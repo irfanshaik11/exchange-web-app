@@ -11,13 +11,12 @@ import { useRouter } from "next/router";
 import InterstateButton from "./InterstateButton";
 import { env } from "../env";
 import { useUser } from "./UserContext";
-import { usePhantomWallet } from "../hooks/usePhantomWallet";
-import { useMetaMaskWallet } from "../hooks/useMetaMaskWallet";
-import { phantomLogin as apiPhantomLogin, metamaskLogin as apiMetamaskLogin, getWaitlistStatus, redeemAccessCode, completeAllQuests } from "../utils/api";
+import { useTurnkey } from "@turnkey/react-wallet-kit";
+import { getWaitlistStatus, redeemAccessCode, completeAllQuests } from "../utils/api";
 import Cookies from "js-cookie";
 import { FaDiscord } from "react-icons/fa";
 import { shouldShowWaitlistModal } from "../utils/waitlist";
-import { getStoredReferralCodeHint, clearStoredReferralCodeHint } from "../utils/referralStorage";
+import { clearTurnkeySession } from "./TurnkeyRootProvider";
 
 type ReferralGateStatus = "checking" | "prompt" | "validating" | "granted";
 
@@ -241,9 +240,11 @@ export function ReferralAccessGate({
     };
   }, [twitterLinked, narrativeFollowed, postLiked, postReposted, postReplied, discordJoined]);
 
-  // Wallet hooks
-  const phantomWallet = usePhantomWallet();
-  const metaMaskWallet = useMetaMaskWallet();
+  // Turnkey wallet authentication hooks
+  const turnkey = useTurnkey();
+  const fetchWalletProviders = turnkey?.fetchWalletProviders;
+  const loginOrSignupWithWallet = turnkey?.loginOrSignupWithWallet;
+  const logout = turnkey?.logout;
 
   const grantAccess = useCallback(() => {
     persistAccess(user?.id ?? null);
@@ -483,13 +484,8 @@ export function ReferralAccessGate({
     );
   }, [router.isReady, router.asPath, router]);
 
-  // Refresh wallet connection state when wallet options are shown
-  useEffect(() => {
-    if (showWalletOptions) {
-      phantomWallet.refreshConnection();
-      metaMaskWallet.refreshConnection();
-    }
-  }, [showWalletOptions, phantomWallet, metaMaskWallet]);
+  // No-op: Turnkey wallet auth doesn't require pre-refreshing connection state
+  // The wallet providers are fetched on-demand when the user clicks to login
 
   // Check Twitter authentication status
   const checkTwitterAuth = useCallback(async () => {
@@ -712,7 +708,8 @@ export function ReferralAccessGate({
     }
   }, []);
 
-  // Phantom Wallet Login handler
+  // Phantom Wallet Login handler - Uses Turnkey wallet authentication
+  // After successful auth, TurnkeySessionBridge handles /api/users/turnkey/login + app JWT
   const handlePhantomLogin = useCallback(async () => {
     setPhantomLoading(true);
     setError(null);
@@ -720,71 +717,88 @@ export function ReferralAccessGate({
     setInfo(null);
     
     try {
-      // Check if Phantom is installed
-      if (!phantomWallet.isInstalled) {
-        setWalletError("Phantom wallet not found. Please install Phantom wallet.");
+      // WORKAROUND: Clear stale Turnkey session data before wallet-auth
+      // This prevents "Key not found" errors from stale IndexedDB entries
+      // Per Turnkey docs, we need to call logout() first, then clear IndexedDB
+      console.log('[ReferralAccessGate] Clearing any stale Turnkey session data...');
+      
+      // Step 1: Call SDK logout if available (this clears session and key references)
+      if (typeof logout === 'function') {
+        try {
+          await logout();
+          console.log('[ReferralAccessGate] SDK logout completed');
+        } catch (logoutErr) {
+          console.warn('[ReferralAccessGate] SDK logout error (continuing):', logoutErr);
+        }
+      }
+      
+      // Step 2: Clear IndexedDB manually as backup
+      await clearTurnkeySession();
+      
+      // Small delay to ensure IndexedDB is fully cleared
+      await new Promise(resolve => setTimeout(resolve, 200));
+      
+      if (!fetchWalletProviders || !loginOrSignupWithWallet) {
+        setWalletError("Turnkey wallet authentication is not ready. Please try again.");
         return;
       }
 
-      // Connect to Phantom wallet
-      let connected;
-      try {
-        connected = await phantomWallet.connect();
-      } catch (connectError: any) {
-        console.error("Phantom connect error:", connectError);
-        setWalletError("User rejected the connection request");
-        return;
-      }
+      // Fetch available wallet providers
+      const providers = await fetchWalletProviders();
       
-      if (!connected) {
-        setWalletError(phantomWallet.error || "Failed to connect to Phantom wallet");
+      // Find Phantom provider (Solana namespace)
+      const phantomProvider = providers.find((p: any) => {
+        const providerName = p.info?.name?.toLowerCase() || '';
+        const namespace = p.chainInfo?.namespace?.toLowerCase() || '';
+        return providerName.includes('phantom') && namespace === 'solana';
+      });
+
+      if (!phantomProvider) {
+        setWalletError("Phantom wallet not found. Please install Phantom wallet and refresh the page.");
         return;
       }
 
-      // Create message and sign it
-      const message = `Login to Interstate with nonce: ${Date.now()}`;
-      const signResult = await phantomWallet.signMessage(message);
+      // Authenticate with Turnkey using Phantom
+      // This creates a Turnkey session, which TurnkeySessionBridge will detect
+      // and call /api/users/turnkey/login to get the app JWT
+      // Include createSubOrgParams to ensure an embedded wallet is created for new users
+      await loginOrSignupWithWallet({ 
+        walletProvider: phantomProvider,
+        createSubOrgParams: {
+          // Create an embedded wallet during signup so user can export it later
+          customWallet: {
+            walletName: "Narrative Wallet",
+            walletAccounts: [
+              { curve: "CURVE_ED25519", pathFormat: "PATH_FORMAT_BIP32", path: "m/44'/501'/0'/0'", addressFormat: "ADDRESS_FORMAT_SOLANA" },
+              { curve: "CURVE_SECP256K1", pathFormat: "PATH_FORMAT_BIP32", path: "m/44'/60'/0'/0/0", addressFormat: "ADDRESS_FORMAT_ETHEREUM" },
+            ],
+          },
+        },
+      });
       
-      // Check if signing failed
-      if ("error" in signResult) {
-        setWalletError((signResult as { error: string }).error);
-        return;
-      }
+      // Success! TurnkeySessionBridge will handle the rest (JWT + refreshUser)
+      setInfo("Authenticating with Phantom...");
+      setShowWalletOptions(false);
+      setShowWaitlist(true);
       
-      // Send to backend for verification
-      const referralCode = getStoredReferralCodeHint() || undefined;
-      const { token } = await apiPhantomLogin(signResult.publicKey, signResult.signature, signResult.message, referralCode);
-
-      if (token) {
-        Cookies.set("token", token, { expires: 7, path: "/" });
-        // Clear referral code hint after successful login (it's been sent to backend)
-        clearStoredReferralCodeHint();
-        await refreshUser();
-        setInfo("Phantom login successful!");
-        // Show waitlist modal after successful wallet login
-        setShowWalletOptions(false);
-        setShowWaitlist(true);
-      } else {
-        setError("Phantom login failed - no token received");
-      }
     } catch (error: any) {
       console.error("Phantom login error:", error);
-
-      if (error.message?.includes("Internal server error")) {
-        setWalletError("Backend server error. Please try again later.");
-      } else if (error.message?.includes("Signature verification failed")) {
-        setWalletError("Signature verification failed. Please try again.");
-      } else if (error.message?.includes("Missing required fields")) {
-        setWalletError("Missing required data. Please try again.");
+      
+      // Handle user rejection
+      if (error.message?.includes('rejected') || error.message?.includes('cancelled') || error.message?.includes('denied')) {
+        setWalletError("Connection request was rejected. Please try again.");
+      } else if (error.message?.includes('not found') || error.message?.includes('not installed')) {
+        setWalletError("Phantom wallet not found. Please install Phantom wallet.");
       } else {
-        setWalletError(error?.message || "Phantom login failed");
+        setWalletError(error?.message || "Phantom login failed. Please try again.");
       }
     } finally {
       setPhantomLoading(false);
     }
-  }, [phantomWallet, refreshUser, grantAccess]);
+  }, [fetchWalletProviders, loginOrSignupWithWallet]);
 
-  // MetaMask Wallet Login handler
+  // MetaMask Wallet Login handler - Uses Turnkey wallet authentication
+  // After successful auth, TurnkeySessionBridge handles /api/users/turnkey/login + app JWT
   const handleMetamaskLogin = useCallback(async () => {
     setMetamaskLoading(true);
     setError(null);
@@ -792,67 +806,86 @@ export function ReferralAccessGate({
     setInfo(null);
 
     try {
-      // Check if MetaMask is installed
-      if (!metaMaskWallet.isInstalled) {
-        setWalletError("MetaMask wallet not found. Please install MetaMask extension.");
-        return;
-      }
-
-      // Connect to MetaMask wallet
-      let connected = await metaMaskWallet.connect();
-
-      // If connection failed due to pending request, wait and retry once
-      if (!connected && metaMaskWallet.error?.includes("already")) {
-        setWalletError("MetaMask is busy. Retrying in 2 seconds...");
-        await new Promise((resolve) => setTimeout(resolve, 2000));
-        connected = await metaMaskWallet.connect();
-      }
-
-      if (!connected) {
-        setWalletError(metaMaskWallet.error || "Failed to connect to MetaMask wallet");
-        return;
-      }
-
-      // Create message and sign it
-      const message = `Login to Interstate with nonce: ${Date.now()}`;
-      const signResult = await metaMaskWallet.signMessage(message);
+      // WORKAROUND: Clear stale Turnkey session data before wallet-auth
+      // This prevents "Key not found" errors from stale IndexedDB entries
+      // Per Turnkey docs, we need to call logout() first, then clear IndexedDB
+      console.log('[ReferralAccessGate] Clearing any stale Turnkey session data...');
       
-      // Check if signing failed
-      if ("error" in signResult) {
-        setWalletError((signResult as { error: string }).error);
-        return;
+      // Step 1: Call SDK logout if available (this clears session and key references)
+      if (typeof logout === 'function') {
+        try {
+          await logout();
+          console.log('[ReferralAccessGate] SDK logout completed');
+        } catch (logoutErr) {
+          console.warn('[ReferralAccessGate] SDK logout error (continuing):', logoutErr);
+        }
       }
       
-      // Send to backend for verification
-      const referralCode = getStoredReferralCodeHint() || undefined;
-      const { token } = await apiMetamaskLogin(signResult.address, signResult.signature, signResult.message, referralCode);
-
-      if (token) {
-        Cookies.set("token", token, { expires: 7, path: "/" });
-        await refreshUser();
-        setInfo("MetaMask login successful!");
-        // Show waitlist modal after successful wallet login
-        setShowWalletOptions(false);
-        setShowWaitlist(true);
-      } else {
-        setError("MetaMask login failed - no token received");
+      // Step 2: Clear IndexedDB manually as backup
+      await clearTurnkeySession();
+      
+      // Small delay to ensure IndexedDB is fully cleared
+      await new Promise(resolve => setTimeout(resolve, 200));
+      
+      if (!fetchWalletProviders || !loginOrSignupWithWallet) {
+        setWalletError("Turnkey wallet authentication is not ready. Please try again.");
+        return;
       }
+
+      // Fetch available wallet providers
+      const providers = await fetchWalletProviders();
+      
+      // Find MetaMask provider (Ethereum/EIP-155 namespace)
+      const metaMaskProvider = providers.find((p: any) => {
+        const providerName = p.info?.name?.toLowerCase() || '';
+        const namespace = p.chainInfo?.namespace?.toLowerCase() || '';
+        // MetaMask can be on 'ethereum' or 'eip155' namespace depending on SDK version
+        return providerName.includes('metamask') && (namespace === 'ethereum' || namespace === 'eip155');
+      });
+
+      if (!metaMaskProvider) {
+        setWalletError("MetaMask wallet not found. Please install MetaMask extension and refresh the page.");
+        return;
+      }
+
+      // Authenticate with Turnkey using MetaMask
+      // This creates a Turnkey session, which TurnkeySessionBridge will detect
+      // and call /api/users/turnkey/login to get the app JWT
+      // Include createSubOrgParams to ensure an embedded wallet is created for new users
+      await loginOrSignupWithWallet({ 
+        walletProvider: metaMaskProvider,
+        createSubOrgParams: {
+          // Create an embedded wallet during signup so user can export it later
+          customWallet: {
+            walletName: "Narrative Wallet",
+            walletAccounts: [
+              { curve: "CURVE_ED25519", pathFormat: "PATH_FORMAT_BIP32", path: "m/44'/501'/0'/0'", addressFormat: "ADDRESS_FORMAT_SOLANA" },
+              { curve: "CURVE_SECP256K1", pathFormat: "PATH_FORMAT_BIP32", path: "m/44'/60'/0'/0/0", addressFormat: "ADDRESS_FORMAT_ETHEREUM" },
+            ],
+          },
+        },
+      });
+      
+      // Success! TurnkeySessionBridge will handle the rest (JWT + refreshUser)
+      setInfo("Authenticating with MetaMask...");
+      setShowWalletOptions(false);
+      setShowWaitlist(true);
+      
     } catch (error: any) {
       console.error("MetaMask login error:", error);
 
-      if (error.message?.includes("Internal server error")) {
-        setWalletError("Backend server error. Please try again later.");
-      } else if (error.message?.includes("Signature verification failed")) {
-        setWalletError("Signature verification failed. Please try again.");
-      } else if (error.message?.includes("Missing required fields")) {
-        setWalletError("Missing required data. Please try again.");
+      // Handle user rejection
+      if (error.message?.includes('rejected') || error.message?.includes('cancelled') || error.message?.includes('denied')) {
+        setWalletError("Connection request was rejected. Please try again.");
+      } else if (error.message?.includes('not found') || error.message?.includes('not installed')) {
+        setWalletError("MetaMask wallet not found. Please install MetaMask extension.");
       } else {
-        setWalletError(error?.message || "MetaMask login failed");
+        setWalletError(error?.message || "MetaMask login failed. Please try again.");
       }
     } finally {
       setMetamaskLoading(false);
     }
-  }, [metaMaskWallet, refreshUser, grantAccess]);
+  }, [fetchWalletProviders, loginOrSignupWithWallet]);
 
   const contextValue = useMemo<ReferralAccessContextValue>(() => {
     return {

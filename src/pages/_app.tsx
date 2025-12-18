@@ -127,6 +127,8 @@ function TurnkeySessionBridge() {
     authState,
     session,
     user,
+    wallets,
+    clientState,
     fetchOrCreateP256ApiKeyUser,
     fetchOrCreatePolicies,
   } = turnkeyCtx;
@@ -145,12 +147,27 @@ function TurnkeySessionBridge() {
   const isRunningRef = useRef(false);
 
   console.log(
-    "TurnkeySessionBridge authState:",
-    authState,
-    "session:",
-    session,
-    "user:",
-    user
+    "[TurnkeySessionBridge] State:",
+    {
+      authState,
+      clientState,
+      session: session ? {
+        token: session.token ? '***present***' : 'missing',
+        organizationId: session.organizationId,
+        userId: session.userId,
+      } : null,
+      user: user ? {
+        id: user.id,
+        email: user.email,
+        userName: user.userName,
+      } : null,
+      wallets: wallets ? (Array.isArray(wallets) ? wallets.map((w: any) => ({
+        id: w.walletId || w.id,
+        name: w.walletName || w.name,
+        accounts: w.accounts?.length || 0,
+      })) : wallets) : 'not available',
+      turnkeyCtxKeys: Object.keys(turnkeyCtx || {}),
+    }
   );
 
   // Reset all flags when auth state changes
@@ -166,6 +183,23 @@ function TurnkeySessionBridge() {
     }
   }, [authState]);
 
+  // Store session data immediately when available (before any Turnkey API calls that might fail)
+  const sessionDataRef = useRef<{token: string, organizationId: string, userId: string} | null>(null);
+  
+  useEffect(() => {
+    if (session?.token && session.organizationId && session.userId) {
+      sessionDataRef.current = {
+        token: session.token,
+        organizationId: session.organizationId,
+        userId: session.userId,
+      };
+      console.log("[TurnkeySessionBridge] Session data captured:", {
+        organizationId: session.organizationId,
+        userId: session.userId,
+      });
+    }
+  }, [session?.token, session?.organizationId, session?.userId]);
+
   //
   // Main Pipeline
   //
@@ -178,91 +212,23 @@ function TurnkeySessionBridge() {
 
     (async () => {
       try {
-        const daPublicKey =   process.env.NEXT_PUBLIC_DA_PUBLIC_KEY || undefined;
+        const daPublicKey = process.env.NEXT_PUBLIC_DA_PUBLIC_KEY || undefined;
+        
+        // Use captured session data if current session is null (can happen after 403 errors)
+        const sessionData = session?.token ? {
+          token: session.token,
+          organizationId: session.organizationId,
+          userId: session.userId,
+        } : sessionDataRef.current;
+        
         //
-        // 1) Ensure delegated user exists (NO IndexedDB check)
-        //
-        if (
-          fetchOrCreateP256ApiKeyUser &&
-          daPublicKey &&
-          !hasCreatedDelegatedUserRef.current
-        ) {
-          try {
-            const res = await fetchOrCreateP256ApiKeyUser({
-              publicKey: daPublicKey,
-              createParams: {
-                userName: "Delegated Access",
-                apiKeyName: "Delegated User API Key",
-              },
-            });
-
-            const uid = res?.userId || res?.id;
-            if (uid) {
-              delegatedUserIdRef.current = uid;
-              hasCreatedDelegatedUserRef.current = true;
-              hasCreatedDelegatedPolicyRef.current = false;
-              console.log("Delegated user ready:", uid);
-            } else {
-              console.error(
-                "fetchOrCreateP256ApiKeyUser succeeded but no userId returned"
-              );
-              hasCreatedDelegatedUserRef.current = true; // prevent infinite loop
-            }
-          } catch (err: any) {
-            const errorMessage = err?.message || err?.toString() || "";
-            // Suppress Turnkey session errors - they're handled gracefully
-            if (errorMessage.includes("Session public key") || errorMessage.includes("session public key could not be found")) {
-              console.log("[TurnkeySessionBridge] Session error handled gracefully:", errorMessage);
-            } else {
-              console.error("Failed to create delegated Turnkey user", err);
-            }
-            hasCreatedDelegatedUserRef.current = true; // still continue pipeline
-          }
-        }
-
-        //
-        // 2) Ensure delegated policy exists
-        //
-        const delegatedUserId = delegatedUserIdRef.current;
-
-        if (
-          fetchOrCreatePolicies &&
-          delegatedUserId &&
-          !hasCreatedDelegatedPolicyRef.current
-        ) {
-          hasCreatedDelegatedPolicyRef.current = true;
-
-          const policies = [
-            {
-              policyName: `Allow user ${delegatedUserId} to sign`,
-              effect: "EFFECT_ALLOW",
-              consensus: `approvers.any(user, user.id == '${delegatedUserId}')`,
-              notes: "Allow Delegated Access user to sign transactions",
-            },
-          ];
-
-          try {
-            await fetchOrCreatePolicies({ policies });
-            console.log("Delegated policy ensured:", delegatedUserId);
-          } catch (err: any) {
-            const errorMessage = err?.message || err?.toString() || "";
-            // Suppress Turnkey session errors - they're handled gracefully
-            if (errorMessage.includes("Session public key") || errorMessage.includes("session public key could not be found")) {
-              console.log("[TurnkeySessionBridge] Session error handled gracefully:", errorMessage);
-            } else {
-              console.error("Failed to create delegated policy", err);
-            }
-            hasCreatedDelegatedPolicyRef.current = false; // retry next render
-          }
-        }
-
-        //
-        // 3) Backend login → Get App JWT
+        // 1) Backend login → Get App JWT (FIRST, before any Turnkey sub-org operations)
+        //    This must happen first because wallet-auth sessions can't modify sub-orgs
         //
         if (
-          session?.token &&
-          session.organizationId &&
-          session.userId &&
+          sessionData?.token &&
+          sessionData.organizationId &&
+          sessionData.userId &&
           !hasProcessedRef.current
         ) {
           hasProcessedRef.current = true;
@@ -270,15 +236,14 @@ function TurnkeySessionBridge() {
           try {
             const referralCode = getStoredReferralCodeHint() || undefined;
             const data = await turnkeyLogin({
-              turnkeySessionToken: session.token,
-              organizationId: session.organizationId,
-              userId: session.userId,
+              turnkeySessionToken: sessionData.token,
+              organizationId: sessionData.organizationId,
+              userId: sessionData.userId,
               referralCode,
             });
 
             console.log("Turnkey login response:", data);
-            const appToken =
-              data?.token || undefined;
+            const appToken = data?.token || undefined;
 
             if (!appToken) {
               console.error("Turnkey login failed: no token in response");
@@ -315,6 +280,99 @@ function TurnkeySessionBridge() {
               console.error("Error linking Turnkey session to app user", err);
             }
             hasProcessedRef.current = false;
+          }
+        }
+
+        //
+        // 2) Ensure delegated user exists (Skip for wallet-auth - will fail with 403)
+        //    Only attempt if we have a fully valid session (not wallet-auth)
+        //
+        if (
+          fetchOrCreateP256ApiKeyUser &&
+          daPublicKey &&
+          !hasCreatedDelegatedUserRef.current &&
+          session?.token && // Only if we still have a valid session (not invalidated by wallet-auth)
+          session.organizationId
+        ) {
+          try {
+            const res = await fetchOrCreateP256ApiKeyUser({
+              publicKey: daPublicKey,
+              createParams: {
+                userName: "Delegated Access",
+                apiKeyName: "Delegated User API Key",
+              },
+            });
+
+            const uid = res?.userId || res?.id;
+            if (uid) {
+              delegatedUserIdRef.current = uid;
+              hasCreatedDelegatedUserRef.current = true;
+              hasCreatedDelegatedPolicyRef.current = false;
+              console.log("Delegated user ready:", uid);
+            } else {
+              console.error(
+                "fetchOrCreateP256ApiKeyUser succeeded but no userId returned"
+              );
+              hasCreatedDelegatedUserRef.current = true; // prevent infinite loop
+            }
+          } catch (err: any) {
+            const errorMessage = err?.message || err?.toString() || "";
+            // Suppress Turnkey session errors and 403 errors (wallet-auth)
+            if (
+              errorMessage.includes("Session public key") || 
+              errorMessage.includes("session public key could not be found") ||
+              errorMessage.includes("403") ||
+              errorMessage.includes("Forbidden") ||
+              errorMessage.includes("could not find public key")
+            ) {
+              console.log("[TurnkeySessionBridge] Delegated user creation skipped (wallet-auth or session issue):", errorMessage);
+            } else {
+              console.error("Failed to create delegated Turnkey user", err);
+            }
+            hasCreatedDelegatedUserRef.current = true; // still continue pipeline
+          }
+        }
+
+        //
+        // 3) Ensure delegated policy exists (Skip for wallet-auth)
+        //
+        const delegatedUserId = delegatedUserIdRef.current;
+
+        if (
+          fetchOrCreatePolicies &&
+          delegatedUserId &&
+          !hasCreatedDelegatedPolicyRef.current &&
+          session?.token // Only if we still have a valid session
+        ) {
+          hasCreatedDelegatedPolicyRef.current = true;
+
+          const policies = [
+            {
+              policyName: `Allow user ${delegatedUserId} to sign`,
+              effect: "EFFECT_ALLOW",
+              consensus: `approvers.any(user, user.id == '${delegatedUserId}')`,
+              notes: "Allow Delegated Access user to sign transactions",
+            },
+          ];
+
+          try {
+            await fetchOrCreatePolicies({ policies });
+            console.log("Delegated policy ensured:", delegatedUserId);
+          } catch (err: any) {
+            const errorMessage = err?.message || err?.toString() || "";
+            // Suppress Turnkey session errors and 403 errors
+            if (
+              errorMessage.includes("Session public key") || 
+              errorMessage.includes("session public key could not be found") ||
+              errorMessage.includes("403") ||
+              errorMessage.includes("Forbidden") ||
+              errorMessage.includes("could not find public key")
+            ) {
+              console.log("[TurnkeySessionBridge] Delegated policy creation skipped (wallet-auth or session issue):", errorMessage);
+            } else {
+              console.error("Failed to create delegated policy", err);
+            }
+            hasCreatedDelegatedPolicyRef.current = false; // retry next render
           }
         }
       } finally {

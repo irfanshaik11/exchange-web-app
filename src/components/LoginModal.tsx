@@ -1,19 +1,16 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { login as apiLogin, register as apiRegister, phantomLogin as apiPhantomLogin, metamaskLogin as apiMetamaskLogin } from '../utils/api';
+import { login as apiLogin, register as apiRegister } from '../utils/api';
 import Cookies from 'js-cookie';
 import { useUser } from "./UserContext";
 import InterstatePopout from './InterstatePopout';
 import InterstateButton from './InterstateButton';
-import bs58 from 'bs58';
 import { toast } from 'react-hot-toast';
 import { useWallet } from "./useWallet";
-import { usePhantomWallet } from '../hooks/usePhantomWallet';
-import { useMetaMaskWallet } from '../hooks/useMetaMaskWallet';
 import { useTurnkey, ClientState, AuthState } from '@turnkey/react-wallet-kit';
 import { GoogleOAuthProvider, GoogleLogin, type CredentialResponse } from '@react-oauth/google';
 import { sha256 } from '@noble/hashes/sha256';
 import { bytesToHex } from '@noble/hashes/utils';
-import { getStoredReferralCodeHint, clearStoredReferralCodeHint } from '../utils/referralStorage';
+import { clearTurnkeySession } from './TurnkeyRootProvider';
 
 const ENABLE_EMAIL_AUTH = false;
 const AUTH_BUTTON_WIDTH_CLASS = 'w-full max-w-[400px] mx-auto';
@@ -57,12 +54,13 @@ export default function LoginModal({ open, onClose, forceLogin = false }: LoginM
   const { connectors, connectWith, connecting } = useWallet();
   const [showWalletOptions, setShowWalletOptions] = useState(false);
   
-  // Use the new wallet hooks
-  const phantomWallet = usePhantomWallet();
-  const metaMaskWallet = useMetaMaskWallet();
+  // Use Turnkey SDK for wallet authentication
   const turnkey = useTurnkey();
   const authState = turnkey?.authState;
   const clientState = turnkey?.clientState;
+  const fetchWalletProviders = turnkey?.fetchWalletProviders;
+  const loginOrSignupWithWallet = turnkey?.loginOrSignupWithWallet;
+  const logout = turnkey?.logout;
   // Helper function to clear all loading states
   const clearAllLoadingStates = () => {
     setPhantomLoading(false);
@@ -78,12 +76,6 @@ export default function LoginModal({ open, onClose, forceLogin = false }: LoginM
       setShow(true);
       // Lock body scroll when modal is open to prevent interaction with background
       document.body.style.overflow = 'hidden';
-      // Refresh wallet connection state when modal opens
-      phantomWallet.refreshConnection();
-
-      // Don't clear MetaMask connection state - let the hook manage it properly
-      // Clearing this was preventing MetaMask from opening when locked
-      metaMaskWallet.refreshConnection();
       
       // Check for token in cookies and refresh user if not already authenticated
       const token = Cookies.get('token');
@@ -112,7 +104,7 @@ export default function LoginModal({ open, onClose, forceLogin = false }: LoginM
     return () => {
       document.body.style.overflow = '';
     };
-  }, [open, phantomWallet, metaMaskWallet, refreshUser, user, userLoading]);
+  }, [open, refreshUser, user, userLoading, onClose]);
 
   useEffect(() => {
     if (!turnkey) return;
@@ -391,148 +383,229 @@ async function handleGoogleSuccess(resp: CredentialResponse) {
   };
 
 
-  // Phantom Wallet Login handler - Enhanced with proper connection management
+  // Phantom Wallet Login handler - Uses Turnkey wallet authentication
+  // After successful auth, TurnkeySessionBridge handles /api/users/turnkey/login + app JWT
   async function handlePhantomLogin() {
     setPhantomLoading(true);
     setError(null);
     setWalletError(null);
     setSuccess(null);
     
+    console.log('[LoginModal] Starting Phantom login...');
+    
     try {
-      // Check if Phantom is installed
-      if (!phantomWallet.isInstalled) {
-        setWalletError('Phantom wallet not found. Please install Phantom wallet.');
+      // WORKAROUND: Clear stale Turnkey session data before wallet-auth
+      // This prevents "Key not found" errors from stale IndexedDB entries
+      // Per Turnkey docs, we need to call logout() first, then clear IndexedDB
+      console.log('[LoginModal] Clearing any stale Turnkey session data...');
+      
+      // Step 1: Call SDK logout if available (this clears session and key references)
+      if (typeof logout === 'function') {
+        try {
+          await logout();
+          console.log('[LoginModal] SDK logout completed');
+        } catch (logoutErr) {
+          console.warn('[LoginModal] SDK logout error (continuing):', logoutErr);
+        }
+      }
+      
+      // Step 2: Clear IndexedDB manually as backup
+      await clearTurnkeySession();
+      
+      // Small delay to ensure IndexedDB is fully cleared
+      await new Promise(resolve => setTimeout(resolve, 200));
+      
+      if (!fetchWalletProviders || !loginOrSignupWithWallet) {
+        console.error('[LoginModal] Turnkey wallet auth not ready:', { fetchWalletProviders: !!fetchWalletProviders, loginOrSignupWithWallet: !!loginOrSignupWithWallet });
+        setWalletError('Turnkey wallet authentication is not ready. Please try again.');
         return;
       }
 
-      // Connect to Phantom wallet (this handles reconnection properly)
-      let connected;
-      try {
-        connected = await phantomWallet.connect();
-      } catch (connectError: any) {
-        console.error('Phantom connect error in LoginModal:', connectError);
-        setWalletError('User rejected the connection request');
-        return;
-      }
+      // Fetch available wallet providers
+      console.log('[LoginModal] Fetching wallet providers...');
+      const providers = await fetchWalletProviders();
+      console.log('[LoginModal] Available providers:', providers.map((p: any) => ({ name: p.info?.name, namespace: p.chainInfo?.namespace })));
       
-      if (!connected) {
-        setWalletError(phantomWallet.error || 'Failed to connect to Phantom wallet');
+      // Find Phantom provider (Solana namespace)
+      const phantomProvider = providers.find((p: any) => {
+        const providerName = p.info?.name?.toLowerCase() || '';
+        const namespace = p.chainInfo?.namespace?.toLowerCase() || '';
+        return providerName.includes('phantom') && namespace === 'solana';
+      });
+
+      if (!phantomProvider) {
+        console.error('[LoginModal] Phantom provider not found in:', providers);
+        setWalletError('Phantom wallet not found. Please install Phantom wallet and refresh the page.');
         return;
       }
 
-      // Create message and sign it
-      const message = `Login to Narrative with nonce: ${Date.now()}`;
-      const signResult = await phantomWallet.signMessage(message);
-      
-      // Check if signing failed
-      if ('error' in signResult) {
-        setWalletError((signResult as { error: string }).error);
-        return;
-      }
-      
-      // Send to backend for verification
-      const referralCode = getStoredReferralCodeHint() || undefined;
-      const { token } = await apiPhantomLogin(signResult.publicKey, signResult.signature, signResult.message, referralCode);
+      console.log('[LoginModal] Found Phantom provider:', phantomProvider);
 
-      if (token) {
-        Cookies.set('token', token, { expires: 7, path: '/' });
-        // Clear referral code hint after successful login (it's been sent to backend)
-        clearStoredReferralCodeHint();
-        await refreshUser();
-        setSuccess('Login successful!');
-        setTimeout(() => {
-          setSuccess(null);
-          onClose();
-        }, 1200);
-      } else {
-        setError('Phantom login failed - no token received');
-      }
+      // Authenticate with Turnkey using Phantom
+      // This creates a Turnkey session, which TurnkeySessionBridge will detect
+      // and call /api/users/turnkey/login to get the app JWT
+      // Include createSubOrgParams to ensure an embedded wallet is created for new users
+      console.log('[LoginModal] Calling loginOrSignupWithWallet with customWallet config...');
+      const result = await loginOrSignupWithWallet({ 
+        walletProvider: phantomProvider,
+        createSubOrgParams: {
+          // Create an embedded wallet during signup so user can export it later
+          customWallet: {
+            walletName: "Narrative Wallet",
+            walletAccounts: [
+              { curve: "CURVE_ED25519", pathFormat: "PATH_FORMAT_BIP32", path: "m/44'/501'/0'/0'", addressFormat: "ADDRESS_FORMAT_SOLANA" },
+              { curve: "CURVE_SECP256K1", pathFormat: "PATH_FORMAT_BIP32", path: "m/44'/60'/0'/0/0", addressFormat: "ADDRESS_FORMAT_ETHEREUM" },
+            ],
+          },
+        },
+      });
+      
+      console.log('[LoginModal] loginOrSignupWithWallet result:', result);
+      
+      // Success! TurnkeySessionBridge will handle the rest (JWT + refreshUser + redirect)
+      setSuccess('Authenticating with Phantom...');
+      
     } catch (error: any) {
-      console.error('Phantom login error:', error);
+      console.error('[LoginModal] Phantom login error:', {
+        message: error?.message,
+        name: error?.name,
+        code: error?.code,
+        stack: error?.stack,
+        cause: error?.cause,
+        fullError: error,
+      });
       
-      // Handle different types of errors
-      if (error.message?.includes('Internal server error')) {
-        setWalletError('Backend server error. Please try again later.');
-      } else if (error.message?.includes('Signature verification failed')) {
-        setWalletError('Signature verification failed. Please try again.');
-      } else if (error.message?.includes('Missing required fields')) {
-        setWalletError('Missing required data. Please try again.');
+      const errorMsg = error?.message || error?.cause?.message || '';
+      
+      // Handle stale session key error
+      if (errorMsg.includes('Key not found') || errorMsg.includes('Key not found for publicKey')) {
+        console.warn('[LoginModal] Stale session key detected, clearing and retrying...');
+        await clearTurnkeySession();
+        setWalletError('Session expired. Please click the button again to sign in.');
+        toast.error('Session expired - please try again');
+      }
+      // Handle user rejection
+      else if (errorMsg.includes('rejected') || errorMsg.includes('cancelled') || errorMsg.includes('denied')) {
+        setWalletError('Connection request was rejected. Please try again.');
+      } else if (errorMsg.includes('not found') || errorMsg.includes('not installed')) {
+        setWalletError('Phantom wallet not found. Please install Phantom wallet.');
       } else {
-        setWalletError(error?.message || 'Phantom login failed');
+        setWalletError(errorMsg || 'Phantom login failed. Please try again.');
       }
     } finally {
       setPhantomLoading(false);
     }
   }
 
-  // MetaMask Wallet Login handler - Enhanced with proper connection management
+  // MetaMask Wallet Login handler - Uses Turnkey wallet authentication
+  // After successful auth, TurnkeySessionBridge handles /api/users/turnkey/login + app JWT
   async function handleMetamaskLogin() {
     setMetamaskLoading(true);
     setError(null);
     setWalletError(null);
     setSuccess(null);
 
+    console.log('[LoginModal] Starting MetaMask login...');
+
     try {
-      // Check if MetaMask is installed
-      if (!metaMaskWallet.isInstalled) {
-        setWalletError('MetaMask wallet not found. Please install MetaMask extension.');
-        return;
-      }
-
-      // Connect to MetaMask wallet (this handles connection properly)
-      let connected = await metaMaskWallet.connect();
-
-      // If connection failed due to pending request, wait and retry once
-      if (!connected && metaMaskWallet.error?.includes('already')) {
-        setWalletError('MetaMask is busy. Retrying in 2 seconds...');
-        await new Promise(resolve => setTimeout(resolve, 2000));
-        connected = await metaMaskWallet.connect();
-      }
-
-      if (!connected) {
-        setWalletError(metaMaskWallet.error || 'Failed to connect to MetaMask wallet');
-        return;
-      }
-
-      // Create message and sign it
-      const message = `Login to Narrative with nonce: ${Date.now()}`;
-      const signResult = await metaMaskWallet.signMessage(message);
+      // WORKAROUND: Clear stale Turnkey session data before wallet-auth
+      // This prevents "Key not found" errors from stale IndexedDB entries
+      // Per Turnkey docs, we need to call logout() first, then clear IndexedDB
+      console.log('[LoginModal] Clearing any stale Turnkey session data...');
       
-      // Check if signing failed
-      if ('error' in signResult) {
-        setWalletError((signResult as { error: string }).error);
-        return;
+      // Step 1: Call SDK logout if available (this clears session and key references)
+      if (typeof logout === 'function') {
+        try {
+          await logout();
+          console.log('[LoginModal] SDK logout completed');
+        } catch (logoutErr) {
+          console.warn('[LoginModal] SDK logout error (continuing):', logoutErr);
+        }
       }
       
-      // Send to backend for verification
-      const referralCode = getStoredReferralCodeHint() || undefined;
-      const { token } = await apiMetamaskLogin(signResult.address, signResult.signature, signResult.message, referralCode);
-
-      if (token) {
-        Cookies.set('token', token, { expires: 7, path: '/' });
-        // Clear referral code hint after successful login (it's been sent to backend)
-        clearStoredReferralCodeHint();
-        await refreshUser();
-        setSuccess('MetaMask login successful!');
-        setTimeout(() => {
-          setSuccess(null);
-          onClose();
-        }, 1200);
-      } else {
-        setError('MetaMask login failed - no token received');
+      // Step 2: Clear IndexedDB manually as backup
+      await clearTurnkeySession();
+      
+      // Small delay to ensure IndexedDB is fully cleared
+      await new Promise(resolve => setTimeout(resolve, 200));
+      
+      if (!fetchWalletProviders || !loginOrSignupWithWallet) {
+        console.error('[LoginModal] Turnkey wallet auth not ready:', { fetchWalletProviders: !!fetchWalletProviders, loginOrSignupWithWallet: !!loginOrSignupWithWallet });
+        setWalletError('Turnkey wallet authentication is not ready. Please try again.');
+        return;
       }
+
+      // Fetch available wallet providers
+      console.log('[LoginModal] Fetching wallet providers...');
+      const providers = await fetchWalletProviders();
+      console.log('[LoginModal] Available providers:', providers.map((p: any) => ({ name: p.info?.name, namespace: p.chainInfo?.namespace })));
+      
+      // Find MetaMask provider (Ethereum/EIP-155 namespace)
+      const metaMaskProvider = providers.find((p: any) => {
+        const providerName = p.info?.name?.toLowerCase() || '';
+        const namespace = p.chainInfo?.namespace?.toLowerCase() || '';
+        // MetaMask can be on 'ethereum' or 'eip155' namespace depending on SDK version
+        return providerName.includes('metamask') && (namespace === 'ethereum' || namespace === 'eip155');
+      });
+
+      if (!metaMaskProvider) {
+        console.error('[LoginModal] MetaMask provider not found in:', providers);
+        setWalletError('MetaMask wallet not found. Please install MetaMask extension and refresh the page.');
+        return;
+      }
+
+      console.log('[LoginModal] Found MetaMask provider:', metaMaskProvider);
+
+      // Authenticate with Turnkey using MetaMask
+      // This creates a Turnkey session, which TurnkeySessionBridge will detect
+      // and call /api/users/turnkey/login to get the app JWT
+      // Include createSubOrgParams to ensure an embedded wallet is created for new users
+      console.log('[LoginModal] Calling loginOrSignupWithWallet with customWallet config...');
+      const result = await loginOrSignupWithWallet({ 
+        walletProvider: metaMaskProvider,
+        createSubOrgParams: {
+          // Create an embedded wallet during signup so user can export it later
+          customWallet: {
+            walletName: "Narrative Wallet",
+            walletAccounts: [
+              { curve: "CURVE_ED25519", pathFormat: "PATH_FORMAT_BIP32", path: "m/44'/501'/0'/0'", addressFormat: "ADDRESS_FORMAT_SOLANA" },
+              { curve: "CURVE_SECP256K1", pathFormat: "PATH_FORMAT_BIP32", path: "m/44'/60'/0'/0/0", addressFormat: "ADDRESS_FORMAT_ETHEREUM" },
+            ],
+          },
+        },
+      });
+      
+      console.log('[LoginModal] loginOrSignupWithWallet result:', result);
+      
+      // Success! TurnkeySessionBridge will handle the rest (JWT + refreshUser + redirect)
+      setSuccess('Authenticating with MetaMask...');
+      
     } catch (error: any) {
-      console.error('MetaMask login error:', error);
+      console.error('[LoginModal] MetaMask login error:', {
+        message: error?.message,
+        name: error?.name,
+        code: error?.code,
+        stack: error?.stack,
+        cause: error?.cause,
+        fullError: error,
+      });
 
-      // Handle different types of backend errors
-      if (error.message?.includes('Internal server error')) {
-        setWalletError('Backend server error. Please try again later.');
-      } else if (error.message?.includes('Signature verification failed')) {
-        setWalletError('Signature verification failed. Please try again.');
-      } else if (error.message?.includes('Missing required fields')) {
-        setWalletError('Missing required data. Please try again.');
+      const errorMsg = error?.message || error?.cause?.message || '';
+
+      // Handle stale session key error
+      if (errorMsg.includes('Key not found') || errorMsg.includes('Key not found for publicKey')) {
+        console.warn('[LoginModal] Stale session key detected, clearing and retrying...');
+        await clearTurnkeySession();
+        setWalletError('Session expired. Please click the button again to sign in.');
+        toast.error('Session expired - please try again');
+      }
+      // Handle user rejection
+      else if (errorMsg.includes('rejected') || errorMsg.includes('cancelled') || errorMsg.includes('denied')) {
+        setWalletError('Connection request was rejected. Please try again.');
+      } else if (errorMsg.includes('not found') || errorMsg.includes('not installed')) {
+        setWalletError('MetaMask wallet not found. Please install MetaMask extension.');
       } else {
-        setWalletError(error?.message || 'MetaMask login failed');
+        setWalletError(errorMsg || 'MetaMask login failed. Please try again.');
       }
     } finally {
       setMetamaskLoading(false);
@@ -753,75 +826,45 @@ async function handleGoogleSuccess(resp: CredentialResponse) {
               {/* MetaMask */}
               <button
                 type="button"
-                className={`w-full flex items-center justify-between p-3 rounded-lg transition-all duration-200 ${
-                  metaMaskWallet.isConnected
-                    ? 'bg-transparent hover:bg-neutral-700/30 border border-green-600/50 hover:border-green-500/50'
-                    : 'bg-neutral-700/50 hover:bg-neutral-600/50 border border-neutral-600/50 hover:border-neutral-500/50'
-                } ${metamaskLoading || metaMaskWallet.connecting ? 'opacity-50 cursor-not-allowed' : ''}`}
+                className={`w-full flex items-center justify-between p-3 rounded-lg transition-all duration-200 bg-neutral-700/50 hover:bg-neutral-600/50 border border-neutral-600/50 hover:border-neutral-500/50 ${metamaskLoading ? 'opacity-50 cursor-not-allowed' : ''}`}
                 onClick={() => {
                   setPhantomLoading(false);
                   setGoogleLoading(false);
                   handleMetamaskLogin();
                 }}
-                disabled={metamaskLoading || metaMaskWallet.connecting}
+                disabled={metamaskLoading}
               >
                 <div className="flex items-center gap-3">
                   <img src="/MetaMask-icon-fox.svg" alt="MetaMask" className="w-5 h-5" />
                   <div className="flex flex-col items-start">
                     <span className="font-medium text-sm">MetaMask</span>
-                    {metaMaskWallet.isConnected && metaMaskWallet.address && (
-                      <span className="text-xs text-green-400">
-                        Connected: {metaMaskWallet.address.slice(0, 6)}...{metaMaskWallet.address.slice(-4)}
-                      </span>
-                    )}
-                    {metaMaskWallet.connecting && (
+                    {metamaskLoading && (
                       <span className="text-xs text-yellow-400">Connecting...</span>
-                    )}
-                    {metaMaskWallet.error && !metaMaskWallet.isInstalled && (
-                      <span className="text-xs text-red-400">Not installed</span>
                     )}
                   </div>
                 </div>
-                {metaMaskWallet.isConnected && (
-                  <div className="w-2 h-2 bg-green-400 rounded-full"></div>
-                )}
               </button>
 
               {/* Phantom */}
               <button
                 type="button"
-                className={`w-full flex items-center justify-between p-3 rounded-lg transition-all duration-200 ${
-                  phantomWallet.isConnected 
-                    ? 'bg-transparent hover:bg-neutral-700/30 border border-green-600/50 hover:border-green-500/50' 
-                    : 'bg-neutral-700/50 hover:bg-neutral-600/50 border border-neutral-600/50 hover:border-neutral-500/50'
-                } ${phantomLoading || phantomWallet.connecting ? 'opacity-50 cursor-not-allowed' : ''}`}
+                className={`w-full flex items-center justify-between p-3 rounded-lg transition-all duration-200 bg-neutral-700/50 hover:bg-neutral-600/50 border border-neutral-600/50 hover:border-neutral-500/50 ${phantomLoading ? 'opacity-50 cursor-not-allowed' : ''}`}
                 onClick={() => {
                   setMetamaskLoading(false);
                   setGoogleLoading(false);
                   handlePhantomLogin();
                 }}
-                disabled={phantomLoading || phantomWallet.connecting}
+                disabled={phantomLoading}
               >
                 <div className="flex items-center gap-3">
                   <img src="/Phantom-Wallet-300x300.png" alt="Phantom" className="w-5 h-5 rounded-full" />
                   <div className="flex flex-col items-start">
                     <span className="font-medium text-sm">Phantom</span>
-                    {phantomWallet.isConnected && phantomWallet.publicKey && (
-                      <span className="text-xs text-green-400">
-                        Connected: {phantomWallet.publicKey.slice(0, 4)}...{phantomWallet.publicKey.slice(-4)}
-                      </span>
-                    )}
-                    {phantomWallet.connecting && (
+                    {phantomLoading && (
                       <span className="text-xs text-yellow-400">Connecting...</span>
-                    )}
-                    {phantomWallet.error && !phantomWallet.isInstalled && (
-                      <span className="text-xs text-red-400">Not installed</span>
                     )}
                   </div>
                 </div>
-                {phantomWallet.isConnected && (
-                  <div className="w-2 h-2 bg-green-400 rounded-full"></div>
-                )}
               </button>
 
             </div>

@@ -13,6 +13,7 @@ import {
 } from "~/lib/turnkeyWalletKit";
 import { useUser } from "~/components/UserContext";
 import { normalizeMonadAddress } from "~/utils/normalizeMonadAddress";
+import { clearTurnkeySession } from "~/components/TurnkeyRootProvider";
 
 // Dynamically import LoginModal to avoid SSR issues
 const LoginModal = dynamic(() => import("~/components/LoginModal"), {
@@ -285,41 +286,184 @@ export default function ExportWalletModal({
 
   // Fetch wallets only when authenticated
   useEffect(() => {
+    // Debug logging for wallet fetch conditions
+    console.log("[ExportWalletModal] Wallet fetch check:", {
+      isOpen,
+      walletOptionsLength: walletOptions.length,
+      walletsRequestRefCurrent: walletsRequestRef.current,
+      isAuthenticated,
+      hasSession: !!sessionFromContext,
+      organizationId: sessionFromContext?.organizationId,
+      userId: sessionFromContext?.userId,
+      authState,
+      clientState,
+      hasValidSession,
+      hasAuthenticatedThisVisit: hasAuthenticatedThisVisitRef.current,
+      turnkeyAvailable: !!turnkey,
+      hasRefreshWallets: typeof turnkey?.refreshWallets === "function",
+      hasFetchWallets: typeof turnkey?.fetchWallets === "function",
+      walletsFromContext: wallets,
+    });
+
+    // Must have a valid Turnkey SDK session (not just our app authentication)
+    const hasTurnkeySDKSession = 
+      authState === AuthState.Authenticated && 
+      clientState === ClientState.Ready &&
+      sessionFromContext?.token;
+    
     if (
       !isOpen ||
       walletOptions.length ||
       walletsRequestRef.current ||
       !isAuthenticated ||
+      !hasTurnkeySDKSession ||
       !sessionFromContext?.organizationId ||
       !sessionFromContext?.userId
     ) {
+      console.log("[ExportWalletModal] Skipping wallet fetch - conditions not met:", {
+        isOpen,
+        hasWalletOptions: walletOptions.length > 0,
+        alreadyRequested: walletsRequestRef.current,
+        isAuthenticated,
+        hasTurnkeySDKSession,
+        authState,
+        clientState,
+        hasToken: !!sessionFromContext?.token,
+        hasOrgId: !!sessionFromContext?.organizationId,
+        hasUserId: !!sessionFromContext?.userId,
+      });
       return;
     }
 
     walletsRequestRef.current = true;
+    console.log("[ExportWalletModal] Starting wallet fetch for org:", sessionFromContext.organizationId);
+    
     (async () => {
       try {
+        let fetchedWalletList: any[] = [];
+        
         if (typeof turnkey?.refreshWallets === "function") {
+          console.log("[ExportWalletModal] Calling refreshWallets...");
           const refreshed = await turnkey.refreshWallets({
             organizationId: sessionFromContext.organizationId,
             userId: sessionFromContext.userId,
           });
+          console.log("[ExportWalletModal] refreshWallets result:", refreshed);
           if (Array.isArray(refreshed)) {
-            setFetchedWallets(refreshed);
+            fetchedWalletList = refreshed;
           }
         } else if (typeof turnkey?.fetchWallets === "function") {
+          console.log("[ExportWalletModal] Calling fetchWallets...");
           const result = await turnkey.fetchWallets({
             organizationId: sessionFromContext.organizationId,
             userId: sessionFromContext.userId,
           });
+          console.log("[ExportWalletModal] fetchWallets result:", result);
           if (Array.isArray(result)) {
-            setFetchedWallets(result);
+            fetchedWalletList = result;
+          }
+        } else {
+          console.warn("[ExportWalletModal] Neither refreshWallets nor fetchWallets available on turnkey object");
+
+				}
+
+        // If no wallets found, try to create one (for users who signed up before embedded wallet creation was added)
+        if (fetchedWalletList.length === 0 && typeof turnkey?.createWallet === "function") {
+          console.log("[ExportWalletModal] No wallets found, attempting to create one...");
+          try {
+            const newWallet = await turnkey.createWallet({
+              walletName: "Narrative Wallet",
+              accounts: [
+                { curve: "CURVE_ED25519", pathFormat: "PATH_FORMAT_BIP32", path: "m/44'/501'/0'/0'", addressFormat: "ADDRESS_FORMAT_SOLANA" },
+                { curve: "CURVE_SECP256K1", pathFormat: "PATH_FORMAT_BIP32", path: "m/44'/60'/0'/0/0", addressFormat: "ADDRESS_FORMAT_ETHEREUM" },
+              ],
+              organizationId: sessionFromContext.organizationId,
+            });
+            console.log("[ExportWalletModal] Created new wallet:", newWallet);
+            
+            // Refetch wallets after creation
+            if (typeof turnkey?.refreshWallets === "function") {
+              const refreshedAfterCreate = await turnkey.refreshWallets({
+                organizationId: sessionFromContext.organizationId,
+                userId: sessionFromContext.userId,
+              });
+              if (Array.isArray(refreshedAfterCreate)) {
+                fetchedWalletList = refreshedAfterCreate;
+              }
+            }
+          } catch (createErr: any) {
+            console.error("[ExportWalletModal] Failed to create wallet:", createErr);
+            // Don't throw - just continue with empty list and show error
           }
         }
+
+        setFetchedWallets(fetchedWalletList);
+        
+        if (fetchedWalletList.length === 0) {
+          console.warn("[ExportWalletModal] No wallets available after fetch/create attempt");
+          setError("No exportable wallet found. Please try signing in again with a fresh session.");
+        }
       } catch (err: any) {
-        console.error("Failed to load Turnkey wallets for export", err);
-        const errorMessage = err?.message?.toLowerCase() || "";
+        console.error("[ExportWalletModal] Failed to load wallets:", {
+          message: err?.message,
+          name: err?.name,
+          code: err?.code,
+          status: err?.status,
+          stack: err?.stack,
+          cause: err?.cause,
+          fullError: err,
+        });
+        const errorMessage = (err?.message || err?.cause?.message || "").toLowerCase();
+        const causeMessage = (err?.cause?.message || "").toLowerCase();
+        
+        // Handle wallet-auth session errors (403 / public key not found in sub-org)
+        // This happens when user signed in with Phantom/MetaMask - the SDK's session key
+        // is not registered in the sub-org, so API calls fail
         if (
+          errorMessage.includes("could not find public key") ||
+          causeMessage.includes("could not find public key") ||
+          errorMessage.includes("403") ||
+          (errorMessage.includes("fetch") && errorMessage.includes("wallets") && (
+            causeMessage.includes("forbidden") ||
+            causeMessage.includes("unauthenticated") ||
+            causeMessage.includes("could not find public key")
+          ))
+        ) {
+          console.warn("[ExportWalletModal] Wallet-auth session detected - cannot fetch wallets via SDK");
+          hasAuthenticatedThisVisitRef.current = false;
+          setError("Wallet export is currently only available for Google sign-in users. Please sign in with Google to export your wallet.");
+          setFetchedWallets([]);
+          walletsRequestRef.current = false;
+          // Don't show toast - the UI message is sufficient
+        }
+        // Handle "no active session" error - user needs to sign in with Turnkey
+        else if (
+          errorMessage.includes("no active session") ||
+          errorMessage.includes("no_session_found") ||
+          errorMessage.includes("requires a valid session")
+        ) {
+          console.warn("[ExportWalletModal] No active Turnkey session, prompting re-auth...");
+          hasAuthenticatedThisVisitRef.current = false;
+          setError("Please sign in with Turnkey to export your wallet. Click 'Continue with Google' below.");
+          setFetchedWallets([]);
+          walletsRequestRef.current = false;
+          // Don't show toast - the UI will prompt the user to sign in
+        }
+        // Handle stale session key error (key not found in IndexedDB)
+        else if (
+          errorMessage.includes("key not found") ||
+          errorMessage.includes("key not found for publickey")
+        ) {
+          console.warn("[ExportWalletModal] Stale session key detected, clearing session...");
+          await clearTurnkeySession();
+          hasAuthenticatedThisVisitRef.current = false;
+          setError("Your session has expired. Please refresh the page and sign in again.");
+          setFetchedWallets([]);
+          walletsRequestRef.current = false;
+          toast.error("Session expired - please refresh and sign in again");
+        }
+        // Handle other session errors
+        else if (
           errorMessage.includes("session public key") ||
           (errorMessage.includes("session") && (
             errorMessage.includes("not found") ||
@@ -333,7 +477,7 @@ export default function ExportWalletModal({
           setFetchedWallets([]);
           walletsRequestRef.current = false;
         } else {
-          setError("Failed to load wallets. Please try again.");
+          setError(`Failed to load wallets: ${err?.message || 'Unknown error'}. Please try again.`);
           walletsRequestRef.current = false;
         }
       }
@@ -345,6 +489,10 @@ export default function ExportWalletModal({
     sessionFromContext?.userId,
     turnkey,
     walletOptions.length,
+    authState,
+    clientState,
+    hasValidSession,
+    wallets,
   ]);
 
   const needsTurnkeySession =
