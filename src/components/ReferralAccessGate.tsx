@@ -17,7 +17,7 @@ import { phantomLogin as apiPhantomLogin, metamaskLogin as apiMetamaskLogin, get
 import Cookies from "js-cookie";
 import { FaDiscord } from "react-icons/fa";
 import { shouldShowWaitlistModal } from "../utils/waitlist";
-import { getStoredReferralCodeHint } from "../utils/referralStorage";
+import { getStoredReferralCodeHint, clearStoredReferralCodeHint } from "../utils/referralStorage";
 
 type ReferralGateStatus = "checking" | "prompt" | "validating" | "granted";
 
@@ -757,6 +757,8 @@ export function ReferralAccessGate({
 
       if (token) {
         Cookies.set("token", token, { expires: 7, path: "/" });
+        // Clear referral code hint after successful login (it's been sent to backend)
+        clearStoredReferralCodeHint();
         await refreshUser();
         setInfo("Phantom login successful!");
         // Show waitlist modal after successful wallet login

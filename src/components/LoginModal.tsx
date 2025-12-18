@@ -13,7 +13,7 @@ import { useTurnkey, ClientState, AuthState } from '@turnkey/react-wallet-kit';
 import { GoogleOAuthProvider, GoogleLogin, type CredentialResponse } from '@react-oauth/google';
 import { sha256 } from '@noble/hashes/sha256';
 import { bytesToHex } from '@noble/hashes/utils';
-import { getStoredReferralCodeHint } from '../utils/referralStorage';
+import { getStoredReferralCodeHint, clearStoredReferralCodeHint } from '../utils/referralStorage';
 
 const ENABLE_EMAIL_AUTH = false;
 const AUTH_BUTTON_WIDTH_CLASS = 'w-full max-w-[400px] mx-auto';
@@ -436,6 +436,8 @@ async function handleGoogleSuccess(resp: CredentialResponse) {
 
       if (token) {
         Cookies.set('token', token, { expires: 7, path: '/' });
+        // Clear referral code hint after successful login (it's been sent to backend)
+        clearStoredReferralCodeHint();
         await refreshUser();
         setSuccess('Login successful!');
         setTimeout(() => {
@@ -508,6 +510,8 @@ async function handleGoogleSuccess(resp: CredentialResponse) {
 
       if (token) {
         Cookies.set('token', token, { expires: 7, path: '/' });
+        // Clear referral code hint after successful login (it's been sent to backend)
+        clearStoredReferralCodeHint();
         await refreshUser();
         setSuccess('MetaMask login successful!');
         setTimeout(() => {
