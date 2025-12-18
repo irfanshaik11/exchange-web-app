@@ -70,11 +70,21 @@ export default function InterstatePopout({
   return (
     <div
       className={`${overlayBase} ${align === "center" ? overlayCenter : overlayTopRight} ${isVisible ? "visible" : ""} ${isVisible ? "pointer-events-auto" : "pointer-events-none"} ${overlayClassName}`}
-      style={{ zIndex }}
+      style={{ zIndex, pointerEvents: isVisible ? 'auto' : 'none' }}
+      onClick={(e) => {
+        // Block all clicks on the overlay itself (only allow clicks on modal content)
+        if (e.target === e.currentTarget && !disableClickOutside) {
+          onClose();
+        }
+      }}
     >
       <div
         ref={contentRef}
-        className={`${isVisible ? "scale-100 opacity-100" : "scale-95 opacity-0"} transition-all duration-200 ${className}`}
+        className={`${isVisible ? "scale-100 opacity-100" : "scale-95 opacity-0"} transition-all duration-200 ${className} pointer-events-auto`}
+        onClick={(e) => {
+          // Prevent clicks inside modal from propagating to overlay
+          e.stopPropagation();
+        }}
       >
         {children}
       </div>
