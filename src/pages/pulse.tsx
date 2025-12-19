@@ -94,9 +94,9 @@ const PLATFORM_UPDATES = [
 
 export default function PulsePage() {
   // Tab navigation state - MOBILE VIEW DISABLED
-  // const [activeTab, setActiveTab] = useState<
-  //   "new" | "final-stretch" | "migrated"
-  // >("new");
+  const [activeTab, setActiveTab] = useState<
+    "new" | "final-stretch" | "migrated"
+  >("new");
 
   // Updates modal state
   const [showUpdatesModal, setShowUpdatesModal] = useState(false);
@@ -234,30 +234,30 @@ export default function PulsePage() {
   }, [user]); // Re-run when user changes (login/logout)
 
   // Keyboard navigation for tabs (mobile only) - MOBILE VIEW DISABLED
-  // useEffect(() => {
-  //   const handleKeyDown = (event: KeyboardEvent) => {
-  //     // Only enable keyboard navigation on mobile devices (when tabs are visible)
-  //     if (window.innerWidth < 1024 && (event.ctrlKey || event.metaKey)) {
-  //       switch (event.key) {
-  //         case "1":
-  //           event.preventDefault();
-  //           setActiveTab("new");
-  //           break;
-  //         case "2":
-  //           event.preventDefault();
-  //           setActiveTab("final-stretch");
-  //           break;
-  //         case "3":
-  //           event.preventDefault();
-  //           setActiveTab("migrated");
-  //           break;
-  //       }
-  //     }
-  //   };
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      // Only enable keyboard navigation on mobile devices (when tabs are visible)
+      if (window.innerWidth < 1024 && (event.ctrlKey || event.metaKey)) {
+        switch (event.key) {
+          case "1":
+            event.preventDefault();
+            setActiveTab("new");
+            break;
+          case "2":
+            event.preventDefault();
+            setActiveTab("final-stretch");
+            break;
+          case "3":
+            event.preventDefault();
+            setActiveTab("migrated");
+            break;
+        }
+      }
+    };
 
-  //   window.addEventListener("keydown", handleKeyDown);
-  //   return () => window.removeEventListener("keydown", handleKeyDown);
-  // }, []);
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, []);
 
   // React Query client for manual cache updates from WebSocket
   const queryClient = useQueryClient();
@@ -1379,7 +1379,7 @@ export default function PulsePage() {
       </Head>
       <div className="flex h-screen flex-col overflow-hidden bg-[#06070b] text-neutral-100">
         <Header />
-        <div className="flex min-h-0 w-full flex-1 flex-col overflow-hidden px-6 pt-4">
+        <div className="flex min-h-0 w-full flex-1 flex-col overflow-hidden px-4 sm:px-6 py-4">
           <div className="mb-1">
             <div className="mb-1 flex flex-col gap-3 px-2 pt-2 sm:flex-row sm:items-center sm:justify-between">
               <div className="flex items-center gap-3">
@@ -1450,63 +1450,74 @@ export default function PulsePage() {
               {/* <PulseControlBar className="mb-0.5" /> */}
             </div>
 
-            {/* Tab Navigation - Mobile Only - MOBILE VIEW DISABLED
-            <div className="mt-4 mb-8 lg:hidden">
-              <div className="flex space-x-1 rounded-xl border border-neutral-700/50 bg-neutral-800/30 p-1.5 shadow-lg backdrop-blur-sm">
+            {/* Tab Navigation - Mobile Only */}
+            <div className="mt-3 mb-4 lg:hidden">
+              <div className="flex gap-1.5 rounded-lg border border-neutral-800/50 bg-neutral-900/60 p-1">
                 <button
                   onClick={() => setActiveTab("new")}
-                  className={`flex-1 cursor-pointer rounded-lg px-3 py-2.5 text-xs font-semibold transition-all duration-300 ease-out lg:text-sm ${
+                  className={`relative flex-1 rounded-md px-3 py-2.5 text-xs font-semibold transition-all duration-200 ${
                     activeTab === "new"
-                      ? "scale-[1.02] transform bg-gradient-to-r from-emerald-600 to-emerald-500 text-white shadow-lg shadow-emerald-500/25"
-                      : "text-neutral-400 hover:scale-[1.01] hover:transform hover:bg-neutral-700/40 hover:text-white"
+                      ? "bg-[#7FFFC9] text-black"
+                      : "text-neutral-300 hover:text-neutral-100 hover:bg-neutral-800/60"
                   }`}
-                  title="New Pairs (Mobile: Ctrl+1)"
                 >
-                  <span className="flex items-center justify-center gap-1.5">
-                    <span className="h-2 w-2 rounded-full bg-current opacity-60"></span>
-                    <span>New Pairs</span>
-                    <span className="ml-1 text-xs opacity-75">
-                      ({enrichedNewPairsToShow.length})
+                  <div className="flex items-center justify-center gap-1.5">
+                    <span>New</span>
+                    <span
+                      className={`inline-flex min-w-[20px] items-center justify-center rounded-full px-1.5 py-0.5 text-[10px] font-bold leading-none ${
+                        activeTab === "new"
+                          ? "bg-black/15 text-black/90"
+                          : "bg-neutral-800 text-neutral-400"
+                      }`}
+                    >
+                      {enrichedNewPairsToShow.length}
                     </span>
-                  </span>
+                  </div>
                 </button>
                 <button
                   onClick={() => setActiveTab("final-stretch")}
-                  className={`flex-1 cursor-pointer rounded-lg px-3 py-2.5 text-xs font-semibold transition-all duration-300 ease-out lg:text-sm ${
+                  className={`relative flex-1 rounded-md px-3 py-2.5 text-xs font-semibold transition-all duration-200 ${
                     activeTab === "final-stretch"
-                      ? "scale-[1.02] transform bg-gradient-to-r from-emerald-600 to-emerald-500 text-white shadow-lg shadow-emerald-500/25"
-                      : "text-neutral-400 hover:scale-[1.01] hover:transform hover:bg-neutral-700/40 hover:text-white"
+                      ? "bg-[#7FFFC9] text-black"
+                      : "text-neutral-300 hover:text-neutral-100 hover:bg-neutral-800/60"
                   }`}
-                  title="Final Stretch (Mobile: Ctrl+2)"
                 >
-                  <span className="flex items-center justify-center gap-1.5">
-                    <span className="h-2 w-2 rounded-full bg-current opacity-60"></span>
-                    <span>Final Stretch</span>
-                    <span className="ml-1 text-xs opacity-75">
-                      ({enrichedFinalStretch.length})
+                  <div className="flex items-center justify-center gap-1.5">
+                    <span>Final</span>
+                    <span
+                      className={`inline-flex min-w-[20px] items-center justify-center rounded-full px-1.5 py-0.5 text-[10px] font-bold leading-none ${
+                        activeTab === "final-stretch"
+                          ? "bg-black/15 text-black/90"
+                          : "bg-neutral-800 text-neutral-400"
+                      }`}
+                    >
+                      {enrichedFinalStretch.length}
                     </span>
-                  </span>
+                  </div>
                 </button>
                 <button
                   onClick={() => setActiveTab("migrated")}
-                  className={`flex-1 cursor-pointer rounded-lg px-3 py-2.5 text-xs font-semibold transition-all duration-300 ease-out lg:text-sm ${
+                  className={`relative flex-1 rounded-md px-3 py-2.5 text-xs font-semibold transition-all duration-200 ${
                     activeTab === "migrated"
-                      ? "scale-[1.02] transform bg-gradient-to-r from-emerald-600 to-emerald-500 text-white shadow-lg shadow-emerald-500/25"
-                      : "text-neutral-400 hover:scale-[1.01] hover:transform hover:bg-neutral-700/40 hover:text-white"
+                      ? "bg-[#7FFFC9] text-black"
+                      : "text-neutral-300 hover:text-neutral-100 hover:bg-neutral-800/60"
                   }`}
-                  title="Migrated (Mobile: Ctrl+3)"
                 >
-                  <span className="flex items-center justify-center gap-1.5">
-                    <span className="h-2 w-2 rounded-full bg-current opacity-60"></span>
+                  <div className="flex items-center justify-center gap-1.5">
                     <span>Migrated</span>
-                    <span className="ml-1 text-xs opacity-75">
-                      ({enrichedMigrated.length})
+                    <span
+                      className={`inline-flex min-w-[20px] items-center justify-center rounded-full px-1.5 py-0.5 text-[10px] font-bold leading-none ${
+                        activeTab === "migrated"
+                          ? "bg-black/15 text-black/90"
+                          : "bg-neutral-800 text-neutral-400"
+                      }`}
+                    >
+                      {enrichedMigrated.length}
                     </span>
-                  </span>
+                  </div>
                 </button>
               </div>
             </div>
-            */}
           </div>
 
           {false ? ( // isBnbRoute commented out
@@ -1566,9 +1577,9 @@ export default function PulsePage() {
             </div>
           ) : isMonadRoute ? ( // || isBaseRoute || isEthereumRoute
             <div className="flex min-h-0 w-full flex-1 flex-col overflow-hidden">
-              {/* Mobile: Single table based on active tab - MOBILE VIEW DISABLED
-              <div className="lg:hidden flex-1 min-h-0">
-                <div className="transition-all duration-300 ease-in-out">
+              {/* Mobile: Single table based on active tab */}
+              <div className="lg:hidden flex flex-1 min-h-0 flex-col overflow-hidden">
+                <div className="flex h-full min-h-0 flex-col transition-all duration-300 ease-in-out">
                   {activeTab === 'new' && (
                     <MonadTable
                       title="New Pairs"
@@ -1596,9 +1607,8 @@ export default function PulsePage() {
                   )}
                 </div>
               </div>
-              */}
-              {/* All tables horizontally - always visible */}
-              <div className="flex min-h-0 w-full flex-1 flex-row overflow-hidden">
+              {/* All tables horizontally - Desktop only */}
+              <div className="hidden lg:flex min-h-0 w-full flex-1 flex-row overflow-hidden">
                 <MonadTable
                   title="New Pairs"
                   tokens={enrichedNewPairsToShow}
@@ -1628,25 +1638,22 @@ export default function PulsePage() {
                 <PulseTable
                   title="New Pairs"
                   tokens={[]}
-                  loading
-                  skeletonRowCount={10}
+                  loading={true}
                   isFirstOrLast="first"
                   showBubbleMetrics={false}
                   currentChain={currentChain}
                 />
-                <PulseTable
+                <MonadTable
                   title="Final Stretch"
                   tokens={[]}
-                  loading
-                  skeletonRowCount={10}
+                  loading={true}
                   showBubbleMetrics={false}
                   currentChain={currentChain}
                 />
-                <PulseTable
+                <MonadTable
                   title="Migrated"
                   tokens={[]}
-                  loading
-                  skeletonRowCount={10}
+                  loading={true}
                   isFirstOrLast="last"
                   showBubbleMetrics={false}
                   currentChain={currentChain}
@@ -1677,13 +1684,13 @@ export default function PulsePage() {
                   showBubbleMetrics={false}
                   currentChain={currentChain}
                 />
-                <PulseTable
+                <MonadTable
                   title="Final Stretch"
                   tokens={enrichedFinalStretch as any}
                   showBubbleMetrics={false}
                   currentChain={currentChain}
                 />
-                <PulseTable
+                <MonadTable
                   title="Migrated"
                   tokens={enrichedMigrated as any}
                   isFirstOrLast="last"
