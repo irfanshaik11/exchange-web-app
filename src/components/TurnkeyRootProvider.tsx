@@ -137,6 +137,10 @@ export function TurnkeyRootProvider({ children }: { children: React.ReactNode })
         // Optional, but keeps UI ordering nice if you ever show their modal:
         methodOrder: ["socials", "email", "sms", "passkey", "wallet"],
         verifyWalletOnSignup: true,
+        // Provide default sub-org params so wallet auth flows inherit the same settings
+        createSuborgParams: {
+          walletAuth: {},
+        },
       },
 
       // Wallet authentication configuration for Phantom/MetaMask

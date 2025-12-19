@@ -16,7 +16,6 @@ import { getWaitlistStatus, redeemAccessCode, completeAllQuests } from "../utils
 import Cookies from "js-cookie";
 import { FaDiscord } from "react-icons/fa";
 import { shouldShowWaitlistModal } from "../utils/waitlist";
-import { clearTurnkeySession } from "./TurnkeyRootProvider";
 
 type ReferralGateStatus = "checking" | "prompt" | "validating" | "granted";
 
@@ -717,26 +716,7 @@ export function ReferralAccessGate({
     setInfo(null);
     
     try {
-      // WORKAROUND: Clear stale Turnkey session data before wallet-auth
-      // This prevents "Key not found" errors from stale IndexedDB entries
-      // Per Turnkey docs, we need to call logout() first, then clear IndexedDB
-      console.log('[ReferralAccessGate] Clearing any stale Turnkey session data...');
-      
-      // Step 1: Call SDK logout if available (this clears session and key references)
-      if (typeof logout === 'function') {
-        try {
-          await logout();
-          console.log('[ReferralAccessGate] SDK logout completed');
-        } catch (logoutErr) {
-          console.warn('[ReferralAccessGate] SDK logout error (continuing):', logoutErr);
-        }
-      }
-      
-      // Step 2: Clear IndexedDB manually as backup
-      await clearTurnkeySession();
-      
-      // Small delay to ensure IndexedDB is fully cleared
-      await new Promise(resolve => setTimeout(resolve, 200));
+      console.log('[ReferralAccessGate] Using existing Turnkey session storage (no manual clearing)');
       
       if (!fetchWalletProviders || !loginOrSignupWithWallet) {
         setWalletError("Turnkey wallet authentication is not ready. Please try again.");
@@ -758,24 +738,74 @@ export function ReferralAccessGate({
         return;
       }
 
+      // CRITICAL: Create an API key pair BEFORE wallet auth
+      // This API key will be added to the sub-org during creation,
+      // allowing subsequent operations (like export) without wallet signatures
+      let apiKeyPublicKey: string | null = null;
+      try {
+        if (typeof turnkey?.createApiKeyPair === 'function') {
+          apiKeyPublicKey = await turnkey.createApiKeyPair({ storeOverride: true });
+          console.log('[ReferralAccessGate] API key pair created for Phantom auth');
+        }
+      } catch (apiKeyErr) {
+        console.warn('[ReferralAccessGate] Failed to create API key pair:', apiKeyErr);
+      }
+
+      // Build createSubOrgParams with API key if available
+      const createSubOrgParams: any = {
+        // Create an embedded wallet during signup so user can export it later
+        customWallet: {
+          walletName: "Narrative Wallet",
+          walletAccounts: [
+            { curve: "CURVE_ED25519", pathFormat: "PATH_FORMAT_BIP32", path: "m/44'/501'/0'/0'", addressFormat: "ADDRESS_FORMAT_SOLANA" },
+            { curve: "CURVE_SECP256K1", pathFormat: "PATH_FORMAT_BIP32", path: "m/44'/60'/0'/0/0", addressFormat: "ADDRESS_FORMAT_ETHEREUM" },
+          ],
+        },
+      };
+
+      // Add API key to sub-org if we created one - this enables API-key stamping for export
+      if (apiKeyPublicKey) {
+        createSubOrgParams.apiKeys = [
+          {
+            apiKeyName: "Session API Key",
+            publicKey: apiKeyPublicKey,
+            curveType: "API_KEY_CURVE_P256",
+          },
+        ];
+      }
+
       // Authenticate with Turnkey using Phantom
       // This creates a Turnkey session, which TurnkeySessionBridge will detect
       // and call /api/users/turnkey/login to get the app JWT
-      // Include createSubOrgParams to ensure an embedded wallet is created for new users
-      await loginOrSignupWithWallet({ 
+      const result = await loginOrSignupWithWallet({
         walletProvider: phantomProvider,
-        createSubOrgParams: {
-          // Create an embedded wallet during signup so user can export it later
-          customWallet: {
-            walletName: "Narrative Wallet",
-            walletAccounts: [
-              { curve: "CURVE_ED25519", pathFormat: "PATH_FORMAT_BIP32", path: "m/44'/501'/0'/0'", addressFormat: "ADDRESS_FORMAT_SOLANA" },
-              { curve: "CURVE_SECP256K1", pathFormat: "PATH_FORMAT_BIP32", path: "m/44'/60'/0'/0/0", addressFormat: "ADDRESS_FORMAT_ETHEREUM" },
-            ],
-          },
-        },
+        createSubOrgParams,
       });
-      
+
+      console.log('[ReferralAccessGate] loginOrSignupWithWallet result:', result);
+
+      // Mark API key as ready for export operations
+      if (apiKeyPublicKey && typeof window !== 'undefined') {
+        window.localStorage.setItem("turnkeyApiKeyReady", "true");
+        window.dispatchEvent(new CustomEvent("turnkey-apikey-ready"));
+      }
+
+      // Fetch and cache wallets for export modal
+      if (result?.organizationId && result?.userId && typeof turnkey?.fetchWallets === 'function') {
+        try {
+          const fetched = await turnkey.fetchWallets({
+            organizationId: result.organizationId,
+            userId: result.userId,
+          });
+          if (Array.isArray(fetched) && fetched.length > 0) {
+            (window as any).__turnkeyCachedWallets = fetched;
+            console.log('[ReferralAccessGate] Wallets cached:', fetched.length);
+          }
+        } catch (fetchErr) {
+          console.warn('[ReferralAccessGate] Wallet fetch failed:', fetchErr);
+        }
+      }
+
       // Success! TurnkeySessionBridge will handle the rest (JWT + refreshUser)
       setInfo("Authenticating with Phantom...");
       setShowWalletOptions(false);
@@ -806,26 +836,7 @@ export function ReferralAccessGate({
     setInfo(null);
 
     try {
-      // WORKAROUND: Clear stale Turnkey session data before wallet-auth
-      // This prevents "Key not found" errors from stale IndexedDB entries
-      // Per Turnkey docs, we need to call logout() first, then clear IndexedDB
-      console.log('[ReferralAccessGate] Clearing any stale Turnkey session data...');
-      
-      // Step 1: Call SDK logout if available (this clears session and key references)
-      if (typeof logout === 'function') {
-        try {
-          await logout();
-          console.log('[ReferralAccessGate] SDK logout completed');
-        } catch (logoutErr) {
-          console.warn('[ReferralAccessGate] SDK logout error (continuing):', logoutErr);
-        }
-      }
-      
-      // Step 2: Clear IndexedDB manually as backup
-      await clearTurnkeySession();
-      
-      // Small delay to ensure IndexedDB is fully cleared
-      await new Promise(resolve => setTimeout(resolve, 200));
+      console.log('[ReferralAccessGate] Using existing Turnkey session storage (no manual clearing)');
       
       if (!fetchWalletProviders || !loginOrSignupWithWallet) {
         setWalletError("Turnkey wallet authentication is not ready. Please try again.");
@@ -848,23 +859,73 @@ export function ReferralAccessGate({
         return;
       }
 
+      // CRITICAL: Create an API key pair BEFORE wallet auth
+      // This API key will be added to the sub-org during creation,
+      // allowing subsequent operations (like export) without wallet signatures
+      let apiKeyPublicKey: string | null = null;
+      try {
+        if (typeof turnkey?.createApiKeyPair === 'function') {
+          apiKeyPublicKey = await turnkey.createApiKeyPair({ storeOverride: true });
+          console.log('[ReferralAccessGate] API key pair created for MetaMask auth');
+        }
+      } catch (apiKeyErr) {
+        console.warn('[ReferralAccessGate] Failed to create API key pair:', apiKeyErr);
+      }
+
+      // Build createSubOrgParams with API key if available
+      const createSubOrgParams: any = {
+        // Create an embedded wallet during signup so user can export it later
+        customWallet: {
+          walletName: "Narrative Wallet",
+          walletAccounts: [
+            { curve: "CURVE_ED25519", pathFormat: "PATH_FORMAT_BIP32", path: "m/44'/501'/0'/0'", addressFormat: "ADDRESS_FORMAT_SOLANA" },
+            { curve: "CURVE_SECP256K1", pathFormat: "PATH_FORMAT_BIP32", path: "m/44'/60'/0'/0/0", addressFormat: "ADDRESS_FORMAT_ETHEREUM" },
+          ],
+        },
+      };
+
+      // Add API key to sub-org if we created one - this enables API-key stamping for export
+      if (apiKeyPublicKey) {
+        createSubOrgParams.apiKeys = [
+          {
+            apiKeyName: "Session API Key",
+            publicKey: apiKeyPublicKey,
+            curveType: "API_KEY_CURVE_P256",
+          },
+        ];
+      }
+
       // Authenticate with Turnkey using MetaMask
       // This creates a Turnkey session, which TurnkeySessionBridge will detect
       // and call /api/users/turnkey/login to get the app JWT
-      // Include createSubOrgParams to ensure an embedded wallet is created for new users
-      await loginOrSignupWithWallet({ 
+      const result = await loginOrSignupWithWallet({
         walletProvider: metaMaskProvider,
-        createSubOrgParams: {
-          // Create an embedded wallet during signup so user can export it later
-          customWallet: {
-            walletName: "Narrative Wallet",
-            walletAccounts: [
-              { curve: "CURVE_ED25519", pathFormat: "PATH_FORMAT_BIP32", path: "m/44'/501'/0'/0'", addressFormat: "ADDRESS_FORMAT_SOLANA" },
-              { curve: "CURVE_SECP256K1", pathFormat: "PATH_FORMAT_BIP32", path: "m/44'/60'/0'/0/0", addressFormat: "ADDRESS_FORMAT_ETHEREUM" },
-            ],
-          },
-        },
+        createSubOrgParams,
       });
+
+      console.log('[ReferralAccessGate] loginOrSignupWithWallet result:', result);
+
+      // Mark API key as ready for export operations
+      if (apiKeyPublicKey && typeof window !== 'undefined') {
+        window.localStorage.setItem("turnkeyApiKeyReady", "true");
+        window.dispatchEvent(new CustomEvent("turnkey-apikey-ready"));
+      }
+
+      // Fetch and cache wallets for export modal
+      if (result?.organizationId && result?.userId && typeof turnkey?.fetchWallets === 'function') {
+        try {
+          const fetched = await turnkey.fetchWallets({
+            organizationId: result.organizationId,
+            userId: result.userId,
+          });
+          if (Array.isArray(fetched) && fetched.length > 0) {
+            (window as any).__turnkeyCachedWallets = fetched;
+            console.log('[ReferralAccessGate] Wallets cached:', fetched.length);
+          }
+        } catch (fetchErr) {
+          console.warn('[ReferralAccessGate] Wallet fetch failed:', fetchErr);
+        }
+      }
       
       // Success! TurnkeySessionBridge will handle the rest (JWT + refreshUser)
       setInfo("Authenticating with MetaMask...");
