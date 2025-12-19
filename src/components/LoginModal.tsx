@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { login as apiLogin, register as apiRegister } from '../utils/api';
 import Cookies from 'js-cookie';
 import { useUser } from "./UserContext";
@@ -28,6 +28,39 @@ declare global {
     ethereum?: any;
   }
 }
+
+const TURNKEY_AUTH_METHOD_EVENT = "turnkey-auth-method";
+const TURNKEY_APIKEY_READY_EVENT = "turnkey-apikey-ready";
+
+const recordAuthMethod = (method: "google" | "wallet") => {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.setItem("turnkeyLastAuthMethod", method);
+    window.dispatchEvent(new CustomEvent(TURNKEY_AUTH_METHOD_EVENT, { detail: method }));
+  } catch (err) {
+    console.warn("[LoginModal] Failed to persist auth method", err);
+  }
+};
+
+const recordPasskeyReady = () => {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.setItem("turnkeyPasskeyReady", "true");
+    window.dispatchEvent(new CustomEvent("turnkey-passkey-ready"));
+  } catch (err) {
+    console.warn("[LoginModal] Failed to persist passkey ready flag", err);
+  }
+};
+
+const recordApiKeyReady = () => {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.setItem("turnkeyApiKeyReady", "true");
+    window.dispatchEvent(new CustomEvent(TURNKEY_APIKEY_READY_EVENT));
+  } catch (err) {
+    console.warn("[LoginModal] Failed to persist API key ready flag", err);
+  }
+};
 
 export default function LoginModal({ open, onClose, forceLogin = false }: LoginModalProps) {
   const [mode, setMode] = useState<'login' | 'signup'>('login');
@@ -69,6 +102,11 @@ export default function LoginModal({ open, onClose, forceLogin = false }: LoginM
     setError(null);
     setWalletError(null);
   };
+
+  // Passkey flow disabled: stick to wallet stamping for Phantom/MetaMask
+  const establishPasskeySession = useCallback(async () => {
+    console.log("[LoginModal] Passkey flow disabled; using wallet stamping only.");
+  }, []);
 
 
   useEffect(() => {
@@ -360,6 +398,7 @@ async function handleGoogleSuccess(resp: CredentialResponse) {
     console.log("Turnkey OAuth result:", sessionResult);
 
     setSuccess("Google sign-in complete!");
+    recordAuthMethod("google");
 
   } catch (err: any) {
     console.error("Turnkey Google OAuth failed:", err);
@@ -461,9 +500,21 @@ async function handleGoogleSuccess(resp: CredentialResponse) {
       });
       
       console.log('[LoginModal] loginOrSignupWithWallet result:', result);
+
+      // Store the returned session as the active session so we can use API-key stamping (no extra wallet prompts)
+      if (result?.sessionToken && typeof (turnkey as any)?.storeSession === "function") {
+        try {
+          await (turnkey as any).storeSession({ session: result.sessionToken });
+          recordApiKeyReady();
+        } catch (storeErr) {
+          console.warn("[LoginModal] Failed to store wallet-auth session", storeErr);
+        }
+      }
       
       // Success! TurnkeySessionBridge will handle the rest (JWT + refreshUser + redirect)
       setSuccess('Authenticating with Phantom...');
+      recordAuthMethod("wallet");
+      await establishPasskeySession();
       
     } catch (error: any) {
       console.error('[LoginModal] Phantom login error:', {
@@ -579,6 +630,8 @@ async function handleGoogleSuccess(resp: CredentialResponse) {
       
       // Success! TurnkeySessionBridge will handle the rest (JWT + refreshUser + redirect)
       setSuccess('Authenticating with MetaMask...');
+      recordAuthMethod("wallet");
+      await establishPasskeySession();
       
     } catch (error: any) {
       console.error('[LoginModal] MetaMask login error:', {
@@ -874,3 +927,4 @@ async function handleGoogleSuccess(resp: CredentialResponse) {
     </InterstatePopout>
   );
 } 
+ 

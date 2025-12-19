@@ -108,7 +108,7 @@ export async function clearTurnkeySession() {
 export function TurnkeyRootProvider({ children }: { children: React.ReactNode }) {
   const turnkeyConfig: TurnkeyProviderConfig = useMemo(() => {
     // Prefer env vars and avoid any hardcoded defaults
-    const orgId = env.NEXT_PUBLIC_ORGANIZATION_ID || ''
+    const orgId = env.NEXT_PUBLIC_ORGANIZATION_ID || env.NEXT_PUBLIC_TURNKEY_ORGANIZATION_ID || ''
     const proxyConfigId = env.NEXT_PUBLIC_AUTH_PROXY_CONFIG_ID || '';
     const apiBaseUrl = env.NEXT_PUBLIC_TURNKEY_API_BASE_URL || ''
     const authProxyUrl = 'https://authproxy.turnkey.com';
@@ -131,7 +131,7 @@ export function TurnkeyRootProvider({ children }: { children: React.ReactNode })
           // Toggle any others you actually want:
           emailOtpAuthEnabled: false,
           smsOtpAuthEnabled: false,
-          passkeyAuthEnabled: false,
+          passkeyAuthEnabled: true,
           walletAuthEnabled: true, // ENABLED for Phantom/MetaMask auth
         },
         // Optional, but keeps UI ordering nice if you ever show their modal:
