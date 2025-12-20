@@ -791,11 +791,12 @@ export function ReferralAccessGate({
       }
 
       // Fetch and cache wallets for export modal
-      if (result?.organizationId && result?.userId && typeof turnkey?.fetchWallets === 'function') {
+      const resultAny = result as any;
+      if (resultAny?.organizationId && resultAny?.userId && typeof turnkey?.fetchWallets === 'function') {
         try {
           const fetched = await turnkey.fetchWallets({
-            organizationId: result.organizationId,
-            userId: result.userId,
+            organizationId: resultAny.organizationId,
+            userId: resultAny.userId,
           });
           if (Array.isArray(fetched) && fetched.length > 0) {
             (window as any).__turnkeyCachedWallets = fetched;
@@ -912,11 +913,12 @@ export function ReferralAccessGate({
       }
 
       // Fetch and cache wallets for export modal
-      if (result?.organizationId && result?.userId && typeof turnkey?.fetchWallets === 'function') {
+      const resultAny = result as any;
+      if (resultAny?.organizationId && resultAny?.userId && typeof turnkey?.fetchWallets === 'function') {
         try {
           const fetched = await turnkey.fetchWallets({
-            organizationId: result.organizationId,
-            userId: result.userId,
+            organizationId: resultAny.organizationId,
+            userId: resultAny.userId,
           });
           if (Array.isArray(fetched) && fetched.length > 0) {
             (window as any).__turnkeyCachedWallets = fetched;

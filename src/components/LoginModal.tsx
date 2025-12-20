@@ -492,8 +492,9 @@ async function handleGoogleSuccess(resp: CredentialResponse) {
       console.log('[LoginModal] loginOrSignupWithWallet result:', JSON.stringify(result, null, 2));
 
       // Check if result contains wallet info directly (some SDK versions include it)
-      if (result?.wallet || result?.wallets || result?.walletId) {
-        const walletInfo = result.wallet || result.wallets?.[0] || { walletId: result.walletId };
+      const resultAny = result as any;
+      if (resultAny?.wallet || resultAny?.wallets || resultAny?.walletId) {
+        const walletInfo = resultAny.wallet || resultAny.wallets?.[0] || { walletId: resultAny.walletId };
         if (walletInfo && typeof window !== 'undefined') {
           const cached = (window as any).__turnkeyCachedWallets || [];
           if (!cached.some((w: any) => (w.walletId || w.id) === (walletInfo.walletId || walletInfo.id))) {
@@ -623,8 +624,9 @@ async function handleGoogleSuccess(resp: CredentialResponse) {
       console.log('[LoginModal] loginOrSignupWithWallet result:', JSON.stringify(result, null, 2));
 
       // Check if result contains wallet info directly (some SDK versions include it)
-      if (result?.wallet || result?.wallets || result?.walletId) {
-        const walletInfo = result.wallet || result.wallets?.[0] || { walletId: result.walletId };
+      const resultAny = result as any;
+      if (resultAny?.wallet || resultAny?.wallets || resultAny?.walletId) {
+        const walletInfo = resultAny.wallet || resultAny.wallets?.[0] || { walletId: resultAny.walletId };
         if (walletInfo && typeof window !== 'undefined') {
           const cached = (window as any).__turnkeyCachedWallets || [];
           if (!cached.some((w: any) => (w.walletId || w.id) === (walletInfo.walletId || walletInfo.id))) {
