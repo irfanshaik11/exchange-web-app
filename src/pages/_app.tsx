@@ -213,14 +213,118 @@ function TurnkeySessionBridge() {
     (async () => {
       try {
         const daPublicKey = process.env.NEXT_PUBLIC_DA_PUBLIC_KEY || undefined;
-        
+        const lastAuthMethod =
+          typeof window !== "undefined"
+            ? window.localStorage.getItem("turnkeyLastAuthMethod")
+            : null;
+        const shouldSeedDelegated =
+          lastAuthMethod !== "wallet" && !!daPublicKey;
+
         // Use captured session data if current session is null (can happen after 403 errors)
         const sessionData = session?.token ? {
           token: session.token,
           organizationId: session.organizationId,
           userId: session.userId,
         } : sessionDataRef.current;
-        
+
+        //
+        // 1) Ensure delegated user + policy exists (only for Turnkey/Google flows)
+        //    Skip for wallet-auth (Phantom/MetaMask) by checking lastAuthMethod
+        //
+        if (
+          shouldSeedDelegated &&
+          authState === AuthState.Authenticated &&
+          sessionData?.organizationId &&
+          fetchOrCreateP256ApiKeyUser &&
+          fetchOrCreatePolicies
+        ) {
+          // Delegated user (API key) creation
+          if (!hasCreatedDelegatedUserRef.current) {
+            try {
+              const res = await fetchOrCreateP256ApiKeyUser({
+                publicKey: daPublicKey!,
+                createParams: {
+                  userName: "Delegated Access",
+                  apiKeyName: "Delegated User API Key",
+                },
+              });
+
+              const uid = res?.userId || res?.id;
+              if (uid) {
+                delegatedUserIdRef.current = uid;
+                hasCreatedDelegatedUserRef.current = true;
+                hasCreatedDelegatedPolicyRef.current = false;
+                console.log("[TurnkeySessionBridge] Delegated user ready:", uid);
+              } else {
+                console.error(
+                  "[TurnkeySessionBridge] fetchOrCreateP256ApiKeyUser succeeded but no userId returned"
+                );
+                hasCreatedDelegatedUserRef.current = true; // prevent loop
+              }
+            } catch (err: any) {
+              const errorMessage = err?.message || err?.toString() || "";
+              if (
+                errorMessage.includes("Session public key") ||
+                errorMessage.includes("session public key could not be found")
+              ) {
+                console.log(
+                  "[TurnkeySessionBridge] Delegated user creation session error (handled):",
+                  errorMessage
+                );
+              } else {
+                console.error(
+                  "[TurnkeySessionBridge] Failed to create delegated Turnkey user",
+                  err
+                );
+              }
+              hasCreatedDelegatedUserRef.current = true; // still continue pipeline
+            }
+          }
+
+          // Delegated policy creation
+          const delegatedUserId = delegatedUserIdRef.current;
+          if (
+            delegatedUserId &&
+            !hasCreatedDelegatedPolicyRef.current
+          ) {
+            hasCreatedDelegatedPolicyRef.current = true;
+
+            const policies = [
+              {
+                policyName: `Allow user ${delegatedUserId} to sign`,
+                effect: "EFFECT_ALLOW",
+                consensus: `approvers.any(user, user.id == '${delegatedUserId}')`,
+                notes: "Allow Delegated Access user to sign transactions",
+              },
+            ];
+
+            try {
+              await fetchOrCreatePolicies({ policies });
+              console.log(
+                "[TurnkeySessionBridge] Delegated policy ensured:",
+                delegatedUserId
+              );
+            } catch (err: any) {
+              const errorMessage = err?.message || err?.toString() || "";
+              if (
+                errorMessage.includes("Session public key") ||
+                errorMessage.includes("session public key could not be found")
+              ) {
+                console.log(
+                  "[TurnkeySessionBridge] Delegated policy session error (handled):",
+                  errorMessage
+                );
+              } else {
+                console.error(
+                  "[TurnkeySessionBridge] Failed to create delegated policy",
+                  err
+                );
+              }
+              hasCreatedDelegatedPolicyRef.current = false; // retry on next render
+            }
+          }
+        }
+
         //
         // 1) Backend login → Get App JWT (FIRST, before any Turnkey sub-org operations)
         //    This must happen first because wallet-auth sessions can't modify sub-orgs

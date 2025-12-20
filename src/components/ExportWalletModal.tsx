@@ -6,7 +6,7 @@ import { FaTimes } from "react-icons/fa";
 import toast from "react-hot-toast";
 import Cookies from "js-cookie";
 
-import { WalletSource, useTurnkey } from "~/lib/turnkeyWalletKit";
+import { AuthState, ClientState, WalletSource, useTurnkey } from "~/lib/turnkeyWalletKit";
 import { useUser } from "~/components/UserContext";
 import { normalizeMonadAddress } from "~/utils/normalizeMonadAddress";
 
@@ -53,33 +53,15 @@ const statusCopy: Record<
   },
 };
 
-const toLowerCase = (value?: string): string =>
-  (value || "").toString().toLowerCase();
+const toLowerCase = (value?: string): string => (value || "").toString().toLowerCase();
 
 const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL;
-
-const isWalletAuthSessionError = (err: any): boolean => {
-  const message = toLowerCase(err?.message || err?.cause?.message);
-  const cause = toLowerCase(err?.cause?.message);
-  if (!message && !cause) return false;
-  const baseMessage = `${message} ${cause}`;
-  return (
-    baseMessage.includes("could not find public key") ||
-    baseMessage.includes("session public key") ||
-    baseMessage.includes("403") ||
-    (baseMessage.includes("fetch") &&
-      baseMessage.includes("wallets") &&
-      (baseMessage.includes("forbidden") ||
-        baseMessage.includes("unauthenticated") ||
-        baseMessage.includes("could not find public key")))
-  );
-};
 
 interface ExportWalletModalProps {
   isOpen: boolean;
   onClose: () => void;
   walletId?: string;
-  walletAddress?: string; // The actual wallet address to display
+  walletAddress?: string;
   forceExport?: boolean;
   onForceExportConfirmed?: () => Promise<void> | void;
 }
@@ -93,14 +75,15 @@ export default function ExportWalletModal({
   onForceExportConfirmed,
 }: ExportWalletModalProps) {
   const turnkey = useTurnkey() as any;
-  const { wallets = [] } = turnkey || {};
+  const { authState, clientState, session: turnkeySession, exportWallet, wallets = [] } = turnkey || {};
+  const sessionFromContext = turnkeySession || turnkey?.session;
+
   const { logout, user, walletList, refreshWalletList } = useUser();
 
   const [selectedWalletId, setSelectedWalletId] = useState<string | null>(null);
   const [status, setStatus] = useState<ExportStatus>("idle");
   const [error, setError] = useState<string | null>(null);
   const [iframeVisible, setIframeVisible] = useState(false);
-  const [targetPublicKey, setTargetPublicKey] = useState<string | null>(null);
   const [isClient, setIsClient] = useState(false);
   const [fetchedWallets, setFetchedWallets] = useState<any[]>([]);
   const [showLoginModal, setShowLoginModal] = useState(false);
@@ -118,40 +101,63 @@ export default function ExportWalletModal({
   const [pastedKeySecond, setPastedKeySecond] = useState("");
   const [copyPasteValidated, setCopyPasteValidated] = useState(false);
   const [validationError, setValidationError] = useState<string | null>(null);
+  const [lastAuthMethod, setLastAuthMethod] = useState<string | null>(null);
+  const walletsRequestRef = useRef(false);
+  const hasAuthenticatedThisVisitRef = useRef(false);
+
+  useEffect(() => {
+    setIsClient(true);
+    return () => {
+      iframeStamperRef.current?.clear();
+    };
+  }, []);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
-    // No special stamper selection needed; backend handles export.
+    try {
+      const stored = window.localStorage.getItem("turnkeyLastAuthMethod");
+      if (stored) setLastAuthMethod(stored);
+    } catch (err) {
+      console.warn("[ExportWalletModal] Failed to read stored auth method", err);
+    }
   }, []);
 
-  const isAuthenticated = true;
+  const inferredWalletAuth =
+    lastAuthMethod === "wallet" ||
+    (!sessionFromContext?.organizationId && !!Cookies.get("token"));
+  const isWalletAuth = inferredWalletAuth;
+  const hasSdkSession =
+    !!(sessionFromContext?.token && sessionFromContext?.organizationId && sessionFromContext?.userId);
+  const isGoogleAuthenticated =
+    !isWalletAuth &&
+    authState === AuthState.Authenticated &&
+    clientState === ClientState.Ready &&
+    hasSdkSession;
+  const isAuthenticated = isWalletAuth || isGoogleAuthenticated;
 
   // Reset state when modal opens/closes
   useEffect(() => {
     if (!isOpen) {
-      // Clear any timeouts
       if (timeoutRef.current) {
         clearTimeout(timeoutRef.current);
         timeoutRef.current = null;
       }
-      // Abort any ongoing operations
       if (abortControllerRef.current) {
         abortControllerRef.current.abort();
         abortControllerRef.current = null;
       }
-      
+
       setStatus("idle");
       setError(null);
       setIframeVisible(false);
-      setTargetPublicKey(null);
       setSelectedWalletId(null);
       setFetchedWallets([]);
+      walletsRequestRef.current = false;
+      hasAuthenticatedThisVisitRef.current = false;
       organizationIdRef.current = null;
-      // Don't reset preferredStamperType here - it's set from localStorage on mount
-      // and should persist across modal open/close cycles
       pendingRevealRef.current = false;
-      
-      // Clear any existing iframe
+      setShowLoginModal(false);
+
       if (iframeStamperRef.current) {
         iframeStamperRef.current.clear();
       }
@@ -162,7 +168,6 @@ export default function ExportWalletModal({
         }
       }
     } else {
-      // Reset initialization on open
       setHasConfirmedStorage(false);
       setConfirmingStorage(false);
       setPastedKeyFirst("");
@@ -172,48 +177,65 @@ export default function ExportWalletModal({
     }
   }, [isOpen]);
 
+  // Track when Google auth succeeds
   useEffect(() => {
-    setIsClient(true);
-    return () => {
-      iframeStamperRef.current?.clear();
-    };
-  }, []);
+    if (clientState !== ClientState.Ready || !isOpen || isWalletAuth) return;
 
+    const justAuthenticated =
+      authState === AuthState.Authenticated &&
+      hasSdkSession &&
+      !hasAuthenticatedThisVisitRef.current;
+
+    if (justAuthenticated) {
+      hasAuthenticatedThisVisitRef.current = true;
+      setShowLoginModal(false);
+      setError(null);
+    }
+  }, [authState, clientState, hasSdkSession, isOpen, isWalletAuth]);
+
+  // Pull latest backend wallets when modal opens for wallet-auth path
   useEffect(() => {
-    if (!isOpen) return;
-    // Pull the latest server-managed wallets when the modal is opened
+    if (!isOpen || !isWalletAuth) return;
     refreshWalletList?.(true);
-  }, [isOpen, refreshWalletList]);
+  }, [isOpen, isWalletAuth, refreshWalletList]);
+
+  // Prompt Google login when needed
+  useEffect(() => {
+    if (!isOpen || isWalletAuth) return;
+    if (!isGoogleAuthenticated) {
+      setShowLoginModal(true);
+    }
+  }, [isOpen, isWalletAuth, isGoogleAuthenticated]);
 
   const walletsSource = useMemo(() => {
+    if (!isWalletAuth) {
+      let sourceList: any[] = [];
+      try {
+        const cached =
+          typeof window !== "undefined" ? (window as any).__turnkeyCachedWallets : null;
+        if (Array.isArray(cached) && cached.length) {
+          sourceList = cached;
+        }
+      } catch {
+        // Ignore caching errors
+      }
+
+      if (!sourceList.length && Array.isArray(wallets) && wallets.length) {
+        sourceList = wallets;
+      }
+      if (!sourceList.length) {
+        sourceList = Array.isArray(fetchedWallets) ? fetchedWallets : [];
+      }
+
+      return sourceList;
+    }
+
     if (Array.isArray(walletList) && walletList.length) return walletList;
-    const contextualWallets = Array.isArray(wallets) ? wallets : [];
-    if (contextualWallets.length) return contextualWallets;
     return Array.isArray(fetchedWallets) ? fetchedWallets : [];
-  }, [walletList, wallets, fetchedWallets]);
+  }, [isWalletAuth, walletList, wallets, fetchedWallets]);
 
   const walletOptions = useMemo(() => {
-    // Prefer cached wallets from LoginModal if available on the window (setCachedWallets)
-    let sourceList: any[] = [];
-    try {
-      const cached = typeof window !== "undefined" ? (window as any).__turnkeyCachedWallets : null;
-      if (Array.isArray(cached) && cached.length) {
-        sourceList = cached;
-      }
-    } catch {}
-
-    const baseSource =
-      sourceList.length
-        ? sourceList
-        : Array.isArray(walletList) && walletList.length
-        ? walletList
-        : Array.isArray(wallets) && wallets.length
-        ? wallets
-        : Array.isArray(fetchedWallets)
-        ? fetchedWallets
-        : [];
-
-    return (baseSource as any[]).reduce<
+    return (walletsSource as any[]).reduce<
       {
         id: string;
         name: string;
@@ -227,10 +249,7 @@ export default function ExportWalletModal({
     >((acc, wallet) => {
       const id = wallet?.walletId || wallet?.id;
       if (!id) return acc;
-      const name =
-        wallet?.walletName ||
-        wallet?.name ||
-        `Wallet ${acc.length + 1}`;
+      const name = wallet?.walletName || wallet?.name || `Wallet ${acc.length + 1}`;
       const solanaAddress =
         wallet?.solanaAddress ||
         wallet?.address ||
@@ -253,8 +272,8 @@ export default function ExportWalletModal({
           : undefined) ||
         "";
       const normalizedEth = normalizeMonadAddress(rawEthAddress);
-      const preferredAddress =
-        normalizedEth || solanaAddress || wallet?.address || "";
+      const preferredAddress = normalizedEth || solanaAddress || wallet?.address || "";
+
       acc.push({
         id,
         name,
@@ -262,38 +281,102 @@ export default function ExportWalletModal({
         solanaAddress: solanaAddress || undefined,
         ethereumAddress: normalizedEth || undefined,
         walletAccountId: (wallet as any)?.walletAccountId || null,
-        organizationId: (wallet as any)?.organizationId || user?.subOrgId || null,
+        organizationId: isWalletAuth
+          ? (wallet as any)?.organizationId || user?.subOrgId || null
+          : (wallet as any)?.organizationId || sessionFromContext?.organizationId || null,
         source: wallet?.source,
       });
       return acc;
     }, []);
-  }, [walletsSource, user?.subOrgId]);
+  }, [walletsSource, isWalletAuth, sessionFromContext?.organizationId, user?.subOrgId]);
 
-  // Helper: detect key-not-found/session stamper errors
-  const isSessionKeyError = (err: any): boolean => {
-    const msg = toLowerCase(err?.message || err?.cause?.message || err?.toString() || "");
-    return (
-      msg.includes("key not found") ||
-      msg.includes("public key") ||
-      msg.includes("session public key") ||
-      msg.includes("could not be found")
-    );
-  };
+  // Fetch SDK wallets for Google auth if not already available
+  useEffect(() => {
+    if (
+      !isOpen ||
+      isWalletAuth ||
+      walletOptions.length ||
+      walletsRequestRef.current ||
+      !isGoogleAuthenticated ||
+      !sessionFromContext?.organizationId ||
+      !sessionFromContext?.userId
+    ) {
+      return;
+    }
 
-  // Set selected wallet from prop - if walletId is provided, use it DIRECTLY without waiting for fetch
+    walletsRequestRef.current = true;
+    (async () => {
+      try {
+        const refreshFn =
+          typeof turnkey?.refreshWallets === "function"
+            ? turnkey.refreshWallets
+            : typeof turnkey?.fetchWallets === "function"
+            ? turnkey.fetchWallets
+            : null;
+
+        if (refreshFn) {
+          const result = await refreshFn({
+            organizationId: sessionFromContext.organizationId,
+            userId: sessionFromContext.userId,
+          });
+          if (Array.isArray(result)) {
+            setFetchedWallets(result);
+          }
+        }
+      } catch (err: any) {
+        console.error("Failed to load Turnkey wallets for export", err);
+        const errorMessage = toLowerCase(err?.message || "");
+        if (
+          errorMessage.includes("session public key") ||
+          (errorMessage.includes("session") &&
+            (errorMessage.includes("not found") ||
+              errorMessage.includes("expired") ||
+              errorMessage.includes("invalid") ||
+              errorMessage.includes("could not be found")))
+        ) {
+          hasAuthenticatedThisVisitRef.current = false;
+          setError("Your session has expired. Please click 'Continue with Google' to sign in again.");
+          setFetchedWallets([]);
+          walletsRequestRef.current = false;
+          setShowLoginModal(true);
+        } else {
+          setError("Failed to load wallets. Please try again.");
+          walletsRequestRef.current = false;
+        }
+      }
+    })();
+  }, [
+    isOpen,
+    isWalletAuth,
+    walletOptions.length,
+    isGoogleAuthenticated,
+    sessionFromContext?.organizationId,
+    sessionFromContext?.userId,
+    turnkey,
+  ]);
+
+  // Set selected wallet from prop
   useEffect(() => {
     if (!isOpen) return;
 
     try {
       if (walletId) {
-        // USE walletId DIRECTLY - no need to fetch or match against walletOptions
-        // This enables 1-signature export flow
-        console.log("[ExportWalletModal] Using walletId prop directly:", walletId);
-        setSelectedWalletId(walletId);
-        setError(null);
-        return;
+        if (walletOptions.length === 0) {
+          return;
+        }
+
+        const match = walletOptions.find((w) => w.id === walletId);
+        if (match) {
+          setSelectedWalletId(match.id);
+          setError(null);
+          return;
+        } else {
+          setError("Wallet not found. Please select a different wallet.");
+          setSelectedWalletId(null);
+          return;
+        }
       }
-      // Auto-select first available wallet if no walletId provided
+
       if (!selectedWalletId && walletOptions.length > 0) {
         const embedded =
           walletOptions.find((w) => w.source === WalletSource.Embedded) ||
@@ -306,19 +389,15 @@ export default function ExportWalletModal({
     }
   }, [isOpen, walletId, walletOptions, selectedWalletId]);
 
-  // The SDK already manages wallets; skip custom fetches to avoid stale-session errors.
-  useEffect(() => {
-    return;
-  }, []);
+  const isTurnkeyReady = isWalletAuth
+    ? walletOptions.length > 0
+    : isGoogleAuthenticated &&
+      walletOptions.length > 0 &&
+      !!sessionFromContext?.organizationId &&
+      typeof exportWallet === "function";
 
-  const needsTurnkeySession = false;
-
-  // Consider export "ready" when we have at least one wallet option to export
-  const isTurnkeyReady = walletOptions.length > 0;
   const isActionInProgress =
-    status === "initializing" ||
-    status === "requesting" ||
-    status === "injecting";
+    status === "initializing" || status === "requesting" || status === "injecting";
 
   // Helper function to create timeout promise
   const createTimeout = (ms: number, message: string): Promise<never> => {
@@ -330,21 +409,26 @@ export default function ExportWalletModal({
   };
 
   // Helper function to wrap promise with timeout
-  const withTimeout = async <T,>(promise: Promise<T>, ms: number, errorMessage: string): Promise<T> => {
-    return Promise.race([
-      promise,
-      createTimeout(ms, errorMessage)
-    ]);
+  const withTimeout = async <T,>(
+    promise: Promise<T>,
+    ms: number,
+    errorMessage: string
+  ): Promise<T> => {
+    return Promise.race([promise, createTimeout(ms, errorMessage)]);
   };
 
   const handleExport = useCallback(async () => {
     if (!isClient || !isOpen) return;
 
-    if (!BACKEND_URL) {
-      setError("Backend URL is not configured.");
-      setStatus("error");
-      return;
+    if (isGoogleAuthenticated && showLoginModal) {
+      setShowLoginModal(false);
     }
+
+    const isGooglePath =
+      !isWalletAuth &&
+      isGoogleAuthenticated &&
+      typeof exportWallet === "function" &&
+      !!sessionFromContext?.organizationId;
 
     if (timeoutRef.current) {
       clearTimeout(timeoutRef.current);
@@ -356,17 +440,22 @@ export default function ExportWalletModal({
     setError(null);
     setIframeVisible(false);
 
-    const token = Cookies.get("token");
-    if (!token) {
-      setError("Please log in again to export your wallet.");
+    if (!isTurnkeyReady) {
+      if (isGooglePath) {
+        setError("Connect with Turnkey and pick a wallet before exporting.");
+        setShowLoginModal(true);
+      } else {
+        setError("No wallet available to export. Please refresh and try again.");
+      }
       setStatus("error");
-      setShowLoginModal(true);
       return;
     }
 
     const walletIdToUse = selectedWalletId || walletOptions[0]?.id || null;
     const walletMeta = walletOptions.find((w) => w.id === walletIdToUse);
-    const organizationIdForWallet = walletMeta?.organizationId || user?.subOrgId || null;
+    const organizationIdForWallet = isGooglePath
+      ? sessionFromContext?.organizationId || null
+      : walletMeta?.organizationId || user?.subOrgId || null;
     const addressForWallet =
       walletMeta?.solanaAddress ||
       walletMeta?.ethereumAddress ||
@@ -374,7 +463,12 @@ export default function ExportWalletModal({
       undefined;
 
     if (!walletIdToUse) {
-      setError("No wallet available to export. Please refresh and try again.");
+      if (isGooglePath) {
+        setError("No Turnkey wallet found. Please sign in again to refresh your wallet list.");
+        setShowLoginModal(true);
+      } else {
+        setError("No wallet available to export. Please refresh and try again.");
+      }
       setStatus("error");
       return;
     }
@@ -397,7 +491,6 @@ export default function ExportWalletModal({
         }
       }
 
-      // Initialize iframe with timeout (30 seconds)
       let stamper: IframeStamper;
       let publicKey: string;
 
@@ -431,42 +524,61 @@ export default function ExportWalletModal({
       }
 
       iframeStamperRef.current = stamper;
-      setTargetPublicKey(publicKey);
 
       setStatus("requesting");
 
       let exportBundle: string | null = null;
       try {
-        const response = await withTimeout(
-          fetch(`${BACKEND_URL}/api/users/wallet/export`, {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              Authorization: `Bearer ${token}`,
-            },
-            body: JSON.stringify({
+        if (isGooglePath) {
+          exportBundle = await withTimeout(
+            exportWallet!({
               walletId: walletIdToUse,
-              walletAccountId: walletMeta?.walletAccountId,
-              address: addressForWallet,
               targetPublicKey: publicKey,
+              organizationId: sessionFromContext?.organizationId,
             }),
-            signal: abortControllerRef.current?.signal,
-          }),
-          60000,
-          "Export request timed out. Please try again."
-        );
+            60000,
+            "Export request timed out. Please try again."
+          );
+          organizationIdRef.current = sessionFromContext?.organizationId || null;
+        } else {
+          if (!BACKEND_URL) {
+            throw new Error("Backend URL is not configured.");
+          }
+          const token = Cookies.get("token");
+          if (!token) {
+            throw new Error("Please log in again to export your wallet.");
+          }
 
-        const responseBody = await response.json().catch(() => ({} as any));
-        if (!response.ok) {
-          const exportError =
-            responseBody?.error ||
-            `Failed to export wallet (status ${response.status})`;
-          throw new Error(exportError);
+          const response = await withTimeout(
+            fetch(`${BACKEND_URL}/api/users/wallet/export`, {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                Authorization: `Bearer ${token}`,
+              },
+              body: JSON.stringify({
+                walletId: walletIdToUse,
+                walletAccountId: walletMeta?.walletAccountId,
+                address: addressForWallet,
+                targetPublicKey: publicKey,
+              }),
+              signal: abortControllerRef.current?.signal,
+            }),
+            60000,
+            "Export request timed out. Please try again."
+          );
+
+          const responseBody = await response.json().catch(() => ({} as any));
+          if (!response.ok) {
+            const exportError =
+              responseBody?.error || `Failed to export wallet (status ${response.status})`;
+            throw new Error(exportError);
+          }
+
+          exportBundle = responseBody?.exportBundle || null;
+          organizationIdRef.current =
+            responseBody?.organizationId || organizationIdForWallet || null;
         }
-
-        exportBundle = responseBody?.exportBundle || null;
-        organizationIdRef.current =
-          responseBody?.organizationId || organizationIdForWallet || null;
       } catch (exportErr: any) {
         if (timeoutRef.current) {
           clearTimeout(timeoutRef.current);
@@ -476,11 +588,20 @@ export default function ExportWalletModal({
         const exportErrorMsg = toLowerCase(exportErr?.message || exportErr?.toString());
 
         if (
-          exportErrorMsg.includes("session public key") ||
-          exportErrorMsg.includes("session public key could not be found")
+          isGooglePath &&
+          (exportErrorMsg.includes("session public key") ||
+            exportErrorMsg.includes("session public key could not be found") ||
+            (exportErrorMsg.includes("session") &&
+              (exportErrorMsg.includes("not found") ||
+                exportErrorMsg.includes("expired") ||
+                exportErrorMsg.includes("invalid") ||
+                exportErrorMsg.includes("could not be found"))))
         ) {
-          setError("Your session has expired. Please log in again.");
+          hasAuthenticatedThisVisitRef.current = false;
+          setError("Your session has expired. Please click 'Continue with Google' to sign in again.");
           setStatus("error");
+          setFetchedWallets([]);
+          walletsRequestRef.current = false;
           setShowLoginModal(true);
           return;
         }
@@ -500,7 +621,6 @@ export default function ExportWalletModal({
 
       setStatus("injecting");
 
-      // Inject bundle with timeout (30 seconds)
       let injected: boolean;
       try {
         injected = await withTimeout(
@@ -556,11 +676,20 @@ export default function ExportWalletModal({
             errorLower.includes("invalid") ||
             errorLower.includes("could not be found")))
       ) {
-        setError("Your session has expired. Please log in again.");
-        setShowLoginModal(true);
+        hasAuthenticatedThisVisitRef.current = false;
+        setError("Your session has expired. Please click 'Continue with Google' to sign in again.");
+        setFetchedWallets([]);
+        walletsRequestRef.current = false;
+        if (!isWalletAuth) {
+          setShowLoginModal(true);
+        }
       } else if (errorLower.includes("timed out") || errorLower.includes("timeout")) {
         setError("The export process timed out. Please try again.");
-      } else if (errorLower.includes("network") || errorLower.includes("fetch") || errorLower.includes("connection")) {
+      } else if (
+        errorLower.includes("network") ||
+        errorLower.includes("fetch") ||
+        errorLower.includes("connection")
+      ) {
         setError("Network error. Please check your connection and try again.");
       } else if (errorLower.includes("permission") || errorLower.includes("unauthorized")) {
         setError("You don't have permission to export this wallet. Please contact support.");
@@ -568,18 +697,8 @@ export default function ExportWalletModal({
         setError("Wallet not found. Please try selecting a different wallet.");
       } else if (errorLower.includes("iframe") || errorLower.includes("stamper")) {
         setError("Failed to initialize secure export. Please refresh the page and try again.");
-      } else if (
-        errorLower.includes("idbobjectstore") ||
-        errorLower.includes("indexeddb") ||
-        errorLower.includes("key or key range")
-      ) {
-        setError("Secure iframe storage failed. Please refresh, sign back in, and try again.");
       } else {
         setError("Failed to export wallet. Please try again or contact support if the issue persists.");
-      }
-
-      if (forceExport) {
-        setShowLoginModal(true);
       }
     } finally {
       abortControllerRef.current = null;
@@ -587,10 +706,14 @@ export default function ExportWalletModal({
   }, [
     isClient,
     isOpen,
+    isWalletAuth,
+    isGoogleAuthenticated,
+    isTurnkeyReady,
     walletOptions,
     selectedWalletId,
+    exportWallet,
+    sessionFromContext?.organizationId,
     user?.subOrgId,
-    forceExport,
   ]);
 
   const handleLoginModalClose = useCallback(async () => {
@@ -598,19 +721,12 @@ export default function ExportWalletModal({
     pendingRevealRef.current = false;
   }, []);
 
-  const isForceLockActive =
-    forceExport &&
-    !hasConfirmedStorage &&
-    status !== "error" &&
-    iframeVisible;
-  const isCloseDisabled = isForceLockActive;
+  const handleReauthenticate = useCallback(() => {
+    setShowLoginModal(true);
+  }, []);
 
-  useEffect(() => {
-    if (!isOpen) return;
-    if (pendingRevealRef.current && isTurnkeyReady) {
-      handleExport();
-    }
-  }, [isOpen, isTurnkeyReady, handleExport]);
+  const isForceLockActive = forceExport && !hasConfirmedStorage && status !== "error" && iframeVisible;
+  const isCloseDisabled = isForceLockActive;
 
   const handleConfirmStorage = useCallback(async () => {
     if (hasConfirmedStorage || confirmingStorage) return;
@@ -622,8 +738,7 @@ export default function ExportWalletModal({
       setHasConfirmedStorage(true);
       toast.success("Backup confirmed. Store this key somewhere only you control.");
     } catch (err: any) {
-      const message =
-        err?.message || "Failed to confirm backup. Please try again.";
+      const message = err?.message || "Failed to confirm backup. Please try again.";
       toast.error(message);
     } finally {
       setConfirmingStorage(false);
@@ -635,9 +750,7 @@ export default function ExportWalletModal({
       toast.error("Please confirm you've safely stored this key before closing.");
       return;
     }
-    // Always allow closing, but clean up if in progress
     if (status === "initializing" || status === "requesting" || status === "injecting") {
-      // Cancel ongoing operations
       if (timeoutRef.current) {
         clearTimeout(timeoutRef.current);
         timeoutRef.current = null;
@@ -654,7 +767,6 @@ export default function ExportWalletModal({
   };
 
   const handleCancel = () => {
-    // Cancel ongoing export
     if (timeoutRef.current) {
       clearTimeout(timeoutRef.current);
       timeoutRef.current = null;
@@ -666,7 +778,6 @@ export default function ExportWalletModal({
     setStatus("idle");
     setError(null);
     setIframeVisible(false);
-    setTargetPublicKey(null);
   };
 
   const handleLogout = () => {
@@ -686,8 +797,7 @@ export default function ExportWalletModal({
     fallbackMonad ||
     "";
   const solanaAddress =
-    selectedWallet?.solanaAddress &&
-    selectedWallet.solanaAddress !== monadAddress
+    selectedWallet?.solanaAddress && selectedWallet.solanaAddress !== monadAddress
       ? selectedWallet.solanaAddress
       : null;
 
@@ -722,8 +832,8 @@ export default function ExportWalletModal({
                   Log out
                 </button>
                 {!isCloseDisabled && (
-                  <button 
-                    className="text-[#9CA3AF] hover:text-[#f0f5f5] text-xl font-light transition-colors" 
+                  <button
+                    className="text-[#9CA3AF] hover:text-[#f0f5f5] text-xl font-light transition-colors"
                     onClick={handleClose}
                   >
                     <FaTimes />
@@ -735,6 +845,38 @@ export default function ExportWalletModal({
 
           {/* Content */}
           <div className="px-5 py-4">
+            {!isWalletAuth && clientState === ClientState.Ready && !isGoogleAuthenticated && (
+              <div className="mb-4">
+                <button
+                  onClick={handleReauthenticate}
+                  className="w-full inline-flex items-center justify-center gap-2 rounded-lg bg-white px-3 py-2.5 text-sm font-medium text-[#1A1A1A] transition hover:bg-gray-100"
+                >
+                  <svg className="w-4 h-4" viewBox="0 0 24 24">
+                    <path
+                      fill="#4285F4"
+                      d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
+                    />
+                    <path
+                      fill="#34A853"
+                      d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
+                    />
+                    <path
+                      fill="#FBBC05"
+                      d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"
+                    />
+                    <path
+                      fill="#EA4335"
+                      d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"
+                    />
+                  </svg>
+                  Continue with Google
+                </button>
+                <p className="mt-2 text-[11px] text-[#FF4D7F] text-center">
+                  Showing your private keys. DO NOT verify if you are not exporting your private keys.
+                </p>
+              </div>
+            )}
+
             {/* Wallet Address */}
             {selectedWalletId && (
               <div className="mb-3">
@@ -760,11 +902,25 @@ export default function ExportWalletModal({
                     className="text-[#9CA3AF] hover:text-[#f0f5f5] transition-colors"
                   >
                     <svg width="16" height="16" fill="none" viewBox="0 0 24 24">
-                      <rect x="9" y="9" width="13" height="13" rx="2" ry="2" stroke="currentColor" strokeWidth="2"/>
-                      <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" stroke="currentColor" strokeWidth="2"/>
+                      <rect
+                        x="9"
+                        y="9"
+                        width="13"
+                        height="13"
+                        rx="2"
+                        ry="2"
+                        stroke="currentColor"
+                        strokeWidth="2"
+                      />
+                      <path
+                        d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"
+                        stroke="currentColor"
+                        strokeWidth="2"
+                      />
                     </svg>
                   </button>
                 </div>
+                {/* Hide Solana copy since export flow is EVM-focused */}
               </div>
             )}
 
@@ -772,10 +928,7 @@ export default function ExportWalletModal({
             <div className="mb-3">
               <label className="text-xs text-[#9CA3AF] mb-1.5 block">Private Key</label>
               <div className="rounded-lg border border-[#2A2B33] bg-[#121212] p-3 min-h-[100px] relative">
-                <div
-                  ref={iframeContainerRef}
-                  className={`w-full ${iframeVisible ? "block" : "hidden"}`}
-                />
+                <div ref={iframeContainerRef} className={`w-full ${iframeVisible ? "block" : "hidden"}`} />
                 {!iframeVisible && (
                   <div className="flex items-center justify-center min-h-[100px]">
                     <div className="text-center w-full">
@@ -801,7 +954,7 @@ export default function ExportWalletModal({
                             <div className="flex flex-col items-center gap-2">
                               <button
                                 onClick={handleExport}
-                                disabled={isActionInProgress}
+                                disabled={!isTurnkeyReady || isActionInProgress}
                                 className="px-3 py-1.5 rounded-lg bg-[#374151] text-[#f0f5f5] text-sm font-medium hover:bg-[#4B5563] transition-colors disabled:opacity-50 disabled:cursor-not-allowed inline-flex items-center gap-2"
                               >
                                 Reveal private key
@@ -921,7 +1074,11 @@ export default function ExportWalletModal({
                   className="mt-2.5 w-full inline-flex items-center justify-center gap-2 rounded-lg bg-[#70E0B0] px-3 py-2 text-xs font-semibold text-[#101114] disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {confirmingStorage && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
-                  {hasConfirmedStorage ? "Confirmed" : !copyPasteValidated ? "Verify key backup first" : "I stored this key safely"}
+                  {hasConfirmedStorage
+                    ? "Confirmed"
+                    : !copyPasteValidated
+                    ? "Verify key backup first"
+                    : "I stored this key safely"}
                 </button>
               </div>
             )}
@@ -930,13 +1087,9 @@ export default function ExportWalletModal({
       </div>
 
       {/* Login modal for re-authentication */}
-      {isClient && (
-        <LoginModal
-          open={showLoginModal}
-          onClose={handleLoginModalClose}
-        />
+      {isClient && !isWalletAuth && (
+        <LoginModal open={showLoginModal} onClose={handleLoginModalClose} />
       )}
-
     </>
   );
 }

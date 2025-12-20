@@ -169,7 +169,8 @@ export function TurnkeyRootProvider({ children }: { children: React.ReactNode })
       },
 
       ui: {
-        renderModalInProvider: true,
+        // Disable Turnkey's built-in modal rendering; we use our own login UI to avoid stray popups
+        renderModalInProvider: false,
       },
     };
 
