@@ -5,11 +5,12 @@ import { useUser } from "./UserContext";
 import InterstatePopout from './InterstatePopout';
 import InterstateButton from './InterstateButton';
 import { toast } from 'react-hot-toast';
-import { useWallet } from "./useWallet";
 import { useTurnkey, ClientState, AuthState } from '@turnkey/react-wallet-kit';
 import { GoogleOAuthProvider, GoogleLogin, type CredentialResponse } from '@react-oauth/google';
 import { sha256 } from '@noble/hashes/sha256';
 import { bytesToHex } from '@noble/hashes/utils';
+import bs58 from "bs58";
+import { clearStoredReferralCodeHint, getStoredReferralCodeHint } from "../utils/referralStorage";
 
 const ENABLE_EMAIL_AUTH = false;
 const AUTH_BUTTON_WIDTH_CLASS = 'w-full max-w-[400px] mx-auto';
@@ -31,6 +32,7 @@ declare global {
 
 const TURNKEY_AUTH_METHOD_EVENT = "turnkey-auth-method";
 const TURNKEY_APIKEY_READY_EVENT = "turnkey-apikey-ready";
+const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL;
 
 const recordAuthMethod = (method: "google" | "wallet") => {
   if (typeof window === "undefined") return;
@@ -51,6 +53,9 @@ const recordPasskeyReady = () => {
     console.warn("[LoginModal] Failed to persist passkey ready flag", err);
   }
 };
+
+const buildWalletLoginMessage = () =>
+  `Login to Narrative with nonce: ${Date.now()}`;
 
 export default function LoginModal({ open, onClose, forceLogin = false }: LoginModalProps) {
   const [mode, setMode] = useState<'login' | 'signup'>('login');
@@ -74,19 +79,12 @@ export default function LoginModal({ open, onClose, forceLogin = false }: LoginM
   const [success, setSuccess] = useState<string | null>(null);
   const { refreshUser, user, loading: userLoading } = useUser();
   const [wiggle, setWiggle] = useState(false);
-  const { connectors, connectWith, connecting } = useWallet();
   const [showWalletOptions, setShowWalletOptions] = useState(false);
-  const [cachedWallets, setCachedWallets] = useState<any[] | null>(null);
   
   // Use Turnkey SDK for wallet authentication
 const turnkey = useTurnkey();
 const authState = turnkey?.authState;
 const clientState = turnkey?.clientState;
-const fetchWalletProviders = turnkey?.fetchWalletProviders;
-const loginOrSignupWithWallet = turnkey?.loginOrSignupWithWallet;
-const logout = turnkey?.logout;
-const sessionFromHook = turnkey?.session;
-const walletsFromHook = turnkey?.wallets;
   // Helper function to clear all loading states
   const clearAllLoadingStates = () => {
     setPhantomLoading(false);
@@ -105,11 +103,11 @@ const walletsFromHook = turnkey?.wallets;
 
   // Debug: log session and wallets whenever they change
   useEffect(() => {
-    console.log("[LoginModal] useTurnkey session snapshot:", sessionFromHook);
-    if (walletsFromHook) {
-      console.log("[LoginModal] useTurnkey wallets snapshot:", walletsFromHook);
+    console.log("[LoginModal] useTurnkey session snapshot:", turnkey?.session);
+    if (turnkey?.wallets) {
+      console.log("[LoginModal] useTurnkey wallets snapshot:", turnkey.wallets);
     }
-  }, [sessionFromHook, walletsFromHook]);
+  }, [turnkey?.session, turnkey?.wallets]);
 
 
   useEffect(() => {
@@ -426,286 +424,155 @@ async function handleGoogleSuccess(resp: CredentialResponse) {
   };
 
 
-  // Phantom Wallet Login handler - Uses Turnkey wallet authentication
-  // After successful auth, TurnkeySessionBridge handles /api/users/turnkey/login + app JWT
+  // Phantom Wallet Login handler - server-side Turnkey wallet + backend JWT
   async function handlePhantomLogin() {
     setPhantomLoading(true);
     setError(null);
     setWalletError(null);
     setSuccess(null);
-    
-    console.log('[LoginModal] Starting Phantom login...');
-    
-    try {
-      // Rely on wallet-kit to manage sessions; avoid clearing stored sessions pre-login
-      console.log('[LoginModal] Using existing Turnkey session storage (no manual clearing)');
 
-      if (!fetchWalletProviders || !loginOrSignupWithWallet) {
-        console.error('[LoginModal] Turnkey wallet auth not ready:', { fetchWalletProviders: !!fetchWalletProviders, loginOrSignupWithWallet: !!loginOrSignupWithWallet });
-        setWalletError('Turnkey wallet authentication is not ready. Please try again.');
-        return;
+    try {
+      if (!BACKEND_URL) {
+        throw new Error("Backend URL is not configured");
       }
 
-      // Fetch available wallet providers
-      console.log('[LoginModal] Fetching wallet providers...');
-      const providers = await fetchWalletProviders();
-      console.log('[LoginModal] Available providers:', providers.map((p: any) => ({ name: p.info?.name, namespace: p.chainInfo?.namespace })));
-
-      // Find Phantom provider (Solana namespace)
-      const phantomProvider = providers.find((p: any) => {
-        const providerName = p.info?.name?.toLowerCase() || '';
-        const namespace = p.chainInfo?.namespace?.toLowerCase() || '';
-        return providerName.includes('phantom') && namespace === 'solana';
-      });
-
-      if (!phantomProvider) {
-        console.error('[LoginModal] Phantom provider not found in:', providers);
+      const provider = (window as any).solana;
+      if (!provider) {
         setWalletError('Phantom wallet not found. Please install Phantom wallet and refresh the page.');
         return;
       }
 
-      console.log('[LoginModal] Found Phantom provider:', phantomProvider);
+      const connectionResult = await provider.connect?.();
+      const publicKey =
+        connectionResult?.publicKey?.toString?.() ||
+        provider.publicKey?.toString?.();
 
-      // Authenticate with Turnkey using Phantom
-      // This creates a Turnkey session, which TurnkeySessionBridge will detect
-      // and call /api/users/turnkey/login to get the app JWT
+      if (!publicKey) {
+        setWalletError('Unable to read Phantom public key. Please try again.');
+        return;
+      }
 
-      console.log('[LoginModal] Calling loginOrSignupWithWallet with customWallet and API key...');
+      const message = buildWalletLoginMessage();
+      const encodedMessage = new TextEncoder().encode(message);
+      const signed = await provider.signMessage(encodedMessage, "utf8");
+      const signatureBytes = signed?.signature || signed;
+      const signatureBase58 = bs58.encode(signatureBytes);
 
-      // Build createSubOrgParams with API key if available
-      const createSubOrgParams: any = {
-        // Create an embedded wallet during signup so user can export it later
-        customWallet: {
-          walletName: "Narrative Wallet",
-          walletAccounts: [
-            { curve: "CURVE_ED25519", pathFormat: "PATH_FORMAT_BIP32", path: "m/44'/501'/0'/0'", addressFormat: "ADDRESS_FORMAT_SOLANA" },
-            { curve: "CURVE_SECP256K1", pathFormat: "PATH_FORMAT_BIP32", path: "m/44'/60'/0'/0/0", addressFormat: "ADDRESS_FORMAT_ETHEREUM" },
-          ],
+      const referralCode = getStoredReferralCodeHint() || undefined;
+
+      const response = await fetch(`${BACKEND_URL}/api/users/phantom/login`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
         },
-      };
-
-      const result = await loginOrSignupWithWallet({
-        walletProvider: phantomProvider,
-        createSubOrgParams,
+        body: JSON.stringify({
+          publicKey,
+          signature: signatureBase58,
+          message,
+          referralCode,
+        }),
       });
 
-      console.log('[LoginModal] loginOrSignupWithWallet result:', JSON.stringify(result, null, 2));
-
-      // Check if result contains wallet info directly (some SDK versions include it)
-      const resultAny = result as any;
-      if (resultAny?.wallet || resultAny?.wallets || resultAny?.walletId) {
-        const walletInfo = resultAny.wallet || resultAny.wallets?.[0] || { walletId: resultAny.walletId };
-        if (walletInfo && typeof window !== 'undefined') {
-          const cached = (window as any).__turnkeyCachedWallets || [];
-          if (!cached.some((w: any) => (w.walletId || w.id) === (walletInfo.walletId || walletInfo.id))) {
-            (window as any).__turnkeyCachedWallets = [...cached, walletInfo];
-            console.log('[LoginModal] Wallet from result cached:', walletInfo);
-          }
-        }
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        const errorMsg = data?.error || `Phantom login failed (${response.status})`;
+        throw new Error(errorMsg);
       }
 
-    // Session is already stored by loginOrSignupWithWallet; log snapshot for debugging
-    try {
-      const activeSession =
-        typeof turnkey?.getSession === "function"
-          ? await turnkey.getSession()
-          : (turnkey as any)?.session;
-      const allSessions =
-        typeof turnkey?.getAllSessions === "function"
-          ? await turnkey.getAllSessions()
-          : undefined;
-      console.log("[LoginModal] Session snapshot after Phantom login:", {
-        activeSession,
-        allSessions,
-      });
-      // Success! TurnkeySessionBridge will handle the rest (JWT + refreshUser + redirect)
-      setSuccess('Authenticating with Phantom...');
+      const token = data?.token;
+      if (!token) {
+        throw new Error("Login succeeded but no token was returned.");
+      }
+
+      Cookies.set("token", token, { expires: 7, path: "/" });
+      clearStoredReferralCodeHint();
+      await refreshUser();
+      setSuccess("Phantom login successful");
       recordAuthMethod("wallet");
-      // API-key path handled via wallet-kit session; no extra action here
-    } catch (innerError: any) {
-      // Non-critical error in session logging, just log it
-      console.warn('[LoginModal] Session logging error (non-blocking):', innerError);
-    }
-  } catch (error: any) {
-      console.error('[LoginModal] Phantom login error:', {
-        message: error?.message,
-        name: error?.name,
-        code: error?.code,
-        stack: error?.stack,
-        cause: error?.cause,
-        fullError: error,
-      });
-      
-      const errorMsg = error?.message || error?.cause?.message || '';
-      
-      // Handle stale session key error
-      if (errorMsg.includes('Key not found') || errorMsg.includes('Key not found for publicKey')) {
-        console.warn('[LoginModal] Stale session key detected, please retry login');
-        setWalletError('Session expired. Please click the button again to sign in.');
-        toast.error('Session expired - please try again');
-      }
-      // Handle user rejection
-      else if (errorMsg.includes('rejected') || errorMsg.includes('cancelled') || errorMsg.includes('denied')) {
-        setWalletError('Connection request was rejected. Please try again.');
-      } else if (errorMsg.includes('not found') || errorMsg.includes('not installed')) {
-        setWalletError('Phantom wallet not found. Please install Phantom wallet.');
-      } else {
-        setWalletError(errorMsg || 'Phantom login failed. Please try again.');
-      }
+      onClose();
+    } catch (error: any) {
+      console.error("[LoginModal] Phantom login error:", error);
+      const msg = error?.message || "Phantom login failed. Please try again.";
+      setWalletError(msg);
+      toast.error(msg);
     } finally {
       setPhantomLoading(false);
     }
   }
 
-  // MetaMask Wallet Login handler - Uses Turnkey wallet authentication
-  // After successful auth, TurnkeySessionBridge handles /api/users/turnkey/login + app JWT
+  // MetaMask Wallet Login handler - server-side Turnkey wallet + backend JWT
   async function handleMetamaskLogin() {
     setMetamaskLoading(true);
     setError(null);
     setWalletError(null);
     setSuccess(null);
 
-    console.log('[LoginModal] Starting MetaMask login...');
-
     try {
-      // Rely on wallet-kit to manage sessions; avoid clearing stored sessions pre-login
-      console.log('[LoginModal] Using existing Turnkey session storage (no manual clearing)');
-
-      if (!fetchWalletProviders || !loginOrSignupWithWallet) {
-        console.error('[LoginModal] Turnkey wallet auth not ready:', { fetchWalletProviders: !!fetchWalletProviders, loginOrSignupWithWallet: !!loginOrSignupWithWallet });
-        setWalletError('Turnkey wallet authentication is not ready. Please try again.');
-        return;
+      if (!BACKEND_URL) {
+        throw new Error("Backend URL is not configured");
       }
 
-      // Fetch available wallet providers
-      console.log('[LoginModal] Fetching wallet providers...');
-      const providers = await fetchWalletProviders();
-      console.log('[LoginModal] Available providers:', providers.map((p: any) => ({ name: p.info?.name, namespace: p.chainInfo?.namespace })));
-
-      // Find MetaMask provider (Ethereum/EIP-155 namespace)
-      const metaMaskProvider = providers.find((p: any) => {
-        const providerName = p.info?.name?.toLowerCase() || '';
-        const namespace = p.chainInfo?.namespace?.toLowerCase() || '';
-        // MetaMask can be on 'ethereum' or 'eip155' namespace depending on SDK version
-        return providerName.includes('metamask') && (namespace === 'ethereum' || namespace === 'eip155');
-      });
-
-      if (!metaMaskProvider) {
-        console.error('[LoginModal] MetaMask provider not found in:', providers);
-        setWalletError('MetaMask wallet not found. Please install MetaMask extension and refresh the page.');
-        return;
-      }
-
-      console.log('[LoginModal] Found MetaMask provider:', metaMaskProvider);
-
-      // Authenticate with Turnkey using MetaMask
-      // This creates a Turnkey session, which TurnkeySessionBridge will detect
-      // and call /api/users/turnkey/login to get the app JWT
-
-      console.log('[LoginModal] Calling loginOrSignupWithWallet with customWallet and API key...');
-
-      // Build createSubOrgParams with API key if available
-      const createSubOrgParams: any = {
-        // Create an embedded wallet during signup so user can export it later
-        customWallet: {
-          walletName: "Narrative Wallet",
-          walletAccounts: [
-            { curve: "CURVE_ED25519", pathFormat: "PATH_FORMAT_BIP32", path: "m/44'/501'/0'/0'", addressFormat: "ADDRESS_FORMAT_SOLANA" },
-            { curve: "CURVE_SECP256K1", pathFormat: "PATH_FORMAT_BIP32", path: "m/44'/60'/0'/0/0", addressFormat: "ADDRESS_FORMAT_ETHEREUM" },
-          ],
-        },
-      };
-
-      const result = await loginOrSignupWithWallet({
-        walletProvider: metaMaskProvider,
-        createSubOrgParams,
-      });
-
-      console.log('[LoginModal] loginOrSignupWithWallet result:', JSON.stringify(result, null, 2));
-
-      // Check if result contains wallet info directly (some SDK versions include it)
-      const resultAny = result as any;
-      if (resultAny?.wallet || resultAny?.wallets || resultAny?.walletId) {
-        const walletInfo = resultAny.wallet || resultAny.wallets?.[0] || { walletId: resultAny.walletId };
-        if (walletInfo && typeof window !== 'undefined') {
-          const cached = (window as any).__turnkeyCachedWallets || [];
-          if (!cached.some((w: any) => (w.walletId || w.id) === (walletInfo.walletId || walletInfo.id))) {
-            (window as any).__turnkeyCachedWallets = [...cached, walletInfo];
-            console.log('[LoginModal] Wallet from result cached:', walletInfo);
-          }
-        }
-      }
-
-    // Session is already stored by loginOrSignupWithWallet; log snapshot for debugging
-    try {
-      const activeSession =
-        typeof turnkey?.getSession === "function"
-          ? await turnkey.getSession()
-          : (turnkey as any)?.session;
-      const allSessions =
-        typeof turnkey?.getAllSessions === "function"
-          ? await turnkey.getAllSessions()
-          : undefined;
-      console.log("[LoginModal] Session snapshot after MetaMask login:", {
-        activeSession,
-        allSessions,
-      });
-      // Debug: fetch wallets once after login to prime SDK/cache
-      if (turnkey?.fetchWallets) {
-        try {
-          const fetched = await turnkey.fetchWallets();
-          console.log("[LoginModal] fetchWallets after MetaMask login (no args):", fetched);
-          if (Array.isArray(fetched) && fetched.length && typeof window !== "undefined") {
-            (window as any).__turnkeyCachedWallets = fetched;
-          }
-        } catch (fetchErr) {
-          console.warn("[LoginModal] fetchWallets after MetaMask login failed (non-blocking):", fetchErr);
-        }
-      }
-    } catch (sessionLogErr) {
-      console.warn("[LoginModal] Failed to log session snapshot after MetaMask login", sessionLogErr);
-    }
-
-
-      // Success! TurnkeySessionBridge will handle the rest (JWT + refreshUser + redirect)
-      setSuccess('Authenticating with MetaMask...');
-      recordAuthMethod("wallet");
-      // API-key path handled via wallet-kit session; no extra action here
-
-    } catch (error: any) {
-      console.error('[LoginModal] MetaMask login error:', {
-        message: error?.message,
-        name: error?.name,
-        code: error?.code,
-        stack: error?.stack,
-        cause: error?.cause,
-        fullError: error,
-      });
-
-      const errorMsg = error?.message || error?.cause?.message || '';
-
-      // Handle stale session key error
-      if (errorMsg.includes('Key not found') || errorMsg.includes('Key not found for publicKey')) {
-        console.warn('[LoginModal] Stale session key detected, please retry login');
-        setWalletError('Session expired. Please click the button again to sign in.');
-        toast.error('Session expired - please try again');
-      }
-      // Handle user rejection
-      else if (errorMsg.includes('rejected') || errorMsg.includes('cancelled') || errorMsg.includes('denied')) {
-        setWalletError('Connection request was rejected. Please try again.');
-      } else if (errorMsg.includes('not found') || errorMsg.includes('not installed')) {
+      const ethereum = (window as any).ethereum;
+      if (!ethereum) {
         setWalletError('MetaMask wallet not found. Please install MetaMask extension.');
-      } else {
-        setWalletError(errorMsg || 'MetaMask login failed. Please try again.');
+        return;
       }
+
+      const accounts: string[] = await ethereum.request({
+        method: "eth_requestAccounts",
+      });
+      const address = accounts?.[0];
+      if (!address) {
+        setWalletError("Unable to read MetaMask address. Please try again.");
+        return;
+      }
+
+      const message = buildWalletLoginMessage();
+      const signature = await ethereum.request({
+        method: "personal_sign",
+        params: [message, address],
+      });
+
+      const referralCode = getStoredReferralCodeHint() || undefined;
+
+      const response = await fetch(`${BACKEND_URL}/api/users/metamask/login`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          address,
+          signature,
+          message,
+          referralCode,
+        }),
+      });
+
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        const errorMsg = data?.error || `MetaMask login failed (${response.status})`;
+        throw new Error(errorMsg);
+      }
+
+      const token = data?.token;
+      if (!token) {
+        throw new Error("Login succeeded but no token was returned.");
+      }
+
+      Cookies.set("token", token, { expires: 7, path: "/" });
+      clearStoredReferralCodeHint();
+      await refreshUser();
+      setSuccess("MetaMask login successful");
+      recordAuthMethod("wallet");
+      onClose();
+    } catch (error: any) {
+      console.error("[LoginModal] MetaMask login error:", error);
+      const msg = error?.message || "MetaMask login failed. Please try again.";
+      setWalletError(msg);
+      toast.error(msg);
     } finally {
       setMetamaskLoading(false);
     }
-  }
-
-  // Handler for MetaMask (or other EVM) wallet
-  function handleEvmConnect(connector: any) {
-    connectWith(connector);
   }
 
   // Handle close attempt
