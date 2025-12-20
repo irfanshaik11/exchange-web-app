@@ -130,6 +130,10 @@ export default function ExportWalletModal({
 
   const [hasConfirmedStorage, setHasConfirmedStorage] = useState(false);
   const [confirmingStorage, setConfirmingStorage] = useState(false);
+  const [pastedKeyFirst, setPastedKeyFirst] = useState("");
+  const [pastedKeySecond, setPastedKeySecond] = useState("");
+  const [copyPasteValidated, setCopyPasteValidated] = useState(false);
+  const [validationError, setValidationError] = useState<string | null>(null);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -269,6 +273,10 @@ export default function ExportWalletModal({
       hasInitializedRef.current = false;
       setHasConfirmedStorage(false);
       setConfirmingStorage(false);
+      setPastedKeyFirst("");
+      setPastedKeySecond("");
+      setCopyPasteValidated(false);
+      setValidationError(null);
 
       // Re-read localStorage flags when modal opens to pick up any auth changes
       if (typeof window !== 'undefined') {
@@ -1008,12 +1016,12 @@ export default function ExportWalletModal({
         className="fixed inset-0 z-50 flex items-center justify-center bg-black/60"
         onClick={isCloseDisabled ? undefined : handleClose}
       >
-        <div 
-          className="bg-[#101114] rounded-lg shadow-2xl w-full max-w-md relative border border-[#2A2B33]"
+        <div
+          className="bg-[#101114] rounded-lg shadow-2xl w-full max-w-[400px] max-h-[90vh] overflow-y-auto relative border border-[#2A2B33]"
           onClick={(e) => e.stopPropagation()}
         >
           {/* Header */}
-          <div className="px-6 py-4 border-b border-[#2A2B33]">
+          <div className="px-5 py-3 border-b border-[#2A2B33]">
             <div className="flex items-center justify-between gap-4">
               <div>
                 <h2 className="text-lg font-semibold text-[#f0f5f5]">Export Wallet</h2>
@@ -1043,82 +1051,79 @@ export default function ExportWalletModal({
           </div>
 
           {/* Content */}
-          <div className="px-6 py-6">
+          <div className="px-5 py-4">
             {/* Authentication Status - Only show if not authenticated */}
             {clientState === ClientState.Ready && (!isAuthenticated || needsTurnkeySession) && (
-              <div className="mb-6">
+              <div className="mb-4">
                 <button
                   onClick={handleReauthenticate}
-                  className="w-full inline-flex items-center justify-center gap-3 rounded-lg bg-white px-4 py-3 text-sm font-medium text-[#1A1A1A] transition hover:bg-gray-100"
+                  className="w-full inline-flex items-center justify-center gap-2 rounded-lg bg-white px-3 py-2.5 text-sm font-medium text-[#1A1A1A] transition hover:bg-gray-100"
                 >
                   <Lock className="w-4 h-4" />
                   Open Turnkey login
                 </button>
-                <p className="mt-3 text-xs text-[#FF4D7F] text-center">
-                  Showing your private keys. DO NOT verify if you are not exporting your private keys.
+                <p className="mt-2 text-[11px] text-[#FF4D7F] text-center">
+                  DO NOT verify if you are not exporting your private keys.
                 </p>
               </div>
             )}
 
             {/* Wallet Address */}
             {selectedWalletId && (
-              <div className="mb-4 space-y-3">
-                <div>
-                  <label className="text-sm text-[#9CA3AF] mb-2 block">
-                    Monad wallet (EVM)
-                  </label>
-                  <div className="flex items-center gap-2">
-                    <input
-                      type="text"
-                      readOnly
-                      value={monadAddress}
-                      className="flex-1 px-3 py-2 rounded-lg bg-[#17191E] border border-[#2A2B33] text-[#f0f5f5] text-sm font-mono"
-                    />
-                    <button
-                      onClick={() => {
-                        if (monadAddress) {
-                          navigator.clipboard.writeText(monadAddress).then(
-                            () => toast.success("Copied to clipboard"),
-                            () => toast.error("Failed to copy")
-                          );
-                        }
-                      }}
-                      className="text-[#9CA3AF] hover:text-[#f0f5f5] transition-colors"
-                    >
-                      <svg width="18" height="18" fill="none" viewBox="0 0 24 24">
-                        <rect x="9" y="9" width="13" height="13" rx="2" ry="2" stroke="currentColor" strokeWidth="2"/>
-                        <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" stroke="currentColor" strokeWidth="2"/>
-                      </svg>
-                    </button>
-                  </div>
+              <div className="mb-3">
+                <label className="text-xs text-[#9CA3AF] mb-1.5 block">
+                  Monad wallet (EVM)
+                </label>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="text"
+                    readOnly
+                    value={monadAddress}
+                    className="flex-1 px-2.5 py-1.5 rounded-lg bg-[#17191E] border border-[#2A2B33] text-[#f0f5f5] text-xs font-mono"
+                  />
+                  <button
+                    onClick={() => {
+                      if (monadAddress) {
+                        navigator.clipboard.writeText(monadAddress).then(
+                          () => toast.success("Copied to clipboard"),
+                          () => toast.error("Failed to copy")
+                        );
+                      }
+                    }}
+                    className="text-[#9CA3AF] hover:text-[#f0f5f5] transition-colors"
+                  >
+                    <svg width="16" height="16" fill="none" viewBox="0 0 24 24">
+                      <rect x="9" y="9" width="13" height="13" rx="2" ry="2" stroke="currentColor" strokeWidth="2"/>
+                      <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" stroke="currentColor" strokeWidth="2"/>
+                    </svg>
+                  </button>
                 </div>
-                {/* Solana wallet field temporarily disabled */}
               </div>
             )}
 
             {/* Private Key Area */}
-            <div className="mb-4">
-              <label className="text-sm text-[#9CA3AF] mb-2 block">Private Key</label>
-              <div className="rounded-lg border border-[#2A2B33] bg-[#17191E] p-4 min-h-[150px] relative">
+            <div className="mb-3">
+              <label className="text-xs text-[#9CA3AF] mb-1.5 block">Private Key</label>
+              <div className="rounded-lg border border-[#2A2B33] bg-[#121212] p-3 min-h-[100px] relative">
                 <div
                   ref={iframeContainerRef}
                   className={`w-full ${iframeVisible ? "block" : "hidden"}`}
                 />
                 {!iframeVisible && (
-                  <div className="flex items-center justify-center min-h-[150px]">
+                  <div className="flex items-center justify-center min-h-[100px]">
                     <div className="text-center w-full">
-                      <div className="blur-sm bg-[#2A2B33] rounded w-full h-20 mb-4 mx-auto"></div>
+                      <div className="blur-sm bg-[#2A2B33] rounded w-full h-16 mb-3 mx-auto"></div>
                       {isAuthenticated && (
                         <div className="flex items-center gap-2 justify-center">
                           {isActionInProgress ? (
                             <>
                               <button
                                 onClick={handleCancel}
-                                className="px-4 py-2 rounded-lg bg-[#FF4D7F] text-white text-sm font-medium hover:bg-[#FF3D6F] transition-colors inline-flex items-center gap-2"
+                                className="px-3 py-1.5 rounded-lg bg-[#FF4D7F] text-white text-sm font-medium hover:bg-[#FF3D6F] transition-colors inline-flex items-center gap-2"
                               >
                                 Cancel
                               </button>
-                              <div className="px-4 py-2 rounded-lg bg-[#374151] text-[#f0f5f5] text-sm font-medium inline-flex items-center gap-2">
+                              <div className="px-3 py-1.5 rounded-lg bg-[#374151] text-[#f0f5f5] text-sm font-medium inline-flex items-center gap-2">
                                 <Loader2 className="h-4 w-4 animate-spin" />
                                 {status === "initializing" && "Initializing..."}
                                 {status === "requesting" && "Requesting export..."}
@@ -1130,7 +1135,7 @@ export default function ExportWalletModal({
                               <button
                                 onClick={handleExport}
                                 disabled={isActionInProgress}
-                                className="px-4 py-2 rounded-lg bg-[#374151] text-[#f0f5f5] text-sm font-medium hover:bg-[#4B5563] transition-colors disabled:opacity-50 disabled:cursor-not-allowed inline-flex items-center gap-2"
+                                className="px-3 py-1.5 rounded-lg bg-[#374151] text-[#f0f5f5] text-sm font-medium hover:bg-[#4B5563] transition-colors disabled:opacity-50 disabled:cursor-not-allowed inline-flex items-center gap-2"
                               >
                                 Reveal private key
                               </button>
@@ -1156,47 +1161,115 @@ export default function ExportWalletModal({
                   </div>
                 )}
               </div>
+
+              {/* Copy-Paste Validation */}
+              {iframeVisible && !copyPasteValidated && (
+                <div className="mt-3 p-3 rounded-lg border border-[#2A2B33] bg-[#121212]">
+                  <p className="text-xs text-[#9CA3AF] mb-2">
+                    Copy your private key from above, then paste it twice to confirm:
+                  </p>
+                  <div className="space-y-2">
+                    <input
+                      type="text"
+                      value={pastedKeyFirst}
+                      onChange={(e) => {
+                        setPastedKeyFirst(e.target.value);
+                        setValidationError(null);
+                      }}
+                      placeholder="Paste your private key here..."
+                      className="w-full px-3 py-2 rounded-lg bg-[#17191E] border border-[#2A2B33] text-[#f0f5f5] text-xs font-mono placeholder:text-[#6B7280]"
+                    />
+                    <input
+                      type="text"
+                      value={pastedKeySecond}
+                      onChange={(e) => {
+                        setPastedKeySecond(e.target.value);
+                        setValidationError(null);
+                      }}
+                      placeholder="Paste it again to confirm..."
+                      className="w-full px-3 py-2 rounded-lg bg-[#17191E] border border-[#2A2B33] text-[#f0f5f5] text-xs font-mono placeholder:text-[#6B7280]"
+                    />
+                    {validationError && (
+                      <p className="text-[11px] text-[#FF4D7F]">{validationError}</p>
+                    )}
+                    <button
+                      onClick={() => {
+                        const first = pastedKeyFirst.trim();
+                        const second = pastedKeySecond.trim();
+
+                        if (!first || !second) {
+                          setValidationError("Please paste your key in both fields.");
+                          return;
+                        }
+                        if (first.length < 20) {
+                          setValidationError("The pasted key seems too short. Please paste the complete key.");
+                          return;
+                        }
+                        if (first !== second) {
+                          setValidationError("The keys don't match. Please paste the same key in both fields.");
+                          return;
+                        }
+
+                        setCopyPasteValidated(true);
+                        setValidationError(null);
+                        toast.success("Key verified! You've confirmed your backup.");
+                      }}
+                      className="w-full px-3 py-2 rounded-lg bg-[#374151] text-[#f0f5f5] text-xs font-medium hover:bg-[#4B5563] transition-colors"
+                    >
+                      Verify Match
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* Validation Success */}
+              {copyPasteValidated && (
+                <div className="mt-3 p-2 rounded-lg bg-[#70E0B0]/10 border border-[#70E0B0]/20 flex items-center gap-2">
+                  <svg className="w-4 h-4 text-[#70E0B0]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                  </svg>
+                  <span className="text-xs text-[#70E0B0]">Private key backup verified</span>
+                </div>
+              )}
             </div>
 
             {/* Status Messages */}
             {error && (
-              <div className="mb-4 p-3 rounded-lg bg-[#FF4D7F]/10 border border-[#FF4D7F]/20 text-sm text-[#FF4D7F]">
+              <div className="mb-3 p-2.5 rounded-lg bg-[#FF4D7F]/10 border border-[#FF4D7F]/20 text-xs text-[#FF4D7F]">
                 {error}
               </div>
             )}
 
             {status !== "idle" && status !== "error" && !iframeVisible && (
-              <div className="mb-4 p-3 rounded-lg bg-[#17191E] border border-[#2A2B33] text-sm text-[#9CA3AF]">
+              <div className="mb-3 p-2.5 rounded-lg bg-[#17191E] border border-[#2A2B33] text-xs text-[#9CA3AF]">
                 {currentStatus.description}
               </div>
             )}
 
             {/* Warning */}
-            <div className="mt-6 p-3 rounded-lg bg-[#FF4D7F]/10 border border-[#FF4D7F]/20 flex items-start gap-2">
-              <AlertTriangle className="text-[#FF4D7F] flex-shrink-0 mt-0.5" size={16} />
-              <p className="text-xs text-[#FF4D7F]">
-                <strong>WARNING:</strong> Your private key grants complete control over this wallet. NEVER SHARE IT WITH ANYONE. Store it somewhere only you can access and remember that keeping it safe is entirely your responsibility.
+            <div className="mt-4 p-2.5 rounded-lg bg-[#FF4D7F]/10 border border-[#FF4D7F]/20 flex items-start gap-2">
+              <AlertTriangle className="text-[#FF4D7F] flex-shrink-0 mt-0.5" size={14} />
+              <p className="text-[11px] leading-tight text-[#FF4D7F]">
+                <strong>WARNING:</strong> Your private key grants complete control over this wallet. NEVER SHARE IT. Store it securely.
               </p>
             </div>
 
             {forceExport && status === "done" && iframeVisible && (
-              <div className="mt-4 p-4 rounded-lg border border-[#2A2B33] bg-[#13151B]">
-                <p className="text-sm text-[#f0f5f5]">
-                  Carefully back up this key now. Write it down or save it in an encrypted manager that <em>you</em> control. We cannot recover it for you.
+              <div className="mt-3 p-3 rounded-lg border border-[#2A2B33] bg-[#121212]">
+                <p className="text-xs text-[#f0f5f5]">
+                  Back up this key now. Save it in an encrypted manager that <em>you</em> control.
                 </p>
-                <p className="mt-2 text-xs text-[#9CA3AF]">
-                  Once you acknowledge this step, you are confirming that you stored the key safely and understand it is solely your responsibility not to lose it.
+                <p className="mt-1.5 text-[11px] text-[#9CA3AF]">
+                  By confirming, you acknowledge that storing this key safely is your responsibility.
                 </p>
-                <div className="mt-3 flex flex-col gap-2">
-                  <button
-                    onClick={handleConfirmStorage}
-                    disabled={confirmingStorage || hasConfirmedStorage}
-                    className="inline-flex items-center justify-center gap-2 rounded-lg bg-[#70E0B0] px-4 py-2 text-sm font-semibold text-[#101114] disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    {confirmingStorage && <Loader2 className="h-4 w-4 animate-spin" />}
-                    {hasConfirmedStorage ? "Confirmed" : "I stored this key safely"}
-                  </button>
-                </div>
+                <button
+                  onClick={handleConfirmStorage}
+                  disabled={confirmingStorage || hasConfirmedStorage || !copyPasteValidated}
+                  className="mt-2.5 w-full inline-flex items-center justify-center gap-2 rounded-lg bg-[#70E0B0] px-3 py-2 text-xs font-semibold text-[#101114] disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {confirmingStorage && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+                  {hasConfirmedStorage ? "Confirmed" : !copyPasteValidated ? "Verify key backup first" : "I stored this key safely"}
+                </button>
               </div>
             )}
           </div>
