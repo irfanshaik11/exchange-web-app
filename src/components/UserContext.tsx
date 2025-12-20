@@ -25,6 +25,7 @@ export interface UserInfo {
   publicKey: string;
   bearerToken: string;
   walletId?: string;
+  subOrgId?: string | null;
   hasExportedWallet: boolean;
   walletExportedAt?: string | null;
 }
@@ -158,6 +159,7 @@ export function UserProvider({ children }: { children: ReactNode }) {
     if (!raw || typeof raw !== "object") return null;
     return {
       ...raw,
+      subOrgId: raw.subOrgId ?? null,
       hasExportedWallet: !!raw.hasExportedWallet,
       walletExportedAt: raw.walletExportedAt ?? null,
     };
