@@ -174,6 +174,7 @@ export default function ExportWalletModal({
       setPastedKeySecond("");
       setCopyPasteValidated(false);
       setValidationError(null);
+      hasAuthenticatedThisVisitRef.current = false;
     }
   }, [isOpen]);
 
