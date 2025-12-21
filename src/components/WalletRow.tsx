@@ -312,39 +312,39 @@ export default function WalletRow({
     const minute = 60 * 1000;
     const hour = 60 * minute;
     const day = 24 * hour;
-    const week = 7 * day;
-    const month = 30 * day;
-    const year = 365 * day;
 
     if (diff < minute) return "Just now";
     if (diff < hour) {
       const mins = Math.floor(diff / minute);
-      return `${mins} min${mins === 1 ? "" : "s"} ago`;
+      return `${mins} ${mins === 1 ? 'min' : 'mins'}`;
     }
     if (diff < day) {
       const hours = Math.floor(diff / hour);
-      return `${hours}h ago`;
+      return `${hours} ${hours === 1 ? 'hour' : 'hours'}`;
     }
-    if (diff < week) {
-      const days = Math.floor(diff / day);
-      return `${days} day${days === 1 ? "" : "s"} ago`;
+    // For anything >= 1 day, show days
+    const days = Math.floor(diff / day);
+    return `${Math.max(1, days)} ${days === 1 ? 'day' : 'days'}`;
+  };
+
+  const handleRowClick = (e: React.MouseEvent) => {
+    // Don't trigger row click if clicking on buttons or interactive elements
+    const target = e.target as HTMLElement;
+    if (
+      target.closest("button") ||
+      target.closest("a") ||
+      target.closest('[role="button"]')
+    ) {
+      return;
     }
-    if (diff < month) {
-      const weeks = Math.floor(diff / week);
-      return `${weeks} week${weeks === 1 ? "" : "s"} ago`;
-    }
-    if (diff < year) {
-      const months = Math.floor(diff / month);
-      return `${months} month${months === 1 ? "" : "s"} ago`;
-    }
-    const years = Math.floor(diff / year);
-    return `${years} yr${years === 1 ? "" : "s"} ago`;
+    onClick && onClick(wallet);
   };
 
   return (
     <tr
       key={wallet.address}
-      className="border-b border-neutral-800/50 hover:bg-neutral-800/40 transition-all duration-200"
+      className="border-b border-neutral-800/50 hover:bg-neutral-800/40 transition-all duration-200 cursor-pointer"
+      onClick={handleRowClick}
     >
       <td className="py-3 px-2">
         <div className="flex w-full items-center gap-4">

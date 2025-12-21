@@ -690,11 +690,18 @@ const MonadTradeActionPanel: React.FC<MonadTradeActionPanelProps> = ({ token }) 
         return;
       }
     } else if (mode === "sell") {
-      // Check if user has any tokens to sell
-      const currentTokenBalance = positionSummary?.balanceTokens ?? 0;
-      if (currentTokenBalance <= 0) {
-        toast.error('Insufficient token balance. Your balance is 0 tokens. Cannot sell.', { duration: 5000 });
-        return;
+      // Only block when we have a confirmed zero balance; allow attempts while position data is still loading/stale
+      const currentTokenBalance = positionSummary?.balanceTokens;
+      if (currentTokenBalance !== undefined) {
+        if (currentTokenBalance <= 0) {
+          toast.error('Insufficient token balance. Your balance is 0 tokens. Cannot sell.', { duration: 5000 });
+          return;
+        }
+      } else if (!positionLoading) {
+        // Kick off a background refresh so the panel catches up after quick buys elsewhere
+        refreshPosition().catch((err) => {
+          console.error('[MonadTradeActionPanel] Failed to refresh position before sell:', err);
+        });
       }
     }
     // ============================================

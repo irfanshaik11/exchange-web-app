@@ -9,6 +9,7 @@ export const env = createEnv({
   server: {
     NODE_ENV: z.enum(["development", "test", "production"]),
     NEON_DB_API_KEY: z.string(),
+    BLOCKVISION_API_KEY: z.string().optional(),
     X_API_KEY: z.string().optional(),
     X_API_KEY_SECRET: z.string().optional(),
     X_BEARER_TOKEN: z.string().optional(),
@@ -29,6 +30,7 @@ export const env = createEnv({
     NEXT_PUBLIC_BACKEND_URL: z.string(),
     NEXT_PUBLIC_GO_SERVICE_URL: z.string().url(),
     NEXT_PUBLIC_MONAD_TOKEN_SERVICE_URL: z.string().url().optional(),
+    NEXT_PUBLIC_BLOCKVISION_API_KEY: z.string().optional(),
     NEXT_PUBLIC_IS_BACKEND_DEPLOYED: z.preprocess(
       (val) => val === "true" || val === true,
       z.boolean(),
@@ -61,6 +63,7 @@ export const env = createEnv({
   runtimeEnv: {
     NODE_ENV: process.env.NODE_ENV,
     NEON_DB_API_KEY: process.env.NEON_DB_API_KEY,
+    BLOCKVISION_API_KEY: process.env.BLOCKVISION_API_KEY,
     X_API_KEY: process.env.X_API_KEY,
     X_API_KEY_SECRET: process.env.X_API_KEY_SECRET,
     X_BEARER_TOKEN: process.env.X_BEARER_TOKEN,
@@ -73,6 +76,7 @@ export const env = createEnv({
     NEXT_PUBLIC_GO_SERVICE_URL: process.env.NEXT_PUBLIC_GO_SERVICE_URL,
     NEXT_PUBLIC_MONAD_TOKEN_SERVICE_URL: process.env.NEXT_PUBLIC_MONAD_TOKEN_SERVICE_URL,
     NEXT_PUBLIC_WEBSOCKET_URL: process.env.NEXT_PUBLIC_WEBSOCKET_URL,
+    NEXT_PUBLIC_BLOCKVISION_API_KEY: process.env.NEXT_PUBLIC_BLOCKVISION_API_KEY,
     NEXT_PUBLIC_IS_BACKEND_DEPLOYED:
       process.env.NEXT_PUBLIC_IS_BACKEND_DEPLOYED,
     NEXT_PUBLIC_CODEX_API_KEY: process.env.NEXT_PUBLIC_CODEX_API_KEY,
@@ -84,10 +88,10 @@ export const env = createEnv({
 		NEXT_PUBLIC_REQUIRE_REFERRAL_ACCESS: process.env.NEXT_PUBLIC_REQUIRE_REFERRAL_ACCESS,
     NEXT_PUBLIC_DEFAULT_REFERRAL_CODE: process.env.NEXT_PUBLIC_DEFAULT_REFERRAL_CODE,
     NEXT_PUBLIC_MONAD_RPC_URL: process.env.NEXT_PUBLIC_MONAD_RPC_URL,
-    NEXT_PUBLIC_ORGANIZATION_ID:process.env. NEXT_PUBLIC_ORGANIZATION_ID,
+    NEXT_PUBLIC_ORGANIZATION_ID:process.env.NEXT_PUBLIC_ORGANIZATION_ID,
     NEXT_PUBLIC_AUTH_PROXY_CONFIG_ID:process.env.NEXT_PUBLIC_AUTH_PROXY_CONFIG_ID,
     NEXT_PUBLIC_TURNKEY_AUTH_PROXY_URL: process.env.NEXT_PUBLIC_TURNKEY_AUTH_PROXY_URL,
-    NEXT_PUBLIC_GOOGLE_CLIENT_ID:process.env. NEXT_PUBLIC_GOOGLE_CLIENT_ID,
+    NEXT_PUBLIC_GOOGLE_CLIENT_ID:process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID,
     NEXT_PUBLIC_REDIRECT_URI:process.env.NEXT_PUBLIC_REDIRECT_URI,
     NEXT_PUBLIC_TURNKEY_API_BASE_URL:process.env.NEXT_PUBLIC_TURNKEY_API_BASE_URL,
 
