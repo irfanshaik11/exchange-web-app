@@ -1445,13 +1445,14 @@ const MonadTradeActionPanel: React.FC<MonadTradeActionPanelProps> = ({ token }) 
                       ${usdValue.toFixed(2)} • {tokensDisplay} {token.symbol}
                     </span>
                   );
-                } else if (mode === "sell" && !isNaN(amountValue) && amountValue > 0 && pos) {
+                } else if (mode === "sell" && !isNaN(amountValue) && amountValue > 0) {
                   // Calculate USD value and MON received for sell
                   const sellPercentage = amountValue / 100;
-                  const tokensSold = pos.balanceTokens * sellPercentage;
+                  const availableTokens = pos?.balanceTokens ?? 0;
+                  const tokensSold = availableTokens * sellPercentage;
                   
                   // Calculate USD value based on current token price
-                  const usdValue = tokenPrice > 0 ? (tokensSold * tokenPrice) : (pos.balanceUsdHistorical * sellPercentage);
+                  const usdValue = tokenPrice > 0 ? (tokensSold * tokenPrice) : ((pos?.balanceUsdHistorical || 0) * sellPercentage);
                   
                   // Calculate MON received based on USD value (estimate)
                   const monReceived = effectiveMonPrice > 0 ? (usdValue / effectiveMonPrice) : 0;
@@ -1476,9 +1477,13 @@ const MonadTradeActionPanel: React.FC<MonadTradeActionPanelProps> = ({ token }) 
                     monDisplay = formatWithSubscript(monReceived);
                   }
                   
-                  return (
+                  return availableTokens > 0 || positionLoading ? (
                     <span className="text-[11px] font-normal opacity-90">
-                      ${usdValue.toFixed(2)} • {monDisplay} MON • {tokensDisplay} {token.symbol}
+                      {positionLoading ? 'Calculating...' : `$${usdValue.toFixed(2)} • ${monDisplay} MON • ${tokensDisplay} ${token.symbol}`}
+                    </span>
+                  ) : (
+                    <span className="text-[11px] font-normal opacity-70">
+                      Enter % to estimate sell proceeds
                     </span>
                   );
                 }
