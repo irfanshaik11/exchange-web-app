@@ -19,7 +19,10 @@ import MonadTopTradersTable from "../../../components/trade/MonadTopTradersTable
 import MonadHoldersTable from "../../../components/trade/MonadHoldersTable";
 import MonadDevTokensTable from "../../../components/trade/MonadDevTokensTable";
 import { useMonadTradesWebSocket } from "../../../hooks/useMonadTradesWebSocket";
+import { useMonadPositionWebSocket, type MonadPosition } from "../../../hooks/useMonadPositionWebSocket";
 import useMonadDevTokens from "../../../hooks/useMonadDevTokens";
+import { consumePendingMonadPositionRefresh } from "../../../utils/monadTradeEvents";
+import { useSolPrice } from "../../../components/SolPriceContext";
 
 // Lazy load other components
 const MonadTrades = dynamic(() => import("../../../components/trade/MonadTrades"), { ssr: false });
@@ -75,6 +78,7 @@ export default function MonadTradePage() {
   const [error, setError] = useState<string | null>(null);
   const { isConnected } = useWallet();
   const { user } = useUser();
+  const { monPrice } = useSolPrice();
   const [selectedTab, setSelectedTab] = useState("Transactions");
   const [search, setSearch] = useState("");
   const [showMobileTradeModal, setShowMobileTradeModal] = useState(false);
@@ -107,6 +111,53 @@ export default function MonadTradePage() {
     if (typeof _mint === "string" && _mint.trim()) return _mint;
     return typeof contractAddress === "string" ? contractAddress : "";
   });
+  const [positionForChart, setPositionForChart] = useState<MonadPosition | null>(null);
+  const [chartMetrics, setChartMetrics] = useState<{ lastPriceUsd?: number; lastMarketCapUsd?: number; maxMarketCapUsd?: number }>({});
+
+  // Track user position for chart overlays (avg entry/exit) and quick updates
+  const { position: userPositionForChart, refreshPosition: refreshChartPosition } = useMonadPositionWebSocket({
+    tokenAddress: tokenMintForLive,
+    enabled: !!user?.id && !!tokenMintForLive,
+    onUpdate: (pos) => setPositionForChart(pos),
+  });
+
+  useEffect(() => {
+    if (userPositionForChart) {
+      setPositionForChart(userPositionForChart);
+    }
+  }, [userPositionForChart]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined' || !tokenMintForLive) return;
+    const normalized = tokenMintForLive.toLowerCase();
+
+    const triggerRefresh = () => {
+      refreshChartPosition().catch((err) => {
+        console.error('[MonadTradePage] Failed to refresh position after quick trade:', err);
+      });
+    };
+
+    const consumePending = () => {
+      const ts = consumePendingMonadPositionRefresh(normalized);
+      if (ts && Date.now() - ts < 60_000) {
+        triggerRefresh();
+        setTimeout(triggerRefresh, 1500);
+      }
+    };
+
+    consumePending();
+
+    const handler = (event: Event) => {
+      const detail = (event as CustomEvent<{ tokenAddress?: string }>).detail;
+      const addr = detail?.tokenAddress?.toLowerCase();
+      if (addr === normalized) {
+        consumePending();
+      }
+    };
+
+    window.addEventListener('monadQuickTrade', handler as EventListener);
+    return () => window.removeEventListener('monadQuickTrade', handler as EventListener);
+  }, [tokenMintForLive, refreshChartPosition]);
 
   // Real-time token metrics via WebSocket
   const [liveMetrics, setLiveMetrics] = useState<TokenMetrics | null>(null);
@@ -327,6 +378,81 @@ export default function MonadTradePage() {
     };
   }, [tokenData, optimisticToken, contractAddress, liveMetrics, wsMetrics]);
 
+  // Memoize pairAddress early so downstream hooks can use it
+  const pairAddress = React.useMemo(() => {
+    return displayToken?.pair_address || (contractAddress as string);
+  }, [displayToken?.pair_address, contractAddress]);
+
+  // Dev address and trades (used for markers and avg entry/exit fallback)
+  const { devTokenData: devData } = useMonadDevTokens(
+    (contractAddress as string) || undefined,
+    { enabled: !!contractAddress && typeof contractAddress === "string" }
+  );
+  const devAddress = React.useMemo(() => {
+    return devData?.dev_wallet || (displayToken as any)?.dev_address || (displayToken as any)?.creator_address || null;
+  }, [devData?.dev_wallet, displayToken]);
+
+  const { trades: allTrades } = useMonadTradesWebSocket({
+    tokenAddress: tokenMintForLive,
+    addressAliases: pairAddress ? [pairAddress] : [],
+    enabled: !!tokenMintForLive, // allow even without devAddress for avg calc fallback
+    maxTrades: 200,
+  });
+
+  const avgEntryPriceUsd = React.useMemo(() => {
+    if (positionForChart && positionForChart.totalBoughtTokens > 0) {
+      return positionForChart.totalBoughtUsd / positionForChart.totalBoughtTokens;
+    }
+    // Fallback to trades (weighted by token amount)
+    if (!allTrades || allTrades.length === 0 || !monPrice) return null;
+    let buyTokens = 0;
+    let buyUsd = 0;
+    allTrades.forEach((t) => {
+      if (t.is_buy) {
+        const tokenAmt = Number(t.token_amount) || 0;
+        const priceMon = Number(t.price_mon) || 0;
+        if (tokenAmt > 0 && priceMon > 0) {
+          buyTokens += tokenAmt;
+          buyUsd += tokenAmt * priceMon * monPrice;
+        }
+      }
+    });
+    if (buyTokens <= 0 || buyUsd <= 0) return null;
+    return buyUsd / buyTokens;
+  }, [allTrades, monPrice, positionForChart]);
+
+  const avgExitPriceUsd = React.useMemo(() => {
+    if (positionForChart && positionForChart.totalSoldTokens > 0) {
+      return positionForChart.totalSoldUsd / positionForChart.totalSoldTokens;
+    }
+    if (!allTrades || allTrades.length === 0 || !monPrice) return null;
+    let sellTokens = 0;
+    let sellUsd = 0;
+    allTrades.forEach((t) => {
+      if (!t.is_buy) {
+        const tokenAmt = Number(t.token_amount) || 0;
+        const priceMon = Number(t.price_mon) || 0;
+        if (tokenAmt > 0 && priceMon > 0) {
+          sellTokens += tokenAmt;
+          sellUsd += tokenAmt * priceMon * monPrice;
+        }
+      }
+    });
+    if (sellTokens <= 0 || sellUsd <= 0) return null;
+    return sellUsd / sellTokens;
+  }, [allTrades, monPrice, positionForChart]);
+
+  const priceLineValues = React.useMemo(() => {
+    const entry = avgEntryPriceUsd ?? undefined;
+    const exit = avgExitPriceUsd ?? undefined;
+    // Only update object when values change to avoid needless chart churn
+    return { avgEntryPriceUsd: entry, avgExitPriceUsd: exit };
+  }, [avgEntryPriceUsd, avgExitPriceUsd]);
+
+  const handleChartMetrics = React.useCallback((metrics: { lastPriceUsd?: number; lastMarketCapUsd?: number; maxMarketCapUsd?: number }) => {
+    setChartMetrics(metrics);
+  }, []);
+
   // Once token data resolves, align live stream identifier to the mint
   useEffect(() => {
     if (displayToken?.mint && displayToken.mint !== tokenMintForLive) {
@@ -344,19 +470,31 @@ export default function MonadTradePage() {
     ? `${tokenNameForTitle} | Monad Trade`
     : "Monad Trade";
 
+  const displayTokenWithChartMetrics = React.useMemo(() => {
+    if (!displayToken) return displayToken;
+    return {
+      ...displayToken,
+      usd_price: chartMetrics.lastPriceUsd ?? (displayToken as any)?.usd_price,
+      price_usd: chartMetrics.lastPriceUsd ?? (displayToken as any)?.price_usd,
+      market_cap_usd: chartMetrics.lastMarketCapUsd ?? (displayToken as any)?.market_cap_usd ?? displayToken.market_cap_usd,
+      fully_diluted_value: chartMetrics.lastMarketCapUsd ?? (displayToken as any)?.fully_diluted_value ?? (displayToken as any)?.market_cap_usd,
+      max_market_cap_usd: chartMetrics.maxMarketCapUsd ?? (displayToken as any)?.max_market_cap_usd,
+    } as any;
+  }, [chartMetrics, displayToken]);
+
   // OHLC params - Monad uses 1s (1-second) candles as default for all tokens
   // TimescaleDB supports: 1s, 1m, 5m, 15m, 30m, 1h, 4h, 1d, 1w
   const getOHLCParams = useComponentCache(
     "ohlc-params-monad",
     [tokenData, displayToken],
     () => {
-      // Always use 1s interval with 1d (24h) timeframe for all tokens regardless of age
-      return { interval: "1s" as const, timeframe: "24h" as const, optimize: false };
+      // Always use 1s interval with 30d timeframe for all tokens regardless of age
+      return { interval: "1s" as const, timeframe: "30d" as const, optimize: true };
     }
   );
 
   const ohlcParams = getOHLCParams;
-  const defaultOHLCParams = { interval: "1s" as const, timeframe: "24h" as const, optimize: false };
+  const defaultOHLCParams = { interval: "1s" as const, timeframe: "30d" as const, optimize: true };
   const currentOHLCParams = React.useMemo(
     () => ohlcParams || defaultOHLCParams,
     [ohlcParams?.interval, ohlcParams?.timeframe, ohlcParams?.optimize]
@@ -501,29 +639,6 @@ export default function MonadTradePage() {
     };
   }, [showMobileTradeModal, handleDragMove, handleDragEnd]);
 
-  // Memoize pairAddress to prevent unnecessary changes that cause component remounts
-  // Only recalculate when the actual pair_address changes, not on every displayToken update
-  const pairAddress = React.useMemo(() => {
-    return displayToken?.pair_address || (contractAddress as string);
-  }, [displayToken?.pair_address, contractAddress]);
-
-  // Get dev address from dev token data
-  const { devTokenData: devData } = useMonadDevTokens(
-    (contractAddress as string) || undefined,
-    { enabled: !!contractAddress && typeof contractAddress === "string" }
-  );
-  const devAddress = React.useMemo(() => {
-    return devData?.dev_wallet || (displayToken as any)?.dev_address || (displayToken as any)?.creator_address || null;
-  }, [devData?.dev_wallet, displayToken]);
-
-  // Get trades for dev marker detection
-  const { trades: allTrades } = useMonadTradesWebSocket({
-    tokenAddress: tokenMintForLive,
-    addressAliases: pairAddress ? [pairAddress] : [],
-    enabled: !!tokenMintForLive && !!devAddress,
-    maxTrades: 200,
-  });
-
   // Filter trades to find dev buys/sells
   const devTrades = React.useMemo(() => {
     if (!devAddress || !allTrades.length) return [];
@@ -601,7 +716,11 @@ export default function MonadTradePage() {
               }}
             >
               <div className="px-2 flex-shrink-0">
-                <TradeHeader token={displayToken as any} />
+                <TradeHeader
+                  token={displayTokenWithChartMetrics as any}
+                  livePriceUsd={chartMetrics?.lastPriceUsd}
+                  liveMarketCapUsd={chartMetrics?.lastMarketCapUsd}
+                />
               </div>
 
               <div className="px-3 border-b border-[#2A2B33]" style={{ marginTop: '2px' }} />
@@ -635,6 +754,8 @@ export default function MonadTradePage() {
                     tokenName={displayToken?.name || null}
                     tokenDecimals={displayToken?.decimals || null}
                     network="monad"
+                    priceLines={priceLineValues}
+                    onChartMetrics={handleChartMetrics}
                   />
                 ) : (
                   <div className="flex items-center justify-center h-full" style={{ color: AX.muted }}>

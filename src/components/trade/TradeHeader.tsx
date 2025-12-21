@@ -388,9 +388,11 @@ function getColumnType(token: Token): "new" | "final-stretch" | "migrated" {
 /* ===================================================================== */
 interface TradeHeaderProps {
   token: Token | null;
+  livePriceUsd?: number | null;
+  liveMarketCapUsd?: number | null;
 }
 
-const TradeHeader: React.FC<TradeHeaderProps> = ({ token }) => {
+const TradeHeader: React.FC<TradeHeaderProps> = ({ token, livePriceUsd, liveMarketCapUsd }) => {
   if (!token || (!token.name && !token.symbol)) {
     return (
       <div className="flex-shrink-0 px-2">
@@ -447,12 +449,20 @@ const TradeHeader: React.FC<TradeHeaderProps> = ({ token }) => {
   });
 
   const marketData = getMarketData();
-  const mcap = marketData?.market_cap_usd || token.market_cap_usd || 0;
-  const price =
-    marketData?.price_usd ||
-    (token as any).usd_price ||
-    (token as any).price_usd ||
+  const effectivePrice =
+    livePriceUsd ??
+    marketData?.price_usd ??
+    (token as any).usd_price ??
+    (token as any).price_usd ??
     0;
+  const effectiveMarketCap =
+    liveMarketCapUsd ??
+    marketData?.market_cap_usd ??
+    (token as any).market_cap_usd ??
+    token.market_cap_usd ??
+    0;
+  const mcap = effectiveMarketCap;
+  const price = effectivePrice;
   const liq =
     marketData?.liquidity_usd ??
     marketData?.volume_usd ??
@@ -473,8 +483,7 @@ const TradeHeader: React.FC<TradeHeaderProps> = ({ token }) => {
       0;
     if (v) return v;
     const mc =
-      marketData?.market_cap_usd ||
-      (token as any).market_cap_usd ||
+      effectiveMarketCap ||
       (token as any).fully_diluted_value ||
       0;
     return mc ? Math.min((mc / 69000000) * 100, 100) : 0;

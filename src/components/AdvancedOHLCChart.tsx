@@ -31,11 +31,21 @@ export interface AdvancedOHLCChartProps {
   tokenName?: string | null;
   tokenDecimals?: number | null;
   network?: 'solana' | 'monad'; // Network type (defaults to 'solana' for backward compatibility)
+  priceLines?: {
+    avgEntryPriceUsd?: number | null;
+    avgExitPriceUsd?: number | null;
+  };
+  onChartMetrics?: (metrics: {
+    lastPriceUsd?: number;
+    lastMarketCapUsd?: number;
+    maxMarketCapUsd?: number;
+  }) => void;
 }
 
 const BACKEND_URL = process.env.NEXT_PUBLIC_GO_SERVICE_URL;
 const MONAD_BACKEND_URL = process.env.NEXT_PUBLIC_MONAD_TOKEN_SERVICE_URL!;
 const VALID_INTERVALS: BackendInterval[] = ['1s', '5s', '15s', '30s', '1m', '5m', '15m', '1h', '4h', '1d', '7d'];
+const MARKET_CAP_MULTIPLIER = 1_000_000_000; // 1B supply for Monad
 
 // Map our intervals to TradingView resolution format
 const INTERVAL_TO_RESOLUTION: Record<BackendInterval, string> = {
@@ -151,6 +161,23 @@ const formatTokenAmount = (value: number, tokenDecimals?: number | null): string
   });
 };
 
+const formatAxisLabel = (value: number, isMarketCap: boolean): string => {
+  if (!Number.isFinite(value)) return '—';
+  const abs = Math.abs(value);
+
+  if (isMarketCap) {
+    if (abs >= 1_000_000_000_000) return `$${(value / 1_000_000_000_000).toFixed(2)}T`;
+    if (abs >= 1_000_000_000) return `$${(value / 1_000_000_000).toFixed(2)}B`;
+    if (abs >= 1_000_000) return `$${(value / 1_000_000).toFixed(2)}M`;
+    if (abs >= 1_000) return `$${(value / 1_000).toFixed(2)}K`;
+    return `$${value.toFixed(2)}`;
+  }
+
+  if (abs >= 1) return `$${value.toFixed(2)}`;
+  if (abs >= 0.1) return `$${value.toFixed(4)}`;
+  return `$${value.toFixed(6)}`;
+};
+
 const truncateAddress = (address?: string | null): string => {
   if (!address || address.length <= 10) return address || 'Unknown';
   return `${address.slice(0, 6)}…${address.slice(-4)}`;
@@ -185,6 +212,16 @@ const getWindowStartTime = (unixTime: number, interval: BackendInterval): number
     default:
       return seconds;
   }
+};
+
+const mapSecondsToTimeframe = (spanSeconds: number): BackendTimeRange => {
+  if (!Number.isFinite(spanSeconds) || spanSeconds <= 0) return '24h';
+  if (spanSeconds >= 15552000) return '180d'; // >= 180d
+  if (spanSeconds >= 2592000) return '30d';   // >= 30d
+  if (spanSeconds >= 604800) return '7d';     // >= 7d
+  if (spanSeconds >= 86400) return '24h';     // >= 1d
+  if (spanSeconds >= 14400) return '4h';      // >= 4h
+  return '1h';
 };
 
 const resolveTradeSymbol = (
@@ -254,6 +291,8 @@ const AdvancedOHLCChart: React.FC<AdvancedOHLCChartProps> = ({
   tokenName = null,
   tokenDecimals = null,
   network = 'solana', // Default to solana for backward compatibility
+  priceLines,
+  onChartMetrics,
 }) => {
   // DEBUG: Confirm component is rendering with latest code
   console.log('[AdvancedOHLCChart] 🚀 Component rendering - VERSION 2', { mint, pairAddress, network, interval });
@@ -309,6 +348,137 @@ const AdvancedOHLCChart: React.FC<AdvancedOHLCChartProps> = ({
       close: transformOHLCValue(bar.close, mode, isMonad),
     };
   }, [transformOHLCValue]);
+
+  const computeMaxMarketCapUsd = useCallback((): number | null => {
+    const isMonad = latestParamsRef.current.network === 'monad';
+    if (!isMonad) return null;
+    const data = lastGoodCandlesRef.current || [];
+    if (!data.length) return null;
+    let maxHigh = 0;
+    for (const candle of data) {
+      if (candle?.h && candle.h > maxHigh) {
+        maxHigh = candle.h;
+      }
+    }
+    if (!Number.isFinite(maxHigh) || maxHigh <= 0) return null;
+    return maxHigh * MARKET_CAP_MULTIPLIER;
+  }, []);
+
+  const syncPriceLines = useCallback((maxMarketCapUsdOverride?: number | null) => {
+    const isMonad = latestParamsRef.current.network === 'monad';
+    const widget = widgetRef.current;
+    let chart: any = null;
+
+    // TradingView can throw if chart() is called before the widget is fully ready
+    try {
+      chart = widget?.chart?.();
+    } catch (err) {
+      console.warn('[AdvancedOHLCChart] chart() not ready for price lines, skipping:', err);
+    }
+
+    // Clear any existing shapes if not Monad or chart not ready
+    if (!chart || typeof chart.createShape !== 'function' || !isMonad) {
+      Object.values(priceLineShapesRef.current).forEach(shape => {
+        try {
+          shape?.remove?.();
+        } catch {}
+      });
+      priceLineShapesRef.current = {};
+      return;
+    }
+
+    const mode = displayModeRef.current;
+    const axisIsMarketCap = mode === 'MC';
+    const maxMarketCapUsd = typeof maxMarketCapUsdOverride === 'number'
+      ? maxMarketCapUsdOverride
+      : computeMaxMarketCapUsd();
+
+    const toAxisPrice = (usdPrice?: number | null) => {
+      if (!usdPrice || !Number.isFinite(usdPrice) || usdPrice <= 0) return null;
+      return axisIsMarketCap ? usdPrice * MARKET_CAP_MULTIPLIER : usdPrice;
+    };
+
+    const ensureShape = (key: string, usdPrice: number | null, label: string, color: string, lineStyle: number = 0) => {
+      const priceOnAxis = toAxisPrice(usdPrice);
+      const currentShape = priceLineShapesRef.current[key];
+
+      if (!priceOnAxis) {
+        if (currentShape) {
+          try {
+            currentShape?.remove?.();
+          } catch {}
+          delete priceLineShapesRef.current[key];
+        }
+        return;
+      }
+
+      const text = `${label}: ${formatAxisLabel(priceOnAxis, axisIsMarketCap)}`;
+
+      // If shape exists, try to update in place
+      if (currentShape) {
+        if (typeof currentShape?.setProperties === 'function') {
+          try {
+            currentShape.setProperties({
+              price: priceOnAxis,
+              text,
+            });
+            return;
+          } catch {}
+        }
+        try {
+          currentShape?.remove?.();
+        } catch {}
+        delete priceLineShapesRef.current[key];
+      }
+
+      try {
+        const shape = chart.createShape({ price: priceOnAxis }, {
+          shape: 'horizontal_line',
+          text,
+          lock: true,
+          disableSelection: true,
+          disableSave: true,
+          overrides: {
+            linecolor: color,
+            textcolor: color,
+            linestyle: lineStyle, // 0 = solid, 1 = dashed, 2 = dotted
+            linewidth: 2,
+            showLabel: true,
+            drawPriceLabel: true,
+          },
+        });
+        priceLineShapesRef.current[key] = shape;
+      } catch (err) {
+        console.error('[AdvancedOHLCChart] Failed to create price line shape:', err);
+      }
+    };
+
+    ensureShape('maxMc', maxMarketCapUsd ? maxMarketCapUsd / MARKET_CAP_MULTIPLIER : null, 'Max MC', '#f2994a', 2);
+    ensureShape('avgEntry', priceLines?.avgEntryPriceUsd ?? null, 'Avg Entry', '#f2c94c', 2);
+    ensureShape('avgExit', priceLines?.avgExitPriceUsd ?? null, 'Avg Exit', '#4aa3ff', 2);
+  }, [computeMaxMarketCapUsd, priceLines]);
+
+  const updateChartMetrics = useCallback(() => {
+    const candles = lastGoodCandlesRef.current;
+    if (!candles || candles.length === 0) return;
+
+    const sorted = [...candles].sort((a, b) => a.unix_time - b.unix_time);
+    const latest = sorted[sorted.length - 1];
+    const lastPriceUsd = Number(latest?.c || latest?.o || 0);
+    if (!Number.isFinite(lastPriceUsd) || lastPriceUsd <= 0) return;
+
+    const isMonad = latestParamsRef.current.network === 'monad';
+    const maxMarketCapUsd = isMonad ? computeMaxMarketCapUsd() : null;
+    const metrics = {
+      lastPriceUsd,
+      lastMarketCapUsd: isMonad ? lastPriceUsd * MARKET_CAP_MULTIPLIER : undefined,
+      maxMarketCapUsd: isMonad ? maxMarketCapUsd ?? undefined : undefined,
+    };
+
+    lastMetricsRef.current = metrics;
+    syncPriceLines(metrics.maxMarketCapUsd ?? null);
+    onChartMetrics?.(metrics);
+  }, [computeMaxMarketCapUsd, onChartMetrics, syncPriceLines]);
 
   useEffect(() => {
     if (!initialTokenId && (mint || pairAddress)) {
@@ -370,6 +540,10 @@ const AdvancedOHLCChart: React.FC<AdvancedOHLCChartProps> = ({
     });
   }, [displayMode, selectedInterval]);
 
+  useEffect(() => {
+    syncPriceLines(lastMetricsRef.current.maxMarketCapUsd ?? null);
+  }, [displayMode, priceLines, syncPriceLines]);
+
   // Refs for data management (same as BackendOHLCChart)
   const lastGoodCandlesRef = useRef<BackendOHLCData[]>(preloadedData || []);
   const inFlightRef = useRef<string | null>(null);
@@ -380,8 +554,11 @@ const AdvancedOHLCChart: React.FC<AdvancedOHLCChartProps> = ({
   const datafeedRef = useRef<any>(null);
   // Cache tracking - prevents redundant HTTP calls
   const cachedIntervalRef = useRef<string | null>(null);
+  const cachedTimeframeRef = useRef<string | null>(null);
   const fetchCountRef = useRef<number>(0); // Debug: track fetch count
   const getBarsInFlightRef = useRef<Promise<void> | null>(null); // Prevent concurrent getBars requests
+  const getBarsInFlightKeyRef = useRef<string | null>(null);
+  const visibleRangeDebounceRef = useRef<NodeJS.Timeout | null>(null);
   // WebSocket for real-time OHLC updates (Monad only)
   const wsRef = useRef<WebSocket | null>(null);
   const wsReconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -395,6 +572,9 @@ const AdvancedOHLCChart: React.FC<AdvancedOHLCChartProps> = ({
     typeof tokenDecimals === 'number' && !Number.isNaN(tokenDecimals) ? tokenDecimals : null
   );
   const hasRealPriceDataRef = useRef<boolean>(false); // Track if we've received real price data
+  const priceLineShapesRef = useRef<Record<string, any>>({});
+  const lastMetricsRef = useRef<{ lastPriceUsd?: number; lastMarketCapUsd?: number; maxMarketCapUsd?: number }>({});
+  const lastPriceLinesRef = useRef<{ avgEntryPriceUsd?: number | null; avgExitPriceUsd?: number | null }>({});
   const marksInitializedRef = useRef(false);
   const prevTradeDataLengthRef = useRef<number>(tradeData?.length || 0);
   const tradeSignatureRef = useRef<string>(
@@ -490,11 +670,12 @@ const AdvancedOHLCChart: React.FC<AdvancedOHLCChartProps> = ({
   // Build URL for OHLC data (same as BackendOHLCChart)
   // Allow override of interval for when TradingView requests a different resolution
   const buildUrl = useCallback(
-    (overrideInterval?: BackendInterval) => {
+    (overrideInterval?: BackendInterval, overrideTimeframe?: BackendTimeRange) => {
       const { network: currentNetwork, mint: currentMint, pairAddress: currentPairAddress, interval: currentInterval, timeframe: currentTimeframe, optimize: currentOptimize } =
         latestParamsRef.current;
 
       const effectiveInterval = overrideInterval || currentInterval;
+      const effectiveTimeframe = overrideTimeframe || currentTimeframe;
 
       if (currentNetwork === 'monad') {
         if (typeof window === 'undefined') {
@@ -505,7 +686,7 @@ const AdvancedOHLCChart: React.FC<AdvancedOHLCChartProps> = ({
         if (tokenAddress) url.searchParams.set('token_address', tokenAddress);
         // Fetch actual interval data (1s for 1s, etc.)
         url.searchParams.set('interval', effectiveInterval);
-        url.searchParams.set('timeframe', currentTimeframe);
+        url.searchParams.set('timeframe', effectiveTimeframe);
         if (currentOptimize) url.searchParams.set('optimize', 'true');
         return url;
       }
@@ -514,7 +695,7 @@ const AdvancedOHLCChart: React.FC<AdvancedOHLCChartProps> = ({
       if (currentMint) url.searchParams.set('mint', currentMint);
       if (currentPairAddress) url.searchParams.set('pair_address', currentPairAddress);
       url.searchParams.set('interval', effectiveInterval);
-      url.searchParams.set('timeframe', currentTimeframe);
+      url.searchParams.set('timeframe', effectiveTimeframe);
       if (currentOptimize) url.searchParams.set('optimize', 'true');
       return url;
     },
@@ -710,6 +891,7 @@ const AdvancedOHLCChart: React.FC<AdvancedOHLCChartProps> = ({
       setCandles(items);
       setLastUpdate(new Date());
       setRetryCount(0);
+      updateChartMetrics();
       onDataUpdate?.(items);
       
       // If this is the first real data and widget is ready, refresh symbol to update price scale
@@ -835,6 +1017,7 @@ const AdvancedOHLCChart: React.FC<AdvancedOHLCChartProps> = ({
       setIsLoading(false);
       hasInitializedRef.current = true;
       firstLoadRef.current = false;
+      updateChartMetrics();
       
       onDataUpdate?.(preloadedData);
       
@@ -1057,6 +1240,7 @@ const AdvancedOHLCChart: React.FC<AdvancedOHLCChartProps> = ({
           hasInitializedRef.current = true;
           firstLoadRef.current = false; // Ensure loading overlay is dismissed
           console.log('[AdvancedOHLCChart] 📊 WebSocket data received - loading state cleared');
+          updateChartMetrics();
 
           // Force TradingView to refresh data from the updated cache
           // Use resetData() instead of setSymbol to avoid disrupting subscription lifecycle
@@ -1265,6 +1449,7 @@ const AdvancedOHLCChart: React.FC<AdvancedOHLCChartProps> = ({
               message: 'subscribeBars may not have been called yet by TradingView',
             });
           }
+          updateChartMetrics();
           
           return; // Don't process as 1s candle
         }
@@ -1366,6 +1551,7 @@ const AdvancedOHLCChart: React.FC<AdvancedOHLCChartProps> = ({
           cachedData.push(newCandle);
           cachedData.sort((a, b) => a.unix_time - b.unix_time);
         }
+        updateChartMetrics();
       } catch (e) {
         console.error('[AdvancedOHLCChart] Error parsing WebSocket message:', e);
       }
@@ -1725,6 +1911,15 @@ const AdvancedOHLCChart: React.FC<AdvancedOHLCChartProps> = ({
         
         // Convert TradingView resolution to our interval format
         const requestedInterval = RESOLUTION_TO_INTERVAL[resolution] || dfInterval;
+        let requestedTimeframe: BackendTimeRange = (cachedTimeframeRef.current as BackendTimeRange) || latestParamsRef.current.timeframe;
+        if (periodParams && Number.isFinite(periodParams.from) && Number.isFinite(periodParams.to)) {
+          const spanSeconds = periodParams.to - periodParams.from;
+          const mapped = mapSecondsToTimeframe(spanSeconds);
+          requestedTimeframe = mapped;
+        }
+        // Keep refs in sync
+        cachedTimeframeRef.current = requestedTimeframe;
+        latestParamsRef.current.timeframe = requestedTimeframe;
 
         fetchCountRef.current += 1;
         const currentFetchCount = fetchCountRef.current;
@@ -1732,18 +1927,22 @@ const AdvancedOHLCChart: React.FC<AdvancedOHLCChartProps> = ({
         // CHECK CACHE FIRST - Only fetch if cache is empty OR interval changed
         const hasCachedData = lastGoodCandlesRef.current.length > 0;
         const intervalChanged = cachedIntervalRef.current !== requestedInterval;
-        const needsFetch = !hasCachedData || intervalChanged;
+        const timeframeChanged = cachedTimeframeRef.current !== requestedTimeframe;
+        const needsFetch = !hasCachedData || intervalChanged || timeframeChanged;
 
         console.log('[AdvancedOHLCChart] ========== getBars #' + currentFetchCount + ' ==========');
-        console.log('[AdvancedOHLCChart] Cache check:', {
-          hasCachedData,
-          cachedInterval: cachedIntervalRef.current,
-          requestedInterval,
-          intervalChanged,
-          needsFetch,
-          cachedDataLength: lastGoodCandlesRef.current.length,
-          currentDisplayMode: displayModeRef.current,
-        });
+          console.log('[AdvancedOHLCChart] Cache check:', {
+            hasCachedData,
+            cachedInterval: cachedIntervalRef.current,
+            cachedTimeframe: cachedTimeframeRef.current,
+            requestedInterval,
+            requestedTimeframe,
+            intervalChanged,
+            timeframeChanged,
+            needsFetch,
+            cachedDataLength: lastGoodCandlesRef.current.length,
+            currentDisplayMode: displayModeRef.current,
+          });
         const now = Date.now();
         
         // Safely format periodParams dates with validation
@@ -1787,6 +1986,7 @@ const AdvancedOHLCChart: React.FC<AdvancedOHLCChartProps> = ({
         if (!needsFetch) {
           const items = lastGoodCandlesRef.current;
           console.log('[AdvancedOHLCChart] 📦 Using cached data (skipping HTTP):', items.length, 'candles');
+          cachedTimeframeRef.current = requestedTimeframe;
 
           const MIN_PRICE = 0.0000001;
           const currentNetwork = latestParamsRef.current.network;
@@ -1910,7 +2110,8 @@ const AdvancedOHLCChart: React.FC<AdvancedOHLCChartProps> = ({
         }
 
         // If there's already a request in-flight for this interval, wait for it
-        if (getBarsInFlightRef.current && !intervalChanged) {
+        const inFlightKey = `${requestedInterval}|${requestedTimeframe}`;
+        if (getBarsInFlightRef.current && getBarsInFlightKeyRef.current === inFlightKey) {
           console.log('[AdvancedOHLCChart] ⏳ Waiting for in-flight request...');
           try {
             await getBarsInFlightRef.current;
@@ -1948,6 +2149,7 @@ const AdvancedOHLCChart: React.FC<AdvancedOHLCChartProps> = ({
         // Create a promise for this request so others can wait
         let resolveInFlight: () => void;
         let rejectInFlight: (e: any) => void;
+        getBarsInFlightKeyRef.current = inFlightKey;
         getBarsInFlightRef.current = new Promise((resolve, reject) => {
           resolveInFlight = resolve;
           rejectInFlight = reject;
@@ -1958,7 +2160,7 @@ const AdvancedOHLCChart: React.FC<AdvancedOHLCChartProps> = ({
 
           console.log('[AdvancedOHLCChart] 🌐 Making HTTP request (fetch #' + currentFetchCount + ')');
 
-          const url = buildUrl(requestedInterval);
+          const url = buildUrl(requestedInterval, requestedTimeframe);
           const response = await fetch(url, {
             method: 'GET',
             headers: {
@@ -1982,7 +2184,9 @@ const AdvancedOHLCChart: React.FC<AdvancedOHLCChartProps> = ({
           if (items.length > 0) {
             lastGoodCandlesRef.current = items;
             cachedIntervalRef.current = requestedInterval;
+            cachedTimeframeRef.current = requestedTimeframe;
             setCandles(items);
+            updateChartMetrics();
             onDataUpdate?.(items);
             console.log('[AdvancedOHLCChart] ✅ Cache updated with', items.length, 'candles');
           }
@@ -1990,6 +2194,8 @@ const AdvancedOHLCChart: React.FC<AdvancedOHLCChartProps> = ({
           // Signal that request is complete
           resolveInFlight!();
           getBarsInFlightRef.current = null;
+          getBarsInFlightKeyRef.current = null;
+          getBarsInFlightKeyRef.current = null;
           
           // Get current network for Monad-specific logic
           const currentNetwork = latestParamsRef.current.network;
@@ -3271,13 +3477,13 @@ Maker: ${walletAddress}`;
           });
         }
 
-        // Force widget to load data after it's ready
-        widget.onChartReady(() => {
-          console.log('[AdvancedOHLCChart] Chart is ready, setting chart type to candlesticks...');
-          
-          try {
-            const chart = widget.chart();
-            if (chart) {
+      // Force widget to load data after it's ready
+      widget.onChartReady(() => {
+        console.log('[AdvancedOHLCChart] Chart is ready, setting chart type to candlesticks...');
+        
+        try {
+          const chart = widget.chart();
+          if (chart) {
               // Explicitly set chart type to candlesticks
               chart.setChartType(1); // 1 = Candles, 2 = Hollow Candles, 3 = Bars, etc.
               console.log('[AdvancedOHLCChart] Chart type set to candlesticks');
@@ -3321,6 +3527,23 @@ Maker: ${walletAddress}`;
                 console.log('[AdvancedOHLCChart] Could not set volume colors programmatically (may use defaults):', volumeError);
               }
               
+              // Track visible range to update timeframe mapping (reduces wrong timeframe requests)
+              try {
+                chart.onVisibleRangeChanged((range: any) => {
+                  const from = range?.from;
+                  const to = range?.to;
+                  if (!Number.isFinite(from) || !Number.isFinite(to)) return;
+                  const spanSeconds = to - from;
+                  const mapped = mapSecondsToTimeframe(spanSeconds);
+                  if (mapped && mapped !== cachedTimeframeRef.current) {
+                    cachedTimeframeRef.current = mapped;
+                    latestParamsRef.current.timeframe = mapped;
+                  }
+                });
+              } catch (rangeErr) {
+                console.log('[AdvancedOHLCChart] Could not bind visible range listener:', rangeErr);
+              }
+              
               // Trigger resize now that chart is ready
               // Use widget.resize() directly since we have the widget
               if (widgetRef.current?.resize && containerRef.current) {
@@ -3337,6 +3560,13 @@ Maker: ${walletAddress}`;
                     }
                   }, 100);
                 }
+              }
+              
+              // Draw custom price lines once the chart is ready
+              try {
+                syncPriceLines(lastMetricsRef.current.maxMarketCapUsd ?? null);
+              } catch (lineErr) {
+                console.log('[AdvancedOHLCChart] Could not render price lines on chart ready:', lineErr);
               }
               
               // Don't force symbol reset - let TradingView call getBars naturally
@@ -3392,6 +3622,11 @@ Maker: ${walletAddress}`;
         widgetRef.current = null;
         widgetTokenRef.current = null;
       }
+      priceLineShapesRef.current = {};
+      if (visibleRangeDebounceRef.current) {
+        clearTimeout(visibleRangeDebounceRef.current);
+        visibleRangeDebounceRef.current = null;
+      }
     };
   }, [libraryLoaded, createDatafeed, initialTokenId, syncWidgetWithParams]);
 
@@ -3408,6 +3643,7 @@ Maker: ${walletAddress}`;
     // Update the ref so datafeed can use it
     lastGoodCandlesRef.current = preloadedData;
     setCandles(preloadedData);
+    updateChartMetrics();
 
     // Force widget to refresh and load data
     try {
