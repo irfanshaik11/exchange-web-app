@@ -17,6 +17,8 @@ export interface MonadPosition {
   realizedPnl: number;
   realizedPnlMon: number;
   realizedPnlPct: number;
+  avgBuyPriceUsd?: number | null;
+  avgSellPriceUsd?: number | null;
 }
 
 export interface TxHashMessage {
