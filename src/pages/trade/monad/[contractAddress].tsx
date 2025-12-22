@@ -400,20 +400,33 @@ export default function MonadTradePage() {
   });
 
   const avgEntryPriceUsd = React.useMemo(() => {
+    if (positionForChart?.avgBuyPriceUsd && positionForChart.avgBuyPriceUsd > 0) {
+      return positionForChart.avgBuyPriceUsd;
+    }
+    const toNumber = (v: any) => {
+      const n = typeof v === "string" ? parseFloat(v) : Number(v);
+      return Number.isFinite(n) ? n : 0;
+    };
+    const priceUsdForTrade = (t: any) => {
+      const usd = toNumber((t as any).price_usd ?? (t as any).token_price_usd);
+      if (usd > 0) return usd;
+      const priceMon = toNumber(t.price_mon);
+      return priceMon > 0 ? priceMon * (monPrice || 0) : 0;
+    };
+
     if (positionForChart && positionForChart.totalBoughtTokens > 0) {
       return positionForChart.totalBoughtUsd / positionForChart.totalBoughtTokens;
     }
-    // Fallback to trades (weighted by token amount)
-    if (!allTrades || allTrades.length === 0 || !monPrice) return null;
+    if (!allTrades || allTrades.length === 0) return null;
     let buyTokens = 0;
     let buyUsd = 0;
     allTrades.forEach((t) => {
       if (t.is_buy) {
-        const tokenAmt = Number(t.token_amount) || 0;
-        const priceMon = Number(t.price_mon) || 0;
-        if (tokenAmt > 0 && priceMon > 0) {
+        const tokenAmt = toNumber(t.token_amount);
+        const priceUsd = priceUsdForTrade(t);
+        if (tokenAmt > 0 && priceUsd > 0) {
           buyTokens += tokenAmt;
-          buyUsd += tokenAmt * priceMon * monPrice;
+          buyUsd += tokenAmt * priceUsd;
         }
       }
     });
@@ -422,19 +435,33 @@ export default function MonadTradePage() {
   }, [allTrades, monPrice, positionForChart]);
 
   const avgExitPriceUsd = React.useMemo(() => {
+    if (positionForChart?.avgSellPriceUsd && positionForChart.avgSellPriceUsd > 0) {
+      return positionForChart.avgSellPriceUsd;
+    }
+    const toNumber = (v: any) => {
+      const n = typeof v === "string" ? parseFloat(v) : Number(v);
+      return Number.isFinite(n) ? n : 0;
+    };
+    const priceUsdForTrade = (t: any) => {
+      const usd = toNumber((t as any).price_usd ?? (t as any).token_price_usd);
+      if (usd > 0) return usd;
+      const priceMon = toNumber(t.price_mon);
+      return priceMon > 0 ? priceMon * (monPrice || 0) : 0;
+    };
+
     if (positionForChart && positionForChart.totalSoldTokens > 0) {
       return positionForChart.totalSoldUsd / positionForChart.totalSoldTokens;
     }
-    if (!allTrades || allTrades.length === 0 || !monPrice) return null;
+    if (!allTrades || allTrades.length === 0) return null;
     let sellTokens = 0;
     let sellUsd = 0;
     allTrades.forEach((t) => {
       if (!t.is_buy) {
-        const tokenAmt = Number(t.token_amount) || 0;
-        const priceMon = Number(t.price_mon) || 0;
-        if (tokenAmt > 0 && priceMon > 0) {
+        const tokenAmt = toNumber(t.token_amount);
+        const priceUsd = priceUsdForTrade(t);
+        if (tokenAmt > 0 && priceUsd > 0) {
           sellTokens += tokenAmt;
-          sellUsd += tokenAmt * priceMon * monPrice;
+          sellUsd += tokenAmt * priceUsd;
         }
       }
     });
@@ -443,8 +470,12 @@ export default function MonadTradePage() {
   }, [allTrades, monPrice, positionForChart]);
 
   const priceLineValues = React.useMemo(() => {
-    const entry = avgEntryPriceUsd ?? undefined;
-    const exit = avgExitPriceUsd ?? undefined;
+    const sanitize = (value: any) => {
+      const num = typeof value === "string" ? parseFloat(value) : value;
+      return Number.isFinite(num) && num > 0 ? num : undefined;
+    };
+    const entry = sanitize(avgEntryPriceUsd);
+    const exit = sanitize(avgExitPriceUsd);
     // Only update object when values change to avoid needless chart churn
     return { avgEntryPriceUsd: entry, avgExitPriceUsd: exit };
   }, [avgEntryPriceUsd, avgExitPriceUsd]);

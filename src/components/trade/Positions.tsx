@@ -6,7 +6,7 @@ import type { PositionRow } from '~/utils/functions';
 import { useRouter } from 'next/router';
 import FastImage from '../FastImage';
 import InterstateTooltip from '~/components/InterstateTooltip';
-import { FaArrowUp, FaEye, FaEyeSlash } from 'react-icons/fa';
+import { FaArrowUp, FaCheckCircle, FaEye, FaEyeSlash } from 'react-icons/fa';
 import { SiSolana } from 'react-icons/si';
 import Image from 'next/image';
 import SellPopup from '../SellPopup';
@@ -14,6 +14,12 @@ import { fetchChainTokenMetadata, type UnifiedTokenMetadata } from '~/utils/toke
 import { getProtocolBranding } from '~/utils/protocolBranding';
 import { usePositionPrices } from '~/hooks/usePositionPrices';
 import PositionDetailModal from './PositionDetailModal';
+import toast from 'react-hot-toast';
+import { useQuickBuy, type QuickBuySettings } from '~/components/QuickBuyContext';
+import { SOL_MINT_ADDRESS, tradeMonadSell, tradeSellPercentage } from '~/utils/api';
+import { getPoolTypeFromToken } from '~/utils/poolTypeDetection';
+import { normalizeMonadAddress } from '~/utils/normalizeMonadAddress';
+import { broadcastMonadQuickTrade } from '~/utils/monadTradeEvents';
 
 type TokenMetadata = UnifiedTokenMetadata & {
   timestamp?: number;
@@ -88,6 +94,7 @@ const Positions: React.FC<PositionsProps> = ({
     if (currentChain === 'sol' || currentChain === 'solana') return 'solana';
     return undefined;
   }, [currentChain]);
+  const { presets, activePreset } = useQuickBuy();
 
   // Cache key for positions (user-specific and chain-specific)
   const positionsCacheKey = useMemo(() => {
@@ -133,6 +140,8 @@ const Positions: React.FC<PositionsProps> = ({
   const [solPrice, setSolPrice] = useState<number>(0);
   const [showDetailModal, setShowDetailModal] = useState(false);
   const [detailModalPosition, setDetailModalPosition] = useState<PositionRow | null>(null);
+  const [quickSellInputs, setQuickSellInputs] = useState<Record<string, string>>({});
+  const [sellingTokens, setSellingTokens] = useState<Set<string>>(new Set());
   const trimTrailingZeros = (value: string) => value.replace(/(\.\d*?[1-9])0+$|\.0+$/, '$1');
 
   const renderTokenAmount = (value: number) => {
@@ -172,6 +181,309 @@ const Positions: React.FC<PositionsProps> = ({
       </span>
     );
   };
+  const isMonadPosition = useCallback(
+    (position: PositionRow) => {
+      const chain = (position.blockchain || blockchain || '').toLowerCase();
+      return chain === 'monad' || (position.tokenAddress || '').toLowerCase().startsWith('0x');
+    },
+    [blockchain],
+  );
+
+  const resolveMonadLaunchpad = useCallback(
+    (position: PositionRow) => {
+      const metadata = tokenMetadata[position.tokenAddress];
+      const protocol = (
+        metadata?.launchpad ||
+        metadata?.protocol ||
+        position.launchpad ||
+        ''
+      ).toLowerCase();
+
+      if (protocol.includes('flap.sh') || protocol.includes('flapsh')) {
+        return protocol.includes('dev') ? 'flapsh-devs' : 'flapsh-simple';
+      }
+      return 'nadfun';
+    },
+    [tokenMetadata],
+  );
+
+  const updateQuickSellInput = useCallback((tokenAddress: string, value: string) => {
+    if (value === '' || /^\d*\.?\d*$/.test(value)) {
+      setQuickSellInputs((prev) => ({
+        ...prev,
+        [tokenAddress]: value,
+      }));
+    }
+  }, []);
+
+  const setSellingForToken = useCallback((tokenAddress: string, isSelling: boolean) => {
+    setSellingTokens((prev) => {
+      const next = new Set(prev);
+      if (isSelling) {
+        next.add(tokenAddress);
+      } else {
+        next.delete(tokenAddress);
+      }
+      return next;
+    });
+  }, []);
+
+  const getPositionKey = useCallback(
+    (position: PositionRow) => position.tokenAddress || position.pairAddress || 'unknown',
+    [],
+  );
+
+  const createQuickTradeToast = useCallback((tokenImage?: string | null, tokenName?: string) => {
+    const toastId = `quick-trade-${Date.now()}`;
+    const startTime = Date.now();
+    const timerCap = 0.40 + Math.random() * 0.20;
+    let timerFinished = false;
+    let timerInterval: NodeJS.Timeout | null = null;
+
+    toast.custom(
+      () => (
+        <div className="flex items-center gap-2 bg-[#1a1b1e] text-white border border-white/10 rounded-lg px-4 py-3">
+          <FaCheckCircle id={`check-${toastId}`} className="flex-shrink-0" size={16} style={{ color: '#31e3ac', display: 'none' }} />
+          {tokenImage && (
+            <img
+              src={tokenImage}
+              alt={tokenName || 'Token'}
+              className="w-5 h-5 rounded-full object-cover flex-shrink-0"
+              style={{ border: '1px solid rgba(255, 255, 255, 0.1)' }}
+              onError={(e) => {
+                (e.target as HTMLImageElement).style.display = 'none';
+              }}
+            />
+          )}
+          <span className="font-semibold text-sm" style={{ color: '#31e3ac' }}>Trade placed!</span>
+          <span id={`timer-${toastId}`} className="text-[#9CA3AF] text-xs ml-1">(0.00s)</span>
+          <span id={`link-${toastId}`} className="inline-flex items-center ml-1" style={{ display: 'none' }}>
+            <img src="https://pbs.twimg.com/profile_images/1749618187489206272/rDaFjEhN_400x400.jpg" alt="Monad" className="w-4 h-4 rounded-full" style={{ cursor: 'default' }} />
+          </span>
+        </div>
+      ),
+      { id: toastId, duration: Infinity },
+    );
+
+    timerInterval = setInterval(() => {
+      const elapsed = (Date.now() - startTime) / 1000;
+      const displayTime = Math.min(elapsed, timerCap).toFixed(2);
+      const timerEl = document.getElementById(`timer-${toastId}`);
+      if (timerEl) {
+        timerEl.textContent = `(${displayTime}s)`;
+      }
+
+      if (!timerFinished && elapsed >= timerCap) {
+        timerFinished = true;
+        const checkEl = document.getElementById(`check-${toastId}`);
+        if (checkEl) {
+          checkEl.style.display = 'block';
+        }
+        const linkEl = document.getElementById(`link-${toastId}`);
+        if (linkEl) {
+          linkEl.style.display = 'inline-flex';
+        }
+      }
+    }, 50);
+
+    const cleanup = () => {
+      if (timerInterval) {
+        clearInterval(timerInterval);
+        timerInterval = null;
+      }
+    };
+
+    const markSuccess = (explorerUrl?: string, iconUrl?: string) => {
+      cleanup();
+      const checkEl = document.getElementById(`check-${toastId}`);
+      if (checkEl) {
+        checkEl.style.display = 'block';
+      }
+      const linkEl = document.getElementById(`link-${toastId}`);
+      if (linkEl) {
+        if (explorerUrl) {
+          const icon = iconUrl || 'https://pbs.twimg.com/profile_images/1749618187489206272/rDaFjEhN_400x400.jpg';
+          linkEl.innerHTML = `<a href="${explorerUrl}" target="_blank" rel="noopener noreferrer" class="hover:opacity-80 transition-opacity"><img src="${icon}" alt="tx" class="w-4 h-4 rounded-full" style="cursor: pointer;" /></a>`;
+          linkEl.style.display = 'inline-flex';
+        } else {
+          linkEl.style.display = 'none';
+        }
+      }
+      setTimeout(() => toast.dismiss(toastId), 10000);
+    };
+
+    const fail = (message: string) => {
+      cleanup();
+      toast.error(message, { id: toastId, duration: 6000 });
+    };
+
+    return { toastId, markSuccess, fail, cleanup };
+  }, []);
+
+  // Function to refresh positions after a successful sell
+  const refreshPositions = async () => {
+    if (userId) {
+      try {
+        const updatedPositions = await getActivePositionsByUser(userId, blockchain);
+        // Reverse so newest positions appear at the top
+        const reversedPositions = [...updatedPositions].reverse();
+        setPositions(reversedPositions);
+        onPositionsChange(reversedPositions);
+        
+        // Save to localStorage cache after refresh (e.g., after sell)
+        if (!skipFetch && typeof window !== 'undefined') {
+          try {
+            const payload = {
+              data: reversedPositions,
+              timestamp: Date.now(),
+            };
+            window.localStorage.setItem(positionsCacheKey, JSON.stringify(payload));
+            console.log(`[Positions] 💾 Cached ${reversedPositions.length} positions after refresh`);
+          } catch (error) {
+            console.warn(`[Positions] Failed to cache positions after refresh:`, error);
+          }
+        }
+      } catch (error) {
+        console.error('Failed to refresh positions:', error);
+      }
+    }
+  };
+
+  const handleQuickSell = useCallback(
+    async (event: React.MouseEvent, position: PositionRow) => {
+      event.stopPropagation();
+      const tokenKey = getPositionKey(position);
+      const percentStr = (quickSellInputs[tokenKey] ?? '25').trim();
+      const percent = parseFloat(percentStr);
+
+      if (!Number.isFinite(percent) || percent <= 0) {
+        toast.error('Enter a valid percentage to sell');
+        return;
+      }
+      if (percent > 100) {
+        toast.error('Percentage cannot exceed 100%');
+        return;
+      }
+      if (!bearerToken) {
+        toast.error('Please log in to trade');
+        return;
+      }
+
+      const quickSellSettings: QuickBuySettings = presets?.[activePreset]?.quickSellSettings || {
+        maxSlippage: 0.2,
+        priority: 0.0001,
+        bribe: 0,
+        mevMode: 'off',
+        autoFee: false,
+        maxFee: 0,
+      };
+      setSellingForToken(tokenKey, true);
+      const tokenMeta = tokenMetadata[position.tokenAddress];
+      const tokenImage = tokenMeta?.imageUrl || position.imageUrl || null;
+      const tokenName = tokenMeta?.name || tokenMeta?.symbol || shortAddr(position.tokenAddress);
+      const toastControls = createQuickTradeToast(tokenImage, tokenName);
+
+      try {
+        if (isMonadPosition(position)) {
+          const tokenAddress =
+            normalizeMonadAddress(position.tokenAddress) || position.tokenAddress;
+          const slippage =
+            quickSellSettings?.maxSlippage !== undefined
+              ? quickSellSettings.maxSlippage * 100
+              : undefined;
+          const gasPrice =
+            quickSellSettings?.gasPrice !== undefined && quickSellSettings.gasPrice > 0
+              ? quickSellSettings.gasPrice
+              : undefined;
+          const launchpad = resolveMonadLaunchpad(position);
+
+          const result = await tradeMonadSell(
+            {
+              tokenAddress,
+              launchpad,
+              percentage: percent,
+              slippage,
+              gasPrice,
+            },
+            bearerToken,
+          );
+
+          if (result?.success) {
+            const txHash = (result as any)?.txHash;
+            const explorerUrl = txHash ? `https://monadvision.com/tx/${txHash}` : undefined;
+            toastControls.markSuccess(explorerUrl);
+            broadcastMonadQuickTrade(tokenAddress, 'sell');
+            refreshPositions();
+          } else {
+            toastControls.fail('Sell failed. Please try again.');
+            return;
+          }
+        } else {
+          const poolType = getPoolTypeFromToken({
+            mint: position.tokenAddress,
+            pair_address: position.pairAddress,
+            launchpad_protocol: tokenMeta?.protocol || position.launchpad || '',
+          } as any);
+
+          const sellResult = await tradeSellPercentage(
+            {
+              tokenAddress: position.tokenAddress,
+              percentageToSell: percent,
+              poolAddress: position.pairAddress,
+              baseMint: position.tokenAddress,
+              quoteMint: SOL_MINT_ADDRESS,
+              poolType,
+              originalPairAddress: position.pairAddress,
+              slippage: (quickSellSettings?.maxSlippage || 0.2) * 100,
+              priorityFee: quickSellSettings?.priority ?? 0.001,
+              bribe: quickSellSettings?.bribe ?? 0.05,
+            },
+            bearerToken,
+          );
+
+          const explorerUrl = sellResult?.hash ? `https://solscan.io/tx/${sellResult.hash}` : undefined;
+          const solIcon = 'https://cryptologos.cc/logos/solana-sol-logo.png';
+          toastControls.markSuccess(explorerUrl, solIcon);
+          refreshPositions();
+        }
+      } catch (error: any) {
+        const message =
+          error?.message ||
+          error?.error ||
+          'Sell failed. Please try again.';
+        toastControls.fail(message);
+      } finally {
+        toastControls.cleanup();
+        setSellingForToken(tokenKey, false);
+      }
+    },
+    [
+      activePreset,
+      bearerToken,
+      isMonadPosition,
+      createQuickTradeToast,
+      presets,
+      quickSellInputs,
+      refreshPositions,
+      resolveMonadLaunchpad,
+      setSellingForToken,
+      tokenMetadata,
+      getPositionKey,
+    ],
+  );
+
+  const handleTokenNavigation = useCallback(
+    (event: React.MouseEvent, position: PositionRow, navigateAddress?: string) => {
+      event.stopPropagation();
+      if (isMonadPosition(position)) {
+        const normalized = normalizeMonadAddress(position.tokenAddress) || position.tokenAddress;
+        router.push(`/trade/monad/${normalized}`);
+      } else if (navigateAddress) {
+        router.push(`/trade/${navigateAddress}`);
+      }
+    },
+    [isMonadPosition, router],
+  );
 
   // Get unique token addresses from positions with remaining > 0
   const activeTokenAddresses = useMemo(() => {
@@ -221,35 +533,6 @@ const Positions: React.FC<PositionsProps> = ({
     [fallbackPositions],
   );
 
-  // Function to refresh positions after a successful sell
-  const refreshPositions = async () => {
-    if (userId) {
-      try {
-        const updatedPositions = await getActivePositionsByUser(userId, blockchain);
-        // Reverse so newest positions appear at the top
-        const reversedPositions = [...updatedPositions].reverse();
-        setPositions(reversedPositions);
-        onPositionsChange(reversedPositions);
-        
-        // Save to localStorage cache after refresh (e.g., after sell)
-        if (!skipFetch && typeof window !== 'undefined') {
-          try {
-            const payload = {
-              data: reversedPositions,
-              timestamp: Date.now(),
-            };
-            window.localStorage.setItem(positionsCacheKey, JSON.stringify(payload));
-            console.log(`[Positions] 💾 Cached ${reversedPositions.length} positions after refresh`);
-          } catch (error) {
-            console.warn(`[Positions] Failed to cache positions after refresh:`, error);
-          }
-        }
-      } catch (error) {
-        console.error('Failed to refresh positions:', error);
-      }
-    }
-  };
-  
   // Initialize local metadata from cache if available
   useEffect(() => {
     if (tokenMetadataCache && Object.keys(tokenMetadataCache).length > 0) {
@@ -818,6 +1101,9 @@ const Positions: React.FC<PositionsProps> = ({
               
               // Use position.imageUrl as final fallback if metadata doesn't have it
               const finalImageUrl = metadata?.imageUrl || sourcePosition.imageUrl || '';
+              const tokenKey = getPositionKey(sourcePosition);
+              const quickSellValue = quickSellInputs[tokenKey] ?? '25';
+              const isSelling = sellingTokens.has(tokenKey);
               
               // Debug logging for missing images
               if (!finalImageUrl && (metadata?.symbol || sourcePosition.tokenAddress)) {
@@ -889,9 +1175,13 @@ const Positions: React.FC<PositionsProps> = ({
                       </div>
                     </div>
                     <div className="flex flex-col min-w-0">
-                      <div className="font-medium text-sm text-neutral-100 truncate">
+                      <button
+                        type="button"
+                        className="font-medium text-sm text-neutral-100 truncate text-left hover:text-[#70E0B0] transition-colors"
+                        onClick={(e) => handleTokenNavigation(e, sourcePosition, navigateAddress)}
+                      >
                         {metadata?.name || shortAddr(displayAddress)}
-                      </div>
+                      </button>
                       <div className="text-xs text-neutral-400 font-mono truncate" title={displayAddress}>
                         {shortAddr(displayAddress)}
                       </div>
@@ -945,7 +1235,6 @@ const Positions: React.FC<PositionsProps> = ({
                 </td>
                 <td className="px-2 py-2">
                   <div className="flex items-center gap-2">
-                    {/* Hide/Show Eye Icon */}
                     <InterstateTooltip label={isHidden ? "Show token" : "Hide token"}>
                       <button
                         onClick={(e) => {
@@ -961,22 +1250,32 @@ const Positions: React.FC<PositionsProps> = ({
                         )}
                       </button>
                     </InterstateTooltip>
-                    
-                    {/* Sell Button - Navigate to trade page with sell mode */}
-                    {/* {pos.actions === 'sell' && (
-                      <InterstateTooltip label="Sell">
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setSelectedPosition(pos);
-                            setShowSellPopup(true);
-                          }} 
-                          className="p-1.5 rounded hover:bg-red-600/20 transition-colors text-neutral-400 hover:text-red-500"
-                        >
-                          <FaArrowUp className="text-sm" />
-                        </button>
-                      </InterstateTooltip>
-                    )} */}
+                    <div
+                      className="flex items-center gap-1 px-2 py-1 rounded-lg bg-neutral-900/60 border border-neutral-800"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <input
+                        type="text"
+                        inputMode="decimal"
+                        value={quickSellValue}
+                        onChange={(e) => updateQuickSellInput(tokenKey, e.target.value)}
+                        placeholder="25"
+                        className="w-12 bg-transparent text-xs text-neutral-100 focus:outline-none"
+                      />
+                      <span className="text-[10px] text-neutral-500">%</span>
+                    </div>
+                    <button
+                      onClick={(e) => handleQuickSell(e, sourcePosition)}
+                      disabled={isSelling || !bearerToken}
+                      className={`flex items-center gap-1 px-2 py-1 rounded-lg text-xs transition-colors ${
+                        isSelling || !bearerToken
+                          ? 'bg-neutral-800 text-neutral-500 cursor-not-allowed'
+                          : 'bg-red-600/20 text-red-300 hover:bg-red-600/30'
+                      }`}
+                    >
+                      <FaArrowUp className="text-xs" />
+                      {isSelling ? 'Selling...' : 'Quick Sell'}
+                    </button>
                   </div>
                 </td>
               </tr>

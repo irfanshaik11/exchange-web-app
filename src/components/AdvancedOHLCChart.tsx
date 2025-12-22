@@ -364,28 +364,21 @@ const AdvancedOHLCChart: React.FC<AdvancedOHLCChartProps> = ({
     return maxHigh * MARKET_CAP_MULTIPLIER;
   }, []);
 
+  // Price line management - always clears and redraws to ensure consistency
   const syncPriceLines = useCallback((maxMarketCapUsdOverride?: number | null) => {
     const isMonad = latestParamsRef.current.network === 'monad';
     const widget = widgetRef.current;
+
+    if (!widget || !isMonad) return;
+
     let chart: any = null;
-
-    // TradingView can throw if chart() is called before the widget is fully ready
     try {
-      chart = widget?.chart?.();
+      chart = widget.activeChart?.() || widget.chart?.();
     } catch (err) {
-      console.warn('[AdvancedOHLCChart] chart() not ready for price lines, skipping:', err);
-    }
-
-    // Clear any existing shapes if not Monad or chart not ready
-    if (!chart || typeof chart.createShape !== 'function' || !isMonad) {
-      Object.values(priceLineShapesRef.current).forEach(shape => {
-        try {
-          shape?.remove?.();
-        } catch {}
-      });
-      priceLineShapesRef.current = {};
       return;
     }
+
+    if (!chart || typeof chart.createShape !== 'function') return;
 
     const mode = displayModeRef.current;
     const axisIsMarketCap = mode === 'MC';
@@ -393,70 +386,78 @@ const AdvancedOHLCChart: React.FC<AdvancedOHLCChartProps> = ({
       ? maxMarketCapUsdOverride
       : computeMaxMarketCapUsd();
 
-    const toAxisPrice = (usdPrice?: number | null) => {
-      if (!usdPrice || !Number.isFinite(usdPrice) || usdPrice <= 0) return null;
+    const currentPrices = priceLinesRef.current;
+    const normalizeUsd = (value: unknown): number | null => {
+      const numeric = typeof value === 'string' ? parseFloat(value) : (value as number);
+      if (!Number.isFinite(numeric) || numeric <= 0) return null;
+      return numeric;
+    };
+    const avgEntryUsd = normalizeUsd(currentPrices?.avgEntryPriceUsd ?? null);
+    const avgExitUsd = normalizeUsd(currentPrices?.avgExitPriceUsd ?? null);
+
+    const toAxisPrice = (usdPrice?: number | null): number | null => {
+      if (usdPrice === null || usdPrice === undefined) return null;
       return axisIsMarketCap ? usdPrice * MARKET_CAP_MULTIPLIER : usdPrice;
     };
 
-    const ensureShape = (key: string, usdPrice: number | null, label: string, color: string, lineStyle: number = 0) => {
-      const priceOnAxis = toAxisPrice(usdPrice);
-      const currentShape = priceLineShapesRef.current[key];
+    const entryPrice = toAxisPrice(avgEntryUsd);
+    const exitPrice = toAxisPrice(avgExitUsd);
+    const maxMcPrice = toAxisPrice(maxMarketCapUsd ? maxMarketCapUsd / MARKET_CAP_MULTIPLIER : null);
 
-      if (!priceOnAxis) {
-        if (currentShape) {
-          try {
-            currentShape?.remove?.();
-          } catch {}
-          delete priceLineShapesRef.current[key];
-        }
-        return;
-      }
-
-      const text = `${label}: ${formatAxisLabel(priceOnAxis, axisIsMarketCap)}`;
-
-      // If shape exists, try to update in place
-      if (currentShape) {
-        if (typeof currentShape?.setProperties === 'function') {
-          try {
-            currentShape.setProperties({
-              price: priceOnAxis,
-              text,
-            });
-            return;
-          } catch {}
-        }
+    // STEP 1: Always remove ALL existing shapes first
+    try {
+      // Remove tracked shapes by ID
+      Object.values(priceLineShapesRef.current).forEach((line: any) => {
         try {
-          currentShape?.remove?.();
-        } catch {}
-        delete priceLineShapesRef.current[key];
+          if (line?.id && typeof line.id === 'string') {
+            chart.removeEntity(line.id);
+          }
+        } catch (e) {}
+      });
+      priceLineShapesRef.current = {};
+
+      // Also remove all shapes from chart as backup
+      if (typeof chart.removeAllShapes === 'function') {
+        chart.removeAllShapes();
       }
+    } catch (e) {}
+
+    // STEP 2: Create fresh lines using createShape
+    const createLine = async (key: string, price: number | null, label: string, color: string) => {
+      if (price === null) return;
 
       try {
-        const shape = chart.createShape({ price: priceOnAxis }, {
+        const result = chart.createShape({ price }, {
           shape: 'horizontal_line',
-          text,
-          lock: true,
+          text: `${label}: ${formatAxisLabel(price, axisIsMarketCap)}`,
           disableSelection: true,
           disableSave: true,
           overrides: {
             linecolor: color,
             textcolor: color,
-            linestyle: lineStyle, // 0 = solid, 1 = dashed, 2 = dotted
+            linestyle: 2,
             linewidth: 2,
             showLabel: true,
             drawPriceLabel: true,
           },
         });
-        priceLineShapesRef.current[key] = shape;
+
+        // Handle both Promise and direct ID returns
+        const shapeId = result instanceof Promise ? await result : result;
+
+        if (shapeId && typeof shapeId === 'string') {
+          priceLineShapesRef.current[key] = { id: shapeId };
+        }
       } catch (err) {
-        console.error('[AdvancedOHLCChart] Failed to create price line shape:', err);
+        console.error('[syncPriceLines] Failed to create line:', key, err);
       }
     };
 
-    ensureShape('maxMc', maxMarketCapUsd ? maxMarketCapUsd / MARKET_CAP_MULTIPLIER : null, 'Max MC', '#f2994a', 2);
-    ensureShape('avgEntry', priceLines?.avgEntryPriceUsd ?? null, 'Avg Entry', '#f2c94c', 2);
-    ensureShape('avgExit', priceLines?.avgExitPriceUsd ?? null, 'Avg Exit', '#4aa3ff', 2);
-  }, [computeMaxMarketCapUsd, priceLines]);
+    // Create the lines
+    createLine('avgEntry', entryPrice, 'Avg Entry', '#f2c94c');
+    createLine('avgExit', exitPrice, 'Avg Exit', '#4aa3ff');
+    createLine('maxMc', maxMcPrice, 'Max MC', '#f2994a');
+  }, [computeMaxMarketCapUsd]);
 
   const updateChartMetrics = useCallback(() => {
     const candles = lastGoodCandlesRef.current;
@@ -540,10 +541,6 @@ const AdvancedOHLCChart: React.FC<AdvancedOHLCChartProps> = ({
     });
   }, [displayMode, selectedInterval]);
 
-  useEffect(() => {
-    syncPriceLines(lastMetricsRef.current.maxMarketCapUsd ?? null);
-  }, [displayMode, priceLines, syncPriceLines]);
-
   // Refs for data management (same as BackendOHLCChart)
   const lastGoodCandlesRef = useRef<BackendOHLCData[]>(preloadedData || []);
   const inFlightRef = useRef<string | null>(null);
@@ -574,7 +571,10 @@ const AdvancedOHLCChart: React.FC<AdvancedOHLCChartProps> = ({
   const hasRealPriceDataRef = useRef<boolean>(false); // Track if we've received real price data
   const priceLineShapesRef = useRef<Record<string, any>>({});
   const lastMetricsRef = useRef<{ lastPriceUsd?: number; lastMarketCapUsd?: number; maxMarketCapUsd?: number }>({});
-  const lastPriceLinesRef = useRef<{ avgEntryPriceUsd?: number | null; avgExitPriceUsd?: number | null }>({});
+  const lastPriceLinesRef = useRef<Record<string, number | null>>({});
+  const priceLinesRef = useRef(priceLines);
+  priceLinesRef.current = priceLines;
+  const priceLineSyncTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const marksInitializedRef = useRef(false);
   const prevTradeDataLengthRef = useRef<number>(tradeData?.length || 0);
   const tradeSignatureRef = useRef<string>(
@@ -589,6 +589,28 @@ const AdvancedOHLCChart: React.FC<AdvancedOHLCChartProps> = ({
   const currentAggregatingIntervalRef = useRef<string | null>(null);
   // Track if initial right-alignment has been done to prevent overriding user's zoom/pan
   const hasRightAlignedRef = useRef(false);
+
+  // Helper to (re)draw price lines when chart is ready
+  const requestPriceLineSync = useCallback((delay: number = 0) => {
+    if (priceLineSyncTimeoutRef.current) {
+      clearTimeout(priceLineSyncTimeoutRef.current);
+    }
+    priceLineSyncTimeoutRef.current = setTimeout(() => {
+      const widget = widgetRef.current;
+      if (!widget) return;
+      const run = () => syncPriceLines(lastMetricsRef.current.maxMarketCapUsd ?? null);
+      if (typeof widget.onChartReady === 'function') {
+        widget.onChartReady(run);
+      } else {
+        run();
+      }
+    }, Math.max(0, delay));
+  }, [syncPriceLines]);
+
+  // Refresh chart price lines when props or display mode change
+  useEffect(() => {
+    requestPriceLineSync(10);
+  }, [displayMode, priceLines, requestPriceLineSync]);
 
   useEffect(() => {
     latestTradeDataRef.current = tradeData || [];
@@ -636,6 +658,7 @@ const AdvancedOHLCChart: React.FC<AdvancedOHLCChartProps> = ({
           const chart = widgetRef.current?.chart?.();
           chart?.resetData?.();
           console.log('[AdvancedOHLCChart] Triggered chart reset to refresh marks', { tradeCount });
+          requestPriceLineSync(50);
         } catch (error) {
           console.error('[AdvancedOHLCChart] Failed to reset chart for marks refresh', error);
         }
@@ -643,7 +666,7 @@ const AdvancedOHLCChart: React.FC<AdvancedOHLCChartProps> = ({
     }
 
     prevTradeDataLengthRef.current = tradeCount;
-  }, [creatorAddress, tradeData?.length]);
+  }, [creatorAddress, tradeData?.length, requestPriceLineSync]);
 
   // Refresh marks when the underlying trade set changes (even if length stays the same)
   useEffect(() => {
@@ -659,13 +682,14 @@ const AdvancedOHLCChart: React.FC<AdvancedOHLCChartProps> = ({
             const chart = widgetRef.current?.chart?.();
             chart?.resetData?.();
             console.log('[AdvancedOHLCChart] Triggered chart reset after trade data signature change');
+            requestPriceLineSync(50);
           } catch (error) {
             console.error('[AdvancedOHLCChart] Failed to reset chart after trade data signature change', error);
           }
         });
       }
     }
-  }, [tradeData]);
+  }, [tradeData, requestPriceLineSync]);
 
   // Build URL for OHLC data (same as BackendOHLCChart)
   // Allow override of interval for when TradingView requests a different resolution
@@ -1252,6 +1276,8 @@ const AdvancedOHLCChart: React.FC<AdvancedOHLCChartProps> = ({
                 if (chart && typeof chart.resetData === 'function') {
                   chart.resetData();
                   console.log('[AdvancedOHLCChart] ✅ TradingView chart().resetData() called - chart refreshed without disrupting subscription');
+                  // Redraw price lines after reset so overlays persist through refreshes
+                  requestPriceLineSync(50);
                   
                   // After refresh, right-align chart to show latest candles
                   try {
@@ -3185,12 +3211,14 @@ Maker: ${walletAddress}`;
             currentWidget.setSymbol?.(tokenId, nextResolution, () => {
               widgetTokenRef.current = tokenId;
               chart.resetData?.();
+              requestPriceLineSync(50);
             });
             return;
           }
 
           chart.setResolution?.(nextResolution, () => {
             chart.resetData?.();
+            requestPriceLineSync(50);
           });
         } catch (error) {
           // Silently ignore during widget initialization/cleanup
@@ -3440,6 +3468,9 @@ Maker: ${walletAddress}`;
 
         widgetRef.current = widget;
         widgetTokenRef.current = initialTokenId;
+        // Clear any stale shape refs from previous widget instance
+        priceLineShapesRef.current = {};
+        lastPriceLinesRef.current = {};
         setIsLoading(false);
         firstLoadRef.current = false; // Ensure loading overlay is dismissed
         setError(null);
@@ -3563,8 +3594,15 @@ Maker: ${walletAddress}`;
               }
               
               // Draw custom price lines once the chart is ready
+              // First clear any existing shapes to start fresh
               try {
-                syncPriceLines(lastMetricsRef.current.maxMarketCapUsd ?? null);
+                const activeChart = widget.activeChart?.() || widget.chart?.();
+                if (activeChart && typeof activeChart.removeAllShapes === 'function') {
+                  activeChart.removeAllShapes();
+                }
+                priceLineShapesRef.current = {};
+                lastPriceLinesRef.current = {};
+                requestPriceLineSync(0);
               } catch (lineErr) {
                 console.log('[AdvancedOHLCChart] Could not render price lines on chart ready:', lineErr);
               }
@@ -3623,6 +3661,7 @@ Maker: ${walletAddress}`;
         widgetTokenRef.current = null;
       }
       priceLineShapesRef.current = {};
+      lastPriceLinesRef.current = {};
       if (visibleRangeDebounceRef.current) {
         clearTimeout(visibleRangeDebounceRef.current);
         visibleRangeDebounceRef.current = null;
@@ -3653,6 +3692,7 @@ Maker: ${walletAddress}`;
           // Reset data to trigger getBars call
           chart.resetData();
           console.log('[AdvancedOHLCChart] Forced chart refresh with preloaded data');
+          requestPriceLineSync(50);
         }
       });
     } catch (e) {
