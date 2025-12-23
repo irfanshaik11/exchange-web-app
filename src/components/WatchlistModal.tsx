@@ -235,8 +235,19 @@ function normalizeAssetUrl(raw?: string): string | null {
 }
 
 function resolveWatchlistVolume1h(token: Token): number {
-  const buy = Number((token as any).total_buy_volume_1h) || 0;
-  const sell = Number((token as any).total_sell_volume_1h) || 0;
+  const usdVolumeFields = [
+    (token as any).volume_1h_usd,
+    (token as any).volume1hUsd,
+    (token as any).volume1h_usd,
+    (token as any).volume_24h_usd, // fallback when 1h is missing
+  ];
+  for (const v of usdVolumeFields) {
+    const num = Number(v);
+    if (Number.isFinite(num) && num > 0) return num;
+  }
+
+  const buy = Number((token as any).total_buy_volume_1h) || Number((token as any).total_buy_volume_mon) || 0;
+  const sell = Number((token as any).total_sell_volume_1h) || Number((token as any).total_sell_volume_mon) || 0;
   if (buy || sell) return buy + sell;
   const direct =
     (token as any).volume_1h ??
@@ -248,6 +259,7 @@ function resolveWatchlistVolume1h(token: Token): number {
   const fallback =
     (token as any).total_volume_1h ??
     (token as any).buy_volume_1h ??
+    (token as any).volume_24h_usd ??  // Use volume_24h_usd for Monad tokens
     (token as any).volume_24h ??
     0;
   return Number(fallback) || 0;
@@ -265,10 +277,38 @@ function resolveWatchlistStats(token: Token) {
     (token as any).liquidityUsd ??
     0;
   const volume1h = resolveWatchlistVolume1h(token);
-  const price = (token as any).usd_price ?? (token as any).price ?? 0;
-  const priceChange1h = (token as any).price_percent_change_1h ?? (token as any).price_change_1h ?? 0;
+  const price =
+    (token as any).usd_price ??
+    (token as any).price_usd ??
+    (token as any).chart_live_price_usd ??
+    (token as any).lastPriceUsd ??
+    (token as any).priceUsd ??
+    (token as any).price ??
+    0;
+  const priceChange1h =
+    (token as any).price_percent_change_1h ??
+    (token as any).price_change_1h ??
+    (token as any).price_change ??
+    (token as any).price_percent_change_24h ??
+    (token as any).price_change_24h ??
+    0;
+  const legacyPrice =
+    Number(
+      (token as any)?.usd_price ??
+      (token as any)?.price ??
+      (token as any)?.price_usd ??
+      0
+    ) || 0;
+  const legacyChange =
+    Number(
+      (token as any)?.price_percent_change_1h ??
+      (token as any)?.price_change_1h ??
+      0
+    ) || 0;
+  const finalPrice = price || legacyPrice;
+  const finalChange = priceChange1h || legacyChange;
 
-  return { marketCap, liquidity, volume1h, price, priceChange1h };
+  return { marketCap, liquidity, volume1h, price: finalPrice, priceChange1h: finalChange };
 }
 
 // SubscriptNumber component for price display
@@ -358,7 +398,7 @@ const getQuickBuyAmount = (): number => {
 
 export default function WatchlistModal({ open, onClose }: WatchlistModalProps) {
   const [show, setShow] = useState(false);
-  const { watchlist, removeFromWatchlist } = useWatchlist();
+  const { watchlist, removeFromWatchlist, refreshWatchlistToken } = useWatchlist();
   const router = useRouter();
   const { user, refreshBalance, chainBalances } = useUser();
   const { presets, activePreset } = useQuickBuy();
@@ -369,6 +409,24 @@ export default function WatchlistModal({ open, onClose }: WatchlistModalProps) {
   const amountUnit = hasMonadTokens ? 'MON' : 'SOL';
   const [quickBuyAmount, setQuickBuyAmountState] = useState(getQuickBuyAmount);
   const [customAmountInput, setCustomAmountInput] = useState<string>('');
+
+  // Refresh Monad tokens when modal opens if price is missing
+  useEffect(() => {
+    if (!open) return;
+    watchlist.forEach((token) => {
+      if (!isMonadToken(token)) return;
+      const price =
+        (token as any).usd_price ??
+        (token as any).price_usd ??
+        (token as any).chart_live_price_usd ??
+        (token as any).lastPriceUsd ??
+        (token as any).price ??
+        0;
+      if (price && price > 0) return;
+      const key = (token as any).mint || token.pair_address || '';
+      if (key) refreshWatchlistToken(key);
+    });
+  }, [open, watchlist, refreshWatchlistToken]);
   
   // Load saved quick buy amount when the modal opens
   useEffect(() => {
@@ -653,9 +711,10 @@ export default function WatchlistModal({ open, onClose }: WatchlistModalProps) {
           <thead>
             <tr style={{ backgroundColor: 'transparent', borderBottom: `1px solid ${AX.border}` }}>
               <th className="w-72 px-4 py-3 text-left text-xs font-medium tracking-wide uppercase" style={{ color: '#787a8d', fontWeight: '300' }}>Token</th>
-              <th className="w-28 px-4 py-3 text-right text-xs font-medium tracking-wide uppercase" style={{ color: '#787a8d', fontWeight: '300' }}>1h Vol</th>
-              <th className="w-20 px-4 py-3 text-right text-xs font-medium tracking-wide uppercase" style={{ color: '#787a8d', fontWeight: '300' }}>1h%</th>
-              <th className="w-36 px-4 py-3 text-right text-xs font-medium tracking-wide uppercase" style={{ color: '#787a8d', fontWeight: '300' }}>MKT Cap / Liq</th>
+              <th className="w-28 px-4 py-3 text-right text-xs font-medium tracking-wide uppercase" style={{ color: '#787a8d', fontWeight: '300' }}>Vol</th>
+              {/* <th className="w-20 px-4 py-3 text-right text-xs font-medium tracking-wide uppercase" style={{ color: '#787a8d', fontWeight: '300' }}>1h%</th> */}
+              <th className="w-28 px-4 py-3 text-right text-xs font-medium tracking-wide uppercase" style={{ color: '#787a8d', fontWeight: '300' }}>MKT Cap</th>
+              <th className="w-28 px-4 py-3 text-right text-xs font-medium tracking-wide uppercase" style={{ color: '#787a8d', fontWeight: '300' }}>Liq</th>
               <th className="w-28 px-4 py-3 text-right text-xs font-medium tracking-wide uppercase" style={{ color: '#787a8d', fontWeight: '300' }}>Price</th>
               <th className="w-28 px-4 py-3 text-center text-xs font-medium tracking-wide uppercase" style={{ color: '#787a8d', fontWeight: '300' }}>Action</th>
             </tr>
@@ -777,21 +836,42 @@ export default function WatchlistModal({ open, onClose }: WatchlistModalProps) {
                     <div className="text-sm font-medium" style={{ color: AX.text }}>
                       ${formatSmartNumber(volume1h)}
                     </div>
+                    {/* Volume as percentage of market cap */}
+                    {(() => {
+                      // Calculate volume as percentage of market cap
+                      let volumePercent = 0;
+                      if (volume1h > 0 && marketCap > 0) {
+                        volumePercent = (volume1h / marketCap) * 100;
+                      }
+                      
+                      // Color based on price change direction: green for up, red for down
+                      const volumeColor = priceChange1h >= 0 ? '#85d99f' : '#f26681';
+                      
+                      return volumePercent > 0 ? (
+                        <div className="text-xs font-medium mt-0.5" style={{ color: volumeColor }}>
+                          {formatSmartNumber(volumePercent)}%
+                        </div>
+                      ) : null;
+                    })()}
                   </td>
                   
-                  {/* 1h% Column */}
-                  <td className="w-20 px-4 py-3 align-middle text-right">
+                  {/* 1h% Column - Commented out */}
+                  {/* <td className="w-20 px-4 py-3 align-middle text-right">
                     <div className="text-sm font-medium" style={{ color: priceChange1h >= 0 ? '#85d99f' : '#f26681' }}>
                       {priceChange1h >= 0 ? '+' : ''}{formatSmartNumber(Math.abs(priceChange1h))}%
                     </div>
-                  </td>
+                  </td> */}
                   
-                  {/* MKT Cap / Liq Column */}
-                  <td className="w-36 px-4 py-3 align-middle text-right">
+                  {/* MKT Cap Column */}
+                  <td className="w-28 px-4 py-3 align-middle text-right">
                     <div className="text-sm font-semibold" style={{ color: AX.text }}>
                       ${formatMarketCap(marketCap)}
                     </div>
-                    <div className="text-xs" style={{ color: AX.muted }}>
+                  </td>
+                  
+                  {/* Liq Column */}
+                  <td className="w-28 px-4 py-3 align-middle text-right">
+                    <div className="text-sm font-semibold" style={{ color: AX.text }}>
                       ${formatSmartNumber(liquidity)}
                     </div>
                   </td>

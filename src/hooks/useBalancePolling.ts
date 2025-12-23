@@ -66,6 +66,9 @@ export function useBalancePolling(options: UseBalancePollingOptions = {}): UseBa
   }, [chain, chainBalances, solBalance]);
 
   const stopPolling = useCallback(() => {
+    // Only log if we were actually polling
+    const wasPolling = isPollingRef.current || pollingIntervalRef.current !== null;
+    
     if (pollingIntervalRef.current) {
       clearInterval(pollingIntervalRef.current);
       pollingIntervalRef.current = null;
@@ -73,7 +76,11 @@ export function useBalancePolling(options: UseBalancePollingOptions = {}): UseBa
     isPollingRef.current = false;
     startTimeRef.current = null;
     previousBalanceRef.current = null;
-    console.log(`[useBalancePolling] 🛑 Stopped polling for ${chain} balance`);
+    
+    // Only log if we were actually polling (avoid logging on cleanup when not polling)
+    if (wasPolling && process.env.NODE_ENV === 'development') {
+      console.log(`[useBalancePolling] 🛑 Stopped polling for ${chain} balance`);
+    }
   }, [chain]);
 
   const startPolling = useCallback(() => {
@@ -82,7 +89,9 @@ export function useBalancePolling(options: UseBalancePollingOptions = {}): UseBa
       clearInterval(pollingIntervalRef.current);
     }
 
-    console.log(`[useBalancePolling] 🚀 Starting balance polling for ${chain} (interval: ${intervalMs}ms, max: ${maxDurationMs}ms)`);
+    if (process.env.NODE_ENV === 'development') {
+      console.log(`[useBalancePolling] 🚀 Starting balance polling for ${chain} (interval: ${intervalMs}ms, max: ${maxDurationMs}ms)`);
+    }
 
     startTimeRef.current = Date.now();
     previousBalanceRef.current = getCurrentBalance();
@@ -93,7 +102,9 @@ export function useBalancePolling(options: UseBalancePollingOptions = {}): UseBa
 
       // Stop if max duration reached
       if (elapsed >= maxDurationMs) {
-        console.log(`[useBalancePolling] ⏰ Max duration reached, stopping polling`);
+        if (process.env.NODE_ENV === 'development') {
+          console.log(`[useBalancePolling] ⏰ Max duration reached, stopping polling`);
+        }
         stopPolling();
         return;
       }
@@ -108,14 +119,15 @@ export function useBalancePolling(options: UseBalancePollingOptions = {}): UseBa
 
           // Check if balance changed
           if (Math.abs(newBalance - oldBalance) > 0.0001) {
-            console.log(`[useBalancePolling] 💰 Balance changed: ${oldBalance.toFixed(4)} -> ${newBalance.toFixed(4)}`);
+            if (process.env.NODE_ENV === 'development') {
+              console.log(`[useBalancePolling] 💰 Balance changed: ${oldBalance.toFixed(4)} -> ${newBalance.toFixed(4)}`);
+            }
             onBalanceChange?.(oldBalance, newBalance);
 
             // Stop polling after successful balance change detection
             stopPolling();
-          } else {
-            console.log(`[useBalancePolling] 🔄 Balance unchanged (${elapsed}ms elapsed)`);
           }
+          // Removed "Balance unchanged" log to reduce noise
 
           previousBalanceRef.current = newBalance;
         }

@@ -361,7 +361,8 @@ export default function MonadTradePage() {
       total_liquidity_usd: live?.liquidity_usd ?? (tokenData as any)?.liquidity_usd ?? 0,
       graduation_percent: live?.graduation_percent ?? (tokenData as any)?.graduation_percent ?? (tokenData as any)?.bonding_curve_progress ?? 0,
       bonding_pct: live?.graduation_percent ?? (tokenData as any)?.bonding_curve_progress ?? (tokenData as any)?.graduation_percent ?? 0,
-      volume_24h: live?.volume_24h_usd ?? tokenData.volume_24h ?? 0,
+      volume_24h: live?.volume_24h_usd ?? (tokenData as any)?.volume_24h_usd ?? 0,
+      volume_24h_usd: live?.volume_24h_usd ?? (tokenData as any)?.volume_24h_usd ?? 0,
       total_buys: live?.total_buys ?? tokenData.total_buys ?? 0,
       total_sells: live?.total_sells ?? tokenData.total_sells ?? 0,
       total_transactions: live?.total_transactions ?? tokenData.total_transactions ?? 0,
@@ -503,12 +504,16 @@ export default function MonadTradePage() {
 
   const displayTokenWithChartMetrics = React.useMemo(() => {
     if (!displayToken) return displayToken;
+    const livePrice = chartMetrics.lastPriceUsd;
+    const liveMcap = chartMetrics.lastMarketCapUsd;
     return {
       ...displayToken,
-      usd_price: chartMetrics.lastPriceUsd ?? (displayToken as any)?.usd_price,
-      price_usd: chartMetrics.lastPriceUsd ?? (displayToken as any)?.price_usd,
-      market_cap_usd: chartMetrics.lastMarketCapUsd ?? (displayToken as any)?.market_cap_usd ?? displayToken.market_cap_usd,
-      fully_diluted_value: chartMetrics.lastMarketCapUsd ?? (displayToken as any)?.fully_diluted_value ?? (displayToken as any)?.market_cap_usd,
+      usd_price: livePrice ?? (displayToken as any)?.usd_price,
+      price_usd: livePrice ?? (displayToken as any)?.price_usd,
+      market_cap_usd: liveMcap ?? (displayToken as any)?.market_cap_usd ?? displayToken.market_cap_usd,
+      fully_diluted_value: liveMcap ?? (displayToken as any)?.fully_diluted_value ?? (displayToken as any)?.market_cap_usd,
+      chart_live_price_usd: livePrice ?? null,
+      chart_live_market_cap_usd: liveMcap ?? null,
       max_market_cap_usd: chartMetrics.maxMarketCapUsd ?? (displayToken as any)?.max_market_cap_usd,
     } as any;
   }, [chartMetrics, displayToken]);
