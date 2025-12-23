@@ -2243,22 +2243,23 @@ export default function Header({
                       0;
                     
                     // Calculate volume as percentage of market cap
-                    let volumePercent = 0;
-                    if (volume1h > 0 && marketCap > 0) {
-                      volumePercent = (volume1h / marketCap) * 100;
-                    }
+                    // let volumePercent = 0;
+                    // if (volume1h > 0 && marketCap > 0) {
+                    //   volumePercent = (volume1h / marketCap) * 100;
+                    // }
                     
-                    // Show as percentage if we have both volume and market cap, otherwise show dollar amount
+                    // Show USD volume amount
                     // Color based on price change direction: green for up, red for down
                     const volumeColor = priceChange >= 0 ? '#85d99f' : '#f26681';
                     
-                    if (volumePercent > 0) {
-                      return (
-                        <span className="text-xs font-medium" style={{ color: volumeColor }}>
-                          {formatSmartNumber(volumePercent)}%
-                        </span>
-                      );
-                    } else if (volume1h > 0) {
+                    // if (volumePercent > 0) {
+                    //   return (
+                    //     <span className="text-xs font-medium" style={{ color: volumeColor }}>
+                    //       {formatSmartNumber(volumePercent)}%
+                    //     </span>
+                    //   );
+                    // } else 
+                    if (volume1h > 0) {
                       return (
                         <span className="text-xs font-medium" style={{ color: volumeColor }}>
                           ${formatSmartNumber(volume1h)}
