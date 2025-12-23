@@ -836,8 +836,8 @@ export default function WatchlistModal({ open, onClose }: WatchlistModalProps) {
                     <div className="text-sm font-medium" style={{ color: AX.text }}>
                       ${formatSmartNumber(volume1h)}
                     </div>
-                    {/* Volume as percentage of market cap */}
-                    {(() => {
+                    {/* Volume as percentage of market cap - Commented out for now */}
+                    {/* {(() => {
                       // Calculate volume as percentage of market cap
                       let volumePercent = 0;
                       if (volume1h > 0 && marketCap > 0) {
@@ -852,7 +852,7 @@ export default function WatchlistModal({ open, onClose }: WatchlistModalProps) {
                           {formatSmartNumber(volumePercent)}%
                         </div>
                       ) : null;
-                    })()}
+                    })()} */}
                   </td>
                   
                   {/* 1h% Column - Commented out */}
