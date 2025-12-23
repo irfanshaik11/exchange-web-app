@@ -393,6 +393,14 @@ interface TradeHeaderProps {
 }
 
 const TradeHeader: React.FC<TradeHeaderProps> = ({ token, livePriceUsd, liveMarketCapUsd }) => {
+  const coalesceNumber = (...values: any[]): number | null => {
+    for (const v of values) {
+      const n = typeof v === "string" ? parseFloat(v) : v;
+      if (Number.isFinite(n)) return n as number;
+    }
+    return null;
+  };
+
   if (!token || (!token.name && !token.symbol)) {
     return (
       <div className="flex-shrink-0 px-2">
@@ -411,8 +419,9 @@ const TradeHeader: React.FC<TradeHeaderProps> = ({ token, livePriceUsd, liveMark
   }
 
   const router = useRouter();
-  const { addToWatchlist, removeFromWatchlist, isInWatchlist } = useWatchlist();
-  const isWatched = isInWatchlist(token.pair_address || "");
+  const { addToWatchlist, removeFromWatchlist, isInWatchlist, updateWatchlistToken } = useWatchlist();
+  const watchlistKey = token.pair_address || (token as any).mint || "";
+  const isWatched = isInWatchlist(watchlistKey);
   const [showPreview, setShowPreview] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [showZoomPopup, setShowZoomPopup] = useState(false);
@@ -449,18 +458,57 @@ const TradeHeader: React.FC<TradeHeaderProps> = ({ token, livePriceUsd, liveMark
   });
 
   const marketData = getMarketData();
+  const chartPriceUsd = coalesceNumber(
+    livePriceUsd,
+    (token as any)?.chart_live_price_usd
+  );
+  const chartMarketCapUsd = coalesceNumber(
+    liveMarketCapUsd,
+    (token as any)?.chart_live_market_cap_usd
+  );
   const effectivePrice =
-    livePriceUsd ??
-    marketData?.price_usd ??
-    (token as any).usd_price ??
-    (token as any).price_usd ??
-    0;
+    coalesceNumber(
+      chartPriceUsd,
+      marketData?.price_usd,
+      (token as any).usd_price,
+      (token as any).price_usd
+    ) ?? 0;
   const effectiveMarketCap =
-    liveMarketCapUsd ??
-    marketData?.market_cap_usd ??
-    (token as any).market_cap_usd ??
-    token.market_cap_usd ??
-    0;
+    coalesceNumber(
+      chartMarketCapUsd,
+      marketData?.market_cap_usd,
+      (token as any).market_cap_usd,
+      (token as any).fully_diluted_value,
+      token.market_cap_usd
+    ) ?? 0;
+  const effectivePriceChange1h = coalesceNumber(
+    (token as any)?.price_percent_change_1h,
+    (token as any)?.price_change_1h,
+    (token as any)?.price_change,
+    (token as any)?.price_percent_change_24h,
+    (token as any)?.price_change_24h
+  );
+
+  // Keep watchlist entry hydrated with fresh price/percent/mcap when viewed on trade page
+  useEffect(() => {
+    if (!watchlistKey || !isWatched) return;
+
+    // Only update when we have meaningful data
+    const hasPrice = Number.isFinite(effectivePrice) && effectivePrice > 0;
+    const hasMcap = Number.isFinite(effectiveMarketCap) && effectiveMarketCap > 0;
+    const hasChange = Number.isFinite(effectivePriceChange1h ?? NaN);
+    if (!hasPrice && !hasMcap && !hasChange) return;
+
+    updateWatchlistToken({
+      ...token,
+      price_usd: hasPrice ? effectivePrice : (token as any).price_usd,
+      usd_price: hasPrice ? effectivePrice : (token as any).usd_price,
+      market_cap_usd: hasMcap ? effectiveMarketCap : (token as any).market_cap_usd,
+      fully_diluted_value: hasMcap ? effectiveMarketCap : (token as any).fully_diluted_value,
+      price_percent_change_1h: hasChange ? (effectivePriceChange1h as number) : (token as any).price_percent_change_1h,
+      price_change_1h: hasChange ? (effectivePriceChange1h as number) : (token as any).price_change_1h,
+    } as any);
+  }, [effectiveMarketCap, effectivePrice, effectivePriceChange1h, isWatched, token, updateWatchlistToken, watchlistKey]);
   const mcap = effectiveMarketCap;
   const price = effectivePrice;
   const liq =
@@ -580,10 +628,19 @@ const TradeHeader: React.FC<TradeHeaderProps> = ({ token, livePriceUsd, liveMark
 
   const handleWatchlistClick = () => {
     if (isWatched) {
-      removeFromWatchlist(token.pair_address || "");
+      removeFromWatchlist(watchlistKey);
       showToast("Removed from watchlist");
     } else {
-      addToWatchlist(token);
+      // Store current effective values so watchlist has price/change/mcap immediately
+      addToWatchlist({
+        ...(token as any),
+        price_usd: effectivePrice,
+        usd_price: effectivePrice,
+        price_percent_change_1h: effectivePriceChange1h ?? (token as any).price_percent_change_1h,
+        price_change_1h: effectivePriceChange1h ?? (token as any).price_change_1h,
+        market_cap_usd: effectiveMarketCap,
+        fully_diluted_value: effectiveMarketCap,
+      } as any);
       showToast("Added to watchlist");
     }
   };
