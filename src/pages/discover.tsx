@@ -488,7 +488,7 @@ export default function DiscoverPage() {
       '0xc911ba7aee487f5145702c20c20a40d9e5b87777',
       '0x9a17ad79acc180f911be1b89f6fd566597fd7777',
       '0xb6842737e2a6d5a92aba03ed0cca578303e87777',
-      '0xd32e9ddd968b18e8429f2d1da7efb2cc1f01d42d',
+      // '0xd32e9ddd968b18e8429f2d1da7efb2cc1f01d42d', // Commented out
       '0x3842751a46d23b41a47e702473dff316e6237777',
       '0xa7b3f394b9aaba67f2543a8c1a0f753cc68d7777',
       '0x7b2728c04ad436153285702e969e6efac3a97777',
