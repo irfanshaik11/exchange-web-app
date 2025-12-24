@@ -993,8 +993,7 @@ export default function DiscoverPage() {
                 volume_5m: token.volume_5m_usd || token.volume_5m || 0,
                 // Monad uses total_buy_volume_mon and total_sell_volume_mon (total, not timeframe-specific)
                 // For 24h volume calculation, we can sum buy/sell if available, otherwise use volume_24h_usd
-                // Use corrected_buy_volume_mon (calculated from monad_trades) as it fixes the swap bug
-                total_buy_volume_24h: token.corrected_buy_volume_mon || token.total_buy_volume_mon || 0,
+                total_buy_volume_24h: token.total_buy_volume_mon || 0,
                 total_sell_volume_24h: token.total_sell_volume_mon || 0,
                 // Map transaction fields
                 // Monad provides total counts (not timeframe-specific), map them to 24h fields
