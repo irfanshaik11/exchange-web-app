@@ -1,5 +1,12 @@
 import React from 'react';
-import { FaUsers, FaClock, FaEnvelope } from 'react-icons/fa';
+import { FaUsers, FaClock, FaEnvelope, FaDiscord, FaTelegram } from 'react-icons/fa';
+
+// Custom X (Twitter) icon component
+const XIcon = ({ size = 20 }: { size?: number }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor">
+    <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z" />
+  </svg>
+);
 
 interface UserLimitBlockerProps {
   isOpen: boolean;
@@ -44,6 +51,40 @@ const UserLimitBlocker: React.FC<UserLimitBlockerProps> = ({ isOpen, message }) 
             <div className="flex items-center justify-center gap-3 text-sm text-neutral-400">
               <FaEnvelope className="w-4 h-4" />
               <span>Contact support if you have questions</span>
+            </div>
+          </div>
+
+          {/* Social Links */}
+          <div className="mt-6 pt-6 border-t border-neutral-700">
+            <p className="text-sm text-neutral-400 mb-4">Stay updated on our social channels:</p>
+            <div className="flex items-center justify-center gap-4">
+              <a
+                href="https://discord.gg/sACYQmCsTJ"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center justify-center w-10 h-10 rounded-full bg-neutral-800 hover:bg-[#5865F2] border border-neutral-700 hover:border-[#5865F2] transition-all duration-200 group"
+                title="Discord"
+              >
+                <FaDiscord className="w-5 h-5 text-neutral-400 group-hover:text-white transition-colors" />
+              </a>
+              <a
+                href="https://x.com/narrative_hq"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center justify-center w-10 h-10 rounded-full bg-neutral-800 hover:bg-black border border-neutral-700 hover:border-neutral-600 transition-all duration-200 group"
+                title="Twitter"
+              >
+                <XIcon size={20} className="text-neutral-400 group-hover:text-white transition-colors" />
+              </a>
+              <a
+                href="https://t.me/+DDXGrsJoe3szYTAx"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center justify-center w-10 h-10 rounded-full bg-neutral-800 hover:bg-[#0088cc] border border-neutral-700 hover:border-[#0088cc] transition-all duration-200 group"
+                title="Telegram"
+              >
+                <FaTelegram className="w-5 h-5 text-neutral-400 group-hover:text-white transition-colors" />
+              </a>
             </div>
           </div>
 
