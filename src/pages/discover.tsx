@@ -2033,7 +2033,10 @@ export default function DiscoverPage() {
           '0x01bFF41798a0BcF287b996046Ca68b395DbC1071',
           '0x0a332311633C0625f63CFc51EE33fC49826E0a3C',
           '0x22Cd99EC337a2811F594340a4A6E41e4A3022b07',
-          '0xF59D81cd43f620E722E07f9Cb3f6E41B031017a3'
+          '0xF59D81cd43f620E722E07f9Cb3f6E41B031017a3',
+          '0x1001fF13bf368Aa4fa85F21043648079F00E1001',
+          '0x336D414754967C6682B5A665C7DAF6F1409E63e8',
+          '0x4bEdf5d792DAb4BfeF048d86af4404228DF3F3fb'
         ].map(addr => addr.toLowerCase());
         
         safeArr = safeArr.filter(t => {
@@ -2699,8 +2702,8 @@ export default function DiscoverPage() {
                 </div>
               )}
 
-            {/* Filter button - hidden when in Live Pump tab */}
-            {activeTab !== "live" && (
+            {/* Filter button - hidden when in Live Pump tab or Monad chain */}
+            {currentChain !== "monad" && activeTab !== "live" && (
               <div className="relative hidden h-7 w-[85px] min-w-[85px] items-center justify-center gap-1 rounded-md border border-[#24252C] bg-[#272a2e] px-1.5 py-1 sm:flex">
                 <button
                   className="relative flex h-full w-full cursor-pointer items-center justify-between transition-all duration-200"
