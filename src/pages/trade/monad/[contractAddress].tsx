@@ -85,6 +85,8 @@ export default function MonadTradePage() {
   const [search, setSearch] = useState("");
   const [showMobileTradeModal, setShowMobileTradeModal] = useState(false);
   const [isClosingModal, setIsClosingModal] = useState(false);
+  const [positionLinesApi, setPositionLinesApi] = useState<{ avgBuyPriceUsd?: number | null; avgSellPriceUsd?: number | null } | null>(null);
+  const fetchPositionLinesRef = useRef<Promise<void> | null>(null);
   
   // Load instant trade open state from localStorage
   const getInitialInstantTradeState = (): boolean => {
@@ -395,6 +397,77 @@ export default function MonadTradePage() {
     return displayToken?.pair_address || (contractAddress as string);
   }, [displayToken?.pair_address, contractAddress]);
 
+  // Fetch avg entry/exit lines from backend (user-scoped) with fallback to position endpoint
+  const fetchPositionLines = React.useCallback(async () => {
+    if (!tokenMintForLive || !user?.bearerToken) {
+      setPositionLinesApi(null);
+      return;
+    }
+    // Avoid overlapping fetches
+    if (fetchPositionLinesRef.current) return fetchPositionLinesRef.current;
+
+    const run = (async () => {
+      try {
+        const baseUrl = process.env.NEXT_PUBLIC_BACKEND_URL;
+        if (!baseUrl) return;
+        const headers = {
+          Authorization: `Bearer ${user.bearerToken}`,
+          Accept: "application/json",
+        };
+        const primaryUrl = `${baseUrl}/api/trade/monad/position-lines?tokenAddress=${encodeURIComponent(tokenMintForLive)}`;
+        let resp = await fetch(primaryUrl, { headers });
+        if (!resp.ok) {
+          resp = await fetch(
+            `${baseUrl}/api/trade/monad/position?tokenAddress=${encodeURIComponent(tokenMintForLive)}`,
+            { headers }
+          );
+        }
+        if (!resp.ok) {
+          setPositionLinesApi(null);
+          return;
+        }
+        const body = await resp.json();
+        const data = body?.data || body;
+        if (body?.success === false || !data) {
+          setPositionLinesApi(null);
+          return;
+        }
+        setPositionLinesApi({
+          avgBuyPriceUsd: data.avgBuyPriceUsd ?? data.avgBuyPriceUSD ?? null,
+          avgSellPriceUsd: data.avgSellPriceUsd ?? data.avgSellPriceUSD ?? null,
+        });
+      } catch {
+        setPositionLinesApi(null);
+      } finally {
+        fetchPositionLinesRef.current = null;
+      }
+    })();
+
+    fetchPositionLinesRef.current = run;
+    return run;
+  }, [tokenMintForLive, user?.bearerToken]);
+
+  // Initial fetch and on token change
+  useEffect(() => {
+    fetchPositionLines();
+  }, [fetchPositionLines]);
+
+  // Refresh lines on quick trade events for this token
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const normalized = tokenMintForLive?.toLowerCase();
+    if (!normalized) return;
+    const handler = (event: Event) => {
+      const detail = (event as CustomEvent<{ tokenAddress?: string }>).detail;
+      const addr = detail?.tokenAddress?.toLowerCase();
+      if (addr === normalized) {
+        fetchPositionLines();
+      }
+    };
+    window.addEventListener("monadQuickTrade", handler as EventListener);
+    return () => window.removeEventListener("monadQuickTrade", handler as EventListener);
+  }, [fetchPositionLines, tokenMintForLive]);
+
   // Dev address and trades (used for markers and avg entry/exit fallback)
   const { devTokenData: devData } = useMonadDevTokens(
     (contractAddress as string) || undefined,
@@ -415,82 +488,42 @@ export default function MonadTradePage() {
     if (positionForChart?.avgBuyPriceUsd && positionForChart.avgBuyPriceUsd > 0) {
       return positionForChart.avgBuyPriceUsd;
     }
-    const toNumber = (v: any) => {
-      const n = typeof v === "string" ? parseFloat(v) : Number(v);
-      return Number.isFinite(n) ? n : 0;
-    };
-    const priceUsdForTrade = (t: any) => {
-      const usd = toNumber((t as any).price_usd ?? (t as any).token_price_usd);
-      if (usd > 0) return usd;
-      const priceMon = toNumber(t.price_mon);
-      return priceMon > 0 ? priceMon * (monPrice || 0) : 0;
-    };
-
     if (positionForChart && positionForChart.totalBoughtTokens > 0) {
-      return positionForChart.totalBoughtUsd / positionForChart.totalBoughtTokens;
-    }
-    if (!allTrades || allTrades.length === 0) return null;
-    let buyTokens = 0;
-    let buyUsd = 0;
-    allTrades.forEach((t) => {
-      if (t.is_buy) {
-        const tokenAmt = toNumber(t.token_amount);
-        const priceUsd = priceUsdForTrade(t);
-        if (tokenAmt > 0 && priceUsd > 0) {
-          buyTokens += tokenAmt;
-          buyUsd += tokenAmt * priceUsd;
-        }
+      if (positionForChart.totalBoughtUsd > 0) {
+        return positionForChart.totalBoughtUsd / positionForChart.totalBoughtTokens;
       }
-    });
-    if (buyTokens <= 0 || buyUsd <= 0) return null;
-    return buyUsd / buyTokens;
-  }, [allTrades, monPrice, positionForChart]);
+      if (positionForChart.totalBoughtMon > 0 && monPrice > 0) {
+        return (positionForChart.totalBoughtMon * monPrice) / positionForChart.totalBoughtTokens;
+      }
+    }
+    return null;
+  }, [monPrice, positionForChart]);
 
   const avgExitPriceUsd = React.useMemo(() => {
     if (positionForChart?.avgSellPriceUsd && positionForChart.avgSellPriceUsd > 0) {
       return positionForChart.avgSellPriceUsd;
     }
-    const toNumber = (v: any) => {
-      const n = typeof v === "string" ? parseFloat(v) : Number(v);
-      return Number.isFinite(n) ? n : 0;
-    };
-    const priceUsdForTrade = (t: any) => {
-      const usd = toNumber((t as any).price_usd ?? (t as any).token_price_usd);
-      if (usd > 0) return usd;
-      const priceMon = toNumber(t.price_mon);
-      return priceMon > 0 ? priceMon * (monPrice || 0) : 0;
-    };
-
     if (positionForChart && positionForChart.totalSoldTokens > 0) {
-      return positionForChart.totalSoldUsd / positionForChart.totalSoldTokens;
-    }
-    if (!allTrades || allTrades.length === 0) return null;
-    let sellTokens = 0;
-    let sellUsd = 0;
-    allTrades.forEach((t) => {
-      if (!t.is_buy) {
-        const tokenAmt = toNumber(t.token_amount);
-        const priceUsd = priceUsdForTrade(t);
-        if (tokenAmt > 0 && priceUsd > 0) {
-          sellTokens += tokenAmt;
-          sellUsd += tokenAmt * priceUsd;
-        }
+      if (positionForChart.totalSoldUsd > 0) {
+        return positionForChart.totalSoldUsd / positionForChart.totalSoldTokens;
       }
-    });
-    if (sellTokens <= 0 || sellUsd <= 0) return null;
-    return sellUsd / sellTokens;
-  }, [allTrades, monPrice, positionForChart]);
+      if (positionForChart.totalSoldMon > 0 && monPrice > 0) {
+        return (positionForChart.totalSoldMon * monPrice) / positionForChart.totalSoldTokens;
+      }
+    }
+    return null;
+  }, [monPrice, positionForChart]);
 
   const priceLineValues = React.useMemo(() => {
     const sanitize = (value: any) => {
       const num = typeof value === "string" ? parseFloat(value) : value;
       return Number.isFinite(num) && num > 0 ? num : undefined;
     };
-    const entry = sanitize(avgEntryPriceUsd);
-    const exit = sanitize(avgExitPriceUsd);
+    const entry = sanitize(avgEntryPriceUsd ?? positionLinesApi?.avgBuyPriceUsd);
+    const exit = sanitize(avgExitPriceUsd ?? positionLinesApi?.avgSellPriceUsd);
     // Only update object when values change to avoid needless chart churn
     return { avgEntryPriceUsd: entry, avgExitPriceUsd: exit };
-  }, [avgEntryPriceUsd, avgExitPriceUsd]);
+  }, [avgEntryPriceUsd, avgExitPriceUsd, positionLinesApi?.avgBuyPriceUsd, positionLinesApi?.avgSellPriceUsd]);
 
   const handleChartMetrics = React.useCallback((metrics: { lastPriceUsd?: number; lastMarketCapUsd?: number; maxMarketCapUsd?: number }) => {
     setChartMetrics(metrics);

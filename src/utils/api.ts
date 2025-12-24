@@ -703,6 +703,7 @@ export type MonadSellParams = {
   percentage?: number; // Optional: Percentage of balance to sell (1-100, mutually exclusive with tokenAmount)
   slippage?: number; // Optional: Slippage percentage
   gasPrice?: number; // Optional: Gas price in gwei (defaults to network suggestion)
+  priceUsd?: number; // Optional: Current token price in USD (for accurate trade history recording)
 };
 
 export const tradeMonadBuy = (params: MonadBuyParams, authToken: string) =>

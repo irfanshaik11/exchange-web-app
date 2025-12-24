@@ -322,7 +322,13 @@ const AdvancedOHLCChart: React.FC<AdvancedOHLCChartProps> = ({
 
   // Keep ref in sync with state
   useEffect(() => {
+    console.log('🔄 [DISPLAY_MODE_UPDATE] Display mode changing:', {
+      oldMode: displayModeRef.current,
+      newMode: displayMode,
+      timestamp: new Date().toISOString(),
+    });
     displayModeRef.current = displayMode;
+    console.log('✅ [DISPLAY_MODE_UPDATE] displayModeRef.current updated to:', displayModeRef.current);
   }, [displayMode]);
 
   // Helper function to transform OHLC values based on display mode (USD vs MC)
@@ -350,86 +356,262 @@ const AdvancedOHLCChart: React.FC<AdvancedOHLCChartProps> = ({
   }, [transformOHLCValue]);
 
   const computeMaxMarketCapUsd = useCallback((): number | null => {
+    console.log('📊 [MAX_MC_COMPUTE] Starting max MC computation...');
     const isMonad = latestParamsRef.current.network === 'monad';
-    if (!isMonad) return null;
+    console.log('📊 [MAX_MC_COMPUTE] Network check:', { isMonad, network: latestParamsRef.current.network });
+
+    if (!isMonad) {
+      console.log('⚠️ [MAX_MC_COMPUTE] Not Monad network, returning null');
+      return null;
+    }
+
     const data = lastGoodCandlesRef.current || [];
-    if (!data.length) return null;
+    console.log('📊 [MAX_MC_COMPUTE] Candles available:', data.length);
+
+    if (!data.length) {
+      console.log('⚠️ [MAX_MC_COMPUTE] No candle data available, returning null');
+      return null;
+    }
+
     let maxHigh = 0;
+    let maxHighCandle = null;
     for (const candle of data) {
       if (candle?.h && candle.h > maxHigh) {
         maxHigh = candle.h;
+        maxHighCandle = candle;
       }
     }
-    if (!Number.isFinite(maxHigh) || maxHigh <= 0) return null;
-    return maxHigh * MARKET_CAP_MULTIPLIER;
+
+    console.log('📊 [MAX_MC_COMPUTE] Max high found:', {
+      maxHigh,
+      maxHighUSD: maxHigh,
+      candleTime: maxHighCandle ? new Date(maxHighCandle.unix_time * 1000).toISOString() : null,
+      isFinite: Number.isFinite(maxHigh),
+      isPositive: maxHigh > 0,
+    });
+
+    if (!Number.isFinite(maxHigh) || maxHigh <= 0) {
+      console.log('⚠️ [MAX_MC_COMPUTE] Invalid maxHigh, returning null');
+      return null;
+    }
+
+    const result = maxHigh * MARKET_CAP_MULTIPLIER;
+    console.log('✅ [MAX_MC_COMPUTE] Final max MC (USD):', {
+      maxHighPriceUSD: maxHigh,
+      MARKET_CAP_MULTIPLIER,
+      resultMaxMcUSD: result,
+      formatted: `$${(result / 1_000_000).toFixed(2)}M`,
+    });
+
+    return result;
   }, []);
 
   // Price line management - always clears and redraws to ensure consistency
   const syncPriceLines = useCallback((maxMarketCapUsdOverride?: number | null) => {
+    console.log('🎯 [SYNC_PRICE_LINES] ============= START =============');
+    console.log('🎯 [SYNC_PRICE_LINES] Called with maxMarketCapUsdOverride:', maxMarketCapUsdOverride);
+
+    if (syncLinesInFlightRef.current) {
+      console.log('⚠️ [SYNC_PRICE_LINES] Already in flight, skipping');
+      return;
+    }
+
+    syncLinesInFlightRef.current = true;
+    console.log('🎯 [SYNC_PRICE_LINES] Set in-flight flag to true');
+
     const isMonad = latestParamsRef.current.network === 'monad';
     const widget = widgetRef.current;
+    console.log('🎯 [SYNC_PRICE_LINES] Initial checks:', {
+      isMonad,
+      network: latestParamsRef.current.network,
+      hasWidget: !!widget,
+    });
 
-    if (!widget || !isMonad) return;
+    if (!widget || !isMonad) {
+      console.log('❌ [SYNC_PRICE_LINES] Early exit - no widget or not Monad:', { hasWidget: !!widget, isMonad });
+      syncLinesInFlightRef.current = false;
+      return;
+    }
 
     let chart: any = null;
     try {
       chart = widget.activeChart?.() || widget.chart?.();
+      console.log('🎯 [SYNC_PRICE_LINES] Chart obtained:', {
+        hasChart: !!chart,
+        hasCreateShape: chart ? typeof chart.createShape === 'function' : false,
+      });
     } catch (err) {
+      console.log('❌ [SYNC_PRICE_LINES] Failed to get chart:', err);
+      syncLinesInFlightRef.current = false;
       return;
     }
 
-    if (!chart || typeof chart.createShape !== 'function') return;
+    if (!chart || typeof chart.createShape !== 'function') {
+      console.log('❌ [SYNC_PRICE_LINES] Invalid chart or missing createShape');
+      syncLinesInFlightRef.current = false;
+      return;
+    }
 
     const mode = displayModeRef.current;
     const axisIsMarketCap = mode === 'MC';
+    console.log('🎯 [SYNC_PRICE_LINES] Display mode:', {
+      mode,
+      axisIsMarketCap,
+      displayModeRef: displayModeRef.current,
+    });
+
     const maxMarketCapUsd = typeof maxMarketCapUsdOverride === 'number'
       ? maxMarketCapUsdOverride
       : computeMaxMarketCapUsd();
 
+    console.log('🎯 [SYNC_PRICE_LINES] Max MC determination:', {
+      hasOverride: typeof maxMarketCapUsdOverride === 'number',
+      overrideValue: maxMarketCapUsdOverride,
+      computedValue: typeof maxMarketCapUsdOverride === 'number' ? '(not computed)' : maxMarketCapUsd,
+      finalMaxMarketCapUsd: maxMarketCapUsd,
+    });
+
     const currentPrices = priceLinesRef.current;
+    console.log('🎯 [SYNC_PRICE_LINES] Current price line props:', {
+      currentPrices,
+      avgEntryPriceUsd: currentPrices?.avgEntryPriceUsd,
+      avgExitPriceUsd: currentPrices?.avgExitPriceUsd,
+    });
+
     const normalizeUsd = (value: unknown): number | null => {
       const numeric = typeof value === 'string' ? parseFloat(value) : (value as number);
-      if (!Number.isFinite(numeric) || numeric <= 0) return null;
-      return numeric;
+      const result = (!Number.isFinite(numeric) || numeric <= 0) ? null : numeric;
+      console.log('🔢 [NORMALIZE_USD]', { input: value, numeric, isFinite: Number.isFinite(numeric), isPositive: numeric > 0, result });
+      return result;
     };
+
     const avgEntryUsd = normalizeUsd(currentPrices?.avgEntryPriceUsd ?? null);
     const avgExitUsd = normalizeUsd(currentPrices?.avgExitPriceUsd ?? null);
 
+    console.log('🎯 [SYNC_PRICE_LINES] Normalized USD values:', {
+      avgEntryUsd,
+      avgExitUsd,
+    });
+
     const toAxisPrice = (usdPrice?: number | null): number | null => {
-      if (usdPrice === null || usdPrice === undefined) return null;
-      return axisIsMarketCap ? usdPrice * MARKET_CAP_MULTIPLIER : usdPrice;
+      if (usdPrice === null || usdPrice === undefined) {
+        console.log('🔢 [TO_AXIS_PRICE] Input is null/undefined:', usdPrice);
+        return null;
+      }
+      const result = axisIsMarketCap ? usdPrice * MARKET_CAP_MULTIPLIER : usdPrice;
+      console.log('🔢 [TO_AXIS_PRICE] Conversion:', {
+        input_USD: usdPrice,
+        axisIsMarketCap,
+        MARKET_CAP_MULTIPLIER,
+        output_AxisPrice: result,
+        formatted: axisIsMarketCap ? `$${(result / 1_000_000_000).toFixed(2)}B` : `$${result.toFixed(6)}`,
+      });
+      return result;
     };
 
+    console.log('🎯 [SYNC_PRICE_LINES] Converting prices to axis coordinates...');
     const entryPrice = toAxisPrice(avgEntryUsd);
     const exitPrice = toAxisPrice(avgExitUsd);
-    const maxMcPrice = toAxisPrice(maxMarketCapUsd ? maxMarketCapUsd / MARKET_CAP_MULTIPLIER : null);
+
+    console.log('🎯 [SYNC_PRICE_LINES] Max MC axis price calculation...');
+    console.log('🎯 [SYNC_PRICE_LINES] maxMarketCapUsd before division:', maxMarketCapUsd);
+    const maxMcPriceInput = maxMarketCapUsd ? maxMarketCapUsd / MARKET_CAP_MULTIPLIER : null;
+    console.log('🎯 [SYNC_PRICE_LINES] Max MC after dividing by multiplier:', {
+      maxMarketCapUsd,
+      MARKET_CAP_MULTIPLIER,
+      divided: maxMcPriceInput,
+      willBeNull: !maxMarketCapUsd,
+    });
+    const maxMcPrice = toAxisPrice(maxMcPriceInput);
+
+    console.log('🎯 [SYNC_PRICE_LINES] Final axis prices:', {
+      entryPrice,
+      exitPrice,
+      maxMcPrice,
+    });
+
+    const lastApplied = lastAppliedLinesRef.current;
+    console.log('🎯 [SYNC_PRICE_LINES] Checking if lines already applied:', {
+      lastApplied,
+      entryPrice,
+      exitPrice,
+      maxMcPrice,
+      entryMatch: lastApplied?.entry === entryPrice,
+      exitMatch: lastApplied?.exit === exitPrice,
+      maxMcMatch: lastApplied?.maxMc === maxMcPrice,
+    });
+
+    if (
+      lastApplied &&
+      lastApplied.entry === entryPrice &&
+      lastApplied.exit === exitPrice &&
+      lastApplied.maxMc === maxMcPrice
+    ) {
+      console.log('⚠️ [SYNC_PRICE_LINES] Lines already applied with same values, skipping');
+      syncLinesInFlightRef.current = false;
+      return;
+    }
+
+    console.log('🎯 [SYNC_PRICE_LINES] Lines need update, proceeding...');
 
     // STEP 1: Always remove ALL existing shapes first
+    console.log('🗑️ [SYNC_PRICE_LINES] STEP 1: Removing existing shapes...');
     try {
+      const existingShapes = Object.keys(priceLineShapesRef.current);
+      console.log('🗑️ [SYNC_PRICE_LINES] Tracked shapes to remove:', existingShapes);
+
       // Remove tracked shapes by ID
       Object.values(priceLineShapesRef.current).forEach((line: any) => {
         try {
           if (line?.id && typeof line.id === 'string') {
+            console.log('🗑️ [SYNC_PRICE_LINES] Removing shape:', line.id);
             chart.removeEntity(line.id);
           }
-        } catch (e) {}
+        } catch (e) {
+          console.log('⚠️ [SYNC_PRICE_LINES] Failed to remove shape:', line?.id, e);
+        }
       });
       priceLineShapesRef.current = {};
+      console.log('🗑️ [SYNC_PRICE_LINES] Cleared priceLineShapesRef');
 
       // Also remove all shapes from chart as backup
       if (typeof chart.removeAllShapes === 'function') {
         chart.removeAllShapes();
+        console.log('🗑️ [SYNC_PRICE_LINES] Called chart.removeAllShapes()');
       }
-    } catch (e) {}
+    } catch (e) {
+      console.log('⚠️ [SYNC_PRICE_LINES] Error during shape removal:', e);
+    }
 
     // STEP 2: Create fresh lines using createShape
+    console.log('✨ [SYNC_PRICE_LINES] STEP 2: Creating fresh lines...');
     const createLine = async (key: string, price: number | null, label: string, color: string) => {
-      if (price === null) return;
+      console.log(`✨ [CREATE_LINE] Creating line "${key}":`, {
+        key,
+        price,
+        label,
+        color,
+        priceIsNull: price === null,
+      });
+
+      if (price === null) {
+        console.log(`⚠️ [CREATE_LINE] Skipping "${key}" - price is null`);
+        return;
+      }
 
       try {
+        const formattedPrice = formatAxisLabel(price, axisIsMarketCap);
+        const lineText = `${label}: ${formattedPrice}`;
+        console.log(`✨ [CREATE_LINE] "${key}" formatted:`, {
+          price,
+          axisIsMarketCap,
+          formattedPrice,
+          lineText,
+        });
+
         const result = chart.createShape({ price }, {
           shape: 'horizontal_line',
-          text: `${label}: ${formatAxisLabel(price, axisIsMarketCap)}`,
+          text: lineText,
           disableSelection: true,
           disableSave: true,
           overrides: {
@@ -442,43 +624,163 @@ const AdvancedOHLCChart: React.FC<AdvancedOHLCChartProps> = ({
           },
         });
 
+        console.log(`✨ [CREATE_LINE] "${key}" createShape called, result type:`, {
+          resultType: typeof result,
+          isPromise: result instanceof Promise,
+          hasThenable: result && typeof result.then === 'function',
+          result,
+        });
+
         // Handle both Promise and direct ID returns
-        const shapeId = result instanceof Promise ? await result : result;
+        // Use thenable check instead of instanceof Promise (handles cross-realm Promises from iframes)
+        const isThenable = (obj: any): obj is Promise<any> => obj && typeof obj.then === 'function';
+
+        let shapeId = isThenable(result) ? await result : result;
+        console.log(`✨ [CREATE_LINE] "${key}" after first await:`, {
+          shapeId,
+          type: typeof shapeId,
+          isPromise: shapeId instanceof Promise,
+          hasThenable: isThenable(shapeId),
+        });
+
+        // Check if we got a nested Promise/thenable and await again if needed
+        if (isThenable(shapeId)) {
+          console.log(`✨ [CREATE_LINE] "${key}" detected nested thenable, awaiting again...`);
+          shapeId = await shapeId;
+          console.log(`✨ [CREATE_LINE] "${key}" after second await:`, {
+            shapeId,
+            type: typeof shapeId,
+          });
+        }
+
+        console.log(`✨ [CREATE_LINE] "${key}" final shape ID:`, {
+          shapeId,
+          isString: typeof shapeId === 'string',
+        });
 
         if (shapeId && typeof shapeId === 'string') {
           priceLineShapesRef.current[key] = { id: shapeId };
+          console.log(`✅ [CREATE_LINE] "${key}" successfully created and tracked with ID:`, shapeId);
+
+          // Log chart's visible price range to debug visibility issues
+          try {
+            const priceScale = chart.getPanes?.()?.[0]?.getRightPriceScales?.()?.[0];
+            if (priceScale) {
+              const visibleRange = priceScale.getVisiblePriceRange?.();
+              console.log(`📊 [CREATE_LINE] "${key}" chart visible price range:`, {
+                linePrice: price,
+                visibleMin: visibleRange?.minValue,
+                visibleMax: visibleRange?.maxValue,
+                isLineVisible: price >= visibleRange?.minValue && price <= visibleRange?.maxValue,
+                lineIsAboveChart: price > visibleRange?.maxValue,
+                lineIsBelowChart: price < visibleRange?.minValue,
+              });
+            }
+          } catch (e) {
+            console.log(`⚠️ [CREATE_LINE] "${key}" could not get visible range:`, e);
+          }
+        } else {
+          console.log(`⚠️ [CREATE_LINE] "${key}" received invalid shape ID:`, {
+            shapeId,
+            type: typeof shapeId,
+            isNull: shapeId === null,
+            isUndefined: shapeId === undefined,
+          });
         }
       } catch (err) {
-        console.error('[syncPriceLines] Failed to create line:', key, err);
+        console.error(`❌ [CREATE_LINE] Failed to create line "${key}":`, err);
       }
     };
 
     // Create the lines
-    createLine('avgEntry', entryPrice, 'Avg Entry', '#f2c94c');
-    createLine('avgExit', exitPrice, 'Avg Exit', '#4aa3ff');
-    createLine('maxMc', maxMcPrice, 'Max MC', '#f2994a');
+    (async () => {
+      console.log('✨ [SYNC_PRICE_LINES] Starting async line creation...');
+      await createLine('avgEntry', entryPrice, 'Avg Entry', '#f2c94c');
+      await createLine('avgExit', exitPrice, 'Avg Exit', '#4aa3ff');
+      await createLine('maxMc', maxMcPrice, 'Max MC', '#f2994a');
+
+      lastAppliedLinesRef.current = { entry: entryPrice, exit: exitPrice, maxMc: maxMcPrice };
+      console.log('✅ [SYNC_PRICE_LINES] All lines created, updated lastAppliedLinesRef:', lastAppliedLinesRef.current);
+      console.log('✅ [SYNC_PRICE_LINES] Tracked shapes:', Object.keys(priceLineShapesRef.current));
+
+      syncLinesInFlightRef.current = false;
+      console.log('🎯 [SYNC_PRICE_LINES] ============= COMPLETE =============');
+    })().catch((err) => {
+      console.error('❌ [SYNC_PRICE_LINES] Async line creation failed:', err);
+      syncLinesInFlightRef.current = false;
+      console.log('🎯 [SYNC_PRICE_LINES] ============= FAILED =============');
+    });
   }, [computeMaxMarketCapUsd]);
 
   const updateChartMetrics = useCallback(() => {
+    console.log('📈 [UPDATE_METRICS] ============= START =============');
     const candles = lastGoodCandlesRef.current;
-    if (!candles || candles.length === 0) return;
+    console.log('📈 [UPDATE_METRICS] Candles:', {
+      count: candles?.length || 0,
+      hasCandles: !!(candles && candles.length > 0),
+    });
+
+    if (!candles || candles.length === 0) {
+      console.log('⚠️ [UPDATE_METRICS] No candles available, exiting');
+      return;
+    }
 
     const sorted = [...candles].sort((a, b) => a.unix_time - b.unix_time);
     const latest = sorted[sorted.length - 1];
     const lastPriceUsd = Number(latest?.c || latest?.o || 0);
-    if (!Number.isFinite(lastPriceUsd) || lastPriceUsd <= 0) return;
+
+    console.log('📈 [UPDATE_METRICS] Latest candle:', {
+      unix_time: latest?.unix_time,
+      timestamp: new Date(latest?.unix_time * 1000).toISOString(),
+      close: latest?.c,
+      open: latest?.o,
+      lastPriceUsd,
+      isFinite: Number.isFinite(lastPriceUsd),
+      isPositive: lastPriceUsd > 0,
+    });
+
+    if (!Number.isFinite(lastPriceUsd) || lastPriceUsd <= 0) {
+      console.log('⚠️ [UPDATE_METRICS] Invalid last price, exiting');
+      return;
+    }
 
     const isMonad = latestParamsRef.current.network === 'monad';
-    const maxMarketCapUsd = isMonad ? computeMaxMarketCapUsd() : null;
+    console.log('📈 [UPDATE_METRICS] Network:', { isMonad, network: latestParamsRef.current.network });
+
+    const maxMarketCapUsd = isMonad
+      ? (maxMarketCapFromApiRef.current ?? computeMaxMarketCapUsd())
+      : null;
+
+    console.log('📈 [UPDATE_METRICS] Max MC determination:', {
+      isMonad,
+      maxMarketCapFromApi: maxMarketCapFromApiRef.current,
+      computedMaxMc: maxMarketCapFromApiRef.current === null ? 'computed' : 'using API value',
+      finalMaxMarketCapUsd: maxMarketCapUsd,
+    });
+
     const metrics = {
       lastPriceUsd,
       lastMarketCapUsd: isMonad ? lastPriceUsd * MARKET_CAP_MULTIPLIER : undefined,
       maxMarketCapUsd: isMonad ? maxMarketCapUsd ?? undefined : undefined,
     };
 
+    console.log('📈 [UPDATE_METRICS] Computed metrics:', {
+      lastPriceUsd,
+      lastMarketCapUsd: metrics.lastMarketCapUsd,
+      maxMarketCapUsd: metrics.maxMarketCapUsd,
+      MARKET_CAP_MULTIPLIER,
+    });
+
     lastMetricsRef.current = metrics;
+    console.log('📈 [UPDATE_METRICS] Updated lastMetricsRef.current:', lastMetricsRef.current);
+
+    console.log('📈 [UPDATE_METRICS] Calling syncPriceLines with maxMarketCapUsd:', metrics.maxMarketCapUsd ?? null);
     syncPriceLines(metrics.maxMarketCapUsd ?? null);
+
+    console.log('📈 [UPDATE_METRICS] Calling onChartMetrics callback');
     onChartMetrics?.(metrics);
+
+    console.log('📈 [UPDATE_METRICS] ============= COMPLETE =============');
   }, [computeMaxMarketCapUsd, onChartMetrics, syncPriceLines]);
 
   useEffect(() => {
@@ -486,6 +788,104 @@ const AdvancedOHLCChart: React.FC<AdvancedOHLCChartProps> = ({
       setInitialTokenId((mint || pairAddress) ?? null);
     }
   }, [initialTokenId, mint, pairAddress]);
+
+  // Fetch max market cap from full 30d/1s OHLC for Monad tokens to keep Max MC line accurate
+  useEffect(() => {
+    console.log('🔍 [MAX_MC_FETCH] Effect triggered:', { mint, pairAddress });
+    const isMonad = latestParamsRef.current.network === 'monad';
+    const tokenId = mint || pairAddress;
+    console.log('🔍 [MAX_MC_FETCH] Checks:', {
+      isMonad,
+      tokenId,
+      hasWindow: typeof window !== 'undefined',
+    });
+
+    if (!isMonad || !tokenId || typeof window === 'undefined') {
+      console.log('⚠️ [MAX_MC_FETCH] Skipping - conditions not met');
+      maxMarketCapFromApiRef.current = null;
+      return;
+    }
+
+    console.log('🔍 [MAX_MC_FETCH] Starting fetch for token:', tokenId);
+    const controller = new AbortController();
+    const fetchMaxMc = async () => {
+      try {
+        const url = new URL('/api/token-service/ohlc-monad', window.location.origin);
+        url.searchParams.set('token_address', tokenId);
+        url.searchParams.set('interval', '1s');
+        url.searchParams.set('timeframe', '30d');
+        url.searchParams.set('optimize', 'true');
+
+        console.log('🔍 [MAX_MC_FETCH] Fetching URL:', url.toString());
+
+        const resp = await fetch(url.toString(), {
+          signal: controller.signal,
+          headers: { Accept: 'application/json' },
+        });
+
+        console.log('🔍 [MAX_MC_FETCH] Response status:', resp.status, resp.ok);
+
+        if (!resp.ok) {
+          console.warn('⚠️ [MAX_MC_FETCH] Fetch failed with status:', resp.status);
+          maxMarketCapFromApiRef.current = null;
+          return;
+        }
+
+        const data = await resp.json();
+        const items: BackendOHLCData[] = data?.data?.items || [];
+        console.log('🔍 [MAX_MC_FETCH] Received candles:', items.length);
+
+        let maxHigh = 0;
+        let maxHighCandle = null;
+        for (const c of items) {
+          if (c?.h && c.h > maxHigh) {
+            maxHigh = c.h;
+            maxHighCandle = c;
+          }
+        }
+
+        const maxMcUsd = maxHigh > 0 ? maxHigh * MARKET_CAP_MULTIPLIER : null;
+
+        console.log('🔍 [MAX_MC_FETCH] Result:', {
+          token: tokenId,
+          maxHigh,
+          maxMcUsd,
+          formatted: maxMcUsd ? `$${(maxMcUsd / 1_000_000).toFixed(2)}M` : 'null',
+          candles: items.length,
+          maxHighCandle: maxHighCandle ? {
+            time: new Date(maxHighCandle.unix_time * 1000).toISOString(),
+            high: maxHighCandle.h,
+          } : null,
+        });
+
+        maxMarketCapFromApiRef.current = maxMcUsd;
+        console.log('✅ [MAX_MC_FETCH] Updated maxMarketCapFromApiRef.current:', maxMarketCapFromApiRef.current);
+
+        // Update cached metrics so price line sync can use the fresh max MC
+        if (maxMarketCapFromApiRef.current) {
+          lastMetricsRef.current = {
+            ...lastMetricsRef.current,
+            maxMarketCapUsd: maxMarketCapFromApiRef.current,
+          };
+          console.log('✅ [MAX_MC_FETCH] Updated lastMetricsRef.current:', lastMetricsRef.current);
+        }
+
+        console.log('🔍 [MAX_MC_FETCH] Requesting price line sync with delay 0');
+        requestPriceLineSync(0);
+      } catch (e) {
+        if ((e as any)?.name !== 'AbortError') {
+          console.warn('❌ [MAX_MC_FETCH] Error:', e);
+        }
+        maxMarketCapFromApiRef.current = null;
+      }
+    };
+
+    fetchMaxMc();
+    return () => {
+      console.log('🔍 [MAX_MC_FETCH] Cleanup - aborting fetch');
+      controller.abort();
+    };
+  }, [mint, pairAddress]);
 
   useEffect(() => {
     latestParamsRef.current = {
@@ -571,8 +971,24 @@ const AdvancedOHLCChart: React.FC<AdvancedOHLCChartProps> = ({
   const hasRealPriceDataRef = useRef<boolean>(false); // Track if we've received real price data
   const priceLineShapesRef = useRef<Record<string, any>>({});
   const lastMetricsRef = useRef<{ lastPriceUsd?: number; lastMarketCapUsd?: number; maxMarketCapUsd?: number }>({});
+  const maxMarketCapFromApiRef = useRef<number | null>(null);
+  const lastAppliedLinesRef = useRef<{ entry?: number | null; exit?: number | null; maxMc?: number | null }>({});
+  const syncLinesInFlightRef = useRef<boolean>(false);
   const lastPriceLinesRef = useRef<Record<string, number | null>>({});
   const priceLinesRef = useRef(priceLines);
+
+  // Log when priceLines prop changes
+  if (priceLinesRef.current !== priceLines) {
+    console.log('💰 [PRICE_LINES_PROP] Price lines prop changed:', {
+      old: priceLinesRef.current,
+      new: priceLines,
+      oldEntry: priceLinesRef.current?.avgEntryPriceUsd,
+      newEntry: priceLines?.avgEntryPriceUsd,
+      oldExit: priceLinesRef.current?.avgExitPriceUsd,
+      newExit: priceLines?.avgExitPriceUsd,
+    });
+  }
+
   priceLinesRef.current = priceLines;
   const priceLineSyncTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const marksInitializedRef = useRef(false);
@@ -592,16 +1008,39 @@ const AdvancedOHLCChart: React.FC<AdvancedOHLCChartProps> = ({
 
   // Helper to (re)draw price lines when chart is ready
   const requestPriceLineSync = useCallback((delay: number = 0) => {
+    console.log('🔔 [REQUEST_SYNC] Price line sync requested with delay:', delay, 'ms');
+    console.log('🔔 [REQUEST_SYNC] Current metrics:', lastMetricsRef.current);
+
     if (priceLineSyncTimeoutRef.current) {
+      console.log('🔔 [REQUEST_SYNC] Clearing existing timeout');
       clearTimeout(priceLineSyncTimeoutRef.current);
     }
+
     priceLineSyncTimeoutRef.current = setTimeout(() => {
+      console.log('🔔 [REQUEST_SYNC] Timeout fired, checking widget...');
       const widget = widgetRef.current;
-      if (!widget) return;
-      const run = () => syncPriceLines(lastMetricsRef.current.maxMarketCapUsd ?? null);
+
+      if (!widget) {
+        console.log('⚠️ [REQUEST_SYNC] Widget not ready, will retry in 50ms');
+        // Retry shortly if widget not ready yet
+        priceLineSyncTimeoutRef.current = setTimeout(() => requestPriceLineSync(0), 50);
+        return;
+      }
+
+      console.log('🔔 [REQUEST_SYNC] Widget ready, preparing to sync...');
+      const maxMarketCapUsd = lastMetricsRef.current.maxMarketCapUsd ?? null;
+      console.log('🔔 [REQUEST_SYNC] Will call syncPriceLines with maxMarketCapUsd:', maxMarketCapUsd);
+
+      const run = () => {
+        console.log('🔔 [REQUEST_SYNC] Executing syncPriceLines...');
+        syncPriceLines(maxMarketCapUsd);
+      };
+
       if (typeof widget.onChartReady === 'function') {
+        console.log('🔔 [REQUEST_SYNC] Using widget.onChartReady callback');
         widget.onChartReady(run);
       } else {
+        console.log('🔔 [REQUEST_SYNC] Running immediately (no onChartReady)');
         run();
       }
     }, Math.max(0, delay));
@@ -609,6 +1048,15 @@ const AdvancedOHLCChart: React.FC<AdvancedOHLCChartProps> = ({
 
   // Refresh chart price lines when props or display mode change
   useEffect(() => {
+    console.log('🔄 [EFFECT_PRICE_SYNC] Effect triggered - display mode or priceLines changed');
+    console.log('🔄 [EFFECT_PRICE_SYNC] Current state:', {
+      displayMode,
+      displayModeRef: displayModeRef.current,
+      priceLines,
+      avgEntryPriceUsd: priceLines?.avgEntryPriceUsd,
+      avgExitPriceUsd: priceLines?.avgExitPriceUsd,
+    });
+    console.log('🔄 [EFFECT_PRICE_SYNC] Calling requestPriceLineSync with 10ms delay');
     requestPriceLineSync(10);
   }, [displayMode, priceLines, requestPriceLineSync]);
 

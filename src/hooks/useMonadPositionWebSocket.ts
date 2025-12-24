@@ -113,14 +113,21 @@ export function useMonadPositionWebSocket(
         }
       );
 
-      if (!response.ok) {
+      if (response.status === 404) {
+        // No position yet for this token/user – treat as empty instead of error
+        setPosition(null);
+      } else if (!response.ok) {
+        console.warn('[useMonadPositionWebSocket] Position fetch failed', response.status);
         throw new Error(`Failed to fetch position: ${response.status}`);
-      }
-
-      const result = await response.json();
-      if (result.success && result.data) {
-        setPosition(result.data);
-        onUpdateRef.current?.(result.data);
+      } else {
+        const result = await response.json();
+        if (result.success && result.data) {
+          setPosition(result.data);
+          onUpdateRef.current?.(result.data);
+        } else {
+          console.warn('[useMonadPositionWebSocket] Position fetch returned no data', result);
+          setPosition(null);
+        }
       }
     } catch (err) {
       console.error('[useMonadPositionWebSocket] Failed to fetch initial position:', err);
@@ -128,7 +135,7 @@ export function useMonadPositionWebSocket(
     } finally {
       setLoading(false);
     }
-  }, [tokenAddress, user?.id, user?.bearerToken]);
+  }, [tokenAddress, user?.bearerToken, user?.id]);
 
   // Connect to WebSocket - uses refs to avoid dependency changes causing reconnects
   const connect = useCallback(() => {
@@ -241,7 +248,7 @@ export function useMonadPositionWebSocket(
     };
 
     // Only fetch position if we have a specific tokenAddress
-    if (tokenAddress && user?.id) {
+    if (tokenAddress && user?.id && user?.bearerToken) {
       fetchInitialPosition();
     }
 
@@ -271,7 +278,7 @@ export function useMonadPositionWebSocket(
         wsRef.current = null;
       }
     };
-  }, [enabled, tokenAddress, user?.id]); // Only reconnect when these change
+  }, [enabled, tokenAddress, user?.bearerToken, user?.id]); // Only reconnect when these change
 
   const refreshPosition = useCallback(() => {
     return fetchInitialPosition();

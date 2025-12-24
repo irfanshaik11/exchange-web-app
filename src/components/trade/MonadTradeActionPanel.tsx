@@ -838,6 +838,9 @@ const MonadTradeActionPanel: React.FC<MonadTradeActionPanelProps> = ({ token }) 
           return;
         }
 
+        // Get current token price for accurate USD value calculation
+        const currentPriceUsd = (token as any).usd_price || (token as any).price_usd || 0;
+
         const result = await tradeMonadSell(
           {
             tokenAddress,
@@ -845,6 +848,7 @@ const MonadTradeActionPanel: React.FC<MonadTradeActionPanelProps> = ({ token }) 
             percentage: sellPercentage,
             slippage: maxSlippage * 100,
             gasPrice: gasPrice,
+            priceUsd: currentPriceUsd, // Pass current price for immediate USD calculation
           },
           user.bearerToken
         );
