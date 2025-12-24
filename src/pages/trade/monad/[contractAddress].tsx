@@ -88,6 +88,10 @@ export default function MonadTradePage() {
   const [positionLinesApi, setPositionLinesApi] = useState<{ avgBuyPriceUsd?: number | null; avgSellPriceUsd?: number | null } | null>(null);
   const fetchPositionLinesRef = useRef<Promise<void> | null>(null);
   
+  // Fallback liquidity from liquidity endpoint when liquidity is $0
+  const [fallbackLiquidityUsd, setFallbackLiquidityUsd] = useState<number | null>(null);
+  const fetchFallbackLiquidityRef = useRef<Promise<void> | null>(null);
+  
   // Load instant trade open state from localStorage
   const getInitialInstantTradeState = (): boolean => {
     if (typeof window === 'undefined') return false;
@@ -344,8 +348,15 @@ export default function MonadTradePage() {
       dev_address: null,
       owner: null,
       // Live metrics
-      liquidity_usd: live?.liquidity_usd ?? optimisticToken.liquidity_usd ?? optimisticToken.total_liquidity_usd ?? 0,
-      total_liquidity_usd: live?.liquidity_usd ?? optimisticToken.total_liquidity_usd ?? optimisticToken.liquidity_usd ?? 0,
+      // Use fallback liquidity endpoint if liquidity is $0
+      liquidity_usd: (() => {
+        const primary = live?.liquidity_usd ?? optimisticToken.liquidity_usd ?? optimisticToken.total_liquidity_usd ?? 0;
+        return (primary > 0) ? primary : (fallbackLiquidityUsd ?? primary);
+      })(),
+      total_liquidity_usd: (() => {
+        const primary = live?.liquidity_usd ?? optimisticToken.total_liquidity_usd ?? optimisticToken.liquidity_usd ?? 0;
+        return (primary > 0) ? primary : (fallbackLiquidityUsd ?? primary);
+      })(),
       graduation_percent: live?.graduation_percent ?? 0,
       volume_24h: live?.volume_24h_usd ?? 0,
       total_buys: live?.total_buys ?? 0,
@@ -370,8 +381,17 @@ export default function MonadTradePage() {
       total_supply: tokenSupply,
       created_at: tokenData.created_at || tokenData.launch_time || null,
       // Live metrics (real-time via WebSocket, fallback to HTTP API data)
-      liquidity_usd: live?.liquidity_usd ?? (tokenData as any)?.liquidity_usd ?? optimisticToken?.liquidity_usd ?? optimisticToken?.total_liquidity_usd ?? 0,
-      total_liquidity_usd: live?.liquidity_usd ?? (tokenData as any)?.liquidity_usd ?? optimisticToken?.total_liquidity_usd ?? optimisticToken?.liquidity_usd ?? 0,
+      // Use fallback liquidity endpoint if liquidity is $0
+      liquidity_usd: (() => {
+        const primary = live?.liquidity_usd ?? (tokenData as any)?.liquidity_usd ?? optimisticToken?.liquidity_usd ?? optimisticToken?.total_liquidity_usd ?? 0;
+        // Use fallback if primary is $0 and fallback exists
+        return (primary > 0) ? primary : (fallbackLiquidityUsd ?? primary);
+      })(),
+      total_liquidity_usd: (() => {
+        const primary = live?.liquidity_usd ?? (tokenData as any)?.liquidity_usd ?? optimisticToken?.total_liquidity_usd ?? optimisticToken?.liquidity_usd ?? 0;
+        // Use fallback if primary is $0 and fallback exists
+        return (primary > 0) ? primary : (fallbackLiquidityUsd ?? primary);
+      })(),
       graduation_percent: live?.graduation_percent ?? (tokenData as any)?.graduation_percent ?? (tokenData as any)?.bonding_curve_progress ?? 0,
       bonding_pct: live?.graduation_percent ?? (tokenData as any)?.bonding_curve_progress ?? (tokenData as any)?.graduation_percent ?? 0,
       volume_24h: live?.volume_24h_usd ?? (tokenData as any)?.volume_24h_usd ?? 0,
@@ -390,12 +410,90 @@ export default function MonadTradePage() {
       dev_address: (tokenData as any)?.dev_address || (tokenData as any)?.creator_wallet || (tokenData as any)?.creator_address || (tokenData as any)?.owner || null,
       owner: (tokenData as any)?.owner || (tokenData as any)?.creator_wallet || (tokenData as any)?.creator_address || (tokenData as any)?.dev_address || null,
     };
-  }, [tokenData, optimisticToken, contractAddress, liveMetrics, wsMetrics]);
+  }, [tokenData, optimisticToken, contractAddress, liveMetrics, wsMetrics, fallbackLiquidityUsd]);
 
   // Memoize pairAddress early so downstream hooks can use it
   const pairAddress = React.useMemo(() => {
     return displayToken?.pair_address || (contractAddress as string);
   }, [displayToken?.pair_address, contractAddress]);
+
+  // Fetch liquidity from fallback endpoint when liquidity is $0
+  const fetchFallbackLiquidity = React.useCallback(async () => {
+    if (!tokenMintForLive) {
+      setFallbackLiquidityUsd(null);
+      return;
+    }
+    
+    // Avoid overlapping fetches
+    if (fetchFallbackLiquidityRef.current) return fetchFallbackLiquidityRef.current;
+
+    const run = (async () => {
+      try {
+        const monadServiceUrl = process.env.NEXT_PUBLIC_MONAD_TOKEN_SERVICE_URL || 'https://monad-token-service.narrative.trade';
+        const url = `${monadServiceUrl}/v1/liquidity?token_address=${encodeURIComponent(tokenMintForLive)}`;
+        
+        const response = await fetch(url, {
+          headers: {
+            'Accept': 'application/json',
+          },
+        });
+
+        if (!response.ok) {
+          setFallbackLiquidityUsd(null);
+          return;
+        }
+
+        const body = await response.json();
+        if (body?.status === 'success' && body?.data?.liquidity_usd) {
+          const liquidity = typeof body.data.liquidity_usd === 'number' 
+            ? body.data.liquidity_usd 
+            : parseFloat(body.data.liquidity_usd);
+          
+          if (Number.isFinite(liquidity) && liquidity > 0) {
+            setFallbackLiquidityUsd(liquidity);
+            console.log(`[MonadTradePage] 💧 Fetched fallback liquidity: $${liquidity.toLocaleString()}`);
+          } else {
+            setFallbackLiquidityUsd(null);
+          }
+        } else {
+          setFallbackLiquidityUsd(null);
+        }
+      } catch (err) {
+        console.warn('[MonadTradePage] Failed to fetch fallback liquidity:', err);
+        setFallbackLiquidityUsd(null);
+      } finally {
+        fetchFallbackLiquidityRef.current = null;
+      }
+    })();
+
+    fetchFallbackLiquidityRef.current = run;
+    return run;
+  }, [tokenMintForLive]);
+
+  // Fetch fallback liquidity when token changes or when liquidity is $0
+  useEffect(() => {
+    if (!tokenMintForLive) {
+      setFallbackLiquidityUsd(null);
+      return;
+    }
+
+    // Check current liquidity from source data (not displayToken to avoid circular dependency)
+    const currentLiquidity = 
+      liveMetrics?.liquidity_usd ?? 
+      wsMetrics?.liquidity_usd ?? 
+      (tokenData as any)?.liquidity_usd ?? 
+      optimisticToken?.liquidity_usd ?? 
+      optimisticToken?.total_liquidity_usd ?? 
+      0;
+    
+    // Only fetch if liquidity is $0 or missing
+    if (currentLiquidity === 0 || !currentLiquidity) {
+      fetchFallbackLiquidity();
+    } else {
+      // Clear fallback if we have real liquidity
+      setFallbackLiquidityUsd(null);
+    }
+  }, [tokenMintForLive, liveMetrics?.liquidity_usd, wsMetrics?.liquidity_usd, tokenData, optimisticToken, fetchFallbackLiquidity]);
 
   // Fetch avg entry/exit lines from backend (user-scoped) with fallback to position endpoint
   const fetchPositionLines = React.useCallback(async () => {
