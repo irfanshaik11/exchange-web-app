@@ -601,11 +601,13 @@ const MonadTradeActionPanel: React.FC<MonadTradeActionPanelProps> = ({ token }) 
   // Get stats from token data - using same mapping as TradeHeader
   const getStatsForTimeframe = (range: TimeRange) => {
     const tokenData = token as any;
+    // Use corrected_buy_volume_mon (fixes swap bug in indexer) with fallback to total_buy_volume_mon
+    const buyVolMon = tokenData?.corrected_buy_volume_mon ?? tokenData?.total_buy_volume_mon ?? 0;
     const fallbackVolumeUsd = (tokenData?.total_buy_volume_usd ?? 0) + (tokenData?.total_sell_volume_usd ?? 0);
-    const fallbackVolumeMon = (tokenData?.total_buy_volume_mon ?? 0) + (tokenData?.total_sell_volume_mon ?? 0);
+    const fallbackVolumeMon = buyVolMon + (tokenData?.total_sell_volume_mon ?? 0);
     // Use correct field mappings from pulse endpoints:
     // - volume_24h_usd (not volume_24h)
-    // - total_buy_volume_mon / total_sell_volume_mon (lifetime volumes in MON)
+    // - corrected_buy_volume_mon / total_sell_volume_mon (lifetime volumes in MON)
     // - total_buys / total_sells (lifetime counts)
     // For 24h timeframe, use volume_24h_usd from pulse endpoint
     if (range === '24h') {
@@ -616,14 +618,14 @@ const MonadTradeActionPanel: React.FC<MonadTradeActionPanelProps> = ({ token }) 
         ),
         buys: num(tokenData?.total_buys ?? 0),
         sells: num(tokenData?.total_sells ?? 0),
-        buyVolume: num(tokenData?.total_buy_volume_usd ?? tokenData?.total_buy_volume_mon ?? 0),
+        buyVolume: num(tokenData?.total_buy_volume_usd ?? buyVolMon ?? 0),
         sellVolume: num(tokenData?.total_sell_volume_usd ?? tokenData?.total_sell_volume_mon ?? 0),
-        netVolume: num(tokenData?.net_volume_usd ?? tokenData?.net_volume_mon ?? (num(tokenData?.total_buy_volume_usd ?? tokenData?.total_buy_volume_mon ?? 0) - num(tokenData?.total_sell_volume_usd ?? tokenData?.total_sell_volume_mon ?? 0))),
+        netVolume: num(tokenData?.net_volume_usd ?? tokenData?.net_volume_mon ?? (num(tokenData?.total_buy_volume_usd ?? buyVolMon ?? 0) - num(tokenData?.total_sell_volume_usd ?? tokenData?.total_sell_volume_mon ?? 0))),
         change: num(tokenData?.price_percent_change_24h ?? 0),
       };
     }
     // For other timeframes, try timeframe-specific USD fields first, then fall back to 24h
-    const buyVolUsd = num(tokenData[`total_buy_volume_${range}_usd`] || tokenData?.total_buy_volume_usd || tokenData?.total_buy_volume_mon || 0);
+    const buyVolUsd = num(tokenData[`total_buy_volume_${range}_usd`] || tokenData?.total_buy_volume_usd || buyVolMon || 0);
     const sellVolUsd = num(tokenData[`total_sell_volume_${range}_usd`] || tokenData?.total_sell_volume_usd || tokenData?.total_sell_volume_mon || 0);
     return {
       volume: num(
