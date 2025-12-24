@@ -47,6 +47,8 @@ interface MonadTokenData {
   usd_price: number;
   fully_diluted_value: number;
   market_cap_usd?: number;
+  liquidity_usd?: number;
+  total_liquidity_usd?: number;
   volume_24h: number;
   volume_5m?: number;
   volume_1h?: number;
@@ -71,7 +73,7 @@ interface MonadTokenData {
 
 export default function MonadTradePage() {
   const router = useRouter();
-  const { contractAddress, _name, _symbol, _price, _mcap, _image, _mint } = router.query;
+  const { contractAddress, _name, _symbol, _price, _mcap, _image, _mint, _liq } = router.query;
 
   const [tokenData, setTokenData] = useState<MonadTokenData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -170,16 +172,20 @@ export default function MonadTradePage() {
   // Optimistic token data from query params
   const optimisticToken = React.useMemo(() => {
     if (_name || _symbol) {
+      const liqNum = typeof _liq === "string" ? parseFloat(_liq) : undefined;
+      const liquidity = Number.isFinite(liqNum) ? liqNum : undefined;
       return {
         name: (_name as string) || "",
         symbol: (_symbol as string) || "",
         price_usd: _price ? parseFloat(_price as string) : undefined,
         market_cap_usd: _mcap ? parseFloat(_mcap as string) : undefined,
+        liquidity_usd: liquidity,
+        total_liquidity_usd: liquidity,
         image: (_image as string) || undefined,
       };
     }
     return null;
-  }, [_name, _symbol, _price, _mcap, _image]);
+  }, [_liq, _mcap, _name, _price, _symbol, _image]);
 
   // Fetch token data
   useEffect(() => {
@@ -268,6 +274,8 @@ export default function MonadTradePage() {
             usd_price: optimisticToken.price_usd || 0,
             fully_diluted_value: optimisticToken.market_cap_usd || 0,
             market_cap_usd: optimisticToken.market_cap_usd || 0,
+            liquidity_usd: optimisticToken.liquidity_usd,
+            total_liquidity_usd: optimisticToken.total_liquidity_usd,
             volume_24h: 0,
             created_at: null,
             image_url: optimisticToken.image || null,
@@ -288,6 +296,8 @@ export default function MonadTradePage() {
             usd_price: optimisticToken.price_usd || 0,
             fully_diluted_value: optimisticToken.market_cap_usd || 0,
             market_cap_usd: optimisticToken.market_cap_usd || 0,
+            liquidity_usd: optimisticToken.liquidity_usd,
+            total_liquidity_usd: optimisticToken.total_liquidity_usd,
             volume_24h: 0,
             created_at: null,
             image_url: optimisticToken.image || null,
@@ -332,7 +342,8 @@ export default function MonadTradePage() {
       dev_address: null,
       owner: null,
       // Live metrics
-      liquidity_usd: live?.liquidity_usd ?? 0,
+      liquidity_usd: live?.liquidity_usd ?? optimisticToken.liquidity_usd ?? optimisticToken.total_liquidity_usd ?? 0,
+      total_liquidity_usd: live?.liquidity_usd ?? optimisticToken.total_liquidity_usd ?? optimisticToken.liquidity_usd ?? 0,
       graduation_percent: live?.graduation_percent ?? 0,
       volume_24h: live?.volume_24h_usd ?? 0,
       total_buys: live?.total_buys ?? 0,
@@ -357,8 +368,8 @@ export default function MonadTradePage() {
       total_supply: tokenSupply,
       created_at: tokenData.created_at || tokenData.launch_time || null,
       // Live metrics (real-time via WebSocket, fallback to HTTP API data)
-      liquidity_usd: live?.liquidity_usd ?? (tokenData as any)?.liquidity_usd ?? 0,
-      total_liquidity_usd: live?.liquidity_usd ?? (tokenData as any)?.liquidity_usd ?? 0,
+      liquidity_usd: live?.liquidity_usd ?? (tokenData as any)?.liquidity_usd ?? optimisticToken?.liquidity_usd ?? optimisticToken?.total_liquidity_usd ?? 0,
+      total_liquidity_usd: live?.liquidity_usd ?? (tokenData as any)?.liquidity_usd ?? optimisticToken?.total_liquidity_usd ?? optimisticToken?.liquidity_usd ?? 0,
       graduation_percent: live?.graduation_percent ?? (tokenData as any)?.graduation_percent ?? (tokenData as any)?.bonding_curve_progress ?? 0,
       bonding_pct: live?.graduation_percent ?? (tokenData as any)?.bonding_curve_progress ?? (tokenData as any)?.graduation_percent ?? 0,
       volume_24h: live?.volume_24h_usd ?? (tokenData as any)?.volume_24h_usd ?? 0,

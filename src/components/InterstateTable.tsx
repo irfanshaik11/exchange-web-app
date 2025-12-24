@@ -1600,6 +1600,12 @@ export default function InterstateTable({
                     if (token.name) queryParams.set('_name', token.name);
                     if (token.symbol) queryParams.set('_symbol', token.symbol);
                     if (token.fully_diluted_value) queryParams.set('_mcap', token.fully_diluted_value.toString());
+                    if (token.total_liquidity_usd || (token as any)?.liquidity_usd || (token as any)?.liquidity) {
+                      const liq = token.total_liquidity_usd || (token as any)?.liquidity_usd || (token as any)?.liquidity;
+                      if (typeof liq === 'number' && Number.isFinite(liq)) {
+                        queryParams.set('_liq', liq.toString());
+                      }
+                    }
                     if (token.uri || token.logo) queryParams.set('_image', token.uri || token.logo || '');
                     queryParams.set('_mint', address);
                     queryParams.set('chain', 'monad');
