@@ -474,12 +474,12 @@ export default function DiscoverPage() {
     }
 
     const FEATURED_TOKEN_ADDRESSES = [
-      '0x0a332311633c0625f63cfc51ee33fc49826e0a3c',
+      // '0x0a332311633c0625f63cfc51ee33fc49826e0a3c', // Commented out
       '0x350035555e10d9afaf1566aaebfced5ba6c27777',
       '0xc09c8242eb21b24298303799bb5af402a2957777',
       '0x405b6330e213ded490240cbcdd64790806827777',
       '0xad96c3dffcd6374294e2573a7fbba96097cc8d7c',
-      '0xa3227c5969757783154c60bf0bc1944180ed81b9',
+      // '0xa3227c5969757783154c60bf0bc1944180ed81b9', // Commented out
       '0x81a224f8a62f52bde942dbf23a56df77a10b7777',
       '0x7131eca3401f58371cfb4c3b27aa07837cf77777',
       '0x788571e0e5067adea87e6ba22a2b738ffdf48888',
@@ -495,7 +495,7 @@ export default function DiscoverPage() {
       '0x1ad7052bb331a0529c1981c3ec2bc4663498a110',
       '0xb5f73846a656232d5d251ab1048bca88d1507777',
       '0x5df178c7e58046bc9074782fef0009c6be167777',
-      '0x1f80c65cc2c37af84abbe1ea03183a624a6f8888',
+      // '0x1f80c65cc2c37af84abbe1ea03183a624a6f8888', // Commented out
     ].map(addr => addr.toLowerCase());
 
     let cancelled = false;
