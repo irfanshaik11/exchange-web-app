@@ -367,10 +367,10 @@ export default function MonadTradePage() {
       total_sells: live?.total_sells ?? tokenData.total_sells ?? 0,
       total_transactions: live?.total_transactions ?? tokenData.total_transactions ?? 0,
       unique_traders: live?.unique_traders ?? tokenData.unique_traders ?? 0,
-      // USD volumes: prefer WebSocket, fallback to calculated from MON volume (MON price ~$0.25)
-      total_buy_volume_usd: live?.total_buy_volume_usd ?? ((tokenData as any)?.total_buy_volume_mon ? (tokenData as any).total_buy_volume_mon * 0.25 : 0),
-      total_sell_volume_usd: live?.total_sell_volume_usd ?? ((tokenData as any)?.total_sell_volume_mon ? (tokenData as any).total_sell_volume_mon * 0.25 : 0),
-      net_volume_usd: live?.net_volume_usd ?? (((tokenData as any)?.total_buy_volume_mon ?? 0) - ((tokenData as any)?.total_sell_volume_mon ?? 0)) * 0.25,
+      // USD volumes: prefer WebSocket, fallback to calculated from MON volume
+      total_buy_volume_usd: live?.total_buy_volume_usd ?? ((tokenData as any)?.total_buy_volume_mon ? (tokenData as any).total_buy_volume_mon * (monPrice || 0.025) : 0),
+      total_sell_volume_usd: live?.total_sell_volume_usd ?? ((tokenData as any)?.total_sell_volume_mon ? (tokenData as any).total_sell_volume_mon * (monPrice || 0.025) : 0),
+      net_volume_usd: live?.net_volume_usd ?? (((tokenData as any)?.total_buy_volume_mon ?? 0) - ((tokenData as any)?.total_sell_volume_mon ?? 0)) * (monPrice || 0.025),
       launchpad_protocol: tokenData.launchpad_protocol || "nad.fun",
       // Dev/creator address fields
       creator_address: (tokenData as any)?.creator_address || (tokenData as any)?.creator_wallet || (tokenData as any)?.dev_address || (tokenData as any)?.owner || null,
@@ -690,17 +690,17 @@ export default function MonadTradePage() {
       eventDisplayType: trade.is_buy ? 'Buy' : 'Sell',
       price: String(trade.price_mon),
       amount: String(trade.token_amount),
-      totalUSD: String(Number(trade.mon_amount) * 0.25), // Approximate USD conversion
+      totalUSD: String(Number(trade.mon_amount) * (monPrice || 0.025)),
       maker: trade.trader_address,
       wallet_address: trade.trader_address,
       user: trade.trader_address,
       data: {
         priceUsd: String(trade.price_mon),
         amountNonLiquidityToken: String(trade.token_amount),
-        priceUsdTotal: String(Number(trade.mon_amount) * 0.25),
+        priceUsdTotal: String(Number(trade.mon_amount) * (monPrice || 0.025)),
       },
     }));
-  }, [allTrades, devAddress]);
+  }, [allTrades, devAddress, monPrice]);
 
   return (
     <>
