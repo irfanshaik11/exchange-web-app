@@ -14,6 +14,8 @@ import { mainnet } from 'viem/chains';
 import dynamic from 'next/dynamic';
 import { TurnkeyRootProvider } from "../components/TurnkeyRootProvider";
 import WalletExportGuard from "../components/WalletExportGuard";
+import { UserLimitProvider, useUserLimit } from "../components/UserLimitContext";
+import UserLimitBlocker from "../components/UserLimitBlocker";
 
 import { useTurnkey, AuthState } from '@turnkey/react-wallet-kit';
 import { turnkeyLogin } from '../utils/api';
@@ -123,6 +125,7 @@ if (typeof window !== 'undefined' && process.env.NODE_ENV === 'development') {
 
 function TurnkeySessionBridge() {
   const turnkeyCtx = useTurnkey() as any;
+  const { setUserLimitReached } = useUserLimit();
   const {
     authState,
     session,
@@ -377,6 +380,12 @@ function TurnkeySessionBridge() {
             }
           } catch (err: any) {
             const errorMessage = err?.message || err?.toString() || "";
+            // Check for user limit error
+            if (err?.code === 'USER_LIMIT_REACHED' || (err?.response?.data?.code === 'USER_LIMIT_REACHED')) {
+              setUserLimitReached(err?.response?.data?.message || err?.message);
+              hasProcessedRef.current = false;
+              return;
+            }
             // Suppress Turnkey session errors - they're handled gracefully
             if (errorMessage.includes("Session public key") || errorMessage.includes("session public key could not be found")) {
               console.log("[TurnkeySessionBridge] Session error handled gracefully:", errorMessage);
@@ -408,6 +417,12 @@ function TurnkeySessionBridge() {
   ]);
 
   return null;
+}
+
+// Wrapper component to show user limit blocker
+function UserLimitBlockerWrapper() {
+  const { showBlocker, blockerMessage } = useUserLimit();
+  return <UserLimitBlocker isOpen={showBlocker} message={blockerMessage || undefined} />;
 }
 
 const config = getDefaultConfig({
@@ -679,27 +694,30 @@ const MyApp: AppType = ({ Component, pageProps }) => {
           {/* <MonadTradeBanner /> */}
           <WagmiProviderWrapper config={config} queryClient={queryClient}>
             <UserProvider>
-              <TurnkeySessionBridge />
-              <TokenHandler />
-              <ReferralTracker />
-              <SolPriceProvider>
-                <ThemeProvider>
-                  <QuickBuyProvider>
-                    <WatchlistProvider>
-                      <FilterProvider>
-                        <WalletTrackerProvider>
-                          <ReferralAccessGate>
-                            <PagePreloader />
-                            <Component {...pageProps} />
-                          </ReferralAccessGate>
-                        </WalletTrackerProvider>
-                      </FilterProvider>
-                    </WatchlistProvider>
-                  </QuickBuyProvider>
-                  <GlobalLoginModalManager enforceLogin={!!env.NEXT_PUBLIC_IS_BACKEND_DEPLOYED} />
-                  <WalletExportGuard />
-                </ThemeProvider>
-              </SolPriceProvider>
+              <UserLimitProvider>
+                <TurnkeySessionBridge />
+                <TokenHandler />
+                <ReferralTracker />
+                <SolPriceProvider>
+                  <ThemeProvider>
+                    <QuickBuyProvider>
+                      <WatchlistProvider>
+                        <FilterProvider>
+                          <WalletTrackerProvider>
+                            <ReferralAccessGate>
+                              <PagePreloader />
+                              <Component {...pageProps} />
+                            </ReferralAccessGate>
+                          </WalletTrackerProvider>
+                        </FilterProvider>
+                      </WatchlistProvider>
+                    </QuickBuyProvider>
+                    <GlobalLoginModalManager enforceLogin={!!env.NEXT_PUBLIC_IS_BACKEND_DEPLOYED} />
+                    <WalletExportGuard />
+                    <UserLimitBlockerWrapper />
+                  </ThemeProvider>
+                </SolPriceProvider>
+              </UserLimitProvider>
             </UserProvider>
           </WagmiProviderWrapper>
           <Toaster 
