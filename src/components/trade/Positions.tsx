@@ -353,7 +353,7 @@ const Positions: React.FC<PositionsProps> = ({
     async (event: React.MouseEvent, position: PositionRow) => {
       event.stopPropagation();
       const tokenKey = getPositionKey(position);
-      const percentStr = (quickSellInputs[tokenKey] ?? '25').trim();
+      const percentStr = (quickSellInputs[tokenKey] ?? '100').trim();
       const percent = parseFloat(percentStr);
 
       if (!Number.isFinite(percent) || percent <= 0) {
@@ -1102,7 +1102,7 @@ const Positions: React.FC<PositionsProps> = ({
               // Use position.imageUrl as final fallback if metadata doesn't have it
               const finalImageUrl = metadata?.imageUrl || sourcePosition.imageUrl || '';
               const tokenKey = getPositionKey(sourcePosition);
-              const quickSellValue = quickSellInputs[tokenKey] ?? '25';
+              const quickSellValue = quickSellInputs[tokenKey] ?? '100';
               const isSelling = sellingTokens.has(tokenKey);
               
               // Debug logging for missing images
@@ -1259,7 +1259,7 @@ const Positions: React.FC<PositionsProps> = ({
                         inputMode="decimal"
                         value={quickSellValue}
                         onChange={(e) => updateQuickSellInput(tokenKey, e.target.value)}
-                        placeholder="25"
+                        placeholder="100"
                         className="w-12 bg-transparent text-xs text-neutral-100 focus:outline-none"
                       />
                       <span className="text-[10px] text-neutral-500">%</span>
