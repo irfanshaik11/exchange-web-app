@@ -430,34 +430,68 @@ export default function MonadTradePage() {
     const run = (async () => {
       try {
         const monadServiceUrl = process.env.NEXT_PUBLIC_MONAD_TOKEN_SERVICE_URL || 'https://monad-token-service.narrative.trade';
-        const url = `${monadServiceUrl}/v1/liquidity?token_address=${encodeURIComponent(tokenMintForLive)}`;
         
-        const response = await fetch(url, {
-          headers: {
-            'Accept': 'application/json',
-          },
-        });
+        // Try first fallback: /v1/liquidity endpoint
+        const liquidityUrl = `${monadServiceUrl}/v1/liquidity?token_address=${encodeURIComponent(tokenMintForLive)}`;
+        
+        let liquidity: number | null = null;
+        
+        try {
+          const response = await fetch(liquidityUrl, {
+            headers: {
+              'Accept': 'application/json',
+            },
+          });
 
-        if (!response.ok) {
-          setFallbackLiquidityUsd(null);
-          return;
-        }
-
-        const body = await response.json();
-        if (body?.status === 'success' && body?.data?.liquidity_usd) {
-          const liquidity = typeof body.data.liquidity_usd === 'number' 
-            ? body.data.liquidity_usd 
-            : parseFloat(body.data.liquidity_usd);
-          
-          if (Number.isFinite(liquidity) && liquidity > 0) {
-            setFallbackLiquidityUsd(liquidity);
-            console.log(`[MonadTradePage] 💧 Fetched fallback liquidity: $${liquidity.toLocaleString()}`);
-          } else {
-            setFallbackLiquidityUsd(null);
+          if (response.ok) {
+            const body = await response.json();
+            if (body?.status === 'success' && body?.data?.liquidity_usd) {
+              const parsedLiquidity = typeof body.data.liquidity_usd === 'number' 
+                ? body.data.liquidity_usd 
+                : parseFloat(body.data.liquidity_usd);
+              
+              if (Number.isFinite(parsedLiquidity) && parsedLiquidity > 0) {
+                liquidity = parsedLiquidity;
+                console.log(`[MonadTradePage] 💧 Fetched fallback liquidity (v1/liquidity): $${liquidity.toLocaleString()}`);
+              }
+            }
           }
-        } else {
-          setFallbackLiquidityUsd(null);
+        } catch (err) {
+          console.warn('[MonadTradePage] Failed to fetch from v1/liquidity:', err);
         }
+
+        // If first fallback returned 0 or failed, try second fallback: /v1/liqdex endpoint
+        if (!liquidity || liquidity === 0) {
+          try {
+            const liqdexUrl = `${monadServiceUrl}/v1/liqdex?token_address=${encodeURIComponent(tokenMintForLive)}`;
+            
+            const liqdexResponse = await fetch(liqdexUrl, {
+              headers: {
+                'Accept': 'application/json',
+              },
+            });
+
+            if (liqdexResponse.ok) {
+              const liqdexBody = await liqdexResponse.json();
+              if (liqdexBody?.status === 'success' && liqdexBody?.data?.liquidity_usd) {
+                const parsedLiqdexLiquidity = typeof liqdexBody.data.liquidity_usd === 'number' 
+                  ? liqdexBody.data.liquidity_usd 
+                  : parseFloat(liqdexBody.data.liquidity_usd);
+                
+                if (Number.isFinite(parsedLiqdexLiquidity) && parsedLiqdexLiquidity > 0) {
+                  liquidity = parsedLiqdexLiquidity;
+                  console.log(`[MonadTradePage] 💧 Fetched fallback liquidity (v1/liqdex): $${liquidity.toLocaleString()}`);
+                }
+              }
+            }
+          } catch (err) {
+            console.warn('[MonadTradePage] Failed to fetch from v1/liqdex:', err);
+          }
+        }
+
+        // Set the result (null if both failed or returned 0)
+        setFallbackLiquidityUsd(liquidity && liquidity > 0 ? liquidity : null);
+        
       } catch (err) {
         console.warn('[MonadTradePage] Failed to fetch fallback liquidity:', err);
         setFallbackLiquidityUsd(null);
