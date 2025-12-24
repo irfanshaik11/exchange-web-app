@@ -767,7 +767,10 @@ export default function usePaginatedTokensWithFallback({
                   sol_price: 0,
                   total_snipers: 0,
                   total_holders: 0,
-                  created_at: new Date().toISOString(),
+                  // Birdeye API doesn't provide creation/launch timestamps
+                  // Set to null so age column shows "-" instead of misleading "1m"
+                  created_at: null,
+                  launch_time: null,
                   updated_at: new Date().toISOString(),
                   bonding_curve_progress: 0,
                   
@@ -785,6 +788,78 @@ export default function usePaginatedTokensWithFallback({
                 birdeye_rank: tokens[0].birdeye_rank,
                 volume_24h: tokens[0].volume_24h,
               } : 'No tokens');
+              
+              // Enrich Birdeye tokens with created_at from our token service
+              // Only do this for Monad chain (since that's where our token service operates)
+              if (isMonadChain && tokens.length > 0) {
+                const monadServiceUrl = process.env.NEXT_PUBLIC_MONAD_TOKEN_SERVICE_URL || 'https://monad-token-service.narrative.trade';
+                console.log(`[Birdeye] Enriching ${tokens.length} tokens with created_at from our token service...`);
+                
+                // Fetch created_at for all tokens in parallel
+                const enrichmentPromises = tokens.map(async (token: any) => {
+                  const address = token.mint || token.address || '';
+                  if (!address) return token;
+                  
+                  try {
+                    // First try the /v1/token endpoint
+                    const tokenUrl = `${monadServiceUrl}/v1/token?address=${encodeURIComponent(address)}`;
+                    const tokenResp = await fetch(tokenUrl, { 
+                      headers: { 'Accept': 'application/json' },
+                      signal: abortController.signal,
+                    });
+                    
+                    let createdAt: string | null = null;
+                    
+                    if (tokenResp.ok) {
+                      const tokenData = await tokenResp.json();
+                      createdAt = tokenData?.data?.created_at || null;
+                      // If created_at is null/empty/0, treat as missing and try search endpoint
+                      if (!createdAt) {
+                        createdAt = null; // Will trigger search fallback below
+                      }
+                    }
+                    
+                    // If /v1/token returns 404 or created_at is null/0, try search endpoint as fallback
+                    if (!tokenResp.ok || tokenResp.status === 404 || !createdAt) {
+                      try {
+                        const searchUrl = `${monadServiceUrl}/v1/search?q=${encodeURIComponent(address)}`;
+                        const searchResp = await fetch(searchUrl, { 
+                          headers: { 'Accept': 'application/json' },
+                          signal: abortController.signal,
+                        });
+                        
+                        if (searchResp.ok) {
+                          const searchData = await searchResp.json();
+                          // Search returns array, get first result if available
+                          if (searchData?.data && Array.isArray(searchData.data) && searchData.data.length > 0) {
+                            const searchCreatedAt = searchData.data[0]?.created_at || null;
+                            if (searchCreatedAt) {
+                              createdAt = searchCreatedAt;
+                            }
+                          }
+                        }
+                      } catch (searchErr) {
+                        // Silently fail search fallback
+                        console.debug(`[Birdeye] Search fallback failed for ${address}:`, searchErr);
+                      }
+                    }
+                    
+                    if (createdAt) {
+                      token.created_at = createdAt;
+                      token.launch_time = createdAt; // Also set launch_time for compatibility
+                    }
+                  } catch (err) {
+                    // Silently fail - token might not be in our DB, that's okay
+                    console.debug(`[Birdeye] Could not fetch created_at for ${address}:`, err);
+                  }
+                  
+                  return token;
+                });
+                
+                // Wait for all enrichment requests to complete
+                tokens = await Promise.all(enrichmentPromises);
+                console.log(`[Birdeye] ✅ Enrichment complete. Tokens with created_at: ${tokens.filter((t: any) => t.created_at).length}/${tokens.length}`);
+              }
               
               // Filter out boring tokens (stablecoins, infrastructure tokens, mega-caps, high volume/liquidity)
               // This filtering happens client-side on all tokens fetched from Birdeye
