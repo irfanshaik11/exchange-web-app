@@ -789,13 +789,19 @@ export default function usePaginatedTokensWithFallback({
                 volume_24h: tokens[0].volume_24h,
               } : 'No tokens');
               
-              // Enrich Birdeye tokens with created_at from our token service
+              // Enrich Birdeye tokens with created_at and market_cap_usd from our token service
               // Only do this for Monad chain (since that's where our token service operates)
               if (isMonadChain && tokens.length > 0) {
                 const monadServiceUrl = process.env.NEXT_PUBLIC_MONAD_TOKEN_SERVICE_URL || 'https://monad-token-service.narrative.trade';
-                console.log(`[Birdeye] Enriching ${tokens.length} tokens with created_at from our token service...`);
+                console.log(`[Birdeye] Enriching ${tokens.length} tokens with created_at and market_cap_usd from our token service...`);
                 
-                // Fetch created_at for all tokens in parallel
+                // Store Birdeye market cap as fallback before enrichment
+                tokens.forEach((token: any) => {
+                  token._birdeye_market_cap = token.market_cap_usd || 0;
+                  token._birdeye_fdv = token.fully_diluted_value || 0;
+                });
+                
+                // Fetch created_at and market_cap_usd for all tokens in parallel
                 const enrichmentPromises = tokens.map(async (token: any) => {
                   const address = token.mint || token.address || '';
                   if (!address) return token;
@@ -809,18 +815,22 @@ export default function usePaginatedTokensWithFallback({
                     });
                     
                     let createdAt: string | null = null;
+                    let marketCapUsd: number | null = null;
+                    let fdv: number | null = null;
                     
                     if (tokenResp.ok) {
                       const tokenData = await tokenResp.json();
                       createdAt = tokenData?.data?.created_at || null;
+                      marketCapUsd = tokenData?.data?.market_cap_usd || null;
+                      fdv = tokenData?.data?.fully_diluted_value || tokenData?.data?.market_cap_usd || null;
                       // If created_at is null/empty/0, treat as missing and try search endpoint
                       if (!createdAt) {
                         createdAt = null; // Will trigger search fallback below
                       }
                     }
                     
-                    // If /v1/token returns 404 or created_at is null/0, try search endpoint as fallback
-                    if (!tokenResp.ok || tokenResp.status === 404 || !createdAt) {
+                    // If /v1/token returns 404 or data is missing, try search endpoint as fallback
+                    if (!tokenResp.ok || tokenResp.status === 404 || (!createdAt && !marketCapUsd)) {
                       try {
                         const searchUrl = `${monadServiceUrl}/v1/search?q=${encodeURIComponent(address)}`;
                         const searchResp = await fetch(searchUrl, { 
@@ -832,9 +842,13 @@ export default function usePaginatedTokensWithFallback({
                           const searchData = await searchResp.json();
                           // Search returns array, get first result if available
                           if (searchData?.data && Array.isArray(searchData.data) && searchData.data.length > 0) {
-                            const searchCreatedAt = searchData.data[0]?.created_at || null;
-                            if (searchCreatedAt) {
-                              createdAt = searchCreatedAt;
+                            const searchToken = searchData.data[0];
+                            if (!createdAt) {
+                              createdAt = searchToken?.created_at || null;
+                            }
+                            if (!marketCapUsd) {
+                              marketCapUsd = searchToken?.market_cap_usd || null;
+                              fdv = searchToken?.fully_diluted_value || searchToken?.market_cap_usd || null;
                             }
                           }
                         }
@@ -844,13 +858,22 @@ export default function usePaginatedTokensWithFallback({
                       }
                     }
                     
+                    // Set created_at if we have it
                     if (createdAt) {
                       token.created_at = createdAt;
                       token.launch_time = createdAt; // Also set launch_time for compatibility
                     }
+                    
+                    // Use our DB market cap if available, otherwise keep Birdeye value
+                    if (marketCapUsd !== null && marketCapUsd > 0) {
+                      token.market_cap_usd = marketCapUsd;
+                      token.fully_diluted_value = fdv !== null && fdv > 0 ? fdv : marketCapUsd;
+                      token.total_fully_diluted_valuation = fdv !== null && fdv > 0 ? fdv : marketCapUsd;
+                    }
+                    // If no DB market cap, keep Birdeye values (already set as _birdeye_market_cap)
                   } catch (err) {
                     // Silently fail - token might not be in our DB, that's okay
-                    console.debug(`[Birdeye] Could not fetch created_at for ${address}:`, err);
+                    console.debug(`[Birdeye] Could not fetch enrichment data for ${address}:`, err);
                   }
                   
                   return token;
@@ -858,7 +881,14 @@ export default function usePaginatedTokensWithFallback({
                 
                 // Wait for all enrichment requests to complete
                 tokens = await Promise.all(enrichmentPromises);
-                console.log(`[Birdeye] ✅ Enrichment complete. Tokens with created_at: ${tokens.filter((t: any) => t.created_at).length}/${tokens.length}`);
+                const enrichedCount = tokens.filter((t: any) => t.created_at || (t.market_cap_usd !== t._birdeye_market_cap && t.market_cap_usd > 0)).length;
+                console.log(`[Birdeye] ✅ Enrichment complete. Tokens enriched: ${enrichedCount}/${tokens.length}`);
+                
+                // Clean up temporary fallback fields
+                tokens.forEach((token: any) => {
+                  delete token._birdeye_market_cap;
+                  delete token._birdeye_fdv;
+                });
               }
               
               // Filter out boring tokens (stablecoins, infrastructure tokens, mega-caps, high volume/liquidity)
