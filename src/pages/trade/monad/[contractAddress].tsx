@@ -328,10 +328,14 @@ export default function MonadTradePage() {
       (tokenData as any)?.marketCapUSD ??
       (tokenData as any)?.fully_diluted_value ??
       0;
+    // Special case: token 0xad96c3dffcd6374294e2573a7fbba96097cc8d7c should show 100m supply instead of 1b
+    const defaultSupply = (typeof contractAddress === "string" && contractAddress.toLowerCase() === "0xad96c3dffcd6374294e2573a7fbba96097cc8d7c")
+      ? 100_000_000
+      : 1_000_000_000;
     const tokenSupply =
       (tokenData as any)?.total_supply ??
       (tokenData as any)?.supply ??
-      1_000_000_000;
+      defaultSupply;
 
     if (!tokenData) return optimisticToken ? {
       mint: contractAddress as string,
@@ -343,7 +347,7 @@ export default function MonadTradePage() {
       pair_address: contractAddress as string,
       logo: optimisticToken.image || "",
       decimals: 18,
-      total_supply: 1_000_000_000,
+      total_supply: defaultSupply,
       creator_address: null,
       dev_address: null,
       owner: null,
@@ -682,17 +686,62 @@ export default function MonadTradePage() {
     if (!displayToken) return displayToken;
     const livePrice = chartMetrics.lastPriceUsd;
     const liveMcap = chartMetrics.lastMarketCapUsd;
+    // Priority: OHLC WebSocket data (chart metrics) > Token metrics WebSocket > API value
+    // Chart metrics come from real-time OHLC WebSocket updates, so they're the most current
+    const live = liveMetrics || wsMetrics;
+    const wsMarketCap = live?.market_cap_usd;
+    // displayToken.market_cap_usd already has WebSocket priority, so it's either WebSocket value or API value (13540)
+    const apiOrWsMarketCap = displayToken.market_cap_usd;
+    // Prioritize: OHLC chart metrics (real-time from WebSocket) > Token metrics WebSocket > API value
+    const finalMarketCap = liveMcap ?? wsMarketCap ?? apiOrWsMarketCap;
+    
+    // Debug: Log displayTokenWithChartMetrics calculation
+    console.log('[DISPLAY_TOKEN_MC_DEBUG] displayTokenWithChartMetrics calculation:', {
+      'chartMetrics.lastPriceUsd': livePrice,
+      'chartMetrics.lastMarketCapUsd (OHLC WebSocket)': liveMcap,
+      'liveMetrics?.market_cap_usd': liveMetrics?.market_cap_usd,
+      'wsMetrics?.market_cap_usd': wsMetrics?.market_cap_usd,
+      'wsMarketCap (token metrics WebSocket)': wsMarketCap,
+      'displayToken.market_cap_usd': displayToken.market_cap_usd,
+      'apiOrWsMarketCap': apiOrWsMarketCap,
+      'finalMarketCap (result - OHLC prioritized)': finalMarketCap,
+    });
+    
     return {
       ...displayToken,
       usd_price: livePrice ?? (displayToken as any)?.usd_price,
       price_usd: livePrice ?? (displayToken as any)?.price_usd,
-      market_cap_usd: liveMcap ?? (displayToken as any)?.market_cap_usd ?? displayToken.market_cap_usd,
-      fully_diluted_value: liveMcap ?? (displayToken as any)?.fully_diluted_value ?? (displayToken as any)?.market_cap_usd,
+      // Prioritize OHLC WebSocket market cap (most real-time from chart candles)
+      market_cap_usd: finalMarketCap,
+      fully_diluted_value: finalMarketCap ?? (displayToken as any)?.fully_diluted_value ?? (displayToken as any)?.market_cap_usd,
       chart_live_price_usd: livePrice ?? null,
-      chart_live_market_cap_usd: liveMcap ?? null,
+      chart_live_market_cap_usd: liveMcap ?? null, // Store OHLC WebSocket market cap for TradeHeader
       max_market_cap_usd: chartMetrics.maxMarketCapUsd ?? (displayToken as any)?.max_market_cap_usd,
     } as any;
-  }, [chartMetrics, displayToken]);
+  }, [chartMetrics, displayToken, liveMetrics, wsMetrics]);
+
+  // Priority market cap for TradeHeader: OHLC WebSocket (chart) > Token metrics WebSocket > API value
+  // Chart metrics come from real-time OHLC WebSocket updates, so prioritize them
+  const priorityMarketCapUsd = React.useMemo(() => {
+    const live = liveMetrics || wsMetrics;
+    const wsMarketCap = live?.market_cap_usd;
+    const ohlcMarketCap = chartMetrics?.lastMarketCapUsd;
+    // Priority: OHLC WebSocket (real-time from chart) > Token metrics WebSocket > null (fallback to token.market_cap_usd)
+    const result = ohlcMarketCap ?? wsMarketCap ?? null;
+    
+    // Debug: Log all market cap sources
+    console.log('[MARKET_CAP_DEBUG] All market cap sources (OHLC prioritized):', {
+      'chartMetrics.lastMarketCapUsd (OHLC WebSocket)': ohlcMarketCap,
+      'liveMetrics?.market_cap_usd': liveMetrics?.market_cap_usd,
+      'wsMetrics?.market_cap_usd': wsMetrics?.market_cap_usd,
+      'wsMarketCap (token metrics WebSocket)': wsMarketCap,
+      'displayToken.market_cap_usd': displayToken?.market_cap_usd,
+      'tokenData.market_cap_usd (API)': (tokenData as any)?.market_cap_usd,
+      'final priorityMarketCapUsd (OHLC first)': result,
+    });
+    
+    return result;
+  }, [liveMetrics, wsMetrics, chartMetrics, displayToken, tokenData]);
 
   // OHLC params - Monad uses 1s (1-second) candles as default for all tokens
   // TimescaleDB supports: 1s, 1m, 5m, 15m, 30m, 1h, 4h, 1d, 1w
@@ -931,7 +980,7 @@ export default function MonadTradePage() {
                 <TradeHeader
                   token={displayTokenWithChartMetrics as any}
                   livePriceUsd={chartMetrics?.lastPriceUsd}
-                  liveMarketCapUsd={chartMetrics?.lastMarketCapUsd}
+                  liveMarketCapUsd={priorityMarketCapUsd}
                 />
               </div>
 

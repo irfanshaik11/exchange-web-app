@@ -16,7 +16,7 @@ interface UserLimitBlockerProps {
 const UserLimitBlocker: React.FC<UserLimitBlockerProps> = ({ isOpen, message }) => {
   if (!isOpen) return null;
 
-  const defaultMessage = message || "Maximum number of users (100) has been reached. Registration is currently closed.";
+  const defaultMessage = message || "Maximum number of users has been reached. Registration is currently closed.";
 
   return (
     <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/90 backdrop-blur-sm">
