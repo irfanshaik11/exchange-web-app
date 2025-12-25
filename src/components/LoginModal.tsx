@@ -11,6 +11,8 @@ import { sha256 } from '@noble/hashes/sha256';
 import { bytesToHex } from '@noble/hashes/utils';
 import bs58 from "bs58";
 import { clearStoredReferralCodeHint, getStoredReferralCodeHint } from "../utils/referralStorage";
+import { useUserLimit } from "./UserLimitContext";
+import { ApiError } from "../utils/api";
 
 const ENABLE_EMAIL_AUTH = false;
 const AUTH_BUTTON_WIDTH_CLASS = 'w-full max-w-[400px] mx-auto';
@@ -78,6 +80,7 @@ export default function LoginModal({ open, onClose, forceLogin = false }: LoginM
   const [walletError, setWalletError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const { refreshUser, user, loading: userLoading } = useUser();
+  const { setUserLimitReached } = useUserLimit();
   const [wiggle, setWiggle] = useState(false);
   const [showWalletOptions, setShowWalletOptions] = useState(false);
   
@@ -213,7 +216,13 @@ const clientState = turnkey?.clientState;
         setSuccess(null);
       }, 1200);
     } catch (err: any) {
-      setError(err.message || 'Registration failed');
+      // Check if this is a user limit error
+      if (err instanceof ApiError && err.code === 'USER_LIMIT_REACHED') {
+        setUserLimitReached(err.message);
+        setError(null); // Don't show error in modal, blocker will show
+      } else {
+        setError(err.message || 'Registration failed');
+      }
     } finally {
       setLoading(false);
     }
@@ -475,6 +484,12 @@ async function handleGoogleSuccess(resp: CredentialResponse) {
 
       const data = await response.json().catch(() => ({}));
       if (!response.ok) {
+        // Check for user limit error
+        if (data?.code === 'USER_LIMIT_REACHED') {
+          setUserLimitReached(data?.message);
+          setWalletError(null);
+          return;
+        }
         const errorMsg = data?.error || `Phantom login failed (${response.status})`;
         throw new Error(errorMsg);
       }
@@ -550,6 +565,12 @@ async function handleGoogleSuccess(resp: CredentialResponse) {
 
       const data = await response.json().catch(() => ({}));
       if (!response.ok) {
+        // Check for user limit error
+        if (data?.code === 'USER_LIMIT_REACHED') {
+          setUserLimitReached(data?.message);
+          setWalletError(null);
+          return;
+        }
         const errorMsg = data?.error || `MetaMask login failed (${response.status})`;
         throw new Error(errorMsg);
       }
