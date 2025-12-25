@@ -478,7 +478,7 @@ export default function DiscoverPage() {
       '0x350035555e10d9afaf1566aaebfced5ba6c27777',
       '0xc09c8242eb21b24298303799bb5af402a2957777',
       '0x405b6330e213ded490240cbcdd64790806827777',
-      '0xad96c3dffcd6374294e2573a7fbba96097cc8d7c',
+      // '0xad96c3dffcd6374294e2573a7fbba96097cc8d7c', // Commented out - blacklisted
       // '0xa3227c5969757783154c60bf0bc1944180ed81b9', // Commented out
       '0x81a224f8a62f52bde942dbf23a56df77a10b7777',
       '0x7131eca3401f58371cfb4c3b27aa07837cf77777',
@@ -492,7 +492,7 @@ export default function DiscoverPage() {
       '0x3842751a46d23b41a47e702473dff316e6237777',
       '0xa7b3f394b9aaba67f2543a8c1a0f753cc68d7777',
       '0x7b2728c04ad436153285702e969e6efac3a97777',
-      '0x1ad7052bb331a0529c1981c3ec2bc4663498a110',
+      // '0x1ad7052bb331a0529c1981c3ec2bc4663498a110', // Commented out - blacklisted
       '0xb5f73846a656232d5d251ab1048bca88d1507777',
       '0x5df178c7e58046bc9074782fef0009c6be167777',
       // '0x1f80c65cc2c37af84abbe1ea03183a624a6f8888', // Commented out
@@ -582,8 +582,84 @@ export default function DiscoverPage() {
           }
         });
 
-        const tokens = await Promise.all(tokenPromises);
-        const validTokens = tokens.filter((t): t is TokenWithDexPaid => t !== null);
+        let tokens = await Promise.all(tokenPromises);
+        let validTokens = tokens.filter((t): t is TokenWithDexPaid => t !== null);
+
+        // Enrich liquidity for tokens with 0 liquidity using fallback endpoints
+        if (validTokens.length > 0) {
+          const monadServiceUrl = process.env.NEXT_PUBLIC_MONAD_TOKEN_SERVICE_URL || 'https://monad-token-service.narrative.trade';
+          console.log(`[FeaturedTokens] Enriching liquidity for ${validTokens.length} tokens...`);
+          
+          const enrichedTokens = await Promise.all(validTokens.map(async (token: any) => {
+            const address = token.mint || token.address || '';
+            const currentLiquidity = token.total_liquidity_usd || token.liquidity_usd || 0;
+            
+            // Only enrich if liquidity is 0 or missing
+            if (!address || (currentLiquidity && currentLiquidity > 0)) {
+              return token;
+            }
+            
+            let liquidity: number | null = null;
+            
+            // Try first fallback: /v1/liquidity endpoint
+            try {
+              const liquidityUrl = `${monadServiceUrl}/v1/liquidity?token_address=${encodeURIComponent(address)}`;
+              const liquidityResp = await fetch(liquidityUrl, {
+                headers: { 'Accept': 'application/json' },
+              });
+              
+              if (liquidityResp.ok) {
+                const liquidityData = await liquidityResp.json();
+                if (liquidityData?.status === 'success' && liquidityData?.data?.liquidity_usd) {
+                  const parsedLiquidity = typeof liquidityData.data.liquidity_usd === 'number' 
+                    ? liquidityData.data.liquidity_usd 
+                    : parseFloat(liquidityData.data.liquidity_usd);
+                  
+                  if (Number.isFinite(parsedLiquidity) && parsedLiquidity > 0) {
+                    liquidity = parsedLiquidity;
+                  }
+                }
+              }
+            } catch (err) {
+              console.debug(`[FeaturedTokens] Failed to fetch from v1/liquidity for ${address}:`, err);
+            }
+            
+            // If first fallback returned 0 or failed, try second fallback: /v1/liqdex endpoint
+            if (!liquidity || liquidity === 0) {
+              try {
+                const liqdexUrl = `${monadServiceUrl}/v1/liqdex?token_address=${encodeURIComponent(address)}`;
+                const liqdexResp = await fetch(liqdexUrl, {
+                  headers: { 'Accept': 'application/json' },
+                });
+                
+                if (liqdexResp.ok) {
+                  const liqdexData = await liqdexResp.json();
+                  if (liqdexData?.status === 'success' && liqdexData?.data?.liquidity_usd) {
+                    const parsedLiqdexLiquidity = typeof liqdexData.data.liquidity_usd === 'number' 
+                      ? liqdexData.data.liquidity_usd 
+                      : parseFloat(liqdexData.data.liquidity_usd);
+                    
+                    if (Number.isFinite(parsedLiqdexLiquidity) && parsedLiqdexLiquidity > 0) {
+                      liquidity = parsedLiqdexLiquidity;
+                    }
+                  }
+                }
+              } catch (err) {
+                console.debug(`[FeaturedTokens] Failed to fetch from v1/liqdex for ${address}:`, err);
+              }
+            }
+            
+            // Update liquidity if we got a valid value
+            if (liquidity && liquidity > 0) {
+              token.total_liquidity_usd = liquidity;
+              token.liquidity_usd = liquidity;
+            }
+            
+            return token;
+          }));
+          
+          validTokens = enrichedTokens;
+        }
 
         if (!cancelled) {
           setFeaturedTokens(validTokens);
@@ -1110,6 +1186,76 @@ export default function DiscoverPage() {
             return normalized as TokenWithDexPaid;
           };
 
+          // Helper function to enrich liquidity using fallback endpoints
+          const enrichLiquidity = async (token: any): Promise<any> => {
+            const address = token.mint || token.address || '';
+            const currentLiquidity = token.total_liquidity_usd || token.liquidity_usd || 0;
+            
+            // Only enrich if liquidity is 0 or missing
+            if (!address || (currentLiquidity && currentLiquidity > 0)) {
+              return token;
+            }
+            
+            const monadServiceUrl = process.env.NEXT_PUBLIC_MONAD_TOKEN_SERVICE_URL || 'https://monad-token-service.narrative.trade';
+            let liquidity: number | null = null;
+            
+            // Try first fallback: /v1/liquidity endpoint
+            try {
+              const liquidityUrl = `${monadServiceUrl}/v1/liquidity?token_address=${encodeURIComponent(address)}`;
+              const liquidityResp = await fetch(liquidityUrl, {
+                headers: { 'Accept': 'application/json' },
+              });
+              
+              if (liquidityResp.ok) {
+                const liquidityData = await liquidityResp.json();
+                if (liquidityData?.status === 'success' && liquidityData?.data?.liquidity_usd) {
+                  const parsedLiquidity = typeof liquidityData.data.liquidity_usd === 'number' 
+                    ? liquidityData.data.liquidity_usd 
+                    : parseFloat(liquidityData.data.liquidity_usd);
+                  
+                  if (Number.isFinite(parsedLiquidity) && parsedLiquidity > 0) {
+                    liquidity = parsedLiquidity;
+                  }
+                }
+              }
+            } catch (err) {
+              console.debug(`[Discover] Failed to fetch from v1/liquidity for ${address}:`, err);
+            }
+            
+            // If first fallback returned 0 or failed, try second fallback: /v1/liqdex endpoint
+            if (!liquidity || liquidity === 0) {
+              try {
+                const liqdexUrl = `${monadServiceUrl}/v1/liqdex?token_address=${encodeURIComponent(address)}`;
+                const liqdexResp = await fetch(liqdexUrl, {
+                  headers: { 'Accept': 'application/json' },
+                });
+                
+                if (liqdexResp.ok) {
+                  const liqdexData = await liqdexResp.json();
+                  if (liqdexData?.status === 'success' && liqdexData?.data?.liquidity_usd) {
+                    const parsedLiqdexLiquidity = typeof liqdexData.data.liquidity_usd === 'number' 
+                      ? liqdexData.data.liquidity_usd 
+                      : parseFloat(liqdexData.data.liquidity_usd);
+                    
+                    if (Number.isFinite(parsedLiqdexLiquidity) && parsedLiqdexLiquidity > 0) {
+                      liquidity = parsedLiqdexLiquidity;
+                    }
+                  }
+                }
+              } catch (err) {
+                console.debug(`[Discover] Failed to fetch from v1/liqdex for ${address}:`, err);
+              }
+            }
+            
+            // Update liquidity if we got a valid value
+            if (liquidity && liquidity > 0) {
+              token.total_liquidity_usd = liquidity;
+              token.liquidity_usd = liquidity;
+            }
+            
+            return token;
+          };
+
           // Transform tokens to match expected format before filtering
           // CRITICAL: Ensure Monad tokens always have 'mint' field set from 'address'
           // This matches pulse.tsx transformation logic
@@ -1227,6 +1373,25 @@ export default function DiscoverPage() {
             }
             seenKeys.add(key);
             deduped.push(normalizePulseToken(token));
+          }
+
+          // Enrich liquidity for tokens with 0 liquidity using fallback endpoints (only for Monad chain)
+          if (currentChain === 'monad' && deduped.length > 0) {
+            console.log(`[Discover] Enriching liquidity for ${deduped.length} tokens from pulse/new...`);
+            
+            const enrichedDeduped = await Promise.all(deduped.map(async (token: any) => {
+              return await enrichLiquidity(token);
+            }));
+            
+            // Re-filter after enrichment to remove tokens that still have 0 liquidity
+            const finalFiltered = enrichedDeduped.filter((token: any) => {
+              const liquidity = token.total_liquidity_usd || token.liquidity_usd || 0;
+              // Keep tokens that have liquidity > 0 after enrichment
+              return liquidity > 0;
+            });
+            
+            deduped.length = 0;
+            deduped.push(...finalFiltered);
           }
 
           // Only update if we have valid data - this ensures data persists once loaded
@@ -2180,7 +2345,9 @@ export default function DiscoverPage() {
           '0xF59D81cd43f620E722E07f9Cb3f6E41B031017a3',
           '0x1001fF13bf368Aa4fa85F21043648079F00E1001',
           '0x336D414754967C6682B5A665C7DAF6F1409E63e8',
-          '0x4bEdf5d792DAb4BfeF048d86af4404228DF3F3fb'
+          '0x4bEdf5d792DAb4BfeF048d86af4404228DF3F3fb',
+          '0x1ad7052bb331a0529c1981c3ec2bc4663498a110',
+          '0xad96c3dffcd6374294e2573a7fbba96097cc8d7c'
         ].map(addr => addr.toLowerCase());
         
         safeArr = safeArr.filter(t => {
@@ -2341,7 +2508,9 @@ export default function DiscoverPage() {
                 '0x01bFF41798a0BcF287b996046Ca68b395DbC1071',
                 '0x0a332311633C0625f63CFc51EE33fC49826E0a3C',
                 '0x22Cd99EC337a2811F594340a4A6E41e4A3022b07',
-                '0xF59D81cd43f620E722E07f9Cb3f6E41B031017a3'
+                '0xF59D81cd43f620E722E07f9Cb3f6E41B031017a3',
+                '0x1ad7052bb331a0529c1981c3ec2bc4663498a110',
+                '0xad96c3dffcd6374294e2573a7fbba96097cc8d7c'
               ].map(addr => addr.toLowerCase());
               const tokenAddress = tokenMint;
               if (blacklistedAddresses.includes(tokenAddress)) return false;
