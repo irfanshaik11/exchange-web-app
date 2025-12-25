@@ -2385,15 +2385,12 @@ const AdvancedOHLCChart: React.FC<AdvancedOHLCChartProps> = ({
         
         // Convert TradingView resolution to our interval format
         const requestedInterval = RESOLUTION_TO_INTERVAL[resolution] || dfInterval;
-        let requestedTimeframe: BackendTimeRange = (cachedTimeframeRef.current as BackendTimeRange) || latestParamsRef.current.timeframe;
-        if (periodParams && Number.isFinite(periodParams.from) && Number.isFinite(periodParams.to)) {
-          const spanSeconds = periodParams.to - periodParams.from;
-          const mapped = mapSecondsToTimeframe(spanSeconds);
-          requestedTimeframe = mapped;
-        }
-        // Keep refs in sync
+        // FIX: Always use the prop timeframe - don't let TradingView's periodParams override it
+        // TradingView's periodParams represents the visible window, not how much data to fetch
+        // The prop timeframe (e.g., "30d") should control the API call
+        const requestedTimeframe: BackendTimeRange = latestParamsRef.current.timeframe;
+        // Keep cache ref in sync (for caching logic)
         cachedTimeframeRef.current = requestedTimeframe;
-        latestParamsRef.current.timeframe = requestedTimeframe;
 
         fetchCountRef.current += 1;
         const currentFetchCount = fetchCountRef.current;
@@ -4009,15 +4006,9 @@ Maker: ${walletAddress}`;
               // Track visible range to update timeframe mapping (reduces wrong timeframe requests)
               try {
                 chart.onVisibleRangeChanged((range: any) => {
-                  const from = range?.from;
-                  const to = range?.to;
-                  if (!Number.isFinite(from) || !Number.isFinite(to)) return;
-                  const spanSeconds = to - from;
-                  const mapped = mapSecondsToTimeframe(spanSeconds);
-                  if (mapped && mapped !== cachedTimeframeRef.current) {
-                    cachedTimeframeRef.current = mapped;
-                    latestParamsRef.current.timeframe = mapped;
-                  }
+                  // FIX: Don't update timeframe based on visible range
+                  // The prop timeframe should always control the API call
+                  // Visible range changes are just for zooming/panning within cached data
                 });
               } catch (rangeErr) {
                 console.log('[AdvancedOHLCChart] Could not bind visible range listener:', rangeErr);
