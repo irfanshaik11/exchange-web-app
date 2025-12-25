@@ -1161,25 +1161,26 @@ export default function Header({
   }, [notificationsOpen]);
 
   // Show Feature Updates modal only on first login
-  useEffect(() => {
-    if (typeof window === "undefined" || !user || userLoading) {
-      return;
-    }
+  // COMMENTED OUT: Disabled popout that shows "Enhanced Real-Time Data" on login
+  // useEffect(() => {
+  //   if (typeof window === "undefined" || !user || userLoading) {
+  //     return;
+  //   }
 
-    const storageKey = `feature-updates-first-login-${user.id}`;
-    const hasSeenModal = localStorage.getItem(storageKey);
+  //   const storageKey = `feature-updates-first-login-${user.id}`;
+  //   const hasSeenModal = localStorage.getItem(storageKey);
 
-    if (!hasSeenModal) {
-      // Delay to ensure page has loaded
-      setTimeout(() => {
-        setIsFirstLogin(true);
-        setShowUpdatesModal(true);
-      }, 1500);
+  //   if (!hasSeenModal) {
+  //     // Delay to ensure page has loaded
+  //     setTimeout(() => {
+  //       setIsFirstLogin(true);
+  //       setShowUpdatesModal(true);
+  //     }, 1500);
 
-      // Mark as seen
-      localStorage.setItem(storageKey, "true");
-    }
-  }, [user, userLoading]);
+  //     // Mark as seen
+  //     localStorage.setItem(storageKey, "true");
+  //   }
+  // }, [user, userLoading]);
 
   return (
     <>
