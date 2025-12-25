@@ -328,10 +328,14 @@ export default function MonadTradePage() {
       (tokenData as any)?.marketCapUSD ??
       (tokenData as any)?.fully_diluted_value ??
       0;
+    // Special case: token 0xad96c3dffcd6374294e2573a7fbba96097cc8d7c should show 100m supply instead of 1b
+    const defaultSupply = (typeof contractAddress === "string" && contractAddress.toLowerCase() === "0xad96c3dffcd6374294e2573a7fbba96097cc8d7c")
+      ? 100_000_000
+      : 1_000_000_000;
     const tokenSupply =
       (tokenData as any)?.total_supply ??
       (tokenData as any)?.supply ??
-      1_000_000_000;
+      defaultSupply;
 
     if (!tokenData) return optimisticToken ? {
       mint: contractAddress as string,
@@ -343,7 +347,7 @@ export default function MonadTradePage() {
       pair_address: contractAddress as string,
       logo: optimisticToken.image || "",
       decimals: 18,
-      total_supply: 1_000_000_000,
+      total_supply: defaultSupply,
       creator_address: null,
       dev_address: null,
       owner: null,
