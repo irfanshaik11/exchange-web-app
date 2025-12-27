@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState, useMemo, useCallback, useRef } from "react";
 import { useRouter } from "next/router";
-// import PulseTable from "./PulseTable";
+import PulseTable from "./PulseTable";
 import MonadTable from "./MonadTable";
 import type { Token } from "~/utils/db";
 import { useUser } from "./UserContext";
@@ -112,45 +112,28 @@ export default function PulsePopoutContent({ forceMobileView = false }: PulsePop
   const queryClient = useQueryClient();
 
   // React Query hooks - only enable Solana data fetching when NOT on Monad route
-  // COMMENTED OUT: PulseTable is disabled, so these hooks are disabled too
-  const shouldFetchSolanaData = false; // router.isReady && !isMonadRoute;
+  const shouldFetchSolanaData = router.isReady && !isMonadRoute;
+
+  const { 
+    data: tokens = [], 
+    isLoading: tokensLoading, 
+    error: tokensError, 
+    isStale: tokensStale,
+    refetch: refreshTokens,
+    dataUpdatedAt,
+    isFetching,
+  } = useQueryNewPairs(shouldFetchSolanaData);
   
-  // const {
-  //   data: tokens = [],
-  //   isLoading: tokensLoading,
-  //   error: tokensError,
-  //   isStale: tokensStale,
-  //   refetch: refreshTokens,
-  //   dataUpdatedAt,
-  //   isFetching,
-  // } = useQueryNewPairs(shouldFetchSolanaData);
+  const { 
+    data: launchpadData = { new: [], completing: [], completed: [] }, 
+    isLoading: launchpadLoading, 
+    error: launchpadError, 
+    isStale: launchpadStale,
+    refetch: refreshLaunchpadData,
+  } = useQueryLaunchpadData(shouldFetchSolanaData);
 
-  // const {
-  //   data: launchpadData = { new: [], completing: [], completed: [] },
-  //   isLoading: launchpadLoading,
-  //   error: launchpadError,
-  //   isStale: launchpadStale,
-  //   refetch: refreshLaunchpadData,
-  // } = useQueryLaunchpadData(shouldFetchSolanaData);
-
-  // const { data: finalStretchTokensQuery = [] } = useQueryFinalStretch(shouldFetchSolanaData);
-  // const { data: migratedTokensQuery = [] } = useQueryMigrated(shouldFetchSolanaData);
-
-  // Placeholder values since hooks are commented out
-  const tokens: Token[] = [];
-  const tokensLoading = false;
-  const tokensError = null;
-  const tokensStale = false;
-  const refreshTokens = () => {};
-  const dataUpdatedAt = 0;
-  const isFetching = false;
-  const launchpadData: LaunchpadData = { new: [], completing: [], completed: [] };
-  const launchpadLoading = false;
-  const launchpadError = null;
-  const launchpadStale = false;
-  const refreshLaunchpadData = () => {};
-  const finalStretchTokensQuery: Token[] = [];
-  const migratedTokensQuery: Token[] = [];
+  const { data: finalStretchTokensQuery = [] } = useQueryFinalStretch(shouldFetchSolanaData);
+  const { data: migratedTokensQuery = [] } = useQueryMigrated(shouldFetchSolanaData);
 
   // ✅ REAL-TIME WEBSOCKET: Direct cache updates (NO REFETCH)
   // COMMENTED OUT: PulseTable is disabled, so WebSocket is disabled too
@@ -179,9 +162,36 @@ export default function PulsePopoutContent({ forceMobileView = false }: PulsePop
   //   }, [queryClient]),
   // });
 
-  // Placeholder values since WebSocket is commented out
-  const pulseWsConnected = false;
-  const pulseWsError = null;
+  // ✅ REAL-TIME WEBSOCKET: Direct cache updates (NO REFETCH)
+  const { connected: pulseWsConnected, error: pulseWsError } = usePulseWebSocket({
+    enabled: shouldFetchSolanaData,
+    onNewToken: useCallback((token) => {
+      queryClient.setQueryData(tokenKeys.trenches.newPairs(), (oldData: any[] | undefined) => {
+        if (!oldData) return [token];
+        const filtered = oldData.filter((t: any) => t.mint !== token.mint);
+        return [token, ...filtered].slice(0, 200);
+      });
+    }, [queryClient]),
+    onFinalStretchToken: useCallback((token) => {
+      queryClient.setQueryData(tokenKeys.trenches.finalStretch(), (oldData: any[] | undefined) => {
+        if (!oldData) return [token];
+        const filtered = oldData.filter((t: any) => t.mint !== token.mint);
+        return [token, ...filtered].slice(0, 50);
+      });
+    }, [queryClient]),
+    onMigratedToken: useCallback((token) => {
+      queryClient.setQueryData(tokenKeys.trenches.migrated(), (oldData: any[] | undefined) => {
+        if (!oldData) return [token];
+        const filtered = oldData.filter((t: any) => t.mint !== token.mint);
+        return [token, ...filtered].slice(0, 50);
+      });
+    }, [queryClient]),
+  });
+  useEffect(() => {
+    if (pulseWsError) {
+      console.error("[Pulse Popout] WebSocket error", pulseWsError);
+    }
+  }, [pulseWsConnected, pulseWsError]);
 
   // State for HTTP polling data
   const [httpNew, setHttpNew] = useState<any[]>([]);
@@ -1050,36 +1060,33 @@ export default function PulsePopoutContent({ forceMobileView = false }: PulsePop
             </div>
           </div>
         ) : isLoading ? (
-          <div className="flex min-h-0 w-full flex-1 flex-col overflow-hidden">
-            <div className="flex min-h-0 w-full flex-1 flex-row overflow-hidden">
-              {/* <PulseTable
-                title="New Pairs"
-                tokens={[]}
-                loading
-                skeletonRowCount={10}
-                isFirstOrLast="first"
-                showBubbleMetrics={false}
-              />
-              <PulseTable
-                title="Final Stretch"
-                tokens={[]}
-                loading
-                skeletonRowCount={10}
-                showBubbleMetrics={false}
-              />
-              <PulseTable
-                title="Migrated"
-                tokens={[]}
-                loading
-                skeletonRowCount={10}
-                isFirstOrLast="last"
-                showBubbleMetrics={false}
-              /> */}
-              <div className="flex-1 text-center text-neutral-400 py-10">
-                PulseTable is currently disabled
+              <div className="flex min-h-0 w-full flex-1 flex-col overflow-hidden">
+                <div className="flex min-h-0 w-full flex-1 flex-row overflow-hidden">
+                  <PulseTable
+                    title="New Pairs"
+                    tokens={[]}
+                    loading
+                    skeletonRowCount={10}
+                    isFirstOrLast="first"
+                    showBubbleMetrics={false}
+                  />
+                  <PulseTable
+                    title="Final Stretch"
+                    tokens={[]}
+                    loading
+                    skeletonRowCount={10}
+                    showBubbleMetrics={false}
+                  />
+                  <PulseTable
+                    title="Migrated"
+                    tokens={[]}
+                    loading
+                    skeletonRowCount={10}
+                    isFirstOrLast="last"
+                    showBubbleMetrics={false}
+                  />
+                </div>
               </div>
-            </div>
-          </div>
         ) : hasError ? (
           <div className="py-10 text-center text-red-400">
             <div className="mb-2 text-xl font-semibold">
@@ -1094,34 +1101,30 @@ export default function PulsePopoutContent({ forceMobileView = false }: PulsePop
             </button>
           </div>
         ) : (
-          <div className="flex min-h-0 w-full flex-1 flex-col overflow-hidden">
-            <div className="flex min-h-0 w-full flex-1 flex-row overflow-hidden">
-              {/* <PulseTable
-                title="New Pairs"
-                tokens={enrichedNewPairsToShow as any}
-                loading={newPairsLoading}
-                isFirstOrLast="first"
-                showBubbleMetrics={false}
-              />
-              <PulseTable
-                title="Final Stretch"
-                tokens={enrichedFinalStretch as any}
-                showBubbleMetrics={false}
-              />
-              <PulseTable
-                title="Migrated"
-                tokens={enrichedMigrated as any}
-                isFirstOrLast="last"
-                showBubbleMetrics={false}
-              /> */}
-              <div className="flex-1 text-center text-neutral-400 py-10">
-                PulseTable is currently disabled
+            <div className="flex min-h-0 w-full flex-1 flex-col overflow-hidden">
+              <div className="flex min-h-0 w-full flex-1 flex-row overflow-hidden">
+                <PulseTable
+                  title="New Pairs"
+                  tokens={enrichedNewPairsToShow as any}
+                  loading={newPairsLoading}
+                  isFirstOrLast="first"
+                  showBubbleMetrics={false}
+                />
+                <PulseTable
+                  title="Final Stretch"
+                  tokens={enrichedFinalStretch as any}
+                  showBubbleMetrics={false}
+                />
+                <PulseTable
+                  title="Migrated"
+                  tokens={enrichedMigrated as any}
+                  isFirstOrLast="last"
+                  showBubbleMetrics={false}
+                />
               </div>
             </div>
-          </div>
         )}
       </div>
     </div>
   );
 }
-
