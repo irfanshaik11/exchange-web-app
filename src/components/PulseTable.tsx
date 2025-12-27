@@ -105,7 +105,7 @@ import { showEnhancedToast, updateEnhancedToast } from "~/utils/enhancedToast";
 import { FiGlobe } from "react-icons/fi";
 import BottomCardInfoHolder from "./BottomCardInfoHolder";
 
-/* ---- Enhanced Axiom AI Palette ---- */
+/* ---- Enhanced Monad Green Palette (matching MonadTable) ---- */
 const AX = {
   bg: "#0b0c0e",
   surface: "#16171C",
@@ -113,18 +113,18 @@ const AX = {
   border: "#24252C",
   text: "#f0f5f5",
   muted: "#9CA3AF",
-  mint: "#18c48c",
-  mintHover: "#12a877",
+  mint: "#31e3ac", // Green - Monad brand color (matching MonadTable)
+  mintHover: "#28c896", // Darker green for hover (matching MonadTable)
   sell: "#ed3a7a",
-  aiBlue: "#526fff",
-  aiBlueHover: "#3f56d9",
-  aiGreen: "#31e3ac",
-  aiGreenHover: "#28c896",
-  aiCyan: "#06B6D4",
-  aiCyanHover: "#0891B2",
-  glowBlue: "rgba(82, 111, 255, 0.3)",
-  glowGreen: "rgba(49, 227, 172, 0.3)",
-  glowCyan: "rgba(6, 182, 212, 0.3)",
+  aiBlue: "#526fff", // Blue variant (matching MonadTable)
+  aiBlueHover: "#3f56d9", // Darker blue variant (matching MonadTable)
+  aiGreen: "#31e3ac", // Green for primary actions (matching MonadTable)
+  aiGreenHover: "#28c896", // Darker green for hover (matching MonadTable)
+  aiCyan: "#06B6D4", // Cyan variant (matching MonadTable)
+  aiCyanHover: "#0891B2", // Cyan hover (matching MonadTable)
+  glowBlue: "rgba(82, 111, 255, 0.3)", // Blue glow (matching MonadTable)
+  glowGreen: "rgba(49, 227, 172, 0.3)", // Green glow (matching MonadTable)
+  glowCyan: "rgba(6, 182, 212, 0.3)", // Cyan glow (matching MonadTable)
 };
 
 interface PulseTableProps {
@@ -346,10 +346,10 @@ const SmartColor: React.FC<SmartColorProps> = ({
     // Restrict MarketCap metric to approved palette only
     if (metricType === "marketCap") {
       // User-defined tiers (in thousands):
-      // 0–20k: blue, 20k–30k: purple, 30k–100k: yellow, 100k+: green
+      // 0–20k: blue, 20k–30k: green, 30k–100k: yellow, 100k+: green
       if (mc >= 100_000) return "#31e3ac"; // Green: 100k+
       if (mc >= 30_000) return "#ddc13d"; // Yellow: 30k–100k
-      if (mc >= 20_000) return "#526ffe"; // Purple: 20k–30k
+      if (mc >= 20_000) return "#31e3ac"; // Green: 20k–30k (matching MonadTable)
       return "#52c6ff"; // Blue: <20k
     }
 
@@ -402,11 +402,11 @@ const SmartColor: React.FC<SmartColorProps> = ({
       return "#52c6ff"; // Blue
     }
 
-    // For non-marketCap metrics, prefer purple for notable tokens using approved purple
+    // For non-marketCap metrics, prefer green for notable tokens using approved green
     const marketCap = token.fully_diluted_value || token.market_cap_usd || 0;
     if (marketCap > 10000000) {
       // > $10M market cap
-      return "#526ffe"; // Purple
+      return "#31e3ac"; // Green (matching MonadTable)
     }
 
     // New/trending tokens - map to approved palette (use yellow)
@@ -420,7 +420,7 @@ const SmartColor: React.FC<SmartColorProps> = ({
       return a & a;
     }, 0);
 
-    const defaultColors = ["#52c6ff", "#31e3ac", "#ddc13d", "#526ffe"];
+    const defaultColors = ["#52c6ff", "#31e3ac", "#ddc13d", "#06B6D4"];
     return defaultColors[Math.abs(hash) % defaultColors.length];
   };
 
@@ -551,7 +551,7 @@ function TokenMetrics({
             height: "18px",
           }}
         >
-          <GoPeople size={12} style={{ color: "#36d8ff", strokeWidth: "3" }} />
+          <GoPeople size={12} style={{ color: "#57ace9", strokeWidth: "3" }} />
         </div>
         <span className="text-xs" style={{ color: AX.text }}>
           {metrics.users}
@@ -722,18 +722,18 @@ function TokenImage({
     moonshot: "#eab308", // Yellow for moonshot
     moonshoot: "#eab308", // Yellow for moonshoot
     moonit: "#eab308", // Yellow for moonit
-    heaven: "#8b5cf6",
+    heaven: "#31e3ac", // Green (matching MonadTable)
     "daos.fun": "#06b6d4",
     candle: "#f59e0b",
     sugar: "#ec4899",
     believe: "#31e3ac",
-    jupiter: "#8b5cf6",
+    jupiter: "#31e3ac", // Green (matching MonadTable)
     boop: "#134577", // Dark blue for boopfun
     boopfun: "#134577", // Dark blue for boopfun
     launchlab: "#3b82f6", // Blue for launchlab (default)
     dynamic: "#526fff",
-    raydium: "#5c51f7", // Purple for raydium
-    raydiumlaunchpad: "#5c51f7", // Purple for raydiumlaunchpad
+    raydium: "#31e3ac", // Green for raydium (matching MonadTable)
+    raydiumlaunchpad: "#31e3ac", // Green for raydiumlaunchpad (matching MonadTable)
     meteora: "#d11f3a", // Pink-red for meteora
     meteora_v2: "#d11f3a", // Pink-red for meteora
     pump_amm: "#e9ba14", // Gold for meteora amm
@@ -783,7 +783,7 @@ function TokenImage({
     }
 
     if (launchpadProtocol.includes("raydium")) {
-      return "#5c51f7"; // Purple for raydium
+      return "#31e3ac"; // Green for raydium (matching MonadTable)
     }
 
     if (
@@ -2357,7 +2357,7 @@ function PulseTable({
           className="rounded-full"
         />
       ),
-      color: "#00ff88",
+      color: "#31e3ac", // Green (matching MonadTable)
     },
     {
       name: "Bonk",
@@ -2382,7 +2382,7 @@ function PulseTable({
           className="rounded-full"
         />
       ),
-      color: "#00d4aa",
+      color: "#31e3ac", // Green (matching MonadTable)
     },
     // { name: 'Moonshot', icon: <Image src="https://play-lh.googleusercontent.com/bmv_OqsfmlR2Tfd7-4I2HS1twZdiJmmyX0warik6UxhUdSfegPMegeIRxxj9LGUBAQM" alt="Moonshot" width={16} height={16} className="rounded-full" />, color: '#a855f7' },
     // { name: 'Heaven', icon: <Image src="data:image/png;base64,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" alt="Heaven" width={16} height={16} className="rounded-full" />, color: '#8b5cf6' },
@@ -2485,7 +2485,7 @@ function PulseTable({
           S
         </div>
       ),
-      color: "#00ff88",
+      color: "#31e3ac", // Green (matching MonadTable)
     },
     {
       name: "USDC",
@@ -3452,7 +3452,10 @@ function PulseTable({
   };
   return (
     <div
-      className={`num mx-1 flex min-h-0 w-full flex-1 flex-col overflow-hidden rounded-2xl bg-[#0A0E0A] shadow-lg overflow-x-hidden`}
+      className={`num mx-1 flex min-h-0 w-full flex-1 flex-col overflow-hidden rounded-2xl shadow-lg overflow-x-hidden`}
+      style={{
+        backgroundColor: "#111214",
+      }}
     >
       <div
         className="group relative mb-2 flex items-center justify-between border-b p-2 text-lg font-bold"
@@ -3540,7 +3543,8 @@ function PulseTable({
                 className="relative flex items-center justify-center"
               >
                 <button
-                  className={`flex cursor-pointer items-center justify-center px-1.5 text-xl text-xs font-medium transition-all duration-200 ${selectedPill == pill ? `text-emerald-300` : `text-gray-500`}`}
+                  className="flex cursor-pointer items-center justify-center px-1.5 text-xl text-xs font-medium transition-all duration-200"
+                  style={{ color: selectedPill == pill ? "#31e3ac" : "#9CA3AF" }}
                   onClick={() => {
                     // Update local preset selection for this column only
                     setSelectedPill(pill);
@@ -3684,8 +3688,8 @@ function PulseTable({
               {filters.protocols.filter((p: string) => p !== "All").length >
                 0 && (
                 <span
-                  className="absolute -top-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full bg-emerald-500 text-xs font-bold"
-                  style={{ color: "#f0f5f5", fontSize: "10px" }}
+                  className="absolute -top-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full text-xs font-bold"
+                  style={{ color: "#f0f5f5", fontSize: "10px", backgroundColor: "#31e3ac" }}
                 >
                   {filters.protocols.filter((p: string) => p !== "All").length}
                 </span>
@@ -6607,8 +6611,8 @@ function PulseTable({
                                 </button>
 
                                 <div className="ml-1 flex flex-row gap-2 font-light">
-                                  <div className="flex items-center gap-1 text-violet-200">
-                                    <PiCrownSimpleLight size={16} />
+                                  <div className="flex items-center gap-1">
+                                    <PiCrownSimpleLight size={16} style={{ color: "#dcc13c" }} />
                                     <span className="text-sm text-white">
                                       0
                                     </span>
@@ -6624,10 +6628,10 @@ function PulseTable({
                                   {/* People Icon - Total Holders */}
                                   <div className="relative flex items-center gap-1">
                                     <div
-                                      className="flex cursor-help items-center justify-center rounded text-violet-200"
+                                      className="flex cursor-help items-center justify-center rounded"
                                       title="Holders"
                                     >
-                                      <GoPeople size={16} />
+                                      <GoPeople size={16} style={{ color: "#57ace9" }} />
                                     </div>
                                     <span className="text-sm text-white">
                                       {(() => {
@@ -6680,7 +6684,7 @@ function PulseTable({
                           <div className="items-right justify-right flex flex-col items-end gap-1 text-right">
                             <div
                               className={
-                                "justify-right flex flex-row items-center gap-2 text-xs text-neutral-400 lg:text-xs"
+                                "justify-right flex flex-row items-center gap-2 text-sm text-neutral-400 lg:text-sm"
                               }
                             >
                               <div className="flex flex-row items-center gap-1" style={{ color: AX.muted }}>
@@ -6704,14 +6708,14 @@ function PulseTable({
                                     0;
                                   if (hasGreenWave) {
                                     return (
-                                      <span className="number-font text-xs font-medium text-white lg:text-base">
+                                      <span className="number-font text-sm font-medium text-white lg:text-base">
                                         <SmoothNumber
                                           value={mcVal}
                                           formatter={(val) =>
                                             `${formatMarketCap(val)}`
                                           }
                                           duration={300}
-                                          className="text-xs"
+                                          className="text-sm"
                                         />
                                       </span>
                                     );
@@ -6720,7 +6724,7 @@ function PulseTable({
                                     <SmartColor
                                       token={token}
                                       metricType="marketCap"
-                                      className="number-font flex flex-row items-center text-xs font-medium text-white lg:text-base"
+                                      className="number-font flex flex-row items-center text-sm font-medium text-white lg:text-base"
                                     >
                                       <SmoothNumber
                                         value={mcVal}
@@ -6728,7 +6732,7 @@ function PulseTable({
                                           `${formatMarketCap(val)}`
                                         }
                                         duration={300}
-                                        className="text-xs"
+                                        className="text-sm"
                                       />
                                     </SmartColor>
                                   );
@@ -6747,9 +6751,9 @@ function PulseTable({
                                 })()}
                               </div>
                               <div style={{ color: AX.muted }} className="flex flex-row gap-1">
-                                <span className="text-xs">V:</span>{" "}
+                                <span className="text-sm">V:</span>{" "}
                                 <span
-                                  className="number-font text-xs"
+                                  className="number-font text-sm font-medium"
                                   style={{
                                     color: "#ffffff",
                                   }}
@@ -6772,14 +6776,14 @@ function PulseTable({
                                   />
                                 </span>
                               </div>
-                              <div className="flex items-center gap-2 text-xs">
+                              <div className="flex items-center gap-2 text-sm">
                                 <div
                                   className="flex flex-row items-center gap-1"
                                   style={{ color: AX.muted }}
                                 >
-                                  <span className="text-xs">Tx:</span>{" "}
+                                  <span className="text-sm">TX</span>{" "}
                                   <span
-                                    className="text-xs"
+                                    className="number-font text-sm font-medium"
                                     style={{
                                       color: "#ffffff",
                                     }}
@@ -6812,40 +6816,45 @@ function PulseTable({
                                       duration={0}
                                     />
                                   </span>
-                                  {/* <div className="ml-1 flex h-0.5 w-8 overflow-hidden rounded-full bg-gray-700">
-                              <div
-                                className="h-full"
-                                style={{
-                                  backgroundColor: "#31e3ac",
-                                  width: `${(() => {
-                                    const buys = token.total_buys_24h ?? 0;
-                                    const sells = token.total_sells_24h ?? 0;
-                                    const total = Math.max(1, buys + sells);
-                                    const percent = (buys / total) * 100;
-                                    return Math.min(100, Math.max(0, percent));
-                                  })()}%`,
-                                }}
-                              ></div>
-                              <div
-                                className="h-full"
-                                style={{
-                                  backgroundColor: "#d11f3a",
-                                  width: `${(() => {
-                                    const buys = token.total_buys_24h ?? 0;
-                                    const sells = token.total_sells_24h ?? 0;
-                                    const total = Math.max(1, buys + sells);
-                                    const percent = (sells / total) * 100;
-                                    return Math.min(100, Math.max(0, percent));
-                                  })()}%`,
-                                }}
-                              ></div>
-                            </div> */}
+                                  <div className="ml-1 flex h-0.5 w-8 overflow-hidden rounded-full bg-gray-700">
+                                    <div
+                                      className="h-full"
+                                      style={{
+                                        backgroundColor: "#31e3ac", // Green for buys
+                                        width: `${(() => {
+                                          const buys = token.total_buys_24h ?? 0;
+                                          const sells = token.total_sells_24h ?? 0;
+                                          const total = Math.max(1, buys + sells);
+                                          const percent = (buys / total) * 100;
+                                          return Math.min(100, Math.max(0, percent));
+                                        })()}%`,
+                                      }}
+                                    ></div>
+                                    <div
+                                      className="h-full"
+                                      style={{
+                                        backgroundColor: "#d11f3a", // Red for sells
+                                        width: `${(() => {
+                                          const buys = token.total_buys_24h ?? 0;
+                                          const sells = token.total_sells_24h ?? 0;
+                                          const total = Math.max(1, buys + sells);
+                                          const percent = (sells / total) * 100;
+                                          return Math.min(100, Math.max(0, percent));
+                                        })()}%`,
+                                      }}
+                                    ></div>
+                                  </div>
                                 </div>
                               </div>
                             </div>
 
                             <button
-                              className={`mt-2 ${title.toLowerCase().includes("final") || title.toLowerCase().includes("stretch") ? `bg-transparent border-emerald-400 text-emerald-400` : `bg-emerald-900/50 text-emerald-400 border-emerald-500`} border z-50 flex cursor-pointer items-center gap-2 rounded-lg px-2 py-1 text-sm font-bold opacity-0 shadow-sm transition-all duration-200 ease-out group-hover:opacity-100`}
+                              className="mt-2 border z-50 flex cursor-pointer items-center gap-2 rounded-lg px-2 py-1 text-sm font-bold opacity-0 shadow-sm transition-all duration-200 ease-out group-hover:opacity-100"
+                              style={{
+                                backgroundColor: title.toLowerCase().includes("final") || title.toLowerCase().includes("stretch") ? "transparent" : "rgba(49, 227, 172, 0.1)",
+                                borderColor: "#31e3ac",
+                                color: "#31e3ac",
+                              }}
                               onClick={(e) => {
                                 e.stopPropagation();
                                 e.preventDefault(); // Prevent Link navigation
@@ -6888,8 +6897,8 @@ function PulseTable({
                                   return (
                                     <>
                                       <HiLightningBolt
-                                        className="text-emerald-400"
                                         size={14}
+                                        style={{ color: "#31e3ac" }}
                                       />{" "}
                                       <span className="number-font">
                                         {thunderAmount || "0"}
@@ -6953,8 +6962,8 @@ function PulseTable({
                                   return (
                                     <>
                                       <HiLightningBolt
-                                        className={"text-emerald-400"}
                                         size={14}
+                                        style={{ color: "#31e3ac" }}
                                       />
                                       <span
                                         className="number-font"
@@ -7189,10 +7198,12 @@ function PulseTable({
                       <BottomCardInfoHolder
                         PassedIcon={FaRegUser}
                         value={0.2}
+                        iconColor="#57ace9"
                       />
                       <BottomCardInfoHolder
                         PassedIcon={LuChefHat}
                         value={0.2}
+                        iconColor="#4d96cc"
                       />
                       <BottomCardInfoHolder
                         PassedIcon={GiSeatedMouse}
@@ -7412,7 +7423,21 @@ function PulseTable({
                 void handleArmSniper();
               }}
               disabled={sniperSubmitting}
-              className="flex w-full items-center justify-center gap-2 rounded-lg bg-emerald-500 px-4 py-2 text-sm font-bold text-black transition-colors hover:bg-emerald-600 disabled:cursor-not-allowed disabled:opacity-60"
+              className="flex w-full items-center justify-center gap-2 rounded-lg px-4 py-2 text-sm font-bold transition-colors disabled:cursor-not-allowed disabled:opacity-60"
+              style={{
+                backgroundColor: "#31e3ac",
+                color: "#000000",
+              }}
+              onMouseEnter={(e) => {
+                if (!sniperSubmitting) {
+                  e.currentTarget.style.backgroundColor = "#28c896";
+                }
+              }}
+              onMouseLeave={(e) => {
+                if (!sniperSubmitting) {
+                  e.currentTarget.style.backgroundColor = "#31e3ac";
+                }
+              }}
             >
               {sniperSubmitting
                 ? "Arming…"
@@ -7456,7 +7481,13 @@ function PulseTable({
 
           {/* MEV Mode - Matching preset popup */}
           <div className="mx-4 mb-4 flex gap-2 rounded-lg border border-neutral-700/90 px-1 py-1">
-            <button className="flex-1 rounded-md bg-emerald-300/20 px-3 py-1.5 text-xs font-semibold text-emerald-200 transition-colors">
+            <button
+              className="flex-1 rounded-md px-3 py-1.5 text-xs font-semibold transition-colors"
+              style={{
+                backgroundColor: "rgba(49, 227, 172, 0.2)",
+                color: "#31e3ac",
+              }}
+            >
               Off
             </button>
             <button className="flex-1 rounded-md bg-neutral-800 px-3 py-1.5 text-xs font-semibold text-neutral-400 transition-colors hover:bg-neutral-700 hover:text-neutral-200">
@@ -7473,7 +7504,17 @@ function PulseTable({
             <input
               type="text"
               value="https://api.mainnet-beta.solana.com"
-              className="w-full rounded-lg border border-neutral-700 bg-neutral-800 px-3 py-2 text-xs focus:ring-2 focus:ring-emerald-500 focus:outline-none"
+              className="w-full rounded-lg border border-neutral-700 bg-neutral-800 px-3 py-2 text-xs focus:outline-none"
+              style={{
+                color: "#f0f5f5",
+                focusRingColor: "#31e3ac",
+              }}
+              onFocus={(e) => {
+                e.currentTarget.style.boxShadow = "0 0 0 2px rgba(49, 227, 172, 0.5)";
+              }}
+              onBlur={(e) => {
+                e.currentTarget.style.boxShadow = "none";
+              }}
               style={{ color: "#f0f5f5" }}
               readOnly
             />
