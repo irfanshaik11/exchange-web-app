@@ -3483,8 +3483,19 @@ function PulseTable({
         {/* Right side container for pill and filter */}
         <div className="flex items-center gap-2">
           {/* Keyword Search Box */}
-          <div className="hidden max-w-32 items-center gap-1 overflow-hidden rounded-md border border-2 border-neutral-800 px-1.5 py-1 sm:flex">
-            <LuSearch size={16} style={{ color: AX.muted, flexShrink: 0 }} />
+          <div
+            className="hidden items-center gap-1 overflow-hidden rounded-md border px-1.5 sm:flex"
+            style={{
+              borderColor: AX.border,
+              backgroundColor: "#272a2e",
+              paddingTop: "4px",
+              paddingBottom: "4px",
+              minWidth: "120px",
+              width: "120px",
+              height: "24px",
+            }}
+          >
+            <LuSearch size={12} style={{ color: AX.muted, flexShrink: 0 }} />
             <input
               type="text"
               value={filters.searchKeywords}
@@ -3494,13 +3505,25 @@ function PulseTable({
                   searchKeywords: e.target.value,
                 }));
               }}
-              placeholder="Search..."
+              placeholder="keyword1, keyword2"
               className="min-w-0 flex-1 border-none bg-transparent text-left text-xs font-medium placeholder-gray-500 outline-none"
+              style={{ color: AX.text, width: "100%", maxWidth: "100%" }}
             />
           </div>
 
           {/* Thunder Icon and Amount Entry - Separate Thin Box */}
-          <div className="hidden max-w-32 items-center justify-center gap-1 rounded-md border border-2 border-neutral-800 px-1.5 py-1 sm:flex">
+          <div
+            className="hidden items-center justify-center gap-1 rounded-md border px-1.5 sm:flex"
+            style={{
+              borderColor: AX.border,
+              backgroundColor: "#272a2e",
+              paddingTop: "4px",
+              paddingBottom: "4px",
+              minWidth: "70px",
+              width: "70px",
+              height: "24px",
+            }}
+          >
             <HiLightningBolt size={12} style={{ color: AX.aiGreen }} />
             <input
               type="text"
@@ -3536,15 +3559,29 @@ function PulseTable({
           </div>
 
           {/* P1 P2 P3 Boxes - Separate Thin Box With Background Color */}
-          <div className="relative hidden items-center justify-center rounded-md border-2 border-neutral-800 px-1.5 sm:flex">
+          <div
+            className="relative hidden items-center justify-center gap-1 rounded-md border px-1.5 sm:flex"
+            style={{
+              borderColor: AX.border,
+              backgroundColor: "#272a2e",
+              paddingTop: "4px",
+              paddingBottom: "4px",
+              minWidth: "80px",
+              width: "80px",
+              height: "24px",
+            }}
+          >
             {["P1", "P2", "P3"].map((pill, i) => (
               <div
                 key={pill}
                 className="relative flex items-center justify-center"
               >
                 <button
-                  className="flex cursor-pointer items-center justify-center px-1.5 text-xl text-xs font-medium transition-all duration-200"
-                  style={{ color: selectedPill == pill ? "#31e3ac" : "#9CA3AF" }}
+                  className={`flex cursor-pointer items-center justify-center rounded px-1 py-[2px] text-xs font-medium transition-all duration-200 ${
+                    selectedPill === pill
+                      ? "bg-[rgba(24,196,140,0.15)]"
+                      : "bg-[rgba(22,23,28,0.6)]"
+                  }`}
                   onClick={() => {
                     // Update local preset selection for this column only
                     setSelectedPill(pill);
