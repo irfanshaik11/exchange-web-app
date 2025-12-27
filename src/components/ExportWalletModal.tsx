@@ -64,6 +64,7 @@ interface ExportWalletModalProps {
   walletAddress?: string;
   forceExport?: boolean;
   onForceExportConfirmed?: () => Promise<void> | void;
+  onExported?: (chain: "sol" | "monad" | "both") => void;
 }
 
 export default function ExportWalletModal({
@@ -73,6 +74,7 @@ export default function ExportWalletModal({
   walletAddress,
   forceExport = false,
   onForceExportConfirmed,
+  onExported,
 }: ExportWalletModalProps) {
   const turnkey = useTurnkey() as any;
   const { authState, clientState, session: turnkeySession, exportWallet, wallets = [] } = turnkey || {};
@@ -88,6 +90,7 @@ export default function ExportWalletModal({
   const [fetchedWallets, setFetchedWallets] = useState<any[]>([]);
   const [showLoginModal, setShowLoginModal] = useState(false);
   const pendingRevealRef = useRef(false);
+  const exportNotifiedRef = useRef(false);
 
   const iframeContainerRef = useRef<HTMLDivElement | null>(null);
   const iframeStamperRef = useRef<IframeStamper | null>(null);
@@ -157,6 +160,7 @@ export default function ExportWalletModal({
       organizationIdRef.current = null;
       pendingRevealRef.current = false;
       setShowLoginModal(false);
+      exportNotifiedRef.current = false;
 
       if (iframeStamperRef.current) {
         iframeStamperRef.current.clear();
@@ -440,6 +444,7 @@ export default function ExportWalletModal({
 
     setError(null);
     setIframeVisible(false);
+    exportNotifiedRef.current = false;
 
     if (!isTurnkeyReady) {
       if (isGooglePath) {
@@ -461,6 +466,7 @@ export default function ExportWalletModal({
       walletMeta?.solanaAddress ||
       walletMeta?.ethereumAddress ||
       walletMeta?.address ||
+      walletAddress ||
       undefined;
 
     if (!walletIdToUse) {
@@ -802,6 +808,23 @@ export default function ExportWalletModal({
       ? selectedWallet.solanaAddress
       : null;
 
+  useEffect(() => {
+    if (!isOpen) return;
+    if (status !== "done") return;
+    if (exportNotifiedRef.current) return;
+    try {
+      // Bundle contains both chains; mark both as exported.
+      if (typeof window !== "undefined") {
+        window.localStorage.setItem("export_ack_sol", "true");
+        window.localStorage.setItem("export_ack_monad", "true");
+      }
+    } catch {
+      // Ignore storage failures
+    }
+    exportNotifiedRef.current = true;
+    onExported?.("both");
+  }, [isOpen, onExported, status]);
+
   if (!isOpen) return null;
 
   return (
@@ -878,50 +901,97 @@ export default function ExportWalletModal({
               </div>
             )}
 
-            {/* Wallet Address */}
+            {/* Wallet Addresses */}
             {selectedWalletId && (
-              <div className="mb-3">
-                <label className="text-xs text-[#9CA3AF] mb-1.5 block">
-                  Monad wallet (EVM)
-                </label>
-                <div className="flex items-center gap-2">
-                  <input
-                    type="text"
-                    readOnly
-                    value={monadAddress}
-                    className="flex-1 px-2.5 py-1.5 rounded-lg bg-[#17191E] border border-[#2A2B33] text-[#f0f5f5] text-xs font-mono"
-                  />
-                  <button
-                    onClick={() => {
-                      if (monadAddress) {
-                        navigator.clipboard.writeText(monadAddress).then(
-                          () => toast.success("Copied to clipboard"),
-                          () => toast.error("Failed to copy")
-                        );
-                      }
-                    }}
-                    className="text-[#9CA3AF] hover:text-[#f0f5f5] transition-colors"
-                  >
-                    <svg width="16" height="16" fill="none" viewBox="0 0 24 24">
-                      <rect
-                        x="9"
-                        y="9"
-                        width="13"
-                        height="13"
-                        rx="2"
-                        ry="2"
-                        stroke="currentColor"
-                        strokeWidth="2"
-                      />
-                      <path
-                        d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"
-                        stroke="currentColor"
-                        strokeWidth="2"
-                      />
-                    </svg>
-                  </button>
+              <div className="mb-3 space-y-2">
+                <div>
+                  <label className="text-xs text-[#9CA3AF] mb-1.5 block">
+                    Monad wallet (EVM)
+                  </label>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="text"
+                      readOnly
+                      value={monadAddress}
+                      className="flex-1 px-2.5 py-1.5 rounded-lg bg-[#17191E] border border-[#2A2B33] text-[#f0f5f5] text-xs font-mono"
+                    />
+                    <button
+                      onClick={() => {
+                        if (monadAddress) {
+                          navigator.clipboard.writeText(monadAddress).then(
+                            () => toast.success("Copied to clipboard"),
+                            () => toast.error("Failed to copy")
+                          );
+                        }
+                      }}
+                      className="text-[#9CA3AF] hover:text-[#f0f5f5] transition-colors"
+                    >
+                      <svg width="16" height="16" fill="none" viewBox="0 0 24 24">
+                        <rect
+                          x="9"
+                          y="9"
+                          width="13"
+                          height="13"
+                          rx="2"
+                          ry="2"
+                          stroke="currentColor"
+                          strokeWidth="2"
+                        />
+                        <path
+                          d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"
+                          stroke="currentColor"
+                          strokeWidth="2"
+                        />
+                      </svg>
+                    </button>
+                  </div>
                 </div>
-                {/* Hide Solana copy since export flow is EVM-focused */}
+
+                <div>
+                  <label className="text-xs text-[#9CA3AF] mb-1.5 block">
+                    Solana wallet
+                  </label>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="text"
+                      readOnly
+                      value={solanaAddress || ""}
+                      className="flex-1 px-2.5 py-1.5 rounded-lg bg-[#17191E] border border-[#2A2B33] text-[#f0f5f5] text-xs font-mono"
+                    />
+                    <button
+                      onClick={() => {
+                        if (solanaAddress) {
+                          navigator.clipboard.writeText(solanaAddress).then(
+                            () => toast.success("Copied to clipboard"),
+                            () => toast.error("Failed to copy")
+                          );
+                        }
+                      }}
+                      className="text-[#9CA3AF] hover:text-[#f0f5f5] transition-colors"
+                    >
+                      <svg width="16" height="16" fill="none" viewBox="0 0 24 24">
+                        <rect
+                          x="9"
+                          y="9"
+                          width="13"
+                          height="13"
+                          rx="2"
+                          ry="2"
+                          stroke="currentColor"
+                          strokeWidth="2"
+                        />
+                        <path
+                          d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"
+                          stroke="currentColor"
+                          strokeWidth="2"
+                        />
+                      </svg>
+                    </button>
+                  </div>
+                </div>
+                <p className="text-[11px] text-[#9CA3AF]">
+                  One export backs up both Solana and Monad/EVM accounts (single seed).
+                </p>
               </div>
             )}
 

@@ -28,6 +28,7 @@ import { usePositionPrices } from "~/hooks/usePositionPrices";
 import { useWalletTokenBalances } from "~/hooks/useWalletTokenBalances";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Area, AreaChart } from 'recharts';
 import { normalizeMonadAddress } from "~/utils/normalizeMonadAddress";
+import { acknowledgeWalletExport } from "~/utils/api";
 
 // Interactive Balance Chart Component
 const BalanceChart = ({ 
@@ -287,11 +288,10 @@ const normalizeWalletFromApi = (
 
 const getAddressForChain = (wallet: UserWallet, chain: string) => {
   if (chain === "sol") {
-    return wallet.solanaAddress || wallet.address || "";
+    return wallet.solanaAddress || "";
   }
   return (
     normalizeMonadAddress(wallet.ethereumAddress) ||
-    normalizeMonadAddress(wallet.address) ||
     ""
   );
 };
@@ -303,7 +303,7 @@ export default function PortfolioPage() {
   const [activeSection, setActiveSection] = useState<"spot" | "wallet" | "perpetuals">("spot");
   const [activeSpotTab, setActiveSpotTab] = useState(0);
   const [activePerpetualsTab, setActivePerpetualsTab] = useState(0);
-  const { user, loading: userLoading, solBalance, usdcBalance, refreshBalance, refreshAllBalances, chainBalances, primaryWalletAddresses, walletBalances: contextWalletBalances, walletList: contextWalletList, walletListLoading, refreshWalletList } = useUser();
+  const { user, loading: userLoading, solBalance, usdcBalance, refreshBalance, refreshAllBalances, chainBalances, primaryWalletAddresses, walletBalances: contextWalletBalances, walletList: contextWalletList, walletListLoading, refreshWalletList, refreshUser } = useUser();
   const { monPrice } = useSolPrice();
   const router = useRouter();
   const currentChain = (router.query.chain as string) || "monad";
@@ -475,6 +475,7 @@ export default function PortfolioPage() {
   const [showExportModal, setShowExportModal] = useState(false);
   const [exportWalletId, setExportWalletId] = useState<string | null>(null);
   const [exportWalletAddress, setExportWalletAddress] = useState<string | null>(null);
+  const [forceExportChain, setForceExportChain] = useState<"sol" | "monad" | null>(null);
   const [walletSearchQuery, setWalletSearchQuery] = useState("");
   const isWalletsLoading = walletListLoading && wallets.length === 0;
 
@@ -520,6 +521,31 @@ export default function PortfolioPage() {
   useEffect(() => {
     tokenMetadataCacheRef.current = tokenMetadataCache;
   }, [tokenMetadataCache]);
+
+  // Force Solana export when switching to Sol chain and user hasn't acknowledged backup
+  useEffect(() => {
+    if (!user?.id) return;
+    if (currentChain !== "sol") return;
+    if (showExportModal) return;
+
+    try {
+      const solAck = localStorage.getItem("export_ack_sol") === "true";
+      if (solAck) return;
+    } catch {
+      // ignore storage issues
+    }
+
+    const primary =
+      wallets.find((w) => w.isPrimary) ||
+      wallets[0];
+
+    if (primary) {
+      setExportWalletId(primary.walletId || primary.id);
+      setExportWalletAddress(getAddressForChain(primary, "sol"));
+      setForceExportChain("sol");
+      setShowExportModal(true);
+    }
+  }, [currentChain, showExportModal, user?.id, wallets]);
 
   // Save cache to localStorage when it changes (debounced)
   useEffect(() => {
@@ -872,10 +898,17 @@ export default function PortfolioPage() {
     }
   );
 
-  // Load persisted data on mount
+  // Load persisted data on mount or chain change
   useEffect(() => {
     if (typeof window === 'undefined') return;
-    
+
+    // Reset chain-scoped refs/state when switching chains to avoid cross-chain bleed
+    initialNativeBalanceRef.current = null;
+    setBalanceHistory([]);
+    previousBalancesRef.current = {};
+    realizedPnlHistoryRef.current = [];
+    cumulativeRealizedPnlRef.current = 0;
+
     const storageKeys = getStorageKeys();
     
     try {
@@ -904,7 +937,7 @@ export default function PortfolioPage() {
       const savedInitialBalance = localStorage.getItem(storageKeys.initialNativeBalance);
       if (savedInitialBalance) {
         initialNativeBalanceRef.current = parseFloat(savedInitialBalance);
-        console.log("📊 Loaded initial native balance:", initialNativeBalanceRef.current);
+        console.log("📊 Loaded initial native balance:", initialNativeBalanceRef.current, currentChain === "monad" ? "MON" : "SOL");
       }
     } catch (error) {
       console.error("Error loading persisted data:", error);
@@ -934,6 +967,15 @@ export default function PortfolioPage() {
       }
     }
   }, [positions, user?.id, currentChain]);
+
+  // Reset balance change metrics when switching chains to avoid cross-chain bleed
+  useEffect(() => {
+    setActualBalanceChangePnl(0);
+    setActualBalanceChangePnlPercentage(0);
+    setActualBalanceChangeNative(0);
+    setActualBalanceChangeNativePercentage(0);
+    setBalanceHistory([]);
+  }, [currentChain]);
 
   // Update previous balances when actual balances come in - but ONLY if we don't have a saved value
   useEffect(() => {
@@ -1725,14 +1767,13 @@ export default function PortfolioPage() {
       // Use correct price for the chain
       const nativePrice = currentChain === 'monad' ? (monPrice || 0.025) : solPrice;
       
-      // Initialize initial balance if not set (first time we see a balance)
-      // This represents the balance when the user FIRST started using the platform
+      // Initialize initial balance if not set (first time we see a balance) - per chain
       if (initialNativeBalanceRef.current === null && currentNativeBalance > 0) {
         initialNativeBalanceRef.current = currentNativeBalance;
         const storageKeys = getStorageKeys();
         try {
           localStorage.setItem(storageKeys.initialNativeBalance, currentNativeBalance.toString());
-          console.log("📊 Initialized initial native balance:", currentNativeBalance);
+          console.log("📊 Initialized initial native balance:", currentNativeBalance, currentChain === "monad" ? "MON" : "SOL");
         } catch (error) {
           console.error("Error saving initial balance:", error);
         }
@@ -2149,30 +2190,35 @@ export default function PortfolioPage() {
 
   // Filter wallets based on search query and archived status
   const filteredWallets = useMemo(() => {
-    return wallets.filter((w) => {
-      // Filter by archived status
-      if (!showHidden && w.isArchived) return false;
-      
-      // Filter by search query
-      if (walletSearchQuery.trim()) {
-        const query = walletSearchQuery.toLowerCase().trim();
-        const label = (w.label || "").toLowerCase();
-        const solanaAddr = (w.solanaAddress || "").toLowerCase();
-        const ethereumAddr = (w.ethereumAddress || "").toLowerCase();
-        const address = (w.address || "").toLowerCase();
-        const displayAddr = getAddressForChain(w, currentChain).toLowerCase();
+    return wallets
+      .filter((w) => {
+        // Hide wallets that don't have an address for the current chain
+        const addrForChain = getAddressForChain(w, currentChain);
+        if (!addrForChain) return false;
+
+        // Filter by archived status
+        if (!showHidden && w.isArchived) return false;
         
-        return (
-          label.includes(query) ||
-          solanaAddr.includes(query) ||
-          ethereumAddr.includes(query) ||
-          address.includes(query) ||
-          displayAddr.includes(query)
-        );
-      }
-      
-      return true;
-    });
+        // Filter by search query
+        if (walletSearchQuery.trim()) {
+          const query = walletSearchQuery.toLowerCase().trim();
+          const label = (w.label || "").toLowerCase();
+          const solanaAddr = (w.solanaAddress || "").toLowerCase();
+          const ethereumAddr = (w.ethereumAddress || "").toLowerCase();
+          const address = (w.address || "").toLowerCase();
+          const displayAddr = addrForChain.toLowerCase();
+          
+          return (
+            label.includes(query) ||
+            solanaAddr.includes(query) ||
+            ethereumAddr.includes(query) ||
+            address.includes(query) ||
+            displayAddr.includes(query)
+          );
+        }
+        
+        return true;
+      });
   }, [wallets, showHidden, walletSearchQuery, currentChain]);
 
     const handleCreateWallet = async () => {
@@ -2288,8 +2334,29 @@ export default function PortfolioPage() {
     // Use the Turnkey walletId, not the database id
     setExportWalletId(wallet.walletId);
     setExportWalletAddress(address);
+    setForceExportChain(null);
     setShowExportModal(true);
   };
+
+  const handleExported = useCallback(() => {
+    try {
+      localStorage.setItem("export_ack_sol", "true");
+      localStorage.setItem("export_ack_monad", "true");
+    } catch {
+      // ignore storage issues
+    }
+    setForceExportChain(null);
+  }, []);
+
+  const acknowledgeBackup = useCallback(async () => {
+    if (!user?.bearerToken) return;
+    try {
+      await acknowledgeWalletExport(user.bearerToken);
+      await refreshUser();
+    } catch (err: any) {
+      console.error("Failed to acknowledge wallet export", err);
+    }
+  }, [refreshUser, user?.bearerToken]);
 
   const handleRenameWallet = async () => {
     if (!editingWalletId || !user?.bearerToken) {
@@ -2483,6 +2550,28 @@ export default function PortfolioPage() {
       throw new Error("No valid private keys provided");
     }
 
+    // Detect chain from provided keys. Reject mixed chains; auto-switch when needed.
+    const detectChain = (keys: string[]): "sol" | "monad" => {
+      let hasSol = false;
+      let hasEvm = false;
+      for (const key of keys) {
+        const trimmed = key.trim();
+        const maybeHex = trimmed.startsWith("0x") && trimmed.length === 66;
+        if (maybeHex) {
+          hasEvm = true;
+        } else {
+          hasSol = true;
+        }
+      }
+      if (hasSol && hasEvm) {
+        throw new Error("Mixed Solana and EVM keys detected. Please import one chain at a time.");
+      }
+      return hasEvm ? "monad" : "sol";
+    };
+
+    const chainForImport: "sol" | "monad" = detectChain(validKeys);
+    const isChainMismatch = chainForImport !== currentChain;
+
     try {
       // Send all private keys in a single request (similar to createTurnkeyWallet pattern)
       const res = await fetch(
@@ -2496,7 +2585,7 @@ export default function PortfolioPage() {
           body: JSON.stringify({
             userId: user.id,
             privateKeys: validKeys, // Send array of private keys
-            chain: currentChain, // 'sol' or 'monad'
+            chain: chainForImport, // 'sol' or 'monad'
           }),
         }
       );
@@ -2504,12 +2593,38 @@ export default function PortfolioPage() {
       const data = await res.json().catch(() => ({}));
 
       if (!res.ok) {
-        const errorMessage = data.error || data.message || `Failed to import wallets (${res.status})`;
+        let resultError = null;
+        if (Array.isArray(data?.results)) {
+          const failures = data.results.filter((r: any) => !r?.success);
+          if (failures.length === 1) {
+            resultError = failures[0]?.error || null;
+          } else if (failures.length > 1) {
+            resultError = failures
+              .map((r: any) =>
+                r?.error ? `Wallet ${r.index}: ${r.error}` : null
+              )
+              .filter(Boolean)
+              .join("; ");
+          }
+        }
+        const errorMessage =
+          resultError ||
+          data.error ||
+          data.message ||
+          `Failed to import wallets (${res.status})`;
         throw new Error(errorMessage);
       }
 
       // Refresh wallets after import
       await fetchWallets();
+
+      if (isChainMismatch) {
+        // Auto-switch to the imported chain so the user sees the wallets there
+        const targetChain = chainForImport;
+        const nextQuery = { ...router.query, chain: targetChain };
+        await router.push({ pathname: router.pathname, query: nextQuery }, undefined, { shallow: true });
+        toast.success(`Imported to ${targetChain.toUpperCase()} and switched view to that chain.`);
+      }
 
       // Handle results from backend (similar to createTurnkeyWallet response pattern)
       const successCount = data.successCount || 0;
@@ -2527,12 +2642,15 @@ export default function PortfolioPage() {
 
       if (failureCount > 0) {
         // Some succeeded, some failed
-        const errorDetails = data.results
-          ?.filter((r: any) => !r.success)
-          .map((r: any) => `Wallet ${r.index}: ${r.error}`)
-          .slice(0, 2)
-          .join("; ") || "";
-        toast.error(`Imported ${successCount} wallet(s), ${failureCount} failed. ${errorDetails}`);
+        const failures = data.results?.filter((r: any) => !r.success) || [];
+        const errorDetails =
+          failures.length === 1
+            ? failures[0]?.error || ""
+            : failures
+                .map((r: any) => `Wallet ${r.index}: ${r.error}`)
+                .slice(0, 2)
+                .join("; ");
+        toast.error(`Imported ${successCount} wallet(s), ${failureCount} failed${errorDetails ? `. ${errorDetails}` : ""}`);
       }
 
       if (successCount > 0) {
@@ -2540,6 +2658,8 @@ export default function PortfolioPage() {
       }
     } catch (err: any) {
       console.error("Failed to import wallets:", err);
+      const message = err?.message || "Failed to import wallets";
+      toast.error(message);
       throw err;
     }
   };
@@ -2636,7 +2756,7 @@ export default function PortfolioPage() {
                       </defs>
                     </svg>
                     <span className="text-sm text-[#9CA3AF]">
-                      {currentChain === 'monad' 
+                      {currentChain === 'monad'
                         ? `${formatSmartNumber(monBalance)} MON`
                         : `${formatSmartNumber(solBalance)} SOL`}
                     </span>
@@ -2739,20 +2859,13 @@ export default function PortfolioPage() {
                     </div> */}
                     <div>
                       <div className="text-[#6B7280] text-sm font-light">
-                        Available Balance in MON
+                        Available Balance in {currentChain === "monad" ? "MON" : "SOL"}
                       </div>
-                      <div className="text-2xl font-light text-[#f0f5f5]">
-                        {currentChain === 'monad' ? (
-                          <>
-                            <ChainIcon chain={currentChain} size="medium" />
-                            {formatSmartNumber(monBalance)} MON
-                          </>
-                        ) : (
-                          <>
-                            <ChainIcon chain="monad" size="medium" />
-                            0 MON
-                          </>
-                        )}
+                      <div className="text-2xl font-light text-[#f0f5f5] flex items-center gap-1">
+                        <ChainIcon chain={currentChain} size="medium" />
+                        {currentChain === "monad"
+                          ? `${formatSmartNumber(monBalance)} MON`
+                          : `${formatSmartNumber(solBalance)} SOL`}
                       </div>
                     </div>
                   </div>
@@ -2803,7 +2916,7 @@ export default function PortfolioPage() {
                 {initialNativeBalanceRef.current !== null && (
                   <div className="bg-[#101114] rounded-lg p-6">
                     <div className="mb-4 text-[#f0f5f5] text-sm font-medium cursor-pointer hover:text-[#70E0B0] transition-colors">
-                      Wallet Balance Change
+                      Wallet Balance Change ({currentChain === "monad" ? "MON" : "SOL"})
                     </div>
                     <div className="flex flex-col">
                       <div
@@ -3465,7 +3578,9 @@ export default function PortfolioPage() {
                 <div className="py-2 -mx-4 px-4">
                   <div className="grid grid-cols-[2fr_1fr_1fr_1.2fr] gap-2 text-xs text-[#9CA3AF]">
                     <div className="font-medium truncate">Wallet</div>
-                    <div className="font-medium truncate text-center">Balance</div>
+                    <div className="font-medium truncate text-center">
+                      Balance ({currentChain === "monad" ? "MON" : "SOL"})
+                    </div>
                     <div className="font-medium truncate text-center">Holdings</div>
                     <div className="font-medium truncate text-center">Actions</div>
                   </div>
@@ -3473,7 +3588,9 @@ export default function PortfolioPage() {
                 {/* <div className="px-4 py-2 border-l border-[#2A2B33]">
                   <div className="grid grid-cols-4 gap-2 text-xs text-[#9CA3AF]">
                     <div className="font-medium truncate">Wallet</div>
-                    <div className="font-medium truncate">Balance</div>
+                    <div className="font-medium truncate">
+                      Balance ({currentChain === "monad" ? "MON" : "SOL"})
+                    </div>
                     <div className="font-medium truncate">Holdings</div>
                     <div className="font-medium truncate">Actions</div>
                   </div>
@@ -3879,9 +3996,16 @@ export default function PortfolioPage() {
           setShowExportModal(false);
           setExportWalletId(null);
           setExportWalletAddress(null);
+          setForceExportChain(null);
         }}
         walletId={exportWalletId || undefined}
         walletAddress={exportWalletAddress || undefined}
+        forceExport={forceExportChain !== null}
+        onExported={handleExported}
+        onForceExportConfirmed={async () => {
+          await acknowledgeBackup();
+          await handleExported();
+        }}
       />
     </>
   );

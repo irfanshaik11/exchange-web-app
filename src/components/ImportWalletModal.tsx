@@ -96,6 +96,7 @@ export default function ImportWalletModal({ isOpen, onClose, onImport, chain = '
       <div 
         className="bg-[#101114] rounded-lg shadow-2xl w-full max-w-md relative border border-[#2A2B33]"
         onClick={(e) => e.stopPropagation()}
+        autoComplete="off"
       >
         {/* Header */}
         <div className="px-6 py-4 border-b border-[#2A2B33]">
@@ -140,6 +141,8 @@ export default function ImportWalletModal({ isOpen, onClose, onImport, chain = '
                       value={key}
                       onChange={(e) => updatePrivateKey(index, e.target.value)}
                       disabled={isImporting}
+                      name={`import-key-${index}`}
+                      autoComplete="new-password"
                     />
                     <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-2">
                       <button
@@ -206,4 +209,3 @@ export default function ImportWalletModal({ isOpen, onClose, onImport, chain = '
     </div>
   );
 }
-
