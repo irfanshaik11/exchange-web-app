@@ -96,7 +96,6 @@ export default function ImportWalletModal({ isOpen, onClose, onImport, chain = '
       <div 
         className="bg-[#101114] rounded-lg shadow-2xl w-full max-w-md relative border border-[#2A2B33]"
         onClick={(e) => e.stopPropagation()}
-        autoComplete="off"
       >
         {/* Header */}
         <div className="px-6 py-4 border-b border-[#2A2B33]">

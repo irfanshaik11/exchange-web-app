@@ -83,7 +83,6 @@ export default function WalletExportGuard() {
       forceExport
       walletId={user?.walletId || undefined}
       walletAddress={derivedAddress}
-      preferredChain={preferredChain}
       onForceExportConfirmed={handleConfirm}
       onExported={handleExported}
     />

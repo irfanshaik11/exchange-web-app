@@ -7507,7 +7507,6 @@ function PulseTable({
               className="w-full rounded-lg border border-neutral-700 bg-neutral-800 px-3 py-2 text-xs focus:outline-none"
               style={{
                 color: "#f0f5f5",
-                focusRingColor: "#31e3ac",
               }}
               onFocus={(e) => {
                 e.currentTarget.style.boxShadow = "0 0 0 2px rgba(49, 227, 172, 0.5)";
@@ -7515,7 +7514,6 @@ function PulseTable({
               onBlur={(e) => {
                 e.currentTarget.style.boxShadow = "none";
               }}
-              style={{ color: "#f0f5f5" }}
               readOnly
             />
           </div>
