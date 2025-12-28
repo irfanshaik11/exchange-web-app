@@ -241,7 +241,7 @@ export default function ImportSolanaWalletModal({
         finalizeUrl = `${process.env.NEXT_PUBLIC_BACKEND_URL}/api/users/turnkey/import/finalize`;
         body = {
           encryptedBundle,
-          walletName: "Imported Solana Wallet",
+          walletName: "Imported Wallet",
         };
       }
 

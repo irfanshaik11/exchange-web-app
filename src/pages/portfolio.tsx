@@ -3534,7 +3534,7 @@ export default function PortfolioPage() {
                             : "No wallets found"}
                       </div>
                     ) : (
-                      <>
+                      <div className="max-h-[70vh] overflow-y-auto pr-2 -mr-2">
                         {filteredWallets.map((wallet) => {
                           const displayAddress = getAddressForChain(wallet, currentChain);
                           const truncated =
@@ -3707,7 +3707,7 @@ export default function PortfolioPage() {
                             </div>
                           );
                         })}
-                      </>
+                      </div>
                     )}
                   </div>
                 </div>

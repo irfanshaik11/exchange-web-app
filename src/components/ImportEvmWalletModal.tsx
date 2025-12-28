@@ -241,7 +241,7 @@ export default function ImportEvmWalletModal({
         finalizeUrl = `${process.env.NEXT_PUBLIC_BACKEND_URL}/api/users/turnkey/import/finalize`;
         body = {
           encryptedBundle,
-          walletName: "Imported EVM Wallet",
+          walletName: "Imported Wallet",
         };
       }
 

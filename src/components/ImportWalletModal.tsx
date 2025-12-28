@@ -273,6 +273,7 @@ export default function ImportWalletModal({
       let encryptedBundle: string | null = null;
       let finalizeUrl: string;
       let body: any;
+      const walletLabelPrefix = "Imported Wallet";
 
       if (importMode === "privateKey") {
         // Map our keyFormat to Turnkey's expected format strings
@@ -289,7 +290,7 @@ export default function ImportWalletModal({
         body = {
           encryptedBundle,
           keyFormat: keyFormat, // Backend will normalize this
-          privateKeyName: "Imported Private Key",
+          privateKeyName: `${walletLabelPrefix} Private Key`,
         };
       } else {
         encryptedBundle =
@@ -300,7 +301,7 @@ export default function ImportWalletModal({
         finalizeUrl = `${process.env.NEXT_PUBLIC_BACKEND_URL}/api/users/turnkey/import/finalize`;
         body = {
           encryptedBundle,
-          walletName: "Imported Wallet",
+          walletName: walletLabelPrefix,
         };
       }
 
@@ -323,7 +324,16 @@ export default function ImportWalletModal({
       }
 
       // Determine which chain the imported wallet belongs to based on keyFormat
-      const importedChain = keyFormat === "solana" ? "SOL" : (keyFormat === "hexadecimal" ? "EVM/MON" : "wallet");
+      const importedChain =
+        importMode === "mnemonic"
+          ? walletLabelPrefix.includes("Solana")
+            ? "SOL"
+            : "EVM/MON"
+          : keyFormat === "solana"
+            ? "SOL"
+            : keyFormat === "hexadecimal"
+              ? "EVM/MON"
+              : "wallet";
 
       // Show helpful message if importing EVM wallet
       if (keyFormat === "hexadecimal") {
