@@ -22,7 +22,9 @@ import { FaSearch, FaEye, FaUpload, FaTimes, FaInfoCircle } from "react-icons/fa
 import { SiSolana } from "react-icons/si";
 import toast from "react-hot-toast";
 import { FiEdit2, FiCheck, FiX, FiInfo } from "react-icons/fi";
-import ImportWalletModal from "../components/ImportWalletModal";
+import ImportSolanaWalletModal from "../components/ImportSolanaWalletModal";
+import ImportEvmWalletModal from "../components/ImportEvmWalletModal";
+import { SolanaIcon } from "../components/Footer";
 import ExportWalletModal from "../components/ExportWalletModal";
 import { usePositionPrices } from "~/hooks/usePositionPrices";
 import { useWalletTokenBalances } from "~/hooks/useWalletTokenBalances";
@@ -471,7 +473,9 @@ export default function PortfolioPage() {
   const [walletRenameValue, setWalletRenameValue] = useState("");
   const [renamingWalletId, setRenamingWalletId] = useState<string | null>(null);
   const [walletBalances, setWalletBalances] = useState<Record<string, number>>({});
-  const [showImportModal, setShowImportModal] = useState(false);
+  const [showImportSolanaModal, setShowImportSolanaModal] = useState(false);
+  const [showImportEvmModal, setShowImportEvmModal] = useState(false);
+  const [showImportDropdown, setShowImportDropdown] = useState(false);
   const [showExportModal, setShowExportModal] = useState(false);
   const [exportWalletId, setExportWalletId] = useState<string | null>(null);
   const [exportWalletAddress, setExportWalletAddress] = useState<string | null>(null);
@@ -2534,136 +2538,6 @@ export default function PortfolioPage() {
     }
   };
 
-  const handleImportWallets = async (privateKeys: string[]) => {
-    if (!user?.id || !user?.bearerToken) {
-      throw new Error("Please log in first");
-    }
-
-    if (!privateKeys || privateKeys.length === 0) {
-      throw new Error("No private keys provided");
-    }
-
-    // Filter out empty keys
-    const validKeys = privateKeys.filter(key => key?.trim().length > 0);
-    
-    if (validKeys.length === 0) {
-      throw new Error("No valid private keys provided");
-    }
-
-    // Detect chain from provided keys. Reject mixed chains; auto-switch when needed.
-    const detectChain = (keys: string[]): "sol" | "monad" => {
-      let hasSol = false;
-      let hasEvm = false;
-      for (const key of keys) {
-        const trimmed = key.trim();
-        const maybeHex = trimmed.startsWith("0x") && trimmed.length === 66;
-        if (maybeHex) {
-          hasEvm = true;
-        } else {
-          hasSol = true;
-        }
-      }
-      if (hasSol && hasEvm) {
-        throw new Error("Mixed Solana and EVM keys detected. Please import one chain at a time.");
-      }
-      return hasEvm ? "monad" : "sol";
-    };
-
-    const chainForImport: "sol" | "monad" = detectChain(validKeys);
-    const isChainMismatch = chainForImport !== currentChain;
-
-    try {
-      // Send all private keys in a single request (similar to createTurnkeyWallet pattern)
-      const res = await fetch(
-        `${process.env.NEXT_PUBLIC_BACKEND_URL}/api/users/wallet/import`,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${user.bearerToken}`,
-          },
-          body: JSON.stringify({
-            userId: user.id,
-            privateKeys: validKeys, // Send array of private keys
-            chain: chainForImport, // 'sol' or 'monad'
-          }),
-        }
-      );
-
-      const data = await res.json().catch(() => ({}));
-
-      if (!res.ok) {
-        let resultError = null;
-        if (Array.isArray(data?.results)) {
-          const failures = data.results.filter((r: any) => !r?.success);
-          if (failures.length === 1) {
-            resultError = failures[0]?.error || null;
-          } else if (failures.length > 1) {
-            resultError = failures
-              .map((r: any) =>
-                r?.error ? `Wallet ${r.index}: ${r.error}` : null
-              )
-              .filter(Boolean)
-              .join("; ");
-          }
-        }
-        const errorMessage =
-          resultError ||
-          data.error ||
-          data.message ||
-          `Failed to import wallets (${res.status})`;
-        throw new Error(errorMessage);
-      }
-
-      // Refresh wallets after import
-      await fetchWallets();
-
-      if (isChainMismatch) {
-        // Auto-switch to the imported chain so the user sees the wallets there
-        const targetChain = chainForImport;
-        const nextQuery = { ...router.query, chain: targetChain };
-        await router.push({ pathname: router.pathname, query: nextQuery }, undefined, { shallow: true });
-        toast.success(`Imported to ${targetChain.toUpperCase()} and switched view to that chain.`);
-      }
-
-      // Handle results from backend (similar to createTurnkeyWallet response pattern)
-      const successCount = data.successCount || 0;
-      const failureCount = data.failureCount || 0;
-
-      if (successCount === 0) {
-        // All failed
-        const errorDetails = data.results
-          ?.filter((r: any) => !r.success)
-          .map((r: any) => `Wallet ${r.index}: ${r.error}`)
-          .slice(0, 3)
-          .join("; ") || "All wallets failed to import";
-        throw new Error(errorDetails);
-      }
-
-      if (failureCount > 0) {
-        // Some succeeded, some failed
-        const failures = data.results?.filter((r: any) => !r.success) || [];
-        const errorDetails =
-          failures.length === 1
-            ? failures[0]?.error || ""
-            : failures
-                .map((r: any) => `Wallet ${r.index}: ${r.error}`)
-                .slice(0, 2)
-                .join("; ");
-        toast.error(`Imported ${successCount} wallet(s), ${failureCount} failed${errorDetails ? `. ${errorDetails}` : ""}`);
-      }
-
-      if (successCount > 0) {
-        toast.success(`Successfully imported ${successCount} wallet(s)`);
-      }
-    } catch (err: any) {
-      console.error("Failed to import wallets:", err);
-      const message = err?.message || "Failed to import wallets";
-      toast.error(message);
-      throw err;
-    }
-  };
-
   return (
     <>
       <Head>
@@ -3547,12 +3421,49 @@ export default function PortfolioPage() {
                       <span className="hidden sm:inline">Show Archived</span>
                       <span className="sm:hidden">Archived</span>
                     </button>
-                    <button 
-                      onClick={() => setShowImportModal(true)}
-                      className="px-3  py-1 rounded-full bg-[#374151] text-xs text-[#f0f5f5] hover:bg-[#4B5563] transition-colors cursor-pointer whitespace-nowrap"
-                    >
-                      Import
-                    </button>
+                    <div className="relative">
+                      <button
+                        onClick={() => setShowImportDropdown(!showImportDropdown)}
+                        className="px-3 py-1 rounded-full bg-[#374151] text-xs text-[#f0f5f5] hover:bg-[#4B5563] transition-colors cursor-pointer whitespace-nowrap"
+                      >
+                        Import ▾
+                      </button>
+                      {showImportDropdown && (
+                        <>
+                          <div
+                            className="fixed inset-0 z-10"
+                            onClick={() => setShowImportDropdown(false)}
+                          />
+                          <div className="absolute top-full mt-1 right-0 bg-[#1A1B23] border border-[#2A2B33] rounded-lg shadow-lg z-20 min-w-[200px]">
+                            <button
+                              onClick={() => {
+                                setShowImportSolanaModal(true);
+                                setShowImportDropdown(false);
+                              }}
+                              className="w-full px-4 py-2 text-left text-sm text-[#f0f5f5] hover:bg-[#2A2B33] transition-colors first:rounded-t-lg flex items-center gap-2"
+                            >
+                              <SolanaIcon size={16} />
+                              Import Solana Wallet
+                            </button>
+                            <button
+                              onClick={() => {
+                                setShowImportEvmModal(true);
+                                setShowImportDropdown(false);
+                              }}
+                              className="w-full px-4 py-2 text-left text-sm text-[#f0f5f5] hover:bg-[#2A2B33] transition-colors last:rounded-b-lg flex items-center gap-2"
+                            >
+                              <img
+                                src="./monad_icon.png"
+                                alt="Monad"
+                                className="object-contain"
+                                style={{ width: 16, height: 16 }}
+                              />
+                              Import EVM/Monad Wallet
+                            </button>
+                          </div>
+                        </>
+                      )}
+                    </div>
                     <button
                     onClick={handleCreateWallet}
                     disabled={creatingWallet || !user}
@@ -3981,12 +3892,18 @@ export default function PortfolioPage() {
       </div>
       <Footer />
       
-      {/* Import Wallet Modal */}
-      <ImportWalletModal
-        isOpen={showImportModal}
-        onClose={() => setShowImportModal(false)}
-        onImport={handleImportWallets}
-        chain={currentChain as 'sol' | 'monad'}
+      {/* Import Solana Wallet Modal */}
+      <ImportSolanaWalletModal
+        isOpen={showImportSolanaModal}
+        onClose={() => setShowImportSolanaModal(false)}
+        onImported={fetchWallets}
+      />
+
+      {/* Import EVM/Monad Wallet Modal */}
+      <ImportEvmWalletModal
+        isOpen={showImportEvmModal}
+        onClose={() => setShowImportEvmModal(false)}
+        onImported={fetchWallets}
       />
       
       {/* Export Wallet Modal */}
