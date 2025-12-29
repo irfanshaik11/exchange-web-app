@@ -1,9 +1,10 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { FiSettings, FiExternalLink, FiX } from 'react-icons/fi';
 import { FaFilter, FaArrowUp, FaArrowDown } from 'react-icons/fa';
 import { SiSolana } from 'react-icons/si';
 import { MdOutlineBubbleChart } from 'react-icons/md';
 import useCodexHolders from '../../hooks/useCodexHolders';
+import useSolanaTokenWebSocket, { type SolanaTokenHolder } from '../../hooks/useSolanaTokenWebSocket';
 import { getWalletSolBalance } from '../../utils/walletTracking';
 import type { Token } from '~/utils/db';
 
@@ -149,45 +150,86 @@ const AX = {
   sell: "#FF4D7F",
 };
 
-const HoldersTable: React.FC<HoldersTableProps> = ({ 
-  token, 
+const HoldersTable: React.FC<HoldersTableProps> = ({
+  token,
   onBubblemapToggle,
   isBubblemapVisible = false,
   containerWidth = 1000,
 }) => {
-  const { holders, isLoading, error } = useCodexHolders(token?.mint);
+  // Use WebSocket for holders (primary source)
+  const { holders: wsHolders, loading: wsLoading } = useSolanaTokenWebSocket({
+    mintAddress: token?.mint,
+    enabled: !!token?.mint,
+  });
+
+  // Fallback to Codex if WebSocket holders are empty
+  const { holders: codexHolders, isLoading: codexLoading, error: codexError } = useCodexHolders(token?.mint);
+
+  // Prefer WebSocket holders, fall back to Codex
+  // Only use WebSocket data if it's not loading AND has data
+  const wsFinished = !wsLoading;
+  const useWebSocketData = wsFinished && wsHolders && wsHolders.length > 0;
+  // Loading if WebSocket is still loading, OR if WebSocket finished with no data and Codex is loading
+  const isLoading = wsLoading || (!useWebSocketData && codexLoading);
+  const error = useWebSocketData ? null : codexError;
+
   const [holdersWithBalances, setHoldersWithBalances] = useState<HolderWithBalance[]>([]);
   const tableRef = useRef<HTMLDivElement>(null);
 
+  // Convert WebSocket holders to HolderWithBalance format
+  const normalizedHolders = useMemo(() => {
+    if (useWebSocketData && wsHolders) {
+      // Use WebSocket holders data
+      return wsHolders.map((h: SolanaTokenHolder) => ({
+        address: h.wallet_address,
+        lastTransactionAt: h.last_activity_at ? Math.floor(new Date(h.last_activity_at).getTime() / 1000) : 0,
+        solBalance: null,
+        isLoadingBalance: true,
+        // Convert SOL amounts to USD (approximate, using SOL price ~$200)
+        amountBoughtUsd30d: String(h.total_bought_sol * 200),
+        amountSoldUsd30d: String(h.total_sold_sol * 200),
+        tokenAmountBought30d: String(h.total_bought_tokens),
+        tokenAmountSold30d: String(h.total_sold_tokens),
+        tokenAcquisitionCostUsd: String(h.total_bought_sol * 200),
+        tokenBalance: String(h.remaining_tokens),
+        buys30d: h.buy_count,
+        sells30d: h.sell_count,
+      }));
+    } else if (codexHolders && codexHolders.length > 0) {
+      // Use Codex holders data
+      return codexHolders.map(h => ({
+        address: h.address,
+        lastTransactionAt: h.lastTransactionAt,
+        solBalance: null,
+        isLoadingBalance: true,
+        amountBoughtUsd30d: h.amountBoughtUsd30d,
+        amountSoldUsd30d: h.amountSoldUsd30d,
+        tokenAmountBought30d: h.tokenAmountBought30d,
+        tokenAmountSold30d: h.tokenAmountSold30d,
+        tokenAcquisitionCostUsd: h.tokenAcquisitionCostUsd,
+        tokenBalance: h.tokenBalance,
+        buys30d: h.buys30d,
+        sells30d: h.sells30d,
+      }));
+    }
+    return [];
+  }, [useWebSocketData, wsHolders, codexHolders]);
+
   // Fetch SOL balances for holders
   useEffect(() => {
-    if (!holders || holders.length === 0) {
+    if (normalizedHolders.length === 0) {
       setHoldersWithBalances([]);
       return;
     }
 
     // Initialize with holders data
-    const initial: HolderWithBalance[] = holders.map(h => ({
-      address: h.address,
-      lastTransactionAt: h.lastTransactionAt,
-      solBalance: null,
-      isLoadingBalance: true,
-      amountBoughtUsd30d: h.amountBoughtUsd30d,
-      amountSoldUsd30d: h.amountSoldUsd30d,
-      tokenAmountBought30d: h.tokenAmountBought30d,
-      tokenAmountSold30d: h.tokenAmountSold30d,
-      tokenAcquisitionCostUsd: h.tokenAcquisitionCostUsd,
-      tokenBalance: h.tokenBalance,
-      buys30d: h.buys30d,
-      sells30d: h.sells30d,
-    }));
-    setHoldersWithBalances(initial);
+    setHoldersWithBalances(normalizedHolders);
 
     // Fetch balances in batches to avoid overwhelming the API
     const fetchBalances = async () => {
       const batchSize = 5;
-      for (let i = 0; i < holders.length; i += batchSize) {
-        const batch = holders.slice(i, i + batchSize);
+      for (let i = 0; i < normalizedHolders.length; i += batchSize) {
+        const batch = normalizedHolders.slice(i, i + batchSize);
         const balancePromises = batch.map(async (holder) => {
           try {
             const balance = await getWalletSolBalance(holder.address);
@@ -199,8 +241,8 @@ const HoldersTable: React.FC<HoldersTableProps> = ({
         });
 
         const results = await Promise.all(balancePromises);
-        
-        setHoldersWithBalances(prev => 
+
+        setHoldersWithBalances(prev =>
           prev.map(h => {
             const result = results.find(r => r.address === h.address);
             if (result) {
@@ -215,14 +257,14 @@ const HoldersTable: React.FC<HoldersTableProps> = ({
         );
 
         // Small delay between batches to avoid rate limiting
-        if (i + batchSize < holders.length) {
+        if (i + batchSize < normalizedHolders.length) {
           await new Promise(resolve => setTimeout(resolve, 200));
         }
       }
     };
 
     fetchBalances();
-  }, [holders]);
+  }, [normalizedHolders]);
 
   const handleBubblemapClick = useCallback(() => {
     if (onBubblemapToggle) {
@@ -324,7 +366,7 @@ const HoldersTable: React.FC<HoldersTableProps> = ({
                   <div className="text-red-400 text-sm">{error}</div>
                 </td>
               </tr>
-            ) : !holders || holders.length === 0 ? (
+            ) : holdersWithBalances.length === 0 ? (
               <tr>
                 <td colSpan={7} className="px-4 py-8 text-center">
                   <div className="text-neutral-400 text-sm">No holders data available</div>

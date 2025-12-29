@@ -5,13 +5,14 @@ import { FaFilter } from "react-icons/fa";
 import { IoOpenOutline } from "react-icons/io5";
 import React from 'react';
 import { formatSmartNumber, formatMarketCap } from '~/utils/db';
-import useOptimizedTradeEventsWebSocket from '../../hooks/useOptimizedTradeEventsWebSocket';
+import useSolanaTokenWebSocket from '../../hooks/useSolanaTokenWebSocket';
 import type { Token } from '~/utils/db';
 
 interface CodexTradesProps {
   token: Token | null;
   initialTrades?: any[];
   onTradesUpdate?: (trades: any[]) => void; // Callback to update parent cache when trades change
+  pairAddress?: string; // Fallback pair address when token doesn't have it
 }
 
 function getAge(timestamp: number) {
@@ -106,6 +107,8 @@ function normalizeTrade(
   const hasWsShape = trade.side && trade.amount && trade.price && trade.pair_address;
   const hasBackend = trade.event_type && (trade.amount !== undefined || trade.price_in_usd !== undefined);
   const hasCodex = trade.eventDisplayType && trade.data;
+  // New format from /v1/ws/trades/{mint} endpoint
+  const hasIndexerFormat = trade.type && (trade.sol_amount !== undefined || trade.token_amount !== undefined);
 
   if (typeof trade.timestamp === 'number') {
     timestampSec = trade.timestamp < 1e10 ? trade.timestamp : trade.timestamp / 1000;
@@ -150,6 +153,24 @@ function normalizeTrade(
 
     keyPart = (trade.transactionHash || trade.txHash || '') + (trade.timestamp || '');
     maker = trade.maker || trade.trader || '';
+  } else if (hasIndexerFormat) {
+    // New format from Solana indexer WebSocket (v1/ws/token/{mint})
+    isBuy = trade.type?.toLowerCase() === 'buy';
+    color = isBuy ? 'text-emerald-400' : 'text-red-400';
+    tokenAmount = Number(trade.token_amount || 0);
+    solAmount = Number(trade.sol_amount || 0);
+    // Handle both price_usd (new format) and total_usd/price (old format)
+    pricePerToken = Number(trade.price_usd || trade.price || 0);
+    totalUSD = Number(trade.total_usd || 0);
+    // If no total_usd, estimate from SOL amount (approx $200/SOL)
+    if (!totalUSD && solAmount > 0) {
+      totalUSD = solAmount * 200; // Approximate
+    }
+    if (!pricePerToken && tokenAmount > 0 && totalUSD > 0) pricePerToken = totalUSD / tokenAmount;
+    // Handle both signature (new format) and transaction_hash (old format)
+    keyPart = (trade.signature || trade.transaction_hash || trade.id || '') + (trade.timestamp || '');
+    // Handle both wallet_address (new format) and trader (old format)
+    maker = trade.wallet_address || trade.trader || '';
   } else {
     isBuy = !!(trade.side === 'buy' || trade.type === 'BUY');
     color = isBuy ? 'text-emerald-400' : 'text-red-400';
@@ -224,7 +245,7 @@ const SolIcon: React.FC = () => (
   </>
 );
 
-const CodexTrades: React.FC<CodexTradesProps> = ({ token, initialTrades = [], onTradesUpdate }) => {
+const CodexTrades: React.FC<CodexTradesProps> = ({ token, initialTrades = [], onTradesUpdate, pairAddress }) => {
   const [showAge, setShowAge] = React.useState(true); // true = Age, false = Time
   const [totalMode, setTotalMode] = React.useState<'usd' | 'sol'>('usd');
   const [mcMode, setMcMode] = React.useState<'mc' | 'price'>('mc'); // MC vs Price toggle
@@ -396,13 +417,22 @@ const CodexTrades: React.FC<CodexTradesProps> = ({ token, initialTrades = [], on
     return initialTrades;
   }, [cachedTradesFromStorage, initialTrades]);
 
-  const { loading: wsLoading, trades: wsTrades } = useOptimizedTradeEventsWebSocket({
-    pairAddress: stableToken?.pair_address,
-    enabled: !!stableToken?.pair_address,
-    initialTrades: stableInitialTrades,
-    tokenDecimals: stableToken?.decimals || 9,
-    maxTrades: 200,
-    enableDeduplication: true,
+  // Use mint if available, fallback to pair_address, then fallback to pairAddress prop
+  const mintForWebSocket = stableToken?.mint || stableToken?.pair_address || pairAddress;
+
+  // Debug logging
+  console.log('[CodexTrades] Debug:', {
+    tokenMint: stableToken?.mint,
+    tokenPairAddress: stableToken?.pair_address,
+    propPairAddress: pairAddress,
+    mintForWebSocket,
+    enabled: !!mintForWebSocket,
+  });
+
+  const { loading: wsLoading, trades: wsTrades } = useSolanaTokenWebSocket({
+    mintAddress: mintForWebSocket,
+    enabled: !!mintForWebSocket,
+    maxTrades: 100,
   });
 
   // Preserve trades - once we have trades from WebSocket, always use them

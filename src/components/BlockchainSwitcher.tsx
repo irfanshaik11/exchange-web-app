@@ -87,8 +87,46 @@ export default function BlockchainSwitcher() {
   const [isOpen, setIsOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
-  // Get current chain from query parameter, default to 'monad'
-  const currentChain = (router.query.chain as string) || 'monad';
+  // Track intentional chain changes to prevent sync from overriding
+  const intentionalChangeRef = useRef<string | null>(null);
+
+  // Use local state for immediate UI feedback, synced with router
+  const [localChain, setLocalChain] = useState<string>(() => {
+    // Initialize from URL params if available
+    if (typeof window !== 'undefined') {
+      const urlParams = new URLSearchParams(window.location.search);
+      return urlParams.get('chain') || 'monad';
+    }
+    return 'monad';
+  });
+
+  // Sync local chain with router query - but only when URL explicitly has chain param
+  useEffect(() => {
+    if (!router.isReady) return;
+
+    // Check if we just made an intentional change - don't override it
+    if (intentionalChangeRef.current) {
+      const urlParams = new URLSearchParams(router.asPath.split('?')[1] || '');
+      const chainInUrl = urlParams.get('chain');
+      // Only clear the intentional change once URL has updated
+      if (chainInUrl === intentionalChangeRef.current) {
+        console.log('[BlockchainSwitcher] URL updated to:', chainInUrl);
+        intentionalChangeRef.current = null;
+      }
+      return; // Don't sync while waiting for URL to update
+    }
+
+    // Only sync if URL explicitly has a chain parameter
+    const urlParams = new URLSearchParams(router.asPath.split('?')[1] || '');
+    const chainFromUrl = urlParams.get('chain');
+
+    if (chainFromUrl && chainFromUrl !== localChain) {
+      console.log('[BlockchainSwitcher] Syncing chain from URL:', localChain, '->', chainFromUrl);
+      setLocalChain(chainFromUrl);
+    }
+  }, [router.asPath, router.query.chain, router.isReady, localChain]);
+
+  const currentChain = localChain;
   const selectedBlockchain = blockchains.find(b => b.id === currentChain) || blockchains[0];
 
   // Close dropdown when clicking outside
@@ -110,9 +148,20 @@ export default function BlockchainSwitcher() {
 
   const handleChainSelect = (chainId: string) => {
     setIsOpen(false);
-    
+
+    // Mark this as an intentional change to prevent sync from overriding
+    intentionalChangeRef.current = chainId;
+
+    // Immediately update local state for instant UI feedback
+    setLocalChain(chainId);
+
     // Update the current page's chain query parameter
     const currentPath = router.pathname;
+    console.log('[BlockchainSwitcher] Selecting chain:', chainId);
+    console.log('[BlockchainSwitcher] Current path:', currentPath);
+    console.log('[BlockchainSwitcher] Current query:', router.query);
+    console.log('[BlockchainSwitcher] New query will be:', { ...router.query, chain: chainId });
+
     router.push({
       pathname: currentPath,
       query: { ...router.query, chain: chainId },

@@ -1,11 +1,12 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { formatSmartNumber } from '~/utils/db';
-import useCodexTopTraders from '../../hooks/useCodexTopTraders';
+import useSolanaTokenWebSocket, { type SolanaTopTrader } from '../../hooks/useSolanaTokenWebSocket';
 import type { Token } from '~/utils/db';
 import { FaExternalLinkAlt, FaCrown, FaBullseye, FaLeaf, FaLink, FaStar } from 'react-icons/fa';
 
 interface CodexTopTradersProps {
   token: Token | null;
+  pairAddress?: string; // Fallback pair address when token doesn't have mint
 }
 
 function getAge(timestamp: number) {
@@ -58,7 +59,7 @@ function formatPrice(amountUsd: string, tokenAmount: string) {
   return `$${price.toFixed(2)}`;
 }
 
-const CodexTopTraders: React.FC<CodexTopTradersProps> = ({ token }) => {
+const CodexTopTraders: React.FC<CodexTopTradersProps> = ({ token, pairAddress }) => {
   // Client-side localStorage cache for top traders (persists across page reloads)
   const CACHE_KEY_PREFIX = 'codex_top_traders_cache_';
   const CACHE_EXPIRY_MS = 5 * 60 * 1000; // 5 minutes cache expiry
@@ -155,12 +156,59 @@ const CodexTopTraders: React.FC<CodexTopTradersProps> = ({ token }) => {
     }
   }, []);
 
-  const shouldShowSkeleton = !token || (!token.name && !token.symbol);
+  // Use mint if available, fallback to pair_address, then fallback to pairAddress prop
+  const mintForWebSocket = token?.mint || token?.pair_address || pairAddress;
 
-  const { traders, isLoading, error } = useCodexTopTraders(token?.mint, {
-    limit: 20,
-    tradingPeriod: 'WEEK'
+  // Only show skeleton if we have absolutely no address to work with
+  const shouldShowSkeleton = !mintForWebSocket;
+
+  // Debug logging
+  console.log('[CodexTopTraders] Debug:', {
+    hasToken: !!token,
+    tokenMint: token?.mint,
+    tokenPairAddress: token?.pair_address,
+    propPairAddress: pairAddress,
+    mintForWebSocket,
+    shouldShowSkeleton,
   });
+
+  // Use WebSocket for top traders (only source - no Codex fallback)
+  const { topTraders: wsTopTraders, loading: wsLoading, error: wsError } = useSolanaTokenWebSocket({
+    mintAddress: mintForWebSocket,
+    enabled: !!mintForWebSocket,
+  });
+
+  // Normalize WebSocket top traders to match Codex format
+  const normalizedWsTraders = useMemo(() => {
+    if (!wsTopTraders || wsTopTraders.length === 0) return [];
+
+    const SOL_PRICE = 200; // Approximate SOL price
+
+    return wsTopTraders.map((t: SolanaTopTrader) => ({
+      walletAddress: t.wallet_address,
+      amountBoughtUsd: String(t.total_bought_sol * SOL_PRICE),
+      amountSoldUsd: String(t.total_sold_sol * SOL_PRICE),
+      volumeUsd: String((t.total_bought_sol + t.total_sold_sol) * SOL_PRICE),
+      realizedProfitUsd: String(t.realized_pnl * SOL_PRICE),
+      realizedProfitPercentage: t.realized_pnl > 0 && t.total_bought_sol > 0
+        ? t.realized_pnl / t.total_bought_sol
+        : 0,
+      tokenBalance: String(t.remaining_tokens),
+      lastTransactionAt: t.last_activity_at
+        ? Math.floor(new Date(t.last_activity_at).getTime() / 1000)
+        : 0,
+      tokenAmountBought: String(t.total_bought_tokens),
+      tokenAmountSold: String(t.total_sold_tokens),
+      buys: t.buy_count,
+      sells: t.sell_count,
+      remainingPercent: t.remaining_percent,
+    }));
+  }, [wsTopTraders]);
+
+  // Use WebSocket data only (no Codex fallback)
+  const traders = normalizedWsTraders;
+  const isLoading = wsLoading;
+  const error = wsError;
 
   // Use cached traders if available, otherwise use fetched traders
   const displayTraders = React.useMemo(() => {

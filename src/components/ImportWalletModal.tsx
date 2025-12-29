@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { FaTimes } from "react-icons/fa";
 import { AlertTriangle } from "lucide-react";
-import { IframeStamper } from "@turnkey/iframe-stamper";
+import { IframeStamper, KeyFormat } from "@turnkey/iframe-stamper";
 import Cookies from "js-cookie";
 import toast from "react-hot-toast";
 
@@ -276,9 +276,9 @@ export default function ImportWalletModal({
       const walletLabelPrefix = "Imported Wallet";
 
       if (importMode === "privateKey") {
-        // Map our keyFormat to Turnkey's expected format strings
-        // Turnkey expects: "solana" for base58 keys, "hexadecimal" for 0x keys
-        const turnkeyFormat = keyFormat === "solana" ? "solana" : "hexadecimal";
+        // Map our keyFormat to Turnkey's expected KeyFormat enum
+        // Turnkey expects: KeyFormat.Solana for base58 keys, KeyFormat.Hexadecimal for 0x keys
+        const turnkeyFormat = keyFormat === "solana" ? KeyFormat.Solana : KeyFormat.Hexadecimal;
 
         encryptedBundle = await stamperRef.current.extractKeyEncryptedBundle(turnkeyFormat);
 
@@ -375,7 +375,6 @@ export default function ImportWalletModal({
       <div
         className="bg-[#101114] rounded-lg shadow-2xl w-full max-w-lg relative border border-[#2A2B33]"
         onClick={(e) => e.stopPropagation()}
-        autoComplete="off"
       >
         <div className="px-6 py-4 border-b border-[#2A2B33]">
           <div className="flex items-center justify-between">

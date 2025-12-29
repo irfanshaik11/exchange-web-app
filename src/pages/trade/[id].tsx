@@ -708,10 +708,11 @@ export default function TradePage() {
               </div>
               <div className="flex-1 min-h-0 overflow-y-auto" style={{ paddingBottom: '2rem' }}>
                 <div style={{ display: selectedTab === "Trades" ? "block" : "none", height: "100%" }}>
-                  <CodexTrades 
-                    token={correctTokenData || displayToken} 
+                  <CodexTrades
+                    token={correctTokenData || displayToken}
                     initialTrades={initialTradesForComponent}
                     onTradesUpdate={updateTradesCache}
+                    pairAddress={resolvedPairAddress}
                   />
                 </div>
                 <div style={{ display: selectedTab === "Orders" ? "block" : "none", height: "100%" }}>
@@ -719,12 +720,12 @@ export default function TradePage() {
                 </div>
                 <div style={{ display: selectedTab === "Top Traders" ? "block" : "none", height: "100%" }}>
                   <React.Suspense fallback={<div className="flex items-center justify-center h-full text-neutral-400">Loading...</div>}>
-                    <CodexTopTraders token={displayToken} />
+                    <CodexTopTraders token={displayToken} pairAddress={typeof id === "string" ? id : resolvedPairAddress} />
                   </React.Suspense>
                 </div>
                 <div style={{ display: selectedTab === "Holders" ? "block" : "none", height: "100%" }}>
                   <React.Suspense fallback={<div className="flex items-center justify-center h-full text-neutral-400">Loading...</div>}>
-                    <CodexHolders token={displayToken} />
+                    <CodexHolders token={displayToken} pairAddress={typeof id === "string" ? id : resolvedPairAddress} />
                   </React.Suspense>
                 </div>
                 <div style={{ display: selectedTab === "Dev Tokens" ? "block" : "none", height: "100%" }}>
