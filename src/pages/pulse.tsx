@@ -1613,6 +1613,7 @@ export default function PulsePage() {
                   skeletonRowCount={10}
                   isFirstOrLast="first"
                   showBubbleMetrics={false}
+                  chain={chain}
                 />
                 <PulseTable
                   title="Final Stretch"
@@ -1620,6 +1621,7 @@ export default function PulsePage() {
                   loading
                   skeletonRowCount={10}
                   showBubbleMetrics={false}
+                  chain={chain}
                 />
                 <PulseTable
                   title="Migrated"
@@ -1628,6 +1630,7 @@ export default function PulsePage() {
                   skeletonRowCount={10}
                   isFirstOrLast="last"
                   showBubbleMetrics={false}
+                  chain={chain}
                 />
               </div>
             </div>

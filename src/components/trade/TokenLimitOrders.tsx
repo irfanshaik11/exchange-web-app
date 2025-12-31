@@ -376,7 +376,7 @@ export default function TokenLimitOrders() {
 
         if (needsFallback) {
           const searchResponse = await fetch(
-            `/api/token-service/search?phrase=${encodeURIComponent(address)}&limit=1`
+            `${process.env.NEXT_PUBLIC_GO_SERVICE_URL}/v1/search?phrase=${encodeURIComponent(address)}&limit=1`
           );
           if (searchResponse.ok) {
             const searchData = await searchResponse.json();

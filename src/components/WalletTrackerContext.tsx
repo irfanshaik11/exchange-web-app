@@ -334,7 +334,7 @@ export function WalletTrackerProvider({
         try {
           // First try to search for the token to get its pair_address
           const searchResponse = await fetch(
-            `/api/token-service/search?phrase=${encodeURIComponent(normalizedEvent.mint)}&limit=1`,
+            `${process.env.NEXT_PUBLIC_GO_SERVICE_URL}/v1/search?phrase=${encodeURIComponent(normalizedEvent.mint)}&limit=1`,
           );
 
           if (searchResponse.ok) {

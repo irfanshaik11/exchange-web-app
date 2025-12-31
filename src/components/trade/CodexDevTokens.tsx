@@ -1,11 +1,14 @@
 import React, { useMemo } from 'react';
 import { formatSmartNumber } from '~/utils/db';
 import useCodexDevTokens from '../../hooks/useCodexDevTokens';
+import useSolanaTokenWebSocket, { type SolanaDevToken } from '../../hooks/useSolanaTokenWebSocket';
+import useMonadDevTokens from '../../hooks/useMonadDevTokens';
 import type { Token } from '~/utils/db';
 import DevTokensPieChart from './DevTokensPieChart';
 
 interface CodexDevTokensProps {
   token: Token | null;
+  chain?: 'sol' | 'monad'; // Chain to determine which endpoint to use
 }
 
 function getAge(timestamp: number) {
@@ -59,6 +62,27 @@ function formatVolume(volume: string) {
   return `$${vol.toFixed(0)}`;
 }
 
+// Helper to map WebSocket dev tokens to display format
+function mapWebSocketDevTokenToDisplay(wsToken: SolanaDevToken) {
+  // Convert ISO date string to Unix timestamp (seconds)
+  const createdAtTimestamp = wsToken.created_at
+    ? Math.floor(new Date(wsToken.created_at).getTime() / 1000)
+    : Math.floor(Date.now() / 1000);
+
+  return {
+    token: {
+      address: wsToken.mint,
+      name: wsToken.name,
+      symbol: wsToken.symbol,
+      createdAt: createdAtTimestamp,
+      migrated_pool_address: wsToken.migrated_pool_address || (wsToken.migrated ? 'migrated' : undefined),
+    },
+    marketCap: String(wsToken.market_cap || 0),
+    liquidity: String(wsToken.liquidity || 0),
+    volume24: String(wsToken.volume_24h || wsToken.volume_1h || 0),
+  };
+}
+
 const AX = {
   bg: "#101114",
   surface: "#1E1F26",
@@ -70,7 +94,7 @@ const AX = {
   nonMigrated: "#EC4899", // Pink/magenta for non-migrated
 };
 
-const CodexDevTokens: React.FC<CodexDevTokensProps> = ({ token }) => {
+const CodexDevTokens: React.FC<CodexDevTokensProps> = ({ token, chain = 'sol' }) => {
   // Client-side localStorage cache for dev tokens (persists across page reloads)
   const CACHE_KEY_PREFIX_LIMITED = 'codex_dev_tokens_limited_cache_';
   const CACHE_KEY_PREFIX_ALL = 'codex_dev_tokens_all_cache_';
@@ -213,30 +237,64 @@ const CodexDevTokens: React.FC<CodexDevTokensProps> = ({ token }) => {
 
   const shouldShowSkeleton = !token || (!token.name && !token.symbol);
 
-  // Fetch all tokens for pie chart calculations
-  const { tokens: allTokens, isLoading: isLoadingAll } = useCodexDevTokens(token?.mint, {
-    fetchAll: true
+  // Solana: WebSocket hook for real-time dev tokens (primary source when available)
+  const { devTokens: wsDevTokens, loading: wsLoading } = useSolanaTokenWebSocket({
+    mintAddress: token?.mint,
+    enabled: chain === 'sol' && !!token?.mint,
   });
 
-  // Fetch limited tokens for table display
-  const { tokens, isLoading, error } = useCodexDevTokens(token?.mint, {
-    limit: 10
-  });
+  // Monad: Dev wallet data hook (shows dev wallet activity for current token)
+  const { devTokenData: monadDevData, isLoading: monadLoading, error: monadError } = useMonadDevTokens(
+    token?.mint,
+    { enabled: chain === 'monad' && !!token?.mint }
+  );
 
-  // Use cached tokens if available, otherwise use fetched tokens
+  // Map WebSocket dev tokens to display format (Solana only)
+  const mappedWsDevTokens = React.useMemo(() => {
+    if (chain !== 'sol' || !wsDevTokens || wsDevTokens.length === 0) return [];
+    return wsDevTokens.map(mapWebSocketDevTokenToDisplay);
+  }, [chain, wsDevTokens]);
+
+  // Fetch all tokens for pie chart calculations (REST API fallback - Solana only)
+  const { tokens: allTokens, isLoading: isLoadingAll } = useCodexDevTokens(
+    chain === 'sol' ? token?.mint : undefined,
+    { fetchAll: true }
+  );
+
+  // Fetch limited tokens for table display (REST API fallback - Solana only)
+  const { tokens, isLoading, error } = useCodexDevTokens(
+    chain === 'sol' ? token?.mint : undefined,
+    { limit: 10 }
+  );
+
+  // Use WebSocket data as primary, then REST API, then cache as fallback
+  // Priority: WebSocket > REST API > LocalStorage cache
   const displayTokens = React.useMemo(() => {
+    // WebSocket data takes priority when available
+    if (mappedWsDevTokens.length > 0) {
+      console.log('[CodexDevTokens] Using WebSocket dev tokens:', mappedWsDevTokens.length);
+      return mappedWsDevTokens.slice(0, 10); // Limit to 10 for table
+    }
+    // Fall back to REST API data
     if (tokens.length > 0) {
       return tokens;
     }
+    // Fall back to cached data
     return cachedLimitedTokensFromStorage;
-  }, [tokens, cachedLimitedTokensFromStorage]);
+  }, [mappedWsDevTokens, tokens, cachedLimitedTokensFromStorage]);
 
   const displayAllTokens = React.useMemo(() => {
+    // WebSocket data takes priority when available
+    if (mappedWsDevTokens.length > 0) {
+      return mappedWsDevTokens;
+    }
+    // Fall back to REST API data
     if (allTokens.length > 0) {
       return allTokens;
     }
+    // Fall back to cached data
     return cachedAllTokensFromStorage;
-  }, [allTokens, cachedAllTokensFromStorage]);
+  }, [mappedWsDevTokens, allTokens, cachedAllTokensFromStorage]);
 
   // Save to cache when tokens update
   React.useEffect(() => {
@@ -252,8 +310,9 @@ const CodexDevTokens: React.FC<CodexDevTokensProps> = ({ token }) => {
   }, [allTokens, token?.mint, saveToCache]);
 
   // Only show loading if we don't have any tokens at all (not even cached ones)
-  const showLoading = isLoading && displayTokens.length === 0 && cachedLimitedTokensFromStorage.length === 0;
-  const showLoadingAll = isLoadingAll && displayAllTokens.length === 0 && cachedAllTokensFromStorage.length === 0;
+  // Consider both WebSocket and REST API loading states
+  const showLoading = (wsLoading || isLoading) && displayTokens.length === 0 && cachedLimitedTokensFromStorage.length === 0;
+  const showLoadingAll = (wsLoading || isLoadingAll) && displayAllTokens.length === 0 && cachedAllTokensFromStorage.length === 0;
 
   // Calculate migrated vs non-migrated counts from all tokens (use displayAllTokens which includes cache)
   const { migrated, nonMigrated, total } = useMemo(() => {
@@ -329,6 +388,79 @@ const CodexDevTokens: React.FC<CodexDevTokensProps> = ({ token }) => {
   }
 
   const matteBlack = '#000000';
+
+  // Monad: Show dev wallet data instead of dev tokens list
+  if (chain === 'monad') {
+    return (
+      <div className="w-full h-full flex flex-col p-4" style={{ backgroundColor: matteBlack }}>
+        <h3 className="text-lg font-semibold text-white mb-4">Dev Wallet Analysis</h3>
+
+        {monadError && (
+          <div className="p-3 bg-red-900/20 border border-red-500/30 rounded-lg mb-4">
+            <p className="text-red-400 text-sm">{monadError}</p>
+          </div>
+        )}
+
+        {monadLoading ? (
+          <div className="text-center py-6 text-neutral-500">
+            Loading dev wallet data...
+          </div>
+        ) : monadDevData ? (
+          <div className="grid grid-cols-2 gap-4">
+            {/* Dev Wallet Address */}
+            <div className="p-3 rounded-lg" style={{ backgroundColor: AX.surface2, border: `1px solid ${AX.border}` }}>
+              <div className="text-xs" style={{ color: AX.muted }}>Dev Wallet</div>
+              <a
+                href={`https://testnet.monadexplorer.com/address/${monadDevData.dev_wallet}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-sm font-mono text-white hover:text-emerald-400 transition-colors"
+              >
+                {monadDevData.dev_wallet.slice(0, 8)}...{monadDevData.dev_wallet.slice(-6)}
+              </a>
+            </div>
+
+            {/* Dev Holdings */}
+            <div className="p-3 rounded-lg" style={{ backgroundColor: AX.surface2, border: `1px solid ${AX.border}` }}>
+              <div className="text-xs" style={{ color: AX.muted }}>Dev Holdings</div>
+              <div className="text-sm font-semibold text-white">{monadDevData.dev_hold_percent.toFixed(2)}%</div>
+            </div>
+
+            {/* Buy Activity */}
+            <div className="p-3 rounded-lg" style={{ backgroundColor: AX.surface2, border: `1px solid ${AX.border}` }}>
+              <div className="text-xs" style={{ color: AX.muted }}>Buy Activity</div>
+              <div className="text-sm font-semibold text-emerald-400">{monadDevData.buy_count} buys</div>
+              <div className="text-xs" style={{ color: AX.muted }}>${monadDevData.buy_volume_usd.toFixed(2)}</div>
+            </div>
+
+            {/* Sell Activity */}
+            <div className="p-3 rounded-lg" style={{ backgroundColor: AX.surface2, border: `1px solid ${AX.border}` }}>
+              <div className="text-xs" style={{ color: AX.muted }}>Sell Activity</div>
+              <div className="text-sm font-semibold text-red-400">{monadDevData.sell_count} sells</div>
+              <div className="text-xs" style={{ color: AX.muted }}>${monadDevData.sell_volume_usd.toFixed(2)}</div>
+            </div>
+
+            {/* MON Balance */}
+            <div className="p-3 rounded-lg" style={{ backgroundColor: AX.surface2, border: `1px solid ${AX.border}` }}>
+              <div className="text-xs" style={{ color: AX.muted }}>MON Balance</div>
+              <div className="text-sm font-semibold text-white">{monadDevData.mon_balance.toFixed(4)} MON</div>
+              <div className="text-xs" style={{ color: AX.muted }}>${monadDevData.mon_balance_usd.toFixed(2)}</div>
+            </div>
+
+            {/* Token Balance */}
+            <div className="p-3 rounded-lg" style={{ backgroundColor: AX.surface2, border: `1px solid ${AX.border}` }}>
+              <div className="text-xs" style={{ color: AX.muted }}>Token Balance</div>
+              <div className="text-sm font-semibold text-white">{formatSmartNumber(monadDevData.token_balance)}</div>
+            </div>
+          </div>
+        ) : (
+          <div className="text-center py-6 text-neutral-500">
+            No dev wallet data available for this token.
+          </div>
+        )}
+      </div>
+    );
+  }
 
   return (
     <div className="w-full h-full flex flex-row min-h-0" style={{ backgroundColor: matteBlack, overflow: 'hidden' }}>

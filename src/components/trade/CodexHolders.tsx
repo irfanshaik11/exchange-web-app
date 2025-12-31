@@ -5,6 +5,7 @@ import HoldersTable from './HoldersTable';
 interface CodexHoldersProps {
   token: Token | null;
   pairAddress?: string; // Fallback pair address when token doesn't have mint
+  chain?: 'sol' | 'monad'; // Chain to determine which endpoint to use
 }
 
 const AX = {
@@ -19,7 +20,7 @@ const AX = {
   sell: "#FF4D7F",
 };
 
-const CodexHolders: React.FC<CodexHoldersProps> = ({ token, pairAddress }) => {
+const CodexHolders: React.FC<CodexHoldersProps> = ({ token, pairAddress, chain = 'sol' }) => {
   // Use mint if available, fallback to pair_address, then fallback to pairAddress prop
   const mintAddress = token?.mint || token?.pair_address || pairAddress;
 
@@ -82,11 +83,13 @@ const CodexHolders: React.FC<CodexHoldersProps> = ({ token, pairAddress }) => {
   const chainIds: Record<string, string> = {
     'ethereum': '1',
     'solana': 'sol',
+    'sol': 'sol',
     'bsc': '56',
     'polygon': '137',
     'arbitrum': '42161',
     'optimism': '10',
     'base': '8453',
+    'monad': 'monad', // Monad chain ID for InsightX (may need to be updated when they support it)
   };
 
   const getChainId = (chain: string): string => {
@@ -106,7 +109,7 @@ const CodexHolders: React.FC<CodexHoldersProps> = ({ token, pairAddress }) => {
     setIsLoading(false);
   };
 
-  const bubblemapsUrl = buildBubblemapsUrl(mintAddress, 'sol');
+  const bubblemapsUrl = buildBubblemapsUrl(mintAddress, chain === 'monad' ? 'monad' : 'sol');
 
   const handleResizeStart = useCallback((e: React.MouseEvent) => {
     // Only handle left mouse button
@@ -290,6 +293,7 @@ const CodexHolders: React.FC<CodexHoldersProps> = ({ token, pairAddress }) => {
             onBubblemapToggle={handleBubblemapToggle}
             isBubblemapVisible={showBubblemap}
             containerWidth={tableWidth}
+            chain={chain}
           />
         </div>
 

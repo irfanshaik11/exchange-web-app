@@ -928,7 +928,7 @@ export default function WalletTrackerContent() {
                                 let tokenAddress = trade.pair_address;
                                 if (!tokenAddress && trade.mint) {
                                   try {
-                                    const searchResponse = await fetch(`/api/token-service/search?phrase=${encodeURIComponent(trade.mint)}&limit=1`);
+                                    const searchResponse = await fetch(`${process.env.NEXT_PUBLIC_GO_SERVICE_URL}/v1/search?phrase=${encodeURIComponent(trade.mint)}&limit=1`);
                                     if (searchResponse.ok) {
                                       const searchData = await searchResponse.json();
                                       if (searchData.tokens && searchData.tokens.length > 0) {

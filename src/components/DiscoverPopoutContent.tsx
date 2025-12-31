@@ -2937,8 +2937,8 @@ export default function DiscoverPopoutContent() {
                   } catch (err) {
                     console.error('[Discover] Prefetch failed:', err);
                   }
-                  // Navigate to trade page
-                  router.push(`/trade/${id}`);
+                  // Navigate to trade page with chain=sol for Solana tokens
+                  router.push(`/trade/${id}?chain=sol`);
                 }}
                 quickBuyAmount={Number(quickBuyAmount) || 0}
                 onQuickBuy={handleQuickBuy}

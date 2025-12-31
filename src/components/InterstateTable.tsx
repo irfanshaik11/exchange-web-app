@@ -1613,8 +1613,16 @@ export default function InterstateTable({
                     const url = `/trade/monad/${address}?${queryParams.toString()}`;
                     router.push(url);
                   } else {
-                    // For Solana, use regular format
-                    router.push(`/trade/${address}`);
+                    // For Solana, include chain=sol parameter
+                    const solQueryParams = new URLSearchParams();
+                    if (token.name) solQueryParams.set('_name', token.name);
+                    if (token.symbol) solQueryParams.set('_symbol', token.symbol);
+                    if ((token as any).price_usd) solQueryParams.set('_price', (token as any).price_usd.toString());
+                    if (token.market_cap_usd) solQueryParams.set('_mcap', token.market_cap_usd.toString());
+                    if (token.uri || token.logo || (token as any).image) solQueryParams.set('_image', token.uri || token.logo || (token as any).image || '');
+                    solQueryParams.set('_mint', address);
+                    solQueryParams.set('chain', 'sol');
+                    router.push(`/trade/${address}?${solQueryParams.toString()}`);
                   }
                 }
               };

@@ -58,13 +58,28 @@ export interface SolanaTopTrader {
   last_activity_at: string;
 }
 
+// Dev token data from the unified WebSocket
+export interface SolanaDevToken {
+  mint: string;
+  name: string;
+  symbol: string;
+  migrated: boolean;
+  migrated_pool_address?: string;
+  market_cap?: number;
+  liquidity?: number;
+  volume_1h?: number;
+  volume_24h?: number;
+  created_at: string;
+}
+
 // WebSocket message types
 interface WebSocketMessage {
-  type: 'snapshot' | 'trade_update' | 'holder_update' | 'top_trader_update' | 'pong';
+  type: 'snapshot' | 'trade_update' | 'holder_update' | 'top_trader_update' | 'dev_token_update' | 'pong';
   data: {
     trades: SolanaTokenTrade[] | null;
     holders: SolanaTokenHolder[] | null;
     top_traders: SolanaTopTrader[] | null;
+    dev_tokens: SolanaDevToken[] | null;
   };
   timestamp: string;
 }
@@ -78,12 +93,14 @@ interface UseSolanaTokenWebSocketOptions {
   onNewTrade?: (trade: SolanaTokenTrade) => void;
   onHoldersUpdate?: (holders: SolanaTokenHolder[]) => void;
   onTopTradersUpdate?: (topTraders: SolanaTopTrader[]) => void;
+  onDevTokensUpdate?: (devTokens: SolanaDevToken[]) => void;
 }
 
 interface UseSolanaTokenWebSocketReturn {
   trades: SolanaTokenTrade[];
   holders: SolanaTokenHolder[];
   topTraders: SolanaTopTrader[];
+  devTokens: SolanaDevToken[];
   connected: boolean;
   error: string | null;
   loading: boolean;
@@ -140,11 +157,13 @@ export function useSolanaTokenWebSocket(
     onNewTrade,
     onHoldersUpdate,
     onTopTradersUpdate,
+    onDevTokensUpdate,
   } = options;
 
   const [trades, setTrades] = useState<SolanaTokenTrade[]>([]);
   const [holders, setHolders] = useState<SolanaTokenHolder[]>([]);
   const [topTraders, setTopTraders] = useState<SolanaTopTrader[]>([]);
+  const [devTokens, setDevTokens] = useState<SolanaDevToken[]>([]);
   const [connected, setConnected] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -156,6 +175,7 @@ export function useSolanaTokenWebSocket(
   const onNewTradeRef = useRef(onNewTrade);
   const onHoldersUpdateRef = useRef(onHoldersUpdate);
   const onTopTradersUpdateRef = useRef(onTopTradersUpdate);
+  const onDevTokensUpdateRef = useRef(onDevTokensUpdate);
   const pingIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
   // Update callback refs when they change
@@ -170,6 +190,10 @@ export function useSolanaTokenWebSocket(
   useEffect(() => {
     onTopTradersUpdateRef.current = onTopTradersUpdate;
   }, [onTopTradersUpdate]);
+
+  useEffect(() => {
+    onDevTokensUpdateRef.current = onDevTokensUpdate;
+  }, [onDevTokensUpdate]);
 
   // Connect to WebSocket
   const connect = useCallback(() => {
@@ -242,6 +266,14 @@ export function useSolanaTokenWebSocket(
               setTopTraders([]);
             }
 
+            if (message.data.dev_tokens) {
+              console.log('[useSolanaTokenWebSocket] Received dev_tokens:', message.data.dev_tokens.length);
+              setDevTokens(message.data.dev_tokens);
+              onDevTokensUpdateRef.current?.(message.data.dev_tokens);
+            } else {
+              setDevTokens([]);
+            }
+
             setLoading(false);
           } else if (message.type === 'trade_update') {
             // Real-time trade update
@@ -270,6 +302,13 @@ export function useSolanaTokenWebSocket(
             if (message.data.top_traders) {
               setTopTraders(message.data.top_traders);
               onTopTradersUpdateRef.current?.(message.data.top_traders);
+            }
+          } else if (message.type === 'dev_token_update') {
+            // Real-time dev token update
+            if (message.data.dev_tokens) {
+              console.log('[useSolanaTokenWebSocket] Dev tokens update:', message.data.dev_tokens.length);
+              setDevTokens(message.data.dev_tokens);
+              onDevTokensUpdateRef.current?.(message.data.dev_tokens);
             }
           }
           // Ignore pong messages
@@ -345,6 +384,7 @@ export function useSolanaTokenWebSocket(
       setTrades([]);
       setHolders([]);
       setTopTraders([]);
+      setDevTokens([]);
       disconnect();
       reconnectAttemptsRef.current = 0;
       connect();
@@ -363,6 +403,7 @@ export function useSolanaTokenWebSocket(
     trades,
     holders,
     topTraders,
+    devTokens,
     connected,
     error,
     loading,

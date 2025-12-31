@@ -63,11 +63,15 @@ export default function useCodexDevTokens(
         });
 
         if (!response.ok) {
-          throw new Error(`HTTP error! status: ${response.status}`);
+          // 404 or other non-OK responses just mean no dev tokens - not an error
+          console.log(`Dev tokens endpoint returned ${response.status} - treating as no tokens`);
+          setTokens([]);
+          setIsLoading(false);
+          return;
         }
 
         const result: CodexDevTokensResponse = await response.json();
-        
+
         if (result.filterTokens?.results) {
           setTokens(result.filterTokens.results);
           console.log(`Fetched ${result.filterTokens.results.length} dev tokens`);
@@ -76,8 +80,9 @@ export default function useCodexDevTokens(
           console.log('No dev tokens found');
         }
       } catch (err) {
-        console.error('Failed to fetch dev tokens:', err);
-        setError('Failed to fetch dev tokens data');
+        // Only log to console, don't show error to user - no dev tokens is normal
+        console.log('Dev tokens fetch issue (may be expected):', err);
+        setTokens([]);
       } finally {
         setIsLoading(false);
       }

@@ -280,7 +280,14 @@ export default function Header({
     chainBalances,
     logout,
   } = useUser();
-  const currentChain = (router.query.chain as string) || "monad";
+  // Determine chain from URL path or query parameter
+  // /trade/monad/[address] = monad, /trade/[id] = sol, otherwise use query or default to monad
+  const currentChain = useMemo(() => {
+    if (router.query.chain) return router.query.chain as string;
+    if (router.pathname.startsWith('/trade/monad')) return 'monad';
+    if (router.pathname.startsWith('/trade/')) return 'sol';
+    return 'monad'; // default for other pages like /pulse
+  }, [router.query.chain, router.pathname]);
   const { solPrice, monPrice } = useSolPrice();
   const chainPrice = currentChain === 'monad' ? monPrice : solPrice;
   const { watchlist, removeFromWatchlist, refreshWatchlistToken } = useWatchlist();
@@ -578,12 +585,29 @@ export default function Header({
       lastCheckedClipboard.current = trimmed;
 
       try {
+        // First try to resolve mint address to pair address
+        let pairAddress = trimmed;
+        try {
+          const hydrateResponse = await fetch('/api/token-service/hydrate-pair', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ mint: trimmed }),
+          });
+          if (hydrateResponse.ok) {
+            const hydrateData = await hydrateResponse.json();
+            if (hydrateData.pair_address) {
+              pairAddress = hydrateData.pair_address;
+            }
+          }
+        } catch {
+          // If hydration fails, use the original address as pair_address
+        }
+
         const response = await fetch(
-          `/api/token-service/trade-view?mint_address=${trimmed}`,
+          `/api/token-service/trade-view?pair_address=${pairAddress}`,
         );
         if (!response.ok) {
           setClipboardToken(null);
-          lastCheckedClipboard.current = "";
           return;
         }
 
@@ -592,7 +616,6 @@ export default function Header({
 
         if (!token) {
           setClipboardToken(null);
-          lastCheckedClipboard.current = "";
           return;
         }
 
@@ -600,7 +623,6 @@ export default function Header({
           token.imageUrl || token.image || token.thumbnail || token.uri || null;
         if (!imageUrl) {
           setClipboardToken(null);
-          lastCheckedClipboard.current = "";
           return;
         }
 
@@ -634,7 +656,7 @@ export default function Header({
       } catch (error) {
         console.error("Error fetching token data:", error);
         setClipboardToken(null);
-        lastCheckedClipboard.current = "";
+        // Don't reset lastCheckedClipboard - prevents infinite retry loop
       }
     },
     [clipboardToken?.address],
@@ -719,7 +741,13 @@ export default function Header({
   // Handler for Paste CA button - navigate to token
   const handlePasteCA = async () => {
     if (clipboardToken) {
-      router.push(`/trade/${clipboardToken.address}`);
+      // Detect if Monad (0x) or Solana address
+      const isMonadAddress = clipboardToken.address.startsWith('0x') || clipboardToken.address.startsWith('0X');
+      if (isMonadAddress) {
+        router.push(`/trade/monad/${clipboardToken.address}?chain=monad`);
+      } else {
+        router.push(`/trade/${clipboardToken.address}?chain=sol`);
+      }
       toast.success("Navigating to token...", {
         duration: 2000,
         style: {
@@ -736,7 +764,7 @@ export default function Header({
         const isSolanaAddress = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(trimmed);
 
         if (isSolanaAddress) {
-          router.push(`/trade/${trimmed}`);
+          router.push(`/trade/${trimmed}?chain=sol`);
           toast.success("Navigating to token...", {
             duration: 2000,
             style: {
@@ -2174,8 +2202,20 @@ export default function Header({
                         const url = `/trade/monad/${tokenAddress}?${queryParams.toString()}`;
                         router.push(url);
                       } else {
-                        // For Solana or other chains, use the regular trade page
-                        router.push(`/trade/${tokenAddress}`);
+                        // For Solana tokens, include chain=sol query parameter
+                        const queryParams = new URLSearchParams();
+                        if (token.name) queryParams.set('_name', token.name);
+                        if (token.symbol) queryParams.set('_symbol', token.symbol);
+                        if (price > 0) queryParams.set('_price', price.toString());
+                        if (token.market_cap_usd || (token as any).fully_diluted_value) {
+                          queryParams.set('_mcap', ((token.market_cap_usd || (token as any).fully_diluted_value || 0)).toString());
+                        }
+                        const imageUrl = (token as any).uri || (token as any).image || (token as any).logo || '';
+                        if (imageUrl) queryParams.set('_image', imageUrl);
+                        queryParams.set('_mint', tokenAddress);
+                        queryParams.set('chain', 'sol');
+
+                        router.push(`/trade/${tokenAddress}?${queryParams.toString()}`);
                       }
                     }
                   }}
@@ -2364,16 +2404,10 @@ export default function Header({
               trimmed.startsWith("0x") || trimmed.startsWith("0X");
             // For Monad tokens, use the Monad trade page route
             if (isMonadAddress) {
-              router.push(`/trade/monad/${trimmed}`);
+              router.push(`/trade/monad/${trimmed}?chain=monad`);
             } else {
-              // For Solana or other chains, use the regular trade page with chain query param
-              router.push({
-                pathname: `/trade/${trimmed}`,
-                query:
-                  currentChain && currentChain !== "sol"
-                    ? { chain: currentChain }
-                    : {},
-              });
+              // For Solana tokens, always include chain=sol
+              router.push(`/trade/${trimmed}?chain=sol`);
             }
             setSearch?.("");
             return;

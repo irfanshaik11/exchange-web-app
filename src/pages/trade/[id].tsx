@@ -73,9 +73,14 @@ export default function TradePage() {
   const router = useRouter();
   const { id, _name, _symbol, _price, _mcap, _image, _mint, chain } = router.query;
 
-  // Determine network from chain parameter (defaults to 'monad')
-  // If chain is explicitly 'sol', use 'solana', otherwise default to 'monad'
-  const network = chain === 'sol' ? 'solana' : 'monad';
+  // Wait for router to be ready before using query params
+  // This prevents hydration issues where id is undefined briefly
+  const isRouterReady = router.isReady;
+  const idString = typeof id === "string" ? id : "";
+
+  // /trade/[id] is the Solana trade page - always use solana
+  // Monad has its own page at /trade/monad/[contractAddress]
+  const network = 'solana';
 
   const { backgroundData: backgroundOHLCData, isPreloading, preloadComplete } = useBackgroundOHLCPreload();
 
@@ -151,12 +156,20 @@ export default function TradePage() {
     cacheStats,
     cleanupCache,
     cachedTokenMetadata,
-  } = useInitialTradeData(resolvedPairAddress, token?.mint);
+  } = useInitialTradeData(resolvedPairAddress, token?.mint, 'sol');
 
   const [correctTokenData, setCorrectTokenData] = useState<any>(null);
   const [isLoadingCorrectData, setIsLoadingCorrectData] = useState(false);
 
   const [creatorAddress, setCreatorAddress] = useState<string | null>(null);
+
+  // Reset state when navigating to a different token
+  useEffect(() => {
+    console.log('[TradePage] Token ID changed, resetting state:', id);
+    setCorrectTokenData(null);
+    setCreatorAddress(null);
+    setIsLoadingCorrectData(false);
+  }, [id]);
 
   useEffect(() => {
     const fetchCorrectTokenData = async () => {
@@ -165,7 +178,7 @@ export default function TradePage() {
 
       setIsLoadingCorrectData(true);
       try {
-        const response = await fetch(`/api/token-service/search?phrase=${encodeURIComponent(token.mint)}&limit=1`);
+        const response = await fetch(`${process.env.NEXT_PUBLIC_GO_SERVICE_URL}/v1/search?phrase=${encodeURIComponent(token.mint)}&limit=1`);
         if (response.ok) {
           const data = await response.json();
           if (data.tokens && data.tokens.length > 0) setCorrectTokenData(data.tokens[0]);
@@ -209,7 +222,7 @@ export default function TradePage() {
       const createdAt =
         (tokenForAge as any)?.created_at || (tokenForAge as any)?.createdAt || (tokenForAge as any)?.CreatedAt;
 
-      if (!createdAt) return { interval: "1h" as const, timeframe: "30d" as const, optimize: false };
+      if (!createdAt) return { interval: "1s" as const, timeframe: "30d" as const, optimize: false };
 
       let timestamp = createdAt as any;
       if (typeof createdAt === "number" && createdAt < 10000000000) timestamp = createdAt * 1000;
@@ -218,8 +231,7 @@ export default function TradePage() {
       const diffMs = Date.now() - createdDate.getTime();
       const ageInHours = diffMs / (1000 * 60 * 60);
       const ageInDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
-      // if (ageInHours < 1) return { interval: "1s", timeframe: "1h", optimize: false } as const;
-      if (ageInHours < 1) return { interval: "1m", timeframe: "1h", optimize: false } as const;
+      if (ageInHours < 1) return { interval: "1s", timeframe: "1h", optimize: false } as const;
       if (ageInHours < 6) return { interval: "1h", timeframe: "4h", optimize: false } as const;
       if (ageInDays < 1) return { interval: "1h", timeframe: "24h", optimize: false } as const;
       if (ageInDays < 7) return { interval: "1h", timeframe: "7d", optimize: false } as const;
@@ -232,7 +244,7 @@ export default function TradePage() {
   );
 
   const ohlcParams = getOHLCParams;
-  const defaultOHLCParams = { interval: "1h" as const, timeframe: "30d" as const, optimize: false };
+  const defaultOHLCParams = { interval: "1s" as const, timeframe: "30d" as const, optimize: false };
 
   const currentOHLCParams = React.useMemo(
     () => ohlcParams || defaultOHLCParams,
@@ -393,15 +405,74 @@ export default function TradePage() {
     };
   }, [showMobileTradeModal, handleDragMove, handleDragEnd]);
 
-  const displayToken =
-    token ||
-    (cachedTokenMetadata
-      ? { ...cachedTokenMetadata, mint: cachedTokenMetadata.mint || "", pair_address: cachedTokenMetadata.pair_address || "", created_at: cachedTokenMetadata.created_at || null }
-      : optimisticToken);
+  // IMPORTANT: Only use cached/fallback data if it matches the current URL id
+  // This prevents showing stale data from a previous token when navigating
 
+  const displayToken = React.useMemo(() => {
+    // First priority: fresh token data from polling - but ONLY if it matches current id
+    // This validation is CRITICAL: when navigating, `token` may still hold old data
+    // because the hook's reset effect hasn't run yet
+    if (token) {
+      const tokenMatchesId =
+        token.pair_address === idString ||
+        token.mint === idString;
+      if (tokenMatchesId) {
+        return token;
+      }
+      // Token doesn't match current id - it's stale data from previous token
+      console.log('[TradePage] token does not match current id, skipping stale data', {
+        tokenMint: token.mint,
+        tokenPairAddress: token.pair_address,
+        idString
+      });
+    }
+
+    // Second priority: cached metadata - but ONLY if it matches current id
+    if (cachedTokenMetadata) {
+      const cacheMatchesId =
+        cachedTokenMetadata.pair_address === idString ||
+        cachedTokenMetadata.mint === idString;
+      if (cacheMatchesId) {
+        return {
+          ...cachedTokenMetadata,
+          mint: cachedTokenMetadata.mint || "",
+          pair_address: cachedTokenMetadata.pair_address || "",
+          created_at: cachedTokenMetadata.created_at || null
+        };
+      }
+    }
+
+    // Third priority: optimistic data from URL query params
+    if (optimisticToken) return optimisticToken;
+
+    // No valid data - return null to show loading state
+    return null;
+  }, [token, cachedTokenMetadata, optimisticToken, idString]);
+
+  // Validate correctTokenData matches current id to prevent showing stale data
+  const validatedCorrectTokenData = React.useMemo(() => {
+    if (!correctTokenData) return null;
+
+    // Check if correctTokenData matches the current URL id
+    const matchesId =
+      correctTokenData.pair_address === idString ||
+      correctTokenData.mint === idString ||
+      correctTokenData.address === idString;
+
+    if (matchesId) {
+      return correctTokenData;
+    }
+
+    // If it doesn't match, return null to prevent showing stale data
+    console.log('[TradePage] correctTokenData does not match current id, skipping', {
+      correctTokenData: correctTokenData.mint || correctTokenData.pair_address,
+      idString
+    });
+    return null;
+  }, [correctTokenData, idString]);
+
+  // Use validated displayToken for title to prevent showing stale token name
   const tokenNameForTitle =
-    (typeof token?.name === "string" && token.name.trim()) ||
-    (typeof token?.symbol === "string" && token.symbol.trim()) ||
     (typeof displayToken?.name === "string" && displayToken.name.trim()) ||
     (typeof displayToken?.symbol === "string" && displayToken.symbol.trim()) ||
     (typeof id === "string" && id.trim()) ||
@@ -420,9 +491,9 @@ export default function TradePage() {
 
   // Get current pair address for caching
   const currentPairAddress = React.useMemo(() => {
-    const currentToken = correctTokenData || displayToken;
+    const currentToken = validatedCorrectTokenData || displayToken;
     return currentToken?.pair_address || resolvedPairAddress || '';
-  }, [correctTokenData, displayToken?.pair_address, resolvedPairAddress]);
+  }, [validatedCorrectTokenData, displayToken?.pair_address, resolvedPairAddress]);
 
   // Callback to update trades cache when new trades arrive
   const updateTradesCache = React.useCallback((newTrades: any[]) => {
@@ -571,7 +642,7 @@ export default function TradePage() {
               }}
             >
               <div className="px-2 flex-shrink-0">
-                <TradeHeader token={correctTokenData || displayToken} />
+                <TradeHeader token={validatedCorrectTokenData || displayToken} />
               </div>
 
               {/* Separator line after TradeHeader */}
@@ -588,10 +659,11 @@ export default function TradePage() {
                   minWidth: 0,
                 }}
               >
-                {canStartOHLC || (typeof resolvedPairAddress === "string" && resolvedPairAddress.length >= 32) ? (
+                {(canStartOHLC || (idString.length >= 32)) && isRouterReady ? (
                   <AdvancedOHLCChart
-                    mint={typeof _mint === "string" ? _mint : undefined}
-                    pairAddress={resolvedPairAddress}
+                    key={`chart-${idString}`}
+                    mint={typeof _mint === "string" ? _mint : (displayToken?.mint || idString || undefined)}
+                    pairAddress={resolvedPairAddress || idString || undefined}
                     interval={currentOHLCParams.interval}
                     timeframe={currentOHLCParams.timeframe}
                     optimize={currentOHLCParams.optimize}
@@ -709,10 +781,11 @@ export default function TradePage() {
               <div className="flex-1 min-h-0 overflow-y-auto" style={{ paddingBottom: '2rem' }}>
                 <div style={{ display: selectedTab === "Trades" ? "block" : "none", height: "100%" }}>
                   <CodexTrades
-                    token={correctTokenData || displayToken}
+                    token={validatedCorrectTokenData || displayToken}
                     initialTrades={initialTradesForComponent}
                     onTradesUpdate={updateTradesCache}
                     pairAddress={resolvedPairAddress}
+                    chain="sol"
                   />
                 </div>
                 <div style={{ display: selectedTab === "Orders" ? "block" : "none", height: "100%" }}>
@@ -720,17 +793,17 @@ export default function TradePage() {
                 </div>
                 <div style={{ display: selectedTab === "Top Traders" ? "block" : "none", height: "100%" }}>
                   <React.Suspense fallback={<div className="flex items-center justify-center h-full text-neutral-400">Loading...</div>}>
-                    <CodexTopTraders token={displayToken} pairAddress={typeof id === "string" ? id : resolvedPairAddress} />
+                    <CodexTopTraders token={displayToken} pairAddress={idString || resolvedPairAddress} chain="sol" />
                   </React.Suspense>
                 </div>
                 <div style={{ display: selectedTab === "Holders" ? "block" : "none", height: "100%" }}>
                   <React.Suspense fallback={<div className="flex items-center justify-center h-full text-neutral-400">Loading...</div>}>
-                    <CodexHolders token={displayToken} pairAddress={typeof id === "string" ? id : resolvedPairAddress} />
+                    <CodexHolders token={displayToken} pairAddress={idString || resolvedPairAddress} chain="sol" />
                   </React.Suspense>
                 </div>
                 <div style={{ display: selectedTab === "Dev Tokens" ? "block" : "none", height: "100%" }}>
                   <React.Suspense fallback={<div className="flex items-center justify-center h-full text-neutral-400">Loading...</div>}>
-                    <CodexDevTokens token={displayToken} />
+                    <CodexDevTokens token={displayToken} chain="sol" />
                   </React.Suspense>
                 </div>
               </div>
@@ -875,7 +948,7 @@ export default function TradePage() {
       <InstantTradeModal
         isOpen={isInstantTradeOpen}
         onClose={() => setIsInstantTradeOpen(false)}
-        token={correctTokenData || displayToken}
+        token={validatedCorrectTokenData || displayToken}
       />
     </>
   );
