@@ -323,7 +323,19 @@ export default function PortfolioPage() {
   const { user, loading: userLoading, solBalance, usdcBalance, refreshBalance, refreshAllBalances, chainBalances, primaryWalletAddresses, walletBalances: contextWalletBalances, walletList: contextWalletList, walletListLoading, refreshWalletList, refreshUser, selectedWalletIds, selectAllWalletsForChain, selectWalletsWithFunds, clearSelectedWallets, setSelectedWalletsForChain } = useUser();
   const { monPrice } = useSolPrice();
   const router = useRouter();
-  const currentChain = (router.query.chain as string) || "monad";
+  // Get chain from URL first, then localStorage, then default to monad
+  const currentChain = (() => {
+    if (router.query.chain) {
+      return router.query.chain as string;
+    }
+    if (typeof window !== 'undefined') {
+      const savedChain = localStorage.getItem('selected-chain');
+      if (savedChain === 'sol' || savedChain === 'monad') {
+        return savedChain;
+      }
+    }
+    return 'monad';
+  })();
   const monBalance = chainBalances?.monad || 0;
   const [walletChecked, setWalletChecked] = useState(false);
   // Cache TTL: 30 seconds (short to prevent stale data, but long enough for instant display)

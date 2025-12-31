@@ -283,7 +283,19 @@ export default function Header({
     selectedWalletIds,
     logout,
   } = useUser();
-  const currentChain = (router.query.chain as string) || "monad";
+  // Get chain from URL first, then localStorage, then default to monad
+  const currentChain = (() => {
+    if (router.query.chain) {
+      return router.query.chain as string;
+    }
+    if (typeof window !== 'undefined') {
+      const savedChain = localStorage.getItem('selected-chain');
+      if (savedChain === 'sol' || savedChain === 'monad') {
+        return savedChain;
+      }
+    }
+    return 'monad';
+  })();
   const { solPrice, monPrice } = useSolPrice();
   const chainPrice = currentChain === 'monad' ? monPrice : solPrice;
   const { watchlist, removeFromWatchlist, refreshWatchlistToken } = useWatchlist();
