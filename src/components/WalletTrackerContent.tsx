@@ -100,7 +100,7 @@ function getProtocolColor(protocol: string): string {
 
 export default function WalletTrackerContent() {
   const router = useRouter();
-  const { user } = useUser();
+  const { user, walletList, walletBalances, selectedWalletIds } = useUser();
   const {
     wsConnected,
     latestTrades,
@@ -135,7 +135,7 @@ export default function WalletTrackerContent() {
   const [showImportModal, setShowImportModal] = useState(false);
   const [watchedWallets, setWatchedWallets] = useState<WatchWallet[]>([]);
   const [walletEvents, setWalletEvents] = useState<Record<string, WalletEvent[]>>({});
-  const [walletBalances, setWalletBalances] = useState<Record<string, number>>({});
+  const [trackedWalletBalances, setTrackedWalletBalances] = useState<Record<string, number>>({});
   const [lastActiveMap, setLastActiveMap] = useState<Record<string, number | null>>({});
   const [isTogglingAllNotifications, setIsTogglingAllNotifications] = useState(false);
   const [tokenMetadata, setTokenMetadata] = useState<Map<string, any>>(new Map());
@@ -171,7 +171,7 @@ export default function WalletTrackerContent() {
       });
       const balances = await Promise.all(balancePromises);
       balances.forEach(({ address, balance }) => {
-        setWalletBalances((prev) => ({ ...prev, [address]: balance }));
+        setTrackedWalletBalances((prev) => ({ ...prev, [address]: balance }));
       });
     } catch (error) {
       console.error("Failed to load wallets:", error);
@@ -575,6 +575,12 @@ export default function WalletTrackerContent() {
       user: { bearerToken: user.bearerToken, id: user.id },
       solBalance: 0, // Will be fetched by executeEnhancedTrade
       solPriceUsd: 150,
+      walletContext: {
+        selectedWalletIds: selectedWalletIds?.sol || [],
+        walletList: walletList || [],
+        walletBalances: walletBalances || {},
+        chain: selectedChain,
+      },
       onSuccess: () => {
         console.log('✅ Quick Buy successful');
       },
@@ -797,7 +803,7 @@ export default function WalletTrackerContent() {
                         (ww) => ww.address === wallet.address
                       );
                       const events = walletEvents[wallet.address] || [];
-                      const balance = walletBalances[wallet.address];
+                      const balance = trackedWalletBalances[wallet.address];
                       return (
                         <WalletRow
                           key={wallet.address}

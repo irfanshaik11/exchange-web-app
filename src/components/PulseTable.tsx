@@ -102,6 +102,9 @@ import {
 } from "~/utils/toast";
 import { executeEnhancedTrade } from "~/utils/enhancedTradeHandler";
 import { showEnhancedToast, updateEnhancedToast } from "~/utils/enhancedToast";
+import { executeSolanaMultiBuy, buildSolanaWalletAllocations } from "~/utils/solanaWalletAllocation";
+import useSolanaPositionWebSocket from "~/hooks/useSolanaPositionWebSocket";
+import toast from "react-hot-toast";
 import { FiGlobe } from "react-icons/fi";
 import BottomCardInfoHolder from "./BottomCardInfoHolder";
 
@@ -2262,8 +2265,52 @@ function PulseTable({
   const router = useRouter();
 
   // Quick buy functionality
-  const { user, solBalance } = useUser();
+  const { user, solBalance, walletList, walletBalances, selectedWalletIds } = useUser();
   const { presets, activePreset, setActivePreset } = useQuickBuy();
+
+  // Pending toast ref for Solana quick buys (for WebSocket instant tx updates)
+  const pendingSolanaQuickBuyToastRef = useRef<{
+    id: string;
+    tokenImage: string | null;
+    tokenName: string;
+    fakeTime: string;
+    tokenAddress: string;
+    startTime: number;
+    timerHandle?: number;
+    totalSelectedWallets: number;
+  } | null>(null);
+
+  // Callback for instant txHash update via WebSocket (fires before HTTP response)
+  const handleSolanaQuickBuyWsTxHash = useCallback((data: { txHash: string; tokenAddress: string; tradeType: 'buy' | 'sell'; explorerUrl: string }) => {
+    const pending = pendingSolanaQuickBuyToastRef.current;
+    if (!pending || pending.tokenAddress.toLowerCase() !== data.tokenAddress.toLowerCase()) return;
+
+    console.log('[PulseTable] 🚀 INSTANT Solana txHash via WebSocket:', data.txHash);
+
+    // For multi-wallet trades: Don't update the toast (count was already shown at timer cap)
+    // For single wallet: Update the link element with clickable Solana logo
+    if (pending.totalSelectedWallets === 1) {
+      const linkEl = document.getElementById(`link-${pending.id}`);
+      if (linkEl) {
+        linkEl.innerHTML = `<a href="${data.explorerUrl}" target="_blank" rel="noopener noreferrer" class="hover:opacity-80 transition-opacity"><img src="https://avatars.githubusercontent.com/u/92743431?s=200&v=4" alt="Solana" class="w-4 h-4 rounded-full" style="cursor: pointer;" /></a>`;
+      }
+    }
+
+    // Set duration for auto-dismiss after 10s
+    setTimeout(() => {
+      if (pendingSolanaQuickBuyToastRef.current?.id === pending.id) {
+        toast.dismiss(pending.id);
+        pendingSolanaQuickBuyToastRef.current = null;
+      }
+    }, 10000);
+  }, []);
+
+  // WebSocket for Solana position updates AND instant txHash
+  const { connected: solanaWsConnected } = useSolanaPositionWebSocket({
+    tokenAddress: '', // Empty for global listening
+    enabled: !!user?.id,
+    onTxHash: handleSolanaQuickBuyWsTxHash, // INSTANT txHash callback
+  });
 
   useEffect(() => {
     if (!showSnipeModal) return;
@@ -2280,9 +2327,9 @@ function PulseTable({
   const getPresetIndex = () => {
     return parseInt(selectedPill.replace("P", "")) - 1;
   };
-  // QUICK BUY handler – with detailed logging
+  // QUICK BUY handler – with Monad-style toast
   const handleQuickBuy = async (token: Token) => {
-    console.log("🎯 Enhanced Quick Buy called for token:", token.symbol);
+    console.log("🎯 Quick Buy called for token:", token.symbol);
 
     if (!user?.bearerToken || !user?.id) {
       console.log("❌ User not logged in");
@@ -2305,7 +2352,7 @@ function PulseTable({
       return;
     }
 
-    const presetIndex = getPresetIndex(); // Use local preset selection based on selectedPill
+    const presetIndex = getPresetIndex();
     const preset = presets[presetIndex];
     if (!preset) {
       console.log("❌ Quick buy preset missing for index", presetIndex);
@@ -2317,28 +2364,212 @@ function PulseTable({
     }
 
     const settings = preset.quickBuySettings;
+    const poolType = getPoolTypeFromToken(token);
 
-    // Execute enhanced trade with all features
-    const result = await executeEnhancedTrade({
-      token,
+    // Pre-calculate which wallets will actually be used (have sufficient balance)
+    const { allocations, total } = buildSolanaWalletAllocations({
       amount: buyAmount,
-      side: "buy",
-      settings,
-      user: { bearerToken: user.bearerToken, id: user.id },
-      solBalance: Number(solBalance || 0),
-      solPriceUsd: 150, // TODO: Get real SOL price
-      onSuccess: (txHash, stats) => {
-        console.log("✅ Enhanced Quick Buy successful:", { txHash, stats });
-      },
-      onError: (error) => {
-        console.error("❌ Enhanced Quick Buy failed:", error);
-      },
-      onWarning: (warnings) => {
-        console.warn("⚠️ Pre-transaction warnings:", warnings);
-      },
+      walletList,
+      walletBalances,
+      selectedWalletIds: selectedWalletIds?.sol || [],
+      priorityFee: settings.priority || 0.0001,
+      bribe: settings.bribe || 0,
     });
+    const walletsWithBalance = allocations.length;
+    const isMultiWallet = walletsWithBalance > 1;
 
-    return result;
+    // Generate random timer cap (0.40-0.60s)
+    const timerCap = 0.40 + Math.random() * 0.20;
+    const uniqueToastId = `solana-quickbuy-${Date.now()}-${Math.random()}`;
+    const startTime = Date.now();
+    let timerFinished = false;
+
+    // Extract token image
+    const tokenImage = extractTokenImage(token);
+    const tokenName = token.symbol || token.name || 'Token';
+
+    // Show animated toast with timer
+    toast(
+      (t) => (
+        <div className="flex items-center gap-3">
+          {tokenImage && (
+            <img
+              src={tokenImage}
+              alt={tokenName}
+              className="w-6 h-6 rounded-full flex-shrink-0"
+            />
+          )}
+          <div className="flex items-center gap-2 flex-1 min-w-0">
+            <span className="text-sm text-neutral-200 truncate">
+              Buying {tokenName}
+            </span>
+            <span
+              id={`timer-${uniqueToastId}`}
+              className="text-xs text-neutral-400 flex-shrink-0"
+            >
+              (0.00s)
+            </span>
+          <span
+            id={`check-${uniqueToastId}`}
+            className="text-green-400 flex-shrink-0"
+            style={{ display: 'none' }}
+          >
+            ✓
+          </span>
+          <span
+            id={`link-${uniqueToastId}`}
+            className="flex-shrink-0"
+            style={{ display: 'inline-flex' }}
+          >
+            {/* Default Solana avatar (becomes clickable once tx hash arrives) */}
+            <img
+              src="https://avatars.githubusercontent.com/u/92743431?s=200&v=4"
+              alt="Solana"
+              className="w-4 h-4 rounded-full opacity-70"
+              style={{ cursor: 'default' }}
+            />
+          </span>
+        </div>
+      </div>
+      ),
+      {
+        id: uniqueToastId,
+        duration: Infinity,
+        style: {
+          background: '#1a1a1a',
+          border: '1px solid #333',
+          borderRadius: '8px',
+          padding: '12px',
+        },
+      }
+    );
+
+    // Start timer animation - update every 50ms, show checkmark when cap is reached
+    const tick = () => {
+      const elapsed = (Date.now() - startTime) / 1000;
+      const displayTime = Math.min(elapsed, timerCap).toFixed(2);
+      const timerEl = document.getElementById(`timer-${uniqueToastId}`);
+      if (timerEl) {
+        timerEl.textContent = `(${displayTime}s)`;
+      }
+
+      // When timer reaches cap, show checkmark and wallet count (or placeholder for logo)
+      if (!timerFinished && elapsed >= timerCap) {
+        timerFinished = true;
+        const checkEl = document.getElementById(`check-${uniqueToastId}`);
+        if (checkEl) {
+          checkEl.style.display = 'block';
+        }
+        const linkEl = document.getElementById(`link-${uniqueToastId}`);
+        if (linkEl) {
+          if (isMultiWallet) {
+            // Show wallet count immediately for multi-wallet
+            linkEl.textContent = `${walletsWithBalance}/${total}`;
+            linkEl.className = 'text-xs text-blue-400 font-medium flex-shrink-0';
+          } else {
+            // Single wallet: show Solana icon immediately (clickable once tx hash arrives)
+            linkEl.innerHTML = `<img src="https://avatars.githubusercontent.com/u/92743431?s=200&v=4" alt="Solana" class="w-4 h-4 rounded-full opacity-70" style="cursor: default;" />`;
+            linkEl.className = 'flex-shrink-0';
+          }
+          // For single wallet, leave empty - will be filled by WebSocket with logo
+        }
+        // Stop timer after reaching cap to avoid jitter
+        timerHandle = null as any;
+        return;
+      }
+      timerHandle = requestAnimationFrame(tick) as any;
+    };
+    let timerHandle = requestAnimationFrame(tick) as any;
+
+    // Store pending toast info for WebSocket instant update
+    pendingSolanaQuickBuyToastRef.current = {
+      id: uniqueToastId,
+      tokenImage,
+      tokenName,
+      fakeTime: timerCap.toFixed(2),
+      tokenAddress: token.mint || '',
+      startTime,
+      timerHandle,
+      totalSelectedWallets: walletsWithBalance
+    };
+
+    try {
+      const poolAddress = token.migrated_pool_address || token.pair_address || '';
+      const baseMint = token.mint || '';
+      const quoteMint = SOL_MINT_ADDRESS;
+
+      const multiResult = await executeSolanaMultiBuy({
+        poolAddress,
+        baseMint,
+        quoteMint,
+        amountSOL: buyAmount,
+        poolType,
+        originalPairAddress: token.pair_address,
+        slippage: settings.maxSlippage,
+        priorityFee: settings.priority,
+        bribe: settings.bribe,
+        mevMode: settings.mevMode,
+        autoFee: settings.autoFee,
+        maxFee: settings.maxFee,
+        rpc: settings.rpc,
+        tokenName: token.name,
+        tokenSymbol: token.symbol,
+        authToken: user.bearerToken,
+        walletList,
+        walletBalances,
+        selectedWalletIds: selectedWalletIds?.sol || [],
+        onTxHash: ({ txHash }) => {
+          if (pendingSolanaQuickBuyToastRef.current?.id === uniqueToastId && txHash) {
+            const linkEl = document.getElementById(`link-${uniqueToastId}`);
+            if (linkEl) {
+              const explorerUrl = `https://solscan.io/tx/${txHash}`;
+              linkEl.innerHTML = `<a href="${explorerUrl}" target="_blank" rel="noopener noreferrer" class="hover:opacity-80 transition-opacity"><img src="https://avatars.githubusercontent.com/u/92743431?s=200&v=4" alt="Solana" class="w-4 h-4 rounded-full" style="cursor: pointer;" /></a>`;
+              linkEl.className = '';
+            }
+          }
+        },
+      });
+
+      // If single wallet and we have a tx hash, show clickable Solana icon immediately
+      const firstTxHash =
+        multiResult?.results?.find((r: any) => (r.result as any)?.hash || (r.result as any)?.txid)?.result?.hash ||
+        multiResult?.results?.find((r: any) => (r.result as any)?.hash || (r.result as any)?.txid)?.result?.txid;
+
+      if (firstTxHash && !isMultiWallet) {
+        const linkEl = document.getElementById(`link-${uniqueToastId}`);
+        if (linkEl) {
+          const explorerUrl = `https://solscan.io/tx/${firstTxHash}`;
+          linkEl.innerHTML = `<a href="${explorerUrl}" target="_blank" rel="noopener noreferrer" class="hover:opacity-80 transition-opacity"><img src="https://avatars.githubusercontent.com/u/92743431?s=200&v=4" alt="Solana" class="w-4 h-4 rounded-full" style="cursor: pointer;" /></a>`;
+          linkEl.className = '';
+        }
+        if (timerHandle) {
+          cancelAnimationFrame(timerHandle);
+        }
+        setTimeout(() => toast.dismiss(uniqueToastId), 10000);
+      }
+
+      console.log("✅ Quick Buy successful");
+      return { success: true };
+    } catch (error: any) {
+      // Stop timer on error
+      if (timerHandle) {
+        cancelAnimationFrame(timerHandle);
+      }
+
+      // Dismiss pending toast
+      if (pendingSolanaQuickBuyToastRef.current) {
+        toast.dismiss(pendingSolanaQuickBuyToastRef.current.id);
+        pendingSolanaQuickBuyToastRef.current = null;
+      }
+
+      // Show error toast
+      console.error("❌ Quick Buy failed:", error);
+      showEnhancedToast("error", error.message || "Buy failed", {
+        title: "Trade Failed",
+      });
+
+      return { success: false, error };
+    }
   };
 
   // Protocol and quote token data with official icons from web3icons

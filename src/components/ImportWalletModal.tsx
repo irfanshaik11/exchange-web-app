@@ -276,7 +276,7 @@ export default function ImportWalletModal({
       const walletLabelPrefix = "Imported Wallet";
 
       if (importMode === "privateKey") {
-        // Map our keyFormat to Turnkey's expected KeyFormat enum
+
         // Turnkey expects: KeyFormat.Solana for base58 keys, KeyFormat.Hexadecimal for 0x keys
         const turnkeyFormat = keyFormat === "solana" ? KeyFormat.Solana : KeyFormat.Hexadecimal;
 

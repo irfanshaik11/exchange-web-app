@@ -188,6 +188,22 @@ export const enhanceError = (
       case 'VALIDATION_ERROR':
         // Check if it's actually a balance error
         const errorMessage = error.message || '';
+        const errorMessageLower = errorMessage.toLowerCase();
+
+        // Minimum amount specific messaging
+        if (errorMessageLower.includes('trade amount must be at least') || errorMessageLower.includes('minimum trade amount')) {
+          return {
+            title: 'Trade Amount Too Small',
+            description: errorMessage || 'Minimum trade amount is 0.0001 SOL',
+            suggestions: [
+              'Increase your trade amount to at least 0.0001 SOL',
+              'Very small trades can fail due to fees and rent',
+            ],
+            canRetry: false,
+            actions: [],
+          };
+        }
+
         if (errorMessage.toLowerCase().includes('insufficient') || 
             errorMessage.toLowerCase().includes('balance') ||
             errorMessage.toLowerCase().includes('not enough') ||
@@ -290,6 +306,22 @@ export const enhanceError = (
 
   // Handle generic errors
   const errorMsg = error.message || 'Unknown error';
+  const errorMsgLower = errorMsg.toLowerCase();
+
+  // No wallets with balance (multi-wallet prevalidation)
+  if (errorMsgLower.includes('no selected wallets') && errorMsgLower.includes('sufficient balance')) {
+    return {
+      title: 'Insufficient SOL Balance',
+      description: 'None of the selected wallets have enough SOL for this trade (including fees and rent)',
+      suggestions: [
+        'Select a wallet with SOL',
+        'Add SOL to one of your wallets',
+        'Lower the trade amount or fees',
+      ],
+      canRetry: false,
+      actions: [],
+    };
+  }
 
   // Insufficient funds for rent - this is a balance issue
   if (errorMsg.includes('insufficient funds for rent') || 
@@ -368,19 +400,26 @@ export const enhanceError = (
     };
   }
 
-  // Slippage errors
-  if (errorMsg.includes('slippage') || errorMsg.includes('Slippage')) {
+  // Slippage errors (including Pumpfun TooMuchSolRequired error)
+  if (errorMsg.includes('slippage') || errorMsg.includes('Slippage') ||
+      errorMsg.includes('TooMuchSolRequired') || errorMsg.includes('Too much SOL required')) {
+    const currentSlippage = context.slippage || 40; // Default to 40% if not set
+    const suggestedSlippage = Math.min(50, Math.max(10, currentSlippage * 1.5)); // Suggest 1.5x current, capped at 50%
+
     return {
       title: 'Slippage Tolerance Exceeded',
-      description: 'Price moved more than your slippage tolerance allows',
+      description: errorMsg.includes('TooMuchSolRequired') || errorMsg.includes('Too much SOL required')
+        ? 'The trade requires more SOL than expected due to price movement or low liquidity'
+        : 'Price moved more than your slippage tolerance allows',
       suggestions: [
-        `Increase slippage to ${Math.max(3, (context.slippage || 1) * 2)}%`,
+        `Increase slippage to ${suggestedSlippage.toFixed(0)}% or higher`,
         'Wait a few seconds for price to stabilize',
-        'Try trading a smaller amount',
+        'Try trading a smaller amount to reduce slippage impact',
+        'Check token liquidity - low liquidity tokens have higher slippage',
       ],
       canRetry: true,
       retryWithAdjustments: {
-        increaseSlippage: Math.max(3, (context.slippage || 1) * 2),
+        increaseSlippage: suggestedSlippage,
         waitSeconds: 3,
       },
       actions: [
@@ -424,4 +463,3 @@ export const enhanceError = (
     actions: [{ label: 'Retry', action: 'retry' }],
   };
 };
-

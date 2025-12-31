@@ -20,7 +20,7 @@ import { useQuickBuy } from "./QuickBuyContext";
 import { formatSmartNumber } from "../utils/db";
 import type { Token } from "../utils/db";
 import { executeEnhancedTrade } from "~/utils/enhancedTradeHandler";
-import { tradeMonadBuy } from "~/utils/api";
+import { executeMonadMultiBuy, formatMonadTxSummary } from "~/utils/monadWalletAllocation";
 import { extractTokenImage } from "~/utils/images";
 import { broadcastMonadQuickTrade } from "~/utils/monadTradeEvents";
 import Cookies from "js-cookie";
@@ -278,6 +278,9 @@ export default function Header({
     refreshBalance,
     primaryWalletAddresses,
     chainBalances,
+    walletList,
+    walletBalances,
+    selectedWalletIds,
     logout,
   } = useUser();
   // Determine chain from URL path or query parameter
@@ -299,6 +302,7 @@ export default function Header({
   
   // Enrich watchlist tokens with cached pulse token data when price is missing
   const [cachedPulseTokens, setCachedPulseTokens] = useState<Token[]>([]);
+  const pendingQuickBuyToastRef = useRef<{ id: string; tokenImage: string | null; tokenName: string; fakeTime: string; startTime: number; timerInterval?: NodeJS.Timeout } | null>(null);
 
   const isMonadToken = (token: any) =>
     typeof token?.mint === "string" && token.mint.startsWith("0x");
@@ -903,95 +907,42 @@ export default function Header({
       const tokenImage = token ? extractTokenImage(token as any) : null;
       const tokenName = token?.name || token?.symbol || '';
       
-      // Generate unique toast ID and fake fast time
-      const uniqueToastId = `header-quickbuy-${Date.now()}`;
-      const fakeTime = (Math.random() * 0.2 + 0.4).toFixed(2);
-      const startTime = Date.now();
-      const timerCap = 0.40 + Math.random() * 0.20;
-      let timerFinished = false;
+      const toastId = toast.loading('Placing trade...', { duration: Infinity });
       
-      // Show initial loading toast with timer
-      toast.custom(
-        (t) => (
-          <div className="flex items-center gap-2 bg-[#1a1b1e] text-white border border-white/10 rounded-lg px-4 py-3">
-            <FaCheckCircle id={`check-${uniqueToastId}`} className="flex-shrink-0" size={16} style={{ color: '#31e3ac', display: 'none' }} />
-            {tokenImage && (
-              <img src={tokenImage} alt={tokenName} className="w-5 h-5 rounded-full object-cover flex-shrink-0" style={{ border: '1px solid rgba(255, 255, 255, 0.1)' }} onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
-            )}
-            <span className="font-semibold text-sm" style={{ color: '#31e3ac' }}>Trade placed!</span>
-            <span id={`timer-${uniqueToastId}`} className="text-[#9CA3AF] text-xs ml-1">(0.00s)</span>
-            <span id={`link-${uniqueToastId}`} className="inline-flex items-center ml-1" style={{ display: 'none' }}>
-              <img src="https://pbs.twimg.com/profile_images/1749618187489206272/rDaFjEhN_400x400.jpg" alt="Monad" className="w-4 h-4 rounded-full" style={{ cursor: 'default' }} />
-            </span>
-          </div>
-        ),
-        { id: uniqueToastId, duration: Infinity }
-      );
-      
-      // Start timer animation
-      const timerInterval = setInterval(() => {
-        const elapsed = (Date.now() - startTime) / 1000;
-        const displayTime = Math.min(elapsed, timerCap).toFixed(2);
-        const timerEl = document.getElementById(`timer-${uniqueToastId}`);
-        if (timerEl) {
-          timerEl.textContent = `(${displayTime}s)`;
-        }
-        
-        if (!timerFinished && elapsed >= timerCap) {
-          timerFinished = true;
-          const checkEl = document.getElementById(`check-${uniqueToastId}`);
-          if (checkEl) {
-            checkEl.style.display = 'block';
-          }
-          const linkEl = document.getElementById(`link-${uniqueToastId}`);
-          if (linkEl) {
-            linkEl.style.display = 'inline-flex';
-          }
-        }
-      }, 50);
-
       try {
-        const result = await tradeMonadBuy(
-          {
-            tokenAddress,
-            amountMON: quickBuyAmount,
-            launchpad,
-            slippage,
-            gasPrice,
-          },
-          user.bearerToken,
-        );
+        const { results, totalConsidered } = await executeMonadMultiBuy({
+          tokenAddress,
+          amountMON: quickBuyAmount,
+          launchpad,
+          slippage,
+          gasPrice,
+          authToken: user.bearerToken,
+          walletList,
+          walletBalances,
+          selectedWalletIds: selectedWalletIds?.monad || [],
+        });
 
-        if (result.success && result.txHash) {
-          clearInterval(timerInterval);
-          const explorerUrl = `https://monadvision.com/tx/${result.txHash}`;
-          const linkEl = document.getElementById(`link-${uniqueToastId}`);
-          if (linkEl) {
-            linkEl.innerHTML = `<a href="${explorerUrl}" target="_blank" rel="noopener noreferrer" class="hover:opacity-80 transition-opacity"><img src="https://pbs.twimg.com/profile_images/1749618187489206272/rDaFjEhN_400x400.jpg" alt="Monad" class="w-4 h-4 rounded-full" style="cursor: pointer;" /></a>`;
-          }
-          setTimeout(() => {
-            toast.dismiss(uniqueToastId);
-          }, 10000);
-          // Refresh balance immediately after successful buy (with small delay for on-chain confirmation)
+        const txHashes = results
+          .map((r) => (r.result as any)?.txHash)
+          .filter(Boolean);
+        const summary = formatMonadTxSummary(txHashes, totalConsidered);
+
+        if (txHashes.length > 0) {
           setTimeout(() => {
             refreshBalance({ chain: "monad", force: true }).catch((err) => {
               console.warn('Failed to refresh balance:', err);
             });
           }, 1000);
           broadcastMonadQuickTrade(tokenAddress, 'buy');
-          console.log('✅ Header Watchlist Quick Buy successful:', result);
-          return { success: true, txHash: result.txHash };
-        } else {
-          clearInterval(timerInterval);
-          const errorMsg = formatMonadError((result as any)?.error);
-          toast.error(errorMsg, { id: uniqueToastId, duration: 6000 });
-          return { success: false, error: errorMsg };
+          toast.success(summary.message, { id: toastId, duration: 6000 });
+          return { success: true, txHash: txHashes[0] };
         }
+        toast.error('Trade failed', { id: toastId, duration: 6000 });
+        return { success: false, error: 'Trade failed' };
       } catch (error: any) {
         console.error('❌ Header Watchlist Quick Buy failed:', error);
-        clearInterval(timerInterval);
         const errorMessage = formatMonadError(error?.message || error?.error);
-        toast.error(errorMessage, { id: uniqueToastId, duration: 6000 });
+        toast.error(errorMessage, { id: toastId, duration: 6000 });
         return { success: false, error: errorMessage };
       }
     }
@@ -1016,6 +967,12 @@ export default function Header({
       user: { bearerToken: user.bearerToken, id: user.id },
       solBalance: 0, // Will be fetched by executeEnhancedTrade
       solPriceUsd: 150,
+      walletContext: {
+        selectedWalletIds: currentChain === "monad" ? selectedWalletIds?.monad || [] : selectedWalletIds?.sol || [],
+        walletList: walletList || [],
+        walletBalances: walletBalances || {},
+        chain: currentChain === "monad" ? "monad" : "sol",
+      },
       refreshBalance,
       onSuccess: (txHash, stats) => {
         console.log('✅ Header Watchlist Quick Buy successful:', { txHash, stats });
