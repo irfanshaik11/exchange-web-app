@@ -18,7 +18,9 @@ import { getWithdrawalHistory } from "~/utils/api";
 import { formatSmartNumber, formatSmallPrice } from "~/utils/db";
 import type { PositionRow, TradeRow } from "~/utils/functions";
 import type { UnifiedTokenMetadata } from "~/utils/tokenMetadata";
-import { FaSearch, FaEye, FaUpload, FaTimes, FaInfoCircle, FaStar, FaRegStar } from "react-icons/fa";
+import { FaSearch, FaEye, FaUpload, FaTimes, FaInfoCircle, FaStar, FaRegStar, FaTrash, FaSync } from "react-icons/fa";
+import { IoIosGitNetwork } from "react-icons/io";
+import { PiNetwork } from "react-icons/pi";
 import { SiSolana } from "react-icons/si";
 import toast from "react-hot-toast";
 import { FiEdit2, FiCheck, FiX, FiInfo } from "react-icons/fi";
@@ -31,6 +33,8 @@ import { useWalletTokenBalances } from "~/hooks/useWalletTokenBalances";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Area, AreaChart } from 'recharts';
 import { normalizeMonadAddress } from "~/utils/normalizeMonadAddress";
 import { acknowledgeWalletExport } from "~/utils/api";
+import { redistributeWalletFunds } from "~/utils/api";
+import { deleteUserWallet } from "~/utils/api";
 
 // Interactive Balance Chart Component
 const BalanceChart = ({ 
@@ -249,21 +253,25 @@ interface UserWallet {
   walletId?: string | null; // Turnkey wallet ID (null for imported wallets)
 }
 
+const isValidSolanaAddress = (address?: string | null) =>
+  typeof address === "string" &&
+  /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(address.trim());
+
 const normalizeWalletFromApi = (
   wallet: any,
   fallbackIndex?: number
 ): UserWallet => {
+  const rawAddress =
+    typeof wallet?.address === "string" ? wallet.address.trim() : "";
   const solanaAddress =
-    typeof wallet?.solanaAddress === "string" && wallet.solanaAddress.length > 0
-      ? wallet.solanaAddress
-      : typeof wallet?.address === "string"
-      ? wallet.address
+    isValidSolanaAddress(wallet?.solanaAddress)
+      ? wallet.solanaAddress.trim()
+      : isValidSolanaAddress(rawAddress)
+      ? rawAddress
       : "";
   const ethereumAddress =
     normalizeMonadAddress(wallet?.ethereumAddress) ||
-    normalizeMonadAddress(
-      typeof wallet?.address === "string" ? wallet.address : undefined,
-    ) ||
+    normalizeMonadAddress(rawAddress) ||
     "";
   const resolvedAddress = solanaAddress || ethereumAddress || "";
   let label = typeof wallet?.label === "string" ? wallet.label : undefined;
@@ -290,10 +298,17 @@ const normalizeWalletFromApi = (
 
 const getAddressForChain = (wallet: UserWallet, chain: string) => {
   if (chain === "sol") {
-    return wallet.solanaAddress || "";
+    if (isValidSolanaAddress(wallet.solanaAddress)) {
+      return wallet.solanaAddress.trim();
+    }
+    if (isValidSolanaAddress(wallet.address)) {
+      return wallet.address.trim();
+    }
+    return "";
   }
   return (
     normalizeMonadAddress(wallet.ethereumAddress) ||
+    normalizeMonadAddress(wallet.address) ||
     ""
   );
 };
@@ -481,6 +496,12 @@ export default function PortfolioPage() {
   const [exportWalletAddress, setExportWalletAddress] = useState<string | null>(null);
   const [forceExportChain, setForceExportChain] = useState<"sol" | "monad" | null>(null);
   const [walletSearchQuery, setWalletSearchQuery] = useState("");
+  const [redistributing, setRedistributing] = useState(false);
+  const [deletingWalletId, setDeletingWalletId] = useState<string | null>(null);
+  const [deleteModalOpen, setDeleteModalOpen] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<UserWallet | null>(null);
+  const [deleteRiskAck, setDeleteRiskAck] = useState(false);
+  const [refreshingBalances, setRefreshingBalances] = useState(false);
   const isWalletsLoading = walletListLoading && wallets.length === 0;
 
   const notifyWalletsUpdated = () => {
@@ -2232,6 +2253,153 @@ export default function PortfolioPage() {
   const isAllSolSelected = currentChain === "sol" && filteredWallets.length > 0 && selectedSolSet.size === filteredWallets.length;
   const isAllMonSelected = currentChain === "monad" && filteredWallets.length > 0 && selectedMonSet.size === filteredWallets.length;
 
+  const handleRedistributeFunds = async (mode: "split" | "consolidate") => {
+    if (!user?.bearerToken) {
+      toast.error("Please log in first");
+      return;
+    }
+    const ids = currentChain === "sol" ? selectedSolWalletIds : selectedMonWalletIds;
+    if (!ids || ids.length === 0) {
+      toast.error("Select at least one wallet first");
+      return;
+    }
+
+    setRedistributing(true);
+    try {
+      const response = await redistributeWalletFunds(
+        { chain: currentChain as "sol" | "monad", mode, walletIds: ids },
+        user.bearerToken
+      );
+
+      const { summary, results } = response || {};
+      if (mode === "consolidate") {
+        const sentFrom =
+          results
+            ?.filter((r) => r.status === "sent" && r.from)
+            .map((r) => r.from)
+            .filter(Boolean) || [];
+        const uniqueFrom = Array.from(new Set(sentFrom));
+        const label = uniqueFrom
+          .slice(0, 3)
+          .map((addr) =>
+            addr.length > 10 ? `${addr.slice(0, 4)}...${addr.slice(-4)}` : addr
+          )
+          .join(", ");
+        const more = uniqueFrom.length > 3 ? ` +${uniqueFrom.length - 3} more` : "";
+        toast.success(
+          `Consolidation queued: moved from ${uniqueFrom.length} wallet(s)${label ? ` (${label}${more})` : ""}`
+        );
+      } else {
+        toast.success("Split successful");
+      }
+
+      // Refresh balances for affected wallets
+      const addresses = wallets
+        .filter((w) => ids.includes(w.id))
+        .map((w) => getAddressForChain(w, currentChain))
+        .filter(Boolean) as string[];
+
+      const primaryAddress =
+        currentChain === "sol"
+          ? primaryWalletAddresses.solana || getAddressForChain(wallets.find((w) => w.isPrimary) || wallets[0] || ({} as any), "sol")
+          : primaryWalletAddresses.ethereum ||
+            normalizeMonadAddress(
+              getAddressForChain(wallets.find((w) => w.isPrimary) || wallets[0] || ({} as any), "monad")
+            );
+
+      const refreshSet = new Set(addresses);
+      if (primaryAddress) refreshSet.add(primaryAddress);
+
+      if (refreshSet.size) {
+        await refreshBalancesForCurrentChain();
+      }
+      await refreshWalletList(true);
+    } catch (error: any) {
+      console.error("Redistribute failed:", error);
+      toast.error(error?.message || "Failed to redistribute funds");
+    } finally {
+      setRedistributing(false);
+    }
+  };
+
+  const beginDeleteWallet = (wallet: UserWallet) => {
+    setDeleteTarget(wallet);
+    setDeleteRiskAck(false);
+    setDeleteModalOpen(true);
+  };
+
+  const refreshBalancesForCurrentChain = async () => {
+    if (!wallets.length) return;
+    setRefreshingBalances(true);
+    try {
+      const addresses = wallets
+        .map((w) => getAddressForChain(w, currentChain))
+        .filter(Boolean) as string[];
+      if (addresses.length) {
+        await refreshAllBalances(
+          addresses.map((address) => ({ address, chain: currentChain })),
+          true
+        );
+      }
+      const primaryAddress =
+        currentChain === "sol"
+          ? primaryWalletAddresses.solana
+          : primaryWalletAddresses.ethereum;
+      if (primaryAddress) {
+        await refreshBalance({
+          chain: currentChain,
+          address: primaryAddress,
+          force: true,
+          updateChainBalance: true,
+        });
+      }
+    } catch (error) {
+      console.error("Balance refresh failed:", error);
+    } finally {
+      setRefreshingBalances(false);
+    }
+  };
+
+  const handleDeleteWallet = async () => {
+    if (!deleteTarget) return;
+    if (!user?.bearerToken) {
+      toast.error("Please log in first");
+      return;
+    }
+    setDeletingWalletId(deleteTarget.id);
+    try {
+      await deleteUserWallet(deleteTarget.id, user.bearerToken);
+
+      // Remove from selection locally
+      if (currentChain === "sol") {
+        setSelectedWalletsForChain(
+          selectedSolWalletIds.filter((id) => id !== deleteTarget.id),
+          "sol"
+        );
+      } else {
+        setSelectedWalletsForChain(
+          selectedMonWalletIds.filter((id) => id !== deleteTarget.id),
+          "monad"
+        );
+      }
+
+      await refreshWalletList(true);
+
+      // Refresh balances to update header/chain balances
+      await refreshAllBalances([], true); // noop but keeps contract
+      await refreshBalance({ chain: currentChain, force: true, updateChainBalance: true });
+
+      toast.success("Wallet deleted");
+    } catch (error: any) {
+      console.error("Delete wallet failed:", error);
+      toast.error(error?.message || "Failed to delete wallet");
+    } finally {
+      setDeletingWalletId(null);
+      setDeleteModalOpen(false);
+      setDeleteTarget(null);
+    }
+  };
+
     const handleCreateWallet = async () => {
     if (!user?.id) {
       toast.error("Please log in first");
@@ -3450,6 +3618,24 @@ export default function PortfolioPage() {
                         >
                           Select with funds
                         </button>
+                        <button
+                          className="px-3 py-1 rounded-full bg-[#374151] text-xs text-[#f0f5f5] hover:bg-[#4B5563] transition-colors cursor-pointer whitespace-nowrap flex items-center gap-1 disabled:opacity-60"
+                          disabled={redistributing}
+                          onClick={() => handleRedistributeFunds("consolidate")}
+                          title="Move all selected funds to the primary wallet"
+                        >
+                          <IoIosGitNetwork size={14} />
+                          {redistributing ? "Working..." : "Consolidate"}
+                        </button>
+                        <button
+                          className="px-3 py-1 rounded-full bg-[#374151] text-xs text-[#f0f5f5] hover:bg-[#4B5563] transition-colors cursor-pointer whitespace-nowrap flex items-center gap-1 disabled:opacity-60"
+                          disabled={redistributing}
+                          onClick={() => handleRedistributeFunds("split")}
+                          title="Split selected balance equally across wallets"
+                        >
+                          <PiNetwork size={14} />
+                          {redistributing ? "Working..." : "Split"}
+                        </button>
                       </div>
                     )}
                     <div className="relative">
@@ -3520,8 +3706,21 @@ export default function PortfolioPage() {
                 <div className="py-2 -mx-4 px-4">
                   <div className="grid grid-cols-[2fr_1fr_1fr_1.2fr] gap-2 text-xs text-[#9CA3AF]">
                     <div className="font-medium truncate">Wallet</div>
-                    <div className="font-medium truncate text-center">
-                      Balance ({currentChain === "monad" ? "MON" : "SOL"})
+                    <div className="font-medium truncate text-center flex items-center justify-center gap-2">
+                      <span>
+                        Balance ({currentChain === "monad" ? "MON" : "SOL"})
+                      </span>
+                      <button
+                        className="flex items-center justify-center rounded-full border border-[#2A2B33] p-1 text-[10px] hover:border-[#4B5563] transition disabled:opacity-50"
+                        title="Refresh balances"
+                        onClick={() => refreshBalancesForCurrentChain()}
+                        disabled={refreshingBalances}
+                      >
+                        <FaSync
+                          size={10}
+                          className={refreshingBalances ? "animate-spin" : ""}
+                        />
+                      </button>
                     </div>
                     <div className="font-medium truncate text-center">Holdings</div>
                     <div className="font-medium truncate text-center">Actions</div>
@@ -3565,7 +3764,7 @@ export default function PortfolioPage() {
                             : "No wallets found"}
                       </div>
                     ) : (
-                      <div className="max-h-[70vh] overflow-y-auto pr-2 -mr-2">
+                      <div className="max-h-[70vh] overflow-y-auto pr-2 -mr-2 pb-10">
                         {filteredWallets.map((wallet) => {
                           const displayAddress = getAddressForChain(wallet, currentChain);
                           const truncated =
@@ -3781,6 +3980,17 @@ export default function PortfolioPage() {
                                     ) : (
                                       <FaRegStar size={14} color="#9CA3AF" />
                                     )}
+                                  </button>
+                                  <button
+                                    className="px-2 py-1 rounded-full text-xs text-red-400 hover:text-red-300 transition-colors cursor-pointer whitespace-nowrap flex items-center gap-1 disabled:opacity-60"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      beginDeleteWallet(wallet);
+                                    }}
+                                    title="Delete wallet"
+                                    disabled={deletingWalletId === wallet.id}
+                                  >
+                                    <FaTrash size={12} />
                                   </button>
                                   <button
                                     className="px-3 py-1 rounded-full bg-[#374151] text-xs text-[#f0f5f5] hover:bg-[#4B5563] transition-colors cursor-pointer whitespace-nowrap"
@@ -4014,6 +4224,51 @@ export default function PortfolioPage() {
           await handleExported();
         }}
       />
+
+      {/* Delete Wallet Confirmation */}
+      {deleteModalOpen && deleteTarget && (
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/70 px-4">
+          <div className="w-full max-w-md rounded-xl border border-[#2A2B33] bg-[#101114] p-5 shadow-2xl">
+            <div className="mb-3 flex items-center gap-2 text-[#f0f5f5]">
+              <span className="text-lg">⚠️ Deletion Reminder</span>
+            </div>
+            <p className="text-sm text-[#c7c9d1] mb-3 leading-relaxed">
+              This archives the wallet and removes it from your list. Funds stay on-chain, but this wallet will no longer be used for trading. Export any keys you need first.
+            </p>
+            <p className="text-sm text-[#c7c9d1] mb-3 leading-relaxed">
+              Wallet: <span className="text-[#70E0B0]">{deleteTarget.label}</span>
+            </p>
+            <label className="flex items-center gap-2 text-sm text-[#c7c9d1]">
+              <input
+                type="checkbox"
+                checked={deleteRiskAck}
+                onChange={(e) => setDeleteRiskAck(e.target.checked)}
+                className="h-4 w-4 accent-[#70E0B0]"
+              />
+              I understand this will archive the wallet and stop its trades.
+            </label>
+            <div className="mt-5 flex justify-end gap-3">
+              <button
+                onClick={() => {
+                  setDeleteModalOpen(false);
+                  setDeleteTarget(null);
+                }}
+                className="rounded-md border border-[#2A2B33] px-4 py-2 text-sm text-[#c7c9d1] hover:border-[#4B5563]"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleDeleteWallet}
+                disabled={!deleteRiskAck || deletingWalletId === deleteTarget.id}
+                className="flex items-center gap-2 rounded-md bg-[#ef4444] px-4 py-2 text-sm font-semibold text-white transition disabled:opacity-60"
+              >
+                <FaTrash size={12} />
+                {deletingWalletId === deleteTarget.id ? "Deleting..." : "Delete"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   );
 }

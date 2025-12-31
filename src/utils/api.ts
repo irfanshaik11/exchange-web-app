@@ -472,6 +472,34 @@ export const getWithdrawalFee = async (chain?: string) => {
   }
 };
 
+// Wallet redistribution (split/consolidate)
+export const redistributeWalletFunds = (
+  params: { chain: "sol" | "monad"; mode: "split" | "consolidate"; walletIds: string[] },
+  authToken: string
+) =>
+  apiFetch<{
+    ok: boolean;
+    summary: { sent: number; failed: number; skipped: number };
+    results: Array<{
+      from: string;
+      to: string;
+      amount: string;
+      txSignature?: string;
+      status: "sent" | "skipped" | "failed";
+      reason?: string;
+    }>;
+  }>("/api/wallets/redistribute", {
+    method: "POST",
+    body: params,
+    authToken,
+  });
+
+export const deleteUserWallet = (walletId: string, authToken: string) =>
+  apiFetch<{ ok: boolean; walletId: string }>(`/api/users/wallet/${walletId}`, {
+    method: "DELETE",
+    authToken,
+  });
+
 export const updateLimitOrder = (
   params: UpdateLimitOrderParams,
   authToken: string,
