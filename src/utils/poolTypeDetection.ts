@@ -1,18 +1,20 @@
 import type { Token } from "./db";
 
-export type PoolType = 
-  | "PumpAmm" 
-  | "Raydium CPMM" 
-  | "Raydium Launchpad" 
-  | "Pumpfun" 
-  | "launchLab" 
-  | "bonk" 
-  | "meteora dbc" 
-  | "meteora amm v1" 
-  | "meteora amm v2" 
-  | "Meteora" 
-  | "bags" 
-  | "MoonShoot" 
+export type PoolType =
+  | "PumpAmm"
+  | "Raydium"
+  | "Raydium CPMM"
+  | "Raydium CLMM"
+  | "Raydium Launchpad"
+  | "Pumpfun"
+  | "launchLab"
+  | "bonk"
+  | "meteora dbc"
+  | "meteora amm v1"
+  | "meteora amm v2"
+  | "Meteora"
+  | "bags"
+  | "MoonShoot"
   | "Orca"
   | "";
 
@@ -52,6 +54,13 @@ export function getPoolTypeFromToken(token: Token): PoolType {
   }
   if (protocolLower.includes("raydium") && protocolLower.includes("cpmm")) {
     return "Raydium CPMM";
+  }
+  if (protocolLower.includes("raydium") && protocolLower.includes("clmm")) {
+    return "Raydium CLMM";
+  }
+  // Generic "raydium" without specific variant - backend Trade API will auto-route
+  if (protocolLower.includes("raydium") || protocolLower === "raydium") {
+    return "Raydium";
   }
   // Meteora protocol detection - check for specific variants first
   if (protocolLower.includes("meteora")) {
