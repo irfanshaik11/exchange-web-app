@@ -18,7 +18,7 @@ import { getWithdrawalHistory } from "~/utils/api";
 import { formatSmartNumber, formatSmallPrice } from "~/utils/db";
 import type { PositionRow, TradeRow } from "~/utils/functions";
 import type { UnifiedTokenMetadata } from "~/utils/tokenMetadata";
-import { FaSearch, FaEye, FaUpload, FaTimes, FaInfoCircle } from "react-icons/fa";
+import { FaSearch, FaEye, FaUpload, FaTimes, FaInfoCircle, FaStar, FaRegStar } from "react-icons/fa";
 import { SiSolana } from "react-icons/si";
 import toast from "react-hot-toast";
 import { FiEdit2, FiCheck, FiX, FiInfo } from "react-icons/fi";
@@ -305,7 +305,7 @@ export default function PortfolioPage() {
   const [activeSection, setActiveSection] = useState<"spot" | "wallet" | "perpetuals">("spot");
   const [activeSpotTab, setActiveSpotTab] = useState(0);
   const [activePerpetualsTab, setActivePerpetualsTab] = useState(0);
-  const { user, loading: userLoading, solBalance, usdcBalance, refreshBalance, refreshAllBalances, chainBalances, primaryWalletAddresses, walletBalances: contextWalletBalances, walletList: contextWalletList, walletListLoading, refreshWalletList, refreshUser } = useUser();
+  const { user, loading: userLoading, solBalance, usdcBalance, refreshBalance, refreshAllBalances, chainBalances, primaryWalletAddresses, walletBalances: contextWalletBalances, walletList: contextWalletList, walletListLoading, refreshWalletList, refreshUser, selectedWalletIds, selectAllWalletsForChain, selectWalletsWithFunds, clearSelectedWallets, setSelectedWalletsForChain } = useUser();
   const { monPrice } = useSolPrice();
   const router = useRouter();
   const currentChain = (router.query.chain as string) || "monad";
@@ -2225,6 +2225,13 @@ export default function PortfolioPage() {
       });
   }, [wallets, showHidden, walletSearchQuery, currentChain]);
 
+  const selectedSolWalletIds = selectedWalletIds?.sol || [];
+  const selectedSolSet = useMemo(() => new Set(selectedSolWalletIds), [selectedSolWalletIds]);
+  const selectedMonWalletIds = selectedWalletIds?.monad || [];
+  const selectedMonSet = useMemo(() => new Set(selectedMonWalletIds), [selectedMonWalletIds]);
+  const isAllSolSelected = currentChain === "sol" && filteredWallets.length > 0 && selectedSolSet.size === filteredWallets.length;
+  const isAllMonSelected = currentChain === "monad" && filteredWallets.length > 0 && selectedMonSet.size === filteredWallets.length;
+
     const handleCreateWallet = async () => {
     if (!user?.id) {
       toast.error("Please log in first");
@@ -3421,6 +3428,30 @@ export default function PortfolioPage() {
                       <span className="hidden sm:inline">Show Archived</span>
                       <span className="sm:hidden">Archived</span>
                     </button>
+                    {(currentChain === "sol" || currentChain === "monad") && (
+                      <div className="flex gap-2">
+                        <button
+                          className="px-3 py-1 rounded-full bg-[#374151] text-xs text-[#f0f5f5] hover:bg-[#4B5563] transition-colors cursor-pointer whitespace-nowrap"
+                          onClick={() => {
+                            if (currentChain === "sol") {
+                              if (isAllSolSelected) clearSelectedWallets("sol");
+                              else selectAllWalletsForChain("sol");
+                            } else {
+                              if (isAllMonSelected) clearSelectedWallets("monad");
+                              else selectAllWalletsForChain("monad");
+                            }
+                          }}
+                        >
+                          {(currentChain === "sol" ? isAllSolSelected : isAllMonSelected) ? "Unselect all" : "Select all"}
+                        </button>
+                        <button
+                          className="px-3 py-1 rounded-full bg-[#374151] text-xs text-[#f0f5f5] hover:bg-[#4B5563] transition-colors cursor-pointer whitespace-nowrap"
+                          onClick={() => selectWalletsWithFunds(currentChain as "sol" | "monad")}
+                        >
+                          Select with funds
+                        </button>
+                      </div>
+                    )}
                     <div className="relative">
                       <button
                         onClick={() => setShowImportDropdown(!showImportDropdown)}
@@ -3541,35 +3572,67 @@ export default function PortfolioPage() {
                             displayAddress.length > 8
                               ? `${displayAddress.slice(0, 4)}...${displayAddress.slice(-4)}`
                               : displayAddress;
+                          const isSelectable = currentChain === "sol" || currentChain === "monad";
+                          const isSelected = isSelectable
+                            ? currentChain === "sol"
+                              ? selectedSolSet.has(wallet.id)
+                              : selectedMonSet.has(wallet.id)
+                            : false;
+                          const rowBackground = undefined;
                           return (
                             <div
                               key={wallet.id}
-                              className="border-b border-[#2A2B33] hover:bg-[#17191E] transition-colors cursor-pointer -mx-4 px-4"
+                              className="group border-b border-[#2A2B33] hover:bg-[#17191E] transition-colors -mx-4 px-4"
+                              style={{ backgroundColor: rowBackground }}
                             >
                               <div className="grid grid-cols-[2fr_1fr_1fr_1.2fr] gap-2 items-center py-3">
                               {/* Wallet + address */}
                                 <div className="flex items-center gap-2 min-w-0">
-                                  <button
-                                    className={`flex-shrink-0 w-5 h-5 rounded border-2 flex items-center justify-center transition-all ${
-                                      wallet.isPrimary ? "border-[#FF6B35]" : "border-[#2A2B33]"
-                                    }`}
+                                  <div
+                                    className="relative flex-shrink-0 w-5 h-5 rounded border-2 flex items-center justify-center transition-all cursor-pointer"
                                     style={{
-                                      backgroundColor: wallet.isPrimary ? "#FF6B35" : 'transparent'
-                                    }}
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      handleSetPrimaryWallet(wallet.id);
+                                      borderColor: wallet.isPrimary ? "#FF6B35" : isSelected ? "#2563EB" : "#2A2B33",
+                                      boxShadow: isSelected ? "0 0 0 1px #2563EB" : "none",
+                                      backgroundColor: wallet.isPrimary ? "#FF6B3522" : isSelected ? "#2563EB20" : "transparent",
                                     }}
                                     title={
-                                      wallet.isPrimary ? "Primary wallet" : "Set as primary wallet"
+                                      wallet.isPrimary
+                                        ? "Primary wallet"
+                                        : isSelected
+                                          ? "Selected for trading"
+                                          : "Wallet"
                                     }
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      if (currentChain === "sol" || currentChain === "monad") {
+                                        const next =
+                                          currentChain === "sol"
+                                            ? new Set(selectedSolSet)
+                                            : new Set(selectedMonSet);
+                                        if (isSelected) {
+                                          next.delete(wallet.id);
+                                        } else {
+                                          next.add(wallet.id);
+                                        }
+                                        setSelectedWalletsForChain(
+                                          Array.from(next),
+                                          currentChain as "sol" | "monad"
+                                        );
+                                      }
+                                    }}
                                   >
                                     {wallet.isPrimary && (
-                                      <div className="w-2.5 h-2.5 bg-white rounded-sm" />
+                                      <div className="w-2.5 h-2.5 rounded-sm" style={{ backgroundColor: "#FF6B35" }} />
                                     )}
-                                  </button>
+                                    {!wallet.isPrimary && isSelected && (
+                                      <div className="w-2.5 h-2.5 rounded-sm" style={{ backgroundColor: "#2563EB" }} />
+                                    )}
+                                    {wallet.isPrimary && isSelected && (
+                                      <div className="absolute inset-0 rounded border border-[#2563EB] pointer-events-none" />
+                                    )}
+                                  </div>
                                   <div className="min-w-0 flex-1">
-                                    <div className="font-medium text-[#f0f5f5] text-sm flex items-center gap-2">
+                                    <div className="font-medium text-sm flex items-center gap-2" style={{ color: wallet.isPrimary ? "#FF6B35" : "#f0f5f5" }}>
                                     {editingWalletId === wallet.id ? (
                                       <>
                                         <input
@@ -3584,11 +3647,15 @@ export default function PortfolioPage() {
                                             }
                                           }}
                                           autoFocus
+                                          onClick={(e) => e.stopPropagation()}
                                         />
                                         <button
                                           type="button"
                                           className="text-[#70E0B0] hover:text-[#58B890]"
-                                          onClick={handleRenameWallet}
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            handleRenameWallet();
+                                          }}
                                           disabled={renamingWalletId === wallet.id}
                                         >
                                           <FiCheck size={14} />
@@ -3596,7 +3663,10 @@ export default function PortfolioPage() {
                                         <button
                                           type="button"
                                           className="text-[#9CA3AF] hover:text-[#f0f5f5]"
-                                          onClick={handleCancelRenameWallet}
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            handleCancelRenameWallet();
+                                          }}
                                           disabled={renamingWalletId === wallet.id}
                                         >
                                           <FiX size={14} />
@@ -3608,7 +3678,10 @@ export default function PortfolioPage() {
                                         <button
                                           type="button"
                                           className="text-[#9CA3AF] hover:text-[#f0f5f5]"
-                                          onClick={() => handleBeginRenameWallet(wallet)}
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            handleBeginRenameWallet(wallet);
+                                          }}
                                           title="Rename wallet"
                                         >
                                           <FiEdit2 size={14} />
@@ -3694,10 +3767,27 @@ export default function PortfolioPage() {
                                 </div>
 
                                 {/* Actions */}
-                                <div className="text-center">
+                                <div className="flex items-center justify-end gap-2">
+                                  <button
+                                    className={`transition-opacity p-1 ${wallet.isPrimary ? "opacity-100" : "opacity-0 group-hover:opacity-100"}`}
+                                    title={wallet.isPrimary ? "Primary wallet" : "Set as primary"}
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleSetPrimaryWallet(wallet.id);
+                                    }}
+                                  >
+                                    {wallet.isPrimary ? (
+                                      <FaStar size={14} color="#FF6B35" />
+                                    ) : (
+                                      <FaRegStar size={14} color="#9CA3AF" />
+                                    )}
+                                  </button>
                                   <button
                                     className="px-3 py-1 rounded-full bg-[#374151] text-xs text-[#f0f5f5] hover:bg-[#4B5563] transition-colors cursor-pointer whitespace-nowrap"
-                                    onClick={() => handleExportWallet(wallet.id)}
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleExportWallet(wallet.id);
+                                    }}
                                     title="Export wallet"
                                   >
                                     Export wallet

@@ -22,7 +22,6 @@ import { IoColorPaletteOutline } from "react-icons/io5";
 import QuickBuySettingsModal from "./QuickBuySettingsModal";
 import PnLModal from "./PnLModal";
 import WalletSwitcher from "./WalletSwitcher";
-import WalletTrackerPopup from "./WalletTrackerPopup";
 import MonadWalletSwitcher from "./MonadWalletSwitcher";
 import TwitterTrackerPopup from "./TwitterTrackerPopup";
 import DiscoverPopup from "./DiscoverPopup";
@@ -1044,13 +1043,7 @@ export default function Footer() {
       {/* PnL Modal */}
       <PnLModal isOpen={showPnLModal} onClose={() => setShowPnLModal(false)} chain={currentChain} />
 
-      {/* Wallet Switcher Modal - Commented out */}
-      {/* <WalletSwitcher 
-        isOpen={showWalletDropdown} 
-        onClose={() => setShowWalletDropdown(false)} 
-      /> */}
-
-      {/* Monad Wallet Switcher - Show when chain is Monad */}
+      {/* Monad Wallet Switcher */}
       {currentChain === "monad" && (
         <MonadWalletSwitcher
           isOpen={showWalletDropdown}
@@ -1058,9 +1051,9 @@ export default function Footer() {
         />
       )}
 
-      {/* Wallet Tracker Popup - Show when chain is Solana */}
+      {/* Solana Wallet Switcher */}
       {currentChain !== "monad" && (
-        <WalletTrackerPopup
+        <WalletSwitcher
           isOpen={showWalletDropdown}
           onClose={() => setShowWalletDropdown(false)}
         />

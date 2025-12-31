@@ -9,7 +9,8 @@ import { useQuickBuy } from "~/components/QuickBuyContext";
 import QuickBuySettingsModal from '../components/QuickBuySettingsModal';
 import { useFilter } from '../components/FilterContext';
 import FilterPopout from '../components/FilterPopout';
-import { SOL_MINT_ADDRESS, tradeMonadBuy } from "~/utils/api";
+import { SOL_MINT_ADDRESS } from "~/utils/api";
+import { executeMonadMultiBuy, formatMonadTxSummary } from "~/utils/monadWalletAllocation";
 import { executeEnhancedTrade } from "~/utils/enhancedTradeHandler";
 import { showEnhancedToast, updateEnhancedToast } from "~/utils/enhancedToast";
 import { useUser } from "~/components/UserContext";
@@ -159,7 +160,7 @@ export default function DiscoverPopoutContent() {
   }, [router.isReady, router.query.search]);
 
   const { presets, activePreset, setActivePreset } = useQuickBuy();
-  const { user, solBalance, refreshBalance } = useUser();
+  const { user, solBalance, refreshBalance, walletList, walletBalances, selectedWalletIds } = useUser();
 
   // Load quickBuyAmount from localStorage with fallback
   const getInitialQuickBuyAmount = () => {
@@ -1668,6 +1669,7 @@ export default function DiscoverPopoutContent() {
       // Random cap time between 0.40 and 0.60 seconds
       const timerCap = 0.40 + Math.random() * 0.20;
       let timerFinished = false;
+      let firstSuccessShown = false;
       
       // Show initial loading toast with timer - checkmark hidden until timer finishes, link icon grayed out
       toast.custom(
@@ -1677,7 +1679,7 @@ export default function DiscoverPopoutContent() {
             {tokenImage && (
               <img src={tokenImage} alt={tokenName} className="w-5 h-5 rounded-full object-cover flex-shrink-0" style={{ border: '1px solid rgba(255, 255, 255, 0.1)' }} onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
             )}
-            <span className="font-semibold text-sm" style={{ color: '#31e3ac' }}>Trade placed!</span>
+            <span id={`message-${uniqueToastId}`} className="font-semibold text-sm" style={{ color: '#31e3ac' }}>Trade placed!</span>
             <span id={`timer-${uniqueToastId}`} className="text-[#9CA3AF] text-xs ml-1">(0.00s)</span>
             <span id={`link-${uniqueToastId}`} className="inline-flex items-center ml-1" style={{ display: 'none' }}>
               <img src="https://pbs.twimg.com/profile_images/1749618187489206272/rDaFjEhN_400x400.jpg" alt="Monad" className="w-4 h-4 rounded-full" style={{ cursor: 'default' }} />
@@ -1714,39 +1716,75 @@ export default function DiscoverPopoutContent() {
       pendingQuickBuyToastRef.current = { id: uniqueToastId, tokenImage, tokenName, fakeTime: timerCap.toFixed(2), tokenAddress, startTime, timerInterval };
 
       try {
-        const result = await tradeMonadBuy(
-          {
-            tokenAddress,
-            amountMON: buyAmount,
-            launchpad,
-            slippage,
-            gasPrice,
-          },
-          user.bearerToken,
-        );
-
-        if (result.success && result.txHash) {
-          // Only update toast if WebSocket hasn't already handled it
-          if (pendingQuickBuyToastRef.current?.id === uniqueToastId) {
-            const explorerUrl = `https://monadvision.com/tx/${result.txHash}`;
-            // Update the link element - wrap Monad logo in anchor to make clickable
+        const { results, totalConsidered } = await executeMonadMultiBuy({
+          tokenAddress,
+          amountMON: buyAmount,
+          launchpad,
+          slippage,
+          gasPrice,
+          authToken: user.bearerToken,
+          walletList,
+          walletBalances,
+          selectedWalletIds: selectedWalletIds?.monad || [],
+          onWalletSuccess: (ctx) => {
+            if (firstSuccessShown) return;
+            const txHash = (ctx.result as any)?.txHash;
+            const summary = formatMonadTxSummary(txHash ? [txHash] : [], ctx.totalConsidered);
+            const messageEl = document.getElementById(`message-${uniqueToastId}`);
+            if (messageEl) {
+              messageEl.textContent = summary.message;
+            }
+            const checkEl = document.getElementById(`check-${uniqueToastId}`);
+            if (checkEl) {
+              checkEl.style.display = 'block';
+            }
             const linkEl = document.getElementById(`link-${uniqueToastId}`);
             if (linkEl) {
-              linkEl.innerHTML = `<a href="${explorerUrl}" target="_blank" rel="noopener noreferrer" class="hover:opacity-80 transition-opacity"><img src="https://pbs.twimg.com/profile_images/1749618187489206272/rDaFjEhN_400x400.jpg" alt="Monad" class="w-4 h-4 rounded-full" style="cursor: pointer;" /></a>`;
+              if (summary.hasMultiple || !txHash) {
+                linkEl.style.display = 'none';
+              } else {
+                const explorerUrl = `https://monadvision.com/tx/${txHash}`;
+                linkEl.innerHTML = `<a href="${explorerUrl}" target="_blank" rel="noopener noreferrer" class="hover:opacity-80 transition-opacity"><img src="https://pbs.twimg.com/profile_images/1749618187489206272/rDaFjEhN_400x400.jpg" alt="Monad" class="w-4 h-4 rounded-full" style="cursor: pointer;" /></a>`;
+                linkEl.style.display = 'inline-flex';
+              }
             }
-            // Auto-dismiss after 10s
+            firstSuccessShown = true;
+          },
+        });
+
+        const txHashes = results.map((r) => (r.result as any)?.txHash).filter(Boolean);
+        const summary = formatMonadTxSummary(txHashes, totalConsidered);
+
+        if (txHashes.length > 0) {
+          const messageEl = document.getElementById(`message-${uniqueToastId}`);
+          if (messageEl) {
+            messageEl.textContent = summary.message;
+          }
+          // Only update toast if WebSocket hasn't already handled it
+          if (pendingQuickBuyToastRef.current?.id === uniqueToastId) {
+            const linkEl = document.getElementById(`link-${uniqueToastId}`);
+            if (linkEl) {
+              if (summary.hasMultiple) {
+                linkEl.style.display = 'none';
+              } else if (txHashes[0]) {
+                const explorerUrl = `https://monadvision.com/tx/${txHashes[0]}`;
+                linkEl.innerHTML = `<a href="${explorerUrl}" target="_blank" rel="noopener noreferrer" class="hover:opacity-80 transition-opacity"><img src="https://pbs.twimg.com/profile_images/1749618187489206272/rDaFjEhN_400x400.jpg" alt="Monad" class="w-4 h-4 rounded-full" style="cursor: pointer;" /></a>`;
+                linkEl.style.display = 'inline-flex';
+              }
+            }
             setTimeout(() => {
               toast.dismiss(uniqueToastId);
             }, 10000);
             pendingQuickBuyToastRef.current = null;
           }
-          console.log("✅ Monad Quick Buy successful:", result);
+          console.log("✅ Monad Quick Buy successful:", txHashes);
           broadcastMonadQuickTrade(tokenAddress, 'buy');
-          return { success: true, txHash: result.txHash };
+          toast.success(summary.message, { duration: 4000 });
+          return { success: true, txHash: txHashes[0] };
         } else {
           clearInterval(timerInterval);
           pendingQuickBuyToastRef.current = null;
-          const errorMsg = formatMonadError((result as any)?.error);
+          const errorMsg = 'Trade failed';
           toast.error(errorMsg, { id: uniqueToastId, duration: 6000 });
           return { success: false, error: errorMsg };
         }
@@ -1772,6 +1810,12 @@ export default function DiscoverPopoutContent() {
       user: { bearerToken: user.bearerToken, id: user.id },
       solBalance: Number(solBalance || 0),
       solPriceUsd: 150, // TODO: Get real SOL price
+      walletContext: {
+        selectedWalletIds: currentChain === 'monad' ? selectedWalletIds?.monad || [] : selectedWalletIds?.sol || [],
+        walletList: walletList || [],
+        walletBalances: walletBalances || {},
+        chain: currentChain === 'monad' ? 'monad' : 'sol',
+      },
       refreshBalance,
       onSuccess: (txHash, stats) => {
         console.log('✅ Enhanced Quick Buy successful:', { txHash, stats });

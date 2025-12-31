@@ -608,6 +608,7 @@ export type BuyParams = {
   baseMint: string;
   quoteMint: string;
   amount: number;
+  walletId?: string; // Optional - target a specific wallet for signing
   mevProtection?: 0 | 1;
   poolType?: "PumpAmm" | "Raydium CPMM" | "Raydium Launchpad" | "Pumpfun" | "launchLab" | "bonk" | "meteora dbc" | "meteora amm v1" | "meteora amm v2" | "Meteora" | "bags" | "MoonShoot" | "Orca" | ""; // Optional - backend will detect if missing
   originalPairAddress?: string; // Original pair address from token-service for trade history
@@ -694,6 +695,7 @@ export type MonadBuyParams = {
   launchpad: 'nadfun' | 'flapsh-simple' | 'flapsh-devs'; // Launchpad identifier
   slippage?: number; // Optional: Slippage percentage (e.g., 5 for 5%)
   gasPrice?: number; // Optional: Gas price in gwei (defaults to network suggestion)
+  walletId?: string; // Optional: specific wallet to use for the trade
 };
 
 export type MonadSellParams = {
@@ -704,6 +706,7 @@ export type MonadSellParams = {
   slippage?: number; // Optional: Slippage percentage
   gasPrice?: number; // Optional: Gas price in gwei (defaults to network suggestion)
   priceUsd?: number; // Optional: Current token price in USD (for accurate trade history recording)
+  walletId?: string; // Optional: specific wallet to use for the trade
 };
 
 export const tradeMonadBuy = (params: MonadBuyParams, authToken: string) =>

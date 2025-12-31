@@ -17,6 +17,7 @@ import { useQuickBuy } from './QuickBuyContext';
 import { executeEnhancedTrade } from '~/utils/enhancedTradeHandler';
 import toast from 'react-hot-toast';
 import { tradeMonadBuy } from '~/utils/api';
+import { executeMonadMultiBuy, formatMonadTxSummary, buildMonadWalletAllocations } from '~/utils/monadWalletAllocation';
 import { validateMonadBalance } from '~/utils/tradeBalanceValidation';
 import { broadcastMonadQuickTrade } from '~/utils/monadTradeEvents';
 import { extractTokenImage } from '~/utils/images';
@@ -400,7 +401,7 @@ export default function WatchlistModal({ open, onClose }: WatchlistModalProps) {
   const [show, setShow] = useState(false);
   const { watchlist, removeFromWatchlist, refreshWatchlistToken } = useWatchlist();
   const router = useRouter();
-  const { user, refreshBalance, chainBalances } = useUser();
+  const { user, refreshBalance, chainBalances, walletList, walletBalances, selectedWalletIds } = useUser();
   const { presets, activePreset } = useQuickBuy();
   const hasMonadTokens = useMemo(
     () => watchlist.some((token) => isMonadToken(token)),
@@ -541,7 +542,20 @@ export default function WatchlistModal({ open, onClose }: WatchlistModalProps) {
       const startTime = Date.now();
       const timerCap = 0.40 + Math.random() * 0.20;
       let timerFinished = false;
-      
+
+      // Determine if this is a multi-wallet trade
+      const isMultiWallet = (selectedWalletIds?.monad || []).length > 1;
+      const totalSelectedWallets = (selectedWalletIds?.monad || []).length || 1;
+
+      // Pre-calculate which wallets will actually be used (have sufficient balance)
+      const { allocations, total } = buildMonadWalletAllocations({
+        amount: buyAmount,
+        walletList,
+        walletBalances,
+        selectedWalletIds: selectedWalletIds?.monad || [],
+      });
+      const walletsWithBalance = allocations.length;
+
       // Show initial loading toast
       toast.custom(
         (t) => (
@@ -559,7 +573,7 @@ export default function WatchlistModal({ open, onClose }: WatchlistModalProps) {
         ),
         { id: uniqueToastId, duration: Infinity }
       );
-      
+
       // Start timer animation
       const timerInterval = setInterval(() => {
         const elapsed = (Date.now() - startTime) / 1000;
@@ -568,7 +582,7 @@ export default function WatchlistModal({ open, onClose }: WatchlistModalProps) {
         if (timerEl) {
           timerEl.textContent = `(${displayTime}s)`;
         }
-        
+
         if (!timerFinished && elapsed >= timerCap) {
           timerFinished = true;
           const checkEl = document.getElementById(`check-${uniqueToastId}`);
@@ -577,30 +591,44 @@ export default function WatchlistModal({ open, onClose }: WatchlistModalProps) {
           }
           const linkEl = document.getElementById(`link-${uniqueToastId}`);
           if (linkEl) {
+            if (isMultiWallet) {
+              // Show actual wallets with balance vs total selected
+              linkEl.innerHTML = `<span style="color: #31e3ac; font-size: 11px; font-weight: 600;">${walletsWithBalance}/${totalSelectedWallets}</span>`;
+            }
             linkEl.style.display = 'inline-flex';
           }
         }
       }, 50);
       
       try {
-        const result = await tradeMonadBuy(
-          {
-            tokenAddress,
-            amountMON: buyAmount,
-            launchpad,
-            slippage,
-            gasPrice,
-          },
-          user.bearerToken,
-        );
-        
+        const { results, totalConsidered } = await executeMonadMultiBuy({
+          tokenAddress,
+          amountMON: buyAmount,
+          launchpad,
+          slippage,
+          gasPrice,
+          authToken: user.bearerToken,
+          walletList,
+          walletBalances,
+          selectedWalletIds: selectedWalletIds?.monad || [],
+        });
+
+        // Extract transaction hashes from results
+        const txHashes = results
+          .map((r) => (r.result as any)?.txHash)
+          .filter(Boolean);
+
         clearInterval(timerInterval);
-        
-        if (result.success && result.txHash) {
-          const explorerUrl = `https://monadvision.com/tx/${result.txHash}`;
-          const linkEl = document.getElementById(`link-${uniqueToastId}`);
-          if (linkEl) {
-            linkEl.innerHTML = `<a href="${explorerUrl}" target="_blank" rel="noopener noreferrer" class="hover:opacity-80 transition-opacity"><img src="https://monad.xyz/favicon.ico" alt="Monad" class="w-4 h-4 rounded-full" style="cursor: pointer;" /></a>`;
+
+        if (txHashes.length > 0) {
+          // For multi-wallet trades: Don't update anything (count was already shown at timer cap)
+          // For single wallet: Update logo to make it clickable
+          if (totalSelectedWallets === 1 && txHashes[0]) {
+            const linkEl = document.getElementById(`link-${uniqueToastId}`);
+            if (linkEl) {
+              const explorerUrl = `https://monadvision.com/tx/${txHashes[0]}`;
+              linkEl.innerHTML = `<a href="${explorerUrl}" target="_blank" rel="noopener noreferrer" class="hover:opacity-80 transition-opacity"><img src="https://monad.xyz/favicon.ico" alt="Monad" class="w-4 h-4 rounded-full" style="cursor: pointer;" /></a>`;
+            }
           }
           setTimeout(() => {
             toast.dismiss(uniqueToastId);
@@ -611,9 +639,9 @@ export default function WatchlistModal({ open, onClose }: WatchlistModalProps) {
             });
           }, 1000);
           broadcastMonadQuickTrade(tokenAddress, 'buy');
-          console.log('✅ Watchlist Monad Quick Buy successful:', result);
+          console.log('✅ Watchlist Monad Quick Buy successful:', txHashes);
         } else {
-          const errorMsg = formatMonadError((result as any)?.error);
+          const errorMsg = 'Trade failed';
           toast.error(errorMsg, { id: uniqueToastId, duration: 6000 });
         }
       } catch (error: any) {
@@ -632,8 +660,14 @@ export default function WatchlistModal({ open, onClose }: WatchlistModalProps) {
         side: 'buy',
         settings,
         user: { bearerToken: user.bearerToken, id: user.id },
-        solBalance: 0, // Will be fetched by executeEnhancedTrade
+        solBalance: chainBalances?.['sol'] ?? 0, // Use known SOL balance when available
         solPriceUsd: 150,
+        walletContext: {
+          selectedWalletIds: selectedWalletIds?.sol || [],
+          walletList: walletList || [],
+          walletBalances: walletBalances || {},
+          chain: 'sol',
+        },
         refreshBalance,
         onSuccess: (txHash, stats) => {
           console.log('✅ Watchlist Quick Buy successful:', { txHash, stats });

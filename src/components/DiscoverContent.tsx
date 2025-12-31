@@ -36,7 +36,7 @@ export default function DiscoverContent() {
   const { filter } = useFilter();
   const [localFilters, setLocalFilters] = useState(filter);
   const { presets, activePreset, setActivePreset } = useQuickBuy();
-  const { user, solBalance } = useUser();
+  const { user, solBalance, walletList, walletBalances, selectedWalletIds } = useUser();
 
   // Load quickBuyAmount from localStorage with fallback
   const getInitialQuickBuyAmount = () => {
@@ -612,6 +612,12 @@ export default function DiscoverContent() {
       user: { bearerToken: user.bearerToken, id: user.id },
       solBalance: Number(solBalance || 0),
       solPriceUsd: 150,
+      walletContext: {
+        selectedWalletIds: selectedWalletIds?.sol || [],
+        walletList: walletList || [],
+        walletBalances: walletBalances || {},
+        chain: 'sol',
+      },
       onSuccess: () => console.log('✅ Quick Buy successful'),
       onError: (error) => console.error('❌ Quick Buy failed:', error),
     });
@@ -1415,4 +1421,3 @@ export default function DiscoverContent() {
     </div>
   );
 }
-
