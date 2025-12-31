@@ -71,11 +71,11 @@ type ReusedTokenLite = {
 
 export default function TradePage() {
   const router = useRouter();
-  const { id, _name, _symbol, _price, _mcap, _image, _mint, chain } = router.query;
+  const { id, _name, _symbol, _price, _mcap, _image, _mint } = router.query;
 
-  // Determine network from chain parameter (defaults to 'monad')
-  // If chain is explicitly 'sol', use 'solana', otherwise default to 'monad'
-  const network = chain === 'sol' ? 'solana' : 'monad';
+  // This route (/trade/[id]) is EXCLUSIVELY for Solana tokens
+  // Monad tokens use /trade/monad/[contractAddress] instead
+  const network = 'solana' as const;
 
   const { backgroundData: backgroundOHLCData, isPreloading, preloadComplete } = useBackgroundOHLCPreload();
 

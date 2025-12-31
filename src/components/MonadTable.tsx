@@ -130,6 +130,7 @@ interface MonadTableProps {
   loading?: boolean;
   skeletonRowCount?: number;
   showBubbleMetrics?: boolean; // Feature flag for bubble metrics (Buyers, Sellers, Wallets, 24h TX, Vol 24h)
+  currentChain?: string; // Chain from parent to avoid router.query timing issues
 }
 
 // Add a simple in-memory cache for token metadata
@@ -1533,6 +1534,7 @@ function MonadTable({
   loading = false,
   skeletonRowCount = 10,
   showBubbleMetrics = false,
+  currentChain: chainProp,
 }: MonadTableProps) {
   // DEBUG: Log EVERY render (not just when tokens change)
   console.log(
@@ -5857,7 +5859,8 @@ function MonadTable({
 
               // Build query params for optimistic UI + cache lookup
               // Include chain parameter to preserve chain selection
-              const currentChain = (router.query.chain as string) || "monad";
+              // Use prop from parent (more reliable) or fallback to router.query
+              const currentChain = chainProp || (router.query.chain as string) || "monad";
               const queryParams = new URLSearchParams({
                 _name: (token as any)?.name || (token as any)?.symbol || "",
                 _symbol: (token as any)?.symbol || "",
