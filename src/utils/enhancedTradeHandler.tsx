@@ -110,6 +110,7 @@ export interface EnhancedTradeParams {
       solanaAddress?: string | null;
       ethereumAddress?: string | null;
       address?: string | null;
+      balance?: number;
       isPrimary?: boolean;
       isArchived?: boolean;
     }>;
@@ -217,9 +218,10 @@ export async function executeEnhancedTrade(params: EnhancedTradeParams): Promise
         allocations = workingWallets
           .map((wallet) => {
             const address = getAddressForChain(wallet, "sol");
-            const balance = address
-              ? params.walletContext!.walletBalances[address] ?? 0
-              : 0;
+            const addressKey = address?.trim();
+            const balance = addressKey
+              ? params.walletContext!.walletBalances[addressKey] ?? wallet.balance ?? 0
+              : wallet.balance ?? 0;
 
             console.log('[EnhancedTradeHandler] Checking wallet:', {
               walletId: wallet.id,
@@ -275,7 +277,10 @@ export async function executeEnhancedTrade(params: EnhancedTradeParams): Promise
     if (walletAllocations.length === 0 && availableWallets.length > 0) {
       const fallback = availableWallets[0];
       const address = getAddressForChain(fallback, "sol");
-      const balance = address ? params.walletContext.walletBalances[address] ?? 0 : 0;
+      const addressKey = address?.trim();
+      const balance = addressKey
+        ? params.walletContext.walletBalances[addressKey] ?? fallback.balance ?? 0
+        : fallback.balance ?? 0;
       walletAllocations = [
         {
           walletId: fallback.id,

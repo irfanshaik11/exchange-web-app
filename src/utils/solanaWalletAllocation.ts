@@ -102,6 +102,55 @@ export function buildSolanaWalletAllocations({
     };
   });
 
+  // Prefer a single wallet that can cover the full trade+fees (selected first)
+  const sortedByPreference = [...candidates].sort((a, b) => {
+    if (a.selected && !b.selected) return -1;
+    if (!a.selected && b.selected) return 1;
+    const balA = typeof a.balance === "number" ? a.balance : -1;
+    const balB = typeof b.balance === "number" ? b.balance : -1;
+    return balB - balA;
+  });
+
+  const singleCoveringWallet = sortedByPreference.find(
+    (c) =>
+      c.address &&
+      typeof c.balance === "number" &&
+      (c.balance as number) >= requiredBalanceFull
+  );
+
+  if (singleCoveringWallet) {
+    return {
+      allocations: [
+        {
+          walletId: singleCoveringWallet.wallet.id,
+          amount: amountValue,
+          address: singleCoveringWallet.address,
+          balance: singleCoveringWallet.balance as number,
+        },
+      ],
+      total: 1,
+    };
+  }
+
+  // If exactly one wallet is selected, honor it even without cached balance
+  if (selectionSet.size === 1) {
+    const selectedId = Array.from(selectionSet)[0];
+    const match = candidates.find((c) => c.wallet.id === selectedId && c.address);
+    if (match) {
+      return {
+        allocations: [
+          {
+            walletId: match.wallet.id,
+            amount: amountValue,
+            address: match.address!,
+            balance: typeof match.balance === "number" ? match.balance : 0,
+          },
+        ],
+        total: 1,
+      };
+    }
+  }
+
   const pickBestSingleWallet = () => {
     // 1) Selected wallets with known sufficient balance
     let pool = candidates
@@ -215,6 +264,42 @@ export function buildSolanaWalletAllocations({
         },
       ];
       walletsConsidered = 1;
+    }
+  }
+
+  // If still nothing and we have multiple wallets with balances, try proportional split (cover 100% or return empty)
+  if (allocations.length === 0) {
+    const walletsWithBalance = candidates.filter(
+      (c) => typeof c.balance === "number" && (c.balance as number) > 0 && c.address
+    );
+    // Filter to selected wallets first; if none, use all funded
+    const selectedFunded = walletsWithBalance.filter((c) => c.selected);
+    const pool = selectedFunded.length > 0 ? selectedFunded : walletsWithBalance;
+    const totalKnown = pool.reduce((sum, c) => sum + (c.balance as number), 0);
+
+    if (pool.length > 0 && totalKnown >= requiredBalanceFull) {
+      // Sort by balance desc
+      pool.sort((a, b) => (b.balance as number) - (a.balance as number));
+      let remaining = amountValue;
+      const splits: SolanaWalletAllocation[] = [];
+      for (const c of pool) {
+        if (remaining <= 0) break;
+        const available = Math.max((c.balance as number) - SAFETY_BUFFER, 0);
+        if (available <= 0) continue;
+        const take = Math.min(available, remaining);
+        if (take <= 0) continue;
+        splits.push({
+          walletId: c.wallet.id,
+          amount: take,
+          address: c.address as string,
+          balance: c.balance as number,
+        });
+        remaining -= take;
+      }
+      if (remaining <= 0) {
+        allocations = splits;
+        walletsConsidered = splits.length;
+      }
     }
   }
 
