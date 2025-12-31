@@ -1,10 +1,13 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { FaWallet, FaTimes, FaCopy, FaCheck, FaStar, FaRegStar } from 'react-icons/fa';
+import { IoIosGitNetwork } from "react-icons/io";
+import { PiNetwork } from "react-icons/pi";
 import { useUser } from './UserContext';
 import { useSolPrice } from './SolPriceContext';
 import toast from 'react-hot-toast';
 import { normalizeMonadAddress } from '~/utils/normalizeMonadAddress';
+import { redistributeWalletFunds } from '~/utils/api';
 
 interface UserWallet {
   id: string;
@@ -59,6 +62,7 @@ export default function MonadWalletSwitcher({ isOpen, onClose }: MonadWalletSwit
   const [loading, setLoading] = useState(false);
   const [copiedAddress, setCopiedAddress] = useState<string | null>(null);
   const isUpdatingPrimaryRef = useRef(false);
+  const [redistributing, setRedistributing] = useState(false);
   const selectedSet = useMemo(() => new Set(selectedWalletIds.monad || []), [selectedWalletIds.monad]);
   const selectedCount = wallets.filter((w) => selectedSet.has(w.id)).length;
   const totalCount = wallets.length;
@@ -195,6 +199,34 @@ export default function MonadWalletSwitcher({ isOpen, onClose }: MonadWalletSwit
     selectWalletsWithFunds("monad");
   };
 
+  const handleRedistribute = async (mode: "split" | "consolidate") => {
+    if (!user?.bearerToken) {
+      toast.error("Please log in first");
+      return;
+    }
+    const ids = Array.from(selectedSet);
+    if (!ids.length) {
+      toast.error("Select at least one wallet");
+      return;
+    }
+    setRedistributing(true);
+    try {
+      const resp = await redistributeWalletFunds(
+        { chain: "monad", mode, walletIds: ids },
+        user.bearerToken
+      );
+      toast.success(
+        `${mode === "consolidate" ? "Consolidated" : "Split"}: ${resp.summary?.sent ?? 0} sent`
+      );
+      await refreshWalletList(true);
+    } catch (error: any) {
+      console.error("Redistribute failed:", error);
+      toast.error(error?.message || "Failed to redistribute");
+    } finally {
+      setRedistributing(false);
+    }
+  };
+
   if (!isOpen) return null;
 
   const modalContent = (
@@ -271,6 +303,32 @@ export default function MonadWalletSwitcher({ isOpen, onClose }: MonadWalletSwit
             }}
           >
             Select All with Funds
+          </button>
+          <button
+            onClick={() => handleRedistribute("consolidate")}
+            className="flex-1 px-3 py-2 rounded-md text-xs font-medium transition-all duration-300 flex items-center justify-center gap-1 disabled:opacity-60"
+            style={{
+              backgroundColor: AX.surface,
+              color: AX.text,
+              border: `1px solid ${AX.border}`,
+            }}
+            disabled={redistributing}
+          >
+            <IoIosGitNetwork size={14} />
+            {redistributing ? "Working..." : "Consolidate"}
+          </button>
+          <button
+            onClick={() => handleRedistribute("split")}
+            className="flex-1 px-3 py-2 rounded-md text-xs font-medium transition-all duration-300 flex items-center justify-center gap-1 disabled:opacity-60"
+            style={{
+              backgroundColor: AX.surface,
+              color: AX.text,
+              border: `1px solid ${AX.border}`,
+            }}
+            disabled={redistributing}
+          >
+            <PiNetwork size={14} />
+            {redistributing ? "Working..." : "Split"}
           </button>
         </div>
 

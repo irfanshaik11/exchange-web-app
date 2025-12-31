@@ -1,10 +1,13 @@
 import React, { useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import { FaWallet, FaTimes, FaPlus, FaCopy, FaCheck, FaStar, FaRegStar } from "react-icons/fa";
+import { IoIosGitNetwork } from "react-icons/io";
+import { PiNetwork } from "react-icons/pi";
 import { useRouter } from "next/router";
 import { useUser } from "./UserContext";
 import toast from "react-hot-toast";
 import { SiSolana } from "react-icons/si";
+import { redistributeWalletFunds } from "~/utils/api";
 
 interface WalletSwitcherProps {
   isOpen: boolean;
@@ -39,6 +42,7 @@ export default function WalletSwitcher({ isOpen, onClose }: WalletSwitcherProps)
   } = useUser();
 
   const [copiedAddress, setCopiedAddress] = useState<string | null>(null);
+  const [redistributing, setRedistributing] = useState(false);
 
   const solWallets = useMemo(
     () => walletList.filter((w) => w.solanaAddress && !w.isArchived),
@@ -127,6 +131,34 @@ export default function WalletSwitcher({ isOpen, onClose }: WalletSwitcherProps)
     }
   };
 
+  const handleRedistribute = async (mode: "split" | "consolidate") => {
+    if (!user?.bearerToken) {
+      toast.error("Log in first");
+      return;
+    }
+    const ids = Array.from(selectedSet);
+    if (!ids.length) {
+      toast.error("Select at least one wallet");
+      return;
+    }
+    setRedistributing(true);
+    try {
+      const resp = await redistributeWalletFunds(
+        { chain: "sol", mode, walletIds: ids },
+        user.bearerToken
+      );
+      toast.success(
+        `${mode === "consolidate" ? "Consolidated" : "Split"}: ${resp.summary?.sent ?? 0} sent`
+      );
+      await refreshWalletList(true);
+    } catch (error: any) {
+      console.error("Redistribute failed:", error);
+      toast.error(error?.message || "Failed to redistribute");
+    } finally {
+      setRedistributing(false);
+    }
+  };
+
   if (!isOpen) return null;
 
   const modalContent = (
@@ -212,6 +244,32 @@ export default function WalletSwitcher({ isOpen, onClose }: WalletSwitcherProps)
             }}
           >
             Select All with Funds
+          </button>
+          <button
+            onClick={() => handleRedistribute("consolidate")}
+            className="flex-1 px-3 py-2 rounded-md text-xs font-medium transition-all duration-300 flex items-center justify-center gap-1 disabled:opacity-60"
+            style={{
+              backgroundColor: AX.surface,
+              color: AX.text,
+              border: `1px solid ${AX.border}`,
+            }}
+            disabled={redistributing}
+          >
+            <IoIosGitNetwork size={14} />
+            {redistributing ? "Working..." : "Consolidate"}
+          </button>
+          <button
+            onClick={() => handleRedistribute("split")}
+            className="flex-1 px-3 py-2 rounded-md text-xs font-medium transition-all duration-300 flex items-center justify-center gap-1 disabled:opacity-60"
+            style={{
+              backgroundColor: AX.surface,
+              color: AX.text,
+              border: `1px solid ${AX.border}`,
+            }}
+            disabled={redistributing}
+          >
+            <PiNetwork size={14} />
+            {redistributing ? "Working..." : "Split"}
           </button>
         </div>
 
