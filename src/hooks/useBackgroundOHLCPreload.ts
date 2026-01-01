@@ -43,6 +43,10 @@ export default function useBackgroundOHLCPreload(interval: string = '1h', timefr
   const previousMintRef = useRef<string | null>(null);
   const currentMintRef = useRef<string | null>(null);
 
+  // Detect chain from URL path or query
+  const chain = router.pathname.startsWith('/trade/monad') ? 'monad' :
+                (router.query.chain as string) || 'sol';
+
   useEffect(() => {
     const { _mint } = router.query;
     
@@ -94,29 +98,56 @@ export default function useBackgroundOHLCPreload(interval: string = '1h', timefr
         
         fetchRef.current = (async () => {
           try {
-            const url = new URL(`${process.env.NEXT_PUBLIC_GO_SERVICE_URL}/v1/trade/ohlc-data`);
-            url.searchParams.set('mint', _mint);
-            url.searchParams.set('interval', interval);
-            url.searchParams.set('timeframe', timeframe);
-            
-            console.log('[Background OHLC] Starting preload for', cacheKey, 'URL:', url.toString());
+            let url: URL;
+            let items: OHLCData[] = [];
+
+            if (chain === 'monad') {
+              // Monad uses old endpoint format
+              url = new URL(`${process.env.NEXT_PUBLIC_MONAD_TOKEN_SERVICE_URL}/v1/trade/ohlc-data`);
+              url.searchParams.set('mint', _mint);
+              url.searchParams.set('interval', interval);
+              url.searchParams.set('timeframe', timeframe);
+            } else {
+              // Solana uses new /v1/ohlcv/{tokenAddress} endpoint with 1s candles
+              url = new URL(`${process.env.NEXT_PUBLIC_GO_SERVICE_URL}/v1/ohlcv/${_mint}`);
+              url.searchParams.set('timeframe', '1s');
+              url.searchParams.set('limit', '500');
+            }
+
+            console.log('[Background OHLC] Starting preload for', cacheKey, 'chain:', chain, 'URL:', url.toString());
             const response = await fetch(url.toString(), {
               method: 'GET',
-              headers: { 
-                accept: 'application/json', 
-                'X-API-Key': process.env.NEXT_PUBLIC_BACKEND_API_KEY || 'test-key' 
+              headers: {
+                accept: 'application/json',
+                'X-API-Key': process.env.NEXT_PUBLIC_BACKEND_API_KEY || 'test-key'
               },
             });
-            
+
             if (response.ok) {
               const data = await response.json();
-              if (data?.success && data?.data?.items) {
-                console.log('[Background OHLC] Preload complete:', data.data.items.length, 'candles for', cacheKey);
-                
+
+              if (chain === 'sol' && data?.candles) {
+                // Solana returns { candles: [...] }
+                items = data.candles.map((c: any) => ({
+                  unix_time: c.time || c.unix_time,
+                  o: c.open ?? c.o,
+                  h: c.high ?? c.h,
+                  l: c.low ?? c.l,
+                  c: c.close ?? c.c,
+                  v_usd: c.volume ?? c.volume_usd ?? c.v_usd ?? 0,
+                }));
+              } else if (data?.data?.items) {
+                // Monad returns { data: { items: [...] } }
+                items = data.data.items;
+              }
+
+              if (data?.success && items.length > 0) {
+                console.log('[Background OHLC] Preload complete:', items.length, 'candles for', cacheKey);
+
                 // Cache the data globally with parameter-specific key and mint validation
-                globalOHLCCache.set(cacheKey, { data: data.data.items, timestamp: now, mint: _mint });
-                
-                setBackgroundData(data.data.items);
+                globalOHLCCache.set(cacheKey, { data: items, timestamp: now, mint: _mint });
+
+                setBackgroundData(items);
                 setPreloadComplete(true);
               }
             }

@@ -4,6 +4,8 @@ import HoldersTable from './HoldersTable';
 
 interface CodexHoldersProps {
   token: Token | null;
+  pairAddress?: string; // Fallback pair address when token doesn't have mint
+  chain?: 'sol' | 'monad'; // Chain to determine which endpoint to use
 }
 
 const AX = {
@@ -18,9 +20,12 @@ const AX = {
   sell: "#FF4D7F",
 };
 
-const CodexHolders: React.FC<CodexHoldersProps> = ({ token }) => {
-  // Only show skeleton if we have absolutely no token data (not even optimistic)
-  if (!token || (!token.name && !token.symbol)) {
+const CodexHolders: React.FC<CodexHoldersProps> = ({ token, pairAddress, chain = 'sol' }) => {
+  // Use mint if available, fallback to pair_address, then fallback to pairAddress prop
+  const mintAddress = token?.mint || token?.pair_address || pairAddress;
+
+  // Only show skeleton if we have absolutely no address to work with
+  if (!mintAddress) {
     return (
       <div className="flex-1 min-h-0 p-4">
         <div className="animate-pulse">
@@ -34,6 +39,9 @@ const CodexHolders: React.FC<CodexHoldersProps> = ({ token }) => {
       </div>
     );
   }
+
+  // Create a token object with at least the mint for HoldersTable
+  const tokenForTable = token || { mint: mintAddress } as Token;
 
   const [isLoading, setIsLoading] = useState(true);
   const [showBubblemap, setShowBubblemap] = useState(false);
@@ -75,11 +83,13 @@ const CodexHolders: React.FC<CodexHoldersProps> = ({ token }) => {
   const chainIds: Record<string, string> = {
     'ethereum': '1',
     'solana': 'sol',
+    'sol': 'sol',
     'bsc': '56',
     'polygon': '137',
     'arbitrum': '42161',
     'optimism': '10',
     'base': '8453',
+    'monad': 'monad', // Monad chain ID for InsightX (may need to be updated when they support it)
   };
 
   const getChainId = (chain: string): string => {
@@ -99,7 +109,7 @@ const CodexHolders: React.FC<CodexHoldersProps> = ({ token }) => {
     setIsLoading(false);
   };
 
-  const bubblemapsUrl = buildBubblemapsUrl(token.mint, 'sol');
+  const bubblemapsUrl = buildBubblemapsUrl(mintAddress, chain === 'monad' ? 'monad' : 'sol');
 
   const handleResizeStart = useCallback((e: React.MouseEvent) => {
     // Only handle left mouse button
@@ -278,11 +288,12 @@ const CodexHolders: React.FC<CodexHoldersProps> = ({ token }) => {
             transition: isResizing ? 'none' : 'width 0.2s ease-out',
           }}
         >
-          <HoldersTable 
-            token={token} 
+          <HoldersTable
+            token={tokenForTable}
             onBubblemapToggle={handleBubblemapToggle}
             isBubblemapVisible={showBubblemap}
             containerWidth={tableWidth}
+            chain={chain}
           />
         </div>
 

@@ -314,7 +314,7 @@ type MultiBuyParams = {
   baseMint: string;
   quoteMint: string;
   amountSOL: number;
-  poolType?: "PumpAmm" | "Raydium CPMM" | "Raydium Launchpad" | "Pumpfun" | "launchLab" | "bonk" | "meteora dbc" | "meteora amm v1" | "meteora amm v2" | "Meteora" | "bags" | "MoonShoot" | "Orca" | "";
+  poolType?: "PumpAmm" | "Raydium" | "Raydium CPMM" | "Raydium CLMM" | "Raydium Launchpad" | "Pumpfun" | "launchLab" | "bonk" | "meteora dbc" | "meteora amm v1" | "meteora amm v2" | "Meteora" | "bags" | "MoonShoot" | "Orca" | "";
   originalPairAddress?: string;
   slippage?: number;
   priorityFee?: number;

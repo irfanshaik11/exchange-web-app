@@ -20,6 +20,7 @@ import FastImage from "./FastImage";
 import { IoShareSocialOutline } from "react-icons/io5";
 import { LuPill } from "react-icons/lu";
 import type { Timeframe } from "../pages/index";
+import { env } from "~/env";
 
 // Token type
 export interface Token {
@@ -404,12 +405,12 @@ const SearchModalContent = React.memo(function SearchModalContent({
     try {
       console.log('🔍 Searching:', { query: searchQuery.trim() });
       
-      // Use different endpoint based on chain
+      // Use different endpoint based on chain - call backend directly
       const isMonad = chain === 'monad';
-      const endpoint = isMonad 
-        ? `/api/token-service/search-monad?q=${encodeURIComponent(searchQuery.trim())}&limit=50`
-        : `/api/token-service/search?phrase=${encodeURIComponent(searchQuery.trim())}&limit=50`;
-      
+      const endpoint = isMonad
+        ? `${env.NEXT_PUBLIC_MONAD_TOKEN_SERVICE_URL}/v1/search?q=${encodeURIComponent(searchQuery.trim())}&limit=50`
+        : `${env.NEXT_PUBLIC_GO_SERVICE_URL}/v1/search?phrase=${encodeURIComponent(searchQuery.trim())}&limit=50`;
+
       const response = await fetch(endpoint);
       
       if (!response.ok) {
@@ -529,6 +530,9 @@ const SearchModalContent = React.memo(function SearchModalContent({
         const address = token.pair_address || token.mint;
         const isMonad = chain === 'monad';
         
+        // Close modal first to prevent UI issues during navigation
+        onClose();
+
         if (isMonad && address) {
           // Build Monad trade URL with query parameters
           const queryParams = new URLSearchParams();
@@ -538,20 +542,30 @@ const SearchModalContent = React.memo(function SearchModalContent({
           if (token.uri || token.logo) queryParams.set('_image', token.uri || token.logo || '');
           queryParams.set('_mint', address);
           queryParams.set('chain', 'monad');
-          
+
           const url = `/trade/monad/${address}?${queryParams.toString()}`;
-          router.push(url);
-        } else {
-          // Navigate to trade page for Solana
-          onSubmit?.(token.pair_address);
+          await router.push(url);
+        } else if (address) {
+          // Navigate to trade page for Solana - use direct router.push
+          const queryParams = new URLSearchParams();
+          if (token.name) queryParams.set('_name', token.name);
+          if (token.symbol) queryParams.set('_symbol', token.symbol);
+          if (token.fully_diluted_value) queryParams.set('_mcap', token.fully_diluted_value.toString());
+          if (token.uri || token.logo) queryParams.set('_image', token.uri || token.logo || '');
+          if (token.mint) queryParams.set('_mint', token.mint);
+
+          const url = `/trade/${address}?${queryParams.toString()}`;
+          await router.push(url);
         }
-        onClose();
       } catch (error) {
         console.error('❌ Error backfilling token:', error);
         // Still navigate even if backfill fails
         const address = token.pair_address || token.mint;
         const isMonad = chain === 'monad';
-        
+
+        // Close modal first to prevent UI issues during navigation
+        onClose();
+
         if (isMonad && address) {
           const queryParams = new URLSearchParams();
           if (token.name) queryParams.set('_name', token.name);
@@ -560,13 +574,21 @@ const SearchModalContent = React.memo(function SearchModalContent({
           if (token.uri || token.logo) queryParams.set('_image', token.uri || token.logo || '');
           queryParams.set('_mint', address);
           queryParams.set('chain', 'monad');
-          
+
           const url = `/trade/monad/${address}?${queryParams.toString()}`;
-          router.push(url);
-        } else {
-          onSubmit?.(token.pair_address);
+          await router.push(url);
+        } else if (address) {
+          // Navigate to trade page for Solana - use direct router.push
+          const queryParams = new URLSearchParams();
+          if (token.name) queryParams.set('_name', token.name);
+          if (token.symbol) queryParams.set('_symbol', token.symbol);
+          if (token.fully_diluted_value) queryParams.set('_mcap', token.fully_diluted_value.toString());
+          if (token.uri || token.logo) queryParams.set('_image', token.uri || token.logo || '');
+          if (token.mint) queryParams.set('_mint', token.mint);
+
+          const url = `/trade/${address}?${queryParams.toString()}`;
+          await router.push(url);
         }
-        onClose();
       }
     },
     [onSubmit, onClose, chain, router],

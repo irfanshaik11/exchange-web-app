@@ -150,6 +150,11 @@ export default function BlockchainSwitcher() {
 
     // Update the current page's chain query parameter
     const currentPath = router.pathname;
+    console.log('[BlockchainSwitcher] Selecting chain:', chainId);
+    console.log('[BlockchainSwitcher] Current path:', currentPath);
+    console.log('[BlockchainSwitcher] Current query:', router.query);
+    console.log('[BlockchainSwitcher] New query will be:', { ...router.query, chain: chainId });
+
     router.push({
       pathname: currentPath,
       query: { ...router.query, chain: chainId },

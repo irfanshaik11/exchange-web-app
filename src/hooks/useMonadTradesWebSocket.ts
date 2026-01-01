@@ -308,7 +308,8 @@ export function useMonadTradesWebSocket(
   useEffect(() => {
     mountedRef.current = true;
 
-    if (tokenAddress) {
+    // Only fetch trades if enabled AND we have a token address
+    if (enabled && tokenAddress) {
       fetchInitialTrades();
       scheduleFallbackFetches();
     }

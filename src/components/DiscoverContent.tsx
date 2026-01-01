@@ -1329,7 +1329,8 @@ export default function DiscoverContent() {
                 } catch (err) {
                   console.error('[Discover] Prefetch failed:', err);
                 }
-                router.push(`/trade/${id}`);
+                // For Solana tokens, include chain=sol parameter
+                router.push(`/trade/${id}?chain=sol`);
               }}
               quickBuyAmount={Number(quickBuyAmount) || 0}
               onQuickBuy={handleQuickBuy}

@@ -157,6 +157,16 @@ export default function PulsePage() {
   // const isBaseRoute = chain === 'base';
   // const isEthereumRoute = chain === 'eth';
   const isSolanaRoute = chain === 'sol'; // Only Solana if explicitly set
+
+  // Debug logging for chain state
+  console.log('[Pulse] Chain state:', {
+    currentChain,
+    chain,
+    isMonadRoute,
+    isSolanaRoute,
+    routerQueryChain: router.query.chain,
+    routerAsPath: router.asPath,
+  });
   const chainButtonBase =
     "relative inline-flex h-8 w-8 items-center justify-center rounded-full border border-[#20232b] bg-[#171920] text-neutral-300 shadow-sm transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/40 focus-visible:ring-offset-2 focus-visible:ring-offset-[#06070b]";
   const solanaButtonClasses = `${chainButtonBase} ${
