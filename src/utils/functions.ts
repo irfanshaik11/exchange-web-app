@@ -8,6 +8,8 @@ export interface PositionRow {
   blockchain?: string;
   launchpad?: string | null;
   imageUrl?: string | null; // Token image URL saved during buy
+  tokenName?: string | null; // Token name from backend
+  tokenSymbol?: string | null; // Token symbol from backend
   bought: number;
   boughtUsdValue: number;
   sold: number;
@@ -50,6 +52,7 @@ export interface TradeRow {
   transactionHash: string;
   createdAt: string;
   tokenName?: string; // Token name from API
+  tokenSymbol?: string; // Token symbol from API
 }
 
 // New: Wallet Interface

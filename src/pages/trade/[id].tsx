@@ -209,7 +209,7 @@ export default function TradePage() {
       const createdAt =
         (tokenForAge as any)?.created_at || (tokenForAge as any)?.createdAt || (tokenForAge as any)?.CreatedAt;
 
-      if (!createdAt) return { interval: "1h" as const, timeframe: "30d" as const, optimize: false };
+      if (!createdAt) return { interval: "1s" as const, timeframe: "30d" as const, optimize: false };
 
       let timestamp = createdAt as any;
       if (typeof createdAt === "number" && createdAt < 10000000000) timestamp = createdAt * 1000;
@@ -218,8 +218,7 @@ export default function TradePage() {
       const diffMs = Date.now() - createdDate.getTime();
       const ageInHours = diffMs / (1000 * 60 * 60);
       const ageInDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
-      // if (ageInHours < 1) return { interval: "1s", timeframe: "1h", optimize: false } as const;
-      if (ageInHours < 1) return { interval: "1m", timeframe: "1h", optimize: false } as const;
+      if (ageInHours < 1) return { interval: "1s", timeframe: "1h", optimize: false } as const;
       if (ageInHours < 6) return { interval: "1h", timeframe: "4h", optimize: false } as const;
       if (ageInDays < 1) return { interval: "1h", timeframe: "24h", optimize: false } as const;
       if (ageInDays < 7) return { interval: "1h", timeframe: "7d", optimize: false } as const;
@@ -232,7 +231,7 @@ export default function TradePage() {
   );
 
   const ohlcParams = getOHLCParams;
-  const defaultOHLCParams = { interval: "1h" as const, timeframe: "30d" as const, optimize: false };
+  const defaultOHLCParams = { interval: "1s" as const, timeframe: "30d" as const, optimize: false };
 
   const currentOHLCParams = React.useMemo(
     () => ohlcParams || defaultOHLCParams,
