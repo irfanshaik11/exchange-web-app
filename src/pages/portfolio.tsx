@@ -917,9 +917,9 @@ export default function PortfolioPage() {
     return primaryWalletAddresses?.solana || user?.publicKey || null;
   }, [currentChain, primaryWalletAddresses, user?.publicKey]);
 
-  // Fetch live prices for active positions
+  // Fetch live prices for active positions (DISABLED - endpoint not implemented yet)
   const { prices: livePrices } = usePositionPrices(activeTokenAddresses, {
-    enabled: activeTokenAddresses.length > 0,
+    enabled: false, // Disabled until /api/codex/market-data endpoint is implemented
     refreshInterval: 2000, // Update every 2 seconds for faster updates
     chain: currentChain,
   });
@@ -3126,25 +3126,25 @@ export default function PortfolioPage() {
                           d={(() => {
                             const history = realizedPnlHistoryRef.current;
                             const pnl = timeframeMetrics.realizedPnl;
-                            
+
                             if (history.length === 0) {
                               // No history yet, use current value
-                              const absMaxPnl = Math.max(Math.abs(pnl), 100);
-                              const normalizedPnl = absMaxPnl > 0 ? Math.max(-1, Math.min(1, pnl / absMaxPnl)) : 0;
+                              // If PNL is non-zero, show a visible slope; if zero, flat line
+                              const normalizedPnl = pnl === 0 ? 0 : (pnl > 0 ? 0.7 : -0.7);
                               const endY = 40 - normalizedPnl * 30;
                               return `M 0 40 L 300 ${endY}`;
                             }
-                            
+
                             // Use history to create a line chart
                             const points: string[] = [];
                             const maxTime = Math.max(...history.map(h => h.timestamp));
                             const minTime = Math.min(...history.map(h => h.timestamp));
                             const timeRange = maxTime - minTime || 1;
-                            
-                            // Normalize PNL values for display
+
+                            // Normalize PNL values for display - use actual range, not minimum of 100
                             const allValues = [...history.map(h => h.value), pnl];
-                            const maxAbsValue = Math.max(...allValues.map(Math.abs), 100);
-                            
+                            const maxAbsValue = Math.max(...allValues.map(Math.abs), 0.001);
+
                             history.forEach((point, index) => {
                               const x = ((point.timestamp - minTime) / timeRange) * 300;
                               const normalizedValue = maxAbsValue > 0 ? Math.max(-1, Math.min(1, point.value / maxAbsValue)) : 0;
@@ -3155,12 +3155,12 @@ export default function PortfolioPage() {
                                 points.push(`L ${x} ${y}`);
                               }
                             });
-                            
+
                             // Add current value
                             const normalizedPnl = maxAbsValue > 0 ? Math.max(-1, Math.min(1, pnl / maxAbsValue)) : 0;
                             const endY = 40 - normalizedPnl * 30;
                             points.push(`L 300 ${endY}`);
-                            
+
                             return points.join(' ');
                           })()}
                           stroke={
@@ -3188,8 +3188,8 @@ export default function PortfolioPage() {
                           cx="300"
                           cy={(() => {
                             const pnl = timeframeMetrics.realizedPnl;
-                            const absMaxPnl = Math.max(Math.abs(pnl), 100);
-                            const normalizedPnl = absMaxPnl > 0 ? Math.max(-1, Math.min(1, pnl / absMaxPnl)) : 0;
+                            // Match the path scaling - show visible position for any non-zero value
+                            const normalizedPnl = pnl === 0 ? 0 : (pnl > 0 ? 0.7 : -0.7);
                             return 40 - normalizedPnl * 30;
                           })()}
                           r="2"

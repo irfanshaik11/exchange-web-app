@@ -2199,19 +2199,17 @@ const AdvancedOHLCChart: React.FC<AdvancedOHLCChartProps> = ({
           latestParamsNetwork: latestParamsRef.current.network 
         });
         const config = {
-          // For Monad: Put seconds FIRST in the array - TradingView shows them in order
+          // Both Solana and Monad now support 1s candles
           // CRITICAL: Seconds must be in supported_resolutions AND supports_seconds must be true
           // TradingView groups by type (SECONDS, MINUTES, HOURS, DAYS) in the dropdown
-          supported_resolutions: isMonad 
-            ? ['1S', '5S', '15S', '30S', '1', '5', '15', '60', '240', '1D', '1W'] // Seconds FIRST
-            : ['1', '5', '15', '60', '240', '1D', '1W'], // Regular order for others
+          supported_resolutions: ['1S', '5S', '15S', '30S', '1', '5', '15', '60', '240', '1D', '1W'],
           supports_group_request: false,
           supports_marks: true, // ✅ Enable marks support
           supports_search: false,
           supports_timescale_marks: true, // ✅ Enable timescale marks support
           supports_time: true,
           // CRITICAL: supports_seconds MUST be true for SECONDS section to appear in dropdown
-          supports_seconds: isMonad, 
+          supports_seconds: true, // Both Solana and Monad support 1s candles
         };
         console.log('[AdvancedOHLCChart] 🔧 onReady Datafeed config:', JSON.stringify(config, null, 2), { 
           isMonad, 
@@ -2329,13 +2327,11 @@ const AdvancedOHLCChart: React.FC<AdvancedOHLCChartProps> = ({
           has_weekly_and_monthly: false,
           // CRITICAL: has_seconds MUST be true for SECONDS section to appear in dropdown
           // This tells TradingView that this symbol supports second-based resolutions
-          has_seconds: isMonad, 
-          // For Monad: Put seconds FIRST in the array - TradingView shows them in order
+          has_seconds: true, // Both Solana and Monad support 1s candles
+          // Put seconds FIRST in the array - TradingView shows them in order
           // TradingView groups resolutions by type (SECONDS, MINUTES, HOURS, DAYS) in dropdown
           // The SECONDS group will appear if has_seconds=true AND seconds are in supported_resolutions
-          supported_resolutions: isMonad
-            ? ['1S', '5S', '15S', '30S', '1', '5', '15', '60', '240', '1D', '1W'] // Seconds FIRST
-            : ['1', '5', '15', '60', '240', '1D', '1W'], // Must match onReady exactly
+          supported_resolutions: ['1S', '5S', '15S', '30S', '1', '5', '15', '60', '240', '1D', '1W'],
           volume_precision: 2,
           data_status: 'streaming',
         };
