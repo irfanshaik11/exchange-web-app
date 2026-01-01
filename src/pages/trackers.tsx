@@ -225,8 +225,19 @@ export default function TrackersPage() {
   const [lastActiveMap, setLastActiveMap] = useState<
     Record<string, number | null | undefined>
   >({});
-  // Get chain from router query (same as Header component)
-  const currentChain = (router.query.chain as string) || "monad";
+  // Get chain from router query first, then localStorage, then default to monad
+  const currentChain = (() => {
+    if (router.query.chain) {
+      return router.query.chain as string;
+    }
+    if (typeof window !== 'undefined') {
+      const savedChain = localStorage.getItem('selected-chain');
+      if (savedChain === 'sol' || savedChain === 'monad') {
+        return savedChain;
+      }
+    }
+    return 'monad';
+  })();
   const selectedChain = (currentChain === 'monad' || currentChain === 'sol') ? currentChain : 'monad';
   const walletsRef = useRef<Wallet[]>([]);
   const [tokenMetadata, setTokenMetadata] = useState<

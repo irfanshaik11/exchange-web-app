@@ -497,9 +497,9 @@ const Positions: React.FC<PositionsProps> = ({
     );
   }, [positions]);
 
-  // Fetch live prices for active positions
+  // Fetch live prices for active positions (DISABLED - endpoint not implemented yet)
   const { prices: livePrices } = usePositionPrices(activeTokenAddresses, {
-    enabled: activeTokenAddresses.length > 0,
+    enabled: false, // Disabled until /api/codex/market-data endpoint is implemented
     refreshInterval: 2000, // Update every 2 seconds for faster updates
     chain: currentChain,
   });
@@ -1091,7 +1091,13 @@ const Positions: React.FC<PositionsProps> = ({
                 setShowDetailModal(true);
               };
               
-              const metadata = tokenMetadata[pos.tokenAddress];
+              const rawMetadata = tokenMetadata[pos.tokenAddress];
+              // Merge position's tokenName/tokenSymbol with fetched metadata (position takes priority)
+              const metadata = {
+                ...rawMetadata,
+                name: sourcePosition.tokenName || rawMetadata?.name,
+                symbol: sourcePosition.tokenSymbol || rawMetadata?.symbol,
+              };
               const protocolSource = metadata?.protocol || metadata?.launchpad || sourcePosition.launchpad || '';
               const branding = getProtocolBranding(protocolSource);
               const protocolColor = branding.color;

@@ -87,47 +87,40 @@ export default function BlockchainSwitcher() {
   const [isOpen, setIsOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
-  // Track intentional chain changes to prevent sync from overriding
-  const intentionalChangeRef = useRef<string | null>(null);
-
-  // Use local state for immediate UI feedback, synced with router
-  const [localChain, setLocalChain] = useState<string>(() => {
-    // Initialize from URL params if available
+  // Determine chain based on route and query parameter
+  // /trade/monad/[contractAddress] = always monad
+  // /trade/[id] = always sol (Solana trade page)
+  // Other pages = use query param, then localStorage, then default to monad
+  const getChainFromRoute = (): string => {
+    const path = router.pathname;
+    if (path.startsWith('/trade/monad/')) {
+      return 'monad';
+    }
+    if (path === '/trade/[id]') {
+      return 'sol';
+    }
+    // For non-trade pages, check URL first, then localStorage
+    if (router.query.chain) {
+      return router.query.chain as string;
+    }
     if (typeof window !== 'undefined') {
-      const urlParams = new URLSearchParams(window.location.search);
-      return urlParams.get('chain') || 'monad';
+      const savedChain = localStorage.getItem('selected-chain');
+      if (savedChain && (savedChain === 'sol' || savedChain === 'monad')) {
+        return savedChain;
+      }
     }
     return 'monad';
-  });
+  };
 
-  // Sync local chain with router query - but only when URL explicitly has chain param
-  useEffect(() => {
-    if (!router.isReady) return;
-
-    // Check if we just made an intentional change - don't override it
-    if (intentionalChangeRef.current) {
-      const urlParams = new URLSearchParams(router.asPath.split('?')[1] || '');
-      const chainInUrl = urlParams.get('chain');
-      // Only clear the intentional change once URL has updated
-      if (chainInUrl === intentionalChangeRef.current) {
-        console.log('[BlockchainSwitcher] URL updated to:', chainInUrl);
-        intentionalChangeRef.current = null;
-      }
-      return; // Don't sync while waiting for URL to update
-    }
-
-    // Only sync if URL explicitly has a chain parameter
-    const urlParams = new URLSearchParams(router.asPath.split('?')[1] || '');
-    const chainFromUrl = urlParams.get('chain');
-
-    if (chainFromUrl && chainFromUrl !== localChain) {
-      console.log('[BlockchainSwitcher] Syncing chain from URL:', localChain, '->', chainFromUrl);
-      setLocalChain(chainFromUrl);
-    }
-  }, [router.asPath, router.query.chain, router.isReady, localChain]);
-
-  const currentChain = localChain;
+  const currentChain = getChainFromRoute();
   const selectedBlockchain = blockchains.find(b => b.id === currentChain) || blockchains[0];
+
+  // Save chain to localStorage when on trade pages (so navigation back preserves it)
+  useEffect(() => {
+    if (typeof window !== 'undefined' && currentChain) {
+      localStorage.setItem('selected-chain', currentChain);
+    }
+  }, [currentChain]);
 
   // Close dropdown when clicking outside
   useEffect(() => {
@@ -146,14 +139,14 @@ export default function BlockchainSwitcher() {
     };
   }, [isOpen]);
 
+  // Check if we're on a trade page (chain switching not allowed - tokens are chain-specific)
+  const isOnTradePage = router.pathname.startsWith('/trade/');
+
   const handleChainSelect = (chainId: string) => {
     setIsOpen(false);
 
-    // Mark this as an intentional change to prevent sync from overriding
-    intentionalChangeRef.current = chainId;
-
-    // Immediately update local state for instant UI feedback
-    setLocalChain(chainId);
+    // Don't allow chain switching on trade pages
+    if (isOnTradePage) return;
 
     // Update the current page's chain query parameter
     const currentPath = router.pathname;
@@ -171,8 +164,8 @@ export default function BlockchainSwitcher() {
   return (
     <div className="relative" ref={dropdownRef}>
       <button
-        onClick={() => setIsOpen(!isOpen)}
-        className="flex items-center gap-2 h-10 rounded-3xl px-3 w-40 transition-all duration-300 ease-out border border-neutral-700/70 hover:bg-neutral-700/70"
+        onClick={() => !isOnTradePage && setIsOpen(!isOpen)}
+        className={`flex items-center gap-2 h-10 rounded-3xl px-3 w-40 transition-all duration-300 ease-out border border-neutral-700/70 ${isOnTradePage ? 'cursor-default opacity-75' : 'hover:bg-neutral-700/70'}`}
         style={{
           color: AX.text,
         }}
@@ -183,11 +176,13 @@ export default function BlockchainSwitcher() {
           alt={selectedBlockchain.name}
         />
         <span className="text-sm font-medium">{selectedBlockchain.name}</span>
-        <FaChevronDown
-          size={10}
-          className={`transition-transform mr-0 ml-auto duration-200 ${isOpen ? 'rotate-180' : ''}`}
-          style={{ color: AX.muted }}
-        />
+        {!isOnTradePage && (
+          <FaChevronDown
+            size={10}
+            className={`transition-transform mr-0 ml-auto duration-200 ${isOpen ? 'rotate-180' : ''}`}
+            style={{ color: AX.muted }}
+          />
+        )}
       </button>
 
       {isOpen && (

@@ -71,7 +71,7 @@ type ReusedTokenLite = {
 
 export default function TradePage() {
   const router = useRouter();
-  const { id, _name, _symbol, _price, _mcap, _image, _mint, chain } = router.query;
+  const { id, _name, _symbol, _price, _mcap, _image, _mint } = router.query;
 
   // Wait for router to be ready before using query params
   // This prevents hydration issues where id is undefined briefly

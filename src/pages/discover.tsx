@@ -36,36 +36,53 @@ type TokenWithDexPaid = Token & { dexPaid?: boolean };
 export default function DiscoverPage() {
   const router = useRouter();
   
+  // Helper to get chain from localStorage
+  const getSavedChain = () => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('selected-chain');
+      if (saved === 'sol' || saved === 'monad') {
+        return saved;
+      }
+    }
+    return 'monad';
+  };
+
   // CRITICAL: Initialize chain from router query immediately to avoid race conditions
   // This ensures we react to shallow routing changes immediately
   const [currentChain, setCurrentChain] = useState<string>(() => {
-    // Initialize from router query if available, otherwise default to 'monad'
-    if (typeof window !== 'undefined' && router.isReady) {
-      return (router.query.chain as string) || 'monad';
+    // Initialize from router query if available, then localStorage, otherwise default to 'monad'
+    if (typeof window !== 'undefined' && router.isReady && router.query.chain) {
+      return router.query.chain as string;
     }
     // Also check URL params directly for immediate access
     if (typeof window !== 'undefined') {
       const urlParams = new URLSearchParams(window.location.search);
-      return urlParams.get('chain') || 'monad';
+      const chainFromUrl = urlParams.get('chain');
+      if (chainFromUrl) return chainFromUrl;
+      // Check localStorage
+      return getSavedChain();
     }
     return 'monad';
   });
-  
+
   // Sync chain state with router query - this handles both initial load and shallow routing updates
   useEffect(() => {
     if (!router.isReady) return;
-    const chainFromQuery = (router.query.chain as string) || 'monad';
+    // Check URL first, then localStorage
+    const chainFromQuery = router.query.chain
+      ? (router.query.chain as string)
+      : getSavedChain();
     if (chainFromQuery !== currentChain) {
       console.log('[Discover] Chain changed from router:', currentChain, '->', chainFromQuery);
       setCurrentChain(chainFromQuery);
     }
   }, [router.query.chain, router.isReady, currentChain]);
-  
+
   // Also watch router.asPath as a fallback for shallow routing
   useEffect(() => {
     if (!router.isReady) return;
     const urlParams = new URLSearchParams(router.asPath.split('?')[1] || '');
-    const chainFromUrl = urlParams.get('chain') || 'sol';
+    const chainFromUrl = urlParams.get('chain') || getSavedChain();
     if (chainFromUrl !== currentChain) {
       console.log('[Discover] Chain changed from URL:', currentChain, '->', chainFromUrl);
       setCurrentChain(chainFromUrl);

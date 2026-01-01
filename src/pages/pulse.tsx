@@ -106,15 +106,22 @@ export default function PulsePage() {
   
   // CRITICAL: Initialize chain from URL immediately to avoid race conditions
   // This ensures we react to the correct chain before router.query is ready
+  // Priority: URL param > localStorage > default (monad)
   const [currentChain, setCurrentChain] = useState<string>(() => {
     // Initialize from router query if available, otherwise check URL directly
-    if (typeof window !== 'undefined' && router.isReady) {
-      return (router.query.chain as string) || 'monad';
+    if (typeof window !== 'undefined' && router.isReady && router.query.chain) {
+      return router.query.chain as string;
     }
     // Also check URL params directly for immediate access
     if (typeof window !== 'undefined') {
       const urlParams = new URLSearchParams(window.location.search);
-      return urlParams.get('chain') || 'monad';
+      const chainFromUrl = urlParams.get('chain');
+      if (chainFromUrl) return chainFromUrl;
+      // Check localStorage for persisted chain
+      const savedChain = localStorage.getItem('selected-chain');
+      if (savedChain && (savedChain === 'sol' || savedChain === 'monad')) {
+        return savedChain;
+      }
     }
     return 'monad';
   });
@@ -122,19 +129,23 @@ export default function PulsePage() {
   // Sync chain state with router query - this handles both initial load and shallow routing updates
   useEffect(() => {
     if (!router.isReady) return;
-    const chainFromQuery = (router.query.chain as string) || 'monad';
-    if (chainFromQuery !== currentChain) {
-      console.log('[Pulse] Chain changed from router:', currentChain, '->', chainFromQuery);
-      setCurrentChain(chainFromQuery);
+    // Only update if there's an explicit chain in the query
+    if (router.query.chain) {
+      const chainFromQuery = router.query.chain as string;
+      if (chainFromQuery !== currentChain) {
+        console.log('[Pulse] Chain changed from router:', currentChain, '->', chainFromQuery);
+        setCurrentChain(chainFromQuery);
+      }
     }
   }, [router.query.chain, router.isReady, currentChain]);
-  
+
   // Also watch router.asPath as a fallback for shallow routing
   useEffect(() => {
     if (!router.isReady) return;
     const urlParams = new URLSearchParams(router.asPath.split('?')[1] || '');
-    const chainFromUrl = urlParams.get('chain') || 'monad';
-    if (chainFromUrl !== currentChain) {
+    const chainFromUrl = urlParams.get('chain');
+    // Only update if there's an explicit chain in the URL
+    if (chainFromUrl && chainFromUrl !== currentChain) {
       console.log('[Pulse] Chain changed from URL:', currentChain, '->', chainFromUrl);
       setCurrentChain(chainFromUrl);
     }
@@ -184,11 +195,16 @@ export default function PulsePage() {
   //     : 'bg-[#141821] text-neutral-500 opacity-75 hover:opacity-100 hover:text-neutral-100'
   // }`;
 
-  // Redirect to /pulse?chain=monad if no chain parameter is present
+  // Redirect to /pulse?chain=X if no chain parameter is present
+  // Use saved chain from localStorage, or default to monad
   useEffect(() => {
     if (router.isReady && !router.query.chain) {
-      router.replace("/pulse?chain=monad", undefined, { shallow: true });
-      setCurrentChain('monad');
+      const savedChain = typeof window !== 'undefined'
+        ? localStorage.getItem('selected-chain')
+        : null;
+      const chainToUse = (savedChain === 'sol' || savedChain === 'monad') ? savedChain : 'monad';
+      router.replace(`/pulse?chain=${chainToUse}`, undefined, { shallow: true });
+      setCurrentChain(chainToUse);
     }
   }, [router.isReady, router.query.chain, router]);
 
@@ -1589,17 +1605,20 @@ export default function PulsePage() {
                   loading={false}
                   isFirstOrLast="first"
                   showBubbleMetrics={false}
+                  currentChain={currentChain}
                 />
                 <MonadTable
                   title="Final Stretch"
                   tokens={enrichedFinalStretch}
                   showBubbleMetrics={false}
+                  currentChain={currentChain}
                 />
                 <MonadTable
                   title="Migrated"
                   tokens={enrichedMigrated}
                   isFirstOrLast="last"
                   showBubbleMetrics={false}
+                  currentChain={currentChain}
                 />
               </div>
             </div>
@@ -1613,7 +1632,7 @@ export default function PulsePage() {
                   skeletonRowCount={10}
                   isFirstOrLast="first"
                   showBubbleMetrics={false}
-                  chain={chain}
+                  currentChain={currentChain}
                 />
                 <PulseTable
                   title="Final Stretch"
@@ -1621,7 +1640,7 @@ export default function PulsePage() {
                   loading
                   skeletonRowCount={10}
                   showBubbleMetrics={false}
-                  chain={chain}
+                  currentChain={currentChain}
                 />
                 <PulseTable
                   title="Migrated"
@@ -1630,7 +1649,7 @@ export default function PulsePage() {
                   skeletonRowCount={10}
                   isFirstOrLast="last"
                   showBubbleMetrics={false}
-                  chain={chain}
+                  currentChain={currentChain}
                 />
               </div>
             </div>
@@ -1656,20 +1675,20 @@ export default function PulsePage() {
                   loading={newPairsLoading}
                   isFirstOrLast="first"
                   showBubbleMetrics={false}
-                  chain={chain}
+                  currentChain={currentChain}
                 />
                 <PulseTable
                   title="Final Stretch"
                   tokens={enrichedFinalStretch as any}
                   showBubbleMetrics={false}
-                  chain={chain}
+                  currentChain={currentChain}
                 />
                 <PulseTable
                   title="Migrated"
                   tokens={enrichedMigrated as any}
                   isFirstOrLast="last"
-                  chain={chain}
                   showBubbleMetrics={false}
+                  currentChain={currentChain}
                 />
               </div>
             </div>

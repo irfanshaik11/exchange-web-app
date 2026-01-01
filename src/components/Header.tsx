@@ -283,14 +283,19 @@ export default function Header({
     selectedWalletIds,
     logout,
   } = useUser();
-  // Determine chain from URL path or query parameter
-  // /trade/monad/[address] = monad, /trade/[id] = sol, otherwise use query or default to monad
-  const currentChain = useMemo(() => {
-    if (router.query.chain) return router.query.chain as string;
-    if (router.pathname.startsWith('/trade/monad')) return 'monad';
-    if (router.pathname.startsWith('/trade/')) return 'sol';
-    return 'monad'; // default for other pages like /pulse
-  }, [router.query.chain, router.pathname]);
+  // Get chain from URL first, then localStorage, then default to monad
+  const currentChain = (() => {
+    if (router.query.chain) {
+      return router.query.chain as string;
+    }
+    if (typeof window !== 'undefined') {
+      const savedChain = localStorage.getItem('selected-chain');
+      if (savedChain === 'sol' || savedChain === 'monad') {
+        return savedChain;
+      }
+    }
+    return 'monad';
+  })();
   const { solPrice, monPrice } = useSolPrice();
   const chainPrice = currentChain === 'monad' ? monPrice : solPrice;
   const { watchlist, removeFromWatchlist, refreshWatchlistToken } = useWatchlist();

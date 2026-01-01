@@ -2221,10 +2221,9 @@ const AdvancedOHLCChart: React.FC<AdvancedOHLCChartProps> = ({
           latestParamsNetwork: latestParamsRef.current.network 
         });
         const config = {
-          // Seconds FIRST in the array - TradingView shows them in order
+          // Both Solana and Monad now support 1s candles
           // CRITICAL: Seconds must be in supported_resolutions AND supports_seconds must be true
           // TradingView groups by type (SECONDS, MINUTES, HOURS, DAYS) in the dropdown
-          // Both Solana and Monad now support 1s candles
           supported_resolutions: ['1S', '5S', '15S', '30S', '1', '5', '15', '60', '240', '1D', '1W'],
           supports_group_request: false,
           supports_marks: true, // ✅ Enable marks support
