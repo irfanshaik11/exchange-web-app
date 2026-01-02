@@ -36,6 +36,12 @@ export default function FastImage({
   const [imageLoaded, setImageLoaded] = useState(false);
   const [imageError, setImageError] = useState(false);
 
+  // CRITICAL: Reset loading state when src changes to prevent stale image display
+  React.useEffect(() => {
+    setImageLoaded(false);
+    setImageError(false);
+  }, [src, fallbackSrc]);
+
   // Use proxy for IPFS URLs, defined.fi, debridge, and other CORS-prone domains
   // IPFS gateways can have CORS restrictions, so proxy them
   const needsProxy = finalSrc && (
@@ -134,8 +140,9 @@ export default function FastImage({
         </div>
       )}
       
-      {/* Actual image */}
+      {/* Actual image - key forces DOM recreation when src changes */}
       <img
+        key={imageUrl}
         src={imageUrl}
         alt={alt}
         width={width}
