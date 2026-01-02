@@ -112,7 +112,7 @@ export const checkMinimumAmount = (
   };
 
   const minAmount = minimums[poolType] || 0.0001;
-  
+
   if (amount < minAmount) {
     return {
       level: 'critical',
@@ -121,6 +121,93 @@ export const checkMinimumAmount = (
       suggestion: `Increase your trade amount to at least ${minAmount} SOL`,
       canProceed: false,
     };
+  }
+
+  return null;
+};
+
+// Check for potential slippage issues with Pumpfun trades
+export const checkPumpfunSlippage = (
+  token: Token,
+  tradeAmountSol: number,
+  slippagePercent: number,
+  poolType?: string // Add poolType parameter
+): ValidationWarning | null => {
+  // Check multiple sources for Pumpfun detection
+  const tokenPoolType = (token as any).pool_type || (token as any).poolType || (token as any).pool?.type || '';
+  const launchpadProtocol = (token as any).launchpad_protocol || (token as any).launchpadProtocol || '';
+  const pairAddress = (token as any).pair_address || (token as any).pairAddress || '';
+
+  // Detect Pumpfun by multiple indicators (prioritize explicit poolType parameter)
+  const isPumpfun =
+    (poolType && poolType.toLowerCase().includes('pump')) ||
+    tokenPoolType.toLowerCase().includes('pump') ||
+    launchpadProtocol.toLowerCase().includes('pump') ||
+    pairAddress.length === 44; // Pumpfun uses bonding curve addresses (44 chars)
+
+  console.log('[PreTransactionValidation] Pumpfun check:', {
+    poolTypeParam: poolType,
+    tokenPoolType,
+    launchpadProtocol,
+    pairAddress: pairAddress.substring(0, 8) + '...',
+    isPumpfun,
+    slippagePercent,
+  });
+
+  if (!isPumpfun) {
+    return null; // Skip validation for non-Pumpfun tokens
+  }
+
+  // Check if token has a valid price
+  const tokenPrice = (token as any).usd_price || (token as any).price_usd || 0;
+  if (!tokenPrice || tokenPrice <= 0) {
+    return {
+      level: 'critical',
+      title: 'Token Price Unknown',
+      message: 'Cannot calculate expected output - token price unavailable',
+      suggestion: 'Wait a moment for price data to load or try a different token',
+      canProceed: false,
+    };
+  }
+
+  // Check if slippage is too low for Pumpfun (bonding curve can have high slippage)
+  // CRITICAL: Block trade if slippage is too low (prevents backend error)
+  if (slippagePercent < 5) {
+    return {
+      level: 'critical',
+      title: 'Slippage Too Low for Pumpfun',
+      message: `${slippagePercent.toFixed(1)}% slippage is too low for Pumpfun bonding curves. Minimum recommended: 10%`,
+      suggestion: 'Increase slippage to at least 10% in your preset settings',
+      canProceed: false, // Block the trade
+    };
+  }
+
+  // Warn if slippage is borderline (5-10%)
+  if (slippagePercent >= 5 && slippagePercent < 10) {
+    return {
+      level: 'warning',
+      title: 'Slippage May Be Low',
+      message: `${slippagePercent.toFixed(1)}% slippage may still cause failures on Pumpfun. Recommended: 10-15%`,
+      suggestion: 'Consider increasing slippage to 10-15% for more reliable trades',
+      canProceed: true,
+    };
+  }
+
+  // Check if trade size is too large relative to market cap (can cause excessive slippage)
+  const marketCap = (token as any).market_cap || (token as any).marketCap || 0;
+  if (marketCap > 0) {
+    const tradeUsdValue = tradeAmountSol * 150; // Assume ~$150 per SOL
+    const tradeToMarketCapRatio = (tradeUsdValue / marketCap) * 100;
+
+    if (tradeToMarketCapRatio > 5) {
+      return {
+        level: 'warning',
+        title: 'Large Trade Size',
+        message: `This trade is ${tradeToMarketCapRatio.toFixed(1)}% of the token's market cap`,
+        suggestion: 'Large trades on bonding curves can cause high slippage. Consider splitting into smaller trades or increasing slippage tolerance.',
+        canProceed: true,
+      };
+    }
   }
 
   return null;
@@ -153,6 +240,12 @@ export const performPreTransactionCheck = (
     if (minAmountWarning) warnings.push(minAmountWarning);
   }
 
+  // Pumpfun slippage validation (only for BUY)
+  if (!isSellOrder) {
+    const pumpfunSlippageWarning = checkPumpfunSlippage(token, tradeAmount, slippage, poolType);
+    if (pumpfunSlippageWarning) warnings.push(pumpfunSlippageWarning);
+  }
+
   // REMOVED: Slippage estimation - was causing inaccurate warnings
   // Users know their slippage settings better than our estimates
 
@@ -175,4 +268,3 @@ export const performPreTransactionCheck = (
     estimatedFees: undefined, // Not showing fee estimates either
   };
 };
-

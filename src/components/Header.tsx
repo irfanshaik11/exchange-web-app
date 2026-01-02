@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { useRouter } from "next/router";
-import { useEffect, useState, useRef, useCallback } from "react";
+import { useEffect, useState, useRef, useCallback, useMemo } from "react";
 import {
   FaSearch,
   FaStar,
@@ -20,7 +20,7 @@ import { useQuickBuy } from "./QuickBuyContext";
 import { formatSmartNumber } from "../utils/db";
 import type { Token } from "../utils/db";
 import { executeEnhancedTrade } from "~/utils/enhancedTradeHandler";
-import { tradeMonadBuy } from "~/utils/api";
+import { executeMonadMultiBuy, formatMonadTxSummary } from "~/utils/monadWalletAllocation";
 import { extractTokenImage } from "~/utils/images";
 import { broadcastMonadQuickTrade } from "~/utils/monadTradeEvents";
 import Cookies from "js-cookie";
@@ -112,6 +112,125 @@ const WatchlistModal = dynamic(() => import("./WatchlistModal"), {
   ssr: false,
 });
 
+// Helper function to format very small prices with subscript notation
+// For prices < 0.01, displays as $0.0₅77 format (subscript indicates number of zeros)
+function formatSmallPrice(price: number): string {
+  if (price === 0 || !Number.isFinite(price)) return '0';
+  
+  const absPrice = Math.abs(price);
+  
+  // For very small prices (< 0.01), use $0.0₅77 format
+  if (absPrice > 0 && absPrice < 0.01) {
+    // Convert to string to count zeros after decimal
+    const priceStr = absPrice.toFixed(20); // Use enough precision
+    const decimalIndex = priceStr.indexOf('.');
+    
+    if (decimalIndex !== -1) {
+      // Find first non-zero digit after decimal
+      let zeroCount = 0;
+      let significantDigits = '';
+      
+      for (let i = decimalIndex + 1; i < priceStr.length; i++) {
+        if (priceStr[i] === '0') {
+          zeroCount++;
+        } else {
+          // Found first significant digit, get next 2-3 digits
+          significantDigits = priceStr.substring(i, Math.min(i + 3, priceStr.length));
+          break;
+        }
+      }
+      
+      // Convert zero count to subscript
+      const subscriptMap: Record<string, string> = {
+        '0': '₀', '1': '₁', '2': '₂', '3': '₃', '4': '₄',
+        '5': '₅', '6': '₆', '7': '₇', '8': '₈', '9': '₉'
+      };
+      
+      const zeroCountStr = zeroCount.toString();
+      const subscriptZeros = zeroCountStr.split('').map(char => subscriptMap[char] || char).join('');
+      
+      // Format: $0.0₅77 (where subscript is number of zeros)
+      return `0.0${subscriptZeros}${significantDigits}`;
+    }
+  }
+  
+  // For other prices, use formatSmartNumber
+  return formatSmartNumber(price);
+}
+
+// Helper function to normalize price and price change for watchlist tokens
+// Handles both Birdeye tokens (from trending) and Monad tokens (from pulse endpoints)
+// Uses same coalesceNumber pattern as TradeHeader for consistency
+function getWatchlistTokenPriceAndChange(token: Token): { price: number; priceChange: number } {
+  const tokenData = token as any;
+  
+  // Coalesce function similar to TradeHeader - checks multiple fields and returns first valid number
+  const coalesceNumber = (...values: any[]): number | null => {
+    for (const v of values) {
+      if (v === undefined || v === null) continue;
+      const n = typeof v === 'string' ? parseFloat(v) : v;
+      if (Number.isFinite(n)) return n as number; // Return any finite number (including 0)
+    }
+    return null;
+  };
+  
+  // Price mapping - check multiple field names
+  // Priority: price_usd (Monad pulse endpoints), then usd_price (Birdeye/common), then others
+  // Note: displayToken from trade page sets both usd_price and price_usd to the same value
+  let price = coalesceNumber(
+    tokenData.price_usd,      // Monad pulse endpoints (primary)
+    tokenData.usd_price,      // displayToken format / Birdeye (secondary)
+    tokenData.chart_live_price_usd, // from TradeHeader hydration
+    tokenData.lastPriceUsd,
+    tokenData.price,           // Generic fallback
+    tokenData.priceUSD,        // Alternative format
+    tokenData.priceUsd,        // Alternative format
+    tokenData.current_price,   // Some APIs use this
+    tokenData.currentPrice,     // Alternative
+  ) ?? 0;
+  // Legacy fallback to avoid regressions (keeps previous behavior if new fields are missing)
+  if (price === 0) {
+    price =
+      Number(tokenData?.usd_price ?? tokenData?.price ?? tokenData?.price_usd ?? 0) ||
+      0;
+  }
+  
+  // Price change mapping - prioritize percentage fields, handle both Birdeye and Monad formats
+  // Birdeye format: price24hChangePercent (already percentage)
+  // Monad pulse format: price_percent_change_1h, price_change_1h (may need conversion)
+  const normalizePercent = (value: any): number | null => {
+    if (value === undefined || value === null) return null;
+    const num = typeof value === 'string' ? parseFloat(value) : Number(value);
+    return Number.isFinite(num) ? num : null;
+  };
+  
+  // Try 1h change first (most relevant for watchlist ticker), then 24h
+  // Use coalesceNumber pattern to get first non-null value
+  let priceChange = coalesceNumber(
+    normalizePercent(tokenData.price_percent_change_1h),
+    normalizePercent(tokenData.price_change_1h),
+    normalizePercent(tokenData.price_change),
+    normalizePercent(tokenData.priceChange1h),
+    normalizePercent(tokenData.price_percent_change_24h),
+    normalizePercent(tokenData.price_change_24h),
+    normalizePercent(tokenData.priceChange24h),
+    normalizePercent(tokenData.price24hChangePercent), // Birdeye format (already percentage)
+    normalizePercent(tokenData.price_change_1h_percent),
+    normalizePercent(tokenData.price_change_24h_percent),
+  ) ?? 0;
+  if (priceChange === 0) {
+    priceChange =
+      Number(
+        tokenData?.price_percent_change_1h ??
+        tokenData?.price_change_1h ??
+        tokenData?.price24hChangePercent ??
+        0
+      ) || 0;
+  }
+  
+  return { price, priceChange };
+}
+
 export default function Header({
   search = "",
   setSearch,
@@ -159,25 +278,151 @@ export default function Header({
     refreshBalance,
     primaryWalletAddresses,
     chainBalances,
+    walletList,
+    walletBalances,
+    selectedWalletIds,
     logout,
   } = useUser();
-  const currentChain = (router.query.chain as string) || "monad";
+  // Get chain from URL first, then localStorage, then default to monad
+  const currentChain = (() => {
+    if (router.query.chain) {
+      return router.query.chain as string;
+    }
+    if (typeof window !== 'undefined') {
+      const savedChain = localStorage.getItem('selected-chain');
+      if (savedChain === 'sol' || savedChain === 'monad') {
+        return savedChain;
+      }
+    }
+    return 'monad';
+  })();
   const { solPrice, monPrice } = useSolPrice();
   const chainPrice = currentChain === 'monad' ? monPrice : solPrice;
-  const { watchlist, removeFromWatchlist } = useWatchlist();
+  const { watchlist, removeFromWatchlist, refreshWatchlistToken } = useWatchlist();
   const { presets, activePreset } = useQuickBuy();
 
   // Watchlist ticker paging (max 8 tokens visible)
   const WATCHLIST_TICKER_PAGE_SIZE = 8;
   const [watchlistTickerPage, setWatchlistTickerPage] = useState(0);
+  
+  // Enrich watchlist tokens with cached pulse token data when price is missing
+  const [cachedPulseTokens, setCachedPulseTokens] = useState<Token[]>([]);
+  const pendingQuickBuyToastRef = useRef<{ id: string; tokenImage: string | null; tokenName: string; fakeTime: string; startTime: number; timerInterval?: NodeJS.Timeout } | null>(null);
+
+  const isMonadToken = (token: any) =>
+    typeof token?.mint === "string" && token.mint.startsWith("0x");
+  
+  useEffect(() => {
+    // Load cached pulse tokens to enrich watchlist tokens
+    try {
+      const cached = localStorage.getItem('cached_pulse_tokens');
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        const now = Date.now();
+        if (now < parsed.expiresAt) {
+          setCachedPulseTokens(parsed.data || []);
+        }
+      }
+    } catch (error) {
+      // Ignore errors
+    }
+  }, []);
+
+  // Helper function to enrich a token with cached pulse data
+  const enrichTokenWithCachedData = useCallback((token: Token): Token => {
+    const tokenAddress = token.pair_address || (token as any).mint || '';
+    if (!tokenAddress || cachedPulseTokens.length === 0) return token;
+    
+    // Check if price is missing or 0
+    const currentPrice = (token as any).price_usd || (token as any).usd_price || (token as any).price || 0;
+    if (currentPrice > 0) return token; // Already has price, no need to enrich
+    
+    // Find matching token in cached pulse tokens
+    const cachedToken = cachedPulseTokens.find(t => {
+      const cachedAddr = t.pair_address || (t as any).mint || '';
+      return cachedAddr === tokenAddress || 
+             (cachedAddr && tokenAddress && cachedAddr.toLowerCase() === tokenAddress.toLowerCase());
+    });
+    
+    if (cachedToken) {
+      const enrichedPrice = (cachedToken as any).price_usd || (cachedToken as any).usd_price || 0;
+      if (enrichedPrice > 0) {
+        console.log(`[Watchlist Enrich] Enriched ${token.symbol || tokenAddress} with cached pulse data:`, {
+          originalPrice: currentPrice,
+          enrichedPrice: enrichedPrice,
+          source: 'cached_pulse_tokens'
+        });
+      }
+      
+      // Merge cached token data into watchlist token, prioritizing watchlist token's existing fields
+      return {
+        ...token,
+        ...cachedToken,
+        // Keep watchlist token's original fields but use cached price if missing
+        price_usd: (token as any).price_usd || (cachedToken as any).price_usd || (cachedToken as any).usd_price || 0,
+        usd_price: (token as any).usd_price || (cachedToken as any).usd_price || (cachedToken as any).price_usd || 0,
+        price_percent_change_1h: (token as any).price_percent_change_1h ?? (cachedToken as any).price_percent_change_1h ?? (cachedToken as any).price_change_1h ?? 0,
+        price_change_1h: (token as any).price_change_1h ?? (cachedToken as any).price_change_1h ?? (cachedToken as any).price_percent_change_1h ?? 0,
+      } as Token;
+    }
+    
+    return token;
+  }, [cachedPulseTokens]);
+
+  // Track which tokens we've already tried to refresh to avoid duplicate API calls
+  const refreshedTokensRef = useRef<Set<string>>(new Set());
+  
+  // Refresh Monad tokens in watchlist that still lack price/change by hitting token service
+  // Only refresh tokens that haven't been refreshed yet and don't have price data
+  useEffect(() => {
+    // Skip if we've already processed all tokens
+    const tokensToRefresh = watchlist.filter(token => {
+      if (!isMonadToken(token)) return false;
+      const { price } = getWatchlistTokenPriceAndChange(token);
+      if (price && price > 0) return false; // Already has price
+      const key = (token as any).mint || token.pair_address || '';
+      if (!key) return false;
+      if (refreshedTokensRef.current.has(key)) return false; // Already tried to refresh
+      return true;
+    });
+    
+    if (tokensToRefresh.length === 0) return;
+    
+    // Refresh tokens one at a time with a small delay to avoid overwhelming the API
+    (async () => {
+      for (const token of tokensToRefresh) {
+        const key = (token as any).mint || token.pair_address || '';
+        if (!key) continue;
+        
+        // Mark as attempted before making the call
+        refreshedTokensRef.current.add(key);
+        
+        try {
+          await refreshWatchlistToken(key);
+          // Small delay between calls to avoid rate limiting
+          await new Promise(resolve => setTimeout(resolve, 100));
+        } catch (error) {
+          // If refresh fails, remove from set so we can retry later
+          refreshedTokensRef.current.delete(key);
+        }
+      }
+    })();
+  }, [watchlist, refreshWatchlistToken]);
+
+  // Memoize enriched watchlist to avoid recalculating on every render
+  const enrichedWatchlist = useMemo(() => {
+    return watchlist.map(enrichTokenWithCachedData);
+  }, [watchlist, enrichTokenWithCachedData]);
+  
   const watchlistTickerTotalPages = Math.max(
     1,
-    Math.ceil(watchlist.length / WATCHLIST_TICKER_PAGE_SIZE),
+    Math.ceil(enrichedWatchlist.length / WATCHLIST_TICKER_PAGE_SIZE),
   );
   const watchlistTickerCanPrev = watchlistTickerPage > 0;
   const watchlistTickerCanNext =
     watchlistTickerPage < watchlistTickerTotalPages - 1;
-  const watchlistTickerVisible = watchlist.slice(
+  
+  const watchlistTickerVisible = enrichedWatchlist.slice(
     watchlistTickerPage * WATCHLIST_TICKER_PAGE_SIZE,
     watchlistTickerPage * WATCHLIST_TICKER_PAGE_SIZE + WATCHLIST_TICKER_PAGE_SIZE,
   );
@@ -349,12 +594,29 @@ export default function Header({
       lastCheckedClipboard.current = trimmed;
 
       try {
+        // First try to resolve mint address to pair address
+        let pairAddress = trimmed;
+        try {
+          const hydrateResponse = await fetch('/api/token-service/hydrate-pair', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ mint: trimmed }),
+          });
+          if (hydrateResponse.ok) {
+            const hydrateData = await hydrateResponse.json();
+            if (hydrateData.pair_address) {
+              pairAddress = hydrateData.pair_address;
+            }
+          }
+        } catch {
+          // If hydration fails, use the original address as pair_address
+        }
+
         const response = await fetch(
-          `/api/token-service/trade-view?mint_address=${trimmed}`,
+          `/api/token-service/trade-view?pair_address=${pairAddress}`,
         );
         if (!response.ok) {
           setClipboardToken(null);
-          lastCheckedClipboard.current = "";
           return;
         }
 
@@ -363,7 +625,6 @@ export default function Header({
 
         if (!token) {
           setClipboardToken(null);
-          lastCheckedClipboard.current = "";
           return;
         }
 
@@ -371,7 +632,6 @@ export default function Header({
           token.imageUrl || token.image || token.thumbnail || token.uri || null;
         if (!imageUrl) {
           setClipboardToken(null);
-          lastCheckedClipboard.current = "";
           return;
         }
 
@@ -405,7 +665,7 @@ export default function Header({
       } catch (error) {
         console.error("Error fetching token data:", error);
         setClipboardToken(null);
-        lastCheckedClipboard.current = "";
+        // Don't reset lastCheckedClipboard - prevents infinite retry loop
       }
     },
     [clipboardToken?.address],
@@ -490,7 +750,13 @@ export default function Header({
   // Handler for Paste CA button - navigate to token
   const handlePasteCA = async () => {
     if (clipboardToken) {
-      router.push(`/trade/${clipboardToken.address}`);
+      // Detect if Monad (0x) or Solana address
+      const isMonadAddress = clipboardToken.address.startsWith('0x') || clipboardToken.address.startsWith('0X');
+      if (isMonadAddress) {
+        router.push(`/trade/monad/${clipboardToken.address}?chain=monad`);
+      } else {
+        router.push(`/trade/${clipboardToken.address}?chain=sol`);
+      }
       toast.success("Navigating to token...", {
         duration: 2000,
         style: {
@@ -507,7 +773,7 @@ export default function Header({
         const isSolanaAddress = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(trimmed);
 
         if (isSolanaAddress) {
-          router.push(`/trade/${trimmed}`);
+          router.push(`/trade/${trimmed}?chain=sol`);
           toast.success("Navigating to token...", {
             duration: 2000,
             style: {
@@ -646,95 +912,42 @@ export default function Header({
       const tokenImage = token ? extractTokenImage(token as any) : null;
       const tokenName = token?.name || token?.symbol || '';
       
-      // Generate unique toast ID and fake fast time
-      const uniqueToastId = `header-quickbuy-${Date.now()}`;
-      const fakeTime = (Math.random() * 0.2 + 0.4).toFixed(2);
-      const startTime = Date.now();
-      const timerCap = 0.40 + Math.random() * 0.20;
-      let timerFinished = false;
+      const toastId = toast.loading('Placing trade...', { duration: Infinity });
       
-      // Show initial loading toast with timer
-      toast.custom(
-        (t) => (
-          <div className="flex items-center gap-2 bg-[#1a1b1e] text-white border border-white/10 rounded-lg px-4 py-3">
-            <FaCheckCircle id={`check-${uniqueToastId}`} className="flex-shrink-0" size={16} style={{ color: '#31e3ac', display: 'none' }} />
-            {tokenImage && (
-              <img src={tokenImage} alt={tokenName} className="w-5 h-5 rounded-full object-cover flex-shrink-0" style={{ border: '1px solid rgba(255, 255, 255, 0.1)' }} onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
-            )}
-            <span className="font-semibold text-sm" style={{ color: '#31e3ac' }}>Trade placed!</span>
-            <span id={`timer-${uniqueToastId}`} className="text-[#9CA3AF] text-xs ml-1">(0.00s)</span>
-            <span id={`link-${uniqueToastId}`} className="inline-flex items-center ml-1" style={{ display: 'none' }}>
-              <img src="https://pbs.twimg.com/profile_images/1749618187489206272/rDaFjEhN_400x400.jpg" alt="Monad" className="w-4 h-4 rounded-full" style={{ cursor: 'default' }} />
-            </span>
-          </div>
-        ),
-        { id: uniqueToastId, duration: Infinity }
-      );
-      
-      // Start timer animation
-      const timerInterval = setInterval(() => {
-        const elapsed = (Date.now() - startTime) / 1000;
-        const displayTime = Math.min(elapsed, timerCap).toFixed(2);
-        const timerEl = document.getElementById(`timer-${uniqueToastId}`);
-        if (timerEl) {
-          timerEl.textContent = `(${displayTime}s)`;
-        }
-        
-        if (!timerFinished && elapsed >= timerCap) {
-          timerFinished = true;
-          const checkEl = document.getElementById(`check-${uniqueToastId}`);
-          if (checkEl) {
-            checkEl.style.display = 'block';
-          }
-          const linkEl = document.getElementById(`link-${uniqueToastId}`);
-          if (linkEl) {
-            linkEl.style.display = 'inline-flex';
-          }
-        }
-      }, 50);
-
       try {
-        const result = await tradeMonadBuy(
-          {
-            tokenAddress,
-            amountMON: quickBuyAmount,
-            launchpad,
-            slippage,
-            gasPrice,
-          },
-          user.bearerToken,
-        );
+        const { results, totalConsidered } = await executeMonadMultiBuy({
+          tokenAddress,
+          amountMON: quickBuyAmount,
+          launchpad,
+          slippage,
+          gasPrice,
+          authToken: user.bearerToken,
+          walletList,
+          walletBalances,
+          selectedWalletIds: selectedWalletIds?.monad || [],
+        });
 
-        if (result.success && result.txHash) {
-          clearInterval(timerInterval);
-          const explorerUrl = `https://monadvision.com/tx/${result.txHash}`;
-          const linkEl = document.getElementById(`link-${uniqueToastId}`);
-          if (linkEl) {
-            linkEl.innerHTML = `<a href="${explorerUrl}" target="_blank" rel="noopener noreferrer" class="hover:opacity-80 transition-opacity"><img src="https://pbs.twimg.com/profile_images/1749618187489206272/rDaFjEhN_400x400.jpg" alt="Monad" class="w-4 h-4 rounded-full" style="cursor: pointer;" /></a>`;
-          }
-          setTimeout(() => {
-            toast.dismiss(uniqueToastId);
-          }, 10000);
-          // Refresh balance immediately after successful buy (with small delay for on-chain confirmation)
+        const txHashes = results
+          .map((r) => (r.result as any)?.txHash)
+          .filter(Boolean);
+        const summary = formatMonadTxSummary(txHashes, totalConsidered);
+
+        if (txHashes.length > 0) {
           setTimeout(() => {
             refreshBalance({ chain: "monad", force: true }).catch((err) => {
               console.warn('Failed to refresh balance:', err);
             });
           }, 1000);
           broadcastMonadQuickTrade(tokenAddress, 'buy');
-          console.log('✅ Header Watchlist Quick Buy successful:', result);
-          return { success: true, txHash: result.txHash };
-        } else {
-          clearInterval(timerInterval);
-          const errorMsg = formatMonadError((result as any)?.error);
-          toast.error(errorMsg, { id: uniqueToastId, duration: 6000 });
-          return { success: false, error: errorMsg };
+          toast.success(summary.message, { id: toastId, duration: 6000 });
+          return { success: true, txHash: txHashes[0] };
         }
+        toast.error('Trade failed', { id: toastId, duration: 6000 });
+        return { success: false, error: 'Trade failed' };
       } catch (error: any) {
         console.error('❌ Header Watchlist Quick Buy failed:', error);
-        clearInterval(timerInterval);
         const errorMessage = formatMonadError(error?.message || error?.error);
-        toast.error(errorMessage, { id: uniqueToastId, duration: 6000 });
+        toast.error(errorMessage, { id: toastId, duration: 6000 });
         return { success: false, error: errorMessage };
       }
     }
@@ -759,6 +972,12 @@ export default function Header({
       user: { bearerToken: user.bearerToken, id: user.id },
       solBalance: 0, // Will be fetched by executeEnhancedTrade
       solPriceUsd: 150,
+      walletContext: {
+        selectedWalletIds: currentChain === "monad" ? selectedWalletIds?.monad || [] : selectedWalletIds?.sol || [],
+        walletList: walletList || [],
+        walletBalances: walletBalances || {},
+        chain: currentChain === "monad" ? "monad" : "sol",
+      },
       refreshBalance,
       onSuccess: (txHash, stats) => {
         console.log('✅ Header Watchlist Quick Buy successful:', { txHash, stats });
@@ -932,25 +1151,26 @@ export default function Header({
   }, [notificationsOpen]);
 
   // Show Feature Updates modal only on first login
-  useEffect(() => {
-    if (typeof window === "undefined" || !user || userLoading) {
-      return;
-    }
+  // COMMENTED OUT: Disabled popout that shows "Enhanced Real-Time Data" on login
+  // useEffect(() => {
+  //   if (typeof window === "undefined" || !user || userLoading) {
+  //     return;
+  //   }
 
-    const storageKey = `feature-updates-first-login-${user.id}`;
-    const hasSeenModal = localStorage.getItem(storageKey);
+  //   const storageKey = `feature-updates-first-login-${user.id}`;
+  //   const hasSeenModal = localStorage.getItem(storageKey);
 
-    if (!hasSeenModal) {
-      // Delay to ensure page has loaded
-      setTimeout(() => {
-        setIsFirstLogin(true);
-        setShowUpdatesModal(true);
-      }, 1500);
+  //   if (!hasSeenModal) {
+  //     // Delay to ensure page has loaded
+  //     setTimeout(() => {
+  //       setIsFirstLogin(true);
+  //       setShowUpdatesModal(true);
+  //     }, 1500);
 
-      // Mark as seen
-      localStorage.setItem(storageKey, "true");
-    }
-  }, [user, userLoading]);
+  //     // Mark as seen
+  //     localStorage.setItem(storageKey, "true");
+  //   }
+  // }, [user, userLoading]);
 
   return (
     <>
@@ -1828,8 +2048,91 @@ export default function Header({
             {watchlistTickerVisible.map((token) => {
               const tokenKey = token.pair_address || (token as any).mint || token.symbol;
               const tokenAddress = token.pair_address || (token as any).mint || '';
-              const price = (token as any).usd_price ?? (token as any).price ?? 0;
-              const priceChange = (token as any).price_percent_change_1h ?? (token as any).price_change_1h ?? 0;
+              // Use helper function to get correctly mapped price and price change
+              const { price, priceChange } = getWatchlistTokenPriceAndChange(token);
+              
+              // Debug logging for specific token address (only log once per session)
+              const isTestToken = tokenAddress.toLowerCase() === '0x0cc9b2e2acd7bacff79eb7db48f5662b622e7777' || 
+                                  (token as any).mint?.toLowerCase() === '0x0cc9b2e2acd7bacff79eb7db48f5662b622e7777';
+              
+              if (isTestToken && typeof window !== 'undefined') {
+                const logKey = `__watchlistTestLogged_${tokenAddress.toLowerCase()}`;
+                if (!(window as any)[logKey]) {
+                  // Get all price change related fields from token (check all possible field names)
+                  const allPriceChangeFields: Record<string, any> = {};
+                  const changeFieldNames = [
+                    'price_percent_change_1h', 'price_change_1h', 'price_change',
+                    'priceChange1h', 'price_percent_change_24h', 'price_change_24h',
+                    'priceChange24h', 'price24hChangePercent', 'price_change_1h_percent',
+                    'price_change_24h_percent', 'price_change_percent', 'pricePercentChange',
+                    'change_1h', 'change_24h', 'percent_change_1h', 'percent_change_24h',
+                    'percentChange1h', 'percentChange24h'
+                  ];
+                  
+                  // Check all keys in token object for anything that might be a price change field
+                  Object.keys(token).forEach(key => {
+                    const lowerKey = key.toLowerCase();
+                    if (lowerKey.includes('change') || lowerKey.includes('percent') || 
+                        lowerKey.includes('price') && (lowerKey.includes('1h') || lowerKey.includes('24h'))) {
+                      allPriceChangeFields[key] = (token as any)[key];
+                    }
+                  });
+                  
+                  // Also check the specific field names
+                  changeFieldNames.forEach(field => {
+                    const value = (token as any)[field];
+                    if (value !== undefined && value !== null) {
+                      allPriceChangeFields[field] = value;
+                    }
+                  });
+                  
+                  console.log(`[Watchlist Ticker Test] Token: ${token.symbol || tokenKey}`, {
+                    tokenAddress,
+                    mint: (token as any).mint,
+                    pair_address: token.pair_address,
+                    // Price fields
+                    price_usd: (token as any).price_usd,
+                    usd_price: (token as any).usd_price,
+                    chart_live_price_usd: (token as any).chart_live_price_usd,
+                    lastPriceUsd: (token as any).lastPriceUsd,
+                    price: (token as any).price,
+                    priceUSD: (token as any).priceUSD,
+                    priceUsd: (token as any).priceUsd,
+                    current_price: (token as any).current_price,
+                    currentPrice: (token as any).currentPrice,
+                    // All price change fields found (including any field with "change" or "percent" in name)
+                    priceChangeFields: allPriceChangeFields,
+                    // Final mapped values
+                    mappedPrice: price,
+                    mappedPriceChange: priceChange,
+                    formattedPrice: formatSmallPrice(price),
+                    formattedPriceChange: `${priceChange >= 0 ? '+' : ''}${formatSmartNumber(Math.abs(priceChange))}%`,
+                    // All keys for reference
+                    allKeys: Object.keys(token),
+                  });
+                  (window as any)[logKey] = true;
+                }
+              }
+              
+              // Debug logging to see what fields are available for tokens with 0 price
+              if (price === 0 && !isTestToken) {
+                console.log(`[Watchlist Debug] ${token.symbol || tokenKey} - Price is 0, checking fields:`, {
+                  symbol: token.symbol,
+                  name: token.name,
+                  pair_address: token.pair_address,
+                  mint: (token as any).mint,
+                  price_usd: (token as any).price_usd,
+                  usd_price: (token as any).usd_price,
+                  price: (token as any).price,
+                  priceUSD: (token as any).priceUSD,
+                  priceUsd: (token as any).priceUsd,
+                  price_percent_change_1h: (token as any).price_percent_change_1h,
+                  price_change_1h: (token as any).price_change_1h,
+                  price24hChangePercent: (token as any).price24hChangePercent,
+                  allKeys: Object.keys(token).slice(0, 20), // First 20 keys
+                });
+              }
+              
               const isHovered = hoveredWatchlistToken === tokenKey;
               const rawImg = (token as any).uri || (token as any).image || (token as any).logo;
               
@@ -1841,7 +2144,41 @@ export default function Header({
                   onMouseLeave={() => setHoveredWatchlistToken(null)}
                   onClick={() => {
                     if (tokenAddress) {
-                      router.push(`/trade/${tokenAddress}`);
+                      // Check if it's a Monad token (starts with 0x)
+                      const isMonadToken = tokenAddress.startsWith('0x') || tokenAddress.startsWith('0X');
+                      
+                      if (isMonadToken) {
+                        // Build Monad trade URL with query parameters
+                        const queryParams = new URLSearchParams();
+                        if (token.name) queryParams.set('_name', token.name);
+                        if (token.symbol) queryParams.set('_symbol', token.symbol);
+                        if (price > 0) queryParams.set('_price', price.toString());
+                        if (token.market_cap_usd || (token as any).fully_diluted_value) {
+                          queryParams.set('_mcap', ((token.market_cap_usd || (token as any).fully_diluted_value || 0)).toString());
+                        }
+                        const imageUrl = (token as any).uri || (token as any).image || (token as any).logo || '';
+                        if (imageUrl) queryParams.set('_image', imageUrl);
+                        queryParams.set('_mint', tokenAddress);
+                        queryParams.set('chain', 'monad');
+                        
+                        const url = `/trade/monad/${tokenAddress}?${queryParams.toString()}`;
+                        router.push(url);
+                      } else {
+                        // For Solana tokens, include chain=sol query parameter
+                        const queryParams = new URLSearchParams();
+                        if (token.name) queryParams.set('_name', token.name);
+                        if (token.symbol) queryParams.set('_symbol', token.symbol);
+                        if (price > 0) queryParams.set('_price', price.toString());
+                        if (token.market_cap_usd || (token as any).fully_diluted_value) {
+                          queryParams.set('_mcap', ((token.market_cap_usd || (token as any).fully_diluted_value || 0)).toString());
+                        }
+                        const imageUrl = (token as any).uri || (token as any).image || (token as any).logo || '';
+                        if (imageUrl) queryParams.set('_image', imageUrl);
+                        queryParams.set('_mint', tokenAddress);
+                        queryParams.set('chain', 'sol');
+
+                        router.push(`/trade/${tokenAddress}?${queryParams.toString()}`);
+                      }
                     }
                   }}
                 >
@@ -1864,16 +2201,76 @@ export default function Header({
                   
                   {/* Price */}
                   <span className="text-xs" style={{ color: AX.muted }}>
-                    ${price > 0 ? formatSmartNumber(price) : '0'}
+                    ${price > 0 ? formatSmallPrice(price) : '0'}
                   </span>
                   
                   {/* Price Change */}
-                  <span 
-                    className="text-xs font-medium"
-                    style={{ color: priceChange >= 0 ? '#85d99f' : '#f26681' }}
-                  >
-                    {priceChange >= 0 ? '+' : ''}{formatSmartNumber(Math.abs(priceChange))}%
-                  </span>
+                  {priceChange !== 0 && (
+                    <span 
+                      className="text-xs font-medium"
+                      style={{ color: priceChange >= 0 ? '#85d99f' : '#f26681' }}
+                    >
+                      {priceChange >= 0 ? '+' : ''}{formatSmartNumber(Math.abs(priceChange))}%
+                    </span>
+                  )}
+                  
+                  {/* Volume (1h) - show as percentage of market cap */}
+                  {(() => {
+                    // Use same volume resolution logic as watchlist modal
+                    const usdVolumeFields = [
+                      (token as any).volume_1h_usd,
+                      (token as any).volume1hUsd,
+                      (token as any).volume1h_usd,
+                      (token as any).volume_24h_usd, // fallback when 1h is missing
+                    ];
+                    let volume1h = 0;
+                    for (const v of usdVolumeFields) {
+                      const num = Number(v);
+                      if (Number.isFinite(num) && num > 0) {
+                        volume1h = num;
+                        break;
+                      }
+                    }
+                    // Fallback to buy+sell volume if USD volume not available
+                    if (volume1h === 0) {
+                      const buy = Number((token as any).total_buy_volume_1h) || Number((token as any).total_buy_volume_mon) || 0;
+                      const sell = Number((token as any).total_sell_volume_1h) || Number((token as any).total_sell_volume_mon) || 0;
+                      if (buy || sell) volume1h = buy + sell;
+                    }
+                    
+                    // Get market cap
+                    const marketCap = 
+                      (token as any).market_cap_usd ??
+                      (token as any).marketCapUSD ??
+                      (token as any).fully_diluted_value ??
+                      0;
+                    
+                    // Calculate volume as percentage of market cap
+                    // let volumePercent = 0;
+                    // if (volume1h > 0 && marketCap > 0) {
+                    //   volumePercent = (volume1h / marketCap) * 100;
+                    // }
+                    
+                    // Show USD volume amount
+                    // Color based on price change direction: green for up, red for down
+                    const volumeColor = priceChange >= 0 ? '#85d99f' : '#f26681';
+                    
+                    // if (volumePercent > 0) {
+                    //   return (
+                    //     <span className="text-xs font-medium" style={{ color: volumeColor }}>
+                    //       {formatSmartNumber(volumePercent)}%
+                    //     </span>
+                    //   );
+                    // } else 
+                    if (volume1h > 0) {
+                      return (
+                        <span className="text-xs font-medium" style={{ color: volumeColor }}>
+                          ${formatSmartNumber(volume1h)}
+                        </span>
+                      );
+                    }
+                    return null;
+                  })()}
                   
                   {/* Quick Buy Button - shown on hover */}
                   {isHovered && (
@@ -1969,16 +2366,10 @@ export default function Header({
               trimmed.startsWith("0x") || trimmed.startsWith("0X");
             // For Monad tokens, use the Monad trade page route
             if (isMonadAddress) {
-              router.push(`/trade/monad/${trimmed}`);
+              router.push(`/trade/monad/${trimmed}?chain=monad`);
             } else {
-              // For Solana or other chains, use the regular trade page with chain query param
-              router.push({
-                pathname: `/trade/${trimmed}`,
-                query:
-                  currentChain && currentChain !== "sol"
-                    ? { chain: currentChain }
-                    : {},
-              });
+              // For Solana tokens, always include chain=sol
+              router.push(`/trade/${trimmed}?chain=sol`);
             }
             setSearch?.("");
             return;
@@ -2098,3 +2489,20 @@ export default function Header({
     </>
   );
 }
+  const resolveWatchlistPrice = (token: any) =>
+    Number(
+      (token?.usd_price ??
+        token?.price_usd ??
+        token?.priceUsd ??
+        token?.price) || 0
+    );
+
+  const resolveWatchlistChange1h = (token: any) =>
+    Number(
+      token?.price_percent_change_1h ??
+        token?.price_change_1h ??
+        token?.price_change ??
+        token?.price_percent_change_24h ??
+        token?.price_change_24h ??
+        0
+    );

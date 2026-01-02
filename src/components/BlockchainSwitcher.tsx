@@ -16,12 +16,12 @@ const blockchains: Blockchain[] = [
     logo: 'https://i0.wp.com/www.gizmotimes.com/wp-content/uploads/2023/10/Monad-Logo.png?fit=1920%2C1080&ssl=1',
     color: '#9B59B6' 
   },
-  // { 
-  //   id: 'sol', 
-  //   name: 'Solana', 
-  //   logo: 'https://raw.githubusercontent.com/solana-labs/token-list/main/assets/mainnet/So11111111111111111111111111111111111111112/logo.png',
-  //   color: '#14F195' 
-  // },
+  { 
+    id: 'sol', 
+    name: 'Solana', 
+    logo: 'https://raw.githubusercontent.com/solana-labs/token-list/main/assets/mainnet/So11111111111111111111111111111111111111112/logo.png',
+    color: '#14F195' 
+  },
   // { 
   //   id: 'eth', 
   //   name: 'Ethereum', 
@@ -87,9 +87,40 @@ export default function BlockchainSwitcher() {
   const [isOpen, setIsOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
-  // Get current chain from query parameter, default to 'monad'
-  const currentChain = (router.query.chain as string) || 'monad';
+  // Determine chain based on route and query parameter
+  // /trade/monad/[contractAddress] = always monad
+  // /trade/[id] = always sol (Solana trade page)
+  // Other pages = use query param, then localStorage, then default to monad
+  const getChainFromRoute = (): string => {
+    const path = router.pathname;
+    if (path.startsWith('/trade/monad/')) {
+      return 'monad';
+    }
+    if (path === '/trade/[id]') {
+      return 'sol';
+    }
+    // For non-trade pages, check URL first, then localStorage
+    if (router.query.chain) {
+      return router.query.chain as string;
+    }
+    if (typeof window !== 'undefined') {
+      const savedChain = localStorage.getItem('selected-chain');
+      if (savedChain && (savedChain === 'sol' || savedChain === 'monad')) {
+        return savedChain;
+      }
+    }
+    return 'monad';
+  };
+
+  const currentChain = getChainFromRoute();
   const selectedBlockchain = blockchains.find(b => b.id === currentChain) || blockchains[0];
+
+  // Save chain to localStorage when on trade pages (so navigation back preserves it)
+  useEffect(() => {
+    if (typeof window !== 'undefined' && currentChain) {
+      localStorage.setItem('selected-chain', currentChain);
+    }
+  }, [currentChain]);
 
   // Close dropdown when clicking outside
   useEffect(() => {
@@ -108,11 +139,22 @@ export default function BlockchainSwitcher() {
     };
   }, [isOpen]);
 
+  // Check if we're on a trade page (chain switching not allowed - tokens are chain-specific)
+  const isOnTradePage = router.pathname.startsWith('/trade/');
+
   const handleChainSelect = (chainId: string) => {
     setIsOpen(false);
-    
+
+    // Don't allow chain switching on trade pages
+    if (isOnTradePage) return;
+
     // Update the current page's chain query parameter
     const currentPath = router.pathname;
+    console.log('[BlockchainSwitcher] Selecting chain:', chainId);
+    console.log('[BlockchainSwitcher] Current path:', currentPath);
+    console.log('[BlockchainSwitcher] Current query:', router.query);
+    console.log('[BlockchainSwitcher] New query will be:', { ...router.query, chain: chainId });
+
     router.push({
       pathname: currentPath,
       query: { ...router.query, chain: chainId },
@@ -122,8 +164,8 @@ export default function BlockchainSwitcher() {
   return (
     <div className="relative" ref={dropdownRef}>
       <button
-        onClick={() => setIsOpen(!isOpen)}
-        className="flex items-center gap-2 h-10 rounded-3xl px-3 w-40 transition-all duration-300 ease-out border border-neutral-700/70 hover:bg-neutral-700/70"
+        onClick={() => !isOnTradePage && setIsOpen(!isOpen)}
+        className={`flex items-center gap-2 h-10 rounded-3xl px-3 w-40 transition-all duration-300 ease-out border border-neutral-700/70 ${isOnTradePage ? 'cursor-default opacity-75' : 'hover:bg-neutral-700/70'}`}
         style={{
           color: AX.text,
         }}
@@ -134,11 +176,13 @@ export default function BlockchainSwitcher() {
           alt={selectedBlockchain.name}
         />
         <span className="text-sm font-medium">{selectedBlockchain.name}</span>
-        <FaChevronDown
-          size={10}
-          className={`transition-transform mr-0 ml-auto duration-200 ${isOpen ? 'rotate-180' : ''}`}
-          style={{ color: AX.muted }}
-        />
+        {!isOnTradePage && (
+          <FaChevronDown
+            size={10}
+            className={`transition-transform mr-0 ml-auto duration-200 ${isOpen ? 'rotate-180' : ''}`}
+            style={{ color: AX.muted }}
+          />
+        )}
       </button>
 
       {isOpen && (
@@ -192,4 +236,3 @@ export default function BlockchainSwitcher() {
     </div>
   );
 }
-

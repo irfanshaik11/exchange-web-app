@@ -316,21 +316,35 @@ export default function WalletRow({
     if (diff < minute) return "Just now";
     if (diff < hour) {
       const mins = Math.floor(diff / minute);
-      return `${mins}m`;
+      return `${mins} ${mins === 1 ? 'min' : 'mins'}`;
     }
     if (diff < day) {
       const hours = Math.floor(diff / hour);
-      return `${hours}h`;
+      return `${hours} ${hours === 1 ? 'hour' : 'hours'}`;
     }
-    // For anything >= 1 day, show compact days (user preference: e.g. "15d").
+    // For anything >= 1 day, show days
     const days = Math.floor(diff / day);
-    return `${Math.max(1, days)}d`;
+    return `${Math.max(1, days)} ${days === 1 ? 'day' : 'days'}`;
+  };
+
+  const handleRowClick = (e: React.MouseEvent) => {
+    // Don't trigger row click if clicking on buttons or interactive elements
+    const target = e.target as HTMLElement;
+    if (
+      target.closest("button") ||
+      target.closest("a") ||
+      target.closest('[role="button"]')
+    ) {
+      return;
+    }
+    onClick && onClick(wallet);
   };
 
   return (
     <tr
       key={wallet.address}
-      className="border-b border-neutral-800/50 hover:bg-neutral-800/40 transition-all duration-200"
+      className="border-b border-neutral-800/50 hover:bg-neutral-800/40 transition-all duration-200 cursor-pointer"
+      onClick={handleRowClick}
     >
       <td className="py-3 px-2">
         <div className="flex w-full items-center gap-4">

@@ -100,7 +100,7 @@ function getProtocolColor(protocol: string): string {
 
 export default function WalletTrackerContent() {
   const router = useRouter();
-  const { user } = useUser();
+  const { user, walletList, walletBalances, selectedWalletIds } = useUser();
   const {
     wsConnected,
     latestTrades,
@@ -135,7 +135,7 @@ export default function WalletTrackerContent() {
   const [showImportModal, setShowImportModal] = useState(false);
   const [watchedWallets, setWatchedWallets] = useState<WatchWallet[]>([]);
   const [walletEvents, setWalletEvents] = useState<Record<string, WalletEvent[]>>({});
-  const [walletBalances, setWalletBalances] = useState<Record<string, number>>({});
+  const [trackedWalletBalances, setTrackedWalletBalances] = useState<Record<string, number>>({});
   const [lastActiveMap, setLastActiveMap] = useState<Record<string, number | null>>({});
   const [isTogglingAllNotifications, setIsTogglingAllNotifications] = useState(false);
   const [tokenMetadata, setTokenMetadata] = useState<Map<string, any>>(new Map());
@@ -171,7 +171,7 @@ export default function WalletTrackerContent() {
       });
       const balances = await Promise.all(balancePromises);
       balances.forEach(({ address, balance }) => {
-        setWalletBalances((prev) => ({ ...prev, [address]: balance }));
+        setTrackedWalletBalances((prev) => ({ ...prev, [address]: balance }));
       });
     } catch (error) {
       console.error("Failed to load wallets:", error);
@@ -381,8 +381,14 @@ export default function WalletTrackerContent() {
     }
   };
 
-  const handleOpenAddWalletModal = () => {
-    setShowAddWalletModal(true);
+  const handleOpenAddWalletModal = (e?: React.MouseEvent) => {
+    e?.preventDefault();
+    e?.stopPropagation();
+    try {
+      setShowAddWalletModal(true);
+    } catch (error) {
+      console.error("Error opening add wallet modal:", error);
+    }
   };
 
   const handleAddWallet = async (address: string, name: string, emoji?: string, chain?: 'sol' | 'monad') => {
@@ -569,6 +575,12 @@ export default function WalletTrackerContent() {
       user: { bearerToken: user.bearerToken, id: user.id },
       solBalance: 0, // Will be fetched by executeEnhancedTrade
       solPriceUsd: 150,
+      walletContext: {
+        selectedWalletIds: selectedWalletIds?.sol || [],
+        walletList: walletList || [],
+        walletBalances: walletBalances || {},
+        chain: selectedChain,
+      },
       onSuccess: () => {
         console.log('✅ Quick Buy successful');
       },
@@ -586,8 +598,11 @@ export default function WalletTrackerContent() {
             You are not logged in to Narrative
           </p>
           <button
+            type="button"
             className="inline-flex items-center justify-center rounded-full border border-neutral-600 px-6 py-1.5 text-xs font-medium text-neutral-100 transition-colors duration-200 hover:border-neutral-400 hover:bg-neutral-800/60"
-            onClick={() => {
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
               const event = new CustomEvent("open-login-modal");
               window.dispatchEvent(event);
             }}
@@ -608,12 +623,17 @@ export default function WalletTrackerContent() {
           {TABS.map((tab, i) => (
             <button
               key={tab}
+              type="button"
               className={`cursor-pointer rounded-lg px-1.5 sm:px-2 py-1 text-[10px] sm:text-xs transition-all duration-300 whitespace-nowrap ${
                 activeTab === i
                   ? "bg-[#111111] font-medium text-white"
                   : "font-medium text-neutral-400 hover:bg-[#141414] hover:text-white"
               }`}
-              onClick={() => setActiveTab(i)}
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                setActiveTab(i);
+              }}
             >
               {tab}
               {tab === "Live Trades" && (
@@ -654,14 +674,24 @@ export default function WalletTrackerContent() {
           {activeTab === 0 && (
             <>
               <button
+                type="button"
                 className="rounded-full bg-[#111111] px-2 sm:px-4 py-1 text-[10px] sm:text-xs font-semibold text-white transition-all duration-300 hover:bg-[#181818] whitespace-nowrap"
-                onClick={() => setShowImportModal(true)}
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  setShowImportModal(true);
+                }}
               >
                 Import
               </button>
               <button
+                type="button"
                 className="rounded-full bg-[#111111] px-2 sm:px-4 py-1 text-[10px] sm:text-xs font-semibold text-white transition-all duration-300 hover:bg-[#181818] whitespace-nowrap"
-                onClick={handleExportAddresses}
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  handleExportAddresses();
+                }}
               >
                 Export
               </button>
@@ -675,7 +705,11 @@ export default function WalletTrackerContent() {
               <button
                 className={`flex h-7 sm:h-8 w-7 sm:w-8 items-center justify-center rounded-full bg-[#111111] transition-all duration-300 hover:bg-[#181818] ${isTogglingAllNotifications ? 'opacity-50 cursor-wait' : 'cursor-pointer'}`}
                 type="button"
-                onClick={handleToggleAllNotifications}
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  handleToggleAllNotifications();
+                }}
                 disabled={isTogglingAllNotifications}
                 title={isTogglingAllNotifications ? "Toggling..." : allNotificationsEnabled ? "Disable all notifications" : "Enable all notifications"}
               >
@@ -695,13 +729,18 @@ export default function WalletTrackerContent() {
               </button>
 
               <button
+                type="button"
                 className="rounded-full px-2 sm:px-4 py-1 text-[10px] sm:text-xs font-semibold transition-all duration-300 whitespace-nowrap"
                 style={{
                   backgroundColor: "#70E0B0",
                   color: "#000000",
                   border: "none",
                 }}
-                onClick={handleOpenAddWalletModal}
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  handleOpenAddWalletModal(e);
+                }}
                 onMouseEnter={(e) => {
                   e.currentTarget.style.backgroundColor = "#58B890";
                   e.currentTarget.style.boxShadow = "0 0 8px rgba(112, 224, 176, 0.3), 0 0 16px rgba(112, 224, 176, 0.15)";
@@ -743,8 +782,13 @@ export default function WalletTrackerContent() {
                           <span className="w-28 hidden sm:flex justify-center text-[10px] sm:text-xs font-medium text-neutral-400">Last Active</span>
                           <div className="flex-1 flex items-center justify-end">
                             <button
+                              type="button"
                               className="whitespace-nowrap text-[10px] sm:text-xs font-semibold text-red-400 transition-colors duration-300 hover:text-red-300"
-                              onClick={() => handleRemoveWallet("all")}
+                              onClick={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                handleRemoveWallet("all");
+                              }}
                             >
                               Remove All
                             </button>
@@ -759,7 +803,7 @@ export default function WalletTrackerContent() {
                         (ww) => ww.address === wallet.address
                       );
                       const events = walletEvents[wallet.address] || [];
-                      const balance = walletBalances[wallet.address];
+                      const balance = trackedWalletBalances[wallet.address];
                       return (
                         <WalletRow
                           key={wallet.address}
@@ -769,7 +813,11 @@ export default function WalletTrackerContent() {
                           balance={balance}
                           lastActive={lastActiveMap[wallet.address]}
                           onRemove={handleRemoveWallet}
-                          onClick={() => {}}
+                          onClick={(wallet) => {
+                            // Open wallet transactions page in a new tab
+                            const url = `/wallet/${wallet.address}`;
+                            window.open(url, "_blank");
+                          }}
                           onNotificationToggle={async (address, enabled) => {
                             await refreshWatchedWallets();
                           }}
@@ -879,11 +927,14 @@ export default function WalletTrackerContent() {
                           </td>
                           <td className="w-36 sm:w-48 px-1 sm:px-2 py-1.5 sm:py-2">
                             <button
-                              onClick={async () => {
+                              type="button"
+                              onClick={async (e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
                                 let tokenAddress = trade.pair_address;
                                 if (!tokenAddress && trade.mint) {
                                   try {
-                                    const searchResponse = await fetch(`/api/token-service/search?phrase=${encodeURIComponent(trade.mint)}&limit=1`);
+                                    const searchResponse = await fetch(`${process.env.NEXT_PUBLIC_GO_SERVICE_URL}/v1/search?phrase=${encodeURIComponent(trade.mint)}&limit=1`);
                                     if (searchResponse.ok) {
                                       const searchData = await searchResponse.json();
                                       if (searchData.tokens && searchData.tokens.length > 0) {
@@ -987,7 +1038,9 @@ export default function WalletTrackerContent() {
                           <td className="w-20 sm:w-28 px-1 sm:px-2 py-1.5 sm:py-2">
                             <div className="flex items-center justify-center">
                               <button
+                                type="button"
                                 onClick={(e) => {
+                                  e.preventDefault();
                                   e.stopPropagation();
                                   handleQuickBuy(trade);
                                 }}

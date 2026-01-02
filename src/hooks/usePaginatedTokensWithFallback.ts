@@ -767,7 +767,10 @@ export default function usePaginatedTokensWithFallback({
                   sol_price: 0,
                   total_snipers: 0,
                   total_holders: 0,
-                  created_at: new Date().toISOString(),
+                  // Birdeye API doesn't provide creation/launch timestamps
+                  // Set to null so age column shows "-" instead of misleading "1m"
+                  created_at: null,
+                  launch_time: null,
                   updated_at: new Date().toISOString(),
                   bonding_curve_progress: 0,
                   
@@ -785,6 +788,149 @@ export default function usePaginatedTokensWithFallback({
                 birdeye_rank: tokens[0].birdeye_rank,
                 volume_24h: tokens[0].volume_24h,
               } : 'No tokens');
+              
+              // Enrich Birdeye tokens with created_at and liquidity from our token service
+              // Note: We prioritize Birdeye's values (market cap, etc.) but enrich liquidity if Birdeye shows 0
+              // Only do this for Monad chain (since that's where our token service operates)
+              if (isMonadChain && tokens.length > 0) {
+                const monadServiceUrl = process.env.NEXT_PUBLIC_MONAD_TOKEN_SERVICE_URL || 'https://monad-token-service.narrative.trade';
+                console.log(`[Birdeye] Enriching ${tokens.length} tokens with created_at and liquidity from our token service...`);
+                
+                // Fetch created_at and liquidity for all tokens in parallel
+                const enrichmentPromises = tokens.map(async (token: any) => {
+                  const address = token.mint || token.address || '';
+                  if (!address) return token;
+                  
+                  try {
+                    // Check if liquidity needs enrichment (if Birdeye liquidity is 0 or missing)
+                    const birdeyeLiquidity = token.total_liquidity_usd || token.liquidity_usd || 0;
+                    const needsLiquidityEnrichment = !birdeyeLiquidity || birdeyeLiquidity === 0;
+                    
+                    // First try the /v1/token endpoint
+                    const tokenUrl = `${monadServiceUrl}/v1/token?address=${encodeURIComponent(address)}`;
+                    const tokenResp = await fetch(tokenUrl, { 
+                      headers: { 'Accept': 'application/json' },
+                      signal: abortController.signal,
+                    });
+                    
+                    let createdAt: string | null = null;
+                    
+                    if (tokenResp.ok) {
+                      const tokenData = await tokenResp.json();
+                      createdAt = tokenData?.data?.created_at || null;
+                      // If created_at is null/empty/0, treat as missing and try search endpoint
+                      if (!createdAt) {
+                        createdAt = null; // Will trigger search fallback below
+                      }
+                    }
+                    
+                    // If /v1/token returns 404 or created_at is null/0, try search endpoint as fallback
+                    if (!tokenResp.ok || tokenResp.status === 404 || !createdAt) {
+                      try {
+                        const searchUrl = `${monadServiceUrl}/v1/search?q=${encodeURIComponent(address)}`;
+                        const searchResp = await fetch(searchUrl, { 
+                          headers: { 'Accept': 'application/json' },
+                          signal: abortController.signal,
+                        });
+                        
+                        if (searchResp.ok) {
+                          const searchData = await searchResp.json();
+                          // Search returns array, get first result if available
+                          if (searchData?.data && Array.isArray(searchData.data) && searchData.data.length > 0) {
+                            const searchCreatedAt = searchData.data[0]?.created_at || null;
+                            if (searchCreatedAt) {
+                              createdAt = searchCreatedAt;
+                            }
+                          }
+                        }
+                      } catch (searchErr) {
+                        // Silently fail search fallback
+                        console.debug(`[Birdeye] Search fallback failed for ${address}:`, searchErr);
+                      }
+                    }
+                    
+                    // Set created_at if we have it
+                    if (createdAt) {
+                      token.created_at = createdAt;
+                      token.launch_time = createdAt; // Also set launch_time for compatibility
+                    }
+                    
+                    // Enrich liquidity if Birdeye shows 0 or missing
+                    if (needsLiquidityEnrichment) {
+                      let liquidity: number | null = null;
+                      
+                      // Try first fallback: /v1/liquidity endpoint
+                      try {
+                        const liquidityUrl = `${monadServiceUrl}/v1/liquidity?token_address=${encodeURIComponent(address)}`;
+                        const liquidityResp = await fetch(liquidityUrl, { 
+                          headers: { 'Accept': 'application/json' },
+                          signal: abortController.signal,
+                        });
+                        
+                        if (liquidityResp.ok) {
+                          const liquidityData = await liquidityResp.json();
+                          if (liquidityData?.status === 'success' && liquidityData?.data?.liquidity_usd) {
+                            const parsedLiquidity = typeof liquidityData.data.liquidity_usd === 'number' 
+                              ? liquidityData.data.liquidity_usd 
+                              : parseFloat(liquidityData.data.liquidity_usd);
+                            
+                            if (Number.isFinite(parsedLiquidity) && parsedLiquidity > 0) {
+                              liquidity = parsedLiquidity;
+                            }
+                          }
+                        }
+                      } catch (err) {
+                        console.debug(`[Birdeye] Failed to fetch from v1/liquidity for ${address}:`, err);
+                      }
+                      
+                      // If first fallback returned 0 or failed, try second fallback: /v1/liqdex endpoint
+                      if (!liquidity || liquidity === 0) {
+                        try {
+                          const liqdexUrl = `${monadServiceUrl}/v1/liqdex?token_address=${encodeURIComponent(address)}`;
+                          const liqdexResp = await fetch(liqdexUrl, { 
+                            headers: { 'Accept': 'application/json' },
+                            signal: abortController.signal,
+                          });
+                          
+                          if (liqdexResp.ok) {
+                            const liqdexData = await liqdexResp.json();
+                            if (liqdexData?.status === 'success' && liqdexData?.data?.liquidity_usd) {
+                              const parsedLiqdexLiquidity = typeof liqdexData.data.liquidity_usd === 'number' 
+                                ? liqdexData.data.liquidity_usd 
+                                : parseFloat(liqdexData.data.liquidity_usd);
+                              
+                              if (Number.isFinite(parsedLiqdexLiquidity) && parsedLiqdexLiquidity > 0) {
+                                liquidity = parsedLiqdexLiquidity;
+                              }
+                            }
+                          }
+                        } catch (err) {
+                          console.debug(`[Birdeye] Failed to fetch from v1/liqdex for ${address}:`, err);
+                        }
+                      }
+                      
+                      // Update liquidity if we got a valid value
+                      if (liquidity && liquidity > 0) {
+                        token.total_liquidity_usd = liquidity;
+                        token.liquidity_usd = liquidity;
+                      }
+                    }
+                    // Note: We keep Birdeye's market_cap_usd, fully_diluted_value, etc. as-is (prioritize Birdeye)
+                  } catch (err) {
+                    // Silently fail - token might not be in our DB, that's okay
+                    console.debug(`[Birdeye] Could not fetch enrichment data for ${address}:`, err);
+                  }
+                  
+                  return token;
+                });
+                
+                // Wait for all enrichment requests to complete
+                tokens = await Promise.all(enrichmentPromises);
+                const enrichedCount = tokens.filter((t: any) => 
+                  t.created_at || (t.total_liquidity_usd || t.liquidity_usd) > 0
+                ).length;
+                console.log(`[Birdeye] ✅ Enrichment complete. Tokens enriched: ${enrichedCount}/${tokens.length}`);
+              }
               
               // Filter out boring tokens (stablecoins, infrastructure tokens, mega-caps, high volume/liquidity)
               // This filtering happens client-side on all tokens fetched from Birdeye

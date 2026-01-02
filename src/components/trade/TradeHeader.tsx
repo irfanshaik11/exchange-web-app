@@ -388,9 +388,19 @@ function getColumnType(token: Token): "new" | "final-stretch" | "migrated" {
 /* ===================================================================== */
 interface TradeHeaderProps {
   token: Token | null;
+  livePriceUsd?: number | null;
+  liveMarketCapUsd?: number | null;
 }
 
-const TradeHeader: React.FC<TradeHeaderProps> = ({ token }) => {
+const TradeHeader: React.FC<TradeHeaderProps> = ({ token, livePriceUsd, liveMarketCapUsd }) => {
+  const coalesceNumber = (...values: any[]): number | null => {
+    for (const v of values) {
+      const n = typeof v === "string" ? parseFloat(v) : v;
+      if (Number.isFinite(n)) return n as number;
+    }
+    return null;
+  };
+
   if (!token || (!token.name && !token.symbol)) {
     return (
       <div className="flex-shrink-0 px-2">
@@ -409,8 +419,9 @@ const TradeHeader: React.FC<TradeHeaderProps> = ({ token }) => {
   }
 
   const router = useRouter();
-  const { addToWatchlist, removeFromWatchlist, isInWatchlist } = useWatchlist();
-  const isWatched = isInWatchlist(token.pair_address || "");
+  const { addToWatchlist, removeFromWatchlist, isInWatchlist, updateWatchlistToken } = useWatchlist();
+  const watchlistKey = token.pair_address || (token as any).mint || "";
+  const isWatched = isInWatchlist(watchlistKey);
   const [showPreview, setShowPreview] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [showZoomPopup, setShowZoomPopup] = useState(false);
@@ -422,13 +433,91 @@ const TradeHeader: React.FC<TradeHeaderProps> = ({ token }) => {
   const [xPreviewPosition, setXPreviewPosition] = useState({ x: 0, y: 0 });
   const xPreviewTimeoutRef = useRef<number | null>(null);
   const toastTimeoutRef = useRef<number | null>(null);
+  
+  // State for fetched age from search endpoint
+  const [fetchedCreatedAt, setFetchedCreatedAt] = useState<string | number | null>(null);
+  const fetchingAgeRef = useRef(false);
+  
+  // Check if we have age data
+  const hasAge = (token as any).created_at || (token as any).createdAt || (token as any).CreatedAt || fetchedCreatedAt;
+  
+  // Fetch age from search endpoint if missing (for Monad tokens only)
+  useEffect(() => {
+    // Only fetch if:
+    // 1. We don't have age data
+    // 2. It's a Monad token (check after isMonadContext is determined)
+    // 3. We have a token address to search
+    // 4. We're not already fetching
+    if (hasAge || fetchingAgeRef.current) return;
+    
+    // Determine if Monad token (we'll calculate this inline since isMonadContext is defined later)
+    const protocolSource =
+      (token as any).launchpad_protocol ||
+      (token as any).protocol ||
+      (token as any).launchpadName ||
+      (token as any).amm ||
+      extractProtocolRaw(token) ||
+      undefined;
+    const normalizedProtocol = (protocolSource || "").toLowerCase();
+    const isMonadProtocol = normalizedProtocol
+      ? MONAD_PROTOCOL_KEYWORDS.some((keyword) =>
+          normalizedProtocol.includes(keyword),
+        )
+      : false;
+    const tokenChain =
+      ((token as any).blockchain ||
+        (token as any).network ||
+        (token as any).chain ||
+        "") as string;
+    const normalizedChain = tokenChain.toLowerCase();
+    const isMonadContext =
+      normalizedChain === "monad" ||
+      router?.pathname?.includes("/trade/monad") ||
+      isMonadProtocol;
+    
+    if (!isMonadContext) return;
+    
+    const tokenAddress = token.mint || token.pair_address || (token as any).address;
+    if (!tokenAddress) return;
+    
+    fetchingAgeRef.current = true;
+    const monadServiceUrl = process.env.NEXT_PUBLIC_MONAD_TOKEN_SERVICE_URL || 'https://monad-token-service.narrative.trade';
+    const searchUrl = `${monadServiceUrl}/v1/search?q=${encodeURIComponent(tokenAddress)}`;
+    
+    fetch(searchUrl, {
+      headers: { 'Accept': 'application/json' }
+    })
+      .then((res) => {
+        if (!res.ok) return null;
+        return res.json();
+      })
+      .then((data) => {
+        if (data?.data && Array.isArray(data.data) && data.data.length > 0) {
+          const searchResult = data.data[0];
+          const createdAt = searchResult?.created_at || searchResult?.createdAt;
+          if (createdAt) {
+            setFetchedCreatedAt(createdAt);
+          }
+        }
+      })
+      .catch((err) => {
+        console.debug('[TradeHeader] Failed to fetch age from search endpoint:', err);
+      })
+      .finally(() => {
+        fetchingAgeRef.current = false;
+      });
+  }, [hasAge, token, router?.pathname]);
+  
   const tokenAgeLabel = useMemo(() => {
     const createdAt =
       (token as any).created_at ||
       (token as any).createdAt ||
-      (token as any).CreatedAt;
-    return getTokenAge(createdAt);
-  }, [token]);
+      (token as any).CreatedAt ||
+      fetchedCreatedAt;
+    const age = getTokenAge(createdAt);
+    // Don't show "Unknown" - show "-" instead if we don't have age
+    return age === "Unknown" ? "-" : age;
+  }, [token, fetchedCreatedAt]);
   const [showXPreview, setShowXPreview] = useState<boolean>(false);
   const [buttonPosition, setButtonPosition] = useState<{
     left: number;
@@ -447,12 +536,70 @@ const TradeHeader: React.FC<TradeHeaderProps> = ({ token }) => {
   });
 
   const marketData = getMarketData();
-  const mcap = marketData?.market_cap_usd || token.market_cap_usd || 0;
-  const price =
-    marketData?.price_usd ||
-    (token as any).usd_price ||
-    (token as any).price_usd ||
-    0;
+  const chartPriceUsd = coalesceNumber(
+    livePriceUsd,
+    (token as any)?.chart_live_price_usd
+  );
+  const chartMarketCapUsd = coalesceNumber(
+    liveMarketCapUsd,
+    (token as any)?.chart_live_market_cap_usd
+  );
+  const effectivePrice =
+    coalesceNumber(
+      chartPriceUsd,
+      marketData?.price_usd,
+      (token as any).usd_price,
+      (token as any).price_usd
+    ) ?? 0;
+  // Debug: Log all market cap fallback values
+  console.log('[TRADEHEADER_MC_DEBUG] Market cap fallback chain:', {
+    'liveMarketCapUsd (prop)': liveMarketCapUsd,
+    'token.chart_live_market_cap_usd': (token as any)?.chart_live_market_cap_usd,
+    'chartMarketCapUsd (combined)': chartMarketCapUsd,
+    'marketData?.market_cap_usd': marketData?.market_cap_usd,
+    'token.market_cap_usd': (token as any).market_cap_usd,
+    'token.fully_diluted_value': (token as any).fully_diluted_value,
+    'token.market_cap_usd (direct)': token.market_cap_usd,
+  });
+  const effectiveMarketCap =
+    coalesceNumber(
+      chartMarketCapUsd,
+      marketData?.market_cap_usd,
+      (token as any).market_cap_usd,
+      (token as any).fully_diluted_value,
+      token.market_cap_usd
+    ) ?? 0;
+  console.log('[TRADEHEADER_MC_DEBUG] Final effectiveMarketCap:', effectiveMarketCap);
+  const effectivePriceChange1h = coalesceNumber(
+    (token as any)?.price_percent_change_1h,
+    (token as any)?.price_change_1h,
+    (token as any)?.price_change,
+    (token as any)?.price_percent_change_24h,
+    (token as any)?.price_change_24h
+  );
+
+  // Keep watchlist entry hydrated with fresh price/percent/mcap when viewed on trade page
+  useEffect(() => {
+    if (!watchlistKey || !isWatched) return;
+
+    // Only update when we have meaningful data
+    const hasPrice = Number.isFinite(effectivePrice) && effectivePrice > 0;
+    const hasMcap = Number.isFinite(effectiveMarketCap) && effectiveMarketCap > 0;
+    const hasChange = Number.isFinite(effectivePriceChange1h ?? NaN);
+    if (!hasPrice && !hasMcap && !hasChange) return;
+
+    updateWatchlistToken({
+      ...token,
+      price_usd: hasPrice ? effectivePrice : (token as any).price_usd,
+      usd_price: hasPrice ? effectivePrice : (token as any).usd_price,
+      market_cap_usd: hasMcap ? effectiveMarketCap : (token as any).market_cap_usd,
+      fully_diluted_value: hasMcap ? effectiveMarketCap : (token as any).fully_diluted_value,
+      price_percent_change_1h: hasChange ? (effectivePriceChange1h as number) : (token as any).price_percent_change_1h,
+      price_change_1h: hasChange ? (effectivePriceChange1h as number) : (token as any).price_change_1h,
+    } as any);
+  }, [effectiveMarketCap, effectivePrice, effectivePriceChange1h, isWatched, token, updateWatchlistToken, watchlistKey]);
+  const mcap = effectiveMarketCap;
+  const price = effectivePrice;
   const liq =
     marketData?.liquidity_usd ??
     marketData?.volume_usd ??
@@ -473,8 +620,7 @@ const TradeHeader: React.FC<TradeHeaderProps> = ({ token }) => {
       0;
     if (v) return v;
     const mc =
-      marketData?.market_cap_usd ||
-      (token as any).market_cap_usd ||
+      effectiveMarketCap ||
       (token as any).fully_diluted_value ||
       0;
     return mc ? Math.min((mc / 69000000) * 100, 100) : 0;
@@ -571,10 +717,19 @@ const TradeHeader: React.FC<TradeHeaderProps> = ({ token }) => {
 
   const handleWatchlistClick = () => {
     if (isWatched) {
-      removeFromWatchlist(token.pair_address || "");
+      removeFromWatchlist(watchlistKey);
       showToast("Removed from watchlist");
     } else {
-      addToWatchlist(token);
+      // Store current effective values so watchlist has price/change/mcap immediately
+      addToWatchlist({
+        ...(token as any),
+        price_usd: effectivePrice,
+        usd_price: effectivePrice,
+        price_percent_change_1h: effectivePriceChange1h ?? (token as any).price_percent_change_1h,
+        price_change_1h: effectivePriceChange1h ?? (token as any).price_change_1h,
+        market_cap_usd: effectiveMarketCap,
+        fully_diluted_value: effectiveMarketCap,
+      } as any);
       showToast("Added to watchlist");
     }
   };

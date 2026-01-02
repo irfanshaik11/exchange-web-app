@@ -24,11 +24,13 @@ export interface UseBackendOHLCOptions {
   optimize?: boolean;     // Enable automatic optimization for maximum data points
   enabled?: boolean;
   refreshInterval?: number; // in milliseconds
+  chain?: 'sol' | 'monad'; // Which chain to use
   onSuccess?: (data: BackendOHLCItem[]) => void;
   onError?: (error: Error) => void;
 }
 
-const BACKEND_URL = process.env.NEXT_PUBLIC_GO_SERVICE_URL;
+const SOLANA_BACKEND_URL = process.env.NEXT_PUBLIC_GO_SERVICE_URL;
+const MONAD_BACKEND_URL = process.env.NEXT_PUBLIC_MONAD_TOKEN_SERVICE_URL;
 
 /**
  * Custom hook to fetch OHLC data from your backend
@@ -51,6 +53,7 @@ export function useBackendOHLC({
   optimize = false,
   enabled = true,
   refreshInterval = 30000,
+  chain = 'sol',
   onSuccess,
   onError,
 }: UseBackendOHLCOptions) {
@@ -79,23 +82,33 @@ export function useBackendOHLC({
       setIsLoading(true);
       setError(null);
 
-      const url = new URL(`${BACKEND_URL}/v1/trade/ohlc-data`);
-      
-      // Add query parameters based on what's provided
-      if (mint) {
-        url.searchParams.append('mint', mint);
+      // Select backend URL based on chain
+      const backendUrl = chain === 'monad' ? MONAD_BACKEND_URL : SOLANA_BACKEND_URL;
+
+      if (!backendUrl) {
+        throw new Error(`Backend URL not configured for chain: ${chain}`);
       }
-      if (pairAddress) {
-        url.searchParams.append('pair_address', pairAddress);
-      }
-      if (interval) {
-        url.searchParams.append('interval', interval);
-      }
-      if (timeframe) {
-        url.searchParams.append('timeframe', timeframe);
-      }
-      if (optimize) {
-        url.searchParams.append('optimize', 'true');
+
+      // Use /v1/ohlcv/{tokenAddress} for Solana, /v1/trade/ohlc-data for Monad
+      const tokenAddress = mint || pairAddress;
+      let url: URL;
+
+      if (chain === 'sol') {
+        url = new URL(`${backendUrl}/v1/ohlcv/${tokenAddress}`);
+        url.searchParams.append('timeframe', interval);
+        // Calculate limit based on timeframe
+        const limitMap: Record<string, number> = {
+          '1h': 60, '4h': 240, '24h': 1440, '7d': 500, '30d': 500, '90d': 500, '180d': 500, '365d': 500,
+        };
+        url.searchParams.append('limit', String(limitMap[timeframe] || 500));
+      } else {
+        // Monad uses old endpoint format
+        url = new URL(`${backendUrl}/v1/trade/ohlc-data`);
+        if (mint) url.searchParams.append('mint', mint);
+        if (pairAddress) url.searchParams.append('pair_address', pairAddress);
+        if (interval) url.searchParams.append('interval', interval);
+        if (timeframe) url.searchParams.append('timeframe', timeframe);
+        if (optimize) url.searchParams.append('optimize', 'true');
       }
 
       console.log('useBackendOHLC: Fetching data', { mint, pairAddress, interval, timeframe, optimize, url: url.toString() });
@@ -121,16 +134,31 @@ export function useBackendOHLC({
         throw new Error(`API request failed: ${response.status} ${response.statusText}${extra}`);
       }
 
-      const result: BackendOHLCResponse = await response.json();
+      const result = await response.json();
 
       if (!result.success) {
         throw new Error('API returned unsuccessful response');
       }
-      
+
       // Reset retry count on success
       setRetryCount(0);
 
-      const items = result.data?.items || [];
+      // Handle different response formats between Solana and Monad
+      let items: BackendOHLCItem[];
+      if (chain === 'sol' && result.candles) {
+        // Solana returns { candles: [...] } with different field names
+        items = result.candles.map((c: any) => ({
+          unix_time: c.time || c.unix_time,
+          o: c.open ?? c.o,
+          h: c.high ?? c.h,
+          l: c.low ?? c.l,
+          c: c.close ?? c.c,
+          v_usd: c.volume ?? c.volume_usd ?? c.v_usd ?? 0,
+        }));
+      } else {
+        // Monad returns { data: { items: [...] } }
+        items = result.data?.items || [];
+      }
 
       if (!isMountedRef.current) return;
 
@@ -166,7 +194,7 @@ export function useBackendOHLC({
         onError(error);
       }
     }
-  }, [mint, pairAddress, interval, timeframe, optimize, enabled, onSuccess, onError]);
+  }, [mint, pairAddress, interval, timeframe, optimize, enabled, chain, onSuccess, onError]);
 
   // Initial fetch
   useEffect(() => {

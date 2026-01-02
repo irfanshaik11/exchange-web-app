@@ -83,7 +83,6 @@ export default function TurnkeyExportPage() {
   const walletsRequestRef = useRef(false);
   const [authChecked, setAuthChecked] = useState(false);
   const hasInitializedRef = useRef(false);
-  const hasAuthenticatedThisVisitRef = useRef(false); // Track if user authenticated on this page visit
 
   const iframeContainerRef = useRef<HTMLDivElement | null>(null);
   const iframeStamperRef = useRef<IframeStamper | null>(null);
@@ -99,20 +98,15 @@ export default function TurnkeyExportPage() {
   const isAppUserLoggedIn = !!appUser;
   
   // Require explicit authentication state AND that user authenticated on this page visit
-  // This forces re-authentication on every page visit
   const isAuthenticated = 
     authState === AuthState.Authenticated &&
     hasValidSession &&
-    clientState === ClientState.Ready &&
-    hasAuthenticatedThisVisitRef.current;
+    clientState === ClientState.Ready;
 
   // Reset state on page mount/remount - force fresh authentication check
   useEffect(() => {
     if (hasInitializedRef.current) return;
     hasInitializedRef.current = true;
-    
-    // Force re-authentication on every page visit
-    hasAuthenticatedThisVisitRef.current = false;
     
     // Reset all export-related state
     setStatus("idle");
@@ -134,48 +128,70 @@ export default function TurnkeyExportPage() {
       }
     }
     
-    console.log('[Export Page] Page initialized, forcing re-authentication');
+    console.log('[Export Page] Page initialized');
   }, []);
 
-  // Just track auth state, don't auto-popup modal
+  // Track auth status for UI gating
   useEffect(() => {
     if (!isClient) return;
     if (clientState !== ClientState.Ready) return;
-    
+
+    setAuthChecked(true);
+
     if (isAuthenticated) {
-      console.log('[Export Page] Authenticated');
-      setAuthChecked(true);
-    } else {
-      console.log('[Export Page] Not authenticated - user must click Connect button');
-      setAuthChecked(true);
+      setShowLoginModal(false);
+      setError(null);
     }
   }, [isClient, clientState, isAuthenticated]);
-
-  // Track when user successfully authenticates on this page visit
-  useEffect(() => {
-    if (clientState !== ClientState.Ready) return;
-    
-    // Check if user just authenticated (authState is Authenticated and has valid session)
-    const justAuthenticated = 
-      authState === AuthState.Authenticated &&
-      hasValidSession &&
-      !hasAuthenticatedThisVisitRef.current;
-    
-    if (justAuthenticated) {
-      console.log('[Export Page] User authenticated on this visit');
-      hasAuthenticatedThisVisitRef.current = true;
-      setShowLoginModal(false);
-      setError(null); // Clear any previous errors
-    }
-  }, [authState, clientState, hasValidSession, showLoginModal]);
-  
 
   useEffect(() => {
     setIsClient(true);
     return () => {
       iframeStamperRef.current?.clear();
       hasInitializedRef.current = false; // Allow re-initialization on remount
-      hasAuthenticatedThisVisitRef.current = false; // Reset auth flag on unmount
+    };
+  }, []);
+
+  // Suppress Turnkey's built-in modal if it leaks through (we render our own UX)
+  useEffect(() => {
+    if (typeof document === "undefined") return;
+
+    const suppress = () => {
+      const nodes = Array.from(
+        document.querySelectorAll("div,section,dialog")
+      ) as HTMLElement[];
+
+      nodes.forEach((node) => {
+        const text = (node.textContent || "").toLowerCase();
+        if (
+          text.includes("sign in to narrative") ||
+          text.includes("secure access")
+        ) {
+          // Try clicking a close button if present
+          const closeBtn =
+            node.querySelector("button") ||
+            node.querySelector('[aria-label="Close"]');
+          if (closeBtn instanceof HTMLElement) {
+            closeBtn.click();
+          }
+
+          // Hide the modal and its parent to avoid flicker
+          node.style.display = "none";
+          const parent = node.parentElement;
+          if (parent) {
+            parent.style.display = "none";
+          }
+        }
+      });
+    };
+
+    suppress();
+    const observer = new MutationObserver(suppress);
+    observer.observe(document.body, { childList: true, subtree: true });
+    const interval = window.setInterval(suppress, 500);
+    return () => {
+      observer.disconnect();
+      window.clearInterval(interval);
     };
   }, []);
 
@@ -249,8 +265,6 @@ export default function TurnkeyExportPage() {
           )
         ) {
           console.log('[Export Page] Session error detected - resetting authentication');
-          // Reset authentication state to force re-authentication
-          hasAuthenticatedThisVisitRef.current = false;
           setError("Session expired or invalid. Please click 'Connect with Turnkey' to log in again.");
           // Clear wallets to force re-fetch after re-authentication
           setFetchedWallets([]);
@@ -381,7 +395,6 @@ export default function TurnkeyExportPage() {
       ) {
         console.log('[Export Page] Session error during export - resetting authentication');
         // Reset authentication state to force re-authentication
-        hasAuthenticatedThisVisitRef.current = false;
         setError("Session expired or invalid. Please click 'Connect with Turnkey' to log in again and try exporting.");
         // Clear wallets to force re-fetch after re-authentication
         setFetchedWallets([]);

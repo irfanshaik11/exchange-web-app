@@ -1600,6 +1600,12 @@ export default function InterstateTable({
                     if (token.name) queryParams.set('_name', token.name);
                     if (token.symbol) queryParams.set('_symbol', token.symbol);
                     if (token.fully_diluted_value) queryParams.set('_mcap', token.fully_diluted_value.toString());
+                    if (token.total_liquidity_usd || (token as any)?.liquidity_usd || (token as any)?.liquidity) {
+                      const liq = token.total_liquidity_usd || (token as any)?.liquidity_usd || (token as any)?.liquidity;
+                      if (typeof liq === 'number' && Number.isFinite(liq)) {
+                        queryParams.set('_liq', liq.toString());
+                      }
+                    }
                     if (token.uri || token.logo) queryParams.set('_image', token.uri || token.logo || '');
                     queryParams.set('_mint', address);
                     queryParams.set('chain', 'monad');
@@ -1607,8 +1613,16 @@ export default function InterstateTable({
                     const url = `/trade/monad/${address}?${queryParams.toString()}`;
                     router.push(url);
                   } else {
-                    // For Solana, use regular format
-                    router.push(`/trade/${address}`);
+                    // For Solana, include chain=sol parameter
+                    const solQueryParams = new URLSearchParams();
+                    if (token.name) solQueryParams.set('_name', token.name);
+                    if (token.symbol) solQueryParams.set('_symbol', token.symbol);
+                    if ((token as any).price_usd) solQueryParams.set('_price', (token as any).price_usd.toString());
+                    if (token.market_cap_usd) solQueryParams.set('_mcap', token.market_cap_usd.toString());
+                    if (token.uri || token.logo || (token as any).image) solQueryParams.set('_image', token.uri || token.logo || (token as any).image || '');
+                    solQueryParams.set('_mint', address);
+                    solQueryParams.set('chain', 'sol');
+                    router.push(`/trade/${address}?${solQueryParams.toString()}`);
                   }
                 }
               };

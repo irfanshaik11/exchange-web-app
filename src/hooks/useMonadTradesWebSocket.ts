@@ -70,6 +70,7 @@ export function useMonadTradesWebSocket(
   const onNewTradeRef = useRef(onNewTrade);
   const pollTimeoutsRef = useRef<NodeJS.Timeout[]>([]);
   const tradesRef = useRef<MonadTrade[]>([]);
+  const lastManualRefreshRef = useRef(0);
   
   // Store config in refs to avoid re-creating connect/disconnect
   const configRef = useRef({
@@ -147,20 +148,47 @@ export function useMonadTradesWebSocket(
   }, [tokenAddress, maxTrades]);
 
   // Schedule a handful of REST refetches to bridge WS delivery delays
-  const scheduleFallbackFetches = useCallback(() => {
+  const scheduleFallbackFetches = useCallback((force: boolean = false) => {
     pollTimeoutsRef.current.forEach((t) => clearTimeout(t));
     pollTimeoutsRef.current = [];
 
     for (const delay of fallbackPollIntervals) {
       const timeoutId = setTimeout(() => {
         if (!mountedRef.current) return;
-        if (tradesRef.current.length === 0) {
+        if (force || tradesRef.current.length === 0) {
           fetchInitialTrades();
         }
       }, delay);
       pollTimeoutsRef.current.push(timeoutId);
     }
   }, [fallbackPollIntervals, fetchInitialTrades]);
+
+  const triggerQuickRefresh = useCallback(() => {
+    const now = Date.now();
+    if (now - lastManualRefreshRef.current < 400) return;
+    lastManualRefreshRef.current = now;
+    fetchInitialTrades();
+    scheduleFallbackFetches(true);
+  }, [fetchInitialTrades, scheduleFallbackFetches]);
+
+  // Listen for client-side quick trades to force a fast refresh while backend catches up
+  useEffect(() => {
+    if (typeof window === 'undefined' || !tokenAddress) return;
+    const normalized = tokenAddress.toLowerCase();
+
+    const handler = (event: Event) => {
+      const detail = (event as CustomEvent<{ tokenAddress?: string }>).detail;
+      const addr = detail?.tokenAddress?.toLowerCase();
+      const aliases = configRef.current.addressAliases || [];
+      const matchesAlias = aliases.some((alias) => alias && alias.toLowerCase() === addr);
+      if (addr && (addr === normalized || matchesAlias)) {
+        triggerQuickRefresh();
+      }
+    };
+
+    window.addEventListener('monadQuickTrade', handler as EventListener);
+    return () => window.removeEventListener('monadQuickTrade', handler as EventListener);
+  }, [tokenAddress, triggerQuickRefresh]);
 
   // Connect to WebSocket - uses refs to avoid dependency changes causing reconnects
   const connect = useCallback(() => {
@@ -280,7 +308,8 @@ export function useMonadTradesWebSocket(
   useEffect(() => {
     mountedRef.current = true;
 
-    if (tokenAddress) {
+    // Only fetch trades if enabled AND we have a token address
+    if (enabled && tokenAddress) {
       fetchInitialTrades();
       scheduleFallbackFetches();
     }

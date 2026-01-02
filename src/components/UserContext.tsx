@@ -25,6 +25,7 @@ export interface UserInfo {
   publicKey: string;
   bearerToken: string;
   walletId?: string;
+  subOrgId?: string | null;
   hasExportedWallet: boolean;
   walletExportedAt?: string | null;
 }
@@ -64,6 +65,12 @@ interface UserContextType {
   walletList: WalletInfo[]; // Centralized wallet list
   walletListLoading: boolean;
   refreshWalletList: (force?: boolean) => Promise<void>;
+  selectedWalletIds: { sol: string[]; monad: string[] };
+  toggleWalletSelection: (walletId: string, chain?: "sol" | "monad") => void;
+  setSelectedWalletsForChain: (walletIds: string[], chain?: "sol" | "monad") => void;
+  selectAllWalletsForChain: (chain?: "sol" | "monad") => void;
+  selectWalletsWithFunds: (chain?: "sol" | "monad", minimumBalance?: number) => void;
+  clearSelectedWallets: (chain?: "sol" | "monad") => void;
 }
 
 const UserContext = createContext<UserContextType | undefined>(undefined);
@@ -113,6 +120,25 @@ export function UserProvider({ children }: { children: ReactNode }) {
   const [walletBalances, setWalletBalances] = useState<Record<string, number>>({});
   const [walletList, setWalletList] = useState<WalletInfo[]>([]);
   const [walletListLoading, setWalletListLoading] = useState(false);
+  const MIN_SELECTABLE_BALANCE = 0.00021; // priority fee + safety buffer from pre-transaction check
+  const [selectedWalletIds, setSelectedWalletIds] = useState<{ sol: string[]; monad: string[] }>(() => {
+    if (typeof window === "undefined") {
+      return { sol: [], monad: [] };
+    }
+    try {
+      const saved = window.localStorage.getItem("walletSelections_v1");
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        return {
+          sol: Array.isArray(parsed?.sol) ? parsed.sol : [],
+          monad: Array.isArray(parsed?.monad) ? parsed.monad : [],
+        };
+      }
+    } catch {
+      // ignore parsing errors
+    }
+    return { sol: [], monad: [] };
+  });
   const chainBalancesRef = useRef<Record<string, number>>({ sol: 0 });
   const batchFetchInProgressRef = useRef(false);
   const lastBatchFetchRef = useRef(0);
@@ -158,10 +184,130 @@ export function UserProvider({ children }: { children: ReactNode }) {
     if (!raw || typeof raw !== "object") return null;
     return {
       ...raw,
+      subOrgId: raw.subOrgId ?? null,
       hasExportedWallet: !!raw.hasExportedWallet,
       walletExportedAt: raw.walletExportedAt ?? null,
     };
   }, []);
+
+  const persistSelectedWallets = useCallback((next: { sol: string[]; monad: string[] }) => {
+    if (typeof window === "undefined") return;
+    try {
+      window.localStorage.setItem("walletSelections_v1", JSON.stringify(next));
+    } catch {
+      // ignore storage errors
+    }
+  }, []);
+
+  // Keep selected wallet ids in sync with available wallets
+  useEffect(() => {
+    if (!walletList || walletList.length === 0) return;
+
+    setSelectedWalletIds((prev) => {
+      const validSolIds = new Set(
+        walletList
+          .filter((w) => w.solanaAddress && !w.isArchived)
+          .map((w) => w.id)
+      );
+      const validMonadIds = new Set(
+        walletList
+          .filter((w) => w.ethereumAddress && !w.isArchived)
+          .map((w) => w.id)
+      );
+
+      const nextSol = prev.sol.filter((id) => validSolIds.has(id));
+      const nextMonad = prev.monad.filter((id) => validMonadIds.has(id));
+
+      if (nextSol.length === prev.sol.length && nextMonad.length === prev.monad.length) {
+        return prev;
+      }
+
+      const next = { sol: nextSol, monad: nextMonad };
+      persistSelectedWallets(next);
+      return next;
+    });
+  }, [walletList, persistSelectedWallets]);
+
+  const setSelectedWalletsForChain = useCallback(
+    (walletIds: string[], chain: "sol" | "monad" = "sol") => {
+      setSelectedWalletIds((prev) => {
+        const deduped = Array.from(new Set(walletIds.filter(Boolean)));
+        const next = { ...prev, [chain]: deduped };
+        persistSelectedWallets(next);
+        return next;
+      });
+    },
+    [persistSelectedWallets]
+  );
+
+  const toggleWalletSelection = useCallback(
+    (walletId: string, chain: "sol" | "monad" = "sol") => {
+      setSelectedWalletIds((prev) => {
+        const current = new Set(prev[chain] || []);
+        if (current.has(walletId)) {
+          current.delete(walletId);
+        } else {
+          current.add(walletId);
+        }
+        const next = { ...prev, [chain]: Array.from(current) };
+        persistSelectedWallets(next);
+        return next;
+      });
+    },
+    [persistSelectedWallets]
+  );
+
+  const selectAllWalletsForChain = useCallback(
+    (chain: "sol" | "monad" = "sol") => {
+      const ids =
+        walletList
+          ?.filter((w) =>
+            chain === "monad"
+              ? w.ethereumAddress && !w.isArchived
+              : w.solanaAddress && !w.isArchived
+          )
+          .map((w) => w.id) || [];
+      setSelectedWalletIds((prev) => {
+        const next = { ...prev, [chain]: ids };
+        persistSelectedWallets(next);
+        return next;
+      });
+    },
+    [walletList, persistSelectedWallets]
+  );
+
+  const selectWalletsWithFunds = useCallback(
+    (chain: "sol" | "monad" = "sol", minimumBalance: number = MIN_SELECTABLE_BALANCE) => {
+      const ids =
+        walletList
+          ?.filter((w) => {
+            if (w.isArchived) return false;
+            const address =
+              chain === "monad"
+                ? normalizeMonadAddress(w.ethereumAddress) || ""
+                : (w.solanaAddress || "").trim();
+            if (!address) return false;
+            const bal = walletBalances[address] ?? 0;
+            return bal >= minimumBalance;
+          })
+          .map((w) => w.id) || [];
+
+      setSelectedWalletIds((prev) => {
+        const next = { ...prev, [chain]: ids };
+        persistSelectedWallets(next);
+        return next;
+      });
+    },
+    [walletList, walletBalances, persistSelectedWallets]
+  );
+
+  const clearSelectedWallets = useCallback((chain: "sol" | "monad" = "sol") => {
+    setSelectedWalletIds((prev) => {
+      const next = { ...prev, [chain]: [] };
+      persistSelectedWallets(next);
+      return next;
+    });
+  }, [persistSelectedWallets]);
 
   useEffect(() => {
     chainBalancesRef.current = chainBalances;
@@ -947,6 +1093,12 @@ export function UserProvider({ children }: { children: ReactNode }) {
         walletList,
         walletListLoading,
         refreshWalletList,
+        selectedWalletIds,
+        toggleWalletSelection,
+        setSelectedWalletsForChain,
+        selectAllWalletsForChain,
+        selectWalletsWithFunds,
+        clearSelectedWallets,
       }}
     >
       {children}

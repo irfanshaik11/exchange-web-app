@@ -5,6 +5,5 @@ export {
   AuthState,
 } from "@turnkey/react-wallet-kit";
 
-export { WalletSource } from "@turnkey/core";
+export { WalletSource, StamperType } from "@turnkey/core";
 export type { Wallet, WalletAccount } from "@turnkey/core";
-

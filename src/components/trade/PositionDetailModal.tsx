@@ -339,7 +339,7 @@ export default function PositionDetailModal({
     setLoadingTrades(true);
     try {
       const currentChain = chain || 'sol';
-      const blockchainParam = currentChain === 'monad' ? '&blockchain=monad' : '';
+      const blockchainParam = currentChain === 'monad' ? '&blockchain=monad' : '&blockchain=solana';
       const res = await fetch(
         `${env.NEXT_PUBLIC_BACKEND_URL}/api/trade/get_trade_activity_by_user?userId=${userId}${blockchainParam}`
       );

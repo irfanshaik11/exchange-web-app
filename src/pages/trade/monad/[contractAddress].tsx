@@ -19,7 +19,10 @@ import MonadTopTradersTable from "../../../components/trade/MonadTopTradersTable
 import MonadHoldersTable from "../../../components/trade/MonadHoldersTable";
 import MonadDevTokensTable from "../../../components/trade/MonadDevTokensTable";
 import { useMonadTradesWebSocket } from "../../../hooks/useMonadTradesWebSocket";
+import { useMonadPositionWebSocket, type MonadPosition } from "../../../hooks/useMonadPositionWebSocket";
 import useMonadDevTokens from "../../../hooks/useMonadDevTokens";
+import { consumePendingMonadPositionRefresh } from "../../../utils/monadTradeEvents";
+import { useSolPrice } from "../../../components/SolPriceContext";
 
 // Lazy load other components
 const MonadTrades = dynamic(() => import("../../../components/trade/MonadTrades"), { ssr: false });
@@ -44,6 +47,8 @@ interface MonadTokenData {
   usd_price: number;
   fully_diluted_value: number;
   market_cap_usd?: number;
+  liquidity_usd?: number;
+  total_liquidity_usd?: number;
   volume_24h: number;
   volume_5m?: number;
   volume_1h?: number;
@@ -68,17 +73,24 @@ interface MonadTokenData {
 
 export default function MonadTradePage() {
   const router = useRouter();
-  const { contractAddress, _name, _symbol, _price, _mcap, _image, _mint } = router.query;
+  const { contractAddress, _name, _symbol, _price, _mcap, _image, _mint, _liq } = router.query;
 
   const [tokenData, setTokenData] = useState<MonadTokenData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const { isConnected } = useWallet();
   const { user } = useUser();
+  const { monPrice } = useSolPrice();
   const [selectedTab, setSelectedTab] = useState("Transactions");
   const [search, setSearch] = useState("");
   const [showMobileTradeModal, setShowMobileTradeModal] = useState(false);
   const [isClosingModal, setIsClosingModal] = useState(false);
+  const [positionLinesApi, setPositionLinesApi] = useState<{ avgBuyPriceUsd?: number | null; avgSellPriceUsd?: number | null } | null>(null);
+  const fetchPositionLinesRef = useRef<Promise<void> | null>(null);
+  
+  // Fallback liquidity from liquidity endpoint when liquidity is $0
+  const [fallbackLiquidityUsd, setFallbackLiquidityUsd] = useState<number | null>(null);
+  const fetchFallbackLiquidityRef = useRef<Promise<void> | null>(null);
   
   // Load instant trade open state from localStorage
   const getInitialInstantTradeState = (): boolean => {
@@ -107,6 +119,53 @@ export default function MonadTradePage() {
     if (typeof _mint === "string" && _mint.trim()) return _mint;
     return typeof contractAddress === "string" ? contractAddress : "";
   });
+  const [positionForChart, setPositionForChart] = useState<MonadPosition | null>(null);
+  const [chartMetrics, setChartMetrics] = useState<{ lastPriceUsd?: number; lastMarketCapUsd?: number; maxMarketCapUsd?: number }>({});
+
+  // Track user position for chart overlays (avg entry/exit) and quick updates
+  const { position: userPositionForChart, refreshPosition: refreshChartPosition } = useMonadPositionWebSocket({
+    tokenAddress: tokenMintForLive,
+    enabled: !!user?.id && !!tokenMintForLive,
+    onUpdate: (pos) => setPositionForChart(pos),
+  });
+
+  useEffect(() => {
+    if (userPositionForChart) {
+      setPositionForChart(userPositionForChart);
+    }
+  }, [userPositionForChart]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined' || !tokenMintForLive) return;
+    const normalized = tokenMintForLive.toLowerCase();
+
+    const triggerRefresh = () => {
+      refreshChartPosition().catch((err) => {
+        console.error('[MonadTradePage] Failed to refresh position after quick trade:', err);
+      });
+    };
+
+    const consumePending = () => {
+      const ts = consumePendingMonadPositionRefresh(normalized);
+      if (ts && Date.now() - ts < 60_000) {
+        triggerRefresh();
+        setTimeout(triggerRefresh, 1500);
+      }
+    };
+
+    consumePending();
+
+    const handler = (event: Event) => {
+      const detail = (event as CustomEvent<{ tokenAddress?: string }>).detail;
+      const addr = detail?.tokenAddress?.toLowerCase();
+      if (addr === normalized) {
+        consumePending();
+      }
+    };
+
+    window.addEventListener('monadQuickTrade', handler as EventListener);
+    return () => window.removeEventListener('monadQuickTrade', handler as EventListener);
+  }, [tokenMintForLive, refreshChartPosition]);
 
   // Real-time token metrics via WebSocket
   const [liveMetrics, setLiveMetrics] = useState<TokenMetrics | null>(null);
@@ -119,16 +178,20 @@ export default function MonadTradePage() {
   // Optimistic token data from query params
   const optimisticToken = React.useMemo(() => {
     if (_name || _symbol) {
+      const liqNum = typeof _liq === "string" ? parseFloat(_liq) : undefined;
+      const liquidity = Number.isFinite(liqNum) ? liqNum : undefined;
       return {
         name: (_name as string) || "",
         symbol: (_symbol as string) || "",
         price_usd: _price ? parseFloat(_price as string) : undefined,
         market_cap_usd: _mcap ? parseFloat(_mcap as string) : undefined,
+        liquidity_usd: liquidity,
+        total_liquidity_usd: liquidity,
         image: (_image as string) || undefined,
       };
     }
     return null;
-  }, [_name, _symbol, _price, _mcap, _image]);
+  }, [_liq, _mcap, _name, _price, _symbol, _image]);
 
   // Fetch token data
   useEffect(() => {
@@ -217,6 +280,8 @@ export default function MonadTradePage() {
             usd_price: optimisticToken.price_usd || 0,
             fully_diluted_value: optimisticToken.market_cap_usd || 0,
             market_cap_usd: optimisticToken.market_cap_usd || 0,
+            liquidity_usd: optimisticToken.liquidity_usd,
+            total_liquidity_usd: optimisticToken.total_liquidity_usd,
             volume_24h: 0,
             created_at: null,
             image_url: optimisticToken.image || null,
@@ -237,6 +302,8 @@ export default function MonadTradePage() {
             usd_price: optimisticToken.price_usd || 0,
             fully_diluted_value: optimisticToken.market_cap_usd || 0,
             market_cap_usd: optimisticToken.market_cap_usd || 0,
+            liquidity_usd: optimisticToken.liquidity_usd,
+            total_liquidity_usd: optimisticToken.total_liquidity_usd,
             volume_24h: 0,
             created_at: null,
             image_url: optimisticToken.image || null,
@@ -261,10 +328,14 @@ export default function MonadTradePage() {
       (tokenData as any)?.marketCapUSD ??
       (tokenData as any)?.fully_diluted_value ??
       0;
+    // Special case: token 0xad96c3dffcd6374294e2573a7fbba96097cc8d7c should show 100m supply instead of 1b
+    const defaultSupply = (typeof contractAddress === "string" && contractAddress.toLowerCase() === "0xad96c3dffcd6374294e2573a7fbba96097cc8d7c")
+      ? 100_000_000
+      : 1_000_000_000;
     const tokenSupply =
       (tokenData as any)?.total_supply ??
       (tokenData as any)?.supply ??
-      1_000_000_000;
+      defaultSupply;
 
     if (!tokenData) return optimisticToken ? {
       mint: contractAddress as string,
@@ -276,12 +347,20 @@ export default function MonadTradePage() {
       pair_address: contractAddress as string,
       logo: optimisticToken.image || "",
       decimals: 18,
-      total_supply: 1_000_000_000,
+      total_supply: defaultSupply,
       creator_address: null,
       dev_address: null,
       owner: null,
       // Live metrics
-      liquidity_usd: live?.liquidity_usd ?? 0,
+      // Use fallback liquidity endpoint if liquidity is $0
+      liquidity_usd: (() => {
+        const primary = live?.liquidity_usd ?? optimisticToken.liquidity_usd ?? optimisticToken.total_liquidity_usd ?? 0;
+        return (primary > 0) ? primary : (fallbackLiquidityUsd ?? primary);
+      })(),
+      total_liquidity_usd: (() => {
+        const primary = live?.liquidity_usd ?? optimisticToken.total_liquidity_usd ?? optimisticToken.liquidity_usd ?? 0;
+        return (primary > 0) ? primary : (fallbackLiquidityUsd ?? primary);
+      })(),
       graduation_percent: live?.graduation_percent ?? 0,
       volume_24h: live?.volume_24h_usd ?? 0,
       total_buys: live?.total_buys ?? 0,
@@ -306,26 +385,285 @@ export default function MonadTradePage() {
       total_supply: tokenSupply,
       created_at: tokenData.created_at || tokenData.launch_time || null,
       // Live metrics (real-time via WebSocket, fallback to HTTP API data)
-      liquidity_usd: live?.liquidity_usd ?? (tokenData as any)?.liquidity_usd ?? 0,
-      total_liquidity_usd: live?.liquidity_usd ?? (tokenData as any)?.liquidity_usd ?? 0,
+      // Use fallback liquidity endpoint if liquidity is $0
+      liquidity_usd: (() => {
+        const primary = live?.liquidity_usd ?? (tokenData as any)?.liquidity_usd ?? optimisticToken?.liquidity_usd ?? optimisticToken?.total_liquidity_usd ?? 0;
+        // Use fallback if primary is $0 and fallback exists
+        return (primary > 0) ? primary : (fallbackLiquidityUsd ?? primary);
+      })(),
+      total_liquidity_usd: (() => {
+        const primary = live?.liquidity_usd ?? (tokenData as any)?.liquidity_usd ?? optimisticToken?.total_liquidity_usd ?? optimisticToken?.liquidity_usd ?? 0;
+        // Use fallback if primary is $0 and fallback exists
+        return (primary > 0) ? primary : (fallbackLiquidityUsd ?? primary);
+      })(),
       graduation_percent: live?.graduation_percent ?? (tokenData as any)?.graduation_percent ?? (tokenData as any)?.bonding_curve_progress ?? 0,
       bonding_pct: live?.graduation_percent ?? (tokenData as any)?.bonding_curve_progress ?? (tokenData as any)?.graduation_percent ?? 0,
-      volume_24h: live?.volume_24h_usd ?? tokenData.volume_24h ?? 0,
+      volume_24h: live?.volume_24h_usd ?? (tokenData as any)?.volume_24h_usd ?? 0,
+      volume_24h_usd: live?.volume_24h_usd ?? (tokenData as any)?.volume_24h_usd ?? 0,
       total_buys: live?.total_buys ?? tokenData.total_buys ?? 0,
       total_sells: live?.total_sells ?? tokenData.total_sells ?? 0,
       total_transactions: live?.total_transactions ?? tokenData.total_transactions ?? 0,
       unique_traders: live?.unique_traders ?? tokenData.unique_traders ?? 0,
-      // USD volumes: prefer WebSocket, fallback to calculated from MON volume (MON price ~$0.25)
-      total_buy_volume_usd: live?.total_buy_volume_usd ?? ((tokenData as any)?.total_buy_volume_mon ? (tokenData as any).total_buy_volume_mon * 0.25 : 0),
-      total_sell_volume_usd: live?.total_sell_volume_usd ?? ((tokenData as any)?.total_sell_volume_mon ? (tokenData as any).total_sell_volume_mon * 0.25 : 0),
-      net_volume_usd: live?.net_volume_usd ?? (((tokenData as any)?.total_buy_volume_mon ?? 0) - ((tokenData as any)?.total_sell_volume_mon ?? 0)) * 0.25,
+      // USD volumes: prefer WebSocket, fallback to calculated from MON volume
+      total_buy_volume_usd: live?.total_buy_volume_usd ?? ((tokenData as any)?.total_buy_volume_mon ? (tokenData as any).total_buy_volume_mon * (monPrice || 0.025) : 0),
+      total_sell_volume_usd: live?.total_sell_volume_usd ?? ((tokenData as any)?.total_sell_volume_mon ? (tokenData as any).total_sell_volume_mon * (monPrice || 0.025) : 0),
+      net_volume_usd: live?.net_volume_usd ?? (((tokenData as any)?.total_buy_volume_mon ?? 0) - ((tokenData as any)?.total_sell_volume_mon ?? 0)) * (monPrice || 0.025),
       launchpad_protocol: tokenData.launchpad_protocol || "nad.fun",
       // Dev/creator address fields
       creator_address: (tokenData as any)?.creator_address || (tokenData as any)?.creator_wallet || (tokenData as any)?.dev_address || (tokenData as any)?.owner || null,
       dev_address: (tokenData as any)?.dev_address || (tokenData as any)?.creator_wallet || (tokenData as any)?.creator_address || (tokenData as any)?.owner || null,
       owner: (tokenData as any)?.owner || (tokenData as any)?.creator_wallet || (tokenData as any)?.creator_address || (tokenData as any)?.dev_address || null,
     };
-  }, [tokenData, optimisticToken, contractAddress, liveMetrics, wsMetrics]);
+  }, [tokenData, optimisticToken, contractAddress, liveMetrics, wsMetrics, fallbackLiquidityUsd]);
+
+  // Memoize pairAddress early so downstream hooks can use it
+  const pairAddress = React.useMemo(() => {
+    return displayToken?.pair_address || (contractAddress as string);
+  }, [displayToken?.pair_address, contractAddress]);
+
+  // Fetch liquidity from fallback endpoint when liquidity is $0
+  const fetchFallbackLiquidity = React.useCallback(async () => {
+    if (!tokenMintForLive) {
+      setFallbackLiquidityUsd(null);
+      return;
+    }
+    
+    // Avoid overlapping fetches
+    if (fetchFallbackLiquidityRef.current) return fetchFallbackLiquidityRef.current;
+
+    const run = (async () => {
+      try {
+        const monadServiceUrl = process.env.NEXT_PUBLIC_MONAD_TOKEN_SERVICE_URL || 'https://monad-token-service.narrative.trade';
+        
+        // Try first fallback: /v1/liquidity endpoint
+        const liquidityUrl = `${monadServiceUrl}/v1/liquidity?token_address=${encodeURIComponent(tokenMintForLive)}`;
+        
+        let liquidity: number | null = null;
+        
+        try {
+          const response = await fetch(liquidityUrl, {
+            headers: {
+              'Accept': 'application/json',
+            },
+          });
+
+          if (response.ok) {
+            const body = await response.json();
+            if (body?.status === 'success' && body?.data?.liquidity_usd) {
+              const parsedLiquidity = typeof body.data.liquidity_usd === 'number' 
+                ? body.data.liquidity_usd 
+                : parseFloat(body.data.liquidity_usd);
+              
+              if (Number.isFinite(parsedLiquidity) && parsedLiquidity > 0) {
+                liquidity = parsedLiquidity;
+                console.log(`[MonadTradePage] 💧 Fetched fallback liquidity (v1/liquidity): $${liquidity.toLocaleString()}`);
+              }
+            }
+          }
+        } catch (err) {
+          console.warn('[MonadTradePage] Failed to fetch from v1/liquidity:', err);
+        }
+
+        // If first fallback returned 0 or failed, try second fallback: /v1/liqdex endpoint
+        if (!liquidity || liquidity === 0) {
+          try {
+            const liqdexUrl = `${monadServiceUrl}/v1/liqdex?token_address=${encodeURIComponent(tokenMintForLive)}`;
+            
+            const liqdexResponse = await fetch(liqdexUrl, {
+              headers: {
+                'Accept': 'application/json',
+              },
+            });
+
+            if (liqdexResponse.ok) {
+              const liqdexBody = await liqdexResponse.json();
+              if (liqdexBody?.status === 'success' && liqdexBody?.data?.liquidity_usd) {
+                const parsedLiqdexLiquidity = typeof liqdexBody.data.liquidity_usd === 'number' 
+                  ? liqdexBody.data.liquidity_usd 
+                  : parseFloat(liqdexBody.data.liquidity_usd);
+                
+                if (Number.isFinite(parsedLiqdexLiquidity) && parsedLiqdexLiquidity > 0) {
+                  liquidity = parsedLiqdexLiquidity;
+                  console.log(`[MonadTradePage] 💧 Fetched fallback liquidity (v1/liqdex): $${liquidity.toLocaleString()}`);
+                }
+              }
+            }
+          } catch (err) {
+            console.warn('[MonadTradePage] Failed to fetch from v1/liqdex:', err);
+          }
+        }
+
+        // Set the result (null if both failed or returned 0)
+        setFallbackLiquidityUsd(liquidity && liquidity > 0 ? liquidity : null);
+        
+      } catch (err) {
+        console.warn('[MonadTradePage] Failed to fetch fallback liquidity:', err);
+        setFallbackLiquidityUsd(null);
+      } finally {
+        fetchFallbackLiquidityRef.current = null;
+      }
+    })();
+
+    fetchFallbackLiquidityRef.current = run;
+    return run;
+  }, [tokenMintForLive]);
+
+  // Fetch fallback liquidity when token changes or when liquidity is $0
+  useEffect(() => {
+    if (!tokenMintForLive) {
+      setFallbackLiquidityUsd(null);
+      return;
+    }
+
+    // Check current liquidity from source data (not displayToken to avoid circular dependency)
+    const currentLiquidity = 
+      liveMetrics?.liquidity_usd ?? 
+      wsMetrics?.liquidity_usd ?? 
+      (tokenData as any)?.liquidity_usd ?? 
+      optimisticToken?.liquidity_usd ?? 
+      optimisticToken?.total_liquidity_usd ?? 
+      0;
+    
+    // Only fetch if liquidity is $0 or missing
+    if (currentLiquidity === 0 || !currentLiquidity) {
+      fetchFallbackLiquidity();
+    } else {
+      // Clear fallback if we have real liquidity
+      setFallbackLiquidityUsd(null);
+    }
+  }, [tokenMintForLive, liveMetrics?.liquidity_usd, wsMetrics?.liquidity_usd, tokenData, optimisticToken, fetchFallbackLiquidity]);
+
+  // Fetch avg entry/exit lines from backend (user-scoped) with fallback to position endpoint
+  const fetchPositionLines = React.useCallback(async () => {
+    if (!tokenMintForLive || !user?.bearerToken) {
+      setPositionLinesApi(null);
+      return;
+    }
+    // Avoid overlapping fetches
+    if (fetchPositionLinesRef.current) return fetchPositionLinesRef.current;
+
+    const run = (async () => {
+      try {
+        const baseUrl = process.env.NEXT_PUBLIC_BACKEND_URL;
+        if (!baseUrl) return;
+        const headers = {
+          Authorization: `Bearer ${user.bearerToken}`,
+          Accept: "application/json",
+        };
+        const primaryUrl = `${baseUrl}/api/trade/monad/position-lines?tokenAddress=${encodeURIComponent(tokenMintForLive)}`;
+        let resp = await fetch(primaryUrl, { headers });
+        if (!resp.ok) {
+          resp = await fetch(
+            `${baseUrl}/api/trade/monad/position?tokenAddress=${encodeURIComponent(tokenMintForLive)}`,
+            { headers }
+          );
+        }
+        if (!resp.ok) {
+          setPositionLinesApi(null);
+          return;
+        }
+        const body = await resp.json();
+        const data = body?.data || body;
+        if (body?.success === false || !data) {
+          setPositionLinesApi(null);
+          return;
+        }
+        setPositionLinesApi({
+          avgBuyPriceUsd: data.avgBuyPriceUsd ?? data.avgBuyPriceUSD ?? null,
+          avgSellPriceUsd: data.avgSellPriceUsd ?? data.avgSellPriceUSD ?? null,
+        });
+      } catch {
+        setPositionLinesApi(null);
+      } finally {
+        fetchPositionLinesRef.current = null;
+      }
+    })();
+
+    fetchPositionLinesRef.current = run;
+    return run;
+  }, [tokenMintForLive, user?.bearerToken]);
+
+  // Initial fetch and on token change
+  useEffect(() => {
+    fetchPositionLines();
+  }, [fetchPositionLines]);
+
+  // Refresh lines on quick trade events for this token
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const normalized = tokenMintForLive?.toLowerCase();
+    if (!normalized) return;
+    const handler = (event: Event) => {
+      const detail = (event as CustomEvent<{ tokenAddress?: string }>).detail;
+      const addr = detail?.tokenAddress?.toLowerCase();
+      if (addr === normalized) {
+        fetchPositionLines();
+      }
+    };
+    window.addEventListener("monadQuickTrade", handler as EventListener);
+    return () => window.removeEventListener("monadQuickTrade", handler as EventListener);
+  }, [fetchPositionLines, tokenMintForLive]);
+
+  // Dev address and trades (used for markers and avg entry/exit fallback)
+  const { devTokenData: devData } = useMonadDevTokens(
+    (contractAddress as string) || undefined,
+    { enabled: !!contractAddress && typeof contractAddress === "string" }
+  );
+  const devAddress = React.useMemo(() => {
+    return devData?.dev_wallet || (displayToken as any)?.dev_address || (displayToken as any)?.creator_address || null;
+  }, [devData?.dev_wallet, displayToken]);
+
+  const { trades: allTrades } = useMonadTradesWebSocket({
+    tokenAddress: tokenMintForLive,
+    addressAliases: pairAddress ? [pairAddress] : [],
+    enabled: !!tokenMintForLive, // allow even without devAddress for avg calc fallback
+    maxTrades: 200,
+  });
+
+  const avgEntryPriceUsd = React.useMemo(() => {
+    if (positionForChart?.avgBuyPriceUsd && positionForChart.avgBuyPriceUsd > 0) {
+      return positionForChart.avgBuyPriceUsd;
+    }
+    if (positionForChart && positionForChart.totalBoughtTokens > 0) {
+      if (positionForChart.totalBoughtUsd > 0) {
+        return positionForChart.totalBoughtUsd / positionForChart.totalBoughtTokens;
+      }
+      if (positionForChart.totalBoughtMon > 0 && monPrice > 0) {
+        return (positionForChart.totalBoughtMon * monPrice) / positionForChart.totalBoughtTokens;
+      }
+    }
+    return null;
+  }, [monPrice, positionForChart]);
+
+  const avgExitPriceUsd = React.useMemo(() => {
+    if (positionForChart?.avgSellPriceUsd && positionForChart.avgSellPriceUsd > 0) {
+      return positionForChart.avgSellPriceUsd;
+    }
+    if (positionForChart && positionForChart.totalSoldTokens > 0) {
+      if (positionForChart.totalSoldUsd > 0) {
+        return positionForChart.totalSoldUsd / positionForChart.totalSoldTokens;
+      }
+      if (positionForChart.totalSoldMon > 0 && monPrice > 0) {
+        return (positionForChart.totalSoldMon * monPrice) / positionForChart.totalSoldTokens;
+      }
+    }
+    return null;
+  }, [monPrice, positionForChart]);
+
+  const priceLineValues = React.useMemo(() => {
+    const sanitize = (value: any) => {
+      const num = typeof value === "string" ? parseFloat(value) : value;
+      return Number.isFinite(num) && num > 0 ? num : undefined;
+    };
+    const entry = sanitize(avgEntryPriceUsd ?? positionLinesApi?.avgBuyPriceUsd);
+    const exit = sanitize(avgExitPriceUsd ?? positionLinesApi?.avgSellPriceUsd);
+    // Only update object when values change to avoid needless chart churn
+    return { avgEntryPriceUsd: entry, avgExitPriceUsd: exit };
+  }, [avgEntryPriceUsd, avgExitPriceUsd, positionLinesApi?.avgBuyPriceUsd, positionLinesApi?.avgSellPriceUsd]);
+
+  const handleChartMetrics = React.useCallback((metrics: { lastPriceUsd?: number; lastMarketCapUsd?: number; maxMarketCapUsd?: number }) => {
+    setChartMetrics(metrics);
+  }, []);
 
   // Once token data resolves, align live stream identifier to the mint
   useEffect(() => {
@@ -344,19 +682,80 @@ export default function MonadTradePage() {
     ? `${tokenNameForTitle} | Monad Trade`
     : "Monad Trade";
 
+  const displayTokenWithChartMetrics = React.useMemo(() => {
+    if (!displayToken) return displayToken;
+    const livePrice = chartMetrics.lastPriceUsd;
+    const liveMcap = chartMetrics.lastMarketCapUsd;
+    // Priority: OHLC WebSocket data (chart metrics) > Token metrics WebSocket > API value
+    // Chart metrics come from real-time OHLC WebSocket updates, so they're the most current
+    const live = liveMetrics || wsMetrics;
+    const wsMarketCap = live?.market_cap_usd;
+    // displayToken.market_cap_usd already has WebSocket priority, so it's either WebSocket value or API value (13540)
+    const apiOrWsMarketCap = displayToken.market_cap_usd;
+    // Prioritize: OHLC chart metrics (real-time from WebSocket) > Token metrics WebSocket > API value
+    const finalMarketCap = liveMcap ?? wsMarketCap ?? apiOrWsMarketCap;
+    
+    // Debug: Log displayTokenWithChartMetrics calculation
+    console.log('[DISPLAY_TOKEN_MC_DEBUG] displayTokenWithChartMetrics calculation:', {
+      'chartMetrics.lastPriceUsd': livePrice,
+      'chartMetrics.lastMarketCapUsd (OHLC WebSocket)': liveMcap,
+      'liveMetrics?.market_cap_usd': liveMetrics?.market_cap_usd,
+      'wsMetrics?.market_cap_usd': wsMetrics?.market_cap_usd,
+      'wsMarketCap (token metrics WebSocket)': wsMarketCap,
+      'displayToken.market_cap_usd': displayToken.market_cap_usd,
+      'apiOrWsMarketCap': apiOrWsMarketCap,
+      'finalMarketCap (result - OHLC prioritized)': finalMarketCap,
+    });
+    
+    return {
+      ...displayToken,
+      usd_price: livePrice ?? (displayToken as any)?.usd_price,
+      price_usd: livePrice ?? (displayToken as any)?.price_usd,
+      // Prioritize OHLC WebSocket market cap (most real-time from chart candles)
+      market_cap_usd: finalMarketCap,
+      fully_diluted_value: finalMarketCap ?? (displayToken as any)?.fully_diluted_value ?? (displayToken as any)?.market_cap_usd,
+      chart_live_price_usd: livePrice ?? null,
+      chart_live_market_cap_usd: liveMcap ?? null, // Store OHLC WebSocket market cap for TradeHeader
+      max_market_cap_usd: chartMetrics.maxMarketCapUsd ?? (displayToken as any)?.max_market_cap_usd,
+    } as any;
+  }, [chartMetrics, displayToken, liveMetrics, wsMetrics]);
+
+  // Priority market cap for TradeHeader: OHLC WebSocket (chart) > Token metrics WebSocket > API value
+  // Chart metrics come from real-time OHLC WebSocket updates, so prioritize them
+  const priorityMarketCapUsd = React.useMemo(() => {
+    const live = liveMetrics || wsMetrics;
+    const wsMarketCap = live?.market_cap_usd;
+    const ohlcMarketCap = chartMetrics?.lastMarketCapUsd;
+    // Priority: OHLC WebSocket (real-time from chart) > Token metrics WebSocket > null (fallback to token.market_cap_usd)
+    const result = ohlcMarketCap ?? wsMarketCap ?? null;
+    
+    // Debug: Log all market cap sources
+    console.log('[MARKET_CAP_DEBUG] All market cap sources (OHLC prioritized):', {
+      'chartMetrics.lastMarketCapUsd (OHLC WebSocket)': ohlcMarketCap,
+      'liveMetrics?.market_cap_usd': liveMetrics?.market_cap_usd,
+      'wsMetrics?.market_cap_usd': wsMetrics?.market_cap_usd,
+      'wsMarketCap (token metrics WebSocket)': wsMarketCap,
+      'displayToken.market_cap_usd': displayToken?.market_cap_usd,
+      'tokenData.market_cap_usd (API)': (tokenData as any)?.market_cap_usd,
+      'final priorityMarketCapUsd (OHLC first)': result,
+    });
+    
+    return result;
+  }, [liveMetrics, wsMetrics, chartMetrics, displayToken, tokenData]);
+
   // OHLC params - Monad uses 1s (1-second) candles as default for all tokens
   // TimescaleDB supports: 1s, 1m, 5m, 15m, 30m, 1h, 4h, 1d, 1w
   const getOHLCParams = useComponentCache(
     "ohlc-params-monad",
     [tokenData, displayToken],
     () => {
-      // Always use 1s interval with 1d (24h) timeframe for all tokens regardless of age
-      return { interval: "1s" as const, timeframe: "24h" as const, optimize: false };
+      // Always use 1s interval with 30d timeframe for all tokens regardless of age
+      return { interval: "1s" as const, timeframe: "30d" as const, optimize: true };
     }
   );
 
   const ohlcParams = getOHLCParams;
-  const defaultOHLCParams = { interval: "1s" as const, timeframe: "24h" as const, optimize: false };
+  const defaultOHLCParams = { interval: "1s" as const, timeframe: "30d" as const, optimize: true };
   const currentOHLCParams = React.useMemo(
     () => ohlcParams || defaultOHLCParams,
     [ohlcParams?.interval, ohlcParams?.timeframe, ohlcParams?.optimize]
@@ -501,29 +900,6 @@ export default function MonadTradePage() {
     };
   }, [showMobileTradeModal, handleDragMove, handleDragEnd]);
 
-  // Memoize pairAddress to prevent unnecessary changes that cause component remounts
-  // Only recalculate when the actual pair_address changes, not on every displayToken update
-  const pairAddress = React.useMemo(() => {
-    return displayToken?.pair_address || (contractAddress as string);
-  }, [displayToken?.pair_address, contractAddress]);
-
-  // Get dev address from dev token data
-  const { devTokenData: devData } = useMonadDevTokens(
-    (contractAddress as string) || undefined,
-    { enabled: !!contractAddress && typeof contractAddress === "string" }
-  );
-  const devAddress = React.useMemo(() => {
-    return devData?.dev_wallet || (displayToken as any)?.dev_address || (displayToken as any)?.creator_address || null;
-  }, [devData?.dev_wallet, displayToken]);
-
-  // Get trades for dev marker detection
-  const { trades: allTrades } = useMonadTradesWebSocket({
-    tokenAddress: tokenMintForLive,
-    addressAliases: pairAddress ? [pairAddress] : [],
-    enabled: !!tokenMintForLive && !!devAddress,
-    maxTrades: 200,
-  });
-
   // Filter trades to find dev buys/sells
   const devTrades = React.useMemo(() => {
     if (!devAddress || !allTrades.length) return [];
@@ -539,17 +915,17 @@ export default function MonadTradePage() {
       eventDisplayType: trade.is_buy ? 'Buy' : 'Sell',
       price: String(trade.price_mon),
       amount: String(trade.token_amount),
-      totalUSD: String(Number(trade.mon_amount) * 0.25), // Approximate USD conversion
+      totalUSD: String(Number(trade.mon_amount) * (monPrice || 0.025)),
       maker: trade.trader_address,
       wallet_address: trade.trader_address,
       user: trade.trader_address,
       data: {
         priceUsd: String(trade.price_mon),
         amountNonLiquidityToken: String(trade.token_amount),
-        priceUsdTotal: String(Number(trade.mon_amount) * 0.25),
+        priceUsdTotal: String(Number(trade.mon_amount) * (monPrice || 0.025)),
       },
     }));
-  }, [allTrades, devAddress]);
+  }, [allTrades, devAddress, monPrice]);
 
   return (
     <>
@@ -601,7 +977,11 @@ export default function MonadTradePage() {
               }}
             >
               <div className="px-2 flex-shrink-0">
-                <TradeHeader token={displayToken as any} />
+                <TradeHeader
+                  token={displayTokenWithChartMetrics as any}
+                  livePriceUsd={chartMetrics?.lastPriceUsd}
+                  liveMarketCapUsd={priorityMarketCapUsd}
+                />
               </div>
 
               <div className="px-3 border-b border-[#2A2B33]" style={{ marginTop: '2px' }} />
@@ -635,6 +1015,8 @@ export default function MonadTradePage() {
                     tokenName={displayToken?.name || null}
                     tokenDecimals={displayToken?.decimals || null}
                     network="monad"
+                    priceLines={priceLineValues}
+                    onChartMetrics={handleChartMetrics}
                   />
                 ) : (
                   <div className="flex items-center justify-center h-full" style={{ color: AX.muted }}>

@@ -472,6 +472,34 @@ export const getWithdrawalFee = async (chain?: string) => {
   }
 };
 
+// Wallet redistribution (split/consolidate)
+export const redistributeWalletFunds = (
+  params: { chain: "sol" | "monad"; mode: "split" | "consolidate"; walletIds: string[] },
+  authToken: string
+) =>
+  apiFetch<{
+    ok: boolean;
+    summary: { sent: number; failed: number; skipped: number };
+    results: Array<{
+      from: string;
+      to: string;
+      amount: string;
+      txSignature?: string;
+      status: "sent" | "skipped" | "failed";
+      reason?: string;
+    }>;
+  }>("/api/wallets/redistribute", {
+    method: "POST",
+    body: params,
+    authToken,
+  });
+
+export const deleteUserWallet = (walletId: string, authToken: string) =>
+  apiFetch<{ ok: boolean; walletId: string }>(`/api/users/wallet/${walletId}`, {
+    method: "DELETE",
+    authToken,
+  });
+
 export const updateLimitOrder = (
   params: UpdateLimitOrderParams,
   authToken: string,
@@ -608,8 +636,9 @@ export type BuyParams = {
   baseMint: string;
   quoteMint: string;
   amount: number;
+  walletId?: string; // Optional - target a specific wallet for signing
   mevProtection?: 0 | 1;
-  poolType?: "PumpAmm" | "Raydium CPMM" | "Raydium Launchpad" | "Pumpfun" | "launchLab" | "bonk" | "meteora dbc" | "meteora amm v1" | "meteora amm v2" | "Meteora" | "bags" | "MoonShoot" | "Orca" | ""; // Optional - backend will detect if missing
+  poolType?: "PumpAmm" | "Raydium" | "Raydium CPMM" | "Raydium CLMM" | "Raydium Launchpad" | "Pumpfun" | "launchLab" | "bonk" | "meteora dbc" | "meteora amm v1" | "meteora amm v2" | "Meteora" | "bags" | "MoonShoot" | "Orca" | ""; // Optional - backend will detect if missing
   originalPairAddress?: string; // Original pair address from token-service for trade history
   // Preset trading parameters
   slippage?: number; // Percentage value (0.01-100), e.g., 20 for 20%
@@ -694,6 +723,7 @@ export type MonadBuyParams = {
   launchpad: 'nadfun' | 'flapsh-simple' | 'flapsh-devs'; // Launchpad identifier
   slippage?: number; // Optional: Slippage percentage (e.g., 5 for 5%)
   gasPrice?: number; // Optional: Gas price in gwei (defaults to network suggestion)
+  walletId?: string; // Optional: specific wallet to use for the trade
 };
 
 export type MonadSellParams = {
@@ -703,6 +733,8 @@ export type MonadSellParams = {
   percentage?: number; // Optional: Percentage of balance to sell (1-100, mutually exclusive with tokenAmount)
   slippage?: number; // Optional: Slippage percentage
   gasPrice?: number; // Optional: Gas price in gwei (defaults to network suggestion)
+  priceUsd?: number; // Optional: Current token price in USD (for accurate trade history recording)
+  walletId?: string; // Optional: specific wallet to use for the trade
 };
 
 export const tradeMonadBuy = (params: MonadBuyParams, authToken: string) =>

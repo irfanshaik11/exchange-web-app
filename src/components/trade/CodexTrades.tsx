@@ -5,13 +5,16 @@ import { FaFilter } from "react-icons/fa";
 import { IoOpenOutline } from "react-icons/io5";
 import React from 'react';
 import { formatSmartNumber, formatMarketCap } from '~/utils/db';
-import useOptimizedTradeEventsWebSocket from '../../hooks/useOptimizedTradeEventsWebSocket';
+import useSolanaTokenWebSocket from '../../hooks/useSolanaTokenWebSocket';
+import { useMonadTradesWebSocket } from '../../hooks/useMonadTradesWebSocket';
 import type { Token } from '~/utils/db';
 
 interface CodexTradesProps {
   token: Token | null;
   initialTrades?: any[];
   onTradesUpdate?: (trades: any[]) => void; // Callback to update parent cache when trades change
+  pairAddress?: string; // Fallback pair address when token doesn't have it
+  chain?: 'sol' | 'monad'; // Chain to determine which WebSocket to use
 }
 
 function getAge(timestamp: number) {
@@ -106,6 +109,10 @@ function normalizeTrade(
   const hasWsShape = trade.side && trade.amount && trade.price && trade.pair_address;
   const hasBackend = trade.event_type && (trade.amount !== undefined || trade.price_in_usd !== undefined);
   const hasCodex = trade.eventDisplayType && trade.data;
+  // New format from /v1/ws/trades/{mint} endpoint
+  const hasIndexerFormat = trade.type && (trade.sol_amount !== undefined || trade.token_amount !== undefined);
+  // Monad trade format from useMonadTradesWebSocket
+  const hasMonadFormat = trade.is_buy !== undefined && (trade.mon_amount !== undefined || trade.token_amount !== undefined);
 
   if (typeof trade.timestamp === 'number') {
     timestampSec = trade.timestamp < 1e10 ? trade.timestamp : trade.timestamp / 1000;
@@ -150,6 +157,44 @@ function normalizeTrade(
 
     keyPart = (trade.transactionHash || trade.txHash || '') + (trade.timestamp || '');
     maker = trade.maker || trade.trader || '';
+  } else if (hasIndexerFormat) {
+    // New format from Solana indexer WebSocket (v1/ws/token/{mint})
+    isBuy = trade.type?.toLowerCase() === 'buy';
+    color = isBuy ? 'text-emerald-400' : 'text-red-400';
+    tokenAmount = Number(trade.token_amount || 0);
+    solAmount = Number(trade.sol_amount || 0);
+    // Handle both price_usd (new format) and total_usd/price (old format)
+    pricePerToken = Number(trade.price_usd || trade.price || 0);
+    totalUSD = Number(trade.total_usd || 0);
+    // If no total_usd, estimate from SOL amount (approx $200/SOL)
+    if (!totalUSD && solAmount > 0) {
+      totalUSD = solAmount * 200; // Approximate
+    }
+    if (!pricePerToken && tokenAmount > 0 && totalUSD > 0) pricePerToken = totalUSD / tokenAmount;
+    // Handle both signature (new format) and transaction_hash (old format)
+    keyPart = (trade.signature || trade.transaction_hash || trade.id || '') + (trade.timestamp || '');
+    // Handle both wallet_address (new format) and trader (old format)
+    maker = trade.wallet_address || trade.trader || '';
+  } else if (hasMonadFormat) {
+    // Monad trade format from useMonadTradesWebSocket
+    isBuy = trade.is_buy === true;
+    color = isBuy ? 'text-emerald-400' : 'text-red-400';
+    tokenAmount = Number(trade.token_amount || 0);
+    // Monad uses MON instead of SOL
+    solAmount = Number(trade.mon_amount || 0);
+    pricePerToken = Number(trade.price_mon || 0);
+    // Estimate USD value from MON amount (approx price - this should be updated with real MON price)
+    totalUSD = Number(trade.total_usd || 0);
+    if (!totalUSD && solAmount > 0) {
+      totalUSD = solAmount * 1; // MON price estimate (update when we have real price)
+    }
+    if (!pricePerToken && tokenAmount > 0 && totalUSD > 0) pricePerToken = totalUSD / tokenAmount;
+    keyPart = (trade.tx_hash || trade.id || '') + (trade.block_timestamp || '');
+    maker = trade.trader_address || '';
+    // Use block_timestamp for Monad trades
+    if (trade.block_timestamp) {
+      timestampSec = Number(trade.block_timestamp);
+    }
   } else {
     isBuy = !!(trade.side === 'buy' || trade.type === 'BUY');
     color = isBuy ? 'text-emerald-400' : 'text-red-400';
@@ -224,7 +269,7 @@ const SolIcon: React.FC = () => (
   </>
 );
 
-const CodexTrades: React.FC<CodexTradesProps> = ({ token, initialTrades = [], onTradesUpdate }) => {
+const CodexTrades: React.FC<CodexTradesProps> = ({ token, initialTrades = [], onTradesUpdate, pairAddress, chain = 'sol' }) => {
   const [showAge, setShowAge] = React.useState(true); // true = Age, false = Time
   const [totalMode, setTotalMode] = React.useState<'usd' | 'sol'>('usd');
   const [mcMode, setMcMode] = React.useState<'mc' | 'price'>('mc'); // MC vs Price toggle
@@ -396,14 +441,36 @@ const CodexTrades: React.FC<CodexTradesProps> = ({ token, initialTrades = [], on
     return initialTrades;
   }, [cachedTradesFromStorage, initialTrades]);
 
-  const { loading: wsLoading, trades: wsTrades } = useOptimizedTradeEventsWebSocket({
-    pairAddress: stableToken?.pair_address,
-    enabled: !!stableToken?.pair_address,
-    initialTrades: stableInitialTrades,
-    tokenDecimals: stableToken?.decimals || 9,
-    maxTrades: 200,
-    enableDeduplication: true,
+  // Use mint if available, fallback to pair_address, then fallback to pairAddress prop
+  const mintForWebSocket = stableToken?.mint || stableToken?.pair_address || pairAddress;
+
+  // Debug logging
+  console.log('[CodexTrades] Debug:', {
+    tokenMint: stableToken?.mint,
+    tokenPairAddress: stableToken?.pair_address,
+    propPairAddress: pairAddress,
+    mintForWebSocket,
+    enabled: !!mintForWebSocket,
+    chain,
   });
+
+  // Use Solana WebSocket for Solana chain
+  const { loading: solanaWsLoading, trades: solanaTrades } = useSolanaTokenWebSocket({
+    mintAddress: mintForWebSocket,
+    enabled: chain === 'sol' && !!mintForWebSocket,
+    maxTrades: 100,
+  });
+
+  // Use Monad WebSocket for Monad chain
+  const { loading: monadWsLoading, trades: monadTrades } = useMonadTradesWebSocket({
+    tokenAddress: mintForWebSocket,
+    enabled: chain === 'monad' && !!mintForWebSocket,
+    maxTrades: 100,
+  });
+
+  // Select the appropriate trades based on chain
+  const wsLoading = chain === 'sol' ? solanaWsLoading : monadWsLoading;
+  const wsTrades = chain === 'sol' ? solanaTrades : monadTrades;
 
   // Preserve trades - once we have trades from WebSocket, always use them
   // This ensures trades don't disappear or change unless new ones arrive
@@ -609,7 +676,7 @@ const CodexTrades: React.FC<CodexTradesProps> = ({ token, initialTrades = [], on
               {/* Amount */}
               <th className="w-[16.66%] px-2 py-2 text-left">Amount</th>
 
-              {/* Total USD / SOL toggle column */}
+              {/* Total USD / SOL/MON toggle column */}
               <th className="w-[16.66%] px-2 py-2 text-left">
                 <button
                   type="button"
@@ -619,7 +686,7 @@ const CodexTrades: React.FC<CodexTradesProps> = ({ token, initialTrades = [], on
                   className="inline-flex items-center gap-1 text-xs text-neutral-300 hover:text-white"
                 >
                   <span className="font-medium">
-                    {totalMode === 'usd' ? 'Total USD' : 'Total SOL'}
+                    {totalMode === 'usd' ? 'Total USD' : chain === 'monad' ? 'Total MON' : 'Total SOL'}
                   </span>
                   <RiExchangeDollarLine
                     className={
@@ -780,7 +847,9 @@ const CodexTrades: React.FC<CodexTradesProps> = ({ token, initialTrades = [], on
                     <td className="px-2 py-2 text-neutral-300 align-middle">
                       <div className="flex items-center flex-nowrap gap-4 min-w-0" style={{ lineHeight: '20px' }}>
                         <a
-                          href={`https://solscan.io/account/${n.maker || ''}`}
+                          href={chain === 'monad'
+                            ? `https://testnet.monadexplorer.com/address/${n.maker || ''}`
+                            : `https://solscan.io/account/${n.maker || ''}`}
                           target="_blank"
                           rel="noopener noreferrer"
                           className="text-white hover:text-neutral-300 transition-colors hover:underline flex items-center min-w-0 flex-shrink"
@@ -804,7 +873,9 @@ const CodexTrades: React.FC<CodexTradesProps> = ({ token, initialTrades = [], on
                             return null;
                           })()}
                           <a
-                            href={`https://solscan.io/account/${n.maker || ''}`}
+                            href={chain === 'monad'
+                              ? `https://testnet.monadexplorer.com/address/${n.maker || ''}`
+                              : `https://solscan.io/account/${n.maker || ''}`}
                             target="_blank"
                             rel="noopener noreferrer"
                             className="text-neutral-400 hover:text-neutral-300 transition-colors inline-flex items-center justify-center flex-shrink-0"
@@ -845,7 +916,7 @@ const CodexTrades: React.FC<CodexTradesProps> = ({ token, initialTrades = [], on
                     <span className="ml-auto">
                       {totalMode === 'usd'
                         ? `p95: $${p95Display.toFixed(2)}`
-                        : `p95: ${p95Display.toFixed(4)} SOL`}
+                        : `p95: ${p95Display.toFixed(4)} ${chain === 'monad' ? 'MON' : 'SOL'}`}
                     </span>
                   </div>
                 </td>

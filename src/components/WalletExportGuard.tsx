@@ -8,10 +8,20 @@ import { acknowledgeWalletExport } from "../utils/api";
 export default function WalletExportGuard() {
   const { user, refreshUser, primaryWalletAddresses } = useUser();
   const [forceOpen, setForceOpen] = useState(false);
-  const [skipAcknowledged, setSkipAcknowledged] = useState(false);
+  const [preferredChain, setPreferredChain] = useState<"sol" | "monad">("monad");
 
-  const mustForce =
-    !!user && user.hasExportedWallet === false && !skipAcknowledged;
+  const needsExportFlags = () => {
+    if (typeof window === "undefined") {
+      return { sol: false, monad: false };
+    }
+    const sol = window.localStorage.getItem("export_ack_sol") !== "true";
+    const monad = window.localStorage.getItem("export_ack_monad") !== "true";
+    return { sol, monad };
+  };
+
+  const { sol: needsSol, monad: needsMonad } = needsExportFlags();
+
+  const mustForce = !!user && (user.hasExportedWallet === false || needsSol || needsMonad);
   const derivedAddress =
     primaryWalletAddresses?.ethereum ||
     primaryWalletAddresses?.solana ||
@@ -20,13 +30,14 @@ export default function WalletExportGuard() {
 
   useEffect(() => {
     setForceOpen(mustForce);
-  }, [mustForce]);
-
-  useEffect(() => {
-    if (user && user.hasExportedWallet === false) {
-      setSkipAcknowledged(false);
+    if (needsSol) {
+      setPreferredChain("sol");
+    } else if (needsMonad) {
+      setPreferredChain("monad");
+    } else {
+      setPreferredChain("monad");
     }
-  }, [user?.id, user?.hasExportedWallet]);
+  }, [mustForce, needsMonad, needsSol]);
 
   const handleClose = useCallback(() => {
     if (mustForce) {
@@ -51,19 +62,16 @@ export default function WalletExportGuard() {
     }
   }, [refreshUser, user?.bearerToken]);
 
-  const onForceExportSkippedToast = () => {
-    toast(
-      "You skipped exporting your key. Keep in mind we can't recover it later.",
-      {
-        icon: "⚠️",
+  const handleExported = useCallback(() => {
+    try {
+      if (typeof window !== "undefined") {
+        window.localStorage.setItem("export_ack_sol", "true");
+        window.localStorage.setItem("export_ack_monad", "true");
       }
-    );
-  };
-
-  const handleSkip = useCallback(() => {
-    setSkipAcknowledged(true);
+    } catch {
+      // ignore
+    }
     setForceOpen(false);
-    onForceExportSkippedToast();
   }, []);
 
   if (!forceOpen) return null;
@@ -76,7 +84,7 @@ export default function WalletExportGuard() {
       walletId={user?.walletId || undefined}
       walletAddress={derivedAddress}
       onForceExportConfirmed={handleConfirm}
-      onForceExportSkipped={handleSkip}
+      onExported={handleExported}
     />
   );
 }

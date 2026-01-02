@@ -1,9 +1,11 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { FiSettings, FiExternalLink, FiX } from 'react-icons/fi';
 import { FaFilter, FaArrowUp, FaArrowDown } from 'react-icons/fa';
 import { SiSolana } from 'react-icons/si';
 import { MdOutlineBubbleChart } from 'react-icons/md';
 import useCodexHolders from '../../hooks/useCodexHolders';
+import useSolanaTokenWebSocket, { type SolanaTokenHolder } from '../../hooks/useSolanaTokenWebSocket';
+import useMonadHolders, { type MonadHolder } from '../../hooks/useMonadHolders';
 import { getWalletSolBalance } from '../../utils/walletTracking';
 import type { Token } from '~/utils/db';
 
@@ -12,6 +14,7 @@ interface HoldersTableProps {
   onBubblemapToggle?: (show: boolean) => void;
   isBubblemapVisible?: boolean;
   containerWidth?: number;
+  chain?: 'sol' | 'monad'; // Chain to determine which endpoint to use
 }
 
 interface HolderWithBalance {
@@ -149,45 +152,120 @@ const AX = {
   sell: "#FF4D7F",
 };
 
-const HoldersTable: React.FC<HoldersTableProps> = ({ 
-  token, 
+const HoldersTable: React.FC<HoldersTableProps> = ({
+  token,
   onBubblemapToggle,
   isBubblemapVisible = false,
   containerWidth = 1000,
+  chain = 'sol',
 }) => {
-  const { holders, isLoading, error } = useCodexHolders(token?.mint);
+  // Use Solana WebSocket for holders (Solana chain)
+  const { holders: wsHolders, loading: wsLoading } = useSolanaTokenWebSocket({
+    mintAddress: token?.mint,
+    enabled: chain === 'sol' && !!token?.mint,
+  });
+
+  // Use Monad hook for holders (Monad chain)
+  const { holders: monadHolders, isLoading: monadLoading, error: monadError } = useMonadHolders(
+    token?.mint,
+    { enabled: chain === 'monad' && !!token?.mint }
+  );
+
+  // Fallback to Codex if WebSocket holders are empty (Solana only)
+  const { holders: codexHolders, isLoading: codexLoading, error: codexError } = useCodexHolders(
+    chain === 'sol' ? token?.mint : undefined
+  );
+
+  // Prefer WebSocket holders, fall back to Codex (Solana only)
+  // Only use WebSocket data if it's not loading AND has data
+  const wsFinished = !wsLoading;
+  const useWebSocketData = chain === 'sol' && wsFinished && wsHolders && wsHolders.length > 0;
+  // Loading state based on chain
+  const isLoading = chain === 'sol'
+    ? (wsLoading || (!useWebSocketData && codexLoading))
+    : monadLoading;
+  const error = chain === 'sol'
+    ? (useWebSocketData ? null : codexError)
+    : monadError;
+
   const [holdersWithBalances, setHoldersWithBalances] = useState<HolderWithBalance[]>([]);
   const tableRef = useRef<HTMLDivElement>(null);
 
-  // Fetch SOL balances for holders
+  // Convert holders to HolderWithBalance format based on chain
+  const normalizedHolders = useMemo(() => {
+    if (chain === 'monad' && monadHolders && monadHolders.length > 0) {
+      // Use Monad holders data
+      return monadHolders.map((h: MonadHolder) => ({
+        address: h.wallet_address,
+        lastTransactionAt: h.last_active_at || 0,
+        solBalance: h.mon_balance || null, // MON balance instead of SOL
+        isLoadingBalance: false, // Monad hook already includes balance
+        amountBoughtUsd30d: String(h.total_bought_usd || 0),
+        amountSoldUsd30d: String(h.total_sold_usd || 0),
+        tokenAmountBought30d: String(h.tokens_bought || 0),
+        tokenAmountSold30d: String(h.tokens_sold || 0),
+        tokenAcquisitionCostUsd: String(h.total_bought_usd || 0),
+        tokenBalance: String(h.tokens_remaining || 0),
+        buys30d: h.buy_count || 0,
+        sells30d: h.sell_count || 0,
+      }));
+    } else if (useWebSocketData && wsHolders) {
+      // Use Solana WebSocket holders data
+      return wsHolders.map((h: SolanaTokenHolder) => ({
+        address: h.wallet_address,
+        lastTransactionAt: h.last_activity_at ? Math.floor(new Date(h.last_activity_at).getTime() / 1000) : 0,
+        solBalance: null,
+        isLoadingBalance: true,
+        // Convert SOL amounts to USD (approximate, using SOL price ~$200)
+        amountBoughtUsd30d: String(h.total_bought_sol * 200),
+        amountSoldUsd30d: String(h.total_sold_sol * 200),
+        tokenAmountBought30d: String(h.total_bought_tokens),
+        tokenAmountSold30d: String(h.total_sold_tokens),
+        tokenAcquisitionCostUsd: String(h.total_bought_sol * 200),
+        tokenBalance: String(h.remaining_tokens),
+        buys30d: h.buy_count,
+        sells30d: h.sell_count,
+      }));
+    } else if (chain === 'sol' && codexHolders && codexHolders.length > 0) {
+      // Use Codex holders data (Solana fallback)
+      return codexHolders.map(h => ({
+        address: h.address,
+        lastTransactionAt: h.lastTransactionAt,
+        solBalance: null,
+        isLoadingBalance: true,
+        amountBoughtUsd30d: h.amountBoughtUsd30d,
+        amountSoldUsd30d: h.amountSoldUsd30d,
+        tokenAmountBought30d: h.tokenAmountBought30d,
+        tokenAmountSold30d: h.tokenAmountSold30d,
+        tokenAcquisitionCostUsd: h.tokenAcquisitionCostUsd,
+        tokenBalance: h.tokenBalance,
+        buys30d: h.buys30d,
+        sells30d: h.sells30d,
+      }));
+    }
+    return [];
+  }, [chain, monadHolders, useWebSocketData, wsHolders, codexHolders]);
+
+  // Fetch SOL balances for holders (only for Solana chain)
   useEffect(() => {
-    if (!holders || holders.length === 0) {
+    if (normalizedHolders.length === 0) {
       setHoldersWithBalances([]);
       return;
     }
 
     // Initialize with holders data
-    const initial: HolderWithBalance[] = holders.map(h => ({
-      address: h.address,
-      lastTransactionAt: h.lastTransactionAt,
-      solBalance: null,
-      isLoadingBalance: true,
-      amountBoughtUsd30d: h.amountBoughtUsd30d,
-      amountSoldUsd30d: h.amountSoldUsd30d,
-      tokenAmountBought30d: h.tokenAmountBought30d,
-      tokenAmountSold30d: h.tokenAmountSold30d,
-      tokenAcquisitionCostUsd: h.tokenAcquisitionCostUsd,
-      tokenBalance: h.tokenBalance,
-      buys30d: h.buys30d,
-      sells30d: h.sells30d,
-    }));
-    setHoldersWithBalances(initial);
+    setHoldersWithBalances(normalizedHolders);
 
-    // Fetch balances in batches to avoid overwhelming the API
+    // Skip balance fetching for Monad (already included in data)
+    if (chain === 'monad') {
+      return;
+    }
+
+    // Fetch balances in batches to avoid overwhelming the API (Solana only)
     const fetchBalances = async () => {
       const batchSize = 5;
-      for (let i = 0; i < holders.length; i += batchSize) {
-        const batch = holders.slice(i, i + batchSize);
+      for (let i = 0; i < normalizedHolders.length; i += batchSize) {
+        const batch = normalizedHolders.slice(i, i + batchSize);
         const balancePromises = batch.map(async (holder) => {
           try {
             const balance = await getWalletSolBalance(holder.address);
@@ -199,8 +277,8 @@ const HoldersTable: React.FC<HoldersTableProps> = ({
         });
 
         const results = await Promise.all(balancePromises);
-        
-        setHoldersWithBalances(prev => 
+
+        setHoldersWithBalances(prev =>
           prev.map(h => {
             const result = results.find(r => r.address === h.address);
             if (result) {
@@ -215,14 +293,14 @@ const HoldersTable: React.FC<HoldersTableProps> = ({
         );
 
         // Small delay between batches to avoid rate limiting
-        if (i + batchSize < holders.length) {
+        if (i + batchSize < normalizedHolders.length) {
           await new Promise(resolve => setTimeout(resolve, 200));
         }
       }
     };
 
     fetchBalances();
-  }, [holders]);
+  }, [normalizedHolders, chain]);
 
   const handleBubblemapClick = useCallback(() => {
     if (onBubblemapToggle) {
@@ -284,7 +362,7 @@ const HoldersTable: React.FC<HoldersTableProps> = ({
                 </div>
               </th>
               <th className="px-4 py-2 text-left text-xs font-medium" style={{ color: AX.muted }}>
-                SOL Balance (Last Active)
+                {chain === 'monad' ? 'MON' : 'SOL'} Balance (Last Active)
               </th>
               <th className="px-4 py-2 text-left text-xs font-medium" style={{ color: AX.muted }}>
                 Bought (Avg Buy)
@@ -324,7 +402,7 @@ const HoldersTable: React.FC<HoldersTableProps> = ({
                   <div className="text-red-400 text-sm">{error}</div>
                 </td>
               </tr>
-            ) : !holders || holders.length === 0 ? (
+            ) : holdersWithBalances.length === 0 ? (
               <tr>
                 <td colSpan={7} className="px-4 py-8 text-center">
                   <div className="text-neutral-400 text-sm">No holders data available</div>
@@ -363,7 +441,9 @@ const HoldersTable: React.FC<HoldersTableProps> = ({
                       <div className="flex items-center gap-2">
                         <FaFilter size={12} style={{ color: AX.muted }} className="cursor-pointer hover:opacity-70" />
                         <a
-                          href={`https://solscan.io/account/${holder.address}`}
+                          href={chain === 'monad'
+                            ? `https://testnet.monadexplorer.com/address/${holder.address}`
+                            : `https://solscan.io/account/${holder.address}`}
                           target="_blank"
                           rel="noopener noreferrer"
                           className="flex items-center gap-1 hover:opacity-70 transition-opacity"
