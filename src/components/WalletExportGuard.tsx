@@ -8,9 +8,20 @@ import { acknowledgeWalletExport } from "../utils/api";
 export default function WalletExportGuard() {
   const { user, refreshUser, primaryWalletAddresses } = useUser();
   const [forceOpen, setForceOpen] = useState(false);
+  const [preferredChain, setPreferredChain] = useState<"sol" | "monad">("monad");
 
-  const mustForce =
-    !!user && user.hasExportedWallet === false;
+  const needsExportFlags = () => {
+    if (typeof window === "undefined") {
+      return { sol: false, monad: false };
+    }
+    const sol = window.localStorage.getItem("export_ack_sol") !== "true";
+    const monad = window.localStorage.getItem("export_ack_monad") !== "true";
+    return { sol, monad };
+  };
+
+  const { sol: needsSol, monad: needsMonad } = needsExportFlags();
+
+  const mustForce = !!user && (user.hasExportedWallet === false || needsSol || needsMonad);
   const derivedAddress =
     primaryWalletAddresses?.ethereum ||
     primaryWalletAddresses?.solana ||
@@ -19,7 +30,14 @@ export default function WalletExportGuard() {
 
   useEffect(() => {
     setForceOpen(mustForce);
-  }, [mustForce]);
+    if (needsSol) {
+      setPreferredChain("sol");
+    } else if (needsMonad) {
+      setPreferredChain("monad");
+    } else {
+      setPreferredChain("monad");
+    }
+  }, [mustForce, needsMonad, needsSol]);
 
   const handleClose = useCallback(() => {
     if (mustForce) {
@@ -44,6 +62,18 @@ export default function WalletExportGuard() {
     }
   }, [refreshUser, user?.bearerToken]);
 
+  const handleExported = useCallback(() => {
+    try {
+      if (typeof window !== "undefined") {
+        window.localStorage.setItem("export_ack_sol", "true");
+        window.localStorage.setItem("export_ack_monad", "true");
+      }
+    } catch {
+      // ignore
+    }
+    setForceOpen(false);
+  }, []);
+
   if (!forceOpen) return null;
 
   return (
@@ -54,6 +84,7 @@ export default function WalletExportGuard() {
       walletId={user?.walletId || undefined}
       walletAddress={derivedAddress}
       onForceExportConfirmed={handleConfirm}
+      onExported={handleExported}
     />
   );
 }

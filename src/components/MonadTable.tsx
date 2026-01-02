@@ -83,6 +83,7 @@ import {
   SOL_MINT_ADDRESS,
   ApiError,
 } from "~/utils/api";
+import { executeMonadMultiBuy, formatMonadTxSummary, buildMonadWalletAllocations } from "~/utils/monadWalletAllocation";
 import { preloadTokenImages } from "~/utils/imagePreloader";
 import { getPoolTypeFromToken } from "~/utils/poolTypeDetection";
 import { TokenAge } from "./TokenAge";
@@ -129,6 +130,7 @@ interface MonadTableProps {
   loading?: boolean;
   skeletonRowCount?: number;
   showBubbleMetrics?: boolean; // Feature flag for bubble metrics (Buyers, Sellers, Wallets, 24h TX, Vol 24h)
+  currentChain?: string; // Chain from parent to avoid router.query timing issues
 }
 
 // Add a simple in-memory cache for token metadata
@@ -1532,6 +1534,7 @@ function MonadTable({
   loading = false,
   skeletonRowCount = 10,
   showBubbleMetrics = false,
+  currentChain: chainProp,
 }: MonadTableProps) {
   // DEBUG: Log EVERY render (not just when tokens change)
   console.log(
@@ -2401,28 +2404,34 @@ function MonadTable({
   const router = useRouter();
 
   // Quick buy functionality
-  const { user, solBalance, refreshBalance, chainBalances } = useUser();
+  const { user, solBalance, refreshBalance, chainBalances, walletList, walletBalances, selectedWalletIds } = useUser();
   const { presets, activePreset, setActivePreset } = useQuickBuy();
   
   // Ref to track pending toast for WebSocket txHash update
-  const pendingQuickBuyToastRef = useRef<{ id: string; tokenImage: string | null; tokenName: string; fakeTime: string; tokenAddress: string; startTime: number; timerInterval?: NodeJS.Timeout } | null>(null);
+  const pendingQuickBuyToastRef = useRef<{ id: string; tokenImage: string | null; tokenName: string; fakeTime: string; tokenAddress: string; startTime: number; timerInterval?: NodeJS.Timeout; totalSelectedWallets: number } | null>(null);
   
   // Callback for instant txHash update via WebSocket (fires before HTTP response)
   const handleWsTxHash = useCallback((data: { txHash: string; tokenAddress: string; tradeType: 'buy' | 'sell'; explorerUrl: string }) => {
     const pending = pendingQuickBuyToastRef.current;
     if (!pending || pending.tokenAddress.toLowerCase() !== data.tokenAddress.toLowerCase()) return;
-    
+
     console.log('[MonadTable] 🚀 INSTANT txHash via WebSocket:', data.txHash);
-    
-    // Update the link element - wrap Monad logo in anchor to make clickable
-    const linkEl = document.getElementById(`link-${pending.id}`);
-    if (linkEl) {
-      linkEl.innerHTML = `<a href="${data.explorerUrl}" target="_blank" rel="noopener noreferrer" class="hover:opacity-80 transition-opacity"><img src="https://pbs.twimg.com/profile_images/1749618187489206272/rDaFjEhN_400x400.jpg" alt="Monad" class="w-4 h-4 rounded-full" style="cursor: pointer;" /></a>`;
+
+    // For multi-wallet trades: Don't update the toast (count was already shown)
+    // For single wallet: Update the link element with clickable Monad logo
+    if (pending.totalSelectedWallets === 1) {
+      const linkEl = document.getElementById(`link-${pending.id}`);
+      if (linkEl) {
+        linkEl.innerHTML = `<a href="${data.explorerUrl}" target="_blank" rel="noopener noreferrer" class="hover:opacity-80 transition-opacity"><img src="https://pbs.twimg.com/profile_images/1749618187489206272/rDaFjEhN_400x400.jpg" alt="Monad" class="w-4 h-4 rounded-full" style="cursor: pointer;" /></a>`;
+      }
     }
-    
+
     // Set duration for auto-dismiss after 10s
     setTimeout(() => {
       if (pendingQuickBuyToastRef.current?.id === pending.id) {
+        if (pendingQuickBuyToastRef.current.timerInterval) {
+          clearInterval(pendingQuickBuyToastRef.current.timerInterval);
+        }
         toast.dismiss(pending.id);
         pendingQuickBuyToastRef.current = null;
       }
@@ -2611,7 +2620,20 @@ function MonadTable({
     // Random cap time between 0.40 and 0.60 seconds
     const timerCap = 0.40 + Math.random() * 0.20;
     let timerFinished = false;
-    
+
+    // Determine if this is a multi-wallet trade
+    const isMultiWallet = (selectedWalletIds?.monad || []).length > 1;
+    const totalSelectedWallets = (selectedWalletIds?.monad || []).length || 1;
+
+    // Pre-calculate which wallets will actually be used (have sufficient balance)
+    const { allocations, total } = buildMonadWalletAllocations({
+      amount: buyAmount,
+      walletList,
+      walletBalances,
+      selectedWalletIds: selectedWalletIds?.monad || [],
+    });
+    const walletsWithBalance = allocations.length;
+
     // Show initial loading toast with timer - checkmark hidden until timer finishes, link icon grayed out
     toast.custom(
       (t) => (
@@ -2629,7 +2651,7 @@ function MonadTable({
       ),
       { id: uniqueToastId, duration: Infinity }
     );
-    
+
     // Start timer animation - update every 50ms, show checkmark when cap is reached
     const timerInterval = setInterval(() => {
       const elapsed = (Date.now() - startTime) / 1000;
@@ -2638,8 +2660,8 @@ function MonadTable({
       if (timerEl) {
         timerEl.textContent = `(${displayTime}s)`;
       }
-      
-      // When timer reaches cap, show checkmark and Monad logo
+
+      // When timer reaches cap, show checkmark and logo/count
       if (!timerFinished && elapsed >= timerCap) {
         timerFinished = true;
         const checkEl = document.getElementById(`check-${uniqueToastId}`);
@@ -2648,34 +2670,47 @@ function MonadTable({
         }
         const linkEl = document.getElementById(`link-${uniqueToastId}`);
         if (linkEl) {
+          if (isMultiWallet) {
+            // Show actual wallets with balance vs total selected
+            linkEl.innerHTML = `<span style="color: #31e3ac; font-size: 11px; font-weight: 600;">${walletsWithBalance}/${totalSelectedWallets}</span>`;
+          }
           linkEl.style.display = 'inline-flex';
         }
       }
     }, 50);
     
     // Store pending toast info for WebSocket instant update (including timer)
-    pendingQuickBuyToastRef.current = { id: uniqueToastId, tokenImage, tokenName, fakeTime: timerCap.toFixed(2), tokenAddress, startTime, timerInterval };
+    pendingQuickBuyToastRef.current = { id: uniqueToastId, tokenImage, tokenName, fakeTime: timerCap.toFixed(2), tokenAddress, startTime, timerInterval, totalSelectedWallets };
 
     try {
-      const result = await tradeMonadBuy(
-        {
-          tokenAddress,
-          amountMON: buyAmount,
-          launchpad,
-          slippage,
-          gasPrice,
-        },
-        user.bearerToken,
-      );
+      const { results, totalConsidered } = await executeMonadMultiBuy({
+        tokenAddress,
+        amountMON: buyAmount,
+        launchpad,
+        slippage,
+        gasPrice,
+        authToken: user.bearerToken,
+        walletList,
+        walletBalances,
+        selectedWalletIds: selectedWalletIds?.monad || [],
+      });
 
-      if (result.success && result.txHash) {
+      // Extract transaction hashes from results
+      const txHashes = results
+        .map((r) => (r.result as any)?.txHash)
+        .filter(Boolean);
+
+      if (txHashes.length > 0) {
         // Only update toast if WebSocket hasn't already handled it
         if (pendingQuickBuyToastRef.current?.id === uniqueToastId) {
-          const explorerUrl = `https://monadvision.com/tx/${result.txHash}`;
-            // Update the link element - wrap Monad logo in anchor to make clickable
-          const linkEl = document.getElementById(`link-${uniqueToastId}`);
-          if (linkEl) {
-            linkEl.innerHTML = `<a href="${explorerUrl}" target="_blank" rel="noopener noreferrer" class="hover:opacity-80 transition-opacity"><img src="https://pbs.twimg.com/profile_images/1749618187489206272/rDaFjEhN_400x400.jpg" alt="Monad" class="w-4 h-4 rounded-full" style="cursor: pointer;" /></a>`;
+          // For multi-wallet trades: Don't update anything (count was already shown at timer cap)
+          // For single wallet: Update logo to make it clickable
+          if (totalSelectedWallets === 1 && txHashes[0]) {
+            const linkEl = document.getElementById(`link-${uniqueToastId}`);
+            if (linkEl) {
+              const explorerUrl = `https://monadvision.com/tx/${txHashes[0]}`;
+              linkEl.innerHTML = `<a href="${explorerUrl}" target="_blank" rel="noopener noreferrer" class="hover:opacity-80 transition-opacity"><img src="https://pbs.twimg.com/profile_images/1749618187489206272/rDaFjEhN_400x400.jpg" alt="Monad" class="w-4 h-4 rounded-full" style="cursor: pointer;" /></a>`;
+            }
           }
           // Auto-dismiss after 10s
           setTimeout(() => {
@@ -2690,12 +2725,12 @@ function MonadTable({
           });
         }, 1000);
         broadcastMonadQuickTrade(tokenAddress, 'buy');
-        console.log("✅ Monad Quick Buy successful:", result);
-        return { success: true, txHash: result.txHash };
+        console.log("✅ Monad Quick Buy successful:", txHashes);
+        return { success: true, txHash: txHashes[0] };
       } else {
         clearInterval(timerInterval);
         pendingQuickBuyToastRef.current = null;
-        const errorMsg = formatMonadError((result as any)?.error);
+        const errorMsg = 'Trade failed';
         toast.error(errorMsg, { id: uniqueToastId, duration: 6000 });
         return { success: false, error: errorMsg };
       }
@@ -5824,7 +5859,8 @@ function MonadTable({
 
               // Build query params for optimistic UI + cache lookup
               // Include chain parameter to preserve chain selection
-              const currentChain = (router.query.chain as string) || "monad";
+              // Use prop from parent (more reliable) or fallback to router.query
+              const currentChain = chainProp || (router.query.chain as string) || "monad";
               const queryParams = new URLSearchParams({
                 _name: (token as any)?.name || (token as any)?.symbol || "",
                 _symbol: (token as any)?.symbol || "",

@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AlertTriangle, Loader2 } from "lucide-react";
 import { IframeStamper } from "@turnkey/iframe-stamper";
+import { generateP256KeyPair, decryptExportBundle } from "@turnkey/crypto";
 import dynamic from "next/dynamic";
 import { FaTimes } from "react-icons/fa";
 import toast from "react-hot-toast";
@@ -33,7 +34,7 @@ const statusCopy: Record<
   },
   requesting: {
     title: "Requesting export bundle",
-    description: "Signing an EXPORT_WALLET activity to encrypt your mnemonic to the iframe key.",
+    description: "Requesting encrypted export bundle from Turnkey to securely display your key.",
     tone: "neutral",
   },
   injecting: {
@@ -43,7 +44,7 @@ const statusCopy: Record<
   },
   done: {
     title: "Export complete",
-    description: "Your mnemonic is visible inside the iframe only. Save it securely.",
+    description: "Your private key or recovery phrase is visible inside the iframe only. Save it securely.",
     tone: "success",
   },
   error: {
@@ -64,6 +65,7 @@ interface ExportWalletModalProps {
   walletAddress?: string;
   forceExport?: boolean;
   onForceExportConfirmed?: () => Promise<void> | void;
+  onExported?: (chain: "sol" | "monad" | "both") => void;
 }
 
 export default function ExportWalletModal({
@@ -73,6 +75,7 @@ export default function ExportWalletModal({
   walletAddress,
   forceExport = false,
   onForceExportConfirmed,
+  onExported,
 }: ExportWalletModalProps) {
   const turnkey = useTurnkey() as any;
   const { authState, clientState, session: turnkeySession, exportWallet, wallets = [] } = turnkey || {};
@@ -88,6 +91,7 @@ export default function ExportWalletModal({
   const [fetchedWallets, setFetchedWallets] = useState<any[]>([]);
   const [showLoginModal, setShowLoginModal] = useState(false);
   const pendingRevealRef = useRef(false);
+  const exportNotifiedRef = useRef(false);
 
   const iframeContainerRef = useRef<HTMLDivElement | null>(null);
   const iframeStamperRef = useRef<IframeStamper | null>(null);
@@ -104,6 +108,9 @@ export default function ExportWalletModal({
   const [lastAuthMethod, setLastAuthMethod] = useState<string | null>(null);
   const walletsRequestRef = useRef(false);
   const hasAuthenticatedThisVisitRef = useRef(false);
+
+  // Direct decryption for Solana keys (no iframe)
+  const [decryptedSolanaKey, setDecryptedSolanaKey] = useState<string>("");
 
   useEffect(() => {
     setIsClient(true);
@@ -157,6 +164,7 @@ export default function ExportWalletModal({
       organizationIdRef.current = null;
       pendingRevealRef.current = false;
       setShowLoginModal(false);
+      exportNotifiedRef.current = false;
 
       if (iframeStamperRef.current) {
         iframeStamperRef.current.clear();
@@ -174,6 +182,7 @@ export default function ExportWalletModal({
       setPastedKeySecond("");
       setCopyPasteValidated(false);
       setValidationError(null);
+      setDecryptedSolanaKey("");
       hasAuthenticatedThisVisitRef.current = false;
     }
   }, [isOpen]);
@@ -440,6 +449,7 @@ export default function ExportWalletModal({
 
     setError(null);
     setIframeVisible(false);
+    exportNotifiedRef.current = false;
 
     if (!isTurnkeyReady) {
       if (isGooglePath) {
@@ -461,6 +471,7 @@ export default function ExportWalletModal({
       walletMeta?.solanaAddress ||
       walletMeta?.ethereumAddress ||
       walletMeta?.address ||
+      walletAddress ||
       undefined;
 
     if (!walletIdToUse) {
@@ -482,53 +493,69 @@ export default function ExportWalletModal({
 
     try {
       setStatus("initializing");
-      if (iframeStamperRef.current) {
-        iframeStamperRef.current.clear();
-      }
-      if (typeof document !== "undefined") {
-        const existing = document.getElementById("turnkey-export-iframe");
-        if (existing?.parentNode) {
-          existing.parentNode.removeChild(existing);
-        }
-      }
 
-      let stamper: IframeStamper;
+      // Check if this is a Solana-only wallet (we'll decrypt directly for better UX)
+      const isSolanaOnly = !!solanaAddress && !monadAddress;
+
       let publicKey: string;
+      let keyPair: { publicKey: string; publicKeyUncompressed: string; privateKey: string } | null = null;
+      let stamper: IframeStamper | null = null;
 
-      try {
-        stamper = new IframeStamper({
-          iframeUrl: "https://export.turnkey.com",
-          iframeElementId: "turnkey-export-iframe",
-          iframeContainer: iframeContainerRef.current,
-        });
-
-        publicKey = await withTimeout(
-          stamper.init(),
-          30000,
-          "Failed to initialize secure iframe. Please check your connection and try again."
-        );
-
-        await withTimeout(
-          stamper.applySettings({ styles: { fontSize: "16px" } }),
-          5000,
-          "Failed to configure iframe settings."
-        );
-      } catch (initErr: any) {
-        const initErrorMsg = initErr?.message || initErr?.toString() || "";
-        if (initErrorMsg.includes("timed out") || initErrorMsg.includes("timeout")) {
-          setError("Connection timeout. Please check your internet connection and try again.");
-        } else {
-          setError("Failed to initialize secure export. Please refresh the page and try again.");
+      if (isSolanaOnly) {
+        // For Solana-only wallets, generate our own key pair for decryption
+        // This allows us to show the key in base58 format directly
+        console.log("[ExportWalletModal] Using direct decryption for Solana key");
+        keyPair = generateP256KeyPair();
+        publicKey = keyPair.publicKeyUncompressed;
+      } else {
+        // For EVM or multi-chain wallets, use iframe (standard flow)
+        console.log("[ExportWalletModal] Using iframe for wallet export");
+        if (iframeStamperRef.current) {
+          iframeStamperRef.current.clear();
         }
-        setStatus("error");
-        return;
-      }
+        if (typeof document !== "undefined") {
+          const existing = document.getElementById("turnkey-export-iframe");
+          if (existing?.parentNode) {
+            existing.parentNode.removeChild(existing);
+          }
+        }
 
-      iframeStamperRef.current = stamper;
+        try {
+          stamper = new IframeStamper({
+            iframeUrl: "https://export.turnkey.com",
+            iframeElementId: "turnkey-export-iframe",
+            iframeContainer: iframeContainerRef.current,
+          });
+
+          publicKey = await withTimeout(
+            stamper.init(),
+            30000,
+            "Failed to initialize secure iframe. Please check your connection and try again."
+          );
+
+          await withTimeout(
+            stamper.applySettings({ styles: { fontSize: "16px" } }),
+            5000,
+            "Failed to configure iframe settings."
+          );
+        } catch (initErr: any) {
+          const initErrorMsg = initErr?.message || initErr?.toString() || "";
+          if (initErrorMsg.includes("timed out") || initErrorMsg.includes("timeout")) {
+            setError("Connection timeout. Please check your internet connection and try again.");
+          } else {
+            setError("Failed to initialize secure export. Please refresh the page and try again.");
+          }
+          setStatus("error");
+          return;
+        }
+
+        iframeStamperRef.current = stamper;
+      }
 
       setStatus("requesting");
 
       let exportBundle: string | null = null;
+      let isPrivateKeyExport = false;
       try {
         if (isGooglePath) {
           exportBundle = await withTimeout(
@@ -541,6 +568,7 @@ export default function ExportWalletModal({
             "Export request timed out. Please try again."
           );
           organizationIdRef.current = sessionFromContext?.organizationId || null;
+          isPrivateKeyExport = false; // Google path doesn't support private key exports currently
         } else {
           if (!BACKEND_URL) {
             throw new Error("Backend URL is not configured.");
@@ -579,6 +607,9 @@ export default function ExportWalletModal({
           exportBundle = responseBody?.exportBundle || null;
           organizationIdRef.current =
             responseBody?.organizationId || organizationIdForWallet || null;
+
+          // Store whether this is a private key export (uses different iframe method)
+          isPrivateKeyExport = responseBody?.isPrivateKey === true;
         }
       } catch (exportErr: any) {
         if (timeoutRef.current) {
@@ -622,40 +653,91 @@ export default function ExportWalletModal({
 
       setStatus("injecting");
 
-      let injected: boolean;
-      try {
-        injected = await withTimeout(
-          stamper.injectWalletExportBundle(
+      if (isSolanaOnly && keyPair) {
+        // For Solana-only wallets, decrypt directly and show in base58 format
+        console.log("[ExportWalletModal] Decrypting Solana key directly");
+        try {
+          // decryptExportBundle with keyFormat: "SOLANA" returns the key in Base58 format directly!
+          const base58Key = await decryptExportBundle({
             exportBundle,
-            organizationIdRef.current || organizationIdForWallet || ""
-          ),
-          30000,
-          "Failed to inject export bundle. Please try again."
-        );
-      } catch (injectErr: any) {
-        const injectErrorMsg = injectErr?.message || injectErr?.toString() || "";
-        if (injectErrorMsg.includes("timed out") || injectErrorMsg.includes("timeout")) {
-          setError("Export injection timed out. Please try again.");
-        } else {
-          setError("Failed to initialize secure export. Please try again.");
-        }
-        setStatus("error");
-        return;
-      }
+            embeddedKey: keyPair.privateKey,
+            organizationId: organizationIdRef.current || organizationIdForWallet || "",
+            returnMnemonic: false,
+            keyFormat: "SOLANA",
+          });
 
-      if (!injected) {
-        setError("Failed to initialize secure export. Please try again.");
-        setStatus("error");
-        return;
+          console.log("[ExportWalletModal] Decrypted Solana key (Base58):", base58Key);
+
+          if (!base58Key || typeof base58Key !== 'string') {
+            throw new Error("Failed to decrypt private key");
+          }
+
+          // Key is already in Base58 format - no conversion needed!
+          setDecryptedSolanaKey(base58Key);
+          setIframeVisible(false); // Don't show iframe for Solana
+          setStatus("done");
+        } catch (decryptErr: any) {
+          console.error("Failed to decrypt Solana key:", decryptErr);
+          setError(decryptErr?.message || "Failed to decrypt private key");
+          setStatus("error");
+          return;
+        }
+      } else {
+        // For EVM or multi-chain wallets, use iframe (standard flow)
+        if (!stamper) {
+          throw new Error("Stamper not initialized");
+        }
+
+        let injected: boolean;
+        try {
+          if (isPrivateKeyExport) {
+            // For imported private keys, use injectKeyExportBundle
+            console.log("[ExportWalletModal] Injecting private key export bundle");
+            injected = await withTimeout(
+              stamper.injectKeyExportBundle(
+                exportBundle,
+                organizationIdRef.current || organizationIdForWallet || ""
+              ),
+              30000,
+              "Failed to inject export bundle. Please try again."
+            );
+          } else {
+            // For wallets (mnemonic), use injectWalletExportBundle
+            console.log("[ExportWalletModal] Injecting wallet export bundle");
+            injected = await withTimeout(
+              stamper.injectWalletExportBundle(
+                exportBundle,
+                organizationIdRef.current || organizationIdForWallet || ""
+              ),
+              30000,
+              "Failed to inject export bundle. Please try again."
+            );
+          }
+        } catch (injectErr: any) {
+          const injectErrorMsg = injectErr?.message || injectErr?.toString() || "";
+          if (injectErrorMsg.includes("timed out") || injectErrorMsg.includes("timeout")) {
+            setError("Export injection timed out. Please try again.");
+          } else {
+            setError("Failed to initialize secure export. Please try again.");
+          }
+          setStatus("error");
+          return;
+        }
+
+        if (!injected) {
+          setError("Failed to initialize secure export. Please try again.");
+          setStatus("error");
+          return;
+        }
+
+        setIframeVisible(true);
+        setStatus("done");
       }
 
       if (timeoutRef.current) {
         clearTimeout(timeoutRef.current);
         timeoutRef.current = null;
       }
-
-      setIframeVisible(true);
-      setStatus("done");
     } catch (err: any) {
       if (timeoutRef.current) {
         clearTimeout(timeoutRef.current);
@@ -802,6 +884,23 @@ export default function ExportWalletModal({
       ? selectedWallet.solanaAddress
       : null;
 
+  useEffect(() => {
+    if (!isOpen) return;
+    if (status !== "done") return;
+    if (exportNotifiedRef.current) return;
+    try {
+      // Bundle contains both chains; mark both as exported.
+      if (typeof window !== "undefined") {
+        window.localStorage.setItem("export_ack_sol", "true");
+        window.localStorage.setItem("export_ack_monad", "true");
+      }
+    } catch {
+      // Ignore storage failures
+    }
+    exportNotifiedRef.current = true;
+    onExported?.("both");
+  }, [isOpen, onExported, status]);
+
   if (!isOpen) return null;
 
   return (
@@ -878,59 +977,145 @@ export default function ExportWalletModal({
               </div>
             )}
 
-            {/* Wallet Address */}
+            {/* Wallet Addresses */}
             {selectedWalletId && (
-              <div className="mb-3">
-                <label className="text-xs text-[#9CA3AF] mb-1.5 block">
-                  Monad wallet (EVM)
-                </label>
-                <div className="flex items-center gap-2">
-                  <input
-                    type="text"
-                    readOnly
-                    value={monadAddress}
-                    className="flex-1 px-2.5 py-1.5 rounded-lg bg-[#17191E] border border-[#2A2B33] text-[#f0f5f5] text-xs font-mono"
-                  />
-                  <button
-                    onClick={() => {
-                      if (monadAddress) {
-                        navigator.clipboard.writeText(monadAddress).then(
-                          () => toast.success("Copied to clipboard"),
-                          () => toast.error("Failed to copy")
-                        );
-                      }
-                    }}
-                    className="text-[#9CA3AF] hover:text-[#f0f5f5] transition-colors"
-                  >
-                    <svg width="16" height="16" fill="none" viewBox="0 0 24 24">
-                      <rect
-                        x="9"
-                        y="9"
-                        width="13"
-                        height="13"
-                        rx="2"
-                        ry="2"
-                        stroke="currentColor"
-                        strokeWidth="2"
+              <div className="mb-3 space-y-2">
+                {monadAddress && (
+                  <div>
+                    <label className="text-xs text-[#9CA3AF] mb-1.5 block">
+                      Monad wallet (EVM)
+                    </label>
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="text"
+                        readOnly
+                        value={monadAddress}
+                        className="flex-1 px-2.5 py-1.5 rounded-lg bg-[#17191E] border border-[#2A2B33] text-[#f0f5f5] text-xs font-mono"
                       />
-                      <path
-                        d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"
-                        stroke="currentColor"
-                        strokeWidth="2"
+                      <button
+                        onClick={() => {
+                          if (monadAddress) {
+                            navigator.clipboard.writeText(monadAddress).then(
+                              () => toast.success("Copied to clipboard"),
+                              () => toast.error("Failed to copy")
+                            );
+                          }
+                        }}
+                        className="text-[#9CA3AF] hover:text-[#f0f5f5] transition-colors"
+                      >
+                        <svg width="16" height="16" fill="none" viewBox="0 0 24 24">
+                          <rect
+                            x="9"
+                            y="9"
+                            width="13"
+                            height="13"
+                            rx="2"
+                            ry="2"
+                            stroke="currentColor"
+                            strokeWidth="2"
+                          />
+                          <path
+                            d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"
+                            stroke="currentColor"
+                            strokeWidth="2"
+                          />
+                        </svg>
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {solanaAddress && (
+                  <div>
+                    <label className="text-xs text-[#9CA3AF] mb-1.5 block">
+                      Solana wallet
+                    </label>
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="text"
+                        readOnly
+                        value={solanaAddress}
+                        className="flex-1 px-2.5 py-1.5 rounded-lg bg-[#17191E] border border-[#2A2B33] text-[#f0f5f5] text-xs font-mono"
                       />
-                    </svg>
-                  </button>
-                </div>
-                {/* Hide Solana copy since export flow is EVM-focused */}
+                      <button
+                        onClick={() => {
+                          if (solanaAddress) {
+                            navigator.clipboard.writeText(solanaAddress).then(
+                              () => toast.success("Copied to clipboard"),
+                              () => toast.error("Failed to copy")
+                            );
+                          }
+                        }}
+                        className="text-[#9CA3AF] hover:text-[#f0f5f5] transition-colors"
+                      >
+                        <svg width="16" height="16" fill="none" viewBox="0 0 24 24">
+                          <rect
+                            x="9"
+                            y="9"
+                            width="13"
+                            height="13"
+                            rx="2"
+                            ry="2"
+                            stroke="currentColor"
+                            strokeWidth="2"
+                          />
+                          <path
+                            d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"
+                            stroke="currentColor"
+                            strokeWidth="2"
+                          />
+                        </svg>
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {monadAddress && solanaAddress && (
+                  <p className="text-[11px] text-[#9CA3AF]">
+                    Wallets created from recovery phrases export both chains. Imported private keys export the single key.
+                  </p>
+                )}
               </div>
             )}
 
             {/* Private Key Area */}
             <div className="mb-3">
-              <label className="text-xs text-[#9CA3AF] mb-1.5 block">Private Key</label>
+              <label className="text-xs text-[#9CA3AF] mb-1.5 block">
+                {solanaAddress && !monadAddress ? "Solana Private Key (Base58)" : "Private Key"}
+              </label>
               <div className="rounded-lg border border-[#2A2B33] bg-[#121212] p-3 min-h-[100px] relative">
+                {/* Solana key display (Base58 format) */}
+                {decryptedSolanaKey && (
+                  <div className="space-y-2">
+                    <div className="relative">
+                      <textarea
+                        value={decryptedSolanaKey}
+                        readOnly
+                        className="w-full h-24 px-3 py-2 pr-20 rounded-lg bg-[#17191E] border border-[#70E0B0] text-[#70E0B0] text-xs font-mono resize-none"
+                      />
+                      <button
+                        onClick={() => {
+                          navigator.clipboard.writeText(decryptedSolanaKey).then(
+                            () => toast.success("Private key copied!"),
+                            () => toast.error("Failed to copy")
+                          );
+                        }}
+                        className="absolute top-2 right-2 px-3 py-1.5 bg-[#70E0B0] text-[#1A1A1A] rounded text-xs font-semibold hover:bg-[#58B890] transition-colors"
+                      >
+                        Copy
+                      </button>
+                    </div>
+                    <p className="text-xs text-[#9CA3AF]">
+                      This is your Solana private key in Base58 format. Use it to import into Phantom, Solflare, or any Solana wallet.
+                    </p>
+                  </div>
+                )}
+
+                {/* Iframe for EVM/multi-chain wallets */}
                 <div ref={iframeContainerRef} className={`w-full ${iframeVisible ? "block" : "hidden"}`} />
-                {!iframeVisible && (
+
+                {/* Loading state */}
+                {!iframeVisible && !decryptedSolanaKey && (
                   <div className="flex items-center justify-center min-h-[100px]">
                     <div className="text-center w-full">
                       <div className="blur-sm bg-[#2A2B33] rounded w-full h-16 mb-3 mx-auto"></div>
@@ -970,7 +1155,7 @@ export default function ExportWalletModal({
               </div>
 
               {/* Copy-Paste Validation */}
-              {iframeVisible && !copyPasteValidated && (
+              {(iframeVisible || decryptedSolanaKey) && !copyPasteValidated && (
                 <div className="mt-3 p-3 rounded-lg border border-[#2A2B33] bg-[#121212]">
                   <p className="text-xs text-[#9CA3AF] mb-2">
                     Copy your private key from above, then paste it twice to confirm:
@@ -1061,7 +1246,7 @@ export default function ExportWalletModal({
               </p>
             </div>
 
-            {forceExport && status === "done" && iframeVisible && (
+            {forceExport && status === "done" && (iframeVisible || decryptedSolanaKey) && (
               <div className="mt-3 p-3 rounded-lg border border-[#2A2B33] bg-[#121212]">
                 <p className="text-xs text-[#f0f5f5]">
                   Back up this key now. Save it in an encrypted manager that <em>you</em> control.

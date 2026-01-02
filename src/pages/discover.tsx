@@ -12,7 +12,8 @@ import { useQuickBuy } from "~/components/QuickBuyContext";
 import QuickBuySettingsModal from '../components/QuickBuySettingsModal';
 import { useFilter } from '../components/FilterContext';
 import FilterPopout from '../components/FilterPopout';
-import { SOL_MINT_ADDRESS, tradeMonadBuy } from "~/utils/api";
+import { SOL_MINT_ADDRESS } from "~/utils/api";
+import { executeMonadMultiBuy, formatMonadTxSummary } from "~/utils/monadWalletAllocation";
 import { executeEnhancedTrade } from "~/utils/enhancedTradeHandler";
 import { showEnhancedToast, updateEnhancedToast } from "~/utils/enhancedToast";
 import { useUser } from "~/components/UserContext";
@@ -35,36 +36,53 @@ type TokenWithDexPaid = Token & { dexPaid?: boolean };
 export default function DiscoverPage() {
   const router = useRouter();
   
+  // Helper to get chain from localStorage
+  const getSavedChain = () => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('selected-chain');
+      if (saved === 'sol' || saved === 'monad') {
+        return saved;
+      }
+    }
+    return 'monad';
+  };
+
   // CRITICAL: Initialize chain from router query immediately to avoid race conditions
   // This ensures we react to shallow routing changes immediately
   const [currentChain, setCurrentChain] = useState<string>(() => {
-    // Initialize from router query if available, otherwise default to 'monad'
-    if (typeof window !== 'undefined' && router.isReady) {
-      return (router.query.chain as string) || 'monad';
+    // Initialize from router query if available, then localStorage, otherwise default to 'monad'
+    if (typeof window !== 'undefined' && router.isReady && router.query.chain) {
+      return router.query.chain as string;
     }
     // Also check URL params directly for immediate access
     if (typeof window !== 'undefined') {
       const urlParams = new URLSearchParams(window.location.search);
-      return urlParams.get('chain') || 'monad';
+      const chainFromUrl = urlParams.get('chain');
+      if (chainFromUrl) return chainFromUrl;
+      // Check localStorage
+      return getSavedChain();
     }
     return 'monad';
   });
-  
+
   // Sync chain state with router query - this handles both initial load and shallow routing updates
   useEffect(() => {
     if (!router.isReady) return;
-    const chainFromQuery = (router.query.chain as string) || 'monad';
+    // Check URL first, then localStorage
+    const chainFromQuery = router.query.chain
+      ? (router.query.chain as string)
+      : getSavedChain();
     if (chainFromQuery !== currentChain) {
       console.log('[Discover] Chain changed from router:', currentChain, '->', chainFromQuery);
       setCurrentChain(chainFromQuery);
     }
   }, [router.query.chain, router.isReady, currentChain]);
-  
+
   // Also watch router.asPath as a fallback for shallow routing
   useEffect(() => {
     if (!router.isReady) return;
     const urlParams = new URLSearchParams(router.asPath.split('?')[1] || '');
-    const chainFromUrl = urlParams.get('chain') || 'sol';
+    const chainFromUrl = urlParams.get('chain') || getSavedChain();
     if (chainFromUrl !== currentChain) {
       console.log('[Discover] Chain changed from URL:', currentChain, '->', chainFromUrl);
       setCurrentChain(chainFromUrl);
@@ -155,7 +173,7 @@ export default function DiscoverPage() {
   }, [router.isReady, router.query.search]);
 
   const { presets, activePreset, setActivePreset } = useQuickBuy();
-  const { user, solBalance, refreshBalance } = useUser();
+  const { user, solBalance, refreshBalance, walletList, walletBalances, selectedWalletIds } = useUser();
 
   // Load quickBuyAmount from localStorage with fallback
   const getInitialQuickBuyAmount = () => {
@@ -1977,17 +1995,55 @@ export default function DiscoverPage() {
       });
 
       // Helper function to attempt buy with a specific launchpad
+      let firstSuccessShown = false;
       const attemptBuy = async (attemptLaunchpad: 'nadfun' | 'flapsh-simple' | 'flapsh-devs') => {
-        return await tradeMonadBuy(
-          {
-            tokenAddress,
-            amountMON: buyAmount,
-            launchpad: attemptLaunchpad,
-            slippage,
-            gasPrice,
+        const { results, totalConsidered } = await executeMonadMultiBuy({
+          tokenAddress,
+          amountMON: buyAmount,
+          launchpad: attemptLaunchpad,
+          slippage,
+          gasPrice,
+          authToken: user.bearerToken,
+          walletList,
+          walletBalances,
+          selectedWalletIds: selectedWalletIds?.monad || [],
+          onWalletSuccess: (ctx) => {
+            if (firstSuccessShown) return;
+            const txHash = (ctx.result as any)?.txHash;
+            const summary = formatMonadTxSummary(txHash ? [txHash] : [], ctx.totalConsidered);
+            const messageEl = document.getElementById(`message-${uniqueToastId}`);
+            if (messageEl) {
+              messageEl.textContent = summary.message;
+            }
+            const checkEl = document.getElementById(`check-${uniqueToastId}`);
+            if (checkEl) {
+              checkEl.style.display = 'block';
+            }
+            const linkEl = document.getElementById(`link-${uniqueToastId}`);
+            if (linkEl) {
+              if (summary.hasMultiple || !txHash) {
+                linkEl.style.display = 'none';
+              } else {
+                const explorerUrl = `https://monadvision.com/tx/${txHash}`;
+                linkEl.innerHTML = `<a href="${explorerUrl}" target="_blank" rel="noopener noreferrer" class="hover:opacity-80 transition-opacity"><img src="https://pbs.twimg.com/profile_images/1749618187489206272/rDaFjEhN_400x400.jpg" alt="Monad" class="w-4 h-4 rounded-full" style="cursor: pointer;" /></a>`;
+                linkEl.style.display = 'inline-flex';
+              }
+            }
+            firstSuccessShown = true;
           },
-          user.bearerToken
-        );
+        });
+
+        const txHashes = results
+          .map((r) => (r.result as any)?.txHash)
+          .filter(Boolean);
+
+        return {
+          success: txHashes.length > 0,
+          txHash: txHashes[0],
+          txHashes,
+          totalConsidered,
+          error: txHashes.length > 0 ? undefined : 'Trade failed',
+        };
       };
 
       // Get token image and name
@@ -2009,7 +2065,7 @@ export default function DiscoverPage() {
             {tokenImage && (
               <img src={tokenImage} alt={tokenName} className="w-5 h-5 rounded-full object-cover flex-shrink-0" style={{ border: '1px solid rgba(255, 255, 255, 0.1)' }} onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
             )}
-            <span className="font-semibold text-sm" style={{ color: '#31e3ac' }}>Trade placed!</span>
+            <span id={`message-${uniqueToastId}`} className="font-semibold text-sm" style={{ color: '#31e3ac' }}>Trade placed!</span>
             <span id={`timer-${uniqueToastId}`} className="text-[#9CA3AF] text-xs ml-1">(0.00s)</span>
             <span id={`link-${uniqueToastId}`} className="inline-flex items-center ml-1" style={{ display: 'none' }}>
               <img src="https://pbs.twimg.com/profile_images/1749618187489206272/rDaFjEhN_400x400.jpg" alt="Monad" className="w-4 h-4 rounded-full" style={{ cursor: 'default' }} />
@@ -2057,13 +2113,28 @@ export default function DiscoverPage() {
           }
         }
 
-        if (result.success && result.txHash) {
+        const txHashesRaw = (result as any)?.txHashes || [];
+        const txHashes = Array.isArray(txHashesRaw) && txHashesRaw.length > 0 ? txHashesRaw : ((result as any)?.txHash ? [(result as any).txHash] : []);
+        const walletsUsed = txHashes.length;
+        const walletsTotal = (result as any)?.totalConsidered || walletsUsed || 1;
+        const summary = formatMonadTxSummary(txHashes, walletsTotal);
+
+        if (result.success && walletsUsed > 0) {
           clearInterval(timerInterval);
-          const explorerUrl = `https://monadvision.com/tx/${result.txHash}`;
-          // Update the link element - wrap Monad logo in anchor to make clickable
+          const messageEl = document.getElementById(`message-${uniqueToastId}`);
+          if (messageEl) {
+            messageEl.textContent = summary.message;
+          }
+          // Update the link element - wrap Monad logo in anchor to make clickable (single-wallet only)
           const linkEl = document.getElementById(`link-${uniqueToastId}`);
           if (linkEl) {
-            linkEl.innerHTML = `<a href="${explorerUrl}" target="_blank" rel="noopener noreferrer" class="hover:opacity-80 transition-opacity"><img src="https://pbs.twimg.com/profile_images/1749618187489206272/rDaFjEhN_400x400.jpg" alt="Monad" class="w-4 h-4 rounded-full" style="cursor: pointer;" /></a>`;
+            if (walletsUsed > 1) {
+              linkEl.style.display = 'none';
+            } else if (txHashes[0]) {
+              const explorerUrl = `https://monadvision.com/tx/${txHashes[0]}`;
+              linkEl.innerHTML = `<a href="${explorerUrl}" target="_blank" rel="noopener noreferrer" class="hover:opacity-80 transition-opacity"><img src="https://pbs.twimg.com/profile_images/1749618187489206272/rDaFjEhN_400x400.jpg" alt="Monad" class="w-4 h-4 rounded-full" style="cursor: pointer;" /></a>`;
+              linkEl.style.display = 'inline-flex';
+            }
           }
           // Auto-dismiss after 10s
           setTimeout(() => {
@@ -2076,8 +2147,9 @@ export default function DiscoverPage() {
             });
           }, 1000);
           broadcastMonadQuickTrade(tokenAddress, 'buy');
-          console.log('✅ Monad Quick Buy successful:', result);
-          return { success: true, txHash: result.txHash };
+          toast.success(summary.message, { duration: 4000 });
+          console.log('✅ Monad Quick Buy successful:', txHashes);
+          return { success: true, txHash: txHashes[0] };
         } else {
           clearInterval(timerInterval);
           const errorMsg = formatMonadError((result as any)?.error);
@@ -2105,6 +2177,12 @@ export default function DiscoverPage() {
       user: { bearerToken: user.bearerToken, id: user.id },
       solBalance: Number(solBalance || 0),
       solPriceUsd: 150, // TODO: Get real SOL price
+      walletContext: {
+        selectedWalletIds: selectedWalletIds?.sol || [],
+        walletList: walletList || [],
+        walletBalances: walletBalances || {},
+        chain: currentChain === 'monad' ? 'monad' : 'sol',
+      },
       refreshBalance,
       onSuccess: (txHash, stats) => {
         console.log('✅ Enhanced Quick Buy successful:', { txHash, stats });

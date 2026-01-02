@@ -7,14 +7,19 @@ const BottomCardHolderInfo: React.FC<{
   green?: boolean;
   tooltip?: string;
   count?: number;
+  iconColor?: string; // Custom color for the icon
 }> = ({
   PassedIcon,
   value,
   green = true,
   tooltip,
-  count
+  count,
+  iconColor
 }) => {
   const [showTooltip, setShowTooltip] = useState(false);
+
+  // Determine the color to use
+  const color = iconColor || (green ? "#31e3ac" : "#f26681");
 
   return (
     <div 
@@ -22,18 +27,51 @@ const BottomCardHolderInfo: React.FC<{
       onMouseEnter={() => setShowTooltip(true)}
       onMouseLeave={() => setShowTooltip(false)}
     >
-      <div className={`flex flex-row items-center gap-1 rounded-lg border border-neutral-700 px-2 py-0.5 text-xs ${green ? `text-emerald-500` : `text-red-500`}`}>
-        <PassedIcon size={12} />
-        {value}%
-      </div>
+      <span
+        className="number-font flex cursor-help items-center gap-1 rounded border px-2 py-1 text-xs transition-all duration-200"
+        style={{
+          color: color,
+          fontSize: "13px",
+          fontWeight: "500",
+          borderColor: "#27282e",
+          backgroundColor: "transparent",
+        }}
+      >
+        <PassedIcon size={16} />
+        <span className="number-font">{value}%</span>
+      </span>
       {showTooltip && (tooltip || count !== undefined) && (
-        <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-2 py-1 bg-gray-900 text-white text-xs rounded shadow-lg z-50 whitespace-nowrap border border-gray-700">
-          {tooltip && <div>{tooltip}</div>}
+        <div
+          className="absolute top-full left-1/2 mt-2 -translate-x-1/2 transform rounded-lg px-4 py-3 text-xs font-medium whitespace-nowrap"
+          style={{
+            backgroundColor: "#16171C",
+            color: "#f0f5f5",
+            border: "1px solid #24252C",
+            minWidth: "240px",
+            zIndex: 4000,
+          }}
+          onMouseEnter={() => setShowTooltip(true)}
+          onMouseLeave={() => setShowTooltip(false)}
+        >
+          <div className="mb-2">
+            <div
+              className="mb-1 text-sm font-semibold"
+              style={{ color: color }}
+            >
+              {tooltip}:{" "}
+              {value}%
+            </div>
+          </div>
           {count !== undefined && (
-            <div className="mt-1 pt-1 border-t border-gray-700">
+            <div className="text-xs" style={{ color: "#9CA3AF" }}>
               Count: {count}
             </div>
           )}
+          {/* Tooltip arrow */}
+          <div
+            className="absolute bottom-full left-1/2 h-0 w-0 -translate-x-1/2 transform border-r-4 border-b-4 border-l-4 border-transparent"
+            style={{ borderBottomColor: "#16171C" }}
+          />
         </div>
       )}
     </div>

@@ -2,7 +2,7 @@ import React, { useEffect, useState, useMemo, useCallback, useRef } from "react"
 import Head from "next/head";
 import Link from "next/link";
 import { useRouter } from "next/router";
-// import PulseTable from "../components/PulseTable";
+import PulseTable from "../components/PulseTable";
 // import BnbTable from "../components/BnbTable";
 import MonadTable from "../components/MonadTable";
 import PulseControlBar from "../components/PulseControlBar";
@@ -106,15 +106,22 @@ export default function PulsePage() {
   
   // CRITICAL: Initialize chain from URL immediately to avoid race conditions
   // This ensures we react to the correct chain before router.query is ready
+  // Priority: URL param > localStorage > default (monad)
   const [currentChain, setCurrentChain] = useState<string>(() => {
     // Initialize from router query if available, otherwise check URL directly
-    if (typeof window !== 'undefined' && router.isReady) {
-      return (router.query.chain as string) || 'monad';
+    if (typeof window !== 'undefined' && router.isReady && router.query.chain) {
+      return router.query.chain as string;
     }
     // Also check URL params directly for immediate access
     if (typeof window !== 'undefined') {
       const urlParams = new URLSearchParams(window.location.search);
-      return urlParams.get('chain') || 'monad';
+      const chainFromUrl = urlParams.get('chain');
+      if (chainFromUrl) return chainFromUrl;
+      // Check localStorage for persisted chain
+      const savedChain = localStorage.getItem('selected-chain');
+      if (savedChain && (savedChain === 'sol' || savedChain === 'monad')) {
+        return savedChain;
+      }
     }
     return 'monad';
   });
@@ -122,19 +129,23 @@ export default function PulsePage() {
   // Sync chain state with router query - this handles both initial load and shallow routing updates
   useEffect(() => {
     if (!router.isReady) return;
-    const chainFromQuery = (router.query.chain as string) || 'monad';
-    if (chainFromQuery !== currentChain) {
-      console.log('[Pulse] Chain changed from router:', currentChain, '->', chainFromQuery);
-      setCurrentChain(chainFromQuery);
+    // Only update if there's an explicit chain in the query
+    if (router.query.chain) {
+      const chainFromQuery = router.query.chain as string;
+      if (chainFromQuery !== currentChain) {
+        console.log('[Pulse] Chain changed from router:', currentChain, '->', chainFromQuery);
+        setCurrentChain(chainFromQuery);
+      }
     }
   }, [router.query.chain, router.isReady, currentChain]);
-  
+
   // Also watch router.asPath as a fallback for shallow routing
   useEffect(() => {
     if (!router.isReady) return;
     const urlParams = new URLSearchParams(router.asPath.split('?')[1] || '');
-    const chainFromUrl = urlParams.get('chain') || 'monad';
-    if (chainFromUrl !== currentChain) {
+    const chainFromUrl = urlParams.get('chain');
+    // Only update if there's an explicit chain in the URL
+    if (chainFromUrl && chainFromUrl !== currentChain) {
       console.log('[Pulse] Chain changed from URL:', currentChain, '->', chainFromUrl);
       setCurrentChain(chainFromUrl);
     }
@@ -146,6 +157,16 @@ export default function PulsePage() {
   // const isBaseRoute = chain === 'base';
   // const isEthereumRoute = chain === 'eth';
   const isSolanaRoute = chain === 'sol'; // Only Solana if explicitly set
+
+  // Debug logging for chain state
+  console.log('[Pulse] Chain state:', {
+    currentChain,
+    chain,
+    isMonadRoute,
+    isSolanaRoute,
+    routerQueryChain: router.query.chain,
+    routerAsPath: router.asPath,
+  });
   const chainButtonBase =
     "relative inline-flex h-8 w-8 items-center justify-center rounded-full border border-[#20232b] bg-[#171920] text-neutral-300 shadow-sm transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/40 focus-visible:ring-offset-2 focus-visible:ring-offset-[#06070b]";
   const solanaButtonClasses = `${chainButtonBase} ${
@@ -174,11 +195,16 @@ export default function PulsePage() {
   //     : 'bg-[#141821] text-neutral-500 opacity-75 hover:opacity-100 hover:text-neutral-100'
   // }`;
 
-  // Redirect to /pulse?chain=monad if no chain parameter is present
+  // Redirect to /pulse?chain=X if no chain parameter is present
+  // Use saved chain from localStorage, or default to monad
   useEffect(() => {
     if (router.isReady && !router.query.chain) {
-      router.replace("/pulse?chain=monad", undefined, { shallow: true });
-      setCurrentChain('monad');
+      const savedChain = typeof window !== 'undefined'
+        ? localStorage.getItem('selected-chain')
+        : null;
+      const chainToUse = (savedChain === 'sol' || savedChain === 'monad') ? savedChain : 'monad';
+      router.replace(`/pulse?chain=${chainToUse}`, undefined, { shallow: true });
+      setCurrentChain(chainToUse);
     }
   }, [router.isReady, router.query.chain, router]);
 
@@ -240,87 +266,65 @@ export default function PulsePage() {
   // CRITICAL: Only enable Solana data fetching when NOT on Monad route
   // This prevents Solana data from loading when on Monad chain
   // Wait for router to be ready before determining which chain we're on
-  // COMMENTED OUT: PulseTable is disabled, so these hooks are disabled too
-  const shouldFetchSolanaData = false; // router.isReady && !isMonadRoute;
+  const shouldFetchSolanaData = router.isReady && !isMonadRoute;
   
-  // const {
-  //   data: tokens = [],
-  //   isLoading: tokensLoading,
-  //   error: tokensError,
-  //   isStale: tokensStale,
-  //   refetch: refreshTokens,
-  //   dataUpdatedAt,
-  //   isFetching,
-  // } = useQueryNewPairs(shouldFetchSolanaData);
+  const {
+    data: tokens = [],
+    isLoading: tokensLoading,
+    error: tokensError,
+    isStale: tokensStale,
+    refetch: refreshTokens,
+    dataUpdatedAt,
+    isFetching,
+  } = useQueryNewPairs(shouldFetchSolanaData);
 
-  // const {
-  //   data: launchpadData = { new: [], completing: [], completed: [] },
-  //   isLoading: launchpadLoading,
-  //   error: launchpadError,
-  //   isStale: launchpadStale,
-  //   refetch: refreshLaunchpadData,
-  // } = useQueryLaunchpadData(shouldFetchSolanaData);
+  const {
+    data: launchpadData = { new: [], completing: [], completed: [] },
+    isLoading: launchpadLoading,
+    error: launchpadError,
+    isStale: launchpadStale,
+    refetch: refreshLaunchpadData,
+  } = useQueryLaunchpadData(shouldFetchSolanaData);
 
-  // const { data: finalStretchTokensQuery = [] } = useQueryFinalStretch(shouldFetchSolanaData);
+  const { data: finalStretchTokensQuery = [] } = useQueryFinalStretch(shouldFetchSolanaData);
 
-  // const { data: migratedTokensQuery = [] } = useQueryMigrated(shouldFetchSolanaData);
-
-  // Placeholder values since hooks are commented out
-  const tokens: Token[] = [];
-  const tokensLoading = false;
-  const tokensError = null;
-  const tokensStale = false;
-  const refreshTokens = () => {};
-  const dataUpdatedAt = 0;
-  const isFetching = false;
-  const launchpadData: LaunchpadData = { new: [], completing: [], completed: [] };
-  const launchpadLoading = false;
-  const launchpadError = null;
-  const launchpadStale = false;
-  const refreshLaunchpadData = () => {};
-  const finalStretchTokensQuery: Token[] = [];
-  const migratedTokensQuery: Token[] = [];
+  const { data: migratedTokensQuery = [] } = useQueryMigrated(shouldFetchSolanaData);
 
   // ✅ REAL-TIME WEBSOCKET: Direct cache updates (NO REFETCH)
   // Only enable WebSocket for Solana route, not Monad
-  // COMMENTED OUT: PulseTable is disabled, so WebSocket is disabled too
-  // const { connected: pulseWsConnected, error: pulseWsError } = usePulseWebSocket({
-  //   enabled: shouldFetchSolanaData, // Only enable WebSocket for Solana route
-  //   onNewToken: useCallback((token) => {
-  //     console.log('[Pulse] 🔥 WebSocket: New token received, adding to cache!', token.mint);
+  const { connected: pulseWsConnected, error: pulseWsError } = usePulseWebSocket({
+    enabled: shouldFetchSolanaData, // Only enable WebSocket for Solana route
+    onNewToken: useCallback((token) => {
+      console.log('[Pulse] 🔥 WebSocket: New token received, adding to cache!', token.mint);
 
-  //     // Directly update cache without triggering refetch
-  //     queryClient.setQueryData(tokenKeys.trenches.newPairs(), (oldData: any[] | undefined) => {
-  //       if (!oldData) return [token];
+      // Directly update cache without triggering refetch
+      queryClient.setQueryData(tokenKeys.trenches.newPairs(), (oldData: any[] | undefined) => {
+        if (!oldData) return [token];
 
-  //       // Deduplicate by mint and prepend new token
-  //       const filtered = oldData.filter((t: any) => t.mint !== token.mint);
-  //       return [token, ...filtered].slice(0, 200); // Keep max 200 tokens
-  //     });
-  //   }, [queryClient]),
-  //   onFinalStretchToken: useCallback((token) => {
-  //     console.log('[Pulse] 🎯 WebSocket: Final stretch token received, adding to cache!', token.mint);
+        // Deduplicate by mint and prepend new token
+        const filtered = oldData.filter((t: any) => t.mint !== token.mint);
+        return [token, ...filtered].slice(0, 200); // Keep max 200 tokens
+      });
+    }, [queryClient]),
+    onFinalStretchToken: useCallback((token) => {
+      console.log('[Pulse] 🎯 WebSocket: Final stretch token received, adding to cache!', token.mint);
 
-  //     queryClient.setQueryData(tokenKeys.trenches.finalStretch(), (oldData: any[] | undefined) => {
-  //       if (!oldData) return [token];
-  //       const filtered = oldData.filter((t: any) => t.mint !== token.mint);
-  //       return [token, ...filtered].slice(0, 50);
-  //     });
-  //   }, [queryClient]),
-  //   onMigratedToken: useCallback((token) => {
-  //     console.log('[Pulse] ✅ WebSocket: Migrated token received, adding to cache!', token.mint);
+      queryClient.setQueryData(tokenKeys.trenches.finalStretch(), (oldData: any[] | undefined) => {
+        if (!oldData) return [token];
+        const filtered = oldData.filter((t: any) => t.mint !== token.mint);
+        return [token, ...filtered].slice(0, 50);
+      });
+    }, [queryClient]),
+    onMigratedToken: useCallback((token) => {
+      console.log('[Pulse] ✅ WebSocket: Migrated token received, adding to cache!', token.mint);
 
-  //     queryClient.setQueryData(tokenKeys.trenches.migrated(), (oldData: any[] | undefined) => {
-  //       if (!oldData) return [token];
-  //       const filtered = oldData.filter((t: any) => t.mint !== token.mint);
-  //       return [token, ...filtered].slice(0, 50);
-  //     });
-  //   }, [queryClient]),
-  // });
-
-  // Placeholder values since WebSocket is commented out
-  const pulseWsConnected = false;
-  const pulseWsError = null;
+      queryClient.setQueryData(tokenKeys.trenches.migrated(), (oldData: any[] | undefined) => {
+        if (!oldData) return [token];
+        const filtered = oldData.filter((t: any) => t.mint !== token.mint);
+        return [token, ...filtered].slice(0, 50);
+      });
+    }, [queryClient]),
+  });
 
   // State for HTTP polling data - no localStorage caching for fresh data always
   const [httpNew, setHttpNew] = useState<any[]>([]);
@@ -1070,8 +1074,8 @@ export default function PulsePage() {
   }, [httpNew]);
 
   // Track websocket connection status
-  const wsPulseConnected = false;
-  const wsPulseError = null;
+  const wsPulseConnected = pulseWsConnected;
+  const wsPulseError = pulseWsError;
   useEffect(() => {
     // Optional: Add minimal logging if needed for debugging
   }, [wsPulseConnected, wsPulseError]);
@@ -1171,89 +1175,86 @@ export default function PulsePage() {
       return;
     }
 
-    // COMMENTED OUT: PulseTable is disabled, so Solana API calls are disabled
-    return;
+    const fetchInitialMigratedTokens = async () => {
+      try {
+        console.log(`[Pulse] 🔄 Fetching initial migrated tokens...`);
+        // Use Next.js proxy to avoid CORS issues
+        const endpoint = `/api/token-service/pulse-migrated?limit=70`;
+        console.log(`[Pulse] 🔄 URL:`, endpoint);
+        console.log(`[Pulse] 🔄 Chain: Solana`);
+        const response = await fetch(endpoint, {
+          cache: 'no-store',
+          headers: {
+            'Cache-Control': 'no-cache',
+            'Pragma': 'no-cache'
+          }
+        });
+        console.log(`[Pulse] 🔄 Response status:`, response.status);
+        if (response.ok) {
+          const data = await response.json();
+          console.log(
+            `[Pulse] 🔄 Fetched ${data.length} migrated tokens from API`,
+          );
+          if (data.length > 0) {
+            const filteredData = data.filter((token: any) => {
+              if (!token) return false;
 
-    // const fetchInitialMigratedTokens = async () => {
-    //   try {
-    //     console.log(`[Pulse] 🔄 Fetching initial migrated tokens...`);
-    //     // Use Next.js proxy to avoid CORS issues
-    //     const endpoint = `/api/token-service/pulse-migrated?limit=70`;
-    //     console.log(`[Pulse] 🔄 URL:`, endpoint);
-    //     console.log(`[Pulse] 🔄 Chain: Solana`);
-    //     const response = await fetch(endpoint, {
-    //       cache: 'no-store',
-    //       headers: {
-    //         'Cache-Control': 'no-cache',
-    //         'Pragma': 'no-cache'
-    //       }
-    //     });
-    //     console.log(`[Pulse] 🔄 Response status:`, response.status);
-    //     if (response.ok) {
-    //       const data = await response.json();
-    //       console.log(
-    //         `[Pulse] 🔄 Fetched ${data.length} migrated tokens from API`,
-    //       );
-    //       if (data.length > 0) {
-    //         const filteredData = data.filter((token: any) => {
-    //           if (!token) return false;
+              if (isZeroLiquidityToken(token)) {
+                console.log(
+                  "[Pulse] ⛔ Skipping migrated token with zero liquidity:",
+                  token?.name,
+                  token?.mint,
+                );
+                return false;
+              }
 
-    //           if (isZeroLiquidityToken(token)) {
-    //             console.log(
-    //               "[Pulse] ⛔ Skipping migrated token with zero liquidity:",
-    //               token?.name,
-    //               token?.mint,
-    //             );
-    //             return false;
-    //           }
+              return true;
+            });
 
-    //           return true;
-    //         });
+            if (filteredData.length === 0) {
+              console.log(
+                "[Pulse] ⚠️ All migrated tokens filtered due to zero liquidity. Clearing migrated list.",
+              );
+              setHttpMigrated([]);
+              setHttpMigratedTick((prev) => prev + 1);
+              return;
+            }
 
-    //         if (filteredData.length === 0) {
-    //           console.log(
-    //             "[Pulse] ⚠️ All migrated tokens filtered due to zero liquidity. Clearing migrated list.",
-    //           );
-    //           setHttpMigrated([]);
-    //           setHttpMigratedTick((prev) => prev + 1);
-    //           return;
-    //         }
+            // Add timestamp to each token for proper sorting
+            const tokensWithTimestamp = filteredData.map((token: any) => ({
+              ...token,
+              created_at: token.migrated_time || new Date().toISOString(),
+              timestamp: Date.now(),
+            }));
+            console.log(
+              `[Pulse] 🔄 BEFORE setHttpMigrated - current count: ${httpMigrated.length}`,
+            );
+            setHttpMigrated(tokensWithTimestamp);
+            setHttpMigratedTick((prev) => prev + 1);
+            console.log(
+              `[Pulse] 🔄 Set initial migrated tokens:`,
+              tokensWithTimestamp.map((t) => t.name),
+            );
+            console.log(
+              `[Pulse] 🔄 AFTER setHttpMigrated - should be ${tokensWithTimestamp.length} tokens`,
+            );
+          }
+        } else {
+          console.error(
+            `[Pulse] ❌ HTTP error:`,
+            response.status,
+            response.statusText,
+          );
+        }
+      } catch (error) {
+        console.error(
+          `[Pulse] ❌ Failed to fetch initial migrated tokens:`,
+          error,
+        );
+      }
+    };
 
-    //         // Add timestamp to each token for proper sorting
-    //         const tokensWithTimestamp = filteredData.map((token: any) => ({
-    //           ...token,
-    //           created_at: token.migrated_time || new Date().toISOString(),
-    //           timestamp: Date.now(),
-    //         }));
-    //         console.log(
-    //           `[Pulse] 🔄 BEFORE setHttpMigrated - current count: ${httpMigrated.length}`,
-    //         );
-    //         setHttpMigrated(tokensWithTimestamp);
-    //         setHttpMigratedTick((prev) => prev + 1);
-    //         console.log(
-    //           `[Pulse] 🔄 Set initial migrated tokens:`,
-    //           tokensWithTimestamp.map((t) => t.name),
-    //         );
-    //         console.log(
-    //           `[Pulse] 🔄 AFTER setHttpMigrated - should be ${tokensWithTimestamp.length} tokens`,
-    //         );
-    //       }
-    //     } else {
-    //       console.error(
-    //         `[Pulse] ❌ HTTP error:`,
-    //         response.status,
-    //         response.statusText,
-    //       );
-    //     }
-    //   } catch (error) {
-    //     console.error(
-    //       `[Pulse] ❌ Failed to fetch initial migrated tokens:`,
-    //       error,
-    //     );
-    //   }
-    // };
-
-    // fetchInitialMigratedTokens();
+    fetchInitialMigratedTokens();
   }, [isMonadRoute]); // Re-run when chain changes
 
   // Debug: log top entries order and timestamps (after data is computed)
@@ -1384,28 +1385,28 @@ export default function PulsePage() {
               <div className="flex items-center gap-3">
                 <h1 className="text-xl font-bold">Trenches</h1>
                 <div className="flex items-center gap-3">
-                  <Link
-                    href="/pulse?chain=monad"
-                    aria-label="View Monad tokens"
-                    className={monadButtonClasses}
-                  >
-                    <img
-                      src="https://i0.wp.com/www.gizmotimes.com/wp-content/uploads/2023/10/Monad-Logo.png?fit=1920%2C1080&ssl=1"
-                      alt="Monad"
-                      className="h-7 w-7 rounded-full object-cover"
-                    />
-                  </Link>
-                  {/* <Link
-                    href="/pulse?chain=sol"
-                    aria-label="View Solana tokens"
-                    className={solanaButtonClasses}
-                  >
-                    <img
-                      src="https://raw.githubusercontent.com/solana-labs/token-list/main/assets/mainnet/So11111111111111111111111111111111111111112/logo.png"
-                      alt="Solana"
-                      className="h-6 w-6 rounded-full object-contain mix-blend-screen contrast-[1.2]"
-                    />
-                  </Link> */}
+                <Link
+                  href="/pulse?chain=monad"
+                  aria-label="View Monad tokens"
+                  className={monadButtonClasses}
+                >
+                  <img
+                    src="https://i0.wp.com/www.gizmotimes.com/wp-content/uploads/2023/10/Monad-Logo.png?fit=1920%2C1080&ssl=1"
+                    alt="Monad"
+                    className="h-7 w-7 rounded-full object-cover"
+                  />
+                </Link>
+                <Link
+                  href="/pulse?chain=sol"
+                  aria-label="View Solana tokens"
+                  className={solanaButtonClasses}
+                >
+                  <img
+                    src="https://raw.githubusercontent.com/solana-labs/token-list/main/assets/mainnet/So11111111111111111111111111111111111111112/logo.png"
+                    alt="Solana"
+                    className="h-6 w-6 rounded-full object-contain mix-blend-screen contrast-[1.2]"
+                  />
+                </Link>
                   {/* <Link
                     href="/pulse?chain=bnb"
                     aria-label="View BNB tokens (beta)"
@@ -1604,42 +1605,26 @@ export default function PulsePage() {
                   loading={false}
                   isFirstOrLast="first"
                   showBubbleMetrics={false}
+                  currentChain={currentChain}
                 />
                 <MonadTable
                   title="Final Stretch"
                   tokens={enrichedFinalStretch}
                   showBubbleMetrics={false}
+                  currentChain={currentChain}
                 />
                 <MonadTable
                   title="Migrated"
                   tokens={enrichedMigrated}
                   isFirstOrLast="last"
                   showBubbleMetrics={false}
+                  currentChain={currentChain}
                 />
               </div>
             </div>
           ) : isLoading ? (
             <div className="flex min-h-0 w-full flex-1 flex-col overflow-hidden">
-              {/* Mobile: Single table based on active tab - MOBILE VIEW DISABLED
-              <div className="lg:hidden">
-                <PulseTable
-                  title={
-                    activeTab === "new"
-                      ? "New Pairs"
-                      : activeTab === "final-stretch"
-                        ? "Final Stretch"
-                        : "Migrated"
-                  }
-                  tokens={[]}
-                  loading
-                  skeletonRowCount={10}
-                  isFirstOrLast="only"
-                  showBubbleMetrics={false}
-                />
-              </div>
-              */}
-              {/* All tables horizontally - always visible */}
-              {/* <div className="flex min-h-0 w-full flex-1 flex-row overflow-hidden">
+              <div className="flex min-h-0 w-full flex-1 flex-row overflow-hidden">
                 <PulseTable
                   title="New Pairs"
                   tokens={[]}
@@ -1647,6 +1632,7 @@ export default function PulsePage() {
                   skeletonRowCount={10}
                   isFirstOrLast="first"
                   showBubbleMetrics={false}
+                  currentChain={currentChain}
                 />
                 <PulseTable
                   title="Final Stretch"
@@ -1654,6 +1640,7 @@ export default function PulsePage() {
                   loading
                   skeletonRowCount={10}
                   showBubbleMetrics={false}
+                  currentChain={currentChain}
                 />
                 <PulseTable
                   title="Migrated"
@@ -1662,8 +1649,9 @@ export default function PulsePage() {
                   skeletonRowCount={10}
                   isFirstOrLast="last"
                   showBubbleMetrics={false}
+                  currentChain={currentChain}
                 />
-              </div> */}
+              </div>
             </div>
           ) : hasError ? (
             <div className="py-10 text-center text-red-400">
@@ -1680,58 +1668,29 @@ export default function PulsePage() {
             </div>
           ) : (
             <div className="flex min-h-0 w-full flex-1 flex-col overflow-hidden">
-              {/* Mobile: Single table based on active tab - MOBILE VIEW DISABLED
-              <div className="flex min-h-0 flex-1 flex-col overflow-hidden lg:hidden">
-                <div className="flex min-h-0 flex-1 flex-col overflow-hidden transition-all duration-300 ease-in-out">
-                  {activeTab === "new" && (
-                    <PulseTable
-                      title="New Pairs"
-                      tokens={enrichedNewPairsToShow as any}
-                      loading={newPairsLoading}
-                      isFirstOrLast="only"
-                      showBubbleMetrics={false}
-                    />
-                  )}
-                  {activeTab === "final-stretch" && (
-                    <PulseTable
-                      title="Final Stretch"
-                      tokens={enrichedFinalStretch as any}
-                      isFirstOrLast="only"
-                      showBubbleMetrics={false}
-                    />
-                  )}
-                  {activeTab === "migrated" && (
-                    <PulseTable
-                      title="Migrated"
-                      tokens={enrichedMigrated as any}
-                      isFirstOrLast="only"
-                      showBubbleMetrics={false}
-                    />
-                  )}
-                </div>
-              </div>
-              */}
-              {/* All tables horizontally - always visible */}
-              {/* <div className="flex min-h-0 w-full flex-1 flex-row overflow-hidden">
+              <div className="flex min-h-0 w-full flex-1 flex-row overflow-hidden">
                 <PulseTable
                   title="New Pairs"
                   tokens={enrichedNewPairsToShow as any}
                   loading={newPairsLoading}
                   isFirstOrLast="first"
                   showBubbleMetrics={false}
+                  currentChain={currentChain}
                 />
                 <PulseTable
                   title="Final Stretch"
                   tokens={enrichedFinalStretch as any}
                   showBubbleMetrics={false}
+                  currentChain={currentChain}
                 />
                 <PulseTable
                   title="Migrated"
                   tokens={enrichedMigrated as any}
                   isFirstOrLast="last"
                   showBubbleMetrics={false}
+                  currentChain={currentChain}
                 />
-              </div> */}
+              </div>
             </div>
           )}
         </div>

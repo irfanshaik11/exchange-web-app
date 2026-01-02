@@ -67,7 +67,8 @@ interface CacheStats {
  */
 export default function useInitialTradeData(
   pairAddress: string | null,
-  tokenAddress?: string
+  tokenAddress?: string,
+  chain: 'sol' | 'monad' = 'sol'
 ): UseInitialTradeDataResult {
   const [data, setData] = useState<InitialTradeDataResponse | null>(null);
   const [loading, setLoading] = useState(false); // Start with false for faster initial render
@@ -227,11 +228,20 @@ export default function useInitialTradeData(
 
       // OHLC data (if we have token address)
       if (token) {
-        const ohlcUrl = new URL(`${baseUrl}/v1/trade/ohlc-data`);
-        ohlcUrl.searchParams.set('mint', token);
-        ohlcUrl.searchParams.set('interval', '1h');
-        ohlcUrl.searchParams.set('timeframe', '7d'); // Reduced timeframe for faster loading
-        
+        let ohlcUrl: URL;
+        if (chain === 'monad') {
+          // Monad uses old endpoint format
+          ohlcUrl = new URL(`${env.NEXT_PUBLIC_MONAD_TOKEN_SERVICE_URL}/v1/trade/ohlc-data`);
+          ohlcUrl.searchParams.set('mint', token);
+          ohlcUrl.searchParams.set('interval', '1h');
+          ohlcUrl.searchParams.set('timeframe', '7d');
+        } else {
+          // Solana uses new /v1/ohlcv/{tokenAddress} endpoint with 1s candles
+          ohlcUrl = new URL(`${baseUrl}/v1/ohlcv/${token}`);
+          ohlcUrl.searchParams.set('timeframe', '1s');
+          ohlcUrl.searchParams.set('limit', '500');
+        }
+
         requests.push(
           fetch(ohlcUrl.toString(), {
             headers: {
@@ -280,7 +290,24 @@ export default function useInitialTradeData(
       // Parse OHLC data if available
       if (ohlcResponse && ohlcResponse.ok) {
         try {
-          ohlcData = await ohlcResponse.json();
+          const rawOhlc = await ohlcResponse.json();
+          // Handle different response formats: Solana uses candles[], Monad uses data.items[]
+          if (chain === 'sol' && rawOhlc?.candles) {
+            ohlcData = {
+              data: {
+                items: rawOhlc.candles.map((c: any) => ({
+                  unix_time: c.time || c.unix_time,
+                  o: c.open ?? c.o,
+                  h: c.high ?? c.h,
+                  l: c.low ?? c.l,
+                  c: c.close ?? c.c,
+                  v_usd: c.volume ?? c.volume_usd ?? c.v_usd ?? 0,
+                }))
+              }
+            };
+          } else {
+            ohlcData = rawOhlc;
+          }
           console.log(`[useInitialTradeData] Fetched ${ohlcData?.data?.items?.length || 0} OHLC candles`);
         } catch (err) {
           console.warn('[useInitialTradeData] Failed to parse OHLC data:', err);
@@ -328,6 +355,7 @@ export default function useInitialTradeData(
       setData(null);
       setLoading(false);
       setIsFromCache(false);
+      setCachedTokenMetadata(null); // Reset cached metadata to prevent stale data
       return;
     }
 
@@ -336,6 +364,9 @@ export default function useInitialTradeData(
     const loadData = async () => {
       setLoading(true);
       setError(null);
+      // Clear previous cached data immediately to prevent showing stale data
+      setCachedTokenMetadata(null);
+      setData(null);
 
       // Step 0: Load cached token metadata for instant display
       const cachedMetadata = getCachedTokenMetadata(pairAddress);

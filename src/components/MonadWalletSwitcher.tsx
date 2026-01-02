@@ -1,10 +1,13 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { createPortal } from 'react-dom';
-import { FaWallet, FaTimes, FaCopy, FaCheck } from 'react-icons/fa';
+import { FaWallet, FaTimes, FaCopy, FaCheck, FaStar, FaRegStar } from 'react-icons/fa';
+import { IoIosGitNetwork } from "react-icons/io";
+import { PiNetwork } from "react-icons/pi";
 import { useUser } from './UserContext';
 import { useSolPrice } from './SolPriceContext';
 import toast from 'react-hot-toast';
 import { normalizeMonadAddress } from '~/utils/normalizeMonadAddress';
+import { redistributeWalletFunds } from '~/utils/api';
 
 interface UserWallet {
   id: string;
@@ -53,12 +56,17 @@ const normalizeWalletFromApi = (wallet: any, index: number): UserWallet => {
 };
 
 export default function MonadWalletSwitcher({ isOpen, onClose }: MonadWalletSwitcherProps) {
-  const { user, refreshBalance, refreshAllBalances, walletBalances: contextWalletBalances, walletList: contextWalletList, walletListLoading, refreshWalletList } = useUser();
+  const { user, refreshBalance, refreshAllBalances, walletBalances: contextWalletBalances, walletList: contextWalletList, walletListLoading, refreshWalletList, selectedWalletIds, setSelectedWalletsForChain, selectAllWalletsForChain, selectWalletsWithFunds } = useUser();
   const { monPrice } = useSolPrice();
   const [wallets, setWallets] = useState<UserWallet[]>([]);
   const [loading, setLoading] = useState(false);
   const [copiedAddress, setCopiedAddress] = useState<string | null>(null);
   const isUpdatingPrimaryRef = useRef(false);
+  const [redistributing, setRedistributing] = useState(false);
+  const selectedSet = useMemo(() => new Set(selectedWalletIds.monad || []), [selectedWalletIds.monad]);
+  const selectedCount = wallets.filter((w) => selectedSet.has(w.id)).length;
+  const totalCount = wallets.length;
+  const isAllSelected = selectedCount > 0 && selectedCount === totalCount;
 
   // Sync wallets from centralized context - filter for Monad wallets only
   useEffect(() => {
@@ -169,6 +177,56 @@ export default function MonadWalletSwitcher({ isOpen, onClose }: MonadWalletSwit
     toast.success("Address copied");
   };
 
+  const handleToggleSelection = (walletId: string) => {
+    const next = new Set(selectedSet);
+    if (next.has(walletId)) {
+      next.delete(walletId);
+    } else {
+      next.add(walletId);
+    }
+    setSelectedWalletsForChain(Array.from(next), "monad");
+  };
+
+  const handleSelectAllToggle = () => {
+    if (isAllSelected) {
+      setSelectedWalletsForChain([], "monad");
+    } else {
+      selectAllWalletsForChain("monad");
+    }
+  };
+
+  const handleSelectAllWithFunds = () => {
+    selectWalletsWithFunds("monad");
+  };
+
+  const handleRedistribute = async (mode: "split" | "consolidate") => {
+    if (!user?.bearerToken) {
+      toast.error("Please log in first");
+      return;
+    }
+    const ids = Array.from(selectedSet);
+    if (!ids.length) {
+      toast.error("Select at least one wallet");
+      return;
+    }
+    setRedistributing(true);
+    try {
+      const resp = await redistributeWalletFunds(
+        { chain: "monad", mode, walletIds: ids },
+        user.bearerToken
+      );
+      toast.success(
+        `${mode === "consolidate" ? "Consolidated" : "Split"}: ${resp.summary?.sent ?? 0} sent`
+      );
+      await refreshWalletList(true);
+    } catch (error: any) {
+      console.error("Redistribute failed:", error);
+      toast.error(error?.message || "Failed to redistribute");
+    } finally {
+      setRedistributing(false);
+    }
+  };
+
   if (!isOpen) return null;
 
   const modalContent = (
@@ -197,12 +255,80 @@ export default function MonadWalletSwitcher({ isOpen, onClose }: MonadWalletSwit
             <h2 className="text-sm font-semibold" style={{ color: AX.text }}>
               Monad Wallets
             </h2>
+            <span className="text-[11px]" style={{ color: AX.muted }}>
+              {selectedCount}/{totalCount || 0} selected
+            </span>
           </div>
           <button
             onClick={onClose}
             className="text-gray-400 hover:text-white transition-colors"
           >
             <FaTimes size={14} />
+          </button>
+        </div>
+
+        <div className="flex gap-2 p-3 border-b" style={{ borderColor: AX.border }}>
+          <button
+            onClick={handleSelectAllToggle}
+            className="flex-1 px-3 py-2 rounded-md text-xs font-medium transition-all duration-300"
+            style={{
+              backgroundColor: AX.surface,
+              color: AX.text,
+              border: `1px solid ${AX.border}`,
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.backgroundColor = AX.surface2;
+              e.currentTarget.style.borderColor = AX.mint;
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.backgroundColor = AX.surface;
+              e.currentTarget.style.borderColor = AX.border;
+            }}
+          >
+            {isAllSelected ? "Unselect All" : "Select All"}
+          </button>
+          <button
+            onClick={handleSelectAllWithFunds}
+            className="flex-1 px-3 py-2 rounded-md text-xs font-medium transition-all duration-300"
+            style={{
+              backgroundColor: AX.surface,
+              color: AX.muted,
+              border: `1px solid ${AX.border}`,
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.backgroundColor = AX.surface2;
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.backgroundColor = AX.surface;
+            }}
+          >
+            Select All with Funds
+          </button>
+          <button
+            onClick={() => handleRedistribute("consolidate")}
+            className="flex-1 px-3 py-2 rounded-md text-xs font-medium transition-all duration-300 flex items-center justify-center gap-1 disabled:opacity-60"
+            style={{
+              backgroundColor: AX.surface,
+              color: AX.text,
+              border: `1px solid ${AX.border}`,
+            }}
+            disabled={redistributing}
+          >
+            <IoIosGitNetwork size={14} />
+            {redistributing ? "Working..." : "Consolidate"}
+          </button>
+          <button
+            onClick={() => handleRedistribute("split")}
+            className="flex-1 px-3 py-2 rounded-md text-xs font-medium transition-all duration-300 flex items-center justify-center gap-1 disabled:opacity-60"
+            style={{
+              backgroundColor: AX.surface,
+              color: AX.text,
+              border: `1px solid ${AX.border}`,
+            }}
+            disabled={redistributing}
+          >
+            <PiNetwork size={14} />
+            {redistributing ? "Working..." : "Split"}
           </button>
         </div>
 
@@ -222,82 +348,93 @@ export default function MonadWalletSwitcher({ isOpen, onClose }: MonadWalletSwit
               </span>
             </div>
           ) : (
-            wallets.map((wallet) => (
-              <div 
-                key={wallet.id}
-                className="flex items-center gap-3 p-3 border-b transition-all"
-                style={{ 
-                  borderColor: AX.border,
-                  backgroundColor: wallet.isPrimary ? `${AX.mint}10` : 'transparent'
-                }}
-              >
-                {/* Primary Wallet Indicator */}
-                <button
-                  onClick={() => handleSetPrimaryWallet(wallet.id)}
-                  className="flex-shrink-0 w-5 h-5 rounded border-2 flex items-center justify-center transition-all"
-                  style={{
-                    borderColor: wallet.isPrimary ? AX.orange : AX.border,
-                    backgroundColor: wallet.isPrimary ? AX.orange : 'transparent'
+            wallets.map((wallet) => {
+              const isSelected = selectedSet.has(wallet.id);
+              return (
+                <div 
+                  key={wallet.id}
+                  className="group flex items-center gap-3 p-3 border-b transition-all"
+                  style={{ 
+                    borderColor: AX.border,
+                    backgroundColor: isSelected ? `${AX.mint}10` : 'transparent'
                   }}
-                  title={wallet.isPrimary ? "Primary wallet" : "Set as primary wallet"}
                 >
-                  {wallet.isPrimary && (
-                    <div className="w-2.5 h-2.5 bg-white rounded-sm" />
-                  )}
-                </button>
-
-                {/* Wallet Info */}
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 mb-1">
-                    <span className="text-sm font-medium" style={{ color: AX.text }}>
-                      {wallet.label}
-                    </span>
-                    {wallet.isPrimary && (
-                      <span 
-                        className="text-[10px] px-1.5 py-0.5 rounded"
-                        style={{ 
-                          backgroundColor: `${AX.orange}20`,
-                          color: AX.orange 
-                        }}
-                      >
-                        Primary
-                      </span>
-                    )}
+                  {/* Selection / Primary Indicator */}
+                  <div
+                    className="flex-shrink-0 w-6 h-6 rounded border-2 flex items-center justify-center transition-all cursor-pointer"
+                    style={{
+                      borderColor: wallet.isPrimary ? AX.orange : isSelected ? AX.mint : AX.border,
+                      boxShadow: isSelected ? `0 0 0 1px ${AX.mint}` : "none",
+                      backgroundColor: wallet.isPrimary ? `${AX.orange}33` : isSelected ? `${AX.mint}20` : "transparent",
+                    }}
+                    onClick={() => handleToggleSelection(wallet.id)}
+                    title={isSelected ? "Unselect wallet" : "Select wallet for trading"}
+                  >
+                    {wallet.isPrimary && <div className="w-2 h-2 rounded-sm" style={{ backgroundColor: AX.orange }} />}
+                    {!wallet.isPrimary && isSelected && <div className="w-2.5 h-2.5 rounded-sm" style={{ backgroundColor: AX.mint }} />}
                   </div>
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs font-mono" style={{ color: AX.muted }}>
-                      {wallet.ethereumAddress.length > 12 
-                        ? `${wallet.ethereumAddress.slice(0, 6)}...${wallet.ethereumAddress.slice(-4)}`
-                        : wallet.ethereumAddress}
+
+                  {/* Wallet Info */}
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 mb-1">
+                      <span className="text-sm font-medium" style={{ color: wallet.isPrimary ? AX.orange : AX.text }}>
+                        {wallet.label}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-mono" style={{ color: AX.muted }}>
+                        {wallet.ethereumAddress.length > 12 
+                          ? `${wallet.ethereumAddress.slice(0, 6)}...${wallet.ethereumAddress.slice(-4)}`
+                          : wallet.ethereumAddress}
+                      </span>
+                      <button
+                        onClick={() => handleCopyAddress(wallet.ethereumAddress)}
+                        className="text-gray-400 hover:text-white transition-colors"
+                        title="Copy address"
+                      >
+                        {copiedAddress === wallet.ethereumAddress ? (
+                          <FaCheck size={10} style={{ color: AX.mint }} />
+                        ) : (
+                          <FaCopy size={10} />
+                        )}
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Balance */}
+                  <div className="flex items-center gap-1 flex-shrink-0">
+                    <img
+                      src="https://i0.wp.com/www.gizmotimes.com/wp-content/uploads/2023/10/Monad-Logo.png?fit=1920%2C1080&ssl=1"
+                      alt="MON"
+                      className="h-4 w-4 rounded"
+                      style={{ objectFit: 'contain' }}
+                    />
+                    <span className="text-xs font-medium" style={{ color: AX.text }}>
+                      {wallet.balance.toFixed(4)}
                     </span>
+                  </div>
+
+                  {/* Primary toggle */}
+                  <div className={`flex-shrink-0 transition-opacity ${wallet.isPrimary ? "opacity-100" : "opacity-0 group-hover:opacity-100"}`}>
                     <button
-                      onClick={() => handleCopyAddress(wallet.ethereumAddress)}
-                      className="text-gray-400 hover:text-white transition-colors"
-                      title="Copy address"
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleSetPrimaryWallet(wallet.id);
+                      }}
+                      className="p-1 text-xs"
+                      title={wallet.isPrimary ? "Primary wallet" : "Set as primary"}
                     >
-                      {copiedAddress === wallet.ethereumAddress ? (
-                        <FaCheck size={10} style={{ color: AX.mint }} />
+                      {wallet.isPrimary ? (
+                        <FaStar size={14} style={{ color: AX.orange }} />
                       ) : (
-                        <FaCopy size={10} />
+                        <FaRegStar size={14} style={{ color: AX.muted }} />
                       )}
                     </button>
                   </div>
                 </div>
-
-                {/* Balance */}
-                <div className="flex items-center gap-1 flex-shrink-0">
-                  <img
-                    src="https://i0.wp.com/www.gizmotimes.com/wp-content/uploads/2023/10/Monad-Logo.png?fit=1920%2C1080&ssl=1"
-                    alt="MON"
-                    className="h-4 w-4 rounded"
-                    style={{ objectFit: 'contain' }}
-                  />
-                  <span className="text-xs font-medium" style={{ color: AX.text }}>
-                    {wallet.balance.toFixed(4)}
-                  </span>
-                </div>
-              </div>
-            ))
+              );
+            })
           )}
         </div>
       </div>

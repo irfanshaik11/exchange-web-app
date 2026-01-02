@@ -174,15 +174,21 @@ export default function useSingleTokenPolling(address: string | undefined) {
   // Effect to resolve address and manage polling lifecycle
   useEffect(() => {
     if (address) {
+      // Reset state when address changes to prevent showing stale data
+      setToken(null);
+      setTrades([]);
+      setResolvedPairAddress(null);
+      setState(prev => ({ ...prev, loading: true, error: null }));
+
       // Resolve address first
       resolveAddress(address).then((resolved) => {
         if (resolved) {
           setResolvedPairAddress(resolved);
         } else {
-          setState(prev => ({ 
-            ...prev, 
+          setState(prev => ({
+            ...prev,
             error: 'Failed to resolve address to pair address',
-            loading: false 
+            loading: false
           }));
         }
       });

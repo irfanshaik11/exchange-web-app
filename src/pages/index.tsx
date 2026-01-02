@@ -70,7 +70,12 @@ export default function Home() {
   // Redirect to /pulse if we're on the root path without any query params
   useEffect(() => {
     if (router.isReady && router.pathname === '/' && !router.query.search && !router.query.chain) {
-      router.replace('/pulse?chain=monad', undefined, { shallow: false });
+      // Use saved chain from localStorage, default to monad
+      const savedChain = typeof window !== 'undefined'
+        ? localStorage.getItem('selected-chain')
+        : null;
+      const chainToUse = (savedChain === 'sol' || savedChain === 'monad') ? savedChain : 'monad';
+      router.replace(`/pulse?chain=${chainToUse}`, undefined, { shallow: false });
       return;
     }
   }, [router.isReady, router.pathname, router.query.search, router.query.chain, router]);
@@ -95,7 +100,7 @@ export default function Home() {
     console.log('🔍 [INDEX] selectedTimeframe changed to:', selectedTimeframe);
   }, [selectedTimeframe]);
   
-  const { user, loading: userLoading, refreshUser, refreshBalance } = useUser();
+  const { user, loading: userLoading, refreshUser, refreshBalance, walletList, walletBalances, selectedWalletIds } = useUser();
   const [selectedTab, setSelectedTab] = useState<"dex" | "trending">("trending");
   const [sortKey, setSortKey] = useState<"market_cap_total" | "liquidity" | "volume" | "txns" | "name">("volume");
   const [sortDirection, setSortDirection] = useState<"asc" | "desc">("desc");
@@ -317,6 +322,12 @@ export default function Home() {
       user: { bearerToken: user.bearerToken, id: user.id },
       solBalance: 0, // Will be fetched by executeEnhancedTrade
       solPriceUsd: 150,
+      walletContext: {
+        selectedWalletIds: selectedWalletIds?.sol || [],
+        walletList: walletList || [],
+        walletBalances: walletBalances || {},
+        chain: currentChain === 'monad' ? 'monad' : 'sol',
+      },
       refreshBalance,
       onSuccess: (txHash, stats) => {
         console.log('✅ Home Quick Buy successful:', { txHash, stats });

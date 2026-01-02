@@ -276,7 +276,7 @@ function waitForVisibleContainer(el: HTMLElement): Promise<void> {
 const AdvancedOHLCChart: React.FC<AdvancedOHLCChartProps> = ({
   mint,
   pairAddress,
-  interval = '1m',
+  interval = '1s',
   timeframe = '24h',
   optimize = false,
   height = '400px',
@@ -307,7 +307,7 @@ const AdvancedOHLCChart: React.FC<AdvancedOHLCChartProps> = ({
   const [lastUpdate, setLastUpdate] = useState<Date | null>(preloadedData && preloadedData.length > 0 ? new Date() : null);
   const [retryCount, setRetryCount] = useState(0);
 
-  const selectedInterval = VALID_INTERVALS.includes(interval) ? interval : '1m';
+  const selectedInterval = VALID_INTERVALS.includes(interval) ? interval : '1s';
   const [initialTokenId, setInitialTokenId] = useState<string | null>(() => (mint || pairAddress) ?? null);
   const [displayMode, setDisplayMode] = useState<'USD' | 'MC'>('MC'); // USD/MC toggle for Monad chain
   const displayModeRef = useRef<'USD' | 'MC'>('MC'); // Ref for fast access in callbacks
@@ -1163,12 +1163,16 @@ const AdvancedOHLCChart: React.FC<AdvancedOHLCChartProps> = ({
         return url;
       }
 
-      const url = new URL(`${BACKEND_URL}/v1/trade/ohlc-data`);
-      if (currentMint) url.searchParams.set('mint', currentMint);
-      if (currentPairAddress) url.searchParams.set('pair_address', currentPairAddress);
-      url.searchParams.set('interval', effectiveInterval);
-      url.searchParams.set('timeframe', effectiveTimeframe);
-      if (currentOptimize) url.searchParams.set('optimize', 'true');
+      // Use new /v1/ohlcv/{tokenAddress} endpoint for Solana
+      // Always fetch 1s candles, frontend aggregates to larger intervals
+      const tokenAddress = currentMint || currentPairAddress;
+      const url = new URL(`${BACKEND_URL}/v1/ohlcv/${tokenAddress}`);
+      url.searchParams.set('timeframe', '1s');
+      // Calculate limit based on time range (in seconds worth of 1s candles)
+      const limitMap: Record<string, number> = {
+        '1h': 3600, '4h': 14400, '24h': 86400, '7d': 500, '30d': 500, '90d': 500, '180d': 500, '365d': 500,
+      };
+      url.searchParams.set('limit', String(limitMap[effectiveTimeframe] || 500));
       return url;
     },
     []
@@ -1330,8 +1334,26 @@ const AdvancedOHLCChart: React.FC<AdvancedOHLCChartProps> = ({
       } catch {}
       if (!r.ok) throw new Error(body?.message || body?.error || `${r.status} ${r.statusText}`);
       if (!body?.success) throw new Error(body?.message || body?.error || 'API returned unsuccessful response');
-      console.log('[AdvancedOHLCChart] Received OHLC data:', body?.data?.items?.length || 0, 'candles');
-      return (body?.data?.items ?? []) as BackendOHLCData[];
+
+      // Handle different response formats: Solana uses candles[], Monad uses data.items[]
+      let items: BackendOHLCData[];
+      if (body.candles && Array.isArray(body.candles)) {
+        // Solana /v1/ohlcv/{tokenAddress} format
+        items = body.candles.map((c: any) => ({
+          unix_time: c.time || c.unix_time,
+          o: c.open ?? c.o,
+          h: c.high ?? c.h,
+          l: c.low ?? c.l,
+          c: c.close ?? c.c,
+          v_usd: c.volume ?? c.volume_usd ?? c.v_usd ?? 0,
+        }));
+      } else {
+        // Monad /v1/trade/ohlc-data format
+        items = body?.data?.items ?? [];
+      }
+
+      console.log('[AdvancedOHLCChart] Received OHLC data:', items.length, 'candles');
+      return items;
     };
 
     try {
@@ -2199,19 +2221,17 @@ const AdvancedOHLCChart: React.FC<AdvancedOHLCChartProps> = ({
           latestParamsNetwork: latestParamsRef.current.network 
         });
         const config = {
-          // For Monad: Put seconds FIRST in the array - TradingView shows them in order
+          // Both Solana and Monad now support 1s candles
           // CRITICAL: Seconds must be in supported_resolutions AND supports_seconds must be true
           // TradingView groups by type (SECONDS, MINUTES, HOURS, DAYS) in the dropdown
-          supported_resolutions: isMonad 
-            ? ['1S', '5S', '15S', '30S', '1', '5', '15', '60', '240', '1D', '1W'] // Seconds FIRST
-            : ['1', '5', '15', '60', '240', '1D', '1W'], // Regular order for others
+          supported_resolutions: ['1S', '5S', '15S', '30S', '1', '5', '15', '60', '240', '1D', '1W'],
           supports_group_request: false,
           supports_marks: true, // ✅ Enable marks support
           supports_search: false,
           supports_timescale_marks: true, // ✅ Enable timescale marks support
           supports_time: true,
           // CRITICAL: supports_seconds MUST be true for SECONDS section to appear in dropdown
-          supports_seconds: isMonad, 
+          supports_seconds: true, // Both Solana and Monad support 1s candles
         };
         console.log('[AdvancedOHLCChart] 🔧 onReady Datafeed config:', JSON.stringify(config, null, 2), { 
           isMonad, 
@@ -2287,17 +2307,29 @@ const AdvancedOHLCChart: React.FC<AdvancedOHLCChartProps> = ({
         }
         
         // Calculate pricescale based on effective sample (accounts for MC mode)
-        let pricescale = 100;
-        if (effectiveSample < 0.01) {
-          pricescale = 100000000; // 8 decimals for very small prices
-        } else if (effectiveSample < 1) {
-          pricescale = 1000000; // 6 decimals
-        } else if (effectiveSample < 100) {
-          pricescale = 10000; // 4 decimals
-        } else if (effectiveSample < 1000) {
-          pricescale = 100; // 2 decimals
-        } else {
-          pricescale = 1; // 0 decimals for large numbers
+        // For crypto tokens with very small prices, we need high precision
+        // If samplePrice is still the default (1), we haven't loaded real data yet
+        // In that case, default to 8 decimals to handle tiny prices safely
+        let pricescale = 100000000; // Default to 8 decimals for crypto safety
+        if (samplePrice !== 1) {
+          // We have real price data, calculate appropriate pricescale
+          if (effectiveSample < 0.00000001) {
+            pricescale = 10000000000; // 10 decimals for extremely small prices
+          } else if (effectiveSample < 0.000001) {
+            pricescale = 100000000; // 8 decimals
+          } else if (effectiveSample < 0.0001) {
+            pricescale = 10000000; // 7 decimals
+          } else if (effectiveSample < 0.01) {
+            pricescale = 1000000; // 6 decimals for very small prices
+          } else if (effectiveSample < 1) {
+            pricescale = 100000; // 5 decimals
+          } else if (effectiveSample < 100) {
+            pricescale = 10000; // 4 decimals
+          } else if (effectiveSample < 1000) {
+            pricescale = 100; // 2 decimals
+          } else {
+            pricescale = 1; // 0 decimals for large numbers
+          }
         }
         
         console.log('[AdvancedOHLCChart] resolveSymbol: samplePrice=', samplePrice, 'mode=', mode, 'effectiveSample=', effectiveSample, 'pricescale=', pricescale);
@@ -2322,20 +2354,18 @@ const AdvancedOHLCChart: React.FC<AdvancedOHLCChartProps> = ({
           session: '24x7',
           timezone: 'Etc/UTC',
           ticker: symbolName,
-          exchange: '',
+          exchange: isMonad ? 'Monad' : 'Solana',
           minmov: 1,
           pricescale: pricescale,
           has_intraday: true,
           has_weekly_and_monthly: false,
           // CRITICAL: has_seconds MUST be true for SECONDS section to appear in dropdown
           // This tells TradingView that this symbol supports second-based resolutions
-          has_seconds: isMonad, 
-          // For Monad: Put seconds FIRST in the array - TradingView shows them in order
+          has_seconds: true, // Both Solana and Monad support 1s candles
+          // Put seconds FIRST in the array - TradingView shows them in order
           // TradingView groups resolutions by type (SECONDS, MINUTES, HOURS, DAYS) in dropdown
           // The SECONDS group will appear if has_seconds=true AND seconds are in supported_resolutions
-          supported_resolutions: isMonad
-            ? ['1S', '5S', '15S', '30S', '1', '5', '15', '60', '240', '1D', '1W'] // Seconds FIRST
-            : ['1', '5', '15', '60', '240', '1D', '1W'], // Must match onReady exactly
+          supported_resolutions: ['1S', '5S', '15S', '30S', '1', '5', '15', '60', '240', '1D', '1W'],
           volume_precision: 2,
           data_status: 'streaming',
         };
@@ -2560,8 +2590,8 @@ const AdvancedOHLCChart: React.FC<AdvancedOHLCChartProps> = ({
           } else if (typeof onHistoryCallback === 'function') {
             console.log('[AdvancedOHLCChart] ⚠️ No bars to return');
             
-            // For Monad: Return a placeholder candle at 0 on initial load
-            if (isMonad && periodParams.firstDataRequest) {
+            // Return a placeholder candle at 0 on initial load to show Y-axis
+            if (periodParams.firstDataRequest) {
               const now = Math.floor(Date.now() / 1000); // Current time in seconds
               const placeholderCandle = {
                 time: now * 1000, // Convert to milliseconds
@@ -2571,7 +2601,7 @@ const AdvancedOHLCChart: React.FC<AdvancedOHLCChartProps> = ({
                 close: 0,
                 volume: 0,
               };
-              console.log('[AdvancedOHLCChart] 📊 Returning placeholder candle at 0 for Monad (cached empty):', placeholderCandle);
+              console.log('[AdvancedOHLCChart] 📊 Returning placeholder candle at 0 (cached empty):', placeholderCandle);
               onHistoryCallback([placeholderCandle], { noData: false });
             } else {
               onHistoryCallback([], { noData: true });
@@ -2649,7 +2679,21 @@ const AdvancedOHLCChart: React.FC<AdvancedOHLCChartProps> = ({
             throw new Error(body?.message || body?.error || 'API returned unsuccessful response');
           }
 
-          items = body?.data?.items ?? [];
+          // Handle different response formats: Solana uses candles[], Monad uses data.items[]
+          if (body.candles && Array.isArray(body.candles)) {
+            // Solana /v1/ohlcv/{tokenAddress} format
+            items = body.candles.map((c: any) => ({
+              unix_time: c.time || c.unix_time,
+              o: c.open ?? c.o,
+              h: c.high ?? c.h,
+              l: c.low ?? c.l,
+              c: c.close ?? c.c,
+              v_usd: c.volume ?? c.volume_usd ?? c.v_usd ?? 0,
+            }));
+          } else {
+            // Monad /v1/trade/ohlc-data format
+            items = body?.data?.items ?? [];
+          }
 
           // Update cache
           if (items.length > 0) {
@@ -2810,11 +2854,11 @@ const AdvancedOHLCChart: React.FC<AdvancedOHLCChartProps> = ({
             }
           }
 
-          // CRITICAL FIX: For Monad first request, ignore from/to and return all candles
+          // CRITICAL FIX: For first request, ignore from/to and return all candles
           // This ensures TradingView always sees data on initial load
           const isFirst = !!periodParams.firstDataRequest;
-          if (isMonad && isFirst) {
-            console.log('[AdvancedOHLCChart] 📊 Monad first request - ignoring time range, returning all', allBars.length, 'bars');
+          if (isFirst) {
+            console.log('[AdvancedOHLCChart] 📊 First request - ignoring time range, returning all', allBars.length, 'bars');
             if (allBars.length === 0) {
               // If somehow empty, create placeholder instead of noData:true
               const now = Math.floor(Date.now() / 1000);
@@ -2827,7 +2871,7 @@ const AdvancedOHLCChart: React.FC<AdvancedOHLCChartProps> = ({
                 volume: 0,
               };
               allBars.push(placeholderCandle);
-              console.log('[AdvancedOHLCChart] 📊 Created placeholder candle for Monad first request');
+              console.log('[AdvancedOHLCChart] 📊 Created placeholder candle for first request');
             }
             if (typeof onHistoryCallback === 'function') {
               onHistoryCallback(allBars, { noData: false });
@@ -3750,14 +3794,15 @@ Maker: ${walletAddress}`;
 
         console.log('[AdvancedOHLCChart] Initializing widget with container size:', containerWidth, 'x', containerHeight);
 
-        // For Monad, use the standard resolution mapping (our datafeed handles fetching 1m data)
+        // Both Monad and Solana use 1s candles as default
         const isMonad = network === 'monad';
-        const initialInterval = INTERVAL_TO_RESOLUTION[latestParamsRef.current.interval];
-        console.log('[AdvancedOHLCChart] Creating TradingView widget with datafeed...', { 
-          isMonad, 
+        // Always start with 1S (1 second) candles for both chains
+        const initialInterval = '1S';
+        console.log('[AdvancedOHLCChart] Creating TradingView widget with datafeed...', {
+          isMonad,
           network,
           initialInterval,
-          willEnableSeconds: isMonad,
+          willEnableSeconds: true, // Both chains support seconds
         });
         const widget = new TradingView.widget({
           debug: true,
@@ -3784,7 +3829,7 @@ Maker: ${walletAddress}`;
             // 'show_interval_dialog_on_key_press',
           ],
           enabled_features: [
-            ...(isMonad ? ['seconds_resolution'] : []), // ✅ Enable seconds resolution for Monad tokens
+            'seconds_resolution', // ✅ Enable seconds resolution for both Solana and Monad
             'study_templates',
             'side_toolbar_in_fullscreen_mode',
             'header_widget',
@@ -3811,20 +3856,13 @@ Maker: ${walletAddress}`;
           user_id: 'public_user_id',
           theme: 'dark', // Dark mode
           // Time frames shown in the bottom toolbar
-          // For Monad: Show 1D, 7D, 30D, 180D as default timeframe options (all use 1s candles)
+          // Both Monad and Solana use 1s candles
           // The resolution field keeps the candle interval the same (1S), only changes visible range
-          time_frames: isMonad ? [
+          time_frames: [
             { text: '1D', resolution: '1S', description: '1 Day', title: '1D' },
             { text: '7D', resolution: '1S', description: '7 Days', title: '7D' },
             { text: '30D', resolution: '1S', description: '30 Days', title: '30D' },
             { text: '180D', resolution: '1S', description: '180 Days', title: '180D' },
-          ] : [
-            { text: '1m', resolution: '1', description: '1 Minute', title: '1m' },
-            { text: '5m', resolution: '5', description: '5 Minutes', title: '5m' },
-            { text: '15m', resolution: '15', description: '15 Minutes', title: '15m' },
-            { text: '1h', resolution: '60', description: '1 Hour', title: '1h' },
-            { text: '4h', resolution: '240', description: '4 Hours', title: '4h' },
-            { text: '1D', resolution: '1D', description: '1 Day', title: '1D' },
           ],
           // Remove custom_css_url to avoid pink theme issues
           // custom_css_url: '/charting_library/themed.css',
@@ -3864,8 +3902,14 @@ Maker: ${walletAddress}`;
             // Thin candles like Solana chart (barSpacing controls candle width)
             'paneProperties.vertGridProperties.style': 0,
             'paneProperties.horzGridProperties.style': 0,
-            'scalesProperties.showLeftScale': true,
+            'scalesProperties.showLeftScale': false,
             'scalesProperties.showRightScale': true,
+            'scalesProperties.showSeriesLastValue': true,
+            'scalesProperties.showStudyLastValue': true,
+            'scalesProperties.showSymbolLabels': true,
+            'mainSeriesProperties.priceAxisProperties.autoScale': true,
+            'mainSeriesProperties.priceAxisProperties.autoScaleDisabled': false,
+            'mainSeriesProperties.visible': true,
           },
           studies_overrides: {
             // Volume bar colors - 0 = up candles (green), 1 = down candles (red)

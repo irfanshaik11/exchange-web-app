@@ -190,7 +190,7 @@ const fetchWithTimeout = async (
 
 export default function TrackersPage() {
   const router = useRouter();
-  const { user, solBalance } = useUser();
+  const { user, solBalance, walletList, walletBalances, selectedWalletIds } = useUser();
   const {
     wsConnected,
     latestTrades,
@@ -219,14 +219,25 @@ export default function TrackersPage() {
   const [walletEvents, setWalletEvents] = useState<
     Record<string, WalletEvent[]>
   >({});
-  const [walletBalances, setWalletBalances] = useState<Record<string, number>>(
+  const [trackedWalletBalances, setTrackedWalletBalances] = useState<Record<string, number>>(
     {},
   );
   const [lastActiveMap, setLastActiveMap] = useState<
     Record<string, number | null | undefined>
   >({});
-  // Get chain from router query (same as Header component)
-  const currentChain = (router.query.chain as string) || "monad";
+  // Get chain from router query first, then localStorage, then default to monad
+  const currentChain = (() => {
+    if (router.query.chain) {
+      return router.query.chain as string;
+    }
+    if (typeof window !== 'undefined') {
+      const savedChain = localStorage.getItem('selected-chain');
+      if (savedChain === 'sol' || savedChain === 'monad') {
+        return savedChain;
+      }
+    }
+    return 'monad';
+  })();
   const selectedChain = (currentChain === 'monad' || currentChain === 'sol') ? currentChain : 'monad';
   const walletsRef = useRef<Wallet[]>([]);
   const [tokenMetadata, setTokenMetadata] = useState<
@@ -514,7 +525,7 @@ export default function TrackersPage() {
           setWallets(parsedCache.wallets);
           setWatchedWallets(parsedCache.watchedWallets);
           if (parsedCache.balances) {
-            setWalletBalances(parsedCache.balances);
+            setTrackedWalletBalances(parsedCache.balances);
           }
         }
       } catch (error) {
@@ -576,7 +587,7 @@ export default function TrackersPage() {
       if (!user?.id) {
         setWatchedWallets([]);
         setWallets([]);
-        setWalletBalances({});
+        setTrackedWalletBalances({});
         // Clear cache
         if (typeof window !== "undefined") {
           Object.keys(localStorage).forEach((key) => {
@@ -611,7 +622,7 @@ export default function TrackersPage() {
       setWallets(frontendWallets);
 
       // Clear balances for wallets that are no longer tracked
-      setWalletBalances((prev) => {
+      setTrackedWalletBalances((prev) => {
         const validAddresses = new Set(allWallets.map((w) => w.address));
         const filtered: Record<string, number> = {};
         Object.keys(prev).forEach((address) => {
@@ -648,7 +659,7 @@ export default function TrackersPage() {
           const balance = await getWalletBalance(wallet.address, walletChain);
           console.log(`[Trackers] Got balance for ${wallet.address.slice(0, 8)}...: ${balance} (chain: ${walletChain})`);
           if (balance !== null && !isNaN(balance)) {
-            setWalletBalances((prev) => {
+            setTrackedWalletBalances((prev) => {
               const updated = { ...prev, [wallet.address]: balance };
 
               // Update balance in cache
@@ -1024,7 +1035,7 @@ export default function TrackersPage() {
         // Clear all state
         setWatchedWallets([]);
         setWallets([]);
-        setWalletBalances({});
+        setTrackedWalletBalances({});
 
         // Clear wallet cache
         if (typeof window !== "undefined" && user?.id) {
@@ -1214,6 +1225,12 @@ export default function TrackersPage() {
       user: { bearerToken: user.bearerToken, id: user.id },
       solBalance: Number(solBalance || 0),
       solPriceUsd: 150, // TODO: Get real SOL price
+      walletContext: {
+        selectedWalletIds: selectedWalletIds?.sol || [],
+        walletList: walletList || [],
+        walletBalances: walletBalances || {},
+        chain: selectedChain === "monad" ? "monad" : "sol",
+      },
       onSuccess: (txHash, stats) => {
         console.log("✅ Quick Buy successful:", { txHash, stats });
       },
@@ -1694,7 +1711,7 @@ export default function TrackersPage() {
                                       const events =
                                         walletEvents[wallet.address] || [];
                                       const balance =
-                                        walletBalances[wallet.address];
+                                        trackedWalletBalances[wallet.address];
                                       return (
                                         <WalletRow
                                           key={wallet.address}
