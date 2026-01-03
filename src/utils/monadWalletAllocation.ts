@@ -33,6 +33,12 @@ const getMonadAddress = (wallet: WalletListItem): string | undefined => {
   return address ? normalizeMonadAddress(address) : undefined;
 };
 
+function clampToDecimals(value: number | string, decimals: number = 18): string {
+  const num = Number(value);
+  if (!Number.isFinite(num)) return "0";
+  return num.toFixed(decimals).replace(/\.?0+$/, "");
+}
+
 const getBalanceForAddress = (
   address: string | undefined,
   walletBalances: Record<string, number>
@@ -249,7 +255,7 @@ export async function executeMonadMultiBuy({
       const result = await tradeMonadBuy(
         {
           tokenAddress,
-          amountMON,
+          amountMON: parseFloat(clampToDecimals(amountMON, 18)),
           launchpad,
           slippage,
           gasPrice,
@@ -361,7 +367,7 @@ export async function executeMonadMultiBuy({
       const result = await tradeMonadBuy(
         {
           tokenAddress,
-          amountMON: allocation.amount,
+          amountMON: parseFloat(clampToDecimals(allocation.amount, 18)),
           launchpad,
           slippage,
           gasPrice,
