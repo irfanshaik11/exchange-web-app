@@ -2086,7 +2086,7 @@ export default function Header({
               }
               
               const isHovered = hoveredWatchlistToken === tokenKey;
-              const rawImg = (token as any).uri || (token as any).image || (token as any).logo;
+              const rawImg = (token as any).image_url || (token as any).image || (token as any).logo || (token as any).uri;
               
               return (
                 <div
@@ -2108,7 +2108,7 @@ export default function Header({
                         if (token.market_cap_usd || (token as any).fully_diluted_value) {
                           queryParams.set('_mcap', ((token.market_cap_usd || (token as any).fully_diluted_value || 0)).toString());
                         }
-                        const imageUrl = (token as any).uri || (token as any).image || (token as any).logo || '';
+                        const imageUrl = (token as any).image_url || (token as any).image || (token as any).logo || (token as any).uri || '';
                         if (imageUrl) queryParams.set('_image', imageUrl);
                         queryParams.set('_mint', tokenAddress);
                         queryParams.set('chain', 'monad');
@@ -2124,7 +2124,7 @@ export default function Header({
                         if (token.market_cap_usd || (token as any).fully_diluted_value) {
                           queryParams.set('_mcap', ((token.market_cap_usd || (token as any).fully_diluted_value || 0)).toString());
                         }
-                        const imageUrl = (token as any).uri || (token as any).image || (token as any).logo || '';
+                        const imageUrl = (token as any).image_url || (token as any).image || (token as any).logo || (token as any).uri || '';
                         if (imageUrl) queryParams.set('_image', imageUrl);
                         queryParams.set('_mint', tokenAddress);
                         queryParams.set('chain', 'sol');
