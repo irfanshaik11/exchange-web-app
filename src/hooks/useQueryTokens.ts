@@ -52,8 +52,8 @@ interface LaunchpadData {
 }
 
 async function fetchLaunchpadData(): Promise<LaunchpadData> {
-  const baseUrl = env.NEXT_PUBLIC_GO_SERVICE_URL.endsWith('/') 
-    ? env.NEXT_PUBLIC_GO_SERVICE_URL.slice(0, -1) 
+  const baseUrl = env.NEXT_PUBLIC_GO_SERVICE_URL.endsWith('/')
+    ? env.NEXT_PUBLIC_GO_SERVICE_URL.slice(0, -1)
     : env.NEXT_PUBLIC_GO_SERVICE_URL;
   const apiUrl = env.NEXT_PUBLIC_IS_BACKEND_DEPLOYED
     ? `${baseUrl}/v1/launchpad/tokens?limit=30`
@@ -121,4 +121,3 @@ export function useQueryLaunchpadData(enabled: boolean = true): UseQueryResult<L
     retry: 1,
   });
 }
-
