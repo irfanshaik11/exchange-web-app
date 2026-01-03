@@ -21,6 +21,7 @@ import { getPoolTypeFromToken } from '~/utils/poolTypeDetection';
 import { normalizeMonadAddress } from '~/utils/normalizeMonadAddress';
 import { broadcastMonadQuickTrade } from '~/utils/monadTradeEvents';
 import { formatMonadError } from '~/utils/monadError';
+import { useUser } from '../UserContext';
 
 type TokenMetadata = UnifiedTokenMetadata & {
   timestamp?: number;
@@ -73,10 +74,10 @@ const SolIcon = () => (
   </>
 );
 
-const Positions: React.FC<PositionsProps> = ({ 
-  userId, 
-  bearerToken, 
-  onPositionsChange, 
+const Positions: React.FC<PositionsProps> = ({
+  userId,
+  bearerToken,
+  onPositionsChange,
   preloadedPositions, 
   skipFetch, 
   onTokenNamesChange, 
@@ -88,6 +89,7 @@ const Positions: React.FC<PositionsProps> = ({
   isCacheValid,
   fallbackPositions
 }) => {
+  const { selectedWalletIds } = useUser();
   const router = useRouter();
   const currentChain = (router.query.chain as string) || 'sol';
   const blockchain = useMemo(() => {

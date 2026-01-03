@@ -486,7 +486,7 @@ export async function executeSolanaMultiBuy({
 
         return {
           results,
-          summary: formatSolanaTxSummary({ results }),
+          summary: formatSolanaTxSummary(multiResult.txHashes || []),
           multiWallet: true,
           parentTradeId: multiResult.parentTradeId,
           txHashes: multiResult.txHashes,

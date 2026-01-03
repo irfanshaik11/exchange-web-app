@@ -1,5 +1,4 @@
 import { type AppType } from "next/app";
-import { Inter } from "next/font/google";
 import "~/styles/globals.css";
 import "@rainbow-me/rainbowkit/styles.css";
 import { getDefaultConfig } from "@rainbow-me/rainbowkit";
@@ -432,11 +431,8 @@ const config = getDefaultConfig({
   ssr: true, // Keep SSR enabled, but handle client-side rendering in wrapper
 });
 
-const inter = Inter({
-  weight: ['400', '500'],
-  subsets: ['latin'],
-  variable: '--font-inter',
-});
+// Fallback font (Inter import removed for offline build)
+const inter: { className: string; variable?: string } = { className: '', variable: '--font-inter' };
 
 function TokenHandler() {
   const { refreshUser } = useUser();
