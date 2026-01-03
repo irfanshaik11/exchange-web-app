@@ -81,7 +81,7 @@ import SniperHoldingsDisplay from "./SniperHoldingsDisplay";
 // import SolanaTokenAnalytics from "./SolanaTokenAnalytics";
 import { useUser } from "~/components/UserContext";
 import { useQuickBuy } from "~/components/QuickBuyContext";
-import { extractTokenImage } from "~/utils/images";
+import { extractTokenImage, isMetadataUrl, resolveMetadataImage } from "~/utils/images";
 import { useSolPrice } from "~/components/SolPriceContext";
 import { preloadTokenImages } from "~/utils/imagePreloader";
 import {
@@ -639,31 +639,34 @@ function TokenImage({
   const [showPreview, setShowPreview] = useState(false);
   const [previewPosition, setPreviewPosition] = useState({ top: 0, left: 0 });
   const imageContainerRef = useRef<HTMLDivElement>(null);
+  const [resolvedImageUrl, setResolvedImageUrl] = useState<string | null>(null);
 
   // Extract image URL from token data, checking multiple possible field names
-  // Priority: image, uri, logo, imageUrl, logoUrl, image_url, logo_url, icon, thumbnail
-  const imageUrl = extractTokenImage(token as any) || null;
+  // Priority: image_url, image, logo, uri (updated for API compatibility)
+  const rawImageUrl = extractTokenImage(token as any) || null;
 
-  // Debug logging to help diagnose image loading issues
+  // If the image URL is a JSON metadata URL, resolve it asynchronously
   useEffect(() => {
-    if (imageUrl) {
-      console.log(
-        `[TokenImage] ${token.symbol || "Unknown"}: imageUrl extracted:`,
-        imageUrl,
-      );
+    let cancelled = false;
+
+    if (rawImageUrl && isMetadataUrl(rawImageUrl)) {
+      // Resolve metadata JSON to get actual image URL
+      resolveMetadataImage(rawImageUrl).then((resolved) => {
+        if (!cancelled) {
+          setResolvedImageUrl(resolved || rawImageUrl);
+        }
+      });
     } else {
-      console.warn(
-        `[TokenImage] ${token.symbol || "Unknown"}: No image URL found. Token data:`,
-        {
-          image: (token as any).image,
-          uri: (token as any).uri,
-          logo: token.logo,
-          imageUrl: (token as any).imageUrl,
-          logoUrl: (token as any).logoUrl,
-        },
-      );
+      setResolvedImageUrl(rawImageUrl);
     }
-  }, [imageUrl, token.symbol, token]);
+
+    return () => {
+      cancelled = true;
+    };
+  }, [rawImageUrl]);
+
+  // Use resolved URL or fall back to raw URL
+  const imageUrl = resolvedImageUrl;
 
   // Calculate migration progress for border color (only for New Pairs, NOT for migrated)
   const getMigrationProgress = (token: Token): number => {
