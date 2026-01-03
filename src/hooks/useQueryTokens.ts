@@ -2,7 +2,6 @@ import { useQuery } from '@tanstack/react-query';
 import type { UseQueryResult } from '@tanstack/react-query';
 import { env } from '../env';
 import type { Token } from '~/utils/db';
-import { extractTokenImage } from '../utils/images';
 
 export const tokenKeys = {
   trenches: {
@@ -15,110 +14,37 @@ export const tokenKeys = {
   },
 };
 
-// Normalize token data from backend API to frontend format
-function normalizeToken(r: any): any {
-  const toNumber = (value: any): number => {
-    if (typeof value === 'number') return Number.isFinite(value) ? value : 0;
-    if (typeof value === 'string') {
-      const parsed = Number(value.trim());
-      return Number.isFinite(parsed) ? parsed : 0;
-    }
-    return 0;
-  };
-
-  const imageUrl = extractTokenImage(r);
-
-  return {
-    // Map mint_address to mint for frontend compatibility
-    mint: r.mint_address || r.mint || r.address || null,
-    mint_address: r.mint_address || r.mint || r.address || null,
-    pair_address: r.pair_address || null,
-    name: r.name || r.token_name || '',
-    symbol: r.symbol || r.token_symbol || '',
-    // Price and market data
-    usd_price: toNumber(r.price_usd),
-    price_usd: toNumber(r.price_usd),
-    fully_diluted_value: toNumber(r.market_cap_usd),
-    market_cap_usd: toNumber(r.market_cap_usd),
-    total_liquidity_usd: toNumber(r.liquidity_usd),
-    liquidity_usd: toNumber(r.liquidity_usd),
-    // Volume data
-    volume_24h: toNumber(r.volume_24h) || (toNumber(r.total_buy_volume_24h) + toNumber(r.total_sell_volume_24h)),
-    volume_1h: toNumber(r.volume_1h) || (toNumber(r.total_buy_volume_1h) + toNumber(r.total_sell_volume_1h)),
-    // Bonding curve
-    bonding_curve_progress: parseFloat(r.bonding_pct ?? 0),
-    bonding_pct: parseFloat(r.bonding_pct ?? 0),
-    graduation_percent: parseFloat(r.graduation_percent ?? 0),
-    // Timestamps
-    created_at: r.launch_time || r.created_at || null,
-    launch_time: r.launch_time || null,
-    migrated_time: r.migrated_time || null,
-    // Protocol
-    launchpad_protocol: r.launchpad_protocol || null,
-    // Images - map to all possible field names
-    image_url: imageUrl,
-    image: imageUrl,
-    logo: imageUrl,
-    uri: r.uri || null,
-    // Trading stats
-    total_buy_volume_24h: toNumber(r.total_buy_volume_24h),
-    total_sell_volume_24h: toNumber(r.total_sell_volume_24h),
-    total_buys_24h: toNumber(r.total_buys_24h),
-    total_sells_24h: toNumber(r.total_sells_24h),
-    price_percent_change_1h: toNumber(r.price_change_1h),
-    price_percent_change_24h: toNumber(r.price_percent_change_24h),
-    // Links
-    links: r.links || null,
-  };
-}
-
 async function fetchNewPairs(): Promise<Token[]> {
-  // Fetch directly from backend API for initial Solana data
-  const baseUrl = env.NEXT_PUBLIC_WEBSOCKET_URL;
-  const apiUrl = `${baseUrl}/v1/pulse/new?limit=35`;
+  // Use Next.js API proxy for server-side fetch (no CORS issues, proper field mapping)
+  const apiUrl = `/api/token-service/pulse-new?limit=35&fresh=1&t=${Date.now()}`;
   const response = await fetch(apiUrl, {
     cache: 'no-store',
     headers: {
-      'Accept': 'application/json',
       'Cache-Control': 'no-cache',
+      'Pragma': 'no-cache'
     }
   });
   if (!response.ok) throw new Error(`Failed to fetch: ${response.status}`);
   const data = await response.json();
-  const tokens = Array.isArray(data) ? data : (data.data || data.result || []);
-  return tokens.map(normalizeToken);
+  return Array.isArray(data) ? data : (data.result || []);
 }
 
 async function fetchFinalStretch(): Promise<Token[]> {
-  // Fetch directly from backend API for initial Solana data
-  const baseUrl = env.NEXT_PUBLIC_WEBSOCKET_URL;
-  const apiUrl = `${baseUrl}/v1/pulse/final-stretch?limit=100`;
-  const response = await fetch(apiUrl, {
-    cache: 'no-store',
-    headers: {
-      'Accept': 'application/json',
-    }
-  });
+  // Use Next.js API proxy for server-side fetch
+  const apiUrl = `/api/token-service/pulse-final-stretch?limit=100&t=${Date.now()}`;
+  const response = await fetch(apiUrl);
   if (!response.ok) throw new Error(`Failed to fetch: ${response.status}`);
   const data = await response.json();
-  const tokens = Array.isArray(data) ? data : (data.data || data.result || []);
-  return tokens.map(normalizeToken);
+  return Array.isArray(data) ? data : [];
 }
 
 async function fetchMigrated(): Promise<Token[]> {
-  // Fetch directly from backend API for initial Solana data
-  const baseUrl = env.NEXT_PUBLIC_WEBSOCKET_URL;
-  const apiUrl = `${baseUrl}/v1/pulse/migrated?limit=30`;
-  const response = await fetch(apiUrl, {
-    cache: 'no-store',
-    headers: {
-      'Accept': 'application/json',
-    }
-  });
+  // Use Next.js API proxy for server-side fetch
+  const apiUrl = `/api/token-service/pulse-migrated?limit=30&t=${Date.now()}`;
+  const response = await fetch(apiUrl);
   if (!response.ok) throw new Error(`Failed to fetch: ${response.status}`);
   const data = await response.json();
-  const tokens = Array.isArray(data) ? data : (data.data || data.result || []);
-  return tokens.map(normalizeToken);
+  return Array.isArray(data) ? data : [];
 }
 
 interface LaunchpadData {
