@@ -109,13 +109,21 @@ function clearPersistedAccess() {
   }
 }
 
-function hasStoredAccess(): boolean {
+function hasStoredAccess(userId?: string | null): boolean {
   if (typeof window === "undefined") return false;
   try {
-    // Prefer per-user localStorage when user is known
-    // Fallback to legacy session flag
+    // Account-specific: only treat as granted when it matches the current user
+    if (!userId) return false;
+
+    // Per-user persistent flag
+    const perUser = window.localStorage.getItem(`${LS_KEY_PREFIX}${userId}`) === "true";
+    if (perUser) return true;
+
+    // Legacy session flag, but only if meta matches this user
     const session = window.sessionStorage.getItem(STORAGE_FLAG_KEY) === "true";
-    return session;
+    if (!session) return false;
+    const meta = getStoredAccessMeta();
+    return !!meta && meta.userId === userId;
   } catch {
     return false;
   }
@@ -152,11 +160,8 @@ export function ReferralAccessGate({
       : false; // default to false to bypass referral gate for now
 
   const [status, setStatus] = useState<ReferralGateStatus>(() => {
-    if (!requireReferralAccess) return "granted";
-    if (typeof window !== "undefined" && hasStoredAccess()) {
-      return "granted";
-    }
-    return "prompt";
+    // Start locked unless the gate is disabled; user-specific access is resolved after load
+    return requireReferralAccess ? "prompt" : "granted";
   });
   const [codeInput, setCodeInput] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -271,28 +276,14 @@ export function ReferralAccessGate({
       return;
     }
 
-    // Check persistent per-user localStorage first
-    if (typeof window !== "undefined" && user?.id) {
-      const lsGranted = window.localStorage.getItem(`${LS_KEY_PREFIX}${user.id}`) === "true";
-      if (lsGranted) {
-        setStatus("granted");
-        setInfo("Welcome back.");
-        return;
-      }
-    }
-
-    // Fallback to legacy session check
-    if (hasStoredAccess()) {
-      const meta = getStoredAccessMeta();
-      if (user && meta && meta.userId && meta.userId === user.id) {
-        setStatus("granted");
-        setInfo("Welcome back.");
-        return;
-      }
+    if (hasStoredAccess(user?.id)) {
+      setStatus("granted");
+      setInfo("Welcome back.");
+      return;
     }
 
     setStatus("prompt");
-  }, [requireReferralAccess, userLoading, user, revokeAccess]);
+  }, [requireReferralAccess, userLoading, user]);
 
   useEffect(() => {
     if (!requireReferralAccess) return;

@@ -62,18 +62,6 @@ export default function WalletExportGuard() {
     }
   }, [refreshUser, user?.bearerToken]);
 
-  const handleExported = useCallback(() => {
-    try {
-      if (typeof window !== "undefined") {
-        window.localStorage.setItem("export_ack_sol", "true");
-        window.localStorage.setItem("export_ack_monad", "true");
-      }
-    } catch {
-      // ignore
-    }
-    setForceOpen(false);
-  }, []);
-
   if (!forceOpen) return null;
 
   return (
@@ -84,7 +72,6 @@ export default function WalletExportGuard() {
       walletId={user?.walletId || undefined}
       walletAddress={derivedAddress}
       onForceExportConfirmed={handleConfirm}
-      onExported={handleExported}
     />
   );
 }
