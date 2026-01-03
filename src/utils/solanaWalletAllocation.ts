@@ -402,6 +402,108 @@ export async function executeSolanaMultiBuy({
     bribe,
   });
 
+  // ========================================
+  // NEW: Use backend multi-wallet API if multiple wallets selected
+  // This is MUCH faster - 1 API call instead of N sequential calls
+  // ========================================
+  // IMPORTANT: For multi-wallet mode, let BACKEND validate and distribute
+  // Don't block on frontend if primary wallet has no balance - other wallets might!
+  if (selectedWalletIds.length > 1) {
+    console.log(`🚀 Using NEW backend multi-wallet API (1 call for ${allocations.length} wallets)`);
+
+    try {
+      const result = await tradeBuy(
+        {
+          poolAddress,
+          baseMint,
+          quoteMint,
+          amount: amountSOL,
+          poolType,
+          originalPairAddress,
+          slippage: normalizedSlippage,
+          priorityFee,
+          bribe,
+          mevMode,
+          autoFee,
+          maxFee,
+          rpc,
+          tokenName,
+          tokenSymbol,
+          walletIds: selectedWalletIds, // NEW: Send array of wallet IDs
+          useMultipleWallets: true,     // NEW: Enable multi-wallet mode
+        },
+        authToken
+      );
+
+      // Handle new multi-wallet response format
+      if ((result as any).multiWallet) {
+        const multiResult = result as any;
+
+        // Notify about all wallets at once
+        for (let i = 0; i < multiResult.walletsUsed; i++) {
+          onWalletStart?.({
+            allocation: allocations[i] || { walletId: undefined, amount: 0, balance: 0 },
+            index: i,
+            total: multiResult.walletsUsed,
+            totalConsidered: total,
+          });
+        }
+
+        // Process each trade result
+        const trades = multiResult.trades || [];
+        const results: Array<{
+          allocation: SolanaWalletAllocation;
+          result: any;
+          error?: any;
+        }> = [];
+
+        for (let i = 0; i < trades.length; i++) {
+          const trade = trades[i];
+          const allocation = allocations.find(a => a.walletId === trade.walletId) || allocations[i];
+
+          if (trade.success && trade.txHash) {
+            onTxHash?.({ allocation, txHash: trade.txHash });
+            onWalletSuccess?.({
+              allocation,
+              index: i,
+              total: trades.length,
+              totalConsidered: total,
+              result: { hash: trade.txHash, txid: trade.txHash },
+            });
+            results.push({ allocation, result: { hash: trade.txHash } });
+          } else {
+            const err = new Error(trade.error || "Trade failed");
+            onWalletError?.({
+              allocation,
+              index: i,
+              total: trades.length,
+              totalConsidered: total,
+              error: err,
+            });
+            results.push({ allocation, result: null, error: err });
+          }
+        }
+
+        return {
+          results,
+          summary: formatSolanaTxSummary({ results }),
+          multiWallet: true,
+          parentTradeId: multiResult.parentTradeId,
+          txHashes: multiResult.txHashes,
+        };
+      }
+    } catch (error: any) {
+      console.error('❌ Multi-wallet backend API failed, falling back to sequential:', error);
+      // Fall through to old sequential approach
+    }
+  }
+
+  // ========================================
+  // OLD: Sequential approach (single wallet OR fallback)
+  // ========================================
+  console.log(`🔄 Using sequential API calls (${allocations.length} wallet${allocations.length > 1 ? 's' : ''})`);
+
+  // Validate balance ONLY for sequential mode (single wallet or fallback)
   if (allocations.length === 0) {
     throw new Error('No selected wallets have sufficient balance for this trade amount and fees');
   }

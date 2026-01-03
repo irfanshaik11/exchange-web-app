@@ -11,7 +11,8 @@ import { executeEnhancedTrade } from '~/utils/enhancedTradeHandler';
 import { tradeMonadSell, preCheckMonadBalance } from '~/utils/api';
 import { executeMonadMultiBuy, formatMonadTxSummary } from '~/utils/monadWalletAllocation';
 import { broadcastMonadQuickTrade } from '~/utils/monadTradeEvents';
-import { validateMonadBalance, validateSolanaBalance } from '~/utils/tradeBalanceValidation';
+import { validateMonadBalance, validateSolanaBalance, computeMonadBalanceForValidation } from '~/utils/tradeBalanceValidation';
+import { formatMonadError } from '~/utils/monadError';
 import { getTradeActivityByUser } from '~/utils/functions';
 import { formatSmartNumber } from '~/utils/db';
 import { extractTokenImage } from '~/utils/images';
@@ -551,41 +552,6 @@ const InstantTradeModal: React.FC<InstantTradeModalProps> = ({ isOpen, onClose, 
     return 'nadfun';
   };
 
-  // Helper function to format user-friendly error messages (same as MonadTable)
-  const formatMonadError = (error: string | undefined | null): string => {
-    if (!error) return "Trade failed. Please try again.";
-    
-    const errorLower = error.toLowerCase();
-    
-    if (errorLower.includes('err_bonding_curve_library_invalid_inputs') || 
-        errorLower.includes('bonding_curve_library_invalid_inputs')) {
-      return "This token has no liquidity or has graduated to DEX. Try a different token.";
-    }
-    
-    if (errorLower.includes('insufficient liquidity') || 
-        errorLower.includes('expected output is 0') ||
-        errorLower.includes('no liquidity')) {
-      return "Insufficient liquidity. This token may not be available for trading.";
-    }
-    
-    if (errorLower.includes('token does not exist') || 
-        errorLower.includes('token may not exist')) {
-      return "Token not found. Please check the token address.";
-    }
-    
-    if (errorLower.includes('token has graduated') || 
-        errorLower.includes('graduated to dex')) {
-      return "This token has graduated to DEX. Trading on bonding curve is no longer available.";
-    }
-    
-    if (errorLower.includes('insufficient balance') || 
-        errorLower.includes('missing')) {
-      return "Insufficient balance. Please check your wallet.";
-    }
-    
-    return error;
-  };
-
   const runMonadBuyWithToast = async ({
     tokenAddress,
     amountMON,
@@ -713,20 +679,30 @@ const InstantTradeModal: React.FC<InstantTradeModalProps> = ({ isOpen, onClose, 
     // This prevents the misleading "Trade placed!" toast when balance is insufficient
     // ============================================
     if (isMonad) {
+      const selectedMonadWalletIds = selectedWalletIds?.monad || [];
+      const isMultiMonad = selectedMonadWalletIds.length > 1;
+
       // Get current Monad balance from chainBalances
-      const monadBalance = chainBalances['monad'] ?? 0;
+      const monadBalance = computeMonadBalanceForValidation({
+        selectedWalletIds: selectedMonadWalletIds,
+        walletList,
+        walletBalances,
+        fallbackBalance: chainBalances['monad'] ?? 0,
+      });
       const gasPrice = settings?.gasPrice !== undefined && settings.gasPrice > 0 ? settings.gasPrice : undefined;
 
       // Client-side validation first (fast, no network call)
-      const clientValidation = validateMonadBalance({
-        balance: monadBalance,
-        tradeAmount: requested,
-        gasPrice: gasPrice,
-      });
+      if (!isMultiMonad) {
+        const clientValidation = validateMonadBalance({
+          balance: monadBalance,
+          tradeAmount: requested,
+          gasPrice: gasPrice,
+        });
 
-      if (!clientValidation.isValid) {
-        toast.error(clientValidation.errorMessage || 'Insufficient balance', { duration: 5000 });
-        return;
+        if (!clientValidation.isValid) {
+          toast.error(clientValidation.errorMessage || 'Insufficient balance', { duration: 5000 });
+          return;
+        }
       }
     } else {
       // Solana validation
@@ -1003,6 +979,10 @@ const InstantTradeModal: React.FC<InstantTradeModalProps> = ({ isOpen, onClose, 
         pendingToastRef.current = { id: uniqueSellToastId, tokenImage, tokenName, fakeTime: sellTimerCap.toFixed(2), startTime: sellStartTime, timerInterval: sellTimerInterval };
 
         // Add timeout wrapper to prevent hanging
+        const selectedMonadWalletIds = selectedWalletIds?.monad || [];
+        const isMultiWalletSell = selectedMonadWalletIds.length > 1;
+        const selectedWalletId = selectedMonadWalletIds[0];
+
         const sellPromise = tradeMonadSell(
           {
             tokenAddress,
@@ -1010,6 +990,9 @@ const InstantTradeModal: React.FC<InstantTradeModalProps> = ({ isOpen, onClose, 
             percentage: percentage,
             slippage: maxSlippage * 100,
             gasPrice: gasPrice,
+            walletId: !isMultiWalletSell ? selectedWalletId : undefined,
+            walletIds: isMultiWalletSell ? selectedMonadWalletIds : undefined,
+            useMultipleWallets: isMultiWalletSell,
           },
           user.bearerToken
         );
@@ -1208,6 +1191,10 @@ const InstantTradeModal: React.FC<InstantTradeModalProps> = ({ isOpen, onClose, 
             broadcastMonadQuickTrade(tokenAddress, 'buy');
           }
         } else {
+          const selectedMonadWalletIds = selectedWalletIds?.monad || [];
+          const isMultiWalletSell = selectedMonadWalletIds.length > 1;
+          const selectedWalletId = selectedMonadWalletIds[0];
+
           const result = await tradeMonadSell(
             {
               tokenAddress,
@@ -1215,11 +1202,19 @@ const InstantTradeModal: React.FC<InstantTradeModalProps> = ({ isOpen, onClose, 
               percentage: amount,
               slippage: maxSlippage * 100, // Convert to percentage (0.15 -> 15)
               gasPrice: gasPrice,
+              walletId: !isMultiWalletSell ? selectedWalletId : undefined,
+              walletIds: isMultiWalletSell ? selectedMonadWalletIds : undefined,
+              useMultipleWallets: isMultiWalletSell,
             },
             user.bearerToken
           );
           
-          if (result.success && result.txHash) {
+          const sellSuccess =
+            result?.success === true ||
+            (Array.isArray((result as any)?.txHashes) && (result as any).txHashes.length > 0) ||
+            !!(result as any)?.txHash;
+
+          if (sellSuccess) {
             // Refresh token balance after trade
             setTimeout(async () => {
               try {
@@ -1250,6 +1245,15 @@ const InstantTradeModal: React.FC<InstantTradeModalProps> = ({ isOpen, onClose, 
               }
             }, 2000);
             broadcastMonadQuickTrade(tokenAddress, 'sell');
+          } else {
+            toast.error('Sell failed. Please try again.', {
+              duration: 5000,
+              style: {
+                background: "#1E1F26",
+                color: "#E6E7EA",
+                border: "1px solid #ff6b6b",
+              },
+            });
           }
         }
       } else {

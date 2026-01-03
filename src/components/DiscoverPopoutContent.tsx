@@ -22,6 +22,7 @@ import { prefetchTradeData } from "~/utils/tokenCache";
 import toast from "react-hot-toast";
 import { extractTokenImage } from "~/utils/images";
 import { broadcastMonadQuickTrade } from "~/utils/monadTradeEvents";
+import { formatMonadError } from "~/utils/monadError";
 
 const WRAPPED_SOL_MINT = SOL_MINT_ADDRESS;
 
@@ -1544,57 +1545,6 @@ export default function DiscoverPopoutContent() {
 
     // Default to nadfun if unknown
     return "nadfun";
-  }, []);
-
-  // Helper function to format user-friendly error messages
-  const formatMonadError = useCallback((error: string | undefined | null): string => {
-    if (!error) return "Trade failed. Please try again.";
-    
-    const errorLower = error.toLowerCase();
-    
-    // Check for specific error patterns
-    if (errorLower.includes('err_bonding_curve_library_invalid_inputs') || 
-        errorLower.includes('bonding_curve_library_invalid_inputs')) {
-      return "This token has no liquidity or has graduated to DEX. Try a different token.";
-    }
-    
-    if (errorLower.includes('insufficient liquidity') || 
-        errorLower.includes('expected output is 0') ||
-        errorLower.includes('no liquidity')) {
-      return "Insufficient liquidity. This token may not be available for trading.";
-    }
-    
-    if (errorLower.includes('token does not exist') || 
-        errorLower.includes('token may not exist')) {
-      return "Token not found. Please check the token address.";
-    }
-    
-    if (errorLower.includes('token has graduated') || 
-        errorLower.includes('graduated to dex')) {
-      return "This token has graduated to DEX. Trading on bonding curve is no longer available.";
-    }
-    
-    if (errorLower.includes('insufficient balance') || 
-        errorLower.includes('missing')) {
-      return "Insufficient balance. Please add more MON to your wallet.";
-    }
-    
-    if (errorLower.includes('locked') || 
-        errorLower.includes('cannot be traded')) {
-      return "This token is locked and cannot be traded.";
-    }
-    
-    if (errorLower.includes('execution reverted') || 
-        errorLower.includes('revert')) {
-      return "Transaction failed. The token may not be available or there may be insufficient liquidity.";
-    }
-    
-    // Return original error if it's short and user-friendly, otherwise return generic message
-    if (error.length < 100 && !error.includes('0x') && !error.includes('data:')) {
-      return error;
-    }
-    
-    return "Trade failed. Please try again.";
   }, []);
 
   // QUICK BUY handler – using MonadTable logic for Monad, enhanced trade flow for Solana
