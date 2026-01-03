@@ -14,6 +14,7 @@ import { useFilter } from '../components/FilterContext';
 import FilterPopout from '../components/FilterPopout';
 import { SOL_MINT_ADDRESS } from "~/utils/api";
 import { executeMonadMultiBuy, formatMonadTxSummary } from "~/utils/monadWalletAllocation";
+import { formatMonadError } from "~/utils/monadError";
 import { executeEnhancedTrade } from "~/utils/enhancedTradeHandler";
 import { showEnhancedToast, updateEnhancedToast } from "~/utils/enhancedToast";
 import { useUser } from "~/components/UserContext";
@@ -1875,65 +1876,6 @@ export default function DiscoverPage() {
     // Default to nadfun if unknown (this handles Birdeye tokens that don't have launchpad_protocol)
     // Most Monad tokens on Birdeye are from nad.fun
     return 'nadfun';
-  }, []);
-
-  // Helper function to format user-friendly error messages (same as MonadTable)
-  const formatMonadError = useCallback((error: string | undefined | null): string => {
-    if (!error) return "Trade failed. Please try again.";
-    
-    const errorLower = error.toLowerCase();
-    
-    // Check for graduated/locked tokens first (most common case with Birdeye trending tokens)
-    if (errorLower.includes('err_bonding_curve_library_invalid_inputs') || 
-        errorLower.includes('bonding_curve_library_invalid_inputs')) {
-      // This error typically means the token has graduated to DEX, is locked, or doesn't exist on the bonding curve
-      // Most tokens from Birdeye trending that fail are already graduated or locked
-      // "Graduated" = moved from bonding curve to DEX (should use DEX router at 0x0B79d71AE99528D1dB24A4148b5f4F865cc2b137)
-      // "Locked" = trading is disabled (cannot trade anywhere)
-      return "This token cannot be bought on the bonding curve. If graduated, use the DEX router. If locked, trading is disabled.";
-    }
-    
-    if (errorLower.includes('insufficient liquidity') || 
-        errorLower.includes('expected output is 0') ||
-        errorLower.includes('no liquidity')) {
-      return "Insufficient liquidity. This token may not be available for trading.";
-    }
-    
-    if (errorLower.includes('token does not exist') || 
-        errorLower.includes('token may not exist')) {
-      return "Token not found. Please check the token address.";
-    }
-    
-    if (errorLower.includes('token has graduated') || 
-        errorLower.includes('graduated to dex')) {
-      return "This token has graduated from the bonding curve to DEX. Graduated tokens should be traded using the DEX router, not the bonding curve router.";
-    }
-    
-    // Check for locked tokens (separate from graduated)
-    if (errorLower.includes('locked') || errorLower.includes('cannot be traded')) {
-      return "This token is locked and trading is disabled. Locked tokens cannot be traded on bonding curves or DEX until the lock is removed by the token creator or protocol.";
-    }
-    
-    if (errorLower.includes('insufficient balance') || 
-        errorLower.includes('missing')) {
-      return "Insufficient balance. Please add more MON to your wallet.";
-    }
-    
-    if (errorLower.includes('locked') || 
-        errorLower.includes('cannot be traded')) {
-      return "This token is locked and cannot be traded.";
-    }
-    
-    if (errorLower.includes('execution reverted') || 
-        errorLower.includes('revert')) {
-      return "Transaction failed. The token may not be available or there may be insufficient liquidity.";
-    }
-    
-    if (error.length < 100 && !error.includes('0x') && !error.includes('data:')) {
-      return error;
-    }
-    
-    return "Trade failed. Please try again.";
   }, []);
 
   // QUICK BUY handler – using enhanced trade flow for Solana, Monad logic for Monad chain (same as MonadTable)

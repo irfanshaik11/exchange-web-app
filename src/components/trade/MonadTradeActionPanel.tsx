@@ -15,13 +15,14 @@ import InterstateTooltip from "../InterstateTooltip";
 import toast from "react-hot-toast";
 import { tradeMonadBuy, tradeMonadSell } from "~/utils/api";
 import { executeMonadMultiBuy, formatMonadTxSummary, buildMonadWalletAllocations } from "~/utils/monadWalletAllocation";
-import { validateMonadBalance } from "~/utils/tradeBalanceValidation";
+import { validateMonadBalance, computeMonadBalanceForValidation } from "~/utils/tradeBalanceValidation";
 import useMonadDevTokens from "~/hooks/useMonadDevTokens";
 import useMonadXray from "~/hooks/useMonadXray";
 import { extractTokenImage } from "~/utils/images";
 import useMonadPositionWebSocket from "~/hooks/useMonadPositionWebSocket";
 import { useSolPrice } from "~/components/SolPriceContext";
 import { broadcastMonadQuickTrade, consumePendingMonadPositionRefresh } from "~/utils/monadTradeEvents";
+import { formatMonadError } from "~/utils/monadError";
 
 type TimeRange = "5m" | "1h" | "12h" | "24h";
 
@@ -218,57 +219,6 @@ const AddressDisplay: React.FC<{
 interface MonadTradeActionPanelProps {
   token: Token | null;
 }
-
-// Helper function to format user-friendly error messages
-const formatMonadError = (error: string | undefined | null): string => {
-  if (!error) return "Trade failed. Please try again.";
-  
-  const errorLower = error.toLowerCase();
-  
-  // Check for specific error patterns
-  if (errorLower.includes('err_bonding_curve_library_invalid_inputs') || 
-      errorLower.includes('bonding_curve_library_invalid_inputs')) {
-    return "This token has no liquidity or has graduated to DEX. Try a different token.";
-  }
-  
-  if (errorLower.includes('insufficient liquidity') || 
-      errorLower.includes('expected output is 0') ||
-      errorLower.includes('no liquidity')) {
-    return "Insufficient liquidity. This token may not be available for trading.";
-  }
-  
-  if (errorLower.includes('token does not exist') || 
-      errorLower.includes('token may not exist')) {
-    return "Token not found. Please check the token address.";
-  }
-  
-  if (errorLower.includes('token has graduated') || 
-      errorLower.includes('graduated to dex')) {
-    return "This token has graduated to DEX. Trading on bonding curve is no longer available.";
-  }
-  
-  if (errorLower.includes('insufficient balance') || 
-      errorLower.includes('missing')) {
-    return "Insufficient balance. Please add more MON to your wallet.";
-  }
-  
-  if (errorLower.includes('locked') || 
-      errorLower.includes('cannot be traded')) {
-    return "This token is locked and cannot be traded.";
-  }
-  
-  if (errorLower.includes('execution reverted') || 
-      errorLower.includes('revert')) {
-    return "Transaction failed. The token may not be available or there may be insufficient liquidity.";
-  }
-  
-  // Return original error if it's short and user-friendly, otherwise return generic message
-  if (error.length < 100 && !error.includes('0x') && !error.includes('data:')) {
-    return error;
-  }
-  
-  return "Trade failed. Please try again.";
-};
 
 const MonadTradeActionPanel: React.FC<MonadTradeActionPanelProps> = ({ token }) => {
   const { user, refreshBalance, chainBalances, walletList, walletBalances, selectedWalletIds } = useUser();
@@ -693,28 +643,37 @@ const MonadTradeActionPanel: React.FC<MonadTradeActionPanelProps> = ({ token }) 
     // This prevents the misleading "Trade placed!" toast when balance is insufficient
     // ============================================
     if (mode === "buy") {
-      const monadBalance = chainBalances['monad'] ?? 0;
+      const selectedMonadWalletIds = selectedWalletIds?.monad || [];
+      const isMultiMonad = selectedMonadWalletIds.length > 1;
+      const monadBalance = computeMonadBalanceForValidation({
+        selectedWalletIds: selectedMonadWalletIds,
+        walletList,
+        walletBalances,
+        fallbackBalance: chainBalances['monad'] ?? 0,
+      });
       const tradeAmount = parseFloat(amount);
 
-      const clientValidation = validateMonadBalance({
-        balance: monadBalance,
-        tradeAmount: tradeAmount,
-        gasPrice: gasPrice || undefined,
-      });
+      if (!isMultiMonad) {
+        const clientValidation = validateMonadBalance({
+          balance: monadBalance,
+          tradeAmount: tradeAmount,
+          gasPrice: gasPrice || undefined,
+        });
 
-      if (!clientValidation.isValid) {
-        toast.error(clientValidation.errorMessage || 'Insufficient MON balance', { duration: 5000 });
-        return;
-      }
-    } else if (mode === "sell") {
-      // Only block when we have a confirmed zero balance; allow attempts while position data is still loading/stale
-      const currentTokenBalance = positionSummary?.balanceTokens;
-      if (currentTokenBalance !== undefined) {
-        if (currentTokenBalance <= 0) {
-          toast.error('Insufficient token balance. Your balance is 0 tokens. Cannot sell.', { duration: 5000 });
+        if (!clientValidation.isValid) {
+          toast.error(clientValidation.errorMessage || 'Insufficient MON balance', { duration: 5000 });
           return;
         }
-      } else if (!positionLoading) {
+      }
+    } else if (mode === "sell") {
+      // Only block when we have a confirmed zero balance AND not in multi-wallet mode.
+      // Allow attempts when balance is stale/unknown or when multiple wallets might hold the token.
+      const isMultiMonad = (selectedWalletIds?.monad || []).length > 1;
+      const currentTokenBalance = positionSummary?.balanceTokens;
+      if (currentTokenBalance !== undefined && currentTokenBalance <= 0 && !isMultiMonad) {
+        toast.error('Insufficient token balance. Your balance is 0 tokens. Cannot sell.', { duration: 5000 });
+        return;
+      } else if (currentTokenBalance === undefined && !positionLoading) {
         // Kick off a background refresh so the panel catches up after quick buys elsewhere
         refreshPosition().catch((err) => {
           console.error('[MonadTradeActionPanel] Failed to refresh position before sell:', err);
@@ -770,7 +729,9 @@ const MonadTradeActionPanel: React.FC<MonadTradeActionPanelProps> = ({ token }) 
       walletBalances,
       selectedWalletIds: selectedWalletIds?.monad || [],
     });
-    const walletsWithBalance = allocations.length;
+    const DISPLAY_MIN_BALANCE = 0.0035;
+    const fundedAllocations = allocations.filter((a) => (a.balance ?? 0) >= DISPLAY_MIN_BALANCE);
+    const walletsWithBalance = fundedAllocations.length || (allocations.length > 0 ? 1 : 0);
 
     // Start timer animation - update every 50ms, show checkmark when cap is reached
     const timerInterval = setInterval(() => {
@@ -870,6 +831,9 @@ const MonadTradeActionPanel: React.FC<MonadTradeActionPanelProps> = ({ token }) 
 
         // Get current token price for accurate USD value calculation
         const currentPriceUsd = (token as any).usd_price || (token as any).price_usd || 0;
+        const selectedMonadWalletIds = selectedWalletIds?.monad || [];
+        const isMultiWalletSell = selectedMonadWalletIds.length > 1;
+        const selectedWalletId = selectedMonadWalletIds[0];
 
         const result = await tradeMonadSell(
           {
@@ -879,14 +843,27 @@ const MonadTradeActionPanel: React.FC<MonadTradeActionPanelProps> = ({ token }) 
             slippage: maxSlippage * 100,
             gasPrice: gasPrice,
             priceUsd: currentPriceUsd, // Pass current price for immediate USD calculation
+            // Wallet routing
+            walletId: !isMultiWalletSell ? selectedWalletId : undefined,
+            walletIds: isMultiWalletSell ? selectedMonadWalletIds : undefined,
+            useMultipleWallets: isMultiWalletSell,
           },
           user.bearerToken
         );
 
-        if (result.success && result.txHash) {
+        const sellSuccess =
+          result?.success === true ||
+          (Array.isArray((result as any)?.txHashes) && (result as any).txHashes.length > 0) ||
+          !!(result as any)?.txHash;
+
+        const txHash =
+          (result as any)?.txHash ||
+          ((result as any)?.txHashes && (result as any)?.txHashes[0]);
+
+        if (sellSuccess) {
           // Only update toast if WebSocket hasn't already handled it
-          if (pendingToastRef.current?.id === uniqueToastId) {
-            const explorerUrl = `https://monadvision.com/tx/${result.txHash}`;
+          if (pendingToastRef.current?.id === uniqueToastId && txHash) {
+            const explorerUrl = `https://monadvision.com/tx/${txHash}`;
             // Update the link element - wrap Monad logo in anchor to make clickable
             const linkEl = document.getElementById(`link-${uniqueToastId}`);
             if (linkEl) {
@@ -897,7 +874,14 @@ const MonadTradeActionPanel: React.FC<MonadTradeActionPanelProps> = ({ token }) 
               toast.dismiss(uniqueToastId);
             }, 10000);
             pendingToastRef.current = null;
+          } else {
+            // If no txHash, just dismiss after 10s
+            setTimeout(() => {
+              toast.dismiss(uniqueToastId);
+            }, 10000);
+            pendingToastRef.current = null;
           }
+
           // Refresh balance immediately after successful sell (with small delay for on-chain confirmation)
           setTimeout(() => {
             refreshBalance({ chain: "monad", force: true }).catch((err) => {

@@ -20,6 +20,7 @@ import { SOL_MINT_ADDRESS, tradeMonadSell, tradeSellPercentage } from '~/utils/a
 import { getPoolTypeFromToken } from '~/utils/poolTypeDetection';
 import { normalizeMonadAddress } from '~/utils/normalizeMonadAddress';
 import { broadcastMonadQuickTrade } from '~/utils/monadTradeEvents';
+import { formatMonadError } from '~/utils/monadError';
 
 type TokenMetadata = UnifiedTokenMetadata & {
   timestamp?: number;
@@ -397,6 +398,10 @@ const Positions: React.FC<PositionsProps> = ({
               : undefined;
           const launchpad = resolveMonadLaunchpad(position);
 
+          const selectedMonadWalletIds = selectedWalletIds?.monad || [];
+          const isMultiWalletSell = selectedMonadWalletIds.length > 1;
+          const selectedWalletId = selectedMonadWalletIds[0];
+
           const result = await tradeMonadSell(
             {
               tokenAddress,
@@ -404,6 +409,9 @@ const Positions: React.FC<PositionsProps> = ({
               percentage: percent,
               slippage,
               gasPrice,
+              walletId: !isMultiWalletSell ? selectedWalletId : undefined,
+              walletIds: isMultiWalletSell ? selectedMonadWalletIds : undefined,
+              useMultipleWallets: isMultiWalletSell,
             },
             bearerToken,
           );
@@ -415,7 +423,8 @@ const Positions: React.FC<PositionsProps> = ({
             broadcastMonadQuickTrade(tokenAddress, 'sell');
             refreshPositions();
           } else {
-            toastControls.fail('Sell failed. Please try again.');
+            const errorMessage = formatMonadError((result as any)?.error);
+            toastControls.fail(errorMessage);
             return;
           }
         } else {
@@ -447,10 +456,9 @@ const Positions: React.FC<PositionsProps> = ({
           refreshPositions();
         }
       } catch (error: any) {
-        const message =
-          error?.message ||
-          error?.error ||
-          'Sell failed. Please try again.';
+        const message = isMonadPosition(position)
+          ? formatMonadError(error?.message || error?.error)
+          : (error?.message || error?.error || 'Sell failed. Please try again.');
         toastControls.fail(message);
       } finally {
         toastControls.cleanup();
