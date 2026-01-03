@@ -432,8 +432,7 @@ const TokenAvatar: React.FC<{
     return 'https://logos-world.net/wp-content/uploads/2024/10/Pump-Fun-Logo.png';
   };
 
-  // API returns image_url, fallback to image, logo, then uri
-  const imageUrl = (token as any).image_url || (token as any).image || token.logo || (token as any).uri;
+  const imageUrl = (token as any).uri || (token as any).image || token.logo;
 
   return (
     <div className="relative h-12 w-12 flex items-center justify-center">
