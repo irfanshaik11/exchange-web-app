@@ -669,9 +669,8 @@ const TradeHeader: React.FC<TradeHeaderProps> = ({ token, livePriceUsd, liveMark
   }
 
   // token image (ipfs/http)
-  // API returns image_url, fallback to image, logo, then uri (metadata URI)
   const rawImg =
-    (token as any).image_url || (token as any).image || (token as any).logo || (token as any).uri;
+    (token as any).uri || (token as any).image || (token as any).logo;
   const imgSrc = normalizeAssetUrl(rawImg);
   const fallbackAvatar = `https://ui-avatars.com/api/?name=${encodeURIComponent(
     token.symbol || token.name || "T",
@@ -1561,32 +1560,22 @@ const TradeHeader: React.FC<TradeHeaderProps> = ({ token, livePriceUsd, liveMark
           return null; // Hide trade stats for Monad tokens
         }
         
-        // Calculate derived values from API fields
-        // Solana API uses: total_buy_volume_24h, total_buys_24h
-        // Fallback to old field names for backwards compatibility
-        const buyVol24h = (token as any)?.total_buy_volume_24h ?? (token as any)?.total_buy_volume_usd ?? 0;
-        const sellVol24h = (token as any)?.total_sell_volume_24h ?? (token as any)?.total_sell_volume_usd ?? 0;
-        const buys24h = (token as any)?.total_buys_24h ?? (token as any)?.total_buys ?? 0;
-        const sells24h = (token as any)?.total_sells_24h ?? (token as any)?.total_sells ?? 0;
-        const volume24h = (token as any)?.volume_24h ?? (buyVol24h + sellVol24h);
-        const netVolume = (token as any)?.net_volume_usd ?? (buyVol24h - sellVol24h);
-
         return (
           <div className="flex items-center gap-3 ml-auto mr-2">
             <StatInline label="24H VOL">
-              ${formatSmartNumber(volume24h)}
+              ${formatSmartNumber((token as any)?.volume_24h ?? 0)}
             </StatInline>
             <StatInline label="BUYS" accent="green">
-              {buys24h} / ${formatSmartNumber(buyVol24h)}
+              {(token as any)?.total_buys ?? 0} / ${formatSmartNumber((token as any)?.total_buy_volume_usd ?? 0)}
             </StatInline>
             <StatInline label="SELLS">
               <span style={{ color: "#FF4D7F" }}>
-                {sells24h} / ${formatSmartNumber(sellVol24h)}
+                {(token as any)?.total_sells ?? 0} / ${formatSmartNumber((token as any)?.total_sell_volume_usd ?? 0)}
               </span>
             </StatInline>
             <StatInline label="NET">
-              <span style={{ color: netVolume >= 0 ? AX.green : "#FF4D7F" }}>
-                {netVolume >= 0 ? "+" : ""}${formatSmartNumber(netVolume)}
+              <span style={{ color: ((token as any)?.net_volume_usd ?? 0) >= 0 ? AX.green : "#FF4D7F" }}>
+                {((token as any)?.net_volume_usd ?? 0) >= 0 ? "+" : ""}${formatSmartNumber((token as any)?.net_volume_usd ?? 0)}
               </span>
             </StatInline>
           </div>
