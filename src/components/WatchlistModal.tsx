@@ -759,7 +759,7 @@ export default function WatchlistModal({ open, onClose }: WatchlistModalProps) {
               const protocolColor = resolveProtocolColor(token);
               const tokenIcon = resolveProtocolIcon(token);
               const fillProtocolBadge = shouldFillProtocolBadge(token);
-              const rawImg = (token as any).uri || (token as any).image || (token as any).logo;
+              const rawImg = (token as any).image_url || (token as any).image || (token as any).logo || (token as any).uri;
               const imgSrc = normalizeAssetUrl(rawImg);
               const fallbackAvatar = `https://ui-avatars.com/api/?name=${encodeURIComponent(
                 token.symbol || token.name || "T"
