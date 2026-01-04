@@ -284,7 +284,7 @@ export default function Header({
     selectedWalletIds,
     logout,
   } = useUser();
-  // Get chain from URL first, then localStorage, then default to monad
+  // Get chain from URL first, then localStorage, then default to solana
   const currentChain = (() => {
     if (router.query.chain) {
       return router.query.chain as string;
@@ -295,7 +295,7 @@ export default function Header({
         return savedChain;
       }
     }
-    return 'monad';
+    return 'sol';
   })();
   const { solPrice, monPrice } = useSolPrice();
   const chainPrice = currentChain === 'monad' ? monPrice : solPrice;

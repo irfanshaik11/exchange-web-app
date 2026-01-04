@@ -373,7 +373,7 @@ function TurnkeySessionBridge() {
               router.asPath.includes("/turnkey/export") ||
               router.pathname === "/portfolio";
             if (!isOnExportPage) {
-              router.push("/pulse?chain=monad");
+              router.push("/pulse?chain=sol");
             } else {
               console.log("[TurnkeySessionBridge] User authenticated on export page, staying on page");
             }

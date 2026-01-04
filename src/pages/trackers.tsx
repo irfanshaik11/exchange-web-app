@@ -225,7 +225,7 @@ export default function TrackersPage() {
   const [lastActiveMap, setLastActiveMap] = useState<
     Record<string, number | null | undefined>
   >({});
-  // Get chain from router query first, then localStorage, then default to monad
+  // Get chain from router query first, then localStorage, then default to solana
   const currentChain = (() => {
     if (router.query.chain) {
       return router.query.chain as string;
@@ -236,9 +236,9 @@ export default function TrackersPage() {
         return savedChain;
       }
     }
-    return 'monad';
+    return 'sol';
   })();
-  const selectedChain = (currentChain === 'monad' || currentChain === 'sol') ? currentChain : 'monad';
+  const selectedChain = (currentChain === 'monad' || currentChain === 'sol') ? currentChain : 'sol';
   const walletsRef = useRef<Wallet[]>([]);
   const [tokenMetadata, setTokenMetadata] = useState<
     Map<

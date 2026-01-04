@@ -35,19 +35,19 @@ export default function DiscoverPopoutContent() {
   const router = useRouter();
   
   // CRITICAL: Initialize chain from router query immediately to avoid race conditions
-  // Default to monad chain for popout
+  // Default to solana chain for popout
   const manualChainSwitchRef = useRef(false);
   const [currentChain, setCurrentChain] = useState<string>(() => {
-    // Initialize from router query if available, otherwise default to 'monad'
+    // Initialize from router query if available, otherwise default to 'sol'
     if (typeof window !== 'undefined' && router.isReady) {
-      return (router.query.chain as string) || 'monad';
+      return (router.query.chain as string) || 'sol';
     }
     // Also check URL params directly for immediate access
     if (typeof window !== 'undefined') {
       const urlParams = new URLSearchParams(window.location.search);
-      return urlParams.get('chain') || 'monad';
+      return urlParams.get('chain') || 'sol';
     }
-    return 'monad';
+    return 'sol';
   });
   
   // Sync chain state with router query (only if not manually switched)
@@ -56,7 +56,7 @@ export default function DiscoverPopoutContent() {
       manualChainSwitchRef.current = false;
       return;
     }
-    const chainFromQuery = (router.query.chain as string) || 'monad';
+    const chainFromQuery = (router.query.chain as string) || 'sol';
     if (chainFromQuery !== currentChain) {
       console.log('[DiscoverPopout] Chain changed from router:', currentChain, '->', chainFromQuery);
       setCurrentChain(chainFromQuery);
@@ -70,7 +70,7 @@ export default function DiscoverPopoutContent() {
       return;
     }
     const urlParams = new URLSearchParams(router.asPath.split('?')[1] || '');
-    const chainFromUrl = urlParams.get('chain') || 'monad';
+    const chainFromUrl = urlParams.get('chain') || 'sol';
     if (chainFromUrl !== currentChain) {
       console.log('[DiscoverPopout] Chain changed from URL:', currentChain, '->', chainFromUrl);
       setCurrentChain(chainFromUrl);

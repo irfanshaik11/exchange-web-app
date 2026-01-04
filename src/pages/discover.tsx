@@ -45,13 +45,13 @@ export default function DiscoverPage() {
         return saved;
       }
     }
-    return 'monad';
+    return 'sol';
   };
 
   // CRITICAL: Initialize chain from router query immediately to avoid race conditions
   // This ensures we react to shallow routing changes immediately
   const [currentChain, setCurrentChain] = useState<string>(() => {
-    // Initialize from router query if available, then localStorage, otherwise default to 'monad'
+    // Initialize from router query if available, then localStorage, otherwise default to 'sol'
     if (typeof window !== 'undefined' && router.isReady && router.query.chain) {
       return router.query.chain as string;
     }
@@ -63,7 +63,7 @@ export default function DiscoverPage() {
       // Check localStorage
       return getSavedChain();
     }
-    return 'monad';
+    return 'sol';
   });
 
   // Sync chain state with router query - this handles both initial load and shallow routing updates
