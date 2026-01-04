@@ -106,7 +106,7 @@ export default function PulsePage() {
   
   // CRITICAL: Initialize chain from URL immediately to avoid race conditions
   // This ensures we react to the correct chain before router.query is ready
-  // Priority: URL param > localStorage > default (monad)
+  // Priority: URL param > localStorage > default (sol)
   const [currentChain, setCurrentChain] = useState<string>(() => {
     // Initialize from router query if available, otherwise check URL directly
     if (typeof window !== 'undefined' && router.isReady && router.query.chain) {
@@ -123,7 +123,7 @@ export default function PulsePage() {
         return savedChain;
       }
     }
-    return 'monad';
+    return 'sol';
   });
   
   // Sync chain state with router query - this handles both initial load and shallow routing updates
@@ -196,13 +196,13 @@ export default function PulsePage() {
   // }`;
 
   // Redirect to /pulse?chain=X if no chain parameter is present
-  // Use saved chain from localStorage, or default to monad
+  // Use saved chain from localStorage, or default to sol
   useEffect(() => {
     if (router.isReady && !router.query.chain) {
       const savedChain = typeof window !== 'undefined'
         ? localStorage.getItem('selected-chain')
         : null;
-      const chainToUse = (savedChain === 'sol' || savedChain === 'monad') ? savedChain : 'monad';
+      const chainToUse = (savedChain === 'sol' || savedChain === 'monad') ? savedChain : 'sol';
       router.replace(`/pulse?chain=${chainToUse}`, undefined, { shallow: true });
       setCurrentChain(chainToUse);
     }
@@ -1386,17 +1386,6 @@ export default function PulsePage() {
                 <h1 className="text-xl font-bold">Trenches</h1>
                 <div className="flex items-center gap-3">
                 <Link
-                  href="/pulse?chain=monad"
-                  aria-label="View Monad tokens"
-                  className={monadButtonClasses}
-                >
-                  <img
-                    src="https://i0.wp.com/www.gizmotimes.com/wp-content/uploads/2023/10/Monad-Logo.png?fit=1920%2C1080&ssl=1"
-                    alt="Monad"
-                    className="h-7 w-7 rounded-full object-cover"
-                  />
-                </Link>
-                <Link
                   href="/pulse?chain=sol"
                   aria-label="View Solana tokens"
                   className={solanaButtonClasses}
@@ -1405,6 +1394,17 @@ export default function PulsePage() {
                     src="https://raw.githubusercontent.com/solana-labs/token-list/main/assets/mainnet/So11111111111111111111111111111111111111112/logo.png"
                     alt="Solana"
                     className="h-6 w-6 rounded-full object-contain mix-blend-screen contrast-[1.2]"
+                  />
+                </Link>
+                <Link
+                  href="/pulse?chain=monad"
+                  aria-label="View Monad tokens"
+                  className={monadButtonClasses}
+                >
+                  <img
+                    src="https://i0.wp.com/www.gizmotimes.com/wp-content/uploads/2023/10/Monad-Logo.png?fit=1920%2C1080&ssl=1"
+                    alt="Monad"
+                    className="h-7 w-7 rounded-full object-cover"
                   />
                 </Link>
                   {/* <Link

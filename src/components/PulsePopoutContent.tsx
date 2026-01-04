@@ -54,16 +54,16 @@ export default function PulsePopoutContent({ forceMobileView = false }: PulsePop
   const router = useRouter();
   const manualChainSwitchRef = useRef(false);
   
-  // CRITICAL: Default to monad chain for popout
+  // CRITICAL: Default to solana chain for popout
   const [currentChain, setCurrentChain] = useState<string>(() => {
     if (typeof window !== 'undefined' && router.isReady) {
-      return (router.query.chain as string) || 'monad';
+      return (router.query.chain as string) || 'sol';
     }
     if (typeof window !== 'undefined') {
       const urlParams = new URLSearchParams(window.location.search);
-      return urlParams.get('chain') || 'monad';
+      return urlParams.get('chain') || 'sol';
     }
-    return 'monad';
+    return 'sol';
   });
   
   // Sync chain state with router query (only if not manually switched)
@@ -72,7 +72,7 @@ export default function PulsePopoutContent({ forceMobileView = false }: PulsePop
       manualChainSwitchRef.current = false;
       return;
     }
-    const chainFromQuery = (router.query.chain as string) || 'monad';
+    const chainFromQuery = (router.query.chain as string) || 'sol';
     if (chainFromQuery !== currentChain) {
       setCurrentChain(chainFromQuery);
     }
@@ -85,7 +85,7 @@ export default function PulsePopoutContent({ forceMobileView = false }: PulsePop
       return;
     }
     const urlParams = new URLSearchParams(router.asPath.split('?')[1] || '');
-    const chainFromUrl = urlParams.get('chain') || 'monad';
+    const chainFromUrl = urlParams.get('chain') || 'sol';
     if (chainFromUrl !== currentChain) {
       setCurrentChain(chainFromUrl);
     }

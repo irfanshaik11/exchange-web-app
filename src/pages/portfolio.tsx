@@ -323,7 +323,7 @@ export default function PortfolioPage() {
   const { user, loading: userLoading, solBalance, usdcBalance, refreshBalance, refreshAllBalances, chainBalances, primaryWalletAddresses, walletBalances: contextWalletBalances, walletList: contextWalletList, walletListLoading, refreshWalletList, refreshUser, selectedWalletIds, selectAllWalletsForChain, selectWalletsWithFunds, clearSelectedWallets, setSelectedWalletsForChain } = useUser();
   const { monPrice } = useSolPrice();
   const router = useRouter();
-  // Get chain from URL first, then localStorage, then default to monad
+  // Get chain from URL first, then localStorage, then default to solana
   const currentChain = (() => {
     if (router.query.chain) {
       return router.query.chain as string;
@@ -334,7 +334,7 @@ export default function PortfolioPage() {
         return savedChain;
       }
     }
-    return 'monad';
+    return 'sol';
   })();
   const monBalance = chainBalances?.monad || 0;
   const [walletChecked, setWalletChecked] = useState(false);

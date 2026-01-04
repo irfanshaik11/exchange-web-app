@@ -70,11 +70,11 @@ export default function Home() {
   // Redirect to /pulse if we're on the root path without any query params
   useEffect(() => {
     if (router.isReady && router.pathname === '/' && !router.query.search && !router.query.chain) {
-      // Use saved chain from localStorage, default to monad
+      // Use saved chain from localStorage, default to solana
       const savedChain = typeof window !== 'undefined'
         ? localStorage.getItem('selected-chain')
         : null;
-      const chainToUse = (savedChain === 'sol' || savedChain === 'monad') ? savedChain : 'monad';
+      const chainToUse = (savedChain === 'sol' || savedChain === 'monad') ? savedChain : 'sol';
       router.replace(`/pulse?chain=${chainToUse}`, undefined, { shallow: false });
       return;
     }
