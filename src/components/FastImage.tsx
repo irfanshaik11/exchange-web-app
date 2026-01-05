@@ -64,7 +64,10 @@ export default function FastImage({
     finalSrc.includes('image.solanatracker.io') ||
     finalSrc.includes('ipfs-forward.solanatracker.io') ||
     finalSrc.includes('instagram.com') ||
-    finalSrc.includes('cdninstagram.com')
+    finalSrc.includes('cdninstagram.com') ||
+    finalSrc.includes('ipfs.storacha.link') ||
+    finalSrc.includes('storacha.link') ||
+    finalSrc.includes('content.coinwave.gg')
   );
   
   const imageUrl = needsProxy && finalSrc

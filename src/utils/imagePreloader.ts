@@ -3,6 +3,8 @@
  * Preloads images for instant display in tables
  */
 
+import { normalizeImageUrl, isMetadataUrl } from "./images";
+
 // Track preloaded images to avoid duplicate requests
 const preloadedImages = new Set<string>();
 
@@ -99,10 +101,37 @@ export async function preloadImages(
  * Extract image URLs from token array
  */
 export function extractImageUrls(tokens: any[]): string[] {
+  const needsProxy = (url: string): boolean => {
+    return (
+      url.includes('token-media.defined.fi') ||
+      url.includes('ipfs.io') ||
+      url.includes('cloudflare-ipfs.com') ||
+      url.includes('gateway.pinata.cloud') ||
+      url.includes('ipfs/') ||
+      url.startsWith('ipfs://') ||
+      url.includes('tokens.debridge.finance') ||
+      url.includes('debridge.finance') ||
+      url.includes('launchonsoar.com') ||
+      url.includes('metadata.rapidlaunch.io') ||
+      url.includes('rapidlaunch.io') ||
+      url.includes('metadata.j7tracker.com') ||
+      url.includes('j7tracker.com') ||
+      url.includes('edge.uxento.io') ||
+      url.includes('uxento.io') ||
+      url.includes('image.solanatracker.io') ||
+      url.includes('ipfs-forward.solanatracker.io') ||
+      url.includes('instagram.com') ||
+      url.includes('cdninstagram.com') ||
+      url.includes('ipfs.storacha.link') ||
+      url.includes('storacha.link') ||
+      url.includes('content.coinwave.gg')
+    );
+  };
+
   return tokens
     .map(token => {
       // Check multiple possible image fields
-      return (
+      const raw =
         token?.image ||
         token?.image_url ||
         token?.imageUrl ||
@@ -112,8 +141,21 @@ export function extractImageUrls(tokens: any[]): string[] {
         token?.uri ||
         token?.icon ||
         token?.thumbnail ||
-        null
-      );
+        null;
+
+      if (!raw || typeof raw !== 'string') return null;
+
+      // Skip metadata URLs here; they are resolved elsewhere before rendering
+      if (isMetadataUrl(raw)) return null;
+
+      const normalized = normalizeImageUrl(raw) || raw;
+      if (!normalized) return null;
+
+      if (normalized.startsWith('/api/image')) return normalized;
+
+      return needsProxy(normalized)
+        ? `/api/image?url=${encodeURIComponent(normalized)}`
+        : normalized;
     })
     .filter((url): url is string => Boolean(url && typeof url === 'string'));
 }
@@ -146,4 +188,3 @@ export async function preloadTokenImages(
   
   await preloadImages(imageUrls, restOptions);
 }
-

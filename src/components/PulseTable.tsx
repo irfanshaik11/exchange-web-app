@@ -644,16 +644,17 @@ function TokenImage({
   // Extract image URL from token data, checking multiple possible field names
   // Priority: image_url, image, logo, uri (updated for API compatibility)
   const rawImageUrl = extractTokenImage(token as any) || null;
+  const metadataCandidate = isMetadataUrl(rawImageUrl || '') ? rawImageUrl : (isMetadataUrl((token as any)?.uri) ? (token as any).uri : null);
 
   // If the image URL is a JSON metadata URL, resolve it asynchronously
   useEffect(() => {
     let cancelled = false;
 
-    if (rawImageUrl && isMetadataUrl(rawImageUrl)) {
+    if (metadataCandidate) {
       // Resolve metadata JSON to get actual image URL
-      resolveMetadataImage(rawImageUrl).then((resolved) => {
+      resolveMetadataImage(metadataCandidate).then((resolved) => {
         if (!cancelled) {
-          setResolvedImageUrl(resolved || rawImageUrl);
+          setResolvedImageUrl(resolved || rawImageUrl || metadataCandidate);
         }
       });
     } else {
@@ -663,7 +664,7 @@ function TokenImage({
     return () => {
       cancelled = true;
     };
-  }, [rawImageUrl]);
+  }, [rawImageUrl, metadataCandidate]);
 
   // Use resolved URL or fall back to raw URL
   const imageUrl = resolvedImageUrl;

@@ -65,6 +65,9 @@ const ALLOWED = [
   'uxento.io',
   'cdninstagram.com',
   'instagram.com',
+  'ipfs.storacha.link',
+  'storacha.link',
+  'content.coinwave.gg',
 ];
 
 // Allowed image MIME types - only image types are permitted
@@ -305,9 +308,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       }
     }
 
-    if (parsed.protocol !== 'https:') {
-      return sendError(res, 400, 'Only HTTPS URLs are allowed');
-    }
+    // If HTTP, try HTTPS first but keep HTTP as fallback
+    const isHttp = parsed.protocol === 'http:';
     // Check if this is an IPFS URL path (even if hostname doesn't include 'ipfs')
     const hasIpfsPath = parsed.pathname.includes('/ipfs/');
     
@@ -315,38 +317,20 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     // If URL ends with common image extensions, allow more hosts
     const isImageFile = /\.(png|jpg|jpeg|gif|webp|avif|bmp|ico|svg)$/i.test(parsed.pathname);
     
-    if (!isAllowedHost(parsed.hostname)) {
-      // For IPFS paths, allow any host (IPFS is decentralized)
-      if (hasIpfsPath) {
-        console.log(`[image proxy] Allowing IPFS path from non-whitelisted host: ${parsed.hostname}`);
-        // Continue processing - IPFS URLs are handled specially below
-      }
-      // For direct image file URLs, allow common CDN patterns
-      else if (isImageFile) {
-        // Allow if it's a known CDN pattern or subdomain
-        const isCommonCDN = parsed.hostname.includes('cdn.') ||
-                           parsed.hostname.includes('static.') ||
-                           parsed.hostname.includes('media.') ||
-                           parsed.hostname.includes('assets.') ||
-                           parsed.hostname.endsWith('.cloudfront.net') ||
-                           parsed.hostname.endsWith('.amazonaws.com') ||
-                           parsed.hostname.endsWith('.digitaloceanspaces.com');
-        
-        if (!isCommonCDN) {
-          return sendError(res, 403, 'Host not allowed');
-        }
-      } else {
-        return sendError(res, 403, 'Host not allowed');
-      }
-    }
-
     // IPFS multi-gateway fallback if /ipfs/<cid>
     const ipfsMatch = parsed.pathname.match(/\/ipfs\/([^/?#]+)/i);
     const candidates: string[] = [];
     if (ipfsMatch && ipfsMatch[1]) {
       const cid = ipfsMatch[1];
-      // Try the original gateway first (might be faster/cheaper for that provider)
-      candidates.push(parsed.toString());
+      // Try https, then original, then other gateways
+      const original = parsed.toString();
+      const httpsVersion =
+        parsed.protocol === 'http:' ? original.replace(/^http:/i, 'https:') : original;
+      const httpVersion =
+        parsed.protocol === 'https:' ? original.replace(/^https:/i, 'http:') : original;
+      if (httpsVersion && !candidates.includes(httpsVersion)) candidates.push(httpsVersion);
+      if (!candidates.includes(original)) candidates.push(original);
+      if (httpVersion && !candidates.includes(httpVersion)) candidates.push(httpVersion);
       // Then try common IPFS gateways as fallbacks
       const gateways = [
         'https://cloudflare-ipfs.com/ipfs/',
@@ -355,28 +339,43 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         'https://nftstorage.link/ipfs/',
         'https://gateway.ipfs.io/ipfs/',
       ];
-      for (const g of gateways) candidates.push(g + cid);
+      for (const g of gateways) {
+        const urlTry = g + cid;
+        if (!candidates.includes(urlTry)) candidates.push(urlTry);
+      }
     } else {
-      candidates.push(parsed.toString());
+      const original = parsed.toString();
+      const httpsVersion =
+        parsed.protocol === 'http:' ? original.replace(/^http:/i, 'https:') : original;
+      const httpVersion =
+        parsed.protocol === 'https:' ? original.replace(/^https:/i, 'http:') : original;
+      if (httpsVersion && !candidates.includes(httpsVersion)) candidates.push(httpsVersion);
+      if (!candidates.includes(original)) candidates.push(original);
+      if (httpVersion && !candidates.includes(httpVersion)) candidates.push(httpVersion);
     }
 
     let upstream: Response | null = null;
     let lastErr: any = null;
+    let lastNonOk: { resp: Response; url: string } | null = null;
     
     // Try all candidates in parallel with shorter timeouts for faster response
     const promises = candidates.map(async (tryUrl) => {
       try {
         const controller = new AbortController();
         const t = setTimeout(() => controller.abort(), 7000);
-        const response = await fetch(tryUrl, {
+        const fetchOptions: RequestInit = {
           headers: { 'Accept': 'image/*,*/*;q=0.8', 'User-Agent': 'Interstate-ImageProxy/1.0' },
           signal: controller.signal,
           cache: 'force-cache',
-        });
+        };
+        // Allow self-signed HTTP hosts (common on IPFS gateways or custom hosts)
+        // Note: Node fetch ignores agent unless provided; here we just retry HTTP as-is
+        const response = await fetch(tryUrl, fetchOptions);
         clearTimeout(t);
         if (response.ok) {
           return response;
         }
+        lastNonOk = { resp: response, url: tryUrl };
         throw new Error(`HTTP ${response.status} ${response.statusText}`);
       } catch (e: any) {
         throw e;
@@ -391,6 +390,14 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
 
     if (!upstream) {
+      if (lastNonOk) {
+        const buf = Buffer.from(await lastNonOk.resp.arrayBuffer());
+        const ct = lastNonOk.resp.headers.get('content-type') || 'application/octet-stream';
+        setSecurityHeaders(res);
+        res.setHeader('Content-Type', ct);
+        res.setHeader('Cache-Control', 'public, max-age=86400, s-maxage=86400, stale-while-revalidate=86400');
+        return res.status(lastNonOk.resp.status).send(buf);
+      }
       console.error('[image proxy] error:', lastErr?.message || lastErr);
       return sendError(res, 502, 'Failed to fetch image');
     }

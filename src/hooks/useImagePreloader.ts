@@ -31,7 +31,10 @@ export function useImagePreloader() {
       src.includes('image.solanatracker.io') ||
       src.includes('ipfs-forward.solanatracker.io') ||
       src.includes('instagram.com') ||
-      src.includes('cdninstagram.com')
+      src.includes('cdninstagram.com') ||
+      src.includes('ipfs.storacha.link') ||
+      src.includes('storacha.link') ||
+      src.includes('content.coinwave.gg')
     );
 
     const imageUrl = needsProxy 

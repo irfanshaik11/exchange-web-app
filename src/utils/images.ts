@@ -1,6 +1,10 @@
 export function normalizeImageUrl(src?: string | null): string | null {
   if (!src) return null;
   try {
+    // Fix common double-protocol or prefixed glitches (e.g., "imaghttps://", "https://https://")
+    src = src.replace(/imaghttps:\/\//gi, 'https://');
+    src = src.replace(/https?:\/\/https?:\/\//gi, match => match.includes('https') ? 'https://' : 'http://');
+
     // Pass through relative paths (starting with /)
     if (src.startsWith('/')) {
       return src;
@@ -73,6 +77,10 @@ export function withImageFallback(primary?: string | null, fallback?: string | n
 export function isMetadataUrl(url: string | null | undefined): boolean {
   if (!url) return false;
   const lower = url.toLowerCase();
+  const hasImageExtension = /\.(png|jpg|jpeg|gif|webp|svg|avif|bmp|ico)$/i.test(lower);
+
+  // Explicit image extensions are not metadata
+  if (hasImageExtension) return false;
 
   // Quick positive match on explicit json/metadata paths
   if (lower.endsWith('.json') || lower.includes('/metadata/')) return true;
@@ -85,8 +93,22 @@ export function isMetadataUrl(url: string | null | undefined): boolean {
       hostname.includes('metadata.rapidlaunch.io') ||
       hostname.includes('metadata.uxento.io');
     if (isMetadataHost) {
-      return pathname.endsWith('.json') || pathname.includes('/metadata/');
+      return (
+        pathname.endsWith('.json') ||
+        pathname.includes('/metadata/') ||
+        pathname.includes('/data/')
+      );
     }
+
+    // IPFS links without image extensions are often metadata JSON
+    const isIpfs =
+      hostname.includes('ipfs') ||
+      lower.startsWith('ipfs://') ||
+      lower.includes('/ipfs/');
+    if (isIpfs) return true;
+
+    // Arweave URLs without extensions are often JSON metadata
+    if (hostname.includes('arweave')) return true;
   } catch {
     // If URL parse fails, fall through
   }
