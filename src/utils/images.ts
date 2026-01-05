@@ -73,13 +73,25 @@ export function withImageFallback(primary?: string | null, fallback?: string | n
 export function isMetadataUrl(url: string | null | undefined): boolean {
   if (!url) return false;
   const lower = url.toLowerCase();
-  return (
-    lower.endsWith('.json') ||
-    lower.includes('/metadata/') ||
-    lower.includes('metadata.j7tracker.com') ||
-    lower.includes('metadata.rapidlaunch.io') ||
-    lower.includes('metadata.uxento.io')
-  );
+
+  // Quick positive match on explicit json/metadata paths
+  if (lower.endsWith('.json') || lower.includes('/metadata/')) return true;
+
+  // For metadata hosts, require json or /metadata/ in the path (avoid treating direct images as metadata)
+  try {
+    const { hostname, pathname } = new URL(lower);
+    const isMetadataHost =
+      hostname.includes('metadata.j7tracker.com') ||
+      hostname.includes('metadata.rapidlaunch.io') ||
+      hostname.includes('metadata.uxento.io');
+    if (isMetadataHost) {
+      return pathname.endsWith('.json') || pathname.includes('/metadata/');
+    }
+  } catch {
+    // If URL parse fails, fall through
+  }
+
+  return false;
 }
 
 // Cache for resolved metadata images to avoid repeated fetches
@@ -101,10 +113,21 @@ export async function resolveMetadataImage(url: string): Promise<string | null> 
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 5000);
 
-    const response = await fetch(url, {
+    const metadataUrl = url.startsWith('/api/metadata')
+      ? url
+      : `/api/metadata?url=${encodeURIComponent(url)}`;
+
+    let response = await fetch(metadataUrl, {
       signal: controller.signal,
       headers: { 'Accept': 'application/json' },
     });
+    // Fallback: try direct fetch if proxy fails (e.g., unsupported host)
+    if (!response.ok && metadataUrl !== url) {
+      response = await fetch(url, {
+        signal: controller.signal,
+        headers: { 'Accept': 'application/json' },
+      });
+    }
     clearTimeout(timeoutId);
 
     if (!response.ok) {

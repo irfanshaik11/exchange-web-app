@@ -12,7 +12,8 @@ export function useImagePreloader() {
     if (!src) return false;
 
     // Use proxy for IPFS URLs, defined.fi, debridge, and other CORS-prone domains
-    const needsProxy = src.includes('token-media.defined.fi') ||
+    const needsProxy = !src.startsWith('/api/image') && (
+      src.includes('token-media.defined.fi') ||
       src.includes('ipfs.io') ||
       src.includes('cloudflare-ipfs.com') ||
       src.includes('gateway.pinata.cloud') ||
@@ -22,7 +23,16 @@ export function useImagePreloader() {
       src.includes('debridge.finance') ||
       src.includes('launchonsoar.com') ||
       src.includes('metadata.rapidlaunch.io') ||
-      src.includes('rapidlaunch.io');
+      src.includes('rapidlaunch.io') ||
+      src.includes('metadata.j7tracker.com') ||
+      src.includes('j7tracker.com') ||
+      src.includes('edge.uxento.io') ||
+      src.includes('uxento.io') ||
+      src.includes('image.solanatracker.io') ||
+      src.includes('ipfs-forward.solanatracker.io') ||
+      src.includes('instagram.com') ||
+      src.includes('cdninstagram.com')
+    );
 
     const imageUrl = needsProxy 
       ? `/api/image?url=${encodeURIComponent(src)}`
