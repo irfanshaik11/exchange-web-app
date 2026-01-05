@@ -16,6 +16,9 @@ const ALLOWED_METADATA_HOSTS = [
   'mypinata.cloud',
   'arweave.net',
   'arweave.dev',
+  'ar-io.net',
+  'ipfs.storacha.link',
+  'storacha.link',
   'raw.githubusercontent.com',
   'githubusercontent.com',
 ];
@@ -54,28 +57,85 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       return res.status(400).send('Invalid URL format');
     }
 
-    if (parsed.protocol !== 'https:') {
-      setHeaders(res);
-      return res.status(400).send('Only HTTPS URLs are allowed');
-    }
-
     const hasIpfsPath = parsed.pathname.includes('/ipfs/');
-    if (!isAllowedHost(parsed.hostname) && !hasIpfsPath) {
-      setHeaders(res);
-      return res.status(403).send('Host not allowed');
+
+    // Build candidate URLs with IPFS/Arweave gateway fallbacks
+    const candidates: string[] = [];
+    const ipfsMatch = parsed.pathname.match(/\/ipfs\/([^/?#]+)/i);
+    if (ipfsMatch && ipfsMatch[1]) {
+      const cid = ipfsMatch[1];
+      const gateways = [
+        parsed.toString(),
+        parsed.protocol === 'http:' ? parsed.toString().replace(/^http:/i, 'https:') : parsed.toString(),
+        `https://cloudflare-ipfs.com/ipfs/${cid}`,
+        `https://ipfs.io/ipfs/${cid}`,
+        `https://gateway.pinata.cloud/ipfs/${cid}`,
+        `https://nftstorage.link/ipfs/${cid}`,
+        `https://gateway.ipfs.io/ipfs/${cid}`,
+      ];
+      for (const g of gateways) {
+        if (!candidates.includes(g)) candidates.push(g);
+      }
+    } else if (parsed.hostname.includes('arweave')) {
+      const arweavePath = parsed.pathname.replace(/^\/+/, '');
+      const arGateways = [
+        parsed.toString(),
+        parsed.protocol === 'http:' ? parsed.toString().replace(/^http:/i, 'https:') : parsed.toString(),
+        `https://arweave.net/${arweavePath}`,
+        `https://ar-io.net/${arweavePath}`,
+      ];
+      for (const g of arGateways) {
+        if (!candidates.includes(g)) candidates.push(g);
+      }
+    } else {
+      const original = parsed.toString();
+      const httpsVersion =
+        parsed.protocol === 'http:' ? original.replace(/^http:/i, 'https:') : original;
+      if (!candidates.includes(httpsVersion)) candidates.push(httpsVersion);
+      if (!candidates.includes(original)) candidates.push(original);
     }
 
-    const controller = new AbortController();
-    const t = setTimeout(() => controller.abort(), 5000);
-    const upstream = await fetch(parsed.toString(), {
-      signal: controller.signal,
-      headers: { Accept: 'application/json' },
-    });
-    clearTimeout(t);
+    let upstream: Response | null = null;
+    let lastErr: any = null;
+    let lastNonOk: { resp: Response; url: string } | null = null;
 
-    if (!upstream.ok) {
+    for (const tryUrl of candidates) {
+      try {
+        const controller = new AbortController();
+        const t = setTimeout(() => controller.abort(), 8000);
+        const headers: Record<string, string> = {
+          'Accept': 'application/json,image/*,*/*;q=0.8',
+          'User-Agent': 'Interstate-Metadata/1.0',
+        };
+        const resp = await fetch(tryUrl, {
+          signal: controller.signal,
+          headers,
+        });
+        clearTimeout(t);
+        if (resp.ok) {
+          upstream = resp;
+          break;
+        }
+        lastNonOk = { resp, url: tryUrl };
+        lastErr = new Error(`HTTP ${resp.status} ${resp.statusText}`);
+      } catch (e: any) {
+        lastErr = e;
+      }
+    }
+
+    if (!upstream) {
+      // If we at least got a non-OK response, passthrough it with CORS instead of 502
+      if (lastNonOk) {
+        const buf = Buffer.from(await lastNonOk.resp.arrayBuffer());
+        const ct = lastNonOk.resp.headers.get('content-type') || '';
+        setHeaders(res);
+        res.setHeader('Content-Type', ct || 'application/octet-stream');
+        res.setHeader('Cache-Control', 'public, max-age=600, s-maxage=600, stale-while-revalidate=600');
+        return res.status(lastNonOk.resp.status).send(buf);
+      }
+      console.error('[api/metadata] failed to fetch:', lastErr?.message || lastErr);
       setHeaders(res);
-      return res.status(upstream.status).send('Failed to fetch metadata');
+      return res.status(502).send('Failed to fetch metadata');
     }
 
     const contentType = upstream.headers.get('content-type') || '';
