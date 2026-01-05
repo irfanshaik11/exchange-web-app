@@ -131,7 +131,11 @@ export function usePumpPortalWebSocket(
   const fetchTokenImage = useCallback(async (uri: string): Promise<string | undefined> => {
     try {
       console.log('[usePumpPortalWebSocket] Attempting to fetch metadata from:', uri);
-      const response = await fetch(uri);
+      const proxied = uri.startsWith('/api/metadata') ? uri : `/api/metadata?url=${encodeURIComponent(uri)}`;
+      let response = await fetch(proxied);
+      if (!response.ok && proxied !== uri) {
+        response = await fetch(uri);
+      }
       console.log('[usePumpPortalWebSocket] Metadata fetch response status:', response.status, 'ok:', response.ok);
       if (response.ok) {
         const metadata = await response.json();
@@ -372,4 +376,3 @@ export function usePumpPortalWebSocket(
     clearTokens,
   };
 }
-

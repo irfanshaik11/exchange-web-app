@@ -34,6 +34,8 @@ const ALLOWED = [
   'googleusercontent.com',
   'googleapis.com',
   'githubusercontent.com',
+  'metadata.j7tracker.com',
+  'j7tracker.com',
 ];
 
 // Allowed content types - only JSON is permitted for metadata
@@ -79,6 +81,9 @@ function containsMaliciousContent(jsonString: string): boolean {
 }
 
 function setSecurityHeaders(res: NextApiResponse) {
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
   res.setHeader('X-Content-Type-Options', 'nosniff');
   res.setHeader('X-Frame-Options', 'DENY');
   res.setHeader('Referrer-Policy', 'no-referrer');
@@ -91,6 +96,11 @@ function sendError(res: NextApiResponse, status: number, message: string) {
 }
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
+  if (req.method === 'OPTIONS') {
+    setSecurityHeaders(res);
+    return res.status(204).end();
+  }
+
   try {
     const url = String(req.query.url || '');
     if (!url) {

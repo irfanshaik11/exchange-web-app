@@ -44,7 +44,8 @@ export default function FastImage({
 
   // Use proxy for IPFS URLs, defined.fi, debridge, and other CORS-prone domains
   // IPFS gateways can have CORS restrictions, so proxy them
-  const needsProxy = finalSrc && (
+  const alreadyProxied = finalSrc?.startsWith('/api/image');
+  const needsProxy = finalSrc && !alreadyProxied && (
     finalSrc.includes('token-media.defined.fi') ||
     finalSrc.includes('ipfs.io') ||
     finalSrc.includes('cloudflare-ipfs.com') ||
@@ -55,7 +56,15 @@ export default function FastImage({
     finalSrc.includes('debridge.finance') ||
     finalSrc.includes('launchonsoar.com') ||
     finalSrc.includes('metadata.rapidlaunch.io') ||
-    finalSrc.includes('rapidlaunch.io')
+    finalSrc.includes('rapidlaunch.io') ||
+    finalSrc.includes('metadata.j7tracker.com') ||
+    finalSrc.includes('j7tracker.com') ||
+    finalSrc.includes('edge.uxento.io') ||
+    finalSrc.includes('uxento.io') ||
+    finalSrc.includes('image.solanatracker.io') ||
+    finalSrc.includes('ipfs-forward.solanatracker.io') ||
+    finalSrc.includes('instagram.com') ||
+    finalSrc.includes('cdninstagram.com')
   );
   
   const imageUrl = needsProxy && finalSrc
