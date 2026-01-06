@@ -1,13 +1,284 @@
 import { RiExchangeDollarLine } from "react-icons/ri";
 import { SiSolana } from "react-icons/si";
 import { FaArrowRightArrowLeft } from "react-icons/fa6";
-import { FaFilter } from "react-icons/fa";
+import { FaFilter, FaCaretDown } from "react-icons/fa";
+import { FiX } from "react-icons/fi";
+import { MdRefresh } from "react-icons/md";
 import { IoOpenOutline } from "react-icons/io5";
-import React from 'react';
+import React, { useState, useCallback } from 'react';
 import { formatSmartNumber, formatMarketCap } from '~/utils/db';
 import useSolanaTokenWebSocket from '../../hooks/useSolanaTokenWebSocket';
 import { useMonadTradesWebSocket } from '../../hooks/useMonadTradesWebSocket';
 import type { Token } from '~/utils/db';
+
+// Sort direction type
+type SortDirection = 'asc' | 'desc' | null;
+
+// Filter range type
+interface FilterRange {
+  min: string;
+  max: string;
+}
+
+// Type filter selection
+type TypeFilter = 'all' | 'buy' | 'sell';
+
+// Column filter state for trades
+interface TradeFilters {
+  type: { filter: TypeFilter };
+  price: { sort: SortDirection; range: FilterRange };
+  amount: { sort: SortDirection; range: FilterRange };
+  total: { sort: SortDirection; range: FilterRange };
+}
+
+const AX = {
+  bg: "#101114",
+  surface: "#1E1F26",
+  surface2: "#17191E",
+  border: "#2A2B33",
+  text: "#E6E7EA",
+  muted: "#9CA3AF",
+  mint: "#70E0B0",
+};
+
+// Filter Popout Component
+interface FilterPopoutProps {
+  isOpen: boolean;
+  onClose: () => void;
+  title: string;
+  unit: string;
+  range: FilterRange;
+  onRangeChange: (range: FilterRange) => void;
+  onReset: () => void;
+  onApply: () => void;
+  position: { top: number; left: number };
+}
+
+const FilterPopout: React.FC<FilterPopoutProps> = ({
+  isOpen,
+  onClose,
+  title,
+  unit,
+  range,
+  onRangeChange,
+  onReset,
+  onApply,
+  position,
+}) => {
+  if (!isOpen) return null;
+
+  return (
+    <div
+      className="fixed z-50 rounded-lg border shadow-xl"
+      style={{
+        backgroundColor: AX.surface,
+        borderColor: AX.border,
+        top: position.top,
+        left: position.left,
+        minWidth: '280px',
+      }}
+      onClick={(e) => e.stopPropagation()}
+    >
+      <div className="p-4">
+        <div className="flex items-center justify-between mb-3">
+          <span className="text-sm font-medium" style={{ color: AX.text }}>{title}</span>
+          <button onClick={onClose} className="p-1 rounded hover:bg-opacity-20" style={{ color: AX.muted }}>
+            <FiX size={14} />
+          </button>
+        </div>
+        <div className="flex items-center gap-2">
+          <div className="flex-1">
+            <input
+              type="text"
+              inputMode="decimal"
+              placeholder="Min"
+              value={range.min}
+              onChange={(e) => {
+                const val = e.target.value;
+                if (val === '' || /^-?\d*\.?\d*$/.test(val)) {
+                  onRangeChange({ ...range, min: val });
+                }
+              }}
+              className="w-full px-3 py-2 text-sm rounded border"
+              style={{
+                backgroundColor: AX.surface2,
+                borderColor: AX.border,
+                color: AX.text,
+                outline: 'none',
+              }}
+            />
+            <div
+              className="text-center text-xs mt-1 px-2 py-1 rounded"
+              style={{ backgroundColor: AX.surface2, color: AX.muted }}
+            >
+              {unit}
+            </div>
+          </div>
+          <span className="text-sm" style={{ color: AX.muted }}>to</span>
+          <div className="flex-1">
+            <input
+              type="text"
+              inputMode="decimal"
+              placeholder="Max"
+              value={range.max}
+              onChange={(e) => {
+                const val = e.target.value;
+                if (val === '' || /^-?\d*\.?\d*$/.test(val)) {
+                  onRangeChange({ ...range, max: val });
+                }
+              }}
+              className="w-full px-3 py-2 text-sm rounded border"
+              style={{
+                backgroundColor: AX.surface2,
+                borderColor: AX.border,
+                color: AX.text,
+                outline: 'none',
+              }}
+            />
+            <div
+              className="text-center text-xs mt-1 px-2 py-1 rounded"
+              style={{ backgroundColor: AX.surface2, color: AX.muted }}
+            >
+              {unit}
+            </div>
+          </div>
+        </div>
+        <div className="flex items-center justify-between mt-4">
+          <button
+            onClick={onReset}
+            className="flex items-center gap-1 px-3 py-1.5 text-sm rounded hover:opacity-80 transition-opacity"
+            style={{ color: AX.muted }}
+          >
+            <MdRefresh size={14} />
+            Reset
+          </button>
+          <button
+            onClick={onApply}
+            className="px-4 py-1.5 text-sm rounded font-medium transition-colors"
+            style={{ backgroundColor: AX.text, color: AX.bg }}
+          >
+            Apply
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// Type Filter Popout Component
+interface TypeFilterPopoutProps {
+  isOpen: boolean;
+  onClose: () => void;
+  value: TypeFilter;
+  onChange: (value: TypeFilter) => void;
+  position: { top: number; left: number };
+}
+
+const TypeFilterPopout: React.FC<TypeFilterPopoutProps> = ({
+  isOpen,
+  onClose,
+  value,
+  onChange,
+  position,
+}) => {
+  if (!isOpen) return null;
+
+  const options: { value: TypeFilter; label: string; color: string }[] = [
+    { value: 'all', label: 'All', color: AX.muted },
+    { value: 'buy', label: 'Buy', color: '#34d399' },
+    { value: 'sell', label: 'Sell', color: '#f87171' },
+  ];
+
+  return (
+    <div
+      className="fixed z-50 rounded-lg border shadow-xl"
+      style={{
+        backgroundColor: AX.surface,
+        borderColor: AX.border,
+        top: position.top,
+        left: position.left,
+        minWidth: '140px',
+      }}
+      onClick={(e) => e.stopPropagation()}
+    >
+      <div className="p-3">
+        <div className="flex items-center justify-between mb-3">
+          <span className="text-sm font-medium" style={{ color: AX.text }}>Type</span>
+          <button onClick={onClose} className="p-1 rounded hover:bg-opacity-20" style={{ color: AX.muted }}>
+            <FiX size={14} />
+          </button>
+        </div>
+        <div className="flex flex-col gap-1.5">
+          {options.map((opt) => (
+            <button
+              key={opt.value}
+              onClick={() => {
+                onChange(opt.value);
+                onClose();
+              }}
+              className="flex items-center gap-2 px-3 py-2 rounded text-sm font-medium transition-colors hover:opacity-80"
+              style={{
+                backgroundColor: value === opt.value ? AX.surface2 : 'transparent',
+                color: opt.color,
+                border: value === opt.value ? `1px solid ${AX.border}` : '1px solid transparent',
+              }}
+            >
+              {value === opt.value && (
+                <span className="text-xs">✓</span>
+              )}
+              {opt.label}
+            </button>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// Sortable Header Component
+interface SortableHeaderProps {
+  label: string;
+  sortDirection: SortDirection;
+  onSort: () => void;
+  hasFilter?: boolean;
+  onFilterClick?: (e: React.MouseEvent) => void;
+  isFilterActive?: boolean;
+}
+
+const SortableHeader: React.FC<SortableHeaderProps> = ({
+  label,
+  sortDirection,
+  onSort,
+  hasFilter = false,
+  onFilterClick,
+  isFilterActive = false,
+}) => (
+  <div className="flex items-center gap-0.5">
+    <button
+      onClick={onSort}
+      className="flex items-center gap-0.5 hover:opacity-80 transition-opacity cursor-pointer"
+      style={{ color: sortDirection ? AX.mint : AX.muted }}
+    >
+      <span className="text-[11px]">{label}</span>
+      <FaCaretDown
+        size={8}
+        style={{
+          transform: sortDirection === 'asc' ? 'rotate(180deg)' : 'rotate(0deg)',
+          opacity: sortDirection ? 1 : 0.5,
+        }}
+      />
+    </button>
+    {hasFilter && (
+      <button
+        onClick={onFilterClick}
+        className="p-0.5 rounded hover:bg-opacity-20 transition-colors"
+        style={{ color: isFilterActive ? AX.mint : AX.muted }}
+      >
+        <FaFilter size={8} />
+      </button>
+    )}
+  </div>
+);
 
 interface CodexTradesProps {
   token: Token | null;
@@ -275,6 +546,87 @@ const CodexTrades: React.FC<CodexTradesProps> = ({ token, initialTrades = [], on
   const [mcMode, setMcMode] = React.useState<'mc' | 'price'>('mc'); // MC vs Price toggle
   const [fetchedMarketCap, setFetchedMarketCap] = React.useState<number | null>(null);
 
+  // Filter states
+  const initialFilters: TradeFilters = {
+    type: { filter: 'all' },
+    price: { sort: null, range: { min: '', max: '' } },
+    amount: { sort: null, range: { min: '', max: '' } },
+    total: { sort: null, range: { min: '', max: '' } },
+  };
+  const [filters, setFilters] = useState<TradeFilters>(initialFilters);
+  const [activeFilterPopout, setActiveFilterPopout] = useState<'price' | 'amount' | 'total' | null>(null);
+  const [typeFilterPopoutOpen, setTypeFilterPopoutOpen] = useState(false);
+  const [filterPopoutPosition, setFilterPopoutPosition] = useState({ top: 0, left: 0 });
+  const [tempFilterRange, setTempFilterRange] = useState<FilterRange>({ min: '', max: '' });
+
+  // Handle sort toggle (only for columns with sort capability)
+  type SortableColumn = 'price' | 'amount' | 'total';
+  const handleSort = useCallback((column: SortableColumn) => {
+    setFilters(prev => {
+      const currentSort = prev[column].sort;
+      const newSort: SortDirection = currentSort === null ? 'desc' : currentSort === 'desc' ? 'asc' : null;
+      // Reset all sorts except current column
+      return {
+        ...prev,
+        price: { ...prev.price, sort: column === 'price' ? newSort : null },
+        amount: { ...prev.amount, sort: column === 'amount' ? newSort : null },
+        total: { ...prev.total, sort: column === 'total' ? newSort : null },
+      };
+    });
+  }, []);
+
+  // Handle range filter popout open
+  const handleFilterClick = useCallback((column: SortableColumn, e: React.MouseEvent) => {
+    e.stopPropagation();
+    const rect = (e.target as HTMLElement).getBoundingClientRect();
+    setFilterPopoutPosition({ top: rect.bottom + 8, left: Math.max(8, rect.left - 100) });
+    setTempFilterRange(filters[column].range);
+    setActiveFilterPopout(activeFilterPopout === column ? null : column);
+  }, [activeFilterPopout, filters]);
+
+  // Handle type filter popout open
+  const handleTypeFilterClick = useCallback((e: React.MouseEvent) => {
+    e.stopPropagation();
+    const rect = (e.target as HTMLElement).getBoundingClientRect();
+    setFilterPopoutPosition({ top: rect.bottom + 8, left: Math.max(8, rect.left - 20) });
+    setTypeFilterPopoutOpen(prev => !prev);
+  }, []);
+
+  // Handle type filter change
+  const handleTypeFilterChange = useCallback((value: TypeFilter) => {
+    setFilters(prev => ({
+      ...prev,
+      type: { filter: value },
+    }));
+  }, []);
+
+  // Handle filter apply
+  const handleFilterApply = useCallback(() => {
+    if (activeFilterPopout) {
+      setFilters(prev => ({
+        ...prev,
+        [activeFilterPopout]: { ...prev[activeFilterPopout], range: tempFilterRange },
+      }));
+      setActiveFilterPopout(null);
+    }
+  }, [activeFilterPopout, tempFilterRange]);
+
+  // Handle filter reset
+  const handleFilterReset = useCallback(() => {
+    setTempFilterRange({ min: '', max: '' });
+  }, []);
+
+  // Get filter title and unit for range filter popout
+  type RangeFilterColumn = 'price' | 'amount' | 'total';
+  const getFilterConfig = (column: RangeFilterColumn): { title: string; unit: string } => {
+    const configs: Record<RangeFilterColumn, { title: string; unit: string }> = {
+      price: { title: 'Price', unit: 'USD' },
+      amount: { title: 'Token Amount', unit: 'Tokens' },
+      total: { title: 'Total Value', unit: 'USD' },
+    };
+    return configs[column];
+  };
+
   const stableToken = React.useMemo(() => {
     if (!token) return null;
     return {
@@ -520,14 +872,57 @@ const CodexTrades: React.FC<CodexTradesProps> = ({ token, initialTrades = [], on
 
   const normalized = React.useMemo(() => {
     const slice = (displayTrades || []).slice(0, 100);
-    return slice.map((t, i) => {
+    let result = slice.map((t, i) => {
       const n = normalizeTrade(t, stableToken?.decimals ?? 9);
       // Store the complete address from raw trade
       const completeAddress = getCompleteTraderAddress(t);
       const finalAddress = completeAddress || n.maker || '';
       return { ...n, raw: t, idx: i, completeTraderAddress: finalAddress };
     });
-  }, [displayTrades, stableToken?.decimals, getCompleteTraderAddress]);
+
+    // Apply type filter
+    if (filters.type.filter !== 'all') {
+      result = result.filter((trade) => {
+        if (filters.type.filter === 'buy') return trade.isBuy;
+        if (filters.type.filter === 'sell') return !trade.isBuy;
+        return true;
+      });
+    }
+
+    // Apply range filters
+    result = result.filter((trade) => {
+      const price = trade.pricePerToken;
+      const amount = trade.tokenAmount;
+      const total = trade.totalUSD;
+
+      if (filters.price.range.min && price < parseFloat(filters.price.range.min)) return false;
+      if (filters.price.range.max && price > parseFloat(filters.price.range.max)) return false;
+      if (filters.amount.range.min && amount < parseFloat(filters.amount.range.min)) return false;
+      if (filters.amount.range.max && amount > parseFloat(filters.amount.range.max)) return false;
+      if (filters.total.range.min && total < parseFloat(filters.total.range.min)) return false;
+      if (filters.total.range.max && total > parseFloat(filters.total.range.max)) return false;
+
+      return true;
+    });
+
+    // Apply sorting (only for sortable columns: price, amount, total)
+    const sortableColumns: ('price' | 'amount' | 'total')[] = ['price', 'amount', 'total'];
+    const sortColumn = sortableColumns.find(col => filters[col].sort !== null);
+    if (sortColumn) {
+      const sortDir = filters[sortColumn].sort;
+      result = [...result].sort((a, b) => {
+        let aVal = 0, bVal = 0;
+        switch (sortColumn) {
+          case 'price': aVal = a.pricePerToken; bVal = b.pricePerToken; break;
+          case 'amount': aVal = a.tokenAmount; bVal = b.tokenAmount; break;
+          case 'total': aVal = a.totalUSD; bVal = b.totalUSD; break;
+        }
+        return sortDir === 'asc' ? aVal - bVal : bVal - aVal;
+      });
+    }
+
+    return result;
+  }, [displayTrades, stableToken?.decimals, getCompleteTraderAddress, filters]);
 
   // Calculate trade count per trader from all trades
   const traderTradeCounts = React.useMemo(() => {
@@ -630,93 +1025,162 @@ const CodexTrades: React.FC<CodexTradesProps> = ({ token, initialTrades = [], on
   }
 
   return (
-    <div className="w-full h-full flex flex-col bg-black">
-      <div className="flex-1 overflow-y-auto pb-18 bg-black">
-        <table className="w-full text-xs border-collapse bg-black table-fixed">
-          <thead className="sticky top-0 bg-black z-10">
-            <tr className="text-neutral-400 border-b border-neutral-800">
+    <div className="w-full h-full flex flex-col" style={{ backgroundColor: '#101114' }}>
+      {/* Filter Popout */}
+      {activeFilterPopout && (
+        <FilterPopout
+          isOpen={true}
+          onClose={() => setActiveFilterPopout(null)}
+          title={getFilterConfig(activeFilterPopout).title}
+          unit={getFilterConfig(activeFilterPopout).unit}
+          range={tempFilterRange}
+          onRangeChange={setTempFilterRange}
+          onReset={handleFilterReset}
+          onApply={handleFilterApply}
+          position={filterPopoutPosition}
+        />
+      )}
+
+      {/* Type Filter Popout */}
+      <TypeFilterPopout
+        isOpen={typeFilterPopoutOpen}
+        onClose={() => setTypeFilterPopoutOpen(false)}
+        value={filters.type.filter}
+        onChange={handleTypeFilterChange}
+        position={filterPopoutPosition}
+      />
+
+      <div className="flex-1 overflow-y-auto min-h-0 pb-18" style={{ backgroundColor: '#101114' }}>
+        <table className="w-full text-[11px] border-collapse table-fixed" style={{ backgroundColor: '#101114' }}>
+          <thead className="sticky top-0 z-10" style={{ backgroundColor: '#101114' }}>
+            <tr style={{ borderBottom: '1px solid #27282e' }}>
               {/* Age / Time */}
-              <th className="w-[16.66%] pl-2 pr-0 py-2 text-left">
+              <th className="w-[16.66%] px-2 py-1.5 text-left whitespace-nowrap" style={{ color: '#9ca3af' }}>
                 <button
                   type="button"
                   onClick={() => setShowAge(prev => !prev)}
-                  className="inline-flex items-center gap-0.5 text-[11px] text-neutral-300 hover:text-white"
+                  className="inline-flex items-center gap-0.5 text-[11px] hover:opacity-70 transition-opacity"
+                  style={{ color: '#9ca3af' }}
                 >
                   <span className="font-medium">
-                    {showAge ? 'Age ↓' : 'Time ↓'}
+                    {showAge ? 'Age' : 'Time'}
                   </span>
-                  <span className="text-[10px] text-neutral-400">
+                  <span className="text-[10px]" style={{ color: '#6b7280' }}>
                     / {showAge ? 'Time' : 'Age'}
                   </span>
-                  <span className="text-[10px] text-neutral-500">▾</span>
                 </button>
               </th>
 
               {/* Type */}
-              <th className="w-[16.66%] pl-0 pr-2 py-2 text-left">
-                Type
+              <th className="w-[16.66%] px-2 py-1.5 text-left whitespace-nowrap" style={{ color: '#9ca3af' }}>
+                <div className="flex items-center gap-1">
+                  <span className="text-[11px]">Type</span>
+                  <button
+                    onClick={handleTypeFilterClick}
+                    className="p-0.5 rounded hover:bg-opacity-20 transition-colors"
+                    style={{ color: filters.type.filter !== 'all' ? AX.mint : AX.muted }}
+                  >
+                    <FaFilter size={8} />
+                  </button>
+                  {filters.type.filter !== 'all' && (
+                    <span
+                      className="text-[9px] px-1 rounded"
+                      style={{
+                        backgroundColor: filters.type.filter === 'buy' ? '#34d39920' : '#f8717120',
+                        color: filters.type.filter === 'buy' ? '#34d399' : '#f87171',
+                      }}
+                    >
+                      {filters.type.filter === 'buy' ? 'Buy' : 'Sell'}
+                    </span>
+                  )}
+                </div>
               </th>
 
-              {/* MC / Price column with icon */}
-              <th className="w-[16.66%] px-2 py-2 text-left">
-                <button
-                  type="button"
-                  onClick={() =>
-                    setMcMode(prev => (prev === 'mc' ? 'price' : 'mc'))
-                  }
-                  className="inline-flex items-center gap-1 text-xs text-neutral-300 hover:text-white"
-                >
-                  <span className="font-medium">
-                    {mcMode === 'mc' ? 'MC' : 'Price'}
-                  </span>
-                  <McHeaderIcon />
-                </button>
+              {/* MC / Price column with filter */}
+              <th className="w-[16.66%] px-2 py-1.5 text-left whitespace-nowrap" style={{ color: '#9ca3af' }}>
+                <div className="flex items-center gap-1">
+                  <button
+                    type="button"
+                    onClick={() => setMcMode(prev => (prev === 'mc' ? 'price' : 'mc'))}
+                    className="inline-flex items-center gap-0.5 text-[11px] hover:opacity-70 transition-opacity"
+                    style={{ color: '#9ca3af' }}
+                  >
+                    <span className="font-medium">{mcMode === 'mc' ? 'MC' : 'Price'}</span>
+                    <McHeaderIcon />
+                  </button>
+                  <SortableHeader
+                    label=""
+                    sortDirection={filters.price.sort}
+                    onSort={() => handleSort('price')}
+                    hasFilter
+                    onFilterClick={(e) => handleFilterClick('price', e)}
+                    isFilterActive={!!filters.price.range.min || !!filters.price.range.max}
+                  />
+                </div>
               </th>
 
-              {/* Amount */}
-              <th className="w-[16.66%] px-2 py-2 text-left">Amount</th>
+              {/* Amount with filter */}
+              <th className="w-[16.66%] px-2 py-1.5 text-left whitespace-nowrap">
+                <SortableHeader
+                  label="Amount"
+                  sortDirection={filters.amount.sort}
+                  onSort={() => handleSort('amount')}
+                  hasFilter
+                  onFilterClick={(e) => handleFilterClick('amount', e)}
+                  isFilterActive={!!filters.amount.range.min || !!filters.amount.range.max}
+                />
+              </th>
 
-              {/* Total USD / SOL/MON toggle column */}
-              <th className="w-[16.66%] px-2 py-2 text-left">
-                <button
-                  type="button"
-                  onClick={() =>
-                    setTotalMode(prev => (prev === 'usd' ? 'sol' : 'usd'))
-                  }
-                  className="inline-flex items-center gap-1 text-xs text-neutral-300 hover:text-white"
-                >
-                  <span className="font-medium">
-                    {totalMode === 'usd' ? 'Total USD' : chain === 'monad' ? 'Total MON' : 'Total SOL'}
-                  </span>
+              {/* Total USD / SOL/MON toggle column with filter */}
+              <th className="w-[16.66%] px-2 py-1.5 text-left whitespace-nowrap" style={{ color: '#9ca3af' }}>
+                <div className="flex items-center gap-1">
+                  <button
+                    type="button"
+                    onClick={() => setTotalMode(prev => (prev === 'usd' ? 'sol' : 'usd'))}
+                    className="inline-flex items-center gap-0.5 text-[11px] hover:opacity-70 transition-opacity"
+                    style={{ color: '#9ca3af' }}
+                  >
+                    <span className="font-medium">
+                      {totalMode === 'usd' ? 'Total' : chain === 'monad' ? 'MON' : 'SOL'}
+                    </span>
                   <RiExchangeDollarLine
                     className={
                       totalMode === 'usd'
-                        ? 'h-4 w-4 text-emerald-300 drop-shadow-[0_0_6px_rgba(16,185,129,0.9)]'
-                        : 'h-4 w-4 text-neutral-400'
+                        ? 'h-3 w-3 text-emerald-300'
+                        : 'h-3 w-3 text-neutral-400'
                     }
                   />
-                </button>
+                  </button>
+                  <SortableHeader
+                    label=""
+                    sortDirection={filters.total.sort}
+                    onSort={() => handleSort('total')}
+                    hasFilter
+                    onFilterClick={(e) => handleFilterClick('total', e)}
+                    isFilterActive={!!filters.total.range.min || !!filters.total.range.max}
+                  />
+                </div>
               </th>
 
               {/* Trader */}
-              <th className="w-[16.66%] px-2 py-2 text-left">Trader</th>
+              <th className="w-[16.66%] px-2 py-1.5 text-left whitespace-nowrap" style={{ color: '#9ca3af' }}>Trader</th>
             </tr>
           </thead>
-          <tbody className="bg-black">
+          <tbody style={{ backgroundColor: '#101114' }}>
             {isLoading ? (
-              <tr className="bg-black">
-                <td colSpan={6} className="text-center py-6 text-neutral-500 bg-black">
+              <tr style={{ backgroundColor: '#101114' }}>
+                <td colSpan={6} className="text-center py-6 text-neutral-500" style={{ backgroundColor: '#101114' }}>
                   Loading trades...
                 </td>
               </tr>
             ) : !normalized.length ? (
-              <tr className="bg-black">
-                <td colSpan={6} className="text-center py-6 text-neutral-500 bg-black">
+              <tr style={{ backgroundColor: '#101114' }}>
+                <td colSpan={6} className="text-center py-6 text-neutral-500" style={{ backgroundColor: '#101114' }}>
                   No trades available.
                 </td>
               </tr>
             ) : (
-              normalized.map(n => {
+              normalized.map((n, index) => {
                 const age = getAge(n.timestampSec);
                 const timeStr = getTimeFromTimestampSec(n.timestampSec);
                 const tokenAmountStr = formatSmartNumber(n.tokenAmount);
@@ -778,16 +1242,19 @@ const CodexTrades: React.FC<CodexTradesProps> = ({ token, initialTrades = [], on
                 return (
                   <tr
                     key={n.keyPart || n.idx}
-                    className="border-b border-neutral-900 hover:bg-neutral-900/60 bg-black"
+                    className="transition-colors hover:brightness-110"
+                    style={{
+                      backgroundColor: index % 2 === 0 ? '#101114' : '#161719',
+                    }}
                   >
                     {/* Age / Time */}
-                    <td className="pl-2 pr-0 py-2 text-neutral-300">
+                    <td className="px-2 py-2 text-[11px]" style={{ color: '#d1d5db' }}>
                       {showAge ? age : timeStr}
                     </td>
 
                     {/* Type */}
                     <td
-                      className={`pl-0 pr-2 py-2 font-semibold ${
+                      className={`px-2 py-2 text-[11px] font-semibold ${
                         n.isBuy ? 'text-emerald-400' : 'text-red-400'
                       }`}
                     >
@@ -795,18 +1262,18 @@ const CodexTrades: React.FC<CodexTradesProps> = ({ token, initialTrades = [], on
                     </td>
 
                     {/* MC / Price */}
-                    <td className="px-2 py-2 text-neutral-300">
+                    <td className="px-2 py-2 text-[11px]" style={{ color: '#d1d5db' }}>
                       {mcMode === 'mc' ? mcStr : priceStr}
                     </td>
 
                     {/* Amount */}
-                    <td className="px-2 py-2 text-neutral-300">
+                    <td className="px-2 py-2 text-[11px]" style={{ color: '#d1d5db' }}>
                       {tokenAmountStr}
                     </td>
 
                     {/* merged Total column */}
                     <td
-                      className="px-2 py-2 font-semibold relative overflow-hidden"
+                      className="px-2 py-2 text-[11px] font-semibold relative overflow-hidden"
                       title={title}
                     >
                       {showingUsd || hasSol ? (
@@ -844,28 +1311,28 @@ const CodexTrades: React.FC<CodexTradesProps> = ({ token, initialTrades = [], on
                     </td>
 
                     {/* Trader */}
-                    <td className="px-2 py-2 text-neutral-300 align-middle">
-                      <div className="flex items-center flex-nowrap gap-4 min-w-0" style={{ lineHeight: '20px' }}>
+                    <td className="px-2 py-2 text-[11px] align-middle" style={{ color: '#d1d5db' }}>
+                      <div className="flex items-center flex-nowrap gap-2 min-w-0">
                         <a
                           href={chain === 'monad'
                             ? `https://testnet.monadexplorer.com/address/${n.maker || ''}`
                             : `https://solscan.io/account/${n.maker || ''}`}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="text-white hover:text-neutral-300 transition-colors hover:underline flex items-center min-w-0 flex-shrink"
-                          style={{ lineHeight: '20px', height: '20px' }}
+                          className="transition-colors hover:text-emerald-400 hover:underline flex items-center min-w-0 flex-shrink"
+                          style={{ color: '#d1d5db' }}
                           onClick={(e) => e.stopPropagation()}
                         >
-                          <span className="truncate text-xs whitespace-nowrap" style={{ lineHeight: '20px' }}>{shortAddr(n.maker || '')}</span>
+                          <span className="truncate text-[11px] font-mono whitespace-nowrap">{shortAddr(n.maker || '')}</span>
                         </a>
-                        <div className="flex items-center flex-nowrap gap-1.5 flex-shrink-0" style={{ lineHeight: '20px', height: '20px' }}>
+                        <div className="flex items-center flex-nowrap gap-1 flex-shrink-0">
                           {(() => {
                             const traderKey = (n.completeTraderAddress || n.maker || '').toString()
                               .replace(/\./g, '').replace(/\s/g, '').toLowerCase().trim();
                             const count = traderTradeCounts[traderKey] || 0;
                             if (count > 0) {
                               return (
-                                <span className="inline-flex items-center justify-center min-w-[20px] px-1.5 text-xs font-medium text-white bg-neutral-800 border border-neutral-700 rounded whitespace-nowrap" style={{ lineHeight: '20px', height: '20px' }}>
+                                <span className="inline-flex items-center justify-center min-w-[16px] px-1 text-[10px] font-medium rounded whitespace-nowrap" style={{ backgroundColor: '#27282e', color: '#d1d5db' }}>
                                   {count}
                                 </span>
                               );
@@ -878,24 +1345,12 @@ const CodexTrades: React.FC<CodexTradesProps> = ({ token, initialTrades = [], on
                               : `https://solscan.io/account/${n.maker || ''}`}
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="text-neutral-400 hover:text-neutral-300 transition-colors inline-flex items-center justify-center flex-shrink-0"
-                            style={{ width: '20px', height: '20px', lineHeight: '20px' }}
+                            className="hover:opacity-70 transition-opacity inline-flex items-center justify-center flex-shrink-0"
+                            style={{ color: '#6b7280' }}
                             onClick={(e) => e.stopPropagation()}
                           >
-                            <IoOpenOutline size={14} className="flex-shrink-0" />
+                            <IoOpenOutline size={12} className="flex-shrink-0" />
                           </a>
-                          <button
-                            onClick={(e) => {
-                              e.preventDefault();
-                              e.stopPropagation();
-                              // Filter functionality can be added here if needed
-                            }}
-                            className="text-neutral-400 hover:text-neutral-300 transition-colors opacity-60 hover:opacity-100 inline-flex items-center justify-center flex-shrink-0"
-                            style={{ width: '20px', height: '20px', lineHeight: '20px' }}
-                            title="Filter by this trader"
-                          >
-                            <FaFilter size={14} className="flex-shrink-0" />
-                          </button>
                         </div>
                       </div>
                     </td>
@@ -906,10 +1361,10 @@ const CodexTrades: React.FC<CodexTradesProps> = ({ token, initialTrades = [], on
           </tbody>
 
           {!!p95Display && (
-            <tfoot className="bg-black">
+            <tfoot style={{ backgroundColor: '#101114' }}>
               <tr>
-                <td colSpan={6} className="bg-black">
-                  <div className="px-2 py-2 text-[10px] text-neutral-500 flex items-center gap-2">
+                <td colSpan={6} style={{ backgroundColor: '#101114' }}>
+                  <div className="px-2 py-1.5 text-[10px] flex items-center gap-2" style={{ color: '#6b7280' }}>
                     <span className="inline-block">
                       Total heat = relative to ~95th percentile
                     </span>
