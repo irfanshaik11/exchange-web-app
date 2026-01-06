@@ -414,7 +414,7 @@ const CodexDevTokens: React.FC<CodexDevTokensProps> = ({ token, chain = 'sol' })
                 href={`https://testnet.monadexplorer.com/address/${monadDevData.dev_wallet}`}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="text-sm font-mono text-white hover:text-emerald-400 transition-colors"
+                className="text-sm font-mono text-white hover:text-emerald-400 hover:underline transition-colors"
               >
                 {monadDevData.dev_wallet.slice(0, 8)}...{monadDevData.dev_wallet.slice(-6)}
               </a>
@@ -471,18 +471,18 @@ const CodexDevTokens: React.FC<CodexDevTokensProps> = ({ token, chain = 'sol' })
       )}
 
       {/* Left side: Table */}
-      <div className="w-1/2 flex-shrink-0 overflow-y-auto" style={{ minWidth: 0, borderRight: `1px solid ${AX.border}`, backgroundColor: matteBlack, maxHeight: '100%', paddingBottom: '1rem' }}>
+      <div className="w-1/2 flex-shrink-0 overflow-y-auto min-h-0" style={{ minWidth: 0, borderRight: `1px solid ${AX.border}`, backgroundColor: matteBlack, paddingBottom: '4.5rem' }}>
         <table className="w-full text-xs">
-          <thead className="sticky top-0 z-10" style={{ backgroundColor: matteBlack }}>
-            <tr className="text-neutral-400 border-b border-neutral-800">
-              <th className="px-2 py-2 text-left">Token ↓</th>
-              <th className="px-2 py-2 text-left">Migrated</th>
-              <th className="px-2 py-2 text-left">Market Cap</th>
-              <th className="px-2 py-2 text-left">Liquidity</th>
-              <th className="px-2 py-2 text-left">1h Volume</th>
+          <thead className="sticky top-0 z-10" style={{ backgroundColor: '#101114' }}>
+            <tr style={{ borderBottom: '1px solid #27282e' }}>
+              <th className="px-2 py-1.5 text-left text-[11px] font-medium whitespace-nowrap" style={{ color: '#9ca3af' }}>Token ↓</th>
+              <th className="px-2 py-1.5 text-left text-[11px] font-medium whitespace-nowrap" style={{ color: '#9ca3af' }}>Migrated</th>
+              <th className="px-2 py-1.5 text-left text-[11px] font-medium whitespace-nowrap" style={{ color: '#9ca3af' }}>Market Cap</th>
+              <th className="px-2 py-1.5 text-left text-[11px] font-medium whitespace-nowrap" style={{ color: '#9ca3af' }}>Liquidity</th>
+              <th className="px-2 py-1.5 text-left text-[11px] font-medium whitespace-nowrap" style={{ color: '#9ca3af' }}>1h Volume</th>
             </tr>
           </thead>
-          <tbody style={{ backgroundColor: matteBlack }}>
+          <tbody>
             {showLoading ? (
               <tr>
                 <td colSpan={5} className="text-center py-6 text-neutral-500">
@@ -502,37 +502,38 @@ const CodexDevTokens: React.FC<CodexDevTokensProps> = ({ token, chain = 'sol' })
                 const liquidity = formatLiquidity(devToken.liquidity);
                 const volume = formatVolume(devToken.volume24);
                 const isMigrated = !!devToken.token.migrated_pool_address;
-                
+
                 return (
-                  <tr key={devToken.token.address} className="border-b border-neutral-800" style={{ backgroundColor: matteBlack }}>
+                  <tr
+                    key={devToken.token.address}
+                    className="transition-colors hover:brightness-110"
+                    style={{
+                      backgroundColor: idx % 2 === 0 ? '#101114' : '#161719',
+                    }}
+                  >
                     <td className="px-2 py-2">
-                      <div className="flex items-center space-x-2">
-                        <div className="w-8 h-8 bg-gradient-to-br from-yellow-400 to-orange-500 rounded-full flex items-center justify-center">
-                          <span className="text-white font-bold text-xs">⚔️</span>
-                        </div>
-                        <div>
-                          <div className="text-white font-semibold">{devToken.token.symbol}</div>
-                          <div className="text-neutral-500 text-xs">{age} ago</div>
-                        </div>
+                      <div className="flex flex-col">
+                        <div className="text-[11px] font-semibold" style={{ color: '#d1d5db' }}>{devToken.token.symbol}</div>
+                        <div className="text-[10px]" style={{ color: '#9ca3af' }}>{age} ago</div>
                       </div>
                     </td>
                     <td className="px-2 py-2">
                       <div className="flex items-center">
                         {isMigrated ? (
-                          <span className="text-green-400">✓</span>
+                          <span className="text-green-400 text-[11px]">✓</span>
                         ) : (
-                          <span className="text-pink-400">✗</span>
+                          <span className="text-pink-400 text-[11px]">✗</span>
                         )}
                       </div>
                     </td>
                     <td className="px-2 py-2">
-                      <div className="text-white font-semibold">{marketCap}</div>
+                      <div className="text-[11px] font-semibold" style={{ color: '#d1d5db' }}>{marketCap}</div>
                     </td>
                     <td className="px-2 py-2">
-                      <div className="text-white font-semibold">{liquidity}</div>
+                      <div className="text-[11px] font-semibold" style={{ color: '#d1d5db' }}>{liquidity}</div>
                     </td>
                     <td className="px-2 py-2">
-                      <div className="text-white font-semibold">{volume}</div>
+                      <div className="text-[11px] font-semibold" style={{ color: '#d1d5db' }}>{volume}</div>
                     </td>
                   </tr>
                 );
@@ -543,7 +544,7 @@ const CodexDevTokens: React.FC<CodexDevTokensProps> = ({ token, chain = 'sol' })
       </div>
 
       {/* Right side: Stats Panels and Pie Chart */}
-      <div className="w-1/2 flex-shrink-0 p-2 overflow-y-auto" style={{ backgroundColor: matteBlack, maxHeight: '100%', paddingBottom: '2rem' }}>
+      <div className="w-1/2 flex-shrink-0 p-2 overflow-y-auto min-h-0" style={{ backgroundColor: matteBlack, paddingBottom: '4.5rem' }}>
         <div className="flex flex-row gap-3 items-start">
           {/* Left: Stats Panels - Fixed narrow width */}
           <div className="flex-shrink-0 space-y-3" style={{ width: '240px', minWidth: '240px' }}>

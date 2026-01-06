@@ -166,7 +166,7 @@ const MonadTrades: React.FC<MonadTradesProps> = ({
       </div>
 
       {/* Trade Table */}
-      <div className="flex-1 overflow-y-auto pb-12">
+      <div className="flex-1 overflow-y-auto min-h-0 pb-18">
         <table className="w-full text-xs border-collapse table-fixed">
           <thead className="sticky top-0 bg-black z-10">
             <tr className="text-neutral-400 border-b border-neutral-800">

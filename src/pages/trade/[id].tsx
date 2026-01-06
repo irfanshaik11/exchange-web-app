@@ -771,15 +771,15 @@ export default function TradePage() {
             {/* BOTTOM pane (tabs + tables) */}
             <div id="tabs-pane" className="flex-1 flex flex-col overflow-hidden min-h-0">
               <div className="flex-shrink-0">
-                <TradeTabs 
-                  selectedTab={selectedTab} 
-                  setSelectedTab={setSelectedTab} 
+                <TradeTabs
+                  selectedTab={selectedTab}
+                  setSelectedTab={setSelectedTab}
                   onInstantTradeClick={() => setIsInstantTradeOpen(true)}
                   isInstantTradeOpen={isInstantTradeOpen}
                 />
               </div>
-              <div className="flex-1 min-h-0 overflow-y-auto" style={{ paddingBottom: '2rem' }}>
-                <div style={{ display: selectedTab === "Trades" ? "block" : "none", height: "100%" }}>
+              <div className="flex-1 min-h-0 relative">
+                <div className={`absolute inset-0 flex flex-col ${selectedTab === "Trades" ? "" : "hidden"}`}>
                   <CodexTrades
                     token={validatedCorrectTokenData || displayToken}
                     initialTrades={initialTradesForComponent}
@@ -788,20 +788,20 @@ export default function TradePage() {
                     chain="sol"
                   />
                 </div>
-                <div style={{ display: selectedTab === "Orders" ? "block" : "none", height: "100%" }}>
+                <div className={`absolute inset-0 flex flex-col ${selectedTab === "Orders" ? "" : "hidden"}`}>
                   <TokenLimitOrders />
                 </div>
-                <div style={{ display: selectedTab === "Top Traders" ? "block" : "none", height: "100%" }}>
+                <div className={`absolute inset-0 flex flex-col ${selectedTab === "Top Traders" ? "" : "hidden"}`}>
                   <React.Suspense fallback={<div className="flex items-center justify-center h-full text-neutral-400">Loading...</div>}>
                     <CodexTopTraders token={displayToken} pairAddress={idString || resolvedPairAddress} chain="sol" />
                   </React.Suspense>
                 </div>
-                <div style={{ display: selectedTab === "Holders" ? "block" : "none", height: "100%" }}>
+                <div className={`absolute inset-0 flex flex-col ${selectedTab === "Holders" ? "" : "hidden"}`}>
                   <React.Suspense fallback={<div className="flex items-center justify-center h-full text-neutral-400">Loading...</div>}>
                     <CodexHolders token={displayToken} pairAddress={idString || resolvedPairAddress} chain="sol" />
                   </React.Suspense>
                 </div>
-                <div style={{ display: selectedTab === "Dev Tokens" ? "block" : "none", height: "100%" }}>
+                <div className={`absolute inset-0 flex flex-col ${selectedTab === "Dev Tokens" ? "" : "hidden"}`}>
                   <React.Suspense fallback={<div className="flex items-center justify-center h-full text-neutral-400">Loading...</div>}>
                     <CodexDevTokens token={displayToken} chain="sol" />
                   </React.Suspense>

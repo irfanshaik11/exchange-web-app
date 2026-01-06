@@ -236,10 +236,15 @@ const CodexHolders: React.FC<CodexHoldersProps> = ({ token, pairAddress, chain =
           display: flex;
           flex-direction: row;
           gap: 0;
+          min-height: 0;
         }
         .holders-table-container {
           min-width: 0;
+          min-height: 0;
           overflow: hidden;
+          display: flex;
+          flex-direction: column;
+          height: 100%;
         }
         .holders-resizer {
           width: 4px;
@@ -274,9 +279,9 @@ const CodexHolders: React.FC<CodexHoldersProps> = ({ token, pairAddress, chain =
           display: block;
         }
       `}</style>
-      <div 
+      <div
         ref={containerRef}
-        className="w-full h-full flex flex-row overflow-hidden holders-container"
+        className="w-full h-full flex flex-row overflow-hidden min-h-0 holders-container"
       >
         {/* Left side: Holders Table */}
         <div 

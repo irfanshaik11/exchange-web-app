@@ -57,9 +57,9 @@ const MonadDevTokensTable: React.FC<MonadDevTokensTableProps> = ({
   const netVolumeUsd = devTokenData.buy_volume_usd - devTokenData.sell_volume_usd;
 
   return (
-    <div className="w-full h-full flex flex-col bg-black">
-      <div className="flex-1 min-h-0 bg-black" style={{ overflowX: 'auto' }}>
-        <table className="w-full text-xs border-collapse bg-black">
+    <div className="w-full h-full flex flex-col" style={{ backgroundColor: '#101114' }}>
+      <div className="flex-1 min-h-0 overflow-y-auto pb-18" style={{ backgroundColor: '#101114', overflowX: 'auto' }}>
+        <table className="w-full text-xs border-collapse" style={{ backgroundColor: '#101114' }}>
           <thead className="sticky top-0 bg-black z-10">
             <tr className="text-neutral-400 border-b border-neutral-800">
               <th className="px-2 py-2 text-left whitespace-nowrap">Dev Wallet</th>
