@@ -71,7 +71,7 @@ type ReusedTokenLite = {
 
 export default function TradePage() {
   const router = useRouter();
-  const { id, _name, _symbol, _price, _mcap, _image, _mint } = router.query;
+  const { id, _name, _symbol, _price, _mcap, _image, _mint, _launchpad_protocol } = router.query;
 
   // Wait for router to be ready before using query params
   // This prevents hydration issues where id is undefined briefly
@@ -85,17 +85,20 @@ export default function TradePage() {
   const { backgroundData: backgroundOHLCData, isPreloading, preloadComplete } = useBackgroundOHLCPreload();
 
   const optimisticToken = React.useMemo(() => {
-    if (_name || _symbol) {
+    // Create optimistic token if we have name/symbol OR mint address (for tokens without metadata)
+    if (_name || _symbol || _mint) {
       return {
-        name: (_name as string) || "",
+        name: (_name as string) || (_symbol as string) || "",
         symbol: (_symbol as string) || "",
+        mint: (_mint as string) || "",
         price_usd: _price ? parseFloat(_price as string) : undefined,
         market_cap_usd: _mcap ? parseFloat(_mcap as string) : undefined,
         image: (_image as string) || undefined,
+        launchpad_protocol: (_launchpad_protocol as string) || undefined,
       };
     }
     return null;
-  }, [_name, _symbol, _price, _mcap, _image]);
+  }, [_name, _symbol, _price, _mcap, _image, _mint, _launchpad_protocol]);
 
   if (process.env.NODE_ENV === "development") {
     console.log("TradePage Debug:", { id, idType: typeof id, isString: typeof id === "string", mintFromQuery: _mint, optimisticToken });

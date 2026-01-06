@@ -2098,7 +2098,7 @@ export default function Header({
                     if (tokenAddress) {
                       // Check if it's a Monad token (starts with 0x)
                       const isMonadToken = tokenAddress.startsWith('0x') || tokenAddress.startsWith('0X');
-                      
+
                       if (isMonadToken) {
                         // Build Monad trade URL with query parameters
                         const queryParams = new URLSearchParams();
@@ -2111,8 +2111,9 @@ export default function Header({
                         const imageUrl = (token as any).image_url || (token as any).image || (token as any).logo || (token as any).uri || '';
                         if (imageUrl) queryParams.set('_image', imageUrl);
                         queryParams.set('_mint', tokenAddress);
+                        if ((token as any).launchpad_protocol) queryParams.set('_launchpad_protocol', (token as any).launchpad_protocol);
                         queryParams.set('chain', 'monad');
-                        
+
                         const url = `/trade/monad/${tokenAddress}?${queryParams.toString()}`;
                         router.push(url);
                       } else {
@@ -2127,6 +2128,7 @@ export default function Header({
                         const imageUrl = (token as any).image_url || (token as any).image || (token as any).logo || (token as any).uri || '';
                         if (imageUrl) queryParams.set('_image', imageUrl);
                         queryParams.set('_mint', tokenAddress);
+                        if ((token as any).launchpad_protocol) queryParams.set('_launchpad_protocol', (token as any).launchpad_protocol);
                         queryParams.set('chain', 'sol');
 
                         router.push(`/trade/${tokenAddress}?${queryParams.toString()}`);

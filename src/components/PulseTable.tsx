@@ -6303,6 +6303,7 @@ function PulseTable({
                 ),
                 _image: extractTokenImage(token as any) || "",
                 _mint: (token as any)?.mint || "", // CRITICAL: Required for cache lookup
+                _launchpad_protocol: (token as any)?.launchpad_protocol || "", // Required for poolType detection
                 chain: currentChain, // Preserve chain selection
               }).toString();
 
@@ -6339,6 +6340,7 @@ function PulseTable({
                         image: extractTokenImage(token as any) || "",
                         mint: (token as any)?.mint || "",
                         pair_address: pairAddress,
+                        launchpad_protocol: (token as any)?.launchpad_protocol || "",
                         timestamp: Date.now(),
                       };
                       localStorage.setItem(

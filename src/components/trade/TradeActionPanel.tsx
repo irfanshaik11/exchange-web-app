@@ -539,7 +539,8 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
   initialStats
 }) => {
   // Only show skeleton if we have absolutely no token data (not even optimistic)
-  if (!token || (!token.name && !token.symbol)) {
+  // Allow tokens with just mint address (for tokens without metadata from search)
+  if (!token || (!token.name && !token.symbol && !token.mint)) {
     return (
       <div className="flex-shrink-0 min-w-[260px] basis-[280px] md:basis-[310px] lg:basis-[330px] hidden lg:block">
         <div className="h-full bg-neutral-800/50 rounded-lg p-4">
