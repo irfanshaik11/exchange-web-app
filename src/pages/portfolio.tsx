@@ -106,11 +106,11 @@ const BalanceChart = ({
   const yDomain = [minValue - padding, maxValue + padding];
 
   return (
-    <div className="w-full h-full">
+    <div className="w-full h-full min-h-[120px] sm:min-h-[160px]">
       <ResponsiveContainer width="100%" height="100%">
         <AreaChart
           data={chartData}
-          margin={{ top: 5, right: 10, left: 0, bottom: 0 }}
+          margin={{ top: 5, right: 5, left: 0, bottom: 0 }}
           onMouseMove={(e: any) => {
             if (e && e.activeTooltipIndex !== undefined) {
               setHoveredIndex(e.activeTooltipIndex);
@@ -128,22 +128,23 @@ const BalanceChart = ({
           <XAxis 
             dataKey="time" 
             stroke="#6B7280"
-            fontSize={10}
+            fontSize={8}
             tick={{ fill: '#6B7280' }}
             interval={Math.floor(chartData.length / 5)}
             tickLine={{ stroke: '#2A2B33' }}
           />
           <YAxis 
             stroke="#6B7280"
-            fontSize={10}
+            fontSize={8}
             tick={{ fill: '#6B7280' }}
             tickLine={{ stroke: '#2A2B33' }}
             domain={yDomain}
             allowDataOverflow={false}
+            width={40}
             tickFormatter={(value) => {
-              if (Math.abs(value) >= 1) return value.toFixed(3);
-              if (Math.abs(value) >= 0.1) return value.toFixed(4);
-              return value.toFixed(6);
+              if (Math.abs(value) >= 1) return value.toFixed(2);
+              if (Math.abs(value) >= 0.1) return value.toFixed(3);
+              return value.toFixed(4);
             }}
           />
           <Tooltip 
@@ -2732,13 +2733,13 @@ export default function PortfolioPage() {
       </Head>
       <div className="min-h-screen bg-[#050608] text-[#E6E7EA]">
         <Header />
-        <div className="px-6 pt-5">
+        <div className="px-3 sm:px-4 md:px-6 pt-4 sm:pt-5">
 
           {/* Section Tabs */}
-          <div className="flex items-center justify-between mb-4 px-2">
-            <div className="flex gap-8">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-4 px-2 gap-3 sm:gap-0">
+            <div className="flex gap-4 sm:gap-8">
               <button
-                className={`text-lg font-light transition cursor-pointer ${
+                className={`text-base sm:text-lg font-light transition cursor-pointer ${
                   activeSection === "spot"
                     ? "text-[#f0f5f5]"
                     : "text-[#6B7280] hover:text-[#f0f5f5]"
@@ -2748,7 +2749,7 @@ export default function PortfolioPage() {
                 Spot
               </button>
               <button
-                className={`text-lg font-light transition cursor-pointer ${
+                className={`text-base sm:text-lg font-light transition cursor-pointer ${
                   activeSection === "wallet"
                     ? "text-[#f0f5f5]"
                     : "text-[#6B7280] hover:text-[#f0f5f5]"
@@ -2758,7 +2759,7 @@ export default function PortfolioPage() {
                 Wallets
               </button>
               {/* <button
-                className={`text-lg font-light transition cursor-pointer ${
+                className={`text-base sm:text-lg font-light transition cursor-pointer ${
                   activeSection === "perpetuals"
                     ? "text-[#f0f5f5]"
                     : "text-[#6B7280] hover:text-[#f0f5f5]"
@@ -2771,7 +2772,7 @@ export default function PortfolioPage() {
 
             {/* Right side controls for Spot section */}
             {activeSection === "spot" && (
-              <div className="flex items-center gap-4">
+              <div className="flex flex-wrap items-center gap-2 sm:gap-4 w-full sm:w-auto">
                 <InterstateTooltip label={currentChain === 'monad' ? 'MON Balance' : 'SOL Balance'}>
                   <div className="flex items-center gap-2 cursor-pointer hover:opacity-80 transition-opacity">
                     {currentChain === 'monad' ? (
@@ -2835,7 +2836,7 @@ export default function PortfolioPage() {
                 <div className="flex items-center gap-1">
                   <button
                     onClick={() => setSelectedTimeframe("1d")}
-                    className={`px-3 py-1 text-xs cursor-pointer transition-colors ${
+                    className={`px-2 sm:px-3 py-1 text-xs cursor-pointer transition-colors ${
                       selectedTimeframe === "1d"
                         ? "text-[#f0f5f5]"
                         : "text-[#9CA3AF] hover:text-[#f0f5f5]"
@@ -2845,7 +2846,7 @@ export default function PortfolioPage() {
                   </button>
                   <button
                     onClick={() => setSelectedTimeframe("7d")}
-                    className={`px-3 py-1 text-xs cursor-pointer transition-colors ${
+                    className={`px-2 sm:px-3 py-1 text-xs cursor-pointer transition-colors ${
                       selectedTimeframe === "7d"
                         ? "text-[#f0f5f5]"
                         : "text-[#9CA3AF] hover:text-[#f0f5f5]"
@@ -2855,7 +2856,7 @@ export default function PortfolioPage() {
                   </button>
                   <button
                     onClick={() => setSelectedTimeframe("30d")}
-                    className={`px-3 py-1 text-xs cursor-pointer transition-colors ${
+                    className={`px-2 sm:px-3 py-1 text-xs cursor-pointer transition-colors ${
                       selectedTimeframe === "30d"
                         ? "text-[#f0f5f5]"
                         : "text-[#9CA3AF] hover:text-[#f0f5f5]"
@@ -2865,7 +2866,7 @@ export default function PortfolioPage() {
                   </button>
                   <button
                     onClick={() => setSelectedTimeframe("Max")}
-                    className={`px-3 py-1 text-xs cursor-pointer transition-colors ${
+                    className={`px-2 sm:px-3 py-1 text-xs cursor-pointer transition-colors ${
                       selectedTimeframe === "Max"
                         ? "text-[#f0f5f5]"
                         : "text-[#9CA3AF] hover:text-[#f0f5f5]"
@@ -2880,20 +2881,20 @@ export default function PortfolioPage() {
 
           {/* Spot Section */}
           {activeSection === "spot" && (
-            <div className="space-y-6">
+            <div className="space-y-4 sm:space-y-6">
               {/* Top Panels */}
-              <div className={`grid gap-6 ${initialNativeBalanceRef.current !== null ? 'grid-cols-4' : 'grid-cols-3'}`}>
+              <div className={`grid gap-4 sm:gap-6 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 ${initialNativeBalanceRef.current !== null ? 'xl:grid-cols-4' : 'xl:grid-cols-3'}`}>
                 {/* Balance */}
-                <div className="bg-[#101114] rounded-lg p-6">
-                  <div className="mb-4 text-[#f0f5f5] text-sm font-medium cursor-pointer hover:text-[#70E0B0] transition-colors">
+                <div className="bg-[#101114] rounded-lg p-4 sm:p-6">
+                  <div className="mb-3 sm:mb-4 text-[#f0f5f5] text-xs sm:text-sm font-medium cursor-pointer hover:text-[#70E0B0] transition-colors">
                     Balance
                   </div>
-                  <div className="space-y-4">
+                  <div className="space-y-3 sm:space-y-4">
                     <div>
-                      <div className="text-[#6B7280] text-sm font-light">
+                      <div className="text-[#6B7280] text-xs sm:text-sm font-light">
                         Available Balance in $
                       </div>
-                      <div className="text-2xl font-light text-[#f0f5f5]">
+                      <div className="text-xl sm:text-2xl font-light text-[#f0f5f5]">
                         {currentChain === 'monad' ? (
                           `$${formatSmartNumber((monBalance || 0) * (monPrice || 0.025))}`
                         ) : (
@@ -2903,13 +2904,13 @@ export default function PortfolioPage() {
                     </div>
                     {/* Unrealized PNL - Commented out */}
                     {/* <div>
-                      <div className="text-[#6B7280] text-sm font-light flex items-center gap-1">
+                      <div className="text-[#6B7280] text-xs sm:text-sm font-light flex items-center gap-1">
                         Unrealized PNL
                         <InterstateTooltip label="Profit/loss from positions you still hold (tokens you haven't sold yet). This changes as token prices change.">
                           <span className="text-[#6B7280] hover:text-[#9CA3AF] cursor-help text-xs">ℹ️</span>
                         </InterstateTooltip>
                       </div>
-                      <div className="text-2xl font-light text-[#f0f5f5]">
+                      <div className="text-xl sm:text-2xl font-light text-[#f0f5f5]">
                         ${formatSmallPrice(unrealizedPnl)}
                       </div>
                       {unrealizedPnlPercentage !== 0 && (
@@ -2919,10 +2920,10 @@ export default function PortfolioPage() {
                       )}
                     </div> */}
                     <div>
-                      <div className="text-[#6B7280] text-sm font-light">
+                      <div className="text-[#6B7280] text-xs sm:text-sm font-light">
                         Available Balance in {currentChain === "monad" ? "MON" : "SOL"}
                       </div>
-                      <div className="text-2xl font-light text-[#f0f5f5] flex items-center gap-1">
+                      <div className="text-xl sm:text-2xl font-light text-[#f0f5f5] flex items-center gap-1">
                         <ChainIcon chain={currentChain} size="medium" />
                         {currentChain === "monad"
                           ? `${formatSmartNumber(monBalance)} MON`
@@ -2975,13 +2976,13 @@ export default function PortfolioPage() {
 
                 {/* Wallet Balance Change */}
                 {initialNativeBalanceRef.current !== null && (
-                  <div className="bg-[#101114] rounded-lg p-6">
-                    <div className="mb-4 text-[#f0f5f5] text-sm font-medium cursor-pointer hover:text-[#70E0B0] transition-colors">
+                  <div className="bg-[#101114] rounded-lg p-4 sm:p-6">
+                    <div className="mb-3 sm:mb-4 text-[#f0f5f5] text-xs sm:text-sm font-medium cursor-pointer hover:text-[#70E0B0] transition-colors">
                       Wallet Balance Change ({currentChain === "monad" ? "MON" : "SOL"})
                     </div>
                     <div className="flex flex-col">
                       <div
-                        className="text-2xl font-light mb-2"
+                        className="text-xl sm:text-2xl font-light mb-2"
                         style={{
                           color: actualBalanceChangePnl >= 0 ? "#70E0B0" : "#FF4D7F",
                         }}
@@ -3023,7 +3024,7 @@ export default function PortfolioPage() {
                       )}
                       {/* Interactive Chart */}
                       {balanceHistory.length > 0 && (
-                        <div className="mt-2 h-40 w-full">
+                        <div className="mt-2 h-32 sm:h-40 w-full">
                           <BalanceChart 
                             data={balanceHistory} 
                             chain={currentChain}
@@ -3036,9 +3037,9 @@ export default function PortfolioPage() {
                 )}
 
                 {/* Realized PNL */}
-                <div className="bg-[#101114] rounded-lg p-6">
-                  <div className="mb-4 flex items-center justify-between">
-                    <div className="text-[#f0f5f5] text-sm font-medium cursor-pointer hover:text-[#70E0B0] transition-colors flex items-center gap-2">
+                <div className="bg-[#101114] rounded-lg p-4 sm:p-6">
+                  <div className="mb-3 sm:mb-4 flex items-center justify-between">
+                    <div className="text-[#f0f5f5] text-xs sm:text-sm font-medium cursor-pointer hover:text-[#70E0B0] transition-colors flex items-center gap-2">
                       Realized PNL
                       <InterstateTooltip label="Profit/loss from completed trades (tokens you've sold). This is locked in and won't change unless you make more trades.">
                         <FiInfo className="text-[#6B7280] hover:text-[#9CA3AF] cursor-help text-xs w-3.5 h-3.5 transition-colors" />
@@ -3055,9 +3056,9 @@ export default function PortfolioPage() {
                       </svg>
                     </InterstateTooltip> */}
                   </div>
-                  <div className="flex flex-col h-32">
+                  <div className="flex flex-col h-28 sm:h-32">
                     <div
-                      className="text-2xl font-light mb-2"
+                      className="text-xl sm:text-2xl font-light mb-2"
                       style={{
                         color:
                           timeframeMetrics.realizedPnl >= 0 ? "#70E0B0" : "#FF4D7F",
@@ -3205,9 +3206,9 @@ export default function PortfolioPage() {
                 </div>
 
                 {/* Performance */}
-                <div className="bg-[#101114] rounded-lg p-6">
-                  <div className="mb-4 flex items-center justify-between">
-                    <div className="text-[#f0f5f5] text-sm font-medium cursor-pointer hover:text-[#70E0B0] transition-colors">
+                <div className="bg-[#101114] rounded-lg p-4 sm:p-6">
+                  <div className="mb-3 sm:mb-4 flex items-center justify-between">
+                    <div className="text-[#f0f5f5] text-xs sm:text-sm font-medium cursor-pointer hover:text-[#70E0B0] transition-colors">
                       Performance
                     </div>
                     <InterstateTooltip label="Export">
@@ -3219,12 +3220,12 @@ export default function PortfolioPage() {
                       </button>
                     </InterstateTooltip>
                   </div>
-                  <div className="space-y-3">
-                    <div className="flex justify-between text-sm">
-                      <span className="text-[#6B7280] font-light">
+                  <div className="space-y-2 sm:space-y-3">
+                    <div className="flex justify-between text-xs sm:text-sm">
+                      <span className="text-[#6B7280] font-light truncate pr-2">
                         {selectedTimeframe} Unrealized PNL
                       </span>
-                      <span className="text-[#f0f5f5] font-light">
+                      <span className="text-[#f0f5f5] font-light whitespace-nowrap">
                         {sortByUSD && solPrice > 0 ? (
                           <>
                             <ChainIcon chain={currentChain} size="medium" />
@@ -3237,11 +3238,11 @@ export default function PortfolioPage() {
                         )}
                       </span>
                     </div>
-                    <div className="flex justify-between text-sm">
-                      <span className="text-[#6B7280] font-light">
+                    <div className="flex justify-between text-xs sm:text-sm">
+                      <span className="text-[#6B7280] font-light truncate pr-2">
                         {selectedTimeframe} Realized PNL
                       </span>
-                      <span className="text-[#f0f5f5] font-light">
+                      <span className="text-[#f0f5f5] font-light whitespace-nowrap">
                         {sortByUSD && solPrice > 0 ? (
                           <>
                             <ChainIcon chain={currentChain} size="medium" />
@@ -3258,12 +3259,12 @@ export default function PortfolioPage() {
                         )}
                       </span>
                     </div>
-                    <div className="flex justify-between text-sm">
-                      <span className="text-[#6B7280] font-light">
+                    <div className="flex justify-between text-xs sm:text-sm">
+                      <span className="text-[#6B7280] font-light truncate pr-2">
                         {selectedTimeframe} Total PNL
                       </span>
                       <span
-                        className="font-light"
+                        className="font-light whitespace-nowrap"
                         style={{
                           color: totalPnl >= 0 ? "#70E0B0" : "#FF4D7F",
                         }}
@@ -3277,17 +3278,17 @@ export default function PortfolioPage() {
                           `${totalPnl >= 0 ? "+" : "-"}$${formatSmallPrice(Math.abs(totalPnl))}`
                         )}
                         {totalPnlPercentage !== 0 && (
-                          <span className="ml-2 text-xs">
+                          <span className="ml-1 sm:ml-2 text-xs">
                             ({totalPnlPercentage >= 0 ? "+" : ""}{formatSmallPrice(totalPnlPercentage)}%)
                           </span>
                         )}
                       </span>
                     </div>
-                    <div className="flex justify-between text-sm">
-                      <span className="text-[#6B7280] font-light">
+                    <div className="flex justify-between text-xs sm:text-sm">
+                      <span className="text-[#6B7280] font-light truncate pr-2">
                         {selectedTimeframe} Total TXNS
                       </span>
-                      <span className="text-[#f0f5f5] font-light">
+                      <span className="text-[#f0f5f5] font-light whitespace-nowrap">
                         {timeframeMetrics.winningTrades}/
                         {timeframeMetrics.losingTrades}
                       </span>
@@ -3295,58 +3296,58 @@ export default function PortfolioPage() {
 
                     {/* Performance breakdown */}
                     <div className="space-y-2 mt-4">
-                      <div className="flex items-center justify-between text-sm">
+                      <div className="flex items-center justify-between text-xs sm:text-sm">
                         <div className="flex items-center gap-2">
-                          <div className="w-2 h-2 rounded-full bg-[#70E0B0]"></div>
-                          <span className="text-[#6B7280] font-light">
+                          <div className="w-2 h-2 rounded-full bg-[#70E0B0] flex-shrink-0"></div>
+                          <span className="text-[#6B7280] font-light truncate">
                             &gt;500%
                           </span>
                         </div>
-                        <span className="text-[#f0f5f5] font-light">
+                        <span className="text-[#f0f5f5] font-light whitespace-nowrap ml-2">
                           {performanceBreakdown.above500}
                         </span>
                       </div>
-                      <div className="flex items-center justify-between text-sm">
+                      <div className="flex items-center justify-between text-xs sm:text-sm">
                         <div className="flex items-center gap-2">
-                          <div className="w-2 h-2 rounded-full bg-[#70E0B0]"></div>
-                          <span className="text-[#6B7280] font-light">
+                          <div className="w-2 h-2 rounded-full bg-[#70E0B0] flex-shrink-0"></div>
+                          <span className="text-[#6B7280] font-light truncate">
                             200% ~ 500%
                           </span>
                         </div>
-                        <span className="text-[#f0f5f5] font-light">
+                        <span className="text-[#f0f5f5] font-light whitespace-nowrap ml-2">
                           {performanceBreakdown.between200And500}
                         </span>
                       </div>
-                      <div className="flex items-center justify-between text-sm">
+                      <div className="flex items-center justify-between text-xs sm:text-sm">
                         <div className="flex items-center gap-2">
-                          <div className="w-2 h-2 rounded-full bg-[#70E0B0]"></div>
-                          <span className="text-[#6B7280] font-light">
+                          <div className="w-2 h-2 rounded-full bg-[#70E0B0] flex-shrink-0"></div>
+                          <span className="text-[#6B7280] font-light truncate">
                             0% ~ 200%
                           </span>
                         </div>
-                        <span className="text:white font-light">
+                        <span className="text-[#f0f5f5] font-light whitespace-nowrap ml-2">
                           {performanceBreakdown.between0And200}
                         </span>
                       </div>
-                      <div className="flex items-center justify-between text-sm">
+                      <div className="flex items-center justify-between text-xs sm:text-sm">
                         <div className="flex items-center gap-2">
-                          <div className="w-2 h-2 rounded-full bg-[#FF4D7F]"></div>
-                          <span className="text-[#6B7280] font-light">
+                          <div className="w-2 h-2 rounded-full bg-[#FF4D7F] flex-shrink-0"></div>
+                          <span className="text-[#6B7280] font-light truncate">
                             0% ~ -50%
                           </span>
                         </div>
-                        <span className="text-[#f0f5f5] font-light">
+                        <span className="text-[#f0f5f5] font-light whitespace-nowrap ml-2">
                           {performanceBreakdown.between0AndMinus50}
                         </span>
                       </div>
-                      <div className="flex items-center justify-between text-sm">
+                      <div className="flex items-center justify-between text-xs sm:text-sm">
                         <div className="flex items-center gap-2">
-                          <div className="w-2 h-2 rounded-full bg-[#FF4D7F]"></div>
-                          <span className="text-[#6B7280] font-light">
+                          <div className="w-2 h-2 rounded-full bg-[#FF4D7F] flex-shrink-0"></div>
+                          <span className="text-[#6B7280] font-light truncate">
                             &lt; -50%
                           </span>
                         </div>
-                        <span className="text-[#f0f5f5] font-light">
+                        <span className="text-[#f0f5f5] font-light whitespace-nowrap ml-2">
                           {performanceBreakdown.belowMinus50}
                         </span>
                       </div>
@@ -3359,14 +3360,14 @@ export default function PortfolioPage() {
               </div>
 
               {/* Positions Table Section  */}
-              <div className="bg-[#101114] rounded-lg">
+              <div className="bg-[#101114] rounded-lg overflow-hidden">
                 {/* Sub-navigation tabs with controls */}
-                <div className="flex items-center justify-between border-b border-[#2A2B33]">
-                  <div className="flex">
+                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between border-b border-[#2A2B33] gap-3 sm:gap-0 p-3 sm:p-0">
+                  <div className="flex flex-wrap">
                     {spotTabs.map((tab, i) => (
                       <button
                         key={tab}
-                        className={`px-3 py-2 text-xs font-medium transition-colors cursor-pointer ${
+                        className={`px-2 sm:px-3 py-2 text-xs font-medium transition-colors cursor-pointer ${
                           activeSpotTab === i
                             ? "text-[#f0f5f5] border-b-2 border-[#70E0B0]"
                             : "text-[#9CA3AF] hover:text-[#f0f5f5]"
@@ -3378,27 +3379,27 @@ export default function PortfolioPage() {
                     ))}
                   </div>
 
-                  <div className="flex items-center gap-4">
-                    <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-[#17191E] border border-[#2A2B33] hover:border-[#374151] transition-colors">
-                      <FaSearch className="text-[#9CA3AF] text-xs" />
+                  <div className="flex flex-wrap items-center gap-2 sm:gap-4 w-full sm:w-auto">
+                    <div className="flex items-center gap-2 px-2 sm:px-3 py-1.5 rounded-full bg-[#17191E] border border-[#2A2B33] hover:border-[#374151] transition-colors flex-1 sm:flex-initial min-w-[200px] sm:min-w-0">
+                      <FaSearch className="text-[#9CA3AF] text-xs flex-shrink-0" />
                       <input
                         type="text"
                         placeholder="Search by name or address"
-                        className="bg-transparent text-xs text-[#9CA3AF] placeholder-[#6B7280] focus:outline-none w-40"
+                        className="bg-transparent text-xs text-[#9CA3AF] placeholder-[#6B7280] focus:outline-none w-full sm:w-40"
                         value={searchQuery}
                         onChange={(e) => setSearchQuery(e.target.value)}
                       />
                       {searchQuery.trim() && (
                         <button
                           onClick={() => setSearchQuery("")}
-                          className="text-[#9CA3AF] hover:text-[#f0f5f5] transition-colors"
+                          className="text-[#9CA3AF] hover:text-[#f0f5f5] transition-colors flex-shrink-0"
                         >
                           <FaTimes className="text-xs" />
                         </button>
                       )}
                     </div>
                     {searchQuery.trim() && (
-                      <div className="text-xs text-[#9CA3AF]">
+                      <div className="text-xs text-[#9CA3AF] whitespace-nowrap">
                         {(() => {
                           const activeTab = activeSpotTab;
                           if (activeTab === 0)
@@ -3414,7 +3415,7 @@ export default function PortfolioPage() {
                     )}
                     <button
                       onClick={() => setShowHidden(!showHidden)}
-                      className={`flex items-center gap-1 px-2 py-1 rounded-lg transition-all duration-200 cursor-pointer text-xs ${
+                      className={`flex items-center gap-1 px-2 py-1 rounded-lg transition-all duration-200 cursor-pointer text-xs whitespace-nowrap ${
                         !showHidden
                           ? "bg-[#2A2B33] text-[#70E0B0]"
                           : "bg-transparent hover:bg-[#2A2B33] text-[#9CA3AF] hover:text-[#f0f5f5]"
@@ -3556,9 +3557,9 @@ export default function PortfolioPage() {
               {/* Header Row  */}
               <div className="border-b border-[#2A2B33]">
                 {/* Left Panel Header */}
-                <div className="px-4 py-3">
-                  <div className="flex justify-between gap-2">
-                    <div className="flex items-center px-3 py-1 rounded-full bg-[#17191E] border border-[#2A2B33] w-48">
+                <div className="px-3 sm:px-4 py-3">
+                  <div className="flex flex-col sm:flex-row justify-between gap-3 sm:gap-2">
+                    <div className="flex items-center px-2 sm:px-3 py-1 rounded-full bg-[#17191E] border border-[#2A2B33] w-full sm:w-48">
                       <FaSearch className="text-[#9CA3AF] text-xs mr-2 flex-shrink-0" />
                       <input
                         type="text"
@@ -3576,9 +3577,10 @@ export default function PortfolioPage() {
                         </button>
                       )}
                     </div>
+                    <div className="flex flex-wrap items-center gap-2">
                     <button
                       onClick={() => setShowHidden(!showHidden)}
-                      className={`flex items-center gap-1 px-1 ml-10 py-1 rounded-full transition-colors duration-200 cursor-pointer text-xs whitespace-nowrap ${
+                      className={`flex items-center gap-1 px-2 sm:px-1 sm:ml-0 py-1 rounded-full transition-colors duration-200 cursor-pointer text-xs whitespace-nowrap ${
                         !showHidden
                           ? "text-[#70E0B0]"
                           : "text-[#9CA3AF] hover:text-[#f0f5f5]"
@@ -3609,9 +3611,9 @@ export default function PortfolioPage() {
                       <span className="sm:hidden">Archived</span>
                     </button>
                     {(currentChain === "sol" || currentChain === "monad") && (
-                      <div className="flex gap-2">
+                      <div className="flex flex-wrap gap-2">
                         <button
-                          className="px-3 py-1 rounded-full bg-[#374151] text-xs text-[#f0f5f5] hover:bg-[#4B5563] transition-colors cursor-pointer whitespace-nowrap"
+                          className="px-2 sm:px-3 py-1 rounded-full bg-[#374151] text-xs text-[#f0f5f5] hover:bg-[#4B5563] transition-colors cursor-pointer whitespace-nowrap"
                           onClick={() => {
                             if (currentChain === "sol") {
                               if (isAllSolSelected) clearSelectedWallets("sol");
@@ -3625,35 +3627,37 @@ export default function PortfolioPage() {
                           {(currentChain === "sol" ? isAllSolSelected : isAllMonSelected) ? "Unselect all" : "Select all"}
                         </button>
                         <button
-                          className="px-3 py-1 rounded-full bg-[#374151] text-xs text-[#f0f5f5] hover:bg-[#4B5563] transition-colors cursor-pointer whitespace-nowrap"
+                          className="px-2 sm:px-3 py-1 rounded-full bg-[#374151] text-xs text-[#f0f5f5] hover:bg-[#4B5563] transition-colors cursor-pointer whitespace-nowrap"
                           onClick={() => selectWalletsWithFunds(currentChain as "sol" | "monad")}
                         >
                           Select with funds
                         </button>
                         <button
-                          className="px-3 py-1 rounded-full bg-[#374151] text-xs text-[#f0f5f5] hover:bg-[#4B5563] transition-colors cursor-pointer whitespace-nowrap flex items-center gap-1 disabled:opacity-60"
+                          className="px-2 sm:px-3 py-1 rounded-full bg-[#374151] text-xs text-[#f0f5f5] hover:bg-[#4B5563] transition-colors cursor-pointer whitespace-nowrap flex items-center gap-1 disabled:opacity-60"
                           disabled={redistributing}
                           onClick={() => handleRedistributeFunds("consolidate")}
                           title="Move all selected funds to the primary wallet"
                         >
                           <IoIosGitNetwork size={14} />
-                          {redistributing ? "Working..." : "Consolidate"}
+                          <span className="hidden sm:inline">{redistributing ? "Working..." : "Consolidate"}</span>
+                          <span className="sm:hidden">{redistributing ? "..." : "Consolidate"}</span>
                         </button>
                         <button
-                          className="px-3 py-1 rounded-full bg-[#374151] text-xs text-[#f0f5f5] hover:bg-[#4B5563] transition-colors cursor-pointer whitespace-nowrap flex items-center gap-1 disabled:opacity-60"
+                          className="px-2 sm:px-3 py-1 rounded-full bg-[#374151] text-xs text-[#f0f5f5] hover:bg-[#4B5563] transition-colors cursor-pointer whitespace-nowrap flex items-center gap-1 disabled:opacity-60"
                           disabled={redistributing}
                           onClick={() => handleRedistributeFunds("split")}
                           title="Split selected balance equally across wallets"
                         >
                           <PiNetwork size={14} />
-                          {redistributing ? "Working..." : "Split"}
+                          <span className="hidden sm:inline">{redistributing ? "Working..." : "Split"}</span>
+                          <span className="sm:hidden">{redistributing ? "..." : "Split"}</span>
                         </button>
                       </div>
                     )}
                     <div className="relative">
                       <button
                         onClick={() => setShowImportDropdown(!showImportDropdown)}
-                        className="px-3 py-1 rounded-full bg-[#374151] text-xs text-[#f0f5f5] hover:bg-[#4B5563] transition-colors cursor-pointer whitespace-nowrap"
+                        className="px-2 sm:px-3 py-1 rounded-full bg-[#374151] text-xs text-[#f0f5f5] hover:bg-[#4B5563] transition-colors cursor-pointer whitespace-nowrap"
                       >
                         Import ▾
                       </button>
@@ -3696,14 +3700,14 @@ export default function PortfolioPage() {
                     <button
                     onClick={handleCreateWallet}
                     disabled={creatingWallet || !user}
-                    className={`px-2 py-1 rounded-full text-xs whitespace-nowrap transition-colors cursor-pointer
+                    className={`px-2 sm:px-3 py-1 rounded-full text-xs whitespace-nowrap transition-colors cursor-pointer
                       ${creatingWallet || !user
                         ? "bg-[#374151] text-[#9CA3AF] cursor-not-allowed" : "bg-[#70E0B0] text-[#1A1A1A] hover:bg-[#58B890]"
 }`}
           >
                   {creatingWallet ? "Creating..." : "Create Wallet"}
                 </button>
-
+                    </div>
                   </div>
                 </div>
 
@@ -3715,8 +3719,8 @@ export default function PortfolioPage() {
 
               {/* Table Headers Row - Spans Both Panels */}
               <div className="border-b border-[#2A2B33]">
-                <div className="py-2 -mx-4 px-4">
-                  <div className="grid grid-cols-[2fr_1fr_1fr_1.2fr] gap-2 text-xs text-[#9CA3AF]">
+                <div className="py-2 -mx-3 sm:-mx-4 px-3 sm:px-4">
+                  <div className="hidden sm:grid grid-cols-[2fr_1fr_1fr_1.2fr] gap-2 text-xs text-[#9CA3AF]">
                     <div className="font-medium truncate">Wallet</div>
                     <div className="font-medium truncate text-center flex items-center justify-center gap-2">
                       <span>
@@ -3753,7 +3757,7 @@ export default function PortfolioPage() {
               {/* Content Area */}
               <div>
                 {/* Left Panel Content */}
-                <div className="px-4 py-3 ">
+                <div className="px-3 sm:px-4 py-3">
                   <div className="min-h-[300px]">
                     {!user ? (
                       <div className="flex h-24 flex-col items-center justify-center text-[#9CA3AF] text-xs">
@@ -3793,12 +3797,12 @@ export default function PortfolioPage() {
                           return (
                             <div
                               key={wallet.id}
-                              className="group border-b border-[#2A2B33] hover:bg-[#17191E] transition-colors -mx-4 px-4"
+                              className="group border-b border-[#2A2B33] hover:bg-[#17191E] transition-colors -mx-3 sm:-mx-4 px-3 sm:px-4"
                               style={{ backgroundColor: rowBackground }}
                             >
-                              <div className="grid grid-cols-[2fr_1fr_1fr_1.2fr] gap-2 items-center py-3">
+                              <div className="flex flex-col sm:grid sm:grid-cols-[2fr_1fr_1fr_1.2fr] gap-3 sm:gap-2 items-start sm:items-center py-3">
                               {/* Wallet + address */}
-                                <div className="flex items-center gap-2 min-w-0">
+                                <div className="flex items-center gap-2 min-w-0 w-full sm:w-auto">
                                   <div
                                     className="relative flex-shrink-0 w-5 h-5 rounded border-2 flex items-center justify-center transition-all cursor-pointer"
                                     style={{
@@ -3843,7 +3847,7 @@ export default function PortfolioPage() {
                                     )}
                                   </div>
                                   <div className="min-w-0 flex-1">
-                                    <div className="font-medium text-sm flex items-center gap-2" style={{ color: wallet.isPrimary ? "#FF6B35" : "#f0f5f5" }}>
+                                    <div className="font-medium text-sm flex items-center gap-2 flex-wrap" style={{ color: wallet.isPrimary ? "#FF6B35" : "#f0f5f5" }}>
                                     {editingWalletId === wallet.id ? (
                                       <>
                                         <input
@@ -3937,48 +3941,56 @@ export default function PortfolioPage() {
                                 </div>
 
                               {/* Balance */}
-                                <div className="flex items-center gap-1 justify-center">
-                                  {currentChain === 'monad' ? (
-                                    <img
-                                      src="https://i0.wp.com/www.gizmotimes.com/wp-content/uploads/2023/10/Monad-Logo.png?fit=1920%2C1080&ssl=1"
-                                      alt="Monad"
-                                      className="h-4 w-4 flex-shrink-0 rounded"
-                                      style={{ objectFit: 'contain' }}
-                                    />
-                                  ) : (
-                                    <SiSolana
-                                      className="h-3 w-3 flex-shrink-0"
-                                      aria-hidden="true"
-                                      style={{
-                                        color: "unset",
-                                        fill: "url(#solana-gradient-wallets)",
-                                        filter: "none",
-                                      }}
-                                    />
-                                  )}
-                                  <span className="text-xs text-white">
-                                    {formatSmartNumber(
-                                      walletBalances[wallet.id] ?? wallet.balance,
+                                <div className="flex flex-col sm:flex-row items-start sm:items-center gap-1 sm:justify-center w-full sm:w-auto">
+                                  <span className="text-xs text-[#6B7280] sm:hidden">Balance ({currentChain === "monad" ? "MON" : "SOL"}):</span>
+                                  <div className="flex items-center gap-1">
+                                    {currentChain === 'monad' ? (
+                                      <img
+                                        src="https://i0.wp.com/www.gizmotimes.com/wp-content/uploads/2023/10/Monad-Logo.png?fit=1920%2C1080&ssl=1"
+                                        alt="Monad"
+                                        className="h-4 w-4 flex-shrink-0 rounded"
+                                        style={{ objectFit: 'contain' }}
+                                      />
+                                    ) : (
+                                      <SiSolana
+                                        className="h-3 w-3 flex-shrink-0"
+                                        aria-hidden="true"
+                                        style={{
+                                          color: "unset",
+                                          fill: "url(#solana-gradient-wallets)",
+                                          filter: "none",
+                                        }}
+                                      />
                                     )}
-                                  </span>
+                                    <span className="text-xs text-white">
+                                      {formatSmartNumber(
+                                        walletBalances[wallet.id] ?? wallet.balance,
+                                      )}
+                                    </span>
+                                  </div>
                                 </div>
 
                                 {/* Holdings */}
-                                <div className="flex items-center justify-center">
-                                  <StackedTokenBoxes
-                                    count={
-                                      // Use API value if available and > 0, otherwise fallback to positions.length for primary wallet
-                                      wallet.holdingsCount > 0
-                                        ? wallet.holdingsCount
-                                        : wallet.isPrimary && positions.length > 0
-                                          ? positions.length
-                                          : wallet.holdingsCount
-                                    }
-                                  />
+                                <div className="flex flex-col sm:flex-row items-start sm:items-center gap-1 sm:justify-center w-full sm:w-auto">
+                                  <span className="text-xs text-[#6B7280] sm:hidden">Holdings:</span>
+                                  <div className="flex items-center">
+                                    <StackedTokenBoxes
+                                      count={
+                                        // Use API value if available and > 0, otherwise fallback to positions.length for primary wallet
+                                        wallet.holdingsCount > 0
+                                          ? wallet.holdingsCount
+                                          : wallet.isPrimary && positions.length > 0
+                                            ? positions.length
+                                            : wallet.holdingsCount
+                                      }
+                                    />
+                                  </div>
                                 </div>
 
                                 {/* Actions */}
-                                <div className="flex items-center justify-end gap-2">
+                                <div className="flex flex-col sm:flex-row items-start sm:items-end gap-2 sm:justify-end w-full sm:w-auto">
+                                  <span className="text-xs text-[#6B7280] sm:hidden">Actions:</span>
+                                  <div className="flex items-center gap-2 flex-wrap">
                                   <button
                                     className={`transition-opacity p-1 ${wallet.isPrimary ? "opacity-100" : "opacity-0 group-hover:opacity-100"}`}
                                     title={wallet.isPrimary ? "Primary wallet" : "Set as primary"}
@@ -4005,15 +4017,17 @@ export default function PortfolioPage() {
                                     <FaTrash size={12} />
                                   </button>
                                   <button
-                                    className="px-3 py-1 rounded-full bg-[#374151] text-xs text-[#f0f5f5] hover:bg-[#4B5563] transition-colors cursor-pointer whitespace-nowrap"
+                                    className="px-2 sm:px-3 py-1 rounded-full bg-[#374151] text-xs text-[#f0f5f5] hover:bg-[#4B5563] transition-colors cursor-pointer whitespace-nowrap"
                                     onClick={(e) => {
                                       e.stopPropagation();
                                       handleExportWallet(wallet.id);
                                     }}
                                     title="Export wallet"
                                   >
-                                    Export wallet
+                                    <span className="hidden sm:inline">Export wallet</span>
+                                    <span className="sm:hidden">Export</span>
                                   </button>
+                                  </div>
                                 </div>
                               </div>
                             </div>
@@ -4239,8 +4253,8 @@ export default function PortfolioPage() {
 
       {/* Delete Wallet Confirmation */}
       {deleteModalOpen && deleteTarget && (
-        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/70 px-4">
-          <div className="w-full max-w-md rounded-xl border border-[#2A2B33] bg-[#101114] p-5 shadow-2xl">
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/70 px-3 sm:px-4">
+          <div className="w-full max-w-md rounded-xl border border-[#2A2B33] bg-[#101114] p-4 sm:p-5 shadow-2xl mx-3 sm:mx-0">
             <div className="mb-3 flex items-center gap-2 text-[#f0f5f5]">
               <span className="text-lg">⚠️ Deletion Reminder</span>
             </div>

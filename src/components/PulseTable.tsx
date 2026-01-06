@@ -81,7 +81,11 @@ import SniperHoldingsDisplay from "./SniperHoldingsDisplay";
 // import SolanaTokenAnalytics from "./SolanaTokenAnalytics";
 import { useUser } from "~/components/UserContext";
 import { useQuickBuy } from "~/components/QuickBuyContext";
-import { extractTokenImage, isMetadataUrl, resolveMetadataImage } from "~/utils/images";
+import {
+  extractTokenImage,
+  isMetadataUrl,
+  resolveMetadataImage,
+} from "~/utils/images";
 import { useSolPrice } from "~/components/SolPriceContext";
 import { preloadTokenImages } from "~/utils/imagePreloader";
 import {
@@ -102,7 +106,10 @@ import {
 } from "~/utils/toast";
 import { executeEnhancedTrade } from "~/utils/enhancedTradeHandler";
 import { showEnhancedToast, updateEnhancedToast } from "~/utils/enhancedToast";
-import { executeSolanaMultiBuy, buildSolanaWalletAllocations } from "~/utils/solanaWalletAllocation";
+import {
+  executeSolanaMultiBuy,
+  buildSolanaWalletAllocations,
+} from "~/utils/solanaWalletAllocation";
 import useSolanaPositionWebSocket from "~/hooks/useSolanaPositionWebSocket";
 import toast from "react-hot-toast";
 import { FiGlobe } from "react-icons/fi";
@@ -1617,7 +1624,7 @@ function PulseTable({
       // This doesn't interfere with WebSocket updates or new tokens coming in
       preloadTokenImages(tokens, {
         limit: 20,
-        priority: 'high',
+        priority: "high",
         maxConcurrent: 10,
       }).catch(() => {
         // Silently fail - don't log to avoid console spam
@@ -2304,7 +2311,8 @@ function PulseTable({
   const router = useRouter();
 
   // Quick buy functionality
-  const { user, solBalance, walletList, walletBalances, selectedWalletIds } = useUser();
+  const { user, solBalance, walletList, walletBalances, selectedWalletIds } =
+    useUser();
   const { presets, activePreset, setActivePreset } = useQuickBuy();
 
   // Pending toast ref for Solana quick buys (for WebSocket instant tx updates)
@@ -2320,33 +2328,48 @@ function PulseTable({
   } | null>(null);
 
   // Callback for instant txHash update via WebSocket (fires before HTTP response)
-  const handleSolanaQuickBuyWsTxHash = useCallback((data: { txHash: string; tokenAddress: string; tradeType: 'buy' | 'sell'; explorerUrl: string }) => {
-    const pending = pendingSolanaQuickBuyToastRef.current;
-    if (!pending || pending.tokenAddress.toLowerCase() !== data.tokenAddress.toLowerCase()) return;
+  const handleSolanaQuickBuyWsTxHash = useCallback(
+    (data: {
+      txHash: string;
+      tokenAddress: string;
+      tradeType: "buy" | "sell";
+      explorerUrl: string;
+    }) => {
+      const pending = pendingSolanaQuickBuyToastRef.current;
+      if (
+        !pending ||
+        pending.tokenAddress.toLowerCase() !== data.tokenAddress.toLowerCase()
+      )
+        return;
 
-    console.log('[PulseTable] 🚀 INSTANT Solana txHash via WebSocket:', data.txHash);
+      console.log(
+        "[PulseTable] 🚀 INSTANT Solana txHash via WebSocket:",
+        data.txHash,
+      );
 
-    // For multi-wallet trades: Don't update the toast (count was already shown at timer cap)
-    // For single wallet: Update the link element with clickable Solana logo
-    if (pending.totalSelectedWallets === 1) {
-      const linkEl = document.getElementById(`link-${pending.id}`);
-      if (linkEl) {
-        linkEl.innerHTML = `<a href="${data.explorerUrl}" target="_blank" rel="noopener noreferrer" class="hover:opacity-80 transition-opacity"><img src="https://avatars.githubusercontent.com/u/92743431?s=200&v=4" alt="Solana" class="w-4 h-4 rounded-full" style="cursor: pointer;" /></a>`;
+      // For multi-wallet trades: Don't update the toast (count was already shown at timer cap)
+      // For single wallet: Update the link element with clickable Solana logo
+      if (pending.totalSelectedWallets === 1) {
+        const linkEl = document.getElementById(`link-${pending.id}`);
+        if (linkEl) {
+          linkEl.innerHTML = `<a href="${data.explorerUrl}" target="_blank" rel="noopener noreferrer" class="hover:opacity-80 transition-opacity"><img src="https://avatars.githubusercontent.com/u/92743431?s=200&v=4" alt="Solana" class="w-4 h-4 rounded-full" style="cursor: pointer;" /></a>`;
+        }
       }
-    }
 
-    // Set duration for auto-dismiss after 10s
-    setTimeout(() => {
-      if (pendingSolanaQuickBuyToastRef.current?.id === pending.id) {
-        toast.dismiss(pending.id);
-        pendingSolanaQuickBuyToastRef.current = null;
-      }
-    }, 10000);
-  }, []);
+      // Set duration for auto-dismiss after 10s
+      setTimeout(() => {
+        if (pendingSolanaQuickBuyToastRef.current?.id === pending.id) {
+          toast.dismiss(pending.id);
+          pendingSolanaQuickBuyToastRef.current = null;
+        }
+      }, 10000);
+    },
+    [],
+  );
 
   // WebSocket for Solana position updates AND instant txHash
   const { connected: solanaWsConnected } = useSolanaPositionWebSocket({
-    tokenAddress: '', // Empty for global listening
+    tokenAddress: "", // Empty for global listening
     enabled: !!user?.id,
     onTxHash: handleSolanaQuickBuyWsTxHash, // INSTANT txHash callback
   });
@@ -2418,14 +2441,14 @@ function PulseTable({
     const isMultiWallet = walletsWithBalance > 1;
 
     // Generate random timer cap (0.40-0.60s)
-    const timerCap = 0.40 + Math.random() * 0.20;
+    const timerCap = 0.4 + Math.random() * 0.2;
     const uniqueToastId = `solana-quickbuy-${Date.now()}-${Math.random()}`;
     const startTime = Date.now();
     let timerFinished = false;
 
     // Extract token image
     const tokenImage = extractTokenImage(token);
-    const tokenName = token.symbol || token.name || 'Token';
+    const tokenName = token.symbol || token.name || "Token";
 
     // Show animated toast with timer
     toast(
@@ -2435,52 +2458,52 @@ function PulseTable({
             <img
               src={tokenImage}
               alt={tokenName}
-              className="w-6 h-6 rounded-full flex-shrink-0"
+              className="h-6 w-6 flex-shrink-0 rounded-full"
             />
           )}
-          <div className="flex items-center gap-2 flex-1 min-w-0">
-            <span className="text-sm text-neutral-200 truncate">
+          <div className="flex min-w-0 flex-1 items-center gap-2">
+            <span className="truncate text-sm text-neutral-200">
               Buying {tokenName}
             </span>
             <span
               id={`timer-${uniqueToastId}`}
-              className="text-xs text-neutral-400 flex-shrink-0"
+              className="flex-shrink-0 text-xs text-neutral-400"
             >
               (0.00s)
             </span>
-          <span
-            id={`check-${uniqueToastId}`}
-            className="text-green-400 flex-shrink-0"
-            style={{ display: 'none' }}
-          >
-            ✓
-          </span>
-          <span
-            id={`link-${uniqueToastId}`}
-            className="flex-shrink-0"
-            style={{ display: 'inline-flex' }}
-          >
-            {/* Default Solana avatar (becomes clickable once tx hash arrives) */}
-            <img
-              src="https://avatars.githubusercontent.com/u/92743431?s=200&v=4"
-              alt="Solana"
-              className="w-4 h-4 rounded-full opacity-70"
-              style={{ cursor: 'default' }}
-            />
-          </span>
+            <span
+              id={`check-${uniqueToastId}`}
+              className="flex-shrink-0 text-green-400"
+              style={{ display: "none" }}
+            >
+              ✓
+            </span>
+            <span
+              id={`link-${uniqueToastId}`}
+              className="flex-shrink-0"
+              style={{ display: "inline-flex" }}
+            >
+              {/* Default Solana avatar (becomes clickable once tx hash arrives) */}
+              <img
+                src="https://avatars.githubusercontent.com/u/92743431?s=200&v=4"
+                alt="Solana"
+                className="h-4 w-4 rounded-full opacity-70"
+                style={{ cursor: "default" }}
+              />
+            </span>
+          </div>
         </div>
-      </div>
       ),
       {
         id: uniqueToastId,
         duration: Infinity,
         style: {
-          background: '#1a1a1a',
-          border: '1px solid #333',
-          borderRadius: '8px',
-          padding: '12px',
+          background: "#1a1a1a",
+          border: "1px solid #333",
+          borderRadius: "8px",
+          padding: "12px",
         },
-      }
+      },
     );
 
     // Start timer animation - update every 50ms, show checkmark when cap is reached
@@ -2497,18 +2520,19 @@ function PulseTable({
         timerFinished = true;
         const checkEl = document.getElementById(`check-${uniqueToastId}`);
         if (checkEl) {
-          checkEl.style.display = 'block';
+          checkEl.style.display = "block";
         }
         const linkEl = document.getElementById(`link-${uniqueToastId}`);
         if (linkEl) {
           if (isMultiWallet) {
             // Show wallet count immediately for multi-wallet
             linkEl.textContent = `${walletsWithBalance}/${total}`;
-            linkEl.className = 'text-xs text-blue-400 font-medium flex-shrink-0';
+            linkEl.className =
+              "text-xs text-blue-400 font-medium flex-shrink-0";
           } else {
             // Single wallet: show Solana icon immediately (clickable once tx hash arrives)
             linkEl.innerHTML = `<img src="https://avatars.githubusercontent.com/u/92743431?s=200&v=4" alt="Solana" class="w-4 h-4 rounded-full opacity-70" style="cursor: default;" />`;
-            linkEl.className = 'flex-shrink-0';
+            linkEl.className = "flex-shrink-0";
           }
           // For single wallet, leave empty - will be filled by WebSocket with logo
         }
@@ -2526,15 +2550,16 @@ function PulseTable({
       tokenImage,
       tokenName,
       fakeTime: timerCap.toFixed(2),
-      tokenAddress: token.mint || '',
+      tokenAddress: token.mint || "",
       startTime,
       timerHandle,
-      totalSelectedWallets: walletsWithBalance
+      totalSelectedWallets: walletsWithBalance,
     };
 
     try {
-      const poolAddress = token.migrated_pool_address || token.pair_address || '';
-      const baseMint = token.mint || '';
+      const poolAddress =
+        token.migrated_pool_address || token.pair_address || "";
+      const baseMint = token.mint || "";
       const quoteMint = SOL_MINT_ADDRESS;
 
       const multiResult = await executeSolanaMultiBuy({
@@ -2558,12 +2583,15 @@ function PulseTable({
         walletBalances,
         selectedWalletIds: selectedWalletIds?.sol || [],
         onTxHash: ({ txHash }) => {
-          if (pendingSolanaQuickBuyToastRef.current?.id === uniqueToastId && txHash) {
+          if (
+            pendingSolanaQuickBuyToastRef.current?.id === uniqueToastId &&
+            txHash
+          ) {
             const linkEl = document.getElementById(`link-${uniqueToastId}`);
             if (linkEl) {
               const explorerUrl = `https://solscan.io/tx/${txHash}`;
               linkEl.innerHTML = `<a href="${explorerUrl}" target="_blank" rel="noopener noreferrer" class="hover:opacity-80 transition-opacity"><img src="https://avatars.githubusercontent.com/u/92743431?s=200&v=4" alt="Solana" class="w-4 h-4 rounded-full" style="cursor: pointer;" /></a>`;
-              linkEl.className = '';
+              linkEl.className = "";
             }
           }
         },
@@ -2571,15 +2599,19 @@ function PulseTable({
 
       // If single wallet and we have a tx hash, show clickable Solana icon immediately
       const firstTxHash =
-        multiResult?.results?.find((r: any) => (r.result as any)?.hash || (r.result as any)?.txid)?.result?.hash ||
-        multiResult?.results?.find((r: any) => (r.result as any)?.hash || (r.result as any)?.txid)?.result?.txid;
+        multiResult?.results?.find(
+          (r: any) => (r.result as any)?.hash || (r.result as any)?.txid,
+        )?.result?.hash ||
+        multiResult?.results?.find(
+          (r: any) => (r.result as any)?.hash || (r.result as any)?.txid,
+        )?.result?.txid;
 
       if (firstTxHash && !isMultiWallet) {
         const linkEl = document.getElementById(`link-${uniqueToastId}`);
         if (linkEl) {
           const explorerUrl = `https://solscan.io/tx/${firstTxHash}`;
           linkEl.innerHTML = `<a href="${explorerUrl}" target="_blank" rel="noopener noreferrer" class="hover:opacity-80 transition-opacity"><img src="https://avatars.githubusercontent.com/u/92743431?s=200&v=4" alt="Solana" class="w-4 h-4 rounded-full" style="cursor: pointer;" /></a>`;
-          linkEl.className = '';
+          linkEl.className = "";
         }
         if (timerHandle) {
           cancelAnimationFrame(timerHandle);
@@ -3803,9 +3835,21 @@ function PulseTable({
   };
   return (
     <div
-      className={`num mx-1 flex min-h-0 w-full flex-1 flex-col overflow-hidden rounded-2xl shadow-lg overflow-x-hidden`}
+      className={`num flex min-h-0 w-full flex-1 flex-col overflow-hidden shadow-lg lg:min-w-[340px] ${
+        isFirstOrLast === "first"
+          ? "rounded-tl-md border-t border-r border-l lg:rounded-tl-md"
+          : isFirstOrLast === "last"
+            ? "rounded-tr-md border-t border-r lg:rounded-tr-md"
+            : isFirstOrLast === "only"
+              ? "rounded-md border border-t border-r border-l"
+              : "border-t border-r"
+      }`}
       style={{
         backgroundColor: "#111214",
+        borderColor: AX.border,
+        borderStyle: "solid",
+        borderWidth: "1px",
+        boxShadow: title.toLowerCase().includes("new") ? "none" : undefined,
       }}
     >
       <div
@@ -3820,7 +3864,13 @@ function PulseTable({
       >
         {/* Left side container for title */}
         <div className="flex items-center gap-2 font-normal">
-          <span className="ml-4 text-sm lg:text-lg">
+          <span
+            className="text-sm lg:text-base"
+            style={{
+              fontWeight: "600",
+              letterSpacing: "0.5px",
+            }}
+          >
             {title.includes("New Pairs")
               ? "New"
               : title.includes("Final Stretch")
@@ -4040,12 +4090,6 @@ function PulseTable({
                       </div>
                     );
                   })()}
-
-                {i < 2 ? (
-                  <div className="h-6 border-r-2 border-neutral-800"></div>
-                ) : (
-                  ""
-                )}
               </div>
             ))}
           </div>
@@ -4073,13 +4117,25 @@ function PulseTable({
               <BsSliders2 size={14} />
 
               {/* Protocol Filter Count Indicator (exclude 'All') */}
-              {filters.protocols.filter((p: string) => p !== "All").length >
+              {/* {filters.protocols.filter((p: string) => p !== "All").length >
                 0 && (
                 <span
                   className="absolute -top-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full text-xs font-bold"
                   style={{ color: "#f0f5f5", fontSize: "10px", backgroundColor: "#31e3ac" }}
                 >
                   {filters.protocols.filter((p: string) => p !== "All").length}
+                </span>
+              )} */}
+              {filters.protocols.length > 0 && (
+                <span
+                  className="absolute -top-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full text-xs font-bold"
+                  style={{
+                    backgroundColor: "#31e3ac",
+                    color: "#000000",
+                    fontSize: "10px",
+                  }}
+                >
+                  {filters.protocols.length}
                 </span>
               )}
             </button>
@@ -6232,7 +6288,8 @@ function PulseTable({
               // Build query params for optimistic UI + cache lookup
               // Include chain parameter to preserve chain selection
               // Use prop from parent (more reliable) or fallback to router.query
-              const currentChain = chainProp || (router.query.chain as string) || 'sol';
+              const currentChain =
+                chainProp || (router.query.chain as string) || "sol";
               const queryParams = new URLSearchParams({
                 _name: (token as any)?.name || (token as any)?.symbol || "",
                 _symbol: (token as any)?.symbol || "",
@@ -6253,10 +6310,11 @@ function PulseTable({
                 <Link
                   href={`/trade/${pairAddress}?${queryParams}`}
                   key={pairAddress}
-                  className="group relative flex w-full cursor-pointer flex-row items-start gap-2 border-b px-6 py-2 transition-all duration-300 ease-out"
+                  className="group relative flex w-full cursor-pointer flex-row items-start gap-2 border-b px-2 pt-1 text-lg transition-all duration-300 ease-out"
                   style={{
                     borderColor: AX.border,
                     backgroundColor: "transparent",
+                    color: AX.text,
                   }}
                   onMouseEnter={(e) => {
                     e.currentTarget.style.backgroundColor =
@@ -6482,12 +6540,12 @@ function PulseTable({
                       totalTokens={memoizedTokens.length} 
                     />
                   </div> */}
-                        {/* <span
+                        <span
                       className="mt-2 mb-1 max-w-[60px] truncate font-mono text-[9px] lg:max-w-[70px] lg:text-[10px]"
                       style={{ color: AX.muted }}
                     >
                       {shortAddr(token)}
-                    </span> */}
+                    </span>
                       </div>
                       {/* Main Info Section */}
                       <div className="flex w-full min-w-0 flex-col gap-1">
@@ -6508,7 +6566,7 @@ function PulseTable({
                               >
                                 {token.name}
                               </span>
-                              <div className="relative ml-1">
+                              <div className="relative">
                                 <button
                                   className="transition-colors duration-200"
                                   style={{ color: AX.muted }}
@@ -6603,10 +6661,15 @@ function PulseTable({
                                 </button>
                               </div>
                             </div>
-                            <div className="mt-1 flex items-center gap-1 text-xs lg:gap-2">
-                              <span>{getAgeLabel(token)}</span>
+                            <div className="flex items-center gap-1 text-xs lg:gap-2">
+                              <span
+                                className="flex items-center gap-1 text-xs lg:gap-2"
+                                style={{ color: "#31e3ac" }}
+                              >
+                                {getAgeLabel(token)}
+                              </span>
                               {/* Socials */}
-                              <div className="relative flex items-center gap-1 text-neutral-400 lg:gap-1">
+                              <div className="relative flex items-center gap-1 text-neutral-400 lg:gap-2">
                                 {/* Pump.fun Link - only show for pump tokens */}
                                 {/* {token.mint.slice(-4) === "pump" && (
                               <Link
@@ -6677,7 +6740,7 @@ function PulseTable({
                                     }}
                                   >
                                     <FaXTwitter
-                                      size={16}
+                                      size={12}
                                       className="text-neutral-400"
                                     />
                                   </button>
@@ -6953,19 +7016,25 @@ function PulseTable({
 
                                 {token.links && (
                                   <button>
-                                    <PiTelegramLogo size={16} />
+                                    <PiTelegramLogo
+                                      size={16}
+                                      className="text-neutral-400"
+                                    />
                                   </button>
                                 )}
 
                                 {token.links && (
                                   <button>
-                                    <FiGlobe size={16} />
+                                    <FiGlobe
+                                      size={16}
+                                      className="text-neutral-400"
+                                    />
                                   </button>
                                 )}
 
                                 {/* Search on Twitter Button - show for all tokens */}
                                 <button
-                                  className="cursor-pointer transition-colors duration-200"
+                                  className="cursor-pointer text-neutral-400 transition-colors duration-200"
                                   style={{ color: AX.muted }}
                                   onMouseEnter={(e) => {
                                     e.currentTarget.style.color = AX.aiCyan;
@@ -6996,12 +7065,19 @@ function PulseTable({
                                     window.open(twitterUrl, "_blank");
                                   }}
                                 >
-                                  <LuSearch size={16} />
+                                  <FaSearch
+                                    size={10}
+                                    className="lg:h-3 lg:w-3"
+                                    style={{ strokeWidth: "3" }}
+                                  />
                                 </button>
 
                                 <div className="ml-1 flex flex-row gap-2 font-light">
                                   <div className="flex items-center gap-1">
-                                    <PiCrownSimpleLight size={16} style={{ color: "#dcc13c" }} />
+                                    <PiCrownSimpleLight
+                                      size={16}
+                                      style={{ color: "#dcc13c" }}
+                                    />
                                     <span className="text-sm text-white">
                                       0
                                     </span>
@@ -7019,8 +7095,17 @@ function PulseTable({
                                     <div
                                       className="flex cursor-help items-center justify-center rounded"
                                       title="Holders"
+                                      style={{
+                                        backgroundColor: "#111214",
+                                        padding: "2px",
+                                        width: "18px",
+                                        height: "18px",
+                                      }}
                                     >
-                                      <GoPeople size={16} style={{ color: "#57ace9" }} />
+                                      <GoPeople
+                                        size={12}
+                                        style={{ color: "#36d8ff" }}
+                                      />
                                     </div>
                                     <span className="text-sm text-white">
                                       {(() => {
@@ -7070,14 +7155,15 @@ function PulseTable({
                             </div>
                           </div>
                           {/* Right: MC, V, F, TX */}
-                          <div className="items-right justify-right flex flex-col items-end gap-1 text-right">
+                        <div className="items-right justify-right flex min-w-[100px] flex-col items-end gap-1 text-right lg:min-w-[140px]">
                             <div
-                              className={
-                                "justify-right flex flex-row items-center gap-2 text-sm text-neutral-400 lg:text-sm"
-                              }
+                              className={"justify-right flex flex-col text-xs"}
                             >
-                              <div className="flex flex-row items-center gap-1" style={{ color: AX.muted }}>
-                                MC:{" "}
+                              <div
+                                className="flex items-end gap-1"
+                                style={{ color: AX.muted }}
+                              >
+                                <span className="mb-[3px]">MC </span>
                                 {(() => {
                                   const isFinalStretchColumn =
                                     title.toLowerCase().includes("final") ||
@@ -7097,14 +7183,16 @@ function PulseTable({
                                     0;
                                   if (hasGreenWave) {
                                     return (
-                                      <span className="number-font text-sm font-medium text-white lg:text-base">
+                                      <span
+                                        className="number-font text-sm font-medium lg:text-base"
+                                        style={{ color: "#31e3ac" }}
+                                      >
                                         <SmoothNumber
                                           value={mcVal}
                                           formatter={(val) =>
                                             `${formatMarketCap(val)}`
                                           }
                                           duration={300}
-                                          className="text-sm"
                                         />
                                       </span>
                                     );
@@ -7113,15 +7201,14 @@ function PulseTable({
                                     <SmartColor
                                       token={token}
                                       metricType="marketCap"
-                                      className="number-font flex flex-row items-center text-sm font-medium text-white lg:text-base"
+                                      className="number-font text-sm font-medium lg:text-base"
                                     >
                                       <SmoothNumber
                                         value={mcVal}
                                         formatter={(val) =>
-                                          `${formatMarketCap(val)}`
+                                          `$${formatMarketCap(val)}`
                                         }
                                         duration={300}
-                                        className="text-sm"
                                       />
                                     </SmartColor>
                                   );
@@ -7139,10 +7226,13 @@ function PulseTable({
                              ); */
                                 })()}
                               </div>
-                              <div style={{ color: AX.muted }} className="flex flex-row gap-1">
-                                <span className="text-sm">V:</span>{" "}
+                              <div
+                                style={{ color: AX.muted }}
+                                className="flex items-end gap-1"
+                              >
+                                <span className="ml-auto text-xs mb-[1px]">V</span>{" "}
                                 <span
-                                  className="number-font text-sm font-medium"
+                                  className="number-font text-xs font-medium lg:text-sm"
                                   style={{
                                     color: "#ffffff",
                                   }}
@@ -7165,14 +7255,15 @@ function PulseTable({
                                   />
                                 </span>
                               </div>
-                              <div className="flex items-center gap-2 text-sm">
+                            </div>
+                              <div className="flex items-center justify-end gap-2 text-xs">
                                 <div
                                   className="flex flex-row items-center gap-1"
                                   style={{ color: AX.muted }}
                                 >
-                                  <span className="text-sm">TX</span>{" "}
+                                  <span className="text-xs">TX</span>{" "}
                                   <span
-                                    className="number-font text-sm font-medium"
+                                    className="number-font text-xs font-medium"
                                     style={{
                                       color: "#ffffff",
                                     }}
@@ -7211,11 +7302,19 @@ function PulseTable({
                                       style={{
                                         backgroundColor: "#31e3ac", // Green for buys
                                         width: `${(() => {
-                                          const buys = token.total_buys_24h ?? 0;
-                                          const sells = token.total_sells_24h ?? 0;
-                                          const total = Math.max(1, buys + sells);
+                                          const buys =
+                                            token.total_buys_24h ?? 0;
+                                          const sells =
+                                            token.total_sells_24h ?? 0;
+                                          const total = Math.max(
+                                            1,
+                                            buys + sells,
+                                          );
                                           const percent = (buys / total) * 100;
-                                          return Math.min(100, Math.max(0, percent));
+                                          return Math.min(
+                                            100,
+                                            Math.max(0, percent),
+                                          );
                                         })()}%`,
                                       }}
                                     ></div>
@@ -7224,25 +7323,58 @@ function PulseTable({
                                       style={{
                                         backgroundColor: "#d11f3a", // Red for sells
                                         width: `${(() => {
-                                          const buys = token.total_buys_24h ?? 0;
-                                          const sells = token.total_sells_24h ?? 0;
-                                          const total = Math.max(1, buys + sells);
+                                          const buys =
+                                            token.total_buys_24h ?? 0;
+                                          const sells =
+                                            token.total_sells_24h ?? 0;
+                                          const total = Math.max(
+                                            1,
+                                            buys + sells,
+                                          );
                                           const percent = (sells / total) * 100;
-                                          return Math.min(100, Math.max(0, percent));
+                                          return Math.min(
+                                            100,
+                                            Math.max(0, percent),
+                                          );
                                         })()}%`,
                                       }}
                                     ></div>
                                   </div>
                                 </div>
                               </div>
-                            </div>
 
+                            {/* Buy button */}
                             <button
-                              className="mt-2 border z-50 flex cursor-pointer items-center gap-2 rounded-lg px-2 py-1 text-sm font-bold opacity-0 shadow-sm transition-all duration-200 ease-out group-hover:opacity-100"
+                              className="z-10 flex cursor-pointer items-center gap-2 rounded-full px-3 py-1.5 text-sm font-bold opacity-0 shadow-sm transition-all duration-200 ease-out group-hover:opacity-100"
                               style={{
-                                backgroundColor: title.toLowerCase().includes("final") || title.toLowerCase().includes("stretch") ? "transparent" : "rgba(49, 227, 172, 0.1)",
-                                borderColor: "#31e3ac",
-                                color: "#31e3ac",
+                                backgroundColor:
+                                  title.toLowerCase().includes("final") ||
+                                  title.toLowerCase().includes("stretch")
+                                    ? "#101114"
+                                    : AX.aiGreen,
+                                color:
+                                  title.toLowerCase().includes("final") ||
+                                  title.toLowerCase().includes("stretch")
+                                    ? AX.aiGreen
+                                    : "#000000",
+                                border:
+                                  title.toLowerCase().includes("final") ||
+                                  title.toLowerCase().includes("stretch")
+                                    ? `1px solid ${AX.aiGreen}`
+                                    : "1px solid rgba(0,0,0,0.15)",
+                              }}
+                              onMouseEnter={(e) => {
+                                const isFinal =
+                                  title.toLowerCase().includes("final") ||
+                                  title.toLowerCase().includes("stretch");
+                                e.currentTarget.style.backgroundColor = isFinal
+                                  ? "#101114"
+                                  : AX.aiGreenHover;
+                                e.currentTarget.style.transform =
+                                  "translateY(-1px)";
+                                e.currentTarget.style.boxShadow = isFinal
+                                  ? `0 0 10px ${AX.glowGreen}`
+                                  : "0 4px 14px rgba(112, 224, 176, 0.25)";
                               }}
                               onClick={(e) => {
                                 e.stopPropagation();
@@ -7286,9 +7418,9 @@ function PulseTable({
                                   return (
                                     <>
                                       <HiLightningBolt
-                                        size={14}
-                                        style={{ color: "#31e3ac" }}
-                                      />{" "}
+                                        className="text-black"
+                                        size={12}
+                                      />
                                       <span className="number-font">
                                         {thunderAmount || "0"}
                                       </span>
@@ -7351,8 +7483,19 @@ function PulseTable({
                                   return (
                                     <>
                                       <HiLightningBolt
+                                        className={"text-black"}
+                                        style={{
+                                          color:
+                                            title
+                                              .toLowerCase()
+                                              .includes("final") ||
+                                            title
+                                              .toLowerCase()
+                                              .includes("stretch")
+                                              ? AX.aiGreen
+                                              : "#000000",
+                                        }}
                                         size={14}
-                                        style={{ color: "#31e3ac" }}
                                       />
                                       <span
                                         className="number-font"
@@ -7519,7 +7662,7 @@ function PulseTable({
 
                         if (isHighBondingMeteora) {
                           return (
-                            <div className="absolute right-2 bottom-2 z-0 flex items-center gap-0.5">
+                            <div className="absolute right-2 bottom-4 z-0 flex items-center gap-0.5">
                               {/* Red Meteora Logo (left) */}
                               <div
                                 className="relative flex h-4 w-4 items-center justify-center overflow-hidden rounded-full"
@@ -7583,19 +7726,19 @@ function PulseTable({
                         return null;
                       })()}
                     </div>
-                    <div className="flex flex-row items-center gap-1 overflow-x-scroll max-w-full">
+                    <div className="absolute bottom-2 left-24 flex max-w-[calc(100%-6rem)] flex-row items-center gap-1 overflow-x-auto pr-10 whitespace-break-nowrap">
                       <BottomCardInfoHolder
-                        PassedIcon={FaRegUser}
+                        PassedIcon={BsPersonGear}
                         value={0.2}
-                        iconColor="#57ace9"
+                        iconColor={AX.aiGreen}
                       />
                       <BottomCardInfoHolder
                         PassedIcon={LuChefHat}
                         value={0.2}
-                        iconColor="#4d96cc"
+                        iconColor="#566cdc"
                       />
                       <BottomCardInfoHolder
-                        PassedIcon={GiSeatedMouse}
+                        PassedIcon={RiGhostLine}
                         value={(() => {
                           const val = (token as any).insider_held_percentage;
                           const num =
@@ -7629,7 +7772,7 @@ function PulseTable({
                         value={0.2}
                       />
                       <BottomCardInfoHolder
-                        PassedIcon={PiTarget}
+                        PassedIcon={SnipperIcon}
                         value={(() => {
                           const val = (token as any).sniper_held_percentage;
                           const num =
@@ -7898,7 +8041,8 @@ function PulseTable({
                 color: "#f0f5f5",
               }}
               onFocus={(e) => {
-                e.currentTarget.style.boxShadow = "0 0 0 2px rgba(49, 227, 172, 0.5)";
+                e.currentTarget.style.boxShadow =
+                  "0 0 0 2px rgba(49, 227, 172, 0.5)";
               }}
               onBlur={(e) => {
                 e.currentTarget.style.boxShadow = "none";
@@ -7913,3 +8057,65 @@ function PulseTable({
 }
 
 export default PulseTable;
+
+
+const SnipperIcon = ({ ...props }) => {
+  return (
+    <svg
+      {...props}
+      width="16"
+      height="16"
+      viewBox="0 0 24 24"
+      fill="currentColor"
+    >
+      <circle
+        cx="12"
+        cy="12"
+        r="8"
+        stroke="currentColor"
+        strokeWidth="1.5"
+        fill="none"
+      />
+      <line
+        x1="12"
+        y1="4"
+        x2="12"
+        y2="8"
+        stroke="currentColor"
+        strokeWidth="1.5"
+      />
+      <line
+        x1="12"
+        y1="16"
+        x2="12"
+        y2="20"
+        stroke="currentColor"
+        strokeWidth="1.5"
+      />
+      <line
+        x1="4"
+        y1="12"
+        x2="8"
+        y2="12"
+        stroke="currentColor"
+        strokeWidth="1.5"
+      />
+      <line
+        x1="16"
+        y1="12"
+        x2="20"
+        y2="12"
+        stroke="currentColor"
+        strokeWidth="1.5"
+      />
+      <circle
+        cx="12"
+        cy="12"
+        r="2"
+        stroke="currentColor"
+        strokeWidth="1.5"
+        fill="none"
+      />
+    </svg>
+  );
+};

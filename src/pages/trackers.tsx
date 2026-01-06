@@ -190,7 +190,8 @@ const fetchWithTimeout = async (
 
 export default function TrackersPage() {
   const router = useRouter();
-  const { user, solBalance, walletList, walletBalances, selectedWalletIds } = useUser();
+  const { user, solBalance, walletList, walletBalances, selectedWalletIds } =
+    useUser();
   const {
     wsConnected,
     latestTrades,
@@ -219,9 +220,9 @@ export default function TrackersPage() {
   const [walletEvents, setWalletEvents] = useState<
     Record<string, WalletEvent[]>
   >({});
-  const [trackedWalletBalances, setTrackedWalletBalances] = useState<Record<string, number>>(
-    {},
-  );
+  const [trackedWalletBalances, setTrackedWalletBalances] = useState<
+    Record<string, number>
+  >({});
   const [lastActiveMap, setLastActiveMap] = useState<
     Record<string, number | null | undefined>
   >({});
@@ -230,15 +231,16 @@ export default function TrackersPage() {
     if (router.query.chain) {
       return router.query.chain as string;
     }
-    if (typeof window !== 'undefined') {
-      const savedChain = localStorage.getItem('selected-chain');
-      if (savedChain === 'sol' || savedChain === 'monad') {
+    if (typeof window !== "undefined") {
+      const savedChain = localStorage.getItem("selected-chain");
+      if (savedChain === "sol" || savedChain === "monad") {
         return savedChain;
       }
     }
-    return 'sol';
+    return "sol";
   })();
-  const selectedChain = (currentChain === 'monad' || currentChain === 'sol') ? currentChain : 'sol';
+  const selectedChain =
+    currentChain === "monad" || currentChain === "sol" ? currentChain : "sol";
   const walletsRef = useRef<Wallet[]>([]);
   const [tokenMetadata, setTokenMetadata] = useState<
     Map<
@@ -292,9 +294,17 @@ export default function TrackersPage() {
     try {
       const results = await Promise.allSettled(
         walletsToEnable.map((wallet) => {
-          const walletData = watchedWallets.find(w => w.address === wallet.address);
+          const walletData = watchedWallets.find(
+            (w) => w.address === wallet.address,
+          );
           const walletChain = walletData?.chain || selectedChain;
-          return toggleWalletNotifications(wallet.address, true, user?.id, walletChain, user?.bearerToken);
+          return toggleWalletNotifications(
+            wallet.address,
+            true,
+            user?.id,
+            walletChain,
+            user?.bearerToken,
+          );
         }),
       );
       const failures = results.filter((result) => result.status === "rejected");
@@ -396,7 +406,9 @@ export default function TrackersPage() {
   };
 
   const showWalletLimitToast = () => {
-    showToastMessage(WALLET_LIMIT_MESSAGE);
+    showEnhancedToast("warning", WALLET_LIMIT_MESSAGE, {
+      duration: 4000,
+    });
   };
 
   const formatTokenAge = (input: unknown): string | null => {
@@ -600,7 +612,11 @@ export default function TrackersPage() {
       }
 
       // Fetch wallets from backend for the selected chain
-      const tracked = await getTrackedWallets(user?.bearerToken, user?.id, selectedChain);
+      const tracked = await getTrackedWallets(
+        user?.bearerToken,
+        user?.id,
+        selectedChain,
+      );
 
       // Also refresh global watched wallets
       await refreshWatchedWallets();
@@ -650,14 +666,27 @@ export default function TrackersPage() {
       }
 
       // Fetch real balances for tracked wallets (both Solana and Monad)
-      console.log(`[Trackers] Fetching balances for ${allWallets.length} wallets:`, allWallets.map(w => ({ address: w.address.slice(0, 8) + '...', chain: w.chain })));
+      console.log(
+        `[Trackers] Fetching balances for ${allWallets.length} wallets:`,
+        allWallets.map((w) => ({
+          address: w.address.slice(0, 8) + "...",
+          chain: w.chain,
+        })),
+      );
       allWallets.forEach(async (wallet) => {
         // Use wallet.chain from backend, fallback to selectedChain if not available
-        const walletChain = (wallet.chain === 'monad' || wallet.chain === 'sol') ? wallet.chain : selectedChain;
-        console.log(`[Trackers] Fetching balance for wallet ${wallet.address.slice(0, 8)}... (chain from wallet: ${wallet.chain}, using: ${walletChain})`);
+        const walletChain =
+          wallet.chain === "monad" || wallet.chain === "sol"
+            ? wallet.chain
+            : selectedChain;
+        console.log(
+          `[Trackers] Fetching balance for wallet ${wallet.address.slice(0, 8)}... (chain from wallet: ${wallet.chain}, using: ${walletChain})`,
+        );
         try {
           const balance = await getWalletBalance(wallet.address, walletChain);
-          console.log(`[Trackers] Got balance for ${wallet.address.slice(0, 8)}...: ${balance} (chain: ${walletChain})`);
+          console.log(
+            `[Trackers] Got balance for ${wallet.address.slice(0, 8)}...: ${balance} (chain: ${walletChain})`,
+          );
           if (balance !== null && !isNaN(balance)) {
             setTrackedWalletBalances((prev) => {
               const updated = { ...prev, [wallet.address]: balance };
@@ -680,10 +709,15 @@ export default function TrackersPage() {
               return updated;
             });
           } else {
-            console.warn(`[Trackers] Balance is null or NaN for wallet ${wallet.address.slice(0, 8)}... (chain: ${walletChain})`);
+            console.warn(
+              `[Trackers] Balance is null or NaN for wallet ${wallet.address.slice(0, 8)}... (chain: ${walletChain})`,
+            );
           }
         } catch (error) {
-          console.error(`[Trackers] Error fetching balance for wallet ${wallet.address.slice(0, 8)}... (chain: ${walletChain}):`, error);
+          console.error(
+            `[Trackers] Error fetching balance for wallet ${wallet.address.slice(0, 8)}... (chain: ${walletChain}):`,
+            error,
+          );
         }
       });
     } catch (error) {
@@ -694,8 +728,7 @@ export default function TrackersPage() {
 
   const loadTrackedWallets = loadWalletsFromBackend;
 
-  useEffect(() => {
-  }, [activeTab]);
+  useEffect(() => {}, [activeTab]);
 
   // Sync local watchedWallets state with global context
   useEffect(() => {
@@ -712,21 +745,27 @@ export default function TrackersPage() {
     const fetchLastActive = async () => {
       try {
         // Group wallets by chain
-        const monadWallets = watchedWallets.filter(w => w.chain === 'monad').map(w => w.address);
-        const solWallets = watchedWallets.filter(w => w.chain !== 'monad').map(w => w.address);
+        const monadWallets = watchedWallets
+          .filter((w) => w.chain === "monad")
+          .map((w) => w.address);
+        const solWallets = watchedWallets
+          .filter((w) => w.chain !== "monad")
+          .map((w) => w.address);
 
-        console.log(
-          "[trackers:lastActive] fetching timestamps:",
-          { monad: monadWallets.length, sol: solWallets.length }
-        );
+        console.log("[trackers:lastActive] fetching timestamps:", {
+          monad: monadWallets.length,
+          sol: solWallets.length,
+        });
 
         const map: Record<string, number | null> = {};
 
         // Fetch Monad wallets using Blockvision API
         if (monadWallets.length > 0) {
           if (!BLOCKVISION_API_KEY) {
-            console.warn("[trackers:lastActive] BLOCKVISION_API_KEY not set, skipping Monad wallets");
-            monadWallets.forEach(addr => map[addr] = null);
+            console.warn(
+              "[trackers:lastActive] BLOCKVISION_API_KEY not set, skipping Monad wallets",
+            );
+            monadWallets.forEach((addr) => (map[addr] = null));
           } else {
             const monadSettled = await Promise.allSettled(
               monadWallets.map(async (address) => {
@@ -779,7 +818,9 @@ export default function TrackersPage() {
             );
 
             // Check if all failed due to CORS, fallback to proxy
-            const allFailed = monadSettled.every((r) => r.status === "rejected");
+            const allFailed = monadSettled.every(
+              (r) => r.status === "rejected",
+            );
             const likelyCors = monadSettled.every((r) => {
               if (r.status !== "rejected") return false;
               const msg = r.reason?.message || String(r.reason);
@@ -791,11 +832,14 @@ export default function TrackersPage() {
                 "[trackers:lastActive] direct Blockvision fetch failed (likely CORS). Falling back to proxy",
               );
               try {
-                const proxyResp = await fetch("/api/blockvision/monad/last-active", {
-                  method: "POST",
-                  headers: { "Content-Type": "application/json" },
-                  body: JSON.stringify({ wallets: monadWallets, limit: 20 }),
-                });
+                const proxyResp = await fetch(
+                  "/api/blockvision/monad/last-active",
+                  {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ wallets: monadWallets, limit: 20 }),
+                  },
+                );
                 const proxyPayload = await proxyResp.json().catch(() => null);
                 if (
                   proxyResp.ok &&
@@ -804,11 +848,17 @@ export default function TrackersPage() {
                 ) {
                   for (const item of proxyPayload.data) {
                     if (!item?.wallet) continue;
-                    map[item.wallet] = typeof item.lastActive === "number" ? item.lastActive : null;
+                    map[item.wallet] =
+                      typeof item.lastActive === "number"
+                        ? item.lastActive
+                        : null;
                   }
                 }
               } catch (proxyError) {
-                console.error("[trackers:lastActive] Proxy fallback failed:", proxyError);
+                console.error(
+                  "[trackers:lastActive] Proxy fallback failed:",
+                  proxyError,
+                );
               }
             } else {
               monadSettled.forEach((res, idx) => {
@@ -817,16 +867,19 @@ export default function TrackersPage() {
                   map[address] = res.value.lastActive;
                 } else {
                   map[address] = null;
-                  console.warn("[trackers:lastActive] Monad wallet fetch failed", {
-                    address,
-                    error: res.reason?.message || String(res.reason),
-                  });
+                  console.warn(
+                    "[trackers:lastActive] Monad wallet fetch failed",
+                    {
+                      address,
+                      error: res.reason?.message || String(res.reason),
+                    },
+                  );
                 }
               });
             }
 
             // Set null for any Monad wallets not in map
-            monadWallets.forEach(addr => {
+            monadWallets.forEach((addr) => {
               if (!(addr in map)) map[addr] = null;
             });
           }
@@ -835,20 +888,25 @@ export default function TrackersPage() {
         // Fetch Solana wallets using backend API
         if (solWallets.length > 0) {
           try {
-            const { getWalletsLastActive } = await import("~/utils/walletTracking");
-            const solResults = await getWalletsLastActive(solWallets, 'sol');
-            
+            const { getWalletsLastActive } = await import(
+              "~/utils/walletTracking"
+            );
+            const solResults = await getWalletsLastActive(solWallets, "sol");
+
             for (const result of solResults) {
               map[result.wallet] = result.lastActive;
             }
 
             // Set null for any Solana wallets not in results
-            solWallets.forEach(addr => {
+            solWallets.forEach((addr) => {
               if (!(addr in map)) map[addr] = null;
             });
           } catch (error) {
-            console.error("[trackers:lastActive] Failed to fetch Solana last active:", error);
-            solWallets.forEach(addr => map[addr] = null);
+            console.error(
+              "[trackers:lastActive] Failed to fetch Solana last active:",
+              error,
+            );
+            solWallets.forEach((addr) => (map[addr] = null));
           }
         }
 
@@ -984,7 +1042,7 @@ export default function TrackersPage() {
     address: string,
     name: string,
     emoji?: string,
-    chain?: 'sol' | 'monad',
+    chain?: "sol" | "monad",
   ) => {
     if (isAtWalletLimit) {
       showWalletLimitToast();
@@ -992,9 +1050,17 @@ export default function TrackersPage() {
     }
 
     try {
-      const walletChain = chain || 'monad';
+      const walletChain = chain || "monad";
       // Add to backend with notifications enabled by default
-      await addTrackedWallet(address, name, user?.id, emoji, true, walletChain, user?.bearerToken);
+      await addTrackedWallet(
+        address,
+        name,
+        user?.id,
+        emoji,
+        true,
+        walletChain,
+        user?.bearerToken,
+      );
 
       // Save notification preference to localStorage
       if (typeof window !== "undefined") {
@@ -1009,7 +1075,9 @@ export default function TrackersPage() {
 
       setShowAddWalletModal(false);
 
-      showToastMessage("Wallet added!");
+      showEnhancedToast("success", "Wallet added!", {
+        duration: 3000,
+      });
     } catch (error: any) {
       const message = error?.message || "Failed to add wallet";
       showToastMessage(message);
@@ -1029,7 +1097,14 @@ export default function TrackersPage() {
       if (addressToRemove === "all") {
         // Remove all wallets for the selected chain
         await Promise.all(
-          wallets.map((w) => removeTrackedWallet(w.address, user?.id, selectedChain, user?.bearerToken)),
+          wallets.map((w) =>
+            removeTrackedWallet(
+              w.address,
+              user?.id,
+              selectedChain,
+              user?.bearerToken,
+            ),
+          ),
         );
 
         // Clear all state
@@ -1058,9 +1133,16 @@ export default function TrackersPage() {
         await refreshWatchedWallets();
       } else {
         // Remove single wallet - need to find the chain from watchedWallets
-        const wallet = watchedWallets.find(w => w.address === addressToRemove);
+        const wallet = watchedWallets.find(
+          (w) => w.address === addressToRemove,
+        );
         const walletChain = wallet?.chain || selectedChain;
-        await removeTrackedWallet(addressToRemove, user?.id, walletChain, user?.bearerToken);
+        await removeTrackedWallet(
+          addressToRemove,
+          user?.id,
+          walletChain,
+          user?.bearerToken,
+        );
 
         // Filter out trades from deleted wallet
         setCachedLiveTrades((prev) =>
@@ -1274,7 +1356,7 @@ export default function TrackersPage() {
   // Twitter functions
   const loadTwitterAccounts = async () => {
     try {
-      const accounts = await getTrackedTwitterAccounts(user?.bearerToken || '');
+      const accounts = await getTrackedTwitterAccounts(user?.bearerToken || "");
       setTwitterAccounts(accounts);
     } catch (error) {
       console.error("Failed to load tracked Twitter accounts:", error);
@@ -1284,7 +1366,7 @@ export default function TrackersPage() {
 
   const handleAddTwitterAccount = async (username: string) => {
     try {
-      await addTrackedTwitterAccount(username, user?.bearerToken || '');
+      await addTrackedTwitterAccount(username, user?.bearerToken || "");
       await loadTwitterAccounts();
       setToast(`Added @${username}`);
       setTimeout(() => setToast(""), 3000);
@@ -1297,7 +1379,7 @@ export default function TrackersPage() {
 
   const handleRemoveTwitterAccount = async (username: string) => {
     try {
-      await removeTrackedTwitterAccount(username, user?.bearerToken || '');
+      await removeTrackedTwitterAccount(username, user?.bearerToken || "");
       await loadTwitterAccounts();
       setToast(`Removed @${username}`);
       setTimeout(() => setToast(""), 3000);
@@ -1431,7 +1513,12 @@ export default function TrackersPage() {
             emoji: wallet.emoji || getRandomEmoji(),
           }));
 
-          await addTrackedWalletsBulk(bulkPayload, user?.id, selectedChain, user?.bearerToken);
+          await addTrackedWalletsBulk(
+            bulkPayload,
+            user?.id,
+            selectedChain,
+            user?.bearerToken,
+          );
           await ensureNotificationsEnabled(walletsToAdd);
 
           let successCount = walletsToAdd.length;
@@ -1448,7 +1535,8 @@ export default function TrackersPage() {
 
           await loadWalletsFromBackend();
 
-          showToastMessage(
+          showEnhancedToast(
+            "warning",
             composeImportSummary({
               successCount,
               duplicateExisting,
@@ -1457,6 +1545,9 @@ export default function TrackersPage() {
               skippedByLimit: [],
               failedCount: errorCount,
             }),
+            {
+              duration: 5000,
+            },
           );
         } else {
           showToastMessage("Invalid wallet file format.");
@@ -1478,36 +1569,34 @@ export default function TrackersPage() {
       <div className="mb-20">
         <div className="flex min-h-screen flex-col bg-[#050608] text-neutral-100">
           <Header isSticky={false} />
-          <div className="my-4 flex flex-col gap-4 px-4 sm:px-6 lg:flex-row lg:items-center lg:justify-between lg:gap-6 lg:px-8">
+          <div className="my-4 flex flex-col gap-4 px-4 sm:my-6 sm:px-6 lg:flex-row lg:items-center lg:justify-between lg:gap-6 lg:px-8">
             {/* Tabs Section - Scrollable on mobile */}
             <div className="scrollbar-hide -mx-4 flex items-center gap-3 overflow-x-auto px-4 pb-2 sm:-mx-6 sm:gap-4 sm:px-6 lg:mx-0 lg:gap-6 lg:px-0 lg:pb-0">
-              <button
-                className={`hover:text-[#f0f5f5]"} text-sm font-light whitespace-nowrap text-[#f0f5f5] transition-colors sm:text-base lg:text-lg`}
-              >
+              <h1 className="text-xl font-semibold whitespace-nowrap text-neutral-100 sm:text-2xl lg:text-3xl">
                 Trackers
-              </button>
+              </h1>
             </div>
           </div>
-          <div className="w-full flex-grow">
+          <div className="mb-4 flex min-h-0 w-full flex-1 flex-col px-2 sm:mb-8 sm:px-4">
             {/* Main Content Area: Two Columns */}
-            <div className="flex flex-col gap-4 px-2 sm:px-4 lg:flex-row">
+            <div className="flex min-h-0 flex-1 flex-col gap-3 sm:gap-4 lg:flex-row">
               {isMobile && (
-                <div className="flex w-full rounded-full bg-[#111111] p-0.5 text-[10px] font-medium text-neutral-400 sm:p-1 sm:text-xs">
+                <div className="flex w-full rounded-xl border border-neutral-800/50 bg-[#0F0F0F] p-1 text-[10px] font-medium text-neutral-400 shadow-lg sm:p-1.5 sm:text-xs">
                   <button
-                    className={`flex-1 rounded-full px-2 py-1.5 transition-colors duration-200 sm:px-3 sm:py-2 ${
+                    className={`flex-1 rounded-lg px-3 py-2 transition-all duration-300 sm:px-4 sm:py-2.5 ${
                       mobileMainTab === "wallets"
-                        ? "bg-[#70E0B0] font-semibold text-neutral-900"
-                        : "text-neutral-300 hover:text-white"
+                        ? "bg-[#7FFFC9] font-semibold text-neutral-900 shadow-[0_0_12px_rgba(127,255,201,0.3)]"
+                        : "text-neutral-300 hover:bg-neutral-800/30 hover:text-neutral-200"
                     }`}
                     onClick={() => setMobileMainTab("wallets")}
                   >
                     Wallet Tracker
                   </button>
                   <button
-                    className={`flex-1 rounded-full px-2 py-1.5 transition-colors duration-200 sm:px-3 sm:py-2 ${
+                    className={`flex-1 rounded-lg px-3 py-2 transition-all duration-300 sm:px-4 sm:py-2.5 ${
                       mobileMainTab === "twitter"
-                        ? "bg-[#70E0B0] font-semibold text-neutral-900"
-                        : "text-neutral-300 hover:text-white"
+                        ? "bg-[#7FFFC9] font-semibold text-neutral-900 shadow-[0_0_12px_rgba(127,255,201,0.3)]"
+                        : "text-neutral-300 hover:bg-neutral-800/30 hover:text-neutral-200"
                     }`}
                     onClick={() => setMobileMainTab("twitter")}
                   >
@@ -1519,9 +1608,13 @@ export default function TrackersPage() {
               {/* LEFT: WALLET SECTION */}
               {showWalletSection && (
                 <div
-                  className="flex h-full min-h-[400px] min-w-0 flex-1 flex-col overflow-hidden border border-neutral-900/80 bg-[#050608] px-2 sm:min-h-[530px] sm:px-4"
+                  className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-xl border border-neutral-800/60 bg-[#0A0A0A] px-3 pb-4 shadow-2xl backdrop-blur-sm sm:px-5"
                   style={{
-                    maxHeight: "calc(100vh - 140px)",
+                    boxShadow:
+                      "0 8px 32px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(127, 255, 201, 0.05)",
+                    maxHeight: isMobile
+                      ? "calc(100vh - 200px)"
+                      : "calc(100vh - 240px)",
                   }}
                 >
                   {/* If user is not logged in, show GMGN-style empty state */}
@@ -1545,131 +1638,155 @@ export default function TrackersPage() {
                   ) : (
                     <>
                       {/* HEADER BAR – three zones like reference screenshot */}
-                      <div className="flex flex-col flex-wrap items-stretch gap-2 border-b border-neutral-800/60 py-2 sm:flex-row sm:items-center sm:gap-4">
+                      <div className="flex justify-between gap-3 border-b border-neutral-800/40 py-3 sm:items-center sm:gap-4 sm:py-4">
                         {/* Left: tabs + wallet count */}
-                        <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
+                        <div className="flex flex-wrap items-center gap-2 sm:gap-2.5">
                           {TABS.map((tab, i) => (
                             <button
                               key={tab}
-                              className={`cursor-pointer rounded-lg px-1.5 py-1 text-[10px] whitespace-nowrap transition-all duration-300 sm:px-2 sm:text-xs ${
+                              className={`cursor-pointer border-b-2 px-3 py-2 text-[10px] whitespace-nowrap transition-all duration-300 sm:px-4 sm:py-2.5 sm:text-xs ${
                                 activeTab === i
-                                  ? "bg-[#111111] font-medium text-white"
-                                  : "font-medium text-neutral-400 hover:bg-[#141414] hover:text-white"
+                                  ? "border-[#7FFFC9] font-semibold text-neutral-100"
+                                  : "border-transparent font-medium text-neutral-400 hover:border-neutral-600 hover:text-neutral-200"
                               }`}
                               onClick={() => setActiveTab(i)}
                             >
                               {tab}
                             </button>
                           ))}
-                          <div className="flex items-center rounded-full bg-[#111111] px-2 py-0.5 text-[10px] text-neutral-300 sm:px-3 sm:py-1 sm:text-[11px]">
-                            <span className="font-medium text-white">
+                          <div className="flex items-center rounded-lg border border-neutral-800/50 bg-neutral-900/60 px-3 py-1 text-[10px] text-neutral-300 sm:px-3.5 sm:py-1.5 sm:text-[11px]">
+                            <span className="font-semibold text-[#7FFFC9]">
                               {watchedWallets.length}
                             </span>
-                            <span className="ml-0.5 hidden text-neutral-400 sm:ml-1 sm:inline">
+                            <span className="ml-1 hidden text-neutral-500 sm:ml-1.5 sm:inline">
                               /{MAX_WALLETS} wallet
                               {watchedWallets.length === 1 ? "" : "s"}
                             </span>
-                            <span className="ml-0.5 text-neutral-400 sm:ml-1 sm:hidden">
+                            <span className="ml-1 text-neutral-500 sm:ml-1.5 sm:hidden">
                               /{MAX_WALLETS}
                             </span>
                           </div>
                         </div>
 
                         {/* Middle: search bar (center, max width) */}
-                        <div className="flex min-w-0 flex-1 justify-start">
-                          <input
-                            type="text"
-                            placeholder="Search by address"
-                            className="w-full max-w-md rounded-full border border-neutral-800 bg-[#050608] px-3 py-1 text-[10px] text-neutral-200 transition-all duration-300 focus:border-[#70E0B0]/60 focus:outline-none sm:px-4 sm:text-xs"
-                            disabled={false}
-                            value={searchTerm}
-                            onChange={(e) => setSearchTerm(e.target.value)}
-                          />
-                        </div>
-
-                        {/* Right: actions (Import / Export / icons / Add Wallet) */}
-                        <div className="flex flex-wrap items-center gap-1 sm:gap-2">
+                        <div className="flex flex-wrap items-center justify-end gap-2 sm:gap-2.5">
                           {activeTab === 0 && (
-                            <>
-                              <button
-                                className="rounded-full bg-[#111111] px-2 py-1 text-[10px] font-semibold whitespace-nowrap text-white transition-all duration-300 hover:bg-[#181818] sm:px-4 sm:text-xs"
-                                onClick={() => setShowImportModal(true)}
-                              >
-                                Import
-                              </button>
-                              <button
-                                className="rounded-full bg-[#111111] px-2 py-1 text-[10px] font-semibold whitespace-nowrap text-white transition-all duration-300 hover:bg-[#181818] sm:px-4 sm:text-xs"
-                                onClick={handleExportAddresses}
-                              >
-                                Export
-                              </button>
-
-                              {/* Icon buttons - hide some on mobile */}
-                              <button
-                                className="hidden h-7 w-7 items-center justify-center rounded-full bg-[#111111] text-sm text-neutral-400 transition-all duration-300 hover:bg-[#181818] hover:text-white sm:flex sm:h-8 sm:w-8"
-                                type="button"
-                              >
-                                <FiSettings className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
-                              </button>
-                              <button
-                                className={`flex h-7 w-7 items-center justify-center rounded-full bg-[#111111] transition-all duration-300 hover:bg-[#181818] sm:h-8 sm:w-8 ${isTogglingAllNotifications ? "cursor-wait opacity-50" : "cursor-pointer"}`}
-                                type="button"
-                                onClick={handleToggleAllNotifications}
-                                disabled={isTogglingAllNotifications}
-                                title={
-                                  isTogglingAllNotifications
-                                    ? "Toggling..."
-                                    : allNotificationsEnabled
-                                      ? "Disable all notifications"
-                                      : "Enable all notifications"
-                                }
-                              >
-                                <FiBell
-                                  className={`h-3.5 w-3.5 sm:h-4 sm:w-4 ${allNotificationsEnabled ? "text-pink-500" : "text-neutral-600"}`}
-                                />
-                              </button>
-                              <button
-                                className="hidden h-7 w-7 items-center justify-center rounded-full bg-[#111111] text-sm text-neutral-400 transition-all duration-300 hover:bg-[#181818] hover:text-white sm:flex sm:h-8 sm:w-8"
-                                type="button"
-                              >
-                                <FiShare2 className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
-                              </button>
-                              <button
-                                className="hidden h-7 w-7 items-center justify-center rounded-full bg-[#111111] text-sm text-neutral-400 transition-all duration-300 hover:bg-[#181818] hover:text-white sm:flex sm:h-8 sm:w-8"
-                                type="button"
-                              >
-                                <FiRss className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
-                              </button>
-
-                              <button
-                                className="rounded-full px-2 py-1 text-[10px] font-semibold whitespace-nowrap transition-all duration-300 sm:px-4 sm:text-xs"
-                                style={{
-                                  backgroundColor: "#70E0B0",
-                                  color: "#000000",
-                                  border: "none",
-                                }}
-                                onClick={handleOpenAddWalletModal}
-                                onMouseEnter={(e) => {
-                                  e.currentTarget.style.backgroundColor =
-                                    "#58B890";
-                                  e.currentTarget.style.boxShadow =
-                                    "0 0 8px rgba(112, 224, 176, 0.3), 0 0 16px rgba(112, 224, 176, 0.15)";
-                                  e.currentTarget.style.transform =
-                                    "scale(1.02)";
-                                }}
-                                onMouseLeave={(e) => {
-                                  e.currentTarget.style.backgroundColor =
-                                    "#70E0B0";
-                                  e.currentTarget.style.boxShadow = "none";
-                                  e.currentTarget.style.transform = "scale(1)";
-                                }}
-                              >
-                                Add Wallet
-                              </button>
-                            </>
+                            <button
+                              className="rounded-lg px-3 py-1.5 text-[9px] font-semibold whitespace-nowrap shadow-lg transition-all duration-300 sm:px-5 sm:py-2.5 sm:text-xs"
+                              style={{
+                                backgroundColor: "#7FFFC9",
+                                color: "#000000",
+                                border: "none",
+                              }}
+                              onClick={handleOpenAddWalletModal}
+                              onMouseEnter={(e) => {
+                                e.currentTarget.style.backgroundColor =
+                                  "#6EE8B8";
+                                e.currentTarget.style.boxShadow =
+                                  "0 0 16px rgba(127, 255, 201, 0.4), 0 4px 12px rgba(127, 255, 201, 0.2)";
+                                e.currentTarget.style.transform =
+                                  "translateY(-1px)";
+                              }}
+                              onMouseLeave={(e) => {
+                                e.currentTarget.style.backgroundColor =
+                                  "#7FFFC9";
+                                e.currentTarget.style.boxShadow =
+                                  "0 4px 12px rgba(0, 0, 0, 0.3)";
+                                e.currentTarget.style.transform =
+                                  "translateY(0)";
+                              }}
+                            >
+                              Add Wallet
+                            </button>
                           )}
                         </div>
                       </div>
+
+                      {/* Search bar and action toolbar - below header, only for Wallet Manager tab */}
+                      {activeTab === 0 && (
+                        <div className="border-b border-neutral-800/40 px-1 py-3 sm:px-2 sm:py-4">
+                          <div className="flex flex-wrap items-center gap-2 sm:gap-3">
+                            {/* Search input */}
+                            <div className="min-w-[200px] flex-1">
+                              <input
+                                type="text"
+                                placeholder="Search by address"
+                                className="w-full rounded-lg border border-neutral-800/60 bg-neutral-900/40 px-4 py-2 text-[10px] text-neutral-200 transition-all duration-300 placeholder:text-neutral-500 focus:border-[#7FFFC9]/60 focus:bg-neutral-900/60 focus:ring-2 focus:ring-[#7FFFC9]/20 focus:outline-none sm:px-5 sm:py-2.5 sm:text-xs"
+                                disabled={false}
+                                value={searchTerm}
+                                onChange={(e) => setSearchTerm(e.target.value)}
+                              />
+                            </div>
+
+                            {/* Right: actions (Import / Export / icons / Add Wallet) */}
+                            <div className="flex flex-wrap items-center gap-1 sm:gap-2">
+                              {activeTab === 0 && (
+                                <>
+                                  <button
+                                    className="rounded-lg border border-neutral-800/50 bg-neutral-900/60 px-2.5 py-1.5 text-[9px] font-semibold whitespace-nowrap text-neutral-200 transition-all duration-300 hover:border-neutral-700/70 hover:bg-neutral-800/80 hover:text-white sm:px-3 sm:py-1.5 sm:text-[10px]"
+                                    onClick={() => setShowImportModal(true)}
+                                  >
+                                    Import
+                                  </button>
+                                  <button
+                                    className="rounded-lg border border-neutral-800/50 bg-neutral-900/60 px-2.5 py-1.5 text-[9px] font-semibold whitespace-nowrap text-neutral-200 transition-all duration-300 hover:border-neutral-700/70 hover:bg-neutral-800/80 hover:text-white sm:px-3 sm:py-1.5 sm:text-[10px]"
+                                    onClick={handleExportAddresses}
+                                  >
+                                    Export
+                                  </button>
+
+                                  {/* Icon buttons - hide some on mobile */}
+                                  <button
+                                    className="flex h-7 w-7 items-center justify-center rounded-lg border border-neutral-800/50 bg-neutral-900/60 text-sm text-neutral-400 transition-all duration-300 hover:border-neutral-700/70 hover:bg-neutral-800/80 hover:text-white sm:h-9 sm:w-9"
+                                    type="button"
+                                  >
+                                    <FiSettings className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+                                  </button>
+                                  <button
+                                    className={`flex h-8 w-8 items-center justify-center rounded-lg border transition-all duration-300 sm:h-9 sm:w-9 ${
+                                      isTogglingAllNotifications
+                                        ? "cursor-not-allowed border-neutral-800/50 bg-neutral-900/60 opacity-50"
+                                        : allNotificationsEnabled
+                                          ? "cursor-pointer border-pink-500/50 bg-pink-500/20 hover:bg-pink-500/30"
+                                          : "cursor-pointer border-neutral-800/50 bg-neutral-900/60 hover:border-neutral-700/70 hover:bg-neutral-800/80"
+                                    }`}
+                                    type="button"
+                                    onClick={handleToggleAllNotifications}
+                                    disabled={isTogglingAllNotifications}
+                                    title={
+                                      isTogglingAllNotifications
+                                        ? "Toggling..."
+                                        : allNotificationsEnabled
+                                          ? "Disable all notifications"
+                                          : "Enable all notifications"
+                                    }
+                                  >
+                                    <FiBell
+                                      className={`h-4 w-4 ${
+                                        allNotificationsEnabled
+                                          ? "fill-pink-400 text-pink-400"
+                                          : "text-neutral-500"
+                                      }`}
+                                    />
+                                  </button>
+                                  <button
+                                    className="flex h-7 w-7 items-center justify-center rounded-lg border border-neutral-800/50 bg-neutral-900/60 text-sm text-neutral-400 transition-all duration-300 hover:border-neutral-700/70 hover:bg-neutral-800/80 hover:text-white sm:h-9 sm:w-9"
+                                    type="button"
+                                  >
+                                    <FiShare2 className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+                                  </button>
+                                  <button
+                                    className="flex h-7 w-7 items-center justify-center rounded-lg border border-neutral-800/50 bg-neutral-900/60 text-sm text-neutral-400 transition-all duration-300 hover:border-neutral-700/70 hover:bg-neutral-800/80 hover:text-white sm:h-9 sm:w-9"
+                                    type="button"
+                                  >
+                                    <FiRss className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+                                  </button>
+                                </>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      )}
 
                       <div className="min-h-0 flex-1 overflow-y-auto">
                         {activeTab === 0 ? (
@@ -1763,30 +1880,34 @@ export default function TrackersPage() {
               {/* RIGHT: TWITTER SECTION */}
               {showTwitterSection && (
                 <div
-                  className="flex h-full min-h-[400px] flex-shrink-0 flex-col overflow-hidden border border-neutral-900/80 bg-[#050608] px-2 sm:min-h-[530px] sm:px-2.5"
+                  className="flex min-h-0 flex-shrink-0 flex-col overflow-hidden rounded-xl border border-neutral-800/60 bg-[#0A0A0A] px-3 shadow-2xl backdrop-blur-sm sm:px-4"
                   style={
                     isMobile
                       ? {
-                          maxHeight: "calc(100vh - 140px)",
+                          boxShadow:
+                            "0 8px 32px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(127, 255, 201, 0.05)",
+                          maxHeight: "calc(100vh - 200px)",
                         }
                       : {
                           width: `${sidebarWidth}px`,
-                          minWidth: "300px",
+                          minWidth: "372px",
                           maxWidth: "800px",
-                          maxHeight: "calc(100vh - 160px)",
+                          maxHeight: "calc(100vh - 240px)",
+                          boxShadow:
+                            "0 8px 32px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(127, 255, 201, 0.05)",
                         }
                   }
                 >
                   {/* Twitter Tabs Header */}
-                  <div className="flex flex-wrap items-center justify-between gap-1.5 border-b border-neutral-800/60 pt-2 pb-1.5 sm:gap-2 sm:pt-4 sm:pb-2">
-                    <div className="flex gap-1 sm:gap-2">
+                  <div className="flex flex-wrap items-center justify-between gap-2 border-b border-neutral-800/40 pt-3 pb-2 sm:gap-3 sm:pt-4 sm:pb-3">
+                    <div className="flex gap-2 sm:gap-2.5">
                       {TWITTER_TABS.map((tab, i) => (
                         <button
                           key={tab}
-                          className={`cursor-pointer rounded-lg px-2 py-0.5 text-[10px] whitespace-nowrap transition-all duration-300 sm:px-3 sm:py-1 sm:text-xs ${
+                          className={`cursor-pointer border-b-2 px-3 py-2 text-[10px] whitespace-nowrap transition-all duration-300 sm:px-4 sm:py-2.5 sm:text-xs ${
                             twitterTab === i
-                              ? "bg-[#70E0B0] font-medium text-neutral-900"
-                              : "font-medium text-neutral-400 hover:bg-[#141414] hover:text-white"
+                              ? "border-neutral-600 bg-neutral-900/30 font-semibold text-neutral-100"
+                              : "border-transparent font-medium text-neutral-400 hover:border-neutral-700 hover:text-neutral-200"
                           }`}
                           onClick={() => setTwitterTab(i)}
                         >
@@ -1796,22 +1917,23 @@ export default function TrackersPage() {
                     </div>
                     {twitterTab === 0 && (
                       <button
-                        className="cursor-pointer rounded-lg px-2 py-0.5 text-[10px] font-semibold whitespace-nowrap text-neutral-900 transition-all duration-300 sm:px-3 sm:py-1 sm:text-xs"
+                        className="cursor-pointer rounded-lg px-3 py-1.5 text-[9px] font-semibold whitespace-nowrap text-black shadow-lg transition-all duration-300 sm:px-5 sm:py-2.5 sm:text-xs"
                         style={{
-                          backgroundColor: "#70E0B0",
+                          backgroundColor: "#7FFFC9",
                           border: "none",
                         }}
                         onClick={() => setShowAddTwitterModal(true)}
                         onMouseEnter={(e) => {
-                          e.currentTarget.style.backgroundColor = "#58B890";
+                          e.currentTarget.style.backgroundColor = "#6EE8B8";
                           e.currentTarget.style.boxShadow =
-                            "0 0 8px rgba(112, 224, 176, 0.3), 0 0 16px rgba(112, 224, 176, 0.15)";
-                          e.currentTarget.style.transform = "scale(1.02)";
+                            "0 0 16px rgba(127, 255, 201, 0.4), 0 4px 12px rgba(127, 255, 201, 0.2)";
+                          e.currentTarget.style.transform = "translateY(-1px)";
                         }}
                         onMouseLeave={(e) => {
-                          e.currentTarget.style.backgroundColor = "#70E0B0";
-                          e.currentTarget.style.boxShadow = "none";
-                          e.currentTarget.style.transform = "scale(1)";
+                          e.currentTarget.style.backgroundColor = "#7FFFC9";
+                          e.currentTarget.style.boxShadow =
+                            "0 4px 12px rgba(0, 0, 0, 0.3)";
+                          e.currentTarget.style.transform = "translateY(0)";
                         }}
                       >
                         Add Handle
@@ -1820,7 +1942,7 @@ export default function TrackersPage() {
                   </div>
 
                   {/* Twitter Content */}
-                  <div className="min-h-0 flex-1 overflow-y-auto">
+                  <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
                     {twitterTab === 0 ? (
                       // Tracked Accounts Tab
                       <>
@@ -1831,7 +1953,7 @@ export default function TrackersPage() {
                             </span>
                           </div>
                         ) : (
-                          <div className="scrollbar-hide overflow-x-auto">
+                          <div className="scrollbar-hide flex-1 overflow-auto">
                             <table className="w-full min-w-[500px] text-[10px] sm:min-w-[640px] sm:text-xs">
                               <tbody>
                                 {twitterAccounts.map((account) => (
@@ -1944,11 +2066,11 @@ export default function TrackersPage() {
       </div>
 
       {/* Modals */}
-      {toast && (
-        <div className="fixed bottom-4 right-4 z-50 rounded-lg bg-neutral-800 px-4 py-2 text-white">
+      {/* {toast && (
+        <div className="fixed right-4 bottom-4 z-50 rounded-lg bg-neutral-800 px-4 py-2 text-white">
           {toast}
         </div>
-      )}
+      )} */}
       {scannedWallet && (
         <WalletScanPanel
           wallet={scannedWallet}
@@ -1965,7 +2087,10 @@ export default function TrackersPage() {
         mode="import"
         isOpen={showImportModal}
         onClose={() => setShowImportModal(false)}
-        onImport={async (wallets: any[], onProgress?: (current: number, total: number) => void) => {
+        onImport={async (
+          wallets: any[],
+          onProgress?: (current: number, total: number) => void,
+        ) => {
           try {
             const existingAddresses = new Set(
               watchedWallets
@@ -1986,7 +2111,7 @@ export default function TrackersPage() {
               if (onProgress) {
                 onProgress(index + 1, wallets.length);
               }
-              
+
               const transformedWallet = wallet?.trackedWalletAddress
                 ? {
                     address: wallet.trackedWalletAddress,
@@ -2032,34 +2157,56 @@ export default function TrackersPage() {
               emoji: wallet.emoji || getRandomEmoji(),
             }));
 
-            await addTrackedWalletsBulk(bulkPayload, user?.id, selectedChain, user?.bearerToken);
+            await addTrackedWalletsBulk(
+              bulkPayload,
+              user?.id,
+              selectedChain,
+              user?.bearerToken,
+            );
             await ensureNotificationsEnabled(walletsToAdd);
             await loadWalletsFromBackend();
             setShowImportModal(false);
 
             const messages: string[] = [];
             if (walletsToAdd.length > 0) {
-              messages.push(`Imported ${walletsToAdd.length} wallet${walletsToAdd.length === 1 ? "" : "s"}`);
+              messages.push(
+                `Imported ${walletsToAdd.length} wallet${walletsToAdd.length === 1 ? "" : "s"}`,
+              );
             }
             if (duplicateExisting.length > 0) {
-              messages.push(`${duplicateExisting.length} duplicate${duplicateExisting.length === 1 ? "" : "s"} (already tracked)`);
+              messages.push(
+                `${duplicateExisting.length} duplicate${duplicateExisting.length === 1 ? "" : "s"} (already tracked)`,
+              );
             }
             if (duplicateWithinImport.length > 0) {
-              messages.push(`${duplicateWithinImport.length} duplicate${duplicateWithinImport.length === 1 ? "" : "s"} (within import)`);
+              messages.push(
+                `${duplicateWithinImport.length} duplicate${duplicateWithinImport.length === 1 ? "" : "s"} (within import)`,
+              );
             }
             if (invalidWallets.length > 0) {
-              messages.push(`${invalidWallets.length} invalid address${invalidWallets.length === 1 ? "" : "es"}`);
+              messages.push(
+                `${invalidWallets.length} invalid address${invalidWallets.length === 1 ? "" : "es"}`,
+              );
             }
-            showToastMessage(
-              composeImportSummary({
-                successCount: walletsToAdd.length,
-                duplicateExisting,
-                duplicateWithinImport,
-                invalidWallets,
-                skippedByLimit: [],
-                failedCount: 0,
-              }),
-            );
+            const successCount = walletsToAdd.length;
+            const summary = composeImportSummary({
+              successCount,
+              duplicateExisting,
+              duplicateWithinImport,
+              invalidWallets,
+              skippedByLimit: [],
+              failedCount: 0,
+            });
+
+            if (successCount > 0) {
+              showEnhancedToast("success", summary, {
+                duration: 5000,
+              });
+            } else {
+              showEnhancedToast("warning", summary, {
+                duration: 5000,
+              });
+            }
           } catch (error: any) {
             showToastMessage(error?.message || "Failed to import wallets");
           }

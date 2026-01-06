@@ -82,9 +82,9 @@ const FilterPopout: React.FC<FilterPopoutProps> = ({
     minKey: keyof typeof filters,
     maxKey: keyof typeof filters,
   ) => (
-    <div>
-      <h3 className="mb-2 text-sm font-semibold text-neutral-300">{label}</h3>
-      <div className="grid grid-cols-2 gap-4">
+    <div className="space-y-2.5">
+      <h3 className="text-sm font-semibold text-[#E6E7EA]" style={{ letterSpacing: '0.01em' }}>{label}</h3>
+      <div className="grid grid-cols-2 gap-3">
         <input
           type="number"
           placeholder="Min"
@@ -94,7 +94,7 @@ const FilterPopout: React.FC<FilterPopoutProps> = ({
               : ""
           }
           onChange={(e) => handleMinMaxChange(minKey, e.target.value)}
-          className="w-full [appearance:textfield] rounded-lg border-2 border-neutral-700 bg-neutral-800 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+          className="w-full [appearance:textfield] rounded-lg border border-[#2a2b33] bg-[#0f1110] px-3.5 py-2.5 text-sm text-[#E6E7EA] placeholder:text-[#6B7280] transition-all duration-200 focus:border-[#85d99f] focus:outline-none focus:ring-1 focus:ring-[#85d99f] focus:ring-opacity-20 [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
         />
         <input
           type="number"
@@ -105,16 +105,16 @@ const FilterPopout: React.FC<FilterPopoutProps> = ({
               : ""
           }
           onChange={(e) => handleMinMaxChange(maxKey, e.target.value)}
-          className="w-full [appearance:textfield] rounded-lg border-2 border-neutral-700 bg-neutral-800 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+          className="w-full [appearance:textfield] rounded-lg border border-[#2a2b33] bg-[#0f1110] px-3.5 py-2.5 text-sm text-[#E6E7EA] placeholder:text-[#6B7280] transition-all duration-200 focus:border-[#85d99f] focus:outline-none focus:ring-1 focus:ring-[#85d99f] focus:ring-opacity-20 [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
         />
       </div>
     </div>
   );
 
   const renderAgeInput = () => (
-    <div>
-      <h3 className="mb-2 text-sm font-semibold text-neutral-300">Age</h3>
-      <div className="flex items-center gap-2">
+    <div className="space-y-2.5">
+      <h3 className="text-sm font-semibold text-[#E6E7EA]" style={{ letterSpacing: '0.01em' }}>Age</h3>
+      <div className="flex items-center gap-3">
         <input
           type="number"
           placeholder="Min"
@@ -124,16 +124,17 @@ const FilterPopout: React.FC<FilterPopoutProps> = ({
               : ""
           }
           onChange={(e) => handleMinMaxChange("ageMin", e.target.value)}
-          className="flex-1 [appearance:textfield] rounded-lg border-2 border-neutral-700 bg-neutral-800 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+          className="flex-1 [appearance:textfield] rounded-lg border border-[#2a2b33] bg-[#0f1110] px-3.5 py-2.5 text-sm text-[#E6E7EA] placeholder:text-[#6B7280] transition-all duration-200 focus:border-[#85d99f] focus:outline-none focus:ring-1 focus:ring-[#85d99f] focus:ring-opacity-20 [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
         />
         <select
           value={filters.ageUnit || "m"}
           onChange={(e) => handleTextChange("ageUnit", e.target.value)}
-          className="rounded-lg border-2 border-neutral-700 bg-neutral-800 px-3 py-2 text-sm text-neutral-300 focus:border-emerald-500 focus:outline-none"
+          className="rounded-lg border border-[#2a2b33] bg-[#0f1110] px-3.5 py-2.5 text-sm text-[#E6E7EA] transition-all duration-200 focus:border-[#85d99f] focus:outline-none focus:ring-1 focus:ring-[#85d99f] focus:ring-opacity-20"
+          style={{ minWidth: '60px' }}
         >
-          <option value="m">m</option>
-          <option value="h">h</option>
-          <option value="d">d</option>
+          <option value="m" className="bg-[#0f1110] text-[#E6E7EA]">m</option>
+          <option value="h" className="bg-[#0f1110] text-[#E6E7EA]">h</option>
+          <option value="d" className="bg-[#0f1110] text-[#E6E7EA]">d</option>
         </select>
       </div>
     </div>
@@ -144,54 +145,60 @@ const FilterPopout: React.FC<FilterPopoutProps> = ({
       open={open}
       onClose={onClose}
       align="center"
-      className="relative flex h-[80vh] max-h-[calc(100vh-40px)] w-full flex-col rounded-xl bg-neutral-900 p-3 text-neutral-100 shadow-2xl sm:max-w-lg sm:p-6"
+      className="relative flex h-[85vh] max-h-[calc(100vh-60px)] w-full flex-col rounded-xl border border-[#2a2b33] bg-[#0f1110] text-[#E6E7EA] sm:max-w-2xl"
       zIndex={200}
     >
-      <div
-        className="flex flex-shrink-0 items-center justify-between pb-2 -mt-6 -ml-6 -mr-6 -pl-6 -pr-6"
+      <div 
+        className="relative flex h-full w-full flex-col"
+        style={{
+          boxShadow: '0 20px 60px rgba(0, 0, 0, 0.5), 0 0 1px rgba(133, 217, 159, 0.1)'
+        }}
       >
-        <h2 className="mt-4 text-xl font-semibold">Filters</h2>
+      {/* Header */}
+      <div className="flex flex-shrink-0 items-center justify-between border-b border-[#2a2b33] px-6 py-4">
+        <h2 className="text-xl font-bold text-[#E6E7EA]" style={{ letterSpacing: '0.01em' }}>Filters</h2>
         <button
           onClick={onClose}
-          className="text-xl text-neutral-400 hover:text-white"
+          className="text-[#6B7280] hover:text-[#E6E7EA] transition-colors duration-200 p-1.5 rounded-lg hover:bg-[rgba(133, 217, 159, 0.1)]"
           aria-label="Close"
         >
-          <FaTimes />
+          <FaTimes size={18} />
         </button>
       </div>
-      <div className="flex-1 space-y-4 overflow-y-auto py-2">
-        <div>
-          <h3 className="mb-3 text-sm font-semibold text-neutral-300">AMMs</h3>
-          <div className="flex flex-wrap gap-3">
+
+      {/* Content */}
+      <div className="flex-1 space-y-6 overflow-y-auto px-6 py-6">
+        {/* AMMs Section */}
+        <div className="space-y-3">
+          <h3 className="text-sm font-semibold text-[#E6E7EA]" style={{ letterSpacing: '0.01em' }}>AMMs</h3>
+          <div className="flex flex-wrap gap-2.5">
             {AmmList.map((amm) => (
               <button
                 key={amm.id}
                 onClick={() => handleAmmToggle(amm.id)}
-                className={`flex transform cursor-pointer flex-row items-center gap-2 rounded-full p-0.25 text-sm font-medium transition-all duration-300 ease-in-out ${
+                className={`flex transform cursor-pointer flex-row items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-all duration-200 ${
                   filters.amms.includes(amm.id)
-                    ? `bg-gradient-to-br p-0.5 ${amm.borderColor} text-white shadow-lg`
-                    : `bg-gradient-to-br p-0.5 ${amm.borderColor} text-white opacity-50 shadow-lg`
+                    ? `bg-[rgba(133, 217, 159, 0.15)] border border-[#85d99f] text-[#85d99f] shadow-sm`
+                    : `bg-[#0f1110] border border-[#2a2b33] text-[#6B7280] hover:border-[rgba(133, 217, 159, 0.3)] hover:text-[#85d99f] hover:bg-[rgba(133, 217, 159, 0.05)]`
                 }`}
               >
-                <div
-                  className={`flex flex-row gap-1 rounded-full bg-neutral-800 px-2 py-1`}
-                >
-                  <Image
-                    src={amm.image}
-                    alt={amm.displayName}
-                    width={16}
-                    height={16}
-                    className="rounded-full"
-                  />
-                  <span>{amm.displayName}</span>
-                </div>
+                <Image
+                  src={amm.image}
+                  alt={amm.displayName}
+                  width={18}
+                  height={18}
+                  className="rounded-full flex-shrink-0"
+                />
+                <span>{amm.displayName}</span>
               </button>
             ))}
           </div>
         </div>
+
+        {/* Keywords Section */}
         <div className="grid grid-cols-2 gap-4">
-          <div>
-            <label className="mb-1 block text-sm font-semibold text-neutral-300">
+          <div className="space-y-2.5">
+            <label className="block text-sm font-semibold text-[#E6E7EA]" style={{ letterSpacing: '0.01em' }}>
               Search Keywords
             </label>
             <input
@@ -201,11 +208,11 @@ const FilterPopout: React.FC<FilterPopoutProps> = ({
               onChange={(e) =>
                 handleTextChange("searchKeywords", e.target.value)
               }
-              className="w-full rounded-lg border-2 border-neutral-700 bg-neutral-800 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none"
+              className="w-full rounded-lg border border-[#2a2b33] bg-[#0f1110] px-3.5 py-2.5 text-sm text-[#E6E7EA] placeholder:text-[#6B7280] transition-all duration-200 focus:border-[#85d99f] focus:outline-none focus:ring-1 focus:ring-[#85d99f] focus:ring-opacity-20"
             />
           </div>
-          <div>
-            <label className="mb-1 block text-sm font-semibold text-neutral-300">
+          <div className="space-y-2.5">
+            <label className="block text-sm font-semibold text-[#E6E7EA]" style={{ letterSpacing: '0.01em' }}>
               Exclude Keywords
             </label>
             <input
@@ -215,57 +222,64 @@ const FilterPopout: React.FC<FilterPopoutProps> = ({
               onChange={(e) =>
                 handleTextChange("excludeKeywords", e.target.value)
               }
-              className="w-full rounded-lg border-2 border-neutral-700 bg-neutral-800 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none"
+              className="w-full rounded-lg border border-[#2a2b33] bg-[#0f1110] px-3.5 py-2.5 text-sm text-[#E6E7EA] placeholder:text-[#6B7280] transition-all duration-200 focus:border-[#85d99f] focus:outline-none focus:ring-1 focus:ring-[#85d99f] focus:ring-opacity-20"
             />
           </div>
         </div>
-        <label className="flex cursor-pointer items-center gap-2">
+
+        {/* Dex Paid Checkbox */}
+        <label className="flex cursor-pointer items-center gap-3 rounded-lg px-3 py-2.5 hover:bg-[rgba(133, 217, 159, 0.05)] transition-colors duration-200">
           <CustomCheckbox
             checked={filters.dexPaid}
             onChange={handleDexPaidToggle}
-          />{" "}
-          Dex Paid
+          />
+          <span className="text-sm font-medium text-[#E6E7EA]">Dex Paid</span>
         </label>
 
         {/* Tabbed Audit/Metrics Section */}
-        <div className="mt-6 border-t border-neutral-700 pt-6">
-          <div className="mb-6 flex gap-6">
-            <button onClick={() => setActiveTab("audit")} className="relative">
+        <div className="border-t border-[#2a2b33] pt-6">
+          <div className="mb-6 flex gap-1 border-b border-[#2a2b33]">
+            <button 
+              onClick={() => setActiveTab("audit")} 
+              className="relative px-4 py-2.5 transition-all duration-200"
+            >
               <span
-                className={`text-base font-semibold transition-colors ${
+                className={`text-sm font-semibold transition-colors ${
                   activeTab === "audit"
-                    ? "text-emerald-400"
-                    : "text-neutral-500"
+                    ? "text-[#85d99f]"
+                    : "text-[#6B7280] hover:text-[#E6E7EA]"
                 }`}
+                style={{ letterSpacing: '0.01em' }}
               >
                 Audit
               </span>
               {activeTab === "audit" && (
-                <div className="absolute right-0 bottom-0 left-0 h-0.5 bg-emerald-400" />
+                <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-[#85d99f] rounded-t-full" />
               )}
             </button>
             <button
               onClick={() => setActiveTab("metrics")}
-              className="relative"
+              className="relative px-4 py-2.5 transition-all duration-200"
             >
               <span
-                className={`text-base font-semibold transition-colors ${
+                className={`text-sm font-semibold transition-colors ${
                   activeTab === "metrics"
-                    ? "text-emerald-400"
-                    : "text-neutral-500"
+                    ? "text-[#85d99f]"
+                    : "text-[#6B7280] hover:text-[#E6E7EA]"
                 }`}
+                style={{ letterSpacing: '0.01em' }}
               >
                 $ Metrics
               </span>
               {activeTab === "metrics" && (
-                <div className="absolute right-0 bottom-0 left-0 h-0.5 bg-emerald-400" />
+                <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-[#85d99f] rounded-t-full" />
               )}
             </button>
           </div>
 
           {/* Tab Content */}
           {activeTab === "audit" && (
-            <div className="space-y-4">
+            <div className="space-y-5">
               {renderMinMaxInputs("Holders", "holdersMin", "holdersMax")}
               {renderMinMaxInputs(
                 "Pro Traders",
@@ -287,7 +301,7 @@ const FilterPopout: React.FC<FilterPopoutProps> = ({
           )}
 
           {activeTab === "metrics" && (
-            <div className="space-y-4">
+            <div className="space-y-5">
               {renderMinMaxInputs(
                 "Liquidity ($)",
                 "liquidityMin",
@@ -316,9 +330,9 @@ const FilterPopout: React.FC<FilterPopoutProps> = ({
           )}
         </div>
       </div>
-      <div
-        className="mt-6 flex flex-shrink-0 items-center justify-between pt-4 -ml-6 -mr-6 -pl-6 -pr-6"
-      >
+
+      {/* Footer */}
+      <div className="flex flex-shrink-0 items-center justify-between border-t border-[#2a2b33] px-6 py-4">
         <div className="flex gap-2">
           <InterstateButton
             variant="secondary"
@@ -349,6 +363,7 @@ const FilterPopout: React.FC<FilterPopoutProps> = ({
             Apply Filters
           </InterstateButton>
         </div>
+      </div>
       </div>
     </InterstatePopout>
   );
