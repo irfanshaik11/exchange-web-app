@@ -751,6 +751,12 @@ function TokenImage({
   // Get protocol color based on launchpad_protocol field
   const getProtocolColor = (token: Token): string => {
     const launchpadProtocol = (token as any).launchpad_protocol?.toLowerCase();
+    const mintAddress = token.mint?.toLowerCase() || "";
+
+    // Check if mint address contains "bags" - override any protocol
+    if (mintAddress.includes("bags")) {
+      return "#31e3ac"; // Green for bags
+    }
 
     if (!launchpadProtocol) {
       return "#31e3ac"; // Default green
@@ -828,6 +834,12 @@ function TokenImage({
   // Get icon based on token data - dynamically maps launchpad_protocol to icon
   const getTokenIcon = (token: Token): string => {
     const launchpadProtocol = (token as any).launchpad_protocol?.toLowerCase();
+    const mintAddress = token.mint?.toLowerCase() || "";
+
+    // Check if mint address contains "bags" - override any protocol
+    if (mintAddress.includes("bags")) {
+      return "https://bags.fm/assets/images/bags-icon.png";
+    }
 
     if (!launchpadProtocol) {
       // Default to pump.fun icon if no protocol info
@@ -883,14 +895,17 @@ function TokenImage({
   // Check if token should have full circle image (no white space)
   const launchpadProtocol =
     (token as any).launchpad_protocol?.toLowerCase() || "";
+  const mintAddressLower = token.mint?.toLowerCase() || "";
   const isMeteora = launchpadProtocol.includes("meteora");
   const isBonk = launchpadProtocol.includes("bonk");
-  const isBags = launchpadProtocol.includes("bags");
+  // Check both launchpad_protocol AND mint address for bags
+  const isBags = launchpadProtocol.includes("bags") || mintAddressLower.includes("bags");
   const isMoonit =
     launchpadProtocol.includes("moonit") ||
     launchpadProtocol.includes("moonshot") ||
     launchpadProtocol.includes("moonshoot");
-  const isFullCircleImage = isMeteora || isBonk || isBags || isMoonit;
+  // If mint contains "bags", it overrides Meteora - don't show as Meteora
+  const isFullCircleImage = (isMeteora && !mintAddressLower.includes("bags")) || isBonk || isBags || isMoonit;
 
   // Debug logging for protocol detection
   if (
@@ -1683,6 +1698,10 @@ function PulseTable({
         typeof parsed.timestamp === "number" &&
         Date.now() - parsed.timestamp <= WS_CACHE_TTL_MS
       ) {
+        // Skip liquidity filtering for New Pairs - show all tokens instantly
+        if (isNewPairs) {
+          return parsed.data as Token[];
+        }
         return filterNonZeroLiquidity(parsed.data as Token[]);
       }
     } catch (error) {
@@ -1774,7 +1793,12 @@ function PulseTable({
         typeof parsed.timestamp === "number" &&
         Date.now() - parsed.timestamp <= WS_CACHE_TTL_MS
       ) {
-        setWsTokens(filterNonZeroLiquidity(parsed.data as Token[]));
+        // Skip liquidity filtering for New Pairs - show all tokens instantly
+        if (isNewPairs) {
+          setWsTokens(parsed.data as Token[]);
+        } else {
+          setWsTokens(filterNonZeroLiquidity(parsed.data as Token[]));
+        }
       }
     } catch (error) {
       console.warn(
@@ -1782,7 +1806,7 @@ function PulseTable({
         error,
       );
     }
-  }, [wsCacheStorageKey]);
+  }, [wsCacheStorageKey, isNewPairs]);
 
   // Pending filters for Apply button functionality
   const [pendingFilters, setPendingFilters] = useState(filters);
@@ -1872,7 +1896,12 @@ function PulseTable({
         if (response.ok) {
           const data = await response.json();
           const next = Array.isArray(data) ? data : [];
-          setFilteredTokens(filterNonZeroLiquidity(next as Token[]));
+          // Skip liquidity filtering for New Pairs
+          if (isNewPairs) {
+            setFilteredTokens(next as Token[]);
+          } else {
+            setFilteredTokens(filterNonZeroLiquidity(next as Token[]));
+          }
         } else {
           console.error("Failed to fetch filtered tokens:", response.status);
           setFilteredTokens([]);
@@ -1912,17 +1941,15 @@ function PulseTable({
     onNewToken: useCallback(
       (token: any) => {
         if (channel === "new") {
-          // FAST PATH: New pairs bypass zero liquidity check for maximum speed
-          // Zero liquidity tokens will be filtered during merge, but new pairs get instant priority
-          // Use flushSync to force immediate update, bypassing React 18's automatic batching
-          // Optimized with Map-based deduplication (O(1) instead of O(n))
-          // Skip filtering existing tokens - just prepend new token instantly
+          // ⚡ INSTANT PATH: Minimal processing for maximum speed
           flushSync(() => {
             setWsTokens((prev) => {
-              // Fast path: Just prepend new token, remove if duplicate
-              // Don't filter existing tokens here - let them through for speed
-              const filtered = prev.filter((t) => t.mint !== token.mint);
-              return [token as Token, ...filtered].slice(0, 50);
+              // O(1) check - skip if duplicate of most recent token
+              if (prev.length > 0 && prev[0].mint === token.mint) {
+                return prev;
+              }
+              // Prepend new token, limit to 50 (slice is O(k) where k=50, not O(n))
+              return [token as Token, ...prev].slice(0, 50);
             });
           });
         }
@@ -2062,6 +2089,10 @@ function PulseTable({
             updated_at: update.updated_at || token.updated_at,
           };
         });
+        // Skip liquidity filtering for New Pairs - keep all tokens
+        if (isNewPairs) {
+          return updatedTokens as Token[];
+        }
         return filterNonZeroLiquidity(updatedTokens as Token[]);
       });
 
@@ -2142,9 +2173,13 @@ function PulseTable({
             updated_at: update.updated_at || token.updated_at,
           };
         });
+        // Skip liquidity filtering for New Pairs - keep all tokens stable
+        if (isNewPairs) {
+          return updatedTokens as Token[];
+        }
         return filterNonZeroLiquidity(updatedTokens as Token[]);
       });
-    }, []),
+    }, [isNewPairs]),
   });
 
   // Fetch filtered tokens when protocols change
@@ -2799,6 +2834,71 @@ function PulseTable({
   // Protocol filtering is now 100% server-side via HTTP API and WebSocket
   // Filter and sort tokens
   const filteredAndSortedTokens = useMemo(() => {
+    const isNewPairs = title.toLowerCase().includes("new");
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // ULTRA-FAST PATH FOR NEW PAIRS: Skip ALL filtering when no custom filters set
+    // This ensures WebSocket tokens render instantly without any processing delay
+    // ═══════════════════════════════════════════════════════════════════════════
+    const hasNoCustomFilters =
+      (filters.protocols.length === 0 || filters.protocols.includes("All")) &&
+      filters.quoteTokens.length === 0 &&
+      !filters.searchKeywords.trim() &&
+      !filters.excludeKeywords.trim() &&
+      !filters.dexPaid &&
+      !filters.caEndsInPump &&
+      !filters.minAge &&
+      !filters.maxAge &&
+      !filters.top10HoldersPercent &&
+      !filters.minMarketCap &&
+      !filters.maxMarketCap &&
+      !filters.minVolume &&
+      !filters.maxVolume &&
+      !filters.minLiquidity &&
+      !filters.maxLiquidity &&
+      !filters.bCurvePercentMin &&
+      !filters.bCurvePercentMax &&
+      !filters.txnsMin &&
+      !filters.txnsMax &&
+      !filters.numBuysMin &&
+      !filters.numBuysMax &&
+      !filters.numSellsMin &&
+      !filters.numSellsMax &&
+      !filters.holdersMin &&
+      !filters.holdersMax &&
+      !filters.hasWebsite &&
+      !filters.hasTwitter &&
+      !filters.hasTelegram &&
+      !filters.atLeastOneSocial &&
+      !filters.onlyPumpLive;
+
+    if (isNewPairs && hasNoCustomFilters) {
+      // ⚡ INSTANT PATH: Render WebSocket tokens immediately, no processing
+      // WebSocket sends newest first - trust that order completely
+      if (wsTokens.length > 0) {
+        // When WebSocket is active, it's the source of truth for new tokens
+        // Use Set for O(1) deduplication check (instead of O(n) with .some())
+        const wsMints = new Set(wsTokens.map(t => t.mint));
+        const baseTokens = filteredTokens.length > 0 ? filteredTokens : tokens;
+
+        // O(n) single pass with O(1) Set lookup - much faster than O(n*m)
+        const uniqueBaseTokens: Token[] = [];
+        for (const bt of baseTokens) {
+          if (!wsMints.has(bt.mint) && uniqueBaseTokens.length < 50) {
+            uniqueBaseTokens.push(bt);
+          }
+        }
+
+        console.log(`[PulseTable ${title}] ⚡ INSTANT: ${wsTokens.length} WS + ${uniqueBaseTokens.length} base`);
+        return [...wsTokens, ...uniqueBaseTokens];
+      }
+
+      // No WebSocket tokens yet - initial load from HTTP
+      const baseTokens = filteredTokens.length > 0 ? filteredTokens : tokens;
+      return baseTokens.slice(0, 100);
+    }
+    // ═══════════════════════════════════════════════════════════════════════════
+
     console.log(
       `[PulseTable ${title}] 🔧 filteredAndSortedTokens recomputing, tokens count: ${tokens?.length || 0}, filteredTokens: ${filteredTokens.length}, wsTokens: ${wsTokens.length}`,
     );
@@ -2825,12 +2925,12 @@ function PulseTable({
     // For new pairs, prioritize speed - filter after merge, not during
     wsTokens.forEach((token) => mergedMap.set(token.mint, token));
 
-    // Filter zero liquidity tokens - but do it fast for new pairs
-    const isNewPairs = title.toLowerCase().includes("new");
+    // Filter zero liquidity tokens - DISABLED for new pairs to maximize speed
     if (isNewPairs) {
-      // Fast path for new pairs: filter in-place to avoid extra array creation
-      const allTokens = Array.from(mergedMap.values()) as Token[];
-      filtered = allTokens.filter((token) => !hasZeroLiquidity(token));
+      // SPEED FIX: Zero liquidity filtering disabled for new pairs
+      // This was causing lag - every WebSocket update triggered O(n) filtering
+      // filtered = allTokens.filter((token) => !hasZeroLiquidity(token));
+      filtered = Array.from(mergedMap.values()) as Token[];
     } else {
       filtered = filterNonZeroLiquidity(
         Array.from(mergedMap.values()) as Token[],
@@ -2861,6 +2961,20 @@ function PulseTable({
 
     // Protocol filtering is now handled by the API, so we skip client-side filtering
     // when protocols are selected (filteredTokens already contains the filtered results)
+
+    // Special handling for "Bags" filter: also include tokens where mint contains "bags"
+    // This catches tokens that have "bags" in mint but different launchpad_protocol (e.g., "meteora")
+    if (filters.protocols.includes("Bags") && tokens.length > 0) {
+      const existingMints = new Set(filtered.map(t => t.mint));
+      const bagsFromMint = tokens.filter(token => {
+        const mintLower = token.mint?.toLowerCase() || "";
+        return mintLower.includes("bags") && !existingMints.has(token.mint);
+      });
+      if (bagsFromMint.length > 0) {
+        console.log(`[Bags Filter] Adding ${bagsFromMint.length} tokens with "bags" in mint address`);
+        filtered = [...filtered, ...bagsFromMint];
+      }
+    }
 
     // Apply keyword filters
     if (filters.searchKeywords.trim()) {
