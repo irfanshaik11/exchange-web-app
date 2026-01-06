@@ -1609,8 +1609,9 @@ export default function InterstateTable({
                     }
                     if (token.uri || token.logo) queryParams.set('_image', token.uri || token.logo || '');
                     queryParams.set('_mint', address);
+                    if ((token as any).launchpad_protocol) queryParams.set('_launchpad_protocol', (token as any).launchpad_protocol);
                     queryParams.set('chain', 'monad');
-                    
+
                     const url = `/trade/monad/${address}?${queryParams.toString()}`;
                     router.push(url);
                   } else {
@@ -1622,6 +1623,7 @@ export default function InterstateTable({
                     if (token.market_cap_usd) solQueryParams.set('_mcap', token.market_cap_usd.toString());
                     if (token.uri || token.logo || (token as any).image) solQueryParams.set('_image', token.uri || token.logo || (token as any).image || '');
                     solQueryParams.set('_mint', address);
+                    if ((token as any).launchpad_protocol) solQueryParams.set('_launchpad_protocol', (token as any).launchpad_protocol);
                     solQueryParams.set('chain', 'sol');
                     router.push(`/trade/${address}?${solQueryParams.toString()}`);
                   }
