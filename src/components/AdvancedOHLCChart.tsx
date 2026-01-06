@@ -2347,9 +2347,16 @@ const AdvancedOHLCChart: React.FC<AdvancedOHLCChartProps> = ({
         // Reuse the 'mode' variable already declared above
         const modeLabel = mode === 'MC' ? 'Market Cap' : 'Price';
         
+        // Use token symbol/name for display, fallback to truncated address
+        const displayName = latestTokenSymbolRef.current
+          || latestTokenNameRef.current
+          || (dfMint ? `${dfMint.slice(0, 4)}…${dfMint.slice(-4)}` : null)
+          || (dfPairAddress ? `${dfPairAddress.slice(0, 4)}…${dfPairAddress.slice(-4)}` : null)
+          || 'Token';
+
         const symbolInfo = {
-          name: symbolName,
-          description: `${dfMint || dfPairAddress || 'Token'} ${modeLabel} Chart`,
+          name: displayName,
+          description: `${displayName} ${modeLabel} Chart`,
           type: 'crypto',
           session: '24x7',
           timezone: 'Etc/UTC',
@@ -3906,7 +3913,7 @@ Maker: ${walletAddress}`;
             'scalesProperties.showRightScale': true,
             'scalesProperties.showSeriesLastValue': true,
             'scalesProperties.showStudyLastValue': true,
-            'scalesProperties.showSymbolLabels': true,
+            'scalesProperties.showSymbolLabels': false,
             'mainSeriesProperties.priceAxisProperties.autoScale': true,
             'mainSeriesProperties.priceAxisProperties.autoScaleDisabled': false,
             'mainSeriesProperties.visible': true,
