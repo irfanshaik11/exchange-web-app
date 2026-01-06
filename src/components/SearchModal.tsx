@@ -541,18 +541,24 @@ const SearchModalContent = React.memo(function SearchModalContent({
           if (token.fully_diluted_value) queryParams.set('_mcap', token.fully_diluted_value.toString());
           if (token.uri || token.logo) queryParams.set('_image', token.uri || token.logo || '');
           queryParams.set('_mint', address);
+          if ((token as any).launchpad_protocol) queryParams.set('_launchpad_protocol', (token as any).launchpad_protocol);
           queryParams.set('chain', 'monad');
 
           const url = `/trade/monad/${address}?${queryParams.toString()}`;
           await router.push(url);
         } else if (address) {
           // Navigate to trade page for Solana - use direct router.push
-          const queryParams = new URLSearchParams();
-          if (token.name) queryParams.set('_name', token.name);
-          if (token.symbol) queryParams.set('_symbol', token.symbol);
-          if (token.fully_diluted_value) queryParams.set('_mcap', token.fully_diluted_value.toString());
-          if (token.uri || token.logo) queryParams.set('_image', token.uri || token.logo || '');
-          if (token.mint) queryParams.set('_mint', token.mint);
+          // IMPORTANT: Always set _name and _symbol (even if empty) to match PulseTable behavior
+          // Otherwise TradeActionPanel shows skeleton instead of buy/sell buttons
+          const queryParams = new URLSearchParams({
+            _name: token.name || token.symbol || "",
+            _symbol: token.symbol || "",
+            _mcap: token.fully_diluted_value?.toString() || "",
+            _image: token.uri || token.logo || "",
+            _mint: token.mint || "",
+            _launchpad_protocol: (token as any).launchpad_protocol || "",
+            chain: chain || 'sol',
+          });
 
           const url = `/trade/${address}?${queryParams.toString()}`;
           await router.push(url);
@@ -573,18 +579,24 @@ const SearchModalContent = React.memo(function SearchModalContent({
           if (token.fully_diluted_value) queryParams.set('_mcap', token.fully_diluted_value.toString());
           if (token.uri || token.logo) queryParams.set('_image', token.uri || token.logo || '');
           queryParams.set('_mint', address);
+          if ((token as any).launchpad_protocol) queryParams.set('_launchpad_protocol', (token as any).launchpad_protocol);
           queryParams.set('chain', 'monad');
 
           const url = `/trade/monad/${address}?${queryParams.toString()}`;
           await router.push(url);
         } else if (address) {
           // Navigate to trade page for Solana - use direct router.push
-          const queryParams = new URLSearchParams();
-          if (token.name) queryParams.set('_name', token.name);
-          if (token.symbol) queryParams.set('_symbol', token.symbol);
-          if (token.fully_diluted_value) queryParams.set('_mcap', token.fully_diluted_value.toString());
-          if (token.uri || token.logo) queryParams.set('_image', token.uri || token.logo || '');
-          if (token.mint) queryParams.set('_mint', token.mint);
+          // IMPORTANT: Always set _name and _symbol (even if empty) to match PulseTable behavior
+          // Otherwise TradeActionPanel shows skeleton instead of buy/sell buttons
+          const queryParams = new URLSearchParams({
+            _name: token.name || token.symbol || "",
+            _symbol: token.symbol || "",
+            _mcap: token.fully_diluted_value?.toString() || "",
+            _image: token.uri || token.logo || "",
+            _mint: token.mint || "",
+            _launchpad_protocol: (token as any).launchpad_protocol || "",
+            chain: chain || 'sol',
+          });
 
           const url = `/trade/${address}?${queryParams.toString()}`;
           await router.push(url);
