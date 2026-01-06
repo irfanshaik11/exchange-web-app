@@ -1545,25 +1545,22 @@ const TradeHeader: React.FC<TradeHeaderProps> = ({ token, livePriceUsd, liveMark
         </div>
       </div>
 
-      {/* RIGHT: Trade stats (24H VOL, BUYS, SELLS, NET) */}
-      {/* Hide for Monad tokens */}
+      {/* RIGHT: Trade stats (24H VOL, BUYS, SELLS, NET) - COMMENTED OUT */}
+      {/*
       {(() => {
         const protocol = extractProtocolRaw(token);
         const isMonad = protocol && (
-          protocol.includes('nad.fun') || 
-          protocol.includes('nadfun') || 
+          protocol.includes('nad.fun') ||
+          protocol.includes('nadfun') ||
           protocol.includes('flapsh') ||
           protocol.includes('flap.sh') ||
           protocol.includes('kuru')
         );
-        
+
         if (isMonad) {
-          return null; // Hide trade stats for Monad tokens
+          return null;
         }
-        
-        // Calculate derived values from API fields
-        // Solana API uses: total_buy_volume_24h, total_buys_24h
-        // Fallback to old field names for backwards compatibility
+
         const buyVol24h = (token as any)?.total_buy_volume_24h ?? (token as any)?.total_buy_volume_usd ?? 0;
         const sellVol24h = (token as any)?.total_sell_volume_24h ?? (token as any)?.total_sell_volume_usd ?? 0;
         const buys24h = (token as any)?.total_buys_24h ?? (token as any)?.total_buys ?? 0;
@@ -1592,6 +1589,7 @@ const TradeHeader: React.FC<TradeHeaderProps> = ({ token, livePriceUsd, liveMark
           </div>
         );
       })()}
+      */}
 
       {/* RIGHT: actions */}
       {(() => {

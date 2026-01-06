@@ -90,7 +90,7 @@ const MonadDevTokensTable: React.FC<MonadDevTokensTableProps> = ({
               
               {/* Hold % */}
               <td className="px-2 py-2 text-neutral-300 whitespace-nowrap">
-                {devTokenData.dev_hold_percent.toFixed(2)}%
+                {(devTokenData.dev_hold_percent ?? 0).toFixed(2)}%
               </td>
               
               {/* MON Balance */}
