@@ -1896,7 +1896,41 @@ export default function PulsePage() {
             </div>
           ) : (
             <div className="flex min-h-0 w-full flex-1 flex-col overflow-hidden">
-              <div className="flex min-h-0 w-full flex-1 flex-row overflow-hidden">
+              {/* Mobile: Single table based on active tab */}
+              <div className="flex min-h-0 flex-1 flex-col overflow-hidden lg:hidden">
+                <div className="flex h-full min-h-0 flex-col transition-all duration-300 ease-in-out">
+                  {activeTab === "new" && (
+                    <PulseTable
+                      title="New Pairs"
+                      tokens={enrichedNewPairsToShow as any}
+                      loading={newPairsLoading}
+                      isFirstOrLast="only"
+                      showBubbleMetrics={false}
+                      currentChain={currentChain}
+                    />
+                  )}
+                  {activeTab === "final-stretch" && (
+                    <PulseTable
+                      title="Final Stretch"
+                      tokens={enrichedFinalStretch as any}
+                      isFirstOrLast="only"
+                      showBubbleMetrics={false}
+                      currentChain={currentChain}
+                    />
+                  )}
+                  {activeTab === "migrated" && (
+                    <PulseTable
+                      title="Migrated"
+                      tokens={enrichedMigrated as any}
+                      isFirstOrLast="only"
+                      showBubbleMetrics={false}
+                      currentChain={currentChain}
+                    />
+                  )}
+                </div>
+              </div>
+              {/* Desktop: All tables horizontally */}
+              <div className="hidden min-h-0 w-full flex-1 flex-row overflow-hidden lg:flex">
                 <PulseTable
                   title="New Pairs"
                   tokens={enrichedNewPairsToShow as any}
@@ -1905,13 +1939,13 @@ export default function PulsePage() {
                   showBubbleMetrics={false}
                   currentChain={currentChain}
                 />
-                <MonadTable
+                <PulseTable
                   title="Final Stretch"
                   tokens={enrichedFinalStretch as any}
                   showBubbleMetrics={false}
                   currentChain={currentChain}
                 />
-                <MonadTable
+                <PulseTable
                   title="Migrated"
                   tokens={enrichedMigrated as any}
                   isFirstOrLast="last"
