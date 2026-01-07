@@ -3,6 +3,7 @@ import type { Token } from "~/utils/db";
 import { tradeBuy, SOL_MINT_ADDRESS, ApiError } from "~/utils/api";
 import { getPoolTypeFromToken } from "~/utils/poolTypeDetection";
 import type { QuickBuySettings } from "~/components/QuickBuyContext";
+import { fetchVerifiedPairAddress } from "~/hooks/useSingleTokenPolling";
 
 interface QuickBuyParams {
   token: Token;
@@ -103,8 +104,28 @@ export async function handleQuickBuyDetailed({
 
   try {
     const poolType = getPoolTypeFromToken(token);
-    const effectivePoolAddress = token.migrated_pool_address || token.pair_address;
-    
+    let effectivePoolAddress = token.migrated_pool_address || token.pair_address;
+
+    // CRITICAL: Verify the pair address from the token service
+    // This ensures we use the correct/up-to-date pool address for trades
+    if (token.mint) {
+      console.log(`\n🔍 VERIFYING PAIR ADDRESS for mint: ${token.mint}`);
+      const verifiedPairAddress = await fetchVerifiedPairAddress(token.mint);
+      if (verifiedPairAddress) {
+        if (verifiedPairAddress !== effectivePoolAddress) {
+          console.log(`  ⚠️ Pair address mismatch detected!`);
+          console.log(`  Local: ${effectivePoolAddress}`);
+          console.log(`  Verified: ${verifiedPairAddress}`);
+          console.log(`  → Using verified address from token service`);
+        } else {
+          console.log(`  ✅ Pair address verified as correct`);
+        }
+        effectivePoolAddress = verifiedPairAddress;
+      } else {
+        console.log(`  ⚠️ Could not verify pair address, using local: ${effectivePoolAddress}`);
+      }
+    }
+
     console.log("\n🏊 POOL INFORMATION:");
     console.log(`  Protocol: ${token.launchpad_protocol || token.protocol || 'unknown'}`);
     console.log(`  Detected PoolType: ${poolType || '(empty - backend will auto-detect)'}`);
