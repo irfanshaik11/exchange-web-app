@@ -334,6 +334,22 @@ const getTokenTimestamp = (token: any, fields: readonly string[]): number => {
   return 0;
 };
 
+/**
+ * Safely extract market cap from token, skipping 0/negative/invalid values.
+ * Uses || instead of ?? to properly fall through when value is 0.
+ * Priority: fully_diluted_value > market_cap_usd > 0
+ */
+const getTokenMarketCap = (token: any): number => {
+  if (!token) return 0;
+  const fdv = token.fully_diluted_value;
+  const mc = token.market_cap_usd;
+  // Use || to skip 0 values (|| treats 0 as falsy, ?? does not)
+  // This ensures we fall through to the next value if current is 0
+  if (typeof fdv === 'number' && fdv > 0) return fdv;
+  if (typeof mc === 'number' && mc > 0) return mc;
+  return 0;
+};
+
 // Smart color system based on token properties
 interface SmartColorProps {
   children: React.ReactNode;
@@ -352,7 +368,7 @@ const SmartColor: React.FC<SmartColorProps> = ({
     const symbol = token.symbol?.toLowerCase() || "";
     const name = token.name?.toLowerCase() || "";
     const mint = token.mint || "";
-    const mc = token.fully_diluted_value || token.market_cap_usd || 0;
+    const mc = getTokenMarketCap(token);
 
     // Restrict MarketCap metric to approved palette only
     if (metricType === "marketCap") {
@@ -449,7 +465,7 @@ const SmartColor: React.FC<SmartColorProps> = ({
   );
 };
 
-// Smooth number transition component
+// Smooth number transition component - fast updates with smooth interpolation
 interface SmoothNumberProps {
   value: number;
   duration?: number;
@@ -458,34 +474,59 @@ interface SmoothNumberProps {
 }
 const SmoothNumber: React.FC<SmoothNumberProps> = ({
   value,
-  duration = 500,
+  duration = 300, // Faster default for snappy updates
   className = "",
   formatter = (val) => val.toString(),
 }) => {
-  const [displayValue, setDisplayValue] = useState(value);
-  const [isAnimating, setIsAnimating] = useState(false);
+  // Initialize with value only if it's valid (positive), otherwise 0
+  const initialValue = value > 0 ? value : 0;
+  const [displayValue, setDisplayValue] = useState(initialValue);
   const animationRef = useRef<number | undefined>(undefined);
-  const startTimeRef = useRef<number | undefined>(undefined);
-  const startValueRef = useRef<number>(value);
+  const prevValueRef = useRef<number>(initialValue);
+  const lastValidValueRef = useRef<number>(initialValue);
 
   useEffect(() => {
-    if (value === displayValue) return;
+    // GUARD: Ignore invalid values (0, negative, NaN)
+    // Keep showing the last valid value instead
+    if (value <= 0 || !Number.isFinite(value)) {
+      return;
+    }
 
-    const startValue = displayValue;
+    // Skip animation if value hasn't changed meaningfully
+    if (Math.abs(value - prevValueRef.current) < 0.0001) return;
+
+    // Store this as the last valid value
+    lastValidValueRef.current = value;
+
+    // COMPONENT REUSE DETECTION: If value changed by more than 50%,
+    // this is likely a different token (component reuse), not a price update.
+    // Reset immediately without animation to avoid weird transitions.
+    const prevValid = prevValueRef.current > 0 ? prevValueRef.current : displayValue;
+    const changeRatio = prevValid > 0 ? Math.abs(value - prevValid) / prevValid : 1;
+
+    if (changeRatio > 0.5) {
+      // Large change = different token, reset immediately
+      setDisplayValue(value);
+      prevValueRef.current = value;
+      return;
+    }
+
+    const startValue = displayValue > 0 ? displayValue : value;
     const endValue = value;
     const startTime = performance.now();
 
-    startTimeRef.current = startTime;
-    startValueRef.current = startValue;
-    setIsAnimating(true);
+    // Cancel any running animation
+    if (animationRef.current) {
+      cancelAnimationFrame(animationRef.current);
+    }
 
     const animate = (currentTime: number) => {
       const elapsed = currentTime - startTime;
       const progress = Math.min(elapsed / duration, 1);
 
-      // Easing function for smooth animation
-      const easeOutCubic = 1 - Math.pow(1 - progress, 3);
-      const currentValue = startValue + (endValue - startValue) * easeOutCubic;
+      // Smooth easing - easeOutQuart for natural deceleration
+      const easeOutQuart = 1 - Math.pow(1 - progress, 4);
+      const currentValue = startValue + (endValue - startValue) * easeOutQuart;
 
       setDisplayValue(currentValue);
 
@@ -493,7 +534,7 @@ const SmoothNumber: React.FC<SmoothNumberProps> = ({
         animationRef.current = requestAnimationFrame(animate);
       } else {
         setDisplayValue(endValue);
-        setIsAnimating(false);
+        prevValueRef.current = endValue;
       }
     };
 
@@ -507,13 +548,67 @@ const SmoothNumber: React.FC<SmoothNumberProps> = ({
   }, [value, duration]);
 
   return (
-    <span
-      className={`${isAnimating ? "transition-all duration-75" : ""} ${className}`}
-    >
+    <span className={className}>
       {formatter(displayValue)}
     </span>
   );
 };
+
+// Hook for smooth progress bar animation using requestAnimationFrame
+function useSmoothProgress(targetValue: number, duration: number = 400): number {
+  // Clamp to valid range [0, 1] for progress values
+  const validTarget = Math.max(0, Math.min(1, Number.isFinite(targetValue) ? targetValue : 0));
+  const [smoothValue, setSmoothValue] = useState(validTarget);
+  const animationRef = useRef<number | undefined>(undefined);
+  const prevTargetRef = useRef<number>(validTarget);
+
+  useEffect(() => {
+    // GUARD: Ignore invalid values
+    if (!Number.isFinite(targetValue) || targetValue < 0) return;
+
+    const clampedTarget = Math.min(targetValue, 1);
+
+    // Skip if change is too small (< 0.1%)
+    if (Math.abs(clampedTarget - prevTargetRef.current) < 0.001) return;
+
+    const startValue = smoothValue;
+    const endValue = clampedTarget;
+    const startTime = performance.now();
+
+    // Cancel any running animation
+    if (animationRef.current) {
+      cancelAnimationFrame(animationRef.current);
+    }
+
+    const animate = (currentTime: number) => {
+      const elapsed = currentTime - startTime;
+      const progress = Math.min(elapsed / duration, 1);
+
+      // Smooth easing - easeOutQuart for natural feeling
+      const easeOutQuart = 1 - Math.pow(1 - progress, 4);
+      const currentValue = startValue + (endValue - startValue) * easeOutQuart;
+
+      setSmoothValue(currentValue);
+
+      if (progress < 1) {
+        animationRef.current = requestAnimationFrame(animate);
+      } else {
+        setSmoothValue(endValue);
+        prevTargetRef.current = endValue;
+      }
+    };
+
+    animationRef.current = requestAnimationFrame(animate);
+
+    return () => {
+      if (animationRef.current) {
+        cancelAnimationFrame(animationRef.current);
+      }
+    };
+  }, [targetValue, duration]);
+
+  return smoothValue;
+}
 
 // Token Metrics Component - displays users, trades, achievements, and rank
 function TokenMetrics({
@@ -685,8 +780,7 @@ function TokenImage({
     const bondingPct = (token as any).bonding_pct;
     const bondingProgress = token.bonding_curve_progress;
     const graduationPercent = (token as any).graduationPercent;
-    const marketCap =
-      (token as any).fully_diluted_value ?? (token as any).market_cap_usd ?? 0;
+    const marketCap = getTokenMarketCap(token);
 
     if (typeof bondingPct === "number" && bondingPct >= 0) {
       return Math.min(Math.max(bondingPct / 100, 0), 1); // Convert percentage to 0-1 range
@@ -954,9 +1048,12 @@ function TokenImage({
 
   // Scale New Pairs progress to fill more of the border (since they max out at ~60%)
   // Cap at 95% to never show full completion
-  const scaledProgress = isNewPairs
+  const rawScaledProgress = isNewPairs
     ? Math.min(finalProgress / 0.6, 0.95)
     : finalProgress;
+
+  // Smooth animation for progress bar - uses requestAnimationFrame for buttery transitions
+  const scaledProgress = useSmoothProgress(rawScaledProgress, 400);
 
   // Debug logging for New Pairs
   if (isNewPairs) {
@@ -1048,10 +1145,10 @@ function TokenImage({
                   protocolColor.startsWith("#") &&
                   (protocolColor.length === 7 || protocolColor.length === 4)
                 ) {
-                  // Slightly more transparent (~70%) for New Pairs color border
+                  // More transparent (~25%) for New Pairs so loading border stands out
                   return protocolColor.length === 7
-                    ? `${protocolColor}B3`
-                    : `${protocolColor}B`;
+                    ? `${protocolColor}40`
+                    : `${protocolColor}4`;
                 }
                 return protocolColor;
               })()}`,
@@ -1110,16 +1207,16 @@ function TokenImage({
               />
 
               {/* Progress border - clockwise rounded path starting from bottom-right */}
+              {/* Animation handled by useSmoothProgress hook with requestAnimationFrame */}
               <path
                 d="M 79 79 L 8 79 Q 2 79 2 73 L 2 8 Q 2 2 8 2 L 73 2 Q 79 2 79 8 L 79 73 Q 79 79 73 79"
                 fill="none"
                 stroke={protocolColor}
-                strokeWidth="1"
+                strokeWidth="2"
                 strokeLinecap="round"
                 strokeLinejoin="round"
                 strokeDasharray={`${4 * 77}`} // Total perimeter
                 strokeDashoffset={`${4 * 77 * (1 - scaledProgress)}`}
-                className="transition-all duration-700 ease-out"
               />
             </svg>
           </div>
@@ -1684,6 +1781,44 @@ function PulseTable({
   const [filteredTokens, setFilteredTokens] = useState<Token[]>([]);
   const [isFetchingFiltered, setIsFetchingFiltered] = useState(false);
   const isNewPairs = title.toLowerCase().includes("new");
+
+  // Local copy of tokens prop that can receive price updates
+  // This solves the issue where price_update events couldn't modify the tokens prop
+  const [baseTokens, setBaseTokens] = useState<Token[]>(tokens);
+
+  // Sync baseTokens with tokens prop when it changes (initial load or parent refresh)
+  // SMART MERGE: Preserve good market cap values from WebSocket updates
+  useEffect(() => {
+    if (tokens && tokens.length > 0) {
+      setBaseTokens((prev) => {
+        if (prev.length === 0) return tokens; // First load - just use parent data
+
+        // Create a map of existing tokens with their market caps
+        const existingMap = new Map<string, Token>();
+        prev.forEach((t) => existingMap.set(t.mint, t));
+
+        // Merge: use parent data but preserve good market cap from existing
+        return tokens.map((newToken) => {
+          const existing = existingMap.get(newToken.mint);
+          if (!existing) return newToken;
+
+          // If existing has a good market cap but new doesn't, preserve it
+          const existingMc = getTokenMarketCap(existing);
+          const newMc = getTokenMarketCap(newToken);
+
+          if (existingMc > 0 && newMc === 0) {
+            // Preserve the good market cap from WebSocket updates
+            return {
+              ...newToken,
+              market_cap_usd: existing.market_cap_usd,
+              fully_diluted_value: (existing as any).fully_diluted_value,
+            };
+          }
+          return newToken;
+        });
+      });
+    }
+  }, [tokens]);
   // State for WebSocket real-time updates
   const wsCacheStorageKey = useMemo(() => {
     const lowerTitle = title.toLowerCase();
@@ -2014,6 +2149,9 @@ function PulseTable({
       [channel],
     ),
     onPriceUpdate: useCallback((updates: any[]) => {
+      // ⚡ INSTANT PATH: Use flushSync to bypass React 18's automatic batching
+      // This ensures price updates render immediately without any delay
+      flushSync(() => {
       // Merge price updates into filteredTokens (base HTTP data)
       setFilteredTokens((prev) => {
         if (!prev || prev.length === 0) return prev;
@@ -2029,17 +2167,45 @@ function PulseTable({
             ...(update.price_usd !== undefined && {
               price_usd: update.price_usd,
             }),
-            ...(update.market_cap_usd !== undefined && {
+            // Only update market_cap if it's a valid positive number (ignore 0 and negative)
+            ...(update.market_cap_usd !== undefined && update.market_cap_usd > 0 && {
               market_cap_usd: update.market_cap_usd,
             }),
             ...(update.volume_24h !== undefined && {
               volume_24h: update.volume_24h,
             }),
-            ...(update.bonding_curve_progress !== undefined && {
+            // Bonding curve / graduation progress - only update if valid (0-100 range)
+            ...(update.bonding_pct !== undefined && update.bonding_pct >= 0 && {
+              bonding_pct: update.bonding_pct,
+              bonding_curve_progress: update.bonding_pct / 100, // Convert to 0-1 range
+            }),
+            ...(update.graduation_percent !== undefined && update.graduation_percent >= 0 && {
+              graduation_percent: update.graduation_percent,
+            }),
+            ...(update.bonding_curve_progress !== undefined && update.bonding_curve_progress >= 0 && {
               bonding_curve_progress: update.bonding_curve_progress,
+            }),
+            // Liquidity - only update if valid positive number
+            ...(update.liquidity_usd !== undefined && update.liquidity_usd >= 0 && {
+              liquidity_usd: update.liquidity_usd,
+              total_liquidity_usd: update.liquidity_usd, // Also update alternate field name
             }),
             ...(update.price_change_24h !== undefined && {
               price_change_24h: update.price_change_24h,
+            }),
+            // Trade info from price_update
+            ...(update.trade_type !== undefined && {
+              last_trade_type: update.trade_type,
+            }),
+            ...(update.sol_amount !== undefined && {
+              last_sol_amount: update.sol_amount,
+            }),
+            ...(update.token_amount !== undefined && {
+              last_token_amount: update.token_amount,
+            }),
+            // Status updates
+            ...(update.status !== undefined && {
+              status: update.status,
             }),
             // Transaction metrics (5m)
             ...(update.total_buy_volume_5m !== undefined && {
@@ -2117,17 +2283,45 @@ function PulseTable({
             ...(update.price_usd !== undefined && {
               price_usd: update.price_usd,
             }),
-            ...(update.market_cap_usd !== undefined && {
+            // Only update market_cap if it's a valid positive number (ignore 0 and negative)
+            ...(update.market_cap_usd !== undefined && update.market_cap_usd > 0 && {
               market_cap_usd: update.market_cap_usd,
             }),
             ...(update.volume_24h !== undefined && {
               volume_24h: update.volume_24h,
             }),
-            ...(update.bonding_curve_progress !== undefined && {
+            // Bonding curve / graduation progress - only update if valid (0-100 range)
+            ...(update.bonding_pct !== undefined && update.bonding_pct >= 0 && {
+              bonding_pct: update.bonding_pct,
+              bonding_curve_progress: update.bonding_pct / 100, // Convert to 0-1 range
+            }),
+            ...(update.graduation_percent !== undefined && update.graduation_percent >= 0 && {
+              graduation_percent: update.graduation_percent,
+            }),
+            ...(update.bonding_curve_progress !== undefined && update.bonding_curve_progress >= 0 && {
               bonding_curve_progress: update.bonding_curve_progress,
+            }),
+            // Liquidity - only update if valid positive number
+            ...(update.liquidity_usd !== undefined && update.liquidity_usd >= 0 && {
+              liquidity_usd: update.liquidity_usd,
+              total_liquidity_usd: update.liquidity_usd, // Also update alternate field name
             }),
             ...(update.price_change_24h !== undefined && {
               price_change_24h: update.price_change_24h,
+            }),
+            // Trade info from price_update
+            ...(update.trade_type !== undefined && {
+              last_trade_type: update.trade_type,
+            }),
+            ...(update.sol_amount !== undefined && {
+              last_sol_amount: update.sol_amount,
+            }),
+            ...(update.token_amount !== undefined && {
+              last_token_amount: update.token_amount,
+            }),
+            // Status updates
+            ...(update.status !== undefined && {
+              status: update.status,
             }),
             ...(update.total_buy_volume_5m !== undefined && {
               total_buy_volume_5m: update.total_buy_volume_5m,
@@ -2186,6 +2380,40 @@ function PulseTable({
         }
         return filterNonZeroLiquidity(updatedTokens as Token[]);
       });
+
+      // ⚡ CRITICAL: Also update baseTokens (local copy of parent's tokens prop)
+      // This fixes the issue where price updates weren't showing because
+      // filteredTokens was empty and display fell back to unchanged tokens prop
+      setBaseTokens((prev) => {
+        if (!prev || prev.length === 0) return prev;
+
+        const updatesMap = new Map(updates.map((u) => [u.mint, u]));
+        let hasChanges = false;
+        const updatedTokens = prev.map((token) => {
+          const update = updatesMap.get(token.mint);
+          if (!update) return token;
+          hasChanges = true;
+          return {
+            ...token,
+            ...(update.price_usd !== undefined && { price_usd: update.price_usd }),
+            ...(update.market_cap_usd !== undefined && update.market_cap_usd > 0 && { market_cap_usd: update.market_cap_usd }),
+            ...(update.volume_24h !== undefined && { volume_24h: update.volume_24h }),
+            ...(update.bonding_pct !== undefined && update.bonding_pct >= 0 && {
+              bonding_pct: update.bonding_pct,
+              bonding_curve_progress: update.bonding_pct / 100,
+            }),
+            ...(update.graduation_percent !== undefined && update.graduation_percent >= 0 && { graduation_percent: update.graduation_percent }),
+            ...(update.liquidity_usd !== undefined && update.liquidity_usd >= 0 && {
+              liquidity_usd: update.liquidity_usd,
+              total_liquidity_usd: update.liquidity_usd,
+            }),
+            ...(update.price_change_24h !== undefined && { price_change_24h: update.price_change_24h }),
+            updated_at: update.updated_at || token.updated_at,
+          };
+        });
+        return hasChanges ? (updatedTokens as Token[]) : prev;
+      });
+      }); // End flushSync
     }, [isNewPairs]),
   });
 
@@ -2911,11 +3139,12 @@ function PulseTable({
         // When WebSocket is active, it's the source of truth for new tokens
         // Use Set for O(1) deduplication check (instead of O(n) with .some())
         const wsMints = new Set(wsTokens.map(t => t.mint));
-        const baseTokens = filteredTokens.length > 0 ? filteredTokens : tokens;
+        // Use baseTokens (local state with price updates) instead of tokens prop
+        const tokensSource = filteredTokens.length > 0 ? filteredTokens : baseTokens;
 
         // O(n) single pass with O(1) Set lookup - much faster than O(n*m)
         const uniqueBaseTokens: Token[] = [];
-        for (const bt of baseTokens) {
+        for (const bt of tokensSource) {
           if (!wsMints.has(bt.mint) && uniqueBaseTokens.length < 50) {
             uniqueBaseTokens.push(bt);
           }
@@ -2926,8 +3155,9 @@ function PulseTable({
       }
 
       // No WebSocket tokens yet - initial load from HTTP
-      const baseTokens = filteredTokens.length > 0 ? filteredTokens : tokens;
-      return baseTokens.slice(0, 100);
+      // Use baseTokens (local state with price updates) instead of tokens prop
+      const tokensSource = filteredTokens.length > 0 ? filteredTokens : baseTokens;
+      return tokensSource.slice(0, 100);
     }
     // ═══════════════════════════════════════════════════════════════════════════
 
@@ -2947,11 +3177,11 @@ function PulseTable({
     const mergedMap = new Map<string, Token>();
 
     // Use filteredTokens if available (either from specific filters or fresh "All" fetch)
-    // Otherwise fall back to tokens prop
-    const baseTokens = filteredTokens.length > 0 ? filteredTokens : tokens;
+    // Otherwise fall back to baseTokens (local state with price updates)
+    const tokensSource = filteredTokens.length > 0 ? filteredTokens : baseTokens;
 
-    // First add HTTP API tokens (either filtered or from props)
-    baseTokens.forEach((token) => mergedMap.set(token.mint, token));
+    // First add HTTP API tokens (either filtered or from local state)
+    tokensSource.forEach((token) => mergedMap.set(token.mint, token));
 
     // Then add/overwrite with WebSocket tokens (they're more recent and real-time)
     // For new pairs, prioritize speed - filter after merge, not during
@@ -3445,10 +3675,8 @@ function PulseTable({
 
       switch (filters.sortBy) {
         case "marketCap":
-          aValue =
-            (a as any).fully_diluted_value ?? (a as any).market_cap_usd ?? 0;
-          bValue =
-            (b as any).fully_diluted_value ?? (b as any).market_cap_usd ?? 0;
+          aValue = getTokenMarketCap(a);
+          bValue = getTokenMarketCap(b);
           break;
         case "volume":
           aValue = (a as any).volume_24h ?? 0;
@@ -3499,10 +3727,8 @@ function PulseTable({
           break;
         }
         default:
-          aValue =
-            (a as any).fully_diluted_value ?? (a as any).market_cap_usd ?? 0;
-          bValue =
-            (b as any).fully_diluted_value ?? (b as any).market_cap_usd ?? 0;
+          aValue = getTokenMarketCap(a);
+          bValue = getTokenMarketCap(b);
       }
 
       if (filters.sortOrder === "asc") {
@@ -3515,6 +3741,7 @@ function PulseTable({
     return filtered;
   }, [
     tokens,
+    baseTokens,
     filteredTokens,
     wsTokens,
     title,
@@ -6442,14 +6669,17 @@ function PulseTable({
                                 // bonding_pct is already in 0-100 range from backend (percentages)
                                 const bondingProgress =
                                   typeof token.bonding_pct === "number"
-                                    ? Math.round(token.bonding_pct)
-                                    : Math.round(
-                                        parseFloat(token.bonding_pct || "0"),
-                                      );
+                                    ? token.bonding_pct
+                                    : parseFloat(token.bonding_pct || "0");
 
                                 return (
                                   <span style={{ color: AX.aiGreen }}>
-                                    Bonding Curve: {bondingProgress}%
+                                    Bonding Curve:{" "}
+                                    <SmoothNumber
+                                      value={bondingProgress}
+                                      formatter={(val) => `${Math.round(val)}%`}
+                                      duration={400}
+                                    />
                                   </span>
                                 );
                               } else if (isFinalStretch) {
@@ -6496,15 +6726,18 @@ function PulseTable({
                                 const bondingProgress =
                                   typeof token.bonding_curve_progress ===
                                   "number"
-                                    ? Math.round(token.bonding_curve_progress)
-                                    : Math.round(
-                                        parseFloat(
-                                          token.bonding_curve_progress || "0",
-                                        ),
+                                    ? token.bonding_curve_progress
+                                    : parseFloat(
+                                        token.bonding_curve_progress || "0",
                                       );
                                 return (
                                   <span style={{ color: AX.aiGreen }}>
-                                    Bonding: {bondingProgress}%
+                                    Bonding:{" "}
+                                    <SmoothNumber
+                                      value={bondingProgress}
+                                      formatter={(val) => `${Math.round(val)}%`}
+                                      duration={400}
+                                    />
                                   </span>
                                 );
                               }
@@ -7179,10 +7412,7 @@ function PulseTable({
                                     isFinalStretchColumn &&
                                     lp.includes("meteora") &&
                                     bonding > 98.6;
-                                  const mcVal =
-                                    (token as any).fully_diluted_value ??
-                                    (token as any).market_cap_usd ??
-                                    0;
+                                  const mcVal = getTokenMarketCap(token);
                                   if (hasGreenWave) {
                                     return (
                                       <span

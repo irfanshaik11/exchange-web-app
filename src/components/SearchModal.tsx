@@ -7,6 +7,7 @@ import React, {
   useMemo,
   useCallback,
 } from "react";
+import { useRouter } from "next/router";
 import { formatSmartNumber, formatMarketCap } from "~/utils/db";
 import { FaSearch, FaTimes } from "react-icons/fa";
 import { FaRocket, FaFire, FaCrown, FaGraduationCap } from "react-icons/fa";
@@ -356,6 +357,7 @@ const SearchModalContent = React.memo(function SearchModalContent({
   selectedTimeframe,
   chain = "sol",
 }: SearchModalProps) {
+  const router = useRouter();
   const [query, setQuery] = useState("");
   const [sortBy, setSortBy] = useState<SortOption>("time");
   const [filters, setFilters] = useState<SearchFilters>({
@@ -590,6 +592,11 @@ const SearchModalContent = React.memo(function SearchModalContent({
 
   const handleSelectToken = useCallback(
     async (token: Token) => {
+      const isMonad = chain === "monad";
+      // Get the token address - for Monad use mint, for Solana use pair_address or mint
+      const address = isMonad
+        ? (token.mint || (token as any).address)
+        : (token.pair_address || token.mint);
       try {
         // First, backfill the token to the database
         console.log("🔄 Backfilling token:", token);
