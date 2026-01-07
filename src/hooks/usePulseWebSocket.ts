@@ -264,11 +264,12 @@ export function usePulseWebSocket(
                   mint: u.address || u.mint,  // Backend uses 'address', frontend expects 'mint'
                 }));
 
-                // ⚡ FAST PATH: Apply price updates directly to internal state arrays
-                // This ensures all channels (new, final-stretch, migrated) get instant updates
+                // PERFORMANCE FIX: Only update the relevant channel's array
+                // Don't use flushSync for price updates - let React batch them naturally
+                // (flushSync is only needed for new token events where instant visibility matters)
                 const updatesMap = new Map(updates.map((u: PulseToken) => [u.mint, u]));
 
-                // Helper to merge price updates into token array
+                // Helper to merge price updates into token array (returns same ref if no changes)
                 const applyUpdates = (tokens: PulseToken[]): PulseToken[] => {
                   if (tokens.length === 0) return tokens;
                   let hasChanges = false;
@@ -292,14 +293,17 @@ export function usePulseWebSocket(
                   return hasChanges ? updated : tokens;
                 };
 
-                // Use flushSync for instant UI updates - critical for real-time feel
-                flushSync(() => {
+                // Only update the array for the channel we're connected to (not all 3!)
+                // This dramatically reduces re-renders
+                if (channel === 'new') {
                   setNewTokens(applyUpdates);
+                } else if (channel === 'final_stretch') {
                   setFinalStretchTokens(applyUpdates);
+                } else if (channel === 'migrated') {
                   setMigratedTokens(applyUpdates);
-                });
+                }
 
-                // Also call the external callback for any additional handling
+                // Call the external callback for additional handling
                 onPriceUpdateRef.current?.(updates);
               }
             } catch (parseErr) {
@@ -342,7 +346,7 @@ export function usePulseWebSocket(
       console.error('[usePulseWebSocket] Failed to create WebSocket:', err);
       setError(err instanceof Error ? err.message : 'Failed to connect');
     }
-  }, [enabled, url, reconnectInterval, maxReconnectAttempts]);
+  }, [enabled, url, channel, reconnectInterval, maxReconnectAttempts]);
 
   const disconnect = useCallback(() => {
     if (reconnectTimeoutRef.current) {
