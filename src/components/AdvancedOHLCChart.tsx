@@ -1285,9 +1285,17 @@ const AdvancedOHLCChart: React.FC<AdvancedOHLCChartProps> = ({
 
   // Fetch candles function (EXACT same logic as BackendOHLCChart)
   const fetchCandles = useCallback(async () => {
-    const { mint: currentMint, pairAddress: currentPairAddress } = latestParamsRef.current;
+    const { mint: currentMint, pairAddress: currentPairAddress, network: currentNetwork } = latestParamsRef.current;
 
-    if (!currentMint && !currentPairAddress) {
+    // For Solana: require mint address (don't use pairAddress as it won't have OHLC data)
+    // For Monad: accept either mint or pairAddress
+    if (currentNetwork !== 'monad') {
+      if (!currentMint) {
+        // Don't set error - just wait for mint to be resolved
+        console.log('[AdvancedOHLCChart] Waiting for mint address to be resolved...');
+        return;
+      }
+    } else if (!currentMint && !currentPairAddress) {
       setError('No mint or pair address provided');
       setIsLoading(false);
       return;
@@ -2137,9 +2145,16 @@ const AdvancedOHLCChart: React.FC<AdvancedOHLCChartProps> = ({
 
   // Create custom datafeed that uses our fetched candles
   const createDatafeed = useCallback(() => {
-    const { mint: dfMint, pairAddress: dfPairAddress, interval: dfInterval } = latestParamsRef.current;
+    const { mint: dfMint, pairAddress: dfPairAddress, interval: dfInterval, network: dfNetwork } = latestParamsRef.current;
 
-    if (!dfMint && !dfPairAddress) {
+    // For Solana: require mint (pairAddress won't have OHLC data)
+    // For Monad: accept either
+    if (dfNetwork !== 'monad') {
+      if (!dfMint) {
+        console.log('[AdvancedOHLCChart] createDatafeed: Waiting for mint address...');
+        return null;
+      }
+    } else if (!dfMint && !dfPairAddress) {
       return null;
     }
 
