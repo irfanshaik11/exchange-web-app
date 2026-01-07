@@ -1165,7 +1165,8 @@ const AdvancedOHLCChart: React.FC<AdvancedOHLCChartProps> = ({
 
       // Use new /v1/ohlcv/{tokenAddress} endpoint for Solana
       // Always fetch 1s candles, frontend aggregates to larger intervals
-      const tokenAddress = currentMint || currentPairAddress;
+      // For Solana: Always use mint address, never pairAddress (prevents race condition override)
+      const tokenAddress = currentMint;
       const url = new URL(`${BACKEND_URL}/v1/ohlcv/${tokenAddress}`);
       url.searchParams.set('timeframe', '1s');
       // Calculate limit based on time range (in seconds worth of 1s candles)
@@ -1393,7 +1394,9 @@ const AdvancedOHLCChart: React.FC<AdvancedOHLCChartProps> = ({
         setTimeout(() => {
           widgetRef.current?.onChartReady(() => {
             try {
-              const tokenId = `${mint || pairAddress}`;
+              // For Solana: prefer mint to prevent pairAddress override
+              const currentNetwork = latestParamsRef.current.network;
+              const tokenId = currentNetwork === 'monad' ? `${mint || pairAddress}` : `${mint}`;
               const currentResolution = INTERVAL_TO_RESOLUTION[selectedInterval];
               widgetRef.current?.setSymbol(tokenId, currentResolution, () => {
                 console.log('[AdvancedOHLCChart] ✅ Symbol refreshed after HTTP data - price scale updated');
@@ -1716,7 +1719,9 @@ const AdvancedOHLCChart: React.FC<AdvancedOHLCChartProps> = ({
             setTimeout(() => {
               widgetRef.current?.onChartReady(() => {
                 try {
-                  const tokenId = `${mint || pairAddress}`;
+                  // For Solana: prefer mint to prevent pairAddress override
+                  const currentNetwork = latestParamsRef.current.network;
+                  const tokenId = currentNetwork === 'monad' ? `${mint || pairAddress}` : `${mint}`;
                   const currentResolution = INTERVAL_TO_RESOLUTION[selectedInterval];
                   widgetRef.current?.setSymbol(tokenId, currentResolution, () => {
                     console.log('[AdvancedOHLCChart] ✅ Symbol refreshed after WS data - price scale updated');
@@ -1764,7 +1769,9 @@ const AdvancedOHLCChart: React.FC<AdvancedOHLCChartProps> = ({
                   console.log('[AdvancedOHLCChart] 📊 First real data - using setSymbol to update price scale...');
                   widgetRef.current.onChartReady(() => {
                     try {
-                      const tokenId = mint || pairAddress;
+                      // For Solana: prefer mint to prevent pairAddress override
+                      const currentNetwork = latestParamsRef.current.network;
+                      const tokenId = currentNetwork === 'monad' ? (mint || pairAddress) : mint;
                       const currentResolution = INTERVAL_TO_RESOLUTION[selectedInterval] || '1S';
                       widgetRef.current.setSymbol(tokenId, currentResolution, () => {
                         console.log('[AdvancedOHLCChart] ✅ Symbol refreshed - price scale should now be correct');
@@ -3885,12 +3892,13 @@ Maker: ${walletAddress}`;
             // Explicitly set chart type to candlesticks
             'paneProperties.backgroundGradientStartColor': '#000000',
             'paneProperties.backgroundGradientEndColor': '#000000',
-            'mainSeriesProperties.candleStyle.upColor': isMonad ? '#86d99f' : '#26a69a',
-            'mainSeriesProperties.candleStyle.downColor': isMonad ? '#f26682' : '#ef5350',
-            'mainSeriesProperties.candleStyle.borderUpColor': isMonad ? '#86d99f' : '#26a69a',
-            'mainSeriesProperties.candleStyle.borderDownColor': isMonad ? '#f26682' : '#ef5350',
-            'mainSeriesProperties.candleStyle.wickUpColor': isMonad ? '#86d99f' : '#26a69a',
-            'mainSeriesProperties.candleStyle.wickDownColor': isMonad ? '#f26682' : '#ef5350',
+            // Unified candle colors (Monad green/red) for both Solana and Monad
+            'mainSeriesProperties.candleStyle.upColor': '#86d99f',
+            'mainSeriesProperties.candleStyle.downColor': '#f26682',
+            'mainSeriesProperties.candleStyle.borderUpColor': '#86d99f',
+            'mainSeriesProperties.candleStyle.borderDownColor': '#f26682',
+            'mainSeriesProperties.candleStyle.wickUpColor': '#86d99f',
+            'mainSeriesProperties.candleStyle.wickDownColor': '#f26682',
             'mainSeriesProperties.candleStyle.drawWick': true,
             'mainSeriesProperties.candleStyle.drawBorder': true,
             'mainSeriesProperties.showCountdown': false,
@@ -3920,14 +3928,15 @@ Maker: ${walletAddress}`;
           },
           studies_overrides: {
             // Volume bar colors - 0 = up candles (green), 1 = down candles (red)
-            'volume.volume.color.0': isMonad ? '#86d99f' : '#26a69a', // Green bars for up candles (matches candle upColor)
-            'volume.volume.color.1': isMonad ? '#f26682' : '#ef5350', // Red bars for down candles (matches candle downColor)
-            // Volume text/label colors - these control the text color above volume bars
-            'volume.volume.colorup': isMonad ? '#86d99f' : '#26a69a', // Green text for up candles
-            'volume.volume.colordown': isMonad ? '#f26682' : '#ef5350', // Red text for down candles
+            // Unified colors (Monad green/red) for both Solana and Monad
+            'volume.volume.color.0': '#86d99f', // Green bars for up candles
+            'volume.volume.color.1': '#f26682', // Red bars for down candles
+            // Volume text/label colors
+            'volume.volume.colorup': '#86d99f',
+            'volume.volume.colordown': '#f26682',
             // Alternative property names that some TradingView versions use
-            'volume.volume.plot.color.0': isMonad ? '#86d99f' : '#26a69a',
-            'volume.volume.plot.color.1': isMonad ? '#f26682' : '#ef5350',
+            'volume.volume.plot.color.0': '#86d99f',
+            'volume.volume.plot.color.1': '#f26682',
           },
           // Custom price formatter for MC mode (K/M/B suffixes)
           custom_formatters: {
