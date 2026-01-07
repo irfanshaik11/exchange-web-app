@@ -22,6 +22,7 @@ import { normalizeMonadAddress } from '~/utils/normalizeMonadAddress';
 import { broadcastMonadQuickTrade } from '~/utils/monadTradeEvents';
 import { formatMonadError } from '~/utils/monadError';
 import { useUser } from '../UserContext';
+import { fetchVerifiedPairAddress } from '~/hooks/useSingleTokenPolling';
 
 type TokenMetadata = UnifiedTokenMetadata & {
   timestamp?: number;
@@ -430,9 +431,22 @@ const Positions: React.FC<PositionsProps> = ({
             return;
           }
         } else {
+          // CRITICAL: Verify the pair address from the token service before selling
+          let verifiedPoolAddress = position.pairAddress;
+          if (position.tokenAddress) {
+            console.log(`[Positions] Verifying pair address for quick sell: ${position.tokenAddress}`);
+            const fetchedAddress = await fetchVerifiedPairAddress(position.tokenAddress);
+            if (fetchedAddress) {
+              if (fetchedAddress !== position.pairAddress) {
+                console.log(`[Positions] Pair address mismatch! Local: ${position.pairAddress}, Verified: ${fetchedAddress}`);
+              }
+              verifiedPoolAddress = fetchedAddress;
+            }
+          }
+
           const poolType = getPoolTypeFromToken({
             mint: position.tokenAddress,
-            pair_address: position.pairAddress,
+            pair_address: verifiedPoolAddress,
             launchpad_protocol: tokenMeta?.protocol || position.launchpad || '',
           } as any);
 
@@ -440,11 +454,11 @@ const Positions: React.FC<PositionsProps> = ({
             {
               tokenAddress: position.tokenAddress,
               percentageToSell: percent,
-              poolAddress: position.pairAddress,
+              poolAddress: verifiedPoolAddress,
               baseMint: position.tokenAddress,
               quoteMint: SOL_MINT_ADDRESS,
               poolType,
-              originalPairAddress: position.pairAddress,
+              originalPairAddress: verifiedPoolAddress,
               slippage: (quickSellSettings?.maxSlippage || 0.2) * 100,
               priorityFee: quickSellSettings?.priority ?? 0.001,
               bribe: quickSellSettings?.bribe ?? 0.05,

@@ -21,6 +21,7 @@ import { getPoolTypeFromToken } from './poolTypeDetection';
 import { Connection, PublicKey } from '@solana/web3.js';
 import toast from 'react-hot-toast';
 import { extractTokenImage } from './images';
+import { fetchVerifiedPairAddress } from '~/hooks/useSingleTokenPolling';
 
 // Helper function to get first valid string from multiple candidates
 function getFirstString(...values: Array<unknown>): string | undefined {
@@ -317,6 +318,19 @@ export async function executeEnhancedTrade(params: EnhancedTradeParams): Promise
     const poolType = getPoolTypeFromToken(token);
     // Use comprehensive pool address detection
     let effectivePoolAddress = getEffectivePoolAddress(token);
+
+    // CRITICAL: Verify the pair address from the token service
+    // This ensures we use the correct/up-to-date pool address for trades
+    if (token.mint) {
+      console.log(`[EnhancedTrade] Verifying pair address for ${token.symbol}: ${token.mint}`);
+      const verifiedPairAddress = await fetchVerifiedPairAddress(token.mint);
+      if (verifiedPairAddress) {
+        if (verifiedPairAddress !== effectivePoolAddress) {
+          console.log(`[EnhancedTrade] Pair address mismatch! Local: ${effectivePoolAddress}, Verified: ${verifiedPairAddress}`);
+        }
+        effectivePoolAddress = verifiedPairAddress;
+      }
+    }
 
     // CRITICAL FIX: If poolAddress equals token mint, it's not a valid pool address
     // This happens when frontend sends token mint as pool address

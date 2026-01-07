@@ -293,7 +293,51 @@ export function useSolanaTokenWebSocket(
             }
           } else if (message.type === 'holder_update') {
             // Real-time holder update
-            if (message.data.holders) {
+            // Backend sends individual holders directly in message.data (not message.data.holders)
+            const holderData = message.data as any;
+
+            if (holderData && holderData.wallet_address) {
+              // Single holder update from backend - merge into existing array
+              const updatedHolder: SolanaTokenHolder = {
+                wallet_address: holderData.wallet_address,
+                token_mint: holderData.token_mint,
+                total_bought_tokens: holderData.total_bought_tokens || 0,
+                total_bought_sol: holderData.total_bought_sol || 0,
+                buy_count: holderData.buy_count || 0,
+                total_sold_tokens: holderData.total_sold_tokens || 0,
+                total_sold_sol: holderData.total_sold_sol || 0,
+                sell_count: holderData.sell_count || 0,
+                remaining_tokens: holderData.remaining_tokens || 0,
+                avg_buy_price: holderData.avg_buy_price || 0,
+                avg_sell_price: holderData.avg_sell_price || 0,
+                first_buy_at: holderData.first_buy_at || '',
+                last_activity_at: holderData.last_activity_at || '',
+              };
+
+              setHolders((prev) => {
+                const existingIndex = prev.findIndex(
+                  (h) => h.wallet_address.toLowerCase() === updatedHolder.wallet_address.toLowerCase()
+                );
+
+                if (existingIndex >= 0) {
+                  // Update existing holder in place
+                  console.log('[useSolanaTokenWebSocket] Holder UPDATED:', updatedHolder.wallet_address.slice(0, 8), 'remaining:', updatedHolder.remaining_tokens);
+                  const updated = [...prev];
+                  updated[existingIndex] = updatedHolder;
+                  return updated;
+                } else {
+                  // Add new holder and re-sort by remaining tokens
+                  console.log('[useSolanaTokenWebSocket] Holder ADDED:', updatedHolder.wallet_address.slice(0, 8), 'remaining:', updatedHolder.remaining_tokens);
+                  return [...prev, updatedHolder].sort(
+                    (a, b) => (b.remaining_tokens || 0) - (a.remaining_tokens || 0)
+                  );
+                }
+              });
+
+              onHoldersUpdateRef.current?.([updatedHolder]);
+            } else if (message.data.holders) {
+              // Legacy: full array replacement (if backend ever sends this format)
+              console.log('[useSolanaTokenWebSocket] Holders REPLACED (legacy):', message.data.holders.length);
               setHolders(message.data.holders);
               onHoldersUpdateRef.current?.(message.data.holders);
             }
