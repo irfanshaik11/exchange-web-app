@@ -664,8 +664,8 @@ export default function TradePage() {
               >
                 {(canStartOHLC || (idString.length >= 32)) && isRouterReady ? (
                   <AdvancedOHLCChart
-                    key={`chart-${idString}`}
-                    mint={typeof _mint === "string" ? _mint : (displayToken?.mint || idString || undefined)}
+                    key={`chart-${displayToken?.mint || idString}`}
+                    mint={typeof _mint === "string" ? _mint : (displayToken?.mint || undefined)}
                     pairAddress={resolvedPairAddress || idString || undefined}
                     interval={currentOHLCParams.interval}
                     timeframe={currentOHLCParams.timeframe}
