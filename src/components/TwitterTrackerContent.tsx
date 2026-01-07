@@ -23,12 +23,14 @@ export default function TwitterTrackerContent() {
   const [twitterFeed, setTwitterFeed] = useState<Tweet[]>([]);
   const [loadingTwitterFeed, setLoadingTwitterFeed] = useState(false);
   const [showAddTwitterModal, setShowAddTwitterModal] = useState(false);
-  const [selectedTwitterUser, setSelectedTwitterUser] = useState<string | null>(null);
+  const [selectedTwitterUser, setSelectedTwitterUser] = useState<string | null>(
+    null,
+  );
 
   // Load Twitter accounts
   const loadTwitterAccounts = async () => {
     try {
-      const accounts = await getTrackedTwitterAccounts(user?.bearerToken || '');
+      const accounts = await getTrackedTwitterAccounts(user?.bearerToken || "");
       setTwitterAccounts(accounts);
     } catch (error) {
       console.error("Failed to load tracked Twitter accounts:", error);
@@ -46,19 +48,25 @@ export default function TwitterTrackerContent() {
     setLoadingTwitterFeed(true);
     try {
       let feed: Tweet[] = [];
-      
+
       if (selectedTwitterUser) {
         // Load tweets from specific user
         const userTweets = await getUserTweets(selectedTwitterUser, 20);
         feed = userTweets;
       } else {
         // Load combined feed from all accounts
-        const combinedFeed = await getTwitterFeed(twitterAccounts.map(acc => acc.username), 20);
+        const combinedFeed = await getTwitterFeed(
+          twitterAccounts.map((acc) => acc.username),
+          20,
+        );
         feed = combinedFeed;
       }
-      
+
       // Sort by date (newest first)
-      feed.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+      feed.sort(
+        (a, b) =>
+          new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
+      );
       setTwitterFeed(feed);
     } catch (error) {
       console.error("Failed to load Twitter feed:", error);
@@ -80,7 +88,7 @@ export default function TwitterTrackerContent() {
 
   const handleAddTwitterAccount = async (username: string) => {
     try {
-      await addTrackedTwitterAccount(username, user?.bearerToken || '');
+      await addTrackedTwitterAccount(username, user?.bearerToken || "");
       await loadTwitterAccounts();
     } catch (error: any) {
       console.error("Failed to add Twitter account:", error);
@@ -90,7 +98,7 @@ export default function TwitterTrackerContent() {
 
   const handleRemoveTwitterAccount = async (username: string) => {
     try {
-      await removeTrackedTwitterAccount(username, user?.bearerToken || '');
+      await removeTrackedTwitterAccount(username, user?.bearerToken || "");
       await loadTwitterAccounts();
       // Clear feed if removed user was selected
       if (selectedTwitterUser === username) {
@@ -130,12 +138,12 @@ export default function TwitterTrackerContent() {
   return (
     <div className="flex h-full flex-col overflow-hidden bg-[#050608] px-2 sm:px-2">
       {/* Twitter Tabs Header */}
-      <div className="flex flex-wrap items-center justify-between gap-1.5 sm:gap-2 border-b border-neutral-800/60 pt-2 sm:pt-4 pb-1.5 sm:pb-2 flex-shrink-0">
+      <div className="flex flex-shrink-0 flex-wrap items-center justify-between gap-1.5 border-b border-neutral-800/60 pt-2 pb-1.5 sm:gap-2 sm:pt-4 sm:pb-2">
         <div className="flex gap-1 sm:gap-2">
           {TWITTER_TABS.map((tab, i) => (
             <button
               key={tab}
-              className={`cursor-pointer rounded-lg px-2 sm:px-3 py-0.5 sm:py-1 text-[10px] sm:text-xs transition-all duration-300 whitespace-nowrap ${
+              className={`cursor-pointer rounded-lg px-2 py-0.5 text-[10px] whitespace-nowrap transition-all duration-300 sm:px-3 sm:py-1 sm:text-xs ${
                 twitterTab === i
                   ? "bg-[#70E0B0] font-medium text-neutral-900"
                   : "font-medium text-neutral-400 hover:bg-[#141414] hover:text-white"
@@ -148,7 +156,7 @@ export default function TwitterTrackerContent() {
         </div>
         {twitterTab === 0 && (
           <button
-            className="cursor-pointer rounded-lg px-2 sm:px-3 py-0.5 sm:py-1 text-[10px] sm:text-xs font-semibold text-neutral-900 transition-all duration-300 whitespace-nowrap"
+            className="cursor-pointer rounded-lg px-2 py-0.5 text-[10px] font-semibold whitespace-nowrap text-neutral-900 transition-all duration-300 sm:px-3 sm:py-1 sm:text-xs"
             style={{
               backgroundColor: "#70E0B0",
               border: "none",
@@ -172,7 +180,7 @@ export default function TwitterTrackerContent() {
       </div>
 
       {/* Twitter Content */}
-      <div className="flex-1 overflow-y-auto min-h-0">
+      <div className="min-h-0 flex-1 overflow-y-auto">
         {twitterTab === 0 ? (
           // Tracked Accounts Tab
           <>
@@ -183,20 +191,20 @@ export default function TwitterTrackerContent() {
                 </span>
               </div>
             ) : (
-              <div className="overflow-x-auto scrollbar-hide">
-                <table className="w-full min-w-[400px] sm:min-w-[520px] text-[10px] sm:text-xs">
-                  <thead className="sticky top-0 bg-[#050608] z-10">
+              <div className="scrollbar-hide overflow-x-auto">
+                <table className="w-full min-w-[400px] text-[10px] sm:min-w-[520px] sm:text-xs">
+                  <thead className="sticky top-0 z-10 bg-[#050608]">
                     <tr className="border-b border-neutral-800/60">
-                      <th className="px-1 sm:px-2 py-1.5 sm:py-2 text-left text-[10px] sm:text-sm text-neutral-400">
+                      <th className="px-1 py-1.5 text-left text-[10px] text-neutral-400 sm:px-2 sm:py-2 sm:text-sm">
                         Account
                       </th>
-                      <th className="px-1 sm:px-2 py-1.5 sm:py-2 text-left text-[10px] sm:text-sm text-neutral-400">
+                      <th className="px-1 py-1.5 text-left text-[10px] text-neutral-400 sm:px-2 sm:py-2 sm:text-sm">
                         Followers
                       </th>
-                      <th className="px-1 sm:px-2 py-1.5 sm:py-2 text-left text-[10px] sm:text-sm text-neutral-400">
+                      <th className="px-1 py-1.5 text-left text-[10px] text-neutral-400 sm:px-2 sm:py-2 sm:text-sm">
                         Added
                       </th>
-                      <th className="px-1 sm:px-2 py-1.5 sm:py-2 text-right text-[10px] sm:text-sm text-neutral-400">
+                      <th className="px-1 py-1.5 text-right text-[10px] text-neutral-400 sm:px-2 sm:py-2 sm:text-sm">
                         Actions
                       </th>
                     </tr>
@@ -227,26 +235,22 @@ export default function TwitterTrackerContent() {
             ) : loadingTwitterFeed ? (
               <div className="flex h-full flex-col items-center justify-center py-8">
                 <div className="h-8 w-8 animate-spin rounded-full border-4 border-emerald-400 border-t-transparent" />
-                <span className="mt-4 text-neutral-400">
-                  Loading feed...
-                </span>
+                <span className="mt-4 text-neutral-400">Loading feed...</span>
               </div>
             ) : twitterFeed.length === 0 ? (
               <div className="flex h-full flex-col items-center justify-center py-8 text-center">
-                <span className="text-neutral-400">
-                  No tweets found
-                </span>
+                <span className="text-neutral-400">No tweets found</span>
               </div>
             ) : (
               <div className="space-y-3 p-2">
                 {selectedTwitterUser && (
-                  <div className="mb-2 flex flex-wrap items-center justify-between gap-2 rounded-lg bg-emerald-500/10 px-3 py-2">
-                    <span className="text-xs text-emerald-400">
+                  <div className="mb-3 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-neutral-800/50 bg-neutral-900/60 px-4 py-2.5">
+                    <span className="text-xs font-medium text-neutral-200">
                       Showing tweets from @{selectedTwitterUser}
                     </span>
                     <button
                       onClick={() => setSelectedTwitterUser(null)}
-                      className="text-xs text-neutral-400 hover:text-white"
+                      className="text-xs font-medium text-neutral-400 transition-colors duration-300 hover:text-neutral-200"
                     >
                       Show All
                     </button>
@@ -255,7 +259,7 @@ export default function TwitterTrackerContent() {
                 {twitterFeed.map((tweet) => (
                   <div
                     key={tweet.id}
-                    className="rounded-lg border border-neutral-800 bg-[#101010] p-3 transition-all duration-300 hover:border-emerald-400/40 hover:bg-[#141414]"
+                    className="rounded-lg border border-neutral-800/50 bg-neutral-900/40 p-4 shadow-lg transition-all duration-300 hover:border-neutral-700/60 hover:bg-neutral-900/60 hover:shadow-xl"
                   >
                     {/* Tweet Header */}
                     <div className="mb-2 flex items-start gap-2">
@@ -266,7 +270,7 @@ export default function TwitterTrackerContent() {
                           className="h-8 w-8 rounded-full"
                         />
                       ) : (
-                        <div className="flex h-8 w-8 items-center justify-center rounded-full bg-emerald-500 text-xs font-bold text-white">
+                        <div className="flex h-8 w-8 items-center justify-center rounded-full bg-neutral-800 text-xs font-bold text-neutral-200">
                           {tweet.authorName.charAt(0).toUpperCase()}
                         </div>
                       )}
@@ -286,7 +290,7 @@ export default function TwitterTrackerContent() {
                     </div>
 
                     {/* Tweet Text */}
-                    <p className="mb-2 whitespace-pre-wrap break-words text-sm text-neutral-200">
+                    <p className="mb-2 text-sm break-words whitespace-pre-wrap text-neutral-200">
                       {tweet.text}
                     </p>
 
@@ -299,10 +303,10 @@ export default function TwitterTrackerContent() {
                             tweet.images.length === 1
                               ? "1fr"
                               : tweet.images.length === 2
-                              ? "1fr 1fr"
-                              : tweet.images.length === 3
-                              ? "1fr 1fr"
-                              : "repeat(2, 1fr)",
+                                ? "1fr 1fr"
+                                : tweet.images.length === 3
+                                  ? "1fr 1fr"
+                                  : "repeat(2, 1fr)",
                         }}
                       >
                         {tweet.images.map((imageUrl, idx) => (
@@ -311,13 +315,10 @@ export default function TwitterTrackerContent() {
                             src={imageUrl}
                             alt={`Tweet image ${idx + 1}`}
                             className="h-auto max-h-96 w-full cursor-pointer rounded-lg border border-neutral-700/50 object-cover transition-opacity hover:opacity-90"
-                            onClick={() =>
-                              window.open(imageUrl, "_blank")
-                            }
+                            onClick={() => window.open(imageUrl, "_blank")}
                             onError={(e) => {
-                              (
-                                e.target as HTMLImageElement
-                              ).style.display = "none";
+                              (e.target as HTMLImageElement).style.display =
+                                "none";
                             }}
                           />
                         ))}
@@ -334,7 +335,7 @@ export default function TwitterTrackerContent() {
                           href={tweet.url}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="ml-auto text-emerald-400 hover:text-emerald-300"
+                          className="ml-auto font-medium text-neutral-400 transition-colors duration-300 hover:text-neutral-200"
                         >
                           View on X →
                         </a>
@@ -357,4 +358,3 @@ export default function TwitterTrackerContent() {
     </div>
   );
 }
-

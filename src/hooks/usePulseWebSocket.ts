@@ -1,5 +1,6 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { flushSync } from 'react-dom';
+// flushSync is used to bypass React 18's automatic batching for instant UI updates
 import { env } from '~/env';
 
 interface PulseToken {
@@ -12,6 +13,17 @@ interface PulseToken {
   volume_24h?: number;
   price_change_24h?: number;
   updated_at?: string;
+  // Price update fields
+  bonding_pct?: number;
+  graduation_percent?: number;
+  liquidity_usd?: number;
+  bonding_curve_progress?: number;
+  trade_type?: string;
+  sol_amount?: number;
+  token_amount?: number;
+  launchpad_protocol?: string;
+  pair_address?: string;
+  image?: string;
 }
 
 interface WebSocketMessage {
@@ -245,16 +257,50 @@ export function usePulseWebSocket(
                   });
                 });
               } else if (message.type === 'price_update' && message.data) {
-                // Price updates can be batched, so don't use flushSync (less critical)
-                if (onPriceUpdateRef.current) {
-                  const rawUpdates = Array.isArray(message.data) ? message.data : [message.data];
-                  // Transform backend response: map 'address' to 'mint' for frontend compatibility
-                  const updates = rawUpdates.map((u: any) => ({
-                    ...u,
-                    mint: u.address || u.mint,  // Backend uses 'address', frontend expects 'mint'
-                  }));
-                  onPriceUpdateRef.current(updates);
-                }
+                const rawUpdates = Array.isArray(message.data) ? message.data : [message.data];
+                // Transform backend response: map 'address' to 'mint' for frontend compatibility
+                const updates = rawUpdates.map((u: any) => ({
+                  ...u,
+                  mint: u.address || u.mint,  // Backend uses 'address', frontend expects 'mint'
+                }));
+
+                // ⚡ FAST PATH: Apply price updates directly to internal state arrays
+                // This ensures all channels (new, final-stretch, migrated) get instant updates
+                const updatesMap = new Map(updates.map((u: PulseToken) => [u.mint, u]));
+
+                // Helper to merge price updates into token array
+                const applyUpdates = (tokens: PulseToken[]): PulseToken[] => {
+                  if (tokens.length === 0) return tokens;
+                  let hasChanges = false;
+                  const updated = tokens.map((token) => {
+                    const update = updatesMap.get(token.mint);
+                    if (!update) return token;
+                    hasChanges = true;
+                    return {
+                      ...token,
+                      // Only update if values are valid (> 0 for market_cap, >= 0 for others)
+                      ...(update.price_usd !== undefined && { price_usd: update.price_usd }),
+                      ...(update.market_cap_usd !== undefined && update.market_cap_usd > 0 && { market_cap_usd: update.market_cap_usd }),
+                      ...(update.volume_24h !== undefined && { volume_24h: update.volume_24h }),
+                      ...(update.bonding_pct !== undefined && update.bonding_pct >= 0 && { bonding_pct: update.bonding_pct }),
+                      ...(update.graduation_percent !== undefined && update.graduation_percent >= 0 && { graduation_percent: update.graduation_percent }),
+                      ...(update.liquidity_usd !== undefined && update.liquidity_usd >= 0 && { liquidity_usd: update.liquidity_usd }),
+                      ...(update.price_change_24h !== undefined && { price_change_24h: update.price_change_24h }),
+                      ...(update.updated_at && { updated_at: update.updated_at }),
+                    };
+                  });
+                  return hasChanges ? updated : tokens;
+                };
+
+                // Use flushSync for instant UI updates - critical for real-time feel
+                flushSync(() => {
+                  setNewTokens(applyUpdates);
+                  setFinalStretchTokens(applyUpdates);
+                  setMigratedTokens(applyUpdates);
+                });
+
+                // Also call the external callback for any additional handling
+                onPriceUpdateRef.current?.(updates);
               }
             } catch (parseErr) {
               // Silently skip parse errors to avoid blocking other messages
