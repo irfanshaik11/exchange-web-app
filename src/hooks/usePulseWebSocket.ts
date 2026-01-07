@@ -24,6 +24,19 @@ interface PulseToken {
   launchpad_protocol?: string;
   pair_address?: string;
   image?: string;
+  // Volume fields (in SOL)
+  total_buy_volume_5m?: string | number;
+  total_sell_volume_5m?: string | number;
+  total_buy_volume_1h?: string | number;
+  total_sell_volume_1h?: string | number;
+  total_buy_volume_6h?: string | number;
+  total_sell_volume_6h?: string | number;
+  total_buy_volume_24h?: string | number;
+  total_sell_volume_24h?: string | number;
+  // Holder percentage fields (decimal 0-1)
+  insider_percent?: number;
+  sniper_percent?: number;
+  dev_percent?: number;
 }
 
 interface WebSocketMessage {
