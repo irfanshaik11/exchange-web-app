@@ -71,7 +71,7 @@ type ReusedTokenLite = {
 
 export default function TradePage() {
   const router = useRouter();
-  const { id, _name, _symbol, _price, _mcap, _image, _mint, _launchpad_protocol } = router.query;
+  const { id, _name, _symbol, _price, _mcap, _image, _mint, _launchpad_protocol, _liquidity, _created_at } = router.query;
 
   // Wait for router to be ready before using query params
   // This prevents hydration issues where id is undefined briefly
@@ -95,13 +95,31 @@ export default function TradePage() {
         market_cap_usd: _mcap ? parseFloat(_mcap as string) : undefined,
         image: (_image as string) || undefined,
         launchpad_protocol: (_launchpad_protocol as string) || undefined,
+        // Liquidity passed from PulseTable for instant display
+        liquidity_usd: _liquidity ? parseFloat(_liquidity as string) : undefined,
+        // Created at / launch_time passed from PulseTable for instant age display
+        launch_time: (_created_at as string) || undefined,
+        created_at: (_created_at as string) || undefined,
       };
     }
     return null;
-  }, [_name, _symbol, _price, _mcap, _image, _mint, _launchpad_protocol]);
+  }, [_name, _symbol, _price, _mcap, _image, _mint, _launchpad_protocol, _liquidity, _created_at]);
 
   if (process.env.NODE_ENV === "development") {
-    console.log("TradePage Debug:", { id, idType: typeof id, isString: typeof id === "string", mintFromQuery: _mint, optimisticToken });
+    console.log("TradePage Debug:", {
+      id,
+      idType: typeof id,
+      isString: typeof id === "string",
+      mintFromQuery: _mint,
+      optimisticToken,
+      // Debug liquidity/age/image from query params
+      queryParams: { _liquidity, _created_at, _image },
+      optimisticHasData: {
+        liquidity: optimisticToken?.liquidity_usd,
+        age: optimisticToken?.launch_time || optimisticToken?.created_at,
+        image: optimisticToken?.image,
+      }
+    });
   }
 
   const [tokenDataLoading, setTokenDataLoading] = useState(false);
@@ -412,15 +430,28 @@ export default function TradePage() {
   // This prevents showing stale data from a previous token when navigating
 
   const displayToken = React.useMemo(() => {
+    // Start with optimistic data from URL query params (instant display)
+    // This ensures liquidity, age, image from PulseTable are shown immediately
+    const baseOptimistic = optimisticToken || {};
+
     // First priority: fresh token data from polling - but ONLY if it matches current id
-    // This validation is CRITICAL: when navigating, `token` may still hold old data
-    // because the hook's reset effect hasn't run yet
+    // MERGE with optimistic data so we don't lose query param values
     if (token) {
       const tokenMatchesId =
         token.pair_address === idString ||
         token.mint === idString;
       if (tokenMatchesId) {
-        return token;
+        // Merge: token data takes priority, but fill gaps with optimistic data
+        return {
+          ...baseOptimistic,
+          ...token,
+          // Ensure these fields use token data when available, fallback to optimistic
+          liquidity_usd: token.liquidity_usd ?? token.total_liquidity_usd ?? (baseOptimistic as any).liquidity_usd,
+          total_liquidity_usd: token.total_liquidity_usd ?? token.liquidity_usd ?? (baseOptimistic as any).liquidity_usd,
+          created_at: token.created_at ?? (baseOptimistic as any).created_at,
+          launch_time: token.launch_time ?? (baseOptimistic as any).launch_time,
+          image: token.image ?? token.image_url ?? token.logo ?? (baseOptimistic as any).image,
+        };
       }
       // Token doesn't match current id - it's stale data from previous token
       console.log('[TradePage] token does not match current id, skipping stale data', {
@@ -431,26 +462,35 @@ export default function TradePage() {
     }
 
     // Second priority: cached metadata - but ONLY if it matches current id
+    // MERGE with optimistic data
     if (cachedTokenMetadata) {
       const cacheMatchesId =
         cachedTokenMetadata.pair_address === idString ||
         cachedTokenMetadata.mint === idString;
       if (cacheMatchesId) {
         return {
+          ...baseOptimistic,
           ...cachedTokenMetadata,
           mint: cachedTokenMetadata.mint || "",
           pair_address: cachedTokenMetadata.pair_address || "",
-          created_at: cachedTokenMetadata.created_at || null
+          created_at: cachedTokenMetadata.created_at || (baseOptimistic as any).created_at || null,
+          liquidity_usd: (cachedTokenMetadata as any).liquidity_usd ?? (baseOptimistic as any).liquidity_usd,
         };
       }
     }
 
-    // Third priority: optimistic data from URL query params
+    // Third priority: optimistic data from URL query params alone
     if (optimisticToken) return optimisticToken;
+
+    // During hydration, router.query is empty - don't return null yet as query params are coming
+    // This prevents the flash of "-" and "0" values before hydration completes
+    if (!isRouterReady) {
+      return undefined; // Signal that we're still loading, not that there's no data
+    }
 
     // No valid data - return null to show loading state
     return null;
-  }, [token, cachedTokenMetadata, optimisticToken, idString]);
+  }, [token, cachedTokenMetadata, optimisticToken, idString, isRouterReady]);
 
   // Validate correctTokenData matches current id to prevent showing stale data
   const validatedCorrectTokenData = React.useMemo(() => {

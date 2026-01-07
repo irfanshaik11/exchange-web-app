@@ -6370,6 +6370,10 @@ function PulseTable({
                 _image: extractTokenImage(token as any) || "",
                 _mint: (token as any)?.mint || "", // CRITICAL: Required for cache lookup
                 _launchpad_protocol: (token as any)?.launchpad_protocol || "", // Required for poolType detection
+                _liquidity: String(
+                  (token as any)?.liquidity_usd || (token as any)?.total_liquidity_usd || "",
+                ),
+                _created_at: (token as any)?.launch_time || (token as any)?.created_at || "",
                 chain: currentChain, // Preserve chain selection
               }).toString();
 

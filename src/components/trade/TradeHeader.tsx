@@ -422,6 +422,27 @@ const TradeHeader: React.FC<TradeHeaderProps> = ({ token, livePriceUsd, liveMark
   const { addToWatchlist, removeFromWatchlist, isInWatchlist, updateWatchlistToken } = useWatchlist();
   const watchlistKey = token.pair_address || (token as any).mint || "";
   const isWatched = isInWatchlist(watchlistKey);
+
+  // Determine if this is a Monad token (vs Solana) - used for data source selection
+  const isMonadContext = useMemo(() => {
+    const protocolSource =
+      (token as any).launchpad_protocol ||
+      (token as any).protocol ||
+      (token as any).launchpadName ||
+      (token as any).amm ||
+      extractProtocolRaw(token) ||
+      undefined;
+    const normalizedProtocol = (protocolSource || "").toLowerCase();
+    const isMonadProtocol = normalizedProtocol
+      ? MONAD_PROTOCOL_KEYWORDS.some((keyword) => normalizedProtocol.includes(keyword))
+      : false;
+    const tokenChain = ((token as any).blockchain || (token as any).network || (token as any).chain || "") as string;
+    const normalizedChain = tokenChain.toLowerCase();
+    return normalizedChain === "monad" || router?.pathname?.includes("/trade/monad") || isMonadProtocol;
+  }, [token, router?.pathname]);
+
+  // For Solana tokens, we only use data from /v1/trade/view endpoint (token prop)
+  const isSolanaToken = !isMonadContext;
   const [showPreview, setShowPreview] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [showZoomPopup, setShowZoomPopup] = useState(false);
@@ -438,43 +459,19 @@ const TradeHeader: React.FC<TradeHeaderProps> = ({ token, livePriceUsd, liveMark
   const [fetchedCreatedAt, setFetchedCreatedAt] = useState<string | number | null>(null);
   const fetchingAgeRef = useRef(false);
   
-  // Check if we have age data
-  const hasAge = (token as any).created_at || (token as any).createdAt || (token as any).CreatedAt || fetchedCreatedAt;
+  // Check if we have age data (include launch_time which backend often uses instead of created_at)
+  const hasAge = (token as any).created_at || (token as any).createdAt || (token as any).CreatedAt || (token as any).launch_time || fetchedCreatedAt;
   
   // Fetch age from search endpoint if missing (for Monad tokens only)
   useEffect(() => {
     // Only fetch if:
     // 1. We don't have age data
-    // 2. It's a Monad token (check after isMonadContext is determined)
+    // 2. It's a Monad token (uses component-level isMonadContext)
     // 3. We have a token address to search
     // 4. We're not already fetching
     if (hasAge || fetchingAgeRef.current) return;
-    
-    // Determine if Monad token (we'll calculate this inline since isMonadContext is defined later)
-    const protocolSource =
-      (token as any).launchpad_protocol ||
-      (token as any).protocol ||
-      (token as any).launchpadName ||
-      (token as any).amm ||
-      extractProtocolRaw(token) ||
-      undefined;
-    const normalizedProtocol = (protocolSource || "").toLowerCase();
-    const isMonadProtocol = normalizedProtocol
-      ? MONAD_PROTOCOL_KEYWORDS.some((keyword) =>
-          normalizedProtocol.includes(keyword),
-        )
-      : false;
-    const tokenChain =
-      ((token as any).blockchain ||
-        (token as any).network ||
-        (token as any).chain ||
-        "") as string;
-    const normalizedChain = tokenChain.toLowerCase();
-    const isMonadContext =
-      normalizedChain === "monad" ||
-      router?.pathname?.includes("/trade/monad") ||
-      isMonadProtocol;
-    
+
+    // Only fetch for Monad tokens - Solana uses /v1/trade/view endpoint only
     if (!isMonadContext) return;
     
     const tokenAddress = token.mint || token.pair_address || (token as any).address;
@@ -506,18 +503,47 @@ const TradeHeader: React.FC<TradeHeaderProps> = ({ token, livePriceUsd, liveMark
       .finally(() => {
         fetchingAgeRef.current = false;
       });
-  }, [hasAge, token, router?.pathname]);
+  }, [hasAge, token, isMonadContext]);
   
   const tokenAgeLabel = useMemo(() => {
-    const createdAt =
-      (token as any).created_at ||
-      (token as any).createdAt ||
-      (token as any).CreatedAt ||
-      fetchedCreatedAt;
+    // AGE: For Solana, only use /v1/trade/view endpoint data (token prop)
+    // For Monad, can also use fetchedCreatedAt from search endpoint
+    const createdAt = isSolanaToken
+      ? // Solana: Only use token data from /v1/trade/view endpoint
+        ((token as any).created_at ||
+        (token as any).createdAt ||
+        (token as any).CreatedAt ||
+        (token as any).launch_time)
+      : // Monad: Can also use fetched data
+        ((token as any).created_at ||
+        (token as any).createdAt ||
+        (token as any).CreatedAt ||
+        (token as any).launch_time ||
+        fetchedCreatedAt);
+
+    // Check if we have any age data defined (vs still loading)
+    const hasAnyAgeField = isSolanaToken
+      ? // Solana: Only check token fields
+        ((token as any).created_at !== undefined ||
+        (token as any).createdAt !== undefined ||
+        (token as any).CreatedAt !== undefined ||
+        (token as any).launch_time !== undefined)
+      : // Monad: Also check fetched data
+        ((token as any).created_at !== undefined ||
+        (token as any).createdAt !== undefined ||
+        (token as any).CreatedAt !== undefined ||
+        (token as any).launch_time !== undefined ||
+        fetchedCreatedAt !== null);
+
     const age = getTokenAge(createdAt);
-    // Don't show "Unknown" - show "-" instead if we don't have age
-    return age === "Unknown" ? "-" : age;
-  }, [token, fetchedCreatedAt]);
+
+    // If age is unknown and we have no age fields defined, show loading indicator
+    // If age is unknown but we have fields (they're just empty), show "-"
+    if (age === "Unknown") {
+      return hasAnyAgeField ? "-" : "...";
+    }
+    return age;
+  }, [token, fetchedCreatedAt, isSolanaToken]);
   const [showXPreview, setShowXPreview] = useState<boolean>(false);
   const [buttonPosition, setButtonPosition] = useState<{
     left: number;
@@ -600,12 +626,18 @@ const TradeHeader: React.FC<TradeHeaderProps> = ({ token, livePriceUsd, liveMark
   }, [effectiveMarketCap, effectivePrice, effectivePriceChange1h, isWatched, token, updateWatchlistToken, watchlistKey]);
   const mcap = effectiveMarketCap;
   const price = effectivePrice;
-  const liq =
-    marketData?.liquidity_usd ??
-    marketData?.volume_usd ??
-    (token as any).total_liquidity_usd ??
-    (token as any).liquidity_usd ??
-    0;
+
+  // LIQUIDITY: For Solana, only use /v1/trade/view endpoint data (token prop)
+  // Check if liquidity data actually exists (vs being undefined/null)
+  const hasTokenLiquidity = (token as any).liquidity_usd !== undefined || (token as any).total_liquidity_usd !== undefined;
+  const tokenLiquidity = (token as any).liquidity_usd ?? (token as any).total_liquidity_usd ?? 0;
+  // For Solana: Only use token data from /v1/trade/view endpoint
+  // For Monad: Can use WebSocket as additional source
+  const wsLiquidity = isSolanaToken ? null : (marketData?.liquidity_usd ?? marketData?.volume_usd);
+  // const wsLiquidity = marketData?.liquidity_usd ?? marketData?.volume_usd; // COMMENTED OUT for Solana - only using endpoint data
+  const liq = (wsLiquidity && wsLiquidity > 0) ? wsLiquidity : tokenLiquidity;
+  // Track if we're still loading liquidity data (no source has provided it yet)
+  const isLiquidityLoading = isSolanaToken ? !hasTokenLiquidity : (!hasTokenLiquidity && !wsLiquidity);
   const supply = (token as any).total_supply ?? (token as any).supply ?? 0;
   const formattedMarketCap = useMemo(() => formatMarketCap(mcap), [mcap]);
   const isLowLiquidity = Number(liq) < 1000;
@@ -628,6 +660,7 @@ const TradeHeader: React.FC<TradeHeaderProps> = ({ token, livePriceUsd, liveMark
 
   /* ---------- canonical protocol resolution ---------- */
   const columnType = getColumnType(token);
+  // protocolSource is used for getProtocolBranding below
   const protocolSource =
     (token as any).launchpad_protocol ||
     (token as any).protocol ||
@@ -635,23 +668,7 @@ const TradeHeader: React.FC<TradeHeaderProps> = ({ token, livePriceUsd, liveMark
     (token as any).amm ||
     extractProtocolRaw(token) ||
     undefined;
-
-  const tokenChain =
-    ((token as any).blockchain ||
-      (token as any).network ||
-      (token as any).chain ||
-      "") as string;
-  const normalizedChain = tokenChain.toLowerCase();
-  const normalizedProtocol = (protocolSource || "").toLowerCase();
-  const isMonadProtocol = normalizedProtocol
-    ? MONAD_PROTOCOL_KEYWORDS.some((keyword) =>
-        normalizedProtocol.includes(keyword),
-      )
-    : false;
-  const isMonadContext =
-    normalizedChain === "monad" ||
-    router?.pathname?.includes("/trade/monad") ||
-    isMonadProtocol;
+  // Note: isMonadContext is already defined at component level via useMemo
 
   let protocolColor: string;
   let tokenIcon: string;
@@ -668,8 +685,9 @@ const TradeHeader: React.FC<TradeHeaderProps> = ({ token, livePriceUsd, liveMark
     fillProtocolBadge = shouldFillProtocolBadge(token);
   }
 
-  // token image (ipfs/http)
+  // IMAGE: For Solana, only use /v1/trade/view endpoint data (token prop)
   // API returns image_url, fallback to image, logo, then uri (metadata URI)
+  // No other sources for image - this is already endpoint-only
   const rawImg =
     (token as any).image_url || (token as any).image || (token as any).logo || (token as any).uri;
   const imgSrc = normalizeAssetUrl(rawImg);
@@ -1514,10 +1532,10 @@ const TradeHeader: React.FC<TradeHeaderProps> = ({ token, livePriceUsd, liveMark
           </StatInline>
           <StatInline label="Liquidity">
             <span className="inline-flex items-center gap-1">
-              <span style={{ color: isLowLiquidity ? AX.warning : AX.text }}>
-                ${formatSmartNumber(liq)}
+              <span style={{ color: isLiquidityLoading ? AX.muted : (isLowLiquidity ? AX.warning : AX.text) }}>
+                {isLiquidityLoading ? '...' : `$${formatSmartNumber(liq)}`}
               </span>
-              {isLowLiquidity && (
+              {!isLiquidityLoading && isLowLiquidity && (
                 <span className="group relative inline-flex items-center">
                   <LuDroplet size={16} color={AX.warning} />
                   <span
