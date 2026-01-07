@@ -610,6 +610,38 @@ function useSmoothProgress(targetValue: number, duration: number = 400): number 
   return smoothValue;
 }
 
+/**
+ * Calculate the best available volume in USD from websocket data.
+ * Checks time periods in priority order: 24h > 6h > 1h > 5m
+ * Adds buy + sell volumes and multiplies by SOL price.
+ */
+const calculateVolumeUsd = (token: any, solPrice: number): number => {
+  // Parse volume string to number, handling undefined/null
+  const parseVol = (val: string | number | undefined): number => {
+    if (val === undefined || val === null) return 0;
+    if (typeof val === 'number') return val;
+    const parsed = parseFloat(val);
+    return isNaN(parsed) ? 0 : parsed;
+  };
+
+  // Check each time period from highest to lowest
+  // Use the first period that has non-zero data
+  const vol24h = parseVol(token.total_buy_volume_24h) + parseVol(token.total_sell_volume_24h);
+  if (vol24h > 0) return vol24h * solPrice;
+
+  const vol6h = parseVol(token.total_buy_volume_6h) + parseVol(token.total_sell_volume_6h);
+  if (vol6h > 0) return vol6h * solPrice;
+
+  const vol1h = parseVol(token.total_buy_volume_1h) + parseVol(token.total_sell_volume_1h);
+  if (vol1h > 0) return vol1h * solPrice;
+
+  const vol5m = parseVol(token.total_buy_volume_5m) + parseVol(token.total_sell_volume_5m);
+  if (vol5m > 0) return vol5m * solPrice;
+
+  // Fallback to existing volume_24h field if available
+  return token.volume_24h || 0;
+};
+
 // Token Metrics Component - displays users, trades, achievements, and rank
 function TokenMetrics({
   token,
@@ -2153,234 +2185,69 @@ function PulseTable({
       // Let React batch these naturally - flushSync was causing render storms
       // The hook already handles updating its internal arrays efficiently
 
-      // Only update filteredTokens if it has data (protocol filter active)
-      setFilteredTokens((prev) => {
-        if (!prev || prev.length === 0) return prev;
+      // Pre-compute updates map once (O(n) instead of O(n*m))
+      const updatesMap = new Map(updates.map((u) => [u.mint, u]));
 
-        const updatesMap = new Map(updates.map((u) => [u.mint, u]));
-        const updatedTokens = prev.map((token) => {
+      // Helper to apply updates - returns same array ref if no changes (prevents re-render)
+      const applyPriceUpdates = (tokens: Token[]): Token[] => {
+        if (!tokens || tokens.length === 0) return tokens;
+
+        let hasChanges = false;
+        const updatedTokens = tokens.map((token) => {
           const update = updatesMap.get(token.mint);
           if (!update) return token;
+          hasChanges = true;
 
-          // Merge update into existing token (preserve all fields, update only changed ones)
+          // Merge update - only include fields with valid values
           return {
             ...token,
-            ...(update.price_usd !== undefined && {
-              price_usd: update.price_usd,
-            }),
-            // Only update market_cap if it's a valid positive number (ignore 0 and negative)
-            ...(update.market_cap_usd !== undefined && update.market_cap_usd > 0 && {
-              market_cap_usd: update.market_cap_usd,
-            }),
-            ...(update.volume_24h !== undefined && {
-              volume_24h: update.volume_24h,
-            }),
-            // Bonding curve / graduation progress - only update if valid (0-100 range)
-            ...(update.bonding_pct !== undefined && update.bonding_pct >= 0 && {
-              bonding_pct: update.bonding_pct,
-              bonding_curve_progress: update.bonding_pct / 100, // Convert to 0-1 range
-            }),
-            ...(update.graduation_percent !== undefined && update.graduation_percent >= 0 && {
-              graduation_percent: update.graduation_percent,
-            }),
-            ...(update.bonding_curve_progress !== undefined && update.bonding_curve_progress >= 0 && {
-              bonding_curve_progress: update.bonding_curve_progress,
-            }),
-            // Liquidity - only update if valid positive number
-            ...(update.liquidity_usd !== undefined && update.liquidity_usd >= 0 && {
-              liquidity_usd: update.liquidity_usd,
-              total_liquidity_usd: update.liquidity_usd, // Also update alternate field name
-            }),
-            ...(update.price_change_24h !== undefined && {
-              price_change_24h: update.price_change_24h,
-            }),
-            // Trade info from price_update
-            ...(update.trade_type !== undefined && {
-              last_trade_type: update.trade_type,
-            }),
-            ...(update.sol_amount !== undefined && {
-              last_sol_amount: update.sol_amount,
-            }),
-            ...(update.token_amount !== undefined && {
-              last_token_amount: update.token_amount,
-            }),
-            // Status updates
-            ...(update.status !== undefined && {
-              status: update.status,
-            }),
-            // Transaction metrics (5m)
-            ...(update.total_buy_volume_5m !== undefined && {
-              total_buy_volume_5m: update.total_buy_volume_5m,
-            }),
-            ...(update.total_sell_volume_5m !== undefined && {
-              total_sell_volume_5m: update.total_sell_volume_5m,
-            }),
-            ...(update.total_buys_5m !== undefined && {
-              total_buys_5m: update.total_buys_5m,
-            }),
-            ...(update.total_sells_5m !== undefined && {
-              total_sells_5m: update.total_sells_5m,
-            }),
-            // Transaction metrics (1h)
-            ...(update.total_buy_volume_1h !== undefined && {
-              total_buy_volume_1h: update.total_buy_volume_1h,
-            }),
-            ...(update.total_sell_volume_1h !== undefined && {
-              total_sell_volume_1h: update.total_sell_volume_1h,
-            }),
-            ...(update.total_buys_1h !== undefined && {
-              total_buys_1h: update.total_buys_1h,
-            }),
-            ...(update.total_sells_1h !== undefined && {
-              total_sells_1h: update.total_sells_1h,
-            }),
-            // Transaction metrics (6h)
-            ...(update.total_buy_volume_6h !== undefined && {
-              total_buy_volume_6h: update.total_buy_volume_6h,
-            }),
-            ...(update.total_sell_volume_6h !== undefined && {
-              total_sell_volume_6h: update.total_sell_volume_6h,
-            }),
-            ...(update.total_buys_6h !== undefined && {
-              total_buys_6h: update.total_buys_6h,
-            }),
-            ...(update.total_sells_6h !== undefined && {
-              total_sells_6h: update.total_sells_6h,
-            }),
-            // Transaction metrics (24h)
-            ...(update.total_buy_volume_24h !== undefined && {
-              total_buy_volume_24h: update.total_buy_volume_24h,
-            }),
-            ...(update.total_sell_volume_24h !== undefined && {
-              total_sell_volume_24h: update.total_sell_volume_24h,
-            }),
-            ...(update.total_buys_24h !== undefined && {
-              total_buys_24h: update.total_buys_24h,
-            }),
-            ...(update.total_sells_24h !== undefined && {
-              total_sells_24h: update.total_sells_24h,
-            }),
+            ...(update.price_usd !== undefined && { price_usd: update.price_usd }),
+            ...(update.market_cap_usd !== undefined && update.market_cap_usd > 0 && { market_cap_usd: update.market_cap_usd }),
+            ...(update.volume_24h !== undefined && { volume_24h: update.volume_24h }),
+            ...(update.bonding_pct !== undefined && update.bonding_pct >= 0 && { bonding_pct: update.bonding_pct, bonding_curve_progress: update.bonding_pct / 100 }),
+            ...(update.graduation_percent !== undefined && update.graduation_percent >= 0 && { graduation_percent: update.graduation_percent }),
+            ...(update.bonding_curve_progress !== undefined && update.bonding_curve_progress >= 0 && { bonding_curve_progress: update.bonding_curve_progress }),
+            ...(update.liquidity_usd !== undefined && update.liquidity_usd >= 0 && { liquidity_usd: update.liquidity_usd, total_liquidity_usd: update.liquidity_usd }),
+            ...(update.price_change_24h !== undefined && { price_change_24h: update.price_change_24h }),
+            ...(update.trade_type !== undefined && { last_trade_type: update.trade_type }),
+            ...(update.sol_amount !== undefined && { last_sol_amount: update.sol_amount }),
+            ...(update.token_amount !== undefined && { last_token_amount: update.token_amount }),
+            ...(update.status !== undefined && { status: update.status }),
+            ...(update.total_buy_volume_5m !== undefined && { total_buy_volume_5m: update.total_buy_volume_5m }),
+            ...(update.total_sell_volume_5m !== undefined && { total_sell_volume_5m: update.total_sell_volume_5m }),
+            ...(update.total_buys_5m !== undefined && { total_buys_5m: update.total_buys_5m }),
+            ...(update.total_sells_5m !== undefined && { total_sells_5m: update.total_sells_5m }),
+            ...(update.total_buy_volume_1h !== undefined && { total_buy_volume_1h: update.total_buy_volume_1h }),
+            ...(update.total_sell_volume_1h !== undefined && { total_sell_volume_1h: update.total_sell_volume_1h }),
+            ...(update.total_buys_1h !== undefined && { total_buys_1h: update.total_buys_1h }),
+            ...(update.total_sells_1h !== undefined && { total_sells_1h: update.total_sells_1h }),
+            ...(update.total_buy_volume_6h !== undefined && { total_buy_volume_6h: update.total_buy_volume_6h }),
+            ...(update.total_sell_volume_6h !== undefined && { total_sell_volume_6h: update.total_sell_volume_6h }),
+            ...(update.total_buys_6h !== undefined && { total_buys_6h: update.total_buys_6h }),
+            ...(update.total_sells_6h !== undefined && { total_sells_6h: update.total_sells_6h }),
+            ...(update.total_buy_volume_24h !== undefined && { total_buy_volume_24h: update.total_buy_volume_24h }),
+            ...(update.total_sell_volume_24h !== undefined && { total_sell_volume_24h: update.total_sell_volume_24h }),
+            ...(update.total_buys_24h !== undefined && { total_buys_24h: update.total_buys_24h }),
+            ...(update.total_sells_24h !== undefined && { total_sells_24h: update.total_sells_24h }),
+            // Map holder percentages from websocket
+            ...(update.insider_percent !== undefined && { insider_percent: update.insider_percent }),
+            ...(update.sniper_percent !== undefined && { sniper_percent: update.sniper_percent }),
+            ...(update.dev_percent !== undefined && { dev_percent: update.dev_percent }),
             updated_at: update.updated_at || token.updated_at,
           };
         });
+
+        // CRITICAL: Return same array ref if no changes - prevents unnecessary re-render
+        if (!hasChanges) return tokens;
+
         // Skip liquidity filtering for New Pairs - keep all tokens
-        if (isNewPairs) {
-          return updatedTokens as Token[];
-        }
+        if (isNewPairs) return updatedTokens as Token[];
         return filterNonZeroLiquidity(updatedTokens as Token[]);
-      });
+      };
 
-      // Also merge into wsTokens (WebSocket new tokens)
-      setWsTokens((prev) => {
-        if (!prev || prev.length === 0) return prev;
-
-        const updatesMap = new Map(updates.map((u) => [u.mint, u]));
-        const updatedTokens = prev.map((token) => {
-          const update = updatesMap.get(token.mint);
-          if (!update) return token;
-
-          return {
-            ...token,
-            ...(update.price_usd !== undefined && {
-              price_usd: update.price_usd,
-            }),
-            // Only update market_cap if it's a valid positive number (ignore 0 and negative)
-            ...(update.market_cap_usd !== undefined && update.market_cap_usd > 0 && {
-              market_cap_usd: update.market_cap_usd,
-            }),
-            ...(update.volume_24h !== undefined && {
-              volume_24h: update.volume_24h,
-            }),
-            // Bonding curve / graduation progress - only update if valid (0-100 range)
-            ...(update.bonding_pct !== undefined && update.bonding_pct >= 0 && {
-              bonding_pct: update.bonding_pct,
-              bonding_curve_progress: update.bonding_pct / 100, // Convert to 0-1 range
-            }),
-            ...(update.graduation_percent !== undefined && update.graduation_percent >= 0 && {
-              graduation_percent: update.graduation_percent,
-            }),
-            ...(update.bonding_curve_progress !== undefined && update.bonding_curve_progress >= 0 && {
-              bonding_curve_progress: update.bonding_curve_progress,
-            }),
-            // Liquidity - only update if valid positive number
-            ...(update.liquidity_usd !== undefined && update.liquidity_usd >= 0 && {
-              liquidity_usd: update.liquidity_usd,
-              total_liquidity_usd: update.liquidity_usd, // Also update alternate field name
-            }),
-            ...(update.price_change_24h !== undefined && {
-              price_change_24h: update.price_change_24h,
-            }),
-            // Trade info from price_update
-            ...(update.trade_type !== undefined && {
-              last_trade_type: update.trade_type,
-            }),
-            ...(update.sol_amount !== undefined && {
-              last_sol_amount: update.sol_amount,
-            }),
-            ...(update.token_amount !== undefined && {
-              last_token_amount: update.token_amount,
-            }),
-            // Status updates
-            ...(update.status !== undefined && {
-              status: update.status,
-            }),
-            ...(update.total_buy_volume_5m !== undefined && {
-              total_buy_volume_5m: update.total_buy_volume_5m,
-            }),
-            ...(update.total_sell_volume_5m !== undefined && {
-              total_sell_volume_5m: update.total_sell_volume_5m,
-            }),
-            ...(update.total_buys_5m !== undefined && {
-              total_buys_5m: update.total_buys_5m,
-            }),
-            ...(update.total_sells_5m !== undefined && {
-              total_sells_5m: update.total_sells_5m,
-            }),
-            ...(update.total_buy_volume_1h !== undefined && {
-              total_buy_volume_1h: update.total_buy_volume_1h,
-            }),
-            ...(update.total_sell_volume_1h !== undefined && {
-              total_sell_volume_1h: update.total_sell_volume_1h,
-            }),
-            ...(update.total_buys_1h !== undefined && {
-              total_buys_1h: update.total_buys_1h,
-            }),
-            ...(update.total_sells_1h !== undefined && {
-              total_sells_1h: update.total_sells_1h,
-            }),
-            ...(update.total_buy_volume_6h !== undefined && {
-              total_buy_volume_6h: update.total_buy_volume_6h,
-            }),
-            ...(update.total_sell_volume_6h !== undefined && {
-              total_sell_volume_6h: update.total_sell_volume_6h,
-            }),
-            ...(update.total_buys_6h !== undefined && {
-              total_buys_6h: update.total_buys_6h,
-            }),
-            ...(update.total_sells_6h !== undefined && {
-              total_sells_6h: update.total_sells_6h,
-            }),
-            ...(update.total_buy_volume_24h !== undefined && {
-              total_buy_volume_24h: update.total_buy_volume_24h,
-            }),
-            ...(update.total_sell_volume_24h !== undefined && {
-              total_sell_volume_24h: update.total_sell_volume_24h,
-            }),
-            ...(update.total_buys_24h !== undefined && {
-              total_buys_24h: update.total_buys_24h,
-            }),
-            ...(update.total_sells_24h !== undefined && {
-              total_sells_24h: update.total_sells_24h,
-            }),
-            updated_at: update.updated_at || token.updated_at,
-          };
-        });
-        // Skip liquidity filtering for New Pairs - keep all tokens stable
-        if (isNewPairs) {
-          return updatedTokens as Token[];
-        }
-        return filterNonZeroLiquidity(updatedTokens as Token[]);
-      });
+      // Apply to both arrays using the same helper - reuses the updatesMap
+      setFilteredTokens(applyPriceUpdates);
+      setWsTokens(applyPriceUpdates);
 
       // PERFORMANCE FIX: Removed setBaseTokens from here
       // baseTokens updates were triggering useMemo recalculations on every price update
@@ -7442,7 +7309,7 @@ function PulseTable({
                                   }}
                                 >
                                   <SmoothNumber
-                                    value={(token as any).volume_24h || 0}
+                                    value={calculateVolumeUsd(token, solPrice)}
                                     formatter={(val) => {
                                       const rounded = Math.round(val);
                                       if (rounded >= 1e12)
@@ -7938,21 +7805,28 @@ function PulseTable({
                       />
                       <BottomCardInfoHolder
                         PassedIcon={LuChefHat}
-                        value={0.2}
+                        token={token}
+                        wsField="dev_percent"
+                        httpField="dev_held_percentage"
                         iconColor="#566cdc"
+                        tooltip="Dev Holding"
                       />
                       <BottomCardInfoHolder
                         PassedIcon={RiGhostLine}
-                        value={(() => {
-                          const val = (token as any).insider_held_percentage;
-                          const num =
-                            typeof val === "string"
-                              ? parseFloat(val)
-                              : (val ?? 0);
-                          return isNaN(num) ? 0 : num;
-                        })().toFixed(2)}
-                        tooltip="Insider Holdings"
+                        token={token}
+                        wsField="insider_percent"
+                        httpField="insider_held_percentage"
+                        tooltip="Insider Holding"
                         count={(token as any).insider_count ?? undefined}
+                      />
+                      <BottomCardInfoHolder
+                        PassedIcon={SnipperIcon}
+                        token={token}
+                        wsField="sniper_percent"
+                        httpField="sniper_held_percentage"
+                        green={false}
+                        tooltip="Sniper Holding"
+                        count={(token as any).sniper_count ?? undefined}
                       />
                       <BottomCardInfoHolder
                         PassedIcon={GoStack}
@@ -7974,20 +7848,6 @@ function PulseTable({
                       <BottomCardInfoHolder
                         PassedIcon={PiLeafLight}
                         value={0.2}
-                      />
-                      <BottomCardInfoHolder
-                        PassedIcon={SnipperIcon}
-                        value={(() => {
-                          const val = (token as any).sniper_held_percentage;
-                          const num =
-                            typeof val === "string"
-                              ? parseFloat(val)
-                              : (val ?? 0);
-                          return isNaN(num) ? 0 : num;
-                        })().toFixed(2)}
-                        green={false}
-                        tooltip="Sniper Holdings"
-                        count={(token as any).sniper_count ?? undefined}
                       />
                     </div>
                   </div>
