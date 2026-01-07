@@ -2149,10 +2149,11 @@ function PulseTable({
       [channel],
     ),
     onPriceUpdate: useCallback((updates: any[]) => {
-      // ⚡ INSTANT PATH: Use flushSync to bypass React 18's automatic batching
-      // This ensures price updates render immediately without any delay
-      flushSync(() => {
-      // Merge price updates into filteredTokens (base HTTP data)
+      // PERFORMANCE FIX: Don't use flushSync for price updates
+      // Let React batch these naturally - flushSync was causing render storms
+      // The hook already handles updating its internal arrays efficiently
+
+      // Only update filteredTokens if it has data (protocol filter active)
       setFilteredTokens((prev) => {
         if (!prev || prev.length === 0) return prev;
 
@@ -2381,39 +2382,10 @@ function PulseTable({
         return filterNonZeroLiquidity(updatedTokens as Token[]);
       });
 
-      // ⚡ CRITICAL: Also update baseTokens (local copy of parent's tokens prop)
-      // This fixes the issue where price updates weren't showing because
-      // filteredTokens was empty and display fell back to unchanged tokens prop
-      setBaseTokens((prev) => {
-        if (!prev || prev.length === 0) return prev;
-
-        const updatesMap = new Map(updates.map((u) => [u.mint, u]));
-        let hasChanges = false;
-        const updatedTokens = prev.map((token) => {
-          const update = updatesMap.get(token.mint);
-          if (!update) return token;
-          hasChanges = true;
-          return {
-            ...token,
-            ...(update.price_usd !== undefined && { price_usd: update.price_usd }),
-            ...(update.market_cap_usd !== undefined && update.market_cap_usd > 0 && { market_cap_usd: update.market_cap_usd }),
-            ...(update.volume_24h !== undefined && { volume_24h: update.volume_24h }),
-            ...(update.bonding_pct !== undefined && update.bonding_pct >= 0 && {
-              bonding_pct: update.bonding_pct,
-              bonding_curve_progress: update.bonding_pct / 100,
-            }),
-            ...(update.graduation_percent !== undefined && update.graduation_percent >= 0 && { graduation_percent: update.graduation_percent }),
-            ...(update.liquidity_usd !== undefined && update.liquidity_usd >= 0 && {
-              liquidity_usd: update.liquidity_usd,
-              total_liquidity_usd: update.liquidity_usd,
-            }),
-            ...(update.price_change_24h !== undefined && { price_change_24h: update.price_change_24h }),
-            updated_at: update.updated_at || token.updated_at,
-          };
-        });
-        return hasChanges ? (updatedTokens as Token[]) : prev;
-      });
-      }); // End flushSync
+      // PERFORMANCE FIX: Removed setBaseTokens from here
+      // baseTokens updates were triggering useMemo recalculations on every price update
+      // The hook's internal arrays (newTokens, finalStretchTokens, migratedTokens)
+      // already get price updates applied directly
     }, [isNewPairs]),
   });
 
