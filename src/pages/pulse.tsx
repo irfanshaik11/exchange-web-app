@@ -389,20 +389,9 @@ export default function PulsePage() {
   const [httpNewTick, setHttpNewTick] = useState(0);
   const [httpMigrated, setHttpMigrated] = useState<any[]>([]);
   const [httpMigratedTick, setHttpMigratedTick] = useState(0);
-  const isZeroLiquidityToken = useCallback((token: any) => {
-    if (!token) return false;
-
-    const rawValue = token.liquidity_usd ?? token.total_liquidity_usd;
-    if (rawValue === undefined || rawValue === null || rawValue === "") {
-      return false;
-    }
-
-    const liquidity = Number(rawValue);
-    if (Number.isNaN(liquidity)) {
-      return false;
-    }
-
-    return liquidity === 0;
+  // Zero liquidity filter disabled - let all tokens through
+  const isZeroLiquidityToken = useCallback((_token: any) => {
+    return false;
   }, []);
 
   const [httpFinalStretch, setHttpFinalStretch] = useState<any[]>([]);

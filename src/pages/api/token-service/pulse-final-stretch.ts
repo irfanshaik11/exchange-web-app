@@ -42,75 +42,11 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     try {
       const raw = JSON.parse(text);
       if (Array.isArray(raw)) {
-        // Filter out tokens without sufficient data for OHLC charts
-        const filtered = raw.filter((r: any) => {
-          // Must have a valid pair_address for chart data
-          if (!r.pair_address) {
-            console.log(`[Final Stretch Filter] Excluding ${r.symbol || 'unknown'}: No pair_address`);
-            return false;
-          }
-          
-          // Check for actual trading activity (not just price data)
-          const hasRecentVolume = (r.volume_24h ?? 0) > 0 || 
-                                 (r.total_buy_volume_24h ?? 0) > 0 || 
-                                 (r.total_sell_volume_24h ?? 0) > 0;
-          
-          // Check for trading transactions (buys/sells)
-          const hasTrades = (r.total_buys_24h ?? 0) > 0 || 
-                           (r.total_sells_24h ?? 0) > 0 ||
-                           (r.total_buys_1h ?? 0) > 0 ||
-                           (r.total_sells_1h ?? 0) > 0;
-          
-          // Check for unique traders
-          const hasTraders = (r.total_buyers_24h ?? 0) > 0 || 
-                            (r.total_sellers_24h ?? 0) > 0 ||
-                            (r.unique_wallets_24h ?? 0) > 0;
-          
-          // Must have BOTH volume AND actual trades/traders to ensure OHLC data exists
-          // This prevents tokens that only have static price but no trading history
-          const isValid = hasRecentVolume && (hasTrades || hasTraders);
-          
-          if (!isValid) {
-            console.log(`[Final Stretch Filter] Excluding ${r.symbol || 'unknown'}: No trading activity (volume: ${hasRecentVolume}, trades: ${hasTrades}, traders: ${hasTraders})`);
-          }
-          
-          return isValid;
-        });
-        
-        console.log(`[Final Stretch Filter] Filtered ${raw.length} tokens down to ${filtered.length} tokens with OHLC data`);
-        
-        // Log the first few tokens to verify filtering
-        if (filtered.length > 0) {
-          console.log(`[Final Stretch Filter] Top 3 tokens that passed filter:`, 
-            filtered.slice(0, 3).map(r => ({
-              symbol: r.symbol,
-              protocol: r.launchpad_protocol,
-              pair: r.pair_address?.slice(0, 8) + '...',
-              volume_24h: r.volume_24h,
-              total_buys_24h: r.total_buys_24h,
-              bonding_pct: r.bonding_pct,
-              graduation_percent: r.graduation_percent
-            }))
-          );
-        }
-        
-        // Specifically log Meteora tokens to verify graduation_percent
-        const meteoraTokens = filtered.filter(r => 
-          r.launchpad_protocol?.toLowerCase().includes('meteora')
-        );
-        if (meteoraTokens.length > 0) {
-          console.log(`[Final Stretch Filter] Found ${meteoraTokens.length} Meteora tokens:`, 
-            meteoraTokens.slice(0, 3).map(r => ({
-              symbol: r.symbol,
-              graduation_percent: r.graduation_percent,
-              bonding_pct: r.bonding_pct,
-              has_graduation_data: !!r.graduation_percent
-            }))
-          );
-        }
-        
+        // Trading activity filter removed - let backend handle filtering
+        // All tokens from the API are passed through and normalized
+
         // Normalize into the minimal Token-like shape the UI expects
-        const mapped = filtered.map((r: any) => {
+        const mapped = raw.map((r: any) => {
           // Helper function to estimate shorter timeframe data from 24h data for older tokens
           const estimateFrom24h = (value24h: number, timeframe: '5m' | '1h' | '6h') => {
             if (value24h > 0) {
