@@ -116,19 +116,33 @@ export function isMetadataUrl(url: string | null | undefined): boolean {
   return false;
 }
 
-// Cache for resolved metadata images to avoid repeated fetches
-const metadataImageCache = new Map<string, string | null>();
+// Cache for resolved metadata images with TTL to allow retries for failed fetches
+// Structure: { image: string | null, timestamp: number }
+const metadataImageCache = new Map<string, { image: string | null; timestamp: number }>();
+
+// Success cache: 30 minutes (images don't change)
+const SUCCESS_TTL_MS = 30 * 60 * 1000;
+// Failure cache: 30 seconds (allows quick retry for IPFS propagation)
+const FAILURE_TTL_MS = 30 * 1000;
 
 /**
  * Resolve a metadata JSON URL to get the actual image URL
  * Returns null if resolution fails or URL is not a metadata URL
+ * Uses TTL-based caching: success cached for 30min, failure cached for 30sec
  */
 export async function resolveMetadataImage(url: string): Promise<string | null> {
   if (!url || !isMetadataUrl(url)) return null;
 
-  // Check cache first
-  if (metadataImageCache.has(url)) {
-    return metadataImageCache.get(url) || null;
+  // Check cache with TTL
+  const cached = metadataImageCache.get(url);
+  if (cached) {
+    const age = Date.now() - cached.timestamp;
+    const ttl = cached.image ? SUCCESS_TTL_MS : FAILURE_TTL_MS;
+    if (age < ttl) {
+      return cached.image;
+    }
+    // TTL expired, remove and retry
+    metadataImageCache.delete(url);
   }
 
   try {
@@ -153,7 +167,7 @@ export async function resolveMetadataImage(url: string): Promise<string | null> 
     clearTimeout(timeoutId);
 
     if (!response.ok) {
-      metadataImageCache.set(url, null);
+      metadataImageCache.set(url, { image: null, timestamp: Date.now() });
       return null;
     }
 
@@ -161,11 +175,11 @@ export async function resolveMetadataImage(url: string): Promise<string | null> 
 
     // Extract image from metadata JSON
     const imageUrl = extractMetaImage(data);
-    metadataImageCache.set(url, imageUrl);
+    metadataImageCache.set(url, { image: imageUrl, timestamp: Date.now() });
     return imageUrl;
   } catch (error) {
-    // Cache failure to avoid repeated failed attempts
-    metadataImageCache.set(url, null);
+    // Cache failure with short TTL to allow retry
+    metadataImageCache.set(url, { image: null, timestamp: Date.now() });
     return null;
   }
 }
