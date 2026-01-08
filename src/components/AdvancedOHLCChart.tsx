@@ -2143,6 +2143,252 @@ const AdvancedOHLCChart: React.FC<AdvancedOHLCChartProps> = ({
     };
   }, [network, mint, pairAddress, selectedInterval]); // Re-connect when token or interval changes (always use 1s WS, aggregate if needed)
 
+  // Solana OHLC WebSocket connection - uses /v1/ws/ohlcv/{mint}?timeframe=1s endpoint
+  // HTTP loads initial data first, then WebSocket takes over for real-time updates only
+  useEffect(() => {
+    // Only connect for Solana network (non-monad)
+    if (network === 'monad') {
+      return;
+    }
+
+    const tokenAddress = mint || pairAddress;
+    if (!tokenAddress) {
+      console.log('[AdvancedOHLCChart] Solana WebSocket: No token address, skipping');
+      return;
+    }
+
+    // Wait for HTTP to load initial data first before connecting WebSocket
+    // This ensures we have historical data before real-time updates start
+    if (!hasInitializedRef.current || lastGoodCandlesRef.current.length === 0) {
+      console.log('[AdvancedOHLCChart] Solana WebSocket: Waiting for HTTP to load initial data first...');
+      return;
+    }
+
+    // Build WebSocket URL for Solana
+    // Use NEXT_PUBLIC_WEBSOCKET_URL which points to the token service
+    const wsBaseUrl = process.env.NEXT_PUBLIC_WEBSOCKET_URL || 'https://token-stage.narrative.trade';
+    const wsInterval = '1s'; // Always use 1s for real-time updates
+    // Convert http/https to ws/wss for WebSocket
+    const wsProtocol = wsBaseUrl.startsWith('https') ? 'wss' : 'ws';
+    const wsHost = wsBaseUrl.replace(/^https?:\/\//, '');
+    const wsUrl = `${wsProtocol}://${wsHost}/v1/ws/ohlcv/${tokenAddress}?timeframe=${wsInterval}`;
+
+    // Check if we need to aggregate 1s -> viewing interval
+    const needsAggregation = selectedInterval !== '1s' &&
+      selectedInterval !== '5s' &&
+      selectedInterval !== '15s' &&
+      selectedInterval !== '30s';
+
+    // Reset aggregation state if interval changed
+    if (currentAggregatingIntervalRef.current !== selectedInterval) {
+      currentAggregatedCandleRef.current = null;
+      oneSecondCandlesRef.current = [];
+      currentAggregatingIntervalRef.current = selectedInterval;
+    }
+
+    // Track if connection was closed by cleanup
+    let closedByCleanup = false;
+
+    // Handle Solana WebSocket messages
+    const handleSolanaMessage = (event: MessageEvent) => {
+      try {
+        const message = JSON.parse(event.data);
+
+        // Handle initial snapshot - DON'T replace HTTP data
+        // HTTP is our source of truth for historical candles, WebSocket only for real-time
+        if (message.type === 'snapshot') {
+          const candles = message.data as Array<any>;
+          console.log('[AdvancedOHLCChart] 📊 Solana WebSocket snapshot received:', candles?.length || 0, 'candles');
+          console.log('[AdvancedOHLCChart] 📊 Ignoring snapshot - HTTP already loaded', lastGoodCandlesRef.current.length, 'candles');
+          console.log('[AdvancedOHLCChart] 📊 WebSocket ready for real-time candle updates');
+          return;
+        }
+
+        // Handle real-time candle updates - this is what we care about
+        if (message.type === 'candle' && message.data) {
+          const ohlcData = message.data;
+          console.log('[AdvancedOHLCChart] 📊 Solana real-time candle received:', ohlcData);
+
+          // Convert to our format
+          const oneSecCandle: BackendOHLCData = {
+            unix_time: ohlcData.unix_time || ohlcData.time,
+            o: ohlcData.o || ohlcData.open || 0,
+            h: ohlcData.h || ohlcData.high || 0,
+            l: ohlcData.l || ohlcData.low || 0,
+            c: ohlcData.c || ohlcData.close || 0,
+            v_usd: ohlcData.v_usd || ohlcData.v || ohlcData.volume || 0,
+          };
+
+          const currentSelectedInterval = latestParamsRef.current.interval;
+
+          // Aggregate if viewing a longer timeframe
+          if (needsAggregation) {
+            const windowStart = getWindowStartTime(oneSecCandle.unix_time, currentSelectedInterval);
+
+            if (!currentAggregatedCandleRef.current || currentAggregatedCandleRef.current.unix_time !== windowStart) {
+              // Finalize previous candle if exists
+              if (currentAggregatedCandleRef.current) {
+                const finalizedCandle = currentAggregatedCandleRef.current;
+                const cachedData = lastGoodCandlesRef.current;
+                const existingIdx = cachedData.findIndex(c => c.unix_time === finalizedCandle.unix_time);
+                if (existingIdx >= 0) {
+                  cachedData[existingIdx] = finalizedCandle;
+                } else {
+                  cachedData.push(finalizedCandle);
+                  cachedData.sort((a, b) => a.unix_time - b.unix_time);
+                }
+              }
+
+              // Create new aggregated candle
+              currentAggregatedCandleRef.current = {
+                unix_time: windowStart,
+                o: oneSecCandle.o,
+                h: oneSecCandle.h,
+                l: oneSecCandle.l,
+                c: oneSecCandle.c,
+                v_usd: oneSecCandle.v_usd,
+              };
+              oneSecondCandlesRef.current = [oneSecCandle];
+            } else {
+              // Update existing aggregated candle
+              const currentCandle = currentAggregatedCandleRef.current;
+              currentCandle.h = Math.max(currentCandle.h, oneSecCandle.h);
+              currentCandle.l = Math.min(currentCandle.l, oneSecCandle.l);
+              currentCandle.c = oneSecCandle.c;
+              currentCandle.v_usd += oneSecCandle.v_usd;
+              oneSecondCandlesRef.current.push(oneSecCandle);
+            }
+
+            // Use aggregated candle for chart update
+            const aggregatedCandle = currentAggregatedCandleRef.current;
+            const bar = {
+              time: aggregatedCandle.unix_time * 1000,
+              open: aggregatedCandle.o,
+              high: aggregatedCandle.h,
+              low: aggregatedCandle.l,
+              close: aggregatedCandle.c,
+              volume: aggregatedCandle.v_usd,
+            };
+
+            // Update cache
+            const cachedData = lastGoodCandlesRef.current;
+            const existingIdx = cachedData.findIndex(c => c.unix_time === aggregatedCandle.unix_time);
+            if (existingIdx >= 0) {
+              cachedData[existingIdx] = aggregatedCandle;
+            } else {
+              cachedData.push(aggregatedCandle);
+              cachedData.sort((a, b) => a.unix_time - b.unix_time);
+            }
+
+            // Update chart via callback
+            if (subscribedCallbackRef.current && bar.time > 0) {
+              console.log('[AdvancedOHLCChart] 📊 Solana aggregated bar update:', bar);
+              subscribedCallbackRef.current(bar);
+            }
+          } else {
+            // No aggregation needed - use 1s candle directly
+            const bar = {
+              time: oneSecCandle.unix_time * 1000,
+              open: oneSecCandle.o,
+              high: oneSecCandle.h,
+              low: oneSecCandle.l,
+              close: oneSecCandle.c,
+              volume: oneSecCandle.v_usd,
+            };
+
+            // Update cache
+            const cachedData = lastGoodCandlesRef.current;
+            const existingIdx = cachedData.findIndex(c => c.unix_time === oneSecCandle.unix_time);
+            if (existingIdx >= 0) {
+              cachedData[existingIdx] = oneSecCandle;
+            } else {
+              cachedData.push(oneSecCandle);
+              cachedData.sort((a, b) => a.unix_time - b.unix_time);
+            }
+
+            // Update chart via callback
+            if (subscribedCallbackRef.current && bar.time > 0) {
+              console.log('[AdvancedOHLCChart] 📊 Solana 1s bar update:', bar);
+              subscribedCallbackRef.current(bar);
+            }
+          }
+
+          updateChartMetrics();
+        }
+      } catch (e) {
+        console.error('[AdvancedOHLCChart] Error parsing Solana WebSocket message:', e);
+      }
+    };
+
+    // Connect function with reconnection logic
+    const connectSolana = () => {
+      if (closedByCleanup) {
+        console.log('[AdvancedOHLCChart] Solana connection attempt skipped - component unmounting');
+        return;
+      }
+
+      console.log('[AdvancedOHLCChart] 🔌 Solana WebSocket connecting:', wsUrl);
+
+      // Close existing WebSocket if any
+      if (wsRef.current) {
+        wsRef.current.close();
+        wsRef.current = null;
+      }
+
+      try {
+        const ws = new WebSocket(wsUrl);
+        wsRef.current = ws;
+
+        ws.onopen = () => {
+          console.log('[AdvancedOHLCChart] ✅ Solana WebSocket connected for', tokenAddress.slice(0, 10) + '...');
+        };
+
+        ws.onmessage = handleSolanaMessage;
+
+        ws.onerror = (error) => {
+          console.error('[AdvancedOHLCChart] Solana WebSocket error:', error);
+        };
+
+        ws.onclose = (event) => {
+          console.log('[AdvancedOHLCChart] Solana WebSocket closed:', event.code, event.reason);
+          wsRef.current = null;
+
+          // Reconnect after delay if not closed by cleanup
+          if (!closedByCleanup && mountedRef.current) {
+            wsReconnectTimeoutRef.current = setTimeout(() => {
+              console.log('[AdvancedOHLCChart] 🔄 Attempting Solana WebSocket reconnect...');
+              connectSolana();
+            }, 2000);
+          }
+        };
+      } catch (e) {
+        console.error('[AdvancedOHLCChart] Failed to create Solana WebSocket:', e);
+        if (!closedByCleanup && mountedRef.current) {
+          wsReconnectTimeoutRef.current = setTimeout(() => {
+            console.log('[AdvancedOHLCChart] 🔄 Retrying Solana WebSocket connection...');
+            connectSolana();
+          }, 2000);
+        }
+      }
+    };
+
+    // Initial connection
+    connectSolana();
+
+    // Cleanup
+    return () => {
+      closedByCleanup = true;
+      if (wsReconnectTimeoutRef.current) {
+        clearTimeout(wsReconnectTimeoutRef.current);
+        wsReconnectTimeoutRef.current = null;
+      }
+      if (wsRef.current) {
+        wsRef.current.close();
+        wsRef.current = null;
+      }
+    };
+  }, [network, mint, pairAddress, selectedInterval, candles.length]); // Re-connect when token or interval changes, or when HTTP data loads
+
   // Create custom datafeed that uses our fetched candles
   const createDatafeed = useCallback(() => {
     const { mint: dfMint, pairAddress: dfPairAddress, interval: dfInterval, network: dfNetwork } = latestParamsRef.current;
@@ -3173,20 +3419,27 @@ const AdvancedOHLCChart: React.FC<AdvancedOHLCChartProps> = ({
           hasExistingWs: !!wsRef.current,
         });
 
-        // Only handle WebSocket for Monad network
-        if (currentNetwork !== 'monad' || !tokenAddress) {
-          console.log('[AdvancedOHLCChart] subscribeBars skipped - not Monad or no token, network:', currentNetwork, 'tokenAddress:', tokenAddress);
+        // Store callback for use in WebSocket message handler (from useEffect)
+        // This callback is used by BOTH Monad and Solana WebSocket handlers
+        if (!tokenAddress) {
+          console.log('[AdvancedOHLCChart] subscribeBars skipped - no token address');
           return;
         }
 
-        // Store callback for use in WebSocket message handler (from useEffect)
-        // The useEffect WebSocket will use this callback for real-time updates
         subscribedCallbackRef.current = onRealtimeCallback;
         console.log('[AdvancedOHLCChart] ✅ subscribeBars registered callback for real-time updates', {
+          network: currentNetwork,
           hasWebSocket: !!wsRef.current,
           wsState: wsRef.current ? wsRef.current.readyState : 'none',
           wsStateName: wsRef.current ? ['CONNECTING', 'OPEN', 'CLOSING', 'CLOSED'][wsRef.current.readyState] : 'none',
         });
+
+        // For Solana: callback is registered, useEffect WebSocket will use it
+        // Don't create WebSocket here - the Solana useEffect handles it
+        if (currentNetwork !== 'monad') {
+          console.log('[AdvancedOHLCChart] 📡 Solana: callback registered, useEffect WebSocket will handle real-time updates');
+          return;
+        }
 
         // If we already have an active WebSocket from useEffect, ensure callback is set and return
         // The useEffect WebSocket will handle both initial data and real-time updates
@@ -3213,7 +3466,7 @@ const AdvancedOHLCChart: React.FC<AdvancedOHLCChartProps> = ({
           return;
         }
 
-        // No active WebSocket, create one (fallback if useEffect didn't connect)
+        // No active WebSocket, create one (fallback if useEffect didn't connect) - Monad only
         const requestedInterval = RESOLUTION_TO_INTERVAL[resolution] || '1s';
         const wsBaseUrl = process.env.NEXT_PUBLIC_MONAD_TOKEN_SERVICE_URL || 'http://localhost:8081';
         // Convert http/https to ws/wss for WebSocket
