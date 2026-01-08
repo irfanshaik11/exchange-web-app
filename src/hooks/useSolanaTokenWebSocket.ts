@@ -276,19 +276,26 @@ export function useSolanaTokenWebSocket(
 
             setLoading(false);
           } else if (message.type === 'trade_update') {
-            // Real-time trade update
+            // Real-time trade update - process ALL trades in the array
             if (message.data.trades && message.data.trades.length > 0) {
-              const newTrade = formatTradeForUI(message.data.trades[0]);
-              onNewTradeRef.current?.(newTrade);
+              const newTrades = message.data.trades.map(formatTradeForUI);
+              console.log('[useSolanaTokenWebSocket] Processing', newTrades.length, 'trade updates');
+
+              // Notify callback for each new trade
+              newTrades.forEach((trade) => {
+                onNewTradeRef.current?.(trade);
+              });
 
               setTrades((prev) => {
-                // Check for duplicate by signature
-                const exists = prev.some((t) => t.signature === newTrade.signature);
-                if (exists) return prev;
+                // Filter out duplicates by signature
+                const existingSignatures = new Set(prev.map((t) => t.signature));
+                const uniqueNewTrades = newTrades.filter((t) => !existingSignatures.has(t.signature));
 
-                // Prepend new trade and limit to maxTrades
-                const newTrades = [newTrade, ...prev];
-                return newTrades.slice(0, maxTrades);
+                if (uniqueNewTrades.length === 0) return prev;
+
+                // Prepend new trades (newest first) and limit to maxTrades
+                const combined = [...uniqueNewTrades, ...prev];
+                return combined.slice(0, maxTrades);
               });
             }
           } else if (message.type === 'holder_update') {
