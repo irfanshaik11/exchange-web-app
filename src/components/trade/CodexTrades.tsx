@@ -290,14 +290,16 @@ interface CodexTradesProps {
 
 function getAge(timestamp: number) {
   const now = Date.now() / 1000; // seconds
-  const diffSeconds = now - timestamp;
+  const diffSeconds = Math.floor(now - timestamp);
   const diffMins = Math.floor(diffSeconds / 60);
   const diffHours = Math.floor(diffSeconds / 3600);
   const diffDays = Math.floor(diffSeconds / 86400);
 
+  if (diffSeconds < 0) return '0s';
   if (diffDays > 0) return `${diffDays}d`;
   if (diffHours > 0) return `${diffHours}h`;
-  return `${diffMins}m`;
+  if (diffMins > 0) return `${diffMins}m`;
+  return `${diffSeconds}s`;
 }
 
 function getTimeFromTimestampSec(ts: number) {
