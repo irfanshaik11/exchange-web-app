@@ -1,5 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import ImageBubble from './ImageBubble';
+import { isMetadataUrl, resolveMetadataImage } from '~/utils/images';
 
 interface FastImageProps {
   src?: string | null;
@@ -30,17 +31,31 @@ export default function FastImage({
   showBubble = true,
   bubbleSrc,
 }: FastImageProps) {
-  // Load images directly from URI - no optimization needed for speed
-  const finalSrc = src || fallbackSrc;
-  
   const [imageLoaded, setImageLoaded] = useState(false);
   const [imageError, setImageError] = useState(false);
+  const [resolvedSrc, setResolvedSrc] = useState<string | null>(null);
+
+  const inputSrc = src || fallbackSrc;
+
+  // If src is a metadata URL (JSON), resolve it to get actual image URL
+  useEffect(() => {
+    if (inputSrc && isMetadataUrl(inputSrc)) {
+      resolveMetadataImage(inputSrc).then(resolved => {
+        setResolvedSrc(resolved || inputSrc);
+      });
+    } else {
+      setResolvedSrc(inputSrc || null);
+    }
+  }, [inputSrc]);
+
+  // Use resolved URL (or original if not metadata)
+  const finalSrc = resolvedSrc;
 
   // CRITICAL: Reset loading state when src changes to prevent stale image display
-  React.useEffect(() => {
+  useEffect(() => {
     setImageLoaded(false);
     setImageError(false);
-  }, [src, fallbackSrc]);
+  }, [resolvedSrc]);
 
   // Use proxy for IPFS URLs, defined.fi, debridge, and other CORS-prone domains
   // IPFS gateways can have CORS restrictions, so proxy them
@@ -67,7 +82,8 @@ export default function FastImage({
     finalSrc.includes('cdninstagram.com') ||
     finalSrc.includes('ipfs.storacha.link') ||
     finalSrc.includes('storacha.link') ||
-    finalSrc.includes('content.coinwave.gg')
+    finalSrc.includes('content.coinwave.gg') ||
+    finalSrc.includes('digitaloceanspaces.com')
   );
   
   const imageUrl = needsProxy && finalSrc
