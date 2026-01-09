@@ -100,22 +100,15 @@ export function isMetadataUrl(url: string | null | undefined): boolean {
       );
     }
 
-    // IPFS and Arweave: ONLY treat as metadata if explicit JSON indicators present
-    // Many IPFS/Arweave URLs are actual images without extensions (e.g., bafkrei... CIDs)
-    // Being too aggressive here breaks image display by trying to parse images as JSON
-    const isIpfsOrArweave =
+    // IPFS links without image extensions are often metadata JSON
+    const isIpfs =
       hostname.includes('ipfs') ||
-      hostname.includes('arweave') ||
       lower.startsWith('ipfs://') ||
       lower.includes('/ipfs/');
-    if (isIpfsOrArweave) {
-      // Only treat as metadata if explicit JSON indicators
-      return (
-        pathname.endsWith('.json') ||
-        pathname.includes('/metadata/') ||
-        pathname.includes('/data/')
-      );
-    }
+    if (isIpfs) return true;
+
+    // Arweave URLs without extensions are often JSON metadata
+    if (hostname.includes('arweave')) return true;
   } catch {
     // If URL parse fails, fall through
   }
@@ -136,11 +129,8 @@ const FAILURE_TTL_MS = 30 * 1000;
  * Resolve a metadata JSON URL to get the actual image URL
  * Returns null if resolution fails or URL is not a metadata URL
  * Uses TTL-based caching: success cached for 30min, failure cached for 30sec
- * Recursively resolves nested metadata URLs (max depth 2)
  */
-export async function resolveMetadataImage(url: string, depth: number = 0): Promise<string | null> {
-  // Prevent infinite loops with max depth
-  if (depth > 2) return null;
+export async function resolveMetadataImage(url: string): Promise<string | null> {
   if (!url || !isMetadataUrl(url)) return null;
 
   // Check cache with TTL
@@ -184,18 +174,7 @@ export async function resolveMetadataImage(url: string, depth: number = 0): Prom
     const data = await response.json();
 
     // Extract image from metadata JSON
-    let imageUrl = extractMetaImage(data);
-
-    // If the extracted image URL is ALSO a metadata URL, resolve it recursively
-    // This handles nested metadata (e.g., IPFS metadata pointing to another IPFS metadata)
-    if (imageUrl && isMetadataUrl(imageUrl)) {
-      const nestedImage = await resolveMetadataImage(imageUrl, depth + 1);
-      if (nestedImage) {
-        imageUrl = nestedImage;
-      }
-      // If nested resolution fails, imageUrl remains as-is (might still be wrong, but we tried)
-    }
-
+    const imageUrl = extractMetaImage(data);
     metadataImageCache.set(url, { image: imageUrl, timestamp: Date.now() });
     return imageUrl;
   } catch (error) {
