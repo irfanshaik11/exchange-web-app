@@ -105,6 +105,22 @@ export interface SolanaTokenInfo {
   updated_at: string;
 }
 
+// Volume data for a specific timeframe
+export interface VolumeTimeframe {
+  buy_volume_sol: number;
+  sell_volume_sol: number;
+  buy_count: number;
+  sell_count: number;
+}
+
+// Volume data from the unified WebSocket snapshot
+export interface SolanaTokenVolume {
+  volume_5m: VolumeTimeframe;
+  volume_1h: VolumeTimeframe;
+  volume_6h: VolumeTimeframe;
+  volume_24h: VolumeTimeframe;
+}
+
 // WebSocket message types
 interface WebSocketMessage {
   type: 'snapshot' | 'trade_update' | 'holder_update' | 'top_trader_update' | 'dev_token_update' | 'token_update' | 'pong';
@@ -115,6 +131,7 @@ interface WebSocketMessage {
     dev_tokens: SolanaDevToken[] | null;
     holder_summary?: HolderSummary | null;
     token?: SolanaTokenInfo | null;
+    volume?: SolanaTokenVolume | null;
   };
   timestamp: string;
 }
@@ -139,6 +156,7 @@ interface UseSolanaTokenWebSocketReturn {
   devTokens: SolanaDevToken[];
   holderSummary: HolderSummary | null;
   tokenInfo: SolanaTokenInfo | null;
+  volume: SolanaTokenVolume | null;
   connected: boolean;
   error: string | null;
   loading: boolean;
@@ -275,6 +293,7 @@ export function useSolanaTokenWebSocket(
   const [devTokens, setDevTokens] = useState<SolanaDevToken[]>([]);
   const [holderSummary, setHolderSummary] = useState<HolderSummary | null>(null);
   const [tokenInfo, setTokenInfo] = useState<SolanaTokenInfo | null>(null);
+  const [volume, setVolume] = useState<SolanaTokenVolume | null>(null);
   const [connected, setConnected] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -422,6 +441,14 @@ export function useSolanaTokenWebSocket(
               onTokenInfoUpdateRef.current?.(rawToken);
             } else {
               setTokenInfo(null);
+            }
+
+            // Capture volume data from snapshot
+            if (message.data.volume) {
+              console.log('[useSolanaTokenWebSocket] Received volume data:', message.data.volume);
+              setVolume(message.data.volume);
+            } else {
+              setVolume(null);
             }
 
             setLoading(false);
@@ -644,6 +671,7 @@ export function useSolanaTokenWebSocket(
       setDevTokens([]);
       setHolderSummary(null);
       setTokenInfo(null);
+      setVolume(null);
       disconnect();
       reconnectAttemptsRef.current = 0;
       connect();
@@ -665,6 +693,7 @@ export function useSolanaTokenWebSocket(
     devTokens,
     holderSummary,
     tokenInfo,
+    volume,
     connected,
     error,
     loading,

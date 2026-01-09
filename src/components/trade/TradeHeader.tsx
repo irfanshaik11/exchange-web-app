@@ -8,7 +8,7 @@ import FastImage from "../FastImage";
 import useMarketDataWebSocket from "~/hooks/useMarketDataWebSocket";
 import { useRouter } from "next/router";
 import { getProtocolBranding } from "~/utils/protocolBranding";
-import type { SolanaTokenInfo } from "~/hooks/useSolanaTokenWebSocket";
+import type { SolanaTokenInfo, SolanaTokenVolume } from "~/hooks/useSolanaTokenWebSocket";
 
 import { IoShareSocialOutline } from "react-icons/io5";
 import {
@@ -393,9 +393,11 @@ interface TradeHeaderProps {
   liveMarketCapUsd?: number | null;
   /** Real-time token info from unified WebSocket (price, mcap, liquidity, image) */
   wsTokenInfo?: SolanaTokenInfo | null;
+  /** Real-time volume data from unified WebSocket (5m, 1h, 6h, 24h volumes) */
+  wsVolume?: SolanaTokenVolume | null;
 }
 
-const TradeHeader: React.FC<TradeHeaderProps> = ({ token, livePriceUsd, liveMarketCapUsd, wsTokenInfo }) => {
+const TradeHeader: React.FC<TradeHeaderProps> = ({ token, livePriceUsd, liveMarketCapUsd, wsTokenInfo, wsVolume }) => {
   const coalesceNumber = (...values: any[]): number | null => {
     for (const v of values) {
       const n = typeof v === "string" ? parseFloat(v) : v;
@@ -1544,66 +1546,49 @@ const TradeHeader: React.FC<TradeHeaderProps> = ({ token, livePriceUsd, liveMark
               )}
             </span>
           </StatInline>
+          {/* 24H VOL - inline after Liquidity */}
+          {(() => {
+            // Hide for Monad tokens
+            const protocol = extractProtocolRaw(token);
+            const isMonad = protocol && (
+              protocol.includes('nad.fun') ||
+              protocol.includes('nadfun') ||
+              protocol.includes('flapsh') ||
+              protocol.includes('flap.sh') ||
+              protocol.includes('kuru')
+            );
+            if (isMonad) return null;
+
+            // SOL price for converting volume from SOL to USD
+            const SOL_PRICE_USD = 200;
+            const vol24h = wsVolume?.volume_24h;
+            const buyVolSol = vol24h?.buy_volume_sol ?? 0;
+            const sellVolSol = vol24h?.sell_volume_sol ?? 0;
+            const totalVol24hUsd = (buyVolSol + sellVolSol) * SOL_PRICE_USD;
+
+            // Only show if we have data
+            if (!wsVolume || totalVol24hUsd === 0) return null;
+
+            return (
+              <StatInline label="24H Vol">
+                ${formatSmartNumber(totalVol24hUsd)}
+              </StatInline>
+            );
+          })()}
           <StatInline label="Supply">{formatSmartNumber(supply)}</StatInline>
           <StatInline label="B. Curve">
             <div className="flex flex-row items-center gap-2 text-xs">
               {Number.isFinite(Number(curvePct))
                 ? `${Number(curvePct).toFixed(1)}%`
                 : "—"}
-              <ColorFillBar 
-                value={curvePct * 100} 
+              <ColorFillBar
+                value={curvePct * 100}
                 color={isMonadContext ? MONAD_RED : undefined}
               />
             </div>
           </StatInline>
         </div>
       </div>
-
-      {/* RIGHT: Trade stats (24H VOL, BUYS, SELLS, NET) - COMMENTED OUT */}
-      {/*
-      {(() => {
-        const protocol = extractProtocolRaw(token);
-        const isMonad = protocol && (
-          protocol.includes('nad.fun') ||
-          protocol.includes('nadfun') ||
-          protocol.includes('flapsh') ||
-          protocol.includes('flap.sh') ||
-          protocol.includes('kuru')
-        );
-
-        if (isMonad) {
-          return null;
-        }
-
-        const buyVol24h = (token as any)?.total_buy_volume_24h ?? (token as any)?.total_buy_volume_usd ?? 0;
-        const sellVol24h = (token as any)?.total_sell_volume_24h ?? (token as any)?.total_sell_volume_usd ?? 0;
-        const buys24h = (token as any)?.total_buys_24h ?? (token as any)?.total_buys ?? 0;
-        const sells24h = (token as any)?.total_sells_24h ?? (token as any)?.total_sells ?? 0;
-        const volume24h = (token as any)?.volume_24h ?? (buyVol24h + sellVol24h);
-        const netVolume = (token as any)?.net_volume_usd ?? (buyVol24h - sellVol24h);
-
-        return (
-          <div className="flex items-center gap-3 ml-auto mr-2">
-            <StatInline label="24H VOL">
-              ${formatSmartNumber(volume24h)}
-            </StatInline>
-            <StatInline label="BUYS" accent="green">
-              {buys24h} / ${formatSmartNumber(buyVol24h)}
-            </StatInline>
-            <StatInline label="SELLS">
-              <span style={{ color: "#FF4D7F" }}>
-                {sells24h} / ${formatSmartNumber(sellVol24h)}
-              </span>
-            </StatInline>
-            <StatInline label="NET">
-              <span style={{ color: netVolume >= 0 ? AX.green : "#FF4D7F" }}>
-                {netVolume >= 0 ? "+" : ""}${formatSmartNumber(netVolume)}
-              </span>
-            </StatInline>
-          </div>
-        );
-      })()}
-      */}
 
       {/* RIGHT: actions */}
       {(() => {
