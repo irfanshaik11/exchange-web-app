@@ -100,15 +100,22 @@ export function isMetadataUrl(url: string | null | undefined): boolean {
       );
     }
 
-    // IPFS links without image extensions are often metadata JSON
-    const isIpfs =
+    // IPFS and Arweave: ONLY treat as metadata if explicit JSON indicators present
+    // Many IPFS/Arweave URLs are actual images without extensions (e.g., bafkrei... CIDs)
+    // Being too aggressive here breaks image display by trying to parse images as JSON
+    const isIpfsOrArweave =
       hostname.includes('ipfs') ||
+      hostname.includes('arweave') ||
       lower.startsWith('ipfs://') ||
       lower.includes('/ipfs/');
-    if (isIpfs) return true;
-
-    // Arweave URLs without extensions are often JSON metadata
-    if (hostname.includes('arweave')) return true;
+    if (isIpfsOrArweave) {
+      // Only treat as metadata if explicit JSON indicators
+      return (
+        pathname.endsWith('.json') ||
+        pathname.includes('/metadata/') ||
+        pathname.includes('/data/')
+      );
+    }
   } catch {
     // If URL parse fails, fall through
   }
