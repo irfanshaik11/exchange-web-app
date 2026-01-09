@@ -64,7 +64,8 @@ export default function FastImage({
 
   // Use proxy for IPFS URLs, defined.fi, debridge, and other CORS-prone domains
   // IPFS gateways can have CORS restrictions, so proxy them
-  const alreadyProxied = finalSrc?.startsWith('/api/image');
+  // Don't proxy URLs that are already going through our API endpoints
+  const alreadyProxied = finalSrc?.startsWith('/api/');
   const needsProxy = finalSrc && !alreadyProxied && (
     finalSrc.includes('token-media.defined.fi') ||
     finalSrc.includes('ipfs.io') ||
@@ -95,28 +96,21 @@ export default function FastImage({
     ? `/api/image?url=${encodeURIComponent(finalSrc)}`
     : finalSrc;
 
-  // Debug logging to help diagnose image loading issues
-  React.useEffect(() => {
-    if (imageUrl) {
-      console.log(`[FastImage] Loading image:`, imageUrl, `for ${symbol || name || alt}`);
-    } else {
-      console.warn(`[FastImage] No image URL provided for ${symbol || name || alt}`);
-    }
-  }, [imageUrl, symbol, name, alt]);
+  // Debug logging disabled for cleaner console
+  // React.useEffect(() => {
+  //   if (imageUrl) {
+  //     console.log(`[FastImage] Loading image:`, imageUrl, `for ${symbol || name || alt}`);
+  //   } else {
+  //     console.warn(`[FastImage] No image URL provided for ${symbol || name || alt}`);
+  //   }
+  // }, [imageUrl, symbol, name, alt]);
 
   const handleLoad = () => {
-    console.log(`[FastImage] Image loaded successfully:`, imageUrl);
     setImageLoaded(true);
     setImageError(false);
   };
 
-  const handleError = (e: React.SyntheticEvent<HTMLImageElement, Event>) => {
-    const target = e.target as HTMLImageElement;
-    console.error(`[FastImage] Image failed to load:`, imageUrl, `Error:`, {
-      src: target.src,
-      naturalWidth: target.naturalWidth,
-      naturalHeight: target.naturalHeight,
-    });
+  const handleError = () => {
     setImageError(true);
     setImageLoaded(false);
   };

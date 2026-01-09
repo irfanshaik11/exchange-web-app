@@ -171,6 +171,14 @@ export async function resolveMetadataImage(url: string): Promise<string | null> 
       return null;
     }
 
+    // Check content-type: if it's an image, the proxy URL IS the image source
+    const contentType = response.headers.get('content-type') || '';
+    if (contentType.startsWith('image/')) {
+      // The /api/metadata endpoint proxied the actual image - use the proxy URL directly
+      metadataImageCache.set(url, { image: metadataUrl, timestamp: Date.now() });
+      return metadataUrl;
+    }
+
     const data = await response.json();
 
     // Extract image from metadata JSON
@@ -189,6 +197,11 @@ export async function resolveMetadataImage(url: string): Promise<string | null> 
  */
 export function clearMetadataImageCache(): void {
   metadataImageCache.clear();
+}
+
+// Expose cache clear to window for debugging
+if (typeof window !== 'undefined') {
+  (window as any).clearMetadataCache = clearMetadataImageCache;
 }
 
 export function extractMetaImage(meta: any): string | null {
