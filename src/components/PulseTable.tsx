@@ -68,7 +68,7 @@ import { SiSolana } from "react-icons/si";
 import Image from "next/image";
 import InterstatePopout from "./InterstatePopout";
 import VerticalInput from "./VerticalInput";
-import { usePulseWebSocket } from "~/hooks/usePulseWebSocket";
+import { usePulseWebSocketPersistent } from "~/hooks/usePulseWebSocketPersistent";
 import { flushSync } from "react-dom";
 
 import { useRouter } from "next/router";
@@ -2112,7 +2112,7 @@ function PulseTable({
     migratedTokens: wsMigratedTokens,
     connected: wsConnected,
     error: wsError,
-  } = usePulseWebSocket({
+  } = usePulseWebSocketPersistent({
     enabled: true,
     channel,
     protocols:
