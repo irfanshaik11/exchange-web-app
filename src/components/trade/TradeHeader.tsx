@@ -1,7 +1,7 @@
 // components/trade/TradeHeader.tsx
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import type { Token } from "~/utils/db";
-import { formatSmartNumber } from "~/utils/db";
+import { formatSmartNumber, formatLamportsToSol } from "~/utils/db";
 import { useWatchlist } from "../WatchlistContext";
 import { SubscriptNumber } from "../InterstateTable";
 import FastImage from "../FastImage";
@@ -1576,6 +1576,9 @@ const TradeHeader: React.FC<TradeHeaderProps> = ({ token, livePriceUsd, liveMark
             );
           })()}
           <StatInline label="Supply">{formatSmartNumber(supply)}</StatInline>
+          <StatInline label="Gas Fees">
+            {formatLamportsToSol((token as any)?.total_fees_lamports)}
+          </StatInline>
           <StatInline label="B. Curve">
             <div className="flex flex-row items-center gap-2 text-xs">
               {Number.isFinite(Number(curvePct))
