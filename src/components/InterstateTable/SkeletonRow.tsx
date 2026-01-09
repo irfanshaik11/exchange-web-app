@@ -29,10 +29,9 @@ export default function SkeletonRow() {
         <div className="h-4 w-12 rounded bg-neutral-800 animate-pulse mb-2" />
         <div className="h-3 w-16 rounded bg-neutral-800 animate-pulse" />
       </td>
-      {/* Audit Log skeleton */}
+      {/* Gas Fees skeleton */}
       <td className="px-3 py-2">
-        <div className="h-3 w-12 rounded bg-neutral-800 animate-pulse mb-2" />
-        <div className="h-3 w-16 rounded bg-neutral-800 animate-pulse" />
+        <div className="h-4 w-16 rounded bg-neutral-800 animate-pulse" />
       </td>
       {/* Action skeleton */}
       <td className="px-3 py-2">
