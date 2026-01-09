@@ -38,6 +38,26 @@ export interface SolanaTokenHolder {
   avg_sell_price: number;
   first_buy_at: string;
   last_activity_at: string;
+  // New fields from WebSocket
+  sol_balance_lamports?: number;
+  holder_type?: 'dev' | 'sniper' | 'bundler' | 'holder';
+}
+
+// Holder summary from snapshot
+export interface HolderSummary {
+  dev_wallet?: string;
+  dev_held_percent: number;
+  dev_remaining_tokens: number;
+  dev_sold_all: boolean;
+  dev_count: number;
+  sniper_held_percent: number;
+  sniper_count: number;
+  bundler_held_percent: number;
+  bundler_count: number;
+  insider_held_percent: number;
+  insider_count: number;
+  top10_held_percent: number;
+  total_holders: number;
 }
 
 // Top trader data from the unified WebSocket
@@ -80,6 +100,7 @@ interface WebSocketMessage {
     holders: SolanaTokenHolder[] | null;
     top_traders: SolanaTopTrader[] | null;
     dev_tokens: SolanaDevToken[] | null;
+    holder_summary?: HolderSummary | null;
   };
   timestamp: string;
 }
@@ -101,6 +122,7 @@ interface UseSolanaTokenWebSocketReturn {
   holders: SolanaTokenHolder[];
   topTraders: SolanaTopTrader[];
   devTokens: SolanaDevToken[];
+  holderSummary: HolderSummary | null;
   connected: boolean;
   error: string | null;
   loading: boolean;
@@ -200,6 +222,7 @@ export function useSolanaTokenWebSocket(
   const [holders, setHolders] = useState<SolanaTokenHolder[]>([]);
   const [topTraders, setTopTraders] = useState<SolanaTopTrader[]>([]);
   const [devTokens, setDevTokens] = useState<SolanaDevToken[]>([]);
+  const [holderSummary, setHolderSummary] = useState<HolderSummary | null>(null);
   const [connected, setConnected] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -308,6 +331,14 @@ export function useSolanaTokenWebSocket(
               onDevTokensUpdateRef.current?.(message.data.dev_tokens);
             } else {
               setDevTokens([]);
+            }
+
+            // Capture holder_summary from snapshot
+            if (message.data.holder_summary) {
+              console.log('[useSolanaTokenWebSocket] Received holder_summary:', message.data.holder_summary);
+              setHolderSummary(message.data.holder_summary);
+            } else {
+              setHolderSummary(null);
             }
 
             setLoading(false);
@@ -515,6 +546,7 @@ export function useSolanaTokenWebSocket(
       setHolders([]);
       setTopTraders([]);
       setDevTokens([]);
+      setHolderSummary(null);
       disconnect();
       reconnectAttemptsRef.current = 0;
       connect();
@@ -534,6 +566,7 @@ export function useSolanaTokenWebSocket(
     holders,
     topTraders,
     devTokens,
+    holderSummary,
     connected,
     error,
     loading,

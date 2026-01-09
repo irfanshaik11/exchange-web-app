@@ -94,7 +94,7 @@ export default function DiscoverPopoutContent() {
           // Check if we're on monad chain - if so, only allow trending or newPairs
           // Check URL params directly for immediate access (same pattern as currentChain)
           const urlParams = new URLSearchParams(window.location.search);
-          const initialChain = urlParams.get('chain') || 'monad';
+          const initialChain = urlParams.get('chain') || 'sol';
           if (initialChain === 'monad' && savedTab !== 'trending' && savedTab !== 'newPairs') {
             return 'trending';
           }

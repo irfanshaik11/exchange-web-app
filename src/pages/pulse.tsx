@@ -228,30 +228,31 @@ export default function PulsePage() {
     }
   }, [router.isReady, router.query.chain, router]);
 
+  // DISABLED: "Enhanced Real-Time Data" popup - commented out for now
   // Check if updates modal should be shown - only once after login
-  useEffect(() => {
-    if (typeof window !== "undefined" && user) {
-      // Use user-specific cookie key so it only shows once per user
-      // Cookies persist across hard refreshes better than localStorage
-      const cookieKey = `trenches-updates-viewed-${user.id}`;
-      const hasViewed = Cookies.get(cookieKey);
+  // useEffect(() => {
+  //   if (typeof window !== "undefined" && user) {
+  //     // Use user-specific cookie key so it only shows once per user
+  //     // Cookies persist across hard refreshes better than localStorage
+  //     const cookieKey = `trenches-updates-viewed-${user.id}`;
+  //     const hasViewed = Cookies.get(cookieKey);
 
-      // Only show modal if user is logged in AND hasn't viewed it before
-      // Simple check: if cookie doesn't exist, show modal
-      if (!hasViewed) {
-        // Delay to ensure page has loaded
-        setTimeout(() => {
-          setShowUpdatesModal(true);
-        }, 1000);
-      } else {
-        // Explicitly set showUpdatesModal to false if cookie exists
-        setShowUpdatesModal(false);
-      }
-    } else {
-      // If user is not logged in, don't show modal
-      setShowUpdatesModal(false);
-    }
-  }, [user]); // Re-run when user changes (login/logout)
+  //     // Only show modal if user is logged in AND hasn't viewed it before
+  //     // Simple check: if cookie doesn't exist, show modal
+  //     if (!hasViewed) {
+  //       // Delay to ensure page has loaded
+  //       setTimeout(() => {
+  //         setShowUpdatesModal(true);
+  //       }, 1000);
+  //     } else {
+  //       // Explicitly set showUpdatesModal to false if cookie exists
+  //       setShowUpdatesModal(false);
+  //     }
+  //   } else {
+  //     // If user is not logged in, don't show modal
+  //     setShowUpdatesModal(false);
+  //   }
+  // }, [user]); // Re-run when user changes (login/logout)
 
   // Keyboard navigation for tabs (mobile only) - MOBILE VIEW DISABLED
   useEffect(() => {

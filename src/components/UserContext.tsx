@@ -993,7 +993,7 @@ export function UserProvider({ children }: { children: ReactNode }) {
         window.dispatchEvent(new Event("referral-access-reset"));
       }
 
-      router.push("/pulse?chain=monad").catch((err) =>
+      router.push("/pulse?chain=sol").catch((err) =>
         console.warn("[logout] Failed to navigate to login", err)
       );
     };
