@@ -539,8 +539,8 @@ export default function TradePage() {
     return undefined;
   }, [displayToken?.mint, _mint, id]);
 
-  // Get holder summary, token info, and trades from unified WebSocket for token info section and dev markers
-  const { holderSummary, topTraders: wsTopTraders, trades: wsHistoricalTrades, tokenInfo: wsTokenInfo } = useSolanaTokenWebSocket({
+  // Get holder summary, token info, trades, and volume from unified WebSocket for token info section and dev markers
+  const { holderSummary, topTraders: wsTopTraders, trades: wsHistoricalTrades, tokenInfo: wsTokenInfo, volume: wsVolume } = useSolanaTokenWebSocket({
     mintAddress: displayToken?.mint || resolvedTokenMint,
     enabled: !!(displayToken?.mint || resolvedTokenMint),
   });
@@ -862,7 +862,7 @@ export default function TradePage() {
               }}
             >
               <div className="px-2 flex-shrink-0">
-                <TradeHeader token={validatedCorrectTokenData || displayToken} wsTokenInfo={wsTokenInfo} />
+                <TradeHeader token={validatedCorrectTokenData || displayToken} wsTokenInfo={wsTokenInfo} wsVolume={wsVolume} />
               </div>
 
               {/* Separator line after TradeHeader */}
@@ -1044,6 +1044,7 @@ export default function TradePage() {
                 quickBuySettings={quickBuySettings}
                 quickBuySide={quickBuySide}
                 initialStats={initialTradeData?.stats}
+                wsVolume={wsVolume}
               />
             </div>
 
@@ -1107,6 +1108,7 @@ export default function TradePage() {
                 setTradeParams={setTradeParams}
                 quickBuySettings={quickBuySettings}
                 quickBuySide={quickBuySide}
+                wsVolume={wsVolume}
               />
             </div>
           </div>
