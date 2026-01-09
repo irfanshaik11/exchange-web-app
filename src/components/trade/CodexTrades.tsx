@@ -5,11 +5,15 @@ import { FaFilter, FaCaretDown } from "react-icons/fa";
 import { FiX } from "react-icons/fi";
 import { MdRefresh } from "react-icons/md";
 import { IoOpenOutline } from "react-icons/io5";
-import React, { useState, useCallback } from 'react';
+import { LuChefHat } from 'react-icons/lu';
+import { TfiTarget } from 'react-icons/tfi';
+import { HiOutlineCubeTransparent } from 'react-icons/hi2';
+import React, { useState, useCallback, useMemo } from 'react';
 import { formatSmartNumber, formatMarketCap } from '~/utils/db';
-import useSolanaTokenWebSocket from '../../hooks/useSolanaTokenWebSocket';
+import useSolanaTokenWebSocket, { type SolanaTokenHolder } from '../../hooks/useSolanaTokenWebSocket';
 import { useMonadTradesWebSocket } from '../../hooks/useMonadTradesWebSocket';
 import type { Token } from '~/utils/db';
+import WalletHoverCard, { type WalletHoverCardData } from './WalletHoverCard';
 
 // Sort direction type
 type SortDirection = 'asc' | 'desc' | null;
@@ -23,12 +27,23 @@ interface FilterRange {
 // Type filter selection
 type TypeFilter = 'all' | 'buy' | 'sell';
 
+// Holder type tags available for filtering
+type HolderTypeTag = 'dev' | 'sniper' | 'bundler';
+
+// Wallet filter state
+interface WalletFilter {
+  address: string;
+  tags: HolderTypeTag[];
+  txsRange: FilterRange;
+}
+
 // Column filter state for trades
 interface TradeFilters {
   type: { filter: TypeFilter };
   price: { sort: SortDirection; range: FilterRange };
   amount: { sort: SortDirection; range: FilterRange };
   total: { sort: SortDirection; range: FilterRange };
+  wallet: WalletFilter;
 }
 
 const AX = {
@@ -229,6 +244,178 @@ const TypeFilterPopout: React.FC<TypeFilterPopoutProps> = ({
               {opt.label}
             </button>
           ))}
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// Wallet Filter Popout Component
+interface WalletFilterPopoutProps {
+  isOpen: boolean;
+  onClose: () => void;
+  filter: WalletFilter;
+  onFilterChange: (filter: WalletFilter) => void;
+  onReset: () => void;
+  onApply: () => void;
+  position: { top: number; left: number };
+}
+
+const WalletFilterPopout: React.FC<WalletFilterPopoutProps> = ({
+  isOpen,
+  onClose,
+  filter,
+  onFilterChange,
+  onReset,
+  onApply,
+  position,
+}) => {
+  if (!isOpen) return null;
+
+  const tagOptions: { value: HolderTypeTag; label: string; color: string; icon: React.ReactNode }[] = [
+    { value: 'dev', label: 'DEV', color: '#facc15', icon: <LuChefHat size={12} className="text-yellow-400" /> },
+    { value: 'sniper', label: 'Sniper', color: '#f87171', icon: <TfiTarget size={12} className="text-red-400" /> },
+    { value: 'bundler', label: 'Bundler', color: '#fb923c', icon: <HiOutlineCubeTransparent size={12} className="text-orange-400" /> },
+  ];
+
+  const handleTagToggle = (tag: HolderTypeTag) => {
+    const newTags = filter.tags.includes(tag)
+      ? filter.tags.filter(t => t !== tag)
+      : [...filter.tags, tag];
+    onFilterChange({ ...filter, tags: newTags });
+  };
+
+  return (
+    <div
+      className="fixed z-50 rounded-lg border shadow-xl"
+      style={{
+        backgroundColor: AX.surface,
+        borderColor: AX.border,
+        top: position.top,
+        left: position.left,
+        minWidth: '280px',
+      }}
+      onClick={(e) => e.stopPropagation()}
+    >
+      <div className="p-4">
+        {/* Header */}
+        <div className="flex items-center justify-between mb-3">
+          <span className="text-sm font-medium" style={{ color: AX.text }}>Filter Trader</span>
+          <button onClick={onClose} className="p-1 rounded hover:bg-opacity-20" style={{ color: AX.muted }}>
+            <FiX size={14} />
+          </button>
+        </div>
+
+        {/* Wallet Address Filter */}
+        <div className="mb-4">
+          <label className="text-xs mb-1.5 block" style={{ color: AX.muted }}>Wallet Address</label>
+          <input
+            type="text"
+            placeholder="Enter wallet address..."
+            value={filter.address}
+            onChange={(e) => onFilterChange({ ...filter, address: e.target.value })}
+            className="w-full px-3 py-2 text-sm rounded border"
+            style={{
+              backgroundColor: AX.surface2,
+              borderColor: AX.border,
+              color: AX.text,
+              outline: 'none',
+            }}
+          />
+        </div>
+
+        {/* Tag Filters */}
+        <div className="mb-4">
+          <label className="text-xs mb-1.5 block" style={{ color: AX.muted }}>Filter by Tag</label>
+          <div className="flex flex-wrap gap-2">
+            {tagOptions.map((opt) => {
+              const isSelected = filter.tags.includes(opt.value);
+              return (
+                <button
+                  key={opt.value}
+                  onClick={() => handleTagToggle(opt.value)}
+                  className="flex items-center gap-1.5 px-2.5 py-1.5 rounded text-xs font-medium transition-colors"
+                  style={{
+                    backgroundColor: isSelected ? `${opt.color}20` : AX.surface2,
+                    border: `1px solid ${isSelected ? opt.color : AX.border}`,
+                    color: isSelected ? opt.color : AX.muted,
+                  }}
+                >
+                  {opt.icon}
+                  {opt.label}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* TXs Range Filter */}
+        <div className="mb-4">
+          <label className="text-xs mb-1.5 block" style={{ color: AX.muted }}>Filter TXs</label>
+          <div className="flex items-center gap-2">
+            <div className="flex-1">
+              <input
+                type="text"
+                inputMode="numeric"
+                placeholder="Min"
+                value={filter.txsRange.min}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  if (val === '' || /^\d*$/.test(val)) {
+                    onFilterChange({ ...filter, txsRange: { ...filter.txsRange, min: val } });
+                  }
+                }}
+                className="w-full px-3 py-2 text-sm rounded border"
+                style={{
+                  backgroundColor: AX.surface2,
+                  borderColor: AX.border,
+                  color: AX.text,
+                  outline: 'none',
+                }}
+              />
+            </div>
+            <span className="text-sm" style={{ color: AX.muted }}>to</span>
+            <div className="flex-1">
+              <input
+                type="text"
+                inputMode="numeric"
+                placeholder="Max"
+                value={filter.txsRange.max}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  if (val === '' || /^\d*$/.test(val)) {
+                    onFilterChange({ ...filter, txsRange: { ...filter.txsRange, max: val } });
+                  }
+                }}
+                className="w-full px-3 py-2 text-sm rounded border"
+                style={{
+                  backgroundColor: AX.surface2,
+                  borderColor: AX.border,
+                  color: AX.text,
+                  outline: 'none',
+                }}
+              />
+            </div>
+          </div>
+        </div>
+
+        {/* Action Buttons */}
+        <div className="flex items-center justify-between mt-4">
+          <button
+            onClick={onReset}
+            className="flex items-center gap-1 px-3 py-1.5 text-sm rounded hover:opacity-80 transition-opacity"
+            style={{ color: AX.muted }}
+          >
+            <MdRefresh size={14} />
+            Reset
+          </button>
+          <button
+            onClick={onApply}
+            className="px-4 py-1.5 text-sm rounded font-medium transition-colors"
+            style={{ backgroundColor: AX.text, color: AX.bg }}
+          >
+            Apply
+          </button>
         </div>
       </div>
     </div>
@@ -552,12 +739,15 @@ const CodexTrades: React.FC<CodexTradesProps> = ({ token, initialTrades = [], on
     price: { sort: null, range: { min: '', max: '' } },
     amount: { sort: null, range: { min: '', max: '' } },
     total: { sort: null, range: { min: '', max: '' } },
+    wallet: { address: '', tags: [], txsRange: { min: '', max: '' } },
   };
   const [filters, setFilters] = useState<TradeFilters>(initialFilters);
   const [activeFilterPopout, setActiveFilterPopout] = useState<'price' | 'amount' | 'total' | null>(null);
   const [typeFilterPopoutOpen, setTypeFilterPopoutOpen] = useState(false);
+  const [walletFilterPopoutOpen, setWalletFilterPopoutOpen] = useState(false);
   const [filterPopoutPosition, setFilterPopoutPosition] = useState({ top: 0, left: 0 });
   const [tempFilterRange, setTempFilterRange] = useState<FilterRange>({ min: '', max: '' });
+  const [tempWalletFilter, setTempWalletFilter] = useState<WalletFilter>({ address: '', tags: [], txsRange: { min: '', max: '' } });
 
   // Handle sort toggle (only for columns with sort capability)
   type SortableColumn = 'price' | 'amount' | 'total';
@@ -599,6 +789,35 @@ const CodexTrades: React.FC<CodexTradesProps> = ({ token, initialTrades = [], on
       type: { filter: value },
     }));
   }, []);
+
+  // Handle wallet filter popout open
+  const handleWalletFilterClick = useCallback((e: React.MouseEvent) => {
+    e.stopPropagation();
+    const rect = (e.target as HTMLElement).getBoundingClientRect();
+    setFilterPopoutPosition({ top: rect.bottom + 8, left: Math.max(8, rect.left - 100) });
+    setTempWalletFilter(filters.wallet);
+    setWalletFilterPopoutOpen(prev => !prev);
+  }, [filters.wallet]);
+
+  // Handle wallet filter apply
+  const handleWalletFilterApply = useCallback(() => {
+    setFilters(prev => ({
+      ...prev,
+      wallet: tempWalletFilter,
+    }));
+    setWalletFilterPopoutOpen(false);
+  }, [tempWalletFilter]);
+
+  // Handle wallet filter reset
+  const handleWalletFilterReset = useCallback(() => {
+    setTempWalletFilter({ address: '', tags: [], txsRange: { min: '', max: '' } });
+  }, []);
+
+  // Check if wallet filter is active
+  const isWalletFilterActive = filters.wallet.address !== '' ||
+    filters.wallet.tags.length > 0 ||
+    filters.wallet.txsRange.min !== '' ||
+    filters.wallet.txsRange.max !== '';
 
   // Handle filter apply
   const handleFilterApply = useCallback(() => {
@@ -807,11 +1026,79 @@ const CodexTrades: React.FC<CodexTradesProps> = ({ token, initialTrades = [], on
   });
 
   // Use Solana WebSocket for Solana chain
-  const { loading: solanaWsLoading, trades: solanaTrades } = useSolanaTokenWebSocket({
+  const { loading: solanaWsLoading, trades: solanaTrades, holders: solanaHolders, topTraders: solanaTopTraders } = useSolanaTokenWebSocket({
     mintAddress: mintForWebSocket,
     enabled: chain === 'sol' && !!mintForWebSocket,
     maxTrades: 100,
   });
+
+  // Create a lookup map of wallet addresses to holder data for hover cards
+  const walletDataMap = useMemo(() => {
+    const map = new Map<string, WalletHoverCardData>();
+    if (chain === 'sol') {
+      // First, populate with holder data
+      if (solanaHolders) {
+        for (const holder of solanaHolders) {
+          if (holder.wallet_address) {
+            const key = holder.wallet_address.toLowerCase();
+            map.set(key, {
+              walletAddress: holder.wallet_address,
+              totalBoughtSol: holder.total_bought_sol,
+              buyCount: holder.buy_count,
+              avgBuyPrice: holder.avg_buy_price,
+              totalSoldSol: holder.total_sold_sol,
+              sellCount: holder.sell_count,
+              avgSellPrice: holder.avg_sell_price,
+              remainingTokens: holder.remaining_tokens,
+              solBalance: holder.sol_balance_lamports ? holder.sol_balance_lamports / 1e9 : undefined,
+              firstBuyAt: holder.first_buy_at,
+              lastActivityAt: holder.last_activity_at,
+              holderType: holder.holder_type,
+            });
+          }
+        }
+      }
+      // Merge with top traders data (for PnL info)
+      if (solanaTopTraders) {
+        for (const trader of solanaTopTraders) {
+          if (trader.wallet_address) {
+            const key = trader.wallet_address.toLowerCase();
+            const existing = map.get(key);
+            if (existing) {
+              existing.realizedPnl = trader.realized_pnl;
+              existing.remainingPercent = trader.remaining_percent;
+            } else {
+              map.set(key, {
+                walletAddress: trader.wallet_address,
+                totalBoughtSol: trader.total_bought_sol,
+                buyCount: trader.buy_count,
+                avgBuyPrice: trader.avg_buy_price,
+                totalSoldSol: trader.total_sold_sol,
+                sellCount: trader.sell_count,
+                avgSellPrice: trader.avg_sell_price,
+                realizedPnl: trader.realized_pnl,
+                remainingTokens: trader.remaining_tokens,
+                remainingPercent: trader.remaining_percent,
+                lastActivityAt: trader.last_activity_at,
+              });
+            }
+          }
+        }
+      }
+    }
+    return map;
+  }, [chain, solanaHolders, solanaTopTraders]);
+
+  // Simple holder type lookup for icons (backwards compatible)
+  const holderTypeMap = useMemo(() => {
+    const map = new Map<string, 'dev' | 'sniper' | 'bundler' | 'holder'>();
+    walletDataMap.forEach((data, key) => {
+      if (data.holderType) {
+        map.set(key, data.holderType);
+      }
+    });
+    return map;
+  }, [walletDataMap]);
 
   // Use Monad WebSocket for Monad chain
   const { loading: monadWsLoading, trades: monadTrades } = useMonadTradesWebSocket({
@@ -905,6 +1192,49 @@ const CodexTrades: React.FC<CodexTradesProps> = ({ token, initialTrades = [], on
       return true;
     });
 
+    // Calculate trade counts per trader for TXs filter
+    const tradeCounts: Record<string, number> = {};
+    result.forEach(trade => {
+      const key = (trade.completeTraderAddress || trade.maker || '').toLowerCase().trim();
+      if (key) {
+        tradeCounts[key] = (tradeCounts[key] || 0) + 1;
+      }
+    });
+
+    // Apply wallet filter
+    const walletFilter = filters.wallet;
+    const hasWalletAddressFilter = walletFilter.address.trim() !== '';
+    const hasTagFilter = walletFilter.tags.length > 0;
+    const hasTxsMinFilter = walletFilter.txsRange.min !== '';
+    const hasTxsMaxFilter = walletFilter.txsRange.max !== '';
+
+    if (hasWalletAddressFilter || hasTagFilter || hasTxsMinFilter || hasTxsMaxFilter) {
+      result = result.filter((trade) => {
+        const traderAddress = (trade.completeTraderAddress || trade.maker || '').toLowerCase().trim();
+
+        // Filter by wallet address (case-insensitive contains match)
+        if (hasWalletAddressFilter) {
+          const searchAddress = walletFilter.address.toLowerCase().trim();
+          if (!traderAddress.includes(searchAddress)) return false;
+        }
+
+        // Filter by holder type tags
+        if (hasTagFilter) {
+          const walletKey = traderAddress;
+          const holderType = holderTypeMap.get(walletKey);
+          // Only show trades from wallets that have one of the selected tags
+          if (!holderType || !walletFilter.tags.includes(holderType as HolderTypeTag)) return false;
+        }
+
+        // Filter by TXs count
+        const tradeCount = tradeCounts[traderAddress] || 0;
+        if (hasTxsMinFilter && tradeCount < parseInt(walletFilter.txsRange.min, 10)) return false;
+        if (hasTxsMaxFilter && tradeCount > parseInt(walletFilter.txsRange.max, 10)) return false;
+
+        return true;
+      });
+    }
+
     // Apply sorting (only for sortable columns: price, amount, total)
     const sortableColumns: ('price' | 'amount' | 'total')[] = ['price', 'amount', 'total'];
     const sortColumn = sortableColumns.find(col => filters[col].sort !== null);
@@ -922,7 +1252,7 @@ const CodexTrades: React.FC<CodexTradesProps> = ({ token, initialTrades = [], on
     }
 
     return result;
-  }, [displayTrades, stableToken?.decimals, getCompleteTraderAddress, filters]);
+  }, [displayTrades, stableToken?.decimals, getCompleteTraderAddress, filters, holderTypeMap]);
 
   // Calculate trade count per trader from all trades
   const traderTradeCounts = React.useMemo(() => {
@@ -1050,6 +1380,17 @@ const CodexTrades: React.FC<CodexTradesProps> = ({ token, initialTrades = [], on
         position={filterPopoutPosition}
       />
 
+      {/* Wallet Filter Popout */}
+      <WalletFilterPopout
+        isOpen={walletFilterPopoutOpen}
+        onClose={() => setWalletFilterPopoutOpen(false)}
+        filter={tempWalletFilter}
+        onFilterChange={setTempWalletFilter}
+        onReset={handleWalletFilterReset}
+        onApply={handleWalletFilterApply}
+        position={filterPopoutPosition}
+      />
+
       <div className="flex-1 overflow-y-auto min-h-0 pb-18" style={{ backgroundColor: '#101114' }}>
         <table className="w-full text-[11px] border-collapse table-fixed" style={{ backgroundColor: '#101114' }}>
           <thead className="sticky top-0 z-10" style={{ backgroundColor: '#101114' }}>
@@ -1163,7 +1504,29 @@ const CodexTrades: React.FC<CodexTradesProps> = ({ token, initialTrades = [], on
               </th>
 
               {/* Trader */}
-              <th className="w-[16.66%] px-2 py-1.5 text-left whitespace-nowrap" style={{ color: '#9ca3af' }}>Trader</th>
+              <th className="w-[16.66%] px-2 py-1.5 text-left whitespace-nowrap" style={{ color: '#9ca3af' }}>
+                <div className="flex items-center gap-1">
+                  <span className="text-[11px]">Trader</span>
+                  <button
+                    onClick={handleWalletFilterClick}
+                    className="p-0.5 rounded hover:bg-opacity-20 transition-colors"
+                    style={{ color: isWalletFilterActive ? AX.mint : AX.muted }}
+                  >
+                    <FaFilter size={8} />
+                  </button>
+                  {isWalletFilterActive && (
+                    <span
+                      className="text-[9px] px-1 rounded"
+                      style={{
+                        backgroundColor: `${AX.mint}20`,
+                        color: AX.mint,
+                      }}
+                    >
+                      {filters.wallet.tags.length > 0 ? filters.wallet.tags.length : ''}{filters.wallet.address ? '🔍' : ''}{(filters.wallet.txsRange.min || filters.wallet.txsRange.max) ? '📊' : ''}
+                    </span>
+                  )}
+                </div>
+              </th>
             </tr>
           </thead>
           <tbody style={{ backgroundColor: '#101114' }}>
@@ -1313,18 +1676,37 @@ const CodexTrades: React.FC<CodexTradesProps> = ({ token, initialTrades = [], on
                     {/* Trader */}
                     <td className="px-2 py-2 text-[11px] align-middle" style={{ color: '#d1d5db' }}>
                       <div className="flex items-center flex-nowrap gap-2 min-w-0">
-                        <a
-                          href={chain === 'monad'
-                            ? `https://testnet.monadexplorer.com/address/${n.maker || ''}`
-                            : `https://solscan.io/account/${n.maker || ''}`}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="transition-colors hover:text-emerald-400 hover:underline flex items-center min-w-0 flex-shrink"
-                          style={{ color: '#d1d5db' }}
-                          onClick={(e) => e.stopPropagation()}
-                        >
-                          <span className="truncate text-[11px] font-mono whitespace-nowrap">{shortAddr(n.maker || '')}</span>
-                        </a>
+                        {(() => {
+                          const walletKey = (n.maker || '').toLowerCase();
+                          const walletData = walletDataMap.get(walletKey);
+                          const holderType = holderTypeMap.get(walletKey);
+
+                          // Build hover card data - use existing data or create minimal data
+                          const hoverData: WalletHoverCardData = walletData || {
+                            walletAddress: n.maker || '',
+                            holderType: holderType,
+                          };
+
+                          return (
+                            <WalletHoverCard data={hoverData} chain={chain}>
+                              <div className="flex items-center gap-1.5">
+                                <span className="truncate text-[11px] font-mono whitespace-nowrap text-gray-300 hover:text-emerald-400 cursor-pointer transition-colors">
+                                  {shortAddr(n.maker || '')}
+                                </span>
+                                {/* Holder type icons */}
+                                {holderType === 'dev' && (
+                                  <LuChefHat size={12} className="text-yellow-400 flex-shrink-0" />
+                                )}
+                                {holderType === 'sniper' && (
+                                  <TfiTarget size={12} className="text-red-400 flex-shrink-0" />
+                                )}
+                                {holderType === 'bundler' && (
+                                  <HiOutlineCubeTransparent size={12} className="text-orange-400 flex-shrink-0" />
+                                )}
+                              </div>
+                            </WalletHoverCard>
+                          );
+                        })()}
                         <div className="flex items-center flex-nowrap gap-1 flex-shrink-0">
                           {(() => {
                             const traderKey = (n.completeTraderAddress || n.maker || '').toString()

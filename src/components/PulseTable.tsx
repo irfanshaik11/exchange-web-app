@@ -2687,6 +2687,12 @@ function PulseTable({
       }
 
       console.log("✅ Quick Buy successful");
+
+      // Dispatch event to refresh chart price lines
+      if (typeof window !== "undefined" && token.mint) {
+        window.dispatchEvent(new CustomEvent("solanaQuickTrade", { detail: { tokenAddress: token.mint } }));
+      }
+
       return { success: true };
     } catch (error: any) {
       // Stop timer on error

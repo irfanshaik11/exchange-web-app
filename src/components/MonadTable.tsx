@@ -5819,7 +5819,7 @@ function MonadTable({
               // Build query params for optimistic UI + cache lookup
               // Include chain parameter to preserve chain selection
               // Use prop from parent (more reliable) or fallback to router.query
-              const currentChain = chainProp || (router.query.chain as string) || "monad";
+              const currentChain = chainProp || (router.query.chain as string) || "sol";
               const queryParams = new URLSearchParams({
                 _name: (token as any)?.name || (token as any)?.symbol || "",
                 _symbol: (token as any)?.symbol || "",

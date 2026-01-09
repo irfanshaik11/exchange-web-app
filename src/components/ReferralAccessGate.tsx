@@ -760,9 +760,10 @@ export function ReferralAccessGate({
       Cookies.set("token", token, { expires: 7, path: "/" });
       clearStoredReferralCodeHint();
       await refreshUser();
-      setInfo("Authenticating with Phantom...");
+      setInfo("Login successful. Please enter your access code.");
       setShowWalletOptions(false);
-      setShowWaitlist(true);
+      // Don't show waitlist - user must enter access code first
+      // They can click "Join Waitlist" if they don't have a code
     } catch (error: any) {
       console.error("Phantom login error:", error);
 
@@ -840,9 +841,10 @@ export function ReferralAccessGate({
       Cookies.set("token", token, { expires: 7, path: "/" });
       clearStoredReferralCodeHint();
       await refreshUser();
-      setInfo("Authenticating with MetaMask...");
+      setInfo("Login successful. Please enter your access code.");
       setShowWalletOptions(false);
-      setShowWaitlist(true);
+      // Don't show waitlist - user must enter access code first
+      // They can click "Join Waitlist" if they don't have a code
     } catch (error: any) {
       console.error("MetaMask login error:", error);
 
@@ -1013,6 +1015,18 @@ export function ReferralAccessGate({
           <div className="relative z-[9999] w-full max-w-md px-4 md:px-0 py-2">
             <div className="rounded-xl bg-gradient-to-br from-neutral-900/95 via-neutral-900/80 to-neutral-950/90 p-[1px] shadow-[0_40px_120px_rgba(59,130,246,0.12)]">
               <div className="rounded-[calc(1rem-1px)] bg-neutral-950/95 p-4 md:p-5">
+                {/* Back Button */}
+                <button
+                  type="button"
+                  onClick={() => setShowWaitlist(false)}
+                  className="mb-3 flex items-center gap-1 text-xs text-neutral-400 hover:text-neutral-200 transition-colors"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                  </svg>
+                  Back to Access Code
+                </button>
+
                 {/* Progress Bar */}
                 <div className="mb-4 bg-neutral-800/50 rounded-lg p-3 border border-neutral-700/50">
                   <div className="flex items-center gap-3 mb-2">
@@ -1048,40 +1062,61 @@ export function ReferralAccessGate({
                     Get Early Access
                   </h2>
                 </div>
-                
+
                 <p className="text-xs text-neutral-300/90 mb-3">
-                  Help us get to know you better. Fill out the form below to join our waitlist and be among the first to access Narrative.
+                  Have an access code? Enter it below. Otherwise, complete quests to join the waitlist.
                 </p>
+
+                {/* Access Code Input Section */}
+                <div className="mb-4 p-3 rounded-lg border border-emerald-500/30 bg-emerald-500/5">
+                  <label className="block text-xs uppercase tracking-[0.24em] text-emerald-400/80 mb-2">
+                    Access Code (if you have one)
+                  </label>
+                  <div className="flex gap-2">
+                    <input
+                      value={codeInput}
+                      onChange={(e) => {
+                        setCodeInput(normalizeReferralInput(e.target.value));
+                        setError(null);
+                      }}
+                      placeholder="ENTER-CODE-HERE"
+                      className="flex-1 rounded-lg border border-neutral-700/60 bg-neutral-900/70 px-3 py-2 text-sm font-semibold tracking-[0.15em] text-[#f0f5f5] placeholder:text-neutral-500 focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/40"
+                      maxLength={64}
+                      spellCheck={false}
+                      autoCapitalize="characters"
+                      autoComplete="off"
+                      disabled={status === "validating"}
+                    />
+                    <InterstateButton
+                      type="button"
+                      onClick={() => handleSubmit()}
+                      loading={status === "validating"}
+                      disabled={!codeInput.trim() || status === "validating"}
+                      className="px-4 py-2 text-xs uppercase tracking-[0.2em] bg-emerald-600 text-[#f0f5f5] hover:bg-emerald-700 disabled:opacity-50"
+                    >
+                      Unlock
+                    </InterstateButton>
+                  </div>
+                  {error && (
+                    <p className="mt-2 text-xs text-red-300">{error}</p>
+                  )}
+                </div>
+
+                <div className="relative mb-3">
+                  <div className="absolute inset-0 flex items-center">
+                    <div className="w-full border-t border-neutral-700/60"></div>
+                  </div>
+                  <div className="relative flex justify-center text-xs">
+                    <span className="bg-neutral-950 px-3 text-neutral-500 uppercase tracking-[0.2em]">Or join waitlist</span>
+                  </div>
+                </div>
 
                 <form
                   className="space-y-3"
                   onSubmit={async (e) => {
                     e.preventDefault();
-                    setWaitlistSubmitting(true);
-                    
-                    // Generate a random waitlist number if not already set
-                    if (!waitlistNumber) {
-                      const randomNumber = Math.floor(Math.random() * 10000) + 1;
-                      setWaitlistNumber(randomNumber);
-                      if (typeof window !== "undefined") {
-                        sessionStorage.setItem("waitlistNumber", randomNumber.toString());
-                      }
-                    }
-                    
-                    // TODO: Submit waitlist data to backend
-                    // For now, just log the data and grant access
-                    const submissionData = {
-                      ...waitlistForm,
-                      telegram: telegramUsername,
-                    };
-                    console.log("Waitlist submission:", submissionData);
-                    
-                    // Simulate API call
-                    await new Promise(resolve => setTimeout(resolve, 1000));
-                    
-                    setWaitlistSubmitting(false);
-                    setShowWaitlist(false);
-                    grantAccess();
+                    // Form submission is handled by individual quest buttons
+                    // Access is only granted through valid access code via handleSubmit
                   }}
                 >
                   {/* Link Twitter */}
@@ -1368,19 +1403,29 @@ export function ReferralAccessGate({
                 <div className="mt-4 pt-3 border-t border-neutral-700/60">
                   <InterstateButton
                     type="button"
-                    onClick={() => {
-                      // Generate a random waitlist number if not already set
-                      if (!waitlistNumber) {
-                        const randomNumber = Math.floor(Math.random() * 10000) + 1;
-                        setWaitlistNumber(randomNumber);
-                        if (typeof window !== "undefined") {
-                          sessionStorage.setItem("waitlistNumber", randomNumber.toString());
+                    onClick={async () => {
+                      setWaitlistSubmitting(true);
+                      try {
+                        // Save user data to waitlist via backend API
+                        if (user?.id) {
+                          await completeAllQuests({
+                            userId: Number(user.id),
+                            telegramId: telegramUsername.trim() || undefined,
+                            twitterId: twitterUsername || undefined,
+                            twitterUsername: twitterUsername || undefined,
+                          });
                         }
+                        setShowCongratsModal(true);
+                      } catch (error) {
+                        console.error('Failed to save waitlist data:', error);
+                        setError('Failed to join waitlist. Please try again.');
+                      } finally {
+                        setWaitlistSubmitting(false);
                       }
-                      setShowCongratsModal(true);
                     }}
                     fullWidth
-                    disabled={questProgressData.completedCount < questProgressData.totalQuests || !telegramUsername.trim()}
+                    loading={waitlistSubmitting}
+                    disabled={questProgressData.completedCount < questProgressData.totalQuests || !telegramUsername.trim() || waitlistSubmitting}
                     className="h-10 text-xs uppercase tracking-[0.3em] bg-gradient-to-r from-blue-600 to-purple-600 text-[#f0f5f5] hover:from-blue-700 hover:to-purple-700 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:from-blue-600 disabled:hover:to-purple-600"
                   >
                     Complete All Quests
@@ -1390,7 +1435,7 @@ export function ReferralAccessGate({
                       ? `Complete all quests above to continue (${questProgressData.completedCount}/${questProgressData.totalQuests})`
                       : !telegramUsername.trim()
                       ? "Please enter your Telegram username to continue"
-                      : "Click to join the waitlist and get early access"}
+                      : "Click to join the waitlist (access code required for entry)"}
                   </p>
                 </div>
               </div>
@@ -1452,7 +1497,7 @@ export function ReferralAccessGate({
                   )}
 
                   <p className="text-sm text-neutral-300/90 mb-8 max-w-sm mx-auto">
-                    Thank you for completing all quests! You will get access in less than 2-3 weeks!
+                    Thank you for completing all quests! We'll send you an access code when it's your turn (usually within 2-3 weeks).
                   </p>
 
                   <InterstateButton
@@ -1685,29 +1730,13 @@ export function ReferralAccessGate({
                     type="button"
                     fullWidth
                     onClick={() => {
+                      // Close quest overlay and return to access code input
+                      // Access is ONLY granted via valid access code
                       setShowQuests(false);
-                      grantAccess();
                     }}
                     className="h-12 text-base uppercase tracking-[0.4em] bg-purple-600 text-[#f0f5f5] hover:bg-purple-700"
                   >
-                    Skip for Now
-                  </InterstateButton>
-                  <InterstateButton
-                    type="button"
-                    fullWidth
-                    onClick={() => {
-                      // TODO: Check if all quests completed, then grant access
-                      if (questProgress.completedQuests.length >= 6) {
-                        grantAccess();
-                        setShowQuests(false);
-                      } else {
-                        alert("Complete more quests to unlock access!");
-                      }
-                    }}
-                    className="h-12 text-base uppercase tracking-[0.4em] bg-black text-[#f0f5f5] hover:bg-neutral-900"
-                    disabled={questProgress.completedQuests.length < 6}
-                  >
-                    Continue
+                    Back to Access Code
                   </InterstateButton>
                 </div>
               </div>

@@ -124,7 +124,7 @@ export function TurnkeyRootProvider({ children }: { children: React.ReactNode })
         oauthConfig: {
           // Let Turnkey handle the redirect details; config lives in dashboard
           openOauthInPage: true,
-          oauthRedirectUri: "https://app.narrative.trade/pulse?chain=monad"
+          oauthRedirectUri: "https://app.narrative.trade/pulse?chain=sol"
         },
         methods: {
           googleOauthEnabled: true,

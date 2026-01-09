@@ -201,7 +201,7 @@ const AddressDisplay: React.FC<{
 
 // Token Info Dropdown Component
 const TokenInfoDropdown: React.FC<{ token: any }> = ({ token }) => {
-  const [isOpen, setIsOpen] = useState(false);
+  const [isOpen, setIsOpen] = useState(true);
 
   // Get token metrics (using Codex fields if available, fallback to token-analytics)
   // Parse string values to numbers (backend returns decimals as strings)
@@ -287,16 +287,117 @@ const TokenInfoDropdown: React.FC<{ token: any }> = ({ token }) => {
               </div>
             </div>
 
-            {/* Dev Holdings */}
-            <div className="rounded-md p-2 border" style={{ backgroundColor: 'rgba(30, 31, 38, 0.3)', borderColor: AX.border }}>
-              <div className="flex flex-col items-center gap-1">
-                <div className="flex items-center gap-1.5">
-                  <LuChefHat size={16} style={{ color: AX.aiGreen }} />
-                  <div className="text-[12px] font-bold" style={{ color: AX.aiGreen }}>
-                    {devPercent > 0 ? `${devPercent.toFixed(1)}%` : '0%'}
+            {/* Dev Holdings - with hover popout */}
+            <div className="relative group">
+              <div className="rounded-md p-2 border cursor-pointer hover:border-[#3A3B43] transition-colors" style={{ backgroundColor: 'rgba(30, 31, 38, 0.3)', borderColor: AX.border }}>
+                <div className="flex flex-col items-center gap-1">
+                  <div className="flex items-center gap-1.5">
+                    <LuChefHat size={16} style={{ color: AX.aiGreen }} />
+                    <div className="text-[12px] font-bold" style={{ color: AX.aiGreen }}>
+                      {devPercent > 0 ? `${devPercent.toFixed(1)}%` : '0%'}
+                    </div>
+                  </div>
+                  <div className="text-[10px] uppercase tracking-wide text-center leading-tight" style={{ color: AX.muted }}>Dev H.</div>
+                </div>
+              </div>
+              {/* Dev Popout */}
+              <div className="absolute left-0 top-full mt-1 z-50 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 pointer-events-none group-hover:pointer-events-auto">
+                <div className="rounded-lg border shadow-xl min-w-[220px]" style={{ backgroundColor: AX.surface, borderColor: AX.border }}>
+                  {/* Header */}
+                  <div className="px-3 py-2 border-b" style={{ borderColor: AX.border }}>
+                    <div className="flex items-center gap-2">
+                      <span className="text-[11px] font-semibold" style={{ color: AX.text }}>DEV Holds</span>
+                      <span className="text-[11px] font-bold" style={{ color: AX.aiGreen }}>
+                        {devPercent > 0 ? `${devPercent.toFixed(2)}%` : '0%'}
+                      </span>
+                    </div>
+                  </div>
+                  {/* Content */}
+                  <div className="px-3 py-2 space-y-1.5">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[10px]" style={{ color: AX.muted }}>Dev Wallet</span>
+                      <div className="flex items-center gap-1">
+                        <span className="text-[10px] font-mono" style={{ color: AX.text }}>
+                          {token?.dev_wallet
+                            ? `${token.dev_wallet.slice(0, 4)}...${token.dev_wallet.slice(-4)}`
+                            : '--'}
+                        </span>
+                        {token?.dev_wallet && (
+                          <a
+                            href={`https://solscan.io/account/${token.dev_wallet}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="hover:opacity-70"
+                          >
+                            <FaExternalLinkAlt size={8} style={{ color: AX.muted }} />
+                          </a>
+                        )}
+                      </div>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-[10px]" style={{ color: AX.muted }}>Bought</span>
+                      <span className="text-[10px]" style={{ color: AX.aiGreen }}>
+                        {token?.dev_bought_usd ? `$${formatSmartNumber(token.dev_bought_usd)}` : '$0'} / {token?.dev_buy_count || 0}TXs
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-[10px]" style={{ color: AX.muted }}>Sold</span>
+                      <span className="text-[10px]" style={{ color: AX.sell }}>
+                        {token?.dev_sold_usd ? `$${formatSmartNumber(token.dev_sold_usd)}` : '$0'} / {token?.dev_sell_count || 0}TXs
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-[10px]" style={{ color: AX.muted }}>Balance</span>
+                      <span className="text-[10px]" style={{ color: AX.text }}>
+                        {token?.dev_balance_usd ? `$${formatSmartNumber(token.dev_balance_usd)}` : '$0'}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-[10px]" style={{ color: AX.muted }}>Funding</span>
+                      <div className="flex items-center gap-1">
+                        {token?.dev_funding_source ? (
+                          <>
+                            <span className="text-[10px] font-mono" style={{ color: AX.text }}>
+                              {`${token.dev_funding_source.slice(0, 4)}...${token.dev_funding_source.slice(-4)}`}
+                            </span>
+                            <a
+                              href={`https://solscan.io/account/${token.dev_funding_source}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="hover:opacity-70"
+                            >
+                              <FaExternalLinkAlt size={8} style={{ color: AX.muted }} />
+                            </a>
+                          </>
+                        ) : (
+                          <span className="text-[10px]" style={{ color: AX.muted }}>--</span>
+                        )}
+                      </div>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-[10px]" style={{ color: AX.muted }}>Transfer In</span>
+                      <span className="text-[10px]" style={{ color: AX.text }}>
+                        {token?.dev_transfer_in_sol ? `${formatSmartNumber(token.dev_transfer_in_sol)} SOL` : '--'}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-[10px]" style={{ color: AX.muted }}>Time</span>
+                      <span className="text-[10px]" style={{ color: AX.text }}>
+                        {token?.dev_first_activity
+                          ? new Date(token.dev_first_activity).toLocaleString('en-US', {
+                              year: 'numeric',
+                              month: '2-digit',
+                              day: '2-digit',
+                              hour: '2-digit',
+                              minute: '2-digit',
+                              second: '2-digit',
+                              hour12: false
+                            }).replace(',', '')
+                          : '--'}
+                      </span>
+                    </div>
                   </div>
                 </div>
-                <div className="text-[10px] uppercase tracking-wide text-center leading-tight" style={{ color: AX.muted }}>Dev H.</div>
               </div>
             </div>
 
@@ -431,7 +532,7 @@ const TokenInfoDropdown: React.FC<{ token: any }> = ({ token }) => {
 const formatCompactNumber = (n: number): string => {
   if (!Number.isFinite(n)) return "0";
   const abs = Math.abs(n);
-  
+
   if (abs >= 1_000_000_000) {
     return (n / 1_000_000_000).toFixed(1).replace(/\.0$/, "") + "B";
   }
@@ -446,6 +547,257 @@ const formatCompactNumber = (n: number): string => {
     return n.toFixed(4).replace(/\.?0+$/, ""); // Show up to 4 decimal places, remove trailing zeros
   }
   return Math.round(n).toString();
+};
+
+// Pool Info Section Component
+const PoolInfoSection: React.FC<{ token: any }> = ({ token }) => {
+  const [isOpen, setIsOpen] = useState(true);
+
+  const copyToClipboard = (text: string) => {
+    navigator.clipboard.writeText(text);
+    toast.success('Copied to clipboard');
+  };
+
+  const formatDate = (dateStr: string | undefined) => {
+    if (!dateStr) return '--';
+    const date = new Date(dateStr);
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    const hours = String(date.getHours()).padStart(2, '0');
+    const minutes = String(date.getMinutes()).padStart(2, '0');
+    const seconds = String(date.getSeconds()).padStart(2, '0');
+    return `${year}/${month}/${day} ${hours}:${minutes}:${seconds}`;
+  };
+
+  const truncateAddress = (addr: string | undefined, start = 4, end = 4) => {
+    if (!addr) return '--';
+    return `${addr.slice(0, start)}...${addr.slice(-end)}`;
+  };
+
+  // Get token name for header - prefer symbol over name for meme tokens
+  // Symbol is typically the recognizable ticker (e.g., "stickman") while name might be a description
+  const tokenName = token?.symbol || token?.name || 'Token';
+
+  return (
+    <div className="border-t border-[#2A2B33]">
+      <button
+        onClick={() => setIsOpen(!isOpen)}
+        className="w-full flex items-center justify-between px-3 py-2 hover:bg-[#1E1F26] transition-colors"
+      >
+        <div className="flex items-center gap-2">
+          <span className="text-[10px] font-semibold text-[#9CA3AF] uppercase tracking-wide">
+            {tokenName} Pool Info
+          </span>
+        </div>
+        <svg
+          width="12"
+          height="12"
+          viewBox="0 0 12 12"
+          fill="none"
+          className={`transition-transform ${isOpen ? 'rotate-180' : ''}`}
+          style={{ color: AX.muted }}
+        >
+          <path d="M6 9L1 4L11 4L6 9Z" fill="currentColor" />
+        </svg>
+      </button>
+
+      {isOpen && (
+        <div style={{ backgroundColor: '#0f1012' }}>
+          {/* Liquidity Section */}
+          <div className="px-3 py-2.5 space-y-2">
+            {/* Total Liquidity */}
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] text-[#9CA3AF] uppercase tracking-wide">Total liq</span>
+              <div className="flex items-center gap-1">
+                <span className="text-[11px] text-[#E6E7EA] font-semibold">
+                  ${formatSmartNumber(token?.liquidity_usd || token?.total_liquidity_usd || 0)}
+                </span>
+                <span className="text-[10px] text-[#9CA3AF]">
+                  ({formatSmartNumber((token?.liquidity_usd || token?.total_liquidity_usd || 0) / 200)} SOL)
+                </span>
+              </div>
+            </div>
+
+            {/* Pair Info */}
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] text-[#9CA3AF] uppercase tracking-wide">Pair</span>
+            </div>
+
+            {/* Token Row */}
+            <div className="pl-3 space-y-1.5">
+              <div className="text-[11px] font-semibold text-[#E6E7EA]">{token?.symbol || 'TOKEN'}</div>
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] text-[#9CA3AF]">Liq/Initial</span>
+                <div className="text-right">
+                  <span className="text-[11px] text-[#E6E7EA] font-semibold">
+                    {formatCompactNumber(token?.total_supply || 0)}
+                  </span>
+                  <span className="text-[10px] text-[#9CA3AF] ml-1">
+                    (100%)
+                  </span>
+                </div>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] text-[#9CA3AF]">Value</span>
+                <span className="text-[11px] text-[#E6E7EA] font-semibold">
+                  ${formatSmartNumber(token?.market_cap_usd || 0)}
+                </span>
+              </div>
+            </div>
+
+            {/* SOL Row */}
+            <div className="pl-3 space-y-1.5">
+              <div className="text-[11px] font-semibold text-[#E6E7EA]">SOL</div>
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] text-[#9CA3AF]">Liq</span>
+                <span className="text-[11px] text-[#E6E7EA] font-semibold">
+                  {formatSmartNumber((token?.liquidity_usd || 0) / 200)} SOL
+                </span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] text-[#9CA3AF]">Value</span>
+                <span className="text-[11px] text-[#E6E7EA] font-semibold">
+                  ${formatSmartNumber(token?.liquidity_usd || 0)}
+                </span>
+              </div>
+            </div>
+          </div>
+
+          {/* Divider */}
+          <div className="border-t border-[#2A2B33]"></div>
+
+          {/* Token Details Section */}
+          <div className="px-3 py-2.5 space-y-2">
+            {/* DEV */}
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] text-[#9CA3AF] uppercase tracking-wide">DEV</span>
+              <div className="flex items-center gap-1.5">
+                <span className="text-[11px] text-[#E6E7EA] font-mono">
+                  {truncateAddress(token?.dev_wallet || token?.creator_address)}
+                </span>
+                {token?.dev_sol_balance !== undefined && (
+                  <span className="text-[10px] text-[#9CA3AF]">
+                    ({formatSmartNumber(token.dev_sol_balance)} SOL)
+                  </span>
+                )}
+                {(token?.dev_wallet || token?.creator_address) && (
+                  <>
+                    <button
+                      onClick={() => copyToClipboard(token?.dev_wallet || token?.creator_address)}
+                      className="p-0.5 hover:bg-[#2A2B33] rounded transition-colors"
+                      title="Copy dev address"
+                    >
+                      <FaCopy className="w-2.5 h-2.5 text-[#9CA3AF]" />
+                    </button>
+                    <a
+                      href={`https://solscan.io/account/${token?.dev_wallet || token?.creator_address}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="p-0.5 hover:bg-[#2A2B33] rounded transition-colors"
+                      title="View on Solscan"
+                    >
+                      <FaExternalLinkAlt className="w-2.5 h-2.5 text-[#9CA3AF]" />
+                    </a>
+                  </>
+                )}
+              </div>
+            </div>
+
+            {/* Funding */}
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] text-[#9CA3AF] uppercase tracking-wide">Funding</span>
+              <div className="flex items-center gap-1.5">
+                {token?.dev_funding_source ? (
+                  <>
+                    <span className="text-[11px] text-[#E6E7EA] font-mono">
+                      {truncateAddress(token.dev_funding_source)}
+                    </span>
+                    {token?.dev_transfer_in_sol && (
+                      <>
+                        <SiSolana className="w-2.5 h-2.5 text-[#9CA3AF]" />
+                        <span className="text-[10px] text-[#E6E7EA]">
+                          {formatSmartNumber(token.dev_transfer_in_sol)}
+                        </span>
+                      </>
+                    )}
+                    <button
+                      onClick={() => copyToClipboard(token.dev_funding_source)}
+                      className="p-0.5 hover:bg-[#2A2B33] rounded transition-colors"
+                    >
+                      <FaCopy className="w-2.5 h-2.5 text-[#9CA3AF]" />
+                    </button>
+                  </>
+                ) : (
+                  <span className="text-[11px] text-[#9CA3AF]">--</span>
+                )}
+              </div>
+            </div>
+
+            {/* Market cap */}
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] text-[#9CA3AF] uppercase tracking-wide">Market cap</span>
+              <span className="text-[11px] text-[#E6E7EA] font-semibold">
+                ${formatSmartNumber(token?.market_cap_usd || 0)}
+              </span>
+            </div>
+
+            {/* Holders */}
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] text-[#9CA3AF] uppercase tracking-wide">Holders</span>
+              <span className="text-[11px] text-[#E6E7EA] font-semibold">
+                {token?.total_holders || token?.unique_traders || 0}
+              </span>
+            </div>
+
+            {/* Total supply */}
+            {token?.total_supply && (
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] text-[#9CA3AF] uppercase tracking-wide">Total supply</span>
+                <span className="text-[11px] text-[#E6E7EA] font-semibold">
+                  {formatCompactNumber(token.total_supply)}
+                </span>
+              </div>
+            )}
+
+            {/* Pair Address */}
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] text-[#9CA3AF] uppercase tracking-wide">Pair</span>
+              <div className="flex items-center gap-1.5">
+                <span className="text-[11px] text-[#E6E7EA] font-mono">
+                  {truncateAddress(token?.pair_address || token?.pool_address)}
+                </span>
+                {(token?.pair_address || token?.pool_address) && (
+                  <button
+                    onClick={() => copyToClipboard(token?.pair_address || token?.pool_address)}
+                    className="p-0.5 hover:bg-[#2A2B33] rounded transition-colors"
+                  >
+                    <FaCopy className="w-2.5 h-2.5 text-[#9CA3AF]" />
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {/* Token created */}
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] text-[#9CA3AF] uppercase tracking-wide">Token created</span>
+              <span className="text-[11px] text-[#E6E7EA]">
+                {formatDate(token?.created_at || token?.token_created_at)}
+              </span>
+            </div>
+
+            {/* Pool created */}
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] text-[#9CA3AF] uppercase tracking-wide">Pool created</span>
+              <span className="text-[11px] text-[#E6E7EA]">
+                {formatDate(token?.pool_created_at || token?.created_at)}
+              </span>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
 };
 
 // Meteora Migration Logo Component
@@ -1121,6 +1473,15 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
       fetchCreatorAddress();
     }
   }, [token.mint || '']);
+
+  // Also use dev_wallet from WebSocket holderSummary if available
+  useEffect(() => {
+    const devWallet = (token as any)?.dev_wallet;
+    if (devWallet && !creatorAddress) {
+      console.log('✅ Using dev_wallet from WebSocket:', devWallet);
+      setCreatorAddress(devWallet);
+    }
+  }, [(token as any)?.dev_wallet, creatorAddress]);
 
   // amount presets - different for buy vs sell (load from localStorage or use defaults)
   const [buyPresets, setBuyPresets] = useState<number[]>(() => {
@@ -2053,6 +2414,11 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
                   setPositionData(newData);
                   console.log("🔄 TradeActionPanel - Position data refreshed after trade:", newData);
                 }
+
+                // Dispatch event to refresh chart price lines
+                if (typeof window !== "undefined" && token.mint) {
+                  window.dispatchEvent(new CustomEvent("solanaQuickTrade", { detail: { tokenAddress: token.mint } }));
+                }
               } catch (error) {
                 console.error("Error refreshing position data:", error);
               }
@@ -2299,6 +2665,11 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
 
               setPositionData(newData);
               console.log("🔄 TradeActionPanel - Position data refreshed after trade:", newData);
+            }
+
+            // Dispatch event to refresh chart price lines
+            if (typeof window !== "undefined" && token.mint) {
+              window.dispatchEvent(new CustomEvent("solanaQuickTrade", { detail: { tokenAddress: token.mint } }));
             }
           } catch (error) {
             console.error("Error refreshing position data:", error);
@@ -3253,6 +3624,9 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
 
       {/* ===== Token Info ===== */}
       <TokenInfoDropdown token={token} />
+
+      {/* ===== Pool Info Section ===== */}
+      <PoolInfoSection token={token} />
 
       {/* High Slippage Warning Dialog */}
       <HighSlippageWarningDialog

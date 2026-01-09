@@ -853,6 +853,11 @@ const InstantTradeModal: React.FC<InstantTradeModalProps> = ({ isOpen, onClose, 
             } else {
               setTokenBalance(0);
             }
+
+            // Dispatch event to refresh chart price lines
+            if (typeof window !== "undefined" && token.mint) {
+              window.dispatchEvent(new CustomEvent("solanaQuickTrade", { detail: { tokenAddress: token.mint } }));
+            }
           } catch (error) {
             console.error('Error refreshing token balance:', error);
           }
@@ -1103,6 +1108,11 @@ const InstantTradeModal: React.FC<InstantTradeModalProps> = ({ isOpen, onClose, 
             } else {
               setTokenBalance(0);
             }
+
+            // Dispatch event to refresh chart price lines
+            if (typeof window !== "undefined" && token.mint) {
+              window.dispatchEvent(new CustomEvent("solanaQuickTrade", { detail: { tokenAddress: token.mint } }));
+            }
           } catch (error) {
             console.error('Error refreshing token balance:', error);
           }
@@ -1304,6 +1314,11 @@ const InstantTradeModal: React.FC<InstantTradeModalProps> = ({ isOpen, onClose, 
             } else {
               setTokenBalance(0);
             }
+
+            // Dispatch event to refresh chart price lines
+            if (typeof window !== "undefined" && token.mint) {
+              window.dispatchEvent(new CustomEvent("solanaQuickTrade", { detail: { tokenAddress: token.mint } }));
+            }
           } catch (error) {
             console.error('Error refreshing token balance:', error);
           }
@@ -1445,6 +1460,11 @@ const InstantTradeModal: React.FC<InstantTradeModalProps> = ({ isOpen, onClose, 
               setTokenBalance(Math.max(0, remaining));
             } else {
               setTokenBalance(0);
+            }
+
+            // Dispatch event to refresh chart price lines
+            if (typeof window !== "undefined" && token.mint) {
+              window.dispatchEvent(new CustomEvent("solanaQuickTrade", { detail: { tokenAddress: token.mint } }));
             }
           } catch (error) {
             console.error('Error refreshing token balance:', error);
