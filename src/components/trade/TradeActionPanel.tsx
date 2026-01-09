@@ -99,6 +99,39 @@ async function fetchLatestMarketCap(pairAddress: string | undefined | null): Pro
   }
 }
 
+/**
+ * Fallback to fetch pair address from token service when not available locally
+ * Uses GET /v1/get-pair/{mint} endpoint with Redis cache-through pattern
+ */
+async function fetchPairAddressFromTokenService(mintAddress: string): Promise<string | null> {
+  if (!TOKEN_SERVICE_URL || !mintAddress) return null;
+
+  try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 10_000);
+    const response = await fetch(`${TOKEN_SERVICE_URL}/v1/get-pair/${mintAddress}`, {
+      signal: controller.signal,
+    });
+    clearTimeout(timeoutId);
+
+    if (!response.ok) {
+      console.warn(`⚠️ Token service get-pair responded ${response.status} for ${mintAddress}`);
+      return null;
+    }
+
+    const data = await response.json();
+    const pairAddress = data?.pair_address;
+    if (typeof pairAddress === "string" && pairAddress.length > 0) {
+      console.log(`✅ Fetched pair address from token service for ${mintAddress}: ${pairAddress}`);
+      return pairAddress;
+    }
+    return null;
+  } catch (error) {
+    console.warn("⚠️ Failed to fetch pair address from token service:", error);
+    return null;
+  }
+}
+
 function getCountsAndVol(t: any, side: "buy" | "sell", window: TimeRange) {
   const s = side;
   const count =
@@ -2135,6 +2168,19 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
       setIsLoading(true);
       setSuccessMessage(null);
 
+      // Resolve pool address with fallback to token service API
+      let resolvedPoolAddress = effectivePoolAddress;
+      if (!resolvedPoolAddress && token.mint) {
+        console.log(`[TradeActionPanel] Pool address empty, fetching from token service for ${token.mint}`);
+        const fetchedPairAddress = await fetchPairAddressFromTokenService(token.mint);
+        if (fetchedPairAddress) {
+          resolvedPoolAddress = fetchedPairAddress;
+          console.log(`[TradeActionPanel] Resolved pool address from token service: ${resolvedPoolAddress}`);
+        } else {
+          console.warn(`[TradeActionPanel] Failed to resolve pool address for ${token.mint}`);
+        }
+      }
+
       if (tab === "limit") {
         if (!amount || !targetMC) {
           setSuccessMessage(null);
@@ -2207,7 +2253,7 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
               : undefined;
 
           let latestMarketCap: number | null = tokenServiceMarketCap ?? baseMarketCap;
-          if (effectivePoolAddress) {
+          if (resolvedPoolAddress) {
             const refreshed = await refreshTokenServiceData(true);
             if (refreshed !== null) {
               latestMarketCap = refreshed;
@@ -2252,8 +2298,8 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
               tokenName: token.name,
               tokenSymbol: token.symbol,
               tokenDecimals: token.decimals,
-              poolAddress: effectivePoolAddress,
-              pairAddress: token.pair_address || "",
+              poolAddress: resolvedPoolAddress,
+              pairAddress: token.pair_address || resolvedPoolAddress || "",
               poolType: computedPoolType,
               slippage: slippageValue,
               priorityFee: priorityFeeValue,
@@ -2565,7 +2611,7 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
       };
 
       try {
-        const poolAddress = effectivePoolAddress;
+        const poolAddress = resolvedPoolAddress;
         const baseMint = token.mint || '';
         const quoteMint = SOL_MINT_ADDRESS;
 
@@ -2575,7 +2621,7 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
           quoteMint,
           amountSOL: buyAmount,
           poolType,
-        originalPairAddress: token.pair_address,
+        originalPairAddress: token.pair_address || resolvedPoolAddress,
         slippage: settings.maxSlippage,
         priorityFee: settings.priority,
           bribe: settings.bribe,

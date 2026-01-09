@@ -13,14 +13,18 @@ interface CodexDevTokensProps {
 
 function getAge(timestamp: number) {
   const now = Date.now() / 1000;
-  const diffSeconds = now - timestamp;
+  const diffSeconds = Math.floor(now - timestamp);
   const diffMins = Math.floor(diffSeconds / 60);
   const diffHours = Math.floor(diffSeconds / 3600);
   const diffDays = Math.floor(diffSeconds / 86400);
-  
+
+  // Handle future timestamps (clock skew)
+  if (diffSeconds < 0) return '0s';
+
   if (diffDays > 0) return `${diffDays}d`;
   if (diffHours > 0) return `${diffHours}h`;
-  return `${diffMins}m`;
+  if (diffMins > 0) return `${diffMins}m`;
+  return `${diffSeconds}s`;
 }
 
 function formatMarketCap(marketCap: string) {
@@ -513,7 +517,9 @@ const CodexDevTokens: React.FC<CodexDevTokensProps> = ({ token, chain = 'sol' })
                   >
                     <td className="px-2 py-2">
                       <div className="flex flex-col">
-                        <div className="text-[11px] font-semibold" style={{ color: '#d1d5db' }}>{devToken.token.symbol}</div>
+                        <div className="text-[11px] font-semibold" style={{ color: '#d1d5db' }}>
+                          {devToken.token.symbol || devToken.token.name || `${devToken.token.address.slice(0, 4)}...${devToken.token.address.slice(-4)}`}
+                        </div>
                         <div className="text-[10px]" style={{ color: '#9ca3af' }}>{age} ago</div>
                       </div>
                     </td>

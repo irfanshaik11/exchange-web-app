@@ -148,6 +148,16 @@ interface UseSolanaTokenWebSocketReturn {
 function formatTradeForUI(trade: SolanaTokenTrade): SolanaTokenTrade {
   const solPrice = 200; // Approximate SOL price, should be fetched dynamically
   const totalUsd = trade.sol_amount * solPrice;
+  const age = getAge(trade.timestamp);
+
+  // Debug log for new trades to verify timestamp is correct
+  if (age === '0s' || age === '1s' || age === '2s') {
+    console.log('[formatTradeForUI] Fresh trade:', {
+      signature: trade.signature?.slice(0, 8),
+      timestamp: trade.timestamp,
+      age,
+    });
+  }
 
   return {
     ...trade,
@@ -158,22 +168,48 @@ function formatTradeForUI(trade: SolanaTokenTrade): SolanaTokenTrade {
     total_usd: totalUsd,
     total_usd_formatted: `$${totalUsd.toFixed(2)}`,
     transaction_hash: trade.signature,
-    age: getAge(trade.timestamp),
+    age,
   };
 }
 
 // Helper to calculate age from timestamp
 function getAge(timestamp: string): string {
+  if (!timestamp) return '0s';
+
   const now = Date.now();
-  const tradeTime = new Date(timestamp).getTime();
-  const diffSeconds = Math.floor((now - tradeTime) / 1000);
+  let tradeTime: number;
+
+  // Handle various timestamp formats
+  if (typeof timestamp === 'string') {
+    // Try parsing as ISO/RFC3339 string
+    tradeTime = new Date(timestamp).getTime();
+
+    // If parsing failed, return 0s
+    if (isNaN(tradeTime)) {
+      console.warn('[getAge] Failed to parse timestamp:', timestamp);
+      return '0s';
+    }
+  } else if (typeof timestamp === 'number') {
+    // Unix timestamp (seconds or milliseconds)
+    tradeTime = timestamp > 1e12 ? timestamp : timestamp * 1000;
+  } else {
+    return '0s';
+  }
+
+  const diffMs = now - tradeTime;
+  const diffSeconds = Math.floor(diffMs / 1000);
+
+  // Handle future timestamps (clock skew) - show as just happened
+  if (diffSeconds < 0) return '0s';
+
   const diffMins = Math.floor(diffSeconds / 60);
   const diffHours = Math.floor(diffSeconds / 3600);
   const diffDays = Math.floor(diffSeconds / 86400);
 
   if (diffDays > 0) return `${diffDays}d`;
   if (diffHours > 0) return `${diffHours}h`;
-  return `${diffMins}m`;
+  if (diffMins > 0) return `${diffMins}m`;
+  return `${diffSeconds}s`;
 }
 
 /**
@@ -390,39 +426,133 @@ export function useSolanaTokenWebSocket(
 
             setLoading(false);
           } else if (message.type === 'trade_update') {
-            // Real-time trade update
+            // Real-time trade update - process ALL trades in the array
             if (message.data.trades && message.data.trades.length > 0) {
-              const newTrade = formatTradeForUI(message.data.trades[0]);
-              onNewTradeRef.current?.(newTrade);
+              const newTrades = message.data.trades.map(formatTradeForUI);
+              console.log('[useSolanaTokenWebSocket] Processing', newTrades.length, 'trade updates');
+
+              // Notify callback for each new trade
+              newTrades.forEach((trade) => {
+                onNewTradeRef.current?.(trade);
+              });
 
               setTrades((prev) => {
-                // Check for duplicate by signature
-                const exists = prev.some((t) => t.signature === newTrade.signature);
-                if (exists) return prev;
+                // Filter out duplicates by signature
+                const existingSignatures = new Set(prev.map((t) => t.signature));
+                const uniqueNewTrades = newTrades.filter((t) => !existingSignatures.has(t.signature));
 
-                // Prepend new trade and limit to maxTrades
-                const newTrades = [newTrade, ...prev];
-                return newTrades.slice(0, maxTrades);
+                if (uniqueNewTrades.length === 0) return prev;
+
+                // Prepend new trades (newest first) and limit to maxTrades
+                const combined = [...uniqueNewTrades, ...prev];
+                return combined.slice(0, maxTrades);
               });
             }
           } else if (message.type === 'holder_update') {
             // Real-time holder update
-            if (message.data.holders) {
+            // Backend sends individual holders directly in message.data (not message.data.holders)
+            const holderData = message.data as any;
+
+            if (holderData && holderData.wallet_address) {
+              // Single holder update from backend - merge into existing array
+              const updatedHolder: SolanaTokenHolder = {
+                wallet_address: holderData.wallet_address,
+                token_mint: holderData.token_mint,
+                total_bought_tokens: holderData.total_bought_tokens || 0,
+                total_bought_sol: holderData.total_bought_sol || 0,
+                buy_count: holderData.buy_count || 0,
+                total_sold_tokens: holderData.total_sold_tokens || 0,
+                total_sold_sol: holderData.total_sold_sol || 0,
+                sell_count: holderData.sell_count || 0,
+                remaining_tokens: holderData.remaining_tokens || 0,
+                avg_buy_price: holderData.avg_buy_price || 0,
+                avg_sell_price: holderData.avg_sell_price || 0,
+                first_buy_at: holderData.first_buy_at || '',
+                last_activity_at: holderData.last_activity_at || '',
+              };
+
+              setHolders((prev) => {
+                const existingIndex = prev.findIndex(
+                  (h) => h.wallet_address.toLowerCase() === updatedHolder.wallet_address.toLowerCase()
+                );
+
+                if (existingIndex >= 0) {
+                  // Update existing holder in place
+                  console.log('[useSolanaTokenWebSocket] Holder UPDATED:', updatedHolder.wallet_address.slice(0, 8), 'remaining:', updatedHolder.remaining_tokens);
+                  const updated = [...prev];
+                  updated[existingIndex] = updatedHolder;
+                  return updated;
+                } else {
+                  // Add new holder and re-sort by remaining tokens
+                  console.log('[useSolanaTokenWebSocket] Holder ADDED:', updatedHolder.wallet_address.slice(0, 8), 'remaining:', updatedHolder.remaining_tokens);
+                  return [...prev, updatedHolder].sort(
+                    (a, b) => (b.remaining_tokens || 0) - (a.remaining_tokens || 0)
+                  );
+                }
+              });
+
+              onHoldersUpdateRef.current?.([updatedHolder]);
+            } else if (message.data.holders) {
+              // Legacy: full array replacement (if backend ever sends this format)
+              console.log('[useSolanaTokenWebSocket] Holders REPLACED (legacy):', message.data.holders.length);
               setHolders(message.data.holders);
               onHoldersUpdateRef.current?.(message.data.holders);
             }
           } else if (message.type === 'top_trader_update') {
-            // Real-time top trader update
-            if (message.data.top_traders) {
-              setTopTraders(message.data.top_traders);
-              onTopTradersUpdateRef.current?.(message.data.top_traders);
+            // Real-time top trader update - merge with existing data
+            if (message.data.top_traders && message.data.top_traders.length > 0) {
+              const newTopTraders = message.data.top_traders;
+              console.log('[useSolanaTokenWebSocket] Top traders update:', newTopTraders.length);
+
+              setTopTraders((prev) => {
+                // Create a map of existing traders by wallet address
+                const traderMap = new Map(
+                  prev.map((t) => [t.wallet_address.toLowerCase(), t])
+                );
+
+                // Update or add new traders
+                newTopTraders.forEach((trader) => {
+                  traderMap.set(trader.wallet_address.toLowerCase(), trader);
+                });
+
+                // Convert back to array and sort by realized PnL (highest first)
+                const merged = Array.from(traderMap.values()).sort(
+                  (a, b) => (b.realized_pnl || 0) - (a.realized_pnl || 0)
+                );
+
+                console.log('[useSolanaTokenWebSocket] Top traders merged:', merged.length);
+                return merged;
+              });
+
+              onTopTradersUpdateRef.current?.(newTopTraders);
             }
           } else if (message.type === 'dev_token_update') {
-            // Real-time dev token update
-            if (message.data.dev_tokens) {
-              console.log('[useSolanaTokenWebSocket] Dev tokens update:', message.data.dev_tokens.length);
-              setDevTokens(message.data.dev_tokens);
-              onDevTokensUpdateRef.current?.(message.data.dev_tokens);
+            // Real-time dev token update - merge with existing data
+            if (message.data.dev_tokens && message.data.dev_tokens.length > 0) {
+              const newDevTokens = message.data.dev_tokens;
+              console.log('[useSolanaTokenWebSocket] Dev tokens update:', newDevTokens.length);
+
+              setDevTokens((prev) => {
+                // Create a map of existing dev tokens by mint
+                const tokenMap = new Map(
+                  prev.map((t) => [t.mint.toLowerCase(), t])
+                );
+
+                // Update or add new dev tokens
+                newDevTokens.forEach((token) => {
+                  tokenMap.set(token.mint.toLowerCase(), token);
+                });
+
+                // Convert back to array and sort by created_at (newest first)
+                const merged = Array.from(tokenMap.values()).sort(
+                  (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+                );
+
+                console.log('[useSolanaTokenWebSocket] Dev tokens merged:', merged.length);
+                return merged;
+              });
+
+              onDevTokensUpdateRef.current?.(newDevTokens);
             }
           } else if (message.type === 'token_update') {
             // Real-time token info update (price, mcap, liquidity)

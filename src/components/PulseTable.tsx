@@ -111,6 +111,7 @@ import {
   buildSolanaWalletAllocations,
 } from "~/utils/solanaWalletAllocation";
 import useSolanaPositionWebSocket from "~/hooks/useSolanaPositionWebSocket";
+import { fetchVerifiedPairAddress } from "~/hooks/useSingleTokenPolling";
 import toast from "react-hot-toast";
 import { FiGlobe } from "react-icons/fi";
 import BottomCardInfoHolder from "./BottomCardInfoHolder";
@@ -788,7 +789,13 @@ function TokenImage({
       // Resolve metadata JSON to get actual image URL
       resolveMetadataImage(metadataCandidate).then((resolved) => {
         if (!cancelled) {
-          setResolvedImageUrl(resolved || rawImageUrl || metadataCandidate);
+          if (resolved) {
+            setResolvedImageUrl(resolved);
+          } else {
+            // Metadata resolution failed - only use rawImageUrl if it's not a metadata URL
+            // Never fallback to metadataCandidate (JSON URL) as that would try to load JSON as image
+            setResolvedImageUrl(rawImageUrl && !isMetadataUrl(rawImageUrl) ? rawImageUrl : null);
+          }
         }
       });
     } else {
@@ -2624,9 +2631,19 @@ function PulseTable({
     };
 
     try {
-      const poolAddress =
-        token.migrated_pool_address || token.pair_address || "";
-      const baseMint = token.mint || "";
+      // CRITICAL: Verify the pair address from the token service before executing trade
+      let poolAddress = token.migrated_pool_address || token.pair_address || '';
+      if (token.mint) {
+        console.log(`[PulseTable] Verifying pair address for quick buy: ${token.mint}`);
+        const verifiedPairAddress = await fetchVerifiedPairAddress(token.mint);
+        if (verifiedPairAddress) {
+          if (verifiedPairAddress !== poolAddress) {
+            console.log(`[PulseTable] Pair address mismatch! Local: ${poolAddress}, Verified: ${verifiedPairAddress}`);
+          }
+          poolAddress = verifiedPairAddress;
+        }
+      }
+      const baseMint = token.mint || '';
       const quoteMint = SOL_MINT_ADDRESS;
 
       const multiResult = await executeSolanaMultiBuy({
@@ -3708,11 +3725,23 @@ function PulseTable({
       return;
     }
 
-    const poolAddress =
+    let poolAddress =
       (token as any).migrated_pool_address ||
       token.pair_address ||
       (token as any).pool_address ||
       "";
+
+    // CRITICAL: Verify the pair address from the token service before creating sniper
+    if (token.mint) {
+      console.log(`[PulseTable] Verifying pair address for sniper: ${token.mint}`);
+      const verifiedPairAddress = await fetchVerifiedPairAddress(token.mint);
+      if (verifiedPairAddress) {
+        if (verifiedPairAddress !== poolAddress) {
+          console.log(`[PulseTable] Sniper: Pair address mismatch! Local: ${poolAddress}, Verified: ${verifiedPairAddress}`);
+        }
+        poolAddress = verifiedPairAddress;
+      }
+    }
 
     if (!poolAddress) {
       showEnhancedToast("error", "Pool information unavailable", {
@@ -3785,8 +3814,7 @@ function PulseTable({
           tokenSymbol: token.symbol,
           tokenDecimals: token.decimals,
           poolAddress,
-          pairAddress:
-            token.pair_address || (token as any).migrated_pool_address || "",
+          pairAddress: poolAddress, // Use the verified pool address
           poolType: getPoolTypeFromToken(token),
           slippage: slippageValue,
           priorityFee: priorityFeeValue,
