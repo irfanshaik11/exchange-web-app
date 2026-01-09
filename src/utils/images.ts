@@ -129,8 +129,11 @@ const FAILURE_TTL_MS = 30 * 1000;
  * Resolve a metadata JSON URL to get the actual image URL
  * Returns null if resolution fails or URL is not a metadata URL
  * Uses TTL-based caching: success cached for 30min, failure cached for 30sec
+ * Recursively resolves nested metadata URLs (max depth 2)
  */
-export async function resolveMetadataImage(url: string): Promise<string | null> {
+export async function resolveMetadataImage(url: string, depth: number = 0): Promise<string | null> {
+  // Prevent infinite loops with max depth
+  if (depth > 2) return null;
   if (!url || !isMetadataUrl(url)) return null;
 
   // Check cache with TTL
@@ -174,7 +177,18 @@ export async function resolveMetadataImage(url: string): Promise<string | null> 
     const data = await response.json();
 
     // Extract image from metadata JSON
-    const imageUrl = extractMetaImage(data);
+    let imageUrl = extractMetaImage(data);
+
+    // If the extracted image URL is ALSO a metadata URL, resolve it recursively
+    // This handles nested metadata (e.g., IPFS metadata pointing to another IPFS metadata)
+    if (imageUrl && isMetadataUrl(imageUrl)) {
+      const nestedImage = await resolveMetadataImage(imageUrl, depth + 1);
+      if (nestedImage) {
+        imageUrl = nestedImage;
+      }
+      // If nested resolution fails, imageUrl remains as-is (might still be wrong, but we tried)
+    }
+
     metadataImageCache.set(url, { image: imageUrl, timestamp: Date.now() });
     return imageUrl;
   } catch (error) {
