@@ -447,7 +447,11 @@ const TokenAvatar: React.FC<{
           </div>
         ) : meta || imageUrl ? (
           <img
-            src={extractMetaImage(meta) || imageUrl || token.logo || ''}
+            src={(() => {
+              const imgSrc = extractMetaImage(meta) || imageUrl || token.logo || '';
+              if (!imgSrc) return '';
+              return `/api/image?url=${encodeURIComponent(imgSrc)}`;
+            })()}
             alt={token.name || token.symbol || ''}
             width={48}
             height={48}
