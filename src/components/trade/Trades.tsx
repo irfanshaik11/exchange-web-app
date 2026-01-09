@@ -8,12 +8,15 @@ function getAge(ts: string | number) {
   const now = Date.now();
   const t = typeof ts === 'string' ? new Date(ts).getTime() : ts;
   const diffMs = now - t;
+  const diffSeconds = Math.floor(diffMs / 1000);
   const diffMins = Math.floor(diffMs / (1000 * 60));
   const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
   const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+  if (diffSeconds < 0) return '0s';
   if (diffDays > 0) return `${diffDays}d`;
   if (diffHours > 0) return `${diffHours}h`;
-  return `${diffMins}m`;
+  if (diffMins > 0) return `${diffMins}m`;
+  return `${diffSeconds}s`;
 }
 
 function shortAddr(addr: string) {

@@ -167,7 +167,8 @@ export default function TradePage() {
   const { params: tradeParams, setParams: setTradeParams, isReady: tradeParamsReady } = useTradePageQueryParams();
 
   const { token, isPolling, loading: pollingLoading, isHydrating, resolvedPairAddress } = useSingleTokenPolling(
-    typeof id === "string" ? id : undefined
+    typeof id === "string" ? id : undefined,
+    typeof _mint === "string" ? _mint : undefined // Pass mint from URL for pair address verification
   );
 
   const {
@@ -439,7 +440,11 @@ export default function TradePage() {
     // First priority: fresh token data from polling - but ONLY if it matches current id
     // MERGE with optimistic data so we don't lose query param values
     if (token) {
+      // IMPORTANT: If token has verified_pair_address flag, trust it even if pair_address
+      // doesn't match URL id. This happens when we correct a wrong pair address via
+      // the get-pair API verification.
       const tokenMatchesId =
+        token.verified_pair_address === true ||
         token.pair_address === idString ||
         token.mint === idString;
       if (tokenMatchesId) {

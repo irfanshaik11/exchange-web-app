@@ -1,5 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import ImageBubble from './ImageBubble';
+import { isMetadataUrl, resolveMetadataImage } from '~/utils/images';
 
 interface FastImageProps {
   src?: string | null;
@@ -30,21 +31,41 @@ export default function FastImage({
   showBubble = true,
   bubbleSrc,
 }: FastImageProps) {
-  // Load images directly from URI - no optimization needed for speed
-  const finalSrc = src || fallbackSrc;
-  
   const [imageLoaded, setImageLoaded] = useState(false);
   const [imageError, setImageError] = useState(false);
+  const [resolvedSrc, setResolvedSrc] = useState<string | null>(null);
+
+  const inputSrc = src || fallbackSrc;
+
+  // If src is a metadata URL (JSON), resolve it to get actual image URL
+  useEffect(() => {
+    if (inputSrc && isMetadataUrl(inputSrc)) {
+      // Don't fall back to metadata URL if resolution fails - that would try to load JSON as image
+      resolveMetadataImage(inputSrc).then(resolved => {
+        if (resolved) {
+          setResolvedSrc(resolved);
+        }
+        // If null, keep resolvedSrc as null - shows fallback letter
+        // TTL cache will allow retry after 30 seconds
+      });
+    } else {
+      setResolvedSrc(inputSrc || null);
+    }
+  }, [inputSrc]);
+
+  // Use resolved URL (or original if not metadata)
+  const finalSrc = resolvedSrc;
 
   // CRITICAL: Reset loading state when src changes to prevent stale image display
-  React.useEffect(() => {
+  useEffect(() => {
     setImageLoaded(false);
     setImageError(false);
-  }, [src, fallbackSrc]);
+  }, [resolvedSrc]);
 
   // Use proxy for IPFS URLs, defined.fi, debridge, and other CORS-prone domains
   // IPFS gateways can have CORS restrictions, so proxy them
-  const alreadyProxied = finalSrc?.startsWith('/api/image');
+  // Don't proxy URLs that are already going through our API endpoints
+  const alreadyProxied = finalSrc?.startsWith('/api/');
   const needsProxy = finalSrc && !alreadyProxied && (
     finalSrc.includes('token-media.defined.fi') ||
     finalSrc.includes('ipfs.io') ||
@@ -67,35 +88,29 @@ export default function FastImage({
     finalSrc.includes('cdninstagram.com') ||
     finalSrc.includes('ipfs.storacha.link') ||
     finalSrc.includes('storacha.link') ||
-    finalSrc.includes('content.coinwave.gg')
+    finalSrc.includes('content.coinwave.gg') ||
+    finalSrc.includes('digitaloceanspaces.com')
   );
   
   const imageUrl = needsProxy && finalSrc
     ? `/api/image?url=${encodeURIComponent(finalSrc)}`
     : finalSrc;
 
-  // Debug logging to help diagnose image loading issues
-  React.useEffect(() => {
-    if (imageUrl) {
-      console.log(`[FastImage] Loading image:`, imageUrl, `for ${symbol || name || alt}`);
-    } else {
-      console.warn(`[FastImage] No image URL provided for ${symbol || name || alt}`);
-    }
-  }, [imageUrl, symbol, name, alt]);
+  // Debug logging disabled for cleaner console
+  // React.useEffect(() => {
+  //   if (imageUrl) {
+  //     console.log(`[FastImage] Loading image:`, imageUrl, `for ${symbol || name || alt}`);
+  //   } else {
+  //     console.warn(`[FastImage] No image URL provided for ${symbol || name || alt}`);
+  //   }
+  // }, [imageUrl, symbol, name, alt]);
 
   const handleLoad = () => {
-    console.log(`[FastImage] Image loaded successfully:`, imageUrl);
     setImageLoaded(true);
     setImageError(false);
   };
 
-  const handleError = (e: React.SyntheticEvent<HTMLImageElement, Event>) => {
-    const target = e.target as HTMLImageElement;
-    console.error(`[FastImage] Image failed to load:`, imageUrl, `Error:`, {
-      src: target.src,
-      naturalWidth: target.naturalWidth,
-      naturalHeight: target.naturalHeight,
-    });
+  const handleError = () => {
     setImageError(true);
     setImageLoaded(false);
   };
