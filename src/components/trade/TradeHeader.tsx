@@ -8,6 +8,7 @@ import FastImage from "../FastImage";
 import useMarketDataWebSocket from "~/hooks/useMarketDataWebSocket";
 import { useRouter } from "next/router";
 import { getProtocolBranding } from "~/utils/protocolBranding";
+import type { SolanaTokenInfo } from "~/hooks/useSolanaTokenWebSocket";
 
 import { IoShareSocialOutline } from "react-icons/io5";
 import {
@@ -390,9 +391,11 @@ interface TradeHeaderProps {
   token: Token | null;
   livePriceUsd?: number | null;
   liveMarketCapUsd?: number | null;
+  /** Real-time token info from unified WebSocket (price, mcap, liquidity, image) */
+  wsTokenInfo?: SolanaTokenInfo | null;
 }
 
-const TradeHeader: React.FC<TradeHeaderProps> = ({ token, livePriceUsd, liveMarketCapUsd }) => {
+const TradeHeader: React.FC<TradeHeaderProps> = ({ token, livePriceUsd, liveMarketCapUsd, wsTokenInfo }) => {
   const coalesceNumber = (...values: any[]): number | null => {
     for (const v of values) {
       const n = typeof v === "string" ? parseFloat(v) : v;
@@ -570,32 +573,25 @@ const TradeHeader: React.FC<TradeHeaderProps> = ({ token, livePriceUsd, liveMark
     liveMarketCapUsd,
     (token as any)?.chart_live_market_cap_usd
   );
+  // Priority: wsTokenInfo (unified WebSocket) > chartPriceUsd > marketData > token
   const effectivePrice =
     coalesceNumber(
+      wsTokenInfo?.price_usd,  // Unified WebSocket has highest priority
       chartPriceUsd,
       marketData?.price_usd,
       (token as any).usd_price,
       (token as any).price_usd
     ) ?? 0;
-  // Debug: Log all market cap fallback values
-  console.log('[TRADEHEADER_MC_DEBUG] Market cap fallback chain:', {
-    'liveMarketCapUsd (prop)': liveMarketCapUsd,
-    'token.chart_live_market_cap_usd': (token as any)?.chart_live_market_cap_usd,
-    'chartMarketCapUsd (combined)': chartMarketCapUsd,
-    'marketData?.market_cap_usd': marketData?.market_cap_usd,
-    'token.market_cap_usd': (token as any).market_cap_usd,
-    'token.fully_diluted_value': (token as any).fully_diluted_value,
-    'token.market_cap_usd (direct)': token.market_cap_usd,
-  });
+  // Priority: wsTokenInfo (unified WebSocket) > chartMarketCapUsd > marketData > token
   const effectiveMarketCap =
     coalesceNumber(
+      wsTokenInfo?.market_cap_usd,  // Unified WebSocket has highest priority
       chartMarketCapUsd,
       marketData?.market_cap_usd,
       (token as any).market_cap_usd,
       (token as any).fully_diluted_value,
       token.market_cap_usd
     ) ?? 0;
-  console.log('[TRADEHEADER_MC_DEBUG] Final effectiveMarketCap:', effectiveMarketCap);
   const effectivePriceChange1h = coalesceNumber(
     (token as any)?.price_percent_change_1h,
     (token as any)?.price_change_1h,
@@ -627,17 +623,18 @@ const TradeHeader: React.FC<TradeHeaderProps> = ({ token, livePriceUsd, liveMark
   const mcap = effectiveMarketCap;
   const price = effectivePrice;
 
-  // LIQUIDITY: For Solana, only use /v1/trade/view endpoint data (token prop)
+  // LIQUIDITY: Priority: wsTokenInfo (unified WebSocket) > token prop > marketData
   // Check if liquidity data actually exists (vs being undefined/null)
+  const hasWsLiquidity = wsTokenInfo?.liquidity_usd !== undefined && wsTokenInfo.liquidity_usd > 0;
   const hasTokenLiquidity = (token as any).liquidity_usd !== undefined || (token as any).total_liquidity_usd !== undefined;
   const tokenLiquidity = (token as any).liquidity_usd ?? (token as any).total_liquidity_usd ?? 0;
-  // For Solana: Only use token data from /v1/trade/view endpoint
-  // For Monad: Can use WebSocket as additional source
-  const wsLiquidity = isSolanaToken ? null : (marketData?.liquidity_usd ?? marketData?.volume_usd);
-  // const wsLiquidity = marketData?.liquidity_usd ?? marketData?.volume_usd; // COMMENTED OUT for Solana - only using endpoint data
-  const liq = (wsLiquidity && wsLiquidity > 0) ? wsLiquidity : tokenLiquidity;
+  // For Solana: Prefer unified WebSocket, fallback to token data
+  // For Monad: Can also use marketData WebSocket as additional source
+  const wsLiquidityFromMarketData = isSolanaToken ? null : (marketData?.liquidity_usd ?? marketData?.volume_usd);
+  // Unified WebSocket liquidity has highest priority
+  const liq = hasWsLiquidity ? wsTokenInfo!.liquidity_usd : ((wsLiquidityFromMarketData && wsLiquidityFromMarketData > 0) ? wsLiquidityFromMarketData : tokenLiquidity);
   // Track if we're still loading liquidity data (no source has provided it yet)
-  const isLiquidityLoading = isSolanaToken ? !hasTokenLiquidity : (!hasTokenLiquidity && !wsLiquidity);
+  const isLiquidityLoading = isSolanaToken ? (!hasWsLiquidity && !hasTokenLiquidity) : (!hasWsLiquidity && !hasTokenLiquidity && !wsLiquidityFromMarketData);
   const supply = (token as any).total_supply ?? (token as any).supply ?? 0;
   const formattedMarketCap = useMemo(() => formatMarketCap(mcap), [mcap]);
   const isLowLiquidity = Number(liq) < 1000;
@@ -685,11 +682,10 @@ const TradeHeader: React.FC<TradeHeaderProps> = ({ token, livePriceUsd, liveMark
     fillProtocolBadge = shouldFillProtocolBadge(token);
   }
 
-  // IMAGE: For Solana, only use /v1/trade/view endpoint data (token prop)
-  // API returns image_url, fallback to image, logo, then uri (metadata URI)
-  // No other sources for image - this is already endpoint-only
+  // IMAGE: Priority: wsTokenInfo.image_url (from URI metadata) > token prop
+  // Unified WebSocket fetches image from URI metadata and provides it directly
   const rawImg =
-    (token as any).image_url || (token as any).image || (token as any).logo || (token as any).uri;
+    wsTokenInfo?.image_url || (token as any).image_url || (token as any).image || (token as any).logo || (token as any).uri;
   const imgSrc = normalizeAssetUrl(rawImg);
   const fallbackAvatar = `https://ui-avatars.com/api/?name=${encodeURIComponent(
     token.symbol || token.name || "T",

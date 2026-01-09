@@ -157,7 +157,7 @@ export function ReferralAccessGate({
   const requireReferralAccess =
     env.NEXT_PUBLIC_REQUIRE_REFERRAL_ACCESS !== undefined
       ? env.NEXT_PUBLIC_REQUIRE_REFERRAL_ACCESS
-      : false; // default to false to bypass referral gate for now
+      : true; // default to true to require access code for new users
 
   const [status, setStatus] = useState<ReferralGateStatus>(() => {
     // Start locked unless the gate is disabled; user-specific access is resolved after load

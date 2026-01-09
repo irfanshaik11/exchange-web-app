@@ -539,8 +539,8 @@ export default function TradePage() {
     return undefined;
   }, [displayToken?.mint, _mint, id]);
 
-  // Get holder summary and trades from unified WebSocket for token info section and dev markers
-  const { holderSummary, topTraders: wsTopTraders, trades: wsHistoricalTrades } = useSolanaTokenWebSocket({
+  // Get holder summary, token info, and trades from unified WebSocket for token info section and dev markers
+  const { holderSummary, topTraders: wsTopTraders, trades: wsHistoricalTrades, tokenInfo: wsTokenInfo } = useSolanaTokenWebSocket({
     mintAddress: displayToken?.mint || resolvedTokenMint,
     enabled: !!(displayToken?.mint || resolvedTokenMint),
   });
@@ -862,7 +862,7 @@ export default function TradePage() {
               }}
             >
               <div className="px-2 flex-shrink-0">
-                <TradeHeader token={validatedCorrectTokenData || displayToken} />
+                <TradeHeader token={validatedCorrectTokenData || displayToken} wsTokenInfo={wsTokenInfo} />
               </div>
 
               {/* Separator line after TradeHeader */}
