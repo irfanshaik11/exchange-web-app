@@ -40,8 +40,13 @@ export default function FastImage({
   // If src is a metadata URL (JSON), resolve it to get actual image URL
   useEffect(() => {
     if (inputSrc && isMetadataUrl(inputSrc)) {
+      // Don't fall back to metadata URL if resolution fails - that would try to load JSON as image
       resolveMetadataImage(inputSrc).then(resolved => {
-        setResolvedSrc(resolved || inputSrc);
+        if (resolved) {
+          setResolvedSrc(resolved);
+        }
+        // If null, keep resolvedSrc as null - shows fallback letter
+        // TTL cache will allow retry after 30 seconds
       });
     } else {
       setResolvedSrc(inputSrc || null);
