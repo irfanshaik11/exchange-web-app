@@ -18,7 +18,7 @@ import type { Token as BaseToken } from "~/utils/db";
 import { formatSmartNumber, formatMarketCap } from '~/utils/db';
 import SkeletonRow from './InterstateTable/SkeletonRow';
 import { fetchTokenMetadata } from '~/utils/functions';
-import { withImageFallback, extractMetaImage } from '~/utils/images';
+import { withImageFallback, extractMetaImage, isMetadataUrl } from '~/utils/images';
 import AvatarImage from '~/components/AvatarImage';
 import { useFilter } from "./FilterContext";
 import { getAmm } from "~/utils/amms";
@@ -432,8 +432,10 @@ const TokenAvatar: React.FC<{
     return 'https://logos-world.net/wp-content/uploads/2024/10/Pump-Fun-Logo.png';
   };
 
-  // API returns image_url, fallback to image, logo, then uri
-  const imageUrl = (token as any).image_url || (token as any).image || token.logo || (token as any).uri;
+  // API returns image_url, fallback to image, logo, then uri (only if uri is not a metadata JSON URL)
+  const rawUri = (token as any).uri;
+  const safeUri = rawUri && !isMetadataUrl(rawUri) ? rawUri : null;
+  const imageUrl = (token as any).image_url || (token as any).image || token.logo || safeUri;
 
   return (
     <div className="relative h-12 w-12 flex items-center justify-center">

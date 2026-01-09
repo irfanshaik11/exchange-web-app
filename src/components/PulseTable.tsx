@@ -789,7 +789,13 @@ function TokenImage({
       // Resolve metadata JSON to get actual image URL
       resolveMetadataImage(metadataCandidate).then((resolved) => {
         if (!cancelled) {
-          setResolvedImageUrl(resolved || rawImageUrl || metadataCandidate);
+          if (resolved) {
+            setResolvedImageUrl(resolved);
+          } else {
+            // Metadata resolution failed - only use rawImageUrl if it's not a metadata URL
+            // Never fallback to metadataCandidate (JSON URL) as that would try to load JSON as image
+            setResolvedImageUrl(rawImageUrl && !isMetadataUrl(rawImageUrl) ? rawImageUrl : null);
+          }
         }
       });
     } else {
