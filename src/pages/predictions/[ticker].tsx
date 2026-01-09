@@ -16,7 +16,8 @@ import {
 import { BiWallet, BiCopy } from 'react-icons/bi';
 import Header from '../../components/Header';
 import Footer from '../../components/Footer';
-import { useDFlowMarket, useDFlowTrades, useDFlowOrderBook, formatVolume, formatOpenInterest, getDFlowQuote, getDFlowSwap } from '~/hooks/useDFlowMarkets';
+import { useDFlowMarket, useDFlowTrades, useDFlowOrderBook, useDFlowPriceHistory, useDFlowRealtimePrices, formatVolume, formatOpenInterest, getDFlowQuote, getDFlowSwap } from '~/hooks/useDFlowMarkets';
+import PredictionChart from '~/components/predictions/PredictionChart';
 import type { ExtendedPredictionMarket } from '~/hooks/useDFlowMarkets';
 import { useUser } from '~/components/UserContext';
 import { useTurnkeySigner } from '~/components/TurnkeySignerContext';
@@ -25,22 +26,24 @@ import { showEnhancedToast, updateEnhancedToast } from '~/utils/enhancedToast';
 // USDC mint on Solana
 const USDC_MINT = 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v';
 
-// Custom color palette
+// Vibrant color palette (matching index page)
 const C = {
   bg: "#0a0b0d",
   surface: "#12141a",
   border: "#1e2028",
   text: "#f0f0f0",
   muted: "#6b7280",
-  green: "#85d99f",
-  greenBg: "rgba(133, 217, 159, 0.12)",
-  greenBorder: "rgba(133, 217, 159, 0.25)",
-  red: "#f26681",
-  redBg: "rgba(242, 102, 129, 0.12)",
-  redBorder: "rgba(242, 102, 129, 0.25)",
-  yellow: "#ffd038",
-  purple: "#647eff",
-  orange: "#f69768",
+  // Vibrant saturated colors
+  green: "#4ADE80",
+  greenBg: "rgba(74, 222, 128, 0.15)",
+  greenBorder: "rgba(74, 222, 128, 0.35)",
+  red: "#F87171",
+  redBg: "rgba(248, 113, 113, 0.15)",
+  redBorder: "rgba(248, 113, 113, 0.35)",
+  yellow: "#FBBF24",
+  purple: "#818CF8",
+  orange: "#FB923C",
+  cyan: "#22D3EE",
 };
 
 // Helpers
@@ -98,9 +101,24 @@ export default function MarketDetailPage() {
   const { market, isLoading, refetch } = useDFlowMarket(tickerString);
   const { trades } = useDFlowTrades(tickerString, { limit: 10, refreshInterval: 15000 });
   const { orderBook } = useDFlowOrderBook(tickerString, { refreshInterval: 5000 });
+  const { history: priceHistory, isLoading: historyLoading } = useDFlowPriceHistory(tickerString, { period: 'week', refreshInterval: 60000 });
+  const realtimePrices = useDFlowRealtimePrices(tickerString);
+
+  // Use real-time prices when available, fallback to market data
+  const currentYesPrice = realtimePrices.yesBid != null && realtimePrices.yesAsk != null
+    ? (realtimePrices.yesBid + realtimePrices.yesAsk) / 2 / 100
+    : market?.yesPrice || 0.5;
+  const currentNoPrice = realtimePrices.noBid != null && realtimePrices.noAsk != null
+    ? (realtimePrices.noBid + realtimePrices.noAsk) / 2 / 100
+    : market?.noPrice || 0.5;
+
+  // Transform price history for the chart
+  const chartPriceHistory = priceHistory.length > 0
+    ? priceHistory.map(p => ({ time: p.timestamp, price: p.yesPrice }))
+    : undefined;
 
   const amountNumber = parseFloat(amount) || 0;
-  const selectedPrice = selectedSide === 'yes' ? (market?.yesPrice || 0.5) : (market?.noPrice || 0.5);
+  const selectedPrice = selectedSide === 'yes' ? currentYesPrice : currentNoPrice;
   const tokensReceived = amountNumber > 0 ? amountNumber / selectedPrice : 0;
   const potentialPayout = tokensReceived;
 
@@ -288,11 +306,11 @@ export default function MarketDetailPage() {
                     <span className="text-sm font-medium" style={{ color: C.green }}>YES</span>
                   </div>
                   <div className="text-3xl font-bold" style={{ color: C.green }}>
-                    {Math.round(market.yesPrice * 100)}¢
+                    {Math.round(currentYesPrice * 100)}¢
                   </div>
-                  {market.yesBid != null && market.yesAsk != null && (
+                  {(realtimePrices.yesBid != null || market.yesBid != null) && (
                     <div className="text-xs mt-1" style={{ color: C.muted }}>
-                      {market.yesBid}¢ / {market.yesAsk}¢
+                      {realtimePrices.yesBid ?? market.yesBid}¢ / {realtimePrices.yesAsk ?? market.yesAsk}¢
                     </div>
                   )}
                 </button>
@@ -310,11 +328,11 @@ export default function MarketDetailPage() {
                     <span className="text-sm font-medium" style={{ color: C.red }}>NO</span>
                   </div>
                   <div className="text-3xl font-bold" style={{ color: C.red }}>
-                    {Math.round(market.noPrice * 100)}¢
+                    {Math.round(currentNoPrice * 100)}¢
                   </div>
-                  {market.noBid != null && market.noAsk != null && (
+                  {(realtimePrices.noBid != null || market.noBid != null) && (
                     <div className="text-xs mt-1" style={{ color: C.muted }}>
-                      {market.noBid}¢ / {market.noAsk}¢
+                      {realtimePrices.noBid ?? market.noBid}¢ / {realtimePrices.noAsk ?? market.noAsk}¢
                     </div>
                   )}
                 </button>
@@ -434,14 +452,28 @@ export default function MarketDetailPage() {
                 </div>
               ) : null}
 
-              {/* Price Chart - Coming Soon */}
-              <div className="rounded-xl p-4" style={{ backgroundColor: C.surface, border: `1px solid ${C.border}` }}>
-                <h3 className="text-sm font-medium mb-2" style={{ color: C.text }}>Price History</h3>
-                <div className="flex items-center justify-center py-6" style={{ backgroundColor: C.bg, borderRadius: '8px' }}>
-                  <p className="text-xs" style={{ color: C.muted }}>
-                    {isResolved ? 'Price history unavailable for resolved markets' : 'Chart coming soon'}
-                  </p>
+              {/* Price Chart */}
+              <div className="rounded-xl overflow-hidden" style={{ backgroundColor: C.surface, border: `1px solid ${C.border}` }}>
+                <div className="p-4 pb-2">
+                  <h3 className="text-sm font-medium" style={{ color: C.text }}>Price History</h3>
                 </div>
+                {historyLoading ? (
+                  <div className="flex items-center justify-center py-12" style={{ backgroundColor: C.bg }}>
+                    <HiOutlineRefresh className="w-5 h-5 animate-spin" style={{ color: C.muted }} />
+                  </div>
+                ) : isResolved ? (
+                  <div className="flex items-center justify-center py-12" style={{ backgroundColor: C.bg }}>
+                    <p className="text-xs" style={{ color: C.muted }}>Price history unavailable for resolved markets</p>
+                  </div>
+                ) : (
+                  <PredictionChart
+                    ticker={tickerString}
+                    yesPrice={currentYesPrice}
+                    noPrice={currentNoPrice}
+                    height="250px"
+                    priceHistory={chartPriceHistory}
+                  />
+                )}
               </div>
 
               {/* Recent Trades */}

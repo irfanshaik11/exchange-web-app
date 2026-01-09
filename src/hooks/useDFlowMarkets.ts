@@ -1,9 +1,16 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import type { PredictionMarket } from '~/components/predictions';
 
-// DFlow API base URLs
-const DFLOW_METADATA_API = 'https://dev-prediction-markets-api.dflow.net';
-const DFLOW_QUOTE_API = 'https://dev-quote-api.dflow.net';
+// DFlow API Configuration
+// Use local proxy routes to avoid CORS issues
+const API_BASE = '/api/dflow';
+const DFLOW_WS_URL = process.env.NEXT_PUBLIC_DFLOW_WS_URL || 'wss://prediction-markets-api.dflow.net/api/v1/ws';
+
+// Simple headers for local proxy
+const getHeaders = () => ({
+  'Accept': 'application/json',
+  'Content-Type': 'application/json',
+});
 
 // Complete DFlow Market type with all API fields
 export interface DFlowMarket {
@@ -324,37 +331,25 @@ export default function useDFlowMarkets(options: UseDFlowMarketsOptions = {}): U
       fetchInProgress.current = true;
       setError(null);
 
-      // Build query params
-      const marketsParams = new URLSearchParams();
-      marketsParams.set('limit', limit.toString());
+      // Build query params for local proxy
+      const params = new URLSearchParams();
+      params.set('limit', limit.toString());
+      if (search) params.set('search', search);
+      if (status !== 'all') params.set('status', status);
 
-      const eventsParams = new URLSearchParams();
-      eventsParams.set('limit', limit.toString());
+      // Use local proxy (handles CORS)
+      const response = await fetch(`${API_BASE}/markets?${params}`, {
+        headers: getHeaders(),
+      });
 
-      let marketsUrl = `${DFLOW_METADATA_API}/api/v1/markets?${marketsParams}`;
-      let eventsUrl = `${DFLOW_METADATA_API}/api/v1/events?${eventsParams}`;
-
-      // If search is provided, use search endpoint
-      if (search) {
-        marketsUrl = `${DFLOW_METADATA_API}/api/v1/search?q=${encodeURIComponent(search)}&limit=${limit}`;
+      if (!response.ok) {
+        throw new Error(`Markets API error: ${response.status}`);
       }
 
-      // Fetch both markets and events in parallel
-      const [marketsResponse, eventsResponse] = await Promise.all([
-        fetch(marketsUrl, { headers: { 'Accept': 'application/json' } }),
-        fetch(eventsUrl, { headers: { 'Accept': 'application/json' } }),
-      ]);
-
-      if (!marketsResponse.ok) {
-        throw new Error(`Markets API error: ${marketsResponse.status}`);
-      }
-
-      const marketsData: DFlowMarketsResponse = await marketsResponse.json();
-      let eventsData: DFlowEventsResponse = { events: [] };
-
-      if (eventsResponse.ok) {
-        eventsData = await eventsResponse.json();
-      }
+      // Proxy returns both markets and events
+      const data = await response.json();
+      const marketsData: DFlowMarketsResponse = { markets: data.markets || [], cursor: data.cursor };
+      const eventsData: DFlowEventsResponse = { events: data.events || [] };
 
       // Create a map of events by ticker for quick lookup
       const eventsMap = new Map<string, DFlowEvent>();
@@ -494,8 +489,8 @@ export async function getDFlowQuote(params: {
       slippageBps: (params.slippageBps || 50).toString(),
     });
 
-    const response = await fetch(`${DFLOW_QUOTE_API}/quote?${queryParams}`, {
-      headers: { 'Accept': 'application/json' },
+    const response = await fetch(`${API_BASE}/quote?${queryParams}`, {
+      headers: getHeaders(),
     });
 
     if (!response.ok) {
@@ -520,12 +515,9 @@ export async function getDFlowSwap(params: {
   if (!params.quoteResponse) return null;
 
   try {
-    const response = await fetch(`${DFLOW_QUOTE_API}/swap`, {
+    const response = await fetch(`${API_BASE}/swap`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Accept': 'application/json',
-      },
+      headers: getHeaders(),
       body: JSON.stringify({
         quoteResponse: params.quoteResponse,
         userPublicKey: params.userPublicKey,
@@ -574,8 +566,8 @@ export async function getDFlowTrades(params: {
     if (params.ticker) queryParams.set('ticker', params.ticker);
     if (params.limit) queryParams.set('limit', params.limit.toString());
 
-    const response = await fetch(`${DFLOW_METADATA_API}/api/v1/trades?${queryParams}`, {
-      headers: { 'Accept': 'application/json' },
+    const response = await fetch(`${API_BASE}/trades?${queryParams}`, {
+      headers: getHeaders(),
     });
 
     if (!response.ok) {
@@ -592,8 +584,8 @@ export async function getDFlowTrades(params: {
 // Fetch order book for a market
 export async function getDFlowOrderBook(ticker: string): Promise<DFlowOrderBook | null> {
   try {
-    const response = await fetch(`${DFLOW_METADATA_API}/api/v1/orderbook/${ticker}`, {
-      headers: { 'Accept': 'application/json' },
+    const response = await fetch(`${API_BASE}/orderbook?ticker=${encodeURIComponent(ticker)}`, {
+      headers: getHeaders(),
     });
 
     if (!response.ok) {
@@ -701,11 +693,11 @@ export async function getDFlowPriceHistory(params: {
 }): Promise<{ history: DFlowPriceHistoryPoint[] } | null> {
   try {
     const queryParams = new URLSearchParams();
+    queryParams.set('ticker', params.ticker);
     if (params.period) queryParams.set('period', params.period);
 
-    const url = `${DFLOW_METADATA_API}/api/v1/forecast_history/${params.ticker}${queryParams.toString() ? '?' + queryParams : ''}`;
-    const response = await fetch(url, {
-      headers: { 'Accept': 'application/json' },
+    const response = await fetch(`${API_BASE}/price-history?${queryParams}`, {
+      headers: getHeaders(),
     });
 
     if (!response.ok) {
@@ -769,4 +761,305 @@ export function formatOpenInterest(oi: number): string {
   if (oi >= 1_000_000) return `${(oi / 1_000_000).toFixed(2)}M`;
   if (oi >= 1_000) return `${(oi / 1_000).toFixed(1)}K`;
   return oi.toFixed(0);
+}
+
+// ============================================
+// WebSocket Service for Real-Time Updates
+// ============================================
+
+export interface DFlowWSPriceUpdate {
+  channel: 'prices';
+  ticker: string;
+  yes_bid: number;
+  yes_ask: number;
+  no_bid: number;
+  no_ask: number;
+  timestamp: number;
+}
+
+export interface DFlowWSTradeUpdate {
+  channel: 'trades';
+  ticker: string;
+  side: 'yes' | 'no';
+  price: number;
+  size: number;
+  timestamp: number;
+}
+
+export interface DFlowWSOrderbookUpdate {
+  channel: 'orderbook';
+  ticker: string;
+  yes_bids: Record<string, number>;
+  no_bids: Record<string, number>;
+  sequence: number;
+}
+
+type DFlowWSMessage = DFlowWSPriceUpdate | DFlowWSTradeUpdate | DFlowWSOrderbookUpdate;
+
+export type DFlowWSCallback = (data: DFlowWSMessage) => void;
+
+class DFlowWebSocketService {
+  private ws: WebSocket | null = null;
+  private subscriptions: Map<string, Set<DFlowWSCallback>> = new Map();
+  private reconnectAttempts = 0;
+  private maxReconnectAttempts = 5;
+  private reconnectDelay = 1000;
+  private isConnecting = false;
+  private pingInterval: NodeJS.Timeout | null = null;
+
+  connect(): Promise<void> {
+    return new Promise((resolve, reject) => {
+      if (this.ws?.readyState === WebSocket.OPEN) {
+        resolve();
+        return;
+      }
+
+      if (this.isConnecting) {
+        // Wait for existing connection attempt
+        const checkConnection = setInterval(() => {
+          if (this.ws?.readyState === WebSocket.OPEN) {
+            clearInterval(checkConnection);
+            resolve();
+          }
+        }, 100);
+        return;
+      }
+
+      this.isConnecting = true;
+
+      try {
+        this.ws = new WebSocket(DFLOW_WS_URL);
+
+        this.ws.onopen = () => {
+          console.log('[DFlow WS] Connected');
+          this.isConnecting = false;
+          this.reconnectAttempts = 0;
+
+          // Start ping to keep connection alive
+          this.startPing();
+
+          // Re-subscribe to all existing subscriptions
+          this.subscriptions.forEach((_, key) => {
+            const [channel, ticker] = key.split(':');
+            this.sendSubscribe(channel as 'prices' | 'trades' | 'orderbook', ticker);
+          });
+
+          resolve();
+        };
+
+        this.ws.onmessage = (event) => {
+          try {
+            const data = JSON.parse(event.data) as DFlowWSMessage;
+            if (data.channel && data.ticker) {
+              const key = `${data.channel}:${data.ticker}`;
+              const callbacks = this.subscriptions.get(key);
+              callbacks?.forEach(cb => cb(data));
+            }
+          } catch (err) {
+            console.error('[DFlow WS] Parse error:', err);
+          }
+        };
+
+        this.ws.onerror = (error) => {
+          console.error('[DFlow WS] Error:', error);
+          this.isConnecting = false;
+        };
+
+        this.ws.onclose = () => {
+          console.log('[DFlow WS] Disconnected');
+          this.isConnecting = false;
+          this.stopPing();
+          this.attemptReconnect();
+        };
+
+      } catch (error) {
+        this.isConnecting = false;
+        reject(error);
+      }
+    });
+  }
+
+  private startPing() {
+    this.stopPing();
+    this.pingInterval = setInterval(() => {
+      if (this.ws?.readyState === WebSocket.OPEN) {
+        this.ws.send(JSON.stringify({ action: 'ping' }));
+      }
+    }, 30000);
+  }
+
+  private stopPing() {
+    if (this.pingInterval) {
+      clearInterval(this.pingInterval);
+      this.pingInterval = null;
+    }
+  }
+
+  private attemptReconnect() {
+    if (this.reconnectAttempts >= this.maxReconnectAttempts) {
+      console.error('[DFlow WS] Max reconnect attempts reached');
+      return;
+    }
+
+    this.reconnectAttempts++;
+    const delay = this.reconnectDelay * Math.pow(2, this.reconnectAttempts - 1);
+    console.log(`[DFlow WS] Reconnecting in ${delay}ms (attempt ${this.reconnectAttempts})`);
+
+    setTimeout(() => {
+      this.connect().catch(console.error);
+    }, delay);
+  }
+
+  private sendSubscribe(channel: 'prices' | 'trades' | 'orderbook', ticker: string) {
+    if (this.ws?.readyState === WebSocket.OPEN) {
+      this.ws.send(JSON.stringify({
+        action: 'subscribe',
+        channel,
+        ticker,
+      }));
+    }
+  }
+
+  private sendUnsubscribe(channel: 'prices' | 'trades' | 'orderbook', ticker: string) {
+    if (this.ws?.readyState === WebSocket.OPEN) {
+      this.ws.send(JSON.stringify({
+        action: 'unsubscribe',
+        channel,
+        ticker,
+      }));
+    }
+  }
+
+  subscribe(channel: 'prices' | 'trades' | 'orderbook', ticker: string, callback: DFlowWSCallback): () => void {
+    const key = `${channel}:${ticker}`;
+
+    if (!this.subscriptions.has(key)) {
+      this.subscriptions.set(key, new Set());
+    }
+
+    this.subscriptions.get(key)!.add(callback);
+
+    // Connect and subscribe
+    this.connect().then(() => {
+      this.sendSubscribe(channel, ticker);
+    }).catch(console.error);
+
+    // Return unsubscribe function
+    return () => {
+      const callbacks = this.subscriptions.get(key);
+      if (callbacks) {
+        callbacks.delete(callback);
+        if (callbacks.size === 0) {
+          this.subscriptions.delete(key);
+          this.sendUnsubscribe(channel, ticker);
+        }
+      }
+    };
+  }
+
+  disconnect() {
+    this.stopPing();
+    this.subscriptions.clear();
+    if (this.ws) {
+      this.ws.close();
+      this.ws = null;
+    }
+  }
+}
+
+// Singleton instance
+export const dflowWebSocket = new DFlowWebSocketService();
+
+// Hook for real-time price updates
+export function useDFlowRealtimePrices(ticker: string) {
+  const [prices, setPrices] = useState<{
+    yesBid: number | null;
+    yesAsk: number | null;
+    noBid: number | null;
+    noAsk: number | null;
+  }>({
+    yesBid: null,
+    yesAsk: null,
+    noBid: null,
+    noAsk: null,
+  });
+
+  useEffect(() => {
+    if (!ticker) return;
+
+    const unsubscribe = dflowWebSocket.subscribe('prices', ticker, (data) => {
+      if (data.channel === 'prices') {
+        const priceData = data as DFlowWSPriceUpdate;
+        setPrices({
+          yesBid: priceData.yes_bid,
+          yesAsk: priceData.yes_ask,
+          noBid: priceData.no_bid,
+          noAsk: priceData.no_ask,
+        });
+      }
+    });
+
+    return () => {
+      unsubscribe();
+    };
+  }, [ticker]);
+
+  return prices;
+}
+
+// Hook for real-time trades
+export function useDFlowRealtimeTrades(ticker: string, maxTrades: number = 20) {
+  const [trades, setTrades] = useState<DFlowWSTradeUpdate[]>([]);
+
+  useEffect(() => {
+    if (!ticker) return;
+
+    const unsubscribe = dflowWebSocket.subscribe('trades', ticker, (data) => {
+      if (data.channel === 'trades') {
+        setTrades(prev => {
+          const newTrades = [data as DFlowWSTradeUpdate, ...prev];
+          return newTrades.slice(0, maxTrades);
+        });
+      }
+    });
+
+    return () => {
+      unsubscribe();
+    };
+  }, [ticker, maxTrades]);
+
+  return trades;
+}
+
+// Hook for real-time orderbook
+export function useDFlowRealtimeOrderbook(ticker: string) {
+  const [orderbook, setOrderbook] = useState<{
+    yesBids: Array<{ price: number; size: number }>;
+    noBids: Array<{ price: number; size: number }>;
+    sequence: number;
+  } | null>(null);
+
+  useEffect(() => {
+    if (!ticker) return;
+
+    const unsubscribe = dflowWebSocket.subscribe('orderbook', ticker, (data) => {
+      if (data.channel === 'orderbook') {
+        const obData = data as DFlowWSOrderbookUpdate;
+        const yesBids = Object.entries(obData.yes_bids)
+          .map(([price, size]) => ({ price: parseFloat(price), size }))
+          .sort((a, b) => b.price - a.price);
+        const noBids = Object.entries(obData.no_bids)
+          .map(([price, size]) => ({ price: parseFloat(price), size }))
+          .sort((a, b) => b.price - a.price);
+
+        setOrderbook({ yesBids, noBids, sequence: obData.sequence });
+      }
+    });
+
+    return () => {
+      unsubscribe();
+    };
+  }, [ticker]);
+
+  return orderbook;
 }
