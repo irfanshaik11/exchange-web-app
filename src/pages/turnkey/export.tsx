@@ -164,7 +164,7 @@ export default function TurnkeyExportPage() {
       nodes.forEach((node) => {
         const text = (node.textContent || "").toLowerCase();
         if (
-          text.includes("sign in to narrative") ||
+          text.includes("sign in to interstate") ||
           text.includes("secure access")
         ) {
           // Try clicking a close button if present

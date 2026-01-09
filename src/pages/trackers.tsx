@@ -1564,7 +1564,7 @@ export default function TrackersPage() {
   return (
     <>
       <Head>
-        <title>Trackers | Narrative Memeboard</title>
+        <title>Trackers | Interstate Memeboard</title>
       </Head>
       <div className="mb-20">
         <div className="flex min-h-screen flex-col bg-[#050608] text-neutral-100">
@@ -1622,7 +1622,7 @@ export default function TrackersPage() {
                     <div className="flex flex-1 items-center justify-center">
                       <div className="text-center">
                         <p className="mb-4 text-sm text-neutral-400">
-                          You are not logged in to Narrative
+                          You are not logged in to Interstate
                         </p>
                         <button
                           className="inline-flex items-center justify-center rounded-full border border-neutral-600 px-6 py-1.5 text-xs font-medium text-neutral-100 transition-colors duration-200 hover:border-neutral-400 hover:bg-neutral-800/60"

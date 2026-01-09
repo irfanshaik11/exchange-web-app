@@ -11,7 +11,7 @@ export default function ConstructionPage() {
         <div className="text-center">
           <div className="mb-6">
             <img 
-              src="/logo.png" 
+              src="/interstate/logo.png" 
               alt="Interstate Logo" 
               className="w-24 h-24 mx-auto mb-6 object-contain"
             />

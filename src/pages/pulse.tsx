@@ -76,7 +76,7 @@ const PLATFORM_UPDATES = [
     badge: "New Feature",
     badgeColor:
       "bg-emerald-500/20 text-emerald-400 border border-emerald-500/30",
-    image: "/interstate-logo.png",
+    image: "/interstate/logo.png",
   },
   {
     id: "update-2",
@@ -1587,7 +1587,7 @@ export default function PulsePage() {
   return (
     <>
       <Head>
-        <title>Trenches | Narrative Memeboard</title>
+        <title>Trenches | Interstate Memeboard</title>
         <meta name="description" content="Token tracking dashboard" />
       </Head>
       <div className="flex h-screen flex-col overflow-hidden bg-[#06070b] text-neutral-100">

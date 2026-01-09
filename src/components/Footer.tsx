@@ -460,7 +460,7 @@ export default function Footer() {
     },
     {
       icon: XIcon,
-      href: "https://x.com/narrative_hq",
+      href: "https://x.com/interstatefdn",
       tooltip: "Twitter",
       text: undefined,
     },
