@@ -92,15 +92,29 @@ export interface SolanaDevToken {
   created_at: string;
 }
 
+// Token info from the unified WebSocket snapshot
+export interface SolanaTokenInfo {
+  mint: string;
+  name: string;
+  symbol: string;
+  price_usd: number;
+  market_cap_usd: number;
+  liquidity_usd: number;
+  uri?: string;           // Metadata URI (contains image URL in JSON)
+  image_url?: string;     // Direct image URL (fetched from URI metadata)
+  updated_at: string;
+}
+
 // WebSocket message types
 interface WebSocketMessage {
-  type: 'snapshot' | 'trade_update' | 'holder_update' | 'top_trader_update' | 'dev_token_update' | 'pong';
+  type: 'snapshot' | 'trade_update' | 'holder_update' | 'top_trader_update' | 'dev_token_update' | 'token_update' | 'pong';
   data: {
     trades: SolanaTokenTrade[] | null;
     holders: SolanaTokenHolder[] | null;
     top_traders: SolanaTopTrader[] | null;
     dev_tokens: SolanaDevToken[] | null;
     holder_summary?: HolderSummary | null;
+    token?: SolanaTokenInfo | null;
   };
   timestamp: string;
 }
@@ -115,6 +129,7 @@ interface UseSolanaTokenWebSocketOptions {
   onHoldersUpdate?: (holders: SolanaTokenHolder[]) => void;
   onTopTradersUpdate?: (topTraders: SolanaTopTrader[]) => void;
   onDevTokensUpdate?: (devTokens: SolanaDevToken[]) => void;
+  onTokenInfoUpdate?: (tokenInfo: SolanaTokenInfo) => void;
 }
 
 interface UseSolanaTokenWebSocketReturn {
@@ -123,6 +138,7 @@ interface UseSolanaTokenWebSocketReturn {
   topTraders: SolanaTopTrader[];
   devTokens: SolanaDevToken[];
   holderSummary: HolderSummary | null;
+  tokenInfo: SolanaTokenInfo | null;
   connected: boolean;
   error: string | null;
   loading: boolean;
@@ -167,6 +183,40 @@ function getAge(timestamp: string): string {
  * - trade_update: Real-time trade updates
  * - holder_update: Real-time holder updates
  */
+// Helper to fetch image URL from IPFS metadata URI
+async function fetchImageFromUri(uri: string): Promise<string | null> {
+  if (!uri) return null;
+
+  try {
+    // Handle IPFS URIs
+    let fetchUrl = uri;
+    if (uri.startsWith('ipfs://')) {
+      fetchUrl = `https://ipfs.io/ipfs/${uri.replace('ipfs://', '')}`;
+    }
+
+    const response = await fetch(fetchUrl, {
+      headers: { 'Accept': 'application/json' },
+    });
+
+    if (!response.ok) return null;
+
+    const metadata = await response.json();
+
+    // Extract image from metadata (standard NFT/token metadata format)
+    let imageUrl = metadata.image || metadata.imageUrl || metadata.logo || null;
+
+    // Handle IPFS image URLs
+    if (imageUrl && imageUrl.startsWith('ipfs://')) {
+      imageUrl = `https://ipfs.io/ipfs/${imageUrl.replace('ipfs://', '')}`;
+    }
+
+    return imageUrl;
+  } catch (err) {
+    console.debug('[useSolanaTokenWebSocket] Failed to fetch URI metadata:', err);
+    return null;
+  }
+}
+
 export function useSolanaTokenWebSocket(
   options: UseSolanaTokenWebSocketOptions = {}
 ): UseSolanaTokenWebSocketReturn {
@@ -180,6 +230,7 @@ export function useSolanaTokenWebSocket(
     onHoldersUpdate,
     onTopTradersUpdate,
     onDevTokensUpdate,
+    onTokenInfoUpdate,
   } = options;
 
   const [trades, setTrades] = useState<SolanaTokenTrade[]>([]);
@@ -187,6 +238,7 @@ export function useSolanaTokenWebSocket(
   const [topTraders, setTopTraders] = useState<SolanaTopTrader[]>([]);
   const [devTokens, setDevTokens] = useState<SolanaDevToken[]>([]);
   const [holderSummary, setHolderSummary] = useState<HolderSummary | null>(null);
+  const [tokenInfo, setTokenInfo] = useState<SolanaTokenInfo | null>(null);
   const [connected, setConnected] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -199,6 +251,7 @@ export function useSolanaTokenWebSocket(
   const onHoldersUpdateRef = useRef(onHoldersUpdate);
   const onTopTradersUpdateRef = useRef(onTopTradersUpdate);
   const onDevTokensUpdateRef = useRef(onDevTokensUpdate);
+  const onTokenInfoUpdateRef = useRef(onTokenInfoUpdate);
   const pingIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
   // Update callback refs when they change
@@ -217,6 +270,10 @@ export function useSolanaTokenWebSocket(
   useEffect(() => {
     onDevTokensUpdateRef.current = onDevTokensUpdate;
   }, [onDevTokensUpdate]);
+
+  useEffect(() => {
+    onTokenInfoUpdateRef.current = onTokenInfoUpdate;
+  }, [onTokenInfoUpdate]);
 
   // Connect to WebSocket
   const connect = useCallback(() => {
@@ -305,6 +362,32 @@ export function useSolanaTokenWebSocket(
               setHolderSummary(null);
             }
 
+            // Capture token info from snapshot (price, mcap, liquidity, uri)
+            if (message.data.token) {
+              console.log('[useSolanaTokenWebSocket] Received token info:', message.data.token);
+              const rawToken = message.data.token;
+
+              // If we have a URI, fetch the image from metadata
+              if (rawToken.uri && !rawToken.image_url) {
+                fetchImageFromUri(rawToken.uri).then((imageUrl) => {
+                  if (mountedRef.current && imageUrl) {
+                    const tokenWithImage: SolanaTokenInfo = {
+                      ...rawToken,
+                      image_url: imageUrl,
+                    };
+                    setTokenInfo(tokenWithImage);
+                    onTokenInfoUpdateRef.current?.(tokenWithImage);
+                  }
+                });
+              }
+
+              // Set token info immediately (image will be updated async if available)
+              setTokenInfo(rawToken);
+              onTokenInfoUpdateRef.current?.(rawToken);
+            } else {
+              setTokenInfo(null);
+            }
+
             setLoading(false);
           } else if (message.type === 'trade_update') {
             // Real-time trade update
@@ -340,6 +423,19 @@ export function useSolanaTokenWebSocket(
               console.log('[useSolanaTokenWebSocket] Dev tokens update:', message.data.dev_tokens.length);
               setDevTokens(message.data.dev_tokens);
               onDevTokensUpdateRef.current?.(message.data.dev_tokens);
+            }
+          } else if (message.type === 'token_update') {
+            // Real-time token info update (price, mcap, liquidity)
+            if (message.data.token) {
+              console.log('[useSolanaTokenWebSocket] Token info update:', message.data.token);
+              const rawToken = message.data.token;
+
+              // Preserve image_url if we already have it (from initial URI fetch)
+              setTokenInfo((prev) => ({
+                ...rawToken,
+                image_url: rawToken.image_url || prev?.image_url,
+              }));
+              onTokenInfoUpdateRef.current?.(rawToken);
             }
           }
           // Ignore pong messages
@@ -417,6 +513,7 @@ export function useSolanaTokenWebSocket(
       setTopTraders([]);
       setDevTokens([]);
       setHolderSummary(null);
+      setTokenInfo(null);
       disconnect();
       reconnectAttemptsRef.current = 0;
       connect();
@@ -437,6 +534,7 @@ export function useSolanaTokenWebSocket(
     topTraders,
     devTokens,
     holderSummary,
+    tokenInfo,
     connected,
     error,
     loading,
