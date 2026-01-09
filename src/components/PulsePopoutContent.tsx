@@ -8,7 +8,7 @@ import type { Token } from "~/utils/db";
 import { useUser } from "./UserContext";
 import Cookies from "js-cookie";
 import { useRealtimeWebSocket } from "../hooks/useRealtimeWebSocket";
-import { usePulseWebSocket } from "../hooks/usePulseWebSocket";
+import { usePulseWebSocketPersistent } from "../hooks/usePulseWebSocketPersistent";
 import { useImagePreloader } from "../hooks/useImagePreloader";
 import {
   useQueryNewPairs,
@@ -163,7 +163,8 @@ export default function PulsePopoutContent({ forceMobileView = false }: PulsePop
   // });
 
   // ✅ REAL-TIME WEBSOCKET: Direct cache updates (NO REFETCH)
-  const { connected: pulseWsConnected, error: pulseWsError } = usePulseWebSocket({
+  // Using persistent WebSocket that survives tab switches and page refreshes
+  const { connected: pulseWsConnected, error: pulseWsError } = usePulseWebSocketPersistent({
     enabled: shouldFetchSolanaData,
     onNewToken: useCallback((token) => {
       queryClient.setQueryData(tokenKeys.trenches.newPairs(), (oldData: any[] | undefined) => {

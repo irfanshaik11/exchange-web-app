@@ -51,7 +51,8 @@
     "test-*.js",
     "test-*.html",
     "websocket-test-script.js",
-    "public/charting_library/**/*"
+    "public/charting_library/**/*",
+    "public/*.worker.js"
   ],
   "linterOptions": {
     "rules": {
