@@ -1,3 +1,4 @@
+@import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400..900&display=swap');
 @import "tailwindcss";
 @import './interstate.css';
 
@@ -79,6 +80,7 @@ html, body {
 }
 @theme {
   --font-sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Inter", system-ui, sans-serif;
+  --font-orbitron: "Orbitron", sans-serif;
 }
 
 /* Global font family - Inter at normal/medium weight */
