@@ -1577,7 +1577,7 @@ const TradeHeader: React.FC<TradeHeaderProps> = ({ token, livePriceUsd, liveMark
           })()}
           <StatInline label="Supply">{formatSmartNumber(supply)}</StatInline>
           <StatInline label="Gas Fees">
-            {formatLamportsToSol((token as any)?.total_fees_lamports)}
+            {formatLamportsToSol((wsTokenInfo as any)?.total_fees_lamports ?? (token as any)?.total_fees_lamports)}
           </StatInline>
           <StatInline label="B. Curve">
             <div className="flex flex-row items-center gap-2 text-xs">
