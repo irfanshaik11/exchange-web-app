@@ -26,6 +26,7 @@ import { FaChartLine } from "react-icons/fa6";
 import BlockchainSwitcher from "./BlockchainSwitcher";
 import { BsLightningChargeFill, BsTwitterX } from "react-icons/bs";
 import { showEnhancedToast } from "~/utils/enhancedToast";
+import { useSearch } from "./ui/SearchContext";
 // TODO: SOCIAL LINKS NOT PRESENT FOR NOW
 // import { HiLightningBolt } from "react-icons/hi";
 // import { PiTelegramLogo } from "react-icons/pi";
@@ -350,7 +351,7 @@ interface SearchModalProps {
 
 // The new inner component that contains the actual modal content and logic
 const SearchModalContent = React.memo(function SearchModalContent({
-  open,
+  open: propOpen,
   onClose,
   onSubmit,
   onQueryChange,
@@ -358,7 +359,9 @@ const SearchModalContent = React.memo(function SearchModalContent({
   chain = "sol",
 }: SearchModalProps) {
   const router = useRouter();
-  const [query, setQuery] = useState("");
+  const context = useSearch();
+  const open = propOpen ?? context.isOpen;
+  const [query, setQuery] = useState(context.query);
   const [sortBy, setSortBy] = useState<SortOption>("time");
   const [filters, setFilters] = useState<SearchFilters>({
     isPumpSearch: false,
@@ -746,9 +749,12 @@ const SearchModalContent = React.memo(function SearchModalContent({
 
   useEffect(() => {
     if (open) {
-      setQuery("");
-      setSearchResults([]);
-      setHasSearched(false);
+      // Only clear query if it wasn't provided via context (i.e., modal was opened without a specific query)
+      if (!context.query) {
+        setQuery("");
+        setSearchResults([]);
+        setHasSearched(false);
+      }
       // Pre-fetch tokens when modal opens for instant search
       fetchTokens();
       const timer = setTimeout(() => inputRef.current?.focus(), 0);
@@ -762,6 +768,27 @@ const SearchModalContent = React.memo(function SearchModalContent({
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
+
+  useEffect(() => {
+    if (!open && context.query) {
+      context.setSearchQuery("");
+    }
+  }, [open, context]);
+
+  useEffect(() => {
+    if (context.query) {
+      setQuery(context.query);
+    }
+  }, [context.query]);
+
+  useEffect(() => {
+    if (open && context.query && context.query.trim().length > 0) {
+      const searchQuery = context.query.trim();
+      if (!hasSearched || searchQuery !== query) {
+        searchTokens(searchQuery);
+      }
+    }
+  }, [open, context.query, hasSearched, searchTokens, query]);
 
   // No need to re-run search when sort changes - we sort on the frontend now
 

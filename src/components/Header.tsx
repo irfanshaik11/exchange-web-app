@@ -17,6 +17,7 @@ import { useUser } from "./UserContext";
 import { useSolPrice } from "./SolPriceContext";
 import { useWatchlist } from "./WatchlistContext";
 import { useQuickBuy } from "./QuickBuyContext";
+import { useSearch } from "./ui/SearchContext";
 import { formatSmartNumber } from "../utils/db";
 import type { Token } from "../utils/db";
 import { executeEnhancedTrade } from "~/utils/enhancedTradeHandler";
@@ -472,7 +473,7 @@ export default function Header({
   >("deposit");
   const [withdrawOpen, setWithdrawOpen] = useState(false);
   const [watchlistOpen, setWatchlistOpen] = useState(false);
-  const [searchModalOpen, setSearchModalOpen] = useState(false);
+  const { isOpen: searchModalOpen, openSearch, closeSearch } = useSearch();
   const [profileMenuOpen, setProfileMenuOpen] = useState(false);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [showUpdatesModal, setShowUpdatesModal] = useState(false);
@@ -951,7 +952,7 @@ export default function Header({
         // If modal is open, close it immediately on Tab
         if (searchModalOpen) {
           e.preventDefault();
-          setSearchModalOpen(false);
+          closeSearch();
           return;
         }
         // Else, only open when focus isn't in an editable element
@@ -964,7 +965,6 @@ export default function Header({
             (t as any).isContentEditable);
         if (isEditable) return; // allow normal tabbing in forms
         e.preventDefault();
-        setSearchModalOpen(true);
       }
 
       // Toggle on '/' (slash). Some keyboards send '?' with Shift+'/'; we support both.
@@ -978,7 +978,11 @@ export default function Header({
             (t as any).isContentEditable);
         if (isEditable) return; // do not steal from inputs
         e.preventDefault();
-        setSearchModalOpen((prev) => !prev);
+        if (searchModalOpen) {
+          closeSearch();
+        } else {
+          openSearch();
+        }
       }
     };
     window.addEventListener("keydown", onKeyDown);
@@ -1243,7 +1247,7 @@ export default function Header({
               <div className="flex items-center gap-1 sm:gap-1.5 md:gap-2">
                 {/* Smaller search button (desktop) */}
                 <button
-                  onClick={() => setSearchModalOpen(true)}
+                  onClick={() => openSearch()}
                   className="hidden h-10 items-center gap-1.5 rounded-3xl border px-4 transition-all duration-300 ease-out xl:flex"
                   style={{
                     borderColor: AX.border,
@@ -1267,7 +1271,7 @@ export default function Header({
 
                 {/* Medium search button (for tablets) - shows icon + text without Tab keycap */}
                 <button
-                  onClick={() => setSearchModalOpen(true)}
+                  onClick={() => openSearch()}
                   className="hidden h-8 min-w-[180px] items-center gap-1.5 rounded-md border px-2.5 transition-all duration-300 ease-out lg:flex xl:hidden"
                   style={{
                     backgroundColor: AX.surface,
@@ -1292,7 +1296,7 @@ export default function Header({
 
                 {/* Compact icon-only trigger on small screens */}
                 <button
-                  onClick={() => setSearchModalOpen(true)}
+                  onClick={() => openSearch()}
                   className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-md border transition-all duration-300 ease-out lg:hidden"
                   style={{
                     backgroundColor: AX.surface,
@@ -2308,7 +2312,7 @@ export default function Header({
       {/* Search Modal */}
       <SearchModal
         open={searchModalOpen}
-        onClose={() => setSearchModalOpen(false)}
+        onClose={() => closeSearch()}
         selectedTimeframe={selectedTimeframe}
         chain={currentChain}
         onSubmit={(q) => {
