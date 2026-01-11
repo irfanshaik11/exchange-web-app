@@ -31,18 +31,18 @@ interface Token {
     left: number;
     top: number;
   };
-	setShowXPreview: (showXPreview: number | null) => void;
+  setShowXPreview: (showXPreview: number | null) => void;
 }
 
 const TokenXProfile = ({ token, buttonPosition, setShowXPreview }: Token) => {
   return (
     <>
       <div
-        className="fixed"
+        className="absolute"
         style={{
-          left: `${buttonPosition.left}px`,
-          top: `${buttonPosition.top - 300}px`,
-          transform: "translate(-50%, 0)",
+          // left: `${buttonPosition.left}px`,
+          // top: `${buttonPosition.top - 300}px`,
+          // transform: "translate(-50%, 0)",
           width: "280px",
           zIndex: 999999,
         }}
@@ -65,7 +65,7 @@ const TokenXProfile = ({ token, buttonPosition, setShowXPreview }: Token) => {
         >
           {/* X Icon Header */}
           <div
-            className="flex items-center justify-between border-b px-4 py-3"
+            className="flex items-center justify-between border-b px-2 py-3"
             style={{ borderColor: "#2f3336" }}
           >
             <div className="flex items-center gap-3">
@@ -104,97 +104,102 @@ const TokenXProfile = ({ token, buttonPosition, setShowXPreview }: Token) => {
           </div>
 
           {/* Official X Profile Layout */}
-          <div className="px-4 py-4">
+          <div className="px-2 py-4">
             {/* Profile Picture */}
-            <div className="mb-4 flex justify-center">
-              <div
-                className="h-20 w-20 overflow-hidden rounded-full"
-                style={{
-                  backgroundColor: "#1a1a1a",
-                  border: `3px solid #2f3336`,
-                }}
-              >
-                <img
-                  src={`https://ui-avatars.com/api/?name=${token.symbol || "Token"}&size=80&background=1a1a1a&color=ffffff&bold=true`}
-                  alt={`${token.symbol} profile`}
-                  className="h-full w-full object-cover"
-                  onError={(e) => {
-                    const target = e.target as HTMLImageElement;
-                    target.style.display = "none";
-                    const fallback = target.nextElementSibling as HTMLElement;
-                    if (fallback) fallback.style.display = "flex";
-                  }}
-                />
+            <div className="flex items-center justify-between">
+              <div className="flex items-center">
                 <div
-                  className="flex h-full w-full items-center justify-center text-xl font-bold"
+                  className="h-10 w-10 overflow-hidden rounded-full"
                   style={{
                     backgroundColor: "#1a1a1a",
-                    color: "#f0f5f5",
-                    display: "none",
+                    border: `3px solid #2f3336`,
                   }}
                 >
-                  {token.symbol?.slice(0, 2) || "??"}
+                  <img
+                    src={`https://ui-avatars.com/api/?name=${token.symbol || "Token"}&size=80&background=1a1a1a&color=ffffff&bold=true`}
+                    alt={`${token.symbol} profile`}
+                    className="h-full w-full object-cover"
+                    onError={(e) => {
+                      const target = e.target as HTMLImageElement;
+                      target.style.display = "none";
+                      const fallback = target.nextElementSibling as HTMLElement;
+                      if (fallback) fallback.style.display = "flex";
+                    }}
+                  />
+                  <div
+                    className="flex h-full w-full items-center justify-center text-xl font-bold"
+                    style={{
+                      backgroundColor: "#1a1a1a",
+                      color: "#f0f5f5",
+                      display: "none",
+                    }}
+                  >
+                    {token.symbol?.slice(0, 2) || "??"}
+                  </div>
                 </div>
+                <div className="ml-2">
+                  <div className="flex items-center justify-center gap-2">
+                    <h3
+                      className="text-sm font-bold"
+                      style={{ color: "#f0f5f5" }}
+                    >
+                      {token.symbol || "Unknown"}
+                    </h3>
+                    {/* Verified Badge */}
+                    <div
+                      className="flex h-3 w-3 items-center justify-center rounded-full"
+                      style={{
+                        backgroundColor: "#1d9bf0",
+                      }}
+                    >
+                      <svg
+                        width="14"
+                        height="14"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="#f0f5f5"
+                        strokeWidth="2"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      >
+                        <path d="M9 12l2 2 4-4" />
+                        <path d="M21 12c0 4.97-4.03 9-9 9s-9-4.03-9-9 4.03-9 9-9 9 4.03 9 9z" />
+                      </svg>
+                    </div>
+                  </div>
+                  <p className="text-xs text-gray-400">
+                    @{token.symbol?.toLowerCase() || "unknown"}
+                  </p>
+                </div>
+              </div>
+              <div className="">
+                <button
+                  className="rounded-full px-4 py-1.5 text-sm font-semibold transition-all duration-200"
+                  style={{
+                    backgroundColor: "#f0f5f5",
+                    color: "#000000",
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.backgroundColor = "#e7e9ea";
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.backgroundColor = "#f0f5f5";
+                  }}
+                >
+                  Follow
+                </button>
               </div>
             </div>
 
             {/* Profile Info */}
-            <div className="mb-4 text-center">
-              <div className="mb-1 flex items-center justify-center gap-2">
-                <h3 className="text-xl font-bold" style={{ color: "#f0f5f5" }}>
-                  {token.symbol || "Unknown"}
-                </h3>
-                {/* Verified Badge */}
-                <div
-                  className="flex h-6 w-6 items-center justify-center rounded-full"
-                  style={{
-                    backgroundColor: "#1d9bf0",
-                  }}
-                >
-                  <svg
-                    width="14"
-                    height="14"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="#f0f5f5"
-                    strokeWidth="2"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  >
-                    <path d="M9 12l2 2 4-4" />
-                    <path d="M21 12c0 4.97-4.03 9-9 9s-9-4.03-9-9 4.03-9 9-9 9 4.03 9 9z" />
-                  </svg>
-                </div>
-              </div>
-              <p className="mb-3 text-sm text-gray-400">
-                @{token.symbol?.toLowerCase() || "unknown"}
-              </p>
+            <div className="my-4 text-left">
               <p
-                className="px-2 text-sm leading-relaxed"
+                className="text-sm leading-relaxed"
                 style={{ color: "#f0f5f5" }}
               >
                 {token.description ||
                   `Official ${token.symbol || "token"} community. Join the conversation!`}
               </p>
-            </div>
-
-            {/* Follow Button */}
-            <div className="mb-4 flex justify-center">
-              <button
-                className="rounded-full px-6 py-2 text-sm font-semibold transition-all duration-200"
-                style={{
-                  backgroundColor: "#f0f5f5",
-                  color: "#000000",
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.backgroundColor = "#e7e9ea";
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.backgroundColor = "#f0f5f5";
-                }}
-              >
-                Follow
-              </button>
             </div>
           </div>
 
