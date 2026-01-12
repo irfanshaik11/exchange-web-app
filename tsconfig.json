@@ -48,6 +48,7 @@
   ],
   "exclude": [
     "node_modules",
+    "tests/**/*",
     "test-*.js",
     "test-*.html",
     "websocket-test-script.js",

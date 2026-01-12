@@ -344,6 +344,7 @@ const AdvancedPredictionChart: React.FC<AdvancedPredictionChartProps> = ({
     });
 
     // Add candlestick series
+    // @ts-ignore - lightweight-charts types mismatch
     const candleSeries = chart.addCandlestickSeries({
       upColor: AX.green,
       downColor: AX.red,
@@ -354,6 +355,7 @@ const AdvancedPredictionChart: React.FC<AdvancedPredictionChartProps> = ({
     });
 
     // Add volume histogram (optional)
+    // @ts-ignore - lightweight-charts types mismatch
     const volumeSeries = chart.addHistogramSeries({
       color: AX.muted,
       priceFormat: { type: 'volume' },

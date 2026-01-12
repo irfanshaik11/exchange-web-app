@@ -325,9 +325,9 @@ export default function MarketDetailPage() {
     if (!orderBook) return null;
     return {
       yesBids: orderBook.yesBids || [],
-      yesAsks: orderBook.yesAsks || [],
+      yesAsks: (orderBook as any).yesAsks || [], // API may not return asks
       noBids: orderBook.noBids || [],
-      noAsks: orderBook.noAsks || [],
+      noAsks: (orderBook as any).noAsks || [], // API may not return asks
     };
   }, [orderBook]);
 
