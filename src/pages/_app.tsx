@@ -628,6 +628,24 @@ const MyApp: AppType = ({ Component, pageProps }) => {
     <>
       <Head>
         <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes" />
+
+        <title>Interstate - The Fastest Exchange</title>
+        <meta name="description" content="Get ready to win on Interstate, the fastest exchange! Get free Solana for joining today, win daily Jackpots, level up and earn progressively higher rewards. Start trading today!" />
+
+        {/* Open Graph meta tags for social sharing */}
+        <meta property="og:title" content="Interstate - The Fastest Exchange" />
+        <meta property="og:description" content="Get ready to win on Interstate, the fastest exchange! Get free Solana for joining today, win daily Jackpots, level up and earn progressively higher rewards. Start trading today!" />
+        <meta property="og:image" content="https://app.interstate.so/referral-share.png" />
+        <meta property="og:image:width" content="1920" />
+        <meta property="og:image:height" content="1080" />
+        <meta property="og:type" content="website" />
+        <meta property="og:site_name" content="Interstate" />
+
+        {/* Twitter Card meta tags */}
+        <meta name="twitter:card" content="summary_large_image" />
+        <meta name="twitter:title" content="Interstate - The Fastest Exchange" />
+        <meta name="twitter:description" content="Get ready to win on Interstate, the fastest exchange! Get free Solana for joining today, win daily Jackpots, level up and earn progressively higher rewards. Start trading today!" />
+        <meta name="twitter:image" content="https://app.interstate.so/referral-share.png" />
         {/* Preload TradingView library for faster chart loading */}
         <link
           rel="preload"

@@ -220,3 +220,15 @@ body {
   border-radius: 1.5rem !important;
   background-color: #0a0b0f !important;
 }
+
+/* Remove number input spinner arrows globally */
+input[type="number"]::-webkit-outer-spin-button,
+input[type="number"]::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+input[type="number"] {
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
