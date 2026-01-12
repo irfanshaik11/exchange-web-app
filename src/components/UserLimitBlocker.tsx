@@ -68,7 +68,7 @@ const UserLimitBlocker: React.FC<UserLimitBlockerProps> = ({ isOpen, message }) 
                 <FaDiscord className="w-5 h-5 text-neutral-400 group-hover:text-white transition-colors" />
               </a>
               <a
-                href="https://x.com/narrative_hq"
+                href="https://x.com/interstatefdn"
                 target="_blank"
                 rel="noopener noreferrer"
                 className="flex items-center justify-center w-10 h-10 rounded-full bg-neutral-800 hover:bg-black border border-neutral-700 hover:border-neutral-600 transition-all duration-200 group"

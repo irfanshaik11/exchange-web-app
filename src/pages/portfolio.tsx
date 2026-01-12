@@ -279,7 +279,7 @@ const normalizeWalletFromApi = (
   let label = typeof wallet?.label === "string" ? wallet.label : undefined;
   if (!label) {
     if (typeof fallbackIndex === "number") {
-      label = fallbackIndex === 0 ? "Narrative Main" : `Wallet ${fallbackIndex + 1}`;
+      label = fallbackIndex === 0 ? "Interstate Main" : `Wallet ${fallbackIndex + 1}`;
     } else {
       label = "Wallet";
     }

@@ -692,7 +692,7 @@ const DepositModal: React.FC<DepositModalProps> = ({
           <div className="px-6 pb-3 text-sm text-neutral-400">
             {activeTab === "convert" && "Swap between cryptocurrencies"}
             {activeTab === "deposit" &&
-              `Deposit ${tokenSymbol} to your Narrative wallet`}
+              `Deposit ${tokenSymbol} to your Interstate wallet`}
             {activeTab === "buy" && `Buy ${tokenSymbol} with fiat currency`}
             {activeTab === "withdraw" &&
               `Withdraw ${tokenSymbol} to an external wallet`}
@@ -783,7 +783,7 @@ const DepositModal: React.FC<DepositModalProps> = ({
                       <div className="flex items-center justify-between">
                         <div>
                           <div className="mb-1 text-xs text-neutral-400">
-                            {primaryWalletLabel || "Narrative Wallet"}
+                            {primaryWalletLabel || "Interstate Wallet"}
                           </div>
                           <div className="font-mono text-sm text-neutral-300">
                             {depositAddress.slice(0, 4)}...
@@ -982,7 +982,7 @@ const DepositModal: React.FC<DepositModalProps> = ({
                           <span className="font-semibold">Note: </span>
                           You will be redirected to Onramper to complete your
                           purchase. {tokenSymbol} will be sent directly to your
-                          Narrative wallet address.
+                          Interstate wallet address.
                         </div>
                       </div>
                     </div>

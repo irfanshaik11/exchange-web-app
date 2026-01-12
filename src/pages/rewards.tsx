@@ -31,7 +31,7 @@ export default function RewardsPage() {
   const baseUrl =
     typeof window !== "undefined"
       ? window.location.origin
-      : "https://app.narrative.trade";
+      : "http://app.interstate.so/";
   const referralLink = referralCode
     ? `${baseUrl}?referrer=${referralCode}`
     : "";
@@ -138,10 +138,10 @@ export default function RewardsPage() {
                     Referrals
                   </p>
                   <h1 className="text-4xl font-semibold text-[#f0f5f5] sm:text-5xl">
-                    Share Narrative. Earn more.
+                    Share Interstate. Earn more.
                   </h1>
                   <p className="max-w-xl text-sm text-neutral-400 sm:text-base">
-                    Invite traders to Narrative Memeboard and collect rewards
+                    Invite traders to Interstate Memeboard and collect rewards
                     every time your network makes a move.
                   </p>
                 </div>

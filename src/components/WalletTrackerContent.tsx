@@ -595,7 +595,7 @@ export default function WalletTrackerContent() {
       <div className="flex flex-1 items-center justify-center p-8">
         <div className="text-center">
           <p className="mb-4 text-sm text-neutral-400">
-            You are not logged in to Narrative
+            You are not logged in to Interstate
           </p>
           <button
             type="button"

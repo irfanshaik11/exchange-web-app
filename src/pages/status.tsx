@@ -151,8 +151,8 @@ export default function StatusPage() {
   return (
     <>
       <Head>
-        <title>System Status | Narrative Trade</title>
-        <meta name="description" content="Current system status for Narrative Trade services" />
+        <title>System Status | Interstate</title>
+        <meta name="description" content="Current system status for Interstate Trade services" />
       </Head>
 
       <div className="min-h-screen bg-[#F5F5F5]">
@@ -273,10 +273,10 @@ export default function StatusPage() {
             <p>
               Status page for{' '}
               <a
-                href="https://narrative.trade"
+                href="https://interstate.so/"
                 className="text-[#6B9E3C] hover:underline"
               >
-                Narrative Trade
+                Interstate
               </a>
             </p>
             <p className="mt-1">

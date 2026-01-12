@@ -57,7 +57,7 @@ const recordPasskeyReady = () => {
 };
 
 const buildWalletLoginMessage = () =>
-  `Login to Narrative with nonce: ${Date.now()}`;
+  `Login to Interstate with nonce: ${Date.now()}`;
 
 export default function LoginModal({ open, onClose, forceLogin = false }: LoginModalProps) {
   const [mode, setMode] = useState<'login' | 'signup'>('login');
@@ -600,7 +600,7 @@ async function handleGoogleSuccess(resp: CredentialResponse) {
   const handleClose = () => {
     if (forceLogin) {
       setWiggle(true);
-      toast.error('Please log-in to trade on Narrative.');
+      toast.error('Please log-in to trade on Interstate.');
       setTimeout(() => setWiggle(false), 600);
       return;
     }
@@ -631,7 +631,7 @@ async function handleGoogleSuccess(resp: CredentialResponse) {
         <p className="text-[0.65rem] uppercase tracking-[0.45em] text-emerald-300/70">
           Secure Access
         </p>
-        <h2 className="mt-2 text-2xl font-semibold text-white">Sign in to Narrative</h2>
+        <h2 className="mt-2 text-2xl font-semibold text-white">Sign in to Interstate</h2>
       </div>
       {error && (
         <div className="mb-3 rounded-lg border border-red-500/40 bg-red-500/10 px-3 py-2 text-xs text-red-200">
@@ -710,7 +710,7 @@ async function handleGoogleSuccess(resp: CredentialResponse) {
               <button className="text-emerald-400 hover:underline bg-transparent border-none shadow-none px-0 py-0 h-auto" onClick={() => setMode('login')}>Login</button>
             </div>
             <div className="text-xs text-neutral-500 mt-4 text-center">
-              By creating an account, you agree to Narrative's{' '}
+              By creating an account, you agree to Interstate's{' '}
               <a href="#" className="underline">Privacy Policy</a> and{' '}
               <a href="#" className="underline">Terms of Service</a>.
             </div>

@@ -47,7 +47,7 @@ const STORAGE_META_KEY = "referralAccess.meta"; // legacy (session)
 const LS_KEY_PREFIX = "referralAccess.granted.user:"; // persistent per-user
 const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL;
 const buildWalletLoginMessage = () =>
-  `Login to Narrative with nonce: ${Date.now()}`;
+  `Login to Interstate with nonce: ${Date.now()}`;
 
 type StoredAccessMeta = {
   grantedAt: number;
@@ -905,7 +905,7 @@ export function ReferralAccessGate({
                 <div className="mb-6 flex items-center justify-between">
                   <div>
                     <p className="text-xs uppercase tracking-[0.35em] text-emerald-400/80">
-                      Narrative Access
+                      Interstate Access
                     </p>
                     <h2 className="mt-2 text-2xl font-semibold text-[#f0f5f5] md:text-3xl">
                       Enter your referral code
@@ -920,7 +920,7 @@ export function ReferralAccessGate({
 
                 <p className="text-sm text-neutral-300/90 md:text-base">
                   To protect our community, access is invite-only. Provide the
-                  referral code you received to unlock the Narrative trading
+                  referral code you received to unlock the Interstate trading
                   dashboard.
                 </p>
 
@@ -1163,10 +1163,10 @@ export function ReferralAccessGate({
                     )}
                   </div>
 
-                  {/* Follow narrative_hq */}
+                  {/* Follow intersatefdn */}
                   <div>
                     <label className="block text-xs uppercase tracking-[0.24em] text-neutral-500 mb-1">
-                      Follow @narrative_hq
+                      Follow @intersatefdn
                     </label>
                     {narrativeFollowed ? (
                       <div className="w-full rounded-lg border border-blue-500/50 bg-blue-500/10 px-3 py-2 flex items-center justify-between">
@@ -1175,14 +1175,14 @@ export function ReferralAccessGate({
                             <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/>
                           </svg>
                           <div>
-                            <p className="text-[#f0f5f5] font-medium">@narrative_hq</p>
+                            <p className="text-[#f0f5f5] font-medium">@intersatefdn</p>
                             <p className="text-xs text-blue-300/80">Following</p>
                           </div>
                         </div>
                         <InterstateButton
                           type="button"
                           onClick={() => {
-                            window.open("https://twitter.com/narrative_hq", "_blank");
+                            window.open("https://twitter.com/intersatefdn", "_blank");
                           }}
                           className="px-4 py-2 text-sm bg-blue-600 hover:bg-blue-700 text-[#f0f5f5]"
                         >
@@ -1193,7 +1193,7 @@ export function ReferralAccessGate({
                       <InterstateButton
                         type="button"
                         onClick={() => {
-                          window.open("https://twitter.com/narrative_hq", "_blank");
+                          window.open("https://twitter.com/intersatefdn", "_blank");
                           setNarrativeFollowed(true);
                         }}
                         fullWidth
@@ -1202,7 +1202,7 @@ export function ReferralAccessGate({
                         <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
                           <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/>
                         </svg>
-                        Follow @narrative_hq
+                        Follow @intersatefdn
                       </InterstateButton>
                     )}
                   </div>
@@ -1210,7 +1210,7 @@ export function ReferralAccessGate({
                   {/* Like a post */}
                   <div>
                     <label className="block text-xs uppercase tracking-[0.24em] text-neutral-500 mb-1">
-                      Like a post by @narrative_hq (Earn 25 xp)
+                      Like a post by @intersatefdn (Earn 25 xp)
                     </label>
                     {postLiked ? (
                       <div className="w-full rounded-lg border border-blue-500/50 bg-blue-500/10 px-3 py-2 flex items-center justify-between">
@@ -1226,7 +1226,7 @@ export function ReferralAccessGate({
                         <InterstateButton
                           type="button"
                           onClick={() => {
-                            window.open("https://twitter.com/narrative_hq", "_blank");
+                            window.open("https://twitter.com/intersatefdn", "_blank");
                           }}
                           className="px-4 py-2 text-sm bg-blue-600 hover:bg-blue-700 text-[#f0f5f5]"
                         >
@@ -1237,7 +1237,7 @@ export function ReferralAccessGate({
                       <InterstateButton
                         type="button"
                         onClick={() => {
-                          window.open("https://twitter.com/narrative_hq", "_blank");
+                          window.open("https://twitter.com/intersatefdn", "_blank");
                           setPostLiked(true);
                         }}
                         fullWidth
@@ -1254,7 +1254,7 @@ export function ReferralAccessGate({
                   {/* Repost a post */}
                   <div>
                     <label className="block text-xs uppercase tracking-[0.24em] text-neutral-500 mb-1">
-                      Repost a post by @narrative_hq
+                      Repost a post by @intersatefdn
                     </label>
                     {postReposted ? (
                       <div className="w-full rounded-lg border border-blue-500/50 bg-blue-500/10 px-3 py-2 flex items-center justify-between">
@@ -1270,7 +1270,7 @@ export function ReferralAccessGate({
                         <InterstateButton
                           type="button"
                           onClick={() => {
-                            window.open("https://twitter.com/narrative_hq", "_blank");
+                            window.open("https://twitter.com/intersatefdn", "_blank");
                           }}
                           className="px-4 py-2 text-sm bg-blue-600 hover:bg-blue-700 text-[#f0f5f5]"
                         >
@@ -1281,7 +1281,7 @@ export function ReferralAccessGate({
                       <InterstateButton
                         type="button"
                         onClick={() => {
-                          window.open("https://twitter.com/narrative_hq", "_blank");
+                          window.open("https://twitter.com/intersatefdn", "_blank");
                           setPostReposted(true);
                         }}
                         fullWidth
@@ -1298,7 +1298,7 @@ export function ReferralAccessGate({
                   {/* Reply to a post */}
                   <div>
                     <label className="block text-xs uppercase tracking-[0.24em] text-neutral-500 mb-1">
-                      Reply to a post by @narrative_hq
+                      Reply to a post by @intersatefdn
                     </label>
                     {postReplied ? (
                       <div className="w-full rounded-lg border border-blue-500/50 bg-blue-500/10 px-3 py-2 flex items-center justify-between">
@@ -1314,7 +1314,7 @@ export function ReferralAccessGate({
                         <InterstateButton
                           type="button"
                           onClick={() => {
-                            window.open("https://twitter.com/narrative_hq", "_blank");
+                            window.open("https://twitter.com/intersatefdn", "_blank");
                           }}
                           className="px-4 py-2 text-sm bg-blue-600 hover:bg-blue-700 text-[#f0f5f5]"
                         >
@@ -1325,7 +1325,7 @@ export function ReferralAccessGate({
                       <InterstateButton
                         type="button"
                         onClick={() => {
-                          window.open("https://twitter.com/narrative_hq", "_blank");
+                          window.open("https://twitter.com/intersatefdn", "_blank");
                           setPostReplied(true);
                         }}
                         fullWidth
@@ -1503,7 +1503,7 @@ export function ReferralAccessGate({
                   <InterstateButton
                     type="button"
                     onClick={() => {
-                      window.location.href = "https://www.narrative.trade";
+                      window.location.href = "https://interstate.so/";
                     }}
                     fullWidth
                     className="h-12 text-base uppercase tracking-[0.4em] bg-emerald-600 text-[#f0f5f5] hover:bg-emerald-700"
@@ -1591,7 +1591,7 @@ export function ReferralAccessGate({
                         type="button"
                         onClick={() => {
                           // TODO: Implement X linking
-                          window.open("https://twitter.com/intent/tweet?text=Check%20out%20Narrative!", "_blank");
+                          window.open("https://twitter.com/intent/tweet?text=Check%20out%20Interstate!", "_blank");
                         }}
                         className="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-[#f0f5f5] text-sm"
                         disabled={questProgress.completedQuests.includes("link-x")}

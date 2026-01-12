@@ -15,7 +15,7 @@ import { useWatchlist } from "./WatchlistContext";
 import { showEnhancedToast } from "~/utils/enhancedToast";
 import { SolanaIcon } from './Footer';
 import type { Token as BaseToken } from "~/utils/db";
-import { formatSmartNumber, formatMarketCap } from '~/utils/db';
+import { formatSmartNumber, formatMarketCap, formatLamportsToSol } from '~/utils/db';
 import SkeletonRow from './InterstateTable/SkeletonRow';
 import { fetchTokenMetadata } from '~/utils/functions';
 import { withImageFallback, extractMetaImage, isMetadataUrl } from '~/utils/images';
@@ -81,6 +81,7 @@ const TABLE_HEADERS: HeaderConfig[] = [
   { key: 'total_liquidity_usd', label: 'Liquidity', align: 'right', width: 'w-28' },
   { key: 'volume', label: 'Volume', align: 'right', width: 'w-28' },
   { key: 'txns', label: 'TXNS', align: 'right', width: 'w-24' },
+  { key: 'total_fees_lamports', label: 'Gas Fees', align: 'right', width: 'w-28' },
   // { key: null, label: 'Token Info', align: 'center', width: 'w-24' },
   { key: null, label: 'Action', align: 'center', width: 'w-32' },
 ];
@@ -1356,12 +1357,25 @@ const TableRow: React.FC<{
       <td className="w-24 px-4 py-4 align-middle">
         <TxnsCell token={token} selectedTimeframe={selectedTimeframe} isDiscoverPage={isDiscoverPage} />
       </td>
-      
+
+      {/* Gas Fees column - shows total fees for all trades on this token */}
+      <td className="w-28 px-4 py-4 align-middle text-right">
+        <div className={`text-sm font-medium ${isDiscoverPage ? 'number-font' : ''}`} style={{
+          color: AX.text,
+          ...(isDiscoverPage ? {} : {
+            fontFamily: 'ui-monospace, SFMono-Regular, "SF Mono", Consolas, "Liberation Mono", Menlo, monospace',
+            fontWeight: '400'
+          })
+        }}>
+          {formatLamportsToSol((token as any).total_fees_lamports)}
+        </div>
+      </td>
+
       {/* Token Info column - commented out per user request */}
       {/* <td className="w-24 px-4 py-4 align-middle">
         <AuditLogCell token={token} selectedTimeframe={selectedTimeframe} />
       </td> */}
-      
+
       <td className="w-32 px-4 py-4 align-middle text-center">
         {isDiscoverPage ? (
           <button
