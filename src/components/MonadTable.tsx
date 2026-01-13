@@ -6313,7 +6313,6 @@ function MonadTable({
                               {showXPreview === idx && buttonPosition && (
                                 <TokenXProfile
                                   token={token}
-                                  buttonPosition={buttonPosition}
                                   setShowXPreview={setShowXPreview}
                                 />
                               )}

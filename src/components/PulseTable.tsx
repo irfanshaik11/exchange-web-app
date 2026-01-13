@@ -115,6 +115,7 @@ import toast from "react-hot-toast";
 import { FiGlobe } from "react-icons/fi";
 import BottomCardInfoHolder from "./BottomCardInfoHolder";
 import TokenXProfile from './TokenXProfile';
+import { Tooltip, TooltipContent, TooltipTrigger } from "./ui/tooltip";
 
 /* ---- Enhanced Monad Green Palette (matching MonadTable) ---- */
 const AX = {
@@ -6835,8 +6836,7 @@ function PulseTable({
                                   {showXPreview === idx && buttonPosition && (
                                     <TokenXProfile
                                       token={token}
-                                      buttonPosition={buttonPosition}
-																			setShowXPreview={setShowXPreview}
+                                      setShowXPreview={setShowXPreview}
                                     />
                                   )}
                                 </div>
@@ -6900,84 +6900,120 @@ function PulseTable({
                                 </button>
 
                                 <div className="ml-1 flex flex-row gap-2 font-light">
-                                  <div className="flex items-center gap-1">
-                                    <PiCrownSimpleLight
-                                      size={16}
-                                      style={{ color: "#dcc13c" }}
-                                    />
-                                    <span className="text-sm text-white">
-                                      0
-                                    </span>
-                                  </div>
+                                  <Tooltip>
+                                    <TooltipTrigger asChild>
+                                      <div className="flex items-center gap-1">
+                                        <PiCrownSimpleLight
+                                          size={16}
+                                          style={{ color: "#dcc13c" }}
+                                        />
+                                        <span className="text-sm text-white">
+                                          0
+                                        </span>
+                                      </div>
+                                    </TooltipTrigger>
+                                    <TooltipContent>
+                                      <p>KOLs</p>
+                                    </TooltipContent>
+                                  </Tooltip>
 
-                                  <div className="flex items-center gap-1 text-violet-200">
-                                    <CiTrophy size={16} />
-                                    <span className="text-sm text-white">
-                                      0
-                                    </span>
-                                  </div>
+                                  <Tooltip>
+                                    <TooltipTrigger asChild>
+                                      <div className="flex items-center gap-1 text-violet-200">
+                                        <CiTrophy size={16} />
+                                        <span className="text-sm text-white">
+                                          0
+                                        </span>
+                                      </div>
+                                    </TooltipTrigger>
+                                    <TooltipContent>
+                                      <p>Dev Migrations/Created</p>
+                                    </TooltipContent>
+                                  </Tooltip>
 
                                   {/* People Icon - Total Holders */}
-                                  <div className="relative flex items-center gap-1">
-                                    <div
-                                      className="flex cursor-help items-center justify-center rounded"
-                                      title="Holders"
-                                      style={{
-                                        backgroundColor: "#111214",
-                                        padding: "2px",
-                                        width: "18px",
-                                        height: "18px",
-                                      }}
-                                    >
-                                      <GoPeople
-                                        size={12}
-                                        style={{ color: "#36d8ff" }}
-                                      />
-                                    </div>
-                                    <span className="text-sm text-white">
-                                      {(() => {
-                                        const holders =
-                                          token.total_holders ||
-                                          token.unique_wallets_24h ||
-                                          0;
-                                        if (holders >= 1e9)
-                                          return `${(holders / 1e9).toFixed(1)}B`;
-                                        if (holders >= 1e6)
-                                          return `${(holders / 1e6).toFixed(1)}M`;
-                                        if (holders >= 1e3)
-                                          return `${(holders / 1e3).toFixed(1)}K`;
-                                        return holders.toString();
-                                      })()}
-                                    </span>
-                                  </div>
-                                  <div className="flex items-center gap-1 text-violet-200">
-                                    <PiRobotLight size={16} />
-                                    <span className="text-sm text-white">
-                                      0
-                                    </span>
-                                  </div>
+                                  <Tooltip>
+                                    <TooltipTrigger asChild>
+                                      <div className="relative flex items-center gap-1">
+                                        <div
+                                          className="flex cursor-help items-center justify-center rounded"
+                                          title="Holders"
+                                          style={{
+                                            backgroundColor: "#111214",
+                                            padding: "2px",
+                                            width: "18px",
+                                            height: "18px",
+                                          }}
+                                        >
+                                          <GoPeople
+                                            size={12}
+                                            style={{ color: "#36d8ff" }}
+                                          />
+                                        </div>
+                                        <span className="text-sm text-white">
+                                          {(() => {
+                                            const holders =
+                                              token.total_holders ||
+                                              token.unique_wallets_24h ||
+                                              0;
+                                            if (holders >= 1e9)
+                                              return `${(holders / 1e9).toFixed(1)}B`;
+                                            if (holders >= 1e6)
+                                              return `${(holders / 1e6).toFixed(1)}M`;
+                                            if (holders >= 1e3)
+                                              return `${(holders / 1e3).toFixed(1)}K`;
+                                            return holders.toString();
+                                          })()}
+                                        </span>
+                                      </div>
+                                    </TooltipTrigger>
+                                    <TooltipContent>
+                                      <p>Holders</p>
+                                    </TooltipContent>
+                                  </Tooltip>
+
+                                  <Tooltip>
+                                    <TooltipTrigger asChild>
+                                      <div className="flex items-center gap-1 text-violet-200">
+                                        <PiRobotLight size={16} />
+                                        <span className="text-sm text-white">
+                                          0
+                                        </span>
+                                      </div>
+                                    </TooltipTrigger>
+                                    <TooltipContent>
+                                      <p>Add to library</p>
+                                    </TooltipContent>
+                                  </Tooltip>
                                 </div>
 
                                 {/* Pump.fun Tooltip */}
-                                {token.mint?.slice(-4) === "pump" && (
-                                  <div
-                                    className="pointer-events-none absolute bottom-full left-1/2 mb-2 -translate-x-1/2 transform rounded px-2 py-1 text-xs font-medium whitespace-nowrap opacity-0 transition-opacity duration-200"
-                                    style={{
-                                      zIndex: 99999,
-                                      backgroundColor: AX.surface,
-                                      color: AX.text,
-                                      border: `1px solid ${AX.border}`,
-                                      boxShadow: `0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06), 0 0 8px ${AX.glowCyan}`,
-                                    }}
-                                  >
-                                    View on Pump.fun
-                                    {/* Tooltip arrow */}
-                                    <div
-                                      className="absolute top-full left-1/2 h-0 w-0 -translate-x-1/2 transform border-t-4 border-r-4 border-l-4 border-transparent"
-                                      style={{ borderTopColor: AX.surface }}
-                                    ></div>
-                                  </div>
-                                )}
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    {token.mint?.slice(-4) === "pump" && (
+                                      <div
+                                        className="pointer-events-none absolute bottom-full left-1/2 mb-2 -translate-x-1/2 transform rounded px-2 py-1 text-xs font-medium whitespace-nowrap opacity-0 transition-opacity duration-200"
+                                        style={{
+                                          zIndex: 99999,
+                                          backgroundColor: AX.surface,
+                                          color: AX.text,
+                                          border: `1px solid ${AX.border}`,
+                                          boxShadow: `0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06), 0 0 8px ${AX.glowCyan}`,
+                                        }}
+                                      >
+                                        View on Pump.fun
+                                        {/* Tooltip arrow */}
+                                        <div
+                                          className="absolute top-full left-1/2 h-0 w-0 -translate-x-1/2 transform border-t-4 border-r-4 border-l-4 border-transparent"
+                                          style={{ borderTopColor: AX.surface }}
+                                        ></div>
+                                      </div>
+                                    )}
+                                  </TooltipTrigger>
+                                  <TooltipContent>
+                                    <p>Add to library</p>
+                                  </TooltipContent>
+                                </Tooltip>
                               </div>
                             </div>
                           </div>
@@ -7548,6 +7584,7 @@ function PulseTable({
                         PassedIcon={BsPersonGear}
                         value={0.2}
                         iconColor={AX.aiGreen}
+                        tooltip="Top Holders"
                       />
                       <BottomCardInfoHolder
                         PassedIcon={LuChefHat}
@@ -7590,10 +7627,12 @@ function PulseTable({
                       <BottomCardInfoHolder
                         PassedIcon={PiFishSimpleLight}
                         value={0.2}
+                        tooltip="Phishing Hold"
                       />
                       <BottomCardInfoHolder
                         PassedIcon={PiLeafLight}
                         value={0.2}
+                        tooltip="Fresh Hold"
                       />
                     </div>
                   </div>
