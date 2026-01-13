@@ -116,7 +116,6 @@ import toast from "react-hot-toast";
 import { FiGlobe } from "react-icons/fi";
 import BottomCardInfoHolder from "./BottomCardInfoHolder";
 import TokenXProfile from './TokenXProfile';
-import { Tooltip, TooltipContent, TooltipTrigger } from "./ui/tooltip";
 import InterstateTooltip from "./InterstateTooltip";
 
 /* ---- Enhanced Monad Green Palette (matching MonadTable) ---- */
@@ -7258,60 +7257,63 @@ function PulseTable({
                                 />
 
                                 {/* OLD X Profile Preview Button - kept for reference */}
-                                {false && <div className="relative">
-                                  <button
-                                    className="flex items-center justify-center rounded transition-colors duration-200"
-                                    onMouseEnter={(e) => {
-                                      const tooltip = document.getElementById(
-                                        `profile-tooltip-${idx}`,
-                                      ) as HTMLElement;
-                                      if (tooltip) {
-                                        const rect =
+                                {false && (
+                                  <div className="relative">
+                                    <button
+                                      className="flex items-center justify-center rounded transition-colors duration-200"
+                                      onMouseEnter={(e) => {
+                                        const tooltip = document.getElementById(
+                                          `profile-tooltip-${idx}`,
+                                        ) as HTMLElement;
+                                        if (tooltip) {
+                                          const rect =
+                                            e.currentTarget.getBoundingClientRect();
+                                          tooltip.style.left = `${rect.left + rect.width / 2}px`;
+                                          tooltip.style.top = `${rect.top - 10}px`;
+                                          tooltip.style.opacity = "1";
+                                        }
+                                        // Show X profile preview
+                                        setShowXPreview(idx);
+                                        // Store button position for popup positioning
+                                        const buttonRect =
                                           e.currentTarget.getBoundingClientRect();
-                                        tooltip.style.left = `${rect.left + rect.width / 2}px`;
-                                        tooltip.style.top = `${rect.top - 10}px`;
-                                        tooltip.style.opacity = "1";
-                                      }
-                                      // Show X profile preview
-                                      setShowXPreview(idx);
-                                      // Store button position for popup positioning
-                                      const buttonRect =
-                                        e.currentTarget.getBoundingClientRect();
-                                      setButtonPosition({
-                                        left:
-                                          buttonRect.left +
-                                          buttonRect.width / 2,
-                                        top: buttonRect.top - 20,
-                                      });
-                                    }}
-                                    onMouseLeave={(e) => {
-                                      const tooltip = document.getElementById(
-                                        `profile-tooltip-${idx}`,
-                                      ) as HTMLElement;
-                                      if (tooltip) tooltip.style.opacity = "0";
-                                    }}
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      e.preventDefault(); // Prevent Link navigation
-                                      // Open X profile in new tab
-                                      const profileUrl = `https://twitter.com/${token.symbol?.toLowerCase() || "search"}`;
-                                      window.open(profileUrl, "_blank");
-                                    }}
-                                  >
-                                    <FaXTwitter
-                                      size={12}
-                                      className="text-neutral-400"
-                                    />
-                                  </button>
+                                        setButtonPosition({
+                                          left:
+                                            buttonRect.left +
+                                            buttonRect.width / 2,
+                                          top: buttonRect.top - 20,
+                                        });
+                                      }}
+                                      onMouseLeave={(e) => {
+                                        const tooltip = document.getElementById(
+                                          `profile-tooltip-${idx}`,
+                                        ) as HTMLElement;
+                                        if (tooltip)
+                                          tooltip.style.opacity = "0";
+                                      }}
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        e.preventDefault(); // Prevent Link navigation
+                                        // Open X profile in new tab
+                                        const profileUrl = `https://twitter.com/${token.symbol?.toLowerCase() || "search"}`;
+                                        window.open(profileUrl, "_blank");
+                                      }}
+                                    >
+                                      <FaXTwitter
+                                        size={12}
+                                        className="text-neutral-400"
+                                      />
+                                    </button>
 
-                                  {/* Small X Profile Preview - positioned near token */}
-                                  {showXPreview === idx && buttonPosition && (
-                                    <TokenXProfile
-                                      token={token}
-                                      setShowXPreview={setShowXPreview}
-                                    />
-                                  )}
-                                </div>}
+                                    {/* Small X Profile Preview - positioned near token */}
+                                    {showXPreview === idx && buttonPosition && (
+                                      <TokenXProfile
+                                        token={token}
+                                        setShowXPreview={setShowXPreview}
+                                      />
+                                    )}
+                                  </div>
+                                )}
 
                                 <div className="ml-1 flex flex-row gap-2 font-light">
                                   {/* Crown Icon */}
@@ -7332,9 +7334,13 @@ function PulseTable({
                                       {token.kol_count ?? 0}
                                     </span>
                                     {/* Tooltip */}
-                                    <div className="pointer-events-none absolute left-0 top-full mt-2 px-3 py-2 bg-[#1a1b1f] border border-[#2a2b33] rounded-lg opacity-0 group-hover/kol2:opacity-100 transition-opacity duration-100 whitespace-nowrap z-[99999] shadow-xl">
-                                      <span className="text-sm text-white font-medium">KOL Count</span>
-                                      <p className="text-xs text-gray-400 mt-0.5">Key Opinion Leaders holding this token</p>
+                                    <div className="pointer-events-none absolute top-full left-0 z-[99999] mt-2 rounded-lg border border-[#2a2b33] bg-[#1a1b1f] px-3 py-2 whitespace-nowrap opacity-0 shadow-xl transition-opacity duration-100 group-hover/kol2:opacity-100">
+                                      <span className="text-sm font-medium text-white">
+                                        KOL Count
+                                      </span>
+                                      <p className="mt-0.5 text-xs text-gray-400">
+                                        Key Opinion Leaders holding this token
+                                      </p>
                                     </div>
                                   </div>
 
@@ -7371,9 +7377,13 @@ function PulseTable({
                                       })()}
                                     </span>
                                     {/* Tooltip */}
-                                    <div className="pointer-events-none absolute left-0 top-full mt-2 px-3 py-2 bg-[#1a1b1f] border border-[#2a2b33] rounded-lg opacity-0 group-hover/holder2:opacity-100 transition-opacity duration-100 whitespace-nowrap z-[99999] shadow-xl">
-                                      <span className="text-sm text-white font-medium">Holder Count</span>
-                                      <p className="text-xs text-gray-400 mt-0.5">Total wallets holding this token</p>
+                                    <div className="pointer-events-none absolute top-full left-0 z-[99999] mt-2 rounded-lg border border-[#2a2b33] bg-[#1a1b1f] px-3 py-2 whitespace-nowrap opacity-0 shadow-xl transition-opacity duration-100 group-hover/holder2:opacity-100">
+                                      <span className="text-sm font-medium text-white">
+                                        Holder Count
+                                      </span>
+                                      <p className="mt-0.5 text-xs text-gray-400">
+                                        Total wallets holding this token
+                                      </p>
                                     </div>
                                   </div>
                                   <div className="flex items-center gap-1 text-violet-200">
@@ -7385,32 +7395,26 @@ function PulseTable({
                                 </div>
 
                                 {/* Pump.fun Tooltip */}
-                                <Tooltip>
-                                  <TooltipTrigger asChild>
-                                    {token.mint?.slice(-4) === "pump" && (
-                                      <div
-                                        className="pointer-events-none absolute bottom-full left-1/2 mb-2 -translate-x-1/2 transform rounded px-2 py-1 text-xs font-medium whitespace-nowrap opacity-0 transition-opacity duration-200"
-                                        style={{
-                                          zIndex: 99999,
-                                          backgroundColor: AX.surface,
-                                          color: AX.text,
-                                          border: `1px solid ${AX.border}`,
-                                          boxShadow: `0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06), 0 0 8px ${AX.glowCyan}`,
-                                        }}
-                                      >
-                                        View on Pump.fun
-                                        {/* Tooltip arrow */}
-                                        <div
-                                          className="absolute top-full left-1/2 h-0 w-0 -translate-x-1/2 transform border-t-4 border-r-4 border-l-4 border-transparent"
-                                          style={{ borderTopColor: AX.surface }}
-                                        ></div>
-                                      </div>
-                                    )}
-                                  </TooltipTrigger>
-                                  <TooltipContent>
-                                    <p>Add to library</p>
-                                  </TooltipContent>
-                                </Tooltip>
+
+                                {token.mint?.slice(-4) === "pump" && (
+                                  <div
+                                    className="pointer-events-none absolute bottom-full left-1/2 mb-2 -translate-x-1/2 transform rounded px-2 py-1 text-xs font-medium whitespace-nowrap opacity-0 transition-opacity duration-200"
+                                    style={{
+                                      zIndex: 99999,
+                                      backgroundColor: AX.surface,
+                                      color: AX.text,
+                                      border: `1px solid ${AX.border}`,
+                                      boxShadow: `0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06), 0 0 8px ${AX.glowCyan}`,
+                                    }}
+                                  >
+                                    View on Pump.fun
+                                    {/* Tooltip arrow */}
+                                    <div
+                                      className="absolute top-full left-1/2 h-0 w-0 -translate-x-1/2 transform border-t-4 border-r-4 border-l-4 border-transparent"
+                                      style={{ borderTopColor: AX.surface }}
+                                    ></div>
+                                  </div>
+                                )}
                               </div>
                             </div>
                           </div>
