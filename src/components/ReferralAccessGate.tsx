@@ -113,22 +113,28 @@ function clearPersistedAccess() {
 function hasStoredAccess(userId?: string | null): boolean {
   if (typeof window === "undefined") return false;
   try {
-    // Check user-independent bypass flag first (set by X button)
+    // If a userId is provided (user is logged in), only check user-specific flags.
+    // This ensures new accounts always see the referral gate.
+    if (userId) {
+      // Per-user persistent flag (set when logged-in user clicks X or enters valid code)
+      const perUser = window.localStorage.getItem(`${LS_KEY_PREFIX}${userId}`) === "true";
+      if (perUser) return true;
+
+      // Legacy session flag, but only if meta matches this user
+      const session = window.sessionStorage.getItem(STORAGE_FLAG_KEY) === "true";
+      if (session) {
+        const meta = getStoredAccessMeta();
+        if (meta && meta.userId === userId) return true;
+      }
+
+      return false;
+    }
+
+    // No userId (user not logged in) - check user-independent bypass flag.
+    // This allows non-logged-in visitors to dismiss the modal and have it persist
+    // until they log in, at which point we check user-specific access.
     const bypass = window.localStorage.getItem(LS_BYPASS_KEY) === "true";
-    if (bypass) return true;
-
-    // Account-specific: only treat as granted when it matches the current user
-    if (!userId) return false;
-
-    // Per-user persistent flag
-    const perUser = window.localStorage.getItem(`${LS_KEY_PREFIX}${userId}`) === "true";
-    if (perUser) return true;
-
-    // Legacy session flag, but only if meta matches this user
-    const session = window.sessionStorage.getItem(STORAGE_FLAG_KEY) === "true";
-    if (!session) return false;
-    const meta = getStoredAccessMeta();
-    return !!meta && meta.userId === userId;
+    return bypass;
   } catch {
     return false;
   }
@@ -165,8 +171,9 @@ export function ReferralAccessGate({
       : true; // default to true to require access code for new users
 
   const [status, setStatus] = useState<ReferralGateStatus>(() => {
-    // Start locked unless the gate is disabled; user-specific access is resolved after load
-    return requireReferralAccess ? "prompt" : "granted";
+    // Start in "checking" state to avoid showing the modal before localStorage is checked.
+    // The useEffect will evaluate stored access and transition to "granted" or "prompt".
+    return requireReferralAccess ? "checking" : "granted";
   });
   const [codeInput, setCodeInput] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -289,6 +296,28 @@ export function ReferralAccessGate({
 
     setStatus("prompt");
   }, [requireReferralAccess, userLoading, user]);
+
+  // Early bypass check - only for non-logged-in visitors.
+  // This allows visitors who dismissed the modal (X button) before logging in
+  // to skip the modal until they actually log in (at which point we check user-specific access).
+  useEffect(() => {
+    if (!requireReferralAccess) return;
+    if (status !== "checking") return; // Only run during initial checking phase
+    if (typeof window === "undefined") return;
+    // Only apply global bypass if user is NOT logged in.
+    // Once user is logged in, we rely on evaluateStoredAccess to check user-specific flags.
+    if (user) return;
+    if (userLoading) return; // Wait to know if user is logged in
+    try {
+      const bypass = window.localStorage.getItem(LS_BYPASS_KEY) === "true";
+      if (bypass) {
+        setStatus("granted");
+        return;
+      }
+    } catch {
+      // Ignore localStorage errors
+    }
+  }, [requireReferralAccess, status, user, userLoading]);
 
   useEffect(() => {
     if (!requireReferralAccess) return;
