@@ -68,7 +68,7 @@ import { SiSolana } from "react-icons/si";
 import Image from "next/image";
 import InterstatePopout from "./InterstatePopout";
 import VerticalInput from "./VerticalInput";
-import { usePulseWebSocket } from "~/hooks/usePulseWebSocket";
+import { usePulseWebSocketPersistent } from "~/hooks/usePulseWebSocketPersistent";
 import { flushSync } from "react-dom";
 
 import { useRouter } from "next/router";
@@ -111,11 +111,13 @@ import {
   buildSolanaWalletAllocations,
 } from "~/utils/solanaWalletAllocation";
 import useSolanaPositionWebSocket from "~/hooks/useSolanaPositionWebSocket";
+import { fetchVerifiedPairAddress } from "~/hooks/useSingleTokenPolling";
 import toast from "react-hot-toast";
 import { FiGlobe } from "react-icons/fi";
 import BottomCardInfoHolder from "./BottomCardInfoHolder";
 import TokenXProfile from './TokenXProfile';
 import { Tooltip, TooltipContent, TooltipTrigger } from "./ui/tooltip";
+import InterstateTooltip from "./InterstateTooltip";
 
 /* ---- Enhanced Monad Green Palette (matching MonadTable) ---- */
 const AX = {
@@ -662,26 +664,50 @@ function TokenMetrics({
     return num.toString();
   };
 
-  // Real data from token
+  // Real data from token - prioritize holder_count and kol_count from WebSocket
   const rawMetrics = {
-    users: token.total_holders || token.unique_wallets_24h || 0,
+    holders: token.holder_count ?? token.total_holders ?? token.unique_wallets_24h ?? 0,
+    kols: token.kol_count ?? 0,
     trades: token.unique_wallets_5m || token.unique_wallets_1h || 0,
-    achievements: 0,
     rank: "0/1",
   };
 
   // Format the metrics for display
   const metrics = {
-    users: formatNumber(rawMetrics.users),
+    holders: formatNumber(rawMetrics.holders),
+    kols: formatNumber(rawMetrics.kols),
     trades: formatNumber(rawMetrics.trades),
-    achievements: rawMetrics.achievements,
     rank: rank && totalTokens ? `${rank}/${totalTokens}` : "0/1",
   };
 
   return (
-    <div className="relative z-10 flex items-center gap-1">
-      {/* Users Icon - Multiple People */}
-      <div className="flex items-center gap-1">
+    <div className="relative z-10 flex items-center gap-2">
+      {/* Trophy Icon - KOL Count */}
+      <div className="group/kol relative flex items-center gap-1 cursor-help">
+        <div
+          className="flex items-center justify-center rounded"
+          style={{
+            backgroundColor: "#111214",
+            padding: "2px",
+            width: "18px",
+            height: "18px",
+          }}
+        >
+          <FaTrophy size={10} style={{ color: AX.muted }} />
+        </div>
+        <span className="text-xs" style={{ color: AX.text }}>
+          {metrics.kols}
+        </span>
+        {/* Tooltip - appears below */}
+        <div className="pointer-events-none absolute left-0 top-full mt-2 px-3 py-2 bg-[#1a1b1f] border border-[#2a2b33] rounded-lg opacity-0 group-hover/kol:opacity-100 transition-opacity duration-100 whitespace-nowrap z-[99999] shadow-xl">
+          <span className="text-sm text-white font-medium">KOL Count</span>
+          <p className="text-xs text-gray-400 mt-0.5">Key Opinion Leaders holding this token</p>
+          <div className="absolute left-4 bottom-full w-0 h-0 border-l-[6px] border-l-transparent border-r-[6px] border-r-transparent border-b-[6px] border-b-[#2a2b33]"></div>
+        </div>
+      </div>
+
+      {/* Users Icon - Holder Count */}
+      <div className="group/holder relative flex items-center gap-1 cursor-help">
         <div
           className="flex items-center justify-center rounded"
           style={{
@@ -694,21 +720,15 @@ function TokenMetrics({
           <GoPeople size={12} style={{ color: "#57ace9", strokeWidth: "3" }} />
         </div>
         <span className="text-xs" style={{ color: AX.text }}>
-          {metrics.users}
+          {metrics.holders}
         </span>
+        {/* Tooltip - appears below */}
+        <div className="pointer-events-none absolute left-0 top-full mt-2 px-3 py-2 bg-[#1a1b1f] border border-[#2a2b33] rounded-lg opacity-0 group-hover/holder:opacity-100 transition-opacity duration-100 whitespace-nowrap z-[99999] shadow-xl">
+          <span className="text-sm text-white font-medium">Holder Count</span>
+          <p className="text-xs text-gray-400 mt-0.5">Total wallets holding this token</p>
+          <div className="absolute left-4 bottom-full w-0 h-0 border-l-[6px] border-l-transparent border-r-[6px] border-r-transparent border-b-[6px] border-b-[#2a2b33]"></div>
+        </div>
       </div>
-
-      {/* Candles Icon - Trading/Volume */}
-      {/* <div className="flex items-center gap-1">
-        <BiCandles size={12} style={{ color: AX.muted }} />
-        <span className="text-xs" style={{ color: AX.text }}>{metrics.trades}</span>
-      </div> */}
-
-      {/* Trophy Icon - Achievements */}
-      {/* <div className="flex items-center gap-1">
-        <MdEmojiEvents size={12} style={{ color: AX.muted }} />
-        <span className="text-xs" style={{ color: AX.text }}>{metrics.achievements}</span>
-      </div> */}
 
       {/* Crown Icon - Ranking */}
       {/* <div 
@@ -761,6 +781,422 @@ function useTokenMetadata(uri?: string) {
   }, [uri]);
   return { meta, loading, showInitial };
 }
+
+// Helper to extract social links from token metadata
+interface SocialLinks {
+  twitter?: string;
+  website?: string;
+  telegram?: string;
+}
+
+function extractSocialLinks(token: Token, meta: any): SocialLinks {
+  const links: SocialLinks = {};
+
+  // Try to get links from metadata first
+  if (meta) {
+    if (meta.twitter) links.twitter = meta.twitter;
+    if (meta.website) links.website = meta.website;
+    if (meta.telegram) links.telegram = meta.telegram;
+  }
+
+  // Also try to parse token.links if it's a JSON string
+  if (token.links) {
+    try {
+      const parsedLinks = typeof token.links === 'string'
+        ? JSON.parse(token.links)
+        : token.links;
+      if (parsedLinks.twitter && !links.twitter) links.twitter = parsedLinks.twitter;
+      if (parsedLinks.website && !links.website) links.website = parsedLinks.website;
+      if (parsedLinks.telegram && !links.telegram) links.telegram = parsedLinks.telegram;
+    } catch {
+      // Ignore parsing errors
+    }
+  }
+
+  return links;
+}
+
+// Helper to extract Twitter handle from URL
+function extractTwitterHandle(url: string): string | null {
+  if (!url) return null;
+  // Handle various Twitter/X URL formats
+  const patterns = [
+    /(?:twitter\.com|x\.com)\/(@?\w+)/i,
+    /(?:twitter\.com|x\.com)\/intent\/user\?screen_name=(\w+)/i,
+  ];
+  for (const pattern of patterns) {
+    const match = url.match(pattern);
+    if (match?.[1]) {
+      return match[1].replace('@', '');
+    }
+  }
+  return null;
+}
+
+// Social Icons Component with URI metadata parsing and search dropdown
+function SocialIconsWithMetadata({
+  token,
+  idx,
+  showSearchDropdown,
+  setShowSearchDropdown,
+}: {
+  token: Token;
+  idx: number;
+  showSearchDropdown: number | null;
+  setShowSearchDropdown: (idx: number | null) => void;
+}) {
+  const { meta } = useTokenMetadata(token.uri);
+  const socialLinks = extractSocialLinks(token, meta);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+  const xButtonRef = useRef<HTMLButtonElement>(null);
+  const searchButtonRef = useRef<HTMLButtonElement>(null);
+  const searchMenuRef = useRef<HTMLDivElement>(null);
+  const [showXPreview, setShowXPreview] = useState(false);
+  const [previewPosition, setPreviewPosition] = useState({ left: 0, top: 0, openBelow: false });
+  const [showSearchMenu, setShowSearchMenu] = useState(false);
+  const [searchMenuPosition, setSearchMenuPosition] = useState({ left: 0, top: 0, openAbove: false });
+  const isOverSearchMenu = useRef(false);
+  const isOverSearchButton = useRef(false);
+  const isOverXPreview = useRef(false);
+  const isOverXButton = useRef(false);
+
+  const hasTwitter = !!socialLinks.twitter;
+  const hasWebsite = !!socialLinks.website;
+  const hasTelegram = !!socialLinks.telegram;
+  const twitterHandle = hasTwitter ? extractTwitterHandle(socialLinks.twitter!) : null;
+
+  return (
+    <div className="flex items-center gap-1">
+      {/* X/Twitter Icon - only show if twitter URL exists */}
+      {hasTwitter && (
+        <div className="relative">
+          <button
+            ref={xButtonRef}
+            className="flex items-center justify-center rounded p-1 transition-colors duration-200 hover:bg-white/10"
+            onClick={(e) => {
+              e.stopPropagation();
+              e.preventDefault();
+              window.open(socialLinks.twitter, "_blank");
+            }}
+            onMouseEnter={() => {
+              isOverXButton.current = true;
+              if (xButtonRef.current) {
+                const rect = xButtonRef.current.getBoundingClientRect();
+                const previewHeight = 320; // Approximate height of X preview
+                const spaceAbove = rect.top;
+                const openBelow = spaceAbove < previewHeight + 20;
+
+                setPreviewPosition({
+                  left: rect.left + rect.width / 2,
+                  top: openBelow ? rect.bottom + 10 : rect.top - 10,
+                  openBelow,
+                });
+              }
+              setShowXPreview(true);
+            }}
+            onMouseLeave={() => {
+              isOverXButton.current = false;
+              // Delay to allow moving to popup
+              setTimeout(() => {
+                if (!isOverXPreview.current && !isOverXButton.current) {
+                  setShowXPreview(false);
+                }
+              }, 200);
+            }}
+          >
+            <FaXTwitter size={12} className="text-neutral-400 hover:text-white" />
+          </button>
+
+          {/* X Profile Preview Popup */}
+          {showXPreview && (
+            <div
+              className="fixed z-[999999]"
+              style={{
+                left: `${previewPosition.left}px`,
+                top: `${previewPosition.top}px`,
+                // If opening below, no Y transform; if above, translate up by full height
+                transform: previewPosition.openBelow
+                  ? "translateX(-50%)"
+                  : "translate(-50%, -100%)",
+              }}
+              onMouseEnter={() => {
+                isOverXPreview.current = true;
+              }}
+              onMouseLeave={() => {
+                isOverXPreview.current = false;
+                setTimeout(() => {
+                  if (!isOverXPreview.current && !isOverXButton.current) {
+                    setShowXPreview(false);
+                  }
+                }, 200);
+              }}
+            >
+              <div
+                className="overflow-hidden rounded-xl w-[280px]"
+                style={{
+                  backgroundColor: "#16181c",
+                  border: "1px solid #2f3336",
+                  boxShadow: "0 8px 28px rgba(0, 0, 0, 0.75)",
+                }}
+              >
+                {/* Header with X logo */}
+                <div className="flex items-center justify-between px-4 py-3 border-b border-[#2f3336]">
+                  <div className="flex items-center gap-2">
+                    {/* Profile Picture */}
+                    <div className="h-12 w-12 rounded-full overflow-hidden bg-[#1a1a1a] flex-shrink-0">
+                      <img
+                        src={token.logo || `https://ui-avatars.com/api/?name=${token.symbol}&background=1a1a1a&color=fff`}
+                        alt={token.symbol}
+                        className="h-full w-full object-cover"
+                        onError={(e) => {
+                          (e.target as HTMLImageElement).src = `https://ui-avatars.com/api/?name=${token.symbol}&background=1a1a1a&color=fff`;
+                        }}
+                      />
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-1">
+                        <span className="text-white font-bold text-sm">{token.name || token.symbol}</span>
+                        <svg className="w-4 h-4 text-[#1d9bf0]" viewBox="0 0 24 24" fill="currentColor">
+                          <path d="M22.5 12.5c0-1.58-.875-2.95-2.148-3.6.154-.435.238-.905.238-1.4 0-2.21-1.71-3.998-3.818-3.998-.47 0-.92.084-1.336.25C14.818 2.415 13.51 1.5 12 1.5s-2.816.917-3.437 2.25c-.415-.165-.866-.25-1.336-.25-2.11 0-3.818 1.79-3.818 4 0 .494.083.964.237 1.4-1.272.65-2.147 2.018-2.147 3.6 0 1.495.782 2.798 1.942 3.486-.02.17-.032.34-.032.514 0 2.21 1.708 4 3.818 4 .47 0 .92-.086 1.335-.25.62 1.334 1.926 2.25 3.437 2.25 1.512 0 2.818-.916 3.437-2.25.415.163.865.248 1.336.248 2.11 0 3.818-1.79 3.818-4 0-.174-.012-.344-.033-.513 1.158-.687 1.943-1.99 1.943-3.484zm-6.616-3.334l-4.334 6.5c-.145.217-.382.334-.625.334-.143 0-.288-.04-.416-.126l-.115-.094-2.415-2.415c-.293-.293-.293-.768 0-1.06s.768-.294 1.06 0l1.77 1.767 3.825-5.74c.23-.345.696-.436 1.04-.207.346.23.44.696.21 1.04z"/>
+                        </svg>
+                      </div>
+                      <div className="flex items-center gap-1 text-gray-500 text-xs">
+                        <span>@{twitterHandle || token.symbol?.toLowerCase()}</span>
+                        <span>·</span>
+                        <span>+</span>
+                      </div>
+                    </div>
+                  </div>
+                  <FaXTwitter size={20} className="text-white" />
+                </div>
+
+                {/* Bio/Description */}
+                <div className="px-4 py-3">
+                  <p className="text-white text-sm leading-relaxed">
+                    {meta?.description || token.description || `Official ${token.symbol} token`}
+                  </p>
+                  {hasWebsite && (
+                    <a
+                      href={socialLinks.website}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-[#1d9bf0] text-sm hover:underline block mt-1 truncate"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      {socialLinks.website}
+                    </a>
+                  )}
+                </div>
+
+                {/* Stats */}
+                <div className="px-4 pb-3 flex items-center gap-4 text-sm">
+                  <div className="flex items-center gap-1 text-gray-500">
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <rect x="3" y="4" width="18" height="18" rx="2" ry="2" strokeWidth="2"/>
+                      <line x1="16" y1="2" x2="16" y2="6" strokeWidth="2"/>
+                      <line x1="8" y1="2" x2="8" y2="6" strokeWidth="2"/>
+                      <line x1="3" y1="10" x2="21" y2="10" strokeWidth="2"/>
+                    </svg>
+                    <span>Joined {new Date(token.created_at || Date.now()).toLocaleDateString('en-US', { month: 'short', year: 'numeric' })}</span>
+                  </div>
+                </div>
+
+                {/* Following/Followers */}
+                <div className="px-4 pb-3 flex items-center gap-4 text-sm">
+                  <span><strong className="text-white">--</strong> <span className="text-gray-500">Following</span></span>
+                  <span><strong className="text-white">--</strong> <span className="text-gray-500">Followers</span></span>
+                </div>
+
+                {/* CTA Button */}
+                <div className="px-4 pb-4">
+                  <button
+                    className="w-full py-2.5 rounded-full text-[#1d9bf0] font-semibold text-sm border border-[#536471] hover:bg-[#1d9bf0]/10 transition-colors"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      window.open(socialLinks.twitter, "_blank");
+                    }}
+                  >
+                    See Profile on X
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Telegram Icon - only show if telegram URL exists */}
+      {hasTelegram && (
+        <button
+          className="flex items-center justify-center rounded p-1 transition-colors duration-200 hover:bg-white/10"
+          onClick={(e) => {
+            e.stopPropagation();
+            e.preventDefault();
+            window.open(socialLinks.telegram, "_blank");
+          }}
+          title="Join Telegram"
+        >
+          <FaTelegram size={12} className="text-neutral-400 hover:text-[#0088cc]" />
+        </button>
+      )}
+
+      {/* Globe Icon - only show if website URL exists */}
+      {hasWebsite && (
+        <div className="group/website relative">
+          <button
+            className="flex items-center justify-center rounded p-1 transition-colors duration-200 hover:bg-white/10"
+            onClick={(e) => {
+              e.stopPropagation();
+              e.preventDefault();
+              window.open(socialLinks.website, "_blank");
+            }}
+          >
+            <FiGlobe size={12} className="text-neutral-400 hover:text-white" />
+          </button>
+          {/* Website URL Tooltip */}
+          <div className="pointer-events-none absolute left-1/2 top-full mt-2 -translate-x-1/2 px-3 py-2 bg-[#1a1b1f] border border-[#2a2b33] rounded-lg opacity-0 group-hover/website:opacity-100 transition-opacity duration-100 whitespace-nowrap z-[99999] shadow-xl">
+            <span className="text-xs text-gray-400">Website</span>
+            <p className="text-sm text-white font-medium max-w-[200px] truncate">{socialLinks.website}</p>
+          </div>
+        </div>
+      )}
+
+      {/* Search Icon with Dropdown - hover triggered */}
+      <div className="relative" ref={dropdownRef}>
+        <button
+          ref={searchButtonRef}
+          className="flex items-center justify-center rounded p-1 transition-colors duration-200 hover:bg-white/10"
+          onMouseEnter={() => {
+            isOverSearchButton.current = true;
+            if (searchButtonRef.current) {
+              const rect = searchButtonRef.current.getBoundingClientRect();
+              const dropdownHeight = 200; // Approximate height of dropdown
+              const spaceBelow = window.innerHeight - rect.bottom;
+              const openAbove = spaceBelow < dropdownHeight + 20;
+
+              setSearchMenuPosition({
+                left: rect.left,
+                top: openAbove ? rect.top - 8 : rect.bottom + 8,
+                openAbove,
+              });
+            }
+            setShowSearchMenu(true);
+          }}
+          onMouseLeave={() => {
+            isOverSearchButton.current = false;
+            // Delay to allow moving to the dropdown
+            setTimeout(() => {
+              if (!isOverSearchMenu.current && !isOverSearchButton.current) {
+                setShowSearchMenu(false);
+              }
+            }, 200);
+          }}
+          onClick={(e) => {
+            e.stopPropagation();
+            e.preventDefault();
+          }}
+        >
+          <FaSearch size={10} className="text-neutral-400 hover:text-[#36d8ff]" />
+        </button>
+
+        {/* Search Dropdown Menu - Fixed positioning, appears to the right */}
+        {showSearchMenu && (
+          <div
+            ref={searchMenuRef}
+            className="fixed min-w-[220px] rounded-lg border border-[#2a2b33] bg-[#16171C] py-1 z-[999999]"
+            style={{
+              // Ensure dropdown doesn't go off the right edge of the screen
+              left: `${Math.min(searchMenuPosition.left, window.innerWidth - 230)}px`,
+              top: `${searchMenuPosition.top}px`,
+              // If opening above, translate up by full height
+              transform: searchMenuPosition.openAbove ? "translateY(-100%)" : "none",
+              boxShadow: "0 8px 32px rgba(0, 0, 0, 0.6)",
+            }}
+            onMouseEnter={() => {
+              isOverSearchMenu.current = true;
+            }}
+            onMouseLeave={() => {
+              isOverSearchMenu.current = false;
+              // Delay to allow moving back to button if needed
+              setTimeout(() => {
+                if (!isOverSearchMenu.current && !isOverSearchButton.current) {
+                  setShowSearchMenu(false);
+                }
+              }, 200);
+            }}
+          >
+            {/* X Search for Address */}
+            <button
+              className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-sm text-white hover:bg-white/10 transition-colors"
+              onClick={(e) => {
+                e.stopPropagation();
+                const url = `https://twitter.com/search?q=${encodeURIComponent(token.mint)}`;
+                window.open(url, "_blank");
+                setShowSearchMenu(false);
+              }}
+            >
+              <FaXTwitter size={14} className="text-neutral-400" />
+              X Search for Address
+            </button>
+
+            {/* X Search for Name */}
+            <button
+              className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-sm text-white hover:bg-white/10 transition-colors"
+              onClick={(e) => {
+                e.stopPropagation();
+                const searchQuery = `${token.symbol} ${token.name}`.trim();
+                const url = `https://twitter.com/search?q=${encodeURIComponent(searchQuery)}`;
+                window.open(url, "_blank");
+                setShowSearchMenu(false);
+              }}
+            >
+              <FaXTwitter size={14} className="text-neutral-400" />
+              X Search for Name
+            </button>
+
+            {/* Divider */}
+            <div className="my-1 border-t border-[#2a2b33]" />
+
+            {/* Google Search for Name */}
+            <button
+              className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-sm text-white hover:bg-white/10 transition-colors"
+              onClick={(e) => {
+                e.stopPropagation();
+                const searchQuery = `${token.symbol} ${token.name} crypto`.trim();
+                const url = `https://www.google.com/search?q=${encodeURIComponent(searchQuery)}`;
+                window.open(url, "_blank");
+                setShowSearchMenu(false);
+              }}
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" className="text-neutral-400">
+                <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
+                <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
+                <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/>
+                <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/>
+              </svg>
+              Google Search for Name
+            </button>
+
+            {/* Interstate Search for Name */}
+            <button
+              className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-sm text-white hover:bg-white/10 transition-colors"
+              onClick={(e) => {
+                e.stopPropagation();
+                const url = `https://dexscreener.com/solana/${token.mint}`;
+                window.open(url, "_blank");
+                setShowSearchMenu(false);
+              }}
+            >
+              <LuSearch size={14} className="text-[#36d8ff]" />
+              Interstate Search for Name
+            </button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function TokenImage({
   token,
   priority = false,
@@ -790,7 +1226,13 @@ function TokenImage({
       // Resolve metadata JSON to get actual image URL
       resolveMetadataImage(metadataCandidate).then((resolved) => {
         if (!cancelled) {
-          setResolvedImageUrl(resolved || rawImageUrl || metadataCandidate);
+          if (resolved) {
+            setResolvedImageUrl(resolved);
+          } else {
+            // Metadata resolution failed - only use rawImageUrl if it's not a metadata URL
+            // Never fallback to metadataCandidate (JSON URL) as that would try to load JSON as image
+            setResolvedImageUrl(rawImageUrl && !isMetadataUrl(rawImageUrl) ? rawImageUrl : null);
+          }
         }
       });
     } else {
@@ -1804,6 +2246,7 @@ function PulseTable({
   const [thunderAmount, setThunderAmount] = useState(getInitialThunderAmount);
   const [showPillTooltip, setShowPillTooltip] = useState<string | null>(null);
   const [showXPreview, setShowXPreview] = useState<number | null>(null);
+  const [showSearchDropdown, setShowSearchDropdown] = useState<number | null>(null);
   const [buttonPosition, setButtonPosition] = useState<{
     left: number;
     top: number;
@@ -2107,7 +2550,7 @@ function PulseTable({
     migratedTokens: wsMigratedTokens,
     connected: wsConnected,
     error: wsError,
-  } = usePulseWebSocket({
+  } = usePulseWebSocketPersistent({
     enabled: true,
     channel,
     protocols:
@@ -2626,9 +3069,19 @@ function PulseTable({
     };
 
     try {
-      const poolAddress =
-        token.migrated_pool_address || token.pair_address || "";
-      const baseMint = token.mint || "";
+      // CRITICAL: Verify the pair address from the token service before executing trade
+      let poolAddress = token.migrated_pool_address || token.pair_address || '';
+      if (token.mint) {
+        console.log(`[PulseTable] Verifying pair address for quick buy: ${token.mint}`);
+        const verifiedPairAddress = await fetchVerifiedPairAddress(token.mint);
+        if (verifiedPairAddress) {
+          if (verifiedPairAddress !== poolAddress) {
+            console.log(`[PulseTable] Pair address mismatch! Local: ${poolAddress}, Verified: ${verifiedPairAddress}`);
+          }
+          poolAddress = verifiedPairAddress;
+        }
+      }
+      const baseMint = token.mint || '';
       const quoteMint = SOL_MINT_ADDRESS;
 
       const multiResult = await executeSolanaMultiBuy({
@@ -3710,11 +4163,23 @@ function PulseTable({
       return;
     }
 
-    const poolAddress =
+    let poolAddress =
       (token as any).migrated_pool_address ||
       token.pair_address ||
       (token as any).pool_address ||
       "";
+
+    // CRITICAL: Verify the pair address from the token service before creating sniper
+    if (token.mint) {
+      console.log(`[PulseTable] Verifying pair address for sniper: ${token.mint}`);
+      const verifiedPairAddress = await fetchVerifiedPairAddress(token.mint);
+      if (verifiedPairAddress) {
+        if (verifiedPairAddress !== poolAddress) {
+          console.log(`[PulseTable] Sniper: Pair address mismatch! Local: ${poolAddress}, Verified: ${verifiedPairAddress}`);
+        }
+        poolAddress = verifiedPairAddress;
+      }
+    }
 
     if (!poolAddress) {
       showEnhancedToast("error", "Pool information unavailable", {
@@ -3787,8 +4252,7 @@ function PulseTable({
           tokenSymbol: token.symbol,
           tokenDecimals: token.decimals,
           poolAddress,
-          pairAddress:
-            token.pair_address || (token as any).migrated_pool_address || "",
+          pairAddress: poolAddress, // Use the verified pool address
           poolType: getPoolTypeFromToken(token),
           slippage: slippageValue,
           priorityFee: priorityFeeValue,
@@ -6785,8 +7249,16 @@ function PulseTable({
                               </Link>
                             )} */}
 
-                                {/* X Profile Preview Button */}
-                                <div className="relative">
+                                {/* Social Icons with URI Metadata */}
+                                <SocialIconsWithMetadata
+                                  token={token}
+                                  idx={idx}
+                                  showSearchDropdown={showSearchDropdown}
+                                  setShowSearchDropdown={setShowSearchDropdown}
+                                />
+
+                                {/* OLD X Profile Preview Button - kept for reference */}
+                                {false && <div className="relative">
                                   <button
                                     className="flex items-center justify-center rounded transition-colors duration-200"
                                     onMouseEnter={(e) => {
@@ -6839,152 +7311,77 @@ function PulseTable({
                                       setShowXPreview={setShowXPreview}
                                     />
                                   )}
-                                </div>
-
-                                {token.links && (
-                                  <button>
-                                    <PiTelegramLogo
-                                      size={16}
-                                      className="text-neutral-400"
-                                    />
-                                  </button>
-                                )}
-
-                                {token.links && (
-                                  <button>
-                                    <FiGlobe
-                                      size={16}
-                                      className="text-neutral-400"
-                                    />
-                                  </button>
-                                )}
-
-                                {/* Search on Twitter Button - show for all tokens */}
-                                <button
-                                  className="cursor-pointer text-neutral-400 transition-colors duration-200"
-                                  style={{ color: AX.muted }}
-                                  onMouseEnter={(e) => {
-                                    e.currentTarget.style.color = AX.aiCyan;
-                                    const tooltip = document.getElementById(
-                                      `search-tooltip-${idx}`,
-                                    ) as HTMLElement;
-                                    if (tooltip) {
-                                      const rect =
-                                        e.currentTarget.getBoundingClientRect();
-                                      tooltip.style.left = `${rect.left + rect.width / 2}px`;
-                                      tooltip.style.top = `${rect.top - 10}px`;
-                                      tooltip.style.opacity = "1";
-                                    }
-                                  }}
-                                  onMouseLeave={(e) => {
-                                    e.currentTarget.style.color = AX.muted;
-                                    const tooltip = document.getElementById(
-                                      `search-tooltip-${idx}`,
-                                    ) as HTMLElement;
-                                    if (tooltip) tooltip.style.opacity = "0";
-                                  }}
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    e.preventDefault(); // Prevent Link navigation
-                                    const searchQuery =
-                                      `${token.symbol} ${token.name}`.trim();
-                                    const twitterUrl = `https://twitter.com/search?q=${encodeURIComponent(searchQuery)}`;
-                                    window.open(twitterUrl, "_blank");
-                                  }}
-                                >
-                                  <FaSearch
-                                    size={10}
-                                    className="lg:h-3 lg:w-3"
-                                    style={{ strokeWidth: "3" }}
-                                  />
-                                </button>
+                                </div>}
 
                                 <div className="ml-1 flex flex-row gap-2 font-light">
-                                  <Tooltip>
-                                    <TooltipTrigger asChild>
-                                      <div className="flex items-center gap-1">
-                                        <PiCrownSimpleLight
-                                          size={16}
-                                          style={{ color: "#dcc13c" }}
-                                        />
-                                        <span className="text-sm text-white">
-                                          0
-                                        </span>
-                                      </div>
-                                    </TooltipTrigger>
-                                    <TooltipContent>
-                                      <p>KOLs</p>
-                                    </TooltipContent>
-                                  </Tooltip>
+                                  {/* Crown Icon */}
+                                  <div className="flex items-center gap-1">
+                                    <PiCrownSimpleLight
+                                      size={16}
+                                      style={{ color: "#dcc13c" }}
+                                    />
+                                    <span className="text-sm text-white">
+                                      0
+                                    </span>
+                                  </div>
 
-                                  <Tooltip>
-                                    <TooltipTrigger asChild>
-                                      <div className="flex items-center gap-1 text-violet-200">
-                                        <CiTrophy size={16} />
-                                        <span className="text-sm text-white">
-                                          0
-                                        </span>
-                                      </div>
-                                    </TooltipTrigger>
-                                    <TooltipContent>
-                                      <p>Dev Migrations/Created</p>
-                                    </TooltipContent>
-                                  </Tooltip>
+                                  {/* KOL Count - Trophy Icon */}
+                                  <div className="group/kol2 relative flex items-center gap-1 text-violet-200">
+                                    <CiTrophy size={16} />
+                                    <span className="text-sm text-white">
+                                      {token.kol_count ?? 0}
+                                    </span>
+                                    {/* Tooltip */}
+                                    <div className="pointer-events-none absolute left-0 top-full mt-2 px-3 py-2 bg-[#1a1b1f] border border-[#2a2b33] rounded-lg opacity-0 group-hover/kol2:opacity-100 transition-opacity duration-100 whitespace-nowrap z-[99999] shadow-xl">
+                                      <span className="text-sm text-white font-medium">KOL Count</span>
+                                      <p className="text-xs text-gray-400 mt-0.5">Key Opinion Leaders holding this token</p>
+                                    </div>
+                                  </div>
 
                                   {/* People Icon - Total Holders */}
-                                  <Tooltip>
-                                    <TooltipTrigger asChild>
-                                      <div className="relative flex items-center gap-1">
-                                        <div
-                                          className="flex cursor-help items-center justify-center rounded"
-                                          title="Holders"
-                                          style={{
-                                            backgroundColor: "#111214",
-                                            padding: "2px",
-                                            width: "18px",
-                                            height: "18px",
-                                          }}
-                                        >
-                                          <GoPeople
-                                            size={12}
-                                            style={{ color: "#36d8ff" }}
-                                          />
-                                        </div>
-                                        <span className="text-sm text-white">
-                                          {(() => {
-                                            const holders =
-                                              token.total_holders ||
-                                              token.unique_wallets_24h ||
-                                              0;
-                                            if (holders >= 1e9)
-                                              return `${(holders / 1e9).toFixed(1)}B`;
-                                            if (holders >= 1e6)
-                                              return `${(holders / 1e6).toFixed(1)}M`;
-                                            if (holders >= 1e3)
-                                              return `${(holders / 1e3).toFixed(1)}K`;
-                                            return holders.toString();
-                                          })()}
-                                        </span>
-                                      </div>
-                                    </TooltipTrigger>
-                                    <TooltipContent>
-                                      <p>Holders</p>
-                                    </TooltipContent>
-                                  </Tooltip>
-
-                                  <Tooltip>
-                                    <TooltipTrigger asChild>
-                                      <div className="flex items-center gap-1 text-violet-200">
-                                        <PiRobotLight size={16} />
-                                        <span className="text-sm text-white">
-                                          0
-                                        </span>
-                                      </div>
-                                    </TooltipTrigger>
-                                    <TooltipContent>
-                                      <p>Add to library</p>
-                                    </TooltipContent>
-                                  </Tooltip>
+                                  <div className="group/holder2 relative flex items-center gap-1">
+                                    <div
+                                      className="flex cursor-help items-center justify-center rounded"
+                                      style={{
+                                        backgroundColor: "#111214",
+                                        padding: "2px",
+                                        width: "18px",
+                                        height: "18px",
+                                      }}
+                                    >
+                                      <GoPeople
+                                        size={12}
+                                        style={{ color: "#36d8ff" }}
+                                      />
+                                    </div>
+                                    <span className="text-sm text-white">
+                                      {(() => {
+                                        const holders =
+                                          token.holder_count ??
+                                          token.total_holders ??
+                                          token.unique_wallets_24h ??
+                                          0;
+                                        if (holders >= 1e9)
+                                          return `${(holders / 1e9).toFixed(1)}B`;
+                                        if (holders >= 1e6)
+                                          return `${(holders / 1e6).toFixed(1)}M`;
+                                        if (holders >= 1e3)
+                                          return `${(holders / 1e3).toFixed(1)}K`;
+                                        return holders.toString();
+                                      })()}
+                                    </span>
+                                    {/* Tooltip */}
+                                    <div className="pointer-events-none absolute left-0 top-full mt-2 px-3 py-2 bg-[#1a1b1f] border border-[#2a2b33] rounded-lg opacity-0 group-hover/holder2:opacity-100 transition-opacity duration-100 whitespace-nowrap z-[99999] shadow-xl">
+                                      <span className="text-sm text-white font-medium">Holder Count</span>
+                                      <p className="text-xs text-gray-400 mt-0.5">Total wallets holding this token</p>
+                                    </div>
+                                  </div>
+                                  <div className="flex items-center gap-1 text-violet-200">
+                                    <PiRobotLight size={16} />
+                                    <span className="text-sm text-white">
+                                      0
+                                    </span>
+                                  </div>
                                 </div>
 
                                 {/* Pump.fun Tooltip */}
@@ -7584,7 +7981,7 @@ function PulseTable({
                         PassedIcon={BsPersonGear}
                         value={0.2}
                         iconColor={AX.aiGreen}
-                        tooltip="Top Holders"
+                        tooltip="Top 10%"
                       />
                       <BottomCardInfoHolder
                         PassedIcon={LuChefHat}
@@ -7624,16 +8021,20 @@ function PulseTable({
                         tooltip="Bundler Holdings"
                         count={(token as any).bundler_count ?? undefined}
                       />
+                      {/* Fish icon - commented out
                       <BottomCardInfoHolder
                         PassedIcon={PiFishSimpleLight}
                         value={0.2}
                         tooltip="Phishing Hold"
                       />
+                      */}
+                      {/* Leaf icon - commented out
                       <BottomCardInfoHolder
                         PassedIcon={PiLeafLight}
                         value={0.2}
                         tooltip="Fresh Hold"
                       />
+                      */}
                     </div>
                   </div>
                 </Link>

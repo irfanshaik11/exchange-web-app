@@ -20,7 +20,7 @@ import { useUser } from "../components/UserContext";
 import Cookies from "js-cookie";
 import usePaginatedTokensWebSocket from "../hooks/usePaginatedTokensWebSocket";
 import { useRealtimeWebSocket } from "../hooks/useRealtimeWebSocket";
-import { usePulseWebSocket } from "../hooks/usePulseWebSocket";
+import { usePulseWebSocketPersistent } from "../hooks/usePulseWebSocketPersistent";
 // import { PriorityImageSearcher } from '../utils/imageSearch'; // DISABLED - no external image searches
 import { useImagePreloader } from "../hooks/useImagePreloader";
 import {
@@ -76,7 +76,7 @@ const PLATFORM_UPDATES = [
     badge: "New Feature",
     badgeColor:
       "bg-emerald-500/20 text-emerald-400 border border-emerald-500/30",
-    image: "/interstate-logo.png",
+    image: "/interstate/logo.png",
   },
   {
     id: "update-2",
@@ -317,8 +317,9 @@ export default function PulsePage() {
 
   // ✅ REAL-TIME WEBSOCKET: Direct cache updates (NO REFETCH)
   // Only enable WebSocket for Solana route, not Monad
+  // Using persistent WebSocket that survives tab switches and page refreshes
   const { connected: pulseWsConnected, error: pulseWsError } =
-    usePulseWebSocket({
+    usePulseWebSocketPersistent({
       enabled: shouldFetchSolanaData, // Only enable WebSocket for Solana route
       onNewToken: useCallback(
         (token) => {
@@ -1587,7 +1588,7 @@ export default function PulsePage() {
   return (
     <>
       <Head>
-        <title>Trenches | Narrative Memeboard</title>
+        <title>Trenches | Interstate Memeboard</title>
         <meta name="description" content="Token tracking dashboard" />
       </Head>
       <div className="flex h-screen flex-col overflow-hidden bg-[#06070b] text-neutral-100">

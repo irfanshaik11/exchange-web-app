@@ -95,6 +95,10 @@ const config = {
       { protocol: "https", hostname: "pub-392e3698ab10439a9bf254db45b52c0b.r2.dev" },
       { protocol: "https", hostname: "dweb.link" },
       { protocol: "https", hostname: "metadata.rapidlaunch.io" },
+      { protocol: "https", hostname: "dflow.net" },
+      { protocol: "https", hostname: "*.dflow.net" },
+      { protocol: "https", hostname: "dev-prediction-markets-api.dflow.net" },
+      { protocol: "https", hostname: "imagedelivery.net" },
     ],
   },
 

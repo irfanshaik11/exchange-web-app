@@ -45,9 +45,10 @@ export function useReferralAccess() {
 const STORAGE_FLAG_KEY = "referralAccess.granted"; // legacy (session)
 const STORAGE_META_KEY = "referralAccess.meta"; // legacy (session)
 const LS_KEY_PREFIX = "referralAccess.granted.user:"; // persistent per-user
+const LS_BYPASS_KEY = "referralAccess.bypass"; // user-independent bypass (for X button)
 const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL;
 const buildWalletLoginMessage = () =>
-  `Login to Narrative with nonce: ${Date.now()}`;
+  `Login to Interstate with nonce: ${Date.now()}`;
 
 type StoredAccessMeta = {
   grantedAt: number;
@@ -112,18 +113,28 @@ function clearPersistedAccess() {
 function hasStoredAccess(userId?: string | null): boolean {
   if (typeof window === "undefined") return false;
   try {
-    // Account-specific: only treat as granted when it matches the current user
-    if (!userId) return false;
+    // If a userId is provided (user is logged in), only check user-specific flags.
+    // This ensures new accounts always see the referral gate.
+    if (userId) {
+      // Per-user persistent flag (set when logged-in user clicks X or enters valid code)
+      const perUser = window.localStorage.getItem(`${LS_KEY_PREFIX}${userId}`) === "true";
+      if (perUser) return true;
 
-    // Per-user persistent flag
-    const perUser = window.localStorage.getItem(`${LS_KEY_PREFIX}${userId}`) === "true";
-    if (perUser) return true;
+      // Legacy session flag, but only if meta matches this user
+      const session = window.sessionStorage.getItem(STORAGE_FLAG_KEY) === "true";
+      if (session) {
+        const meta = getStoredAccessMeta();
+        if (meta && meta.userId === userId) return true;
+      }
 
-    // Legacy session flag, but only if meta matches this user
-    const session = window.sessionStorage.getItem(STORAGE_FLAG_KEY) === "true";
-    if (!session) return false;
-    const meta = getStoredAccessMeta();
-    return !!meta && meta.userId === userId;
+      return false;
+    }
+
+    // No userId (user not logged in) - check user-independent bypass flag.
+    // This allows non-logged-in visitors to dismiss the modal and have it persist
+    // until they log in, at which point we check user-specific access.
+    const bypass = window.localStorage.getItem(LS_BYPASS_KEY) === "true";
+    return bypass;
   } catch {
     return false;
   }
@@ -160,8 +171,9 @@ export function ReferralAccessGate({
       : true; // default to true to require access code for new users
 
   const [status, setStatus] = useState<ReferralGateStatus>(() => {
-    // Start locked unless the gate is disabled; user-specific access is resolved after load
-    return requireReferralAccess ? "prompt" : "granted";
+    // Start in "checking" state to avoid showing the modal before localStorage is checked.
+    // The useEffect will evaluate stored access and transition to "granted" or "prompt".
+    return requireReferralAccess ? "checking" : "granted";
   });
   const [codeInput, setCodeInput] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -284,6 +296,28 @@ export function ReferralAccessGate({
 
     setStatus("prompt");
   }, [requireReferralAccess, userLoading, user]);
+
+  // Early bypass check - only for non-logged-in visitors.
+  // This allows visitors who dismissed the modal (X button) before logging in
+  // to skip the modal until they actually log in (at which point we check user-specific access).
+  useEffect(() => {
+    if (!requireReferralAccess) return;
+    if (status !== "checking") return; // Only run during initial checking phase
+    if (typeof window === "undefined") return;
+    // Only apply global bypass if user is NOT logged in.
+    // Once user is logged in, we rely on evaluateStoredAccess to check user-specific flags.
+    if (user) return;
+    if (userLoading) return; // Wait to know if user is logged in
+    try {
+      const bypass = window.localStorage.getItem(LS_BYPASS_KEY) === "true";
+      if (bypass) {
+        setStatus("granted");
+        return;
+      }
+    } catch {
+      // Ignore localStorage errors
+    }
+  }, [requireReferralAccess, status, user, userLoading]);
 
   useEffect(() => {
     if (!requireReferralAccess) return;
@@ -901,11 +935,34 @@ export function ReferralAccessGate({
 
           <div className="relative z-[9999] w-full max-w-lg px-6 md:px-0">
             <div className="rounded-3xl bg-gradient-to-br from-neutral-900/95 via-neutral-900/80 to-neutral-950/90 p-[1px] shadow-[0_40px_120px_rgba(16,185,129,0.12)]">
-              <div className="rounded-[calc(1.5rem-1px)] bg-neutral-950/95 p-8 md:p-10">
+              <div className="rounded-[calc(1.5rem-1px)] bg-neutral-950/95 p-8 md:p-10 relative">
+                {/* Close Button */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    // Set user-independent bypass flag (persists across refreshes regardless of user.id)
+                    try {
+                      window.localStorage.setItem(LS_BYPASS_KEY, "true");
+                    } catch (e) {
+                      console.warn("Failed to set bypass flag", e);
+                    }
+                    // Also persist with user.id if available
+                    if (user?.id) {
+                      persistAccess(user.id);
+                    }
+                    grantAccess();
+                  }}
+                  className="absolute top-4 right-4 p-2 rounded-full text-neutral-400 hover:text-white hover:bg-neutral-800/50 transition-colors"
+                  aria-label="Close"
+                >
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
                 <div className="mb-6 flex items-center justify-between">
                   <div>
                     <p className="text-xs uppercase tracking-[0.35em] text-emerald-400/80">
-                      Narrative Access
+                      Interstate Access
                     </p>
                     <h2 className="mt-2 text-2xl font-semibold text-[#f0f5f5] md:text-3xl">
                       Enter your referral code
@@ -920,7 +977,7 @@ export function ReferralAccessGate({
 
                 <p className="text-sm text-neutral-300/90 md:text-base">
                   To protect our community, access is invite-only. Provide the
-                  referral code you received to unlock the Narrative trading
+                  referral code you received to unlock the Interstate trading
                   dashboard.
                 </p>
 
@@ -1163,10 +1220,10 @@ export function ReferralAccessGate({
                     )}
                   </div>
 
-                  {/* Follow narrative_hq */}
+                  {/* Follow intersatefdn */}
                   <div>
                     <label className="block text-xs uppercase tracking-[0.24em] text-neutral-500 mb-1">
-                      Follow @narrative_hq
+                      Follow @intersatefdn
                     </label>
                     {narrativeFollowed ? (
                       <div className="w-full rounded-lg border border-blue-500/50 bg-blue-500/10 px-3 py-2 flex items-center justify-between">
@@ -1175,14 +1232,14 @@ export function ReferralAccessGate({
                             <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/>
                           </svg>
                           <div>
-                            <p className="text-[#f0f5f5] font-medium">@narrative_hq</p>
+                            <p className="text-[#f0f5f5] font-medium">@intersatefdn</p>
                             <p className="text-xs text-blue-300/80">Following</p>
                           </div>
                         </div>
                         <InterstateButton
                           type="button"
                           onClick={() => {
-                            window.open("https://twitter.com/narrative_hq", "_blank");
+                            window.open("https://twitter.com/intersatefdn", "_blank");
                           }}
                           className="px-4 py-2 text-sm bg-blue-600 hover:bg-blue-700 text-[#f0f5f5]"
                         >
@@ -1193,7 +1250,7 @@ export function ReferralAccessGate({
                       <InterstateButton
                         type="button"
                         onClick={() => {
-                          window.open("https://twitter.com/narrative_hq", "_blank");
+                          window.open("https://twitter.com/intersatefdn", "_blank");
                           setNarrativeFollowed(true);
                         }}
                         fullWidth
@@ -1202,7 +1259,7 @@ export function ReferralAccessGate({
                         <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
                           <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/>
                         </svg>
-                        Follow @narrative_hq
+                        Follow @intersatefdn
                       </InterstateButton>
                     )}
                   </div>
@@ -1210,7 +1267,7 @@ export function ReferralAccessGate({
                   {/* Like a post */}
                   <div>
                     <label className="block text-xs uppercase tracking-[0.24em] text-neutral-500 mb-1">
-                      Like a post by @narrative_hq (Earn 25 xp)
+                      Like a post by @intersatefdn (Earn 25 xp)
                     </label>
                     {postLiked ? (
                       <div className="w-full rounded-lg border border-blue-500/50 bg-blue-500/10 px-3 py-2 flex items-center justify-between">
@@ -1226,7 +1283,7 @@ export function ReferralAccessGate({
                         <InterstateButton
                           type="button"
                           onClick={() => {
-                            window.open("https://twitter.com/narrative_hq", "_blank");
+                            window.open("https://twitter.com/intersatefdn", "_blank");
                           }}
                           className="px-4 py-2 text-sm bg-blue-600 hover:bg-blue-700 text-[#f0f5f5]"
                         >
@@ -1237,7 +1294,7 @@ export function ReferralAccessGate({
                       <InterstateButton
                         type="button"
                         onClick={() => {
-                          window.open("https://twitter.com/narrative_hq", "_blank");
+                          window.open("https://twitter.com/intersatefdn", "_blank");
                           setPostLiked(true);
                         }}
                         fullWidth
@@ -1254,7 +1311,7 @@ export function ReferralAccessGate({
                   {/* Repost a post */}
                   <div>
                     <label className="block text-xs uppercase tracking-[0.24em] text-neutral-500 mb-1">
-                      Repost a post by @narrative_hq
+                      Repost a post by @intersatefdn
                     </label>
                     {postReposted ? (
                       <div className="w-full rounded-lg border border-blue-500/50 bg-blue-500/10 px-3 py-2 flex items-center justify-between">
@@ -1270,7 +1327,7 @@ export function ReferralAccessGate({
                         <InterstateButton
                           type="button"
                           onClick={() => {
-                            window.open("https://twitter.com/narrative_hq", "_blank");
+                            window.open("https://twitter.com/intersatefdn", "_blank");
                           }}
                           className="px-4 py-2 text-sm bg-blue-600 hover:bg-blue-700 text-[#f0f5f5]"
                         >
@@ -1281,7 +1338,7 @@ export function ReferralAccessGate({
                       <InterstateButton
                         type="button"
                         onClick={() => {
-                          window.open("https://twitter.com/narrative_hq", "_blank");
+                          window.open("https://twitter.com/intersatefdn", "_blank");
                           setPostReposted(true);
                         }}
                         fullWidth
@@ -1298,7 +1355,7 @@ export function ReferralAccessGate({
                   {/* Reply to a post */}
                   <div>
                     <label className="block text-xs uppercase tracking-[0.24em] text-neutral-500 mb-1">
-                      Reply to a post by @narrative_hq
+                      Reply to a post by @intersatefdn
                     </label>
                     {postReplied ? (
                       <div className="w-full rounded-lg border border-blue-500/50 bg-blue-500/10 px-3 py-2 flex items-center justify-between">
@@ -1314,7 +1371,7 @@ export function ReferralAccessGate({
                         <InterstateButton
                           type="button"
                           onClick={() => {
-                            window.open("https://twitter.com/narrative_hq", "_blank");
+                            window.open("https://twitter.com/intersatefdn", "_blank");
                           }}
                           className="px-4 py-2 text-sm bg-blue-600 hover:bg-blue-700 text-[#f0f5f5]"
                         >
@@ -1325,7 +1382,7 @@ export function ReferralAccessGate({
                       <InterstateButton
                         type="button"
                         onClick={() => {
-                          window.open("https://twitter.com/narrative_hq", "_blank");
+                          window.open("https://twitter.com/intersatefdn", "_blank");
                           setPostReplied(true);
                         }}
                         fullWidth
@@ -1503,7 +1560,7 @@ export function ReferralAccessGate({
                   <InterstateButton
                     type="button"
                     onClick={() => {
-                      window.location.href = "https://www.narrative.trade";
+                      window.location.href = "https://interstate.so/";
                     }}
                     fullWidth
                     className="h-12 text-base uppercase tracking-[0.4em] bg-emerald-600 text-[#f0f5f5] hover:bg-emerald-700"
@@ -1591,7 +1648,7 @@ export function ReferralAccessGate({
                         type="button"
                         onClick={() => {
                           // TODO: Implement X linking
-                          window.open("https://twitter.com/intent/tweet?text=Check%20out%20Narrative!", "_blank");
+                          window.open("https://twitter.com/intent/tweet?text=Check%20out%20Interstate!", "_blank");
                         }}
                         className="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-[#f0f5f5] text-sm"
                         disabled={questProgress.completedQuests.includes("link-x")}

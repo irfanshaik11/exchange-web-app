@@ -1,14 +1,14 @@
 // components/trade/TradeHeader.tsx
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import type { Token } from "~/utils/db";
-import { formatSmartNumber } from "~/utils/db";
+import { formatSmartNumber, formatLamportsToSol } from "~/utils/db";
 import { useWatchlist } from "../WatchlistContext";
 import { SubscriptNumber } from "../InterstateTable";
 import FastImage from "../FastImage";
 import useMarketDataWebSocket from "~/hooks/useMarketDataWebSocket";
 import { useRouter } from "next/router";
 import { getProtocolBranding } from "~/utils/protocolBranding";
-import type { SolanaTokenInfo } from "~/hooks/useSolanaTokenWebSocket";
+import type { SolanaTokenInfo, SolanaTokenVolume } from "~/hooks/useSolanaTokenWebSocket";
 
 import { IoShareSocialOutline } from "react-icons/io5";
 import {
@@ -414,14 +414,11 @@ interface TradeHeaderProps {
   liveMarketCapUsd?: number | null;
   /** Real-time token info from unified WebSocket (price, mcap, liquidity, image) */
   wsTokenInfo?: SolanaTokenInfo | null;
+  /** Real-time volume data from unified WebSocket (5m, 1h, 6h, 24h volumes) */
+  wsVolume?: SolanaTokenVolume | null;
 }
 
-const TradeHeader: React.FC<TradeHeaderProps> = ({
-  token,
-  livePriceUsd,
-  liveMarketCapUsd,
-  wsTokenInfo,
-}) => {
+const TradeHeader: React.FC<TradeHeaderProps> = ({ token, livePriceUsd, liveMarketCapUsd, wsTokenInfo, wsVolume }) => {
   const coalesceNumber = (...values: any[]): number | null => {
     for (const v of values) {
       const n = typeof v === "string" ? parseFloat(v) : v;
@@ -1351,30 +1348,35 @@ const TradeHeader: React.FC<TradeHeaderProps> = ({
 
                   return (
                     <>
-                      <div className="flex items-center gap-1 text-violet-200">
-                        <PiCrownSimpleLight size={16} />
+                      {/* Crown Icon */}
+                      <div className="flex items-center gap-1">
+                        <PiCrownSimpleLight size={16} style={{ color: "#dcc13c" }} />
                         <span className="text-sm text-white">0</span>
                       </div>
 
-                      <div className="flex items-center gap-1 text-violet-200">
+                      {/* KOL Count - Trophy Icon */}
+                      <div className="group/kol relative flex items-center gap-1 text-violet-200">
                         <CiTrophy size={16} />
-                        <span className="text-sm text-white">0</span>
+                        <span className="text-sm text-white">{token.kol_count ?? 0}</span>
+                        {/* Tooltip */}
+                        <div className="pointer-events-none absolute left-0 top-full mt-2 px-3 py-2 bg-[#1a1b1f] border border-[#2a2b33] rounded-lg opacity-0 group-hover/kol:opacity-100 transition-opacity duration-100 whitespace-nowrap z-[99999] shadow-xl">
+                          <span className="text-sm text-white font-medium">KOL Count</span>
+                          <p className="text-xs text-gray-400 mt-0.5">Key Opinion Leaders holding this token</p>
+                        </div>
                       </div>
 
                       {/* People Icon - Total Holders */}
-                      <div className="relative flex items-center gap-1">
+                      <div className="group/holder relative flex items-center gap-1">
                         <div
-                          className="flex cursor-help items-center justify-center rounded text-violet-200"
-                          title="Holders"
+                          className="flex cursor-help items-center justify-center rounded"
+                          style={{ color: "#36d8ff" }}
                         >
                           <GoPeople size={16} />
                         </div>
                         <span className="text-sm text-white">
                           {(() => {
                             const holders =
-                              token.total_holders ||
-                              token.unique_wallets_24h ||
-                              0;
+                              token.holder_count ?? token.total_holders ?? token.unique_wallets_24h ?? 0;
                             if (holders >= 1e9)
                               return `${(holders / 1e9).toFixed(1)}B`;
                             if (holders >= 1e6)
@@ -1384,6 +1386,11 @@ const TradeHeader: React.FC<TradeHeaderProps> = ({
                             return holders.toString();
                           })()}
                         </span>
+                        {/* Tooltip */}
+                        <div className="pointer-events-none absolute left-0 top-full mt-2 px-3 py-2 bg-[#1a1b1f] border border-[#2a2b33] rounded-lg opacity-0 group-hover/holder:opacity-100 transition-opacity duration-100 whitespace-nowrap z-[99999] shadow-xl">
+                          <span className="text-sm text-white font-medium">Holder Count</span>
+                          <p className="text-xs text-gray-400 mt-0.5">Total wallets holding this token</p>
+                        </div>
                       </div>
                       <div className="flex items-center gap-1 text-violet-200">
                         <PiRobotLight size={16} />
@@ -1457,7 +1464,39 @@ const TradeHeader: React.FC<TradeHeaderProps> = ({
               )}
             </span>
           </StatInline>
+          {/* 24H VOL - inline after Liquidity */}
+          {(() => {
+            // Hide for Monad tokens
+            const protocol = extractProtocolRaw(token);
+            const isMonad = protocol && (
+              protocol.includes('nad.fun') ||
+              protocol.includes('nadfun') ||
+              protocol.includes('flapsh') ||
+              protocol.includes('flap.sh') ||
+              protocol.includes('kuru')
+            );
+            if (isMonad) return null;
+
+            // SOL price for converting volume from SOL to USD
+            const SOL_PRICE_USD = 200;
+            const vol24h = wsVolume?.volume_24h;
+            const buyVolSol = vol24h?.buy_volume_sol ?? 0;
+            const sellVolSol = vol24h?.sell_volume_sol ?? 0;
+            const totalVol24hUsd = (buyVolSol + sellVolSol) * SOL_PRICE_USD;
+
+            // Only show if we have data
+            if (!wsVolume || totalVol24hUsd === 0) return null;
+
+            return (
+              <StatInline label="24H Vol">
+                ${formatSmartNumber(totalVol24hUsd)}
+              </StatInline>
+            );
+          })()}
           <StatInline label="Supply">{formatSmartNumber(supply)}</StatInline>
+          <StatInline label="Gas Fees">
+            {formatLamportsToSol((wsTokenInfo as any)?.total_fees_lamports ?? (token as any)?.total_fees_lamports)}
+          </StatInline>
           <StatInline label="B. Curve">
             <div className="flex flex-row items-center gap-2 text-xs">
               {Number.isFinite(Number(curvePct))
@@ -1471,52 +1510,6 @@ const TradeHeader: React.FC<TradeHeaderProps> = ({
           </StatInline>
         </div>
       </div>
-
-      {/* RIGHT: Trade stats (24H VOL, BUYS, SELLS, NET) - COMMENTED OUT */}
-      {/*
-      {(() => {
-        const protocol = extractProtocolRaw(token);
-        const isMonad = protocol && (
-          protocol.includes('nad.fun') ||
-          protocol.includes('nadfun') ||
-          protocol.includes('flapsh') ||
-          protocol.includes('flap.sh') ||
-          protocol.includes('kuru')
-        );
-
-        if (isMonad) {
-          return null;
-        }
-
-        const buyVol24h = (token as any)?.total_buy_volume_24h ?? (token as any)?.total_buy_volume_usd ?? 0;
-        const sellVol24h = (token as any)?.total_sell_volume_24h ?? (token as any)?.total_sell_volume_usd ?? 0;
-        const buys24h = (token as any)?.total_buys_24h ?? (token as any)?.total_buys ?? 0;
-        const sells24h = (token as any)?.total_sells_24h ?? (token as any)?.total_sells ?? 0;
-        const volume24h = (token as any)?.volume_24h ?? (buyVol24h + sellVol24h);
-        const netVolume = (token as any)?.net_volume_usd ?? (buyVol24h - sellVol24h);
-
-        return (
-          <div className="flex items-center gap-3 ml-auto mr-2">
-            <StatInline label="24H VOL">
-              ${formatSmartNumber(volume24h)}
-            </StatInline>
-            <StatInline label="BUYS" accent="green">
-              {buys24h} / ${formatSmartNumber(buyVol24h)}
-            </StatInline>
-            <StatInline label="SELLS">
-              <span style={{ color: "#FF4D7F" }}>
-                {sells24h} / ${formatSmartNumber(sellVol24h)}
-              </span>
-            </StatInline>
-            <StatInline label="NET">
-              <span style={{ color: netVolume >= 0 ? AX.green : "#FF4D7F" }}>
-                {netVolume >= 0 ? "+" : ""}${formatSmartNumber(netVolume)}
-              </span>
-            </StatInline>
-          </div>
-        );
-      })()}
-      */}
 
       {/* RIGHT: actions */}
       {(() => {

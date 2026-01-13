@@ -61,7 +61,7 @@ const PLATFORM_UPDATES = [
     badge: "New Feature",
     badgeColor:
       "bg-emerald-500/20 text-emerald-400 border border-emerald-500/30",
-    image: "/interstate-logo.png",
+    image: "/interstate/logo.png",
   },
   {
     id: "update-2",
@@ -88,6 +88,7 @@ const navLinks = [
   { name: "Portfolio", href: "/portfolio" },
   { name: "Trending", href: "/discover" },
   { name: "Trackers", href: "/trackers" },
+  // { name: "Predictions", href: "/predictions" },
   // { name: "Perpetuals", href: "/construction" },
   // { name: "Yield", href: "/construction" },
   { name: "Referral", href: "/rewards" },
@@ -1141,15 +1142,16 @@ export default function Header({
           <div className="flex min-w-0 flex-1 items-center gap-2 overflow-hidden md:gap-3">
             <Link
               href={chainAwareHref("/pulse")}
-              className="flex flex-shrink-0 items-center text-xl tracking-tight select-none"
+              className="flex flex-shrink-0 items-center gap-1 tracking-tight select-none"
               style={{ color: AX.text }}
               title="Go to Trenches"
             >
               <img
-                src="/interstate-logo.png"
+                src="/interstate/logo.png"
                 alt="Interstate logo"
-                className="h-auto w-20 scale-75 sm:w-24 md:w-30 md:scale-90"
+                className="w-5 h-auto"
               />
+              <h3 className="!font-orbitron">interstate</h3>
             </Link>
 
             {/* Navigation container with arrows */}

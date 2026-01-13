@@ -41,7 +41,10 @@ const CodexHolders: React.FC<CodexHoldersProps> = ({ token, pairAddress, chain =
   }
 
   // Create a token object with at least the mint for HoldersTable
-  const tokenForTable = token || { mint: mintAddress } as Token;
+  // Ensure mint is always set even if token exists but token.mint is undefined
+  const tokenForTable = token
+    ? { ...token, mint: token.mint || mintAddress } as Token
+    : { mint: mintAddress } as Token;
 
   const [isLoading, setIsLoading] = useState(true);
   const [showBubblemap, setShowBubblemap] = useState(false);

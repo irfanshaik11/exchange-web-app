@@ -167,7 +167,8 @@ export default function TradePage() {
   const { params: tradeParams, setParams: setTradeParams, isReady: tradeParamsReady } = useTradePageQueryParams();
 
   const { token, isPolling, loading: pollingLoading, isHydrating, resolvedPairAddress } = useSingleTokenPolling(
-    typeof id === "string" ? id : undefined
+    typeof id === "string" ? id : undefined,
+    typeof _mint === "string" ? _mint : undefined // Pass mint from URL for pair address verification
   );
 
   const {
@@ -439,7 +440,11 @@ export default function TradePage() {
     // First priority: fresh token data from polling - but ONLY if it matches current id
     // MERGE with optimistic data so we don't lose query param values
     if (token) {
+      // IMPORTANT: If token has verified_pair_address flag, trust it even if pair_address
+      // doesn't match URL id. This happens when we correct a wrong pair address via
+      // the get-pair API verification.
       const tokenMatchesId =
+        token.verified_pair_address === true ||
         token.pair_address === idString ||
         token.mint === idString;
       if (tokenMatchesId) {
@@ -534,8 +539,8 @@ export default function TradePage() {
     return undefined;
   }, [displayToken?.mint, _mint, id]);
 
-  // Get holder summary, token info, and trades from unified WebSocket for token info section and dev markers
-  const { holderSummary, topTraders: wsTopTraders, trades: wsHistoricalTrades, tokenInfo: wsTokenInfo } = useSolanaTokenWebSocket({
+  // Get holder summary, token info, trades, and volume from unified WebSocket for token info section and dev markers
+  const { holderSummary, topTraders: wsTopTraders, trades: wsHistoricalTrades, tokenInfo: wsTokenInfo, volume: wsVolume } = useSolanaTokenWebSocket({
     mintAddress: displayToken?.mint || resolvedTokenMint,
     enabled: !!(displayToken?.mint || resolvedTokenMint),
   });
@@ -857,7 +862,7 @@ export default function TradePage() {
               }}
             >
               <div className="px-2 flex-shrink-0">
-                <TradeHeader token={validatedCorrectTokenData || displayToken} wsTokenInfo={wsTokenInfo} />
+                <TradeHeader token={validatedCorrectTokenData || displayToken} wsTokenInfo={wsTokenInfo} wsVolume={wsVolume} />
               </div>
 
               {/* Separator line after TradeHeader */}
@@ -1039,6 +1044,7 @@ export default function TradePage() {
                 quickBuySettings={quickBuySettings}
                 quickBuySide={quickBuySide}
                 initialStats={initialTradeData?.stats}
+                wsVolume={wsVolume}
               />
             </div>
 
@@ -1102,6 +1108,7 @@ export default function TradePage() {
                 setTradeParams={setTradeParams}
                 quickBuySettings={quickBuySettings}
                 quickBuySide={quickBuySide}
+                wsVolume={wsVolume}
               />
             </div>
           </div>

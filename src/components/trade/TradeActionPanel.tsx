@@ -18,6 +18,7 @@ import { showEnhancedToast, updateEnhancedToast } from "~/utils/enhancedToast";
 import { useUser } from "~/components/UserContext";
 import { executeSolanaMultiBuy, formatSolanaTxSummary, buildSolanaWalletAllocations } from "~/utils/solanaWalletAllocation";
 import useSolanaPositionWebSocket from "~/hooks/useSolanaPositionWebSocket";
+import type { SolanaTokenVolume } from "~/hooks/useSolanaTokenWebSocket";
 import { extractTokenImage } from "~/utils/images";
 import { SiSolana } from "react-icons/si";
 import useTokenStatsWebSocket from "~/hooks/useTokenStatsWebSocket";
@@ -30,7 +31,7 @@ import { LuChefHat } from "react-icons/lu";
 import { BiCandles } from "react-icons/bi";
 // import TokenAnalyticsPanel from "../TokenAnalyticsPanel";
 
-type TimeRange = "5m" | "1h" | "12h" | "24h";
+type TimeRange = "5m" | "1h" | "6h" | "24h";
 
 function cx(...parts: Array<string | false | null | undefined>) {
   return parts.filter(Boolean).join(" ");
@@ -99,6 +100,39 @@ async function fetchLatestMarketCap(pairAddress: string | undefined | null): Pro
   }
 }
 
+/**
+ * Fallback to fetch pair address from token service when not available locally
+ * Uses GET /v1/get-pair/{mint} endpoint with Redis cache-through pattern
+ */
+async function fetchPairAddressFromTokenService(mintAddress: string): Promise<string | null> {
+  if (!TOKEN_SERVICE_URL || !mintAddress) return null;
+
+  try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 10_000);
+    const response = await fetch(`${TOKEN_SERVICE_URL}/v1/get-pair/${mintAddress}`, {
+      signal: controller.signal,
+    });
+    clearTimeout(timeoutId);
+
+    if (!response.ok) {
+      console.warn(`⚠️ Token service get-pair responded ${response.status} for ${mintAddress}`);
+      return null;
+    }
+
+    const data = await response.json();
+    const pairAddress = data?.pair_address;
+    if (typeof pairAddress === "string" && pairAddress.length > 0) {
+      console.log(`✅ Fetched pair address from token service for ${mintAddress}: ${pairAddress}`);
+      return pairAddress;
+    }
+    return null;
+  } catch (error) {
+    console.warn("⚠️ Failed to fetch pair address from token service:", error);
+    return null;
+  }
+}
+
 function getCountsAndVol(t: any, side: "buy" | "sell", window: TimeRange) {
   const s = side;
   const count =
@@ -106,8 +140,8 @@ function getCountsAndVol(t: any, side: "buy" | "sell", window: TimeRange) {
       ? num(t[`total_${s}s_5m`])
       : window === "1h"
       ? num(t[`total_${s}s_1h`]) || num(t[`total_${s}s_60m`])
-      : window === "12h"
-      ? num(t[`total_${s}s_12h`]) || num(t[`total_${s}s_720m`])
+      : window === "6h"
+      ? num(t[`total_${s}s_6h`]) || num(t[`total_${s}s_360m`])
       : num(t[`total_${s}s_24h`]);
 
   const vol =
@@ -115,8 +149,8 @@ function getCountsAndVol(t: any, side: "buy" | "sell", window: TimeRange) {
       ? num(t[`total_${s}_volume_5m`])
       : window === "1h"
       ? num(t[`total_${s}_volume_1h`]) || num(t[`total_${s}_volume_60m`])
-      : window === "12h"
-      ? num(t[`total_${s}_volume_12h`]) || num(t[`total_${s}_volume_720m`])
+      : window === "6h"
+      ? num(t[`total_${s}_volume_6h`]) || num(t[`total_${s}_volume_360m`])
       : num(t[`total_${s}_volume_24h`]);
 
   return { count, vol };
@@ -880,15 +914,17 @@ interface TradeActionPanelProps {
   quickBuySettings?: any;
   quickBuySide?: "buy" | "sell";
   initialStats?: TokenStats | null; // Initial stats from REST API
+  wsVolume?: SolanaTokenVolume | null; // Volume data from unified WebSocket
 }
 
-const TradeActionPanel: React.FC<TradeActionPanelProps> = ({ 
-  token, 
+const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
+  token,
   tradeParams: externalTradeParams,
   setTradeParams: setExternalTradeParams,
   quickBuySettings: externalQuickBuySettings,
   quickBuySide: externalQuickBuySide,
-  initialStats
+  initialStats,
+  wsVolume
 }) => {
   // Only show skeleton if we have absolutely no token data (not even optimistic)
   // Allow tokens with just mint address (for tokens without metadata from search)
@@ -1382,9 +1418,44 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
   }, [targetMC, baseMarketCap]);
 
   // Real-time stats from WebSocket with fallback to static data
+  // Priority: wsVolume (unified token WebSocket) > wsData (token-stats WebSocket) > static token data
   const realTimeStats = useMemo(() => {
+    // SOL price for converting volume from SOL to USD (approximate)
+    const SOL_PRICE_USD = 200;
+
+    // First priority: Use wsVolume from unified token WebSocket (most reliable)
+    if (wsVolume) {
+      // Map timeRange to wsVolume keys
+      const volumeKey = timeRange === '5m' ? 'volume_5m'
+        : timeRange === '1h' ? 'volume_1h'
+        : timeRange === '6h' ? 'volume_6h'
+        : 'volume_24h';
+
+      const volumeData = wsVolume[volumeKey];
+      if (volumeData) {
+        // Convert SOL volumes to USD
+        const buyVolumeUsd = (volumeData.buy_volume_sol || 0) * SOL_PRICE_USD;
+        const sellVolumeUsd = (volumeData.sell_volume_sol || 0) * SOL_PRICE_USD;
+        const totalVolumeUsd = buyVolumeUsd + sellVolumeUsd;
+        const buyPct = totalVolumeUsd > 0 ? (buyVolumeUsd / totalVolumeUsd) * 100 : 50;
+        const sellPct = 100 - buyPct;
+        const netVolumeUsd = buyVolumeUsd - sellVolumeUsd;
+
+        return {
+          buys: volumeData.buy_count || 0,
+          sells: volumeData.sell_count || 0,
+          volume: totalVolumeUsd,
+          buyVolume: buyVolumeUsd,
+          sellVolume: sellVolumeUsd,
+          netVolume: netVolumeUsd,
+          buyPercentage: buyPct,
+          sellPercentage: sellPct,
+        };
+      }
+    }
+
+    // Second priority: Use wsData from token-stats WebSocket
     if (wsData && wsData.data && wsData.data.timeframes) {
-      // Use WebSocket data directly since timeframes now match
       const wsTimeframe = timeRange;
       const stats = getFormattedStats(wsTimeframe);
       return {
@@ -1397,27 +1468,27 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
         buyPercentage: stats.buyPercentage,
         sellPercentage: stats.sellPercentage,
       };
-    } else {
-      // Fallback to static data
-      const buyStats = getCountsAndVol(token as any, "buy", timeRange);
-      const sellStats = getCountsAndVol(token as any, "sell", timeRange);
-      const totalVol = (buyStats.vol ?? 0) + (sellStats.vol ?? 0);
-      const buyPct = totalVol ? (buyStats.vol / totalVol) * 100 : 50;
-      const sellPct = 100 - buyPct;
-      const netVol = (buyStats.vol ?? 0) - (sellStats.vol ?? 0);
-      
-      return {
-        buys: buyStats.count,
-        sells: sellStats.count,
-        volume: totalVol,
-        buyVolume: buyStats.vol,
-        sellVolume: sellStats.vol,
-        netVolume: netVol,
-        buyPercentage: buyPct,
-        sellPercentage: sellPct,
-      };
     }
-  }, [wsData, timeRange, getFormattedStats, token]);
+
+    // Fallback: Use static data from token object
+    const buyStats = getCountsAndVol(token as any, "buy", timeRange);
+    const sellStats = getCountsAndVol(token as any, "sell", timeRange);
+    const totalVol = (buyStats.vol ?? 0) + (sellStats.vol ?? 0);
+    const buyPct = totalVol ? (buyStats.vol / totalVol) * 100 : 50;
+    const sellPct = 100 - buyPct;
+    const netVol = (buyStats.vol ?? 0) - (sellStats.vol ?? 0);
+
+    return {
+      buys: buyStats.count,
+      sells: sellStats.count,
+      volume: totalVol,
+      buyVolume: buyStats.vol,
+      sellVolume: sellStats.vol,
+      netVolume: netVol,
+      buyPercentage: buyPct,
+      sellPercentage: sellPct,
+    };
+  }, [wsVolume, wsData, timeRange, getFormattedStats, token]);
 
   // Extract stats for easier access
   const { buys, sells, volume, buyVolume, sellVolume, netVolume, buyPercentage, sellPercentage } = realTimeStats;
@@ -2135,6 +2206,19 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
       setIsLoading(true);
       setSuccessMessage(null);
 
+      // Resolve pool address with fallback to token service API
+      let resolvedPoolAddress = effectivePoolAddress;
+      if (!resolvedPoolAddress && token.mint) {
+        console.log(`[TradeActionPanel] Pool address empty, fetching from token service for ${token.mint}`);
+        const fetchedPairAddress = await fetchPairAddressFromTokenService(token.mint);
+        if (fetchedPairAddress) {
+          resolvedPoolAddress = fetchedPairAddress;
+          console.log(`[TradeActionPanel] Resolved pool address from token service: ${resolvedPoolAddress}`);
+        } else {
+          console.warn(`[TradeActionPanel] Failed to resolve pool address for ${token.mint}`);
+        }
+      }
+
       if (tab === "limit") {
         if (!amount || !targetMC) {
           setSuccessMessage(null);
@@ -2207,7 +2291,7 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
               : undefined;
 
           let latestMarketCap: number | null = tokenServiceMarketCap ?? baseMarketCap;
-          if (effectivePoolAddress) {
+          if (resolvedPoolAddress) {
             const refreshed = await refreshTokenServiceData(true);
             if (refreshed !== null) {
               latestMarketCap = refreshed;
@@ -2252,8 +2336,8 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
               tokenName: token.name,
               tokenSymbol: token.symbol,
               tokenDecimals: token.decimals,
-              poolAddress: effectivePoolAddress,
-              pairAddress: token.pair_address || "",
+              poolAddress: resolvedPoolAddress,
+              pairAddress: token.pair_address || resolvedPoolAddress || "",
               poolType: computedPoolType,
               slippage: slippageValue,
               priorityFee: priorityFeeValue,
@@ -2565,7 +2649,7 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
       };
 
       try {
-        const poolAddress = effectivePoolAddress;
+        const poolAddress = resolvedPoolAddress;
         const baseMint = token.mint || '';
         const quoteMint = SOL_MINT_ADDRESS;
 
@@ -2575,7 +2659,7 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
           quoteMint,
           amountSOL: buyAmount,
           poolType,
-        originalPairAddress: token.pair_address,
+        originalPairAddress: token.pair_address || resolvedPoolAddress,
         slippage: settings.maxSlippage,
         priorityFee: settings.priority,
           bribe: settings.bribe,
@@ -2753,31 +2837,28 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
       <div className="px-3 pt-2 pb-2 border-neutral-800">
         <div className="mx-auto w-full max-w-xl overflow-hidden">
           <div className="flex rounded-xl border border-neutral-700">
-            {(["5m", "1h", "12h", "24h"] as TimeRange[]).map((rng) => {
-              // Get change from WebSocket data if available, otherwise fallback to token properties
-              let ch = 0;
-              if (wsData && wsData.data && wsData.data.timeframes) {
-                // Map from WebSocket timeframes data to timeframe changes
-                // Use change property if available, otherwise fallback to 0
-                const changeMap: Record<TimeRange, number> = {
-                  "5m": Number(wsData.data.timeframes["5m"]?.change ?? 0),
-                  "1h": Number(wsData.data.timeframes["1h"]?.change ?? 0),
-                  "12h": Number(wsData.data.timeframes["12h"]?.change ?? 0),
-                  "24h": Number(wsData.data.timeframes["24h"]?.change ?? 0),
-                };
-                ch = changeMap[rng] ?? 0;
-              } else {
-                // Fallback to token properties
-                const changeMap: Record<TimeRange, number> = {
-                  "5m": Number((token as any).price_change_5m ?? (token as any).change_5m ?? 0),
-                  "1h": Number((token as any).price_change_1h ?? (token as any).change_1h ?? 0),
-                  "12h": Number((token as any).price_change_12h ?? (token as any).change_12h ?? 0),
-                  "24h": Number((token as any).price_change_24h ?? (token as any).change_24h ?? 0),
-                };
-                ch = changeMap[rng] ?? 0;
-              }
-              const isUp = ch >= 0;
-              const abs = Math.abs(ch);
+            {(["5m", "1h", "6h", "24h"] as TimeRange[]).map((rng) => {
+              // NOTE: Percentage change display commented out - backend needs to add price_change_percent to volume data
+              // let ch = 0;
+              // if (wsData && wsData.data && wsData.data.timeframes) {
+              //   const changeMap: Record<TimeRange, number> = {
+              //     "5m": Number(wsData.data.timeframes["5m"]?.change ?? 0),
+              //     "1h": Number(wsData.data.timeframes["1h"]?.change ?? 0),
+              //     "6h": Number(wsData.data.timeframes["6h"]?.change ?? 0),
+              //     "24h": Number(wsData.data.timeframes["24h"]?.change ?? 0),
+              //   };
+              //   ch = changeMap[rng] ?? 0;
+              // } else {
+              //   const changeMap: Record<TimeRange, number> = {
+              //     "5m": Number((token as any).price_change_5m ?? (token as any).change_5m ?? 0),
+              //     "1h": Number((token as any).price_change_1h ?? (token as any).change_1h ?? 0),
+              //     "6h": Number((token as any).price_change_6h ?? (token as any).change_6h ?? 0),
+              //     "24h": Number((token as any).price_change_24h ?? (token as any).change_24h ?? 0),
+              //   };
+              //   ch = changeMap[rng] ?? 0;
+              // }
+              // const isUp = ch >= 0;
+              // const abs = Math.abs(ch);
 
               return (
                 <button
@@ -2785,7 +2866,7 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
                   onClick={() => setTimeRange(rng)}
                   aria-pressed={timeRange === rng}
                   className={cx(
-                    "flex-1 text-left flex flex-col items-start justify-center cursor-pointer px-2 py-1 border-neutral-700",
+                    "flex-1 text-center flex flex-col items-center justify-center cursor-pointer px-2 py-2 border-neutral-700",
                     timeRange === rng ? "bg-neutral-700 ring-1 ring-white/10" : "hover:bg-neutral-700",
                     rng == "5m" ? `rounded-tl-xl rounded-bl-xl` : ``,
                     rng == "24h" ? `rounded-tr-xl rounded-br-xl` : `border-r`
@@ -2799,10 +2880,12 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
                   >
                     {rng}
                   </span>
+                  {/* Percentage display - uncomment when backend adds price_change_percent to volume data
                   <span className={cx("text-[10px] tabular-nums", isUp ? "text-[#70E0B0]" : "text-[#FF4D7F]")}>
                     {isUp ? "+" : "-"}
                     {abs.toFixed(2)}%
                   </span>
+                  */}
                 </button>
               );
             })}

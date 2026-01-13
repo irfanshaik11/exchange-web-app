@@ -35,6 +35,7 @@ import { normalizeMonadAddress } from "~/utils/normalizeMonadAddress";
 import { acknowledgeWalletExport } from "~/utils/api";
 import { redistributeWalletFunds } from "~/utils/api";
 import { deleteUserWallet } from "~/utils/api";
+import { PredictionPositions } from "~/components/predictions";
 
 // Interactive Balance Chart Component
 const BalanceChart = ({ 
@@ -234,7 +235,7 @@ const ChainIcon = ({ chain = 'sol', size = 'small' }: { chain?: string; size?: '
 // SOL icon component for inline use (kept for backward compatibility)
 const SolIcon = () => <ChainIcon chain="sol" />;
 
-const spotTabs = ["Active Positions", /* "History", */ "Top 100", "Activity"];
+const spotTabs = ["Active Positions", /* "History", */ "Top 100", "Activity", "Predictions"];
 
 // Token metadata cache interface
 interface TokenMetadataCache extends UnifiedTokenMetadata {
@@ -278,7 +279,7 @@ const normalizeWalletFromApi = (
   let label = typeof wallet?.label === "string" ? wallet.label : undefined;
   if (!label) {
     if (typeof fallbackIndex === "number") {
-      label = fallbackIndex === 0 ? "Narrative Main" : `Wallet ${fallbackIndex + 1}`;
+      label = fallbackIndex === 0 ? "Interstate Main" : `Wallet ${fallbackIndex + 1}`;
     } else {
       label = "Wallet";
     }
@@ -3546,6 +3547,14 @@ export default function PortfolioPage() {
                         />
                       </div>
                     ))}
+                  {activeSpotTab === 3 && (
+                    <div className="w-full">
+                      <PredictionPositions
+                        userPublicKey={user?.publicKey}
+                        showEmptyState={!!user?.id}
+                      />
+                    </div>
+                  )}
                 </div>
               </div>
             </div>

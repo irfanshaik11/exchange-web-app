@@ -11,6 +11,7 @@ import { getPoolTypeFromToken } from "~/utils/poolTypeDetection";
 import type { PositionRow } from "~/utils/functions";
 import { useQuickBuy } from "~/components/QuickBuyContext";
 import HighSlippageWarningDialog from "./HighSlippageWarningDialog";
+import { fetchVerifiedPairAddress } from "~/hooks/useSingleTokenPolling";
 
 interface SellPopupProps {
   isOpen: boolean;
@@ -188,14 +189,27 @@ const SellPopup: React.FC<SellPopupProps> = ({ isOpen, onClose, position, tokenM
     setMessage(null);
 
     try {
+      // CRITICAL: Verify the pair address from the token service before selling
+      let verifiedPoolAddress = effectivePoolAddress;
+      if (position.tokenAddress) {
+        console.log(`[SellPopup] Verifying pair address for sell: ${position.tokenAddress}`);
+        const fetchedAddress = await fetchVerifiedPairAddress(position.tokenAddress);
+        if (fetchedAddress) {
+          if (fetchedAddress !== effectivePoolAddress) {
+            console.log(`[SellPopup] Pair address mismatch! Local: ${effectivePoolAddress}, Verified: ${fetchedAddress}`);
+          }
+          verifiedPoolAddress = fetchedAddress;
+        }
+      }
+
       const sellParams = {
         tokenAddress: position.tokenAddress,
         percentageToSell: Number(amount),
-        poolAddress: effectivePoolAddress,
+        poolAddress: verifiedPoolAddress,
         baseMint: position.tokenAddress,
         quoteMint: SOL_MINT_ADDRESS,
         poolType,
-        originalPairAddress: position.pairAddress,
+        originalPairAddress: verifiedPoolAddress, // Use verified address
         // Preset trading parameters
         slippage: (settings.maxSlippage || 0.2) * 100, // Convert decimal to percentage (0.2 -> 20)
         priorityFee: settings.priority || 0.001,
