@@ -45,6 +45,7 @@ export function useReferralAccess() {
 const STORAGE_FLAG_KEY = "referralAccess.granted"; // legacy (session)
 const STORAGE_META_KEY = "referralAccess.meta"; // legacy (session)
 const LS_KEY_PREFIX = "referralAccess.granted.user:"; // persistent per-user
+const LS_BYPASS_KEY = "referralAccess.bypass"; // user-independent bypass (for X button)
 const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL;
 const buildWalletLoginMessage = () =>
   `Login to Interstate with nonce: ${Date.now()}`;
@@ -112,6 +113,10 @@ function clearPersistedAccess() {
 function hasStoredAccess(userId?: string | null): boolean {
   if (typeof window === "undefined") return false;
   try {
+    // Check user-independent bypass flag first (set by X button)
+    const bypass = window.localStorage.getItem(LS_BYPASS_KEY) === "true";
+    if (bypass) return true;
+
     // Account-specific: only treat as granted when it matches the current user
     if (!userId) return false;
 
@@ -906,7 +911,13 @@ export function ReferralAccessGate({
                 <button
                   type="button"
                   onClick={() => {
-                    // Explicitly persist with user.id (same as handleSubmit does for real codes)
+                    // Set user-independent bypass flag (persists across refreshes regardless of user.id)
+                    try {
+                      window.localStorage.setItem(LS_BYPASS_KEY, "true");
+                    } catch (e) {
+                      console.warn("Failed to set bypass flag", e);
+                    }
+                    // Also persist with user.id if available
                     if (user?.id) {
                       persistAccess(user.id);
                     }
