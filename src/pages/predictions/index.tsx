@@ -14,7 +14,8 @@ import {
   type PredictionMarket,
   type SortOption,
 } from '../../components/predictions';
-import useDFlowMarkets from '~/hooks/useDFlowMarkets';
+import useUnifiedPredictionMarkets from '~/hooks/useUnifiedPredictionMarkets';
+import DataSourceSwitcher, { type PredictionDataSource } from '~/components/predictions/DataSourceSwitcher';
 
 // Vibrant color palette
 const AX = {
@@ -57,27 +58,30 @@ export default function PredictionsPage() {
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [selectedSort, setSelectedSort] = useState<SortOption>('hot');
   const [searchQuery, setSearchQuery] = useState('');
+  const [dataSource, setDataSource] = useState<PredictionDataSource>('all');
 
-  // Fetch markets from DFlow API
+  // Fetch markets from unified hook (dFlow + Polymarket)
   const {
-    markets: dflowMarkets,
+    markets: unifiedMarkets,
     isLoading,
     error,
     refetch,
     totalVolume: apiTotalVolume,
     totalMarkets,
-  } = useDFlowMarkets({
-    enabled: true,
+    dflowCount,
+    polymarketCount,
+  } = useUnifiedPredictionMarkets({
+    source: dataSource,
     limit: 100,
     refreshInterval: 30000, // Refresh every 30 seconds
   });
 
   // Use API markets or fallback
   const allMarkets = useMemo(() => {
-    if (dflowMarkets.length > 0) return dflowMarkets;
+    if (unifiedMarkets.length > 0) return unifiedMarkets;
     if (isLoading) return FALLBACK_MARKETS;
     return [];
-  }, [dflowMarkets, isLoading]);
+  }, [unifiedMarkets, isLoading]);
 
   // Calculate category counts from live data
   const categoryCounts = useMemo(() => {
@@ -267,6 +271,22 @@ export default function PredictionsPage() {
             </motion.div>
           )}
 
+          {/* Data Source Switcher */}
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.5, delay: 0.15 }}
+            className="mb-4 flex justify-center"
+          >
+            <DataSourceSwitcher
+              source={dataSource}
+              onSourceChange={setDataSource}
+              dflowCount={dflowCount}
+              polymarketCount={polymarketCount}
+              showCounts={true}
+            />
+          </motion.div>
+
           {/* Filters - Centered and Horizontally Scrollable */}
           <motion.div
             initial={{ opacity: 0, y: 20 }}
@@ -336,7 +356,7 @@ export default function PredictionsPage() {
             ) : (
               <AnimatePresence mode="wait">
                 <motion.div
-                  key={`${selectedCategory}-${selectedSort}`}
+                  key={`${selectedCategory}-${selectedSort}-${dataSource}`}
                   initial={{ opacity: 0 }}
                   animate={{ opacity: 1 }}
                   exit={{ opacity: 0 }}
@@ -344,7 +364,12 @@ export default function PredictionsPage() {
                   className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4"
                 >
                   {filteredMarkets.map((market, index) => (
-                    <PredictionCard key={market.ticker} market={market} index={index} />
+                    <PredictionCard
+                      key={`${market.source || 'dflow'}-${market.ticker}`}
+                      market={market}
+                      index={index}
+                      showSource={dataSource === 'all'}
+                    />
                   ))}
                 </motion.div>
               </AnimatePresence>

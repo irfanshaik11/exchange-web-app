@@ -901,7 +901,20 @@ export function ReferralAccessGate({
 
           <div className="relative z-[9999] w-full max-w-lg px-6 md:px-0">
             <div className="rounded-3xl bg-gradient-to-br from-neutral-900/95 via-neutral-900/80 to-neutral-950/90 p-[1px] shadow-[0_40px_120px_rgba(16,185,129,0.12)]">
-              <div className="rounded-[calc(1.5rem-1px)] bg-neutral-950/95 p-8 md:p-10">
+              <div className="rounded-[calc(1.5rem-1px)] bg-neutral-950/95 p-8 md:p-10 relative">
+                {/* Close Button */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    grantAccess();
+                  }}
+                  className="absolute top-4 right-4 p-2 rounded-full text-neutral-400 hover:text-white hover:bg-neutral-800/50 transition-colors"
+                  aria-label="Close"
+                >
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
                 <div className="mb-6 flex items-center justify-between">
                   <div>
                     <p className="text-xs uppercase tracking-[0.35em] text-emerald-400/80">

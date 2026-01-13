@@ -17,14 +17,18 @@ import { BiWallet, BiCopy } from 'react-icons/bi';
 import Header from '../../components/Header';
 import Footer from '../../components/Footer';
 import { useDFlowMarket, useDFlowTrades, useDFlowOrderBook, useDFlowPriceHistory, useDFlowRealtimePrices, formatVolume, formatOpenInterest, getDFlowQuote, getDFlowSwap } from '~/hooks/useDFlowMarkets';
+import { usePolymarketMarket, usePolymarketOrderBook, usePolymarketPriceHistory, usePolymarketComments, usePolymarketHolders, usePolymarketActivity } from '~/hooks/usePolymarketMarkets';
+import type { PolymarketComment, PolymarketHolder, PolymarketActivity } from '~/hooks/usePolymarketMarkets';
 import type { ExtendedPredictionMarket } from '~/hooks/useDFlowMarkets';
 import { useUser } from '~/components/UserContext';
 import { useTurnkeySigner } from '~/components/TurnkeySignerContext';
 import { showEnhancedToast, updateEnhancedToast } from '~/utils/enhancedToast';
+import { SourceBadge } from '~/components/predictions';
 
 // Lazy load heavy components
 const PredictionPositions = dynamic(() => import('~/components/predictions/PredictionPositions'), { ssr: false });
 const TradingViewPredictionChart = dynamic(() => import('~/components/predictions/TradingViewPredictionChart'), { ssr: false });
+const PolymarketChart = dynamic(() => import('~/components/predictions/PolymarketChart'), { ssr: false });
 
 // USDC mint on Solana
 const USDC_MINT = 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v';
@@ -51,8 +55,9 @@ const AX = {
   purple: "#818CF8",
 };
 
-// Prediction-specific tabs (Order Book is now inline with chart)
-const PREDICTION_TABS = ['Trades', 'Positions'];
+// Prediction-specific tabs
+const DFLOW_TABS = ['Trades', 'Positions'];
+const POLYMARKET_TABS = ['Activity', 'Comments', 'Holders', 'Positions'];
 
 // Helpers
 const copyToClipboard = (text: string) => navigator.clipboard.writeText(text);
@@ -96,7 +101,12 @@ const MarketImage: React.FC<{ src?: string; alt: string; size?: 'sm' | 'md' | 'l
 };
 
 // Prediction Header Component (similar to TradeHeader)
-const PredictionHeader: React.FC<{ market: ExtendedPredictionMarket; yesPrice: number; noPrice: number }> = ({ market, yesPrice, noPrice }) => {
+const PredictionHeader: React.FC<{
+  market: ExtendedPredictionMarket;
+  yesPrice: number;
+  noPrice: number;
+  source?: 'dflow' | 'polymarket';
+}> = ({ market, yesPrice, noPrice, source }) => {
   const isActive = market.status === 'active';
   const isResolved = market.status === 'resolved';
 
@@ -116,6 +126,19 @@ const PredictionHeader: React.FC<{ market: ExtendedPredictionMarket; yesPrice: n
             <span className="text-xs font-mono px-1.5 py-0.5 rounded" style={{ backgroundColor: AX.surface, color: AX.muted }}>
               {market.ticker}
             </span>
+            {/* Source badge */}
+            {source && (
+              <span
+                className="text-[9px] px-1.5 py-0.5 rounded font-medium uppercase tracking-wider"
+                style={{
+                  backgroundColor: source === 'polymarket' ? `${AX.purple}20` : `${AX.green}20`,
+                  color: source === 'polymarket' ? AX.purple : AX.green,
+                  border: `1px solid ${source === 'polymarket' ? AX.purple : AX.green}40`,
+                }}
+              >
+                {source === 'polymarket' ? 'Polymarket' : 'dFlow'}
+              </span>
+            )}
           </div>
           <div className="flex items-center gap-2 text-xs" style={{ color: AX.muted }}>
             {isResolved ? (
@@ -161,12 +184,13 @@ const PredictionHeader: React.FC<{ market: ExtendedPredictionMarket; yesPrice: n
 
 // Prediction Tabs Component (similar to TradeTabs)
 const PredictionTabs: React.FC<{
+  tabs: string[];
   selectedTab: string;
   setSelectedTab: (tab: string) => void;
-}> = ({ selectedTab, setSelectedTab }) => {
+}> = ({ tabs, selectedTab, setSelectedTab }) => {
   return (
     <div className="flex gap-4 pt-2 text-xs items-center">
-      {PREDICTION_TABS.map(tab => (
+      {tabs.map(tab => (
         <button
           key={tab}
           className={`px-3 py-1 font-semibold ${selectedTab === tab ? 'border-b-4 border-[#70E0B0] text-white' : 'text-neutral-400'}`}
@@ -175,6 +199,323 @@ const PredictionTabs: React.FC<{
           {tab}
         </button>
       ))}
+    </div>
+  );
+};
+
+// Comments Component for Polymarket
+const CommentsSection: React.FC<{ comments: PolymarketComment[]; isLoading: boolean; eventSlug?: string }> = ({ comments, isLoading, eventSlug }) => {
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center py-12">
+        <HiOutlineRefresh className="w-5 h-5 animate-spin" style={{ color: AX.muted }} />
+      </div>
+    );
+  }
+
+  if (!comments || comments.length === 0) {
+    return (
+      <div className="flex flex-col items-center justify-center py-12 px-4">
+        <p className="text-sm mb-3" style={{ color: AX.muted }}>Comments not available via API</p>
+        {eventSlug && (
+          <a
+            href={`https://polymarket.com/event/${eventSlug}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-medium transition-colors hover:opacity-80"
+            style={{ backgroundColor: AX.purple, color: '#fff' }}
+          >
+            <HiOutlineExternalLink className="w-4 h-4" />
+            View comments on Polymarket
+          </a>
+        )}
+      </div>
+    );
+  }
+
+  // Sort comments by date (newest first) and show all
+  const sortedComments = [...comments].sort(
+    (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+  );
+
+  return (
+    <div className="h-full overflow-y-auto p-3 space-y-3">
+      <div className="text-xs mb-2" style={{ color: AX.muted }}>
+        {sortedComments.length} comment{sortedComments.length !== 1 ? 's' : ''}
+      </div>
+      {sortedComments.map((comment) => (
+        <div
+          key={comment.id}
+          className="p-3 rounded-lg"
+          style={{ backgroundColor: AX.surface, border: `1px solid ${AX.border}` }}
+        >
+          <div className="flex items-center gap-2 mb-2">
+            {comment.profile?.profileImage ? (
+              <img
+                src={comment.profile.profileImage}
+                alt=""
+                className="w-6 h-6 rounded-full"
+              />
+            ) : (
+              <div
+                className="w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold"
+                style={{ backgroundColor: AX.border, color: AX.muted }}
+              >
+                {(comment.profile?.name || comment.profile?.pseudonym || 'A').charAt(0).toUpperCase()}
+              </div>
+            )}
+            <span className="text-xs font-medium" style={{ color: AX.text }}>
+              {comment.profile?.name || comment.profile?.pseudonym || comment.userAddress?.slice(0, 8) || 'Anonymous'}
+            </span>
+            <span className="text-xs" style={{ color: AX.muted }}>
+              {new Date(comment.createdAt).toLocaleDateString()}
+            </span>
+          </div>
+          <p className="text-sm whitespace-pre-wrap" style={{ color: AX.text }}>{comment.body}</p>
+          {comment.reactionCount > 0 && (
+            <div className="mt-2 text-xs" style={{ color: AX.muted }}>
+              👍 {comment.reactionCount}
+            </div>
+          )}
+        </div>
+      ))}
+    </div>
+  );
+};
+
+// Holders Component for Polymarket - with YES/NO tabs
+const HoldersSection: React.FC<{ holders: PolymarketHolder[]; isLoading: boolean }> = ({ holders, isLoading }) => {
+  const [selectedOutcome, setSelectedOutcome] = useState<'yes' | 'no'>('yes');
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center py-12">
+        <HiOutlineRefresh className="w-5 h-5 animate-spin" style={{ color: AX.muted }} />
+      </div>
+    );
+  }
+
+  if (!holders || holders.length === 0) {
+    return (
+      <div className="flex items-center justify-center py-12">
+        <p className="text-sm" style={{ color: AX.muted }}>No holder data available</p>
+      </div>
+    );
+  }
+
+  const formatAmount = (amount: number): string => {
+    if (amount >= 1_000_000) return `${(amount / 1_000_000).toFixed(2)}M`;
+    if (amount >= 1_000) return `${(amount / 1_000).toFixed(1)}K`;
+    return amount.toFixed(0);
+  };
+
+  // Separate holders by outcome
+  const yesHolders = holders.filter(h => h.outcome === 'yes').sort((a, b) => b.amount - a.amount);
+  const noHolders = holders.filter(h => h.outcome === 'no').sort((a, b) => b.amount - a.amount);
+  const displayHolders = selectedOutcome === 'yes' ? yesHolders : noHolders;
+
+  return (
+    <div className="h-full flex flex-col">
+      {/* YES/NO Toggle */}
+      <div className="flex-shrink-0 flex gap-2 p-3 border-b" style={{ borderColor: AX.border }}>
+        <button
+          onClick={() => setSelectedOutcome('yes')}
+          className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium transition-all"
+          style={{
+            backgroundColor: selectedOutcome === 'yes' ? AX.greenBg : 'transparent',
+            border: `1px solid ${selectedOutcome === 'yes' ? AX.green : AX.border}`,
+            color: selectedOutcome === 'yes' ? AX.green : AX.muted,
+          }}
+        >
+          <HiOutlineCheckCircle className="w-3.5 h-3.5" />
+          YES Holders ({yesHolders.length})
+        </button>
+        <button
+          onClick={() => setSelectedOutcome('no')}
+          className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium transition-all"
+          style={{
+            backgroundColor: selectedOutcome === 'no' ? AX.redBg : 'transparent',
+            border: `1px solid ${selectedOutcome === 'no' ? AX.red : AX.border}`,
+            color: selectedOutcome === 'no' ? AX.red : AX.muted,
+          }}
+        >
+          <HiOutlineXCircle className="w-3.5 h-3.5" />
+          NO Holders ({noHolders.length})
+        </button>
+      </div>
+
+      {/* Scrollable table */}
+      <div className="flex-1 overflow-y-auto">
+        {displayHolders.length === 0 ? (
+          <div className="flex items-center justify-center py-12">
+            <p className="text-sm" style={{ color: AX.muted }}>
+              No {selectedOutcome.toUpperCase()} holders found
+            </p>
+          </div>
+        ) : (
+          <table className="w-full text-xs">
+            <thead className="sticky top-0" style={{ backgroundColor: AX.bg }}>
+              <tr style={{ borderBottom: `1px solid ${AX.border}` }}>
+                <th className="text-left py-2 px-3 font-medium" style={{ color: AX.muted }}>#</th>
+                <th className="text-left py-2 px-3 font-medium" style={{ color: AX.muted }}>Holder</th>
+                <th className="text-right py-2 px-3 font-medium" style={{ color: AX.muted }}>Shares</th>
+              </tr>
+            </thead>
+            <tbody>
+              {displayHolders.map((holder, idx) => (
+                <tr key={`${holder.proxyWallet}-${idx}`} style={{ borderBottom: `1px solid ${AX.border}` }}>
+                  <td className="py-2 px-3" style={{ color: AX.muted }}>{idx + 1}</td>
+                  <td className="py-2 px-3">
+                    <div className="flex items-center gap-2">
+                      {holder.profileImage ? (
+                        <img src={holder.profileImage} alt="" className="w-5 h-5 rounded-full" />
+                      ) : (
+                        <div
+                          className="w-5 h-5 rounded-full flex items-center justify-center text-[10px]"
+                          style={{ backgroundColor: AX.border, color: AX.muted }}
+                        >
+                          {(holder.name || holder.pseudonym || 'A').charAt(0).toUpperCase()}
+                        </div>
+                      )}
+                      <span style={{ color: AX.text }}>
+                        {holder.name || holder.pseudonym || `${holder.proxyWallet.slice(0, 6)}...`}
+                      </span>
+                    </div>
+                  </td>
+                  <td className="py-2 px-3 text-right" style={{ color: selectedOutcome === 'yes' ? AX.green : AX.red }}>
+                    {formatAmount(holder.amount)}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
+    </div>
+  );
+};
+
+// Activity Component for Polymarket
+const ActivitySection: React.FC<{ activities: PolymarketActivity[]; isLoading: boolean }> = ({ activities, isLoading }) => {
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center py-12">
+        <HiOutlineRefresh className="w-5 h-5 animate-spin" style={{ color: AX.muted }} />
+      </div>
+    );
+  }
+
+  if (!activities || activities.length === 0) {
+    return (
+      <div className="flex items-center justify-center py-12">
+        <p className="text-sm" style={{ color: AX.muted }}>No recent activity</p>
+      </div>
+    );
+  }
+
+  const formatAmount = (amount: number | undefined): string => {
+    if (!amount) return '-';
+    if (amount >= 1_000_000) return `$${(amount / 1_000_000).toFixed(2)}M`;
+    if (amount >= 1_000) return `$${(amount / 1_000).toFixed(1)}K`;
+    return `$${amount.toFixed(2)}`;
+  };
+
+  const formatTime = (timestamp: string): string => {
+    const date = new Date(timestamp);
+    const now = new Date();
+    const diffMs = now.getTime() - date.getTime();
+    const diffMins = Math.floor(diffMs / 60000);
+    const diffHours = Math.floor(diffMs / 3600000);
+    const diffDays = Math.floor(diffMs / 86400000);
+
+    if (diffMins < 1) return 'Just now';
+    if (diffMins < 60) return `${diffMins}m ago`;
+    if (diffHours < 24) return `${diffHours}h ago`;
+    if (diffDays < 7) return `${diffDays}d ago`;
+    return date.toLocaleDateString();
+  };
+
+  const getActivityIcon = (type: string, side?: string) => {
+    if (type === 'trade' || type === 'buy' || type === 'sell') {
+      const isBuy = side === 'buy' || type === 'buy';
+      return (
+        <div
+          className="w-7 h-7 rounded-full flex items-center justify-center"
+          style={{ backgroundColor: isBuy ? AX.greenBg : AX.redBg }}
+        >
+          {isBuy ? (
+            <HiOutlineCheckCircle className="w-4 h-4" style={{ color: AX.green }} />
+          ) : (
+            <HiOutlineXCircle className="w-4 h-4" style={{ color: AX.red }} />
+          )}
+        </div>
+      );
+    }
+    return (
+      <div
+        className="w-7 h-7 rounded-full flex items-center justify-center"
+        style={{ backgroundColor: AX.surface }}
+      >
+        <HiOutlineLightningBolt className="w-4 h-4" style={{ color: AX.muted }} />
+      </div>
+    );
+  };
+
+  const getActivityDescription = (activity: PolymarketActivity): string => {
+    const type = activity.type?.toLowerCase() || '';
+    const side = activity.side?.toLowerCase() || '';
+    const outcome = activity.outcome || '';
+
+    if (type === 'trade' || type === 'buy' || type === 'sell') {
+      const action = side === 'buy' || type === 'buy' ? 'Bought' : 'Sold';
+      return `${action} ${outcome.toUpperCase()}`;
+    }
+    return type.charAt(0).toUpperCase() + type.slice(1);
+  };
+
+  return (
+    <div className="h-full overflow-y-auto">
+      <div className="p-3 space-y-2">
+        {activities.map((activity, idx) => (
+          <div
+            key={activity.id || idx}
+            className="flex items-center gap-3 p-3 rounded-lg"
+            style={{ backgroundColor: AX.surface, border: `1px solid ${AX.border}` }}
+          >
+            {/* Activity Icon */}
+            {getActivityIcon(activity.type, activity.side)}
+
+            {/* Activity Details */}
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2">
+                {activity.profileImage ? (
+                  <img src={activity.profileImage} alt="" className="w-4 h-4 rounded-full" />
+                ) : null}
+                <span className="text-xs font-medium truncate" style={{ color: AX.text }}>
+                  {activity.name || activity.pseudonym || activity.proxyWallet?.slice(0, 8) || 'Anonymous'}
+                </span>
+              </div>
+              <p className="text-xs mt-0.5" style={{ color: AX.muted }}>
+                {getActivityDescription(activity)}
+                {activity.size && ` · ${activity.size.toLocaleString()} shares`}
+                {activity.price && ` @ ${(activity.price * 100).toFixed(1)}¢`}
+              </p>
+            </div>
+
+            {/* Amount & Time */}
+            <div className="text-right flex-shrink-0">
+              {activity.amount && (
+                <div className="text-xs font-medium" style={{ color: AX.text }}>
+                  {formatAmount(activity.amount)}
+                </div>
+              )}
+              <div className="text-[10px]" style={{ color: AX.muted }}>
+                {formatTime(activity.timestamp)}
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
     </div>
   );
 };
@@ -241,11 +582,24 @@ const TradesTable: React.FC<{ trades: any[]; isLoading: boolean }> = ({ trades, 
 
 export default function MarketDetailPage() {
   const router = useRouter();
-  const { ticker } = router.query;
+  const { ticker, source } = router.query;
   const tickerString = typeof ticker === 'string' ? ticker : '';
+  const isPolymarket = source === 'polymarket';
+
+  // Wait for router to be ready before processing query params
+  // This prevents "Market not found" from flashing while Next.js hydrates
+  const isRouterReady = router.isReady;
 
   const [selectedTab, setSelectedTab] = useState("Trades");
+  const [chartInterval, setChartInterval] = useState('1W');
   const [selectedSide, setSelectedSide] = useState<'yes' | 'no'>('yes');
+
+  // Update selected tab when source changes (after router is ready)
+  useEffect(() => {
+    if (isRouterReady) {
+      setSelectedTab(isPolymarket ? "Activity" : "Trades");
+    }
+  }, [isRouterReady, isPolymarket]);
   const [amount, setAmount] = useState<string>('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [tradeError, setTradeError] = useState<string | null>(null);
@@ -301,11 +655,73 @@ export default function MarketDetailPage() {
   // Data hooks
   const { user, solBalance, usdcBalance, refreshBalance } = useUser();
   const turnkeySigner = useTurnkeySigner();
-  const { market, isLoading, refetch } = useDFlowMarket(tickerString);
-  const { trades, isLoading: tradesLoading } = useDFlowTrades(tickerString, { limit: 50, refreshInterval: 15000 });
-  const { orderBook } = useDFlowOrderBook(tickerString, { refreshInterval: 5000 });
-  const { history: priceHistory, isLoading: historyLoading } = useDFlowPriceHistory(tickerString, { period: 'week', refreshInterval: 60000 });
-  const realtimePrices = useDFlowRealtimePrices(tickerString);
+
+  // dFlow hooks (only when not Polymarket AND router is ready)
+  const { market: dflowMarket, isLoading: dflowLoading, refetch: dflowRefetch } = useDFlowMarket(
+    !isPolymarket && isRouterReady && tickerString ? tickerString : undefined
+  );
+  const { trades, isLoading: tradesLoading } = useDFlowTrades(
+    !isPolymarket && isRouterReady && tickerString ? tickerString : undefined,
+    { limit: 50, refreshInterval: 15000 }
+  );
+  const { orderBook: dflowOrderBook } = useDFlowOrderBook(
+    !isPolymarket && isRouterReady && tickerString ? tickerString : undefined,
+    { refreshInterval: 5000 }
+  );
+  const { history: priceHistory, isLoading: historyLoading } = useDFlowPriceHistory(
+    !isPolymarket && isRouterReady && tickerString ? tickerString : undefined,
+    { period: 'week', refreshInterval: 60000 }
+  );
+  const realtimePrices = useDFlowRealtimePrices(!isPolymarket && isRouterReady && tickerString ? tickerString : undefined);
+
+  // Polymarket hooks (only when source=polymarket AND router is ready)
+  const { market: polyMarket, isLoading: polyLoading, refetch: polyRefetch } = usePolymarketMarket(
+    isPolymarket && isRouterReady && tickerString ? tickerString : undefined,
+    { enabled: isPolymarket && isRouterReady }
+  );
+
+  // Get Polymarket token IDs for orderbook (both YES and NO)
+  const polyTokenIds = useMemo(() => {
+    if (!isPolymarket || !polyMarket) return { yes: undefined, no: undefined };
+    const polyData = (polyMarket as any).polymarketData;
+    return {
+      yes: polyData?.yesTokenId,
+      no: polyData?.noTokenId,
+    };
+  }, [isPolymarket, polyMarket]);
+
+  // Fetch orderbooks for both YES and NO tokens
+  const { orderBook: polyYesOrderBook } = usePolymarketOrderBook(polyTokenIds.yes, { refreshInterval: 5000 });
+  const { orderBook: polyNoOrderBook } = usePolymarketOrderBook(polyTokenIds.no, { refreshInterval: 5000 });
+
+  // Polymarket price history for chart (use YES token)
+  const { history: polyPriceHistory, isLoading: polyHistoryLoading } = usePolymarketPriceHistory(
+    polyTokenIds.yes,
+    { interval: 'max', fidelity: 60, refreshInterval: 60000, enabled: isPolymarket && !!polyTokenIds.yes }
+  );
+
+  // Get Polymarket event ID and condition ID for comments and holders
+  const polyEventId = useMemo(() => {
+    if (!isPolymarket || !polyMarket) return undefined;
+    const polyData = (polyMarket as any).polymarketData;
+    return polyData?.eventId;
+  }, [isPolymarket, polyMarket]);
+
+  const polyConditionId = useMemo(() => {
+    if (!isPolymarket || !polyMarket) return undefined;
+    const polyData = (polyMarket as any).polymarketData;
+    return polyData?.conditionId;
+  }, [isPolymarket, polyMarket]);
+
+  // Polymarket comments, holders, and activity
+  const { comments, isLoading: commentsLoading } = usePolymarketComments(polyEventId, { enabled: isPolymarket });
+  const { holders, isLoading: holdersLoading } = usePolymarketHolders(polyConditionId, { limit: 100, enabled: isPolymarket });
+  const { activities, isLoading: activityLoading } = usePolymarketActivity(polyConditionId, { limit: 50, enabled: isPolymarket });
+
+  // Unified market/loading/refetch
+  const market = isPolymarket ? polyMarket : dflowMarket;
+  const isLoading = isPolymarket ? polyLoading : dflowLoading;
+  const refetch = isPolymarket ? polyRefetch : dflowRefetch;
 
   // Use real-time prices when available, fallback to market data
   const currentYesPrice = realtimePrices.yesBid != null && realtimePrices.yesAsk != null
@@ -315,21 +731,55 @@ export default function MarketDetailPage() {
     ? (realtimePrices.noBid + realtimePrices.noAsk) / 2 / 100
     : market?.noPrice || 0.5;
 
-  // Transform price history for the chart
-  const chartPriceHistory = priceHistory.length > 0
-    ? priceHistory.map(p => ({ time: p.timestamp, price: p.yesPrice }))
-    : undefined;
+  // Transform price history for the chart (use appropriate source based on market type)
+  // IMPORTANT: Chart expects timestamps in MILLISECONDS
+  const chartPriceHistory = useMemo(() => {
+    if (isPolymarket) {
+      // Use Polymarket price history
+      // Polymarket returns timestamps in SECONDS, convert to milliseconds
+      if (polyPriceHistory.length > 0) {
+        return polyPriceHistory.map(p => ({
+          time: p.timestamp * 1000, // Convert seconds to milliseconds
+          price: p.price,
+        }));
+      }
+      return undefined;
+    } else {
+      // Use dFlow price history (already in correct format)
+      if (priceHistory.length > 0) {
+        return priceHistory.map(p => ({ time: p.timestamp, price: p.yesPrice }));
+      }
+      return undefined;
+    }
+  }, [isPolymarket, polyPriceHistory, priceHistory]);
+
+  // Unified history loading state
+  const chartHistoryLoading = isPolymarket ? polyHistoryLoading : historyLoading;
 
   // Transform order book for the chart component
   const orderBookForChart = useMemo(() => {
-    if (!orderBook) return null;
-    return {
-      yesBids: orderBook.yesBids || [],
-      yesAsks: (orderBook as any).yesAsks || [], // API may not return asks
-      noBids: orderBook.noBids || [],
-      noAsks: (orderBook as any).noAsks || [], // API may not return asks
-    };
-  }, [orderBook]);
+    if (isPolymarket) {
+      // Use Polymarket orderbook data
+      // Transform from { bids, asks } to { yesBids, yesAsks, noBids, noAsks }
+      if (!polyYesOrderBook && !polyNoOrderBook) return null;
+
+      return {
+        yesBids: polyYesOrderBook?.bids || [],
+        yesAsks: polyYesOrderBook?.asks || [],
+        noBids: polyNoOrderBook?.bids || [],
+        noAsks: polyNoOrderBook?.asks || [],
+      };
+    } else {
+      // Use dFlow orderbook
+      if (!dflowOrderBook) return null;
+      return {
+        yesBids: dflowOrderBook.yesBids || [],
+        yesAsks: (dflowOrderBook as any).yesAsks || [],
+        noBids: dflowOrderBook.noBids || [],
+        noAsks: (dflowOrderBook as any).noAsks || [],
+      };
+    }
+  }, [isPolymarket, polyYesOrderBook, polyNoOrderBook, dflowOrderBook]);
 
   const amountNumber = parseFloat(amount) || 0;
   const selectedPrice = selectedSide === 'yes' ? currentYesPrice : currentNoPrice;
@@ -431,7 +881,8 @@ export default function MarketDetailPage() {
     }, 300);
   }, []);
 
-  if (isLoading) {
+  // Show loading state while router is initializing or data is being fetched
+  if (!isRouterReady || isLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center" style={{ backgroundColor: AX.bg }}>
         <HiOutlineRefresh className="w-6 h-6 animate-spin" style={{ color: AX.mint }} />
@@ -439,6 +890,7 @@ export default function MarketDetailPage() {
     );
   }
 
+  // Only show "Market not found" after router is ready and loading is complete
   if (!market) {
     return (
       <div className="min-h-screen flex flex-col" style={{ backgroundColor: AX.bg }}>
@@ -446,6 +898,9 @@ export default function MarketDetailPage() {
         <main className="flex-1 flex items-center justify-center">
           <div className="text-center">
             <p className="mb-4" style={{ color: AX.muted }}>Market not found</p>
+            <p className="text-xs mb-4" style={{ color: AX.muted }}>
+              Ticker: {tickerString || '(empty)'} | Source: {isPolymarket ? 'Polymarket' : 'dFlow'}
+            </p>
             <Link href="/predictions" className="px-4 py-2 rounded-lg" style={{ backgroundColor: AX.mint, color: '#000' }}>
               Back to Markets
             </Link>
@@ -501,7 +956,12 @@ export default function MarketDetailPage() {
               }}
             >
               <div className="px-3 flex-shrink-0">
-                <PredictionHeader market={market} yesPrice={currentYesPrice} noPrice={currentNoPrice} />
+                <PredictionHeader
+                  market={market}
+                  yesPrice={currentYesPrice}
+                  noPrice={currentNoPrice}
+                  source={isPolymarket ? 'polymarket' : 'dflow'}
+                />
               </div>
 
               {/* Separator line */}
@@ -512,10 +972,21 @@ export default function MarketDetailPage() {
                 className="flex-1 min-h-[200px] relative w-full overflow-hidden"
                 style={{ height: '100%', width: '100%', position: 'relative', minHeight: 0, minWidth: 0 }}
               >
-                {historyLoading ? (
+                {/* Show loading while fetching price history (from either dFlow or Polymarket) */}
+                {chartHistoryLoading ? (
                   <div className="flex items-center justify-center h-full" style={{ backgroundColor: AX.bg }}>
                     <HiOutlineRefresh className="w-5 h-5 animate-spin" style={{ color: AX.muted }} />
                   </div>
+                ) : isPolymarket ? (
+                  <PolymarketChart
+                    priceHistory={chartPriceHistory}
+                    currentPrice={currentYesPrice}
+                    marketTitle={market.title}
+                    isLoading={chartHistoryLoading}
+                    height={topPanePx - 80}
+                    selectedInterval={chartInterval}
+                    onIntervalChange={setChartInterval}
+                  />
                 ) : (
                   <TradingViewPredictionChart
                     ticker={tickerString}
@@ -585,12 +1056,30 @@ export default function MarketDetailPage() {
             {/* BOTTOM pane (tabs + content) */}
             <div className="flex-1 flex flex-col min-h-[400px]">
               <div className="flex-shrink-0 px-3">
-                <PredictionTabs selectedTab={selectedTab} setSelectedTab={setSelectedTab} />
+                <PredictionTabs
+                  tabs={isPolymarket ? POLYMARKET_TABS : DFLOW_TABS}
+                  selectedTab={selectedTab}
+                  setSelectedTab={setSelectedTab}
+                />
               </div>
               <div className="flex-1 min-h-[300px] overflow-auto">
+                {/* dFlow: Trades tab */}
                 <div className={`flex flex-col h-full ${selectedTab === "Trades" ? "" : "hidden"}`}>
                   <TradesTable trades={trades || []} isLoading={tradesLoading} />
                 </div>
+                {/* Polymarket: Activity tab */}
+                <div className={`flex flex-col h-full ${selectedTab === "Activity" ? "" : "hidden"}`}>
+                  <ActivitySection activities={activities || []} isLoading={activityLoading} />
+                </div>
+                {/* Polymarket: Comments tab */}
+                <div className={`flex flex-col h-full ${selectedTab === "Comments" ? "" : "hidden"}`}>
+                  <CommentsSection comments={comments || []} isLoading={commentsLoading} eventSlug={tickerString} />
+                </div>
+                {/* Polymarket: Holders tab */}
+                <div className={`flex flex-col h-full ${selectedTab === "Holders" ? "" : "hidden"}`}>
+                  <HoldersSection holders={holders || []} isLoading={holdersLoading} />
+                </div>
+                {/* Both: Positions tab */}
                 <div className={`flex flex-col h-full ${selectedTab === "Positions" ? "" : "hidden"}`}>
                   <React.Suspense fallback={<div className="flex items-center justify-center h-full"><HiOutlineRefresh className="w-5 h-5 animate-spin" style={{ color: AX.muted }} /></div>}>
                     <PredictionPositions userPublicKey={user?.publicKey} />
@@ -605,6 +1094,58 @@ export default function MarketDetailPage() {
             <div className="p-3 flex-1 overflow-auto">
               {/* Trade Panel */}
               <div className="rounded-xl p-4" style={{ backgroundColor: AX.surface, border: `1px solid ${AX.border}` }}>
+                {/* Polymarket - Trading not available yet */}
+                {isPolymarket ? (
+                  <div className="text-center py-4">
+                    <div
+                      className="w-14 h-14 rounded-xl mx-auto mb-4 flex items-center justify-center"
+                      style={{ backgroundColor: `${AX.purple}15` }}
+                    >
+                      <HiOutlineExternalLink className="w-7 h-7" style={{ color: AX.purple }} />
+                    </div>
+                    <h3 className="text-sm font-semibold mb-2" style={{ color: AX.text }}>
+                      Polymarket Trading
+                    </h3>
+                    <p className="text-xs mb-4 max-w-[200px] mx-auto" style={{ color: AX.muted }}>
+                      Trading on Polymarket requires a Polygon wallet. Visit Polymarket directly to trade this market.
+                    </p>
+
+                    {/* Current prices */}
+                    <div className="flex gap-2 mb-4">
+                      <div className="flex-1 rounded-lg p-2 text-center" style={{ backgroundColor: AX.greenBg }}>
+                        <div className="text-[10px] uppercase" style={{ color: AX.green }}>Yes</div>
+                        <div className="text-lg font-bold" style={{ color: AX.green }}>
+                          {Math.round(currentYesPrice * 100)}¢
+                        </div>
+                      </div>
+                      <div className="flex-1 rounded-lg p-2 text-center" style={{ backgroundColor: AX.redBg }}>
+                        <div className="text-[10px] uppercase" style={{ color: AX.red }}>No</div>
+                        <div className="text-lg font-bold" style={{ color: AX.red }}>
+                          {Math.round(currentNoPrice * 100)}¢
+                        </div>
+                      </div>
+                    </div>
+
+                    <a
+                      href={`https://polymarket.com/event/${tickerString}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors"
+                      style={{
+                        backgroundColor: AX.purple,
+                        color: '#fff',
+                      }}
+                    >
+                      Trade on Polymarket
+                      <HiOutlineExternalLink className="w-4 h-4" />
+                    </a>
+
+                    <p className="text-[10px] mt-3" style={{ color: AX.muted }}>
+                      Polygon wallet integration coming soon
+                    </p>
+                  </div>
+                ) : (
+                  <>
                 {/* Wallet & Balances */}
                 {user ? (
                   <div className="rounded-lg mb-4 overflow-hidden" style={{ backgroundColor: AX.bg, border: `1px solid ${AX.border}` }}>
@@ -777,6 +1318,8 @@ export default function MarketDetailPage() {
                     </>
                   )}
                 </button>
+                  </>
+                )}
               </div>
 
               {/* Market Stats */}

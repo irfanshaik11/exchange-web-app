@@ -47,11 +47,13 @@ export interface PredictionMarket {
   status: 'active' | 'closed' | 'resolved';
   resolution?: 'yes' | 'no';
   imageUrl?: string;
+  source?: 'dflow' | 'polymarket';
 }
 
 interface PredictionCardProps {
   market: PredictionMarket;
   index: number;
+  showSource?: boolean;
 }
 
 const formatVolume = (volume: number): string => {
@@ -70,12 +72,18 @@ const formatTimeRemaining = (closesAt: string): string => {
   return "<1h";
 };
 
-export default function PredictionCard({ market }: PredictionCardProps) {
+export default function PredictionCard({ market, showSource = false }: PredictionCardProps) {
   const isResolved = market.status === 'resolved';
   const isClosed = market.status === 'closed';
+  const isPolymarket = market.source === 'polymarket';
+
+  // Build the URL - for Polymarket, add source query param
+  const href = isPolymarket
+    ? `/predictions/${market.ticker}?source=polymarket`
+    : `/predictions/${market.ticker}`;
 
   return (
-    <Link href={`/predictions/${market.ticker}`}>
+    <Link href={href}>
       <div
         className="group relative rounded-xl p-4 cursor-pointer transition-all duration-200 hover:translate-y-[-2px]"
         style={{
@@ -90,6 +98,23 @@ export default function PredictionCard({ market }: PredictionCardProps) {
             background: `radial-gradient(ellipse at center, ${C.green}08, transparent 70%)`,
           }}
         />
+
+        {/* Source badge - top right */}
+        {showSource && market.source && (
+          <div className="absolute top-2 right-2 z-10">
+            <span
+              className="text-[9px] px-1.5 py-0.5 rounded font-medium uppercase tracking-wider"
+              style={{
+                backgroundColor: isPolymarket ? `${C.purple}20` : `${C.green}20`,
+                color: isPolymarket ? C.purple : C.green,
+                border: `1px solid ${isPolymarket ? C.purple : C.green}40`,
+              }}
+            >
+              {isPolymarket ? 'PM' : 'dFlow'}
+            </span>
+          </div>
+        )}
+
         {/* Header: Title + Status */}
         <div className="mb-4">
           {(isResolved || isClosed) && (

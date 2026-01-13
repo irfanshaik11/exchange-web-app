@@ -4,6 +4,14 @@ import Link from 'next/link';
 import { HiOutlineLightningBolt, HiOutlineStar, HiOutlineArrowRight, HiOutlineTrendingUp, HiOutlineClock } from 'react-icons/hi';
 import type { PredictionMarket } from './PredictionCard';
 
+// Helper to build prediction market URL with source param
+const buildPredictionUrl = (market: PredictionMarket): string => {
+  const isPolymarket = market.source === 'polymarket';
+  return isPolymarket
+    ? `/predictions/${market.ticker}?source=polymarket`
+    : `/predictions/${market.ticker}`;
+};
+
 const AX = {
   bg: "#0a0b0d",
   surface: "#12141a",
@@ -35,7 +43,7 @@ export default function FeaturedMarket({ market }: FeaturedMarketProps) {
       animate={{ opacity: 1, scale: 1 }}
       transition={{ duration: 0.5 }}
     >
-      <Link href={`/predictions/${market.ticker}`}>
+      <Link href={buildPredictionUrl(market)}>
         <div
           className="relative rounded-2xl p-6 md:p-8 cursor-pointer overflow-hidden group"
           style={{
