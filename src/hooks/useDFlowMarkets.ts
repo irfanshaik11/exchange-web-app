@@ -1,12 +1,13 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import type { PredictionMarket } from '~/components/predictions';
+import { env } from '~/env';
 
 // DFlow API Configuration
-// Use local proxy routes to avoid CORS issues
-const API_BASE = '/api/dflow';
-const DFLOW_WS_URL = process.env.NEXT_PUBLIC_DFLOW_WS_URL || 'wss://prediction-markets-api.dflow.net/api/v1/ws';
+// Use backend API (API keys are securely stored on backend)
+const API_BASE = `${env.NEXT_PUBLIC_BACKEND_URL}/api/prediction/dflow`;
+const WS_BASE = `${env.NEXT_PUBLIC_BACKEND_URL?.replace('http', 'ws')}/ws/predictions`;
 
-// Simple headers for local proxy
+// Headers for backend API
 const getHeaders = () => ({
   'Accept': 'application/json',
   'Content-Type': 'application/json',
@@ -346,8 +347,9 @@ export default function useDFlowMarkets(options: UseDFlowMarketsOptions = {}): U
         throw new Error(`Markets API error: ${response.status}`);
       }
 
-      // Proxy returns both markets and events
-      const data = await response.json();
+      // Backend returns { success: true, data: { markets, events } }
+      const json = await response.json();
+      const data = json.data || json;
       const marketsData: DFlowMarketsResponse = { markets: data.markets || [], cursor: data.cursor };
       const eventsData: DFlowEventsResponse = { events: data.events || [] };
 
@@ -497,7 +499,8 @@ export async function getDFlowQuote(params: {
       throw new Error(`Quote API error: ${response.status}`);
     }
 
-    return await response.json();
+    const json = await response.json();
+    return json.data || json;
   } catch (err) {
     console.error('[DFlow] Failed to get quote:', err);
     return null;
@@ -529,7 +532,8 @@ export async function getDFlowSwap(params: {
       throw new Error(`Swap API error: ${response.status} - ${errorText}`);
     }
 
-    return await response.json();
+    const json = await response.json();
+    return json.data || json;
   } catch (err) {
     console.error('[DFlow] Failed to get swap transaction:', err);
     return null;
@@ -574,7 +578,8 @@ export async function getDFlowTrades(params: {
       throw new Error(`Trades API error: ${response.status}`);
     }
 
-    return await response.json();
+    const json = await response.json();
+    return { trades: json.data || json.trades || [] };
   } catch (err) {
     console.error('[DFlow] Failed to fetch trades:', err);
     return null;
@@ -594,7 +599,8 @@ export async function getDFlowOrderBook(ticker: string): Promise<DFlowOrderBook 
       throw new Error(`OrderBook API error: ${response.status}`);
     }
 
-    return await response.json();
+    const json = await response.json();
+    return json.data || json;
   } catch (err) {
     console.error('[DFlow] Failed to fetch order book:', err);
     return null;
@@ -706,7 +712,8 @@ export async function getDFlowPriceHistory(params: {
       throw new Error(`PriceHistory API error: ${response.status}`);
     }
 
-    return await response.json();
+    const json = await response.json();
+    return json.data || json;
   } catch (err) {
     console.error('[DFlow] Failed to fetch price history:', err);
     return null;
@@ -828,7 +835,8 @@ class DFlowWebSocketService {
       this.isConnecting = true;
 
       try {
-        this.ws = new WebSocket(DFLOW_WS_URL);
+        // Connect to backend WebSocket (which proxies to DFlow)
+        this.ws = new WebSocket(WS_BASE);
 
         this.ws.onopen = () => {
           console.log('[DFlow WS] Connected');

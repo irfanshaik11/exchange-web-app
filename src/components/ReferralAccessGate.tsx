@@ -906,6 +906,10 @@ export function ReferralAccessGate({
                 <button
                   type="button"
                   onClick={() => {
+                    // Explicitly persist with user.id (same as handleSubmit does for real codes)
+                    if (user?.id) {
+                      persistAccess(user.id);
+                    }
                     grantAccess();
                   }}
                   className="absolute top-4 right-4 p-2 rounded-full text-neutral-400 hover:text-white hover:bg-neutral-800/50 transition-colors"

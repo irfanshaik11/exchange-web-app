@@ -1,5 +1,10 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import type { ExtendedPredictionMarket } from './useDFlowMarkets';
+import { env } from '~/env';
+
+// Polymarket API Configuration
+// Use backend API (no API keys exposed on frontend)
+const API_BASE = `${env.NEXT_PUBLIC_BACKEND_URL}/api/prediction/polymarket`;
 
 // Polymarket API response types
 export interface PolymarketTag {
@@ -201,14 +206,15 @@ export default function usePolymarketMarkets(options: UsePolymarketMarketsOption
       params.set('order', 'volume24hr');
       params.set('ascending', 'false');
 
-      const response = await fetch(`/api/polymarket/events?${params}`);
+      const response = await fetch(`${API_BASE}/events?${params}`);
 
       if (!response.ok) {
         throw new Error(`Polymarket API error: ${response.status}`);
       }
 
-      const data = await response.json();
-      const eventsData: PolymarketEvent[] = data.events || [];
+      const json = await response.json();
+      // Backend returns { success: true, data: [...] }
+      const eventsData: PolymarketEvent[] = json.data || json.events || [];
 
       // Transform all events to unified market format
       let allMarkets: ExtendedPredictionMarket[] = [];
@@ -288,13 +294,14 @@ export function usePolymarketOrderBook(tokenId: string | undefined, options: { r
     if (!tokenId) return;
 
     try {
-      const response = await fetch(`/api/polymarket/orderbook?token_id=${encodeURIComponent(tokenId)}`);
+      const response = await fetch(`${API_BASE}/orderbook?token_id=${encodeURIComponent(tokenId)}`);
 
       if (!response.ok) {
         throw new Error(`Orderbook API error: ${response.status}`);
       }
 
-      const data = await response.json();
+      const json = await response.json();
+      const data = json.data || json;
 
       setOrderBook({
         bids: (data.bids || []).map((b: any) => ({
@@ -358,7 +365,7 @@ export function usePolymarketMarket(
     console.log('[usePolymarketMarket] Fetching market for slug:', slug);
 
     try {
-      const response = await fetch(`/api/polymarket/market?slug=${encodeURIComponent(slug)}`);
+      const response = await fetch(`${API_BASE}/market?slug=${encodeURIComponent(slug)}`);
 
       console.log('[usePolymarketMarket] Response status:', response.status);
 
@@ -372,9 +379,10 @@ export function usePolymarketMarket(
         return;
       }
 
-      const data = await response.json();
-      console.log('[usePolymarketMarket] Response data:', data);
-      const eventData: PolymarketEvent = data.event;
+      const json = await response.json();
+      console.log('[usePolymarketMarket] Response data:', json);
+      // Backend returns { success: true, data: {...event} }
+      const eventData: PolymarketEvent = json.data || json.event;
 
       if (!eventData) {
         console.log('[usePolymarketMarket] No event data in response');
@@ -471,13 +479,14 @@ export function usePolymarketPriceHistory(
       params.set('interval', interval);
       params.set('fidelity', fidelity.toString());
 
-      const response = await fetch(`/api/polymarket/prices-history?${params}`);
+      const response = await fetch(`${API_BASE}/prices-history?${params}`);
 
       if (!response.ok) {
         throw new Error(`API error: ${response.status}`);
       }
 
-      const data = await response.json();
+      const json = await response.json();
+      const data = json.data || json;
       setHistory(data.history || []);
       setError(null);
 
@@ -544,14 +553,15 @@ export function usePolymarketComments(
     if (!eventId || !enabled) return;
 
     try {
-      const response = await fetch(`/api/polymarket/comments?event_id=${encodeURIComponent(eventId)}`);
+      const response = await fetch(`${API_BASE}/comments?event_id=${encodeURIComponent(eventId)}`);
 
       if (!response.ok) {
         throw new Error(`API error: ${response.status}`);
       }
 
-      const data = await response.json();
-      setComments(data.comments || []);
+      const json = await response.json();
+      const data = json.data || json;
+      setComments(data.comments || data || []);
       setError(null);
     } catch (err) {
       console.error('[Polymarket] Failed to fetch comments:', err);
@@ -605,14 +615,15 @@ export function usePolymarketHolders(
     if (!conditionId || !enabled) return;
 
     try {
-      const response = await fetch(`/api/polymarket/holders?market=${encodeURIComponent(conditionId)}&limit=${limit}`);
+      const response = await fetch(`${API_BASE}/holders?market=${encodeURIComponent(conditionId)}&limit=${limit}`);
 
       if (!response.ok) {
         throw new Error(`API error: ${response.status}`);
       }
 
-      const data = await response.json();
-      setHolders(data.holders || []);
+      const json = await response.json();
+      const data = json.data || json;
+      setHolders(data.holders || data || []);
       setError(null);
     } catch (err) {
       console.error('[Polymarket] Failed to fetch holders:', err);
@@ -674,14 +685,15 @@ export function usePolymarketActivity(
       params.set('market', conditionId);
       params.set('limit', limit.toString());
 
-      const response = await fetch(`/api/polymarket/activity?${params}`);
+      const response = await fetch(`${API_BASE}/activity?${params}`);
 
       if (!response.ok) {
         throw new Error(`API error: ${response.status}`);
       }
 
-      const data = await response.json();
-      setActivities(data.activities || []);
+      const json = await response.json();
+      const data = json.data || json;
+      setActivities(data.activities || data || []);
       setError(null);
     } catch (err) {
       console.error('[Polymarket] Failed to fetch activity:', err);
