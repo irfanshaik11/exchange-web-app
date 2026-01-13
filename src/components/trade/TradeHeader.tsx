@@ -1450,28 +1450,35 @@ const TradeHeader: React.FC<TradeHeaderProps> = ({ token, livePriceUsd, liveMark
                   
                   return (
                     <>
-                      <div className="flex items-center gap-1 text-violet-200">
-                        <PiCrownSimpleLight size={16} />
+                      {/* Crown Icon */}
+                      <div className="flex items-center gap-1">
+                        <PiCrownSimpleLight size={16} style={{ color: "#dcc13c" }} />
                         <span className="text-sm text-white">0</span>
                       </div>
 
-                      <div className="flex items-center gap-1 text-violet-200">
+                      {/* KOL Count - Trophy Icon */}
+                      <div className="group/kol relative flex items-center gap-1 text-violet-200">
                         <CiTrophy size={16} />
-                        <span className="text-sm text-white">0</span>
+                        <span className="text-sm text-white">{token.kol_count ?? 0}</span>
+                        {/* Tooltip */}
+                        <div className="pointer-events-none absolute left-0 top-full mt-2 px-3 py-2 bg-[#1a1b1f] border border-[#2a2b33] rounded-lg opacity-0 group-hover/kol:opacity-100 transition-opacity duration-100 whitespace-nowrap z-[99999] shadow-xl">
+                          <span className="text-sm text-white font-medium">KOL Count</span>
+                          <p className="text-xs text-gray-400 mt-0.5">Key Opinion Leaders holding this token</p>
+                        </div>
                       </div>
 
                       {/* People Icon - Total Holders */}
-                      <div className="relative flex items-center gap-1">
+                      <div className="group/holder relative flex items-center gap-1">
                         <div
-                          className="flex cursor-help items-center justify-center rounded text-violet-200"
-                          title="Holders"
+                          className="flex cursor-help items-center justify-center rounded"
+                          style={{ color: "#36d8ff" }}
                         >
                           <GoPeople size={16} />
                         </div>
                         <span className="text-sm text-white">
                           {(() => {
                             const holders =
-                              token.total_holders || token.unique_wallets_24h || 0;
+                              token.holder_count ?? token.total_holders ?? token.unique_wallets_24h ?? 0;
                             if (holders >= 1e9)
                               return `${(holders / 1e9).toFixed(1)}B`;
                             if (holders >= 1e6)
@@ -1481,6 +1488,11 @@ const TradeHeader: React.FC<TradeHeaderProps> = ({ token, livePriceUsd, liveMark
                             return holders.toString();
                           })()}
                         </span>
+                        {/* Tooltip */}
+                        <div className="pointer-events-none absolute left-0 top-full mt-2 px-3 py-2 bg-[#1a1b1f] border border-[#2a2b33] rounded-lg opacity-0 group-hover/holder:opacity-100 transition-opacity duration-100 whitespace-nowrap z-[99999] shadow-xl">
+                          <span className="text-sm text-white font-medium">Holder Count</span>
+                          <p className="text-xs text-gray-400 mt-0.5">Total wallets holding this token</p>
+                        </div>
                       </div>
                       <div className="flex items-center gap-1 text-violet-200">
                         <PiRobotLight size={16} />

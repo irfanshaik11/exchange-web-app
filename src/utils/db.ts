@@ -99,6 +99,9 @@ export type Token = {
   launchpadProtocol?: string; // Alternative protocol field name
   // Total fees for all trades on this token (in lamports)
   total_fees_lamports?: number;
+  // Holder and KOL metrics from WebSocket
+  holder_count?: number;
+  kol_count?: number;
 };
 
 /**
