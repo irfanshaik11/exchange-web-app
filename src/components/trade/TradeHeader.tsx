@@ -18,6 +18,7 @@ import {
   FaExpand,
   FaCamera,
   FaUser,
+  FaTelegram,
 } from "react-icons/fa";
 import { LuCopy } from "react-icons/lu";
 import { LuPill, LuDroplet, LuSearch } from "react-icons/lu";
@@ -41,7 +42,7 @@ import {
   DropdownMenuTrigger,
 } from "../ui/dropdown-menu";
 import { useSearch } from "../ui/SearchContext";
-import TokenXProfile from "../TokenXProfile";
+import { TradeSocialIcons } from "../TradeSocialIcons";
 
 const MONAD_PROTOCOL_KEYWORDS = [
   "nad.fun",
@@ -1072,7 +1073,7 @@ const TradeHeader: React.FC<TradeHeaderProps> = ({ token, livePriceUsd, liveMark
             {!!token.mint && (
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
-                  <button className="p-1 ml-1" style={{color: AX.muted}}>
+                  <button className="ml-1 p-1" style={{ color: AX.muted }}>
                     <LuCopy size={14} />
                   </button>
                 </DropdownMenuTrigger>
@@ -1197,93 +1198,97 @@ const TradeHeader: React.FC<TradeHeaderProps> = ({ token, livePriceUsd, liveMark
                               </Link>
                             )} */}
 
-              {/* X Profile Preview Button */}
-              <div className="relative">
-                <button
-                  className="flex items-center justify-center rounded transition-colors duration-200"
-                  onMouseEnter={(e) => {
-                    const tooltip = document.getElementById(
-                      `profile-tooltip`,
-                    ) as HTMLElement;
-                    if (tooltip) {
-                      const rect = e.currentTarget.getBoundingClientRect();
-                      tooltip.style.left = `${rect.left + rect.width / 2}px`;
-                      tooltip.style.top = `${rect.top - 10}px`;
-                      tooltip.style.opacity = "1";
-                    }
-                    // Show X profile preview
-                    setShowXPreview(0);
-                    // Store button position for popup positioning
-                    const buttonRect = e.currentTarget.getBoundingClientRect();
-                    setButtonPosition({
-                      left: buttonRect.left + buttonRect.width / 2,
-                      top: buttonRect.top - 20,
-                    });
-                  }}
-                  onMouseLeave={(e) => {
-                    const tooltip = document.getElementById(
-                      `profile-tooltip`,
-                    ) as HTMLElement;
-                    if (tooltip) tooltip.style.opacity = "0";
-                  }}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    e.preventDefault(); // Prevent Link navigation
-                    // Open X profile in new tab
-                    const profileUrl = `https://twitter.com/${token.symbol?.toLowerCase() || "search"}`;
-                    window.open(profileUrl, "_blank");
-                  }}
-                >
-                  <FaXTwitter size={16} className="text-neutral-400" />
-                </button>
+              {/* Social Icons with URI Metadata */}
+              <TradeSocialIcons token={token} />
 
-                <div
-                  key={`search-tooltip`}
-                  id={`search-tooltip`}
-                  className="pointer-events-none fixed rounded px-2 py-1 text-xs font-medium whitespace-nowrap opacity-0 transition-opacity duration-200"
-                  style={{
-                    zIndex: 99999,
-                    backgroundColor: AX.surface,
-                    color: AX.text,
-                    border: `1px solid ${AX.border}`,
-                    boxShadow: `0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06), 0 0 8px ${AX.glowCyan}`,
-                    transform: "translate(-50%, -100%)",
-                  }}
-                >
-                  Search on Twitter
-                  {/* Tooltip arrow */}
+              {/* OLD X Profile Preview Button - kept for reference */}
+              {false && (
+                <div className="relative">
+                  <button
+                    className="flex items-center justify-center rounded transition-colors duration-200"
+                    onMouseEnter={(e) => {
+                      const tooltip = document.getElementById(
+                        `profile-tooltip`,
+                      ) as HTMLElement;
+                      if (tooltip) {
+                        const rect = e.currentTarget.getBoundingClientRect();
+                        tooltip.style.left = `${rect.left + rect.width / 2}px`;
+                        tooltip.style.top = `${rect.top - 10}px`;
+                        tooltip.style.opacity = "1";
+                      }
+                      // Show X profile preview
+                      setShowXPreview(0);
+                      // Store button position for popup positioning
+                      const buttonRect =
+                        e.currentTarget.getBoundingClientRect();
+                      setButtonPosition({
+                        left: buttonRect.left + buttonRect.width / 2,
+                        top: buttonRect.top - 20,
+                      });
+                    }}
+                    onMouseLeave={(e) => {
+                      const tooltip = document.getElementById(
+                        `profile-tooltip`,
+                      ) as HTMLElement;
+                      if (tooltip) tooltip.style.opacity = "0";
+                    }}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      e.preventDefault(); // Prevent Link navigation
+                      // Open X profile in new tab
+                      const profileUrl = `https://twitter.com/${token.symbol?.toLowerCase() || "search"}`;
+                      window.open(profileUrl, "_blank");
+                    }}
+                  >
+                    <FaXTwitter size={16} className="text-neutral-400" />
+                  </button>
+
                   <div
-                    className="absolute top-full left-1/2 h-0 w-0 -translate-x-1/2 transform border-t-4 border-r-4 border-l-4 border-transparent"
-                    style={{ borderTopColor: AX.surface }}
-                  ></div>
-                </div>
+                    key={`search-tooltip`}
+                    id={`search-tooltip`}
+                    className="pointer-events-none fixed rounded px-2 py-1 text-xs font-medium whitespace-nowrap opacity-0 transition-opacity duration-200"
+                    style={{
+                      zIndex: 99999,
+                      backgroundColor: AX.surface,
+                      color: AX.text,
+                      border: `1px solid ${AX.border}`,
+                      boxShadow: `0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06), 0 0 8px ${AX.glowCyan}`,
+                      transform: "translate(-50%, -100%)",
+                    }}
+                  >
+                    Search on Twitter
+                    {/* Tooltip arrow */}
+                    <div
+                      className="absolute top-full left-1/2 h-0 w-0 -translate-x-1/2 transform border-t-4 border-r-4 border-l-4 border-transparent"
+                      style={{ borderTopColor: AX.surface }}
+                    ></div>
+                  </div>
 
-                <div
-                  key={`profile-tooltip`}
-                  id={`profile-tooltip`}
-                  className="pointer-events-none fixed rounded px-2 py-1 text-xs font-medium whitespace-nowrap opacity-0 transition-opacity duration-200"
-                  style={{
-                    zIndex: 99999,
-                    backgroundColor: AX.surface,
-                    color: AX.text,
-                    border: `1px solid ${AX.border}`,
-                    boxShadow: `0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06), 0 0 8px ${AX.glowBlue}`,
-                    transform: "translate(-50%, -100%)",
-                  }}
-                >
-                  View X Profile
-                  {/* Tooltip arrow */}
                   <div
-                    className="absolute top-full left-1/2 h-0 w-0 -translate-x-1/2 transform border-t-4 border-r-4 border-l-4 border-transparent"
-                    style={{ borderTopColor: AX.surface }}
-                  ></div>
-                </div>
+                    key={`profile-tooltip`}
+                    id={`profile-tooltip`}
+                    className="pointer-events-none fixed rounded px-2 py-1 text-xs font-medium whitespace-nowrap opacity-0 transition-opacity duration-200"
+                    style={{
+                      zIndex: 99999,
+                      backgroundColor: AX.surface,
+                      color: AX.text,
+                      border: `1px solid ${AX.border}`,
+                      boxShadow: `0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06), 0 0 8px ${AX.glowBlue}`,
+                      transform: "translate(-50%, -100%)",
+                    }}
+                  >
+                    View X Profile
+                    {/* Tooltip arrow */}
+                    <div
+                      className="absolute top-full left-1/2 h-0 w-0 -translate-x-1/2 transform border-t-4 border-r-4 border-l-4 border-transparent"
+                      style={{ borderTopColor: AX.surface }}
+                    ></div>
+                  </div>
 
-                {/* Small X Profile Preview - positioned near token */}
-                {showXPreview !== null && buttonPosition && (
-                  <TokenXProfile setShowXPreview={setShowXPreview} token={token} />
-                )}
-              </div>
+                  {/* Small X Profile Preview - positioned near token */}
+                  {/* {showXPreview !== null && buttonPosition && ()} */}
+                </div>
+              )}
 
               {token.links && (
                 <button>
@@ -1350,18 +1355,27 @@ const TradeHeader: React.FC<TradeHeaderProps> = ({ token, livePriceUsd, liveMark
                     <>
                       {/* Crown Icon */}
                       <div className="flex items-center gap-1">
-                        <PiCrownSimpleLight size={16} style={{ color: "#dcc13c" }} />
+                        <PiCrownSimpleLight
+                          size={16}
+                          style={{ color: "#dcc13c" }}
+                        />
                         <span className="text-sm text-white">0</span>
                       </div>
 
                       {/* KOL Count - Trophy Icon */}
                       <div className="group/kol relative flex items-center gap-1 text-violet-200">
                         <CiTrophy size={16} />
-                        <span className="text-sm text-white">{token.kol_count ?? 0}</span>
+                        <span className="text-sm text-white">
+                          {token.kol_count ?? 0}
+                        </span>
                         {/* Tooltip */}
-                        <div className="pointer-events-none absolute left-0 top-full mt-2 px-3 py-2 bg-[#1a1b1f] border border-[#2a2b33] rounded-lg opacity-0 group-hover/kol:opacity-100 transition-opacity duration-100 whitespace-nowrap z-[99999] shadow-xl">
-                          <span className="text-sm text-white font-medium">KOL Count</span>
-                          <p className="text-xs text-gray-400 mt-0.5">Key Opinion Leaders holding this token</p>
+                        <div className="pointer-events-none absolute top-full left-0 z-[99999] mt-2 rounded-lg border border-[#2a2b33] bg-[#1a1b1f] px-3 py-2 whitespace-nowrap opacity-0 shadow-xl transition-opacity duration-100 group-hover/kol:opacity-100">
+                          <span className="text-sm font-medium text-white">
+                            KOL Count
+                          </span>
+                          <p className="mt-0.5 text-xs text-gray-400">
+                            Key Opinion Leaders holding this token
+                          </p>
                         </div>
                       </div>
 
@@ -1376,7 +1390,10 @@ const TradeHeader: React.FC<TradeHeaderProps> = ({ token, livePriceUsd, liveMark
                         <span className="text-sm text-white">
                           {(() => {
                             const holders =
-                              token.holder_count ?? token.total_holders ?? token.unique_wallets_24h ?? 0;
+                              token.holder_count ??
+                              token.total_holders ??
+                              token.unique_wallets_24h ??
+                              0;
                             if (holders >= 1e9)
                               return `${(holders / 1e9).toFixed(1)}B`;
                             if (holders >= 1e6)
@@ -1387,9 +1404,13 @@ const TradeHeader: React.FC<TradeHeaderProps> = ({ token, livePriceUsd, liveMark
                           })()}
                         </span>
                         {/* Tooltip */}
-                        <div className="pointer-events-none absolute left-0 top-full mt-2 px-3 py-2 bg-[#1a1b1f] border border-[#2a2b33] rounded-lg opacity-0 group-hover/holder:opacity-100 transition-opacity duration-100 whitespace-nowrap z-[99999] shadow-xl">
-                          <span className="text-sm text-white font-medium">Holder Count</span>
-                          <p className="text-xs text-gray-400 mt-0.5">Total wallets holding this token</p>
+                        <div className="pointer-events-none absolute top-full left-0 z-[99999] mt-2 rounded-lg border border-[#2a2b33] bg-[#1a1b1f] px-3 py-2 whitespace-nowrap opacity-0 shadow-xl transition-opacity duration-100 group-hover/holder:opacity-100">
+                          <span className="text-sm font-medium text-white">
+                            Holder Count
+                          </span>
+                          <p className="mt-0.5 text-xs text-gray-400">
+                            Total wallets holding this token
+                          </p>
                         </div>
                       </div>
                       <div className="flex items-center gap-1 text-violet-200">
@@ -1468,13 +1489,13 @@ const TradeHeader: React.FC<TradeHeaderProps> = ({ token, livePriceUsd, liveMark
           {(() => {
             // Hide for Monad tokens
             const protocol = extractProtocolRaw(token);
-            const isMonad = protocol && (
-              protocol.includes('nad.fun') ||
-              protocol.includes('nadfun') ||
-              protocol.includes('flapsh') ||
-              protocol.includes('flap.sh') ||
-              protocol.includes('kuru')
-            );
+            const isMonad =
+              protocol &&
+              (protocol.includes("nad.fun") ||
+                protocol.includes("nadfun") ||
+                protocol.includes("flapsh") ||
+                protocol.includes("flap.sh") ||
+                protocol.includes("kuru"));
             if (isMonad) return null;
 
             // SOL price for converting volume from SOL to USD
@@ -1495,7 +1516,10 @@ const TradeHeader: React.FC<TradeHeaderProps> = ({ token, livePriceUsd, liveMark
           })()}
           <StatInline label="Supply">{formatSmartNumber(supply)}</StatInline>
           <StatInline label="Gas Fees">
-            {formatLamportsToSol((wsTokenInfo as any)?.total_fees_lamports ?? (token as any)?.total_fees_lamports)}
+            {formatLamportsToSol(
+              (wsTokenInfo as any)?.total_fees_lamports ??
+                (token as any)?.total_fees_lamports,
+            )}
           </StatInline>
           <StatInline label="B. Curve">
             <div className="flex flex-row items-center gap-2 text-xs">

@@ -83,7 +83,11 @@ import {
   SOL_MINT_ADDRESS,
   ApiError,
 } from "~/utils/api";
-import { executeMonadMultiBuy, formatMonadTxSummary, buildMonadWalletAllocations } from "~/utils/monadWalletAllocation";
+import {
+  executeMonadMultiBuy,
+  formatMonadTxSummary,
+  buildMonadWalletAllocations,
+} from "~/utils/monadWalletAllocation";
 import { preloadTokenImages } from "~/utils/imagePreloader";
 import { getPoolTypeFromToken } from "~/utils/poolTypeDetection";
 import { TokenAge } from "./TokenAge";
@@ -99,9 +103,13 @@ import { executeEnhancedTrade } from "~/utils/enhancedTradeHandler";
 import { showEnhancedToast, updateEnhancedToast } from "~/utils/enhancedToast";
 import toast from "react-hot-toast";
 import useMonadPositionWebSocket from "~/hooks/useMonadPositionWebSocket";
-import { validateMonadBalance, validateSolanaBalance, computeMonadBalanceForValidation } from "~/utils/tradeBalanceValidation";
+import {
+  validateMonadBalance,
+  validateSolanaBalance,
+  computeMonadBalanceForValidation,
+} from "~/utils/tradeBalanceValidation";
 import { formatMonadError } from "~/utils/monadError";
-import TokenXProfile from './TokenXProfile';
+import { TradeSocialIcons } from "./TradeSocialIcons";
 
 /* ---- Enhanced Monad Green Palette (matching PulseTable) ---- */
 const AX = {
@@ -526,7 +534,11 @@ function TokenMetrics({
 
   // Real data from token
   const rawMetrics = {
-    users: token.total_holders || token.unique_wallets_24h || (token as any).unique_traders || 0,
+    users:
+      token.total_holders ||
+      token.unique_wallets_24h ||
+      (token as any).unique_traders ||
+      0,
     trades: token.unique_wallets_5m || token.unique_wallets_1h || 0,
     achievements: 0,
     rank: "0/1",
@@ -1125,7 +1137,7 @@ function TokenImage({
           style={{ opacity: showPreview ? 1 : 0 }}
         >
           <div
-            className="bg-[rgba(107,114,128,0.3)] flex items-center justify-center rounded-full p-2"
+            className="flex items-center justify-center rounded-full bg-[rgba(107,114,128,0.3)] p-2"
             style={{
               boxShadow: "none",
             }}
@@ -1649,7 +1661,9 @@ function MonadTable({
         typeof parsed.timestamp === "number" &&
         Date.now() - parsed.timestamp <= HTTP_CACHE_TTL_MS
       ) {
-        console.log(`[MonadTable ${title}] ✅ Restored ${parsed.data.length} tokens from cache`);
+        console.log(
+          `[MonadTable ${title}] ✅ Restored ${parsed.data.length} tokens from cache`,
+        );
         return parsed.data as Token[];
       }
     } catch (error) {
@@ -1657,7 +1671,9 @@ function MonadTable({
     }
     return [];
   });
-  const [isFetchingMonad, setIsFetchingMonad] = useState(monadTokens.length === 0); // Only show loading if no cache
+  const [isFetchingMonad, setIsFetchingMonad] = useState(
+    monadTokens.length === 0,
+  ); // Only show loading if no cache
   // Legacy state for filtered tokens (not used for Monad, kept for compatibility)
   const [filteredTokens, setFilteredTokens] = useState<Token[]>([]);
   const [isFetchingFiltered, setIsFetchingFiltered] = useState(false);
@@ -1693,7 +1709,13 @@ function MonadTable({
 
   const [filters, setFilters] = useState({
     // Protocols - Monad launchpad protocols (nad.fun, flap.sh, Kuru, clanker, and bonadfun)
-    protocols: ["nad.fun", "flap.sh", "Kuru", "clanker", "bonadfun"] as string[],
+    protocols: [
+      "nad.fun",
+      "flap.sh",
+      "Kuru",
+      "clanker",
+      "bonadfun",
+    ] as string[],
     // Quote Tokens
     quoteTokens: [] as string[],
     // Keywords
@@ -1868,9 +1890,11 @@ function MonadTable({
       if (!hasValidCache) {
         setIsFetchingMonad(true);
       } else {
-        console.log(`[MonadTable ${title}] 🔄 Refreshing tokens in background (cache available for instant display)`);
+        console.log(
+          `[MonadTable ${title}] 🔄 Refreshing tokens in background (cache available for instant display)`,
+        );
       }
-      
+
       try {
         // Call Monad token service directly (bypasses Next.js proxy for Redis cache benefits)
         const monadServiceUrl =
@@ -1910,19 +1934,27 @@ function MonadTable({
           // Transform backend response using normalizeMonadToken helper
           const tokens = rawTokens.map(normalizeMonadToken);
           setMonadTokens(tokens);
-          
+
           // Save to localStorage cache for instant loading when navigating back
           try {
             const payload = {
               data: tokens,
               timestamp: Date.now(),
             };
-            window.localStorage.setItem(httpCacheStorageKey, JSON.stringify(payload));
-            console.log(`[MonadTable ${title}] 💾 Cached ${tokens.length} tokens to localStorage`);
+            window.localStorage.setItem(
+              httpCacheStorageKey,
+              JSON.stringify(payload),
+            );
+            console.log(
+              `[MonadTable ${title}] 💾 Cached ${tokens.length} tokens to localStorage`,
+            );
           } catch (error) {
-            console.warn(`[MonadTable ${title}] Failed to cache tokens:`, error);
+            console.warn(
+              `[MonadTable ${title}] Failed to cache tokens:`,
+              error,
+            );
           }
-          
+
           console.log(
             `[MonadTable ${title}] ✅ Fetched ${tokens.length} Monad tokens from backend (Redis cache)`,
           );
@@ -2389,8 +2421,8 @@ function MonadTable({
     const pendingStr = JSON.stringify(pendingFilters);
     const hasChanges = filtersStr !== pendingStr;
     // Debug log for troubleshooting
-    if (process.env.NODE_ENV === 'development') {
-      console.log('[MonadTable] Filter comparison:', {
+    if (process.env.NODE_ENV === "development") {
+      console.log("[MonadTable] Filter comparison:", {
         current: filters.protocols,
         pending: pendingFilters.protocols,
         hasChanges,
@@ -2406,43 +2438,72 @@ function MonadTable({
   const router = useRouter();
 
   // Quick buy functionality
-  const { user, solBalance, refreshBalance, chainBalances, walletList, walletBalances, selectedWalletIds } = useUser();
+  const {
+    user,
+    solBalance,
+    refreshBalance,
+    chainBalances,
+    walletList,
+    walletBalances,
+    selectedWalletIds,
+  } = useUser();
   const { presets, activePreset, setActivePreset } = useQuickBuy();
-  
+
   // Ref to track pending toast for WebSocket txHash update
-  const pendingQuickBuyToastRef = useRef<{ id: string; tokenImage: string | null; tokenName: string; fakeTime: string; tokenAddress: string; startTime: number; timerInterval?: NodeJS.Timeout; totalSelectedWallets: number } | null>(null);
-  
+  const pendingQuickBuyToastRef = useRef<{
+    id: string;
+    tokenImage: string | null;
+    tokenName: string;
+    fakeTime: string;
+    tokenAddress: string;
+    startTime: number;
+    timerInterval?: NodeJS.Timeout;
+    totalSelectedWallets: number;
+  } | null>(null);
+
   // Callback for instant txHash update via WebSocket (fires before HTTP response)
-  const handleWsTxHash = useCallback((data: { txHash: string; tokenAddress: string; tradeType: 'buy' | 'sell'; explorerUrl: string }) => {
-    const pending = pendingQuickBuyToastRef.current;
-    if (!pending || pending.tokenAddress.toLowerCase() !== data.tokenAddress.toLowerCase()) return;
+  const handleWsTxHash = useCallback(
+    (data: {
+      txHash: string;
+      tokenAddress: string;
+      tradeType: "buy" | "sell";
+      explorerUrl: string;
+    }) => {
+      const pending = pendingQuickBuyToastRef.current;
+      if (
+        !pending ||
+        pending.tokenAddress.toLowerCase() !== data.tokenAddress.toLowerCase()
+      )
+        return;
 
-    console.log('[MonadTable] 🚀 INSTANT txHash via WebSocket:', data.txHash);
+      console.log("[MonadTable] 🚀 INSTANT txHash via WebSocket:", data.txHash);
 
-    // For multi-wallet trades: Don't update the toast (count was already shown)
-    // For single wallet: Update the link element with clickable Monad logo
-    if (pending.totalSelectedWallets === 1) {
-      const linkEl = document.getElementById(`link-${pending.id}`);
-      if (linkEl) {
-        linkEl.innerHTML = `<a href="${data.explorerUrl}" target="_blank" rel="noopener noreferrer" class="hover:opacity-80 transition-opacity"><img src="https://pbs.twimg.com/profile_images/1749618187489206272/rDaFjEhN_400x400.jpg" alt="Monad" class="w-4 h-4 rounded-full" style="cursor: pointer;" /></a>`;
-      }
-    }
-
-    // Set duration for auto-dismiss after 10s
-    setTimeout(() => {
-      if (pendingQuickBuyToastRef.current?.id === pending.id) {
-        if (pendingQuickBuyToastRef.current.timerInterval) {
-          clearInterval(pendingQuickBuyToastRef.current.timerInterval);
+      // For multi-wallet trades: Don't update the toast (count was already shown)
+      // For single wallet: Update the link element with clickable Monad logo
+      if (pending.totalSelectedWallets === 1) {
+        const linkEl = document.getElementById(`link-${pending.id}`);
+        if (linkEl) {
+          linkEl.innerHTML = `<a href="${data.explorerUrl}" target="_blank" rel="noopener noreferrer" class="hover:opacity-80 transition-opacity"><img src="https://pbs.twimg.com/profile_images/1749618187489206272/rDaFjEhN_400x400.jpg" alt="Monad" class="w-4 h-4 rounded-full" style="cursor: pointer;" /></a>`;
         }
-        toast.dismiss(pending.id);
-        pendingQuickBuyToastRef.current = null;
       }
-    }, 10000);
-  }, []);
-  
+
+      // Set duration for auto-dismiss after 10s
+      setTimeout(() => {
+        if (pendingQuickBuyToastRef.current?.id === pending.id) {
+          if (pendingQuickBuyToastRef.current.timerInterval) {
+            clearInterval(pendingQuickBuyToastRef.current.timerInterval);
+          }
+          toast.dismiss(pending.id);
+          pendingQuickBuyToastRef.current = null;
+        }
+      }, 10000);
+    },
+    [],
+  );
+
   // WebSocket for instant txHash - connect when component mounts (listens for any token)
   useMonadPositionWebSocket({
-    tokenAddress: '', // Empty string - we'll match by tokenAddress in the callback
+    tokenAddress: "", // Empty string - we'll match by tokenAddress in the callback
     enabled: !!user?.id,
     onTxHash: handleWsTxHash,
   });
@@ -2526,7 +2587,10 @@ function MonadTable({
     // Get slippage from preset or use default (15%)
     const slippage = settings?.maxSlippage ? settings.maxSlippage * 100 : 15;
     // Get gas price from preset (optional, undefined if not set)
-    const gasPrice = settings?.gasPrice !== undefined && settings.gasPrice > 0 ? settings.gasPrice : undefined;
+    const gasPrice =
+      settings?.gasPrice !== undefined && settings.gasPrice > 0
+        ? settings.gasPrice
+        : undefined;
 
     const selectedMonadWalletIds = selectedWalletIds?.monad || [];
     const isMultiWallet = selectedMonadWalletIds.length > 1;
@@ -2540,7 +2604,7 @@ function MonadTable({
       selectedWalletIds: selectedMonadWalletIds,
       walletList,
       walletBalances,
-      fallbackBalance: chainBalances['monad'] ?? 0,
+      fallbackBalance: chainBalances["monad"] ?? 0,
     });
 
     if (!isMultiWallet) {
@@ -2551,10 +2615,14 @@ function MonadTable({
       });
 
       if (!clientValidation.isValid) {
-        showEnhancedToast("error", clientValidation.errorMessage || 'Insufficient MON balance', {
-          title: "Insufficient Balance",
-          duration: 5000,
-        });
+        showEnhancedToast(
+          "error",
+          clientValidation.errorMessage || "Insufficient MON balance",
+          {
+            title: "Insufficient Balance",
+            duration: 5000,
+          },
+        );
         return;
       }
     }
@@ -2567,20 +2635,21 @@ function MonadTable({
       amountMON: buyAmount,
       launchpad,
       slippage,
-      gasPrice: gasPrice !== undefined ? `${gasPrice} gwei` : 'network suggestion',
+      gasPrice:
+        gasPrice !== undefined ? `${gasPrice} gwei` : "network suggestion",
     });
 
     // Get token image and name
     const tokenImage = token ? extractTokenImage(token as any) : null;
-    const tokenName = token?.name || token?.symbol || '';
-    
+    const tokenName = token?.name || token?.symbol || "";
+
     // Generate unique toast ID and fake fast time (0.40-0.60s)
     const uniqueToastId = `monad-quickbuy-${Date.now()}`;
     const fakeTime = (Math.random() * 0.2 + 0.4).toFixed(2);
     const startTime = Date.now();
-    
+
     // Random cap time between 0.40 and 0.60 seconds
-    const timerCap = 0.40 + Math.random() * 0.20;
+    const timerCap = 0.4 + Math.random() * 0.2;
     let timerFinished = false;
 
     // Pre-calculate which wallets will actually be used (have sufficient balance)
@@ -2591,25 +2660,57 @@ function MonadTable({
       selectedWalletIds: selectedMonadWalletIds,
     });
     const DISPLAY_MIN_BALANCE = 0.0035; // ~ min trade + fee + reserve
-    const fundedAllocations = allocations.filter((a) => (a.balance ?? 0) >= DISPLAY_MIN_BALANCE);
-    const walletsWithBalance = fundedAllocations.length || (allocations.length > 0 ? 1 : 0);
+    const fundedAllocations = allocations.filter(
+      (a) => (a.balance ?? 0) >= DISPLAY_MIN_BALANCE,
+    );
+    const walletsWithBalance =
+      fundedAllocations.length || (allocations.length > 0 ? 1 : 0);
 
     // Show initial loading toast with timer - checkmark hidden until timer finishes, link icon grayed out
     toast.custom(
       (t) => (
-        <div className="flex items-center gap-2 bg-[#1a1b1e] text-white border border-white/10 rounded-lg px-4 py-3">
-          <FaCheckCircle id={`check-${uniqueToastId}`} className="flex-shrink-0" size={16} style={{ color: '#31e3ac', display: 'none' }} />
+        <div className="flex items-center gap-2 rounded-lg border border-white/10 bg-[#1a1b1e] px-4 py-3 text-white">
+          <FaCheckCircle
+            id={`check-${uniqueToastId}`}
+            className="flex-shrink-0"
+            size={16}
+            style={{ color: "#31e3ac", display: "none" }}
+          />
           {tokenImage && (
-            <img src={tokenImage} alt={tokenName} className="w-5 h-5 rounded-full object-cover flex-shrink-0" style={{ border: '1px solid rgba(255, 255, 255, 0.1)' }} onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
+            <img
+              src={tokenImage}
+              alt={tokenName}
+              className="h-5 w-5 flex-shrink-0 rounded-full object-cover"
+              style={{ border: "1px solid rgba(255, 255, 255, 0.1)" }}
+              onError={(e) => {
+                (e.target as HTMLImageElement).style.display = "none";
+              }}
+            />
           )}
-          <span className="font-semibold text-sm" style={{ color: '#31e3ac' }}>Trade placed!</span>
-          <span id={`timer-${uniqueToastId}`} className="text-[#9CA3AF] text-xs ml-1">(0.00s)</span>
-          <span id={`link-${uniqueToastId}`} className="inline-flex items-center ml-1" style={{ display: 'none' }}>
-            <img src="https://pbs.twimg.com/profile_images/1749618187489206272/rDaFjEhN_400x400.jpg" alt="Monad" className="w-4 h-4 rounded-full" style={{ cursor: 'default' }} />
+          <span className="text-sm font-semibold" style={{ color: "#31e3ac" }}>
+            Trade placed!
+          </span>
+          <span
+            id={`timer-${uniqueToastId}`}
+            className="ml-1 text-xs text-[#9CA3AF]"
+          >
+            (0.00s)
+          </span>
+          <span
+            id={`link-${uniqueToastId}`}
+            className="ml-1 inline-flex items-center"
+            style={{ display: "none" }}
+          >
+            <img
+              src="https://pbs.twimg.com/profile_images/1749618187489206272/rDaFjEhN_400x400.jpg"
+              alt="Monad"
+              className="h-4 w-4 rounded-full"
+              style={{ cursor: "default" }}
+            />
           </span>
         </div>
       ),
-      { id: uniqueToastId, duration: Infinity }
+      { id: uniqueToastId, duration: Infinity },
     );
 
     // Start timer animation - update every 50ms, show checkmark when cap is reached
@@ -2626,7 +2727,7 @@ function MonadTable({
         timerFinished = true;
         const checkEl = document.getElementById(`check-${uniqueToastId}`);
         if (checkEl) {
-          checkEl.style.display = 'block';
+          checkEl.style.display = "block";
         }
         const linkEl = document.getElementById(`link-${uniqueToastId}`);
         if (linkEl) {
@@ -2634,13 +2735,22 @@ function MonadTable({
             // Show actual wallets with balance vs total selected
             linkEl.innerHTML = `<span style="color: #31e3ac; font-size: 11px; font-weight: 600;">${walletsWithBalance}/${totalSelectedWallets}</span>`;
           }
-          linkEl.style.display = 'inline-flex';
+          linkEl.style.display = "inline-flex";
         }
       }
     }, 50);
-    
+
     // Store pending toast info for WebSocket instant update (including timer)
-    pendingQuickBuyToastRef.current = { id: uniqueToastId, tokenImage, tokenName, fakeTime: timerCap.toFixed(2), tokenAddress, startTime, timerInterval, totalSelectedWallets };
+    pendingQuickBuyToastRef.current = {
+      id: uniqueToastId,
+      tokenImage,
+      tokenName,
+      fakeTime: timerCap.toFixed(2),
+      tokenAddress,
+      startTime,
+      timerInterval,
+      totalSelectedWallets,
+    };
 
     try {
       const { results, totalConsidered } = await executeMonadMultiBuy({
@@ -2681,16 +2791,16 @@ function MonadTable({
         // Refresh balance immediately after successful buy (with small delay for on-chain confirmation)
         setTimeout(() => {
           refreshBalance({ chain: "monad", force: true }).catch((err) => {
-            console.warn('Failed to refresh balance:', err);
+            console.warn("Failed to refresh balance:", err);
           });
         }, 1000);
-        broadcastMonadQuickTrade(tokenAddress, 'buy');
+        broadcastMonadQuickTrade(tokenAddress, "buy");
         console.log("✅ Monad Quick Buy successful:", txHashes);
         return { success: true, txHash: txHashes[0] };
       } else {
         clearInterval(timerInterval);
         pendingQuickBuyToastRef.current = null;
-        const errorMsg = 'Trade failed';
+        const errorMsg = "Trade failed";
         toast.error(errorMsg, { id: uniqueToastId, duration: 6000 });
         return { success: false, error: errorMsg };
       }
@@ -2961,7 +3071,8 @@ function MonadTable({
 
     // Filter out specific blocked token address for New Pairs
     if (isNewPairs) {
-      const blockedTokenAddress = "0x3bd359c1119da7da1d913d1c4d2b7c461115433a".toLowerCase();
+      const blockedTokenAddress =
+        "0x3bd359c1119da7da1d913d1c4d2b7c461115433a".toLowerCase();
       filtered = filtered.filter((token) => {
         const tokenMint = (token.mint || "").toLowerCase();
         return tokenMint !== blockedTokenAddress;
@@ -3060,16 +3171,17 @@ function MonadTable({
       }
     }
 
-
     // Age filter
     if (filters.minAge) {
       const minAge = parseFloat(filters.minAge);
       if (!isNaN(minAge)) {
         const ageUnit = filters.ageUnit || "m";
-        const multiplier = ageUnit === "h" ? 3600000 : ageUnit === "d" ? 86400000 : 60000; // h=hours, d=days, m=minutes
+        const multiplier =
+          ageUnit === "h" ? 3600000 : ageUnit === "d" ? 86400000 : 60000; // h=hours, d=days, m=minutes
         const minAgeMs = minAge * multiplier;
         filtered = filtered.filter((token) => {
-          const tokenTime = (token as any).created_at || (token as any).launch_time || "";
+          const tokenTime =
+            (token as any).created_at || (token as any).launch_time || "";
           if (!tokenTime) return false;
           const tokenAge = Date.now() - new Date(tokenTime).getTime();
           return tokenAge >= minAgeMs;
@@ -3080,10 +3192,12 @@ function MonadTable({
       const maxAge = parseFloat(filters.maxAge);
       if (!isNaN(maxAge)) {
         const ageUnit = filters.ageUnit || "m";
-        const multiplier = ageUnit === "h" ? 3600000 : ageUnit === "d" ? 86400000 : 60000;
+        const multiplier =
+          ageUnit === "h" ? 3600000 : ageUnit === "d" ? 86400000 : 60000;
         const maxAgeMs = maxAge * multiplier;
         filtered = filtered.filter((token) => {
-          const tokenTime = (token as any).created_at || (token as any).launch_time || "";
+          const tokenTime =
+            (token as any).created_at || (token as any).launch_time || "";
           if (!tokenTime) return false;
           const tokenAge = Date.now() - new Date(tokenTime).getTime();
           return tokenAge <= maxAgeMs;
@@ -3096,7 +3210,10 @@ function MonadTable({
       const minLiquidity = parseFloat(filters.minLiquidity);
       if (!isNaN(minLiquidity)) {
         filtered = filtered.filter((token) => {
-          const liquidity = (token as any).liquidity_usd || (token as any).total_liquidity_usd || 0;
+          const liquidity =
+            (token as any).liquidity_usd ||
+            (token as any).total_liquidity_usd ||
+            0;
           return liquidity >= minLiquidity;
         });
       }
@@ -3105,7 +3222,10 @@ function MonadTable({
       const maxLiquidity = parseFloat(filters.maxLiquidity);
       if (!isNaN(maxLiquidity)) {
         filtered = filtered.filter((token) => {
-          const liquidity = (token as any).liquidity_usd || (token as any).total_liquidity_usd || 0;
+          const liquidity =
+            (token as any).liquidity_usd ||
+            (token as any).total_liquidity_usd ||
+            0;
           return liquidity <= maxLiquidity;
         });
       }
@@ -3136,7 +3256,10 @@ function MonadTable({
       const minMarketCap = parseFloat(filters.minMarketCap);
       if (!isNaN(minMarketCap)) {
         filtered = filtered.filter((token) => {
-          const marketCap = (token as any).fully_diluted_value || (token as any).market_cap_usd || 0;
+          const marketCap =
+            (token as any).fully_diluted_value ||
+            (token as any).market_cap_usd ||
+            0;
           return marketCap >= minMarketCap;
         });
       }
@@ -3145,7 +3268,10 @@ function MonadTable({
       const maxMarketCap = parseFloat(filters.maxMarketCap);
       if (!isNaN(maxMarketCap)) {
         filtered = filtered.filter((token) => {
-          const marketCap = (token as any).fully_diluted_value || (token as any).market_cap_usd || 0;
+          const marketCap =
+            (token as any).fully_diluted_value ||
+            (token as any).market_cap_usd ||
+            0;
           return marketCap <= maxMarketCap;
         });
       }
@@ -3156,7 +3282,10 @@ function MonadTable({
       const minBonding = parseFloat(filters.bCurvePercentMin);
       if (!isNaN(minBonding)) {
         filtered = filtered.filter((token) => {
-          const bonding = (token as any).bonding_curve_progress || (token as any).bonding_pct || 0;
+          const bonding =
+            (token as any).bonding_curve_progress ||
+            (token as any).bonding_pct ||
+            0;
           return bonding >= minBonding;
         });
       }
@@ -3165,21 +3294,27 @@ function MonadTable({
       const maxBonding = parseFloat(filters.bCurvePercentMax);
       if (!isNaN(maxBonding)) {
         filtered = filtered.filter((token) => {
-          const bonding = (token as any).bonding_curve_progress || (token as any).bonding_pct || 0;
+          const bonding =
+            (token as any).bonding_curve_progress ||
+            (token as any).bonding_pct ||
+            0;
           return bonding <= maxBonding;
         });
       }
     }
-
 
     // Transactions filter
     if (filters.txnsMin) {
       const minTxns = parseFloat(filters.txnsMin);
       if (!isNaN(minTxns)) {
         filtered = filtered.filter((token) => {
-          const txns = (token as any).total_transactions || 
-                       ((token as any).total_buys || 0) + ((token as any).total_sells || 0) ||
-                       ((token as any).total_buys_24h || 0) + ((token as any).total_sells_24h || 0) || 0;
+          const txns =
+            (token as any).total_transactions ||
+            ((token as any).total_buys || 0) +
+              ((token as any).total_sells || 0) ||
+            ((token as any).total_buys_24h || 0) +
+              ((token as any).total_sells_24h || 0) ||
+            0;
           return txns >= minTxns;
         });
       }
@@ -3188,9 +3323,13 @@ function MonadTable({
       const maxTxns = parseFloat(filters.txnsMax);
       if (!isNaN(maxTxns)) {
         filtered = filtered.filter((token) => {
-          const txns = (token as any).total_transactions || 
-                       ((token as any).total_buys || 0) + ((token as any).total_sells || 0) ||
-                       ((token as any).total_buys_24h || 0) + ((token as any).total_sells_24h || 0) || 0;
+          const txns =
+            (token as any).total_transactions ||
+            ((token as any).total_buys || 0) +
+              ((token as any).total_sells || 0) ||
+            ((token as any).total_buys_24h || 0) +
+              ((token as any).total_sells_24h || 0) ||
+            0;
           return txns <= maxTxns;
         });
       }
@@ -3201,7 +3340,8 @@ function MonadTable({
       const minBuys = parseFloat(filters.numBuysMin);
       if (!isNaN(minBuys)) {
         filtered = filtered.filter((token) => {
-          const buys = (token as any).total_buys || (token as any).total_buys_24h || 0;
+          const buys =
+            (token as any).total_buys || (token as any).total_buys_24h || 0;
           return buys >= minBuys;
         });
       }
@@ -3210,7 +3350,8 @@ function MonadTable({
       const maxBuys = parseFloat(filters.numBuysMax);
       if (!isNaN(maxBuys)) {
         filtered = filtered.filter((token) => {
-          const buys = (token as any).total_buys || (token as any).total_buys_24h || 0;
+          const buys =
+            (token as any).total_buys || (token as any).total_buys_24h || 0;
           return buys <= maxBuys;
         });
       }
@@ -3221,7 +3362,8 @@ function MonadTable({
       const minSells = parseFloat(filters.numSellsMin);
       if (!isNaN(minSells)) {
         filtered = filtered.filter((token) => {
-          const sells = (token as any).total_sells || (token as any).total_sells_24h || 0;
+          const sells =
+            (token as any).total_sells || (token as any).total_sells_24h || 0;
           return sells >= minSells;
         });
       }
@@ -3230,7 +3372,8 @@ function MonadTable({
       const maxSells = parseFloat(filters.numSellsMax);
       if (!isNaN(maxSells)) {
         filtered = filtered.filter((token) => {
-          const sells = (token as any).total_sells || (token as any).total_sells_24h || 0;
+          const sells =
+            (token as any).total_sells || (token as any).total_sells_24h || 0;
           return sells <= maxSells;
         });
       }
@@ -3972,10 +4115,15 @@ function MonadTable({
                           Protocols
                         </h4>
                         {(() => {
-                          const allProtocols = protocols.map(p => p.name);
-                          const allSelected = allProtocols.length > 0 && allProtocols.every(p => pendingFilters.protocols.includes(p));
-                          const noneSelected = pendingFilters.protocols.length === 0;
-                          
+                          const allProtocols = protocols.map((p) => p.name);
+                          const allSelected =
+                            allProtocols.length > 0 &&
+                            allProtocols.every((p) =>
+                              pendingFilters.protocols.includes(p),
+                            );
+                          const noneSelected =
+                            pendingFilters.protocols.length === 0;
+
                           return (
                             <button
                               className="cursor-pointer rounded-full px-3 py-1 text-xs font-medium transition-all duration-300 ease-out"
@@ -3985,12 +4133,14 @@ function MonadTable({
                                 borderRadius: "20px",
                               }}
                               onMouseEnter={(e) => {
-                                e.currentTarget.style.backgroundColor = "#2563eb";
+                                e.currentTarget.style.backgroundColor =
+                                  "#2563eb";
                                 e.currentTarget.style.boxShadow = `0 0 8px ${AX.glowBlue}`;
                                 e.currentTarget.style.transform = "scale(1.05)";
                               }}
                               onMouseLeave={(e) => {
-                                e.currentTarget.style.backgroundColor = AX.aiBlue;
+                                e.currentTarget.style.backgroundColor =
+                                  AX.aiBlue;
                                 e.currentTarget.style.boxShadow = "none";
                                 e.currentTarget.style.transform = "scale(1)";
                               }}
@@ -5820,7 +5970,8 @@ function MonadTable({
               // Build query params for optimistic UI + cache lookup
               // Include chain parameter to preserve chain selection
               // Use prop from parent (more reliable) or fallback to router.query
-              const currentChain = chainProp || (router.query.chain as string) || "sol";
+              const currentChain =
+                chainProp || (router.query.chain as string) || "sol";
               const queryParams = new URLSearchParams({
                 _name: (token as any)?.name || (token as any)?.symbol || "",
                 _symbol: (token as any)?.symbol || "",
@@ -6188,7 +6339,7 @@ function MonadTable({
                           {/* Socials */}
                           <div className="relative flex items-center gap-1 lg:gap-2">
                             {/* Pump.fun Link - only show for pump tokens */}
-                            {token.mint.slice(-4) === "pump" && (
+                            {/* {token.mint.slice(-4) === "pump" && (
                               <Link
                                 target="_blank"
                                 href={`https://pump.fun/coin/${token.mint}`}
@@ -6213,10 +6364,10 @@ function MonadTable({
                                   style={{ strokeWidth: "3" }}
                                 />
                               </Link>
-                            )}
+                            )}  */}
 
                             {/* Search on Twitter Button - show for all tokens */}
-                            <button
+                            {/* <button
                               className="cursor-pointer transition-colors duration-200"
                               style={{ color: AX.muted }}
                               onMouseEnter={(e) => {
@@ -6253,70 +6404,72 @@ function MonadTable({
                                 className="lg:h-3 lg:w-3"
                                 style={{ strokeWidth: "3" }}
                               />
-                            </button>
+                            </button> */}
+                            <TradeSocialIcons token={token} />
                             {/* X Profile Preview Button */}
-                            <div className="relative">
-                              <button
-                                className="flex items-center justify-center rounded transition-colors duration-200"
-                                style={{
-                                  backgroundColor: "#111214",
-                                  padding: "2px",
-                                  width: "18px",
-                                  height: "18px",
-                                  color: "#36d8ff",
-                                }}
-                                onMouseEnter={(e) => {
-                                  e.currentTarget.style.color = "#36d8ff";
-                                  const tooltip = document.getElementById(
-                                    `profile-tooltip-${idx}`,
-                                  ) as HTMLElement;
-                                  if (tooltip) {
-                                    const rect =
+                            {false && (
+                              <div className="relative">
+                                <button
+                                  className="flex items-center justify-center rounded transition-colors duration-200"
+                                  style={{
+                                    backgroundColor: "#111214",
+                                    padding: "2px",
+                                    width: "18px",
+                                    height: "18px",
+                                    color: "#36d8ff",
+                                  }}
+                                  onMouseEnter={(e) => {
+                                    e.currentTarget.style.color = "#36d8ff";
+                                    const tooltip = document.getElementById(
+                                      `profile-tooltip-${idx}`,
+                                    ) as HTMLElement;
+                                    if (tooltip) {
+                                      const rect =
+                                        e.currentTarget.getBoundingClientRect();
+                                      tooltip.style.left = `${rect.left + rect.width / 2}px`;
+                                      tooltip.style.top = `${rect.top - 10}px`;
+                                      tooltip.style.opacity = "1";
+                                    }
+                                    // Show X profile preview
+                                    setShowXPreview(idx);
+                                    // Store button position for popup positioning
+                                    const buttonRect =
                                       e.currentTarget.getBoundingClientRect();
-                                    tooltip.style.left = `${rect.left + rect.width / 2}px`;
-                                    tooltip.style.top = `${rect.top - 10}px`;
-                                    tooltip.style.opacity = "1";
-                                  }
-                                  // Show X profile preview
-                                  setShowXPreview(idx);
-                                  // Store button position for popup positioning
-                                  const buttonRect =
-                                    e.currentTarget.getBoundingClientRect();
-                                  setButtonPosition({
-                                    left:
-                                      buttonRect.left + buttonRect.width / 2,
-                                    top: buttonRect.top - 20,
-                                  });
-                                }}
-                                onMouseLeave={(e) => {
-                                  e.currentTarget.style.color = "#36d8ff";
-                                  const tooltip = document.getElementById(
-                                    `profile-tooltip-${idx}`,
-                                  ) as HTMLElement;
-                                  if (tooltip) tooltip.style.opacity = "0";
-                                }}
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  e.preventDefault(); // Prevent Link navigation
-                                  // Open X profile in new tab
-                                  const profileUrl = `https://twitter.com/${token.symbol?.toLowerCase() || "search"}`;
-                                  window.open(profileUrl, "_blank");
-                                }}
-                              >
-                                <IoPersonOutline
-                                  size={12}
-                                  style={{ strokeWidth: "2" }}
-                                />
-                              </button>
+                                    setButtonPosition({
+                                      left:
+                                        buttonRect.left + buttonRect.width / 2,
+                                      top: buttonRect.top - 20,
+                                    });
+                                  }}
+                                  onMouseLeave={(e) => {
+                                    e.currentTarget.style.color = "#36d8ff";
+                                    const tooltip = document.getElementById(
+                                      `profile-tooltip-${idx}`,
+                                    ) as HTMLElement;
+                                    if (tooltip) tooltip.style.opacity = "0";
+                                  }}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    e.preventDefault(); // Prevent Link navigation
+                                    // Open X profile in new tab
+                                    const profileUrl = `https://twitter.com/${token.symbol?.toLowerCase() || "search"}`;
+                                    window.open(profileUrl, "_blank");
+                                  }}
+                                >
+                                  <IoPersonOutline
+                                    size={12}
+                                    style={{ strokeWidth: "2" }}
+                                  />
+                                </button>
 
-                              {/* Small X Profile Preview - positioned near token */}
-                              {showXPreview === idx && buttonPosition && (
-                                <TokenXProfile
+                                {/* Small X Profile Preview - positioned near token */}
+                                {/* {showXPreview === idx && (
+                                <SocialIconsWithMetadata
                                   token={token}
-                                  setShowXPreview={setShowXPreview}
                                 />
-                              )}
-                            </div>
+                              )} */}
+                              </div>
+                            )}
 
                             {/* People Icon - Total Holders */}
                             <div className="relative flex items-center gap-1">
