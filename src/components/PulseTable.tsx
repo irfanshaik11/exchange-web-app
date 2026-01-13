@@ -7571,15 +7571,39 @@ function PulseTable({
                                 </div>}
 
                                 <div className="ml-1 flex flex-row gap-2 font-light">
-                                  {/* Crown Icon */}
-                                  <div className="flex items-center gap-1">
+                                  {/* Crown Icon - Dev Migration Stats */}
+                                  <div className="group/dev relative flex items-center gap-1 cursor-pointer">
                                     <PiCrownSimpleLight
                                       size={16}
                                       style={{ color: "#dcc13c" }}
                                     />
                                     <span className="text-sm text-white">
-                                      0
+                                      {token.dev_tokens_migrated ?? 0}/{token.dev_tokens_created ?? 0}
                                     </span>
+                                    {/* Dev Migration Tooltip */}
+                                    <div className="pointer-events-none absolute left-0 top-full mt-2 min-w-[180px] bg-[#1a1b1f] border border-[#2a2b33] rounded-lg opacity-0 group-hover/dev:opacity-100 group-hover/dev:pointer-events-auto transition-opacity duration-100 z-[99999] shadow-xl overflow-hidden">
+                                      <div className="px-3 py-2 space-y-1.5">
+                                        <div className="flex justify-between items-center">
+                                          <span className="text-sm text-gray-400">Dev Migrated</span>
+                                          <span className="text-sm text-white font-medium">{token.dev_tokens_migrated ?? 0}</span>
+                                        </div>
+                                        <div className="flex justify-between items-center">
+                                          <span className="text-sm text-gray-400">Dev Launched</span>
+                                          <span className="text-sm text-white font-medium">{token.dev_tokens_created ?? 0}</span>
+                                        </div>
+                                        <div className="flex justify-between items-center">
+                                          <span className="text-sm text-gray-400">Migrated</span>
+                                          <span className="text-sm text-white font-medium">
+                                            {token.dev_tokens_created && token.dev_tokens_created > 0
+                                              ? `${Math.round((token.dev_tokens_migrated ?? 0) / token.dev_tokens_created * 100)}%`
+                                              : '0%'}
+                                          </span>
+                                        </div>
+                                      </div>
+                                      <div className="px-3 py-2 border-t border-[#2a2b33] bg-[#16171a]">
+                                        <span className="text-xs text-gray-500">Click to open Dev Tokens</span>
+                                      </div>
+                                    </div>
                                   </div>
 
                                   {/* KOL Count - Trophy Icon */}

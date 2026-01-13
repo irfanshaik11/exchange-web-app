@@ -31,6 +31,9 @@ export interface PolymarketMarket {
   closed: boolean;
   active: boolean;
   resolved?: boolean;
+  resolvedBy?: string; // UMA resolver contract address
+  groupItemTitle?: string; // Label for multi-outcome markets
+  groupItemThreshold?: string; // Threshold for ordering multi-outcome markets
   image?: string;
   icon?: string;
 }
@@ -84,76 +87,102 @@ const mapPolymarketCategory = (tags: PolymarketTag[], title: string): string => 
   return 'other';
 };
 
-// Transform Polymarket event/market to ExtendedPredictionMarket
+// Transform Polymarket event to a SINGLE ExtendedPredictionMarket
+// Multi-outcome events (like "Who will Trump nominate?") should show as ONE card, not one per outcome
 const transformToUnified = (event: PolymarketEvent): ExtendedPredictionMarket[] => {
-  return event.markets.map(market => {
-    // Parse outcomes and prices
-    const outcomes = safeJsonParse<string[]>(market.outcomes, ['Yes', 'No']);
+  // Always return ONE card per event
+  if (event.markets.length === 0) return [];
+
+  // For multi-outcome markets, find the leading outcome (highest YES probability)
+  // For simple Yes/No markets, just use the first market
+  const isMultiOutcome = event.markets.length > 1;
+
+  // Find the market with highest YES probability to feature on the card
+  let primaryMarket = event.markets[0];
+  let highestYesPrice = 0;
+
+  for (const market of event.markets) {
     const prices = safeJsonParse<string[]>(market.outcomePrices, ['0.5', '0.5']).map(Number);
-
-    // Parse token IDs (could be array or JSON string)
-    let tokenIds: string[] = [];
-    if (Array.isArray(market.clobTokenIds)) {
-      tokenIds = market.clobTokenIds;
-    } else if (typeof market.clobTokenIds === 'string') {
-      tokenIds = safeJsonParse<string[]>(market.clobTokenIds, []);
+    const yesPrice = prices[0] || 0;
+    if (yesPrice > highestYesPrice) {
+      highestYesPrice = yesPrice;
+      primaryMarket = market;
     }
+  }
 
-    const yesPrice = prices[0] || 0.5;
-    const noPrice = prices[1] || (1 - yesPrice);
+  // Parse outcomes and prices from primary market
+  const prices = safeJsonParse<string[]>(primaryMarket.outcomePrices, ['0.5', '0.5']).map(Number);
 
-    // Determine status
-    let status: 'active' | 'closed' | 'resolved' = 'active';
-    if (market.resolved) {
-      status = 'resolved';
-    } else if (market.closed || event.closed) {
-      status = 'closed';
-    }
+  // Parse token IDs (could be array or JSON string)
+  let tokenIds: string[] = [];
+  if (Array.isArray(primaryMarket.clobTokenIds)) {
+    tokenIds = primaryMarket.clobTokenIds;
+  } else if (typeof primaryMarket.clobTokenIds === 'string') {
+    tokenIds = safeJsonParse<string[]>(primaryMarket.clobTokenIds, []);
+  }
 
-    return {
-      // Basic PredictionMarket fields
-      // Use event.slug for ticker since Polymarket API queries by event slug
-      ticker: event.slug || market.slug || `poly-${market.id}`,
-      title: event.title,
-      category: mapPolymarketCategory(event.tags, event.title),
-      yesPrice,
-      noPrice,
-      yesPriceChange24h: 0,
-      noPriceChange24h: 0,
-      volume24h: event.volume24hr || 0,
-      totalVolume: parseFloat(event.volume) || 0,
-      closesAt: market.endDate || event.endDate,
-      status,
-      resolution: undefined,
-      imageUrl: event.image || event.icon || market.image,
+  const yesPrice = prices[0] || 0.5;
+  const noPrice = prices[1] || (1 - yesPrice);
 
-      // Extended fields
-      marketType: 'binary',
-      subtitle: market.question !== event.title ? market.question : undefined,
-      eventTicker: event.slug,
+  // Determine status
+  let status: 'active' | 'closed' | 'resolved' = 'active';
+  if (primaryMarket.resolved) {
+    status = 'resolved';
+  } else if (primaryMarket.closed || event.closed) {
+    status = 'closed';
+  }
 
-      // Timing
-      openTime: new Date(event.startDate).getTime() / 1000,
-      closeTime: new Date(market.endDate || event.endDate).getTime() / 1000,
-      expirationTime: new Date(market.endDate || event.endDate).getTime() / 1000,
+  // For multi-outcome, show the leading outcome in subtitle
+  const leadingOutcome = isMultiOutcome && primaryMarket.groupItemTitle
+    ? `Leading: ${primaryMarket.groupItemTitle} (${(yesPrice * 100).toFixed(0)}%)`
+    : undefined;
 
-      // Stats
-      openInterest: event.openInterest || parseFloat(event.liquidity) || 0,
-      liquidity: parseFloat(event.liquidity) || 0,
+  return [{
+    // Basic PredictionMarket fields
+    // Use event.slug for ticker since Polymarket API queries by event slug
+    ticker: event.slug || primaryMarket.slug || `poly-${primaryMarket.id}`,
+    title: event.title,
+    category: mapPolymarketCategory(event.tags, event.title),
+    yesPrice,
+    noPrice,
+    yesPriceChange24h: 0,
+    noPriceChange24h: 0,
+    volume24h: event.volume24hr || 0,
+    totalVolume: parseFloat(event.volume) || 0,
+    closesAt: primaryMarket.endDate || event.endDate,
+    status,
+    resolution: undefined,
+    imageUrl: event.image || event.icon || primaryMarket.image,
 
-      // Polymarket-specific (stored in extended fields)
-      polymarketData: {
-        source: 'polymarket' as const,
-        eventId: event.id,
-        marketId: market.id,
-        conditionId: market.conditionId,
-        yesTokenId: tokenIds[0] || '',
-        noTokenId: tokenIds[1] || '',
-        tickSize: market.tickSize,
-        negRisk: market.negRisk,
-      },
-    } as ExtendedPredictionMarket & { polymarketData: any };
-  });
+    // Extended fields
+    marketType: isMultiOutcome ? 'multi' : 'binary',
+    subtitle: leadingOutcome,
+    eventTicker: event.slug,
+    outcomeCount: event.markets.length, // Number of outcomes in multi-outcome market
+
+    // Timing
+    openTime: new Date(event.startDate).getTime() / 1000,
+    closeTime: new Date(primaryMarket.endDate || event.endDate).getTime() / 1000,
+    expirationTime: new Date(primaryMarket.endDate || event.endDate).getTime() / 1000,
+
+    // Stats
+    openInterest: event.openInterest || parseFloat(event.liquidity) || 0,
+    liquidity: parseFloat(event.liquidity) || 0,
+
+    // Polymarket-specific (stored in extended fields)
+    polymarketData: {
+      source: 'polymarket' as const,
+      eventId: event.id,
+      marketId: primaryMarket.id,
+      conditionId: primaryMarket.conditionId,
+      yesTokenId: tokenIds[0] || '',
+      noTokenId: tokenIds[1] || '',
+      tickSize: primaryMarket.tickSize,
+      negRisk: primaryMarket.negRisk,
+      isMultiOutcome,
+      outcomeCount: event.markets.length,
+    },
+  } as ExtendedPredictionMarket & { polymarketData: any }];
 };
 
 interface UsePolymarketMarketsOptions {
@@ -520,6 +549,109 @@ export function usePolymarketPriceHistory(
     isLoading,
     error,
     refetch: fetchHistory,
+  };
+}
+
+// Multi-series price history interface
+export interface MultiSeriesPriceHistory {
+  id: string;
+  label: string;
+  tokenId: string;
+  history: PolymarketPricePoint[];
+  currentPrice?: number;
+}
+
+// Hook to fetch price history for multiple tokens (for multi-outcome markets)
+export function usePolymarketMultiPriceHistory(
+  markets: Array<{ id: string; label: string; tokenId: string; currentPrice?: number }> | undefined,
+  options: {
+    interval?: string;
+    fidelity?: number;
+    refreshInterval?: number;
+    enabled?: boolean;
+  } = {}
+) {
+  const {
+    interval = 'max',
+    fidelity = 60,
+    refreshInterval = 60000,
+    enabled = true,
+  } = options;
+
+  const [seriesData, setSeriesData] = useState<MultiSeriesPriceHistory[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const fetchAllHistories = useCallback(async () => {
+    if (!markets || markets.length === 0 || !enabled) {
+      return;
+    }
+
+    try {
+      // Fetch all token histories in parallel
+      const results = await Promise.all(
+        markets.map(async (market) => {
+          try {
+            const params = new URLSearchParams();
+            params.set('market', market.tokenId);
+            params.set('interval', interval);
+            params.set('fidelity', fidelity.toString());
+
+            const response = await fetch(`${API_BASE}/prices-history?${params}`);
+
+            if (!response.ok) {
+              console.warn(`[usePolymarketMultiPriceHistory] Failed to fetch history for ${market.label}`);
+              return { ...market, history: [] };
+            }
+
+            const json = await response.json();
+            const data = json.data || json;
+            return {
+              id: market.id,
+              label: market.label,
+              tokenId: market.tokenId,
+              history: data.history || [],
+              currentPrice: market.currentPrice,
+            };
+          } catch (err) {
+            console.warn(`[usePolymarketMultiPriceHistory] Error fetching ${market.label}:`, err);
+            return { ...market, history: [] };
+          }
+        })
+      );
+
+      setSeriesData(results);
+      setError(null);
+      console.log(`[usePolymarketMultiPriceHistory] Fetched history for ${results.length} tokens`);
+    } catch (err) {
+      console.error('[usePolymarketMultiPriceHistory] Failed to fetch histories:', err);
+      setError(err instanceof Error ? err.message : 'Failed to fetch price histories');
+    } finally {
+      setIsLoading(false);
+    }
+  }, [markets, interval, fidelity, enabled]);
+
+  useEffect(() => {
+    if (!markets || markets.length === 0 || !enabled) {
+      setSeriesData([]);
+      setIsLoading(false);
+      return;
+    }
+
+    setIsLoading(true);
+    fetchAllHistories();
+
+    if (refreshInterval > 0) {
+      const intervalId = setInterval(fetchAllHistories, refreshInterval);
+      return () => clearInterval(intervalId);
+    }
+  }, [markets?.length, enabled, fetchAllHistories, refreshInterval]);
+
+  return {
+    seriesData,
+    isLoading,
+    error,
+    refetch: fetchAllHistories,
   };
 }
 

@@ -13,9 +13,27 @@ const AX = {
   greenBg: "rgba(74, 222, 128, 0.15)",
   red: "#F87171",
   redBg: "rgba(248, 113, 113, 0.15)",
+  blue: "#60A5FA",
+  cyan: "#22D3EE",
+  yellow: "#FBBF24",
+  purple: "#818CF8",
+  orange: "#FB923C",
+  pink: "#F472B6",
 };
 
-export type PredictionInterval = '1m' | '1h' | '1D';
+// Multi-series color palette
+const SERIES_COLORS = [
+  '#60A5FA', // blue
+  '#22D3EE', // cyan
+  '#FBBF24', // yellow
+  '#818CF8', // purple
+  '#FB923C', // orange
+  '#F472B6', // pink
+  '#4ADE80', // green
+  '#F87171', // red
+];
+
+export type PredictionInterval = '1m' | '1h' | '1D' | '1W' | 'ALL';
 
 export interface OrderBookLevel {
   price: number;
@@ -38,6 +56,15 @@ export interface PredictionOHLCData {
   volume?: number;
 }
 
+// Multi-series data structure
+export interface ChartSeriesData {
+  id: string;
+  label: string;
+  color?: string;
+  data: Array<{ time: number; price: number }>;
+  currentPrice?: number;
+}
+
 export interface TradingViewPredictionChartProps {
   ticker: string;
   marketTitle: string;
@@ -50,15 +77,11 @@ export interface TradingViewPredictionChartProps {
   className?: string;
   isResolved?: boolean;
   resolvedResult?: 'yes' | 'no' | null;
-  onIntervalChange?: (interval: PredictionInterval) => void;
+  // Multi-series support
+  series?: ChartSeriesData[];
+  isMultiSeries?: boolean;
+  showOrderBook?: boolean;
 }
-
-// Map intervals to TradingView resolution
-const INTERVAL_TO_RESOLUTION: Record<PredictionInterval, string> = {
-  '1m': '1',
-  '1h': '60',
-  '1D': '1D',
-};
 
 // Transform line chart data to OHLC format
 const transformToOHLC = (
@@ -255,6 +278,32 @@ const InlineOrderBook: React.FC<{
   );
 };
 
+// Multi-Series Legend Component
+const MultiSeriesLegend: React.FC<{
+  series: Array<{ label: string; color: string; currentPrice?: number }>;
+}> = ({ series }) => {
+  return (
+    <div className="flex flex-wrap items-center gap-x-4 gap-y-1 px-3 py-2" style={{ borderBottom: `1px solid ${AX.border}` }}>
+      {series.map((s, idx) => (
+        <div key={idx} className="flex items-center gap-1.5">
+          <div
+            className="w-2.5 h-2.5 rounded-full"
+            style={{ backgroundColor: s.color }}
+          />
+          <span className="text-xs" style={{ color: AX.text }}>
+            {s.label}
+          </span>
+          {s.currentPrice !== undefined && (
+            <span className="text-xs font-medium" style={{ color: s.color }}>
+              {(s.currentPrice * 100).toFixed(1)}%
+            </span>
+          )}
+        </div>
+      ))}
+    </div>
+  );
+};
+
 const TradingViewPredictionChart: React.FC<TradingViewPredictionChartProps> = ({
   ticker,
   marketTitle,
@@ -267,34 +316,78 @@ const TradingViewPredictionChart: React.FC<TradingViewPredictionChartProps> = ({
   className = '',
   isResolved = false,
   resolvedResult = null,
-  onIntervalChange,
+  series,
+  isMultiSeries = false,
+  showOrderBook = true,
 }) => {
   const chartContainerRef = useRef<HTMLDivElement>(null);
   const widgetRef = useRef<any>(null);
   const datafeedRef = useRef<any>(null);
   const ohlcCacheRef = useRef<PredictionOHLCData[]>([]);
+  const seriesCacheRef = useRef<Map<string, Array<{ time: number; price: number }>>>(new Map());
+  const seriesConfigRef = useRef<Array<{ id: string; label: string; color?: string }>>([]);
+  const isMountedRef = useRef(true);
 
-  const [selectedInterval, setSelectedInterval] = useState<PredictionInterval>('1h');
   const [orderBookSide, setOrderBookSide] = useState<'yes' | 'no'>('yes');
   const [isLoading, setIsLoading] = useState(true);
   const [libraryLoaded, setLibraryLoaded] = useState(false);
 
-  const intervals: PredictionInterval[] = ['1m', '1h', '1D'];
+  // Track mounted state to prevent cleanup errors
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, []);
 
-  // Generate OHLC data
+  // Prepare series with colors (memoized to prevent unnecessary re-renders)
+  const coloredSeries = useMemo(() => {
+    if (!series) return [];
+    return series.map((s, idx) => ({
+      ...s,
+      color: s.color || SERIES_COLORS[idx % SERIES_COLORS.length],
+    }));
+  }, [series]);
+
+  // Stable series config for widget initialization (IDs, labels, and colors only, not data)
+  // This only changes when series structure changes (add/remove), not when data updates
+  const seriesConfig = useMemo(() => {
+    return coloredSeries.map(s => ({ id: s.id, label: s.label, color: s.color }));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    // Only recreate when series IDs or colors change, not when data changes
+    coloredSeries.length,
+    // Use JSON stringify for stable comparison of structure
+    JSON.stringify(coloredSeries.map(s => ({ id: s.id, color: s.color }))),
+  ]);
+
+  // Keep ref in sync for use in datafeed callbacks (synchronous update, not effect)
+  seriesConfigRef.current = seriesConfig;
+
+  // Generate OHLC data for single series mode (default 1h interval)
   const ohlcData = useMemo(() => {
-    const intervalMs = selectedInterval === '1m' ? 60000 : selectedInterval === '1h' ? 3600000 : 86400000;
+    if (isMultiSeries) return [];
+    const intervalMs = 3600000; // 1 hour
     if (priceHistory && priceHistory.length > 0) {
       return transformToOHLC(priceHistory, intervalMs);
     }
-    const intervalSeconds = selectedInterval === '1m' ? 60 : selectedInterval === '1h' ? 3600 : 86400;
-    return generateSimulatedOHLC(yesPrice, intervalSeconds);
-  }, [priceHistory, yesPrice, selectedInterval]);
+    return generateSimulatedOHLC(yesPrice, 3600); // 1 hour in seconds
+  }, [priceHistory, yesPrice, isMultiSeries]);
 
-  // Update cache when data changes
+  // Update caches when data changes
   useEffect(() => {
     ohlcCacheRef.current = ohlcData;
   }, [ohlcData]);
+
+  useEffect(() => {
+    if (coloredSeries.length > 0) {
+      const cache = new Map<string, Array<{ time: number; price: number }>>();
+      coloredSeries.forEach(s => {
+        cache.set(s.id, s.data);
+      });
+      seriesCacheRef.current = cache;
+    }
+  }, [coloredSeries]);
 
   // Load TradingView library
   useEffect(() => {
@@ -346,12 +439,19 @@ const TradingViewPredictionChart: React.FC<TradingViewPredictionChartProps> = ({
       return;
     }
 
+    // Build list of all symbols (main + comparison symbols for multi-series)
+    // Use ref for initial config to avoid stale closures
+    const initialSeriesConfig = seriesConfigRef.current.length > 0 ? seriesConfigRef.current : seriesConfig;
+    const allSymbols = isMultiSeries && initialSeriesConfig.length > 0
+      ? initialSeriesConfig.map(s => s.id)
+      : [ticker];
+
     // Create datafeed
     const datafeed = {
       onReady: (callback: any) => {
         setTimeout(() => {
           callback({
-            supported_resolutions: ['1', '60', '1D'],
+            supported_resolutions: ['1', '60', '1D', '1W'],
             supports_marks: false,
             supports_timescale_marks: false,
             supports_time: true,
@@ -362,21 +462,26 @@ const TradingViewPredictionChart: React.FC<TradingViewPredictionChartProps> = ({
       searchSymbols: () => {},
 
       resolveSymbol: (symbolName: string, onResolve: any, onError: any) => {
+        // Find the series for this symbol - use ref for latest config
+        const currentConfig = seriesConfigRef.current;
+        const seriesItem = currentConfig.find(s => s.id === symbolName);
+        const displayName = seriesItem?.label || (symbolName === ticker ? marketTitle : symbolName);
+
         setTimeout(() => {
           onResolve({
-            name: ticker,
-            description: marketTitle,
+            name: symbolName,
+            description: displayName,
             type: 'prediction',
             session: '24x7',
             timezone: 'Etc/UTC',
             exchange: 'Predictions',
             minmov: 1,
-            pricescale: 100, // Prices in cents (0-100)
+            pricescale: 1000, // Prices as percentage (0-100 with 1 decimal)
             has_intraday: true,
             has_seconds: false,
             has_daily: true,
-            has_weekly_and_monthly: false,
-            supported_resolutions: ['1', '60', '1D'],
+            has_weekly_and_monthly: true,
+            supported_resolutions: ['1', '60', '1D', '1W'],
             volume_precision: 2,
             data_status: 'streaming',
           });
@@ -390,23 +495,50 @@ const TradingViewPredictionChart: React.FC<TradingViewPredictionChartProps> = ({
         onResult: any,
         onError: any
       ) => {
-        const data = ohlcCacheRef.current;
-        if (!data || data.length === 0) {
-          onResult([], { noData: true });
-          return;
+        const symbolName = symbolInfo.name;
+
+        if (isMultiSeries) {
+          // Multi-series mode - get data for the specific symbol
+          const seriesData = seriesCacheRef.current.get(symbolName);
+          if (!seriesData || seriesData.length === 0) {
+            onResult([], { noData: true });
+            return;
+          }
+
+          // Convert to TradingView format (time in ms, price as percentage)
+          const bars = seriesData
+            .filter(p => p.time > 0)
+            .sort((a, b) => a.time - b.time)
+            .map(point => ({
+              time: point.time,
+              open: point.price * 100,
+              high: point.price * 100,
+              low: point.price * 100,
+              close: point.price * 100,
+              volume: 0,
+            }));
+
+          onResult(bars, { noData: bars.length === 0 });
+        } else {
+          // Single series mode - use OHLC data
+          const data = ohlcCacheRef.current;
+          if (!data || data.length === 0) {
+            onResult([], { noData: true });
+            return;
+          }
+
+          // Convert to TradingView format (time in milliseconds, price in cents)
+          const bars = data.map(candle => ({
+            time: candle.time * 1000,
+            open: candle.open * 100,
+            high: candle.high * 100,
+            low: candle.low * 100,
+            close: candle.close * 100,
+            volume: candle.volume || 0,
+          }));
+
+          onResult(bars, { noData: bars.length === 0 });
         }
-
-        // Convert to TradingView format (time in milliseconds, price in cents)
-        const bars = data.map(candle => ({
-          time: candle.time * 1000,
-          open: candle.open * 100,
-          high: candle.high * 100,
-          low: candle.low * 100,
-          close: candle.close * 100,
-          volume: candle.volume || 0,
-        }));
-
-        onResult(bars, { noData: bars.length === 0 });
       },
 
       subscribeBars: () => {},
@@ -417,12 +549,14 @@ const TradingViewPredictionChart: React.FC<TradingViewPredictionChartProps> = ({
 
     // Create widget
     try {
+      const mainSymbol = isMultiSeries && initialSeriesConfig.length > 0 ? initialSeriesConfig[0].id : ticker;
+
       const widget = new TradingView.widget({
         debug: false,
         fullscreen: false,
-        symbol: ticker,
+        symbol: mainSymbol,
         datafeed: datafeed,
-        interval: INTERVAL_TO_RESOLUTION[selectedInterval],
+        interval: '60', // 1 hour - TradingView's built-in controls allow users to change this
         container: container,
         library_path: '/charting_library/charting_library/',
         locale: 'en',
@@ -430,8 +564,8 @@ const TradingViewPredictionChart: React.FC<TradingViewPredictionChartProps> = ({
         disabled_features: [
           'use_localstorage_for_settings',
           'header_symbol_search',
-          'header_compare',
           'header_saveload',
+          'header_compare', // We'll add our own comparison
         ],
         enabled_features: [
           'header_widget',
@@ -453,21 +587,28 @@ const TradingViewPredictionChart: React.FC<TradingViewPredictionChartProps> = ({
           'paneProperties.horzGridProperties.color': AX.border,
           'scalesProperties.textColor': AX.muted,
           'scalesProperties.lineColor': AX.border,
-          'mainSeriesProperties.candleStyle.upColor': AX.green,
-          'mainSeriesProperties.candleStyle.downColor': AX.red,
-          'mainSeriesProperties.candleStyle.borderUpColor': AX.green,
-          'mainSeriesProperties.candleStyle.borderDownColor': AX.red,
-          'mainSeriesProperties.candleStyle.wickUpColor': AX.green,
-          'mainSeriesProperties.candleStyle.wickDownColor': AX.red,
-          'mainSeriesProperties.candleStyle.drawWick': true,
-          'mainSeriesProperties.candleStyle.drawBorder': true,
-          'paneProperties.legendProperties.showLegend': true,
-          'paneProperties.legendProperties.showSeriesOHLC': true,
+          // Use line chart style for multi-series
+          ...(isMultiSeries ? {
+            'mainSeriesProperties.style': 2, // Line chart
+            'mainSeriesProperties.lineStyle.color': initialSeriesConfig[0]?.color || AX.blue,
+            'mainSeriesProperties.lineStyle.linewidth': 2,
+          } : {
+            'mainSeriesProperties.candleStyle.upColor': AX.green,
+            'mainSeriesProperties.candleStyle.downColor': AX.red,
+            'mainSeriesProperties.candleStyle.borderUpColor': AX.green,
+            'mainSeriesProperties.candleStyle.borderDownColor': AX.red,
+            'mainSeriesProperties.candleStyle.wickUpColor': AX.green,
+            'mainSeriesProperties.candleStyle.wickDownColor': AX.red,
+            'mainSeriesProperties.candleStyle.drawWick': true,
+            'mainSeriesProperties.candleStyle.drawBorder': true,
+          }),
+          'paneProperties.legendProperties.showLegend': !isMultiSeries,
+          'paneProperties.legendProperties.showSeriesOHLC': !isMultiSeries,
         },
-        // Custom price formatter for cents
+        // Custom price formatter for percentage
         custom_formatters: {
           priceFormatterFactory: () => ({
-            format: (price: number) => `${price.toFixed(1)}`,
+            format: (price: number) => `${price.toFixed(1)}%`,
           }),
         },
       });
@@ -475,6 +616,33 @@ const TradingViewPredictionChart: React.FC<TradingViewPredictionChartProps> = ({
       widget.onChartReady(() => {
         console.log('[TradingViewPredictionChart] Chart ready');
         setIsLoading(false);
+
+        // For multi-series, add comparison symbols using ref for latest config
+        const currentConfig = seriesConfigRef.current.length > 0 ? seriesConfigRef.current : initialSeriesConfig;
+        if (isMultiSeries && currentConfig.length > 1) {
+          const chart = widget.chart();
+
+          // Add remaining series as comparison
+          currentConfig.slice(1).forEach((seriesItem, idx) => {
+            try {
+              chart.createStudy(
+                'Compare',
+                false,
+                false,
+                {
+                  source: 'close',
+                  symbol: seriesItem.id,
+                },
+                {
+                  'plot.color': seriesItem.color,
+                  'plot.linewidth': 2,
+                }
+              );
+            } catch (e) {
+              console.warn('[TradingViewPredictionChart] Failed to add comparison series:', seriesItem.label, e);
+            }
+          });
+        }
       });
 
       widgetRef.current = widget;
@@ -484,16 +652,18 @@ const TradingViewPredictionChart: React.FC<TradingViewPredictionChartProps> = ({
     }
 
     return () => {
-      if (widgetRef.current) {
-        try {
-          widgetRef.current.remove();
-        } catch (e) {}
-        widgetRef.current = null;
-      }
+      // IMPORTANT: Do NOT call widget.remove() - it causes "removeChild" errors
+      // when React's reconciliation conflicts with TradingView's DOM manipulation.
+      // Instead, just clear the ref. The iframe will be garbage collected when
+      // React removes the container from the DOM.
+      widgetRef.current = null;
     };
-  }, [libraryLoaded, ticker, marketTitle, selectedInterval]);
+    // Only depend on values that truly require widget recreation
+    // Data changes should go through the datafeed/cache refs, not widget recreation
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [libraryLoaded, ticker, isMultiSeries]);
 
-  // Refresh chart when OHLC data changes
+  // Refresh chart when data changes
   useEffect(() => {
     if (!widgetRef.current) return;
 
@@ -503,82 +673,65 @@ const TradingViewPredictionChart: React.FC<TradingViewPredictionChartProps> = ({
         chart?.resetData?.();
       } catch (e) {}
     });
-  }, [ohlcData]);
-
-  const handleIntervalChange = (interval: PredictionInterval) => {
-    setSelectedInterval(interval);
-    onIntervalChange?.(interval);
-  };
+  }, [ohlcData, coloredSeries]);
 
   return (
-    <div className={`flex h-full ${className}`} style={{ width, height, backgroundColor: AX.bg }}>
-      {/* Chart section */}
-      <div className="flex-1 flex flex-col min-w-0">
-        {/* Interval toolbar */}
-        <div className="flex items-center gap-1 px-3 py-2" style={{ borderBottom: `1px solid ${AX.border}` }}>
-          {intervals.map((interval) => (
-            <button
-              key={interval}
-              onClick={() => handleIntervalChange(interval)}
-              disabled={isResolved}
-              className="px-2.5 py-1 text-xs font-medium rounded transition-colors"
-              style={{
-                backgroundColor: selectedInterval === interval ? AX.border : 'transparent',
-                color: selectedInterval === interval ? AX.text : AX.muted,
-                opacity: isResolved ? 0.5 : 1,
-              }}
-            >
-              {interval}
-            </button>
-          ))}
-          <div className="flex-1" />
-          <span className="text-xs" style={{ color: AX.muted }}>{ticker} · {selectedInterval}</span>
-          {isResolved && (
-            <span
-              className="ml-2 px-2 py-0.5 rounded text-[10px] font-medium"
-              style={{
-                backgroundColor: resolvedResult === 'yes' ? AX.greenBg : AX.redBg,
-                color: resolvedResult === 'yes' ? AX.green : AX.red,
-              }}
-            >
-              Resolved {resolvedResult?.toUpperCase()}
-            </span>
-          )}
-        </div>
+    <div className={`flex flex-col h-full ${className}`} style={{ width, height, backgroundColor: AX.bg }}>
+      {/* Multi-series legend */}
+      {isMultiSeries && coloredSeries.length > 0 && (
+        <MultiSeriesLegend
+          series={coloredSeries.map(s => ({
+            label: s.label,
+            color: s.color!,
+            currentPrice: s.currentPrice,
+          }))}
+        />
+      )}
 
-        {/* TradingView chart container or Resolved message */}
-        <div
-          ref={isResolved ? undefined : chartContainerRef}
-          className="flex-1 relative"
-          style={{ minHeight: 200 }}
-        >
-          {isResolved ? (
-            <div className="absolute inset-0 flex flex-col items-center justify-center" style={{ backgroundColor: AX.bg }}>
-              <div
-                className="w-16 h-16 rounded-full flex items-center justify-center mb-4"
-                style={{ backgroundColor: resolvedResult === 'yes' ? AX.greenBg : AX.redBg }}
-              >
-                <span className="text-2xl">{resolvedResult === 'yes' ? '✓' : '✗'}</span>
+      <div className="flex flex-1 min-h-0">
+        {/* Chart section */}
+        <div className="flex-1 flex flex-col min-w-0">
+          {/* TradingView chart container - IMPORTANT: Keep this div empty for TradingView's iframe */}
+          {/* React should never render children inside this div to avoid DOM conflicts */}
+          <div className="flex-1 relative" style={{ minHeight: 200 }}>
+            {/* TradingView's dedicated container - no React children allowed */}
+            <div
+              ref={chartContainerRef}
+              className="absolute inset-0"
+              style={{ display: isResolved ? 'none' : 'block' }}
+            />
+            {/* Overlay content rendered OUTSIDE TradingView's container */}
+            {isResolved && (
+              <div className="absolute inset-0 flex flex-col items-center justify-center" style={{ backgroundColor: AX.bg, zIndex: 10 }}>
+                <div
+                  className="w-16 h-16 rounded-full flex items-center justify-center mb-4"
+                  style={{ backgroundColor: resolvedResult === 'yes' ? AX.greenBg : AX.redBg }}
+                >
+                  <span className="text-2xl">{resolvedResult === 'yes' ? '✓' : '✗'}</span>
+                </div>
+                <p className="text-sm font-medium" style={{ color: AX.text }}>Market Resolved</p>
+                <p className="text-xs mt-1" style={{ color: resolvedResult === 'yes' ? AX.green : AX.red }}>
+                  Outcome: {resolvedResult?.toUpperCase()}
+                </p>
               </div>
-              <p className="text-sm font-medium" style={{ color: AX.text }}>Market Resolved</p>
-              <p className="text-xs mt-1" style={{ color: resolvedResult === 'yes' ? AX.green : AX.red }}>
-                Outcome: {resolvedResult?.toUpperCase()}
-              </p>
-            </div>
-          ) : isLoading ? (
-            <div className="absolute inset-0 flex items-center justify-center" style={{ backgroundColor: AX.bg }}>
-              <HiOutlineRefresh className="w-6 h-6 animate-spin" style={{ color: AX.muted }} />
-            </div>
-          ) : null}
+            )}
+            {isLoading && !isResolved && (
+              <div className="absolute inset-0 flex items-center justify-center" style={{ backgroundColor: AX.bg, zIndex: 10 }}>
+                <HiOutlineRefresh className="w-6 h-6 animate-spin" style={{ color: AX.muted }} />
+              </div>
+            )}
+          </div>
         </div>
-      </div>
 
-      {/* Order Book sidebar - always visible */}
-      <InlineOrderBook
-        orderBook={orderBook || null}
-        selectedSide={orderBookSide}
-        onSideChange={setOrderBookSide}
-      />
+        {/* Order Book sidebar - conditionally visible */}
+        {showOrderBook && (
+          <InlineOrderBook
+            orderBook={orderBook || null}
+            selectedSide={orderBookSide}
+            onSideChange={setOrderBookSide}
+          />
+        )}
+      </div>
     </div>
   );
 };

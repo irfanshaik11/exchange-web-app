@@ -77,6 +77,7 @@ export interface ExtendedPredictionMarket extends PredictionMarket {
   yesSubTitle?: string;
   noSubTitle?: string;
   eventTicker?: string;
+  outcomeCount?: number; // Number of outcomes for multi-outcome markets
 
   // Timing
   openTime?: number;

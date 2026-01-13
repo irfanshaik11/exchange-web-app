@@ -12,13 +12,20 @@ import {
   HiOutlineXCircle,
   HiOutlineLightningBolt,
   HiOutlineExclamation,
+  HiOutlineFilter,
+  HiOutlineChevronDown,
+  HiOutlineX,
+  HiOutlineSortAscending,
+  HiOutlineSortDescending,
 } from 'react-icons/hi';
 import { BiWallet, BiCopy } from 'react-icons/bi';
 import Header from '../../components/Header';
 import Footer from '../../components/Footer';
 import { useDFlowMarket, useDFlowTrades, useDFlowOrderBook, useDFlowPriceHistory, useDFlowRealtimePrices, formatVolume, formatOpenInterest, getDFlowQuote, getDFlowSwap } from '~/hooks/useDFlowMarkets';
-import { usePolymarketMarket, usePolymarketOrderBook, usePolymarketPriceHistory, usePolymarketComments, usePolymarketHolders, usePolymarketActivity } from '~/hooks/usePolymarketMarkets';
-import type { PolymarketComment, PolymarketHolder, PolymarketActivity } from '~/hooks/usePolymarketMarkets';
+import { usePolymarketMarket, usePolymarketOrderBook, usePolymarketPriceHistory, usePolymarketMultiPriceHistory, usePolymarketComments, usePolymarketHolders, usePolymarketActivity, formatPolymarketVolume } from '~/hooks/usePolymarketMarkets';
+import type { ChartSeries } from '~/components/predictions/PolymarketChart';
+import type { ChartSeriesData } from '~/components/predictions/TradingViewPredictionChart';
+import type { PolymarketComment, PolymarketHolder, PolymarketActivity, PolymarketEvent, PolymarketMarket } from '~/hooks/usePolymarketMarkets';
 import type { ExtendedPredictionMarket } from '~/hooks/useDFlowMarkets';
 import { useUser } from '~/components/UserContext';
 import { useTurnkeySigner } from '~/components/TurnkeySignerContext';
@@ -29,6 +36,7 @@ import { SourceBadge } from '~/components/predictions';
 const PredictionPositions = dynamic(() => import('~/components/predictions/PredictionPositions'), { ssr: false });
 const TradingViewPredictionChart = dynamic(() => import('~/components/predictions/TradingViewPredictionChart'), { ssr: false });
 const PolymarketChart = dynamic(() => import('~/components/predictions/PolymarketChart'), { ssr: false });
+const PolymarketOrderBook = dynamic(() => import('~/components/predictions/PolymarketOrderBook'), { ssr: false });
 
 // USDC mint on Solana
 const USDC_MINT = 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v';
@@ -53,14 +61,151 @@ const AX = {
   redBorder: "rgba(248, 113, 113, 0.35)",
   yellow: "#FBBF24",
   purple: "#818CF8",
+  cyan: "#22D3EE",
 };
 
 // Prediction-specific tabs
 const DFLOW_TABS = ['Trades', 'Positions'];
-const POLYMARKET_TABS = ['Activity', 'Comments', 'Holders', 'Positions'];
+const POLYMARKET_TABS = ['Outcomes', 'Holders', 'Activity', 'Positions', 'Comments'];
 
 // Helpers
 const copyToClipboard = (text: string) => navigator.clipboard.writeText(text);
+
+// Generate consistent avatar color based on string (name/address)
+const AVATAR_COLORS = [
+  '#F87171', '#FB923C', '#FBBF24', '#A3E635', '#4ADE80',
+  '#2DD4BF', '#22D3EE', '#60A5FA', '#818CF8', '#A78BFA',
+  '#E879F9', '#FB7185', '#F472B6', '#C084FC',
+];
+const getAvatarColor = (str: string): string => {
+  let hash = 0;
+  for (let i = 0; i < str.length; i++) {
+    hash = str.charCodeAt(i) + ((hash << 5) - hash);
+  }
+  return AVATAR_COLORS[Math.abs(hash) % AVATAR_COLORS.length];
+};
+
+// Text Search Filter - for name/text columns only
+const SearchFilter: React.FC<{
+  value: string;
+  onChange: (value: string) => void;
+  placeholder?: string;
+}> = ({ value, onChange, placeholder }) => {
+  const [isOpen, setIsOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setIsOpen(false);
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  return (
+    <div className="relative inline-block" ref={ref}>
+      <button
+        onClick={() => setIsOpen(!isOpen)}
+        className="p-0.5 rounded hover:bg-white/10 transition-colors"
+        title="Search"
+      >
+        <HiOutlineFilter className="w-3 h-3" style={{ color: value ? AX.mint : AX.muted }} />
+      </button>
+      {isOpen && (
+        <div
+          className="absolute top-full left-0 mt-1 z-50 rounded-lg shadow-lg p-2"
+          style={{ backgroundColor: AX.surface, border: `1px solid ${AX.border}` }}
+        >
+          <input
+            type="text"
+            value={value}
+            onChange={(e) => onChange(e.target.value)}
+            placeholder={placeholder || 'Search...'}
+            className="w-28 px-2 py-1.5 text-xs rounded"
+            style={{ backgroundColor: AX.bg, color: AX.text, border: `1px solid ${AX.border}` }}
+            autoFocus
+          />
+          {value && (
+            <button
+              onClick={() => { onChange(''); setIsOpen(false); }}
+              className="w-full mt-1 px-2 py-1 text-[10px] rounded hover:bg-white/10 flex items-center justify-center gap-1"
+              style={{ color: AX.muted }}
+            >
+              <HiOutlineX className="w-3 h-3" /> Clear
+            </button>
+          )}
+        </div>
+      )}
+    </div>
+  );
+};
+
+// Sort Toggle - for numeric columns only (no filter, just sort)
+const SortToggle: React.FC<{
+  direction: 'asc' | 'desc';
+  onToggle: () => void;
+}> = ({ direction, onToggle }) => (
+  <button
+    onClick={onToggle}
+    className="p-0.5 rounded hover:bg-white/10 transition-colors"
+    title={direction === 'desc' ? 'Sort low → high' : 'Sort high → low'}
+  >
+    {direction === 'asc' ? (
+      <HiOutlineSortAscending className="w-3 h-3" style={{ color: AX.mint }} />
+    ) : (
+      <HiOutlineSortDescending className="w-3 h-3" style={{ color: AX.mint }} />
+    )}
+  </button>
+);
+
+// Select Filter - for categorical columns (type, side)
+const SelectFilter: React.FC<{
+  options: { value: string; label: string }[];
+  value: string;
+  onChange: (value: string) => void;
+}> = ({ options, value, onChange }) => {
+  const [isOpen, setIsOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setIsOpen(false);
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  const hasFilter = value !== '' && value !== 'all';
+
+  return (
+    <div className="relative inline-block" ref={ref}>
+      <button
+        onClick={() => setIsOpen(!isOpen)}
+        className="p-0.5 rounded hover:bg-white/10 transition-colors"
+        title="Filter"
+      >
+        <HiOutlineChevronDown className="w-3 h-3" style={{ color: hasFilter ? AX.mint : AX.muted }} />
+      </button>
+      {isOpen && (
+        <div
+          className="absolute top-full right-0 mt-1 z-50 min-w-[70px] rounded-lg shadow-lg py-1"
+          style={{ backgroundColor: AX.surface, border: `1px solid ${AX.border}` }}
+        >
+          {options.map((opt) => (
+            <button
+              key={opt.value}
+              onClick={() => { onChange(opt.value); setIsOpen(false); }}
+              className="w-full px-3 py-1.5 text-left text-xs hover:bg-white/10 transition-colors"
+              style={{ color: value === opt.value ? AX.mint : AX.text }}
+            >
+              {opt.label}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+};
 
 const formatTimeRemaining = (closesAt: string): string => {
   const diff = new Date(closesAt).getTime() - Date.now();
@@ -106,9 +251,16 @@ const PredictionHeader: React.FC<{
   yesPrice: number;
   noPrice: number;
   source?: 'dflow' | 'polymarket';
-}> = ({ market, yesPrice, noPrice, source }) => {
+  isMultiOutcome?: boolean;
+  endDate?: string;
+}> = ({ market, yesPrice, noPrice, source, isMultiOutcome, endDate }) => {
   const isActive = market.status === 'active';
   const isResolved = market.status === 'resolved';
+
+  // Format closing date as "Jan 20, 2025"
+  const formattedEndDate = endDate
+    ? new Date(endDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+    : null;
 
   return (
     <div className="flex items-center justify-between py-2">
@@ -123,9 +275,18 @@ const PredictionHeader: React.FC<{
         <div className="flex flex-col">
           <div className="flex items-center gap-2">
             <span className="font-semibold text-sm" style={{ color: AX.text }}>{market.title}</span>
-            <span className="text-xs font-mono px-1.5 py-0.5 rounded" style={{ backgroundColor: AX.surface, color: AX.muted }}>
+            <button
+              onClick={() => {
+                copyToClipboard(market.ticker);
+                showEnhancedToast('success', 'Copied!', { description: market.ticker, duration: 2000 });
+              }}
+              className="flex items-center gap-1 text-xs font-mono px-1.5 py-0.5 rounded hover:opacity-70 transition-opacity cursor-pointer"
+              style={{ backgroundColor: AX.surface, color: AX.muted }}
+              title="Click to copy"
+            >
               {market.ticker}
-            </span>
+              <BiCopy className="w-3 h-3" />
+            </button>
             {/* Source badge */}
             {source && (
               <span
@@ -145,6 +306,11 @@ const PredictionHeader: React.FC<{
               <span style={{ color: market.result === 'yes' ? AX.green : AX.red }}>
                 Resolved {market.result?.toUpperCase()}
               </span>
+            ) : formattedEndDate ? (
+              <span className="flex items-center gap-1">
+                <HiOutlineClock className="w-3.5 h-3.5" />
+                Closes {formattedEndDate}
+              </span>
             ) : (
               <span className="flex items-center gap-1">
                 <HiOutlineClock className="w-3.5 h-3.5" />
@@ -161,23 +327,25 @@ const PredictionHeader: React.FC<{
         </div>
       </div>
 
-      {/* Right side - Prices */}
-      <div className="flex items-center gap-4">
-        <div className="flex items-center gap-2">
-          <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg" style={{ backgroundColor: AX.greenBg, border: `1px solid ${AX.greenBorder}` }}>
-            <HiOutlineCheckCircle className="w-4 h-4" style={{ color: AX.green }} />
-            <span className="text-sm font-bold" style={{ color: AX.green }}>
-              YES {Math.round(yesPrice * 100)}¢
-            </span>
-          </div>
-          <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg" style={{ backgroundColor: AX.redBg, border: `1px solid ${AX.redBorder}` }}>
-            <HiOutlineXCircle className="w-4 h-4" style={{ color: AX.red }} />
-            <span className="text-sm font-bold" style={{ color: AX.red }}>
-              NO {Math.round(noPrice * 100)}¢
-            </span>
+      {/* Right side - Prices (hidden for multi-outcome markets) */}
+      {!isMultiOutcome && (
+        <div className="flex items-center gap-4">
+          <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg" style={{ backgroundColor: AX.greenBg, border: `1px solid ${AX.greenBorder}` }}>
+              <HiOutlineCheckCircle className="w-4 h-4" style={{ color: AX.green }} />
+              <span className="text-sm font-bold" style={{ color: AX.green }}>
+                YES {Math.round(yesPrice * 100)}¢
+              </span>
+            </div>
+            <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg" style={{ backgroundColor: AX.redBg, border: `1px solid ${AX.redBorder}` }}>
+              <HiOutlineXCircle className="w-4 h-4" style={{ color: AX.red }} />
+              <span className="text-sm font-bold" style={{ color: AX.red }}>
+                NO {Math.round(noPrice * 100)}¢
+              </span>
+            </div>
           </div>
         </div>
-      </div>
+      )}
     </div>
   );
 };
@@ -203,8 +371,11 @@ const PredictionTabs: React.FC<{
   );
 };
 
-// Comments Component for Polymarket
+// Comments Component for Polymarket - with inline filters
 const CommentsSection: React.FC<{ comments: PolymarketComment[]; isLoading: boolean; eventSlug?: string }> = ({ comments, isLoading, eventSlug }) => {
+  const [authorFilter, setAuthorFilter] = useState('');
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center py-12">
@@ -233,59 +404,103 @@ const CommentsSection: React.FC<{ comments: PolymarketComment[]; isLoading: bool
     );
   }
 
-  // Sort comments by date (newest first) and show all
-  const sortedComments = [...comments].sort(
-    (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-  );
+  // Filter and sort comments
+  const filteredComments = comments
+    .filter(comment => {
+      if (!authorFilter) return true;
+      const author = (comment.profile?.name || comment.profile?.pseudonym || comment.userAddress || '').toLowerCase();
+      return author.includes(authorFilter.toLowerCase());
+    })
+    .sort((a, b) => {
+      const timeA = new Date(a.createdAt).getTime();
+      const timeB = new Date(b.createdAt).getTime();
+      return sortDir === 'desc' ? timeB - timeA : timeA - timeB;
+    });
+
+  const hasActiveFilters = authorFilter !== '';
 
   return (
-    <div className="h-full overflow-y-auto p-3 space-y-3">
-      <div className="text-xs mb-2" style={{ color: AX.muted }}>
-        {sortedComments.length} comment{sortedComments.length !== 1 ? 's' : ''}
-      </div>
-      {sortedComments.map((comment) => (
-        <div
-          key={comment.id}
-          className="p-3 rounded-lg"
-          style={{ backgroundColor: AX.surface, border: `1px solid ${AX.border}` }}
-        >
-          <div className="flex items-center gap-2 mb-2">
-            {comment.profile?.profileImage ? (
-              <img
-                src={comment.profile.profileImage}
-                alt=""
-                className="w-6 h-6 rounded-full"
-              />
-            ) : (
-              <div
-                className="w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold"
-                style={{ backgroundColor: AX.border, color: AX.muted }}
-              >
-                {(comment.profile?.name || comment.profile?.pseudonym || 'A').charAt(0).toUpperCase()}
-              </div>
-            )}
-            <span className="text-xs font-medium" style={{ color: AX.text }}>
-              {comment.profile?.name || comment.profile?.pseudonym || comment.userAddress?.slice(0, 8) || 'Anonymous'}
-            </span>
-            <span className="text-xs" style={{ color: AX.muted }}>
-              {new Date(comment.createdAt).toLocaleDateString()}
-            </span>
-          </div>
-          <p className="text-sm whitespace-pre-wrap" style={{ color: AX.text }}>{comment.body}</p>
-          {comment.reactionCount > 0 && (
-            <div className="mt-2 text-xs" style={{ color: AX.muted }}>
-              👍 {comment.reactionCount}
-            </div>
-          )}
+    <div className="h-full flex flex-col">
+      {/* Header with filters */}
+      <div className="flex-shrink-0 flex items-center gap-4 px-3 py-2 text-[10px] border-b" style={{ borderColor: AX.border, color: AX.muted }}>
+        <div className="flex-1">
+          <span className="inline-flex items-center gap-1">
+            Author
+            <SearchFilter value={authorFilter} onChange={setAuthorFilter} placeholder="Search..." />
+          </span>
         </div>
-      ))}
+        <div className="w-16 text-right">
+          <span className="inline-flex items-center gap-1">
+            Date
+            <SortToggle direction={sortDir} onToggle={() => setSortDir(d => d === 'desc' ? 'asc' : 'desc')} />
+          </span>
+        </div>
+      </div>
+
+      {/* Results count if filters active */}
+      {hasActiveFilters && (
+        <div className="flex-shrink-0 px-3 py-1.5 text-[10px] flex items-center justify-between" style={{ backgroundColor: AX.surface }}>
+          <span style={{ color: AX.muted }}>{filteredComments.length} results</span>
+          <button
+            onClick={() => setAuthorFilter('')}
+            className="flex items-center gap-1 hover:underline"
+            style={{ color: AX.mint }}
+          >
+            <HiOutlineX className="w-3 h-3" /> Clear
+          </button>
+        </div>
+      )}
+
+      {/* Scrollable comments */}
+      <div className="flex-1 overflow-y-auto p-3 pb-20 space-y-2">
+        {filteredComments.length === 0 ? (
+          <div className="flex items-center justify-center py-8">
+            <p className="text-sm" style={{ color: AX.muted }}>No matching comments</p>
+          </div>
+        ) : (
+          filteredComments.map((comment) => (
+            <div
+              key={comment.id}
+              className="p-3 rounded-lg"
+              style={{ backgroundColor: AX.surface }}
+            >
+              <div className="flex items-center gap-2 mb-2">
+                {comment.profile?.profileImage ? (
+                  <img src={comment.profile.profileImage} alt="" className="w-6 h-6 rounded-full" />
+                ) : (
+                  <div
+                    className="w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold"
+                    style={{ backgroundColor: getAvatarColor(comment.userAddress || 'A'), color: '#fff' }}
+                  >
+                    {(comment.profile?.name || comment.profile?.pseudonym || 'A').charAt(0).toUpperCase()}
+                  </div>
+                )}
+                <span className="text-xs font-medium" style={{ color: AX.text }}>
+                  {comment.profile?.name || comment.profile?.pseudonym || comment.userAddress?.slice(0, 8) || 'Anonymous'}
+                </span>
+                <span className="text-[10px]" style={{ color: AX.muted }}>
+                  {new Date(comment.createdAt).toLocaleDateString()}
+                </span>
+                {comment.reactionCount > 0 && (
+                  <span className="text-[10px] ml-auto" style={{ color: AX.muted }}>
+                    👍 {comment.reactionCount}
+                  </span>
+                )}
+              </div>
+              <p className="text-xs whitespace-pre-wrap leading-relaxed" style={{ color: AX.text }}>{comment.body}</p>
+            </div>
+          ))
+        )}
+      </div>
     </div>
   );
 };
 
-// Holders Component for Polymarket - with YES/NO tabs
+// Holders Component for Polymarket - with YES/NO tabs and column filters
 const HoldersSection: React.FC<{ holders: PolymarketHolder[]; isLoading: boolean }> = ({ holders, isLoading }) => {
   const [selectedOutcome, setSelectedOutcome] = useState<'yes' | 'no'>('yes');
+  const [nameFilter, setNameFilter] = useState('');
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
 
   if (isLoading) {
     return (
@@ -309,56 +524,72 @@ const HoldersSection: React.FC<{ holders: PolymarketHolder[]; isLoading: boolean
     return amount.toFixed(0);
   };
 
-  // Separate holders by outcome
-  const yesHolders = holders.filter(h => h.outcome === 'yes').sort((a, b) => b.amount - a.amount);
-  const noHolders = holders.filter(h => h.outcome === 'no').sort((a, b) => b.amount - a.amount);
-  const displayHolders = selectedOutcome === 'yes' ? yesHolders : noHolders;
+  // Separate holders by outcome, filter by name, and sort
+  const filterAndSort = (list: PolymarketHolder[]) => {
+    let filtered = list;
+    if (nameFilter) {
+      const q = nameFilter.toLowerCase();
+      filtered = list.filter(h =>
+        (h.name || h.pseudonym || h.proxyWallet || '').toLowerCase().includes(q)
+      );
+    }
+    return filtered.sort((a, b) => sortDir === 'desc' ? b.amount - a.amount : a.amount - b.amount);
+  };
+
+  const yesHolders = holders.filter(h => h.outcome === 'yes');
+  const noHolders = holders.filter(h => h.outcome === 'no');
+  const displayHolders = filterAndSort(selectedOutcome === 'yes' ? yesHolders : noHolders);
 
   return (
     <div className="h-full flex flex-col">
-      {/* YES/NO Toggle */}
-      <div className="flex-shrink-0 flex gap-2 p-3 border-b" style={{ borderColor: AX.border }}>
-        <button
-          onClick={() => setSelectedOutcome('yes')}
-          className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium transition-all"
-          style={{
-            backgroundColor: selectedOutcome === 'yes' ? AX.greenBg : 'transparent',
-            border: `1px solid ${selectedOutcome === 'yes' ? AX.green : AX.border}`,
-            color: selectedOutcome === 'yes' ? AX.green : AX.muted,
-          }}
-        >
-          <HiOutlineCheckCircle className="w-3.5 h-3.5" />
-          YES Holders ({yesHolders.length})
-        </button>
-        <button
-          onClick={() => setSelectedOutcome('no')}
-          className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium transition-all"
-          style={{
-            backgroundColor: selectedOutcome === 'no' ? AX.redBg : 'transparent',
-            border: `1px solid ${selectedOutcome === 'no' ? AX.red : AX.border}`,
-            color: selectedOutcome === 'no' ? AX.red : AX.muted,
-          }}
-        >
-          <HiOutlineXCircle className="w-3.5 h-3.5" />
-          NO Holders ({noHolders.length})
-        </button>
+      {/* YES/NO Toggle - compact */}
+      <div className="flex-shrink-0 flex items-center gap-2 px-3 py-2 border-b" style={{ borderColor: AX.border }}>
+        {(['yes', 'no'] as const).map((side) => (
+          <button
+            key={side}
+            onClick={() => setSelectedOutcome(side)}
+            className="flex items-center gap-1 px-2 py-1 rounded text-[10px] font-medium transition-all"
+            style={{
+              backgroundColor: selectedOutcome === side ? (side === 'yes' ? AX.greenBg : AX.redBg) : 'transparent',
+              color: selectedOutcome === side ? (side === 'yes' ? AX.green : AX.red) : AX.muted,
+            }}
+          >
+            {side === 'yes' ? <HiOutlineCheckCircle className="w-3 h-3" /> : <HiOutlineXCircle className="w-3 h-3" />}
+            {side.toUpperCase()} ({(side === 'yes' ? yesHolders : noHolders).length})
+          </button>
+        ))}
+        {nameFilter && (
+          <span className="text-[10px] ml-auto" style={{ color: AX.muted }}>
+            {displayHolders.length} results
+          </span>
+        )}
       </div>
 
       {/* Scrollable table */}
-      <div className="flex-1 overflow-y-auto">
+      <div className="flex-1 overflow-y-auto pb-20">
         {displayHolders.length === 0 ? (
           <div className="flex items-center justify-center py-12">
             <p className="text-sm" style={{ color: AX.muted }}>
-              No {selectedOutcome.toUpperCase()} holders found
+              {nameFilter ? 'No matches found' : `No ${selectedOutcome.toUpperCase()} holders`}
             </p>
           </div>
         ) : (
           <table className="w-full text-xs">
             <thead className="sticky top-0" style={{ backgroundColor: AX.bg }}>
               <tr style={{ borderBottom: `1px solid ${AX.border}` }}>
-                <th className="text-left py-2 px-3 font-medium" style={{ color: AX.muted }}>#</th>
-                <th className="text-left py-2 px-3 font-medium" style={{ color: AX.muted }}>Holder</th>
-                <th className="text-right py-2 px-3 font-medium" style={{ color: AX.muted }}>Shares</th>
+                <th className="text-left py-2 px-3 font-medium w-8" style={{ color: AX.muted }}>#</th>
+                <th className="text-left py-2 px-3 font-medium" style={{ color: AX.muted }}>
+                  <span className="inline-flex items-center gap-1">
+                    Holder
+                    <SearchFilter value={nameFilter} onChange={setNameFilter} placeholder="Search..." />
+                  </span>
+                </th>
+                <th className="text-right py-2 px-3 font-medium" style={{ color: AX.muted }}>
+                  <span className="inline-flex items-center gap-1">
+                    Shares
+                    <SortToggle direction={sortDir} onToggle={() => setSortDir(d => d === 'desc' ? 'asc' : 'desc')} />
+                  </span>
+                </th>
               </tr>
             </thead>
             <tbody>
@@ -368,11 +599,14 @@ const HoldersSection: React.FC<{ holders: PolymarketHolder[]; isLoading: boolean
                   <td className="py-2 px-3">
                     <div className="flex items-center gap-2">
                       {holder.profileImage ? (
-                        <img src={holder.profileImage} alt="" className="w-5 h-5 rounded-full" />
+                        <img src={holder.profileImage} alt="" className="w-7 h-7 rounded-full object-cover" />
                       ) : (
                         <div
-                          className="w-5 h-5 rounded-full flex items-center justify-center text-[10px]"
-                          style={{ backgroundColor: AX.border, color: AX.muted }}
+                          className="w-7 h-7 rounded-full flex items-center justify-center text-xs font-semibold"
+                          style={{
+                            backgroundColor: getAvatarColor(holder.proxyWallet || holder.name || 'A'),
+                            color: '#fff',
+                          }}
                         >
                           {(holder.name || holder.pseudonym || 'A').charAt(0).toUpperCase()}
                         </div>
@@ -395,8 +629,13 @@ const HoldersSection: React.FC<{ holders: PolymarketHolder[]; isLoading: boolean
   );
 };
 
-// Activity Component for Polymarket
+// Activity Component for Polymarket - with inline column filters
 const ActivitySection: React.FC<{ activities: PolymarketActivity[]; isLoading: boolean }> = ({ activities, isLoading }) => {
+  const [typeFilter, setTypeFilter] = useState<string>('all');
+  const [nameFilter, setNameFilter] = useState('');
+  const [outcomeFilter, setOutcomeFilter] = useState<string>('all');
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc'); // newest first
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center py-12">
@@ -412,6 +651,33 @@ const ActivitySection: React.FC<{ activities: PolymarketActivity[]; isLoading: b
       </div>
     );
   }
+
+  // Filter and sort activities
+  const filteredActivities = activities
+    .filter(activity => {
+      // Type filter (buy/sell)
+      if (typeFilter !== 'all') {
+        const side = activity.side?.toLowerCase() || '';
+        const type = activity.type?.toLowerCase() || '';
+        if (typeFilter === 'buy' && !(side === 'buy' || type === 'buy')) return false;
+        if (typeFilter === 'sell' && !(side === 'sell' || type === 'sell')) return false;
+      }
+      // Name filter
+      if (nameFilter) {
+        const name = (activity.name || activity.pseudonym || activity.proxyWallet || '').toLowerCase();
+        if (!name.includes(nameFilter.toLowerCase())) return false;
+      }
+      // Outcome filter
+      if (outcomeFilter !== 'all') {
+        if (activity.outcome?.toLowerCase() !== outcomeFilter) return false;
+      }
+      return true;
+    })
+    .sort((a, b) => {
+      const timeA = new Date(a.timestamp).getTime();
+      const timeB = new Date(b.timestamp).getTime();
+      return sortDir === 'desc' ? timeB - timeA : timeA - timeB;
+    });
 
   const formatAmount = (amount: number | undefined): string => {
     if (!amount) return '-';
@@ -429,92 +695,382 @@ const ActivitySection: React.FC<{ activities: PolymarketActivity[]; isLoading: b
     const diffDays = Math.floor(diffMs / 86400000);
 
     if (diffMins < 1) return 'Just now';
-    if (diffMins < 60) return `${diffMins}m ago`;
-    if (diffHours < 24) return `${diffHours}h ago`;
-    if (diffDays < 7) return `${diffDays}d ago`;
+    if (diffMins < 60) return `${diffMins}m`;
+    if (diffHours < 24) return `${diffHours}h`;
+    if (diffDays < 7) return `${diffDays}d`;
     return date.toLocaleDateString();
   };
 
-  const getActivityIcon = (type: string, side?: string) => {
-    if (type === 'trade' || type === 'buy' || type === 'sell') {
-      const isBuy = side === 'buy' || type === 'buy';
-      return (
-        <div
-          className="w-7 h-7 rounded-full flex items-center justify-center"
-          style={{ backgroundColor: isBuy ? AX.greenBg : AX.redBg }}
-        >
-          {isBuy ? (
-            <HiOutlineCheckCircle className="w-4 h-4" style={{ color: AX.green }} />
-          ) : (
-            <HiOutlineXCircle className="w-4 h-4" style={{ color: AX.red }} />
-          )}
-        </div>
-      );
+  // Get user avatar (profile image or colored circle with initial)
+  const getUserAvatar = (activity: PolymarketActivity) => {
+    const name = activity.name || activity.pseudonym || activity.proxyWallet || 'A';
+    const initial = name.charAt(0).toUpperCase();
+
+    if (activity.profileImage) {
+      return <img src={activity.profileImage} alt="" className="w-8 h-8 rounded-full object-cover flex-shrink-0" />;
     }
+
     return (
       <div
-        className="w-7 h-7 rounded-full flex items-center justify-center"
-        style={{ backgroundColor: AX.surface }}
+        className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-semibold flex-shrink-0"
+        style={{ backgroundColor: getAvatarColor(activity.proxyWallet || name), color: '#fff' }}
       >
-        <HiOutlineLightningBolt className="w-4 h-4" style={{ color: AX.muted }} />
+        {initial}
       </div>
     );
   };
 
-  const getActivityDescription = (activity: PolymarketActivity): string => {
-    const type = activity.type?.toLowerCase() || '';
-    const side = activity.side?.toLowerCase() || '';
-    const outcome = activity.outcome || '';
-
-    if (type === 'trade' || type === 'buy' || type === 'sell') {
-      const action = side === 'buy' || type === 'buy' ? 'Bought' : 'Sold';
-      return `${action} ${outcome.toUpperCase()}`;
-    }
-    return type.charAt(0).toUpperCase() + type.slice(1);
-  };
+  const hasActiveFilters = typeFilter !== 'all' || nameFilter || outcomeFilter !== 'all';
 
   return (
-    <div className="h-full overflow-y-auto">
-      <div className="p-3 space-y-2">
-        {activities.map((activity, idx) => (
-          <div
-            key={activity.id || idx}
-            className="flex items-center gap-3 p-3 rounded-lg"
-            style={{ backgroundColor: AX.surface, border: `1px solid ${AX.border}` }}
+    <div className="h-full flex flex-col">
+      {/* Compact header with column filters */}
+      <div className="flex-shrink-0 flex items-center gap-4 px-3 py-2 text-[10px] border-b" style={{ borderColor: AX.border, color: AX.muted }}>
+        <div className="w-8"></div>
+        <div className="flex-1">
+          <span className="inline-flex items-center gap-1">
+            Trader
+            <SearchFilter value={nameFilter} onChange={setNameFilter} placeholder="Search..." />
+          </span>
+        </div>
+        <div className="w-14">
+          <span className="inline-flex items-center gap-0.5">
+            Type
+            <SelectFilter
+              options={[
+                { value: 'all', label: 'All' },
+                { value: 'buy', label: 'Buy' },
+                { value: 'sell', label: 'Sell' },
+              ]}
+              value={typeFilter}
+              onChange={setTypeFilter}
+            />
+          </span>
+        </div>
+        <div className="w-12">
+          <span className="inline-flex items-center gap-0.5">
+            Side
+            <SelectFilter
+              options={[
+                { value: 'all', label: 'All' },
+                { value: 'yes', label: 'YES' },
+                { value: 'no', label: 'NO' },
+              ]}
+              value={outcomeFilter}
+              onChange={setOutcomeFilter}
+            />
+          </span>
+        </div>
+        <div className="w-14 text-right">
+          <span className="inline-flex items-center gap-1">
+            Time
+            <SortToggle direction={sortDir} onToggle={() => setSortDir(d => d === 'desc' ? 'asc' : 'desc')} />
+          </span>
+        </div>
+      </div>
+
+      {/* Results count if filters active */}
+      {hasActiveFilters && (
+        <div className="flex-shrink-0 px-3 py-1.5 text-[10px] flex items-center justify-between" style={{ backgroundColor: AX.surface }}>
+          <span style={{ color: AX.muted }}>{filteredActivities.length} results</span>
+          <button
+            onClick={() => { setTypeFilter('all'); setNameFilter(''); setOutcomeFilter('all'); }}
+            className="flex items-center gap-1 hover:underline"
+            style={{ color: AX.mint }}
           >
-            {/* Activity Icon */}
-            {getActivityIcon(activity.type, activity.side)}
+            <HiOutlineX className="w-3 h-3" /> Clear filters
+          </button>
+        </div>
+      )}
 
-            {/* Activity Details */}
-            <div className="flex-1 min-w-0">
-              <div className="flex items-center gap-2">
-                {activity.profileImage ? (
-                  <img src={activity.profileImage} alt="" className="w-4 h-4 rounded-full" />
-                ) : null}
-                <span className="text-xs font-medium truncate" style={{ color: AX.text }}>
-                  {activity.name || activity.pseudonym || activity.proxyWallet?.slice(0, 8) || 'Anonymous'}
-                </span>
-              </div>
-              <p className="text-xs mt-0.5" style={{ color: AX.muted }}>
-                {getActivityDescription(activity)}
-                {activity.size && ` · ${activity.size.toLocaleString()} shares`}
-                {activity.price && ` @ ${(activity.price * 100).toFixed(1)}¢`}
-              </p>
-            </div>
-
-            {/* Amount & Time */}
-            <div className="text-right flex-shrink-0">
-              {activity.amount && (
-                <div className="text-xs font-medium" style={{ color: AX.text }}>
-                  {formatAmount(activity.amount)}
-                </div>
-              )}
-              <div className="text-[10px]" style={{ color: AX.muted }}>
-                {formatTime(activity.timestamp)}
-              </div>
-            </div>
+      {/* Scrollable activity list */}
+      <div className="flex-1 overflow-y-auto px-3 py-2 pb-20 space-y-1.5">
+        {filteredActivities.length === 0 ? (
+          <div className="flex items-center justify-center py-8">
+            <p className="text-sm" style={{ color: AX.muted }}>No matching activities</p>
           </div>
-        ))}
+        ) : (
+          filteredActivities.map((activity, idx) => {
+            const side = activity.side?.toLowerCase() || activity.type?.toLowerCase() || '';
+            const isBuy = side === 'buy';
+            return (
+              <div
+                key={activity.id || idx}
+                className="flex items-center gap-2 px-2 py-2 rounded-lg"
+                style={{ backgroundColor: AX.surface }}
+              >
+                {getUserAvatar(activity)}
+                <div className="flex-1 min-w-0">
+                  <span className="text-xs font-medium truncate block" style={{ color: AX.text }}>
+                    {activity.name || activity.pseudonym || activity.proxyWallet?.slice(0, 8) || 'Anon'}
+                  </span>
+                  <span className="text-[10px]" style={{ color: AX.muted }}>
+                    {activity.size?.toLocaleString() || '-'} @ {activity.price ? `${(activity.price * 100).toFixed(1)}¢` : '-'}
+                  </span>
+                </div>
+                <div className="text-center w-14">
+                  <span
+                    className="text-[10px] px-1.5 py-0.5 rounded font-medium"
+                    style={{
+                      backgroundColor: isBuy ? AX.greenBg : AX.redBg,
+                      color: isBuy ? AX.green : AX.red,
+                    }}
+                  >
+                    {isBuy ? 'BUY' : 'SELL'}
+                  </span>
+                </div>
+                <div className="text-center w-12">
+                  <span
+                    className="text-[10px] font-medium"
+                    style={{ color: activity.outcome?.toLowerCase() === 'yes' ? AX.green : AX.red }}
+                  >
+                    {activity.outcome?.toUpperCase() || '-'}
+                  </span>
+                </div>
+                <div className="text-right w-14">
+                  <div className="text-xs font-medium" style={{ color: AX.text }}>
+                    {formatAmount(activity.amount)}
+                  </div>
+                  <div className="text-[10px]" style={{ color: AX.muted }}>
+                    {formatTime(activity.timestamp)}
+                  </div>
+                </div>
+              </div>
+            );
+          })
+        )}
+      </div>
+    </div>
+  );
+};
+
+// Outcomes Component for Polymarket multi-outcome markets - with inline column filters
+const OutcomesSection: React.FC<{
+  event: PolymarketEvent | null;
+  isLoading: boolean;
+  onSelectOutcome?: (marketId: string, side: 'yes' | 'no') => void;
+}> = ({ event, isLoading, onSelectOutcome }) => {
+  const [nameFilter, setNameFilter] = useState('');
+  const [chanceSort, setChanceSort] = useState<'asc' | 'desc'>('desc');
+  const [volSort, setVolSort] = useState<'asc' | 'desc' | null>(null);
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center py-12">
+        <HiOutlineRefresh className="w-5 h-5 animate-spin" style={{ color: AX.muted }} />
+      </div>
+    );
+  }
+
+  if (!event || !event.markets || event.markets.length === 0) {
+    return (
+      <div className="flex items-center justify-center py-12">
+        <p className="text-sm" style={{ color: AX.muted }}>No outcome data available</p>
+      </div>
+    );
+  }
+
+  // Parse outcome prices from JSON string
+  const parseOutcomePrices = (pricesStr: string): number[] => {
+    try {
+      return JSON.parse(pricesStr).map(Number);
+    } catch {
+      return [0.5, 0.5];
+    }
+  };
+
+  // Format price as percentage
+  const formatPercent = (price: number): string => {
+    const pct = price * 100;
+    if (pct < 1) return '<1%';
+    return `${Math.round(pct)}%`;
+  };
+
+  // Format volume
+  const formatVol = (vol: number | string | undefined): string => {
+    const v = typeof vol === 'string' ? parseFloat(vol) : vol;
+    if (!v) return '$0';
+    if (v >= 1_000_000) return `$${(v / 1_000_000).toFixed(1)}M`;
+    if (v >= 1_000) return `$${(v / 1_000).toFixed(0)}K`;
+    return `$${v.toFixed(0)}`;
+  };
+
+  // Filter and sort markets
+  const filteredMarkets = event.markets
+    .filter(market => {
+      if (!nameFilter) return true;
+      const name = (market.groupItemTitle || market.question || '').toLowerCase();
+      return name.includes(nameFilter.toLowerCase());
+    })
+    .sort((a, b) => {
+      // Volume sort takes priority if active
+      if (volSort) {
+        const volA = parseFloat(a.volume || '0');
+        const volB = parseFloat(b.volume || '0');
+        return volSort === 'desc' ? volB - volA : volA - volB;
+      }
+      // Otherwise sort by chance
+      const pricesA = parseOutcomePrices(a.outcomePrices || '["0.5", "0.5"]');
+      const pricesB = parseOutcomePrices(b.outcomePrices || '["0.5", "0.5"]');
+      return chanceSort === 'desc' ? (pricesB[0] || 0) - (pricesA[0] || 0) : (pricesA[0] || 0) - (pricesB[0] || 0);
+    });
+
+  const hasActiveFilters = nameFilter !== '';
+
+  return (
+    <div className="h-full flex flex-col">
+      {/* Header row with column filters */}
+      <div className="flex-shrink-0 flex items-center gap-3 px-3 py-2 text-[10px] border-b" style={{ borderColor: AX.border, color: AX.muted }}>
+        <div className="flex-1">
+          <span className="inline-flex items-center gap-1">
+            Outcome
+            <SearchFilter value={nameFilter} onChange={setNameFilter} placeholder="Search..." />
+          </span>
+        </div>
+        <div className="w-14 text-center">
+          <span className="inline-flex items-center gap-0.5">
+            Chance
+            <button
+              onClick={() => { setVolSort(null); setChanceSort(d => d === 'desc' ? 'asc' : 'desc'); }}
+              className="p-0.5 rounded hover:bg-white/10 transition-colors"
+              title={chanceSort === 'desc' ? 'Sort low → high' : 'Sort high → low'}
+            >
+              {!volSort ? (
+                chanceSort === 'asc' ? (
+                  <HiOutlineSortAscending className="w-3 h-3" style={{ color: AX.mint }} />
+                ) : (
+                  <HiOutlineSortDescending className="w-3 h-3" style={{ color: AX.mint }} />
+                )
+              ) : (
+                <HiOutlineSortDescending className="w-3 h-3" style={{ color: AX.muted }} />
+              )}
+            </button>
+          </span>
+        </div>
+        <div className="w-14 text-center">
+          <span className="inline-flex items-center gap-0.5">
+            Volume
+            <button
+              onClick={() => setVolSort(d => d === 'desc' ? 'asc' : d === 'asc' ? null : 'desc')}
+              className="p-0.5 rounded hover:bg-white/10 transition-colors"
+              title={volSort === 'desc' ? 'Sort low → high' : volSort === 'asc' ? 'Clear sort' : 'Sort high → low'}
+            >
+              {volSort === 'asc' ? (
+                <HiOutlineSortAscending className="w-3 h-3" style={{ color: AX.mint }} />
+              ) : volSort === 'desc' ? (
+                <HiOutlineSortDescending className="w-3 h-3" style={{ color: AX.mint }} />
+              ) : (
+                <HiOutlineSortDescending className="w-3 h-3" style={{ color: AX.muted }} />
+              )}
+            </button>
+          </span>
+        </div>
+        <div className="w-32 text-center">Trade</div>
+      </div>
+
+      {/* Results count if filters active */}
+      {hasActiveFilters && (
+        <div className="flex-shrink-0 px-3 py-1.5 text-[10px] flex items-center justify-between" style={{ backgroundColor: AX.surface }}>
+          <span style={{ color: AX.muted }}>{filteredMarkets.length} of {event.markets.length} outcomes</span>
+          <button
+            onClick={() => setNameFilter('')}
+            className="flex items-center gap-1 hover:underline"
+            style={{ color: AX.mint }}
+          >
+            <HiOutlineX className="w-3 h-3" /> Clear
+          </button>
+        </div>
+      )}
+
+      {/* Scrollable outcome rows */}
+      <div className="flex-1 overflow-y-auto p-3 pb-20 space-y-2">
+        {filteredMarkets.length === 0 ? (
+          <div className="flex items-center justify-center py-8">
+            <p className="text-sm" style={{ color: AX.muted }}>No matching outcomes</p>
+          </div>
+        ) : (
+          filteredMarkets.map((market) => {
+            const prices = parseOutcomePrices(market.outcomePrices || '["0.5", "0.5"]');
+            const yesPrice = prices[0] || 0.5;
+            const noPrice = prices[1] || 0.5;
+            const yesPriceCents = Math.round(yesPrice * 100 * 10) / 10;
+            const noPriceCents = Math.round(noPrice * 100 * 10) / 10;
+
+            return (
+              <div
+                key={market.id}
+                className="flex items-center gap-3 p-2.5 rounded-lg"
+                style={{ backgroundColor: AX.surface }}
+              >
+                {/* Outcome image and name */}
+                <div className="flex-1 flex items-center gap-2 min-w-0">
+                  {(market.image || market.icon) ? (
+                    <img
+                      src={market.image || market.icon}
+                      alt={market.groupItemTitle || 'Outcome'}
+                      className="w-9 h-9 rounded-lg object-cover flex-shrink-0"
+                      onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+                    />
+                  ) : (
+                    <div
+                      className="w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0 text-sm font-bold"
+                      style={{ backgroundColor: getAvatarColor(market.groupItemTitle || market.id || 'O'), color: '#fff' }}
+                    >
+                      {(market.groupItemTitle || market.question || 'O').charAt(0).toUpperCase()}
+                    </div>
+                  )}
+                  <div className="min-w-0">
+                    <div className="font-medium text-xs truncate" style={{ color: AX.text }}>
+                      {market.groupItemTitle || market.question || 'Outcome'}
+                    </div>
+                    <div className="text-[10px]" style={{ color: AX.muted }}>
+                      {formatVol(market.volume)} Vol.
+                    </div>
+                  </div>
+                </div>
+
+                {/* Percentage chance */}
+                <div className="w-14 text-center">
+                  <span className="text-base font-semibold" style={{ color: AX.text }}>
+                    {formatPercent(yesPrice)}
+                  </span>
+                </div>
+
+                {/* Buy Yes / Buy No buttons */}
+                <div className="w-32 flex gap-1.5">
+                  <button
+                    onClick={() => onSelectOutcome?.(market.id, 'yes')}
+                    className="flex-1 px-2 py-1.5 rounded text-[10px] font-medium transition-all hover:opacity-90"
+                    style={{ backgroundColor: AX.greenBg, color: AX.green }}
+                  >
+                    Yes {yesPriceCents.toFixed(0)}¢
+                  </button>
+                  <button
+                    onClick={() => onSelectOutcome?.(market.id, 'no')}
+                    className="flex-1 px-2 py-1.5 rounded text-[10px] font-medium transition-all hover:opacity-90"
+                    style={{ backgroundColor: AX.redBg, color: AX.red }}
+                  >
+                    No {noPriceCents.toFixed(0)}¢
+                  </button>
+                </div>
+              </div>
+            );
+          })
+        )}
+
+        {/* Polymarket link */}
+        <div className="pt-4 text-center">
+          <a
+            href={`https://polymarket.com/event/${event.slug}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-2 text-xs hover:underline"
+            style={{ color: AX.purple }}
+          >
+            <HiOutlineExternalLink className="w-3.5 h-3.5" />
+            View on Polymarket
+          </a>
+        </div>
       </div>
     </div>
   );
@@ -584,7 +1140,9 @@ export default function MarketDetailPage() {
   const router = useRouter();
   const { ticker, source } = router.query;
   const tickerString = typeof ticker === 'string' ? ticker : '';
-  const isPolymarket = source === 'polymarket';
+  // TODO: dFlow is disabled for now - only Polymarket is active
+  // const isPolymarket = source === 'polymarket';
+  const isPolymarket = true; // Force Polymarket only
 
   // Wait for router to be ready before processing query params
   // This prevents "Market not found" from flashing while Next.js hydrates
@@ -597,7 +1155,7 @@ export default function MarketDetailPage() {
   // Update selected tab when source changes (after router is ready)
   useEffect(() => {
     if (isRouterReady) {
-      setSelectedTab(isPolymarket ? "Activity" : "Trades");
+      setSelectedTab(isPolymarket ? "Outcomes" : "Trades");
     }
   }, [isRouterReady, isPolymarket]);
   const [amount, setAmount] = useState<string>('');
@@ -607,11 +1165,23 @@ export default function MarketDetailPage() {
   const [showMobileTradeModal, setShowMobileTradeModal] = useState(false);
   const [isClosingModal, setIsClosingModal] = useState(false);
 
+  // Selected outcome from Outcomes tab (for multi-outcome Polymarket markets)
+  const [selectedOutcomeMarket, setSelectedOutcomeMarket] = useState<PolymarketMarket | null>(null);
+  const [tradeMode, setTradeMode] = useState<'buy' | 'sell'>('buy');
+
+  // Collapsible sections in trade panel (all open by default)
+  const [showMarketStats, setShowMarketStats] = useState(true);
+  const [showAbout, setShowAbout] = useState(true);
+  const [showResolution, setShowResolution] = useState(true);
+
+  // Ref to track if we've auto-selected best outcome
+  const hasAutoSelectedRef = useRef(false);
+
   // Resizable chart state (matching token trade page)
   const containerRef = useRef<HTMLDivElement | null>(null);
-  const MIN_CHART_HEIGHT = 300;
-  const DEFAULT_CHART_HEIGHT_RATIO = 0.55;
-  const SSR_DEFAULT_CHART_HEIGHT = 400;
+  const MIN_CHART_HEIGHT = 400;
+  const DEFAULT_CHART_HEIGHT_RATIO = 0.65; // 65% of viewport for taller chart + order book
+  const SSR_DEFAULT_CHART_HEIGHT = 500;
 
   const getResponsiveLimits = useCallback(() => {
     if (typeof window === "undefined") return { min: MIN_CHART_HEIGHT, max: 600 };
@@ -675,30 +1245,161 @@ export default function MarketDetailPage() {
   const realtimePrices = useDFlowRealtimePrices(!isPolymarket && isRouterReady && tickerString ? tickerString : undefined);
 
   // Polymarket hooks (only when source=polymarket AND router is ready)
-  const { market: polyMarket, isLoading: polyLoading, refetch: polyRefetch } = usePolymarketMarket(
+  const { market: polyMarket, event: polyEvent, isLoading: polyLoading, refetch: polyRefetch } = usePolymarketMarket(
     isPolymarket && isRouterReady && tickerString ? tickerString : undefined,
     { enabled: isPolymarket && isRouterReady }
   );
 
   // Get Polymarket token IDs for orderbook (both YES and NO)
+  // For multi-outcome markets, use selected outcome's token IDs
   const polyTokenIds = useMemo(() => {
-    if (!isPolymarket || !polyMarket) return { yes: undefined, no: undefined };
+    if (!isPolymarket) return { yes: undefined, no: undefined };
+
+    // For multi-outcome markets, use selected outcome's token IDs
+    if (selectedOutcomeMarket?.clobTokenIds) {
+      try {
+        const tokenIds = Array.isArray(selectedOutcomeMarket.clobTokenIds)
+          ? selectedOutcomeMarket.clobTokenIds
+          : JSON.parse(selectedOutcomeMarket.clobTokenIds as string);
+        return {
+          yes: tokenIds[0] || undefined,
+          no: tokenIds[1] || undefined,
+        };
+      } catch {}
+    }
+
+    // Fallback to polyMarket data for single-outcome markets
+    if (!polyMarket) return { yes: undefined, no: undefined };
     const polyData = (polyMarket as any).polymarketData;
     return {
       yes: polyData?.yesTokenId,
       no: polyData?.noTokenId,
     };
-  }, [isPolymarket, polyMarket]);
+  }, [isPolymarket, polyMarket, selectedOutcomeMarket]);
 
   // Fetch orderbooks for both YES and NO tokens
   const { orderBook: polyYesOrderBook } = usePolymarketOrderBook(polyTokenIds.yes, { refreshInterval: 5000 });
   const { orderBook: polyNoOrderBook } = usePolymarketOrderBook(polyTokenIds.no, { refreshInterval: 5000 });
 
-  // Polymarket price history for chart (use YES token)
+  // Polymarket price history for chart (use YES token) - for single-outcome markets
   const { history: polyPriceHistory, isLoading: polyHistoryLoading } = usePolymarketPriceHistory(
     polyTokenIds.yes,
     { interval: 'max', fidelity: 60, refreshInterval: 60000, enabled: isPolymarket && !!polyTokenIds.yes }
   );
+
+  // Detect multi-outcome market (e.g., Fed rate decision with multiple outcomes)
+  const isMultiOutcomeMarket = useMemo((): boolean => {
+    return !!(isPolymarket && polyEvent?.markets && polyEvent.markets.length > 1);
+  }, [isPolymarket, polyEvent]);
+
+  // Auto-select best outcome (highest probability) when polyEvent loads
+  useEffect(() => {
+    // Only auto-select once when data first loads
+    if (hasAutoSelectedRef.current) return;
+    if (!polyEvent?.markets || polyEvent.markets.length === 0) return;
+
+    // Find the market with the highest YES probability
+    let bestMarket: PolymarketMarket | null = null;
+    let bestPrice = 0;
+
+    for (const market of polyEvent.markets) {
+      try {
+        const prices = JSON.parse(market.outcomePrices || '["0.5", "0.5"]').map(Number);
+        const yesPrice = prices[0] || 0.5;
+
+        // Skip placeholder outcomes
+        const label = (market as any).groupItemTitle || market.question || '';
+        if (/^Person [A-Z]+$/i.test(label)) continue;
+        if (label === 'Other') continue;
+
+        if (yesPrice > bestPrice) {
+          bestPrice = yesPrice;
+          bestMarket = market;
+        }
+      } catch {}
+    }
+
+    if (bestMarket) {
+      setSelectedOutcomeMarket(bestMarket);
+      hasAutoSelectedRef.current = true;
+    }
+  }, [polyEvent]);
+
+  // Extract market info for multi-series price history (top 4 by probability)
+  const multiOutcomeMarketInfo = useMemo(() => {
+    if (!isMultiOutcomeMarket || !polyEvent?.markets) return undefined;
+
+    // Helper to parse JSON safely
+    const safeJsonParse = <T,>(str: string, fallback: T): T => {
+      try { return JSON.parse(str); } catch { return fallback; }
+    };
+
+    // Map all markets with their data
+    const allMarkets = polyEvent.markets.map((market) => {
+      const tokenIds = Array.isArray(market.clobTokenIds)
+        ? market.clobTokenIds
+        : safeJsonParse<string[]>(market.clobTokenIds as string, []);
+      const prices = safeJsonParse<string[]>(market.outcomePrices || '["0.5", "0.5"]', ['0.5', '0.5']).map(Number);
+
+      return {
+        id: market.id,
+        label: (market as any).groupItemTitle || market.question || 'Outcome',
+        tokenId: tokenIds[0] || '', // YES token
+        currentPrice: prices[0] || 0.5,
+        volume: parseFloat(market.volume || '0') || 0,
+      };
+    }).filter(m => m.tokenId); // Only include markets with valid token IDs
+
+    // Filter out placeholder "Person X" outcomes and untraded outcomes (exactly 50%)
+    // These are anonymous placeholders that haven't been revealed or traded
+    const realMarkets = allMarkets.filter(m => {
+      // Filter out "Person XX" placeholder labels
+      if (/^Person [A-Z]+$/i.test(m.label)) return false;
+      // Filter out "Other" catch-all outcome
+      if (m.label === 'Other') return false;
+      // Filter out outcomes with exactly 50% and no volume (untraded)
+      if (m.currentPrice === 0.5 && m.volume === 0) return false;
+      return true;
+    });
+
+    // Sort by probability (highest first) and take top 4
+    return realMarkets
+      .sort((a, b) => b.currentPrice - a.currentPrice)
+      .slice(0, 4);
+  }, [isMultiOutcomeMarket, polyEvent]);
+
+  // Fetch multi-series price history for multi-outcome markets
+  const { seriesData: multiSeriesData, isLoading: multiSeriesLoading } = usePolymarketMultiPriceHistory(
+    multiOutcomeMarketInfo,
+    { interval: 'max', fidelity: 60, refreshInterval: 60000, enabled: isMultiOutcomeMarket && !!multiOutcomeMarketInfo }
+  );
+
+  // Transform multi-series data to ChartSeries format
+  const chartSeries: ChartSeries[] = useMemo(() => {
+    if (!isMultiOutcomeMarket || !multiSeriesData || multiSeriesData.length === 0) {
+      return [];
+    }
+
+    // Transform and filter out series with no valid data points
+    return multiSeriesData
+      .map((series) => {
+        // Transform history data - API returns { t, p } abbreviated format
+        const data = (series.history || [])
+          .map((point: any) => ({
+            time: (point.t || point.timestamp) * 1000, // Convert seconds to milliseconds
+            price: point.p ?? point.price ?? 0,
+          }))
+          .filter((point: any) => point.time > 0 && typeof point.price === 'number');
+
+        return {
+          id: series.id,
+          label: series.label,
+          data,
+          currentPrice: series.currentPrice,
+        };
+      })
+      .filter(series => series.data.length > 0); // Only include series with valid data
+  }, [isMultiOutcomeMarket, multiSeriesData]);
 
   // Get Polymarket event ID and condition ID for comments and holders
   const polyEventId = useMemo(() => {
@@ -754,7 +1455,10 @@ export default function MarketDetailPage() {
   }, [isPolymarket, polyPriceHistory, priceHistory]);
 
   // Unified history loading state
-  const chartHistoryLoading = isPolymarket ? polyHistoryLoading : historyLoading;
+  // For multi-outcome markets, use multi-series loading; otherwise use single-series loading
+  const chartHistoryLoading = isPolymarket
+    ? (isMultiOutcomeMarket ? multiSeriesLoading : polyHistoryLoading)
+    : historyLoading;
 
   // Transform order book for the chart component
   const orderBookForChart = useMemo(() => {
@@ -961,24 +1665,45 @@ export default function MarketDetailPage() {
                   yesPrice={currentYesPrice}
                   noPrice={currentNoPrice}
                   source={isPolymarket ? 'polymarket' : 'dflow'}
+                  isMultiOutcome={isMultiOutcomeMarket}
+                  endDate={polyEvent?.endDate || selectedOutcomeMarket?.endDate}
                 />
               </div>
 
               {/* Separator line */}
               <div className="px-3 border-b border-[#2A2B33]" style={{ marginTop: '2px' }} />
 
-              {/* Chart with inline Order Book - always visible */}
+              {/* Chart with inline Order Book - flex row layout */}
               <div
-                className="flex-1 min-h-[200px] relative w-full overflow-hidden"
-                style={{ height: '100%', width: '100%', position: 'relative', minHeight: 0, minWidth: 0 }}
+                className="flex-1 min-h-[200px] flex w-full overflow-hidden"
+                style={{ height: '100%', width: '100%', minHeight: 0, minWidth: 0 }}
               >
+                {/* Chart area - takes remaining space, full height */}
+                <div className="flex-1 relative min-w-0 h-full" style={{ minHeight: 0 }}>
                 {/* Show loading while fetching price history (from either dFlow or Polymarket) */}
                 {chartHistoryLoading ? (
-                  <div className="flex items-center justify-center h-full" style={{ backgroundColor: AX.bg }}>
+                  <div key="chart-loading" className="flex items-center justify-center h-full" style={{ backgroundColor: AX.bg }}>
                     <HiOutlineRefresh className="w-5 h-5 animate-spin" style={{ color: AX.muted }} />
                   </div>
+                ) : isPolymarket && isMultiOutcomeMarket ? (
+                  /* Use TradingView advanced chart for multi-outcome Polymarket markets */
+                  <TradingViewPredictionChart
+                    key={`tv-multi-${tickerString}`}
+                    ticker={tickerString}
+                    marketTitle={market.title}
+                    yesPrice={currentYesPrice}
+                    noPrice={currentNoPrice}
+                    height="100%"
+                    series={chartSeries as ChartSeriesData[]}
+                    isMultiSeries={true}
+                    showOrderBook={false}
+                    isResolved={isResolved}
+                    resolvedResult={market.result as 'yes' | 'no' | null}
+                  />
                 ) : isPolymarket ? (
+                  /* Use simple PolymarketChart for single-outcome (Yes/No) markets */
                   <PolymarketChart
+                    key={`poly-${tickerString}`}
                     priceHistory={chartPriceHistory}
                     currentPrice={currentYesPrice}
                     marketTitle={market.title}
@@ -988,7 +1713,9 @@ export default function MarketDetailPage() {
                     onIntervalChange={setChartInterval}
                   />
                 ) : (
+                  /* Use TradingView chart for dFlow markets */
                   <TradingViewPredictionChart
+                    key={`tv-dflow-${tickerString}`}
                     ticker={tickerString}
                     marketTitle={market.title}
                     yesPrice={currentYesPrice}
@@ -998,6 +1725,18 @@ export default function MarketDetailPage() {
                     orderBook={orderBookForChart}
                     isResolved={isResolved}
                     resolvedResult={market.result as 'yes' | 'no' | null}
+                  />
+                )}
+
+                </div>
+
+                {/* Polymarket Real-time Order Book - inline flex item on the right */}
+                {isPolymarket && polyTokenIds.yes && (
+                  <PolymarketOrderBook
+                    yesTokenId={polyTokenIds.yes}
+                    noTokenId={polyTokenIds.no}
+                    marketTitle={market.title}
+                    defaultOpen={true}
                   />
                 )}
               </div>
@@ -1062,7 +1801,7 @@ export default function MarketDetailPage() {
                   setSelectedTab={setSelectedTab}
                 />
               </div>
-              <div className="flex-1 min-h-[300px] overflow-auto">
+              <div className="flex-1 min-h-[300px] overflow-auto pb-20">
                 {/* dFlow: Trades tab */}
                 <div className={`flex flex-col h-full ${selectedTab === "Trades" ? "" : "hidden"}`}>
                   <TradesTable trades={trades || []} isLoading={tradesLoading} />
@@ -1070,6 +1809,23 @@ export default function MarketDetailPage() {
                 {/* Polymarket: Activity tab */}
                 <div className={`flex flex-col h-full ${selectedTab === "Activity" ? "" : "hidden"}`}>
                   <ActivitySection activities={activities || []} isLoading={activityLoading} />
+                </div>
+                {/* Polymarket: Outcomes tab (for multi-outcome markets) */}
+                <div className={`flex flex-col h-full ${selectedTab === "Outcomes" ? "" : "hidden"}`}>
+                  <OutcomesSection
+                    event={polyEvent || null}
+                    isLoading={polyLoading}
+                    onSelectOutcome={(marketId, side) => {
+                      // Find the market by ID and set it as selected
+                      const selectedMkt = polyEvent?.markets?.find(m => m.id === marketId);
+                      if (selectedMkt) {
+                        setSelectedOutcomeMarket(selectedMkt);
+                        setSelectedSide(side);
+                        setTradeMode('buy');
+                        setAmount('');
+                      }
+                    }}
+                  />
                 </div>
                 {/* Polymarket: Comments tab */}
                 <div className={`flex flex-col h-full ${selectedTab === "Comments" ? "" : "hidden"}`}>
@@ -1091,58 +1847,350 @@ export default function MarketDetailPage() {
 
           {/* RIGHT: Trade Action Panel */}
           <div className="flex-shrink-0 min-w-[260px] basis-[280px] md:basis-[310px] lg:basis-[330px] hidden lg:flex flex-col">
-            <div className="p-3 flex-1 overflow-auto">
-              {/* Trade Panel */}
-              <div className="rounded-xl p-4" style={{ backgroundColor: AX.surface, border: `1px solid ${AX.border}` }}>
-                {/* Polymarket - Trading not available yet */}
-                {isPolymarket ? (
-                  <div className="text-center py-4">
-                    <div
-                      className="w-14 h-14 rounded-xl mx-auto mb-4 flex items-center justify-center"
-                      style={{ backgroundColor: `${AX.purple}15` }}
-                    >
-                      <HiOutlineExternalLink className="w-7 h-7" style={{ color: AX.purple }} />
-                    </div>
-                    <h3 className="text-sm font-semibold mb-2" style={{ color: AX.text }}>
-                      Polymarket Trading
-                    </h3>
-                    <p className="text-xs mb-4 max-w-[200px] mx-auto" style={{ color: AX.muted }}>
-                      Trading on Polymarket requires a Polygon wallet. Visit Polymarket directly to trade this market.
-                    </p>
+            <div className="px-3 py-2 flex-1 overflow-auto">
+              {/* Polymarket Trade Panel */}
+              {isPolymarket ? (
+                <div>
+                    {/* Selected Outcome Header */}
+                    {selectedOutcomeMarket ? (
+                      <div className="flex items-center gap-3 mb-4">
+                        {(selectedOutcomeMarket.image || selectedOutcomeMarket.icon) ? (
+                          <img
+                            src={selectedOutcomeMarket.image || selectedOutcomeMarket.icon}
+                            alt=""
+                            className="w-12 h-12 rounded-xl object-cover"
+                          />
+                        ) : (
+                          <div
+                            className="w-12 h-12 rounded-xl flex items-center justify-center text-lg font-bold"
+                            style={{ backgroundColor: getAvatarColor(selectedOutcomeMarket.groupItemTitle || 'O'), color: '#fff' }}
+                          >
+                            {(selectedOutcomeMarket.groupItemTitle || 'O').charAt(0).toUpperCase()}
+                          </div>
+                        )}
+                        <div className="flex-1 min-w-0">
+                          <h3 className="font-semibold text-sm truncate" style={{ color: AX.text }}>
+                            {selectedOutcomeMarket.groupItemTitle || selectedOutcomeMarket.question || 'Selected Outcome'}
+                          </h3>
+                          <button
+                            onClick={() => setSelectedOutcomeMarket(null)}
+                            className="text-[10px] hover:underline"
+                            style={{ color: AX.muted }}
+                          >
+                            Change outcome
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="text-center py-3 mb-4 rounded-lg" style={{ backgroundColor: AX.bg }}>
+                        <p className="text-xs" style={{ color: AX.muted }}>
+                          Select an outcome from the Outcomes tab
+                        </p>
+                      </div>
+                    )}
 
-                    {/* Current prices */}
+                    {/* Buy / Sell Toggle */}
+                    <div className="mb-4">
+                      <div className="relative h-9 rounded-lg overflow-hidden" style={{ backgroundColor: AX.bg, border: `1px solid ${AX.border}` }}>
+                        {/* Sliding highlight */}
+                        <div
+                          className="absolute top-0 left-0 h-full w-1/2 rounded-md transition-transform duration-200"
+                          style={{
+                            transform: tradeMode === 'sell' ? 'translateX(100%)' : 'translateX(0%)',
+                            background: tradeMode === 'buy' ? AX.green : AX.red,
+                          }}
+                        />
+                        {/* Buttons */}
+                        <div className="relative z-10 grid grid-cols-2 h-full">
+                          <button
+                            onClick={() => setTradeMode('buy')}
+                            className="flex items-center justify-center h-full text-sm font-semibold cursor-pointer select-none transition-colors"
+                            style={{ color: tradeMode === 'buy' ? '#000' : AX.muted }}
+                          >
+                            Buy
+                          </button>
+                          <button
+                            onClick={() => setTradeMode('sell')}
+                            className="flex items-center justify-center h-full text-sm font-semibold cursor-pointer select-none transition-colors"
+                            style={{ color: tradeMode === 'sell' ? '#fff' : AX.muted }}
+                          >
+                            Sell
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Yes / No Buttons */}
+                    {(() => {
+                      // Parse prices from selected outcome - use SAME formula as OutcomesSection
+                      let yesPrice = currentYesPrice;
+                      let noPrice = currentNoPrice;
+                      if (selectedOutcomeMarket?.outcomePrices) {
+                        try {
+                          const prices = JSON.parse(selectedOutcomeMarket.outcomePrices).map(Number);
+                          yesPrice = prices[0] || 0.5;
+                          noPrice = prices[1] || 0.5;
+                        } catch {}
+                      }
+                      // Same calculation as OutcomesSection: Math.round(price * 100 * 10) / 10, then .toFixed(0)
+                      const yesPriceCents = Math.round(yesPrice * 100 * 10) / 10;
+                      const noPriceCents = Math.round(noPrice * 100 * 10) / 10;
+                      return (
+                        <div className="grid grid-cols-2 gap-2 mb-4">
+                          <button
+                            onClick={() => setSelectedSide('yes')}
+                            className="py-3 rounded-lg flex items-center justify-center gap-2 transition-all"
+                            style={{
+                              backgroundColor: selectedSide === 'yes' ? AX.green : AX.bg,
+                              border: `2px solid ${selectedSide === 'yes' ? AX.green : AX.border}`,
+                              color: selectedSide === 'yes' ? '#000' : AX.green,
+                            }}
+                          >
+                            <span className="font-bold">Yes</span>
+                            <span className="text-sm">{yesPriceCents.toFixed(0)}¢</span>
+                          </button>
+                          <button
+                            onClick={() => setSelectedSide('no')}
+                            className="py-3 rounded-lg flex items-center justify-center gap-2 transition-all"
+                            style={{
+                              backgroundColor: selectedSide === 'no' ? AX.red : AX.bg,
+                              border: `2px solid ${selectedSide === 'no' ? AX.red : AX.border}`,
+                              color: selectedSide === 'no' ? '#fff' : AX.muted,
+                            }}
+                          >
+                            <span className="font-bold">No</span>
+                            <span className="text-sm">{noPriceCents.toFixed(0)}¢</span>
+                          </button>
+                        </div>
+                      );
+                    })()}
+
+                    {/* Amount Input */}
+                    <div className="mb-3">
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="text-xs" style={{ color: AX.muted }}>Amount</span>
+                        <span className="text-xl font-bold" style={{ color: AX.text }}>
+                          ${amount || '0'}
+                        </span>
+                      </div>
+                      <input
+                        type="number"
+                        value={amount}
+                        onChange={(e) => setAmount(e.target.value)}
+                        placeholder="0"
+                        className="w-full px-3 py-3 rounded-lg text-lg font-semibold outline-none text-center"
+                        style={{ backgroundColor: AX.bg, border: `1px solid ${AX.border}`, color: AX.text }}
+                      />
+                    </div>
+
+                    {/* Quick Amount Buttons */}
                     <div className="flex gap-2 mb-4">
-                      <div className="flex-1 rounded-lg p-2 text-center" style={{ backgroundColor: AX.greenBg }}>
-                        <div className="text-[10px] uppercase" style={{ color: AX.green }}>Yes</div>
-                        <div className="text-lg font-bold" style={{ color: AX.green }}>
-                          {Math.round(currentYesPrice * 100)}¢
-                        </div>
-                      </div>
-                      <div className="flex-1 rounded-lg p-2 text-center" style={{ backgroundColor: AX.redBg }}>
-                        <div className="text-[10px] uppercase" style={{ color: AX.red }}>No</div>
-                        <div className="text-lg font-bold" style={{ color: AX.red }}>
-                          {Math.round(currentNoPrice * 100)}¢
-                        </div>
-                      </div>
+                      {[1, 20, 100].map((qa) => (
+                        <button
+                          key={qa}
+                          onClick={() => setAmount(prev => String((parseFloat(prev) || 0) + qa))}
+                          className="flex-1 py-2 rounded-lg text-xs font-medium transition-colors"
+                          style={{ backgroundColor: AX.bg, color: AX.text, border: `1px solid ${AX.border}` }}
+                        >
+                          +${qa}
+                        </button>
+                      ))}
+                      <button
+                        onClick={() => setAmount('1000')}
+                        className="flex-1 py-2 rounded-lg text-xs font-medium transition-colors"
+                        style={{ backgroundColor: AX.bg, color: AX.text, border: `1px solid ${AX.border}` }}
+                      >
+                        Max
+                      </button>
                     </div>
 
+                    {/* Trade Button - Links to Polymarket */}
                     <a
-                      href={`https://polymarket.com/event/${tickerString}`}
+                      href={selectedOutcomeMarket
+                        ? `https://polymarket.com/event/${tickerString}?tid=${selectedOutcomeMarket.id}`
+                        : `https://polymarket.com/event/${tickerString}`
+                      }
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors"
+                      className="w-full py-3 rounded-lg font-semibold flex items-center justify-center gap-2 transition-all"
                       style={{
-                        backgroundColor: AX.purple,
-                        color: '#fff',
+                        backgroundColor: tradeMode === 'buy' ? AX.green : AX.red,
+                        color: tradeMode === 'buy' ? '#000' : '#fff',
+                        opacity: !selectedOutcomeMarket || !amount ? 0.5 : 1,
                       }}
                     >
-                      Trade on Polymarket
+                      {tradeMode === 'buy' ? 'Buy' : 'Sell'} {selectedSide.toUpperCase()} on Polymarket
                       <HiOutlineExternalLink className="w-4 h-4" />
                     </a>
 
-                    <p className="text-[10px] mt-3" style={{ color: AX.muted }}>
-                      Polygon wallet integration coming soon
+                    <p className="text-[10px] mt-3 text-center" style={{ color: AX.muted }}>
+                      Requires Polygon wallet on Polymarket
                     </p>
+
+                    {/* Market Stats Section */}
+                    <div className="mt-4 border-t" style={{ borderColor: AX.border }}>
+                      <button
+                        onClick={() => setShowMarketStats(!showMarketStats)}
+                        className="w-full flex items-center justify-between py-2 hover:opacity-80 transition-opacity"
+                      >
+                        <span className="text-[10px] font-semibold uppercase tracking-wide" style={{ color: AX.muted }}>
+                          Market Stats
+                        </span>
+                        <svg
+                          width="12"
+                          height="12"
+                          viewBox="0 0 12 12"
+                          fill="none"
+                          className={`transition-transform ${showMarketStats ? 'rotate-180' : ''}`}
+                          style={{ color: AX.muted }}
+                        >
+                          <path d="M6 9L1 4L11 4L6 9Z" fill="currentColor" />
+                        </svg>
+                      </button>
+                      {showMarketStats && (
+                        <div className="pb-3 space-y-2">
+                          {/* Volume */}
+                          <div className="flex items-center justify-between">
+                            <span className="text-[10px] uppercase tracking-wide" style={{ color: AX.muted }}>Volume</span>
+                            <span className="text-[11px] font-semibold" style={{ color: AX.text }}>
+                              {formatPolymarketVolume(parseFloat(polyEvent?.volume || selectedOutcomeMarket?.volume || '0'))}
+                            </span>
+                          </div>
+                          {/* Liquidity */}
+                          <div className="flex items-center justify-between">
+                            <span className="text-[10px] uppercase tracking-wide" style={{ color: AX.muted }}>Liquidity</span>
+                            <span className="text-[11px] font-semibold" style={{ color: AX.text }}>
+                              {formatPolymarketVolume(parseFloat(polyEvent?.liquidity || selectedOutcomeMarket?.liquidity || '0'))}
+                            </span>
+                          </div>
+                          {/* End Date */}
+                          {(polyEvent?.endDate || selectedOutcomeMarket?.endDate) && (
+                            <div className="flex items-center justify-between">
+                              <span className="text-[10px] uppercase tracking-wide" style={{ color: AX.muted }}>End Date</span>
+                              <span className="text-[11px] font-semibold" style={{ color: AX.text }}>
+                                {new Date(polyEvent?.endDate || selectedOutcomeMarket?.endDate || '').toLocaleDateString('en-US', {
+                                  year: 'numeric',
+                                  month: 'short',
+                                  day: 'numeric',
+                                })}
+                              </span>
+                            </div>
+                          )}
+                          {/* Status */}
+                          <div className="flex items-center justify-between">
+                            <span className="text-[10px] uppercase tracking-wide" style={{ color: AX.muted }}>Status</span>
+                            <span
+                              className="text-[11px] font-semibold"
+                              style={{ color: (polyEvent?.active ?? selectedOutcomeMarket?.active) ? AX.green : AX.red }}
+                            >
+                              {(polyEvent?.active ?? selectedOutcomeMarket?.active) ? 'Active' : 'Closed'}
+                            </span>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* About Section */}
+                    <div className="border-t" style={{ borderColor: AX.border }}>
+                      <button
+                        onClick={() => setShowAbout(!showAbout)}
+                        className="w-full flex items-center justify-between py-2 hover:opacity-80 transition-opacity"
+                      >
+                        <span className="text-[10px] font-semibold uppercase tracking-wide" style={{ color: AX.muted }}>
+                          About
+                        </span>
+                        <svg
+                          width="12"
+                          height="12"
+                          viewBox="0 0 12 12"
+                          fill="none"
+                          className={`transition-transform ${showAbout ? 'rotate-180' : ''}`}
+                          style={{ color: AX.muted }}
+                        >
+                          <path d="M6 9L1 4L11 4L6 9Z" fill="currentColor" />
+                        </svg>
+                      </button>
+                      {showAbout && (
+                        <div className="pb-3">
+                          <p className="text-[11px] leading-relaxed" style={{ color: AX.text }}>
+                            {polyEvent?.description || 'No description available.'}
+                          </p>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Resolution Section */}
+                    <div className="border-t" style={{ borderColor: AX.border }}>
+                      <button
+                        onClick={() => setShowResolution(!showResolution)}
+                        className="w-full flex items-center justify-between py-2 hover:opacity-80 transition-opacity"
+                      >
+                        <span className="text-[10px] font-semibold uppercase tracking-wide" style={{ color: AX.muted }}>
+                          Resolution
+                        </span>
+                        <svg
+                          width="12"
+                          height="12"
+                          viewBox="0 0 12 12"
+                          fill="none"
+                          className={`transition-transform ${showResolution ? 'rotate-180' : ''}`}
+                          style={{ color: AX.muted }}
+                        >
+                          <path d="M6 9L1 4L11 4L6 9Z" fill="currentColor" />
+                        </svg>
+                      </button>
+                      {showResolution && (
+                        <div className="pb-3 space-y-2">
+                          {/* Resolver Contract - link to Polygonscan */}
+                          {(selectedOutcomeMarket?.resolvedBy || polyEvent?.markets?.[0]?.resolvedBy) && (
+                            <div className="flex items-center justify-between">
+                              <span className="text-[10px] uppercase tracking-wide" style={{ color: AX.muted }}>Resolver</span>
+                              <a
+                                href={`https://polygonscan.com/address/${selectedOutcomeMarket?.resolvedBy || polyEvent?.markets?.[0]?.resolvedBy}`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="flex items-center gap-1 text-[11px] font-mono hover:opacity-70"
+                                style={{ color: AX.purple }}
+                              >
+                                {(selectedOutcomeMarket?.resolvedBy || polyEvent?.markets?.[0]?.resolvedBy || '').slice(0, 6)}...{(selectedOutcomeMarket?.resolvedBy || polyEvent?.markets?.[0]?.resolvedBy || '').slice(-4)}
+                                <HiOutlineExternalLink className="w-3 h-3" />
+                              </a>
+                            </div>
+                          )}
+                          {/* Condition ID */}
+                          {(selectedOutcomeMarket?.conditionId || polyEvent?.markets?.[0]?.conditionId) && (
+                            <div className="flex items-center justify-between">
+                              <span className="text-[10px] uppercase tracking-wide" style={{ color: AX.muted }}>Condition</span>
+                              <button
+                                onClick={() => copyToClipboard(selectedOutcomeMarket?.conditionId || polyEvent?.markets?.[0]?.conditionId || '')}
+                                className="flex items-center gap-1 text-[11px] font-mono hover:opacity-70"
+                                style={{ color: AX.cyan }}
+                              >
+                                {(selectedOutcomeMarket?.conditionId || polyEvent?.markets?.[0]?.conditionId || '').slice(0, 6)}...{(selectedOutcomeMarket?.conditionId || polyEvent?.markets?.[0]?.conditionId || '').slice(-4)}
+                                <BiCopy className="w-3 h-3" />
+                              </button>
+                            </div>
+                          )}
+                          {/* UMA Oracle info */}
+                          <div className="pt-2 mt-1" style={{ borderTop: `1px solid ${AX.border}` }}>
+                            <p className="text-[10px]" style={{ color: AX.muted }}>
+                              Resolved via UMA Optimistic Oracle on Polygon
+                            </p>
+                          </div>
+                          {/* Link to full rules on Polymarket */}
+                          <a
+                            href={`https://polymarket.com/event/${tickerString}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center gap-1 text-[10px] hover:underline"
+                            style={{ color: AX.mint }}
+                          >
+                            View full rules on Polymarket
+                            <HiOutlineExternalLink className="w-3 h-3" />
+                          </a>
+                        </div>
+                      )}
+                    </div>
                   </div>
                 ) : (
                   <>
@@ -1320,78 +2368,7 @@ export default function MarketDetailPage() {
                 </button>
                   </>
                 )}
-              </div>
 
-              {/* Market Stats */}
-              <div className="mt-3 rounded-xl p-4" style={{ backgroundColor: AX.surface, border: `1px solid ${AX.border}` }}>
-                <h3 className="text-xs font-semibold mb-3" style={{ color: AX.text }}>Market Stats</h3>
-                <div className="space-y-2">
-                  {[
-                    { label: '24h Volume', value: formatVolume(market.volume24h || 0) },
-                    { label: 'Total Volume', value: formatVolume(market.totalVolume || 0) },
-                    { label: 'Open Interest', value: formatOpenInterest(market.openInterest || 0) },
-                  ].map((stat) => (
-                    <div key={stat.label} className="flex justify-between text-xs">
-                      <span style={{ color: AX.muted }}>{stat.label}</span>
-                      <span style={{ color: AX.text }}>{stat.value}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              {/* Resolution Rules */}
-              {(market.rulesPrimary || market.settlementSources) && (
-                <div className="mt-3 rounded-xl p-4" style={{ backgroundColor: AX.surface, border: `1px solid ${AX.border}` }}>
-                  <h3 className="text-xs font-semibold mb-2" style={{ color: AX.text }}>Resolution</h3>
-                  {market.rulesPrimary && (
-                    <p className="text-xs mb-2" style={{ color: AX.muted }}>{market.rulesPrimary}</p>
-                  )}
-                  {market.settlementSources && market.settlementSources.length > 0 && (
-                    <div className="flex flex-wrap gap-1">
-                      {market.settlementSources.map((source, idx) => (
-                        <a
-                          key={idx}
-                          href={source.url}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="inline-flex items-center gap-1 text-xs px-2 py-1 rounded hover:opacity-80"
-                          style={{ backgroundColor: AX.bg, color: AX.mint }}
-                        >
-                          <HiOutlineExternalLink className="w-3 h-3" />
-                          {source.name}
-                        </a>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {/* Token Addresses */}
-              {market.accounts && Object.keys(market.accounts).length > 0 && (
-                <div className="mt-3 rounded-xl p-4" style={{ backgroundColor: AX.surface, border: `1px solid ${AX.border}` }}>
-                  <h3 className="text-xs font-semibold mb-2" style={{ color: AX.text }}>Token Addresses</h3>
-                  {Object.entries(market.accounts).map(([collateral, acc]) => (
-                    <div key={collateral} className="space-y-1">
-                      {[
-                        { label: 'YES', value: acc.yesMint, color: AX.green },
-                        { label: 'NO', value: acc.noMint, color: AX.red },
-                      ].map(({ label, value, color }) => (
-                        <div key={label} className="flex items-center justify-between text-xs">
-                          <span style={{ color: AX.muted }}>{label}</span>
-                          <button
-                            onClick={() => copyToClipboard(value)}
-                            className="flex items-center gap-1 font-mono hover:opacity-70"
-                            style={{ color }}
-                          >
-                            {value.slice(0, 4)}...{value.slice(-4)}
-                            <BiCopy className="w-3 h-3" />
-                          </button>
-                        </div>
-                      ))}
-                    </div>
-                  ))}
-                </div>
-              )}
             </div>
           </div>
 

@@ -58,7 +58,9 @@ export default function PredictionsPage() {
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [selectedSort, setSelectedSort] = useState<SortOption>('hot');
   const [searchQuery, setSearchQuery] = useState('');
-  const [dataSource, setDataSource] = useState<PredictionDataSource>('all');
+  // TODO: dFlow is disabled for now - only Polymarket is active
+  // const [dataSource, setDataSource] = useState<PredictionDataSource>('all');
+  const [dataSource, setDataSource] = useState<PredictionDataSource>('polymarket');
 
   // Fetch markets from unified hook (dFlow + Polymarket)
   const {
@@ -272,6 +274,7 @@ export default function PredictionsPage() {
           )}
 
           {/* Data Source Switcher */}
+          {/* TODO: DataSourceSwitcher hidden - dFlow disabled for now
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
@@ -286,6 +289,7 @@ export default function PredictionsPage() {
               showCounts={true}
             />
           </motion.div>
+          */}
 
           {/* Filters - Centered and Horizontally Scrollable */}
           <motion.div
