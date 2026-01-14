@@ -988,7 +988,7 @@ export const SubscriptNumber: React.FC<SubscriptNumberProps> = ({ value, classNa
     const [integerPart, decimalPart = ''] = numStr.split('.');
     const leadingZeros = decimalPart.match(/^0*/)?.[0] || '';
     const originalZeroCount = leadingZeros.length;
-    const zeroCount = Math.max(0, originalZeroCount - 1); // Subtract 1 from zero count
+    const zeroCount = originalZeroCount; // Show actual zero count in subscript
     const sigDigitsStart = leadingZeros.length;
 
     const firstDigit = decimalPart[sigDigitsStart] || '0';

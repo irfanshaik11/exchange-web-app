@@ -164,11 +164,18 @@ export function ReferralAccessGate({
   const { user, loading: userLoading, refreshUser } = useUser();
   const hasMountedRef = useRef(false);
   const prefillAttemptedRef = useRef(false);
+  const silentProcessingAttemptedRef = useRef(false);
 
   const requireReferralAccess =
     env.NEXT_PUBLIC_REQUIRE_REFERRAL_ACCESS !== undefined
       ? env.NEXT_PUBLIC_REQUIRE_REFERRAL_ACCESS
       : true; // default to true to require access code for new users
+
+  // When true, hides the popup UI but still processes referrals silently in the background
+  const referralGateHidden =
+    env.NEXT_PUBLIC_REFERRAL_GATE_HIDDEN !== undefined
+      ? env.NEXT_PUBLIC_REFERRAL_GATE_HIDDEN
+      : false; // default to false to show the gate
 
   const [status, setStatus] = useState<ReferralGateStatus>(() => {
     // Start in "checking" state to avoid showing the modal before localStorage is checked.
@@ -473,6 +480,58 @@ export function ReferralAccessGate({
     handleSubmit(autoSubmitCode);
     setAutoSubmitCode(null);
   }, [autoSubmitCode, status, requireReferralAccess, handleSubmit, user, userLoading]);
+
+  // Silent referral processing when gate is hidden
+  // This ensures referrer still gets credit even when popup is not shown
+  useEffect(() => {
+    if (!referralGateHidden) return; // Only run when gate is hidden
+    if (!router.isReady) return;
+    if (userLoading || !user) return;
+    if (silentProcessingAttemptedRef.current) return;
+
+    const referralCode = derivePrefillQuery(router);
+    if (!referralCode) return;
+
+    silentProcessingAttemptedRef.current = true;
+
+    // Process referral silently in background
+    (async () => {
+      try {
+        if (!user?.bearerToken) {
+          console.debug('[ReferralGate] Silent processing skipped - no auth token');
+          return;
+        }
+
+        console.debug('[ReferralGate] Processing referral silently:', referralCode);
+
+        try {
+          await redeemAccessCode({
+            accessCode: referralCode,
+            authToken: user.bearerToken,
+          });
+          console.debug('[ReferralGate] Silent referral processed successfully');
+        } catch (err: any) {
+          // If no waitlist row, create it, then retry redeem once
+          const statusCode = err?.status || err?.response?.status;
+          if (statusCode === 404) {
+            await completeAllQuests({ userId: Number(user.id) });
+            await redeemAccessCode({
+              accessCode: referralCode,
+              authToken: user.bearerToken,
+            });
+            console.debug('[ReferralGate] Silent referral processed after waitlist creation');
+          } else {
+            console.debug('[ReferralGate] Silent referral failed:', err?.message || err);
+          }
+        }
+
+        // Grant access silently
+        persistAccess(user.id);
+      } catch (e: any) {
+        console.debug('[ReferralGate] Silent referral processing error:', e?.message || e);
+      }
+    })();
+  }, [referralGateHidden, router.isReady, router, user, userLoading]);
 
   useEffect(() => {
     if (!router.isReady) return;
@@ -904,6 +963,16 @@ export function ReferralAccessGate({
   }, [status, grantAccess, revokeAccess]);
 
   if (!requireReferralAccess) {
+    return (
+      <ReferralAccessContext.Provider value={contextValue}>
+        {children}
+      </ReferralAccessContext.Provider>
+    );
+  }
+
+  // When gate is hidden, render children directly without any popup
+  // Silent referral processing still happens via the useEffect above
+  if (referralGateHidden) {
     return (
       <ReferralAccessContext.Provider value={contextValue}>
         {children}
