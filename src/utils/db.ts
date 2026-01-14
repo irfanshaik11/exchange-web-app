@@ -97,6 +97,14 @@ export type Token = {
   protocol?: string; // Alternative protocol field
   amm_id?: string; // AMM identifier
   launchpadProtocol?: string; // Alternative protocol field name
+  // Total fees for all trades on this token (in lamports)
+  total_fees_lamports?: number;
+  // Holder and KOL metrics from WebSocket
+  holder_count?: number;
+  kol_count?: number;
+  // Dev token tracking
+  dev_tokens_created?: number;
+  dev_tokens_migrated?: number;
 };
 
 /**
@@ -270,6 +278,29 @@ export function formatMarketCap(val: string | number | null | undefined): string
 
   // Fallback for values >= $1000 but < $1K (shouldn't happen with above logic)
   return num.toFixed(2);
+}
+
+/**
+ * Formats lamports to SOL with appropriate abbreviation.
+ * 1 SOL = 1,000,000,000 lamports
+ * Examples:
+ *   5000000000  => "5 SOL"
+ *   1500000000  => "1.5 SOL"
+ *   500000000   => "0.5 SOL"
+ *   50000000000 => "50 SOL"
+ */
+export function formatLamportsToSol(lamports: number | null | undefined): string {
+  if (lamports === null || lamports === undefined || lamports === 0) return "-";
+
+  const sol = lamports / 1_000_000_000;
+
+  if (sol >= 1000) {
+    return formatSmartNumber(sol) + " SOL";
+  } else if (sol >= 1) {
+    return sol.toFixed(2) + " SOL";
+  } else {
+    return sol.toFixed(4) + " SOL";
+  }
 }
 
 

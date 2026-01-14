@@ -22,6 +22,7 @@ import { prefetchTradeData } from "~/utils/tokenCache";
 import toast from "react-hot-toast";
 import { extractTokenImage } from "~/utils/images";
 import { broadcastMonadQuickTrade } from "~/utils/monadTradeEvents";
+import { formatMonadError } from "~/utils/monadError";
 
 const WRAPPED_SOL_MINT = SOL_MINT_ADDRESS;
 
@@ -34,19 +35,19 @@ export default function DiscoverPopoutContent() {
   const router = useRouter();
   
   // CRITICAL: Initialize chain from router query immediately to avoid race conditions
-  // Default to monad chain for popout
+  // Default to solana chain for popout
   const manualChainSwitchRef = useRef(false);
   const [currentChain, setCurrentChain] = useState<string>(() => {
-    // Initialize from router query if available, otherwise default to 'monad'
+    // Initialize from router query if available, otherwise default to 'sol'
     if (typeof window !== 'undefined' && router.isReady) {
-      return (router.query.chain as string) || 'monad';
+      return (router.query.chain as string) || 'sol';
     }
     // Also check URL params directly for immediate access
     if (typeof window !== 'undefined') {
       const urlParams = new URLSearchParams(window.location.search);
-      return urlParams.get('chain') || 'monad';
+      return urlParams.get('chain') || 'sol';
     }
-    return 'monad';
+    return 'sol';
   });
   
   // Sync chain state with router query (only if not manually switched)
@@ -55,7 +56,7 @@ export default function DiscoverPopoutContent() {
       manualChainSwitchRef.current = false;
       return;
     }
-    const chainFromQuery = (router.query.chain as string) || 'monad';
+    const chainFromQuery = (router.query.chain as string) || 'sol';
     if (chainFromQuery !== currentChain) {
       console.log('[DiscoverPopout] Chain changed from router:', currentChain, '->', chainFromQuery);
       setCurrentChain(chainFromQuery);
@@ -69,7 +70,7 @@ export default function DiscoverPopoutContent() {
       return;
     }
     const urlParams = new URLSearchParams(router.asPath.split('?')[1] || '');
-    const chainFromUrl = urlParams.get('chain') || 'monad';
+    const chainFromUrl = urlParams.get('chain') || 'sol';
     if (chainFromUrl !== currentChain) {
       console.log('[DiscoverPopout] Chain changed from URL:', currentChain, '->', chainFromUrl);
       setCurrentChain(chainFromUrl);
@@ -93,7 +94,7 @@ export default function DiscoverPopoutContent() {
           // Check if we're on monad chain - if so, only allow trending or newPairs
           // Check URL params directly for immediate access (same pattern as currentChain)
           const urlParams = new URLSearchParams(window.location.search);
-          const initialChain = urlParams.get('chain') || 'monad';
+          const initialChain = urlParams.get('chain') || 'sol';
           if (initialChain === 'monad' && savedTab !== 'trending' && savedTab !== 'newPairs') {
             return 'trending';
           }
@@ -1544,57 +1545,6 @@ export default function DiscoverPopoutContent() {
 
     // Default to nadfun if unknown
     return "nadfun";
-  }, []);
-
-  // Helper function to format user-friendly error messages
-  const formatMonadError = useCallback((error: string | undefined | null): string => {
-    if (!error) return "Trade failed. Please try again.";
-    
-    const errorLower = error.toLowerCase();
-    
-    // Check for specific error patterns
-    if (errorLower.includes('err_bonding_curve_library_invalid_inputs') || 
-        errorLower.includes('bonding_curve_library_invalid_inputs')) {
-      return "This token has no liquidity or has graduated to DEX. Try a different token.";
-    }
-    
-    if (errorLower.includes('insufficient liquidity') || 
-        errorLower.includes('expected output is 0') ||
-        errorLower.includes('no liquidity')) {
-      return "Insufficient liquidity. This token may not be available for trading.";
-    }
-    
-    if (errorLower.includes('token does not exist') || 
-        errorLower.includes('token may not exist')) {
-      return "Token not found. Please check the token address.";
-    }
-    
-    if (errorLower.includes('token has graduated') || 
-        errorLower.includes('graduated to dex')) {
-      return "This token has graduated to DEX. Trading on bonding curve is no longer available.";
-    }
-    
-    if (errorLower.includes('insufficient balance') || 
-        errorLower.includes('missing')) {
-      return "Insufficient balance. Please add more MON to your wallet.";
-    }
-    
-    if (errorLower.includes('locked') || 
-        errorLower.includes('cannot be traded')) {
-      return "This token is locked and cannot be traded.";
-    }
-    
-    if (errorLower.includes('execution reverted') || 
-        errorLower.includes('revert')) {
-      return "Transaction failed. The token may not be available or there may be insufficient liquidity.";
-    }
-    
-    // Return original error if it's short and user-friendly, otherwise return generic message
-    if (error.length < 100 && !error.includes('0x') && !error.includes('data:')) {
-      return error;
-    }
-    
-    return "Trade failed. Please try again.";
   }, []);
 
   // QUICK BUY handler – using MonadTable logic for Monad, enhanced trade flow for Solana

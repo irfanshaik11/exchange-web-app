@@ -49,12 +49,22 @@ export const useTradePageQueryParams = () => {
   // Update URL with current parameters
   const updateUrl = useCallback((newParams: Partial<TradePageParams>) => {
     if (!router.isReady) return;
-    
+
     const updatedParams = { ...params, ...newParams };
     setParams(updatedParams);
-    
+
     const urlParams = new URLSearchParams();
-    
+
+    // PRESERVE optimistic data params (_, chain) for instant loading
+    // These params are passed from source pages (PulseTable, etc.) and contain
+    // liquidity, age, image data that allows instant rendering without API wait
+    const currentQuery = router.query;
+    Object.entries(currentQuery).forEach(([key, value]) => {
+      if ((key.startsWith('_') || key === 'chain') && value) {
+        urlParams.set(key, Array.isArray(value) ? value[0] : value);
+      }
+    });
+
     // Add trade page parameters
     urlParams.set('mode', updatedParams.mode);
     urlParams.set('tab', updatedParams.tab);
@@ -62,7 +72,7 @@ export const useTradePageQueryParams = () => {
     if (updatedParams.amount) urlParams.set('amount', updatedParams.amount);
     if (updatedParams.targetMC) urlParams.set('targetMC', updatedParams.targetMC);
     urlParams.set('sliderPct', updatedParams.sliderPct.toString());
-    
+
     // Update URL without causing a page reload
     // Extract the base path without query parameters
     const basePath = router.asPath.split('?')[0];

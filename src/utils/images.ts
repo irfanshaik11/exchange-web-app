@@ -1,6 +1,10 @@
 export function normalizeImageUrl(src?: string | null): string | null {
   if (!src) return null;
   try {
+    // Fix common double-protocol or prefixed glitches (e.g., "imaghttps://", "https://https://")
+    src = src.replace(/imaghttps:\/\//gi, 'https://');
+    src = src.replace(/https?:\/\/https?:\/\//gi, match => match.includes('https') ? 'https://' : 'http://');
+
     // Pass through relative paths (starting with /)
     if (src.startsWith('/')) {
       return src;
@@ -67,6 +71,139 @@ export function withImageFallback(primary?: string | null, fallback?: string | n
 }
 
 // Extract a usable image URL from varied metadata shapes
+/**
+ * Check if a URL is likely a JSON metadata URL that needs to be resolved
+ */
+export function isMetadataUrl(url: string | null | undefined): boolean {
+  if (!url) return false;
+  const lower = url.toLowerCase();
+  const hasImageExtension = /\.(png|jpg|jpeg|gif|webp|svg|avif|bmp|ico)$/i.test(lower);
+
+  // Explicit image extensions are not metadata
+  if (hasImageExtension) return false;
+
+  // Quick positive match on explicit json/metadata paths
+  if (lower.endsWith('.json') || lower.includes('/metadata/')) return true;
+
+  // For metadata hosts, require json or /metadata/ in the path (avoid treating direct images as metadata)
+  try {
+    const { hostname, pathname } = new URL(lower);
+    const isMetadataHost =
+      hostname.includes('metadata.j7tracker.com') ||
+      hostname.includes('metadata.rapidlaunch.io') ||
+      hostname.includes('metadata.uxento.io');
+    if (isMetadataHost) {
+      return (
+        pathname.endsWith('.json') ||
+        pathname.includes('/metadata/') ||
+        pathname.includes('/data/')
+      );
+    }
+
+    // IPFS links without image extensions are often metadata JSON
+    const isIpfs =
+      hostname.includes('ipfs') ||
+      lower.startsWith('ipfs://') ||
+      lower.includes('/ipfs/');
+    if (isIpfs) return true;
+
+    // Arweave URLs without extensions are often JSON metadata
+    if (hostname.includes('arweave')) return true;
+  } catch {
+    // If URL parse fails, fall through
+  }
+
+  return false;
+}
+
+// Cache for resolved metadata images with TTL to allow retries for failed fetches
+// Structure: { image: string | null, timestamp: number }
+const metadataImageCache = new Map<string, { image: string | null; timestamp: number }>();
+
+// Success cache: 30 minutes (images don't change)
+const SUCCESS_TTL_MS = 30 * 60 * 1000;
+// Failure cache: 30 seconds (allows quick retry for IPFS propagation)
+const FAILURE_TTL_MS = 30 * 1000;
+
+/**
+ * Resolve a metadata JSON URL to get the actual image URL
+ * Returns null if resolution fails or URL is not a metadata URL
+ * Uses TTL-based caching: success cached for 30min, failure cached for 30sec
+ */
+export async function resolveMetadataImage(url: string): Promise<string | null> {
+  if (!url || !isMetadataUrl(url)) return null;
+
+  // Check cache with TTL
+  const cached = metadataImageCache.get(url);
+  if (cached) {
+    const age = Date.now() - cached.timestamp;
+    const ttl = cached.image ? SUCCESS_TTL_MS : FAILURE_TTL_MS;
+    if (age < ttl) {
+      return cached.image;
+    }
+    // TTL expired, remove and retry
+    metadataImageCache.delete(url);
+  }
+
+  try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 5000);
+
+    const metadataUrl = url.startsWith('/api/metadata')
+      ? url
+      : `/api/metadata?url=${encodeURIComponent(url)}`;
+
+    let response = await fetch(metadataUrl, {
+      signal: controller.signal,
+      headers: { 'Accept': 'application/json' },
+    });
+    // Fallback: try direct fetch if proxy fails (e.g., unsupported host)
+    if (!response.ok && metadataUrl !== url) {
+      response = await fetch(url, {
+        signal: controller.signal,
+        headers: { 'Accept': 'application/json' },
+      });
+    }
+    clearTimeout(timeoutId);
+
+    if (!response.ok) {
+      metadataImageCache.set(url, { image: null, timestamp: Date.now() });
+      return null;
+    }
+
+    // Check content-type: if it's an image, the proxy URL IS the image source
+    const contentType = response.headers.get('content-type') || '';
+    if (contentType.startsWith('image/')) {
+      // The /api/metadata endpoint proxied the actual image - use the proxy URL directly
+      metadataImageCache.set(url, { image: metadataUrl, timestamp: Date.now() });
+      return metadataUrl;
+    }
+
+    const data = await response.json();
+
+    // Extract image from metadata JSON
+    const imageUrl = extractMetaImage(data);
+    metadataImageCache.set(url, { image: imageUrl, timestamp: Date.now() });
+    return imageUrl;
+  } catch (error) {
+    // Cache failure with short TTL to allow retry
+    metadataImageCache.set(url, { image: null, timestamp: Date.now() });
+    return null;
+  }
+}
+
+/**
+ * Clear the metadata image cache (useful for testing or memory management)
+ */
+export function clearMetadataImageCache(): void {
+  metadataImageCache.clear();
+}
+
+// Expose cache clear to window for debugging
+if (typeof window !== 'undefined') {
+  (window as any).clearMetadataCache = clearMetadataImageCache;
+}
+
 export function extractMetaImage(meta: any): string | null {
   if (!meta || typeof meta !== 'object') return null;
   const candidates: any[] = [];
@@ -95,121 +232,37 @@ export function extractMetaImage(meta: any): string | null {
 }
 
 /**
- * Check if a URL appears to be an image URL (not JSON, HTML, etc.)
- */
-function isValidImageUrl(url: string): boolean {
-  if (!url || typeof url !== 'string') return false;
-  
-  try {
-    // Reject JSON files
-    if (url.endsWith('.json') || url.includes('.json?')) {
-      return false;
-    }
-    
-    // Reject invalid IP addresses (they should use proper domains)
-    if (/^https?:\/\/(\d{1,3}\.){3}\d{1,3}/.test(url)) {
-      // Allow localhost for development, but reject other IPs
-      if (!url.includes('localhost') && !url.includes('127.0.0.1')) {
-        return false;
-      }
-    }
-    
-    // Accept relative paths that start with / and have image extensions
-    if (url.startsWith('/')) {
-      const imageExtensions = ['.png', '.jpg', '.jpeg', '.gif', '.webp', '.svg', '.ico', '.bmp'];
-      const hasImageExtension = imageExtensions.some(ext => 
-        url.toLowerCase().includes(ext) || url.toLowerCase().includes(ext + '?')
-      );
-      if (hasImageExtension) {
-        return true;
-      }
-    }
-    
-    // Reject non-HTTP/HTTPS protocols
-    if (!url.startsWith('http://') && !url.startsWith('https://') && !url.startsWith('ipfs://')) {
-      return false;
-    }
-    
-    // Accept IPFS URLs
-    if (url.startsWith('ipfs://') || url.includes('/ipfs/')) {
-      return true;
-    }
-    
-    // Check for common image extensions
-    const imageExtensions = ['.png', '.jpg', '.jpeg', '.gif', '.webp', '.svg', '.ico', '.bmp'];
-    const hasImageExtension = imageExtensions.some(ext => 
-      url.toLowerCase().includes(ext) || url.toLowerCase().includes(ext + '?')
-    );
-    
-    // If it has an image extension, it's valid
-    if (hasImageExtension) {
-      return true;
-    }
-    
-    // For URLs without extensions, check if they're from known image hosts
-    // This allows URLs like https://cloudflare-ipfs.com/ipfs/Qm... without extension
-    const knownImageHosts = [
-      'ipfs.io', 'cloudflare-ipfs.com', 'gateway.pinata.cloud',
-      'token-media.defined.fi', 'images.pump.fun', 'pump.fun',
-      'pbs.twimg.com', 'twimg.com', 'cdn.pump.fun',
-      'bluey.tv', 'www.bluey.tv', // Add Bluey image host
-      'storage.nadapp.net', 'nadapp.net' // Monad token image storage
-    ];
-    
-    if (knownImageHosts.some(host => url.includes(host))) {
-      return true;
-    }
-    
-    // If no extension and not from known image host, reject it
-    // This prevents JSON/metadata files from being treated as images
-    return false;
-  } catch {
-    return false;
-  }
-}
-
-/**
  * Extract image URL from token data, checking multiple possible field names
  * This ensures we catch image fields from stream data, HTTP data, and various API formats
- * Priority order: image, uri, logo, imageUrl, logoUrl, image_url, logo_url
+ * Priority order: image_url (API), image, logo, uri (WebSocket stream fallback), then others
  */
 export function extractTokenImage(token: any): string | null {
   if (!token || typeof token !== 'object') return null;
-  
+
   // Check all possible image field names in priority order
+  // image_url: Primary field from /v1/trade/view API
+  // uri: Fallback from WebSocket stream (new, final_stretch, migrated channels)
   const imageFields = [
+    token.image_url,
     token.image,
-    token.uri,
     token.logo,
+    token.uri,
     token.imageUrl,
     token.logoUrl,
-    token.image_url,
     token.logo_url,
     token.icon,
     token.thumbnail,
   ];
-  
-  // Return first non-empty string value that appears to be a valid image URL
+
+  // Return first non-empty string value
   for (const value of imageFields) {
     if (typeof value === 'string' && value.trim()) {
-      const trimmed = value.trim();
-      
-      // Validate that it looks like an image URL (not JSON, etc.)
-      if (!isValidImageUrl(trimmed)) {
-        continue; // Skip this field, try next one
-      }
-      
-      const normalized = normalizeImageUrl(trimmed);
-      // Only return if normalization succeeded (not null or empty)
-      if (normalized && isValidImageUrl(normalized)) {
+      const normalized = normalizeImageUrl(value.trim());
+      if (normalized) {
         return normalized;
-      }
-      // If normalization returned null/empty but original was valid, return original
-      if (isValidImageUrl(trimmed)) {
-        return trimmed;
       }
     }
   }
-  
+
   return null;
 }

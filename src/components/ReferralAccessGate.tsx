@@ -45,9 +45,10 @@ export function useReferralAccess() {
 const STORAGE_FLAG_KEY = "referralAccess.granted"; // legacy (session)
 const STORAGE_META_KEY = "referralAccess.meta"; // legacy (session)
 const LS_KEY_PREFIX = "referralAccess.granted.user:"; // persistent per-user
+const LS_BYPASS_KEY = "referralAccess.bypass"; // user-independent bypass (for X button)
 const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL;
 const buildWalletLoginMessage = () =>
-  `Login to Narrative with nonce: ${Date.now()}`;
+  `Login to Interstate with nonce: ${Date.now()}`;
 
 type StoredAccessMeta = {
   grantedAt: number;
@@ -112,18 +113,28 @@ function clearPersistedAccess() {
 function hasStoredAccess(userId?: string | null): boolean {
   if (typeof window === "undefined") return false;
   try {
-    // Account-specific: only treat as granted when it matches the current user
-    if (!userId) return false;
+    // If a userId is provided (user is logged in), only check user-specific flags.
+    // This ensures new accounts always see the referral gate.
+    if (userId) {
+      // Per-user persistent flag (set when logged-in user clicks X or enters valid code)
+      const perUser = window.localStorage.getItem(`${LS_KEY_PREFIX}${userId}`) === "true";
+      if (perUser) return true;
 
-    // Per-user persistent flag
-    const perUser = window.localStorage.getItem(`${LS_KEY_PREFIX}${userId}`) === "true";
-    if (perUser) return true;
+      // Legacy session flag, but only if meta matches this user
+      const session = window.sessionStorage.getItem(STORAGE_FLAG_KEY) === "true";
+      if (session) {
+        const meta = getStoredAccessMeta();
+        if (meta && meta.userId === userId) return true;
+      }
 
-    // Legacy session flag, but only if meta matches this user
-    const session = window.sessionStorage.getItem(STORAGE_FLAG_KEY) === "true";
-    if (!session) return false;
-    const meta = getStoredAccessMeta();
-    return !!meta && meta.userId === userId;
+      return false;
+    }
+
+    // No userId (user not logged in) - check user-independent bypass flag.
+    // This allows non-logged-in visitors to dismiss the modal and have it persist
+    // until they log in, at which point we check user-specific access.
+    const bypass = window.localStorage.getItem(LS_BYPASS_KEY) === "true";
+    return bypass;
   } catch {
     return false;
   }
@@ -153,15 +164,23 @@ export function ReferralAccessGate({
   const { user, loading: userLoading, refreshUser } = useUser();
   const hasMountedRef = useRef(false);
   const prefillAttemptedRef = useRef(false);
+  const silentProcessingAttemptedRef = useRef(false);
 
   const requireReferralAccess =
     env.NEXT_PUBLIC_REQUIRE_REFERRAL_ACCESS !== undefined
       ? env.NEXT_PUBLIC_REQUIRE_REFERRAL_ACCESS
-      : false; // default to false to bypass referral gate for now
+      : true; // default to true to require access code for new users
+
+  // When true, hides the popup UI but still processes referrals silently in the background
+  const referralGateHidden =
+    env.NEXT_PUBLIC_REFERRAL_GATE_HIDDEN !== undefined
+      ? env.NEXT_PUBLIC_REFERRAL_GATE_HIDDEN
+      : false; // default to false to show the gate
 
   const [status, setStatus] = useState<ReferralGateStatus>(() => {
-    // Start locked unless the gate is disabled; user-specific access is resolved after load
-    return requireReferralAccess ? "prompt" : "granted";
+    // Start in "checking" state to avoid showing the modal before localStorage is checked.
+    // The useEffect will evaluate stored access and transition to "granted" or "prompt".
+    return requireReferralAccess ? "checking" : "granted";
   });
   const [codeInput, setCodeInput] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -284,6 +303,28 @@ export function ReferralAccessGate({
 
     setStatus("prompt");
   }, [requireReferralAccess, userLoading, user]);
+
+  // Early bypass check - only for non-logged-in visitors.
+  // This allows visitors who dismissed the modal (X button) before logging in
+  // to skip the modal until they actually log in (at which point we check user-specific access).
+  useEffect(() => {
+    if (!requireReferralAccess) return;
+    if (status !== "checking") return; // Only run during initial checking phase
+    if (typeof window === "undefined") return;
+    // Only apply global bypass if user is NOT logged in.
+    // Once user is logged in, we rely on evaluateStoredAccess to check user-specific flags.
+    if (user) return;
+    if (userLoading) return; // Wait to know if user is logged in
+    try {
+      const bypass = window.localStorage.getItem(LS_BYPASS_KEY) === "true";
+      if (bypass) {
+        setStatus("granted");
+        return;
+      }
+    } catch {
+      // Ignore localStorage errors
+    }
+  }, [requireReferralAccess, status, user, userLoading]);
 
   useEffect(() => {
     if (!requireReferralAccess) return;
@@ -439,6 +480,58 @@ export function ReferralAccessGate({
     handleSubmit(autoSubmitCode);
     setAutoSubmitCode(null);
   }, [autoSubmitCode, status, requireReferralAccess, handleSubmit, user, userLoading]);
+
+  // Silent referral processing when gate is hidden
+  // This ensures referrer still gets credit even when popup is not shown
+  useEffect(() => {
+    if (!referralGateHidden) return; // Only run when gate is hidden
+    if (!router.isReady) return;
+    if (userLoading || !user) return;
+    if (silentProcessingAttemptedRef.current) return;
+
+    const referralCode = derivePrefillQuery(router);
+    if (!referralCode) return;
+
+    silentProcessingAttemptedRef.current = true;
+
+    // Process referral silently in background
+    (async () => {
+      try {
+        if (!user?.bearerToken) {
+          console.debug('[ReferralGate] Silent processing skipped - no auth token');
+          return;
+        }
+
+        console.debug('[ReferralGate] Processing referral silently:', referralCode);
+
+        try {
+          await redeemAccessCode({
+            accessCode: referralCode,
+            authToken: user.bearerToken,
+          });
+          console.debug('[ReferralGate] Silent referral processed successfully');
+        } catch (err: any) {
+          // If no waitlist row, create it, then retry redeem once
+          const statusCode = err?.status || err?.response?.status;
+          if (statusCode === 404) {
+            await completeAllQuests({ userId: Number(user.id) });
+            await redeemAccessCode({
+              accessCode: referralCode,
+              authToken: user.bearerToken,
+            });
+            console.debug('[ReferralGate] Silent referral processed after waitlist creation');
+          } else {
+            console.debug('[ReferralGate] Silent referral failed:', err?.message || err);
+          }
+        }
+
+        // Grant access silently
+        persistAccess(user.id);
+      } catch (e: any) {
+        console.debug('[ReferralGate] Silent referral processing error:', e?.message || e);
+      }
+    })();
+  }, [referralGateHidden, router.isReady, router, user, userLoading]);
 
   useEffect(() => {
     if (!router.isReady) return;
@@ -760,9 +853,10 @@ export function ReferralAccessGate({
       Cookies.set("token", token, { expires: 7, path: "/" });
       clearStoredReferralCodeHint();
       await refreshUser();
-      setInfo("Authenticating with Phantom...");
+      setInfo("Login successful. Please enter your access code.");
       setShowWalletOptions(false);
-      setShowWaitlist(true);
+      // Don't show waitlist - user must enter access code first
+      // They can click "Join Waitlist" if they don't have a code
     } catch (error: any) {
       console.error("Phantom login error:", error);
 
@@ -840,9 +934,10 @@ export function ReferralAccessGate({
       Cookies.set("token", token, { expires: 7, path: "/" });
       clearStoredReferralCodeHint();
       await refreshUser();
-      setInfo("Authenticating with MetaMask...");
+      setInfo("Login successful. Please enter your access code.");
       setShowWalletOptions(false);
-      setShowWaitlist(true);
+      // Don't show waitlist - user must enter access code first
+      // They can click "Join Waitlist" if they don't have a code
     } catch (error: any) {
       console.error("MetaMask login error:", error);
 
@@ -875,6 +970,16 @@ export function ReferralAccessGate({
     );
   }
 
+  // When gate is hidden, render children directly without any popup
+  // Silent referral processing still happens via the useEffect above
+  if (referralGateHidden) {
+    return (
+      <ReferralAccessContext.Provider value={contextValue}>
+        {children}
+      </ReferralAccessContext.Provider>
+    );
+  }
+
   // Don't show referral overlay if Twitter OAuth just completed (twitter_success in URL)
   const hasTwitterSuccess = router.isReady && router.query.twitter_success === 'true';
   // Show referral overlay after the user has signed in and referral access is not yet granted
@@ -899,11 +1004,34 @@ export function ReferralAccessGate({
 
           <div className="relative z-[9999] w-full max-w-lg px-6 md:px-0">
             <div className="rounded-3xl bg-gradient-to-br from-neutral-900/95 via-neutral-900/80 to-neutral-950/90 p-[1px] shadow-[0_40px_120px_rgba(16,185,129,0.12)]">
-              <div className="rounded-[calc(1.5rem-1px)] bg-neutral-950/95 p-8 md:p-10">
+              <div className="rounded-[calc(1.5rem-1px)] bg-neutral-950/95 p-8 md:p-10 relative">
+                {/* Close Button */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    // Set user-independent bypass flag (persists across refreshes regardless of user.id)
+                    try {
+                      window.localStorage.setItem(LS_BYPASS_KEY, "true");
+                    } catch (e) {
+                      console.warn("Failed to set bypass flag", e);
+                    }
+                    // Also persist with user.id if available
+                    if (user?.id) {
+                      persistAccess(user.id);
+                    }
+                    grantAccess();
+                  }}
+                  className="absolute top-4 right-4 p-2 rounded-full text-neutral-400 hover:text-white hover:bg-neutral-800/50 transition-colors"
+                  aria-label="Close"
+                >
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
                 <div className="mb-6 flex items-center justify-between">
                   <div>
                     <p className="text-xs uppercase tracking-[0.35em] text-emerald-400/80">
-                      Narrative Access
+                      Interstate Access
                     </p>
                     <h2 className="mt-2 text-2xl font-semibold text-[#f0f5f5] md:text-3xl">
                       Enter your referral code
@@ -918,7 +1046,7 @@ export function ReferralAccessGate({
 
                 <p className="text-sm text-neutral-300/90 md:text-base">
                   To protect our community, access is invite-only. Provide the
-                  referral code you received to unlock the Narrative trading
+                  referral code you received to unlock the Interstate trading
                   dashboard.
                 </p>
 
@@ -1013,6 +1141,18 @@ export function ReferralAccessGate({
           <div className="relative z-[9999] w-full max-w-md px-4 md:px-0 py-2">
             <div className="rounded-xl bg-gradient-to-br from-neutral-900/95 via-neutral-900/80 to-neutral-950/90 p-[1px] shadow-[0_40px_120px_rgba(59,130,246,0.12)]">
               <div className="rounded-[calc(1rem-1px)] bg-neutral-950/95 p-4 md:p-5">
+                {/* Back Button */}
+                <button
+                  type="button"
+                  onClick={() => setShowWaitlist(false)}
+                  className="mb-3 flex items-center gap-1 text-xs text-neutral-400 hover:text-neutral-200 transition-colors"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                  </svg>
+                  Back to Access Code
+                </button>
+
                 {/* Progress Bar */}
                 <div className="mb-4 bg-neutral-800/50 rounded-lg p-3 border border-neutral-700/50">
                   <div className="flex items-center gap-3 mb-2">
@@ -1048,40 +1188,61 @@ export function ReferralAccessGate({
                     Get Early Access
                   </h2>
                 </div>
-                
+
                 <p className="text-xs text-neutral-300/90 mb-3">
-                  Help us get to know you better. Fill out the form below to join our waitlist and be among the first to access Narrative.
+                  Have an access code? Enter it below. Otherwise, complete quests to join the waitlist.
                 </p>
+
+                {/* Access Code Input Section */}
+                <div className="mb-4 p-3 rounded-lg border border-emerald-500/30 bg-emerald-500/5">
+                  <label className="block text-xs uppercase tracking-[0.24em] text-emerald-400/80 mb-2">
+                    Access Code (if you have one)
+                  </label>
+                  <div className="flex gap-2">
+                    <input
+                      value={codeInput}
+                      onChange={(e) => {
+                        setCodeInput(normalizeReferralInput(e.target.value));
+                        setError(null);
+                      }}
+                      placeholder="ENTER-CODE-HERE"
+                      className="flex-1 rounded-lg border border-neutral-700/60 bg-neutral-900/70 px-3 py-2 text-sm font-semibold tracking-[0.15em] text-[#f0f5f5] placeholder:text-neutral-500 focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/40"
+                      maxLength={64}
+                      spellCheck={false}
+                      autoCapitalize="characters"
+                      autoComplete="off"
+                      disabled={status === "validating"}
+                    />
+                    <InterstateButton
+                      type="button"
+                      onClick={() => handleSubmit()}
+                      loading={status === "validating"}
+                      disabled={!codeInput.trim() || status === "validating"}
+                      className="px-4 py-2 text-xs uppercase tracking-[0.2em] bg-emerald-600 text-[#f0f5f5] hover:bg-emerald-700 disabled:opacity-50"
+                    >
+                      Unlock
+                    </InterstateButton>
+                  </div>
+                  {error && (
+                    <p className="mt-2 text-xs text-red-300">{error}</p>
+                  )}
+                </div>
+
+                <div className="relative mb-3">
+                  <div className="absolute inset-0 flex items-center">
+                    <div className="w-full border-t border-neutral-700/60"></div>
+                  </div>
+                  <div className="relative flex justify-center text-xs">
+                    <span className="bg-neutral-950 px-3 text-neutral-500 uppercase tracking-[0.2em]">Or join waitlist</span>
+                  </div>
+                </div>
 
                 <form
                   className="space-y-3"
                   onSubmit={async (e) => {
                     e.preventDefault();
-                    setWaitlistSubmitting(true);
-                    
-                    // Generate a random waitlist number if not already set
-                    if (!waitlistNumber) {
-                      const randomNumber = Math.floor(Math.random() * 10000) + 1;
-                      setWaitlistNumber(randomNumber);
-                      if (typeof window !== "undefined") {
-                        sessionStorage.setItem("waitlistNumber", randomNumber.toString());
-                      }
-                    }
-                    
-                    // TODO: Submit waitlist data to backend
-                    // For now, just log the data and grant access
-                    const submissionData = {
-                      ...waitlistForm,
-                      telegram: telegramUsername,
-                    };
-                    console.log("Waitlist submission:", submissionData);
-                    
-                    // Simulate API call
-                    await new Promise(resolve => setTimeout(resolve, 1000));
-                    
-                    setWaitlistSubmitting(false);
-                    setShowWaitlist(false);
-                    grantAccess();
+                    // Form submission is handled by individual quest buttons
+                    // Access is only granted through valid access code via handleSubmit
                   }}
                 >
                   {/* Link Twitter */}
@@ -1128,10 +1289,10 @@ export function ReferralAccessGate({
                     )}
                   </div>
 
-                  {/* Follow narrative_hq */}
+                  {/* Follow intersatefdn */}
                   <div>
                     <label className="block text-xs uppercase tracking-[0.24em] text-neutral-500 mb-1">
-                      Follow @narrative_hq
+                      Follow @intersatefdn
                     </label>
                     {narrativeFollowed ? (
                       <div className="w-full rounded-lg border border-blue-500/50 bg-blue-500/10 px-3 py-2 flex items-center justify-between">
@@ -1140,14 +1301,14 @@ export function ReferralAccessGate({
                             <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/>
                           </svg>
                           <div>
-                            <p className="text-[#f0f5f5] font-medium">@narrative_hq</p>
+                            <p className="text-[#f0f5f5] font-medium">@intersatefdn</p>
                             <p className="text-xs text-blue-300/80">Following</p>
                           </div>
                         </div>
                         <InterstateButton
                           type="button"
                           onClick={() => {
-                            window.open("https://twitter.com/narrative_hq", "_blank");
+                            window.open("https://twitter.com/intersatefdn", "_blank");
                           }}
                           className="px-4 py-2 text-sm bg-blue-600 hover:bg-blue-700 text-[#f0f5f5]"
                         >
@@ -1158,7 +1319,7 @@ export function ReferralAccessGate({
                       <InterstateButton
                         type="button"
                         onClick={() => {
-                          window.open("https://twitter.com/narrative_hq", "_blank");
+                          window.open("https://twitter.com/intersatefdn", "_blank");
                           setNarrativeFollowed(true);
                         }}
                         fullWidth
@@ -1167,7 +1328,7 @@ export function ReferralAccessGate({
                         <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
                           <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/>
                         </svg>
-                        Follow @narrative_hq
+                        Follow @intersatefdn
                       </InterstateButton>
                     )}
                   </div>
@@ -1175,7 +1336,7 @@ export function ReferralAccessGate({
                   {/* Like a post */}
                   <div>
                     <label className="block text-xs uppercase tracking-[0.24em] text-neutral-500 mb-1">
-                      Like a post by @narrative_hq (Earn 25 xp)
+                      Like a post by @intersatefdn (Earn 25 xp)
                     </label>
                     {postLiked ? (
                       <div className="w-full rounded-lg border border-blue-500/50 bg-blue-500/10 px-3 py-2 flex items-center justify-between">
@@ -1191,7 +1352,7 @@ export function ReferralAccessGate({
                         <InterstateButton
                           type="button"
                           onClick={() => {
-                            window.open("https://twitter.com/narrative_hq", "_blank");
+                            window.open("https://twitter.com/intersatefdn", "_blank");
                           }}
                           className="px-4 py-2 text-sm bg-blue-600 hover:bg-blue-700 text-[#f0f5f5]"
                         >
@@ -1202,7 +1363,7 @@ export function ReferralAccessGate({
                       <InterstateButton
                         type="button"
                         onClick={() => {
-                          window.open("https://twitter.com/narrative_hq", "_blank");
+                          window.open("https://twitter.com/intersatefdn", "_blank");
                           setPostLiked(true);
                         }}
                         fullWidth
@@ -1219,7 +1380,7 @@ export function ReferralAccessGate({
                   {/* Repost a post */}
                   <div>
                     <label className="block text-xs uppercase tracking-[0.24em] text-neutral-500 mb-1">
-                      Repost a post by @narrative_hq
+                      Repost a post by @intersatefdn
                     </label>
                     {postReposted ? (
                       <div className="w-full rounded-lg border border-blue-500/50 bg-blue-500/10 px-3 py-2 flex items-center justify-between">
@@ -1235,7 +1396,7 @@ export function ReferralAccessGate({
                         <InterstateButton
                           type="button"
                           onClick={() => {
-                            window.open("https://twitter.com/narrative_hq", "_blank");
+                            window.open("https://twitter.com/intersatefdn", "_blank");
                           }}
                           className="px-4 py-2 text-sm bg-blue-600 hover:bg-blue-700 text-[#f0f5f5]"
                         >
@@ -1246,7 +1407,7 @@ export function ReferralAccessGate({
                       <InterstateButton
                         type="button"
                         onClick={() => {
-                          window.open("https://twitter.com/narrative_hq", "_blank");
+                          window.open("https://twitter.com/intersatefdn", "_blank");
                           setPostReposted(true);
                         }}
                         fullWidth
@@ -1263,7 +1424,7 @@ export function ReferralAccessGate({
                   {/* Reply to a post */}
                   <div>
                     <label className="block text-xs uppercase tracking-[0.24em] text-neutral-500 mb-1">
-                      Reply to a post by @narrative_hq
+                      Reply to a post by @intersatefdn
                     </label>
                     {postReplied ? (
                       <div className="w-full rounded-lg border border-blue-500/50 bg-blue-500/10 px-3 py-2 flex items-center justify-between">
@@ -1279,7 +1440,7 @@ export function ReferralAccessGate({
                         <InterstateButton
                           type="button"
                           onClick={() => {
-                            window.open("https://twitter.com/narrative_hq", "_blank");
+                            window.open("https://twitter.com/intersatefdn", "_blank");
                           }}
                           className="px-4 py-2 text-sm bg-blue-600 hover:bg-blue-700 text-[#f0f5f5]"
                         >
@@ -1290,7 +1451,7 @@ export function ReferralAccessGate({
                       <InterstateButton
                         type="button"
                         onClick={() => {
-                          window.open("https://twitter.com/narrative_hq", "_blank");
+                          window.open("https://twitter.com/intersatefdn", "_blank");
                           setPostReplied(true);
                         }}
                         fullWidth
@@ -1368,19 +1529,29 @@ export function ReferralAccessGate({
                 <div className="mt-4 pt-3 border-t border-neutral-700/60">
                   <InterstateButton
                     type="button"
-                    onClick={() => {
-                      // Generate a random waitlist number if not already set
-                      if (!waitlistNumber) {
-                        const randomNumber = Math.floor(Math.random() * 10000) + 1;
-                        setWaitlistNumber(randomNumber);
-                        if (typeof window !== "undefined") {
-                          sessionStorage.setItem("waitlistNumber", randomNumber.toString());
+                    onClick={async () => {
+                      setWaitlistSubmitting(true);
+                      try {
+                        // Save user data to waitlist via backend API
+                        if (user?.id) {
+                          await completeAllQuests({
+                            userId: Number(user.id),
+                            telegramId: telegramUsername.trim() || undefined,
+                            twitterId: twitterUsername || undefined,
+                            twitterUsername: twitterUsername || undefined,
+                          });
                         }
+                        setShowCongratsModal(true);
+                      } catch (error) {
+                        console.error('Failed to save waitlist data:', error);
+                        setError('Failed to join waitlist. Please try again.');
+                      } finally {
+                        setWaitlistSubmitting(false);
                       }
-                      setShowCongratsModal(true);
                     }}
                     fullWidth
-                    disabled={questProgressData.completedCount < questProgressData.totalQuests || !telegramUsername.trim()}
+                    loading={waitlistSubmitting}
+                    disabled={questProgressData.completedCount < questProgressData.totalQuests || !telegramUsername.trim() || waitlistSubmitting}
                     className="h-10 text-xs uppercase tracking-[0.3em] bg-gradient-to-r from-blue-600 to-purple-600 text-[#f0f5f5] hover:from-blue-700 hover:to-purple-700 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:from-blue-600 disabled:hover:to-purple-600"
                   >
                     Complete All Quests
@@ -1390,7 +1561,7 @@ export function ReferralAccessGate({
                       ? `Complete all quests above to continue (${questProgressData.completedCount}/${questProgressData.totalQuests})`
                       : !telegramUsername.trim()
                       ? "Please enter your Telegram username to continue"
-                      : "Click to join the waitlist and get early access"}
+                      : "Click to join the waitlist (access code required for entry)"}
                   </p>
                 </div>
               </div>
@@ -1452,13 +1623,13 @@ export function ReferralAccessGate({
                   )}
 
                   <p className="text-sm text-neutral-300/90 mb-8 max-w-sm mx-auto">
-                    Thank you for completing all quests! You will get access in less than 2-3 weeks!
+                    Thank you for completing all quests! We'll send you an access code when it's your turn (usually within 2-3 weeks).
                   </p>
 
                   <InterstateButton
                     type="button"
                     onClick={() => {
-                      window.location.href = "https://www.narrative.trade";
+                      window.location.href = "https://interstate.so/";
                     }}
                     fullWidth
                     className="h-12 text-base uppercase tracking-[0.4em] bg-emerald-600 text-[#f0f5f5] hover:bg-emerald-700"
@@ -1546,7 +1717,7 @@ export function ReferralAccessGate({
                         type="button"
                         onClick={() => {
                           // TODO: Implement X linking
-                          window.open("https://twitter.com/intent/tweet?text=Check%20out%20Narrative!", "_blank");
+                          window.open("https://twitter.com/intent/tweet?text=Check%20out%20Interstate!", "_blank");
                         }}
                         className="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-[#f0f5f5] text-sm"
                         disabled={questProgress.completedQuests.includes("link-x")}
@@ -1685,29 +1856,13 @@ export function ReferralAccessGate({
                     type="button"
                     fullWidth
                     onClick={() => {
+                      // Close quest overlay and return to access code input
+                      // Access is ONLY granted via valid access code
                       setShowQuests(false);
-                      grantAccess();
                     }}
                     className="h-12 text-base uppercase tracking-[0.4em] bg-purple-600 text-[#f0f5f5] hover:bg-purple-700"
                   >
-                    Skip for Now
-                  </InterstateButton>
-                  <InterstateButton
-                    type="button"
-                    fullWidth
-                    onClick={() => {
-                      // TODO: Check if all quests completed, then grant access
-                      if (questProgress.completedQuests.length >= 6) {
-                        grantAccess();
-                        setShowQuests(false);
-                      } else {
-                        alert("Complete more quests to unlock access!");
-                      }
-                    }}
-                    className="h-12 text-base uppercase tracking-[0.4em] bg-black text-[#f0f5f5] hover:bg-neutral-900"
-                    disabled={questProgress.completedQuests.length < 6}
-                  >
-                    Continue
+                    Back to Access Code
                   </InterstateButton>
                 </div>
               </div>

@@ -8,7 +8,7 @@ import { acknowledgeWalletExport } from "../utils/api";
 export default function WalletExportGuard() {
   const { user, refreshUser, primaryWalletAddresses } = useUser();
   const [forceOpen, setForceOpen] = useState(false);
-  const [preferredChain, setPreferredChain] = useState<"sol" | "monad">("monad");
+  const [preferredChain, setPreferredChain] = useState<"sol" | "monad">("sol");
 
   const needsExportFlags = () => {
     if (typeof window === "undefined") {

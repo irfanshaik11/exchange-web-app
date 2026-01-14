@@ -1135,28 +1135,31 @@ export default function MonadTradePage() {
                   <span>Instant Trade</span>
                 </button>
               </div>
-              <div className="flex-1 min-h-0" style={{ overflowY: 'auto', overflowX: 'hidden', paddingBottom: '2rem' }}>
-                {selectedTab === "Transactions" ? (
+              <div className="flex-1 min-h-0 relative">
+                <div className={`absolute inset-0 flex flex-col ${selectedTab === "Transactions" ? "" : "hidden"}`}>
                   <MonadTrades
                     tokenAddress={tokenMintForLive}
                     cachedTrades={(tokenData as any)?.recent_trades || []}
                   />
-                ) : selectedTab === "Top Traders" ? (
-                  <MonadTopTradersTable 
+                </div>
+                <div className={`absolute inset-0 flex flex-col ${selectedTab === "Top Traders" ? "" : "hidden"}`}>
+                  <MonadTopTradersTable
                     tokenAddress={contractAddress as string}
                     enabled={true}
                   />
-                ) : selectedTab === "Holders" ? (
-                  <MonadHoldersTable 
+                </div>
+                <div className={`absolute inset-0 flex flex-col ${selectedTab === "Holders" ? "" : "hidden"}`}>
+                  <MonadHoldersTable
                     tokenAddress={contractAddress as string}
                     enabled={true}
                   />
-                ) : (
-                  <MonadDevTokensTable 
+                </div>
+                <div className={`absolute inset-0 flex flex-col ${selectedTab === "Dev Tokens" ? "" : "hidden"}`}>
+                  <MonadDevTokensTable
                     tokenAddress={contractAddress as string}
                     enabled={true}
                   />
-                )}
+                </div>
               </div>
             </div>
           </div>

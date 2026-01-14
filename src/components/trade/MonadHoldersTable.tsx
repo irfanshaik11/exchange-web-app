@@ -19,14 +19,16 @@ function shortAddr(addr: string) {
 
 function getAge(timestamp: number) {
   const now = Date.now() / 1000;
-  const diffSeconds = now - timestamp;
+  const diffSeconds = Math.floor(now - timestamp);
   const diffMins = Math.floor(diffSeconds / 60);
   const diffHours = Math.floor(diffSeconds / 3600);
   const diffDays = Math.floor(diffSeconds / 86400);
-  
+
+  if (diffSeconds < 0) return '0s';
   if (diffDays > 0) return `${diffDays}d`;
   if (diffHours > 0) return `${diffHours}h`;
-  return `${diffMins}m`;
+  if (diffMins > 0) return `${diffMins}m`;
+  return `${diffSeconds}s`;
 }
 
 const MonadHoldersTable: React.FC<MonadHoldersTableProps> = ({ 
@@ -49,9 +51,9 @@ const MonadHoldersTable: React.FC<MonadHoldersTableProps> = ({
   }
 
   return (
-    <div className="w-full h-full flex flex-col bg-black">
-      <div className="flex-1 min-h-0 bg-black">
-        <table className="w-full text-xs border-collapse bg-black">
+    <div className="w-full h-full flex flex-col" style={{ backgroundColor: '#101114' }}>
+      <div className="flex-1 min-h-0 overflow-y-auto pb-18" style={{ backgroundColor: '#101114' }}>
+        <table className="w-full text-xs border-collapse" style={{ backgroundColor: '#101114' }}>
           <thead className="sticky top-0 bg-black z-10">
             <tr className="text-neutral-400 border-b border-neutral-800">
               <th className="px-2 py-2 text-left">#</th>

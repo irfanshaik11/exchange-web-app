@@ -8,7 +8,7 @@ import type { Token } from "~/utils/db";
 import { useUser } from "./UserContext";
 import Cookies from "js-cookie";
 import { useRealtimeWebSocket } from "../hooks/useRealtimeWebSocket";
-import { usePulseWebSocket } from "../hooks/usePulseWebSocket";
+import { usePulseWebSocketPersistent } from "../hooks/usePulseWebSocketPersistent";
 import { useImagePreloader } from "../hooks/useImagePreloader";
 import {
   useQueryNewPairs,
@@ -56,19 +56,19 @@ export default function PulseContent({ forceMobileView = false }: PulseContentPr
   // CRITICAL: Initialize chain from URL immediately to avoid race conditions
   const [currentChain, setCurrentChain] = useState<string>(() => {
     if (typeof window !== 'undefined' && router.isReady) {
-      return (router.query.chain as string) || 'monad';
+      return (router.query.chain as string) || 'sol';
     }
     if (typeof window !== 'undefined') {
       const urlParams = new URLSearchParams(window.location.search);
-      return urlParams.get('chain') || 'monad';
+      return urlParams.get('chain') || 'sol';
     }
-    return 'monad';
+    return 'sol';
   });
   
   // Sync chain state with router query
   useEffect(() => {
     if (!router.isReady) return;
-    const chainFromQuery = (router.query.chain as string) || 'monad';
+    const chainFromQuery = (router.query.chain as string) || 'sol';
     if (chainFromQuery !== currentChain) {
       setCurrentChain(chainFromQuery);
     }
@@ -78,7 +78,7 @@ export default function PulseContent({ forceMobileView = false }: PulseContentPr
   useEffect(() => {
     if (!router.isReady) return;
     const urlParams = new URLSearchParams(router.asPath.split('?')[1] || '');
-    const chainFromUrl = urlParams.get('chain') || 'monad';
+    const chainFromUrl = urlParams.get('chain') || 'sol';
     if (chainFromUrl !== currentChain) {
       setCurrentChain(chainFromUrl);
     }
@@ -129,7 +129,8 @@ export default function PulseContent({ forceMobileView = false }: PulseContentPr
   const { data: migratedTokensQuery = [] } = useQueryMigrated(shouldFetchSolanaData);
 
   // ✅ REAL-TIME WEBSOCKET: Direct cache updates (NO REFETCH)
-  const { connected: pulseWsConnected, error: pulseWsError } = usePulseWebSocket({
+  // Using persistent WebSocket that survives tab switches and page refreshes
+  const { connected: pulseWsConnected, error: pulseWsError, isUsingSharedWorker } = usePulseWebSocketPersistent({
     enabled: shouldFetchSolanaData,
     onNewToken: useCallback((token) => {
       queryClient.setQueryData(tokenKeys.trenches.newPairs(), (oldData: any[] | undefined) => {
@@ -217,17 +218,9 @@ export default function PulseContent({ forceMobileView = false }: PulseContentPr
   });
   const [monadMigratedTick, setMonadMigratedTick] = useState(0);
 
-  const isZeroLiquidityToken = useCallback((token: any) => {
-    if (!token) return false;
-    const rawValue = token.liquidity_usd ?? token.total_liquidity_usd;
-    if (rawValue === undefined || rawValue === null || rawValue === "") {
-      return false;
-    }
-    const liquidity = Number(rawValue);
-    if (Number.isNaN(liquidity)) {
-      return false;
-    }
-    return liquidity === 0;
+  // Zero liquidity filter disabled - let all tokens through
+  const isZeroLiquidityToken = useCallback((_token: any) => {
+    return false;
   }, []);
 
   // Immediate poll on mount for Final Stretch tokens

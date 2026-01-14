@@ -70,11 +70,11 @@ export default function Home() {
   // Redirect to /pulse if we're on the root path without any query params
   useEffect(() => {
     if (router.isReady && router.pathname === '/' && !router.query.search && !router.query.chain) {
-      // Use saved chain from localStorage, default to monad
+      // Use saved chain from localStorage, default to solana
       const savedChain = typeof window !== 'undefined'
         ? localStorage.getItem('selected-chain')
         : null;
-      const chainToUse = (savedChain === 'sol' || savedChain === 'monad') ? savedChain : 'monad';
+      const chainToUse = (savedChain === 'sol' || savedChain === 'monad') ? savedChain : 'sol';
       router.replace(`/pulse?chain=${chainToUse}`, undefined, { shallow: false });
       return;
     }
@@ -441,8 +441,8 @@ export default function Home() {
       <Head>
         <title>Interstate Memeboard | Discover</title>
         <meta name="description" content="Interstate dashboard" />
-        <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png" />
-        <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png" />
+        <link rel="icon" type="image/png" sizes="32x32" href="/interstate/favicon-32x32.png" />
+        <link rel="icon" type="image/png" sizes="16x16" href="/interstate/favicon-16x16.png" />
         <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png?v=2" />
       </Head>
       <div className="min-h-screen bg-neutral-950 text-neutral-100">

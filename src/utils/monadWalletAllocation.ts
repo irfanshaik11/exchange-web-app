@@ -33,6 +33,26 @@ const getMonadAddress = (wallet: WalletListItem): string | undefined => {
   return address ? normalizeMonadAddress(address) : undefined;
 };
 
+function clampToDecimals(value: number | string, decimals: number = 18): string {
+  const num = Number(value);
+  if (!Number.isFinite(num)) return "0";
+  return num.toFixed(decimals).replace(/\.?0+$/, "");
+}
+
+const getBalanceForAddress = (
+  address: string | undefined,
+  walletBalances: Record<string, number>
+): number => {
+  if (!address) return 0;
+  const lower = address.toLowerCase();
+  return (
+    walletBalances[address] ??
+    walletBalances[lower] ??
+    walletBalances[address.toUpperCase()] ??
+    0
+  );
+};
+
 /**
  * Build equal-split allocations for Monad trades based on the selected wallets.
  * Falls back to the primary wallet (or first available) if nothing is selected.
@@ -86,7 +106,7 @@ export function buildMonadWalletAllocations({
     const proposed = workingWallets
       .map((wallet, idx) => {
         const address = getMonadAddress(wallet);
-        const balance = address ? walletBalances[address] ?? 0 : 0;
+        const balance = getBalanceForAddress(address, walletBalances);
         const allocationAmount =
           idx === workingWallets.length - 1
             ? Math.max(amountValue - running, 0)
@@ -123,23 +143,22 @@ export function buildMonadWalletAllocations({
   }
 
   if (allocations.length === 0 && workingWallets.length > 0) {
-    const fallback = workingWallets[0];
-    const address = getMonadAddress(fallback);
-    const balance = address ? walletBalances[address] ?? 0 : 0;
+    // Fallback: use selected/working wallets equally and let backend enforce balance constraints
+    const fallbackWallets = workingWallets;
+    const perWalletAmount =
+      fallbackWallets.length > 0 ? amountValue / fallbackWallets.length : amountValue;
 
-    // Only use fallback wallet if it has sufficient balance (including safety buffer)
-    const requiredBalance = amountValue + SAFETY_BUFFER;
-    if (balance >= requiredBalance) {
-      allocations = [
-        {
-          walletId: fallback.id,
-          amount: amountValue,
-          address,
-          balance,
-        },
-      ];
-      walletsConsidered = 1;
-    }
+    allocations = fallbackWallets.map((wallet) => {
+      const address = getMonadAddress(wallet);
+      const balance = getBalanceForAddress(address, walletBalances);
+      return {
+        walletId: wallet.id,
+        amount: perWalletAmount,
+        address,
+        balance,
+      };
+    });
+    walletsConsidered = fallbackWallets.length || walletsConsidered;
   }
 
   return {
@@ -205,9 +224,122 @@ export async function executeMonadMultiBuy({
     selectedWalletIds,
   });
 
+  // If multi-wallet is requested but no allocations passed the local balance filter,
+  // fall back to sending all selected wallets to the backend (it will filter/allocate).
+  let effectiveAllocations = allocations;
+  if (selectedWalletIds.length > 1 && allocations.length === 0) {
+    const chosen = walletList.filter(
+      (w) => w && selectedWalletIds.includes(w.id)
+    );
+    if (chosen.length > 0) {
+      const perWalletAmount = amountMON / chosen.length;
+      effectiveAllocations = chosen.map((w) => ({
+        walletId: w.id,
+        amount: perWalletAmount,
+        address: getMonadAddress(w),
+        balance: getBalanceForAddress(getMonadAddress(w), walletBalances),
+      }));
+    }
+  }
+
+  // ========================================
+  // NEW: Use backend multi-wallet API if multiple wallets selected
+  // This is MUCH faster - 1 API call instead of N sequential calls
+  // ========================================
+  // IMPORTANT: For multi-wallet mode, let BACKEND validate and distribute
+  // Don't block on frontend if primary wallet has no balance - other wallets might!
+  if (selectedWalletIds.length > 1) {
+    console.log(`🚀 Using NEW backend multi-wallet Monad API (1 call for ${effectiveAllocations.length} wallets)`);
+
+    try {
+      const result = await tradeMonadBuy(
+        {
+          tokenAddress,
+          amountMON: parseFloat(clampToDecimals(amountMON, 18)),
+          launchpad,
+          slippage,
+          gasPrice,
+          walletIds: selectedWalletIds, // NEW: Send array of wallet IDs
+          useMultipleWallets: true,     // NEW: Enable multi-wallet mode
+        },
+        authToken
+      );
+
+      // Handle new multi-wallet response format
+      if ((result as any).multiWallet) {
+        const multiResult = result as any;
+
+        // Notify about all wallets at once
+        for (let i = 0; i < multiResult.walletsUsed; i++) {
+          onWalletStart?.({
+            allocation: effectiveAllocations[i] || { walletId: undefined, amount: 0, balance: 0 },
+            index: i,
+            total: multiResult.walletsUsed,
+            totalConsidered: total,
+          });
+        }
+
+        // Process each trade result
+        const trades = multiResult.trades || [];
+        const results: Array<{
+          allocation: MonadWalletAllocation;
+          result: any;
+        }> = [];
+
+        for (let i = 0; i < trades.length; i++) {
+          const trade = trades[i];
+          const allocation = effectiveAllocations.find(a => a.walletId === trade.walletId) || effectiveAllocations[i];
+
+          if (trade.success && trade.txHash) {
+            onWalletSuccess?.({
+              allocation,
+              index: i,
+              total: trades.length,
+              totalConsidered: total,
+              result: { txHash: trade.txHash, success: true },
+            });
+            results.push({ allocation, result: { txHash: trade.txHash, success: true } });
+          } else {
+            const err = new Error(trade.error || "Trade failed");
+            onWalletError?.({
+              allocation,
+              index: i,
+              total: trades.length,
+              totalConsidered: total,
+              error: err,
+            });
+            // Continue processing instead of throwing
+          }
+        }
+
+        return {
+          allocations: effectiveAllocations,
+          totalConsidered: total,
+          results,
+          multiWallet: true,
+          parentTradeId: multiResult.parentTradeId,
+          txHashes: multiResult.txHashes,
+        };
+      }
+    } catch (error: any) {
+      console.error('❌ Multi-wallet Monad backend API failed, falling back to sequential:', error);
+      // Fall through to old sequential approach
+    }
+  }
+
+  // ========================================
+  // OLD: Sequential approach (single wallet OR fallback)
+  // ========================================
+  console.log(`🔄 Using sequential Monad API calls (${effectiveAllocations.length} wallet${effectiveAllocations.length > 1 ? 's' : ''})`);
+
+  // Validate balance ONLY for sequential mode (single wallet or fallback)
+  if (effectiveAllocations.length === 0) {
+    throw new Error('No selected wallets have sufficient balance for this trade amount and fees');
+  }
+
   const allocationsToUse =
-    allocations.length > 0
-      ? allocations
+    effectiveAllocations.length > 0
+      ? effectiveAllocations
       : [
           {
             walletId: undefined,
@@ -235,7 +367,7 @@ export async function executeMonadMultiBuy({
       const result = await tradeMonadBuy(
         {
           tokenAddress,
-          amountMON: allocation.amount,
+          amountMON: parseFloat(clampToDecimals(allocation.amount, 18)),
           launchpad,
           slippage,
           gasPrice,
@@ -289,7 +421,8 @@ export async function executeMonadMultiBuy({
 export function formatMonadTxSummary(txHashes: string[], totalConsidered?: number) {
   const unique = Array.from(new Set(txHashes || [])).filter(Boolean);
   const walletsUsed = unique.length || 0;
-  const total = totalConsidered || walletsUsed || 1;
+  // For display, cap total at wallets actually used to avoid “5/5” when only 1 wallet executed
+  const total = walletsUsed || totalConsidered || 1;
   const hasMultiple = walletsUsed > 1;
   const primaryTx = unique[0];
   const truncated = primaryTx && primaryTx.length > 14 ? `${primaryTx.slice(0, 6)}...${primaryTx.slice(-6)}` : primaryTx;

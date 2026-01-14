@@ -20,6 +20,9 @@ import { SOL_MINT_ADDRESS, tradeMonadSell, tradeSellPercentage } from '~/utils/a
 import { getPoolTypeFromToken } from '~/utils/poolTypeDetection';
 import { normalizeMonadAddress } from '~/utils/normalizeMonadAddress';
 import { broadcastMonadQuickTrade } from '~/utils/monadTradeEvents';
+import { formatMonadError } from '~/utils/monadError';
+import { useUser } from '../UserContext';
+import { fetchVerifiedPairAddress } from '~/hooks/useSingleTokenPolling';
 
 type TokenMetadata = UnifiedTokenMetadata & {
   timestamp?: number;
@@ -72,10 +75,10 @@ const SolIcon = () => (
   </>
 );
 
-const Positions: React.FC<PositionsProps> = ({ 
-  userId, 
-  bearerToken, 
-  onPositionsChange, 
+const Positions: React.FC<PositionsProps> = ({
+  userId,
+  bearerToken,
+  onPositionsChange,
   preloadedPositions, 
   skipFetch, 
   onTokenNamesChange, 
@@ -87,6 +90,7 @@ const Positions: React.FC<PositionsProps> = ({
   isCacheValid,
   fallbackPositions
 }) => {
+  const { selectedWalletIds } = useUser();
   const router = useRouter();
   const currentChain = (router.query.chain as string) || 'sol';
   const blockchain = useMemo(() => {
@@ -397,6 +401,10 @@ const Positions: React.FC<PositionsProps> = ({
               : undefined;
           const launchpad = resolveMonadLaunchpad(position);
 
+          const selectedMonadWalletIds = selectedWalletIds?.monad || [];
+          const isMultiWalletSell = selectedMonadWalletIds.length > 1;
+          const selectedWalletId = selectedMonadWalletIds[0];
+
           const result = await tradeMonadSell(
             {
               tokenAddress,
@@ -404,6 +412,9 @@ const Positions: React.FC<PositionsProps> = ({
               percentage: percent,
               slippage,
               gasPrice,
+              walletId: !isMultiWalletSell ? selectedWalletId : undefined,
+              walletIds: isMultiWalletSell ? selectedMonadWalletIds : undefined,
+              useMultipleWallets: isMultiWalletSell,
             },
             bearerToken,
           );
@@ -415,13 +426,27 @@ const Positions: React.FC<PositionsProps> = ({
             broadcastMonadQuickTrade(tokenAddress, 'sell');
             refreshPositions();
           } else {
-            toastControls.fail('Sell failed. Please try again.');
+            const errorMessage = formatMonadError((result as any)?.error);
+            toastControls.fail(errorMessage);
             return;
           }
         } else {
+          // CRITICAL: Verify the pair address from the token service before selling
+          let verifiedPoolAddress = position.pairAddress;
+          if (position.tokenAddress) {
+            console.log(`[Positions] Verifying pair address for quick sell: ${position.tokenAddress}`);
+            const fetchedAddress = await fetchVerifiedPairAddress(position.tokenAddress);
+            if (fetchedAddress) {
+              if (fetchedAddress !== position.pairAddress) {
+                console.log(`[Positions] Pair address mismatch! Local: ${position.pairAddress}, Verified: ${fetchedAddress}`);
+              }
+              verifiedPoolAddress = fetchedAddress;
+            }
+          }
+
           const poolType = getPoolTypeFromToken({
             mint: position.tokenAddress,
-            pair_address: position.pairAddress,
+            pair_address: verifiedPoolAddress,
             launchpad_protocol: tokenMeta?.protocol || position.launchpad || '',
           } as any);
 
@@ -429,11 +454,11 @@ const Positions: React.FC<PositionsProps> = ({
             {
               tokenAddress: position.tokenAddress,
               percentageToSell: percent,
-              poolAddress: position.pairAddress,
+              poolAddress: verifiedPoolAddress,
               baseMint: position.tokenAddress,
               quoteMint: SOL_MINT_ADDRESS,
               poolType,
-              originalPairAddress: position.pairAddress,
+              originalPairAddress: verifiedPoolAddress,
               slippage: (quickSellSettings?.maxSlippage || 0.2) * 100,
               priorityFee: quickSellSettings?.priority ?? 0.001,
               bribe: quickSellSettings?.bribe ?? 0.05,
@@ -447,10 +472,9 @@ const Positions: React.FC<PositionsProps> = ({
           refreshPositions();
         }
       } catch (error: any) {
-        const message =
-          error?.message ||
-          error?.error ||
-          'Sell failed. Please try again.';
+        const message = isMonadPosition(position)
+          ? formatMonadError(error?.message || error?.error)
+          : (error?.message || error?.error || 'Sell failed. Please try again.');
         toastControls.fail(message);
       } finally {
         toastControls.cleanup();

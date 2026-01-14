@@ -99,7 +99,8 @@ import { executeEnhancedTrade } from "~/utils/enhancedTradeHandler";
 import { showEnhancedToast, updateEnhancedToast } from "~/utils/enhancedToast";
 import toast from "react-hot-toast";
 import useMonadPositionWebSocket from "~/hooks/useMonadPositionWebSocket";
-import { validateMonadBalance, validateSolanaBalance } from "~/utils/tradeBalanceValidation";
+import { validateMonadBalance, validateSolanaBalance, computeMonadBalanceForValidation } from "~/utils/tradeBalanceValidation";
+import { formatMonadError } from "~/utils/monadError";
 
 /* ---- Enhanced Monad Green Palette (matching PulseTable) ---- */
 const AX = {
@@ -2481,57 +2482,6 @@ function MonadTable({
     return "nadfun";
   };
 
-  // Helper function to format user-friendly error messages
-  const formatMonadError = (error: string | undefined | null): string => {
-    if (!error) return "Trade failed. Please try again.";
-    
-    const errorLower = error.toLowerCase();
-    
-    // Check for specific error patterns
-    if (errorLower.includes('err_bonding_curve_library_invalid_inputs') || 
-        errorLower.includes('bonding_curve_library_invalid_inputs')) {
-      return "This token has no liquidity or has graduated to DEX. Try a different token.";
-    }
-    
-    if (errorLower.includes('insufficient liquidity') || 
-        errorLower.includes('expected output is 0') ||
-        errorLower.includes('no liquidity')) {
-      return "Insufficient liquidity. This token may not be available for trading.";
-    }
-    
-    if (errorLower.includes('token does not exist') || 
-        errorLower.includes('token may not exist')) {
-      return "Token not found. Please check the token address.";
-    }
-    
-    if (errorLower.includes('token has graduated') || 
-        errorLower.includes('graduated to dex')) {
-      return "This token has graduated to DEX. Trading on bonding curve is no longer available.";
-    }
-    
-    if (errorLower.includes('insufficient balance') || 
-        errorLower.includes('missing')) {
-      return "Insufficient balance. Please add more MON to your wallet.";
-    }
-    
-    if (errorLower.includes('locked') || 
-        errorLower.includes('cannot be traded')) {
-      return "This token is locked and cannot be traded.";
-    }
-    
-    if (errorLower.includes('execution reverted') || 
-        errorLower.includes('revert')) {
-      return "Transaction failed. The token may not be available or there may be insufficient liquidity.";
-    }
-    
-    // Return original error if it's short and user-friendly, otherwise return generic message
-    if (error.length < 100 && !error.includes('0x') && !error.includes('data:')) {
-      return error;
-    }
-    
-    return "Trade failed. Please try again.";
-  };
-
   const handleQuickBuy = async (token: Token) => {
     console.log("🎯 Monad Quick Buy called for token:", token.symbol);
 
@@ -2577,24 +2527,35 @@ function MonadTable({
     // Get gas price from preset (optional, undefined if not set)
     const gasPrice = settings?.gasPrice !== undefined && settings.gasPrice > 0 ? settings.gasPrice : undefined;
 
+    const selectedMonadWalletIds = selectedWalletIds?.monad || [];
+    const isMultiWallet = selectedMonadWalletIds.length > 1;
+    const totalSelectedWallets = selectedMonadWalletIds.length || 1;
+
     // ============================================
     // PRE-VALIDATION: Check balance BEFORE showing any toast
     // This prevents the misleading "Trade placed!" toast when balance is insufficient
     // ============================================
-    const monadBalance = chainBalances['monad'] ?? 0;
-
-    const clientValidation = validateMonadBalance({
-      balance: monadBalance,
-      tradeAmount: buyAmount,
-      gasPrice: gasPrice,
+    const monadBalance = computeMonadBalanceForValidation({
+      selectedWalletIds: selectedMonadWalletIds,
+      walletList,
+      walletBalances,
+      fallbackBalance: chainBalances['monad'] ?? 0,
     });
 
-    if (!clientValidation.isValid) {
-      showEnhancedToast("error", clientValidation.errorMessage || 'Insufficient MON balance', {
-        title: "Insufficient Balance",
-        duration: 5000,
+    if (!isMultiWallet) {
+      const clientValidation = validateMonadBalance({
+        balance: monadBalance,
+        tradeAmount: buyAmount,
+        gasPrice: gasPrice,
       });
-      return;
+
+      if (!clientValidation.isValid) {
+        showEnhancedToast("error", clientValidation.errorMessage || 'Insufficient MON balance', {
+          title: "Insufficient Balance",
+          duration: 5000,
+        });
+        return;
+      }
     }
     // ============================================
     // END PRE-VALIDATION
@@ -2621,18 +2582,16 @@ function MonadTable({
     const timerCap = 0.40 + Math.random() * 0.20;
     let timerFinished = false;
 
-    // Determine if this is a multi-wallet trade
-    const isMultiWallet = (selectedWalletIds?.monad || []).length > 1;
-    const totalSelectedWallets = (selectedWalletIds?.monad || []).length || 1;
-
     // Pre-calculate which wallets will actually be used (have sufficient balance)
     const { allocations, total } = buildMonadWalletAllocations({
       amount: buyAmount,
       walletList,
       walletBalances,
-      selectedWalletIds: selectedWalletIds?.monad || [],
+      selectedWalletIds: selectedMonadWalletIds,
     });
-    const walletsWithBalance = allocations.length;
+    const DISPLAY_MIN_BALANCE = 0.0035; // ~ min trade + fee + reserve
+    const fundedAllocations = allocations.filter((a) => (a.balance ?? 0) >= DISPLAY_MIN_BALANCE);
+    const walletsWithBalance = fundedAllocations.length || (allocations.length > 0 ? 1 : 0);
 
     // Show initial loading toast with timer - checkmark hidden until timer finishes, link icon grayed out
     toast.custom(
@@ -5860,7 +5819,7 @@ function MonadTable({
               // Build query params for optimistic UI + cache lookup
               // Include chain parameter to preserve chain selection
               // Use prop from parent (more reliable) or fallback to router.query
-              const currentChain = chainProp || (router.query.chain as string) || "monad";
+              const currentChain = chainProp || (router.query.chain as string) || "sol";
               const queryParams = new URLSearchParams({
                 _name: (token as any)?.name || (token as any)?.symbol || "",
                 _symbol: (token as any)?.symbol || "",

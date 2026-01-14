@@ -6,6 +6,7 @@ import { SOL_MINT_ADDRESS } from "./api";
 import { getPoolTypeFromToken } from "./poolTypeDetection";
 import type { Token } from "./db";
 import type { QuickBuySettings } from "~/components/QuickBuyContext";
+import { fetchVerifiedPairAddress } from "~/hooks/useSingleTokenPolling";
 
 type WalletListItem = {
   id: string;
@@ -208,9 +209,21 @@ export async function executeSolanaBuyWithToast({
   );
 
   try {
-    const effectivePoolAddress = poolAddress || token.migrated_pool_address || token.pair_address || '';
+    let effectivePoolAddress = poolAddress || token.migrated_pool_address || token.pair_address || '';
     const effectiveBaseMint = baseMint || token.mint || '';
     const effectiveQuoteMint = quoteMint || SOL_MINT_ADDRESS;
+
+    // CRITICAL: Verify the pair address from the token service before trading
+    if (token.mint) {
+      console.log(`[createSolanaToastHandler] Verifying pair address for: ${token.mint}`);
+      const verifiedPairAddress = await fetchVerifiedPairAddress(token.mint);
+      if (verifiedPairAddress) {
+        if (verifiedPairAddress !== effectivePoolAddress) {
+          console.log(`[createSolanaToastHandler] Pair address mismatch! Local: ${effectivePoolAddress}, Verified: ${verifiedPairAddress}`);
+        }
+        effectivePoolAddress = verifiedPairAddress;
+      }
+    }
 
     const multiResult = await executeSolanaMultiBuy({
       poolAddress: effectivePoolAddress,
@@ -218,7 +231,7 @@ export async function executeSolanaBuyWithToast({
       quoteMint: effectiveQuoteMint,
       amountSOL: amount,
       poolType,
-      originalPairAddress: token.pair_address,
+      originalPairAddress: effectivePoolAddress,
       slippage: settings.maxSlippage,
       priorityFee: settings.priority,
       bribe: settings.bribe,

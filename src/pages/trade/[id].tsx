@@ -18,6 +18,7 @@ import { useQuickBuyQueryParams } from "../../components/QuickBuy";
 import { useTradePageQueryParams } from "../../utils/queryParams";
 import { useComponentCache } from "../../hooks/useComponentCache";
 import useOptimizedTradeEventsWebSocket from "../../hooks/useOptimizedTradeEventsWebSocket";
+import { useSolanaTokenWebSocket } from "../../hooks/useSolanaTokenWebSocket";
 import dynamic from "next/dynamic";
 import SimilarTokensPanel from "../../components/trade/SimilarTokensPanel";
 import ReusedImageTokensPanel from "../../components/trade/ReusedImageTokensPanel";
@@ -71,7 +72,7 @@ type ReusedTokenLite = {
 
 export default function TradePage() {
   const router = useRouter();
-  const { id, _name, _symbol, _price, _mcap, _image, _mint } = router.query;
+  const { id, _name, _symbol, _price, _mcap, _image, _mint, _launchpad_protocol, _liquidity, _created_at } = router.query;
 
   // Wait for router to be ready before using query params
   // This prevents hydration issues where id is undefined briefly
@@ -85,20 +86,41 @@ export default function TradePage() {
   const { backgroundData: backgroundOHLCData, isPreloading, preloadComplete } = useBackgroundOHLCPreload();
 
   const optimisticToken = React.useMemo(() => {
-    if (_name || _symbol) {
+    // Create optimistic token if we have name/symbol OR mint address (for tokens without metadata)
+    if (_name || _symbol || _mint) {
       return {
-        name: (_name as string) || "",
+        name: (_name as string) || (_symbol as string) || "",
         symbol: (_symbol as string) || "",
+        mint: (_mint as string) || "",
         price_usd: _price ? parseFloat(_price as string) : undefined,
         market_cap_usd: _mcap ? parseFloat(_mcap as string) : undefined,
         image: (_image as string) || undefined,
+        launchpad_protocol: (_launchpad_protocol as string) || undefined,
+        // Liquidity passed from PulseTable for instant display
+        liquidity_usd: _liquidity ? parseFloat(_liquidity as string) : undefined,
+        // Created at / launch_time passed from PulseTable for instant age display
+        launch_time: (_created_at as string) || undefined,
+        created_at: (_created_at as string) || undefined,
       };
     }
     return null;
-  }, [_name, _symbol, _price, _mcap, _image]);
+  }, [_name, _symbol, _price, _mcap, _image, _mint, _launchpad_protocol, _liquidity, _created_at]);
 
   if (process.env.NODE_ENV === "development") {
-    console.log("TradePage Debug:", { id, idType: typeof id, isString: typeof id === "string", mintFromQuery: _mint, optimisticToken });
+    console.log("TradePage Debug:", {
+      id,
+      idType: typeof id,
+      isString: typeof id === "string",
+      mintFromQuery: _mint,
+      optimisticToken,
+      // Debug liquidity/age/image from query params
+      queryParams: { _liquidity, _created_at, _image },
+      optimisticHasData: {
+        liquidity: optimisticToken?.liquidity_usd,
+        age: optimisticToken?.launch_time || optimisticToken?.created_at,
+        image: optimisticToken?.image,
+      }
+    });
   }
 
   const [tokenDataLoading, setTokenDataLoading] = useState(false);
@@ -145,7 +167,8 @@ export default function TradePage() {
   const { params: tradeParams, setParams: setTradeParams, isReady: tradeParamsReady } = useTradePageQueryParams();
 
   const { token, isPolling, loading: pollingLoading, isHydrating, resolvedPairAddress } = useSingleTokenPolling(
-    typeof id === "string" ? id : undefined
+    typeof id === "string" ? id : undefined,
+    typeof _mint === "string" ? _mint : undefined // Pass mint from URL for pair address verification
   );
 
   const {
@@ -218,6 +241,8 @@ export default function TradePage() {
     "ohlc-params",
     [correctTokenData, token, isLoadingCorrectData],
     () => {
+      // Always use 1s interval for Solana - provides best real-time experience
+      // Timeframe can vary based on token age for historical data depth
       const tokenForAge = correctTokenData || token;
       const createdAt =
         (tokenForAge as any)?.created_at || (tokenForAge as any)?.createdAt || (tokenForAge as any)?.CreatedAt;
@@ -231,15 +256,14 @@ export default function TradePage() {
       const diffMs = Date.now() - createdDate.getTime();
       const ageInHours = diffMs / (1000 * 60 * 60);
       const ageInDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+
+      // Always 1s interval, but adjust timeframe based on token age
       if (ageInHours < 1) return { interval: "1s", timeframe: "1h", optimize: false } as const;
-      if (ageInHours < 6) return { interval: "1h", timeframe: "4h", optimize: false } as const;
-      if (ageInDays < 1) return { interval: "1h", timeframe: "24h", optimize: false } as const;
-      if (ageInDays < 7) return { interval: "1h", timeframe: "7d", optimize: false } as const;
-      if (ageInDays < 30) return { interval: "1h", timeframe: "30d", optimize: false } as const;
-      if (ageInDays < 90) return { interval: "1d", timeframe: "90d", optimize: true } as const;
-      if (ageInDays < 180) return { interval: "1d", timeframe: "180d", optimize: true } as const;
-      if (ageInDays < 365) return { interval: "1d", timeframe: "365d", optimize: true } as const;
-      return { interval: "7d", timeframe: "365d", optimize: true } as const;
+      if (ageInHours < 6) return { interval: "1s", timeframe: "4h", optimize: false } as const;
+      if (ageInDays < 1) return { interval: "1s", timeframe: "24h", optimize: false } as const;
+      if (ageInDays < 7) return { interval: "1s", timeframe: "7d", optimize: false } as const;
+      if (ageInDays < 30) return { interval: "1s", timeframe: "30d", optimize: false } as const;
+      return { interval: "1s", timeframe: "30d", optimize: false } as const;
     }
   );
 
@@ -409,15 +433,32 @@ export default function TradePage() {
   // This prevents showing stale data from a previous token when navigating
 
   const displayToken = React.useMemo(() => {
+    // Start with optimistic data from URL query params (instant display)
+    // This ensures liquidity, age, image from PulseTable are shown immediately
+    const baseOptimistic = optimisticToken || {};
+
     // First priority: fresh token data from polling - but ONLY if it matches current id
-    // This validation is CRITICAL: when navigating, `token` may still hold old data
-    // because the hook's reset effect hasn't run yet
+    // MERGE with optimistic data so we don't lose query param values
     if (token) {
+      // IMPORTANT: If token has verified_pair_address flag, trust it even if pair_address
+      // doesn't match URL id. This happens when we correct a wrong pair address via
+      // the get-pair API verification.
       const tokenMatchesId =
+        token.verified_pair_address === true ||
         token.pair_address === idString ||
         token.mint === idString;
       if (tokenMatchesId) {
-        return token;
+        // Merge: token data takes priority, but fill gaps with optimistic data
+        return {
+          ...baseOptimistic,
+          ...token,
+          // Ensure these fields use token data when available, fallback to optimistic
+          liquidity_usd: token.liquidity_usd ?? token.total_liquidity_usd ?? (baseOptimistic as any).liquidity_usd,
+          total_liquidity_usd: token.total_liquidity_usd ?? token.liquidity_usd ?? (baseOptimistic as any).liquidity_usd,
+          created_at: token.created_at ?? (baseOptimistic as any).created_at,
+          launch_time: token.launch_time ?? (baseOptimistic as any).launch_time,
+          image: token.image ?? token.image_url ?? token.logo ?? (baseOptimistic as any).image,
+        };
       }
       // Token doesn't match current id - it's stale data from previous token
       console.log('[TradePage] token does not match current id, skipping stale data', {
@@ -428,26 +469,35 @@ export default function TradePage() {
     }
 
     // Second priority: cached metadata - but ONLY if it matches current id
+    // MERGE with optimistic data
     if (cachedTokenMetadata) {
       const cacheMatchesId =
         cachedTokenMetadata.pair_address === idString ||
         cachedTokenMetadata.mint === idString;
       if (cacheMatchesId) {
         return {
+          ...baseOptimistic,
           ...cachedTokenMetadata,
           mint: cachedTokenMetadata.mint || "",
           pair_address: cachedTokenMetadata.pair_address || "",
-          created_at: cachedTokenMetadata.created_at || null
+          created_at: cachedTokenMetadata.created_at || (baseOptimistic as any).created_at || null,
+          liquidity_usd: (cachedTokenMetadata as any).liquidity_usd ?? (baseOptimistic as any).liquidity_usd,
         };
       }
     }
 
-    // Third priority: optimistic data from URL query params
+    // Third priority: optimistic data from URL query params alone
     if (optimisticToken) return optimisticToken;
+
+    // During hydration, router.query is empty - don't return null yet as query params are coming
+    // This prevents the flash of "-" and "0" values before hydration completes
+    if (!isRouterReady) {
+      return undefined; // Signal that we're still loading, not that there's no data
+    }
 
     // No valid data - return null to show loading state
     return null;
-  }, [token, cachedTokenMetadata, optimisticToken, idString]);
+  }, [token, cachedTokenMetadata, optimisticToken, idString, isRouterReady]);
 
   // Validate correctTokenData matches current id to prevent showing stale data
   const validatedCorrectTokenData = React.useMemo(() => {
@@ -489,6 +539,43 @@ export default function TradePage() {
     return undefined;
   }, [displayToken?.mint, _mint, id]);
 
+  // Get holder summary, token info, trades, and volume from unified WebSocket for token info section and dev markers
+  const { holderSummary, topTraders: wsTopTraders, trades: wsHistoricalTrades, tokenInfo: wsTokenInfo, volume: wsVolume } = useSolanaTokenWebSocket({
+    mintAddress: displayToken?.mint || resolvedTokenMint,
+    enabled: !!(displayToken?.mint || resolvedTokenMint),
+  });
+
+  // Enhance displayToken with holderSummary data for TradeActionPanel
+  const enhancedDisplayToken = React.useMemo(() => {
+    if (!displayToken) return displayToken;
+
+    // Merge holderSummary data into the token for TradeActionPanel's TokenInfoDropdown
+    return {
+      ...displayToken,
+      // Map holder_summary fields to token fields expected by TokenInfoDropdown
+      dev_wallet: holderSummary?.dev_wallet ?? displayToken.dev_wallet,
+      dev_held_percentage: holderSummary?.dev_held_percent ?? displayToken.dev_held_percentage,
+      sniper_held_percentage: holderSummary?.sniper_held_percent ?? displayToken.sniper_held_percentage,
+      sniper_count: holderSummary?.sniper_count ?? displayToken.sniper_count,
+      bundler_held_percentage: holderSummary?.bundler_held_percent ?? displayToken.bundler_held_percentage,
+      bundler_count: holderSummary?.bundler_count ?? displayToken.bundler_count,
+      insider_held_percentage: holderSummary?.insider_held_percent ?? displayToken.insider_held_percentage,
+      insider_count: holderSummary?.insider_count ?? displayToken.insider_count,
+      top10_holding_percentage: holderSummary?.top10_held_percent ?? displayToken.top10_holding_percentage,
+      total_holders: holderSummary?.total_holders ?? displayToken.total_holders,
+      // Pro traders = count of top traders from WebSocket
+      pro_traders: wsTopTraders?.length ?? displayToken.pro_traders,
+    };
+  }, [displayToken, holderSummary, wsTopTraders]);
+
+  // Also use dev_wallet from WebSocket holderSummary for chart dev markers
+  useEffect(() => {
+    if (holderSummary?.dev_wallet && !creatorAddress) {
+      console.log('[TradePage] Using dev_wallet from WebSocket for chart markers:', holderSummary.dev_wallet);
+      setCreatorAddress(holderSummary.dev_wallet);
+    }
+  }, [holderSummary?.dev_wallet, creatorAddress]);
+
   // Get current pair address for caching
   const currentPairAddress = React.useMemo(() => {
     const currentToken = validatedCorrectTokenData || displayToken;
@@ -513,17 +600,152 @@ export default function TradePage() {
     return cachedTrades || initialTradeData?.trades || [];
   }, [cachedTrades, initialTradeData?.trades]);
 
-  const { trades: tradeDataForChart } = useOptimizedTradeEventsWebSocket({
+  const { trades: realTimeTradesForChart } = useOptimizedTradeEventsWebSocket({
     pairAddress: displayToken?.pair_address || resolvedPairAddress || undefined,
     enabled: !!displayToken?.pair_address || !!resolvedPairAddress,
     tokenDecimals: displayToken?.decimals || 9,
     maxTrades: 200,
     enableDeduplication: true,
   });
+
+  // Combine real-time trades with historical trades from unified WebSocket for dev markers
+  // Historical trades have wallet_address, real-time trades have maker - chart handles both
+  const tradeDataForChart = React.useMemo(() => {
+    const combined: any[] = [];
+    const seen = new Set<string>();
+
+    // Add real-time trades first (most recent)
+    if (realTimeTradesForChart && realTimeTradesForChart.length > 0) {
+      for (const trade of realTimeTradesForChart) {
+        const key = trade.transactionHash || `${trade.timestamp}-${trade.maker}`;
+        if (!seen.has(key)) {
+          seen.add(key);
+          combined.push(trade);
+        }
+      }
+    }
+
+    // Add historical trades from unified WebSocket (for dev markers)
+    if (wsHistoricalTrades && wsHistoricalTrades.length > 0) {
+      for (const trade of wsHistoricalTrades) {
+        const key = trade.signature || trade.transaction_hash || `${trade.timestamp}-${trade.wallet_address}`;
+        if (!seen.has(key)) {
+          seen.add(key);
+          // Map historical trade fields to match chart expectations
+          combined.push({
+            ...trade,
+            maker: trade.wallet_address, // Chart looks for maker field
+            side: trade.type?.toLowerCase(), // BUY/SELL -> buy/sell
+            eventDisplayType: trade.type, // Keep original for fallback
+          });
+        }
+      }
+    }
+
+    return combined;
+  }, [realTimeTradesForChart, wsHistoricalTrades]);
+
   useEffect(() => {
-    if (tradeDataForChart && tradeDataForChart.length > 0) console.log("[TradePage] Trade data for chart:", tradeDataForChart.length, "trades");
-    if (creatorAddress) console.log("[TradePage] Creator address:", creatorAddress);
+    if (tradeDataForChart && tradeDataForChart.length > 0) {
+      console.log("[TradePage] Trade data for chart:", tradeDataForChart.length, "trades (real-time + historical)");
+      // Log first few trades to debug dev marker matching
+      const devTrades = tradeDataForChart.filter((t: any) =>
+        creatorAddress && (t.maker || t.wallet_address)?.toLowerCase() === creatorAddress.toLowerCase()
+      );
+      if (devTrades.length > 0) {
+        console.log("[TradePage] Found dev trades for markers:", devTrades.length, devTrades);
+      }
+    }
+    if (creatorAddress) console.log("[TradePage] Creator address for dev markers:", creatorAddress);
   }, [tradeDataForChart, creatorAddress]);
+
+  // -------- Position Lines for Chart (avg entry/exit prices) --------
+  const [positionLinesApi, setPositionLinesApi] = useState<{ avgBuyPriceUsd: number | null; avgSellPriceUsd: number | null } | null>(null);
+  const [chartMetrics, setChartMetrics] = useState<{ lastPriceUsd?: number; lastMarketCapUsd?: number; maxMarketCapUsd?: number }>({});
+  const fetchPositionLinesRef = React.useRef<Promise<void> | null>(null);
+
+  // Fetch avg entry/exit lines from backend (user-scoped)
+  const fetchPositionLines = React.useCallback(async () => {
+    if (!resolvedTokenMint || !user?.bearerToken) {
+      setPositionLinesApi(null);
+      return;
+    }
+    // Avoid overlapping fetches
+    if (fetchPositionLinesRef.current) return fetchPositionLinesRef.current;
+
+    const run = (async () => {
+      try {
+        const baseUrl = process.env.NEXT_PUBLIC_BACKEND_URL;
+        if (!baseUrl) return;
+        const headers = {
+          Authorization: `Bearer ${user.bearerToken}`,
+          Accept: "application/json",
+        };
+        // Solana uses the generic position endpoint
+        const resp = await fetch(
+          `${baseUrl}/api/trade/position?tokenAddress=${encodeURIComponent(resolvedTokenMint)}`,
+          { headers }
+        );
+        if (!resp.ok) {
+          setPositionLinesApi(null);
+          return;
+        }
+        const body = await resp.json();
+        const data = body?.data || body;
+        if (body?.success === false || !data) {
+          setPositionLinesApi(null);
+          return;
+        }
+        setPositionLinesApi({
+          avgBuyPriceUsd: data.avgBuyPriceUsd ?? data.avgBuyPriceUSD ?? null,
+          avgSellPriceUsd: data.avgSellPriceUsd ?? data.avgSellPriceUSD ?? null,
+        });
+      } catch {
+        setPositionLinesApi(null);
+      } finally {
+        fetchPositionLinesRef.current = null;
+      }
+    })();
+
+    fetchPositionLinesRef.current = run;
+    return run;
+  }, [resolvedTokenMint, user?.bearerToken]);
+
+  // Initial fetch and on token change
+  useEffect(() => {
+    fetchPositionLines();
+  }, [fetchPositionLines]);
+
+  // Refresh lines on quick trade events for this token
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const normalized = resolvedTokenMint?.toLowerCase();
+    if (!normalized) return;
+    const handler = (event: Event) => {
+      const detail = (event as CustomEvent<{ tokenAddress?: string }>).detail;
+      const addr = detail?.tokenAddress?.toLowerCase();
+      if (addr === normalized) {
+        fetchPositionLines();
+      }
+    };
+    window.addEventListener("solanaQuickTrade", handler as EventListener);
+    return () => window.removeEventListener("solanaQuickTrade", handler as EventListener);
+  }, [fetchPositionLines, resolvedTokenMint]);
+
+  // Calculate price line values for the chart
+  const priceLineValues = React.useMemo(() => {
+    const sanitize = (value: any) => {
+      const num = typeof value === "string" ? parseFloat(value) : value;
+      return Number.isFinite(num) && num > 0 ? num : undefined;
+    };
+    const entry = sanitize(positionLinesApi?.avgBuyPriceUsd);
+    const exit = sanitize(positionLinesApi?.avgSellPriceUsd);
+    return { avgEntryPriceUsd: entry, avgExitPriceUsd: exit };
+  }, [positionLinesApi?.avgBuyPriceUsd, positionLinesApi?.avgSellPriceUsd]);
+
+  const handleChartMetrics = React.useCallback((metrics: { lastPriceUsd?: number; lastMarketCapUsd?: number; maxMarketCapUsd?: number }) => {
+    setChartMetrics(metrics);
+  }, []);
 
   // -------- Similar Tokens (right rail) --------
   const [similarTokens, setSimilarTokens] = useState<SimilarTokenLite[]>([]);
@@ -595,11 +817,11 @@ export default function TradePage() {
     <>
       <Head><title>{pageTitle}</title></Head>
 
-      <div 
-        className="h-screen w-full flex flex-col overflow-hidden"
-        style={{ 
-          backgroundColor: "#0f1012", 
-          color: AX.text, 
+      <div
+        className="min-h-screen w-full flex flex-col overflow-y-auto"
+        style={{
+          backgroundColor: "#0f1012",
+          color: AX.text,
           fontFamily: "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", \"Inter\", system-ui, sans-serif",
         }}
       >
@@ -613,10 +835,10 @@ export default function TradePage() {
           </div>
         )}
 
-        <div 
-          className="flex flex-1 w-full max-w-full overflow-hidden min-h-0" 
-          style={{ 
-            minHeight: 0,
+        <div
+          className="flex flex-1 w-full max-w-full min-h-0"
+          style={{
+            minHeight: 'calc(100vh - 60px)', // Ensure content fills at least viewport minus header
             flex: '1 1 auto',
           }}
         >
@@ -624,11 +846,9 @@ export default function TradePage() {
           <div
             ref={containerRef}
             className="flex-1 min-w-0 max-w-full flex flex-col pb-0"
-            style={{ 
-              borderRight: `1px solid ${AX.border}`, 
+            style={{
+              borderRight: `1px solid ${AX.border}`,
               minHeight: 0,
-              height: '100%',
-              overflow: 'hidden',
             }}
           >
             {/* TOP pane - Chart in top left */}
@@ -642,7 +862,7 @@ export default function TradePage() {
               }}
             >
               <div className="px-2 flex-shrink-0">
-                <TradeHeader token={validatedCorrectTokenData || displayToken} />
+                <TradeHeader token={validatedCorrectTokenData || displayToken} wsTokenInfo={wsTokenInfo} wsVolume={wsVolume} holderSummary={holderSummary} livePriceUsd={chartMetrics.lastPriceUsd} liveMarketCapUsd={chartMetrics.lastMarketCapUsd} />
               </div>
 
               {/* Separator line after TradeHeader */}
@@ -661,8 +881,8 @@ export default function TradePage() {
               >
                 {(canStartOHLC || (idString.length >= 32)) && isRouterReady ? (
                   <AdvancedOHLCChart
-                    key={`chart-${idString}`}
-                    mint={typeof _mint === "string" ? _mint : (displayToken?.mint || idString || undefined)}
+                    key={`chart-${displayToken?.mint || idString}`}
+                    mint={typeof _mint === "string" ? _mint : (displayToken?.mint || undefined)}
                     pairAddress={resolvedPairAddress || idString || undefined}
                     interval={currentOHLCParams.interval}
                     timeframe={currentOHLCParams.timeframe}
@@ -677,6 +897,8 @@ export default function TradePage() {
                     tokenName={displayToken?.name || null}
                     tokenDecimals={typeof displayToken?.decimals === 'number' ? displayToken.decimals : null}
                     network={network}
+                    priceLines={priceLineValues}
+                    onChartMetrics={handleChartMetrics}
                   />
                   // <BackendOHLCChart
                   //   key={`chart-${resolvedPairAddress || _mint}`}
@@ -768,18 +990,18 @@ export default function TradePage() {
               <div className="absolute inset-x-0 top-1/2 -translate-y-1/2 h-px bg-gray-700/20" />
             </div>
 
-            {/* BOTTOM pane (tabs + tables) */}
-            <div id="tabs-pane" className="flex-1 flex flex-col overflow-hidden min-h-0">
+            {/* BOTTOM pane (tabs + tables) - min-h-[500px] ensures scrollable content */}
+            <div id="tabs-pane" className="flex-1 flex flex-col min-h-[500px]">
               <div className="flex-shrink-0">
-                <TradeTabs 
-                  selectedTab={selectedTab} 
-                  setSelectedTab={setSelectedTab} 
+                <TradeTabs
+                  selectedTab={selectedTab}
+                  setSelectedTab={setSelectedTab}
                   onInstantTradeClick={() => setIsInstantTradeOpen(true)}
                   isInstantTradeOpen={isInstantTradeOpen}
                 />
               </div>
-              <div className="flex-1 min-h-0 overflow-y-auto" style={{ paddingBottom: '2rem' }}>
-                <div style={{ display: selectedTab === "Trades" ? "block" : "none", height: "100%" }}>
+              <div className="flex-1 min-h-[400px]">
+                <div className={`flex flex-col h-full ${selectedTab === "Trades" ? "" : "hidden"}`}>
                   <CodexTrades
                     token={validatedCorrectTokenData || displayToken}
                     initialTrades={initialTradesForComponent}
@@ -788,20 +1010,20 @@ export default function TradePage() {
                     chain="sol"
                   />
                 </div>
-                <div style={{ display: selectedTab === "Orders" ? "block" : "none", height: "100%" }}>
+                <div className={`flex flex-col h-full ${selectedTab === "Orders" ? "" : "hidden"}`}>
                   <TokenLimitOrders />
                 </div>
-                <div style={{ display: selectedTab === "Top Traders" ? "block" : "none", height: "100%" }}>
+                <div className={`flex flex-col h-full ${selectedTab === "Top Traders" ? "" : "hidden"}`}>
                   <React.Suspense fallback={<div className="flex items-center justify-center h-full text-neutral-400">Loading...</div>}>
                     <CodexTopTraders token={displayToken} pairAddress={idString || resolvedPairAddress} chain="sol" />
                   </React.Suspense>
                 </div>
-                <div style={{ display: selectedTab === "Holders" ? "block" : "none", height: "100%" }}>
+                <div className={`flex flex-col h-full ${selectedTab === "Holders" ? "" : "hidden"}`}>
                   <React.Suspense fallback={<div className="flex items-center justify-center h-full text-neutral-400">Loading...</div>}>
                     <CodexHolders token={displayToken} pairAddress={idString || resolvedPairAddress} chain="sol" />
                   </React.Suspense>
                 </div>
-                <div style={{ display: selectedTab === "Dev Tokens" ? "block" : "none", height: "100%" }}>
+                <div className={`flex flex-col h-full ${selectedTab === "Dev Tokens" ? "" : "hidden"}`}>
                   <React.Suspense fallback={<div className="flex items-center justify-center h-full text-neutral-400">Loading...</div>}>
                     <CodexDevTokens token={displayToken} chain="sol" />
                   </React.Suspense>
@@ -811,17 +1033,18 @@ export default function TradePage() {
           </div>
 
           {/* RIGHT: action panel + reused image + similar tokens */}
-          <div className="flex-shrink-0 min-w-[260px] basis-[280px] md:basis-[310px] lg:basis-[330px] hidden lg:flex flex-col overflow-y-auto h-full">
+          <div className="flex-shrink-0 min-w-[260px] basis-[280px] md:basis-[310px] lg:basis-[330px] hidden lg:flex flex-col">
 
             {/* Token Info / actions */}
             <div className="right-rail-panel token-info-panel">
               <TradeActionPanel
-                token={displayToken}
+                token={enhancedDisplayToken}
                 tradeParams={tradeParams}
                 setTradeParams={setTradeParams}
                 quickBuySettings={quickBuySettings}
                 quickBuySide={quickBuySide}
                 initialStats={initialTradeData?.stats}
+                wsVolume={wsVolume}
               />
             </div>
 
@@ -880,11 +1103,12 @@ export default function TradePage() {
             </div>
             <div className="flex-1 overflow-y-auto">
               <TradeActionPanel
-                token={displayToken}
+                token={enhancedDisplayToken}
                 tradeParams={tradeParams}
                 setTradeParams={setTradeParams}
                 quickBuySettings={quickBuySettings}
                 quickBuySide={quickBuySide}
+                wsVolume={wsVolume}
               />
             </div>
           </div>

@@ -1,13 +1,14 @@
 // components/trade/TradeHeader.tsx
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import type { Token } from "~/utils/db";
-import { formatSmartNumber } from "~/utils/db";
+import { formatSmartNumber, formatLamportsToSol } from "~/utils/db";
 import { useWatchlist } from "../WatchlistContext";
 import { SubscriptNumber } from "../InterstateTable";
 import FastImage from "../FastImage";
 import useMarketDataWebSocket from "~/hooks/useMarketDataWebSocket";
 import { useRouter } from "next/router";
 import { getProtocolBranding } from "~/utils/protocolBranding";
+import type { SolanaTokenInfo, SolanaTokenVolume, HolderSummary } from "~/hooks/useSolanaTokenWebSocket";
 
 import { IoShareSocialOutline } from "react-icons/io5";
 import {
@@ -250,12 +251,14 @@ function getTokenAge(createdAt: string | number) {
   const d = new Date(timestamp);
   if (isNaN(d.getTime())) return "Unknown";
   const ms = Date.now() - d.getTime();
+  const secs = Math.floor(ms / 1000);
   const mins = Math.floor(ms / 60000);
   const hours = Math.floor(ms / 3600000);
   const days = Math.floor(ms / 86400000);
   if (days > 0) return `${days}d`;
   if (hours > 0) return `${hours}h`;
-  return `${mins}m`;
+  if (mins > 0) return `${mins}m`;
+  return `${secs}s`;
 }
 
 function normalizeAssetUrl(raw?: string): string | null {
@@ -390,9 +393,15 @@ interface TradeHeaderProps {
   token: Token | null;
   livePriceUsd?: number | null;
   liveMarketCapUsd?: number | null;
+  /** Real-time token info from unified WebSocket (price, mcap, liquidity, image) */
+  wsTokenInfo?: SolanaTokenInfo | null;
+  /** Real-time volume data from unified WebSocket (5m, 1h, 6h, 24h volumes) */
+  wsVolume?: SolanaTokenVolume | null;
+  /** Holder summary from unified WebSocket (kol_count, total_holders, etc.) */
+  holderSummary?: HolderSummary | null;
 }
 
-const TradeHeader: React.FC<TradeHeaderProps> = ({ token, livePriceUsd, liveMarketCapUsd }) => {
+const TradeHeader: React.FC<TradeHeaderProps> = ({ token, livePriceUsd, liveMarketCapUsd, wsTokenInfo, wsVolume, holderSummary }) => {
   const coalesceNumber = (...values: any[]): number | null => {
     for (const v of values) {
       const n = typeof v === "string" ? parseFloat(v) : v;
@@ -422,35 +431,9 @@ const TradeHeader: React.FC<TradeHeaderProps> = ({ token, livePriceUsd, liveMark
   const { addToWatchlist, removeFromWatchlist, isInWatchlist, updateWatchlistToken } = useWatchlist();
   const watchlistKey = token.pair_address || (token as any).mint || "";
   const isWatched = isInWatchlist(watchlistKey);
-  const [showPreview, setShowPreview] = useState(false);
-  const [toastMessage, setToastMessage] = useState<string | null>(null);
-  const [showZoomPopup, setShowZoomPopup] = useState(false);
-  const [popupPosition, setPopupPosition] = useState({ x: 0, y: 0 });
-  const twitterInfo = useMemo(() => resolveTwitterInfo(token), [token]);
-  const twitterProfileUrl = twitterInfo.url;
-  const twitterHandle = twitterInfo.handle;
-  const [showXProfilePreview, setShowXProfilePreview] = useState(false);
-  const [xPreviewPosition, setXPreviewPosition] = useState({ x: 0, y: 0 });
-  const xPreviewTimeoutRef = useRef<number | null>(null);
-  const toastTimeoutRef = useRef<number | null>(null);
-  
-  // State for fetched age from search endpoint
-  const [fetchedCreatedAt, setFetchedCreatedAt] = useState<string | number | null>(null);
-  const fetchingAgeRef = useRef(false);
-  
-  // Check if we have age data
-  const hasAge = (token as any).created_at || (token as any).createdAt || (token as any).CreatedAt || fetchedCreatedAt;
-  
-  // Fetch age from search endpoint if missing (for Monad tokens only)
-  useEffect(() => {
-    // Only fetch if:
-    // 1. We don't have age data
-    // 2. It's a Monad token (check after isMonadContext is determined)
-    // 3. We have a token address to search
-    // 4. We're not already fetching
-    if (hasAge || fetchingAgeRef.current) return;
-    
-    // Determine if Monad token (we'll calculate this inline since isMonadContext is defined later)
+
+  // Determine if this is a Monad token (vs Solana) - used for data source selection
+  const isMonadContext = useMemo(() => {
     const protocolSource =
       (token as any).launchpad_protocol ||
       (token as any).protocol ||
@@ -460,21 +443,77 @@ const TradeHeader: React.FC<TradeHeaderProps> = ({ token, livePriceUsd, liveMark
       undefined;
     const normalizedProtocol = (protocolSource || "").toLowerCase();
     const isMonadProtocol = normalizedProtocol
-      ? MONAD_PROTOCOL_KEYWORDS.some((keyword) =>
-          normalizedProtocol.includes(keyword),
-        )
+      ? MONAD_PROTOCOL_KEYWORDS.some((keyword) => normalizedProtocol.includes(keyword))
       : false;
-    const tokenChain =
-      ((token as any).blockchain ||
-        (token as any).network ||
-        (token as any).chain ||
-        "") as string;
+    const tokenChain = ((token as any).blockchain || (token as any).network || (token as any).chain || "") as string;
     const normalizedChain = tokenChain.toLowerCase();
-    const isMonadContext =
-      normalizedChain === "monad" ||
-      router?.pathname?.includes("/trade/monad") ||
-      isMonadProtocol;
-    
+    return normalizedChain === "monad" || router?.pathname?.includes("/trade/monad") || isMonadProtocol;
+  }, [token, router?.pathname]);
+
+  // For Solana tokens, we only use data from /v1/trade/view endpoint (token prop)
+  const isSolanaToken = !isMonadContext;
+  const [showPreview, setShowPreview] = useState(false);
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [showZoomPopup, setShowZoomPopup] = useState(false);
+  const [popupPosition, setPopupPosition] = useState({ x: 0, y: 0 });
+  const twitterInfo = useMemo(() => {
+    // Priority: wsTokenInfo.twitter (from metadata URI) > token fields
+    if (wsTokenInfo?.twitter) {
+      // Extract handle from URL if it's a full URL
+      let url = wsTokenInfo.twitter;
+      let handle = url;
+
+      // Clean up the URL to extract handle
+      handle = handle.replace(/^https?:\/\/(www\.)?(twitter\.com|x\.com)\//i, "");
+      handle = handle.replace(/^@/, "");
+      handle = handle.split(/[/?#]/)[0].toLowerCase();
+
+      // Ensure URL is properly formatted
+      if (!url.startsWith('http')) {
+        url = `https://twitter.com/${handle}`;
+      }
+
+      return { url, handle };
+    }
+    return resolveTwitterInfo(token);
+  }, [token, wsTokenInfo?.twitter]);
+  const twitterProfileUrl = twitterInfo.url;
+  const twitterHandle = twitterInfo.handle;
+  const [showXProfilePreview, setShowXProfilePreview] = useState(false);
+  const [xPreviewPosition, setXPreviewPosition] = useState({ x: 0, y: 0 });
+  const xPreviewTimeoutRef = useRef<number | null>(null);
+  const toastTimeoutRef = useRef<number | null>(null);
+
+  // X Preview mouse tracking refs (for delayed hide like PulseTable)
+  const isOverXPreview = useRef(false);
+  const isOverXButton = useRef(false);
+  const xButtonRef = useRef<HTMLButtonElement>(null);
+  const [xPreviewPos, setXPreviewPos] = useState({ left: 0, top: 0, openBelow: false });
+
+  // Search dropdown menu state
+  const [showSearchMenu, setShowSearchMenu] = useState(false);
+  const [searchMenuPosition, setSearchMenuPosition] = useState({ left: 0, top: 0, openAbove: false });
+  const isOverSearchMenu = useRef(false);
+  const isOverSearchButton = useRef(false);
+  const searchMenuRef = useRef<HTMLDivElement>(null);
+  
+  // State for fetched age from search endpoint
+  const [fetchedCreatedAt, setFetchedCreatedAt] = useState<string | number | null>(null);
+  const fetchingAgeRef = useRef(false);
+  
+  // Check if we have age data (include launch_time which backend often uses instead of created_at)
+  const hasAge = (token as any).created_at || (token as any).createdAt || (token as any).CreatedAt || (token as any).launch_time || fetchedCreatedAt;
+  
+  // Fetch age from search endpoint if missing (for Monad tokens only)
+  useEffect(() => {
+    // Only fetch if:
+    // 1. We don't have age data
+    // 2. It's a Monad token (uses component-level isMonadContext)
+    // 3. We have a token address to search
+    // 4. We're not already fetching
+    if (hasAge || fetchingAgeRef.current) return;
+
+    // Only fetch for Monad tokens - Solana uses /v1/trade/view endpoint only
     if (!isMonadContext) return;
     
     const tokenAddress = token.mint || token.pair_address || (token as any).address;
@@ -506,18 +545,57 @@ const TradeHeader: React.FC<TradeHeaderProps> = ({ token, livePriceUsd, liveMark
       .finally(() => {
         fetchingAgeRef.current = false;
       });
-  }, [hasAge, token, router?.pathname]);
-  
+  }, [hasAge, token, isMonadContext]);
+
+  // Live ticker for age updates (every second for fresh tokens, every minute for older)
+  const [ageTick, setAgeTick] = useState(0);
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setAgeTick((t) => t + 1);
+    }, 1000); // Update every second
+    return () => clearInterval(interval);
+  }, []);
+
   const tokenAgeLabel = useMemo(() => {
-    const createdAt =
-      (token as any).created_at ||
-      (token as any).createdAt ||
-      (token as any).CreatedAt ||
-      fetchedCreatedAt;
+    // AGE: For Solana, only use /v1/trade/view endpoint data (token prop)
+    // For Monad, can also use fetchedCreatedAt from search endpoint
+    const createdAt = isSolanaToken
+      ? // Solana: Only use token data from /v1/trade/view endpoint
+        ((token as any).created_at ||
+        (token as any).createdAt ||
+        (token as any).CreatedAt ||
+        (token as any).launch_time)
+      : // Monad: Can also use fetched data
+        ((token as any).created_at ||
+        (token as any).createdAt ||
+        (token as any).CreatedAt ||
+        (token as any).launch_time ||
+        fetchedCreatedAt);
+
+    // Check if we have any age data defined (vs still loading)
+    const hasAnyAgeField = isSolanaToken
+      ? // Solana: Only check token fields
+        ((token as any).created_at !== undefined ||
+        (token as any).createdAt !== undefined ||
+        (token as any).CreatedAt !== undefined ||
+        (token as any).launch_time !== undefined)
+      : // Monad: Also check fetched data
+        ((token as any).created_at !== undefined ||
+        (token as any).createdAt !== undefined ||
+        (token as any).CreatedAt !== undefined ||
+        (token as any).launch_time !== undefined ||
+        fetchedCreatedAt !== null);
+
     const age = getTokenAge(createdAt);
-    // Don't show "Unknown" - show "-" instead if we don't have age
-    return age === "Unknown" ? "-" : age;
-  }, [token, fetchedCreatedAt]);
+
+    // If age is unknown and we have no age fields defined, show loading indicator
+    // If age is unknown but we have fields (they're just empty), show "-"
+    if (age === "Unknown") {
+      return hasAnyAgeField ? "-" : "...";
+    }
+    return age;
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [token, fetchedCreatedAt, isSolanaToken, ageTick]);
   const [showXPreview, setShowXPreview] = useState<boolean>(false);
   const [buttonPosition, setButtonPosition] = useState<{
     left: number;
@@ -544,32 +622,27 @@ const TradeHeader: React.FC<TradeHeaderProps> = ({ token, livePriceUsd, liveMark
     liveMarketCapUsd,
     (token as any)?.chart_live_market_cap_usd
   );
+  // Priority: chartPriceUsd (OHLC chart) > wsTokenInfo > marketData > token
+  // Chart price has highest priority to ensure header stays in sync with displayed chart
   const effectivePrice =
     coalesceNumber(
-      chartPriceUsd,
+      chartPriceUsd,  // OHLC chart has highest priority for sync
+      wsTokenInfo?.price_usd,
       marketData?.price_usd,
       (token as any).usd_price,
       (token as any).price_usd
     ) ?? 0;
-  // Debug: Log all market cap fallback values
-  console.log('[TRADEHEADER_MC_DEBUG] Market cap fallback chain:', {
-    'liveMarketCapUsd (prop)': liveMarketCapUsd,
-    'token.chart_live_market_cap_usd': (token as any)?.chart_live_market_cap_usd,
-    'chartMarketCapUsd (combined)': chartMarketCapUsd,
-    'marketData?.market_cap_usd': marketData?.market_cap_usd,
-    'token.market_cap_usd': (token as any).market_cap_usd,
-    'token.fully_diluted_value': (token as any).fully_diluted_value,
-    'token.market_cap_usd (direct)': token.market_cap_usd,
-  });
+  // Priority: chartMarketCapUsd (OHLC chart) > wsTokenInfo > marketData > token
+  // Chart market cap has highest priority to ensure header stays in sync with displayed chart
   const effectiveMarketCap =
     coalesceNumber(
-      chartMarketCapUsd,
+      chartMarketCapUsd,  // OHLC chart has highest priority for sync
+      wsTokenInfo?.market_cap_usd,
       marketData?.market_cap_usd,
       (token as any).market_cap_usd,
       (token as any).fully_diluted_value,
       token.market_cap_usd
     ) ?? 0;
-  console.log('[TRADEHEADER_MC_DEBUG] Final effectiveMarketCap:', effectiveMarketCap);
   const effectivePriceChange1h = coalesceNumber(
     (token as any)?.price_percent_change_1h,
     (token as any)?.price_change_1h,
@@ -600,17 +673,31 @@ const TradeHeader: React.FC<TradeHeaderProps> = ({ token, livePriceUsd, liveMark
   }, [effectiveMarketCap, effectivePrice, effectivePriceChange1h, isWatched, token, updateWatchlistToken, watchlistKey]);
   const mcap = effectiveMarketCap;
   const price = effectivePrice;
-  const liq =
-    marketData?.liquidity_usd ??
-    marketData?.volume_usd ??
-    (token as any).total_liquidity_usd ??
-    (token as any).liquidity_usd ??
-    0;
+
+  // LIQUIDITY: Priority: wsTokenInfo (unified WebSocket) > token prop > marketData
+  // Check if liquidity data actually exists (vs being undefined/null)
+  const hasWsLiquidity = wsTokenInfo?.liquidity_usd !== undefined && wsTokenInfo.liquidity_usd > 0;
+  const hasTokenLiquidity = (token as any).liquidity_usd !== undefined || (token as any).total_liquidity_usd !== undefined;
+  const tokenLiquidity = (token as any).liquidity_usd ?? (token as any).total_liquidity_usd ?? 0;
+  // For Solana: Prefer unified WebSocket, fallback to token data
+  // For Monad: Can also use marketData WebSocket as additional source
+  const wsLiquidityFromMarketData = isSolanaToken ? null : (marketData?.liquidity_usd ?? marketData?.volume_usd);
+  // Unified WebSocket liquidity has highest priority
+  const liq = hasWsLiquidity ? wsTokenInfo!.liquidity_usd : ((wsLiquidityFromMarketData && wsLiquidityFromMarketData > 0) ? wsLiquidityFromMarketData : tokenLiquidity);
+  // Track if we're still loading liquidity data (no source has provided it yet)
+  const isLiquidityLoading = isSolanaToken ? (!hasWsLiquidity && !hasTokenLiquidity) : (!hasWsLiquidity && !hasTokenLiquidity && !wsLiquidityFromMarketData);
   const supply = (token as any).total_supply ?? (token as any).supply ?? 0;
   const formattedMarketCap = useMemo(() => formatMarketCap(mcap), [mcap]);
   const isLowLiquidity = Number(liq) < 1000;
 
   const curvePct = (() => {
+    // Priority: wsTokenInfo.graduation_percent (real-time from WS) > token bonding fields > market cap fallback
+    // graduation_percent from WS is already in percentage form (0-100)
+    if (wsTokenInfo?.graduation_percent != null && wsTokenInfo.graduation_percent > 0) {
+      // graduation_percent might be very small (e.g., 3.52e-9), multiply by 100 if it's < 1
+      const gp = wsTokenInfo.graduation_percent;
+      return gp < 1 ? gp * 100 : gp;
+    }
     const v =
       (token as any).bonding_pct ??
       ((token as any).bonding_curve_progress != null
@@ -628,6 +715,7 @@ const TradeHeader: React.FC<TradeHeaderProps> = ({ token, livePriceUsd, liveMark
 
   /* ---------- canonical protocol resolution ---------- */
   const columnType = getColumnType(token);
+  // protocolSource is used for getProtocolBranding below
   const protocolSource =
     (token as any).launchpad_protocol ||
     (token as any).protocol ||
@@ -635,23 +723,7 @@ const TradeHeader: React.FC<TradeHeaderProps> = ({ token, livePriceUsd, liveMark
     (token as any).amm ||
     extractProtocolRaw(token) ||
     undefined;
-
-  const tokenChain =
-    ((token as any).blockchain ||
-      (token as any).network ||
-      (token as any).chain ||
-      "") as string;
-  const normalizedChain = tokenChain.toLowerCase();
-  const normalizedProtocol = (protocolSource || "").toLowerCase();
-  const isMonadProtocol = normalizedProtocol
-    ? MONAD_PROTOCOL_KEYWORDS.some((keyword) =>
-        normalizedProtocol.includes(keyword),
-      )
-    : false;
-  const isMonadContext =
-    normalizedChain === "monad" ||
-    router?.pathname?.includes("/trade/monad") ||
-    isMonadProtocol;
+  // Note: isMonadContext is already defined at component level via useMemo
 
   let protocolColor: string;
   let tokenIcon: string;
@@ -668,10 +740,26 @@ const TradeHeader: React.FC<TradeHeaderProps> = ({ token, livePriceUsd, liveMark
     fillProtocolBadge = shouldFillProtocolBadge(token);
   }
 
-  // token image (ipfs/http)
+  // IMAGE: Priority: wsTokenInfo.image_url (from URI metadata) > token prop
+  // Unified WebSocket fetches image from URI metadata and provides it directly
+  // Check multiple field names since different sources use different naming
+  const tokenAny = token as any;
   const rawImg =
-    (token as any).uri || (token as any).image || (token as any).logo;
-  const imgSrc = normalizeAssetUrl(rawImg);
+    wsTokenInfo?.image_url ||
+    tokenAny.logo ||
+    tokenAny.image ||
+    tokenAny.image_url ||
+    token.logo ||
+    tokenAny.uri;
+  const computedImgSrc = normalizeAssetUrl(rawImg);
+
+  // Use ref to persist last valid image and prevent flickering
+  const lastValidImgRef = useRef<string | null>(null);
+  if (computedImgSrc) {
+    lastValidImgRef.current = computedImgSrc;
+  }
+  const imgSrc = computedImgSrc || lastValidImgRef.current;
+
   const fallbackAvatar = `https://ui-avatars.com/api/?name=${encodeURIComponent(
     token.symbol || token.name || "T",
   )}&background=0f1012&color=E6E7EA&size=36`;
@@ -1051,318 +1139,149 @@ const TradeHeader: React.FC<TradeHeaderProps> = ({ token, livePriceUsd, liveMark
                               </Link>
                             )} */}
 
-              {/* X Profile Preview Button */}
+              {/* X Profile Preview Button - PulseTable style */}
               <div className="relative">
                 <button
-                  className="flex items-center justify-center rounded transition-colors duration-200"
-                  onMouseEnter={(e) => {
-                    const tooltip = document.getElementById(
-                      `profile-tooltip`,
-                    ) as HTMLElement;
-                    if (tooltip) {
-                      const rect = e.currentTarget.getBoundingClientRect();
-                      tooltip.style.left = `${rect.left + rect.width / 2}px`;
-                      tooltip.style.top = `${rect.top - 10}px`;
-                      tooltip.style.opacity = "1";
-                    }
-                    // Show X profile preview
-                    setShowXPreview(true);
-                    // Store button position for popup positioning
-                    const buttonRect = e.currentTarget.getBoundingClientRect();
-                    setButtonPosition({
-                      left: buttonRect.left + buttonRect.width / 2,
-                      top: buttonRect.top - 20,
-                    });
-                  }}
-                  onMouseLeave={(e) => {
-                    const tooltip = document.getElementById(
-                      `profile-tooltip`,
-                    ) as HTMLElement;
-                    if (tooltip) tooltip.style.opacity = "0";
-                  }}
+                  ref={xButtonRef}
+                  className="flex items-center justify-center rounded p-1 transition-colors duration-200 hover:bg-white/10"
                   onClick={(e) => {
                     e.stopPropagation();
-                    e.preventDefault(); // Prevent Link navigation
-                    // Open X profile in new tab
-                    const profileUrl = `https://twitter.com/${token.symbol?.toLowerCase() || "search"}`;
-                    window.open(profileUrl, "_blank");
+                    e.preventDefault();
+                    window.open(twitterProfileUrl, "_blank");
+                  }}
+                  onMouseEnter={() => {
+                    isOverXButton.current = true;
+                    if (xButtonRef.current) {
+                      const rect = xButtonRef.current.getBoundingClientRect();
+                      const previewHeight = 320; // Approximate height of X preview
+                      const previewWidth = 280; // Width of X preview
+                      const spaceAbove = rect.top;
+                      const openBelow = spaceAbove < previewHeight + 20;
+
+                      // Position to the right of button, ensuring it doesn't go off screen
+                      let leftPos = rect.right + 8; // 8px gap from button
+
+                      // If it would go off the right edge, position to the left instead
+                      if (leftPos + previewWidth > window.innerWidth - 10) {
+                        leftPos = rect.left - previewWidth - 8;
+                      }
+
+                      setXPreviewPos({
+                        left: leftPos,
+                        top: openBelow ? rect.top : rect.bottom - previewHeight,
+                        openBelow,
+                      });
+                    }
+                    setShowXPreview(true);
+                  }}
+                  onMouseLeave={() => {
+                    isOverXButton.current = false;
+                    // Delay to allow moving to popup
+                    setTimeout(() => {
+                      if (!isOverXPreview.current && !isOverXButton.current) {
+                        setShowXPreview(false);
+                      }
+                    }, 200);
                   }}
                 >
-                  <FaXTwitter size={16} className="text-neutral-400" />
+                  <FaXTwitter size={16} className="text-neutral-400 hover:text-white" />
                 </button>
 
-                <div
-                  key={`search-tooltip`}
-                  id={`search-tooltip`}
-                  className="pointer-events-none fixed rounded px-2 py-1 text-xs font-medium whitespace-nowrap opacity-0 transition-opacity duration-200"
-                  style={{
-                    zIndex: 99999,
-                    backgroundColor: AX.surface,
-                    color: AX.text,
-                    border: `1px solid ${AX.border}`,
-                    boxShadow: `0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06), 0 0 8px ${AX.glowCyan}`,
-                    transform: "translate(-50%, -100%)",
-                  }}
-                >
-                  Search on Twitter
-                  {/* Tooltip arrow */}
+                {/* X Profile Preview Popup - PulseTable style */}
+                {showXPreview && (
                   <div
-                    className="absolute top-full left-1/2 h-0 w-0 -translate-x-1/2 transform border-t-4 border-r-4 border-l-4 border-transparent"
-                    style={{ borderTopColor: AX.surface }}
-                  ></div>
-                </div>
-
-                <div
-                  key={`profile-tooltip`}
-                  id={`profile-tooltip`}
-                  className="pointer-events-none fixed rounded px-2 py-1 text-xs font-medium whitespace-nowrap opacity-0 transition-opacity duration-200"
-                  style={{
-                    zIndex: 99999,
-                    backgroundColor: AX.surface,
-                    color: AX.text,
-                    border: `1px solid ${AX.border}`,
-                    boxShadow: `0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06), 0 0 8px ${AX.glowBlue}`,
-                    transform: "translate(-50%, -100%)",
-                  }}
-                >
-                  View X Profile
-                  {/* Tooltip arrow */}
-                  <div
-                    className="absolute top-full left-1/2 h-0 w-0 -translate-x-1/2 transform border-t-4 border-r-4 border-l-4 border-transparent"
-                    style={{ borderTopColor: AX.surface }}
-                  ></div>
-                </div>
-
-                {/* Small X Profile Preview - positioned near token */}
-                {showXPreview && buttonPosition && (
-                  <div
-                    className="fixed"
+                    className="fixed z-[999999]"
                     style={{
-                      left: `${buttonPosition.left}px`,
-                      top: `${buttonPosition.top - 300}px`,
-                      transform: "translate(-50%, 0)",
-                      width: "280px",
-                      zIndex: 999999,
+                      left: `${xPreviewPos.left}px`,
+                      top: `${xPreviewPos.top}px`,
                     }}
                     onMouseEnter={() => {
-                      // Keep popup open when hovering over it
+                      isOverXPreview.current = true;
                     }}
                     onMouseLeave={() => {
-                      // Hide popup when leaving the popup area
-                      setShowXPreview(false);
+                      isOverXPreview.current = false;
+                      setTimeout(() => {
+                        if (!isOverXPreview.current && !isOverXButton.current) {
+                          setShowXPreview(false);
+                        }
+                      }, 200);
                     }}
                   >
                     <div
-                      className="overflow-hidden rounded-xl"
+                      className="overflow-hidden rounded-xl w-[280px]"
                       style={{
-                        backgroundColor: AX.surface,
-                        border: `1px solid ${AX.border}`,
-                        boxShadow: `0 12px 48px rgba(0, 0, 0, 0.5), 0 0 24px ${AX.glowBlue}`,
-                        backdropFilter: "blur(10px)",
+                        backgroundColor: "#16181c",
+                        border: "1px solid #2f3336",
+                        boxShadow: "0 8px 28px rgba(0, 0, 0, 0.75)",
                       }}
                     >
-                      {/* X Icon Header */}
-                      <div
-                        className="flex items-center justify-between border-b px-4 py-3"
-                        style={{ borderColor: "#2f3336" }}
-                      >
-                        <div className="flex items-center gap-3">
-                          <div
-                            className="flex h-7 w-7 items-center justify-center rounded-full"
-                            style={{
-                              backgroundColor: "#1d9bf0",
-                            }}
-                          >
-                            <svg
-                              width="16"
-                              height="16"
-                              viewBox="0 0 24 24"
-                              fill="currentColor"
-                              style={{ color: "#f0f5f5" }}
-                            >
-                              <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z" />
-                            </svg>
-                          </div>
-                          <div>
-                            <div
-                              className="text-sm font-bold"
-                              style={{ color: "#f0f5f5" }}
-                            >
-                              X Profile
-                            </div>
-                            <div className="text-xs text-gray-400">
-                              Live Preview
-                            </div>
-                          </div>
-                        </div>
-                        <div className="flex items-center gap-1">
-                          <div
-                            className="h-2 w-2 rounded-full"
-                            style={{
-                              backgroundColor: "#31e3ac",
-                            }}
-                          ></div>
-                          <span className="text-xs text-gray-400">Live</span>
-                        </div>
-                      </div>
-
-                      {/* Official X Profile Layout */}
-                      <div className="px-4 py-4">
-                        {/* Profile Picture */}
-                        <div className="mb-4 flex justify-center">
-                          <div
-                            className="h-20 w-20 overflow-hidden rounded-full"
-                            style={{
-                              backgroundColor: "#1a1a1a",
-                              border: `3px solid #2f3336`,
-                            }}
-                          >
+                      {/* Header with X logo */}
+                      <div className="flex items-center justify-between px-4 py-3 border-b border-[#2f3336]">
+                        <div className="flex items-center gap-2">
+                          {/* Profile Picture */}
+                          <div className="h-12 w-12 rounded-full overflow-hidden bg-[#1a1a1a] flex-shrink-0">
                             <img
-                              src={`https://ui-avatars.com/api/?name=${token.symbol || "Token"}&size=80&background=1a1a1a&color=ffffff&bold=true`}
-                              alt={`${token.symbol} profile`}
+                              src={imgSrc || fallbackAvatar}
+                              alt={token.symbol}
                               className="h-full w-full object-cover"
                               onError={(e) => {
-                                const target = e.target as HTMLImageElement;
-                                target.style.display = "none";
-                                const fallback =
-                                  target.nextElementSibling as HTMLElement;
-                                if (fallback) fallback.style.display = "flex";
+                                (e.target as HTMLImageElement).src = fallbackAvatar;
                               }}
                             />
-                            <div
-                              className="flex h-full w-full items-center justify-center text-xl font-bold"
-                              style={{
-                                backgroundColor: "#1a1a1a",
-                                color: "#f0f5f5",
-                                display: "none",
-                              }}
-                            >
-                              {token.symbol?.slice(0, 2) || "??"}
-                            </div>
                           </div>
-                        </div>
-
-                        {/* Profile Info */}
-                        <div className="mb-4 text-center">
-                          <div className="mb-1 flex items-center justify-center gap-2">
-                            <h3
-                              className="text-xl font-bold"
-                              style={{ color: "#f0f5f5" }}
-                            >
-                              {token.symbol || "Unknown"}
-                            </h3>
-                            {/* Verified Badge */}
-                            <div
-                              className="flex h-6 w-6 items-center justify-center rounded-full"
-                              style={{
-                                backgroundColor: "#1d9bf0",
-                              }}
-                            >
-                              <svg
-                                width="14"
-                                height="14"
-                                viewBox="0 0 24 24"
-                                fill="none"
-                                stroke="#f0f5f5"
-                                strokeWidth="2"
-                                strokeLinecap="round"
-                                strokeLinejoin="round"
-                              >
-                                <path d="M9 12l2 2 4-4" />
-                                <path d="M21 12c0 4.97-4.03 9-9 9s-9-4.03-9-9 4.03-9 9-9 9 4.03 9 9z" />
+                          <div>
+                            <div className="flex items-center gap-1">
+                              <span className="text-white font-bold text-sm">{token.name || token.symbol}</span>
+                              <svg className="w-4 h-4 text-[#1d9bf0]" viewBox="0 0 24 24" fill="currentColor">
+                                <path d="M22.5 12.5c0-1.58-.875-2.95-2.148-3.6.154-.435.238-.905.238-1.4 0-2.21-1.71-3.998-3.818-3.998-.47 0-.92.084-1.336.25C14.818 2.415 13.51 1.5 12 1.5s-2.816.917-3.437 2.25c-.415-.165-.866-.25-1.336-.25-2.11 0-3.818 1.79-3.818 4 0 .494.083.964.237 1.4-1.272.65-2.147 2.018-2.147 3.6 0 1.495.782 2.798 1.942 3.486-.02.17-.032.34-.032.514 0 2.21 1.708 4 3.818 4 .47 0 .92-.086 1.335-.25.62 1.334 1.926 2.25 3.437 2.25 1.512 0 2.818-.916 3.437-2.25.415.163.865.248 1.336.248 2.11 0 3.818-1.79 3.818-4 0-.174-.012-.344-.033-.513 1.158-.687 1.943-1.99 1.943-3.484zm-6.616-3.334l-4.334 6.5c-.145.217-.382.334-.625.334-.143 0-.288-.04-.416-.126l-.115-.094-2.415-2.415c-.293-.293-.293-.768 0-1.06s.768-.294 1.06 0l1.77 1.767 3.825-5.74c.23-.345.696-.436 1.04-.207.346.23.44.696.21 1.04z"/>
                               </svg>
                             </div>
+                            <div className="flex items-center gap-1 text-gray-500 text-xs">
+                              <span>@{twitterHandle || token.symbol?.toLowerCase()}</span>
+                              <span>·</span>
+                              <span>+</span>
+                            </div>
                           </div>
-                          <p className="mb-3 text-sm text-gray-400">
-                            @{token.symbol?.toLowerCase() || "unknown"}
-                          </p>
-                          <p
-                            className="px-2 text-sm leading-relaxed"
-                            style={{ color: "#f0f5f5" }}
-                          >
-                            {token.description ||
-                              `Official ${token.symbol || "token"} community. Join the conversation!`}
-                          </p>
                         </div>
-
-                        {/* Follow Button */}
-                        <div className="mb-4 flex justify-center">
-                          <button
-                            className="rounded-full px-6 py-2 text-sm font-semibold transition-all duration-200"
-                            style={{
-                              backgroundColor: "#f0f5f5",
-                              color: "#000000",
-                            }}
-                            onMouseEnter={(e) => {
-                              e.currentTarget.style.backgroundColor = "#e7e9ea";
-                            }}
-                            onMouseLeave={(e) => {
-                              e.currentTarget.style.backgroundColor = "#f0f5f5";
-                            }}
-                          >
-                            Follow
-                          </button>
-                        </div>
+                        <FaXTwitter size={20} className="text-white" />
                       </div>
 
-                      {/* Join Date Section */}
-                      <div className="px-4 pb-3">
-                        <div className="flex items-center justify-center gap-2 text-sm text-gray-400">
-                          <svg
-                            width="14"
-                            height="14"
-                            viewBox="0 0 24 24"
-                            fill="none"
-                            stroke="currentColor"
-                            strokeWidth="2"
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                          >
-                            <rect
-                              x="3"
-                              y="4"
-                              width="18"
-                              height="18"
-                              rx="2"
-                              ry="2"
-                            />
-                            <line x1="16" y1="2" x2="16" y2="6" />
-                            <line x1="8" y1="2" x2="8" y2="6" />
-                            <line x1="3" y1="10" x2="21" y2="10" />
+                      {/* Bio/Description */}
+                      <div className="px-4 py-3">
+                        <p className="text-white text-sm leading-relaxed">
+                          {token.description || `Official ${token.symbol} token`}
+                        </p>
+                      </div>
+
+                      {/* Stats - Joined Date */}
+                      <div className="px-4 pb-3 flex items-center gap-4 text-sm">
+                        <div className="flex items-center gap-1 text-gray-500">
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <rect x="3" y="4" width="18" height="18" rx="2" ry="2" strokeWidth="2"/>
+                            <line x1="16" y1="2" x2="16" y2="6" strokeWidth="2"/>
+                            <line x1="8" y1="2" x2="8" y2="6" strokeWidth="2"/>
+                            <line x1="3" y1="10" x2="21" y2="10" strokeWidth="2"/>
                           </svg>
-                          <span>
-                            Joined{" "}
-                            {new Date().toLocaleDateString("en-US", {
-                              month: "short",
-                              year: "numeric",
-                            })}
-                          </span>
+                          <span>Joined {new Date(token.created_at || Date.now()).toLocaleDateString('en-US', { month: 'short', year: 'numeric' })}</span>
                         </div>
                       </div>
-                      {/* Action Button */}
+
+                      {/* Following/Followers */}
+                      <div className="px-4 pb-3 flex items-center gap-4 text-sm">
+                        <span><strong className="text-white">--</strong> <span className="text-gray-500">Following</span></span>
+                        <span><strong className="text-white">--</strong> <span className="text-gray-500">Followers</span></span>
+                      </div>
+
+                      {/* CTA Button */}
                       <div className="px-4 pb-4">
                         <button
-                          className="w-full rounded-full px-4 py-3 text-sm font-semibold transition-all duration-200"
-                          style={{
-                            backgroundColor: "#1d9bf0",
-                            color: "#ffffff",
-                            border: "1px solid #1d9bf0",
-                          }}
-                          onMouseEnter={(e) => {
-                            e.currentTarget.style.backgroundColor = "#1a8cd8";
-                            e.currentTarget.style.borderColor = "#1a8cd8";
-                          }}
-                          onMouseLeave={(e) => {
-                            e.currentTarget.style.backgroundColor = "#1d9bf0";
-                            e.currentTarget.style.borderColor = "#1d9bf0";
-                          }}
+                          className="w-full py-2.5 rounded-full text-[#1d9bf0] font-semibold text-sm border border-[#536471] hover:bg-[#1d9bf0]/10 transition-colors"
                           onClick={(e) => {
                             e.stopPropagation();
-                            const profileUrl = `https://twitter.com/${token.symbol?.toLowerCase() || "search"}`;
-                            window.open(profileUrl, "_blank");
+                            window.open(twitterProfileUrl, "_blank");
                           }}
                         >
-                          See profile on X
+                          See Profile on X
                         </button>
                       </div>
                     </div>
@@ -1382,39 +1301,132 @@ const TradeHeader: React.FC<TradeHeaderProps> = ({ token, livePriceUsd, liveMark
                 </button>
               )}
 
-              {/* Search on Twitter Button - show for all tokens */}
-              <button
-                className="cursor-pointer transition-colors duration-200"
-                style={{ color: AX.muted }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.color = AX.aiCyan;
-                  const tooltip = document.getElementById(
-                    `search-tooltip`,
-                  ) as HTMLElement;
-                  if (tooltip) {
+              {/* Search Button - show dropdown menu on hover */}
+              <div className="relative">
+                <button
+                  className="cursor-pointer transition-colors duration-200"
+                  style={{ color: showSearchMenu ? AX.aiCyan : AX.muted }}
+                  onMouseEnter={(e) => {
+                    isOverSearchButton.current = true;
+                    e.currentTarget.style.color = AX.aiCyan;
                     const rect = e.currentTarget.getBoundingClientRect();
-                    tooltip.style.left = `${rect.left + rect.width / 2}px`;
-                    tooltip.style.top = `${rect.top - 10}px`;
-                    tooltip.style.opacity = "1";
-                  }
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.color = AX.muted;
-                  const tooltip = document.getElementById(
-                    `search-tooltip`,
-                  ) as HTMLElement;
-                  if (tooltip) tooltip.style.opacity = "0";
-                }}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  e.preventDefault(); // Prevent Link navigation
-                  const searchQuery = `${token.symbol} ${token.name}`.trim();
-                  const twitterUrl = `https://twitter.com/search?q=${encodeURIComponent(searchQuery)}`;
-                  window.open(twitterUrl, "_blank");
-                }}
-              >
-                <LuSearch size={16} />
-              </button>
+                    const openAbove = rect.bottom + 200 > window.innerHeight;
+                    setSearchMenuPosition({
+                      left: rect.left + rect.width / 2,
+                      top: openAbove ? rect.top : rect.bottom + 4,
+                      openAbove,
+                    });
+                    setShowSearchMenu(true);
+                  }}
+                  onMouseLeave={(e) => {
+                    isOverSearchButton.current = false;
+                    e.currentTarget.style.color = showSearchMenu ? AX.aiCyan : AX.muted;
+                    // Delay to allow moving to the dropdown
+                    setTimeout(() => {
+                      if (!isOverSearchMenu.current && !isOverSearchButton.current) {
+                        setShowSearchMenu(false);
+                      }
+                    }, 200);
+                  }}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    e.preventDefault();
+                  }}
+                >
+                  <LuSearch size={16} />
+                </button>
+
+                {/* Search Dropdown Menu */}
+                {showSearchMenu && (
+                  <div
+                    ref={searchMenuRef}
+                    className="fixed min-w-[220px] rounded-lg border border-[#2a2b33] bg-[#16171C] py-1 z-[999999]"
+                    style={{
+                      left: `${Math.min(searchMenuPosition.left, window.innerWidth - 230)}px`,
+                      top: `${searchMenuPosition.top}px`,
+                      transform: searchMenuPosition.openAbove ? "translateY(-100%)" : "none",
+                      boxShadow: "0 8px 32px rgba(0, 0, 0, 0.6)",
+                    }}
+                    onMouseEnter={() => {
+                      isOverSearchMenu.current = true;
+                    }}
+                    onMouseLeave={() => {
+                      isOverSearchMenu.current = false;
+                      setTimeout(() => {
+                        if (!isOverSearchMenu.current && !isOverSearchButton.current) {
+                          setShowSearchMenu(false);
+                        }
+                      }, 200);
+                    }}
+                  >
+                    {/* X Search for Address */}
+                    <button
+                      className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-sm text-white hover:bg-white/10 transition-colors"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        const url = `https://twitter.com/search?q=${encodeURIComponent(token.mint || '')}`;
+                        window.open(url, "_blank");
+                        setShowSearchMenu(false);
+                      }}
+                    >
+                      <FaXTwitter size={14} className="text-neutral-400" />
+                      X Search for Address
+                    </button>
+
+                    {/* X Search for Name */}
+                    <button
+                      className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-sm text-white hover:bg-white/10 transition-colors"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        const searchQuery = `${token.symbol} ${token.name}`.trim();
+                        const url = `https://twitter.com/search?q=${encodeURIComponent(searchQuery)}`;
+                        window.open(url, "_blank");
+                        setShowSearchMenu(false);
+                      }}
+                    >
+                      <FaXTwitter size={14} className="text-neutral-400" />
+                      X Search for Name
+                    </button>
+
+                    {/* Divider */}
+                    <div className="my-1 border-t border-[#2a2b33]" />
+
+                    {/* Google Search for Name */}
+                    <button
+                      className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-sm text-white hover:bg-white/10 transition-colors"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        const searchQuery = `${token.symbol} ${token.name} crypto`.trim();
+                        const url = `https://www.google.com/search?q=${encodeURIComponent(searchQuery)}`;
+                        window.open(url, "_blank");
+                        setShowSearchMenu(false);
+                      }}
+                    >
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" className="text-neutral-400">
+                        <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
+                        <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
+                        <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/>
+                        <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/>
+                      </svg>
+                      Google Search for Name
+                    </button>
+
+                    {/* DexScreener Search */}
+                    <button
+                      className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-sm text-white hover:bg-white/10 transition-colors"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        const url = `https://dexscreener.com/solana/${token.mint}`;
+                        window.open(url, "_blank");
+                        setShowSearchMenu(false);
+                      }}
+                    >
+                      <LuSearch size={14} className="text-[#36d8ff]" />
+                      View on DexScreener
+                    </button>
+                  </div>
+                )}
+              </div>
 
               <div className="ml-1 flex flex-row gap-2 font-light">
                 {/* Check if this is a Monad token - hide icons for Monad */}
@@ -1431,30 +1443,69 @@ const TradeHeader: React.FC<TradeHeaderProps> = ({ token, livePriceUsd, liveMark
                     return null; // Hide all icons for Monad tokens
                   }
                   
+                  // Get dev token stats from wsTokenInfo
+                  const devCreated = wsTokenInfo?.dev_tokens_created ?? 0;
+                  const devMigrated = wsTokenInfo?.dev_tokens_migrated ?? 0;
+                  const devMigratedPct = devCreated > 0 ? Math.round((devMigrated / devCreated) * 100) : 0;
+
+                  // Get kol_count from holderSummary (priority) or token
+                  const kolCount = holderSummary?.kol_count ?? token.kol_count ?? 0;
+
+                  // Get total holders from holderSummary (priority), wsTokenInfo, or token
+                  const totalHolders = holderSummary?.total_holders ?? wsTokenInfo?.holder_count ?? token.holder_count ?? token.total_holders ?? (token as any).unique_wallets_24h ?? 0;
+
                   return (
                     <>
-                      <div className="flex items-center gap-1 text-violet-200">
-                        <PiCrownSimpleLight size={16} />
-                        <span className="text-sm text-white">0</span>
+                      {/* Crown Icon - Dev Migration Stats */}
+                      <div className="group/dev relative flex items-center gap-1 cursor-pointer">
+                        <PiCrownSimpleLight size={16} style={{ color: "#dcc13c" }} />
+                        <span className="text-sm text-white">
+                          {devMigrated}/{devCreated}
+                        </span>
+                        {/* Dev Migration Tooltip */}
+                        <div className="pointer-events-none absolute left-0 top-full mt-2 min-w-[180px] bg-[#1a1b1f] border border-[#2a2b33] rounded-lg opacity-0 group-hover/dev:opacity-100 group-hover/dev:pointer-events-auto transition-opacity duration-100 z-[99999] shadow-xl overflow-hidden">
+                          <div className="px-3 py-2 space-y-1.5">
+                            <div className="flex justify-between items-center">
+                              <span className="text-sm text-gray-400">Dev Migrated</span>
+                              <span className="text-sm text-white font-medium">{devMigrated}</span>
+                            </div>
+                            <div className="flex justify-between items-center">
+                              <span className="text-sm text-gray-400">Dev Launched</span>
+                              <span className="text-sm text-white font-medium">{devCreated}</span>
+                            </div>
+                            <div className="flex justify-between items-center">
+                              <span className="text-sm text-gray-400">Migrated</span>
+                              <span className="text-sm text-white font-medium">{devMigratedPct}%</span>
+                            </div>
+                          </div>
+                          <div className="px-3 py-2 border-t border-[#2a2b33] bg-[#16171a]">
+                            <span className="text-xs text-gray-500">Click to open Dev Tokens</span>
+                          </div>
+                        </div>
                       </div>
 
-                      <div className="flex items-center gap-1 text-violet-200">
+                      {/* KOL Count - Trophy Icon */}
+                      <div className="group/kol relative flex items-center gap-1 text-violet-200">
                         <CiTrophy size={16} />
-                        <span className="text-sm text-white">0</span>
+                        <span className="text-sm text-white">{kolCount}</span>
+                        {/* Tooltip */}
+                        <div className="pointer-events-none absolute left-0 top-full mt-2 px-3 py-2 bg-[#1a1b1f] border border-[#2a2b33] rounded-lg opacity-0 group-hover/kol:opacity-100 transition-opacity duration-100 whitespace-nowrap z-[99999] shadow-xl">
+                          <span className="text-sm text-white font-medium">KOL Count</span>
+                          <p className="text-xs text-gray-400 mt-0.5">Key Opinion Leaders holding this token</p>
+                        </div>
                       </div>
 
                       {/* People Icon - Total Holders */}
-                      <div className="relative flex items-center gap-1">
+                      <div className="group/holder relative flex items-center gap-1">
                         <div
-                          className="flex cursor-help items-center justify-center rounded text-violet-200"
-                          title="Holders"
+                          className="flex cursor-help items-center justify-center rounded"
+                          style={{ color: "#36d8ff" }}
                         >
                           <GoPeople size={16} />
                         </div>
                         <span className="text-sm text-white">
                           {(() => {
-                            const holders =
-                              token.total_holders || token.unique_wallets_24h || 0;
+                            const holders = totalHolders;
                             if (holders >= 1e9)
                               return `${(holders / 1e9).toFixed(1)}B`;
                             if (holders >= 1e6)
@@ -1464,6 +1515,11 @@ const TradeHeader: React.FC<TradeHeaderProps> = ({ token, livePriceUsd, liveMark
                             return holders.toString();
                           })()}
                         </span>
+                        {/* Tooltip */}
+                        <div className="pointer-events-none absolute left-0 top-full mt-2 px-3 py-2 bg-[#1a1b1f] border border-[#2a2b33] rounded-lg opacity-0 group-hover/holder:opacity-100 transition-opacity duration-100 whitespace-nowrap z-[99999] shadow-xl">
+                          <span className="text-sm text-white font-medium">Holder Count</span>
+                          <p className="text-xs text-gray-400 mt-0.5">Total wallets holding this token</p>
+                        </div>
                       </div>
                       <div className="flex items-center gap-1 text-violet-200">
                         <PiRobotLight size={16} />
@@ -1513,10 +1569,10 @@ const TradeHeader: React.FC<TradeHeaderProps> = ({ token, livePriceUsd, liveMark
           </StatInline>
           <StatInline label="Liquidity">
             <span className="inline-flex items-center gap-1">
-              <span style={{ color: isLowLiquidity ? AX.warning : AX.text }}>
-                ${formatSmartNumber(liq)}
+              <span style={{ color: isLiquidityLoading ? AX.muted : (isLowLiquidity ? AX.warning : AX.text) }}>
+                {isLiquidityLoading ? '...' : `$${formatSmartNumber(liq)}`}
               </span>
-              {isLowLiquidity && (
+              {!isLiquidityLoading && isLowLiquidity && (
                 <span className="group relative inline-flex items-center">
                   <LuDroplet size={16} color={AX.warning} />
                   <span
@@ -1529,58 +1585,54 @@ const TradeHeader: React.FC<TradeHeaderProps> = ({ token, livePriceUsd, liveMark
               )}
             </span>
           </StatInline>
+          {/* 24H VOL - inline after Liquidity */}
+          {(() => {
+            // Hide for Monad tokens
+            const protocol = extractProtocolRaw(token);
+            const isMonad = protocol && (
+              protocol.includes('nad.fun') ||
+              protocol.includes('nadfun') ||
+              protocol.includes('flapsh') ||
+              protocol.includes('flap.sh') ||
+              protocol.includes('kuru')
+            );
+            if (isMonad) return null;
+
+            // SOL price for converting volume from SOL to USD
+            const SOL_PRICE_USD = 200;
+            const vol24h = wsVolume?.volume_24h;
+            const buyVolSol = vol24h?.buy_volume_sol ?? 0;
+            const sellVolSol = vol24h?.sell_volume_sol ?? 0;
+            const totalVol24hUsd = (buyVolSol + sellVolSol) * SOL_PRICE_USD;
+
+            // Only show if we have data
+            if (!wsVolume || totalVol24hUsd === 0) return null;
+
+            return (
+              <StatInline label="24H Vol">
+                ${formatSmartNumber(totalVol24hUsd)}
+              </StatInline>
+            );
+          })()}
           <StatInline label="Supply">{formatSmartNumber(supply)}</StatInline>
+          {/* Gas Fees - Commented out per request
+          <StatInline label="Gas Fees">
+            {formatLamportsToSol((wsTokenInfo as any)?.total_fees_lamports ?? (token as any)?.total_fees_lamports)}
+          </StatInline>
+          */}
           <StatInline label="B. Curve">
             <div className="flex flex-row items-center gap-2 text-xs">
               {Number.isFinite(Number(curvePct))
                 ? `${Number(curvePct).toFixed(1)}%`
                 : "—"}
-              <ColorFillBar 
-                value={curvePct * 100} 
+              <ColorFillBar
+                value={curvePct * 100}
                 color={isMonadContext ? MONAD_RED : undefined}
               />
             </div>
           </StatInline>
         </div>
       </div>
-
-      {/* RIGHT: Trade stats (24H VOL, BUYS, SELLS, NET) */}
-      {/* Hide for Monad tokens */}
-      {(() => {
-        const protocol = extractProtocolRaw(token);
-        const isMonad = protocol && (
-          protocol.includes('nad.fun') || 
-          protocol.includes('nadfun') || 
-          protocol.includes('flapsh') ||
-          protocol.includes('flap.sh') ||
-          protocol.includes('kuru')
-        );
-        
-        if (isMonad) {
-          return null; // Hide trade stats for Monad tokens
-        }
-        
-        return (
-          <div className="flex items-center gap-3 ml-auto mr-2">
-            <StatInline label="24H VOL">
-              ${formatSmartNumber((token as any)?.volume_24h ?? 0)}
-            </StatInline>
-            <StatInline label="BUYS" accent="green">
-              {(token as any)?.total_buys ?? 0} / ${formatSmartNumber((token as any)?.total_buy_volume_usd ?? 0)}
-            </StatInline>
-            <StatInline label="SELLS">
-              <span style={{ color: "#FF4D7F" }}>
-                {(token as any)?.total_sells ?? 0} / ${formatSmartNumber((token as any)?.total_sell_volume_usd ?? 0)}
-              </span>
-            </StatInline>
-            <StatInline label="NET">
-              <span style={{ color: ((token as any)?.net_volume_usd ?? 0) >= 0 ? AX.green : "#FF4D7F" }}>
-                {((token as any)?.net_volume_usd ?? 0) >= 0 ? "+" : ""}${formatSmartNumber((token as any)?.net_volume_usd ?? 0)}
-              </span>
-            </StatInline>
-          </div>
-        );
-      })()}
 
       {/* RIGHT: actions */}
       {(() => {

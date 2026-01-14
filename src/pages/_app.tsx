@@ -1,5 +1,4 @@
 import { type AppType } from "next/app";
-import { Inter } from "next/font/google";
 import "~/styles/globals.css";
 import "@rainbow-me/rainbowkit/styles.css";
 import { getDefaultConfig } from "@rainbow-me/rainbowkit";
@@ -374,7 +373,7 @@ function TurnkeySessionBridge() {
               router.asPath.includes("/turnkey/export") ||
               router.pathname === "/portfolio";
             if (!isOnExportPage) {
-              router.push("/pulse?chain=monad");
+              router.push("/pulse?chain=sol");
             } else {
               console.log("[TurnkeySessionBridge] User authenticated on export page, staying on page");
             }
@@ -432,11 +431,8 @@ const config = getDefaultConfig({
   ssr: true, // Keep SSR enabled, but handle client-side rendering in wrapper
 });
 
-const inter = Inter({
-  weight: ['400', '500'],
-  subsets: ['latin'],
-  variable: '--font-inter',
-});
+// Fallback font (Inter import removed for offline build)
+const inter: { className: string; variable?: string } = { className: '', variable: '--font-inter' };
 
 function TokenHandler() {
   const { refreshUser } = useUser();
@@ -632,6 +628,24 @@ const MyApp: AppType = ({ Component, pageProps }) => {
     <>
       <Head>
         <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes" />
+
+        <title>Interstate - The Fastest Exchange</title>
+        <meta name="description" content="Get ready to win on Interstate, the fastest exchange! Get free Solana for joining today, win daily Jackpots, level up and earn progressively higher rewards. Start trading today!" />
+
+        {/* Open Graph meta tags for social sharing */}
+        <meta property="og:title" content="Interstate - The Fastest Exchange" />
+        <meta property="og:description" content="Get ready to win on Interstate, the fastest exchange! Get free Solana for joining today, win daily Jackpots, level up and earn progressively higher rewards. Start trading today!" />
+        <meta property="og:image" content="https://app.interstate.so/referral-share.png" />
+        <meta property="og:image:width" content="1920" />
+        <meta property="og:image:height" content="1080" />
+        <meta property="og:type" content="website" />
+        <meta property="og:site_name" content="Interstate" />
+
+        {/* Twitter Card meta tags */}
+        <meta name="twitter:card" content="summary_large_image" />
+        <meta name="twitter:title" content="Interstate - The Fastest Exchange" />
+        <meta name="twitter:description" content="Get ready to win on Interstate, the fastest exchange! Get free Solana for joining today, win daily Jackpots, level up and earn progressively higher rewards. Start trading today!" />
+        <meta name="twitter:image" content="https://app.interstate.so/referral-share.png" />
         {/* Preload TradingView library for faster chart loading */}
         <link
           rel="preload"
@@ -639,8 +653,8 @@ const MyApp: AppType = ({ Component, pageProps }) => {
           as="script"
           crossOrigin="anonymous"
         />
-        <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png" />
-        <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png" />
+        <link rel="icon" type="image/png" sizes="32x32" href="/interstate/favicon-32x32.png" />
+        <link rel="icon" type="image/png" sizes="16x16" href="/interstate/favicon-16x16.png" />
         <style jsx global>{`
           html, body {
             background-color: #101114 !important;

@@ -44,7 +44,7 @@ const TwitterAccountRow: React.FC<TwitterAccountRowProps> = ({
 							onClick={() => window.open(`https://twitter.com/${account.username}`, '_blank')}
             />
           ) : (
-            <div className="w-8 h-8 rounded-full bg-blue-500 flex items-center justify-center text-white text-xs font-bold cursor-pointer" onClick={() => window.open(`https://twitter.com/${account.username}`, '_blank')}>
+            <div className="w-8 h-8 rounded-full bg-neutral-800 flex items-center justify-center text-neutral-300 text-xs font-bold cursor-pointer" onClick={() => window.open(`https://twitter.com/${account.username}`, '_blank')}>
               {account.name.charAt(0).toUpperCase()}
             </div>
           )}
@@ -64,17 +64,17 @@ const TwitterAccountRow: React.FC<TwitterAccountRowProps> = ({
       <td className="px-2 py-3 text-xs text-neutral-400">
         {formatDate(account.createdAt)}
       </td>
-      <td className="px-2 py-3">
-        <div className="flex gap-2 items-center justify-end">
+      <td className="px-1 py-2 sm:px-2 sm:py-3">
+        <div className="flex flex-col sm:flex-row gap-1 sm:gap-2 items-stretch sm:items-center justify-end">
           <button
             onClick={() => onViewProfile(account.username)}
-            className="px-3 py-1 text-xs font-semibold text-blue-400 hover:text-blue-300 transition-colors duration-300 border border-blue-500/30 hover:border-blue-500/50 rounded"
+            className="px-2 py-1 text-[10px] sm:px-3 sm:py-1.5 sm:text-xs font-medium text-neutral-300 hover:text-neutral-100 transition-all duration-300 border border-neutral-700/50 hover:border-neutral-600 rounded-lg bg-neutral-900/40 hover:bg-neutral-800/60 whitespace-nowrap"
           >
             View
           </button>
           <button
             onClick={() => onRemove(account.username)}
-            className="px-3 py-1 text-xs font-semibold text-red-400 hover:text-red-300 transition-colors duration-300 border border-red-500/30 hover:border-red-500/50 rounded"
+            className="px-2 py-1 text-[10px] sm:px-3 sm:py-1.5 sm:text-xs font-medium text-red-400 hover:text-red-300 transition-all duration-300 border border-red-500/30 hover:border-red-500/50 rounded-lg bg-red-500/5 hover:bg-red-500/10 whitespace-nowrap"
           >
             Remove
           </button>

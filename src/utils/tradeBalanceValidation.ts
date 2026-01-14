@@ -32,6 +32,13 @@ export interface SolanaBalanceValidationParams {
   bribe: number; // Bribe/MEV fee in SOL
 }
 
+type WalletInfo = {
+  id?: string | null;
+  ethereumAddress?: string | null;
+  address?: string | null;
+  solanaAddress?: string | null;
+};
+
 // Constants
 const MONAD_SAFETY_BUFFER = 0.1; // 0.1 MON for gas fluctuations
 const MONAD_ESTIMATED_GAS = 300000; // Default gas estimate for Monad trades
@@ -75,6 +82,52 @@ export function validateMonadBalance(params: MonadBalanceValidationParams): Bala
     errorMessage: null,
     details: null,
   };
+}
+
+/**
+ * Compute the effective MON balance for validation using the selected wallets when provided.
+ * Falls back to chain balance when no wallet selection is available.
+ */
+export function computeMonadBalanceForValidation({
+  selectedWalletIds = [],
+  walletList = [],
+  walletBalances = {},
+  fallbackBalance = 0,
+}: {
+  selectedWalletIds?: string[];
+  walletList?: WalletInfo[];
+  walletBalances?: Record<string, number>;
+  fallbackBalance?: number;
+}): number {
+  const selection = new Set(selectedWalletIds.filter(Boolean));
+  if (selection.size === 0) {
+    return fallbackBalance;
+  }
+
+  const toAddress = (wallet: WalletInfo): string | undefined => {
+    const addr = wallet.ethereumAddress || wallet.address || wallet.solanaAddress;
+    return addr ? addr.toLowerCase() : undefined;
+  };
+
+  const uniqueAddresses = new Set<string>();
+  let total = 0;
+
+  for (const wallet of walletList || []) {
+    if (!wallet || !wallet.id) continue;
+    if (!selection.has(wallet.id)) continue;
+    const addr = toAddress(wallet);
+    if (!addr) continue;
+    if (uniqueAddresses.has(addr)) continue;
+    uniqueAddresses.add(addr);
+    const bal =
+      walletBalances?.[addr] ??
+      walletBalances?.[addr.toLowerCase()] ??
+      walletBalances?.[addr.toUpperCase()] ??
+      0;
+    total += bal;
+  }
+
+  return total > 0 ? total : fallbackBalance;
 }
 
 /**

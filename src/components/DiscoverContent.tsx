@@ -1076,12 +1076,14 @@ export default function DiscoverContent() {
           >
             New Pairs
           </button>
+          {/* xStocks tab temporarily disabled - data not available
           <button
             className={`text-sm sm:text-base lg:text-lg font-light transition-colors whitespace-nowrap ${activeTab === "xStocks" ? "text-[#f0f5f5]" : "text-[#6B7280] hover:text-[#f0f5f5]"} cursor-pointer`}
             onClick={() => setActiveTab("xStocks")}
           >
             xStocks
           </button>
+          */}
           <button
             className={`text-sm sm:text-base lg:text-lg font-light transition-colors whitespace-nowrap ${activeTab === "surge" ? "text-[#f0f5f5]" : "text-[#6B7280] hover:text-[#f0f5f5]"} cursor-pointer`}
             onClick={() => setActiveTab("surge")}

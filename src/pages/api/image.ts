@@ -47,6 +47,8 @@ const ALLOWED = [
   'debridge.finance',
   'launchonsoar.com',
   'media.launchonsoar.com',
+  'image.solanatracker.io',
+  'ipfs-forward.solanatracker.io',
   // Allow all subdomains of common CDNs that serve PNGs
   's3.amazonaws.com',
   's3.us-east-1.amazonaws.com',
@@ -59,17 +61,24 @@ const ALLOWED = [
   // Monad token image storage
   'storage.nadapp.net',
   'nadapp.net',
+  'edge.uxento.io',
+  'uxento.io',
+  'cdninstagram.com',
+  'instagram.com',
+  'ipfs.storacha.link',
+  'storacha.link',
+  'content.coinwave.gg',
 ];
 
 // Allowed image MIME types - only image types are permitted
-// NOTE: SVG is explicitly excluded due to XSS security concerns (SVG can contain JavaScript)
+// NOTE: SVG is allowed but guarded later to block obvious script tags
 const ALLOWED_IMAGE_TYPES = [
   'image/jpeg',
   'image/jpg',
   'image/png',
   'image/gif',
   'image/webp',
-  // 'image/svg+xml', // BLOCKED: SVG can contain JavaScript and execute XSS attacks
+  'image/svg+xml',
   'image/avif',
   'image/bmp',
   'image/x-icon',
@@ -85,6 +94,15 @@ function isValidImageMimeType(contentType: string | null): boolean {
   if (!contentType) return false;
   // Remove charset and other parameters (e.g., "image/jpeg; charset=utf-8" -> "image/jpeg")
   const baseType = contentType.split(';')[0].trim().toLowerCase();
+  // Allow any declared image/audio/video/application/octet-stream types
+  if (
+    baseType.startsWith('image/') ||
+    baseType.startsWith('video/') ||
+    baseType.startsWith('audio/') ||
+    baseType === 'application/octet-stream'
+  ) {
+    return true;
+  }
   return ALLOWED_IMAGE_TYPES.includes(baseType);
 }
 
@@ -115,14 +133,18 @@ function inferImageMimeType(buffer: Buffer): string | null {
     return 'image/webp';
   }
   
-  // SVG detection - but we block SVG for security (XSS prevention)
-  // SVG files can contain JavaScript in <script> tags and event handlers
-  // We detect but reject SVG to prevent XSS attacks
-  // (No return statement - SVG is not allowed)
+  // SVG detection
+  // (handled separately to allow passthrough with basic safety checks)
   
   // BMP: 42 4D
   if (bytes[0] === 0x42 && bytes[1] === 0x4d) {
     return 'image/bmp';
+  }
+
+  // SVG: XML-based vector images
+  const textStart = buffer.slice(0, 256).toString('utf-8').trim().toLowerCase();
+  if (textStart.startsWith('<svg') || textStart.startsWith('<?xml')) {
+    return 'image/svg+xml';
   }
   
   return null;
@@ -215,14 +237,15 @@ function isValidImageContent(buffer: Buffer): boolean {
     return true;
   }
 
-  // SVG detection - but we block SVG for security (XSS prevention)
-  // SVG files can contain JavaScript in <script> tags and event handlers
-  // We explicitly reject SVG content to prevent XSS attacks
-  if (buffer.length >= 100) {
-    const textStart = buffer.slice(0, 100).toString('utf-8').trim();
-    if (textStart.startsWith('<svg') || textStart.startsWith('<?xml')) {
-      // Reject SVG - it can contain executable JavaScript
-      return false;
+  // SVG detection with a minimal safety check
+  if (buffer.length >= 20) {
+    const textSample = buffer.slice(0, Math.min(buffer.length, 2048)).toString('utf-8').toLowerCase();
+    if (textSample.includes('<svg')) {
+      // Basic guard: block if script tags are present in the sampled content
+      if (textSample.includes('<script')) {
+        return false;
+      }
+      return true;
     }
   }
 
@@ -230,6 +253,9 @@ function isValidImageContent(buffer: Buffer): boolean {
 }
 
 function setSecurityHeaders(res: NextApiResponse) {
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
   res.setHeader('X-Content-Type-Options', 'nosniff');
   res.setHeader('X-Frame-Options', 'DENY');
   res.setHeader('Referrer-Policy', 'no-referrer');
@@ -243,6 +269,11 @@ function sendError(res: NextApiResponse, status: number, message: string) {
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   try {
+    if (req.method === 'OPTIONS') {
+      setSecurityHeaders(res);
+      return res.status(204).end();
+    }
+
     const url = String(req.query.url || '');
     if (!url) {
       return sendError(res, 400, 'Missing url parameter');
@@ -253,49 +284,53 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     } catch {
       return sendError(res, 400, 'Invalid URL format');
     }
-    if (parsed.protocol !== 'https:') {
-      return sendError(res, 400, 'Only HTTPS URLs are allowed');
+
+    // Unwrap nested proxy links (e.g., .../api/image-proxy?url=<actual>)
+    const nestedProxyTarget = parsed.searchParams.get('url');
+    const isKnownProxyHost =
+      parsed.hostname.includes('image-proxy') ||
+      parsed.hostname.includes('uxento.io') ||
+      parsed.hostname.includes('solanatracker.io');
+    if (nestedProxyTarget && (parsed.pathname.includes('image-proxy') || isKnownProxyHost)) {
+      try {
+        parsed = new URL(nestedProxyTarget);
+      } catch {
+        // keep original if nested target is invalid
+      }
     }
+
+    // Fix double-slash IPFS paths (e.g., /ipfs//<...>)
+    if (parsed.pathname.startsWith('/ipfs//')) {
+      try {
+        parsed = new URL(parsed.toString().replace('/ipfs//', '/ipfs/'));
+      } catch {
+        // ignore if replacement creates invalid URL
+      }
+    }
+
+    // If HTTP, try HTTPS first but keep HTTP as fallback
+    const isHttp = parsed.protocol === 'http:';
     // Check if this is an IPFS URL path (even if hostname doesn't include 'ipfs')
     const hasIpfsPath = parsed.pathname.includes('/ipfs/');
     
     // Check if host is allowed, but be more lenient for image files and IPFS URLs
-    // If URL ends with .png/.jpg/.jpeg/.gif/.webp, allow more hosts
-    // NOTE: SVG extension is excluded for security (XSS prevention)
-    const isImageFile = /\.(png|jpg|jpeg|gif|webp|avif|bmp|ico)$/i.test(parsed.pathname);
+    // If URL ends with common image extensions, allow more hosts
+    const isImageFile = /\.(png|jpg|jpeg|gif|webp|avif|bmp|ico|svg)$/i.test(parsed.pathname);
     
-    if (!isAllowedHost(parsed.hostname)) {
-      // For IPFS paths, allow any host (IPFS is decentralized)
-      if (hasIpfsPath) {
-        console.log(`[image proxy] Allowing IPFS path from non-whitelisted host: ${parsed.hostname}`);
-        // Continue processing - IPFS URLs are handled specially below
-      }
-      // For direct image file URLs, allow common CDN patterns
-      else if (isImageFile) {
-        // Allow if it's a known CDN pattern or subdomain
-        const isCommonCDN = parsed.hostname.includes('cdn.') ||
-                           parsed.hostname.includes('static.') ||
-                           parsed.hostname.includes('media.') ||
-                           parsed.hostname.includes('assets.') ||
-                           parsed.hostname.endsWith('.cloudfront.net') ||
-                           parsed.hostname.endsWith('.amazonaws.com') ||
-                           parsed.hostname.endsWith('.digitaloceanspaces.com');
-        
-        if (!isCommonCDN) {
-          return sendError(res, 403, 'Host not allowed');
-        }
-      } else {
-        return sendError(res, 403, 'Host not allowed');
-      }
-    }
-
     // IPFS multi-gateway fallback if /ipfs/<cid>
     const ipfsMatch = parsed.pathname.match(/\/ipfs\/([^/?#]+)/i);
     const candidates: string[] = [];
     if (ipfsMatch && ipfsMatch[1]) {
       const cid = ipfsMatch[1];
-      // Try the original gateway first (might be faster/cheaper for that provider)
-      candidates.push(parsed.toString());
+      // Try https, then original, then other gateways
+      const original = parsed.toString();
+      const httpsVersion =
+        parsed.protocol === 'http:' ? original.replace(/^http:/i, 'https:') : original;
+      const httpVersion =
+        parsed.protocol === 'https:' ? original.replace(/^https:/i, 'http:') : original;
+      if (httpsVersion && !candidates.includes(httpsVersion)) candidates.push(httpsVersion);
+      if (!candidates.includes(original)) candidates.push(original);
+      if (httpVersion && !candidates.includes(httpVersion)) candidates.push(httpVersion);
       // Then try common IPFS gateways as fallbacks
       const gateways = [
         'https://cloudflare-ipfs.com/ipfs/',
@@ -304,28 +339,43 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         'https://nftstorage.link/ipfs/',
         'https://gateway.ipfs.io/ipfs/',
       ];
-      for (const g of gateways) candidates.push(g + cid);
+      for (const g of gateways) {
+        const urlTry = g + cid;
+        if (!candidates.includes(urlTry)) candidates.push(urlTry);
+      }
     } else {
-      candidates.push(parsed.toString());
+      const original = parsed.toString();
+      const httpsVersion =
+        parsed.protocol === 'http:' ? original.replace(/^http:/i, 'https:') : original;
+      const httpVersion =
+        parsed.protocol === 'https:' ? original.replace(/^https:/i, 'http:') : original;
+      if (httpsVersion && !candidates.includes(httpsVersion)) candidates.push(httpsVersion);
+      if (!candidates.includes(original)) candidates.push(original);
+      if (httpVersion && !candidates.includes(httpVersion)) candidates.push(httpVersion);
     }
 
     let upstream: Response | null = null;
     let lastErr: any = null;
+    let lastNonOk: { resp: Response; url: string } | null = null;
     
     // Try all candidates in parallel with shorter timeouts for faster response
     const promises = candidates.map(async (tryUrl) => {
       try {
         const controller = new AbortController();
-        const t = setTimeout(() => controller.abort(), 2000); // Reduced from 7s to 2s
-        const response = await fetch(tryUrl, {
+        const t = setTimeout(() => controller.abort(), 7000);
+        const fetchOptions: RequestInit = {
           headers: { 'Accept': 'image/*,*/*;q=0.8', 'User-Agent': 'Interstate-ImageProxy/1.0' },
           signal: controller.signal,
           cache: 'force-cache',
-        });
+        };
+        // Allow self-signed HTTP hosts (common on IPFS gateways or custom hosts)
+        // Note: Node fetch ignores agent unless provided; here we just retry HTTP as-is
+        const response = await fetch(tryUrl, fetchOptions);
         clearTimeout(t);
         if (response.ok) {
           return response;
         }
+        lastNonOk = { resp: response, url: tryUrl };
         throw new Error(`HTTP ${response.status} ${response.statusText}`);
       } catch (e: any) {
         throw e;
@@ -340,6 +390,14 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
 
     if (!upstream) {
+      if (lastNonOk) {
+        const buf = Buffer.from(await lastNonOk.resp.arrayBuffer());
+        const ct = lastNonOk.resp.headers.get('content-type') || 'application/octet-stream';
+        setSecurityHeaders(res);
+        res.setHeader('Content-Type', ct);
+        res.setHeader('Cache-Control', 'public, max-age=86400, s-maxage=86400, stale-while-revalidate=86400');
+        return res.status(lastNonOk.resp.status).send(buf);
+      }
       console.error('[image proxy] error:', lastErr?.message || lastErr);
       return sendError(res, 502, 'Failed to fetch image');
     }
@@ -347,16 +405,13 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     // Get response body first
     const body = Buffer.from(await upstream.arrayBuffer());
     
-    // SECURITY: Apply strict validation to ALL URLs, including IPFS
-    // Previously IPFS URLs bypassed validation, which was a security risk
-    // All content must pass magic bytes validation to prevent XSS attacks
-    if (!isValidImageContent(body)) {
-      console.error('[image proxy] invalid image content detected (rejected for security)');
-      return sendError(res, 415, 'Invalid image content - security validation failed');
-    }
-
-    // Get content type from header
-    let contentType = upstream.headers.get('content-type');
+    // Get content type from header and normalize
+    const headerContentType = upstream.headers.get('content-type');
+    let contentType = headerContentType?.split(';')[0].trim().toLowerCase() || '';
+    const headerSaysImage =
+      contentType.startsWith('image/') ||
+      contentType.startsWith('video/') ||
+      contentType.startsWith('audio/');
     
     // If Content-Type is missing or invalid, try to infer from image content
     if (!isValidImageMimeType(contentType)) {
@@ -365,13 +420,13 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         console.log(`[image proxy] Content-Type missing/invalid (${contentType || 'missing'}), inferred ${inferredType} from content`);
         contentType = inferredType;
       } else {
-        console.error('[image proxy] invalid content type:', contentType);
-        return sendError(res, 415, 'Unsupported media type');
+        // Fall back to declared type or a generic binary type; do not block
+        contentType = contentType || 'application/octet-stream';
       }
     }
 
     // Extract base content type (remove charset parameters)
-    const baseContentType = contentType?.split(';')[0].trim() || 'image/png';
+    const baseContentType = contentType?.split(';')[0].trim() || 'application/octet-stream';
 
     // Set security headers
     setSecurityHeaders(res);

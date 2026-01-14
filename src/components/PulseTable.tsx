@@ -68,7 +68,7 @@ import { SiSolana } from "react-icons/si";
 import Image from "next/image";
 import InterstatePopout from "./InterstatePopout";
 import VerticalInput from "./VerticalInput";
-import { usePulseWebSocket } from "~/hooks/usePulseWebSocket";
+import { usePulseWebSocketPersistent } from "~/hooks/usePulseWebSocketPersistent";
 import { flushSync } from "react-dom";
 
 import { useRouter } from "next/router";
@@ -81,7 +81,11 @@ import SniperHoldingsDisplay from "./SniperHoldingsDisplay";
 // import SolanaTokenAnalytics from "./SolanaTokenAnalytics";
 import { useUser } from "~/components/UserContext";
 import { useQuickBuy } from "~/components/QuickBuyContext";
-import { extractTokenImage } from "~/utils/images";
+import {
+  extractTokenImage,
+  isMetadataUrl,
+  resolveMetadataImage,
+} from "~/utils/images";
 import { useSolPrice } from "~/components/SolPriceContext";
 import { preloadTokenImages } from "~/utils/imagePreloader";
 import {
@@ -102,11 +106,16 @@ import {
 } from "~/utils/toast";
 import { executeEnhancedTrade } from "~/utils/enhancedTradeHandler";
 import { showEnhancedToast, updateEnhancedToast } from "~/utils/enhancedToast";
-import { executeSolanaMultiBuy, buildSolanaWalletAllocations } from "~/utils/solanaWalletAllocation";
+import {
+  executeSolanaMultiBuy,
+  buildSolanaWalletAllocations,
+} from "~/utils/solanaWalletAllocation";
 import useSolanaPositionWebSocket from "~/hooks/useSolanaPositionWebSocket";
+import { fetchVerifiedPairAddress } from "~/hooks/useSingleTokenPolling";
 import toast from "react-hot-toast";
 import { FiGlobe } from "react-icons/fi";
 import BottomCardInfoHolder from "./BottomCardInfoHolder";
+import InterstateTooltip from "./InterstateTooltip";
 
 /* ---- Enhanced Monad Green Palette (matching MonadTable) ---- */
 const AX = {
@@ -327,6 +336,22 @@ const getTokenTimestamp = (token: any, fields: readonly string[]): number => {
   return 0;
 };
 
+/**
+ * Safely extract market cap from token, skipping 0/negative/invalid values.
+ * Uses || instead of ?? to properly fall through when value is 0.
+ * Priority: fully_diluted_value > market_cap_usd > 0
+ */
+const getTokenMarketCap = (token: any): number => {
+  if (!token) return 0;
+  const fdv = token.fully_diluted_value;
+  const mc = token.market_cap_usd;
+  // Use || to skip 0 values (|| treats 0 as falsy, ?? does not)
+  // This ensures we fall through to the next value if current is 0
+  if (typeof fdv === 'number' && fdv > 0) return fdv;
+  if (typeof mc === 'number' && mc > 0) return mc;
+  return 0;
+};
+
 // Smart color system based on token properties
 interface SmartColorProps {
   children: React.ReactNode;
@@ -345,7 +370,7 @@ const SmartColor: React.FC<SmartColorProps> = ({
     const symbol = token.symbol?.toLowerCase() || "";
     const name = token.name?.toLowerCase() || "";
     const mint = token.mint || "";
-    const mc = token.fully_diluted_value || token.market_cap_usd || 0;
+    const mc = getTokenMarketCap(token);
 
     // Restrict MarketCap metric to approved palette only
     if (metricType === "marketCap") {
@@ -442,7 +467,7 @@ const SmartColor: React.FC<SmartColorProps> = ({
   );
 };
 
-// Smooth number transition component
+// Smooth number transition component - fast updates with smooth interpolation
 interface SmoothNumberProps {
   value: number;
   duration?: number;
@@ -451,34 +476,59 @@ interface SmoothNumberProps {
 }
 const SmoothNumber: React.FC<SmoothNumberProps> = ({
   value,
-  duration = 500,
+  duration = 300, // Faster default for snappy updates
   className = "",
   formatter = (val) => val.toString(),
 }) => {
-  const [displayValue, setDisplayValue] = useState(value);
-  const [isAnimating, setIsAnimating] = useState(false);
+  // Initialize with value only if it's valid (positive), otherwise 0
+  const initialValue = value > 0 ? value : 0;
+  const [displayValue, setDisplayValue] = useState(initialValue);
   const animationRef = useRef<number | undefined>(undefined);
-  const startTimeRef = useRef<number | undefined>(undefined);
-  const startValueRef = useRef<number>(value);
+  const prevValueRef = useRef<number>(initialValue);
+  const lastValidValueRef = useRef<number>(initialValue);
 
   useEffect(() => {
-    if (value === displayValue) return;
+    // GUARD: Ignore invalid values (0, negative, NaN)
+    // Keep showing the last valid value instead
+    if (value <= 0 || !Number.isFinite(value)) {
+      return;
+    }
 
-    const startValue = displayValue;
+    // Skip animation if value hasn't changed meaningfully
+    if (Math.abs(value - prevValueRef.current) < 0.0001) return;
+
+    // Store this as the last valid value
+    lastValidValueRef.current = value;
+
+    // COMPONENT REUSE DETECTION: If value changed by more than 50%,
+    // this is likely a different token (component reuse), not a price update.
+    // Reset immediately without animation to avoid weird transitions.
+    const prevValid = prevValueRef.current > 0 ? prevValueRef.current : displayValue;
+    const changeRatio = prevValid > 0 ? Math.abs(value - prevValid) / prevValid : 1;
+
+    if (changeRatio > 0.5) {
+      // Large change = different token, reset immediately
+      setDisplayValue(value);
+      prevValueRef.current = value;
+      return;
+    }
+
+    const startValue = displayValue > 0 ? displayValue : value;
     const endValue = value;
     const startTime = performance.now();
 
-    startTimeRef.current = startTime;
-    startValueRef.current = startValue;
-    setIsAnimating(true);
+    // Cancel any running animation
+    if (animationRef.current) {
+      cancelAnimationFrame(animationRef.current);
+    }
 
     const animate = (currentTime: number) => {
       const elapsed = currentTime - startTime;
       const progress = Math.min(elapsed / duration, 1);
 
-      // Easing function for smooth animation
-      const easeOutCubic = 1 - Math.pow(1 - progress, 3);
-      const currentValue = startValue + (endValue - startValue) * easeOutCubic;
+      // Smooth easing - easeOutQuart for natural deceleration
+      const easeOutQuart = 1 - Math.pow(1 - progress, 4);
+      const currentValue = startValue + (endValue - startValue) * easeOutQuart;
 
       setDisplayValue(currentValue);
 
@@ -486,7 +536,7 @@ const SmoothNumber: React.FC<SmoothNumberProps> = ({
         animationRef.current = requestAnimationFrame(animate);
       } else {
         setDisplayValue(endValue);
-        setIsAnimating(false);
+        prevValueRef.current = endValue;
       }
     };
 
@@ -500,12 +550,98 @@ const SmoothNumber: React.FC<SmoothNumberProps> = ({
   }, [value, duration]);
 
   return (
-    <span
-      className={`${isAnimating ? "transition-all duration-75" : ""} ${className}`}
-    >
+    <span className={className}>
       {formatter(displayValue)}
     </span>
   );
+};
+
+// Hook for smooth progress bar animation using requestAnimationFrame
+function useSmoothProgress(targetValue: number, duration: number = 400): number {
+  // Clamp to valid range [0, 1] for progress values
+  const validTarget = Math.max(0, Math.min(1, Number.isFinite(targetValue) ? targetValue : 0));
+  const [smoothValue, setSmoothValue] = useState(validTarget);
+  const animationRef = useRef<number | undefined>(undefined);
+  const prevTargetRef = useRef<number>(validTarget);
+
+  useEffect(() => {
+    // GUARD: Ignore invalid values
+    if (!Number.isFinite(targetValue) || targetValue < 0) return;
+
+    const clampedTarget = Math.min(targetValue, 1);
+
+    // Skip if change is too small (< 0.1%)
+    if (Math.abs(clampedTarget - prevTargetRef.current) < 0.001) return;
+
+    const startValue = smoothValue;
+    const endValue = clampedTarget;
+    const startTime = performance.now();
+
+    // Cancel any running animation
+    if (animationRef.current) {
+      cancelAnimationFrame(animationRef.current);
+    }
+
+    const animate = (currentTime: number) => {
+      const elapsed = currentTime - startTime;
+      const progress = Math.min(elapsed / duration, 1);
+
+      // Smooth easing - easeOutQuart for natural feeling
+      const easeOutQuart = 1 - Math.pow(1 - progress, 4);
+      const currentValue = startValue + (endValue - startValue) * easeOutQuart;
+
+      setSmoothValue(currentValue);
+
+      if (progress < 1) {
+        animationRef.current = requestAnimationFrame(animate);
+      } else {
+        setSmoothValue(endValue);
+        prevTargetRef.current = endValue;
+      }
+    };
+
+    animationRef.current = requestAnimationFrame(animate);
+
+    return () => {
+      if (animationRef.current) {
+        cancelAnimationFrame(animationRef.current);
+      }
+    };
+  }, [targetValue, duration]);
+
+  return smoothValue;
+}
+
+/**
+ * Calculate the best available volume in USD from websocket data.
+ * Checks time periods in priority order: 24h > 6h > 1h > 5m
+ * Adds buy + sell volumes and multiplies by SOL price.
+ */
+const calculateVolumeUsd = (token: any, solPrice: number): number => {
+  // Parse volume string to number, handling undefined/null
+  const parseVol = (val: string | number | undefined): number => {
+    if (val === undefined || val === null) return 0;
+    if (typeof val === 'number') return val;
+    const parsed = parseFloat(val);
+    return isNaN(parsed) ? 0 : parsed;
+  };
+
+  // Check each time period from highest to lowest
+  // Use the first period that has non-zero data
+  const vol24h = parseVol(token.total_buy_volume_24h) + parseVol(token.total_sell_volume_24h);
+  if (vol24h > 0) return vol24h * solPrice;
+
+  const vol6h = parseVol(token.total_buy_volume_6h) + parseVol(token.total_sell_volume_6h);
+  if (vol6h > 0) return vol6h * solPrice;
+
+  const vol1h = parseVol(token.total_buy_volume_1h) + parseVol(token.total_sell_volume_1h);
+  if (vol1h > 0) return vol1h * solPrice;
+
+  const vol5m = parseVol(token.total_buy_volume_5m) + parseVol(token.total_sell_volume_5m);
+  if (vol5m > 0) return vol5m * solPrice;
+
+  // Fallback to existing volume_24h field if available
+  return token.volume_24h || 0;
 };
 
 // Token Metrics Component - displays users, trades, achievements, and rank
@@ -526,26 +662,50 @@ function TokenMetrics({
     return num.toString();
   };
 
-  // Real data from token
+  // Real data from token - prioritize holder_count and kol_count from WebSocket
   const rawMetrics = {
-    users: token.total_holders || token.unique_wallets_24h || 0,
+    holders: token.holder_count ?? token.total_holders ?? token.unique_wallets_24h ?? 0,
+    kols: token.kol_count ?? 0,
     trades: token.unique_wallets_5m || token.unique_wallets_1h || 0,
-    achievements: 0,
     rank: "0/1",
   };
 
   // Format the metrics for display
   const metrics = {
-    users: formatNumber(rawMetrics.users),
+    holders: formatNumber(rawMetrics.holders),
+    kols: formatNumber(rawMetrics.kols),
     trades: formatNumber(rawMetrics.trades),
-    achievements: rawMetrics.achievements,
     rank: rank && totalTokens ? `${rank}/${totalTokens}` : "0/1",
   };
 
   return (
-    <div className="relative z-10 flex items-center gap-1">
-      {/* Users Icon - Multiple People */}
-      <div className="flex items-center gap-1">
+    <div className="relative z-10 flex items-center gap-2">
+      {/* Trophy Icon - KOL Count */}
+      <div className="group/kol relative flex items-center gap-1 cursor-help">
+        <div
+          className="flex items-center justify-center rounded"
+          style={{
+            backgroundColor: "#111214",
+            padding: "2px",
+            width: "18px",
+            height: "18px",
+          }}
+        >
+          <FaTrophy size={10} style={{ color: AX.muted }} />
+        </div>
+        <span className="text-xs" style={{ color: AX.text }}>
+          {metrics.kols}
+        </span>
+        {/* Tooltip - appears below */}
+        <div className="pointer-events-none absolute left-0 top-full mt-2 px-3 py-2 bg-[#1a1b1f] border border-[#2a2b33] rounded-lg opacity-0 group-hover/kol:opacity-100 transition-opacity duration-100 whitespace-nowrap z-[99999] shadow-xl">
+          <span className="text-sm text-white font-medium">KOL Count</span>
+          <p className="text-xs text-gray-400 mt-0.5">Key Opinion Leaders holding this token</p>
+          <div className="absolute left-4 bottom-full w-0 h-0 border-l-[6px] border-l-transparent border-r-[6px] border-r-transparent border-b-[6px] border-b-[#2a2b33]"></div>
+        </div>
+      </div>
+
+      {/* Users Icon - Holder Count */}
+      <div className="group/holder relative flex items-center gap-1 cursor-help">
         <div
           className="flex items-center justify-center rounded"
           style={{
@@ -558,21 +718,15 @@ function TokenMetrics({
           <GoPeople size={12} style={{ color: "#57ace9", strokeWidth: "3" }} />
         </div>
         <span className="text-xs" style={{ color: AX.text }}>
-          {metrics.users}
+          {metrics.holders}
         </span>
+        {/* Tooltip - appears below */}
+        <div className="pointer-events-none absolute left-0 top-full mt-2 px-3 py-2 bg-[#1a1b1f] border border-[#2a2b33] rounded-lg opacity-0 group-hover/holder:opacity-100 transition-opacity duration-100 whitespace-nowrap z-[99999] shadow-xl">
+          <span className="text-sm text-white font-medium">Holder Count</span>
+          <p className="text-xs text-gray-400 mt-0.5">Total wallets holding this token</p>
+          <div className="absolute left-4 bottom-full w-0 h-0 border-l-[6px] border-l-transparent border-r-[6px] border-r-transparent border-b-[6px] border-b-[#2a2b33]"></div>
+        </div>
       </div>
-
-      {/* Candles Icon - Trading/Volume */}
-      {/* <div className="flex items-center gap-1">
-        <BiCandles size={12} style={{ color: AX.muted }} />
-        <span className="text-xs" style={{ color: AX.text }}>{metrics.trades}</span>
-      </div> */}
-
-      {/* Trophy Icon - Achievements */}
-      {/* <div className="flex items-center gap-1">
-        <MdEmojiEvents size={12} style={{ color: AX.muted }} />
-        <span className="text-xs" style={{ color: AX.text }}>{metrics.achievements}</span>
-      </div> */}
 
       {/* Crown Icon - Ranking */}
       {/* <div 
@@ -625,6 +779,422 @@ function useTokenMetadata(uri?: string) {
   }, [uri]);
   return { meta, loading, showInitial };
 }
+
+// Helper to extract social links from token metadata
+interface SocialLinks {
+  twitter?: string;
+  website?: string;
+  telegram?: string;
+}
+
+function extractSocialLinks(token: Token, meta: any): SocialLinks {
+  const links: SocialLinks = {};
+
+  // Try to get links from metadata first
+  if (meta) {
+    if (meta.twitter) links.twitter = meta.twitter;
+    if (meta.website) links.website = meta.website;
+    if (meta.telegram) links.telegram = meta.telegram;
+  }
+
+  // Also try to parse token.links if it's a JSON string
+  if (token.links) {
+    try {
+      const parsedLinks = typeof token.links === 'string'
+        ? JSON.parse(token.links)
+        : token.links;
+      if (parsedLinks.twitter && !links.twitter) links.twitter = parsedLinks.twitter;
+      if (parsedLinks.website && !links.website) links.website = parsedLinks.website;
+      if (parsedLinks.telegram && !links.telegram) links.telegram = parsedLinks.telegram;
+    } catch {
+      // Ignore parsing errors
+    }
+  }
+
+  return links;
+}
+
+// Helper to extract Twitter handle from URL
+function extractTwitterHandle(url: string): string | null {
+  if (!url) return null;
+  // Handle various Twitter/X URL formats
+  const patterns = [
+    /(?:twitter\.com|x\.com)\/(@?\w+)/i,
+    /(?:twitter\.com|x\.com)\/intent\/user\?screen_name=(\w+)/i,
+  ];
+  for (const pattern of patterns) {
+    const match = url.match(pattern);
+    if (match?.[1]) {
+      return match[1].replace('@', '');
+    }
+  }
+  return null;
+}
+
+// Social Icons Component with URI metadata parsing and search dropdown
+function SocialIconsWithMetadata({
+  token,
+  idx,
+  showSearchDropdown,
+  setShowSearchDropdown,
+}: {
+  token: Token;
+  idx: number;
+  showSearchDropdown: number | null;
+  setShowSearchDropdown: (idx: number | null) => void;
+}) {
+  const { meta } = useTokenMetadata(token.uri);
+  const socialLinks = extractSocialLinks(token, meta);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+  const xButtonRef = useRef<HTMLButtonElement>(null);
+  const searchButtonRef = useRef<HTMLButtonElement>(null);
+  const searchMenuRef = useRef<HTMLDivElement>(null);
+  const [showXPreview, setShowXPreview] = useState(false);
+  const [previewPosition, setPreviewPosition] = useState({ left: 0, top: 0, openBelow: false });
+  const [showSearchMenu, setShowSearchMenu] = useState(false);
+  const [searchMenuPosition, setSearchMenuPosition] = useState({ left: 0, top: 0, openAbove: false });
+  const isOverSearchMenu = useRef(false);
+  const isOverSearchButton = useRef(false);
+  const isOverXPreview = useRef(false);
+  const isOverXButton = useRef(false);
+
+  const hasTwitter = !!socialLinks.twitter;
+  const hasWebsite = !!socialLinks.website;
+  const hasTelegram = !!socialLinks.telegram;
+  const twitterHandle = hasTwitter ? extractTwitterHandle(socialLinks.twitter!) : null;
+
+  return (
+    <div className="flex items-center gap-1">
+      {/* X/Twitter Icon - only show if twitter URL exists */}
+      {hasTwitter && (
+        <div className="relative">
+          <button
+            ref={xButtonRef}
+            className="flex items-center justify-center rounded p-1 transition-colors duration-200 hover:bg-white/10"
+            onClick={(e) => {
+              e.stopPropagation();
+              e.preventDefault();
+              window.open(socialLinks.twitter, "_blank");
+            }}
+            onMouseEnter={() => {
+              isOverXButton.current = true;
+              if (xButtonRef.current) {
+                const rect = xButtonRef.current.getBoundingClientRect();
+                const previewHeight = 320; // Approximate height of X preview
+                const spaceAbove = rect.top;
+                const openBelow = spaceAbove < previewHeight + 20;
+
+                setPreviewPosition({
+                  left: rect.left + rect.width / 2,
+                  top: openBelow ? rect.bottom + 10 : rect.top - 10,
+                  openBelow,
+                });
+              }
+              setShowXPreview(true);
+            }}
+            onMouseLeave={() => {
+              isOverXButton.current = false;
+              // Delay to allow moving to popup
+              setTimeout(() => {
+                if (!isOverXPreview.current && !isOverXButton.current) {
+                  setShowXPreview(false);
+                }
+              }, 200);
+            }}
+          >
+            <FaXTwitter size={12} className="text-neutral-400 hover:text-white" />
+          </button>
+
+          {/* X Profile Preview Popup */}
+          {showXPreview && (
+            <div
+              className="fixed z-[999999]"
+              style={{
+                left: `${previewPosition.left}px`,
+                top: `${previewPosition.top}px`,
+                // If opening below, no Y transform; if above, translate up by full height
+                transform: previewPosition.openBelow
+                  ? "translateX(-50%)"
+                  : "translate(-50%, -100%)",
+              }}
+              onMouseEnter={() => {
+                isOverXPreview.current = true;
+              }}
+              onMouseLeave={() => {
+                isOverXPreview.current = false;
+                setTimeout(() => {
+                  if (!isOverXPreview.current && !isOverXButton.current) {
+                    setShowXPreview(false);
+                  }
+                }, 200);
+              }}
+            >
+              <div
+                className="overflow-hidden rounded-xl w-[280px]"
+                style={{
+                  backgroundColor: "#16181c",
+                  border: "1px solid #2f3336",
+                  boxShadow: "0 8px 28px rgba(0, 0, 0, 0.75)",
+                }}
+              >
+                {/* Header with X logo */}
+                <div className="flex items-center justify-between px-4 py-3 border-b border-[#2f3336]">
+                  <div className="flex items-center gap-2">
+                    {/* Profile Picture */}
+                    <div className="h-12 w-12 rounded-full overflow-hidden bg-[#1a1a1a] flex-shrink-0">
+                      <img
+                        src={token.logo || `https://ui-avatars.com/api/?name=${token.symbol}&background=1a1a1a&color=fff`}
+                        alt={token.symbol}
+                        className="h-full w-full object-cover"
+                        onError={(e) => {
+                          (e.target as HTMLImageElement).src = `https://ui-avatars.com/api/?name=${token.symbol}&background=1a1a1a&color=fff`;
+                        }}
+                      />
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-1">
+                        <span className="text-white font-bold text-sm">{token.name || token.symbol}</span>
+                        <svg className="w-4 h-4 text-[#1d9bf0]" viewBox="0 0 24 24" fill="currentColor">
+                          <path d="M22.5 12.5c0-1.58-.875-2.95-2.148-3.6.154-.435.238-.905.238-1.4 0-2.21-1.71-3.998-3.818-3.998-.47 0-.92.084-1.336.25C14.818 2.415 13.51 1.5 12 1.5s-2.816.917-3.437 2.25c-.415-.165-.866-.25-1.336-.25-2.11 0-3.818 1.79-3.818 4 0 .494.083.964.237 1.4-1.272.65-2.147 2.018-2.147 3.6 0 1.495.782 2.798 1.942 3.486-.02.17-.032.34-.032.514 0 2.21 1.708 4 3.818 4 .47 0 .92-.086 1.335-.25.62 1.334 1.926 2.25 3.437 2.25 1.512 0 2.818-.916 3.437-2.25.415.163.865.248 1.336.248 2.11 0 3.818-1.79 3.818-4 0-.174-.012-.344-.033-.513 1.158-.687 1.943-1.99 1.943-3.484zm-6.616-3.334l-4.334 6.5c-.145.217-.382.334-.625.334-.143 0-.288-.04-.416-.126l-.115-.094-2.415-2.415c-.293-.293-.293-.768 0-1.06s.768-.294 1.06 0l1.77 1.767 3.825-5.74c.23-.345.696-.436 1.04-.207.346.23.44.696.21 1.04z"/>
+                        </svg>
+                      </div>
+                      <div className="flex items-center gap-1 text-gray-500 text-xs">
+                        <span>@{twitterHandle || token.symbol?.toLowerCase()}</span>
+                        <span>·</span>
+                        <span>+</span>
+                      </div>
+                    </div>
+                  </div>
+                  <FaXTwitter size={20} className="text-white" />
+                </div>
+
+                {/* Bio/Description */}
+                <div className="px-4 py-3">
+                  <p className="text-white text-sm leading-relaxed">
+                    {meta?.description || token.description || `Official ${token.symbol} token`}
+                  </p>
+                  {hasWebsite && (
+                    <a
+                      href={socialLinks.website}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-[#1d9bf0] text-sm hover:underline block mt-1 truncate"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      {socialLinks.website}
+                    </a>
+                  )}
+                </div>
+
+                {/* Stats */}
+                <div className="px-4 pb-3 flex items-center gap-4 text-sm">
+                  <div className="flex items-center gap-1 text-gray-500">
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <rect x="3" y="4" width="18" height="18" rx="2" ry="2" strokeWidth="2"/>
+                      <line x1="16" y1="2" x2="16" y2="6" strokeWidth="2"/>
+                      <line x1="8" y1="2" x2="8" y2="6" strokeWidth="2"/>
+                      <line x1="3" y1="10" x2="21" y2="10" strokeWidth="2"/>
+                    </svg>
+                    <span>Joined {new Date(token.created_at || Date.now()).toLocaleDateString('en-US', { month: 'short', year: 'numeric' })}</span>
+                  </div>
+                </div>
+
+                {/* Following/Followers */}
+                <div className="px-4 pb-3 flex items-center gap-4 text-sm">
+                  <span><strong className="text-white">--</strong> <span className="text-gray-500">Following</span></span>
+                  <span><strong className="text-white">--</strong> <span className="text-gray-500">Followers</span></span>
+                </div>
+
+                {/* CTA Button */}
+                <div className="px-4 pb-4">
+                  <button
+                    className="w-full py-2.5 rounded-full text-[#1d9bf0] font-semibold text-sm border border-[#536471] hover:bg-[#1d9bf0]/10 transition-colors"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      window.open(socialLinks.twitter, "_blank");
+                    }}
+                  >
+                    See Profile on X
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Telegram Icon - only show if telegram URL exists */}
+      {hasTelegram && (
+        <button
+          className="flex items-center justify-center rounded p-1 transition-colors duration-200 hover:bg-white/10"
+          onClick={(e) => {
+            e.stopPropagation();
+            e.preventDefault();
+            window.open(socialLinks.telegram, "_blank");
+          }}
+          title="Join Telegram"
+        >
+          <FaTelegram size={12} className="text-neutral-400 hover:text-[#0088cc]" />
+        </button>
+      )}
+
+      {/* Globe Icon - only show if website URL exists */}
+      {hasWebsite && (
+        <div className="group/website relative">
+          <button
+            className="flex items-center justify-center rounded p-1 transition-colors duration-200 hover:bg-white/10"
+            onClick={(e) => {
+              e.stopPropagation();
+              e.preventDefault();
+              window.open(socialLinks.website, "_blank");
+            }}
+          >
+            <FiGlobe size={12} className="text-neutral-400 hover:text-white" />
+          </button>
+          {/* Website URL Tooltip */}
+          <div className="pointer-events-none absolute left-1/2 top-full mt-2 -translate-x-1/2 px-3 py-2 bg-[#1a1b1f] border border-[#2a2b33] rounded-lg opacity-0 group-hover/website:opacity-100 transition-opacity duration-100 whitespace-nowrap z-[99999] shadow-xl">
+            <span className="text-xs text-gray-400">Website</span>
+            <p className="text-sm text-white font-medium max-w-[200px] truncate">{socialLinks.website}</p>
+          </div>
+        </div>
+      )}
+
+      {/* Search Icon with Dropdown - hover triggered */}
+      <div className="relative" ref={dropdownRef}>
+        <button
+          ref={searchButtonRef}
+          className="flex items-center justify-center rounded p-1 transition-colors duration-200 hover:bg-white/10"
+          onMouseEnter={() => {
+            isOverSearchButton.current = true;
+            if (searchButtonRef.current) {
+              const rect = searchButtonRef.current.getBoundingClientRect();
+              const dropdownHeight = 200; // Approximate height of dropdown
+              const spaceBelow = window.innerHeight - rect.bottom;
+              const openAbove = spaceBelow < dropdownHeight + 20;
+
+              setSearchMenuPosition({
+                left: rect.left,
+                top: openAbove ? rect.top - 8 : rect.bottom + 8,
+                openAbove,
+              });
+            }
+            setShowSearchMenu(true);
+          }}
+          onMouseLeave={() => {
+            isOverSearchButton.current = false;
+            // Delay to allow moving to the dropdown
+            setTimeout(() => {
+              if (!isOverSearchMenu.current && !isOverSearchButton.current) {
+                setShowSearchMenu(false);
+              }
+            }, 200);
+          }}
+          onClick={(e) => {
+            e.stopPropagation();
+            e.preventDefault();
+          }}
+        >
+          <FaSearch size={10} className="text-neutral-400 hover:text-[#36d8ff]" />
+        </button>
+
+        {/* Search Dropdown Menu - Fixed positioning, appears to the right */}
+        {showSearchMenu && (
+          <div
+            ref={searchMenuRef}
+            className="fixed min-w-[220px] rounded-lg border border-[#2a2b33] bg-[#16171C] py-1 z-[999999]"
+            style={{
+              // Ensure dropdown doesn't go off the right edge of the screen
+              left: `${Math.min(searchMenuPosition.left, window.innerWidth - 230)}px`,
+              top: `${searchMenuPosition.top}px`,
+              // If opening above, translate up by full height
+              transform: searchMenuPosition.openAbove ? "translateY(-100%)" : "none",
+              boxShadow: "0 8px 32px rgba(0, 0, 0, 0.6)",
+            }}
+            onMouseEnter={() => {
+              isOverSearchMenu.current = true;
+            }}
+            onMouseLeave={() => {
+              isOverSearchMenu.current = false;
+              // Delay to allow moving back to button if needed
+              setTimeout(() => {
+                if (!isOverSearchMenu.current && !isOverSearchButton.current) {
+                  setShowSearchMenu(false);
+                }
+              }, 200);
+            }}
+          >
+            {/* X Search for Address */}
+            <button
+              className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-sm text-white hover:bg-white/10 transition-colors"
+              onClick={(e) => {
+                e.stopPropagation();
+                const url = `https://twitter.com/search?q=${encodeURIComponent(token.mint)}`;
+                window.open(url, "_blank");
+                setShowSearchMenu(false);
+              }}
+            >
+              <FaXTwitter size={14} className="text-neutral-400" />
+              X Search for Address
+            </button>
+
+            {/* X Search for Name */}
+            <button
+              className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-sm text-white hover:bg-white/10 transition-colors"
+              onClick={(e) => {
+                e.stopPropagation();
+                const searchQuery = `${token.symbol} ${token.name}`.trim();
+                const url = `https://twitter.com/search?q=${encodeURIComponent(searchQuery)}`;
+                window.open(url, "_blank");
+                setShowSearchMenu(false);
+              }}
+            >
+              <FaXTwitter size={14} className="text-neutral-400" />
+              X Search for Name
+            </button>
+
+            {/* Divider */}
+            <div className="my-1 border-t border-[#2a2b33]" />
+
+            {/* Google Search for Name */}
+            <button
+              className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-sm text-white hover:bg-white/10 transition-colors"
+              onClick={(e) => {
+                e.stopPropagation();
+                const searchQuery = `${token.symbol} ${token.name} crypto`.trim();
+                const url = `https://www.google.com/search?q=${encodeURIComponent(searchQuery)}`;
+                window.open(url, "_blank");
+                setShowSearchMenu(false);
+              }}
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" className="text-neutral-400">
+                <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
+                <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
+                <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/>
+                <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/>
+              </svg>
+              Google Search for Name
+            </button>
+
+            {/* Interstate Search for Name */}
+            <button
+              className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-sm text-white hover:bg-white/10 transition-colors"
+              onClick={(e) => {
+                e.stopPropagation();
+                const url = `https://dexscreener.com/solana/${token.mint}`;
+                window.open(url, "_blank");
+                setShowSearchMenu(false);
+              }}
+            >
+              <LuSearch size={14} className="text-[#36d8ff]" />
+              Interstate Search for Name
+            </button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function TokenImage({
   token,
   priority = false,
@@ -639,31 +1209,41 @@ function TokenImage({
   const [showPreview, setShowPreview] = useState(false);
   const [previewPosition, setPreviewPosition] = useState({ top: 0, left: 0 });
   const imageContainerRef = useRef<HTMLDivElement>(null);
+  const [resolvedImageUrl, setResolvedImageUrl] = useState<string | null>(null);
 
   // Extract image URL from token data, checking multiple possible field names
-  // Priority: image, uri, logo, imageUrl, logoUrl, image_url, logo_url, icon, thumbnail
-  const imageUrl = extractTokenImage(token as any) || null;
+  // Priority: image_url, image, logo, uri (updated for API compatibility)
+  const rawImageUrl = extractTokenImage(token as any) || null;
+  const metadataCandidate = isMetadataUrl(rawImageUrl || '') ? rawImageUrl : (isMetadataUrl((token as any)?.uri) ? (token as any).uri : null);
 
-  // Debug logging to help diagnose image loading issues
+  // If the image URL is a JSON metadata URL, resolve it asynchronously
   useEffect(() => {
-    if (imageUrl) {
-      console.log(
-        `[TokenImage] ${token.symbol || "Unknown"}: imageUrl extracted:`,
-        imageUrl,
-      );
+    let cancelled = false;
+
+    if (metadataCandidate) {
+      // Resolve metadata JSON to get actual image URL
+      resolveMetadataImage(metadataCandidate).then((resolved) => {
+        if (!cancelled) {
+          if (resolved) {
+            setResolvedImageUrl(resolved);
+          } else {
+            // Metadata resolution failed - only use rawImageUrl if it's not a metadata URL
+            // Never fallback to metadataCandidate (JSON URL) as that would try to load JSON as image
+            setResolvedImageUrl(rawImageUrl && !isMetadataUrl(rawImageUrl) ? rawImageUrl : null);
+          }
+        }
+      });
     } else {
-      console.warn(
-        `[TokenImage] ${token.symbol || "Unknown"}: No image URL found. Token data:`,
-        {
-          image: (token as any).image,
-          uri: (token as any).uri,
-          logo: token.logo,
-          imageUrl: (token as any).imageUrl,
-          logoUrl: (token as any).logoUrl,
-        },
-      );
+      setResolvedImageUrl(rawImageUrl);
     }
-  }, [imageUrl, token.symbol, token]);
+
+    return () => {
+      cancelled = true;
+    };
+  }, [rawImageUrl, metadataCandidate]);
+
+  // Use resolved URL or fall back to raw URL
+  const imageUrl = resolvedImageUrl;
 
   // Calculate migration progress for border color (only for New Pairs, NOT for migrated)
   const getMigrationProgress = (token: Token): number => {
@@ -674,8 +1254,7 @@ function TokenImage({
     const bondingPct = (token as any).bonding_pct;
     const bondingProgress = token.bonding_curve_progress;
     const graduationPercent = (token as any).graduationPercent;
-    const marketCap =
-      (token as any).fully_diluted_value ?? (token as any).market_cap_usd ?? 0;
+    const marketCap = getTokenMarketCap(token);
 
     if (typeof bondingPct === "number" && bondingPct >= 0) {
       return Math.min(Math.max(bondingPct / 100, 0), 1); // Convert percentage to 0-1 range
@@ -747,6 +1326,12 @@ function TokenImage({
   // Get protocol color based on launchpad_protocol field
   const getProtocolColor = (token: Token): string => {
     const launchpadProtocol = (token as any).launchpad_protocol?.toLowerCase();
+    const mintAddress = token.mint?.toLowerCase() || "";
+
+    // Check if mint address contains "bags" - override any protocol
+    if (mintAddress.includes("bags")) {
+      return "#31e3ac"; // Green for bags
+    }
 
     if (!launchpadProtocol) {
       return "#31e3ac"; // Default green
@@ -824,6 +1409,12 @@ function TokenImage({
   // Get icon based on token data - dynamically maps launchpad_protocol to icon
   const getTokenIcon = (token: Token): string => {
     const launchpadProtocol = (token as any).launchpad_protocol?.toLowerCase();
+    const mintAddress = token.mint?.toLowerCase() || "";
+
+    // Check if mint address contains "bags" - override any protocol
+    if (mintAddress.includes("bags")) {
+      return "https://bags.fm/assets/images/bags-icon.png";
+    }
 
     if (!launchpadProtocol) {
       // Default to pump.fun icon if no protocol info
@@ -879,14 +1470,17 @@ function TokenImage({
   // Check if token should have full circle image (no white space)
   const launchpadProtocol =
     (token as any).launchpad_protocol?.toLowerCase() || "";
+  const mintAddressLower = token.mint?.toLowerCase() || "";
   const isMeteora = launchpadProtocol.includes("meteora");
   const isBonk = launchpadProtocol.includes("bonk");
-  const isBags = launchpadProtocol.includes("bags");
+  // Check both launchpad_protocol AND mint address for bags
+  const isBags = launchpadProtocol.includes("bags") || mintAddressLower.includes("bags");
   const isMoonit =
     launchpadProtocol.includes("moonit") ||
     launchpadProtocol.includes("moonshot") ||
     launchpadProtocol.includes("moonshoot");
-  const isFullCircleImage = isMeteora || isBonk || isBags || isMoonit;
+  // If mint contains "bags", it overrides Meteora - don't show as Meteora
+  const isFullCircleImage = (isMeteora && !mintAddressLower.includes("bags")) || isBonk || isBags || isMoonit;
 
   // Debug logging for protocol detection
   if (
@@ -928,9 +1522,12 @@ function TokenImage({
 
   // Scale New Pairs progress to fill more of the border (since they max out at ~60%)
   // Cap at 95% to never show full completion
-  const scaledProgress = isNewPairs
+  const rawScaledProgress = isNewPairs
     ? Math.min(finalProgress / 0.6, 0.95)
     : finalProgress;
+
+  // Smooth animation for progress bar - uses requestAnimationFrame for buttery transitions
+  const scaledProgress = useSmoothProgress(rawScaledProgress, 400);
 
   // Debug logging for New Pairs
   if (isNewPairs) {
@@ -1022,10 +1619,10 @@ function TokenImage({
                   protocolColor.startsWith("#") &&
                   (protocolColor.length === 7 || protocolColor.length === 4)
                 ) {
-                  // Slightly more transparent (~70%) for New Pairs color border
+                  // More transparent (~25%) for New Pairs so loading border stands out
                   return protocolColor.length === 7
-                    ? `${protocolColor}B3`
-                    : `${protocolColor}B`;
+                    ? `${protocolColor}40`
+                    : `${protocolColor}4`;
                 }
                 return protocolColor;
               })()}`,
@@ -1084,16 +1681,16 @@ function TokenImage({
               />
 
               {/* Progress border - clockwise rounded path starting from bottom-right */}
+              {/* Animation handled by useSmoothProgress hook with requestAnimationFrame */}
               <path
                 d="M 79 79 L 8 79 Q 2 79 2 73 L 2 8 Q 2 2 8 2 L 73 2 Q 79 2 79 8 L 79 73 Q 79 79 73 79"
                 fill="none"
                 stroke={protocolColor}
-                strokeWidth="1"
+                strokeWidth="2"
                 strokeLinecap="round"
                 strokeLinejoin="round"
                 strokeDasharray={`${4 * 77}`} // Total perimeter
                 strokeDashoffset={`${4 * 77 * (1 - scaledProgress)}`}
-                className="transition-all duration-700 ease-out"
               />
             </svg>
           </div>
@@ -1598,7 +2195,7 @@ function PulseTable({
       // This doesn't interfere with WebSocket updates or new tokens coming in
       preloadTokenImages(tokens, {
         limit: 20,
-        priority: 'high',
+        priority: "high",
         maxConcurrent: 10,
       }).catch(() => {
         // Silently fail - don't log to avoid console spam
@@ -1647,6 +2244,7 @@ function PulseTable({
   const [thunderAmount, setThunderAmount] = useState(getInitialThunderAmount);
   const [showPillTooltip, setShowPillTooltip] = useState<string | null>(null);
   const [showXPreview, setShowXPreview] = useState<number | null>(null);
+  const [showSearchDropdown, setShowSearchDropdown] = useState<number | null>(null);
   const [buttonPosition, setButtonPosition] = useState<{
     left: number;
     top: number;
@@ -1658,6 +2256,44 @@ function PulseTable({
   const [filteredTokens, setFilteredTokens] = useState<Token[]>([]);
   const [isFetchingFiltered, setIsFetchingFiltered] = useState(false);
   const isNewPairs = title.toLowerCase().includes("new");
+
+  // Local copy of tokens prop that can receive price updates
+  // This solves the issue where price_update events couldn't modify the tokens prop
+  const [baseTokens, setBaseTokens] = useState<Token[]>(tokens);
+
+  // Sync baseTokens with tokens prop when it changes (initial load or parent refresh)
+  // SMART MERGE: Preserve good market cap values from WebSocket updates
+  useEffect(() => {
+    if (tokens && tokens.length > 0) {
+      setBaseTokens((prev) => {
+        if (prev.length === 0) return tokens; // First load - just use parent data
+
+        // Create a map of existing tokens with their market caps
+        const existingMap = new Map<string, Token>();
+        prev.forEach((t) => existingMap.set(t.mint, t));
+
+        // Merge: use parent data but preserve good market cap from existing
+        return tokens.map((newToken) => {
+          const existing = existingMap.get(newToken.mint);
+          if (!existing) return newToken;
+
+          // If existing has a good market cap but new doesn't, preserve it
+          const existingMc = getTokenMarketCap(existing);
+          const newMc = getTokenMarketCap(newToken);
+
+          if (existingMc > 0 && newMc === 0) {
+            // Preserve the good market cap from WebSocket updates
+            return {
+              ...newToken,
+              market_cap_usd: existing.market_cap_usd,
+              fully_diluted_value: (existing as any).fully_diluted_value,
+            };
+          }
+          return newToken;
+        });
+      });
+    }
+  }, [tokens]);
   // State for WebSocket real-time updates
   const wsCacheStorageKey = useMemo(() => {
     const lowerTitle = title.toLowerCase();
@@ -1679,6 +2315,10 @@ function PulseTable({
         typeof parsed.timestamp === "number" &&
         Date.now() - parsed.timestamp <= WS_CACHE_TTL_MS
       ) {
+        // Skip liquidity filtering for New Pairs - show all tokens instantly
+        if (isNewPairs) {
+          return parsed.data as Token[];
+        }
         return filterNonZeroLiquidity(parsed.data as Token[]);
       }
     } catch (error) {
@@ -1770,7 +2410,12 @@ function PulseTable({
         typeof parsed.timestamp === "number" &&
         Date.now() - parsed.timestamp <= WS_CACHE_TTL_MS
       ) {
-        setWsTokens(filterNonZeroLiquidity(parsed.data as Token[]));
+        // Skip liquidity filtering for New Pairs - show all tokens instantly
+        if (isNewPairs) {
+          setWsTokens(parsed.data as Token[]);
+        } else {
+          setWsTokens(filterNonZeroLiquidity(parsed.data as Token[]));
+        }
       }
     } catch (error) {
       console.warn(
@@ -1778,7 +2423,7 @@ function PulseTable({
         error,
       );
     }
-  }, [wsCacheStorageKey]);
+  }, [wsCacheStorageKey, isNewPairs]);
 
   // Pending filters for Apply button functionality
   const [pendingFilters, setPendingFilters] = useState(filters);
@@ -1868,7 +2513,12 @@ function PulseTable({
         if (response.ok) {
           const data = await response.json();
           const next = Array.isArray(data) ? data : [];
-          setFilteredTokens(filterNonZeroLiquidity(next as Token[]));
+          // Skip liquidity filtering for New Pairs
+          if (isNewPairs) {
+            setFilteredTokens(next as Token[]);
+          } else {
+            setFilteredTokens(filterNonZeroLiquidity(next as Token[]));
+          }
         } else {
           console.error("Failed to fetch filtered tokens:", response.status);
           setFilteredTokens([]);
@@ -1898,7 +2548,7 @@ function PulseTable({
     migratedTokens: wsMigratedTokens,
     connected: wsConnected,
     error: wsError,
-  } = usePulseWebSocket({
+  } = usePulseWebSocketPersistent({
     enabled: true,
     channel,
     protocols:
@@ -1908,17 +2558,15 @@ function PulseTable({
     onNewToken: useCallback(
       (token: any) => {
         if (channel === "new") {
-          // FAST PATH: New pairs bypass zero liquidity check for maximum speed
-          // Zero liquidity tokens will be filtered during merge, but new pairs get instant priority
-          // Use flushSync to force immediate update, bypassing React 18's automatic batching
-          // Optimized with Map-based deduplication (O(1) instead of O(n))
-          // Skip filtering existing tokens - just prepend new token instantly
+          // ⚡ INSTANT PATH: Minimal processing for maximum speed
           flushSync(() => {
             setWsTokens((prev) => {
-              // Fast path: Just prepend new token, remove if duplicate
-              // Don't filter existing tokens here - let them through for speed
-              const filtered = prev.filter((t) => t.mint !== token.mint);
-              return [token as Token, ...filtered].slice(0, 50);
+              // O(1) check - skip if duplicate of most recent token
+              if (prev.length > 0 && prev[0].mint === token.mint) {
+                return prev;
+              }
+              // Prepend new token, limit to 50 (slice is O(k) where k=50, not O(n))
+              return [token as Token, ...prev].slice(0, 50);
             });
           });
         }
@@ -1976,171 +2624,79 @@ function PulseTable({
       [channel],
     ),
     onPriceUpdate: useCallback((updates: any[]) => {
-      // Merge price updates into filteredTokens (base HTTP data)
-      setFilteredTokens((prev) => {
-        if (!prev || prev.length === 0) return prev;
+      // PERFORMANCE FIX: Don't use flushSync for price updates
+      // Let React batch these naturally - flushSync was causing render storms
+      // The hook already handles updating its internal arrays efficiently
 
-        const updatesMap = new Map(updates.map((u) => [u.mint, u]));
-        const updatedTokens = prev.map((token) => {
+      // Pre-compute updates map once (O(n) instead of O(n*m))
+      const updatesMap = new Map(updates.map((u) => [u.mint, u]));
+
+      // Helper to apply updates - returns same array ref if no changes (prevents re-render)
+      const applyPriceUpdates = (tokens: Token[]): Token[] => {
+        if (!tokens || tokens.length === 0) return tokens;
+
+        let hasChanges = false;
+        const updatedTokens = tokens.map((token) => {
           const update = updatesMap.get(token.mint);
           if (!update) return token;
+          hasChanges = true;
 
-          // Merge update into existing token (preserve all fields, update only changed ones)
+          // Merge update - only include fields with valid values
           return {
             ...token,
-            ...(update.price_usd !== undefined && {
-              price_usd: update.price_usd,
-            }),
-            ...(update.market_cap_usd !== undefined && {
-              market_cap_usd: update.market_cap_usd,
-            }),
-            ...(update.volume_24h !== undefined && {
-              volume_24h: update.volume_24h,
-            }),
-            ...(update.bonding_curve_progress !== undefined && {
-              bonding_curve_progress: update.bonding_curve_progress,
-            }),
-            ...(update.price_change_24h !== undefined && {
-              price_change_24h: update.price_change_24h,
-            }),
-            // Transaction metrics (5m)
-            ...(update.total_buy_volume_5m !== undefined && {
-              total_buy_volume_5m: update.total_buy_volume_5m,
-            }),
-            ...(update.total_sell_volume_5m !== undefined && {
-              total_sell_volume_5m: update.total_sell_volume_5m,
-            }),
-            ...(update.total_buys_5m !== undefined && {
-              total_buys_5m: update.total_buys_5m,
-            }),
-            ...(update.total_sells_5m !== undefined && {
-              total_sells_5m: update.total_sells_5m,
-            }),
-            // Transaction metrics (1h)
-            ...(update.total_buy_volume_1h !== undefined && {
-              total_buy_volume_1h: update.total_buy_volume_1h,
-            }),
-            ...(update.total_sell_volume_1h !== undefined && {
-              total_sell_volume_1h: update.total_sell_volume_1h,
-            }),
-            ...(update.total_buys_1h !== undefined && {
-              total_buys_1h: update.total_buys_1h,
-            }),
-            ...(update.total_sells_1h !== undefined && {
-              total_sells_1h: update.total_sells_1h,
-            }),
-            // Transaction metrics (6h)
-            ...(update.total_buy_volume_6h !== undefined && {
-              total_buy_volume_6h: update.total_buy_volume_6h,
-            }),
-            ...(update.total_sell_volume_6h !== undefined && {
-              total_sell_volume_6h: update.total_sell_volume_6h,
-            }),
-            ...(update.total_buys_6h !== undefined && {
-              total_buys_6h: update.total_buys_6h,
-            }),
-            ...(update.total_sells_6h !== undefined && {
-              total_sells_6h: update.total_sells_6h,
-            }),
-            // Transaction metrics (24h)
-            ...(update.total_buy_volume_24h !== undefined && {
-              total_buy_volume_24h: update.total_buy_volume_24h,
-            }),
-            ...(update.total_sell_volume_24h !== undefined && {
-              total_sell_volume_24h: update.total_sell_volume_24h,
-            }),
-            ...(update.total_buys_24h !== undefined && {
-              total_buys_24h: update.total_buys_24h,
-            }),
-            ...(update.total_sells_24h !== undefined && {
-              total_sells_24h: update.total_sells_24h,
-            }),
+            ...(update.price_usd !== undefined && { price_usd: update.price_usd }),
+            ...(update.market_cap_usd !== undefined && update.market_cap_usd > 0 && { market_cap_usd: update.market_cap_usd }),
+            ...(update.volume_24h !== undefined && { volume_24h: update.volume_24h }),
+            ...(update.bonding_pct !== undefined && update.bonding_pct >= 0 && { bonding_pct: update.bonding_pct, bonding_curve_progress: update.bonding_pct / 100 }),
+            ...(update.graduation_percent !== undefined && update.graduation_percent >= 0 && { graduation_percent: update.graduation_percent }),
+            ...(update.bonding_curve_progress !== undefined && update.bonding_curve_progress >= 0 && { bonding_curve_progress: update.bonding_curve_progress }),
+            ...(update.liquidity_usd !== undefined && update.liquidity_usd >= 0 && { liquidity_usd: update.liquidity_usd, total_liquidity_usd: update.liquidity_usd }),
+            ...(update.price_change_24h !== undefined && { price_change_24h: update.price_change_24h }),
+            ...(update.trade_type !== undefined && { last_trade_type: update.trade_type }),
+            ...(update.sol_amount !== undefined && { last_sol_amount: update.sol_amount }),
+            ...(update.token_amount !== undefined && { last_token_amount: update.token_amount }),
+            ...(update.status !== undefined && { status: update.status }),
+            ...(update.total_buy_volume_5m !== undefined && { total_buy_volume_5m: update.total_buy_volume_5m }),
+            ...(update.total_sell_volume_5m !== undefined && { total_sell_volume_5m: update.total_sell_volume_5m }),
+            ...(update.total_buys_5m !== undefined && { total_buys_5m: update.total_buys_5m }),
+            ...(update.total_sells_5m !== undefined && { total_sells_5m: update.total_sells_5m }),
+            ...(update.total_buy_volume_1h !== undefined && { total_buy_volume_1h: update.total_buy_volume_1h }),
+            ...(update.total_sell_volume_1h !== undefined && { total_sell_volume_1h: update.total_sell_volume_1h }),
+            ...(update.total_buys_1h !== undefined && { total_buys_1h: update.total_buys_1h }),
+            ...(update.total_sells_1h !== undefined && { total_sells_1h: update.total_sells_1h }),
+            ...(update.total_buy_volume_6h !== undefined && { total_buy_volume_6h: update.total_buy_volume_6h }),
+            ...(update.total_sell_volume_6h !== undefined && { total_sell_volume_6h: update.total_sell_volume_6h }),
+            ...(update.total_buys_6h !== undefined && { total_buys_6h: update.total_buys_6h }),
+            ...(update.total_sells_6h !== undefined && { total_sells_6h: update.total_sells_6h }),
+            ...(update.total_buy_volume_24h !== undefined && { total_buy_volume_24h: update.total_buy_volume_24h }),
+            ...(update.total_sell_volume_24h !== undefined && { total_sell_volume_24h: update.total_sell_volume_24h }),
+            ...(update.total_buys_24h !== undefined && { total_buys_24h: update.total_buys_24h }),
+            ...(update.total_sells_24h !== undefined && { total_sells_24h: update.total_sells_24h }),
+            // Map holder percentages from websocket
+            ...(update.insider_percent !== undefined && { insider_percent: update.insider_percent }),
+            ...(update.sniper_percent !== undefined && { sniper_percent: update.sniper_percent }),
+            ...(update.dev_percent !== undefined && { dev_percent: update.dev_percent }),
             updated_at: update.updated_at || token.updated_at,
           };
         });
+
+        // CRITICAL: Return same array ref if no changes - prevents unnecessary re-render
+        if (!hasChanges) return tokens;
+
+        // Skip liquidity filtering for New Pairs - keep all tokens
+        if (isNewPairs) return updatedTokens as Token[];
         return filterNonZeroLiquidity(updatedTokens as Token[]);
-      });
+      };
 
-      // Also merge into wsTokens (WebSocket new tokens)
-      setWsTokens((prev) => {
-        if (!prev || prev.length === 0) return prev;
+      // Apply to both arrays using the same helper - reuses the updatesMap
+      setFilteredTokens(applyPriceUpdates);
+      setWsTokens(applyPriceUpdates);
 
-        const updatesMap = new Map(updates.map((u) => [u.mint, u]));
-        const updatedTokens = prev.map((token) => {
-          const update = updatesMap.get(token.mint);
-          if (!update) return token;
-
-          return {
-            ...token,
-            ...(update.price_usd !== undefined && {
-              price_usd: update.price_usd,
-            }),
-            ...(update.market_cap_usd !== undefined && {
-              market_cap_usd: update.market_cap_usd,
-            }),
-            ...(update.volume_24h !== undefined && {
-              volume_24h: update.volume_24h,
-            }),
-            ...(update.bonding_curve_progress !== undefined && {
-              bonding_curve_progress: update.bonding_curve_progress,
-            }),
-            ...(update.price_change_24h !== undefined && {
-              price_change_24h: update.price_change_24h,
-            }),
-            ...(update.total_buy_volume_5m !== undefined && {
-              total_buy_volume_5m: update.total_buy_volume_5m,
-            }),
-            ...(update.total_sell_volume_5m !== undefined && {
-              total_sell_volume_5m: update.total_sell_volume_5m,
-            }),
-            ...(update.total_buys_5m !== undefined && {
-              total_buys_5m: update.total_buys_5m,
-            }),
-            ...(update.total_sells_5m !== undefined && {
-              total_sells_5m: update.total_sells_5m,
-            }),
-            ...(update.total_buy_volume_1h !== undefined && {
-              total_buy_volume_1h: update.total_buy_volume_1h,
-            }),
-            ...(update.total_sell_volume_1h !== undefined && {
-              total_sell_volume_1h: update.total_sell_volume_1h,
-            }),
-            ...(update.total_buys_1h !== undefined && {
-              total_buys_1h: update.total_buys_1h,
-            }),
-            ...(update.total_sells_1h !== undefined && {
-              total_sells_1h: update.total_sells_1h,
-            }),
-            ...(update.total_buy_volume_6h !== undefined && {
-              total_buy_volume_6h: update.total_buy_volume_6h,
-            }),
-            ...(update.total_sell_volume_6h !== undefined && {
-              total_sell_volume_6h: update.total_sell_volume_6h,
-            }),
-            ...(update.total_buys_6h !== undefined && {
-              total_buys_6h: update.total_buys_6h,
-            }),
-            ...(update.total_sells_6h !== undefined && {
-              total_sells_6h: update.total_sells_6h,
-            }),
-            ...(update.total_buy_volume_24h !== undefined && {
-              total_buy_volume_24h: update.total_buy_volume_24h,
-            }),
-            ...(update.total_sell_volume_24h !== undefined && {
-              total_sell_volume_24h: update.total_sell_volume_24h,
-            }),
-            ...(update.total_buys_24h !== undefined && {
-              total_buys_24h: update.total_buys_24h,
-            }),
-            ...(update.total_sells_24h !== undefined && {
-              total_sells_24h: update.total_sells_24h,
-            }),
-            updated_at: update.updated_at || token.updated_at,
-          };
-        });
-        return filterNonZeroLiquidity(updatedTokens as Token[]);
-      });
-    }, []),
+      // PERFORMANCE FIX: Removed setBaseTokens from here
+      // baseTokens updates were triggering useMemo recalculations on every price update
+      // The hook's internal arrays (newTokens, finalStretchTokens, migratedTokens)
+      // already get price updates applied directly
+    }, [isNewPairs]),
   });
 
   // Fetch filtered tokens when protocols change
@@ -2265,7 +2821,8 @@ function PulseTable({
   const router = useRouter();
 
   // Quick buy functionality
-  const { user, solBalance, walletList, walletBalances, selectedWalletIds } = useUser();
+  const { user, solBalance, walletList, walletBalances, selectedWalletIds } =
+    useUser();
   const { presets, activePreset, setActivePreset } = useQuickBuy();
 
   // Pending toast ref for Solana quick buys (for WebSocket instant tx updates)
@@ -2281,33 +2838,48 @@ function PulseTable({
   } | null>(null);
 
   // Callback for instant txHash update via WebSocket (fires before HTTP response)
-  const handleSolanaQuickBuyWsTxHash = useCallback((data: { txHash: string; tokenAddress: string; tradeType: 'buy' | 'sell'; explorerUrl: string }) => {
-    const pending = pendingSolanaQuickBuyToastRef.current;
-    if (!pending || pending.tokenAddress.toLowerCase() !== data.tokenAddress.toLowerCase()) return;
+  const handleSolanaQuickBuyWsTxHash = useCallback(
+    (data: {
+      txHash: string;
+      tokenAddress: string;
+      tradeType: "buy" | "sell";
+      explorerUrl: string;
+    }) => {
+      const pending = pendingSolanaQuickBuyToastRef.current;
+      if (
+        !pending ||
+        pending.tokenAddress.toLowerCase() !== data.tokenAddress.toLowerCase()
+      )
+        return;
 
-    console.log('[PulseTable] 🚀 INSTANT Solana txHash via WebSocket:', data.txHash);
+      console.log(
+        "[PulseTable] 🚀 INSTANT Solana txHash via WebSocket:",
+        data.txHash,
+      );
 
-    // For multi-wallet trades: Don't update the toast (count was already shown at timer cap)
-    // For single wallet: Update the link element with clickable Solana logo
-    if (pending.totalSelectedWallets === 1) {
-      const linkEl = document.getElementById(`link-${pending.id}`);
-      if (linkEl) {
-        linkEl.innerHTML = `<a href="${data.explorerUrl}" target="_blank" rel="noopener noreferrer" class="hover:opacity-80 transition-opacity"><img src="https://avatars.githubusercontent.com/u/92743431?s=200&v=4" alt="Solana" class="w-4 h-4 rounded-full" style="cursor: pointer;" /></a>`;
+      // For multi-wallet trades: Don't update the toast (count was already shown at timer cap)
+      // For single wallet: Update the link element with clickable Solana logo
+      if (pending.totalSelectedWallets === 1) {
+        const linkEl = document.getElementById(`link-${pending.id}`);
+        if (linkEl) {
+          linkEl.innerHTML = `<a href="${data.explorerUrl}" target="_blank" rel="noopener noreferrer" class="hover:opacity-80 transition-opacity"><img src="https://avatars.githubusercontent.com/u/92743431?s=200&v=4" alt="Solana" class="w-4 h-4 rounded-full" style="cursor: pointer;" /></a>`;
+        }
       }
-    }
 
-    // Set duration for auto-dismiss after 10s
-    setTimeout(() => {
-      if (pendingSolanaQuickBuyToastRef.current?.id === pending.id) {
-        toast.dismiss(pending.id);
-        pendingSolanaQuickBuyToastRef.current = null;
-      }
-    }, 10000);
-  }, []);
+      // Set duration for auto-dismiss after 10s
+      setTimeout(() => {
+        if (pendingSolanaQuickBuyToastRef.current?.id === pending.id) {
+          toast.dismiss(pending.id);
+          pendingSolanaQuickBuyToastRef.current = null;
+        }
+      }, 10000);
+    },
+    [],
+  );
 
   // WebSocket for Solana position updates AND instant txHash
   const { connected: solanaWsConnected } = useSolanaPositionWebSocket({
-    tokenAddress: '', // Empty for global listening
+    tokenAddress: "", // Empty for global listening
     enabled: !!user?.id,
     onTxHash: handleSolanaQuickBuyWsTxHash, // INSTANT txHash callback
   });
@@ -2379,14 +2951,14 @@ function PulseTable({
     const isMultiWallet = walletsWithBalance > 1;
 
     // Generate random timer cap (0.40-0.60s)
-    const timerCap = 0.40 + Math.random() * 0.20;
+    const timerCap = 0.4 + Math.random() * 0.2;
     const uniqueToastId = `solana-quickbuy-${Date.now()}-${Math.random()}`;
     const startTime = Date.now();
     let timerFinished = false;
 
     // Extract token image
     const tokenImage = extractTokenImage(token);
-    const tokenName = token.symbol || token.name || 'Token';
+    const tokenName = token.symbol || token.name || "Token";
 
     // Show animated toast with timer
     toast(
@@ -2396,52 +2968,52 @@ function PulseTable({
             <img
               src={tokenImage}
               alt={tokenName}
-              className="w-6 h-6 rounded-full flex-shrink-0"
+              className="h-6 w-6 flex-shrink-0 rounded-full"
             />
           )}
-          <div className="flex items-center gap-2 flex-1 min-w-0">
-            <span className="text-sm text-neutral-200 truncate">
+          <div className="flex min-w-0 flex-1 items-center gap-2">
+            <span className="truncate text-sm text-neutral-200">
               Buying {tokenName}
             </span>
             <span
               id={`timer-${uniqueToastId}`}
-              className="text-xs text-neutral-400 flex-shrink-0"
+              className="flex-shrink-0 text-xs text-neutral-400"
             >
               (0.00s)
             </span>
-          <span
-            id={`check-${uniqueToastId}`}
-            className="text-green-400 flex-shrink-0"
-            style={{ display: 'none' }}
-          >
-            ✓
-          </span>
-          <span
-            id={`link-${uniqueToastId}`}
-            className="flex-shrink-0"
-            style={{ display: 'inline-flex' }}
-          >
-            {/* Default Solana avatar (becomes clickable once tx hash arrives) */}
-            <img
-              src="https://avatars.githubusercontent.com/u/92743431?s=200&v=4"
-              alt="Solana"
-              className="w-4 h-4 rounded-full opacity-70"
-              style={{ cursor: 'default' }}
-            />
-          </span>
+            <span
+              id={`check-${uniqueToastId}`}
+              className="flex-shrink-0 text-green-400"
+              style={{ display: "none" }}
+            >
+              ✓
+            </span>
+            <span
+              id={`link-${uniqueToastId}`}
+              className="flex-shrink-0"
+              style={{ display: "inline-flex" }}
+            >
+              {/* Default Solana avatar (becomes clickable once tx hash arrives) */}
+              <img
+                src="https://avatars.githubusercontent.com/u/92743431?s=200&v=4"
+                alt="Solana"
+                className="h-4 w-4 rounded-full opacity-70"
+                style={{ cursor: "default" }}
+              />
+            </span>
+          </div>
         </div>
-      </div>
       ),
       {
         id: uniqueToastId,
         duration: Infinity,
         style: {
-          background: '#1a1a1a',
-          border: '1px solid #333',
-          borderRadius: '8px',
-          padding: '12px',
+          background: "#1a1a1a",
+          border: "1px solid #333",
+          borderRadius: "8px",
+          padding: "12px",
         },
-      }
+      },
     );
 
     // Start timer animation - update every 50ms, show checkmark when cap is reached
@@ -2458,18 +3030,19 @@ function PulseTable({
         timerFinished = true;
         const checkEl = document.getElementById(`check-${uniqueToastId}`);
         if (checkEl) {
-          checkEl.style.display = 'block';
+          checkEl.style.display = "block";
         }
         const linkEl = document.getElementById(`link-${uniqueToastId}`);
         if (linkEl) {
           if (isMultiWallet) {
             // Show wallet count immediately for multi-wallet
             linkEl.textContent = `${walletsWithBalance}/${total}`;
-            linkEl.className = 'text-xs text-blue-400 font-medium flex-shrink-0';
+            linkEl.className =
+              "text-xs text-blue-400 font-medium flex-shrink-0";
           } else {
             // Single wallet: show Solana icon immediately (clickable once tx hash arrives)
             linkEl.innerHTML = `<img src="https://avatars.githubusercontent.com/u/92743431?s=200&v=4" alt="Solana" class="w-4 h-4 rounded-full opacity-70" style="cursor: default;" />`;
-            linkEl.className = 'flex-shrink-0';
+            linkEl.className = "flex-shrink-0";
           }
           // For single wallet, leave empty - will be filled by WebSocket with logo
         }
@@ -2487,14 +3060,25 @@ function PulseTable({
       tokenImage,
       tokenName,
       fakeTime: timerCap.toFixed(2),
-      tokenAddress: token.mint || '',
+      tokenAddress: token.mint || "",
       startTime,
       timerHandle,
-      totalSelectedWallets: walletsWithBalance
+      totalSelectedWallets: walletsWithBalance,
     };
 
     try {
-      const poolAddress = token.migrated_pool_address || token.pair_address || '';
+      // CRITICAL: Verify the pair address from the token service before executing trade
+      let poolAddress = token.migrated_pool_address || token.pair_address || '';
+      if (token.mint) {
+        console.log(`[PulseTable] Verifying pair address for quick buy: ${token.mint}`);
+        const verifiedPairAddress = await fetchVerifiedPairAddress(token.mint);
+        if (verifiedPairAddress) {
+          if (verifiedPairAddress !== poolAddress) {
+            console.log(`[PulseTable] Pair address mismatch! Local: ${poolAddress}, Verified: ${verifiedPairAddress}`);
+          }
+          poolAddress = verifiedPairAddress;
+        }
+      }
       const baseMint = token.mint || '';
       const quoteMint = SOL_MINT_ADDRESS;
 
@@ -2519,12 +3103,15 @@ function PulseTable({
         walletBalances,
         selectedWalletIds: selectedWalletIds?.sol || [],
         onTxHash: ({ txHash }) => {
-          if (pendingSolanaQuickBuyToastRef.current?.id === uniqueToastId && txHash) {
+          if (
+            pendingSolanaQuickBuyToastRef.current?.id === uniqueToastId &&
+            txHash
+          ) {
             const linkEl = document.getElementById(`link-${uniqueToastId}`);
             if (linkEl) {
               const explorerUrl = `https://solscan.io/tx/${txHash}`;
               linkEl.innerHTML = `<a href="${explorerUrl}" target="_blank" rel="noopener noreferrer" class="hover:opacity-80 transition-opacity"><img src="https://avatars.githubusercontent.com/u/92743431?s=200&v=4" alt="Solana" class="w-4 h-4 rounded-full" style="cursor: pointer;" /></a>`;
-              linkEl.className = '';
+              linkEl.className = "";
             }
           }
         },
@@ -2532,15 +3119,19 @@ function PulseTable({
 
       // If single wallet and we have a tx hash, show clickable Solana icon immediately
       const firstTxHash =
-        multiResult?.results?.find((r: any) => (r.result as any)?.hash || (r.result as any)?.txid)?.result?.hash ||
-        multiResult?.results?.find((r: any) => (r.result as any)?.hash || (r.result as any)?.txid)?.result?.txid;
+        multiResult?.results?.find(
+          (r: any) => (r.result as any)?.hash || (r.result as any)?.txid,
+        )?.result?.hash ||
+        multiResult?.results?.find(
+          (r: any) => (r.result as any)?.hash || (r.result as any)?.txid,
+        )?.result?.txid;
 
       if (firstTxHash && !isMultiWallet) {
         const linkEl = document.getElementById(`link-${uniqueToastId}`);
         if (linkEl) {
           const explorerUrl = `https://solscan.io/tx/${firstTxHash}`;
           linkEl.innerHTML = `<a href="${explorerUrl}" target="_blank" rel="noopener noreferrer" class="hover:opacity-80 transition-opacity"><img src="https://avatars.githubusercontent.com/u/92743431?s=200&v=4" alt="Solana" class="w-4 h-4 rounded-full" style="cursor: pointer;" /></a>`;
-          linkEl.className = '';
+          linkEl.className = "";
         }
         if (timerHandle) {
           cancelAnimationFrame(timerHandle);
@@ -2549,6 +3140,12 @@ function PulseTable({
       }
 
       console.log("✅ Quick Buy successful");
+
+      // Dispatch event to refresh chart price lines
+      if (typeof window !== "undefined" && token.mint) {
+        window.dispatchEvent(new CustomEvent("solanaQuickTrade", { detail: { tokenAddress: token.mint } }));
+      }
+
       return { success: true };
     } catch (error: any) {
       // Stop timer on error
@@ -2795,6 +3392,73 @@ function PulseTable({
   // Protocol filtering is now 100% server-side via HTTP API and WebSocket
   // Filter and sort tokens
   const filteredAndSortedTokens = useMemo(() => {
+    const isNewPairs = title.toLowerCase().includes("new");
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // ULTRA-FAST PATH FOR NEW PAIRS: Skip ALL filtering when no custom filters set
+    // This ensures WebSocket tokens render instantly without any processing delay
+    // ═══════════════════════════════════════════════════════════════════════════
+    const hasNoCustomFilters =
+      (filters.protocols.length === 0 || filters.protocols.includes("All")) &&
+      filters.quoteTokens.length === 0 &&
+      !filters.searchKeywords.trim() &&
+      !filters.excludeKeywords.trim() &&
+      !filters.dexPaid &&
+      !filters.caEndsInPump &&
+      !filters.minAge &&
+      !filters.maxAge &&
+      !filters.top10HoldersPercent &&
+      !filters.minMarketCap &&
+      !filters.maxMarketCap &&
+      !filters.minVolume &&
+      !filters.maxVolume &&
+      !filters.minLiquidity &&
+      !filters.maxLiquidity &&
+      !filters.bCurvePercentMin &&
+      !filters.bCurvePercentMax &&
+      !filters.txnsMin &&
+      !filters.txnsMax &&
+      !filters.numBuysMin &&
+      !filters.numBuysMax &&
+      !filters.numSellsMin &&
+      !filters.numSellsMax &&
+      !filters.holdersMin &&
+      !filters.holdersMax &&
+      !filters.hasWebsite &&
+      !filters.hasTwitter &&
+      !filters.hasTelegram &&
+      !filters.atLeastOneSocial &&
+      !filters.onlyPumpLive;
+
+    if (isNewPairs && hasNoCustomFilters) {
+      // ⚡ INSTANT PATH: Render WebSocket tokens immediately, no processing
+      // WebSocket sends newest first - trust that order completely
+      if (wsTokens.length > 0) {
+        // When WebSocket is active, it's the source of truth for new tokens
+        // Use Set for O(1) deduplication check (instead of O(n) with .some())
+        const wsMints = new Set(wsTokens.map(t => t.mint));
+        // Use baseTokens (local state with price updates) instead of tokens prop
+        const tokensSource = filteredTokens.length > 0 ? filteredTokens : baseTokens;
+
+        // O(n) single pass with O(1) Set lookup - much faster than O(n*m)
+        const uniqueBaseTokens: Token[] = [];
+        for (const bt of tokensSource) {
+          if (!wsMints.has(bt.mint) && uniqueBaseTokens.length < 50) {
+            uniqueBaseTokens.push(bt);
+          }
+        }
+
+        console.log(`[PulseTable ${title}] ⚡ INSTANT: ${wsTokens.length} WS + ${uniqueBaseTokens.length} base`);
+        return [...wsTokens, ...uniqueBaseTokens];
+      }
+
+      // No WebSocket tokens yet - initial load from HTTP
+      // Use baseTokens (local state with price updates) instead of tokens prop
+      const tokensSource = filteredTokens.length > 0 ? filteredTokens : baseTokens;
+      return tokensSource.slice(0, 100);
+    }
+    // ═══════════════════════════════════════════════════════════════════════════
+
     console.log(
       `[PulseTable ${title}] 🔧 filteredAndSortedTokens recomputing, tokens count: ${tokens?.length || 0}, filteredTokens: ${filteredTokens.length}, wsTokens: ${wsTokens.length}`,
     );
@@ -2811,22 +3475,22 @@ function PulseTable({
     const mergedMap = new Map<string, Token>();
 
     // Use filteredTokens if available (either from specific filters or fresh "All" fetch)
-    // Otherwise fall back to tokens prop
-    const baseTokens = filteredTokens.length > 0 ? filteredTokens : tokens;
+    // Otherwise fall back to baseTokens (local state with price updates)
+    const tokensSource = filteredTokens.length > 0 ? filteredTokens : baseTokens;
 
-    // First add HTTP API tokens (either filtered or from props)
-    baseTokens.forEach((token) => mergedMap.set(token.mint, token));
+    // First add HTTP API tokens (either filtered or from local state)
+    tokensSource.forEach((token) => mergedMap.set(token.mint, token));
 
     // Then add/overwrite with WebSocket tokens (they're more recent and real-time)
     // For new pairs, prioritize speed - filter after merge, not during
     wsTokens.forEach((token) => mergedMap.set(token.mint, token));
 
-    // Filter zero liquidity tokens - but do it fast for new pairs
-    const isNewPairs = title.toLowerCase().includes("new");
+    // Filter zero liquidity tokens - DISABLED for new pairs to maximize speed
     if (isNewPairs) {
-      // Fast path for new pairs: filter in-place to avoid extra array creation
-      const allTokens = Array.from(mergedMap.values()) as Token[];
-      filtered = allTokens.filter((token) => !hasZeroLiquidity(token));
+      // SPEED FIX: Zero liquidity filtering disabled for new pairs
+      // This was causing lag - every WebSocket update triggered O(n) filtering
+      // filtered = allTokens.filter((token) => !hasZeroLiquidity(token));
+      filtered = Array.from(mergedMap.values()) as Token[];
     } else {
       filtered = filterNonZeroLiquidity(
         Array.from(mergedMap.values()) as Token[],
@@ -2857,6 +3521,20 @@ function PulseTable({
 
     // Protocol filtering is now handled by the API, so we skip client-side filtering
     // when protocols are selected (filteredTokens already contains the filtered results)
+
+    // Special handling for "Bags" filter: also include tokens where mint contains "bags"
+    // This catches tokens that have "bags" in mint but different launchpad_protocol (e.g., "meteora")
+    if (filters.protocols.includes("Bags") && tokens.length > 0) {
+      const existingMints = new Set(filtered.map(t => t.mint));
+      const bagsFromMint = tokens.filter(token => {
+        const mintLower = token.mint?.toLowerCase() || "";
+        return mintLower.includes("bags") && !existingMints.has(token.mint);
+      });
+      if (bagsFromMint.length > 0) {
+        console.log(`[Bags Filter] Adding ${bagsFromMint.length} tokens with "bags" in mint address`);
+        filtered = [...filtered, ...bagsFromMint];
+      }
+    }
 
     // Apply keyword filters
     if (filters.searchKeywords.trim()) {
@@ -3295,10 +3973,8 @@ function PulseTable({
 
       switch (filters.sortBy) {
         case "marketCap":
-          aValue =
-            (a as any).fully_diluted_value ?? (a as any).market_cap_usd ?? 0;
-          bValue =
-            (b as any).fully_diluted_value ?? (b as any).market_cap_usd ?? 0;
+          aValue = getTokenMarketCap(a);
+          bValue = getTokenMarketCap(b);
           break;
         case "volume":
           aValue = (a as any).volume_24h ?? 0;
@@ -3349,10 +4025,8 @@ function PulseTable({
           break;
         }
         default:
-          aValue =
-            (a as any).fully_diluted_value ?? (a as any).market_cap_usd ?? 0;
-          bValue =
-            (b as any).fully_diluted_value ?? (b as any).market_cap_usd ?? 0;
+          aValue = getTokenMarketCap(a);
+          bValue = getTokenMarketCap(b);
       }
 
       if (filters.sortOrder === "asc") {
@@ -3365,6 +4039,7 @@ function PulseTable({
     return filtered;
   }, [
     tokens,
+    baseTokens,
     filteredTokens,
     wsTokens,
     title,
@@ -3486,11 +4161,23 @@ function PulseTable({
       return;
     }
 
-    const poolAddress =
+    let poolAddress =
       (token as any).migrated_pool_address ||
       token.pair_address ||
       (token as any).pool_address ||
       "";
+
+    // CRITICAL: Verify the pair address from the token service before creating sniper
+    if (token.mint) {
+      console.log(`[PulseTable] Verifying pair address for sniper: ${token.mint}`);
+      const verifiedPairAddress = await fetchVerifiedPairAddress(token.mint);
+      if (verifiedPairAddress) {
+        if (verifiedPairAddress !== poolAddress) {
+          console.log(`[PulseTable] Sniper: Pair address mismatch! Local: ${poolAddress}, Verified: ${verifiedPairAddress}`);
+        }
+        poolAddress = verifiedPairAddress;
+      }
+    }
 
     if (!poolAddress) {
       showEnhancedToast("error", "Pool information unavailable", {
@@ -3563,8 +4250,7 @@ function PulseTable({
           tokenSymbol: token.symbol,
           tokenDecimals: token.decimals,
           poolAddress,
-          pairAddress:
-            token.pair_address || (token as any).migrated_pool_address || "",
+          pairAddress: poolAddress, // Use the verified pool address
           poolType: getPoolTypeFromToken(token),
           slippage: slippageValue,
           priorityFee: priorityFeeValue,
@@ -3685,9 +4371,21 @@ function PulseTable({
   };
   return (
     <div
-      className={`num mx-1 flex min-h-0 w-full flex-1 flex-col overflow-hidden rounded-2xl shadow-lg overflow-x-hidden`}
+      className={`num flex min-h-0 w-full flex-1 flex-col overflow-hidden shadow-lg lg:min-w-[340px] ${
+        isFirstOrLast === "first"
+          ? "rounded-tl-md border-t border-r border-l lg:rounded-tl-md"
+          : isFirstOrLast === "last"
+            ? "rounded-tr-md border-t border-r lg:rounded-tr-md"
+            : isFirstOrLast === "only"
+              ? "rounded-md border border-t border-r border-l"
+              : "border-t border-r"
+      }`}
       style={{
         backgroundColor: "#111214",
+        borderColor: AX.border,
+        borderStyle: "solid",
+        borderWidth: "1px",
+        boxShadow: title.toLowerCase().includes("new") ? "none" : undefined,
       }}
     >
       <div
@@ -3702,7 +4400,13 @@ function PulseTable({
       >
         {/* Left side container for title */}
         <div className="flex items-center gap-2 font-normal">
-          <span className="ml-4 text-sm lg:text-lg">
+          <span
+            className="text-sm lg:text-base"
+            style={{
+              fontWeight: "600",
+              letterSpacing: "0.5px",
+            }}
+          >
             {title.includes("New Pairs")
               ? "New"
               : title.includes("Final Stretch")
@@ -3922,12 +4626,6 @@ function PulseTable({
                       </div>
                     );
                   })()}
-
-                {i < 2 ? (
-                  <div className="h-6 border-r-2 border-neutral-800"></div>
-                ) : (
-                  ""
-                )}
               </div>
             ))}
           </div>
@@ -3955,13 +4653,25 @@ function PulseTable({
               <BsSliders2 size={14} />
 
               {/* Protocol Filter Count Indicator (exclude 'All') */}
-              {filters.protocols.filter((p: string) => p !== "All").length >
+              {/* {filters.protocols.filter((p: string) => p !== "All").length >
                 0 && (
                 <span
                   className="absolute -top-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full text-xs font-bold"
                   style={{ color: "#f0f5f5", fontSize: "10px", backgroundColor: "#31e3ac" }}
                 >
                   {filters.protocols.filter((p: string) => p !== "All").length}
+                </span>
+              )} */}
+              {filters.protocols.length > 0 && (
+                <span
+                  className="absolute -top-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full text-xs font-bold"
+                  style={{
+                    backgroundColor: "#31e3ac",
+                    color: "#000000",
+                    fontSize: "10px",
+                  }}
+                >
+                  {filters.protocols.length}
                 </span>
               )}
             </button>
@@ -6114,7 +6824,8 @@ function PulseTable({
               // Build query params for optimistic UI + cache lookup
               // Include chain parameter to preserve chain selection
               // Use prop from parent (more reliable) or fallback to router.query
-              const currentChain = chainProp || (router.query.chain as string) || 'sol';
+              const currentChain =
+                chainProp || (router.query.chain as string) || "sol";
               const queryParams = new URLSearchParams({
                 _name: (token as any)?.name || (token as any)?.symbol || "",
                 _symbol: (token as any)?.symbol || "",
@@ -6128,6 +6839,11 @@ function PulseTable({
                 ),
                 _image: extractTokenImage(token as any) || "",
                 _mint: (token as any)?.mint || "", // CRITICAL: Required for cache lookup
+                _launchpad_protocol: (token as any)?.launchpad_protocol || "", // Required for poolType detection
+                _liquidity: String(
+                  (token as any)?.liquidity_usd || (token as any)?.total_liquidity_usd || "",
+                ),
+                _created_at: (token as any)?.launch_time || (token as any)?.created_at || "",
                 chain: currentChain, // Preserve chain selection
               }).toString();
 
@@ -6135,10 +6851,11 @@ function PulseTable({
                 <Link
                   href={`/trade/${pairAddress}?${queryParams}`}
                   key={pairAddress}
-                  className="group relative flex w-full cursor-pointer flex-row items-start gap-2 border-b px-6 py-2 transition-all duration-300 ease-out"
+                  className="group relative flex w-full cursor-pointer flex-row items-start gap-2 border-b px-2 pt-1 text-lg transition-all duration-300 ease-out"
                   style={{
                     borderColor: AX.border,
                     backgroundColor: "transparent",
+                    color: AX.text,
                   }}
                   onMouseEnter={(e) => {
                     e.currentTarget.style.backgroundColor =
@@ -6163,6 +6880,7 @@ function PulseTable({
                         image: extractTokenImage(token as any) || "",
                         mint: (token as any)?.mint || "",
                         pair_address: pairAddress,
+                        launchpad_protocol: (token as any)?.launchpad_protocol || "",
                         timestamp: Date.now(),
                       };
                       localStorage.setItem(
@@ -6264,14 +6982,17 @@ function PulseTable({
                                 // bonding_pct is already in 0-100 range from backend (percentages)
                                 const bondingProgress =
                                   typeof token.bonding_pct === "number"
-                                    ? Math.round(token.bonding_pct)
-                                    : Math.round(
-                                        parseFloat(token.bonding_pct || "0"),
-                                      );
+                                    ? token.bonding_pct
+                                    : parseFloat(token.bonding_pct || "0");
 
                                 return (
                                   <span style={{ color: AX.aiGreen }}>
-                                    Bonding Curve: {bondingProgress}%
+                                    Bonding Curve:{" "}
+                                    <SmoothNumber
+                                      value={bondingProgress}
+                                      formatter={(val) => `${Math.round(val)}%`}
+                                      duration={400}
+                                    />
                                   </span>
                                 );
                               } else if (isFinalStretch) {
@@ -6318,15 +7039,18 @@ function PulseTable({
                                 const bondingProgress =
                                   typeof token.bonding_curve_progress ===
                                   "number"
-                                    ? Math.round(token.bonding_curve_progress)
-                                    : Math.round(
-                                        parseFloat(
-                                          token.bonding_curve_progress || "0",
-                                        ),
+                                    ? token.bonding_curve_progress
+                                    : parseFloat(
+                                        token.bonding_curve_progress || "0",
                                       );
                                 return (
                                   <span style={{ color: AX.aiGreen }}>
-                                    Bonding: {bondingProgress}%
+                                    Bonding:{" "}
+                                    <SmoothNumber
+                                      value={bondingProgress}
+                                      formatter={(val) => `${Math.round(val)}%`}
+                                      duration={400}
+                                    />
                                   </span>
                                 );
                               }
@@ -6364,12 +7088,12 @@ function PulseTable({
                       totalTokens={memoizedTokens.length} 
                     />
                   </div> */}
-                        {/* <span
+                        <span
                       className="mt-2 mb-1 max-w-[60px] truncate font-mono text-[9px] lg:max-w-[70px] lg:text-[10px]"
                       style={{ color: AX.muted }}
                     >
                       {shortAddr(token)}
-                    </span> */}
+                    </span>
                       </div>
                       {/* Main Info Section */}
                       <div className="flex w-full min-w-0 flex-col gap-1">
@@ -6390,7 +7114,7 @@ function PulseTable({
                               >
                                 {token.name}
                               </span>
-                              <div className="relative ml-1">
+                              <div className="relative">
                                 <button
                                   className="transition-colors duration-200"
                                   style={{ color: AX.muted }}
@@ -6485,10 +7209,15 @@ function PulseTable({
                                 </button>
                               </div>
                             </div>
-                            <div className="mt-1 flex items-center gap-1 text-xs lg:gap-2">
-                              <span>{getAgeLabel(token)}</span>
+                            <div className="flex items-center gap-1 text-xs lg:gap-2">
+                              <span
+                                className="flex items-center gap-1 text-xs lg:gap-2"
+                                style={{ color: "#31e3ac" }}
+                              >
+                                {getAgeLabel(token)}
+                              </span>
                               {/* Socials */}
-                              <div className="relative flex items-center gap-1 text-neutral-400 lg:gap-1">
+                              <div className="relative flex items-center gap-1 text-neutral-400 lg:gap-2">
                                 {/* Pump.fun Link - only show for pump tokens */}
                                 {/* {token.mint.slice(-4) === "pump" && (
                               <Link
@@ -6517,8 +7246,16 @@ function PulseTable({
                               </Link>
                             )} */}
 
-                                {/* X Profile Preview Button */}
-                                <div className="relative">
+                                {/* Social Icons with URI Metadata */}
+                                <SocialIconsWithMetadata
+                                  token={token}
+                                  idx={idx}
+                                  showSearchDropdown={showSearchDropdown}
+                                  setShowSearchDropdown={setShowSearchDropdown}
+                                />
+
+                                {/* OLD X Profile Preview Button - kept for reference */}
+                                {false && <div className="relative">
                                   <button
                                     className="flex items-center justify-center rounded transition-colors duration-200"
                                     onMouseEnter={(e) => {
@@ -6559,7 +7296,7 @@ function PulseTable({
                                     }}
                                   >
                                     <FaXTwitter
-                                      size={16}
+                                      size={12}
                                       className="text-neutral-400"
                                     />
                                   </button>
@@ -6831,84 +7568,79 @@ function PulseTable({
                                       </div>
                                     </div>
                                   )}
-                                </div>
-
-                                {token.links && (
-                                  <button>
-                                    <PiTelegramLogo size={16} />
-                                  </button>
-                                )}
-
-                                {token.links && (
-                                  <button>
-                                    <FiGlobe size={16} />
-                                  </button>
-                                )}
-
-                                {/* Search on Twitter Button - show for all tokens */}
-                                <button
-                                  className="cursor-pointer transition-colors duration-200"
-                                  style={{ color: AX.muted }}
-                                  onMouseEnter={(e) => {
-                                    e.currentTarget.style.color = AX.aiCyan;
-                                    const tooltip = document.getElementById(
-                                      `search-tooltip-${idx}`,
-                                    ) as HTMLElement;
-                                    if (tooltip) {
-                                      const rect =
-                                        e.currentTarget.getBoundingClientRect();
-                                      tooltip.style.left = `${rect.left + rect.width / 2}px`;
-                                      tooltip.style.top = `${rect.top - 10}px`;
-                                      tooltip.style.opacity = "1";
-                                    }
-                                  }}
-                                  onMouseLeave={(e) => {
-                                    e.currentTarget.style.color = AX.muted;
-                                    const tooltip = document.getElementById(
-                                      `search-tooltip-${idx}`,
-                                    ) as HTMLElement;
-                                    if (tooltip) tooltip.style.opacity = "0";
-                                  }}
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    e.preventDefault(); // Prevent Link navigation
-                                    const searchQuery =
-                                      `${token.symbol} ${token.name}`.trim();
-                                    const twitterUrl = `https://twitter.com/search?q=${encodeURIComponent(searchQuery)}`;
-                                    window.open(twitterUrl, "_blank");
-                                  }}
-                                >
-                                  <LuSearch size={16} />
-                                </button>
+                                </div>}
 
                                 <div className="ml-1 flex flex-row gap-2 font-light">
-                                  <div className="flex items-center gap-1">
-                                    <PiCrownSimpleLight size={16} style={{ color: "#dcc13c" }} />
+                                  {/* Crown Icon - Dev Migration Stats */}
+                                  <div className="group/dev relative flex items-center gap-1 cursor-pointer">
+                                    <PiCrownSimpleLight
+                                      size={16}
+                                      style={{ color: "#dcc13c" }}
+                                    />
                                     <span className="text-sm text-white">
-                                      0
+                                      {token.dev_tokens_migrated ?? 0}/{token.dev_tokens_created ?? 0}
                                     </span>
+                                    {/* Dev Migration Tooltip */}
+                                    <div className="pointer-events-none absolute left-0 top-full mt-2 min-w-[180px] bg-[#1a1b1f] border border-[#2a2b33] rounded-lg opacity-0 group-hover/dev:opacity-100 group-hover/dev:pointer-events-auto transition-opacity duration-100 z-[99999] shadow-xl overflow-hidden">
+                                      <div className="px-3 py-2 space-y-1.5">
+                                        <div className="flex justify-between items-center">
+                                          <span className="text-sm text-gray-400">Dev Migrated</span>
+                                          <span className="text-sm text-white font-medium">{token.dev_tokens_migrated ?? 0}</span>
+                                        </div>
+                                        <div className="flex justify-between items-center">
+                                          <span className="text-sm text-gray-400">Dev Launched</span>
+                                          <span className="text-sm text-white font-medium">{token.dev_tokens_created ?? 0}</span>
+                                        </div>
+                                        <div className="flex justify-between items-center">
+                                          <span className="text-sm text-gray-400">Migrated</span>
+                                          <span className="text-sm text-white font-medium">
+                                            {token.dev_tokens_created && token.dev_tokens_created > 0
+                                              ? `${Math.round((token.dev_tokens_migrated ?? 0) / token.dev_tokens_created * 100)}%`
+                                              : '0%'}
+                                          </span>
+                                        </div>
+                                      </div>
+                                      <div className="px-3 py-2 border-t border-[#2a2b33] bg-[#16171a]">
+                                        <span className="text-xs text-gray-500">Click to open Dev Tokens</span>
+                                      </div>
+                                    </div>
                                   </div>
 
-                                  <div className="flex items-center gap-1 text-violet-200">
+                                  {/* KOL Count - Trophy Icon */}
+                                  <div className="group/kol2 relative flex items-center gap-1 text-violet-200">
                                     <CiTrophy size={16} />
                                     <span className="text-sm text-white">
-                                      0
+                                      {token.kol_count ?? 0}
                                     </span>
+                                    {/* Tooltip */}
+                                    <div className="pointer-events-none absolute left-0 top-full mt-2 px-3 py-2 bg-[#1a1b1f] border border-[#2a2b33] rounded-lg opacity-0 group-hover/kol2:opacity-100 transition-opacity duration-100 whitespace-nowrap z-[99999] shadow-xl">
+                                      <span className="text-sm text-white font-medium">KOL Count</span>
+                                      <p className="text-xs text-gray-400 mt-0.5">Key Opinion Leaders holding this token</p>
+                                    </div>
                                   </div>
 
                                   {/* People Icon - Total Holders */}
-                                  <div className="relative flex items-center gap-1">
+                                  <div className="group/holder2 relative flex items-center gap-1">
                                     <div
                                       className="flex cursor-help items-center justify-center rounded"
-                                      title="Holders"
+                                      style={{
+                                        backgroundColor: "#111214",
+                                        padding: "2px",
+                                        width: "18px",
+                                        height: "18px",
+                                      }}
                                     >
-                                      <GoPeople size={16} style={{ color: "#57ace9" }} />
+                                      <GoPeople
+                                        size={12}
+                                        style={{ color: "#36d8ff" }}
+                                      />
                                     </div>
                                     <span className="text-sm text-white">
                                       {(() => {
                                         const holders =
-                                          token.total_holders ||
-                                          token.unique_wallets_24h ||
+                                          token.holder_count ??
+                                          token.total_holders ??
+                                          token.unique_wallets_24h ??
                                           0;
                                         if (holders >= 1e9)
                                           return `${(holders / 1e9).toFixed(1)}B`;
@@ -6919,6 +7651,11 @@ function PulseTable({
                                         return holders.toString();
                                       })()}
                                     </span>
+                                    {/* Tooltip */}
+                                    <div className="pointer-events-none absolute left-0 top-full mt-2 px-3 py-2 bg-[#1a1b1f] border border-[#2a2b33] rounded-lg opacity-0 group-hover/holder2:opacity-100 transition-opacity duration-100 whitespace-nowrap z-[99999] shadow-xl">
+                                      <span className="text-sm text-white font-medium">Holder Count</span>
+                                      <p className="text-xs text-gray-400 mt-0.5">Total wallets holding this token</p>
+                                    </div>
                                   </div>
                                   <div className="flex items-center gap-1 text-violet-200">
                                     <PiRobotLight size={16} />
@@ -6952,14 +7689,15 @@ function PulseTable({
                             </div>
                           </div>
                           {/* Right: MC, V, F, TX */}
-                          <div className="items-right justify-right flex flex-col items-end gap-1 text-right">
+                        <div className="items-right justify-right flex min-w-[100px] flex-col items-end gap-1 text-right lg:min-w-[140px]">
                             <div
-                              className={
-                                "justify-right flex flex-row items-center gap-2 text-sm text-neutral-400 lg:text-sm"
-                              }
+                              className={"justify-right flex flex-col text-xs"}
                             >
-                              <div className="flex flex-row items-center gap-1" style={{ color: AX.muted }}>
-                                MC:{" "}
+                              <div
+                                className="flex items-end gap-1"
+                                style={{ color: AX.muted }}
+                              >
+                                <span className="mb-[3px]">MC </span>
                                 {(() => {
                                   const isFinalStretchColumn =
                                     title.toLowerCase().includes("final") ||
@@ -6973,20 +7711,19 @@ function PulseTable({
                                     isFinalStretchColumn &&
                                     lp.includes("meteora") &&
                                     bonding > 98.6;
-                                  const mcVal =
-                                    (token as any).fully_diluted_value ??
-                                    (token as any).market_cap_usd ??
-                                    0;
+                                  const mcVal = getTokenMarketCap(token);
                                   if (hasGreenWave) {
                                     return (
-                                      <span className="number-font text-sm font-medium text-white lg:text-base">
+                                      <span
+                                        className="number-font text-sm font-medium lg:text-base"
+                                        style={{ color: "#31e3ac" }}
+                                      >
                                         <SmoothNumber
                                           value={mcVal}
                                           formatter={(val) =>
                                             `${formatMarketCap(val)}`
                                           }
                                           duration={300}
-                                          className="text-sm"
                                         />
                                       </span>
                                     );
@@ -6995,15 +7732,14 @@ function PulseTable({
                                     <SmartColor
                                       token={token}
                                       metricType="marketCap"
-                                      className="number-font flex flex-row items-center text-sm font-medium text-white lg:text-base"
+                                      className="number-font text-sm font-medium lg:text-base"
                                     >
                                       <SmoothNumber
                                         value={mcVal}
                                         formatter={(val) =>
-                                          `${formatMarketCap(val)}`
+                                          `$${formatMarketCap(val)}`
                                         }
                                         duration={300}
-                                        className="text-sm"
                                       />
                                     </SmartColor>
                                   );
@@ -7021,16 +7757,19 @@ function PulseTable({
                              ); */
                                 })()}
                               </div>
-                              <div style={{ color: AX.muted }} className="flex flex-row gap-1">
-                                <span className="text-sm">V:</span>{" "}
+                              <div
+                                style={{ color: AX.muted }}
+                                className="flex items-end gap-1"
+                              >
+                                <span className="ml-auto text-xs mb-[1px]">V</span>{" "}
                                 <span
-                                  className="number-font text-sm font-medium"
+                                  className="number-font text-xs font-medium lg:text-sm"
                                   style={{
                                     color: "#ffffff",
                                   }}
                                 >
                                   <SmoothNumber
-                                    value={(token as any).volume_24h || 0}
+                                    value={calculateVolumeUsd(token, solPrice)}
                                     formatter={(val) => {
                                       const rounded = Math.round(val);
                                       if (rounded >= 1e12)
@@ -7047,14 +7786,15 @@ function PulseTable({
                                   />
                                 </span>
                               </div>
-                              <div className="flex items-center gap-2 text-sm">
+                            </div>
+                              <div className="flex items-center justify-end gap-2 text-xs">
                                 <div
                                   className="flex flex-row items-center gap-1"
                                   style={{ color: AX.muted }}
                                 >
-                                  <span className="text-sm">TX</span>{" "}
+                                  <span className="text-xs">TX</span>{" "}
                                   <span
-                                    className="number-font text-sm font-medium"
+                                    className="number-font text-xs font-medium"
                                     style={{
                                       color: "#ffffff",
                                     }}
@@ -7093,11 +7833,19 @@ function PulseTable({
                                       style={{
                                         backgroundColor: "#31e3ac", // Green for buys
                                         width: `${(() => {
-                                          const buys = token.total_buys_24h ?? 0;
-                                          const sells = token.total_sells_24h ?? 0;
-                                          const total = Math.max(1, buys + sells);
+                                          const buys =
+                                            token.total_buys_24h ?? 0;
+                                          const sells =
+                                            token.total_sells_24h ?? 0;
+                                          const total = Math.max(
+                                            1,
+                                            buys + sells,
+                                          );
                                           const percent = (buys / total) * 100;
-                                          return Math.min(100, Math.max(0, percent));
+                                          return Math.min(
+                                            100,
+                                            Math.max(0, percent),
+                                          );
                                         })()}%`,
                                       }}
                                     ></div>
@@ -7106,25 +7854,58 @@ function PulseTable({
                                       style={{
                                         backgroundColor: "#d11f3a", // Red for sells
                                         width: `${(() => {
-                                          const buys = token.total_buys_24h ?? 0;
-                                          const sells = token.total_sells_24h ?? 0;
-                                          const total = Math.max(1, buys + sells);
+                                          const buys =
+                                            token.total_buys_24h ?? 0;
+                                          const sells =
+                                            token.total_sells_24h ?? 0;
+                                          const total = Math.max(
+                                            1,
+                                            buys + sells,
+                                          );
                                           const percent = (sells / total) * 100;
-                                          return Math.min(100, Math.max(0, percent));
+                                          return Math.min(
+                                            100,
+                                            Math.max(0, percent),
+                                          );
                                         })()}%`,
                                       }}
                                     ></div>
                                   </div>
                                 </div>
                               </div>
-                            </div>
 
+                            {/* Buy button */}
                             <button
-                              className="mt-2 border z-50 flex cursor-pointer items-center gap-2 rounded-lg px-2 py-1 text-sm font-bold opacity-0 shadow-sm transition-all duration-200 ease-out group-hover:opacity-100"
+                              className="z-10 flex cursor-pointer items-center gap-2 rounded-full px-3 py-1.5 text-sm font-bold opacity-0 shadow-sm transition-all duration-200 ease-out group-hover:opacity-100"
                               style={{
-                                backgroundColor: title.toLowerCase().includes("final") || title.toLowerCase().includes("stretch") ? "transparent" : "rgba(49, 227, 172, 0.1)",
-                                borderColor: "#31e3ac",
-                                color: "#31e3ac",
+                                backgroundColor:
+                                  title.toLowerCase().includes("final") ||
+                                  title.toLowerCase().includes("stretch")
+                                    ? "#101114"
+                                    : AX.aiGreen,
+                                color:
+                                  title.toLowerCase().includes("final") ||
+                                  title.toLowerCase().includes("stretch")
+                                    ? AX.aiGreen
+                                    : "#000000",
+                                border:
+                                  title.toLowerCase().includes("final") ||
+                                  title.toLowerCase().includes("stretch")
+                                    ? `1px solid ${AX.aiGreen}`
+                                    : "1px solid rgba(0,0,0,0.15)",
+                              }}
+                              onMouseEnter={(e) => {
+                                const isFinal =
+                                  title.toLowerCase().includes("final") ||
+                                  title.toLowerCase().includes("stretch");
+                                e.currentTarget.style.backgroundColor = isFinal
+                                  ? "#101114"
+                                  : AX.aiGreenHover;
+                                e.currentTarget.style.transform =
+                                  "translateY(-1px)";
+                                e.currentTarget.style.boxShadow = isFinal
+                                  ? `0 0 10px ${AX.glowGreen}`
+                                  : "0 4px 14px rgba(112, 224, 176, 0.25)";
                               }}
                               onClick={(e) => {
                                 e.stopPropagation();
@@ -7168,9 +7949,9 @@ function PulseTable({
                                   return (
                                     <>
                                       <HiLightningBolt
-                                        size={14}
-                                        style={{ color: "#31e3ac" }}
-                                      />{" "}
+                                        className="text-black"
+                                        size={12}
+                                      />
                                       <span className="number-font">
                                         {thunderAmount || "0"}
                                       </span>
@@ -7233,8 +8014,19 @@ function PulseTable({
                                   return (
                                     <>
                                       <HiLightningBolt
+                                        className={"text-black"}
+                                        style={{
+                                          color:
+                                            title
+                                              .toLowerCase()
+                                              .includes("final") ||
+                                            title
+                                              .toLowerCase()
+                                              .includes("stretch")
+                                              ? AX.aiGreen
+                                              : "#000000",
+                                        }}
                                         size={14}
-                                        style={{ color: "#31e3ac" }}
                                       />
                                       <span
                                         className="number-font"
@@ -7401,7 +8193,7 @@ function PulseTable({
 
                         if (isHighBondingMeteora) {
                           return (
-                            <div className="absolute right-2 bottom-2 z-0 flex items-center gap-0.5">
+                            <div className="absolute right-2 bottom-4 z-0 flex items-center gap-0.5">
                               {/* Red Meteora Logo (left) */}
                               <div
                                 className="relative flex h-4 w-4 items-center justify-center overflow-hidden rounded-full"
@@ -7465,29 +8257,37 @@ function PulseTable({
                         return null;
                       })()}
                     </div>
-                    <div className="flex flex-row items-center gap-1 overflow-x-scroll max-w-full">
+                    <div className="absolute bottom-2 left-24 flex max-w-[calc(100%-6rem)] flex-row items-center gap-1 overflow-x-auto pr-10 whitespace-break-nowrap">
                       <BottomCardInfoHolder
-                        PassedIcon={FaRegUser}
+                        PassedIcon={BsPersonGear}
                         value={0.2}
-                        iconColor="#57ace9"
+                        iconColor={AX.aiGreen}
+                        tooltip="Top 10%"
                       />
                       <BottomCardInfoHolder
                         PassedIcon={LuChefHat}
-                        value={0.2}
-                        iconColor="#4d96cc"
+                        token={token}
+                        wsField="dev_percent"
+                        httpField="dev_held_percentage"
+                        iconColor="#566cdc"
+                        tooltip="Dev Holding"
                       />
                       <BottomCardInfoHolder
-                        PassedIcon={GiSeatedMouse}
-                        value={(() => {
-                          const val = (token as any).insider_held_percentage;
-                          const num =
-                            typeof val === "string"
-                              ? parseFloat(val)
-                              : (val ?? 0);
-                          return isNaN(num) ? 0 : num;
-                        })().toFixed(2)}
-                        tooltip="Insider Holdings"
+                        PassedIcon={RiGhostLine}
+                        token={token}
+                        wsField="insider_percent"
+                        httpField="insider_held_percentage"
+                        tooltip="Insider Holding"
                         count={(token as any).insider_count ?? undefined}
+                      />
+                      <BottomCardInfoHolder
+                        PassedIcon={SnipperIcon}
+                        token={token}
+                        wsField="sniper_percent"
+                        httpField="sniper_held_percentage"
+                        green={false}
+                        tooltip="Sniper Holding"
+                        count={(token as any).sniper_count ?? undefined}
                       />
                       <BottomCardInfoHolder
                         PassedIcon={GoStack}
@@ -7502,28 +8302,18 @@ function PulseTable({
                         tooltip="Bundler Holdings"
                         count={(token as any).bundler_count ?? undefined}
                       />
+                      {/* Fish icon - commented out
                       <BottomCardInfoHolder
                         PassedIcon={PiFishSimpleLight}
                         value={0.2}
                       />
+                      */}
+                      {/* Leaf icon - commented out
                       <BottomCardInfoHolder
                         PassedIcon={PiLeafLight}
                         value={0.2}
                       />
-                      <BottomCardInfoHolder
-                        PassedIcon={PiTarget}
-                        value={(() => {
-                          const val = (token as any).sniper_held_percentage;
-                          const num =
-                            typeof val === "string"
-                              ? parseFloat(val)
-                              : (val ?? 0);
-                          return isNaN(num) ? 0 : num;
-                        })().toFixed(2)}
-                        green={false}
-                        tooltip="Sniper Holdings"
-                        count={(token as any).sniper_count ?? undefined}
-                      />
+                      */}
                     </div>
                   </div>
                 </Link>
@@ -7780,7 +8570,8 @@ function PulseTable({
                 color: "#f0f5f5",
               }}
               onFocus={(e) => {
-                e.currentTarget.style.boxShadow = "0 0 0 2px rgba(49, 227, 172, 0.5)";
+                e.currentTarget.style.boxShadow =
+                  "0 0 0 2px rgba(49, 227, 172, 0.5)";
               }}
               onBlur={(e) => {
                 e.currentTarget.style.boxShadow = "none";
@@ -7795,3 +8586,65 @@ function PulseTable({
 }
 
 export default PulseTable;
+
+
+const SnipperIcon = ({ ...props }) => {
+  return (
+    <svg
+      {...props}
+      width="16"
+      height="16"
+      viewBox="0 0 24 24"
+      fill="currentColor"
+    >
+      <circle
+        cx="12"
+        cy="12"
+        r="8"
+        stroke="currentColor"
+        strokeWidth="1.5"
+        fill="none"
+      />
+      <line
+        x1="12"
+        y1="4"
+        x2="12"
+        y2="8"
+        stroke="currentColor"
+        strokeWidth="1.5"
+      />
+      <line
+        x1="12"
+        y1="16"
+        x2="12"
+        y2="20"
+        stroke="currentColor"
+        strokeWidth="1.5"
+      />
+      <line
+        x1="4"
+        y1="12"
+        x2="8"
+        y2="12"
+        stroke="currentColor"
+        strokeWidth="1.5"
+      />
+      <line
+        x1="16"
+        y1="12"
+        x2="20"
+        y2="12"
+        stroke="currentColor"
+        strokeWidth="1.5"
+      />
+      <circle
+        cx="12"
+        cy="12"
+        r="2"
+        stroke="currentColor"
+        strokeWidth="1.5"
+        fill="none"
+      />
+    </svg>
+  );
+};

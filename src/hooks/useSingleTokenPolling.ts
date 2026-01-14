@@ -2,13 +2,44 @@ import { useEffect, useRef, useState, useCallback } from "react";
 import throttle from "lodash.throttle";
 import { getCachedTradeData } from "~/utils/tokenCache";
 
+const TOKEN_SERVICE_URL = (process.env.NEXT_PUBLIC_GO_SERVICE_URL || process.env.NEXT_PUBLIC_TOKEN_SERVICE_URL || "").replace(/\/$/, "");
+
 interface PollingState {
   isPolling: boolean;
   error: string | null;
   loading: boolean;
 }
 
-export default function useSingleTokenPolling(address: string | undefined) {
+/**
+ * Fetch the correct pair address from the token service using GET /v1/get-pair/{mint}
+ * This uses Redis cache-through pattern for fast lookups
+ * Exported for use by quick buy and other trade flows
+ */
+export async function fetchVerifiedPairAddress(mintAddress: string): Promise<string | null> {
+  if (!TOKEN_SERVICE_URL || !mintAddress) return null;
+
+  try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 10_000);
+    const response = await fetch(`${TOKEN_SERVICE_URL}/v1/get-pair/${mintAddress}`, {
+      signal: controller.signal,
+    });
+    clearTimeout(timeoutId);
+
+    if (!response.ok) return null;
+
+    const data = await response.json();
+    const pairAddress = data?.pair_address;
+    if (typeof pairAddress === "string" && pairAddress.length > 0) {
+      return pairAddress;
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+export default function useSingleTokenPolling(address: string | undefined, mintHint?: string) {
   const [token, setToken] = useState<any>(null);
   const [trades, setTrades] = useState<any[]>([]);
   const [state, setState] = useState<PollingState>({
@@ -25,10 +56,6 @@ export default function useSingleTokenPolling(address: string | undefined) {
 
   const throttledSetToken = useCallback(
     throttle((newData: any) => {
-      console.log('Setting token data:', newData);
-      console.log('Token name:', newData?.name);
-      console.log('Token symbol:', newData?.symbol);
-      console.log('Token uri:', newData?.uri);
       setToken(newData);
       setState(prev => ({ ...prev, loading: false }));
     }, 1000),
@@ -59,7 +86,6 @@ export default function useSingleTokenPolling(address: string | undefined) {
     }, 5000);
 
     try {
-      console.log('Resolving mint address to pair address:', addr);
       const response = await fetch('/api/token-service/hydrate-pair', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -71,24 +97,25 @@ export default function useSingleTokenPolling(address: string | undefined) {
       
       if (response.ok) {
         const data = await response.json();
-        console.log('Successfully resolved address:', data);
         return data.pair_address;
       } else {
-        console.error('Failed to resolve address:', response.status);
         return null;
       }
     } catch (error) {
       clearTimeout(timeoutId);
       if (error.name === 'AbortError') {
-        console.warn(`[useSingleTokenPolling] Hydration aborted for ${addr} - timeout`);
         return null;
       }
-      console.error('Error resolving address:', error);
       return null;
     } finally {
       setIsHydrating(false);
     }
   }, [isMintAddress]);
+
+  // Track if we've already verified the pair address for this token
+  const pairAddressVerifiedRef = useRef<string | null>(null);
+  // Store the verified pair address to use on subsequent polls
+  const verifiedPairAddressRef = useRef<string | null>(null);
 
   // Load data from API with caching
   const loadData = useCallback(async () => {
@@ -96,67 +123,87 @@ export default function useSingleTokenPolling(address: string | undefined) {
 
     // Validate pair address format
     if (typeof resolvedPairAddress !== 'string' || resolvedPairAddress.length < 32) {
-      console.warn('Invalid pair address format:', resolvedPairAddress);
       setToken(null);
       setState(prev => ({ ...prev, loading: false }));
       return;
     }
 
     try {
-      console.log('Loading data for pair_address:', resolvedPairAddress);
 
       // Try to get cached data first for instant display
       // getCachedTradeData will fetch if not cached, so this always returns data
       const data = await getCachedTradeData(resolvedPairAddress);
 
       if (data) {
-        console.log('Data received:', data);
-
         // Set token data
         if (data.token) {
-          console.log('Setting token data:', data.token);
-          throttledSetToken(data.token);
+          // CRITICAL: Verify the pair address from the token service
+          // Use mintHint from URL query params as fallback if token.mint is not available
+          const mintAddress = data.token.mint || data.token.mint_address || mintHint;
+
+          // Verify pair address and use it for the token (don't reload page)
+          let effectivePairAddress = resolvedPairAddress;
+
+          if (mintAddress && pairAddressVerifiedRef.current !== mintAddress) {
+            // First time for this token - verify the pair address
+            const verifiedPairAddress = await fetchVerifiedPairAddress(mintAddress);
+            pairAddressVerifiedRef.current = mintAddress;
+
+            if (verifiedPairAddress) {
+              // Store verified address for subsequent polls
+              verifiedPairAddressRef.current = verifiedPairAddress;
+              effectivePairAddress = verifiedPairAddress;
+            }
+          } else if (verifiedPairAddressRef.current) {
+            // Already verified - use the stored verified address
+            effectivePairAddress = verifiedPairAddressRef.current;
+          }
+
+          // Update token with verified pair_address
+          // Also update migrated_pool_address to prevent getEffectivePoolAddress from using wrong address
+          const tokenWithVerifiedPair = {
+            ...data.token,
+            pair_address: effectivePairAddress,
+            migrated_pool_address: effectivePairAddress,
+            verified_pair_address: true,
+          };
+          throttledSetToken(tokenWithVerifiedPair);
         }
 
         // Set trades data
         if (data.recentTrades) {
-          console.log('Setting trades data:', data.recentTrades);
           setTrades(data.recentTrades);
         }
 
         setState(prev => ({ ...prev, error: null, loading: false }));
       } else {
         // No data available
-        console.warn(`No data available for pair_address: ${resolvedPairAddress}`);
         setToken(null);
         setState(prev => ({ ...prev, loading: false }));
       }
 
     } catch (err: any) {
-      console.error('Failed to load data:', err);
       setState(prev => ({
         ...prev,
         error: err.message || 'Failed to load data',
         loading: false
       }));
     }
-  }, [resolvedPairAddress, throttledSetToken]);
+  }, [resolvedPairAddress, throttledSetToken, mintHint]);
 
   // Start polling
   const startPolling = useCallback(() => {
     if (intervalRef.current) {
       clearInterval(intervalRef.current);
     }
-    
-    console.log('Starting polling for resolved pair address:', resolvedPairAddress);
+
     setState(prev => ({ ...prev, isPolling: true, loading: true }));
-    
+
     // Load initial data immediately
     loadData();
 
-    // Then poll every 5 seconds (reduced from 3s for better performance)
+    // Then poll every 5 seconds
     intervalRef.current = setInterval(() => {
-      console.log('Polling data...');
       loadData();
     }, 5000);
   }, [resolvedPairAddress, loadData]);
@@ -167,7 +214,6 @@ export default function useSingleTokenPolling(address: string | undefined) {
       clearInterval(intervalRef.current);
       intervalRef.current = null;
     }
-    console.log('Stopped polling');
     setState(prev => ({ ...prev, isPolling: false }));
   }, []);
 
@@ -178,6 +224,8 @@ export default function useSingleTokenPolling(address: string | undefined) {
       setToken(null);
       setTrades([]);
       setResolvedPairAddress(null);
+      pairAddressVerifiedRef.current = null; // Reset verification state
+      verifiedPairAddressRef.current = null; // Reset verified address
       setState(prev => ({ ...prev, loading: true, error: null }));
 
       // Resolve address first
@@ -197,6 +245,8 @@ export default function useSingleTokenPolling(address: string | undefined) {
       setToken(null);
       setTrades([]);
       setResolvedPairAddress(null);
+      pairAddressVerifiedRef.current = null;
+      verifiedPairAddressRef.current = null;
     }
 
     // Cleanup on unmount or address change

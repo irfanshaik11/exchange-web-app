@@ -18,6 +18,7 @@ import { showEnhancedToast, updateEnhancedToast } from "~/utils/enhancedToast";
 import { useUser } from "~/components/UserContext";
 import { executeSolanaMultiBuy, formatSolanaTxSummary, buildSolanaWalletAllocations } from "~/utils/solanaWalletAllocation";
 import useSolanaPositionWebSocket from "~/hooks/useSolanaPositionWebSocket";
+import type { SolanaTokenVolume } from "~/hooks/useSolanaTokenWebSocket";
 import { extractTokenImage } from "~/utils/images";
 import { SiSolana } from "react-icons/si";
 import useTokenStatsWebSocket from "~/hooks/useTokenStatsWebSocket";
@@ -30,7 +31,7 @@ import { LuChefHat } from "react-icons/lu";
 import { BiCandles } from "react-icons/bi";
 // import TokenAnalyticsPanel from "../TokenAnalyticsPanel";
 
-type TimeRange = "5m" | "1h" | "12h" | "24h";
+type TimeRange = "5m" | "1h" | "6h" | "24h";
 
 function cx(...parts: Array<string | false | null | undefined>) {
   return parts.filter(Boolean).join(" ");
@@ -99,6 +100,39 @@ async function fetchLatestMarketCap(pairAddress: string | undefined | null): Pro
   }
 }
 
+/**
+ * Fallback to fetch pair address from token service when not available locally
+ * Uses GET /v1/get-pair/{mint} endpoint with Redis cache-through pattern
+ */
+async function fetchPairAddressFromTokenService(mintAddress: string): Promise<string | null> {
+  if (!TOKEN_SERVICE_URL || !mintAddress) return null;
+
+  try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 10_000);
+    const response = await fetch(`${TOKEN_SERVICE_URL}/v1/get-pair/${mintAddress}`, {
+      signal: controller.signal,
+    });
+    clearTimeout(timeoutId);
+
+    if (!response.ok) {
+      console.warn(`⚠️ Token service get-pair responded ${response.status} for ${mintAddress}`);
+      return null;
+    }
+
+    const data = await response.json();
+    const pairAddress = data?.pair_address;
+    if (typeof pairAddress === "string" && pairAddress.length > 0) {
+      console.log(`✅ Fetched pair address from token service for ${mintAddress}: ${pairAddress}`);
+      return pairAddress;
+    }
+    return null;
+  } catch (error) {
+    console.warn("⚠️ Failed to fetch pair address from token service:", error);
+    return null;
+  }
+}
+
 function getCountsAndVol(t: any, side: "buy" | "sell", window: TimeRange) {
   const s = side;
   const count =
@@ -106,8 +140,8 @@ function getCountsAndVol(t: any, side: "buy" | "sell", window: TimeRange) {
       ? num(t[`total_${s}s_5m`])
       : window === "1h"
       ? num(t[`total_${s}s_1h`]) || num(t[`total_${s}s_60m`])
-      : window === "12h"
-      ? num(t[`total_${s}s_12h`]) || num(t[`total_${s}s_720m`])
+      : window === "6h"
+      ? num(t[`total_${s}s_6h`]) || num(t[`total_${s}s_360m`])
       : num(t[`total_${s}s_24h`]);
 
   const vol =
@@ -115,8 +149,8 @@ function getCountsAndVol(t: any, side: "buy" | "sell", window: TimeRange) {
       ? num(t[`total_${s}_volume_5m`])
       : window === "1h"
       ? num(t[`total_${s}_volume_1h`]) || num(t[`total_${s}_volume_60m`])
-      : window === "12h"
-      ? num(t[`total_${s}_volume_12h`]) || num(t[`total_${s}_volume_720m`])
+      : window === "6h"
+      ? num(t[`total_${s}_volume_6h`]) || num(t[`total_${s}_volume_360m`])
       : num(t[`total_${s}_volume_24h`]);
 
   return { count, vol };
@@ -201,7 +235,7 @@ const AddressDisplay: React.FC<{
 
 // Token Info Dropdown Component
 const TokenInfoDropdown: React.FC<{ token: any }> = ({ token }) => {
-  const [isOpen, setIsOpen] = useState(false);
+  const [isOpen, setIsOpen] = useState(true);
 
   // Get token metrics (using Codex fields if available, fallback to token-analytics)
   // Parse string values to numbers (backend returns decimals as strings)
@@ -287,16 +321,117 @@ const TokenInfoDropdown: React.FC<{ token: any }> = ({ token }) => {
               </div>
             </div>
 
-            {/* Dev Holdings */}
-            <div className="rounded-md p-2 border" style={{ backgroundColor: 'rgba(30, 31, 38, 0.3)', borderColor: AX.border }}>
-              <div className="flex flex-col items-center gap-1">
-                <div className="flex items-center gap-1.5">
-                  <LuChefHat size={16} style={{ color: AX.aiGreen }} />
-                  <div className="text-[12px] font-bold" style={{ color: AX.aiGreen }}>
-                    {devPercent > 0 ? `${devPercent.toFixed(1)}%` : '0%'}
+            {/* Dev Holdings - with hover popout */}
+            <div className="relative group">
+              <div className="rounded-md p-2 border cursor-pointer hover:border-[#3A3B43] transition-colors" style={{ backgroundColor: 'rgba(30, 31, 38, 0.3)', borderColor: AX.border }}>
+                <div className="flex flex-col items-center gap-1">
+                  <div className="flex items-center gap-1.5">
+                    <LuChefHat size={16} style={{ color: AX.aiGreen }} />
+                    <div className="text-[12px] font-bold" style={{ color: AX.aiGreen }}>
+                      {devPercent > 0 ? `${devPercent.toFixed(1)}%` : '0%'}
+                    </div>
+                  </div>
+                  <div className="text-[10px] uppercase tracking-wide text-center leading-tight" style={{ color: AX.muted }}>Dev H.</div>
+                </div>
+              </div>
+              {/* Dev Popout */}
+              <div className="absolute left-0 top-full mt-1 z-50 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 pointer-events-none group-hover:pointer-events-auto">
+                <div className="rounded-lg border shadow-xl min-w-[220px]" style={{ backgroundColor: AX.surface, borderColor: AX.border }}>
+                  {/* Header */}
+                  <div className="px-3 py-2 border-b" style={{ borderColor: AX.border }}>
+                    <div className="flex items-center gap-2">
+                      <span className="text-[11px] font-semibold" style={{ color: AX.text }}>DEV Holds</span>
+                      <span className="text-[11px] font-bold" style={{ color: AX.aiGreen }}>
+                        {devPercent > 0 ? `${devPercent.toFixed(2)}%` : '0%'}
+                      </span>
+                    </div>
+                  </div>
+                  {/* Content */}
+                  <div className="px-3 py-2 space-y-1.5">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[10px]" style={{ color: AX.muted }}>Dev Wallet</span>
+                      <div className="flex items-center gap-1">
+                        <span className="text-[10px] font-mono" style={{ color: AX.text }}>
+                          {token?.dev_wallet
+                            ? `${token.dev_wallet.slice(0, 4)}...${token.dev_wallet.slice(-4)}`
+                            : '--'}
+                        </span>
+                        {token?.dev_wallet && (
+                          <a
+                            href={`https://solscan.io/account/${token.dev_wallet}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="hover:opacity-70"
+                          >
+                            <FaExternalLinkAlt size={8} style={{ color: AX.muted }} />
+                          </a>
+                        )}
+                      </div>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-[10px]" style={{ color: AX.muted }}>Bought</span>
+                      <span className="text-[10px]" style={{ color: AX.aiGreen }}>
+                        {token?.dev_bought_usd ? `$${formatSmartNumber(token.dev_bought_usd)}` : '$0'} / {token?.dev_buy_count || 0}TXs
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-[10px]" style={{ color: AX.muted }}>Sold</span>
+                      <span className="text-[10px]" style={{ color: AX.sell }}>
+                        {token?.dev_sold_usd ? `$${formatSmartNumber(token.dev_sold_usd)}` : '$0'} / {token?.dev_sell_count || 0}TXs
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-[10px]" style={{ color: AX.muted }}>Balance</span>
+                      <span className="text-[10px]" style={{ color: AX.text }}>
+                        {token?.dev_balance_usd ? `$${formatSmartNumber(token.dev_balance_usd)}` : '$0'}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-[10px]" style={{ color: AX.muted }}>Funding</span>
+                      <div className="flex items-center gap-1">
+                        {token?.dev_funding_source ? (
+                          <>
+                            <span className="text-[10px] font-mono" style={{ color: AX.text }}>
+                              {`${token.dev_funding_source.slice(0, 4)}...${token.dev_funding_source.slice(-4)}`}
+                            </span>
+                            <a
+                              href={`https://solscan.io/account/${token.dev_funding_source}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="hover:opacity-70"
+                            >
+                              <FaExternalLinkAlt size={8} style={{ color: AX.muted }} />
+                            </a>
+                          </>
+                        ) : (
+                          <span className="text-[10px]" style={{ color: AX.muted }}>--</span>
+                        )}
+                      </div>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-[10px]" style={{ color: AX.muted }}>Transfer In</span>
+                      <span className="text-[10px]" style={{ color: AX.text }}>
+                        {token?.dev_transfer_in_sol ? `${formatSmartNumber(token.dev_transfer_in_sol)} SOL` : '--'}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-[10px]" style={{ color: AX.muted }}>Time</span>
+                      <span className="text-[10px]" style={{ color: AX.text }}>
+                        {token?.dev_first_activity
+                          ? new Date(token.dev_first_activity).toLocaleString('en-US', {
+                              year: 'numeric',
+                              month: '2-digit',
+                              day: '2-digit',
+                              hour: '2-digit',
+                              minute: '2-digit',
+                              second: '2-digit',
+                              hour12: false
+                            }).replace(',', '')
+                          : '--'}
+                      </span>
+                    </div>
                   </div>
                 </div>
-                <div className="text-[10px] uppercase tracking-wide text-center leading-tight" style={{ color: AX.muted }}>Dev H.</div>
               </div>
             </div>
 
@@ -431,7 +566,7 @@ const TokenInfoDropdown: React.FC<{ token: any }> = ({ token }) => {
 const formatCompactNumber = (n: number): string => {
   if (!Number.isFinite(n)) return "0";
   const abs = Math.abs(n);
-  
+
   if (abs >= 1_000_000_000) {
     return (n / 1_000_000_000).toFixed(1).replace(/\.0$/, "") + "B";
   }
@@ -446,6 +581,257 @@ const formatCompactNumber = (n: number): string => {
     return n.toFixed(4).replace(/\.?0+$/, ""); // Show up to 4 decimal places, remove trailing zeros
   }
   return Math.round(n).toString();
+};
+
+// Pool Info Section Component
+const PoolInfoSection: React.FC<{ token: any }> = ({ token }) => {
+  const [isOpen, setIsOpen] = useState(true);
+
+  const copyToClipboard = (text: string) => {
+    navigator.clipboard.writeText(text);
+    toast.success('Copied to clipboard');
+  };
+
+  const formatDate = (dateStr: string | undefined) => {
+    if (!dateStr) return '--';
+    const date = new Date(dateStr);
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    const hours = String(date.getHours()).padStart(2, '0');
+    const minutes = String(date.getMinutes()).padStart(2, '0');
+    const seconds = String(date.getSeconds()).padStart(2, '0');
+    return `${year}/${month}/${day} ${hours}:${minutes}:${seconds}`;
+  };
+
+  const truncateAddress = (addr: string | undefined, start = 4, end = 4) => {
+    if (!addr) return '--';
+    return `${addr.slice(0, start)}...${addr.slice(-end)}`;
+  };
+
+  // Get token name for header - prefer symbol over name for meme tokens
+  // Symbol is typically the recognizable ticker (e.g., "stickman") while name might be a description
+  const tokenName = token?.symbol || token?.name || 'Token';
+
+  return (
+    <div className="border-t border-[#2A2B33]">
+      <button
+        onClick={() => setIsOpen(!isOpen)}
+        className="w-full flex items-center justify-between px-3 py-2 hover:bg-[#1E1F26] transition-colors"
+      >
+        <div className="flex items-center gap-2">
+          <span className="text-[10px] font-semibold text-[#9CA3AF] uppercase tracking-wide">
+            {tokenName} Pool Info
+          </span>
+        </div>
+        <svg
+          width="12"
+          height="12"
+          viewBox="0 0 12 12"
+          fill="none"
+          className={`transition-transform ${isOpen ? 'rotate-180' : ''}`}
+          style={{ color: AX.muted }}
+        >
+          <path d="M6 9L1 4L11 4L6 9Z" fill="currentColor" />
+        </svg>
+      </button>
+
+      {isOpen && (
+        <div style={{ backgroundColor: '#0f1012' }}>
+          {/* Liquidity Section */}
+          <div className="px-3 py-2.5 space-y-2">
+            {/* Total Liquidity */}
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] text-[#9CA3AF] uppercase tracking-wide">Total liq</span>
+              <div className="flex items-center gap-1">
+                <span className="text-[11px] text-[#E6E7EA] font-semibold">
+                  ${formatSmartNumber(token?.liquidity_usd || token?.total_liquidity_usd || 0)}
+                </span>
+                <span className="text-[10px] text-[#9CA3AF]">
+                  ({formatSmartNumber((token?.liquidity_usd || token?.total_liquidity_usd || 0) / 200)} SOL)
+                </span>
+              </div>
+            </div>
+
+            {/* Pair Info */}
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] text-[#9CA3AF] uppercase tracking-wide">Pair</span>
+            </div>
+
+            {/* Token Row */}
+            <div className="pl-3 space-y-1.5">
+              <div className="text-[11px] font-semibold text-[#E6E7EA]">{token?.symbol || 'TOKEN'}</div>
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] text-[#9CA3AF]">Liq/Initial</span>
+                <div className="text-right">
+                  <span className="text-[11px] text-[#E6E7EA] font-semibold">
+                    {formatCompactNumber(token?.total_supply || 0)}
+                  </span>
+                  <span className="text-[10px] text-[#9CA3AF] ml-1">
+                    (100%)
+                  </span>
+                </div>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] text-[#9CA3AF]">Value</span>
+                <span className="text-[11px] text-[#E6E7EA] font-semibold">
+                  ${formatSmartNumber(token?.market_cap_usd || 0)}
+                </span>
+              </div>
+            </div>
+
+            {/* SOL Row */}
+            <div className="pl-3 space-y-1.5">
+              <div className="text-[11px] font-semibold text-[#E6E7EA]">SOL</div>
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] text-[#9CA3AF]">Liq</span>
+                <span className="text-[11px] text-[#E6E7EA] font-semibold">
+                  {formatSmartNumber((token?.liquidity_usd || 0) / 200)} SOL
+                </span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] text-[#9CA3AF]">Value</span>
+                <span className="text-[11px] text-[#E6E7EA] font-semibold">
+                  ${formatSmartNumber(token?.liquidity_usd || 0)}
+                </span>
+              </div>
+            </div>
+          </div>
+
+          {/* Divider */}
+          <div className="border-t border-[#2A2B33]"></div>
+
+          {/* Token Details Section */}
+          <div className="px-3 py-2.5 space-y-2">
+            {/* DEV */}
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] text-[#9CA3AF] uppercase tracking-wide">DEV</span>
+              <div className="flex items-center gap-1.5">
+                <span className="text-[11px] text-[#E6E7EA] font-mono">
+                  {truncateAddress(token?.dev_wallet || token?.creator_address)}
+                </span>
+                {token?.dev_sol_balance !== undefined && (
+                  <span className="text-[10px] text-[#9CA3AF]">
+                    ({formatSmartNumber(token.dev_sol_balance)} SOL)
+                  </span>
+                )}
+                {(token?.dev_wallet || token?.creator_address) && (
+                  <>
+                    <button
+                      onClick={() => copyToClipboard(token?.dev_wallet || token?.creator_address)}
+                      className="p-0.5 hover:bg-[#2A2B33] rounded transition-colors"
+                      title="Copy dev address"
+                    >
+                      <FaCopy className="w-2.5 h-2.5 text-[#9CA3AF]" />
+                    </button>
+                    <a
+                      href={`https://solscan.io/account/${token?.dev_wallet || token?.creator_address}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="p-0.5 hover:bg-[#2A2B33] rounded transition-colors"
+                      title="View on Solscan"
+                    >
+                      <FaExternalLinkAlt className="w-2.5 h-2.5 text-[#9CA3AF]" />
+                    </a>
+                  </>
+                )}
+              </div>
+            </div>
+
+            {/* Funding */}
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] text-[#9CA3AF] uppercase tracking-wide">Funding</span>
+              <div className="flex items-center gap-1.5">
+                {token?.dev_funding_source ? (
+                  <>
+                    <span className="text-[11px] text-[#E6E7EA] font-mono">
+                      {truncateAddress(token.dev_funding_source)}
+                    </span>
+                    {token?.dev_transfer_in_sol && (
+                      <>
+                        <SiSolana className="w-2.5 h-2.5 text-[#9CA3AF]" />
+                        <span className="text-[10px] text-[#E6E7EA]">
+                          {formatSmartNumber(token.dev_transfer_in_sol)}
+                        </span>
+                      </>
+                    )}
+                    <button
+                      onClick={() => copyToClipboard(token.dev_funding_source)}
+                      className="p-0.5 hover:bg-[#2A2B33] rounded transition-colors"
+                    >
+                      <FaCopy className="w-2.5 h-2.5 text-[#9CA3AF]" />
+                    </button>
+                  </>
+                ) : (
+                  <span className="text-[11px] text-[#9CA3AF]">--</span>
+                )}
+              </div>
+            </div>
+
+            {/* Market cap */}
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] text-[#9CA3AF] uppercase tracking-wide">Market cap</span>
+              <span className="text-[11px] text-[#E6E7EA] font-semibold">
+                ${formatSmartNumber(token?.market_cap_usd || 0)}
+              </span>
+            </div>
+
+            {/* Holders */}
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] text-[#9CA3AF] uppercase tracking-wide">Holders</span>
+              <span className="text-[11px] text-[#E6E7EA] font-semibold">
+                {token?.total_holders || token?.unique_traders || 0}
+              </span>
+            </div>
+
+            {/* Total supply */}
+            {token?.total_supply && (
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] text-[#9CA3AF] uppercase tracking-wide">Total supply</span>
+                <span className="text-[11px] text-[#E6E7EA] font-semibold">
+                  {formatCompactNumber(token.total_supply)}
+                </span>
+              </div>
+            )}
+
+            {/* Pair Address */}
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] text-[#9CA3AF] uppercase tracking-wide">Pair</span>
+              <div className="flex items-center gap-1.5">
+                <span className="text-[11px] text-[#E6E7EA] font-mono">
+                  {truncateAddress(token?.pair_address || token?.pool_address)}
+                </span>
+                {(token?.pair_address || token?.pool_address) && (
+                  <button
+                    onClick={() => copyToClipboard(token?.pair_address || token?.pool_address)}
+                    className="p-0.5 hover:bg-[#2A2B33] rounded transition-colors"
+                  >
+                    <FaCopy className="w-2.5 h-2.5 text-[#9CA3AF]" />
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {/* Token created */}
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] text-[#9CA3AF] uppercase tracking-wide">Token created</span>
+              <span className="text-[11px] text-[#E6E7EA]">
+                {formatDate(token?.created_at || token?.token_created_at)}
+              </span>
+            </div>
+
+            {/* Pool created */}
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] text-[#9CA3AF] uppercase tracking-wide">Pool created</span>
+              <span className="text-[11px] text-[#E6E7EA]">
+                {formatDate(token?.pool_created_at || token?.created_at)}
+              </span>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
 };
 
 // Meteora Migration Logo Component
@@ -528,18 +914,21 @@ interface TradeActionPanelProps {
   quickBuySettings?: any;
   quickBuySide?: "buy" | "sell";
   initialStats?: TokenStats | null; // Initial stats from REST API
+  wsVolume?: SolanaTokenVolume | null; // Volume data from unified WebSocket
 }
 
-const TradeActionPanel: React.FC<TradeActionPanelProps> = ({ 
-  token, 
+const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
+  token,
   tradeParams: externalTradeParams,
   setTradeParams: setExternalTradeParams,
   quickBuySettings: externalQuickBuySettings,
   quickBuySide: externalQuickBuySide,
-  initialStats
+  initialStats,
+  wsVolume
 }) => {
   // Only show skeleton if we have absolutely no token data (not even optimistic)
-  if (!token || (!token.name && !token.symbol)) {
+  // Allow tokens with just mint address (for tokens without metadata from search)
+  if (!token || (!token.name && !token.symbol && !token.mint)) {
     return (
       <div className="flex-shrink-0 min-w-[260px] basis-[280px] md:basis-[310px] lg:basis-[330px] hidden lg:block">
         <div className="h-full bg-neutral-800/50 rounded-lg p-4">
@@ -1029,9 +1418,44 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
   }, [targetMC, baseMarketCap]);
 
   // Real-time stats from WebSocket with fallback to static data
+  // Priority: wsVolume (unified token WebSocket) > wsData (token-stats WebSocket) > static token data
   const realTimeStats = useMemo(() => {
+    // SOL price for converting volume from SOL to USD (approximate)
+    const SOL_PRICE_USD = 200;
+
+    // First priority: Use wsVolume from unified token WebSocket (most reliable)
+    if (wsVolume) {
+      // Map timeRange to wsVolume keys
+      const volumeKey = timeRange === '5m' ? 'volume_5m'
+        : timeRange === '1h' ? 'volume_1h'
+        : timeRange === '6h' ? 'volume_6h'
+        : 'volume_24h';
+
+      const volumeData = wsVolume[volumeKey];
+      if (volumeData) {
+        // Convert SOL volumes to USD
+        const buyVolumeUsd = (volumeData.buy_volume_sol || 0) * SOL_PRICE_USD;
+        const sellVolumeUsd = (volumeData.sell_volume_sol || 0) * SOL_PRICE_USD;
+        const totalVolumeUsd = buyVolumeUsd + sellVolumeUsd;
+        const buyPct = totalVolumeUsd > 0 ? (buyVolumeUsd / totalVolumeUsd) * 100 : 50;
+        const sellPct = 100 - buyPct;
+        const netVolumeUsd = buyVolumeUsd - sellVolumeUsd;
+
+        return {
+          buys: volumeData.buy_count || 0,
+          sells: volumeData.sell_count || 0,
+          volume: totalVolumeUsd,
+          buyVolume: buyVolumeUsd,
+          sellVolume: sellVolumeUsd,
+          netVolume: netVolumeUsd,
+          buyPercentage: buyPct,
+          sellPercentage: sellPct,
+        };
+      }
+    }
+
+    // Second priority: Use wsData from token-stats WebSocket
     if (wsData && wsData.data && wsData.data.timeframes) {
-      // Use WebSocket data directly since timeframes now match
       const wsTimeframe = timeRange;
       const stats = getFormattedStats(wsTimeframe);
       return {
@@ -1044,27 +1468,27 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
         buyPercentage: stats.buyPercentage,
         sellPercentage: stats.sellPercentage,
       };
-    } else {
-      // Fallback to static data
-      const buyStats = getCountsAndVol(token as any, "buy", timeRange);
-      const sellStats = getCountsAndVol(token as any, "sell", timeRange);
-      const totalVol = (buyStats.vol ?? 0) + (sellStats.vol ?? 0);
-      const buyPct = totalVol ? (buyStats.vol / totalVol) * 100 : 50;
-      const sellPct = 100 - buyPct;
-      const netVol = (buyStats.vol ?? 0) - (sellStats.vol ?? 0);
-      
-      return {
-        buys: buyStats.count,
-        sells: sellStats.count,
-        volume: totalVol,
-        buyVolume: buyStats.vol,
-        sellVolume: sellStats.vol,
-        netVolume: netVol,
-        buyPercentage: buyPct,
-        sellPercentage: sellPct,
-      };
     }
-  }, [wsData, timeRange, getFormattedStats, token]);
+
+    // Fallback: Use static data from token object
+    const buyStats = getCountsAndVol(token as any, "buy", timeRange);
+    const sellStats = getCountsAndVol(token as any, "sell", timeRange);
+    const totalVol = (buyStats.vol ?? 0) + (sellStats.vol ?? 0);
+    const buyPct = totalVol ? (buyStats.vol / totalVol) * 100 : 50;
+    const sellPct = 100 - buyPct;
+    const netVol = (buyStats.vol ?? 0) - (sellStats.vol ?? 0);
+
+    return {
+      buys: buyStats.count,
+      sells: sellStats.count,
+      volume: totalVol,
+      buyVolume: buyStats.vol,
+      sellVolume: sellStats.vol,
+      netVolume: netVol,
+      buyPercentage: buyPct,
+      sellPercentage: sellPct,
+    };
+  }, [wsVolume, wsData, timeRange, getFormattedStats, token]);
 
   // Extract stats for easier access
   const { buys, sells, volume, buyVolume, sellVolume, netVolume, buyPercentage, sellPercentage } = realTimeStats;
@@ -1120,6 +1544,15 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
       fetchCreatorAddress();
     }
   }, [token.mint || '']);
+
+  // Also use dev_wallet from WebSocket holderSummary if available
+  useEffect(() => {
+    const devWallet = (token as any)?.dev_wallet;
+    if (devWallet && !creatorAddress) {
+      console.log('✅ Using dev_wallet from WebSocket:', devWallet);
+      setCreatorAddress(devWallet);
+    }
+  }, [(token as any)?.dev_wallet, creatorAddress]);
 
   // amount presets - different for buy vs sell (load from localStorage or use defaults)
   const [buyPresets, setBuyPresets] = useState<number[]>(() => {
@@ -1773,6 +2206,19 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
       setIsLoading(true);
       setSuccessMessage(null);
 
+      // Resolve pool address with fallback to token service API
+      let resolvedPoolAddress = effectivePoolAddress;
+      if (!resolvedPoolAddress && token.mint) {
+        console.log(`[TradeActionPanel] Pool address empty, fetching from token service for ${token.mint}`);
+        const fetchedPairAddress = await fetchPairAddressFromTokenService(token.mint);
+        if (fetchedPairAddress) {
+          resolvedPoolAddress = fetchedPairAddress;
+          console.log(`[TradeActionPanel] Resolved pool address from token service: ${resolvedPoolAddress}`);
+        } else {
+          console.warn(`[TradeActionPanel] Failed to resolve pool address for ${token.mint}`);
+        }
+      }
+
       if (tab === "limit") {
         if (!amount || !targetMC) {
           setSuccessMessage(null);
@@ -1845,7 +2291,7 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
               : undefined;
 
           let latestMarketCap: number | null = tokenServiceMarketCap ?? baseMarketCap;
-          if (effectivePoolAddress) {
+          if (resolvedPoolAddress) {
             const refreshed = await refreshTokenServiceData(true);
             if (refreshed !== null) {
               latestMarketCap = refreshed;
@@ -1890,8 +2336,8 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
               tokenName: token.name,
               tokenSymbol: token.symbol,
               tokenDecimals: token.decimals,
-              poolAddress: effectivePoolAddress,
-              pairAddress: token.pair_address || "",
+              poolAddress: resolvedPoolAddress,
+              pairAddress: token.pair_address || resolvedPoolAddress || "",
               poolType: computedPoolType,
               slippage: slippageValue,
               priorityFee: priorityFeeValue,
@@ -2052,6 +2498,11 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
                   setPositionData(newData);
                   console.log("🔄 TradeActionPanel - Position data refreshed after trade:", newData);
                 }
+
+                // Dispatch event to refresh chart price lines
+                if (typeof window !== "undefined" && token.mint) {
+                  window.dispatchEvent(new CustomEvent("solanaQuickTrade", { detail: { tokenAddress: token.mint } }));
+                }
               } catch (error) {
                 console.error("Error refreshing position data:", error);
               }
@@ -2198,7 +2649,7 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
       };
 
       try {
-        const poolAddress = effectivePoolAddress;
+        const poolAddress = resolvedPoolAddress;
         const baseMint = token.mint || '';
         const quoteMint = SOL_MINT_ADDRESS;
 
@@ -2208,7 +2659,7 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
           quoteMint,
           amountSOL: buyAmount,
           poolType,
-        originalPairAddress: token.pair_address,
+        originalPairAddress: token.pair_address || resolvedPoolAddress,
         slippage: settings.maxSlippage,
         priorityFee: settings.priority,
           bribe: settings.bribe,
@@ -2299,6 +2750,11 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
               setPositionData(newData);
               console.log("🔄 TradeActionPanel - Position data refreshed after trade:", newData);
             }
+
+            // Dispatch event to refresh chart price lines
+            if (typeof window !== "undefined" && token.mint) {
+              window.dispatchEvent(new CustomEvent("solanaQuickTrade", { detail: { tokenAddress: token.mint } }));
+            }
           } catch (error) {
             console.error("Error refreshing position data:", error);
           }
@@ -2381,31 +2837,28 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
       <div className="px-3 pt-2 pb-2 border-neutral-800">
         <div className="mx-auto w-full max-w-xl overflow-hidden">
           <div className="flex rounded-xl border border-neutral-700">
-            {(["5m", "1h", "12h", "24h"] as TimeRange[]).map((rng) => {
-              // Get change from WebSocket data if available, otherwise fallback to token properties
-              let ch = 0;
-              if (wsData && wsData.data && wsData.data.timeframes) {
-                // Map from WebSocket timeframes data to timeframe changes
-                // Use change property if available, otherwise fallback to 0
-                const changeMap: Record<TimeRange, number> = {
-                  "5m": Number(wsData.data.timeframes["5m"]?.change ?? 0),
-                  "1h": Number(wsData.data.timeframes["1h"]?.change ?? 0),
-                  "12h": Number(wsData.data.timeframes["12h"]?.change ?? 0),
-                  "24h": Number(wsData.data.timeframes["24h"]?.change ?? 0),
-                };
-                ch = changeMap[rng] ?? 0;
-              } else {
-                // Fallback to token properties
-                const changeMap: Record<TimeRange, number> = {
-                  "5m": Number((token as any).price_change_5m ?? (token as any).change_5m ?? 0),
-                  "1h": Number((token as any).price_change_1h ?? (token as any).change_1h ?? 0),
-                  "12h": Number((token as any).price_change_12h ?? (token as any).change_12h ?? 0),
-                  "24h": Number((token as any).price_change_24h ?? (token as any).change_24h ?? 0),
-                };
-                ch = changeMap[rng] ?? 0;
-              }
-              const isUp = ch >= 0;
-              const abs = Math.abs(ch);
+            {(["5m", "1h", "6h", "24h"] as TimeRange[]).map((rng) => {
+              // NOTE: Percentage change display commented out - backend needs to add price_change_percent to volume data
+              // let ch = 0;
+              // if (wsData && wsData.data && wsData.data.timeframes) {
+              //   const changeMap: Record<TimeRange, number> = {
+              //     "5m": Number(wsData.data.timeframes["5m"]?.change ?? 0),
+              //     "1h": Number(wsData.data.timeframes["1h"]?.change ?? 0),
+              //     "6h": Number(wsData.data.timeframes["6h"]?.change ?? 0),
+              //     "24h": Number(wsData.data.timeframes["24h"]?.change ?? 0),
+              //   };
+              //   ch = changeMap[rng] ?? 0;
+              // } else {
+              //   const changeMap: Record<TimeRange, number> = {
+              //     "5m": Number((token as any).price_change_5m ?? (token as any).change_5m ?? 0),
+              //     "1h": Number((token as any).price_change_1h ?? (token as any).change_1h ?? 0),
+              //     "6h": Number((token as any).price_change_6h ?? (token as any).change_6h ?? 0),
+              //     "24h": Number((token as any).price_change_24h ?? (token as any).change_24h ?? 0),
+              //   };
+              //   ch = changeMap[rng] ?? 0;
+              // }
+              // const isUp = ch >= 0;
+              // const abs = Math.abs(ch);
 
               return (
                 <button
@@ -2413,7 +2866,7 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
                   onClick={() => setTimeRange(rng)}
                   aria-pressed={timeRange === rng}
                   className={cx(
-                    "flex-1 text-left flex flex-col items-start justify-center cursor-pointer px-2 py-1 border-neutral-700",
+                    "flex-1 text-center flex flex-col items-center justify-center cursor-pointer px-2 py-2 border-neutral-700",
                     timeRange === rng ? "bg-neutral-700 ring-1 ring-white/10" : "hover:bg-neutral-700",
                     rng == "5m" ? `rounded-tl-xl rounded-bl-xl` : ``,
                     rng == "24h" ? `rounded-tr-xl rounded-br-xl` : `border-r`
@@ -2427,10 +2880,12 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
                   >
                     {rng}
                   </span>
+                  {/* Percentage display - uncomment when backend adds price_change_percent to volume data
                   <span className={cx("text-[10px] tabular-nums", isUp ? "text-[#70E0B0]" : "text-[#FF4D7F]")}>
                     {isUp ? "+" : "-"}
                     {abs.toFixed(2)}%
                   </span>
+                  */}
                 </button>
               );
             })}
@@ -3252,6 +3707,9 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
 
       {/* ===== Token Info ===== */}
       <TokenInfoDropdown token={token} />
+
+      {/* ===== Pool Info Section ===== */}
+      <PoolInfoSection token={token} />
 
       {/* High Slippage Warning Dialog */}
       <HighSlippageWarningDialog

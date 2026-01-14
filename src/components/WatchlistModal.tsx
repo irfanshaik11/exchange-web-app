@@ -18,7 +18,8 @@ import { executeEnhancedTrade } from '~/utils/enhancedTradeHandler';
 import toast from 'react-hot-toast';
 import { tradeMonadBuy } from '~/utils/api';
 import { executeMonadMultiBuy, formatMonadTxSummary, buildMonadWalletAllocations } from '~/utils/monadWalletAllocation';
-import { validateMonadBalance } from '~/utils/tradeBalanceValidation';
+import { validateMonadBalance, computeMonadBalanceForValidation } from '~/utils/tradeBalanceValidation';
+import { formatMonadError } from '~/utils/monadError';
 import { broadcastMonadQuickTrade } from '~/utils/monadTradeEvents';
 import { extractTokenImage } from '~/utils/images';
 import { FaCheckCircle } from 'react-icons/fa';
@@ -71,55 +72,6 @@ const getMonadLaunchpad = (token: Token): "nadfun" | "flapsh-simple" | "flapsh-d
     return "flapsh-simple";
   }
   return "nadfun"; // Default to nadfun
-};
-
-// Helper to format Monad errors (same logic as MonadTable)
-const formatMonadError = (error: string | undefined | null): string => {
-  if (!error) return "Trade failed. Please try again.";
-  
-  const errorLower = error.toLowerCase();
-  
-  if (errorLower.includes('err_bonding_curve_library_invalid_inputs') || 
-      errorLower.includes('bonding_curve_library_invalid_inputs')) {
-    return "This token has no liquidity or has graduated to DEX. Try a different token.";
-  }
-  
-  if (errorLower.includes('insufficient liquidity') || 
-      errorLower.includes('expected output is 0') ||
-      errorLower.includes('no liquidity')) {
-    return "Insufficient liquidity. This token may not be available for trading.";
-  }
-  
-  if (errorLower.includes('token does not exist') || 
-      errorLower.includes('token may not exist')) {
-    return "Token not found. Please check the token address.";
-  }
-  
-  if (errorLower.includes('token has graduated') || 
-      errorLower.includes('graduated to dex')) {
-    return "This token has graduated to DEX. Trading on bonding curve is no longer available.";
-  }
-  
-  if (errorLower.includes('insufficient balance') || 
-      errorLower.includes('missing')) {
-    return "Insufficient balance. Please add more MON to your wallet.";
-  }
-  
-  if (errorLower.includes('locked') || 
-      errorLower.includes('cannot be traded')) {
-    return "This token is locked and cannot be traded.";
-  }
-  
-  if (errorLower.includes('execution reverted') || 
-      errorLower.includes('revert')) {
-    return "Transaction failed. The token may not be available or there may be insufficient liquidity.";
-  }
-  
-  if (error.length < 100 && !error.includes('0x') && !error.includes('data:')) {
-    return error;
-  }
-  
-  return "Trade failed. Please try again.";
 };
 
 const rawProtocolColorMap: Record<string, string> = {
@@ -517,20 +469,30 @@ export default function WatchlistModal({ open, onClose }: WatchlistModalProps) {
       // Get gas price from preset (optional)
       const gasPrice = settings?.gasPrice !== undefined && settings.gasPrice > 0 ? settings.gasPrice : undefined;
       
+      const selectedMonadWalletIds = selectedWalletIds?.monad || [];
+      const isMultiWallet = selectedMonadWalletIds.length > 1;
+
       // Pre-validation: Check balance BEFORE showing any toast
-      const monadBalance = chainBalances?.['monad'] ?? 0;
-      const clientValidation = validateMonadBalance({
-        balance: monadBalance,
-        tradeAmount: buyAmount,
-        gasPrice: gasPrice,
+      const monadBalance = computeMonadBalanceForValidation({
+        selectedWalletIds: selectedMonadWalletIds,
+        walletList,
+        walletBalances,
+        fallbackBalance: chainBalances?.['monad'] ?? 0,
       });
-      
-      if (!clientValidation.isValid) {
-        toast.error(clientValidation.errorMessage || 'Insufficient MON balance', {
-          duration: 5000,
-          style: { background: "#1E1F26", color: "#E6E7EA", border: "1px solid #ff6b6b" },
+      if (!isMultiWallet) {
+        const clientValidation = validateMonadBalance({
+          balance: monadBalance,
+          tradeAmount: buyAmount,
+          gasPrice: gasPrice,
         });
-        return;
+        
+        if (!clientValidation.isValid) {
+          toast.error(clientValidation.errorMessage || 'Insufficient MON balance', {
+            duration: 5000,
+            style: { background: "#1E1F26", color: "#E6E7EA", border: "1px solid #ff6b6b" },
+          });
+          return;
+        }
       }
       
       // Get token image and name
@@ -544,17 +506,18 @@ export default function WatchlistModal({ open, onClose }: WatchlistModalProps) {
       let timerFinished = false;
 
       // Determine if this is a multi-wallet trade
-      const isMultiWallet = (selectedWalletIds?.monad || []).length > 1;
-      const totalSelectedWallets = (selectedWalletIds?.monad || []).length || 1;
+      const totalSelectedWallets = selectedMonadWalletIds.length || 1;
 
       // Pre-calculate which wallets will actually be used (have sufficient balance)
       const { allocations, total } = buildMonadWalletAllocations({
         amount: buyAmount,
         walletList,
         walletBalances,
-        selectedWalletIds: selectedWalletIds?.monad || [],
+        selectedWalletIds: selectedMonadWalletIds,
       });
-      const walletsWithBalance = allocations.length;
+      const DISPLAY_MIN_BALANCE = 0.0035;
+      const fundedAllocations = allocations.filter((a) => (a.balance ?? 0) >= DISPLAY_MIN_BALANCE);
+      const walletsWithBalance = fundedAllocations.length || (allocations.length > 0 ? 1 : 0);
 
       // Show initial loading toast
       toast.custom(
@@ -759,7 +722,7 @@ export default function WatchlistModal({ open, onClose }: WatchlistModalProps) {
               const protocolColor = resolveProtocolColor(token);
               const tokenIcon = resolveProtocolIcon(token);
               const fillProtocolBadge = shouldFillProtocolBadge(token);
-              const rawImg = (token as any).uri || (token as any).image || (token as any).logo;
+              const rawImg = (token as any).image_url || (token as any).image || (token as any).logo || (token as any).uri;
               const imgSrc = normalizeAssetUrl(rawImg);
               const fallbackAvatar = `https://ui-avatars.com/api/?name=${encodeURIComponent(
                 token.symbol || token.name || "T"

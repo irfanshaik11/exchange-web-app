@@ -21,6 +21,7 @@ import { formatSmartNumber } from "../utils/db";
 import type { Token } from "../utils/db";
 import { executeEnhancedTrade } from "~/utils/enhancedTradeHandler";
 import { executeMonadMultiBuy, formatMonadTxSummary } from "~/utils/monadWalletAllocation";
+import { formatMonadError } from "~/utils/monadError";
 import { extractTokenImage } from "~/utils/images";
 import { broadcastMonadQuickTrade } from "~/utils/monadTradeEvents";
 import Cookies from "js-cookie";
@@ -59,7 +60,7 @@ const PLATFORM_UPDATES = [
     badge: "New Feature",
     badgeColor:
       "bg-emerald-500/20 text-emerald-400 border border-emerald-500/30",
-    image: "/interstate-logo.png",
+    image: "/interstate/logo.png",
   },
   {
     id: "update-2",
@@ -86,6 +87,7 @@ const navLinks = [
   { name: "Portfolio", href: "/portfolio" },
   { name: "Trending", href: "/discover" },
   { name: "Trackers", href: "/trackers" },
+  // { name: "Predictions", href: "/predictions" },
   // { name: "Perpetuals", href: "/construction" },
   // { name: "Yield", href: "/construction" },
   { name: "Referral", href: "/rewards" },
@@ -283,7 +285,7 @@ export default function Header({
     selectedWalletIds,
     logout,
   } = useUser();
-  // Get chain from URL first, then localStorage, then default to monad
+  // Get chain from URL first, then localStorage, then default to solana
   const currentChain = (() => {
     if (router.query.chain) {
       return router.query.chain as string;
@@ -294,7 +296,7 @@ export default function Header({
         return savedChain;
       }
     }
-    return 'monad';
+    return 'sol';
   })();
   const { solPrice, monPrice } = useSolPrice();
   const chainPrice = currentChain === 'monad' ? monPrice : solPrice;
@@ -822,55 +824,6 @@ export default function Header({
     return 'nadfun';
   };
 
-  // Helper function to format user-friendly error messages
-  const formatMonadError = (error: string | undefined | null): string => {
-    if (!error) return "Trade failed. Please try again.";
-    
-    const errorLower = error.toLowerCase();
-    
-    if (errorLower.includes('err_bonding_curve_library_invalid_inputs') || 
-        errorLower.includes('bonding_curve_library_invalid_inputs')) {
-      return "This token has no liquidity or has graduated to DEX. Try a different token.";
-    }
-    
-    if (errorLower.includes('insufficient liquidity') || 
-        errorLower.includes('expected output is 0') ||
-        errorLower.includes('no liquidity')) {
-      return "Insufficient liquidity. This token may not be available for trading.";
-    }
-    
-    if (errorLower.includes('token does not exist') || 
-        errorLower.includes('token may not exist')) {
-      return "Token not found. Please check the token address.";
-    }
-    
-    if (errorLower.includes('token has graduated') || 
-        errorLower.includes('graduated to dex')) {
-      return "This token has graduated to DEX. Trading on bonding curve is no longer available.";
-    }
-    
-    if (errorLower.includes('insufficient balance') || 
-        errorLower.includes('missing')) {
-      return "Insufficient balance. Please add more MON to your wallet.";
-    }
-    
-    if (errorLower.includes('locked') || 
-        errorLower.includes('cannot be traded')) {
-      return "This token is locked and cannot be traded.";
-    }
-    
-    if (errorLower.includes('execution reverted') || 
-        errorLower.includes('revert')) {
-      return "Transaction failed. The token may not be available or there may be insufficient liquidity.";
-    }
-    
-    if (error.length < 100 && !error.includes('0x') && !error.includes('data:')) {
-      return error;
-    }
-    
-    return "Trade failed. Please try again.";
-  };
-
   // Handler for watchlist ticker quick buy
   const handleWatchlistQuickBuy = async (token: Token) => {
     // Validation checks with user feedback
@@ -1185,15 +1138,16 @@ export default function Header({
           <div className="flex min-w-0 flex-1 items-center gap-2 overflow-hidden md:gap-3">
             <Link
               href={chainAwareHref("/pulse")}
-              className="flex flex-shrink-0 items-center text-xl tracking-tight select-none"
+              className="flex flex-shrink-0 items-center gap-1 tracking-tight select-none"
               style={{ color: AX.text }}
               title="Go to Trenches"
             >
               <img
-                src="/interstate-logo.png"
+                src="/interstate/logo.png"
                 alt="Interstate logo"
-                className="h-auto w-20 scale-75 sm:w-24 md:w-30 md:scale-90"
+                className="w-5 h-auto"
               />
+              <h3 className="!font-orbitron">interstate</h3>
             </Link>
 
             {/* Navigation container with arrows */}
@@ -2134,7 +2088,7 @@ export default function Header({
               }
               
               const isHovered = hoveredWatchlistToken === tokenKey;
-              const rawImg = (token as any).uri || (token as any).image || (token as any).logo;
+              const rawImg = (token as any).image_url || (token as any).image || (token as any).logo || (token as any).uri;
               
               return (
                 <div
@@ -2146,7 +2100,7 @@ export default function Header({
                     if (tokenAddress) {
                       // Check if it's a Monad token (starts with 0x)
                       const isMonadToken = tokenAddress.startsWith('0x') || tokenAddress.startsWith('0X');
-                      
+
                       if (isMonadToken) {
                         // Build Monad trade URL with query parameters
                         const queryParams = new URLSearchParams();
@@ -2156,11 +2110,12 @@ export default function Header({
                         if (token.market_cap_usd || (token as any).fully_diluted_value) {
                           queryParams.set('_mcap', ((token.market_cap_usd || (token as any).fully_diluted_value || 0)).toString());
                         }
-                        const imageUrl = (token as any).uri || (token as any).image || (token as any).logo || '';
+                        const imageUrl = (token as any).image_url || (token as any).image || (token as any).logo || (token as any).uri || '';
                         if (imageUrl) queryParams.set('_image', imageUrl);
                         queryParams.set('_mint', tokenAddress);
+                        if ((token as any).launchpad_protocol) queryParams.set('_launchpad_protocol', (token as any).launchpad_protocol);
                         queryParams.set('chain', 'monad');
-                        
+
                         const url = `/trade/monad/${tokenAddress}?${queryParams.toString()}`;
                         router.push(url);
                       } else {
@@ -2172,9 +2127,10 @@ export default function Header({
                         if (token.market_cap_usd || (token as any).fully_diluted_value) {
                           queryParams.set('_mcap', ((token.market_cap_usd || (token as any).fully_diluted_value || 0)).toString());
                         }
-                        const imageUrl = (token as any).uri || (token as any).image || (token as any).logo || '';
+                        const imageUrl = (token as any).image_url || (token as any).image || (token as any).logo || (token as any).uri || '';
                         if (imageUrl) queryParams.set('_image', imageUrl);
                         queryParams.set('_mint', tokenAddress);
+                        if ((token as any).launchpad_protocol) queryParams.set('_launchpad_protocol', (token as any).launchpad_protocol);
                         queryParams.set('chain', 'sol');
 
                         router.push(`/trade/${tokenAddress}?${queryParams.toString()}`);

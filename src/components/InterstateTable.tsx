@@ -15,10 +15,10 @@ import { useWatchlist } from "./WatchlistContext";
 import { showEnhancedToast } from "~/utils/enhancedToast";
 import { SolanaIcon } from './Footer';
 import type { Token as BaseToken } from "~/utils/db";
-import { formatSmartNumber, formatMarketCap } from '~/utils/db';
+import { formatSmartNumber, formatMarketCap, formatLamportsToSol } from '~/utils/db';
 import SkeletonRow from './InterstateTable/SkeletonRow';
 import { fetchTokenMetadata } from '~/utils/functions';
-import { withImageFallback, extractMetaImage } from '~/utils/images';
+import { withImageFallback, extractMetaImage, isMetadataUrl } from '~/utils/images';
 import AvatarImage from '~/components/AvatarImage';
 import { useFilter } from "./FilterContext";
 import { getAmm } from "~/utils/amms";
@@ -81,6 +81,7 @@ const TABLE_HEADERS: HeaderConfig[] = [
   { key: 'total_liquidity_usd', label: 'Liquidity', align: 'right', width: 'w-28' },
   { key: 'volume', label: 'Volume', align: 'right', width: 'w-28' },
   { key: 'txns', label: 'TXNS', align: 'right', width: 'w-24' },
+  // { key: 'total_fees_lamports', label: 'Gas Fees', align: 'right', width: 'w-28' },
   // { key: null, label: 'Token Info', align: 'center', width: 'w-24' },
   { key: null, label: 'Action', align: 'center', width: 'w-32' },
 ];
@@ -432,7 +433,10 @@ const TokenAvatar: React.FC<{
     return 'https://logos-world.net/wp-content/uploads/2024/10/Pump-Fun-Logo.png';
   };
 
-  const imageUrl = (token as any).uri || (token as any).image || token.logo;
+  // API returns image_url, fallback to image, logo, then uri (only if uri is not a metadata JSON URL)
+  const rawUri = (token as any).uri;
+  const safeUri = rawUri && !isMetadataUrl(rawUri) ? rawUri : null;
+  const imageUrl = (token as any).image_url || (token as any).image || token.logo || safeUri;
 
   return (
     <div className="relative h-12 w-12 flex items-center justify-center">
@@ -444,7 +448,11 @@ const TokenAvatar: React.FC<{
           </div>
         ) : meta || imageUrl ? (
           <img
-            src={extractMetaImage(meta) || imageUrl || token.logo || ''}
+            src={(() => {
+              const imgSrc = extractMetaImage(meta) || imageUrl || token.logo || '';
+              if (!imgSrc) return '';
+              return `/api/image?url=${encodeURIComponent(imgSrc)}`;
+            })()}
             alt={token.name || token.symbol || ''}
             width={48}
             height={48}
@@ -980,7 +988,7 @@ export const SubscriptNumber: React.FC<SubscriptNumberProps> = ({ value, classNa
     const [integerPart, decimalPart = ''] = numStr.split('.');
     const leadingZeros = decimalPart.match(/^0*/)?.[0] || '';
     const originalZeroCount = leadingZeros.length;
-    const zeroCount = Math.max(0, originalZeroCount - 1); // Subtract 1 from zero count
+    const zeroCount = originalZeroCount; // Show actual zero count in subscript
     const sigDigitsStart = leadingZeros.length;
 
     const firstDigit = decimalPart[sigDigitsStart] || '0';
@@ -1349,12 +1357,26 @@ const TableRow: React.FC<{
       <td className="w-24 px-4 py-4 align-middle">
         <TxnsCell token={token} selectedTimeframe={selectedTimeframe} isDiscoverPage={isDiscoverPage} />
       </td>
-      
+
+      {/* Gas Fees column - commented out per user request
+      <td className="w-28 px-4 py-4 align-middle text-right">
+        <div className={`text-sm font-medium ${isDiscoverPage ? 'number-font' : ''}`} style={{
+          color: AX.text,
+          ...(isDiscoverPage ? {} : {
+            fontFamily: 'ui-monospace, SFMono-Regular, "SF Mono", Consolas, "Liberation Mono", Menlo, monospace',
+            fontWeight: '400'
+          })
+        }}>
+          {formatLamportsToSol((token as any).total_fees_lamports)}
+        </div>
+      </td>
+      */}
+
       {/* Token Info column - commented out per user request */}
       {/* <td className="w-24 px-4 py-4 align-middle">
         <AuditLogCell token={token} selectedTimeframe={selectedTimeframe} />
       </td> */}
-      
+
       <td className="w-32 px-4 py-4 align-middle text-center">
         {isDiscoverPage ? (
           <button
@@ -1608,8 +1630,9 @@ export default function InterstateTable({
                     }
                     if (token.uri || token.logo) queryParams.set('_image', token.uri || token.logo || '');
                     queryParams.set('_mint', address);
+                    if ((token as any).launchpad_protocol) queryParams.set('_launchpad_protocol', (token as any).launchpad_protocol);
                     queryParams.set('chain', 'monad');
-                    
+
                     const url = `/trade/monad/${address}?${queryParams.toString()}`;
                     router.push(url);
                   } else {
@@ -1621,6 +1644,7 @@ export default function InterstateTable({
                     if (token.market_cap_usd) solQueryParams.set('_mcap', token.market_cap_usd.toString());
                     if (token.uri || token.logo || (token as any).image) solQueryParams.set('_image', token.uri || token.logo || (token as any).image || '');
                     solQueryParams.set('_mint', address);
+                    if ((token as any).launchpad_protocol) solQueryParams.set('_launchpad_protocol', (token as any).launchpad_protocol);
                     solQueryParams.set('chain', 'sol');
                     router.push(`/trade/${address}?${solQueryParams.toString()}`);
                   }
