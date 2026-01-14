@@ -81,7 +81,7 @@ const TABLE_HEADERS: HeaderConfig[] = [
   { key: 'total_liquidity_usd', label: 'Liquidity', align: 'right', width: 'w-28' },
   { key: 'volume', label: 'Volume', align: 'right', width: 'w-28' },
   { key: 'txns', label: 'TXNS', align: 'right', width: 'w-24' },
-  { key: 'total_fees_lamports', label: 'Gas Fees', align: 'right', width: 'w-28' },
+  // { key: 'total_fees_lamports', label: 'Gas Fees', align: 'right', width: 'w-28' },
   // { key: null, label: 'Token Info', align: 'center', width: 'w-24' },
   { key: null, label: 'Action', align: 'center', width: 'w-32' },
 ];
@@ -1358,7 +1358,7 @@ const TableRow: React.FC<{
         <TxnsCell token={token} selectedTimeframe={selectedTimeframe} isDiscoverPage={isDiscoverPage} />
       </td>
 
-      {/* Gas Fees column - shows total fees for all trades on this token */}
+      {/* Gas Fees column - commented out per user request
       <td className="w-28 px-4 py-4 align-middle text-right">
         <div className={`text-sm font-medium ${isDiscoverPage ? 'number-font' : ''}`} style={{
           color: AX.text,
@@ -1370,6 +1370,7 @@ const TableRow: React.FC<{
           {formatLamportsToSol((token as any).total_fees_lamports)}
         </div>
       </td>
+      */}
 
       {/* Token Info column - commented out per user request */}
       {/* <td className="w-24 px-4 py-4 align-middle">

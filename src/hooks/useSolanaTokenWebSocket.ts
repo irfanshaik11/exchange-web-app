@@ -58,6 +58,7 @@ export interface HolderSummary {
   insider_count: number;
   top10_held_percent: number;
   total_holders: number;
+  kol_count?: number;
 }
 
 // Top trader data from the unified WebSocket
@@ -102,7 +103,17 @@ export interface SolanaTokenInfo {
   liquidity_usd: number;
   uri?: string;           // Metadata URI (contains image URL in JSON)
   image_url?: string;     // Direct image URL (fetched from URI metadata)
+  twitter?: string;       // Twitter URL (fetched from URI metadata)
   updated_at: string;
+  // Dev token tracking
+  dev_tokens_created?: number;
+  dev_tokens_migrated?: number;
+  // Bonding curve progress
+  graduation_percent?: number;
+  // Holder count
+  holder_count?: number;
+  // Fee tracking
+  total_fees_lamports?: number;
 }
 
 // Volume data for a specific timeframe
@@ -238,8 +249,13 @@ function getAge(timestamp: string): string {
  * - holder_update: Real-time holder updates
  */
 // Helper to fetch image URL from IPFS metadata URI
-async function fetchImageFromUri(uri: string): Promise<string | null> {
-  if (!uri) return null;
+interface UriMetadata {
+  image_url: string | null;
+  twitter: string | null;
+}
+
+async function fetchMetadataFromUri(uri: string): Promise<UriMetadata> {
+  if (!uri) return { image_url: null, twitter: null };
 
   try {
     // Handle IPFS URIs
@@ -252,7 +268,7 @@ async function fetchImageFromUri(uri: string): Promise<string | null> {
       headers: { 'Accept': 'application/json' },
     });
 
-    if (!response.ok) return null;
+    if (!response.ok) return { image_url: null, twitter: null };
 
     const metadata = await response.json();
 
@@ -264,10 +280,13 @@ async function fetchImageFromUri(uri: string): Promise<string | null> {
       imageUrl = `https://ipfs.io/ipfs/${imageUrl.replace('ipfs://', '')}`;
     }
 
-    return imageUrl;
+    // Extract Twitter from metadata
+    const twitter = metadata.twitter || metadata.x || null;
+
+    return { image_url: imageUrl, twitter };
   } catch (err) {
     console.debug('[useSolanaTokenWebSocket] Failed to fetch URI metadata:', err);
-    return null;
+    return { image_url: null, twitter: null };
   }
 }
 
@@ -422,21 +441,22 @@ export function useSolanaTokenWebSocket(
               console.log('[useSolanaTokenWebSocket] Received token info:', message.data.token);
               const rawToken = message.data.token;
 
-              // If we have a URI, fetch the image from metadata
-              if (rawToken.uri && !rawToken.image_url) {
-                fetchImageFromUri(rawToken.uri).then((imageUrl) => {
-                  if (mountedRef.current && imageUrl) {
-                    const tokenWithImage: SolanaTokenInfo = {
+              // If we have a URI, fetch image and twitter from metadata
+              if (rawToken.uri && (!rawToken.image_url || !rawToken.twitter)) {
+                fetchMetadataFromUri(rawToken.uri).then((metadata) => {
+                  if (mountedRef.current && (metadata.image_url || metadata.twitter)) {
+                    const tokenWithMetadata: SolanaTokenInfo = {
                       ...rawToken,
-                      image_url: imageUrl,
+                      image_url: metadata.image_url || rawToken.image_url,
+                      twitter: metadata.twitter || rawToken.twitter,
                     };
-                    setTokenInfo(tokenWithImage);
-                    onTokenInfoUpdateRef.current?.(tokenWithImage);
+                    setTokenInfo(tokenWithMetadata);
+                    onTokenInfoUpdateRef.current?.(tokenWithMetadata);
                   }
                 });
               }
 
-              // Set token info immediately (image will be updated async if available)
+              // Set token info immediately (image/twitter will be updated async if available)
               setTokenInfo(rawToken);
               onTokenInfoUpdateRef.current?.(rawToken);
             } else {
@@ -587,10 +607,11 @@ export function useSolanaTokenWebSocket(
               console.log('[useSolanaTokenWebSocket] Token info update:', message.data.token);
               const rawToken = message.data.token;
 
-              // Preserve image_url if we already have it (from initial URI fetch)
+              // Preserve image_url and twitter if we already have them (from initial URI fetch)
               setTokenInfo((prev) => ({
                 ...rawToken,
                 image_url: rawToken.image_url || prev?.image_url,
+                twitter: rawToken.twitter || prev?.twitter,
               }));
               onTokenInfoUpdateRef.current?.(rawToken);
             }
