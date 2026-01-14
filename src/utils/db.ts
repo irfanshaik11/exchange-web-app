@@ -102,6 +102,9 @@ export type Token = {
   // Holder and KOL metrics from WebSocket
   holder_count?: number;
   kol_count?: number;
+  // Dev token tracking
+  dev_tokens_created?: number;
+  dev_tokens_migrated?: number;
 };
 
 /**

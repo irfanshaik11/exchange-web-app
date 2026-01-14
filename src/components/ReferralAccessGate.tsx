@@ -45,6 +45,7 @@ export function useReferralAccess() {
 const STORAGE_FLAG_KEY = "referralAccess.granted"; // legacy (session)
 const STORAGE_META_KEY = "referralAccess.meta"; // legacy (session)
 const LS_KEY_PREFIX = "referralAccess.granted.user:"; // persistent per-user
+const LS_BYPASS_KEY = "referralAccess.bypass"; // user-independent bypass (for X button)
 const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL;
 const buildWalletLoginMessage = () =>
   `Login to Interstate with nonce: ${Date.now()}`;
@@ -112,18 +113,28 @@ function clearPersistedAccess() {
 function hasStoredAccess(userId?: string | null): boolean {
   if (typeof window === "undefined") return false;
   try {
-    // Account-specific: only treat as granted when it matches the current user
-    if (!userId) return false;
+    // If a userId is provided (user is logged in), only check user-specific flags.
+    // This ensures new accounts always see the referral gate.
+    if (userId) {
+      // Per-user persistent flag (set when logged-in user clicks X or enters valid code)
+      const perUser = window.localStorage.getItem(`${LS_KEY_PREFIX}${userId}`) === "true";
+      if (perUser) return true;
 
-    // Per-user persistent flag
-    const perUser = window.localStorage.getItem(`${LS_KEY_PREFIX}${userId}`) === "true";
-    if (perUser) return true;
+      // Legacy session flag, but only if meta matches this user
+      const session = window.sessionStorage.getItem(STORAGE_FLAG_KEY) === "true";
+      if (session) {
+        const meta = getStoredAccessMeta();
+        if (meta && meta.userId === userId) return true;
+      }
 
-    // Legacy session flag, but only if meta matches this user
-    const session = window.sessionStorage.getItem(STORAGE_FLAG_KEY) === "true";
-    if (!session) return false;
-    const meta = getStoredAccessMeta();
-    return !!meta && meta.userId === userId;
+      return false;
+    }
+
+    // No userId (user not logged in) - check user-independent bypass flag.
+    // This allows non-logged-in visitors to dismiss the modal and have it persist
+    // until they log in, at which point we check user-specific access.
+    const bypass = window.localStorage.getItem(LS_BYPASS_KEY) === "true";
+    return bypass;
   } catch {
     return false;
   }
@@ -160,8 +171,9 @@ export function ReferralAccessGate({
       : true; // default to true to require access code for new users
 
   const [status, setStatus] = useState<ReferralGateStatus>(() => {
-    // Start locked unless the gate is disabled; user-specific access is resolved after load
-    return requireReferralAccess ? "prompt" : "granted";
+    // Start in "checking" state to avoid showing the modal before localStorage is checked.
+    // The useEffect will evaluate stored access and transition to "granted" or "prompt".
+    return requireReferralAccess ? "checking" : "granted";
   });
   const [codeInput, setCodeInput] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -284,6 +296,28 @@ export function ReferralAccessGate({
 
     setStatus("prompt");
   }, [requireReferralAccess, userLoading, user]);
+
+  // Early bypass check - only for non-logged-in visitors.
+  // This allows visitors who dismissed the modal (X button) before logging in
+  // to skip the modal until they actually log in (at which point we check user-specific access).
+  useEffect(() => {
+    if (!requireReferralAccess) return;
+    if (status !== "checking") return; // Only run during initial checking phase
+    if (typeof window === "undefined") return;
+    // Only apply global bypass if user is NOT logged in.
+    // Once user is logged in, we rely on evaluateStoredAccess to check user-specific flags.
+    if (user) return;
+    if (userLoading) return; // Wait to know if user is logged in
+    try {
+      const bypass = window.localStorage.getItem(LS_BYPASS_KEY) === "true";
+      if (bypass) {
+        setStatus("granted");
+        return;
+      }
+    } catch {
+      // Ignore localStorage errors
+    }
+  }, [requireReferralAccess, status, user, userLoading]);
 
   useEffect(() => {
     if (!requireReferralAccess) return;
@@ -901,7 +935,30 @@ export function ReferralAccessGate({
 
           <div className="relative z-[9999] w-full max-w-lg px-6 md:px-0">
             <div className="rounded-3xl bg-gradient-to-br from-neutral-900/95 via-neutral-900/80 to-neutral-950/90 p-[1px] shadow-[0_40px_120px_rgba(16,185,129,0.12)]">
-              <div className="rounded-[calc(1.5rem-1px)] bg-neutral-950/95 p-8 md:p-10">
+              <div className="rounded-[calc(1.5rem-1px)] bg-neutral-950/95 p-8 md:p-10 relative">
+                {/* Close Button */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    // Set user-independent bypass flag (persists across refreshes regardless of user.id)
+                    try {
+                      window.localStorage.setItem(LS_BYPASS_KEY, "true");
+                    } catch (e) {
+                      console.warn("Failed to set bypass flag", e);
+                    }
+                    // Also persist with user.id if available
+                    if (user?.id) {
+                      persistAccess(user.id);
+                    }
+                    grantAccess();
+                  }}
+                  className="absolute top-4 right-4 p-2 rounded-full text-neutral-400 hover:text-white hover:bg-neutral-800/50 transition-colors"
+                  aria-label="Close"
+                >
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
                 <div className="mb-6 flex items-center justify-between">
                   <div>
                     <p className="text-xs uppercase tracking-[0.35em] text-emerald-400/80">
