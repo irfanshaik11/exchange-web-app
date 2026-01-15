@@ -1,6 +1,6 @@
 import React from 'react';
 import Link from 'next/link';
-import { HiOutlineClock } from 'react-icons/hi';
+import { HiOutlineClock, HiOutlineLockClosed, HiOutlineCheckCircle, HiOutlineStar, HiStar } from 'react-icons/hi';
 
 // Vibrant color palette
 const C = {
@@ -19,6 +19,9 @@ const C = {
   orange: "#FB923C",
   cyan: "#22D3EE",
   pink: "#F472B6",
+  // Status colors
+  live: "#4ADE80",
+  closed: "#6B7280",
 };
 
 // Category colors for left accent
@@ -54,6 +57,8 @@ interface PredictionCardProps {
   market: PredictionMarket;
   index: number;
   showSource?: boolean;
+  isFavorite?: boolean;
+  onToggleFavorite?: (market: PredictionMarket) => void;
 }
 
 const formatVolume = (volume: number): string => {
@@ -72,15 +77,44 @@ const formatTimeRemaining = (closesAt: string): string => {
   return "<1h";
 };
 
-export default function PredictionCard({ market, showSource = false }: PredictionCardProps) {
+export default function PredictionCard({ market, showSource = false, isFavorite = false, onToggleFavorite }: PredictionCardProps) {
   const isResolved = market.status === 'resolved';
   const isClosed = market.status === 'closed';
+  const isActive = market.status === 'active';
   const isPolymarket = market.source === 'polymarket';
 
   // Build the URL - for Polymarket, add source query param
   const href = isPolymarket
     ? `/predictions/${market.ticker}?source=polymarket`
     : `/predictions/${market.ticker}`;
+
+  // Determine status color and styling
+  const getStatusConfig = () => {
+    if (isResolved) {
+      return {
+        color: market.resolution === 'yes' ? C.green : C.red,
+        bgColor: market.resolution === 'yes' ? C.greenBg : C.redBg,
+        label: `Resolved ${market.resolution?.toUpperCase()}`,
+        icon: <HiOutlineCheckCircle className="w-3 h-3" />,
+      };
+    }
+    if (isClosed) {
+      return {
+        color: C.closed,
+        bgColor: `${C.closed}15`,
+        label: 'Closed',
+        icon: <HiOutlineLockClosed className="w-3 h-3" />,
+      };
+    }
+    return {
+      color: C.live,
+      bgColor: `${C.live}15`,
+      label: 'Live',
+      icon: null, // Will use pulsing dot instead
+    };
+  };
+
+  const statusConfig = getStatusConfig();
 
   return (
     <Link href={href}>
@@ -89,45 +123,93 @@ export default function PredictionCard({ market, showSource = false }: Predictio
         style={{
           backgroundColor: C.surface,
           border: `1px solid ${C.border}`,
+          // Dim closed/resolved markets slightly
+          opacity: isActive ? 1 : 0.7,
         }}
       >
-        {/* Hover glow effect */}
-        <div
-          className="absolute inset-0 rounded-xl opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none"
-          style={{
-            background: `radial-gradient(ellipse at center, ${C.green}08, transparent 70%)`,
-          }}
-        />
-
-        {/* Source badge - top right */}
-        {showSource && market.source && (
-          <div className="absolute top-2 right-2 z-10">
-            <span
-              className="text-[9px] px-1.5 py-0.5 rounded font-medium uppercase tracking-wider"
-              style={{
-                backgroundColor: isPolymarket ? `${C.purple}20` : `${C.green}20`,
-                color: isPolymarket ? C.purple : C.green,
-                border: `1px solid ${isPolymarket ? C.purple : C.green}40`,
-              }}
-            >
-              {isPolymarket ? 'PM' : 'dFlow'}
-            </span>
-          </div>
+        {/* Hover glow effect - only for active markets */}
+        {isActive && (
+          <div
+            className="absolute inset-0 rounded-xl opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none"
+            style={{
+              background: `radial-gradient(ellipse at center, ${C.green}08, transparent 70%)`,
+            }}
+          />
         )}
 
-        {/* Header: Title + Status */}
+        {/* Status badge - top left, always visible */}
+        <div className="flex items-center justify-between mb-3">
+          <span
+            className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md text-[10px] font-semibold uppercase tracking-wider"
+            style={{
+              backgroundColor: statusConfig.bgColor,
+              color: statusConfig.color,
+            }}
+          >
+            {isActive ? (
+              <>
+                {/* Pulsing live dot */}
+                <span className="relative flex h-2 w-2">
+                  <span
+                    className="animate-ping absolute inline-flex h-full w-full rounded-full opacity-75"
+                    style={{ backgroundColor: C.live }}
+                  />
+                  <span
+                    className="relative inline-flex rounded-full h-2 w-2"
+                    style={{ backgroundColor: C.live }}
+                  />
+                </span>
+                {statusConfig.label}
+              </>
+            ) : (
+              <>
+                {statusConfig.icon}
+                {statusConfig.label}
+              </>
+            )}
+          </span>
+
+          <div className="flex items-center gap-2">
+            {/* Source badge */}
+            {showSource && market.source && (
+              <span
+                className="text-[9px] px-1.5 py-0.5 rounded font-medium uppercase tracking-wider"
+                style={{
+                  backgroundColor: isPolymarket ? `${C.purple}20` : `${C.green}20`,
+                  color: isPolymarket ? C.purple : C.green,
+                  border: `1px solid ${isPolymarket ? C.purple : C.green}40`,
+                }}
+              >
+                {isPolymarket ? 'PM' : 'dFlow'}
+              </span>
+            )}
+
+            {/* Favorite/Star button */}
+            {onToggleFavorite && (
+              <button
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  onToggleFavorite(market);
+                }}
+                className="p-1 rounded-lg transition-all hover:scale-110"
+                style={{
+                  backgroundColor: isFavorite ? `${C.yellow}15` : 'transparent',
+                  color: isFavorite ? C.yellow : C.muted,
+                }}
+              >
+                {isFavorite ? (
+                  <HiStar className="w-4 h-4" />
+                ) : (
+                  <HiOutlineStar className="w-4 h-4" />
+                )}
+              </button>
+            )}
+          </div>
+        </div>
+
+        {/* Title */}
         <div className="mb-4">
-          {(isResolved || isClosed) && (
-            <span
-              className="inline-block px-2 py-0.5 rounded text-[10px] font-medium uppercase mb-2"
-              style={{
-                backgroundColor: isResolved ? (market.resolution === 'yes' ? C.greenBg : C.redBg) : C.bg,
-                color: isResolved ? (market.resolution === 'yes' ? C.green : C.red) : C.muted,
-              }}
-            >
-              {isResolved ? `Resolved ${market.resolution?.toUpperCase()}` : 'Closed'}
-            </span>
-          )}
           <h3 className="font-medium text-sm leading-snug line-clamp-2" style={{ color: C.text }}>
             {market.title}
           </h3>
@@ -151,14 +233,73 @@ export default function PredictionCard({ market, showSource = false }: Predictio
 
         {/* Footer */}
         <div className="flex items-center justify-between text-xs" style={{ color: C.muted }}>
-          <span>{formatVolume(market.volume24h)}</span>
           <span className="flex items-center gap-1">
-            <HiOutlineClock className="w-3.5 h-3.5" />
-            {formatTimeRemaining(market.closesAt)}
+            <span className="font-medium">Vol:</span>
+            {formatVolume(market.volume24h)}
           </span>
+          {isActive ? (
+            <TimeRemainingBadge closesAt={market.closesAt} />
+          ) : (
+            <span className="flex items-center gap-1 px-2 py-0.5 rounded" style={{ backgroundColor: `${C.closed}10` }}>
+              <HiOutlineLockClosed className="w-3 h-3" />
+              Ended
+            </span>
+          )}
         </div>
       </div>
     </Link>
+  );
+}
+
+// Separate component for time remaining with urgency styling
+function TimeRemainingBadge({ closesAt }: { closesAt: string }) {
+  const diff = new Date(closesAt).getTime() - Date.now();
+  const days = Math.floor(diff / 86400000);
+  const hours = Math.floor((diff % 86400000) / 3600000);
+
+  // Determine urgency level
+  const isUrgent = diff <= 86400000; // Less than 24 hours
+  const isWarning = diff <= 7 * 86400000 && !isUrgent; // Less than 7 days
+
+  const timeText = days > 0 ? `${days}d ${hours}h` : hours > 0 ? `${hours}h` : '<1h';
+
+  const getBadgeStyle = () => {
+    if (isUrgent) {
+      return {
+        backgroundColor: `${C.red}15`,
+        color: C.red,
+        borderColor: `${C.red}30`,
+      };
+    }
+    if (isWarning) {
+      return {
+        backgroundColor: `${C.yellow}15`,
+        color: C.yellow,
+        borderColor: `${C.yellow}30`,
+      };
+    }
+    return {
+      backgroundColor: `${C.muted}10`,
+      color: C.muted,
+      borderColor: 'transparent',
+    };
+  };
+
+  const style = getBadgeStyle();
+
+  return (
+    <span
+      className="flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-medium"
+      style={{
+        backgroundColor: style.backgroundColor,
+        color: style.color,
+        border: `1px solid ${style.borderColor}`,
+      }}
+    >
+      <HiOutlineClock className="w-3 h-3" />
+      {isUrgent && <span className="font-semibold">Ends:</span>}
+      {timeText}
+    </span>
   );
 }
 

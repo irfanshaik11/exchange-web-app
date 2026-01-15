@@ -532,9 +532,9 @@ export default function Header({
   const chainAwareHref = useCallback(
     (href: string) => ({
       pathname: href,
-      query: { ...router.query, chain: currentChain },
+      query: { chain: currentChain },
     }),
-    [router.query, currentChain],
+    [currentChain],
   );
   const formatBalance = (value: number, digits = 3) => {
     if (value === 0) return "0";

@@ -10,3 +10,4 @@ export { default as DataSourceSwitcher, SourceBadge } from './DataSourceSwitcher
 export type { PredictionDataSource } from './DataSourceSwitcher';
 export { default as MarketFilters, applyMarketFilters, DEFAULT_FILTERS } from './MarketFilters';
 export type { MarketFilterState } from './MarketFilters';
+export { default as FavoritesCarousel } from './FavoritesCarousel';
