@@ -188,6 +188,8 @@ const PolymarketOrderBook: React.FC<PolymarketOrderBookProps> = ({
     isLoading,
     error,
     reconnect,
+    yesRealtimePrice,
+    noRealtimePrice,
   } = usePolymarketOrderBook({
     yesTokenId,
     noTokenId,

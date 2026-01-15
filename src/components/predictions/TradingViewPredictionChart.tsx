@@ -81,6 +81,8 @@ export interface TradingViewPredictionChartProps {
   series?: ChartSeriesData[];
   isMultiSeries?: boolean;
   showOrderBook?: boolean;
+  // Use line chart instead of candles for single series
+  useLineChart?: boolean;
 }
 
 // Transform line chart data to OHLC format
@@ -319,6 +321,7 @@ const TradingViewPredictionChart: React.FC<TradingViewPredictionChartProps> = ({
   series,
   isMultiSeries = false,
   showOrderBook = true,
+  useLineChart = false,
 }) => {
   const chartContainerRef = useRef<HTMLDivElement>(null);
   const widgetRef = useRef<any>(null);
@@ -331,6 +334,8 @@ const TradingViewPredictionChart: React.FC<TradingViewPredictionChartProps> = ({
   const [orderBookSide, setOrderBookSide] = useState<'yes' | 'no'>('yes');
   const [isLoading, setIsLoading] = useState(true);
   const [libraryLoaded, setLibraryLoaded] = useState(false);
+  const [loadingTimedOut, setLoadingTimedOut] = useState(false);
+  const loadingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   // Track mounted state to prevent cleanup errors
   useEffect(() => {
@@ -339,6 +344,25 @@ const TradingViewPredictionChart: React.FC<TradingViewPredictionChartProps> = ({
       isMountedRef.current = false;
     };
   }, []);
+
+  // Loading timeout - prevent chart from being stuck in loading state forever
+  // If TradingView doesn't fire onChartReady within 10 seconds, force loading to complete
+  useEffect(() => {
+    if (isLoading && libraryLoaded) {
+      loadingTimeoutRef.current = setTimeout(() => {
+        console.warn('[TradingViewPredictionChart] Loading timeout - forcing completion');
+        setIsLoading(false);
+        setLoadingTimedOut(true);
+      }, 10000); // 10 second timeout
+    }
+
+    return () => {
+      if (loadingTimeoutRef.current) {
+        clearTimeout(loadingTimeoutRef.current);
+        loadingTimeoutRef.current = null;
+      }
+    };
+  }, [isLoading, libraryLoaded]);
 
   // Prepare series with colors (memoized to prevent unnecessary re-renders)
   const coloredSeries = useMemo(() => {
@@ -362,6 +386,8 @@ const TradingViewPredictionChart: React.FC<TradingViewPredictionChartProps> = ({
   ]);
 
   // Keep ref in sync for use in datafeed callbacks (synchronous update, not effect)
+  // IMPORTANT: This must be synchronous (during render) to avoid race conditions
+  // with widget initialization effect which also runs after render
   seriesConfigRef.current = seriesConfig;
 
   // Generate OHLC data for single series mode (default 1h interval)
@@ -374,20 +400,18 @@ const TradingViewPredictionChart: React.FC<TradingViewPredictionChartProps> = ({
     return generateSimulatedOHLC(yesPrice, 3600); // 1 hour in seconds
   }, [priceHistory, yesPrice, isMultiSeries]);
 
-  // Update caches when data changes
-  useEffect(() => {
-    ohlcCacheRef.current = ohlcData;
-  }, [ohlcData]);
+  // Update caches synchronously during render (not in useEffect)
+  // This prevents race conditions where widget initialization runs before cache is populated
+  ohlcCacheRef.current = ohlcData;
 
-  useEffect(() => {
-    if (coloredSeries.length > 0) {
-      const cache = new Map<string, Array<{ time: number; price: number }>>();
-      coloredSeries.forEach(s => {
-        cache.set(s.id, s.data);
-      });
-      seriesCacheRef.current = cache;
-    }
-  }, [coloredSeries]);
+  // Update series cache synchronously
+  if (coloredSeries.length > 0) {
+    const cache = new Map<string, Array<{ time: number; price: number }>>();
+    coloredSeries.forEach(s => {
+      cache.set(s.id, s.data);
+    });
+    seriesCacheRef.current = cache;
+  }
 
   // Load TradingView library
   useEffect(() => {
@@ -429,7 +453,19 @@ const TradingViewPredictionChart: React.FC<TradingViewPredictionChartProps> = ({
 
   // Initialize TradingView widget
   useEffect(() => {
-    if (!libraryLoaded || !chartContainerRef.current) return;
+    if (!libraryLoaded || !chartContainerRef.current) {
+      return;
+    }
+
+    // For multi-series mode, wait until we have series data before initializing
+    // This prevents the race condition where widget initializes with wrong symbol
+    if (isMultiSeries && (!series || series.length === 0)) {
+      return;
+    }
+
+    // Reset loading states when re-initializing
+    setIsLoading(true);
+    setLoadingTimedOut(false);
 
     const container = chartContainerRef.current;
     const TradingView = (window as any).TradingView;
@@ -445,6 +481,8 @@ const TradingViewPredictionChart: React.FC<TradingViewPredictionChartProps> = ({
     const allSymbols = isMultiSeries && initialSeriesConfig.length > 0
       ? initialSeriesConfig.map(s => s.id)
       : [ticker];
+
+    console.log('[TV] Creating widget, series cache size:', seriesCacheRef.current.size, 'main symbol:', isMultiSeries && initialSeriesConfig.length > 0 ? initialSeriesConfig[0].id : ticker);
 
     // Create datafeed
     const datafeed = {
@@ -496,17 +534,21 @@ const TradingViewPredictionChart: React.FC<TradingViewPredictionChartProps> = ({
         onError: any
       ) => {
         const symbolName = symbolInfo.name;
+        // TradingView sends time range in seconds, convert to ms for comparison
+        const fromMs = periodParams.from * 1000;
+        const toMs = periodParams.to * 1000;
 
         if (isMultiSeries) {
           // Multi-series mode - get data for the specific symbol
           const seriesData = seriesCacheRef.current.get(symbolName);
+
           if (!seriesData || seriesData.length === 0) {
             onResult([], { noData: true });
             return;
           }
 
-          // Convert to TradingView format (time in ms, price as percentage)
-          const bars = seriesData
+          // Convert to TradingView format and filter by requested time range
+          const allBars = seriesData
             .filter(p => p.time > 0)
             .sort((a, b) => a.time - b.time)
             .map(point => ({
@@ -518,7 +560,16 @@ const TradingViewPredictionChart: React.FC<TradingViewPredictionChartProps> = ({
               volume: 0,
             }));
 
-          onResult(bars, { noData: bars.length === 0 });
+          // Filter to requested time range
+          const bars = allBars.filter(bar => bar.time >= fromMs && bar.time <= toMs);
+
+          // Determine if there's no more historical data available
+          // noData should be true if we have no bars OR if the oldest bar in our dataset
+          // is newer than the requested 'from' time (meaning we've reached the beginning)
+          const oldestBarTime = allBars.length > 0 ? allBars[0].time : Infinity;
+          const noMoreHistoricalData = allBars.length === 0 || oldestBarTime > fromMs;
+
+          onResult(bars, { noData: noMoreHistoricalData });
         } else {
           // Single series mode - use OHLC data
           const data = ohlcCacheRef.current;
@@ -528,7 +579,7 @@ const TradingViewPredictionChart: React.FC<TradingViewPredictionChartProps> = ({
           }
 
           // Convert to TradingView format (time in milliseconds, price in cents)
-          const bars = data.map(candle => ({
+          const allBars = data.map(candle => ({
             time: candle.time * 1000,
             open: candle.open * 100,
             high: candle.high * 100,
@@ -537,7 +588,14 @@ const TradingViewPredictionChart: React.FC<TradingViewPredictionChartProps> = ({
             volume: candle.volume || 0,
           }));
 
-          onResult(bars, { noData: bars.length === 0 });
+          // Filter to requested time range
+          const bars = allBars.filter(bar => bar.time >= fromMs && bar.time <= toMs);
+
+          // Signal no more historical data if we've reached the beginning
+          const oldestBarTime = allBars.length > 0 ? allBars[0].time : Infinity;
+          const noMoreHistoricalData = allBars.length === 0 || oldestBarTime > fromMs;
+
+          onResult(bars, { noData: noMoreHistoricalData });
         }
       },
 
@@ -587,10 +645,10 @@ const TradingViewPredictionChart: React.FC<TradingViewPredictionChartProps> = ({
           'paneProperties.horzGridProperties.color': AX.border,
           'scalesProperties.textColor': AX.muted,
           'scalesProperties.lineColor': AX.border,
-          // Use line chart style for multi-series
-          ...(isMultiSeries ? {
+          // Use line chart style for multi-series or when useLineChart is true
+          ...(isMultiSeries || useLineChart ? {
             'mainSeriesProperties.style': 2, // Line chart
-            'mainSeriesProperties.lineStyle.color': initialSeriesConfig[0]?.color || AX.blue,
+            'mainSeriesProperties.lineStyle.color': isMultiSeries ? (initialSeriesConfig[0]?.color || AX.blue) : AX.green,
             'mainSeriesProperties.lineStyle.linewidth': 2,
           } : {
             'mainSeriesProperties.candleStyle.upColor': AX.green,
@@ -602,8 +660,8 @@ const TradingViewPredictionChart: React.FC<TradingViewPredictionChartProps> = ({
             'mainSeriesProperties.candleStyle.drawWick': true,
             'mainSeriesProperties.candleStyle.drawBorder': true,
           }),
-          'paneProperties.legendProperties.showLegend': !isMultiSeries,
-          'paneProperties.legendProperties.showSeriesOHLC': !isMultiSeries,
+          'paneProperties.legendProperties.showLegend': !isMultiSeries && !useLineChart,
+          'paneProperties.legendProperties.showSeriesOHLC': !isMultiSeries && !useLineChart,
         },
         // Custom price formatter for percentage
         custom_formatters: {
@@ -614,7 +672,7 @@ const TradingViewPredictionChart: React.FC<TradingViewPredictionChartProps> = ({
       });
 
       widget.onChartReady(() => {
-        console.log('[TradingViewPredictionChart] Chart ready');
+        console.log('[TV] Chart ready - hiding loading');
         setIsLoading(false);
 
         // For multi-series, add comparison symbols using ref for latest config
@@ -660,20 +718,16 @@ const TradingViewPredictionChart: React.FC<TradingViewPredictionChartProps> = ({
     };
     // Only depend on values that truly require widget recreation
     // Data changes should go through the datafeed/cache refs, not widget recreation
+    // For multi-series, also depend on series length so widget creates when data arrives
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [libraryLoaded, ticker, isMultiSeries]);
+  }, [libraryLoaded, ticker, isMultiSeries, isMultiSeries ? series?.length : 0]);
 
-  // Refresh chart when data changes
-  useEffect(() => {
-    if (!widgetRef.current) return;
-
-    widgetRef.current.onChartReady?.(() => {
-      try {
-        const chart = widgetRef.current.chart?.();
-        chart?.resetData?.();
-      } catch (e) {}
-    });
-  }, [ohlcData, coloredSeries]);
+  // NOTE: We intentionally do NOT call resetData() when data changes.
+  // The datafeed uses refs (seriesCacheRef, ohlcCacheRef) which are updated
+  // synchronously when data changes. TradingView's getBars() will always
+  // read from the latest ref values. Calling resetData() causes an infinite
+  // loop because it triggers getBars() which may cause parent re-renders
+  // with new series props, leading to another resetData() call.
 
   return (
     <div className={`flex flex-col h-full ${className}`} style={{ width, height, backgroundColor: AX.bg }}>
@@ -718,6 +772,12 @@ const TradingViewPredictionChart: React.FC<TradingViewPredictionChartProps> = ({
             {isLoading && !isResolved && (
               <div className="absolute inset-0 flex items-center justify-center" style={{ backgroundColor: AX.bg, zIndex: 10 }}>
                 <HiOutlineRefresh className="w-6 h-6 animate-spin" style={{ color: AX.muted }} />
+              </div>
+            )}
+            {loadingTimedOut && !isLoading && !isResolved && (
+              <div className="absolute inset-0 flex flex-col items-center justify-center" style={{ backgroundColor: AX.bg, zIndex: 10 }}>
+                <p className="text-sm" style={{ color: AX.muted }}>Chart data unavailable</p>
+                <p className="text-xs mt-1" style={{ color: AX.muted }}>Please try refreshing the page</p>
               </div>
             )}
           </div>
