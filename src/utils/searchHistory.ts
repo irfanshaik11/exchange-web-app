@@ -2,25 +2,76 @@ import type { Token } from "~/utils/db";
 
 export const SEARCH_HISTORY_KEY = "searchHistory";
 
-export type SearchHistoryItem = Pick<Token, "mint" | "symbol" | "name" | "logo" | "total_fully_diluted_valuation" | "total_buy_volume_24h" | "total_sell_volume_24h" | "total_liquidity_usd">;
+// Extended type to include additional fields needed for display
+export type SearchHistoryItem = Pick<Token, "mint" | "symbol" | "name" | "logo" | "total_fully_diluted_valuation" | "total_buy_volume_24h" | "total_sell_volume_24h" | "total_liquidity_usd"> & {
+  // Additional fields for proper navigation
+  pair_address?: string;
+  fully_diluted_value?: number;
+  uri?: string;
+  launchpad_protocol?: string;
+  chain?: string;
+};
 
-export function getHistory(): SearchHistoryItem[] {
+/**
+ * Get the storage key for search history.
+ * If userId is provided, returns a user-scoped key for per-user history.
+ * Otherwise returns the generic key for anonymous users.
+ */
+function getStorageKey(userId?: string): string {
+  return userId ? `${SEARCH_HISTORY_KEY}_${userId}` : SEARCH_HISTORY_KEY;
+}
+
+/**
+ * Get search history from localStorage.
+ * @param userId - Optional user ID for per-user history
+ */
+export function getHistory(userId?: string): SearchHistoryItem[] {
   if (typeof window === "undefined") return [];
   try {
-    return JSON.parse(localStorage.getItem(SEARCH_HISTORY_KEY) || "[]");
-  } catch {
+    const key = getStorageKey(userId);
+    const raw = localStorage.getItem(key);
+    console.log("📖 getHistory:", { key, raw: raw?.substring(0, 100) });
+    return JSON.parse(raw || "[]");
+  } catch (e) {
+    console.error("❌ getHistory error:", e);
     return [];
   }
 }
 
-export function addToHistory(item: SearchHistoryItem, maxEntries = 20) {
+/**
+ * Add a token to search history.
+ * @param item - The token to add
+ * @param userId - Optional user ID for per-user history
+ * @param maxEntries - Maximum number of entries to keep (default: 10)
+ */
+export function addToHistory(item: SearchHistoryItem, userId?: string, maxEntries = 10) {
   if (typeof window === "undefined") return;
-  const current = getHistory().filter((t) => t.mint !== item.mint);
+  const key = getStorageKey(userId);
+  const current = getHistory(userId).filter((t) => t.mint !== item.mint);
   const updated = [item, ...current].slice(0, maxEntries);
-  localStorage.setItem(SEARCH_HISTORY_KEY, JSON.stringify(updated));
+  localStorage.setItem(key, JSON.stringify(updated));
+  console.log("📝 addToHistory:", { key, itemSymbol: item.symbol, totalItems: updated.length });
 }
 
-export function clearHistory() {
+/**
+ * Remove a single item from search history.
+ * @param mint - The mint address of the token to remove
+ * @param userId - Optional user ID for per-user history
+ */
+export function removeFromHistory(mint: string, userId?: string) {
   if (typeof window === "undefined") return;
-  localStorage.removeItem(SEARCH_HISTORY_KEY);
+  const key = getStorageKey(userId);
+  const current = getHistory(userId).filter((t) => t.mint !== mint);
+  localStorage.setItem(key, JSON.stringify(current));
+  console.log("🗑️ removeFromHistory:", { key, mint, remainingItems: current.length });
+}
+
+/**
+ * Clear search history.
+ * @param userId - Optional user ID for per-user history
+ */
+export function clearHistory(userId?: string) {
+  if (typeof window === "undefined") return;
+  const key = getStorageKey(userId);
+  localStorage.removeItem(key);
 }

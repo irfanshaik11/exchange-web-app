@@ -17,15 +17,17 @@ import { fetchTokenMetadata } from "~/utils/functions";
 import { extractMetaImage } from "~/utils/images";
 import FastImage from "./FastImage";
 import { IoShareSocialOutline } from "react-icons/io5";
-import { LuPill } from "react-icons/lu";
+import { LuPill, LuSearch } from "react-icons/lu";
 import type { Timeframe } from "../pages/index";
 import { GoClock, GoGlobe } from "react-icons/go";
 import { BiBarChartAlt2 } from "react-icons/bi";
 import { FiDroplet } from "react-icons/fi";
-import { FaChartLine } from "react-icons/fa6";
+import { FaChartLine, FaXTwitter } from "react-icons/fa6";
 import BlockchainSwitcher from "./BlockchainSwitcher";
 import { BsLightningChargeFill, BsTwitterX } from "react-icons/bs";
 import { showEnhancedToast } from "~/utils/enhancedToast";
+import { getHistory, addToHistory, clearHistory, removeFromHistory, type SearchHistoryItem } from "~/utils/searchHistory";
+import { useUser } from "./UserContext";
 // TODO: SOCIAL LINKS NOT PRESENT FOR NOW
 // import { HiLightningBolt } from "react-icons/hi";
 // import { PiTelegramLogo } from "react-icons/pi";
@@ -73,9 +75,10 @@ const sortByOptions = [
   { key: "liquidity" as const, icon: FiDroplet },
 ];
 
-const DEFAULT_PROTOCOL_COLOR = "#22c55e";
-const DEFAULT_PROTOCOL_ICON =
-  "https://logos-world.net/wp-content/uploads/2024/10/Pump-Fun-Logo.png";
+// Use the same green as PulseTable for consistency
+const DEFAULT_PROTOCOL_COLOR = "#31e3ac";
+// Use the same pump.fun icon as PulseTable for consistency
+const DEFAULT_PROTOCOL_ICON = "https://pump.fun/pump-logomark.svg";
 
 const rawProtocolColorMap: Record<string, string> = {
   pump: DEFAULT_PROTOCOL_COLOR,
@@ -159,20 +162,39 @@ function extractProtocolRaw(
   return null;
 }
 
+// Matches PulseTable's isFullCircleImage logic for consistency
 function shouldFillProtocolBadge(
   token: Partial<Token> & Record<string, any>,
 ): boolean {
-  const raw = extractProtocolRaw(token) || "";
-  return ["meteora", "bonk", "bags", "moonit", "moonshot", "moonshoot"].some(
-    (needle) => raw.includes(needle),
-  );
+  const launchpadProtocol = (
+    token.launchpad_protocol ||
+    token.launchpad_name ||
+    token.protocol ||
+    ""
+  ).toLowerCase();
+  const mintAddress = (token.mint || "").toLowerCase();
+
+  const isMeteora = launchpadProtocol.includes("meteora");
+  const isBonk = launchpadProtocol.includes("bonk") || launchpadProtocol.includes("launchlab") || mintAddress.endsWith("bonk");
+  const isBags = launchpadProtocol.includes("bags") || mintAddress.includes("bags");
+  const isMoonit = launchpadProtocol.includes("moonit") || launchpadProtocol.includes("moonshot") || launchpadProtocol.includes("moonshoot");
+
+  // Meteora only fills if mint doesn't contain "bags" (bags override)
+  return (isMeteora && !mintAddress.includes("bags")) || isBonk || isBags || isMoonit;
 }
 
+// Matches PulseTable's getProtocolColor function for consistency
 function resolveProtocolColor(
   token: Partial<Token> & Record<string, any>,
   chain?: string,
 ): string {
-  const raw = extractProtocolRaw(token);
+  const launchpadProtocol = (
+    token.launchpad_protocol ||
+    token.launchpad_name ||
+    token.protocol ||
+    ""
+  ).toLowerCase();
+  const mintAddress = (token.mint || "").toLowerCase();
 
   // For Monad tokens, use purple border
   if (
@@ -184,33 +206,85 @@ function resolveProtocolColor(
     return "#c084fc"; // Purple color for Monad tokens
   }
 
-  if (!raw) return DEFAULT_PROTOCOL_COLOR;
-  if (raw.includes("meteora")) return "#ff4662";
-  if (raw.includes("pump")) return DEFAULT_PROTOCOL_COLOR;
-  if (raw.includes("launch")) return "#3b82f6";
-  const normalized = normalizeKey(raw);
-  if (rawProtocolColorMap[raw]) return rawProtocolColorMap[raw];
-  if (normalizedProtocolColorMap[normalized])
-    return normalizedProtocolColorMap[normalized];
-  if (raw.includes("raydium")) return "#5c51f7";
+  // Check if mint address contains "bags" - override any protocol (matches PulseTable)
+  if (mintAddress.includes("bags")) {
+    return DEFAULT_PROTOCOL_COLOR; // Green for bags
+  }
+
+  if (!launchpadProtocol) {
+    return DEFAULT_PROTOCOL_COLOR; // Default green
+  }
+
+  // Meteora - red color (matches PulseTable for new pairs/final stretch)
+  if (launchpadProtocol.includes("meteora")) {
+    return "#d11f3a"; // Red for Meteora
+  }
+
+  // Pump - green color
+  if (launchpadProtocol.includes("pump")) {
+    return DEFAULT_PROTOCOL_COLOR;
+  }
+
+  // LaunchLab - blue color
+  if (launchpadProtocol.includes("launch")) {
+    return "#3b82f6";
+  }
+
+  // Raydium - green (matching PulseTable)
+  if (launchpadProtocol.includes("raydium")) {
+    return DEFAULT_PROTOCOL_COLOR;
+  }
+
+  // Moonit/Moonshot - yellow
   if (
-    raw.includes("moonit") ||
-    raw.includes("moonshot") ||
-    raw.includes("moonshoot")
-  )
+    launchpadProtocol.includes("moonit") ||
+    launchpadProtocol.includes("moonshot") ||
+    launchpadProtocol.includes("moonshoot")
+  ) {
     return "#eab308";
-  if (raw.includes("boop")) return "#134577";
-  if (raw.includes("bonk")) return "#ff6b35";
-  if (raw.includes("bags")) return DEFAULT_PROTOCOL_COLOR;
-  if (raw.includes("orca")) return "#0ea5e9";
-  if (raw.includes("jupiter")) return "#8b5cf6";
+  }
+
+  // Boop - dark blue
+  if (launchpadProtocol.includes("boop")) {
+    return "#134577";
+  }
+
+  // Bonk/LaunchLab - orange
+  if (launchpadProtocol.includes("bonk") || launchpadProtocol.includes("launchlab") || mintAddress.endsWith("bonk")) {
+    return "#ff6b35";
+  }
+
+  // Bags - green
+  if (launchpadProtocol.includes("bags")) {
+    return DEFAULT_PROTOCOL_COLOR;
+  }
+
+  // Orca - light blue
+  if (launchpadProtocol.includes("orca")) {
+    return "#0ea5e9";
+  }
+
+  // Jupiter - purple
+  if (launchpadProtocol.includes("jupiter")) {
+    return "#8b5cf6";
+  }
+
   return DEFAULT_PROTOCOL_COLOR;
 }
 
+// Matches PulseTable's getTokenIcon function exactly for consistency
 function resolveProtocolIcon(
   token: Partial<Token> & Record<string, any>,
   chain?: string,
 ): string {
+  const launchpadProtocol = (
+    token.launchpad_protocol ||
+    token.launchpad_name ||
+    token.protocol ||
+    ""
+  ).toLowerCase();
+  const mintAddress = (token.mint || "").toLowerCase();
+
   // For Monad tokens, use MonadTable's protocol mapping
   if (
     chain === "monad" ||
@@ -218,13 +292,6 @@ function resolveProtocolIcon(
       typeof token.mint === "string" &&
       token.mint.startsWith("0x"))
   ) {
-    const launchpadProtocol = (
-      token.launchpad_protocol ||
-      token.launchpad_name ||
-      token.protocol ||
-      ""
-    ).toLowerCase();
-
     // Map nad.fun to GitHub avatar (from MonadTable)
     if (
       launchpadProtocol.includes("nad.fun") ||
@@ -250,31 +317,51 @@ function resolveProtocolIcon(
     return "https://avatars.githubusercontent.com/u/173274001?s=200&v=4";
   }
 
-  const raw = extractProtocolRaw(token);
-  if (!raw) return DEFAULT_PROTOCOL_ICON;
-  if (raw.includes("meteora")) {
+  // Check if mint address contains "bags" - override any protocol (matches PulseTable)
+  if (mintAddress.includes("bags")) {
+    return "https://bags.fm/assets/images/bags-icon.png";
+  }
+
+  // Default to pump.fun icon if no protocol info
+  if (!launchpadProtocol) {
+    return DEFAULT_PROTOCOL_ICON;
+  }
+
+  // Map launchpad_protocol to external logo URLs (same order as PulseTable)
+  if (launchpadProtocol.includes("pump")) {
+    return DEFAULT_PROTOCOL_ICON;
+  }
+
+  if (launchpadProtocol.includes("meteora")) {
     return "https://s1.coincarp.com/logo/1/meteora.png?style=72&v=1759911013";
   }
-  if (raw.includes("raydium") || raw.includes("launch")) {
+
+  if (launchpadProtocol.includes("raydium")) {
     return "https://s2.coinmarketcap.com/static/img/coins/64x64/8526.png";
   }
-  if (raw.includes("boop")) {
+
+  if (launchpadProtocol.includes("boop")) {
     return "https://api.phantom.app/image-proxy/?image=https%3A%2F%2Fdhc7eusqrdwa0.cloudfront.net%2Fassets%2FBOOP_logo_icon_dark_bg.png&anim=true";
   }
+
   if (
-    raw.includes("moonit") ||
-    raw.includes("moonshot") ||
-    raw.includes("moonshoot")
+    launchpadProtocol.includes("moonit") ||
+    launchpadProtocol.includes("moonshot") ||
+    launchpadProtocol.includes("moonshoot")
   ) {
     return "https://avatars.githubusercontent.com/u/174132191?s=280&v=4";
   }
-  if (raw.includes("bonk")) {
+
+  // Bonk/LaunchLab detection: protocol includes "bonk" or "launchlab", OR mint ends in "bonk"
+  if (launchpadProtocol.includes("bonk") || launchpadProtocol.includes("launchlab") || mintAddress.endsWith("bonk")) {
     return "https://s3.coinmarketcap.com/static-gravity/image/a28128d9ff7c49c9ad33ee2f626fda40.png";
   }
-  if (raw.includes("bags")) {
-    return "https://play-lh.googleusercontent.com/7AxVcu1pumxavcGTb16WBJQU88CDZd0v8q0WzFwfin7zbBvItYMuNQ0Xkqq4srTw4A=w240-h480-rw";
+
+  if (launchpadProtocol.includes("bags")) {
+    return "https://bags.fm/assets/images/bags-icon.png";
   }
-  if (raw.includes("pump")) return DEFAULT_PROTOCOL_ICON;
+
+  // Default to pump.fun icon for unknown protocols
   return DEFAULT_PROTOCOL_ICON;
 }
 
@@ -358,6 +445,7 @@ const SearchModalContent = React.memo(function SearchModalContent({
   chain = "sol",
 }: SearchModalProps) {
   const router = useRouter();
+  const { user } = useUser();
   const [query, setQuery] = useState("");
   const [sortBy, setSortBy] = useState<SortOption>("time");
   const [filters, setFilters] = useState<SearchFilters>({
@@ -370,6 +458,7 @@ const SearchModalContent = React.memo(function SearchModalContent({
   const [cachedTokens, setCachedTokens] = useState<any[]>([]);
   const [lastFetchTime, setLastFetchTime] = useState(0);
   const [hasSearched, setHasSearched] = useState(false);
+  const [recentSearches, setRecentSearches] = useState<SearchHistoryItem[]>([]);
 
   const inputRef = useRef<HTMLInputElement>(null);
   const searchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -594,9 +683,45 @@ const SearchModalContent = React.memo(function SearchModalContent({
     async (token: Token) => {
       const isMonad = chain === "monad";
       // Get the token address - for Monad use mint, for Solana use pair_address or mint
+      // IMPORTANT: Use the same address for both URL path and _mint param for consistency
       const address = isMonad
         ? (token.mint || (token as any).address)
         : (token.pair_address || token.mint);
+
+      // Debug: log navigation details
+      console.log("🚀 handleSelectToken:", {
+        symbol: token.symbol,
+        name: token.name,
+        address,
+        pair_address: token.pair_address,
+        mint: token.mint,
+        chain,
+      });
+
+      // Save to search history
+      const historyItem: SearchHistoryItem = {
+        mint: token.mint,
+        symbol: token.symbol,
+        name: token.name,
+        logo: token.logo,
+        total_fully_diluted_valuation: token.fully_diluted_value || 0,
+        total_buy_volume_24h: token.total_buy_volume_1h || 0,
+        total_sell_volume_24h: token.total_sell_volume_1h || 0,
+        total_liquidity_usd: token.total_liquidity_usd || 0,
+        pair_address: token.pair_address,
+        fully_diluted_value: token.fully_diluted_value,
+        uri: token.uri || token.logo || undefined,
+        launchpad_protocol: (token as any).launchpad_protocol,
+        chain: chain,
+      };
+      addToHistory(historyItem, user?.id);
+      console.log("💾 Saved to search history:", { userId: user?.id, token: historyItem.symbol });
+      // Update local state so it appears immediately if modal reopens
+      setRecentSearches(prev => {
+        const filtered = prev.filter(t => t.mint !== token.mint);
+        return [historyItem, ...filtered].slice(0, 10);
+      });
+
       try {
         // First, backfill the token to the database
         console.log("🔄 Backfilling token:", token);
@@ -649,18 +774,28 @@ const SearchModalContent = React.memo(function SearchModalContent({
           // Navigate to trade page for Solana - use direct router.push
           // IMPORTANT: Always set _name and _symbol (even if empty) to match PulseTable behavior
           // Otherwise TradeActionPanel shows skeleton instead of buy/sell buttons
+          // Also include UI state params to prevent double navigation
+          // Use `address` for _mint to match the URL path (address = pair_address || mint)
           const queryParams = new URLSearchParams({
             _name: token.name || token.symbol || "",
             _symbol: token.symbol || "",
             _mcap: token.fully_diluted_value?.toString() || "",
             _image: token.uri || token.logo || "",
-            _mint: token.mint || "",
+            _mint: address,
             _launchpad_protocol: (token as any).launchpad_protocol || "",
             chain: chain || 'sol',
+            // UI state defaults - prevents trade page from doing a second navigation
+            mode: 'buy',
+            tab: 'market',
+            timeRange: '5m',
+            sliderPct: '0',
           });
 
           const url = `/trade/${address}?${queryParams.toString()}`;
-          await router.push(url);
+          console.log("🔗 Navigating to:", url);
+          // Use window.location for guaranteed full page re-render
+          // router.push doesn't remount when navigating between /trade/[address] routes
+          window.location.href = url;
         }
       } catch (error) {
         console.error("❌ Error backfilling token:", error);
@@ -684,22 +819,32 @@ const SearchModalContent = React.memo(function SearchModalContent({
           // Navigate to trade page for Solana - use direct router.push
           // IMPORTANT: Always set _name and _symbol (even if empty) to match PulseTable behavior
           // Otherwise TradeActionPanel shows skeleton instead of buy/sell buttons
+          // Also include UI state params to prevent double navigation
+          // Use `address` for _mint to match the URL path (address = pair_address || mint)
           const queryParams = new URLSearchParams({
             _name: token.name || token.symbol || "",
             _symbol: token.symbol || "",
             _mcap: token.fully_diluted_value?.toString() || "",
             _image: token.uri || token.logo || "",
-            _mint: token.mint || "",
+            _mint: address,
             _launchpad_protocol: (token as any).launchpad_protocol || "",
             chain: chain || 'sol',
+            // UI state defaults - prevents trade page from doing a second navigation
+            mode: 'buy',
+            tab: 'market',
+            timeRange: '5m',
+            sliderPct: '0',
           });
 
           const url = `/trade/${address}?${queryParams.toString()}`;
-          await router.push(url);
+          console.log("🔗 Navigating to:", url);
+          // Use window.location for guaranteed full page re-render
+          // router.push doesn't remount when navigating between /trade/[address] routes
+          window.location.href = url;
         }
       }
     },
-    [onSubmit, onClose],
+    [onSubmit, onClose, chain, user?.id, router],
   );
 
   const handleQueryChange = useCallback(
@@ -749,6 +894,10 @@ const SearchModalContent = React.memo(function SearchModalContent({
       setQuery("");
       setSearchResults([]);
       setHasSearched(false);
+      // Load search history for the current user
+      const history = getHistory(user?.id);
+      console.log("📜 Loaded search history:", { userId: user?.id, historyCount: history.length, history });
+      setRecentSearches(history);
       // Pre-fetch tokens when modal opens for instant search
       fetchTokens();
       const timer = setTimeout(() => inputRef.current?.focus(), 0);
@@ -761,7 +910,7 @@ const SearchModalContent = React.memo(function SearchModalContent({
       };
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open]);
+  }, [open, user?.id]);
 
   // No need to re-run search when sort changes - we sort on the frontend now
 
@@ -771,12 +920,20 @@ const SearchModalContent = React.memo(function SearchModalContent({
     return sortTokens(searchResults, sortBy);
   }, [hasSearched, searchResults, sortBy]);
 
+  // Debug: log render state
+  console.log("🔍 SearchModal render:", {
+    hasSearched,
+    displayTokensLength: displayTokens.length,
+    recentSearchesLength: recentSearches.length,
+    shouldShowRecent: !hasSearched && recentSearches.length > 0 && displayTokens.length === 0
+  });
+
   return (
     <InterstatePopout
       open={open}
       onClose={onClose}
       align="center"
-      className="mx-auto w-full max-w-[94vw] rounded-xl bg-[#141414] shadow-sm transition-all duration-200 sm:w-[600px] md:w-[800px]"
+      className="mx-auto w-full max-w-[94vw] rounded-xl bg-[#0f0f0f] shadow-sm transition-all duration-200 sm:w-[600px] md:w-[800px]"
       disableClickOutside={false}
     >
       {/* Close Button - Mobile */}
@@ -932,7 +1089,7 @@ const SearchModalContent = React.memo(function SearchModalContent({
       </div>
 
       {/* Token List */}
-      <div className="h-[320px] flex-1 overflow-hidden border-t border-[#FFFFFF0F] px-3 pt-2 sm:h-[450px] sm:px-3 sm:pt-3 md:px-4 2xl:h-[550px]">
+      <div className="max-h-[60vh] min-h-[320px] flex-1 overflow-y-auto border-t border-[#FFFFFF0F] px-3 pt-2 sm:max-h-[70vh] sm:min-h-[450px] sm:px-3 sm:pt-3 md:px-4">
         {(searchLoading || displayTokens.length > 0) && (
           <div className="mb-2 sm:mb-3">
             <span className="text-sm tracking-wider text-[#9595B5] sm:text-base">
@@ -988,9 +1145,192 @@ const SearchModalContent = React.memo(function SearchModalContent({
             ))}
           </div>
         ) : displayTokens.length === 0 ? (
-          <div className="flex flex-col items-center justify-center gap-3 px-4 py-12 sm:py-16">
+          <div className="flex flex-col gap-4">
+            {/* Recent Searches Section - Show when not searching and has history */}
+            {!hasSearched && recentSearches.length > 0 && (
+              <div className="flex flex-col gap-2">
+                <div className="flex items-center justify-between px-1">
+                  <span className="text-sm font-medium text-[#9595B5]">
+                    Recent Searches
+                  </span>
+                  <button
+                    onClick={() => {
+                      clearHistory(user?.id);
+                      setRecentSearches([]);
+                    }}
+                    className="text-xs text-neutral-500 transition-colors hover:text-[#7FFFC9]"
+                  >
+                    Clear All
+                  </button>
+                </div>
+                <ul className="flex flex-col gap-2 overflow-y-auto">
+                  {recentSearches.map((item) => {
+                    const mc = formatMarketCap(item.fully_diluted_value || item.total_fully_diluted_valuation || 0);
+                    const liq = formatSmartNumber(item.total_liquidity_usd || 0);
+                    const normalizedLogo = normalizeAssetUrl(item.logo || item.uri || null);
+                    const fallbackAvatar = `https://ui-avatars.com/api/?name=${encodeURIComponent(item.symbol || item.name || "T")}&background=0f1012&color=E6E7EA&size=56`;
+
+                    // Get protocol color and icon for the history item
+                    const historyToken = {
+                      mint: item.mint,
+                      launchpad_protocol: item.launchpad_protocol,
+                    } as any;
+                    const itemProtocolColor = resolveProtocolColor(historyToken, item.chain);
+                    const itemProtocolIcon = resolveProtocolIcon(historyToken, item.chain);
+                    const itemFillProtocolBadge = shouldFillProtocolBadge(historyToken);
+
+                    return (
+                      <li
+                        key={item.mint}
+                        onClick={() => {
+                          // Convert history item to Token format for handleSelectToken
+                          const token: Token = {
+                            id: 0,
+                            mint: item.mint,
+                            name: item.name || "",
+                            symbol: item.symbol || "",
+                            logo: item.logo || null,
+                            fully_diluted_value: item.fully_diluted_value || item.total_fully_diluted_valuation || 0,
+                            total_liquidity_usd: item.total_liquidity_usd || 0,
+                            total_buy_volume_1h: item.total_buy_volume_24h || 0,
+                            total_sell_volume_1h: item.total_sell_volume_24h || 0,
+                            created_at: "",
+                            bonding_curve_progress: "0%",
+                            amm: "",
+                            uri: item.uri || item.logo || "",
+                            pair_address: item.pair_address || item.mint,
+                            launchpad_protocol: item.launchpad_protocol,
+                          } as Token & { launchpad_protocol?: string };
+                          handleSelectToken(token);
+                        }}
+                        className="group flex cursor-pointer items-center gap-3 rounded-lg border border-transparent bg-[#0f0f0f] px-3 py-2.5 transition-all duration-200 hover:border-[#FFFFFF0F] hover:bg-[#1a1a1a] sm:px-4 sm:py-3"
+                      >
+                        {/* Token Logo with Protocol Border */}
+                        <div
+                          className="relative flex flex-shrink-0 items-center justify-center"
+                          style={{ overflow: "visible" }}
+                        >
+                          <div
+                            className="relative rounded-lg transition-all duration-200 group-hover:scale-105"
+                            style={{
+                              border: `2px solid ${itemProtocolColor}`,
+                              padding: 2,
+                              backgroundColor: "#06070b",
+                              boxShadow: `0 0 8px ${itemProtocolColor}20`,
+                            }}
+                          >
+                            <div className="relative h-12 w-12 overflow-hidden rounded-md sm:h-14 sm:w-14">
+                              <FastImage
+                                src={normalizedLogo ?? undefined}
+                                fallbackSrc={fallbackAvatar}
+                                alt={item.name || item.symbol || ""}
+                                width={56}
+                                height={56}
+                                className="h-full w-full object-cover"
+                                symbol={item.symbol}
+                                name={item.name}
+                                showBubble={false}
+                              />
+                            </div>
+                          </div>
+                          {/* Protocol Pill */}
+                          <div
+                            className="pointer-events-none absolute right-0 bottom-0 z-10 flex translate-x-1/4 translate-y-1/4 transform items-center justify-center rounded-full transition-transform duration-200 group-hover:scale-110"
+                            style={{
+                              width: 20,
+                              height: 20,
+                              backgroundColor: "#000000",
+                              border: `1px solid ${itemProtocolColor}`,
+                              boxShadow: `0 0 4px ${itemProtocolColor}60`,
+                            }}
+                          >
+                            <img
+                              src={itemProtocolIcon}
+                              alt="Protocol logo"
+                              className={`${itemFillProtocolBadge ? "h-full w-full object-cover" : "h-3/4 w-3/4 object-contain"} rounded-full`}
+                              style={{
+                                filter:
+                                  itemProtocolColor === "#eab308"
+                                    ? "sepia(1) saturate(3) hue-rotate(-10deg) brightness(1.1)"
+                                    : "none",
+                              }}
+                              onError={(e) => {
+                                (e.target as HTMLImageElement).style.display = "none";
+                              }}
+                            />
+                          </div>
+                        </div>
+                        {/* Token Info */}
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-2">
+                            <span className="truncate text-sm font-bold text-white sm:text-base">
+                              {item.symbol}
+                            </span>
+                            <span className="truncate text-xs text-neutral-500 sm:text-sm">
+                              {item.name}
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-3 text-xs text-[#9595B5]">
+                            <span>
+                              MC: <span className="font-medium text-white">${mc}</span>
+                            </span>
+                            <span>
+                              L: <span className="font-medium text-white">${liq}</span>
+                            </span>
+                          </div>
+                        </div>
+                        {/* Quick Action */}
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            const token: Token = {
+                              id: 0,
+                              mint: item.mint,
+                              name: item.name || "",
+                              symbol: item.symbol || "",
+                              logo: item.logo || null,
+                              fully_diluted_value: item.fully_diluted_value || item.total_fully_diluted_valuation || 0,
+                              total_liquidity_usd: item.total_liquidity_usd || 0,
+                              total_buy_volume_1h: item.total_buy_volume_24h || 0,
+                              total_sell_volume_1h: item.total_sell_volume_24h || 0,
+                              created_at: "",
+                              bonding_curve_progress: "0%",
+                              amm: "",
+                              uri: item.uri || item.logo || "",
+                              pair_address: item.pair_address || item.mint,
+                              launchpad_protocol: item.launchpad_protocol,
+                            } as Token & { launchpad_protocol?: string };
+                            handleSelectToken(token);
+                          }}
+                          className="flex flex-shrink-0 items-center gap-1 rounded-lg border border-[#7FFFC940] bg-gradient-to-r from-[#243E33] to-[#1a2e26] px-2.5 py-1.5 text-xs font-bold text-[#7FFFC9] transition-all hover:border-[#7FFFC960] hover:from-[#2a4d3d] hover:to-[#1f3a2f] sm:px-3 sm:py-2"
+                        >
+                          <BsLightningChargeFill className="h-3 w-3" />
+                          Trade
+                        </button>
+                        {/* Remove from history */}
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            removeFromHistory(item.mint, user?.id);
+                            setRecentSearches((prev) => prev.filter((t) => t.mint !== item.mint));
+                          }}
+                          className="flex flex-shrink-0 items-center justify-center rounded-lg p-1.5 text-neutral-500 transition-all hover:bg-[#2a2a2a] hover:text-white sm:p-2"
+                          title="Remove from history"
+                        >
+                          <FaTimes className="h-3 w-3" />
+                        </button>
+                      </li>
+                    );
+                  })}
+                </ul>
+              </div>
+            )}
+
+            {/* Empty State or No Results */}
             {hasSearched ? (
-              <>
+              <div className="flex flex-col items-center justify-center gap-3 px-4 py-12 sm:py-16">
                 <div className="mb-2 flex h-12 w-12 items-center justify-center rounded-full border-2 border-[#2a2a2a] bg-[#1a1a1a] sm:h-16 sm:w-16">
                   <svg
                     className="h-6 w-6 text-[#666666] sm:h-8 sm:w-8"
@@ -1023,9 +1363,9 @@ const SearchModalContent = React.memo(function SearchModalContent({
                     </p>
                   </div>
                 </div>
-              </>
-            ) : (
-              <>
+              </div>
+            ) : !recentSearches.length ? (
+              <div className="flex flex-col items-center justify-center gap-3 px-4 py-12 sm:py-16">
                 <div className="mb-2 flex h-12 w-12 items-center justify-center rounded-full border-2 border-[#2a2a2a] bg-[#1a1a1a] sm:h-16 sm:w-16">
                   <FaSearch className="h-6 w-6 text-[#7FFFC9] sm:h-8 sm:w-8" />
                 </div>
@@ -1052,8 +1392,8 @@ const SearchModalContent = React.memo(function SearchModalContent({
                     </span>
                   </div>
                 </div>
-              </>
-            )}
+              </div>
+            ) : null}
           </div>
         ) : (
           <ul className="flex h-full list-none flex-col gap-2 overflow-y-auto pb-2">
@@ -1064,7 +1404,7 @@ const SearchModalContent = React.memo(function SearchModalContent({
 
               return (
                 <TokenListItem
-                  key={token.pair_address}
+                  key={`${token.pair_address || ''}-${token.mint || ''}-${token.symbol || ''}`}
                   token={token}
                   mc={mc}
                   vol={vol}
@@ -1134,6 +1474,24 @@ const TokenListItem = React.memo(
     const xPreviewTimeoutRef = useRef<number | null>(null);
     const [isMobile, setIsMobile] = useState(false);
 
+    // Image preview state (like PulseTable)
+    const [showImagePreview, setShowImagePreview] = useState(false);
+    const [imagePreviewPosition, setImagePreviewPosition] = useState({ top: 0, left: 0 });
+    const imageContainerRef = useRef<HTMLDivElement>(null);
+
+    // Search menu state (like PulseTable)
+    const [showSearchMenu, setShowSearchMenu] = useState(false);
+    const [searchMenuPosition, setSearchMenuPosition] = useState({ left: 0, top: 0, openAbove: false });
+    const searchButtonRef = useRef<HTMLButtonElement>(null);
+    const searchMenuRef = useRef<HTMLDivElement>(null);
+    const isOverSearchMenu = useRef(false);
+    const isOverSearchButton = useRef(false);
+
+    // Ref to persist resolved image URL and prevent flickering (like TradeHeader)
+    const resolvedImageRef = useRef<string | null>(null);
+    // Track the mint we resolved for to know when to re-resolve
+    const resolvedForMintRef = useRef<string | null>(null);
+
     useEffect(() => {
       const checkMobile = () => {
         setIsMobile(window.innerWidth < 640); // sm breakpoint
@@ -1143,25 +1501,44 @@ const TokenListItem = React.memo(
       return () => window.removeEventListener("resize", checkMobile);
     }, []);
 
+    // Only reset logoUrl when the token actually changes (different mint)
+    // Don't reset if we already have a resolved image for this mint
     useEffect(() => {
-      setLogoUrl(token.uri || token.logo || null);
-    }, [token.uri, token.logo, token.mint]);
+      if (resolvedForMintRef.current !== token.mint) {
+        // New token - reset and start fresh
+        const initialUrl = token.uri || token.logo || null;
+        setLogoUrl(initialUrl);
+        resolvedImageRef.current = null;
+        resolvedForMintRef.current = token.mint;
+      }
+    }, [token.mint, token.uri, token.logo]);
 
     useEffect(() => {
       let cancelled = false;
-      if (token.uri && !logoUrl) {
-        fetchTokenMetadata(token.uri).then((data) => {
+      const rawUri = token.uri || token.logo;
+
+      // Skip if we already resolved for this token
+      if (resolvedImageRef.current && resolvedForMintRef.current === token.mint) {
+        return;
+      }
+
+      if (rawUri && !resolvedImageRef.current) {
+        fetchTokenMetadata(rawUri).then((data) => {
           if (cancelled) return;
           const img = extractMetaImage(data);
           if (img) {
+            resolvedImageRef.current = img;
             setLogoUrl(img);
+          } else if (rawUri) {
+            // If metadata fetch didn't return an image, use the raw URI
+            resolvedImageRef.current = rawUri;
           }
         });
       }
       return () => {
         cancelled = true;
       };
-    }, [token.uri, logoUrl]);
+    }, [token.mint, token.uri, token.logo]);
 
     useEffect(() => {
       return () => {
@@ -1177,6 +1554,34 @@ const TokenListItem = React.memo(
     const handleSelect = useCallback(() => {
       onSelect(token);
     }, [onSelect, token]);
+
+    // Image hover handlers (like PulseTable)
+    const handleImageMouseEnter = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
+      if (isMobile) return; // Don't show preview on mobile
+      setShowImagePreview(true);
+      const target = e.currentTarget as HTMLDivElement;
+      target.style.transform = "scale(1.05)";
+
+      // Calculate preview window position
+      if (imageContainerRef.current) {
+        const rect = imageContainerRef.current.getBoundingClientRect();
+        const viewportWidth = window.innerWidth;
+        const previewWidth = 180;
+
+        // Show on right if enough space, otherwise on left
+        const showOnRight = rect.right + previewWidth + 20 < viewportWidth;
+        setImagePreviewPosition({
+          top: rect.top,
+          left: showOnRight ? rect.right + 12 : rect.left - previewWidth - 12,
+        });
+      }
+    }, [isMobile]);
+
+    const handleImageMouseLeave = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
+      setShowImagePreview(false);
+      const target = e.currentTarget as HTMLDivElement;
+      target.style.transform = "scale(1)";
+    }, []);
 
     const protocolColor = useMemo(
       () => resolveProtocolColor(token, chain),
@@ -1328,14 +1733,35 @@ const TokenListItem = React.memo(
       [twitterProfileUrl, openLinkInNewTab],
     );
 
-    const handleSearchClick = useCallback(
-      (event: React.MouseEvent<HTMLButtonElement>) => {
-        event.preventDefault();
-        event.stopPropagation();
-        openLinkInNewTab(twitterSearchUrl);
-      },
-      [openLinkInNewTab, twitterSearchUrl],
-    );
+    // Search menu hover handlers
+    const handleSearchMouseEnter = useCallback(() => {
+      isOverSearchButton.current = true;
+      setShowSearchMenu(true);
+    }, []);
+
+    const handleSearchMouseLeave = useCallback(() => {
+      isOverSearchButton.current = false;
+      // Delay to allow moving to the dropdown
+      setTimeout(() => {
+        if (!isOverSearchMenu.current && !isOverSearchButton.current) {
+          setShowSearchMenu(false);
+        }
+      }, 200);
+    }, []);
+
+    const handleSearchMenuMouseEnter = useCallback(() => {
+      isOverSearchMenu.current = true;
+    }, []);
+
+    const handleSearchMenuMouseLeave = useCallback(() => {
+      isOverSearchMenu.current = false;
+      // Delay to allow moving back to button if needed
+      setTimeout(() => {
+        if (!isOverSearchMenu.current && !isOverSearchButton.current) {
+          setShowSearchMenu(false);
+        }
+      }, 200);
+    }, []);
 
     const handlePumpClick = useCallback(
       (event: React.MouseEvent<HTMLButtonElement>) => {
@@ -1530,15 +1956,84 @@ const TokenListItem = React.memo(
                 >
                   <BsTwitterX size={15} />
                 </button>
-                <button
-                  type="button"
-                  onClick={handleSearchClick}
-                  className="relative z-10 p-0.5 transition-all duration-200 hover:text-white"
-                  style={{ pointerEvents: "auto" }}
-                  title="Search on X"
-                >
-                  <FaSearch size={13} className="sm:h-3 sm:w-3" />
-                </button>
+                <div className="relative">
+                  <button
+                    ref={searchButtonRef}
+                    type="button"
+                    className="relative z-10 p-0.5 transition-all duration-200 hover:text-white hover:bg-white/10 rounded"
+                    style={{ pointerEvents: "auto" }}
+                    title="Search options"
+                    onMouseEnter={handleSearchMouseEnter}
+                    onMouseLeave={handleSearchMouseLeave}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      e.preventDefault();
+                    }}
+                  >
+                    <FaSearch size={13} className="sm:h-3 sm:w-3" />
+                  </button>
+                  {/* Search Dropdown - Mobile */}
+                  {showSearchMenu && (
+                    <div
+                      ref={searchMenuRef}
+                      className="absolute left-0 top-full mt-2 min-w-[220px] rounded-lg border border-[#2a2b33] bg-[#16171C] py-1 z-[999999]"
+                      style={{ boxShadow: "0 8px 32px rgba(0, 0, 0, 0.6)" }}
+                      onMouseEnter={handleSearchMenuMouseEnter}
+                      onMouseLeave={handleSearchMenuMouseLeave}
+                    >
+                      <button
+                        className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-sm text-white hover:bg-white/10 transition-colors"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          window.open(`https://twitter.com/search?q=${encodeURIComponent(token.mint)}`, "_blank");
+                          setShowSearchMenu(false);
+                        }}
+                      >
+                        <FaXTwitter size={14} className="text-neutral-400" />
+                        X Search for Address
+                      </button>
+                      <button
+                        className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-sm text-white hover:bg-white/10 transition-colors"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          window.open(`https://twitter.com/search?q=${encodeURIComponent(`${token.symbol} ${token.name}`.trim())}`, "_blank");
+                          setShowSearchMenu(false);
+                        }}
+                      >
+                        <FaXTwitter size={14} className="text-neutral-400" />
+                        X Search for Name
+                      </button>
+                      <div className="my-1 border-t border-[#2a2b33]" />
+                      <button
+                        className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-sm text-white hover:bg-white/10 transition-colors"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          window.open(`https://www.google.com/search?q=${encodeURIComponent(`${token.symbol} ${token.name} crypto`.trim())}`, "_blank");
+                          setShowSearchMenu(false);
+                        }}
+                      >
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
+                          <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
+                          <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
+                          <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/>
+                          <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/>
+                        </svg>
+                        Google Search for Name
+                      </button>
+                      <button
+                        className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-sm text-white hover:bg-white/10 transition-colors"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          window.open(`https://dexscreener.com/solana/${token.mint}`, "_blank");
+                          setShowSearchMenu(false);
+                        }}
+                      >
+                        <LuSearch size={14} className="text-[#36d8ff]" />
+                        DexScreener
+                      </button>
+                    </div>
+                  )}
+                </div>
                 {isPumpToken && (
                   <button
                     type="button"
@@ -1573,17 +2068,20 @@ const TokenListItem = React.memo(
           <div className="hidden w-full min-w-0 items-center justify-between gap-4 sm:flex md:gap-6">
             <div className="flex w-full max-w-72 min-w-0 flex-1 items-center gap-4">
               <div
+                ref={imageContainerRef}
                 className="relative flex h-16 w-16 flex-shrink-0 items-center justify-center"
                 style={{
                   overflow: "visible",
                 }}
               >
                 <div
-                  className="relative rounded-lg"
+                  className="relative rounded-lg cursor-pointer transition-all duration-200"
                   style={{ border: "none", padding: 0 }}
+                  onMouseEnter={handleImageMouseEnter}
+                  onMouseLeave={handleImageMouseLeave}
                 >
                   <div
-                    className="relative rounded-lg transition-all duration-200 group-hover:scale-105"
+                    className="relative rounded-lg transition-all duration-200"
                     style={{
                       border: `2px solid ${protocolColor}`,
                       padding: 2,
@@ -1607,7 +2105,7 @@ const TokenListItem = React.memo(
                   </div>
                 </div>
                 <div
-                  className="absolute -right-0.5 -bottom-0.5 flex h-5 w-5 items-center justify-center rounded-full border-2 border-[#0f0f0f] bg-[#0f0f0f] transition-transform duration-200 group-hover:scale-110"
+                  className="pointer-events-none absolute -right-0.5 -bottom-0.5 flex h-5 w-5 items-center justify-center rounded-full border-2 border-[#0f0f0f] bg-[#0f0f0f] transition-transform duration-200 group-hover:scale-110"
                   style={{
                     borderColor: protocolColor,
                     boxShadow: `0 0 6px ${protocolColor}50`,
@@ -1901,15 +2399,83 @@ const TokenListItem = React.memo(
                         <LuPill size={15} className="sm:h-3.5 sm:w-3.5" />
                       </button>
                     )}
-                    <button
-                      type="button"
-                      onClick={handleSearchClick}
-                      className="relative z-10 p-0.5 transition-all duration-200 hover:text-white"
-                      style={{ pointerEvents: "auto" }}
-                      title="Search on X"
-                    >
-                      <FaSearch size={13} className="sm:h-3 sm:w-3" />
-                    </button>
+                    <div className="relative">
+                      <button
+                        type="button"
+                        className="relative z-10 p-0.5 transition-all duration-200 hover:text-white hover:bg-white/10 rounded"
+                        style={{ pointerEvents: "auto" }}
+                        title="Search options"
+                        onMouseEnter={handleSearchMouseEnter}
+                        onMouseLeave={handleSearchMouseLeave}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          e.preventDefault();
+                        }}
+                      >
+                        <FaSearch size={13} className="sm:h-3 sm:w-3" />
+                      </button>
+                      {/* Search Dropdown - Desktop */}
+                      {showSearchMenu && (
+                        <div
+                          ref={searchMenuRef}
+                          className="absolute left-0 top-full mt-2 min-w-[220px] rounded-lg border border-[#2a2b33] bg-[#16171C] py-1 z-[999999]"
+                          style={{ boxShadow: "0 8px 32px rgba(0, 0, 0, 0.6)" }}
+                          onMouseEnter={handleSearchMenuMouseEnter}
+                          onMouseLeave={handleSearchMenuMouseLeave}
+                        >
+                          <button
+                            className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-sm text-white hover:bg-white/10 transition-colors"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              window.open(`https://twitter.com/search?q=${encodeURIComponent(token.mint)}`, "_blank");
+                              setShowSearchMenu(false);
+                            }}
+                          >
+                            <FaXTwitter size={14} className="text-neutral-400" />
+                            X Search for Address
+                          </button>
+                          <button
+                            className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-sm text-white hover:bg-white/10 transition-colors"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              window.open(`https://twitter.com/search?q=${encodeURIComponent(`${token.symbol} ${token.name}`.trim())}`, "_blank");
+                              setShowSearchMenu(false);
+                            }}
+                          >
+                            <FaXTwitter size={14} className="text-neutral-400" />
+                            X Search for Name
+                          </button>
+                          <div className="my-1 border-t border-[#2a2b33]" />
+                          <button
+                            className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-sm text-white hover:bg-white/10 transition-colors"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              window.open(`https://www.google.com/search?q=${encodeURIComponent(`${token.symbol} ${token.name} crypto`.trim())}`, "_blank");
+                              setShowSearchMenu(false);
+                            }}
+                          >
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
+                              <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
+                              <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
+                              <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/>
+                              <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/>
+                            </svg>
+                            Google Search for Name
+                          </button>
+                          <button
+                            className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-sm text-white hover:bg-white/10 transition-colors"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              window.open(`https://dexscreener.com/solana/${token.mint}`, "_blank");
+                              setShowSearchMenu(false);
+                            }}
+                          >
+                            <LuSearch size={14} className="text-[#36d8ff]" />
+                            DexScreener
+                          </button>
+                        </div>
+                      )}
+                    </div>
                   </div>
                 </div>
               </div>
@@ -1944,6 +2510,58 @@ const TokenListItem = React.memo(
             </button>
           </div>
         </li>
+
+        {/* Image Preview Window (like PulseTable) */}
+        {showImagePreview && (
+          <div
+            className="pointer-events-none fixed z-[9999]"
+            style={{
+              top: `${imagePreviewPosition.top}px`,
+              left: `${imagePreviewPosition.left}px`,
+            }}
+          >
+            <div className="relative">
+              {/* Main preview container */}
+              <div
+                className="relative overflow-hidden rounded-xl border"
+                style={{
+                  width: "180px",
+                  height: "180px",
+                  backgroundColor: AX.surface,
+                  borderColor: protocolColor,
+                  borderWidth: "2px",
+                  boxShadow: `0 8px 32px rgba(0, 0, 0, 0.4), 0 0 20px ${protocolColor}30`,
+                }}
+              >
+                <FastImage
+                  src={normalizedLogo ?? undefined}
+                  fallbackSrc={fallbackAvatar}
+                  alt={token.name || token.symbol || ""}
+                  width={180}
+                  height={180}
+                  className="h-full w-full object-cover"
+                  symbol={token.symbol}
+                  name={token.name}
+                  showBubble={false}
+                />
+              </div>
+
+              {/* Token info overlay */}
+              <div
+                className="absolute -bottom-8 left-1/2 -translate-x-1/2 transform rounded px-2 py-1 text-xs font-medium whitespace-nowrap"
+                style={{
+                  backgroundColor: AX.surface,
+                  color: AX.text,
+                  border: `1px solid ${AX.border}`,
+                  boxShadow: "0 4px 12px rgba(0, 0, 0, 0.3)",
+                }}
+              >
+                {token.symbol} - {token.name}
+              </div>
+            </div>
+          </div>
+        )}
+
       </>
     );
   },

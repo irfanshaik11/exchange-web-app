@@ -212,7 +212,7 @@ export default function FeaturedMarket({ market }: FeaturedMarketProps) {
                 className="ml-auto flex items-center gap-1.5 px-5 py-2.5 rounded-full text-sm font-semibold transition-colors cursor-pointer"
                 style={{
                   backgroundColor: AX.accent,
-                  color: '#fff',
+                  color: '#000',
                 }}
               >
                 Trade Now
