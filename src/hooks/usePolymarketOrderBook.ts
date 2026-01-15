@@ -25,6 +25,15 @@ export interface UsePolymarketOrderBookOptions {
   maxLevels?: number; // Max number of price levels to show
 }
 
+// Real-time price update from WebSocket
+export interface RealtimePriceUpdate {
+  assetId: string;
+  price: number;
+  bestBid: number;
+  bestAsk: number;
+  timestamp: number;
+}
+
 export interface UsePolymarketOrderBookResult {
   yesOrderBook: OrderBookData | null;
   noOrderBook: OrderBookData | null;
@@ -32,6 +41,9 @@ export interface UsePolymarketOrderBookResult {
   isLoading: boolean;
   error: string | null;
   reconnect: () => void;
+  // Real-time price from WebSocket (updates frequently)
+  yesRealtimePrice: RealtimePriceUpdate | null;
+  noRealtimePrice: RealtimePriceUpdate | null;
 }
 
 /**
@@ -57,6 +69,8 @@ export default function usePolymarketOrderBook(
 
   const [yesOrderBook, setYesOrderBook] = useState<OrderBookData | null>(null);
   const [noOrderBook, setNoOrderBook] = useState<OrderBookData | null>(null);
+  const [yesRealtimePrice, setYesRealtimePrice] = useState<RealtimePriceUpdate | null>(null);
+  const [noRealtimePrice, setNoRealtimePrice] = useState<RealtimePriceUpdate | null>(null);
   const [isConnected, setIsConnected] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -103,13 +117,16 @@ export default function usePolymarketOrderBook(
     try {
       const response = await fetch(`${POLYMARKET_CLOB_API}/book?token_id=${tokenId}`);
       if (!response.ok) {
-        console.warn(`[PolymarketOrderBook] REST API error: ${response.status}`);
+        // 404 is expected for resolved/closed markets - don't warn
+        if (response.status !== 404) {
+          console.warn(`[PolymarketOrderBook] REST API error: ${response.status}`);
+        }
         return null;
       }
       const data = await response.json();
       return processOrderBook(data, data.asset_id || tokenId);
     } catch (e) {
-      console.warn('[PolymarketOrderBook] REST API fetch failed:', e);
+      console.error('[PolymarketOrderBook] REST API fetch failed:', e);
       return null;
     }
   }, [processOrderBook]);
@@ -121,18 +138,13 @@ export default function usePolymarketOrderBook(
       return;
     }
 
-    console.log('[PolymarketOrderBook] Fetching initial data from REST API...');
-
     // Fetch both in parallel
     const promises: Promise<void>[] = [];
 
     if (yesTokenId) {
       promises.push(
         fetchOrderBookREST(yesTokenId).then(data => {
-          if (data) {
-            setYesOrderBook(data);
-            console.log('[PolymarketOrderBook] YES order book loaded from REST');
-          }
+          if (data) setYesOrderBook(data);
         })
       );
     }
@@ -140,10 +152,7 @@ export default function usePolymarketOrderBook(
     if (noTokenId) {
       promises.push(
         fetchOrderBookREST(noTokenId).then(data => {
-          if (data) {
-            setNoOrderBook(data);
-            console.log('[PolymarketOrderBook] NO order book loaded from REST');
-          }
+          if (data) setNoOrderBook(data);
         })
       );
     }
@@ -165,12 +174,10 @@ export default function usePolymarketOrderBook(
     }
 
     try {
-      console.log('[PolymarketOrderBook] Connecting to WebSocket for real-time updates...');
       const ws = new WebSocket(POLYMARKET_WS_URL);
       wsRef.current = ws;
 
       ws.onopen = () => {
-        console.log('[PolymarketOrderBook] WebSocket connected');
         setIsConnected(true);
         setError(null);
         reconnectAttempts.current = 0;
@@ -186,40 +193,68 @@ export default function usePolymarketOrderBook(
             assets_ids: assetIds,
           };
           ws.send(JSON.stringify(subscribeMessage));
-          console.log('[PolymarketOrderBook] Subscribed to:', assetIds);
         }
       };
 
       ws.onmessage = (event) => {
         try {
-          const message = JSON.parse(event.data);
+          const data = JSON.parse(event.data);
 
-          // Handle different message types
-          if (message.type === 'book' || message.event_type === 'book') {
-            // Full order book snapshot
-            const assetId = message.asset_id || message.market;
-            const orderBook = processOrderBook(message, assetId);
+          // WebSocket can send either a single message or an array of messages
+          const messages = Array.isArray(data) ? data : [data];
 
-            if (assetId === yesTokenId) {
-              setYesOrderBook(orderBook);
-            } else if (assetId === noTokenId) {
-              setNoOrderBook(orderBook);
-            }
-          } else if (message.type === 'price_change' || message.event_type === 'price_change') {
-            // Price update - could update best bid/ask
-            const assetId = message.asset_id || message.market;
+          for (const message of messages) {
+            // Handle different message types
+            if (message.type === 'book' || message.event_type === 'book') {
+              // Full order book snapshot
+              const assetId = message.asset_id;
+              if (!assetId) continue;
 
-            // For price changes, update the relevant order book
-            if (assetId === yesTokenId && message.changes) {
-              setYesOrderBook(prev => prev ? {
-                ...prev,
-                timestamp: Date.now(),
-              } : prev);
-            } else if (assetId === noTokenId && message.changes) {
-              setNoOrderBook(prev => prev ? {
-                ...prev,
-                timestamp: Date.now(),
-              } : prev);
+              const orderBook = processOrderBook(message, assetId);
+
+              if (assetId === yesTokenId) {
+                setYesOrderBook(orderBook);
+              } else if (assetId === noTokenId) {
+                setNoOrderBook(orderBook);
+              }
+            } else if (message.type === 'price_change' || message.event_type === 'price_change') {
+              // Real-time price update with best bid/ask
+              // Format: { event_type: "price_change", market: "...", price_changes: [...], timestamp: "..." }
+              const messageTimestamp = message.timestamp ? parseInt(message.timestamp) : Date.now();
+              const priceChanges = message.price_changes || [];
+
+              // Process each price change in the array
+              for (const change of priceChanges) {
+                const assetId = change.asset_id;
+                if (!assetId) continue;
+
+                const priceUpdate: RealtimePriceUpdate = {
+                  assetId,
+                  price: parseFloat(change.price || '0'),
+                  bestBid: parseFloat(change.best_bid || '0'),
+                  bestAsk: parseFloat(change.best_ask || '0'),
+                  timestamp: messageTimestamp,
+                };
+
+                if (assetId === yesTokenId) {
+                  setYesRealtimePrice(priceUpdate);
+                  // Also update order book's mid price for display consistency
+                  setYesOrderBook(prev => prev ? {
+                    ...prev,
+                    midPrice: (priceUpdate.bestBid + priceUpdate.bestAsk) / 2,
+                    spread: priceUpdate.bestAsk - priceUpdate.bestBid,
+                    timestamp: messageTimestamp,
+                  } : prev);
+                } else if (assetId === noTokenId) {
+                  setNoRealtimePrice(priceUpdate);
+                  setNoOrderBook(prev => prev ? {
+                    ...prev,
+                    midPrice: (priceUpdate.bestBid + priceUpdate.bestAsk) / 2,
+                    spread: priceUpdate.bestAsk - priceUpdate.bestBid,
+                    timestamp: messageTimestamp,
+                  } : prev);
+                }
+              }
             }
           }
         } catch (e) {
@@ -232,16 +267,13 @@ export default function usePolymarketOrderBook(
         // Don't set error here - we still have REST data
       };
 
-      ws.onclose = (event) => {
-        console.log('[PolymarketOrderBook] WebSocket closed:', event.code, event.reason);
+      ws.onclose = () => {
         setIsConnected(false);
         wsRef.current = null;
 
         // Attempt reconnection with exponential backoff
         if (enabled && reconnectAttempts.current < maxReconnectAttempts) {
           const delay = Math.min(1000 * Math.pow(2, reconnectAttempts.current), 30000);
-          console.log(`[PolymarketOrderBook] Reconnecting in ${delay}ms...`);
-
           reconnectTimeoutRef.current = setTimeout(() => {
             reconnectAttempts.current++;
             connectWebSocket();
@@ -293,6 +325,8 @@ export default function usePolymarketOrderBook(
     isLoading,
     error,
     reconnect,
+    yesRealtimePrice,
+    noRealtimePrice,
   };
 }
 

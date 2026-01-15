@@ -1304,13 +1304,21 @@ export default function MarketDetailPage() {
 
     for (const market of polyEvent.markets) {
       try {
-        const prices = JSON.parse(market.outcomePrices || '["0.5", "0.5"]').map(Number);
-        const yesPrice = prices[0] || 0.5;
+        // Skip outcomes with no prices (null/undefined means placeholder)
+        if (!market.outcomePrices) continue;
 
-        // Skip placeholder outcomes
+        const prices = JSON.parse(market.outcomePrices).map(Number);
+        const yesPrice = prices[0] || 0;
+
+        // Skip placeholder outcomes with common patterns
         const label = (market as any).groupItemTitle || market.question || '';
-        if (/^Person [A-Z]+$/i.test(label)) continue;
+        if (/^Person [A-Z]+$/i.test(label)) continue;  // "Person A", "Person B", etc.
+        if (/^Team [A-Z]+$/i.test(label)) continue;    // "Team AM", "Team B", etc.
         if (label === 'Other') continue;
+
+        // Skip outcomes with zero volume (no trading activity = likely placeholder)
+        const volume = parseFloat(market.volume || '0');
+        if (volume === 0) continue;
 
         if (yesPrice > bestPrice) {
           bestPrice = yesPrice;
@@ -1327,7 +1335,9 @@ export default function MarketDetailPage() {
 
   // Extract market info for multi-series price history (top 4 by probability)
   const multiOutcomeMarketInfo = useMemo(() => {
-    if (!isMultiOutcomeMarket || !polyEvent?.markets) return undefined;
+    if (!isMultiOutcomeMarket || !polyEvent?.markets) {
+      return undefined;
+    }
 
     // Helper to parse JSON safely
     const safeJsonParse = <T,>(str: string, fallback: T): T => {
@@ -1345,27 +1355,35 @@ export default function MarketDetailPage() {
         id: market.id,
         label: (market as any).groupItemTitle || market.question || 'Outcome',
         tokenId: tokenIds[0] || '', // YES token
-        currentPrice: prices[0] || 0.5,
+        // Use nullish coalescing (??) instead of || to handle price = 0 correctly
+        // || treats 0 as falsy, so eliminated teams (0%) would incorrectly become 50%
+        currentPrice: prices[0] ?? 0.5,
         volume: parseFloat(market.volume || '0') || 0,
       };
     }).filter(m => m.tokenId); // Only include markets with valid token IDs
 
-    // Filter out placeholder "Person X" outcomes and untraded outcomes (exactly 50%)
-    // These are anonymous placeholders that haven't been revealed or traded
+    // Filter out placeholder outcomes, resolved outcomes, and untraded outcomes
     const realMarkets = allMarkets.filter(m => {
       // Filter out "Person XX" placeholder labels
       if (/^Person [A-Z]+$/i.test(m.label)) return false;
+      // Filter out "Team XX" placeholder labels
+      if (/^Team [A-Z]+$/i.test(m.label)) return false;
       // Filter out "Other" catch-all outcome
       if (m.label === 'Other') return false;
-      // Filter out outcomes with exactly 50% and no volume (untraded)
-      if (m.currentPrice === 0.5 && m.volume === 0) return false;
+      // Filter out outcomes with zero volume (no trading activity)
+      if (m.volume === 0) return false;
+      // Filter out resolved/eliminated outcomes (price at 0% or 100%)
+      // These indicate the outcome is no longer active
+      if (m.currentPrice <= 0.01 || m.currentPrice >= 0.99) return false;
       return true;
     });
 
     // Sort by probability (highest first) and take top 4
-    return realMarkets
+    const top4 = realMarkets
       .sort((a, b) => b.currentPrice - a.currentPrice)
       .slice(0, 4);
+
+    return top4;
   }, [isMultiOutcomeMarket, polyEvent]);
 
   // Fetch multi-series price history for multi-outcome markets
@@ -1456,8 +1474,12 @@ export default function MarketDetailPage() {
 
   // Unified history loading state
   // For multi-outcome markets, use multi-series loading; otherwise use single-series loading
+  // IMPORTANT: Also check if chartSeries is empty but should have data - this handles the race condition
+  // where multiSeriesLoading becomes false before chartSeries is populated
   const chartHistoryLoading = isPolymarket
-    ? (isMultiOutcomeMarket ? multiSeriesLoading : polyHistoryLoading)
+    ? (isMultiOutcomeMarket
+        ? (multiSeriesLoading || (chartSeries.length === 0 && multiOutcomeMarketInfo && multiOutcomeMarketInfo.length > 0))
+        : polyHistoryLoading)
     : historyLoading;
 
   // Transform order book for the chart component
@@ -1701,16 +1723,19 @@ export default function MarketDetailPage() {
                     resolvedResult={market.result as 'yes' | 'no' | null}
                   />
                 ) : isPolymarket ? (
-                  /* Use simple PolymarketChart for single-outcome (Yes/No) markets */
-                  <PolymarketChart
-                    key={`poly-${tickerString}`}
-                    priceHistory={chartPriceHistory}
-                    currentPrice={currentYesPrice}
+                  /* Use TradingView chart for single-outcome Polymarket markets (line chart) */
+                  <TradingViewPredictionChart
+                    key={`tv-poly-${tickerString}`}
+                    ticker={tickerString}
                     marketTitle={market.title}
-                    isLoading={chartHistoryLoading}
-                    height={topPanePx - 80}
-                    selectedInterval={chartInterval}
-                    onIntervalChange={setChartInterval}
+                    yesPrice={currentYesPrice}
+                    noPrice={currentNoPrice}
+                    height="100%"
+                    priceHistory={chartPriceHistory}
+                    showOrderBook={false} /* Use separate PolymarketOrderBook instead */
+                    useLineChart={true} /* Line chart like multi-outcome markets */
+                    isResolved={isResolved}
+                    resolvedResult={market.result as 'yes' | 'no' | null}
                   />
                 ) : (
                   /* Use TradingView chart for dFlow markets */
@@ -1731,7 +1756,8 @@ export default function MarketDetailPage() {
                 </div>
 
                 {/* Polymarket Real-time Order Book - inline flex item on the right */}
-                {isPolymarket && polyTokenIds.yes && (
+                {/* Hide order book for resolved/closed markets - Polymarket deactivates CLOB when market closes */}
+                {isPolymarket && polyTokenIds.yes && !isResolved && !(selectedOutcomeMarket as any)?.closed && (
                   <PolymarketOrderBook
                     yesTokenId={polyTokenIds.yes}
                     noTokenId={polyTokenIds.no}

@@ -387,20 +387,14 @@ export function usePolymarketMarket(
 
   const fetchMarket = useCallback(async () => {
     if (!slug || !enabled) {
-      console.log('[usePolymarketMarket] Skipping fetch - slug:', slug, 'enabled:', enabled);
       return;
     }
-
-    console.log('[usePolymarketMarket] Fetching market for slug:', slug);
 
     try {
       const response = await fetch(`${API_BASE}/market?slug=${encodeURIComponent(slug)}`);
 
-      console.log('[usePolymarketMarket] Response status:', response.status);
-
       if (!response.ok) {
         if (response.status === 404) {
-          console.log('[usePolymarketMarket] Market not found for slug:', slug);
           setError('Market not found');
         } else {
           throw new Error(`API error: ${response.status}`);
@@ -409,22 +403,18 @@ export function usePolymarketMarket(
       }
 
       const json = await response.json();
-      console.log('[usePolymarketMarket] Response data:', json);
       // Backend returns { success: true, data: {...event} }
       const eventData: PolymarketEvent = json.data || json.event;
 
       if (!eventData) {
-        console.log('[usePolymarketMarket] No event data in response');
         setError('Market not found');
         return;
       }
 
-      console.log('[usePolymarketMarket] Found event:', eventData.title);
       setEvent(eventData);
 
       // Transform to unified format
       const transformed = transformToUnified(eventData);
-      console.log('[usePolymarketMarket] Transformed markets:', transformed.length);
       if (transformed.length > 0) {
         setMarket(transformed[0]);
       }
@@ -600,7 +590,6 @@ export function usePolymarketMultiPriceHistory(
             const response = await fetch(`${API_BASE}/prices-history?${params}`);
 
             if (!response.ok) {
-              console.warn(`[usePolymarketMultiPriceHistory] Failed to fetch history for ${market.label}`);
               return { ...market, history: [] };
             }
 
@@ -614,7 +603,6 @@ export function usePolymarketMultiPriceHistory(
               currentPrice: market.currentPrice,
             };
           } catch (err) {
-            console.warn(`[usePolymarketMultiPriceHistory] Error fetching ${market.label}:`, err);
             return { ...market, history: [] };
           }
         })
@@ -622,7 +610,6 @@ export function usePolymarketMultiPriceHistory(
 
       setSeriesData(results);
       setError(null);
-      console.log(`[usePolymarketMultiPriceHistory] Fetched history for ${results.length} tokens`);
     } catch (err) {
       console.error('[usePolymarketMultiPriceHistory] Failed to fetch histories:', err);
       setError(err instanceof Error ? err.message : 'Failed to fetch price histories');

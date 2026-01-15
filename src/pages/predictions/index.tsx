@@ -11,8 +11,12 @@ import {
   SortFilter,
   FeaturedMarket,
   StatsBar,
+  MarketFilters,
+  applyMarketFilters,
+  DEFAULT_FILTERS,
   type PredictionMarket,
   type SortOption,
+  type MarketFilterState,
 } from '../../components/predictions';
 import useUnifiedPredictionMarkets from '~/hooks/useUnifiedPredictionMarkets';
 import DataSourceSwitcher, { type PredictionDataSource } from '~/components/predictions/DataSourceSwitcher';
@@ -58,6 +62,7 @@ export default function PredictionsPage() {
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [selectedSort, setSelectedSort] = useState<SortOption>('hot');
   const [searchQuery, setSearchQuery] = useState('');
+  const [marketFilters, setMarketFilters] = useState<MarketFilterState>(DEFAULT_FILTERS);
   // TODO: dFlow is disabled for now - only Polymarket is active
   // const [dataSource, setDataSource] = useState<PredictionDataSource>('all');
   const [dataSource, setDataSource] = useState<PredictionDataSource>('polymarket');
@@ -112,6 +117,9 @@ export default function PredictionsPage() {
       );
     }
 
+    // Apply advanced filters (status, ending, volume, probability)
+    markets = applyMarketFilters(markets, marketFilters);
+
     // Sort
     switch (selectedSort) {
       case 'hot':
@@ -129,7 +137,7 @@ export default function PredictionsPage() {
     }
 
     return markets;
-  }, [allMarkets, selectedCategory, selectedSort, searchQuery]);
+  }, [allMarkets, selectedCategory, selectedSort, searchQuery, marketFilters]);
 
   // Get featured market (highest volume)
   const featuredMarket = useMemo(() => {
@@ -291,14 +299,15 @@ export default function PredictionsPage() {
           </motion.div>
           */}
 
-          {/* Filters - Centered and Horizontally Scrollable */}
+          {/* Filters - Centered with Horizontally Scrollable Categories/Sort */}
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.5, delay: 0.2 }}
             className="mb-6"
           >
-            <div className="flex justify-center">
+            <div className="flex justify-center items-center gap-2">
+              {/* Scrollable filter bar */}
               <div
                 className="inline-flex items-center gap-3 p-1.5 rounded-xl overflow-x-auto scrollbar-hide max-w-full"
                 style={{
@@ -319,6 +328,19 @@ export default function PredictionsPage() {
                 <SortFilter
                   selectedSort={selectedSort}
                   onSelectSort={setSelectedSort}
+                />
+              </div>
+              {/* Advanced Filters - Outside scrollable area so popout isn't clipped */}
+              <div
+                className="flex-shrink-0 p-1.5 rounded-xl"
+                style={{
+                  backgroundColor: AX.surface,
+                  border: `1px solid ${AX.border}`,
+                }}
+              >
+                <MarketFilters
+                  filters={marketFilters}
+                  onFiltersChange={setMarketFilters}
                 />
               </div>
             </div>
@@ -360,7 +382,7 @@ export default function PredictionsPage() {
             ) : (
               <AnimatePresence mode="wait">
                 <motion.div
-                  key={`${selectedCategory}-${selectedSort}-${dataSource}`}
+                  key={`${selectedCategory}-${selectedSort}-${dataSource}-${JSON.stringify(marketFilters)}`}
                   initial={{ opacity: 0 }}
                   animate={{ opacity: 1 }}
                   exit={{ opacity: 0 }}
