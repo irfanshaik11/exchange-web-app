@@ -1,10 +1,15 @@
 /**
  * Admin Login - Proxies to backend
+ *
+ * Sets the session cookie on the frontend domain (not the backend domain)
+ * to ensure cross-origin requests work properly in production.
  */
 
 import type { NextApiRequest, NextApiResponse } from 'next';
+import { serialize } from 'cookie';
 
 const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8000';
+const SESSION_DURATION_MS = 8 * 60 * 60 * 1000; // 8 hours
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== 'POST') {
@@ -20,10 +25,21 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     const data = await response.json();
 
-    // Forward cookies from backend
-    const setCookie = response.headers.get('set-cookie');
-    if (setCookie) {
-      res.setHeader('Set-Cookie', setCookie);
+    // If login was successful, set the cookie on the frontend domain
+    if (response.ok && data.token) {
+      const isProduction = process.env.NODE_ENV === 'production';
+
+      // Set the cookie from the frontend (same domain as the user's browser)
+      res.setHeader(
+        'Set-Cookie',
+        serialize('admin_session', data.token, {
+          path: '/',
+          httpOnly: true,
+          sameSite: 'lax', // 'lax' allows same-site navigation, 'strict' can break redirects
+          maxAge: SESSION_DURATION_MS / 1000, // maxAge is in seconds
+          secure: isProduction,
+        })
+      );
     }
 
     return res.status(response.status).json(data);
