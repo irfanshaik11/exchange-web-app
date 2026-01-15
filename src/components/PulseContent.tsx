@@ -932,11 +932,11 @@ export default function PulseContent({ forceMobileView = false }: PulseContentPr
 
   return (
     <div className="flex h-full flex-col text-neutral-100 overflow-hidden" style={{ backgroundColor: '#06070b' }}>
-      <div className="w-full px-6 pt-4 flex-1 flex flex-col min-h-0 overflow-hidden">
-        <div className="mb-1">
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between pt-2 px-2 mb-1">
-            <div className="flex items-center gap-3">
-              <h1 className="text-xl font-bold">Trenches</h1>
+        <div className="w-full px-6 pt-4 flex-1 flex flex-col min-h-0 overflow-hidden">
+          <div className="mb-1">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between pt-2 px-2 mb-1">
+              <div className="flex items-center gap-3">
+                <h1 className="text-xl font-bold">Trenches</h1>
               <div className="flex items-center gap-3">
                 <button
                   onClick={() => handleChainSwitch('monad')}
@@ -1053,7 +1053,7 @@ export default function PulseContent({ forceMobileView = false }: PulseContentPr
               </div>
             </div>
         )}
+        </div>
       </div>
-    </div>
   );
 }

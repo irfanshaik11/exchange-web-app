@@ -5,6 +5,7 @@ import React, {
   useMemo,
   useCallback,
 } from "react";
+import { defaultPulseFilters, type PulseFilters } from "~/contexts/PulseFiltersContext";
 import type { Token } from "~/utils/db";
 import { formatSmartNumber, formatMarketCap } from "~/utils/db";
 import {
@@ -1387,7 +1388,8 @@ function TokenImage({
       return "#134577"; // Dark blue for boopfun
     }
 
-    if (launchpadProtocol.includes("bonk")) {
+    // Bonk detection: protocol includes "bonk" or "launchlab", OR mint ends in "bonk"
+    if (launchpadProtocol.includes("bonk") || launchpadProtocol.includes("launchlab") || mintAddress.endsWith("bonk")) {
       return protocolColorMap["bonk"];
     }
 
@@ -1446,17 +1448,13 @@ function TokenImage({
       return "https://avatars.githubusercontent.com/u/174132191?s=280&v=4";
     }
 
-    if (launchpadProtocol.includes("bonk")) {
+    // Bonk/LaunchLab detection: protocol includes "bonk" or "launchlab", OR mint ends in "bonk"
+    if (launchpadProtocol.includes("bonk") || launchpadProtocol.includes("launchlab") || mintAddress.endsWith("bonk")) {
       return "https://s3.coinmarketcap.com/static-gravity/image/a28128d9ff7c49c9ad33ee2f626fda40.png";
     }
 
     if (launchpadProtocol.includes("bags")) {
       return "https://play-lh.googleusercontent.com/7AxVcu1pumxavcGTb16WBJQU88CDZd0v8q0WzFwfin7zbBvItYMuNQ0Xkqq4srTw4A=w240-h480-rw";
-    }
-
-    if (launchpadProtocol.includes("launch")) {
-      // LaunchLab uses Raydium icon
-      return "https://s2.coinmarketcap.com/static/img/coins/64x64/8526.png";
     }
 
     // Default to pump.fun icon for unknown protocols
@@ -1472,7 +1470,8 @@ function TokenImage({
     (token as any).launchpad_protocol?.toLowerCase() || "";
   const mintAddressLower = token.mint?.toLowerCase() || "";
   const isMeteora = launchpadProtocol.includes("meteora");
-  const isBonk = launchpadProtocol.includes("bonk");
+  // Check both launchpad_protocol AND mint address suffix for bonk (mint ends in "bonk")
+  const isBonk = launchpadProtocol.includes("bonk") || launchpadProtocol.includes("launchlab") || mintAddressLower.endsWith("bonk");
   // Check both launchpad_protocol AND mint address for bags
   const isBags = launchpadProtocol.includes("bags") || mintAddressLower.includes("bags");
   const isMoonit =
@@ -1529,22 +1528,7 @@ function TokenImage({
   // Smooth animation for progress bar - uses requestAnimationFrame for buttery transitions
   const scaledProgress = useSmoothProgress(rawScaledProgress, 400);
 
-  // Debug logging for New Pairs
-  if (isNewPairs) {
-    console.log(`[TokenImage] ${token.symbol} progress:`, {
-      bonding_pct: (token as any).bonding_pct,
-      bonding_curve_progress: token.bonding_curve_progress,
-      graduationPercent: (token as any).graduationPercent,
-      calculatedProgress: migrationProgress,
-      finalProgress: finalProgress,
-      scaledProgress: scaledProgress,
-      protocolColor: protocolColor,
-      protocol: (token as any).launchpad_protocol,
-    });
-  }
-
   const handleMouseEnter = (e: React.MouseEvent<HTMLDivElement>) => {
-    console.log("Mouse enter - showing preview for:", token.symbol);
     setShowPreview(true);
     const target = e.currentTarget as HTMLDivElement;
     // Minimal hover effect - no glow
@@ -1562,7 +1546,6 @@ function TokenImage({
   };
 
   const handleMouseLeave = (e: React.MouseEvent<HTMLDivElement>) => {
-    console.log("Mouse leave - hiding preview for:", token.symbol);
     setShowPreview(false);
     const target = e.currentTarget as HTMLDivElement;
     // Don't change border color since we're using SVG border now
@@ -2257,23 +2240,83 @@ function PulseTable({
   const [isFetchingFiltered, setIsFetchingFiltered] = useState(false);
   const isNewPairs = title.toLowerCase().includes("new");
 
+  // Helper to normalize HTTP token data for consistent filtering
+  // Ensures all filter-relevant fields have default values with both field name variants
+  const normalizeHttpToken = useCallback((rawToken: any): Token => {
+    const holderValue = rawToken.holder_count ?? rawToken.holders ?? rawToken.unique_wallets_24h ?? 0;
+    const devPercentValue = rawToken.dev_percent ?? rawToken.dev_held_percentage ?? 0;
+    const sniperPercentValue = rawToken.sniper_percent ?? rawToken.sniper_held_percentage ?? 0;
+    const insiderPercentValue = rawToken.insider_percent ?? rawToken.insider_held_percentage ?? 0;
+    const bundlePercentValue = rawToken.bundle_percent ?? rawToken.bundled_percentage ?? rawToken.bundler_held_percentage ?? 0;
+
+    return {
+      ...rawToken,
+      // Holder count variants
+      holder_count: holderValue,
+      holders: holderValue,
+      unique_wallets_24h: rawToken.unique_wallets_24h ?? holderValue,
+      // KOL count
+      kol_count: rawToken.kol_count ?? 0,
+      // Transaction counts
+      total_buys_24h: rawToken.total_buys_24h ?? 0,
+      total_sells_24h: rawToken.total_sells_24h ?? 0,
+      total_buys_5m: rawToken.total_buys_5m ?? 0,
+      total_sells_5m: rawToken.total_sells_5m ?? 0,
+      total_buys_1h: rawToken.total_buys_1h ?? 0,
+      total_sells_1h: rawToken.total_sells_1h ?? 0,
+      total_buys_6h: rawToken.total_buys_6h ?? 0,
+      total_sells_6h: rawToken.total_sells_6h ?? 0,
+      // Dev percent variants
+      dev_percent: devPercentValue,
+      dev_held_percentage: devPercentValue,
+      // Sniper percent variants
+      sniper_percent: sniperPercentValue,
+      sniper_held_percentage: sniperPercentValue,
+      // Insider percent variants
+      insider_percent: insiderPercentValue,
+      insider_held_percentage: insiderPercentValue,
+      // Bundle percent variants
+      bundle_percent: bundlePercentValue,
+      bundled_percentage: bundlePercentValue,
+      bundler_held_percentage: bundlePercentValue,
+      bundle_wallet_count: rawToken.bundle_wallet_count ?? 0,
+      bundler_count: rawToken.bundle_wallet_count ?? rawToken.bundler_count ?? 0,
+      // Top holders
+      top10_holders_pct: rawToken.top10_holders_pct ?? rawToken.top_10_holders_percent ?? 0,
+      // Dev activity
+      dev_tokens_created: rawToken.dev_tokens_created ?? 0,
+      dev_tokens_migrated: rawToken.dev_tokens_migrated ?? 0,
+      // Market metrics
+      market_cap_usd: rawToken.market_cap_usd ?? rawToken.fully_diluted_value ?? rawToken.fdv ?? 0,
+      liquidity_usd: rawToken.liquidity_usd ?? rawToken.total_liquidity_usd ?? 0,
+      volume_24h: rawToken.volume_24h ?? 0,
+      // Total fees in lamports
+      total_fees_lamports: rawToken.total_fees_lamports ?? 0,
+    } as Token;
+  }, []);
+
   // Local copy of tokens prop that can receive price updates
   // This solves the issue where price_update events couldn't modify the tokens prop
-  const [baseTokens, setBaseTokens] = useState<Token[]>(tokens);
+  const [baseTokens, setBaseTokens] = useState<Token[]>(() =>
+    tokens.map(normalizeHttpToken)
+  );
 
   // Sync baseTokens with tokens prop when it changes (initial load or parent refresh)
   // SMART MERGE: Preserve good market cap values from WebSocket updates
   useEffect(() => {
     if (tokens && tokens.length > 0) {
       setBaseTokens((prev) => {
-        if (prev.length === 0) return tokens; // First load - just use parent data
+        // Normalize all incoming tokens for consistent filtering
+        const normalizedTokens = tokens.map(normalizeHttpToken);
+
+        if (prev.length === 0) return normalizedTokens; // First load - just use parent data
 
         // Create a map of existing tokens with their market caps
         const existingMap = new Map<string, Token>();
         prev.forEach((t) => existingMap.set(t.mint, t));
 
         // Merge: use parent data but preserve good market cap from existing
-        return tokens.map((newToken) => {
+        return normalizedTokens.map((newToken) => {
           const existing = existingMap.get(newToken.mint);
           if (!existing) return newToken;
 
@@ -2293,7 +2336,7 @@ function PulseTable({
         });
       });
     }
-  }, [tokens]);
+  }, [tokens, normalizeHttpToken]);
   // State for WebSocket real-time updates
   const wsCacheStorageKey = useMemo(() => {
     const lowerTitle = title.toLowerCase();
@@ -2327,76 +2370,51 @@ function PulseTable({
     return [];
   });
 
-  const [filters, setFilters] = useState({
-    // Protocols
-    protocols: ["All"] as string[],
-    // Quote Tokens
-    quoteTokens: [] as string[],
-    // Keywords
-    searchKeywords: "",
-    excludeKeywords: "",
-    // Audit
-    dexPaid: false,
-    caEndsInPump: false,
-    minAge: "",
-    maxAge: "",
-    ageUnit: "m",
-    top10HoldersPercent: "",
-    // New Audit Fields
-    devHoldingPercentMin: "",
-    devHoldingPercentMax: "",
-    snipersPercentMin: "",
-    snipersPercentMax: "",
-    insidersPercentMin: "",
-    insidersPercentMax: "",
-    bundlePercentMin: "",
-    bundlePercentMax: "",
-    holdersMin: "",
-    holdersMax: "",
-    proTradersMin: "",
-    proTradersMax: "",
-    devMigrationsMin: "",
-    devMigrationsMax: "",
-    devPairsCreatedMin: "",
-    devPairsCreatedMax: "",
-    // Metrics
-    minMarketCap: "",
-    maxMarketCap: "",
-    minVolume: "",
-    maxVolume: "",
-    minLiquidity: "",
-    maxLiquidity: "",
-    bCurvePercentMin: "",
-    bCurvePercentMax: "",
-    globalFeesPaidMin: "",
-    globalFeesPaidMax: "",
-    txnsMin: "",
-    txnsMax: "",
-    numBuysMin: "",
-    numBuysMax: "",
-    numSellsMin: "",
-    numSellsMax: "",
-    // Socials
-    twitterFollowers: "",
-    telegramMembers: "",
-    discordMembers: "",
-    twitterReusesMin: "",
-    twitterReusesMax: "",
-    tweetAgeMin: "",
-    tweetAgeMax: "",
-    tweetAgeUnit: "m",
-    hasTwitter: false,
-    hasWebsite: false,
-    hasTelegram: false,
-    atLeastOneSocial: false,
-    onlyPumpLive: false,
-    // Sort - default to timestamp for New Pairs and Migrated, marketCap for others
+  // Storage key for persisting filters per column
+  const filterStorageKey = useMemo(() => {
+    const lowerTitle = title.toLowerCase();
+    if (lowerTitle.includes("final")) return "pulse_filters_final_stretch";
+    if (lowerTitle.includes("migrated")) return "pulse_filters_migrated";
+    if (lowerTitle.includes("new")) return "pulse_filters_new_pairs";
+    return `pulse_filters_${lowerTitle.replace(/\s+/g, "_")}`;
+  }, [title]);
+
+  // Default filters for this column type
+  const getDefaultFilters = useCallback((): PulseFilters => ({
+    ...defaultPulseFilters,
     sortBy:
       isNewPairs || title.toLowerCase().includes("migrated")
         ? "timestamp"
         : "marketCap",
     sortOrder: "desc",
+  }), [isNewPairs, title]);
+
+  // Local filters state - each column has independent filters
+  // Initialize from localStorage if available
+  const [filters, setFilters] = useState<PulseFilters>(() => {
+    if (typeof window === "undefined") return getDefaultFilters();
+    try {
+      const stored = window.localStorage.getItem(filterStorageKey);
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        // Merge with defaults to handle any new filter fields added later
+        return { ...getDefaultFilters(), ...parsed };
+      }
+    } catch (error) {
+      console.warn("[PulseTable] Failed to load persisted filters:", error);
+    }
+    return getDefaultFilters();
   });
+
+  // Persist filters to localStorage whenever they change
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    try {
+      window.localStorage.setItem(filterStorageKey, JSON.stringify(filters));
+    } catch (error) {
+      // Silent fail - not critical
+    }
+  }, [filters, filterStorageKey, title]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -2429,6 +2447,16 @@ function PulseTable({
   const [pendingFilters, setPendingFilters] = useState(filters);
   const [hasPendingChanges, setHasPendingChanges] = useState(false);
   const prevHasSpecificProtocolsRef = useRef(false);
+  const isInitialMountRef = useRef(true);
+
+  // Sync pendingFilters with filters on initial mount (for persisted filters)
+  useEffect(() => {
+    if (isInitialMountRef.current) {
+      isInitialMountRef.current = false;
+      // On initial mount, ensure pendingFilters matches persisted filters
+      setPendingFilters(filters);
+    }
+  }, [filters, title]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -2454,28 +2482,29 @@ function PulseTable({
   };
 
   // Map frontend protocol names to backend protocol names
+  // These must match the exact launchpad_protocol values from the backend
   const mapProtocolToBackend = useCallback((protocol: string): string[] => {
     switch (protocol) {
       case "Pump":
-        return ["pump.fun"];
+        return ["pump.fun", "pump", "pumpfun"];
       case "Pump AMM":
-        return ["pump.fun"];
+        return ["pump_amm", "pumpamm", "pumpswap", "pump_swap"];
       case "Raydium":
         return ["raydium", "raydiumlaunchpad"];
       case "Meteora AMM":
         return ["meteora"];
       case "Meteora AMM V2":
-        return ["meteora"];
+        return ["meteora"]; // V2 also uses "meteora" as the backend value
       case "Bonk":
-        return ["bonk"];
+        return ["bonk", "bonk.fun", "launchlab"];
       case "Bags":
         return ["bags"];
       case "Moonit":
-        return ["moonit"];
+        return ["moonit", "moonshot", "moonshoot"];
       case "Boop":
-        return ["boopfun"];
+        return ["boop", "boopfun"];
       case "LaunchLab":
-        return ["launchlab"];
+        return ["launchlab", "bonk", "bonk.fun"];
       case "All":
         return ["all"];
       default:
@@ -2512,12 +2541,14 @@ function PulseTable({
         );
         if (response.ok) {
           const data = await response.json();
-          const next = Array.isArray(data) ? data : [];
+          const rawTokens = Array.isArray(data) ? data : [];
+          // Normalize HTTP tokens for consistent filtering (same as WebSocket tokens)
+          const normalizedTokens = rawTokens.map(normalizeHttpToken);
           // Skip liquidity filtering for New Pairs
           if (isNewPairs) {
-            setFilteredTokens(next as Token[]);
+            setFilteredTokens(normalizedTokens);
           } else {
-            setFilteredTokens(filterNonZeroLiquidity(next as Token[]));
+            setFilteredTokens(filterNonZeroLiquidity(normalizedTokens));
           }
         } else {
           console.error("Failed to fetch filtered tokens:", response.status);
@@ -2530,7 +2561,7 @@ function PulseTable({
         setIsFetchingFiltered(false);
       }
     },
-    [title],
+    [title, normalizeHttpToken],
   );
 
   // Determine channel from title
@@ -2551,8 +2582,9 @@ function PulseTable({
   } = usePulseWebSocketPersistent({
     enabled: true,
     channel,
+    // Only pass protocol filter if specific protocols are selected (not "All")
     protocols:
-      filters.protocols.length > 0
+      filters.protocols.length > 0 && !filters.protocols.includes("All")
         ? filters.protocols.flatMap(mapProtocolToBackend)
         : undefined,
     onNewToken: useCallback(
@@ -2676,6 +2708,12 @@ function PulseTable({
             ...(update.insider_percent !== undefined && { insider_percent: update.insider_percent }),
             ...(update.sniper_percent !== undefined && { sniper_percent: update.sniper_percent }),
             ...(update.dev_percent !== undefined && { dev_percent: update.dev_percent }),
+            ...(update.top10_holders_pct !== undefined && { top10_holders_pct: update.top10_holders_pct }),
+            // Map bundler data from websocket (bundle_percent → bundler_held_percentage for BottomCardInfoHolder)
+            ...(update.bundle_percent !== undefined && { bundle_percent: update.bundle_percent, bundler_held_percentage: update.bundle_percent }),
+            ...(update.bundle_wallet_count !== undefined && { bundle_wallet_count: update.bundle_wallet_count, bundler_count: update.bundle_wallet_count }),
+            // Map total fees lamports from websocket
+            ...(update.total_fees_lamports !== undefined && { total_fees_lamports: update.total_fees_lamports }),
             updated_at: update.updated_at || token.updated_at,
           };
         });
@@ -2697,6 +2735,30 @@ function PulseTable({
       // The hook's internal arrays (newTokens, finalStretchTokens, migratedTokens)
       // already get price updates applied directly
     }, [isNewPairs]),
+    onTokenInfoUpdate: useCallback((update: { mint_address: string; holder_count: number; kol_count: number }) => {
+      // Apply holder_count and kol_count updates from token_info_update WebSocket messages
+      const applyTokenInfoUpdate = (tokens: Token[]): Token[] => {
+        if (!tokens || tokens.length === 0) return tokens;
+
+        let hasChanges = false;
+        const updatedTokens = tokens.map((token) => {
+          if (token.mint !== update.mint_address) return token;
+          hasChanges = true;
+          return {
+            ...token,
+            holder_count: update.holder_count,
+            kol_count: update.kol_count,
+          };
+        });
+
+        return hasChanges ? updatedTokens : tokens;
+      };
+
+      // Update all local arrays to ensure holder/KOL counts are reflected everywhere
+      setFilteredTokens(applyTokenInfoUpdate);
+      setWsTokens(applyTokenInfoUpdate);
+      setBaseTokens(applyTokenInfoUpdate);
+    }, []),
   });
 
   // Fetch filtered tokens when protocols change
@@ -2739,73 +2801,19 @@ function PulseTable({
   }, [thunderAmount, title]);
 
   const handleResetFilters = () => {
-    const defaultFilters = {
-      protocols: [] as string[],
-      quoteTokens: [] as string[],
-      searchKeywords: "",
-      excludeKeywords: "",
-      dexPaid: false,
-      caEndsInPump: false,
-      minAge: "",
-      maxAge: "",
-      ageUnit: "m",
-      top10HoldersPercent: "",
-      devHoldingPercentMin: "",
-      devHoldingPercentMax: "",
-      snipersPercentMin: "",
-      snipersPercentMax: "",
-      insidersPercentMin: "",
-      insidersPercentMax: "",
-      bundlePercentMin: "",
-      bundlePercentMax: "",
-      holdersMin: "",
-      holdersMax: "",
-      proTradersMin: "",
-      proTradersMax: "",
-      devMigrationsMin: "",
-      devMigrationsMax: "",
-      devPairsCreatedMin: "",
-      devPairsCreatedMax: "",
-      minMarketCap: "",
-      maxMarketCap: "",
-      minVolume: "",
-      maxVolume: "",
-      minLiquidity: "",
-      maxLiquidity: "",
-      bCurvePercentMin: "",
-      bCurvePercentMax: "",
-      globalFeesPaidMin: "",
-      globalFeesPaidMax: "",
-      txnsMin: "",
-      txnsMax: "",
-      numBuysMin: "",
-      numBuysMax: "",
-      numSellsMin: "",
-      numSellsMax: "",
-      twitterFollowers: "",
-      telegramMembers: "",
-      discordMembers: "",
-      twitterReusesMin: "",
-      twitterReusesMax: "",
-      tweetAgeMin: "",
-      tweetAgeMax: "",
-      tweetAgeUnit: "m",
-      hasTwitter: false,
-      hasWebsite: false,
-      hasTelegram: false,
-      atLeastOneSocial: false,
-      onlyPumpLive: false,
-      sortBy:
-        isNewPairs || title.toLowerCase().includes("migrated")
-          ? "timestamp"
-          : "marketCap",
-      sortOrder: "desc",
-    };
-    setPendingFilters(defaultFilters);
-    setFilters(defaultFilters);
+    const resetFilters = getDefaultFilters();
+    setPendingFilters(resetFilters);
+    setFilters(resetFilters);
     setHasPendingChanges(false);
+    // Clear persisted filters from localStorage
+    try {
+      window.localStorage.removeItem(filterStorageKey);
+    } catch (error) {
+      // Silent fail
+    }
   };
 
+  // Update pending filters - user must click "Apply All" to apply them
   const handlePendingFilterChange = (updater: (prev: any) => any) => {
     setPendingFilters(updater);
     setHasPendingChanges(true);
@@ -3424,6 +3432,26 @@ function PulseTable({
       !filters.numSellsMax &&
       !filters.holdersMin &&
       !filters.holdersMax &&
+      !filters.kolCountMin &&
+      !filters.kolCountMax &&
+      !filters.devHoldingPercentMin &&
+      !filters.devHoldingPercentMax &&
+      !filters.snipersPercentMin &&
+      !filters.snipersPercentMax &&
+      !filters.insidersPercentMin &&
+      !filters.insidersPercentMax &&
+      !filters.devMigrationsMin &&
+      !filters.devMigrationsMax &&
+      !filters.devPairsCreatedMin &&
+      !filters.devPairsCreatedMax &&
+      !filters.bundlePercentMin &&
+      !filters.bundlePercentMax &&
+      !filters.globalFeesPaidMin &&
+      !filters.globalFeesPaidMax &&
+      !filters.twitterReusesMin &&
+      !filters.twitterReusesMax &&
+      !filters.tweetAgeMin &&
+      !filters.tweetAgeMax &&
       !filters.hasWebsite &&
       !filters.hasTwitter &&
       !filters.hasTelegram &&
@@ -3448,7 +3476,6 @@ function PulseTable({
           }
         }
 
-        console.log(`[PulseTable ${title}] ⚡ INSTANT: ${wsTokens.length} WS + ${uniqueBaseTokens.length} base`);
         return [...wsTokens, ...uniqueBaseTokens];
       }
 
@@ -3458,10 +3485,6 @@ function PulseTable({
       return tokensSource.slice(0, 100);
     }
     // ═══════════════════════════════════════════════════════════════════════════
-
-    console.log(
-      `[PulseTable ${title}] 🔧 filteredAndSortedTokens recomputing, tokens count: ${tokens?.length || 0}, filteredTokens: ${filteredTokens.length}, wsTokens: ${wsTokens.length}`,
-    );
 
     // Data source priority:
     // 1. WebSocket real-time tokens (for instant updates)
@@ -3474,16 +3497,70 @@ function PulseTable({
     // Merge WebSocket tokens with HTTP API tokens (deduplicate by mint)
     const mergedMap = new Map<string, Token>();
 
+    // Helper function to determine which filter category a token belongs to
+    // Uses EXACT same logic as getTokenIcon for consistency with icon display
+    const getTokenFilterCategory = (token: Token): string => {
+      const protocol = ((token as any).launchpad_protocol || "").toLowerCase();
+      const mint = (token.mint || "").toLowerCase();
+
+      // Priority 1: Bags mint override (same as icon logic line 1414-1416)
+      if (mint.includes("bags")) return "Bags";
+
+      // Priority 2: Check protocol field
+      if (!protocol) return "Pump"; // Default like icon logic
+
+      // Check in same order as getTokenIcon
+      if (protocol.includes("pump")) return protocol.includes("pump_amm") || protocol.includes("pumpamm") || protocol.includes("pumpswap") ? "Pump AMM" : "Pump";
+      if (protocol.includes("meteora")) return "Meteora AMM"; // V1 and V2 both show same icon
+      if (protocol.includes("raydium")) return "Raydium";
+      if (protocol.includes("boop")) return "Boop";
+      if (protocol.includes("moonit") || protocol.includes("moonshot") || protocol.includes("moonshoot")) return "Moonit";
+      // Bonk detection: protocol includes "bonk" or "launchlab", OR mint ends in "bonk"
+      if (protocol.includes("bonk") || protocol.includes("launchlab") || mint.endsWith("bonk")) return "Bonk";
+      if (protocol.includes("bags")) return "Bags";
+
+      return "Pump"; // Default fallback
+    };
+
+    // Helper to check if token matches selected filters
+    const tokenMatchesFilters = (token: Token): boolean => {
+      const tokenCategory = getTokenFilterCategory(token);
+      return filters.protocols.some(selectedFilter => {
+        if (selectedFilter === tokenCategory) return true;
+        // Meteora AMM V2 filter should also match Meteora AMM tokens
+        if (selectedFilter === "Meteora AMM V2" && tokenCategory === "Meteora AMM") return true;
+        return false;
+      });
+    };
+
     // Use filteredTokens if available (either from specific filters or fresh "All" fetch)
     // Otherwise fall back to baseTokens (local state with price updates)
     const tokensSource = filteredTokens.length > 0 ? filteredTokens : baseTokens;
 
     // First add HTTP API tokens (either filtered or from local state)
-    tokensSource.forEach((token) => mergedMap.set(token.mint, token));
+    // Apply client-side filter validation to ensure consistency with icon display
+    if (hasSpecificProtocols) {
+      tokensSource.forEach((token) => {
+        if (tokenMatchesFilters(token)) {
+          mergedMap.set(token.mint, token);
+        }
+      });
+    } else {
+      tokensSource.forEach((token) => mergedMap.set(token.mint, token));
+    }
 
     // Then add/overwrite with WebSocket tokens (they're more recent and real-time)
-    // For new pairs, prioritize speed - filter after merge, not during
-    wsTokens.forEach((token) => mergedMap.set(token.mint, token));
+    // IMPORTANT: Filter WebSocket tokens by protocol if specific protocols are selected
+    if (hasSpecificProtocols) {
+      wsTokens.forEach((token) => {
+        if (tokenMatchesFilters(token)) {
+          mergedMap.set(token.mint, token);
+        }
+      });
+    } else {
+      // No specific protocols selected - include all WebSocket tokens
+      wsTokens.forEach((token) => mergedMap.set(token.mint, token));
+    }
 
     // Filter zero liquidity tokens - DISABLED for new pairs to maximize speed
     if (isNewPairs) {
@@ -3494,16 +3571,6 @@ function PulseTable({
     } else {
       filtered = filterNonZeroLiquidity(
         Array.from(mergedMap.values()) as Token[],
-      );
-    }
-
-    if (hasSpecificProtocols) {
-      console.log(
-        `[PulseTable ${title}] 🔀 Merged filtered tokens: ${filteredTokens.length} HTTP + ${wsTokens.length} WS = ${filtered.length} total`,
-      );
-    } else {
-      console.log(
-        `[PulseTable ${title}] 🔀 Merged tokens (showing All): ${baseTokens.length} HTTP + ${wsTokens.length} WS = ${filtered.length} total`,
       );
     }
 
@@ -3531,7 +3598,6 @@ function PulseTable({
         return mintLower.includes("bags") && !existingMints.has(token.mint);
       });
       if (bagsFromMint.length > 0) {
-        console.log(`[Bags Filter] Adding ${bagsFromMint.length} tokens with "bags" in mint address`);
         filtered = [...filtered, ...bagsFromMint];
       }
     }
@@ -3544,16 +3610,11 @@ function PulseTable({
         .map((term) => term.trim())
         .filter((term) => term);
       if (searchTerms.length > 0) {
-        const beforeCount = filtered.length;
         filtered = filtered.filter((token) => {
           const tokenText =
             `${token.name || ""} ${token.symbol || ""}`.toLowerCase();
           return searchTerms.some((term) => tokenText.includes(term));
         });
-        console.log(
-          `[Keyword Filter] Filtered ${beforeCount} tokens to ${filtered.length} tokens for search keywords:`,
-          searchTerms,
-        );
       }
     }
 
@@ -3564,71 +3625,72 @@ function PulseTable({
         .map((term) => term.trim())
         .filter((term) => term);
       if (excludeTerms.length > 0) {
-        const beforeCount = filtered.length;
         filtered = filtered.filter((token) => {
           const tokenText =
             `${token.name || ""} ${token.symbol || ""}`.toLowerCase();
           return !excludeTerms.some((term) => tokenText.includes(term));
         });
-        console.log(
-          `[Exclude Filter] Filtered ${beforeCount} tokens to ${filtered.length} tokens for exclude keywords:`,
-          excludeTerms,
-        );
       }
     }
 
     // Apply quote token filters
+    // Protocol to quote token mappings:
+    // - Bonk → USD1
+    // - Raydium → USD1
+    // - Meteora → USDC
+    // - Pump, Bags, Moonit, Boop, LaunchLab → SOL
+    // - Everything else → SOL (default)
     if (filters.quoteTokens.length > 0) {
-      const beforeCount = filtered.length;
       filtered = filtered.filter((token) => {
-        // For now, we'll filter based on pair address patterns or other heuristics
-        // Since we don't have explicit quote token data, we'll use pair address patterns
-        const pairAddress = token.pair_address;
-        if (!pairAddress) return false;
+        const protocol = ((token as any).launchpad_protocol || "").toLowerCase();
+        const mint = (token.mint || "").toLowerCase();
 
-        return filters.quoteTokens.some((quoteToken) => {
-          // This is a simplified approach - in reality you'd need to check the actual pair
-          // For now, we'll just return true if any quote token is selected
-          // You might want to implement more sophisticated logic based on your data
-          return true;
-        });
+        // Determine the quote token for this token based on protocol
+        let tokenQuote = "SOL"; // Default for unknown protocols
+
+        // USD1 protocols: Bonk (including launchlab and mint ending in "bonk"), Raydium
+        if (protocol.includes("bonk") || protocol.includes("launchlab") || protocol.includes("raydium") || mint.endsWith("bonk")) {
+          tokenQuote = "USD1";
+        }
+        // USDC protocols: Meteora
+        else if (protocol.includes("meteora")) {
+          tokenQuote = "USDC";
+        }
+        // SOL protocols: Pump, Bags, Moonit, Boop
+        else if (
+          protocol.includes("pump") ||
+          protocol.includes("bags") ||
+          protocol.includes("moonit") || protocol.includes("moonshot") || protocol.includes("moonshoot") ||
+          protocol.includes("boop")
+        ) {
+          tokenQuote = "SOL";
+        }
+        // Everything else defaults to SOL
+
+        // Check if the token's quote matches any selected quote token filter
+        return filters.quoteTokens.includes(tokenQuote);
       });
-      console.log(
-        `[Quote Token Filter] Filtered ${beforeCount} tokens to ${filtered.length} tokens for quote tokens:`,
-        filters.quoteTokens,
-      );
     }
 
     // Apply dexPaid filter
     if (filters.dexPaid) {
-      const beforeCount = filtered.length;
       filtered = filtered.filter((token) => {
         // Check if token has paid dex fees (this would need to be implemented based on your data structure)
         // For now, we'll assume all tokens have paid if this filter is enabled
         return true; // Placeholder - implement based on actual dexPaid field
       });
-      console.log(
-        `[DexPaid Filter] Filtered ${beforeCount} tokens to ${filtered.length} tokens for dexPaid:`,
-        filters.dexPaid,
-      );
     }
 
     // Apply caEndsInPump filter
     if (filters.caEndsInPump) {
-      const beforeCount = filtered.length;
       filtered = filtered.filter((token) => {
         // Check if contract address ends in "pump"
         return token.mint && token.mint.toLowerCase().endsWith("pump");
       });
-      console.log(
-        `[CA Ends in Pump Filter] Filtered ${beforeCount} tokens to ${filtered.length} tokens for caEndsInPump:`,
-        filters.caEndsInPump,
-      );
     }
 
     // Apply age filters
     if (filters.minAge || filters.maxAge) {
-      const beforeCount = filtered.length;
       filtered = filtered.filter((token) => {
         const launchTime =
           (token as any).launch_time || (token as any).created_at;
@@ -3651,28 +3713,17 @@ function PulseTable({
 
         return ageInTargetUnit >= minAge && ageInTargetUnit <= maxAge;
       });
-      console.log(
-        `[Age Filter] Filtered ${beforeCount} tokens to ${filtered.length} tokens for age range:`,
-        filters.minAge,
-        "-",
-        filters.maxAge,
-        filters.ageUnit,
-      );
     }
 
     // Apply top 10 holders percent filter
     if (filters.top10HoldersPercent) {
-      const beforeCount = filtered.length;
       const threshold = parseFloat(filters.top10HoldersPercent);
       filtered = filtered.filter((token) => {
-        // This would need to be implemented based on actual holder data
-        // For now, we'll skip this filter as we don't have holder data
-        return true;
+        // Use top10_holders_pct from WebSocket price_update data
+        const top10Pct = (token as any).top10_holders_pct ?? 0;
+        // Filter tokens where top 10 holders own LESS than the threshold (lower = better distribution)
+        return top10Pct <= threshold;
       });
-      console.log(
-        `[Top 10 Holders Filter] Filtered ${beforeCount} tokens to ${filtered.length} tokens for top10HoldersPercent:`,
-        threshold,
-      );
     }
 
     // Apply filters
@@ -3802,11 +3853,12 @@ function PulseTable({
       });
     }
 
-    // Apply unique wallets filters
+    // Apply holders filters
+    // Check multiple possible field names: holder_count (preferred), unique_wallets_24h (fallback)
     if (filters.holdersMin) {
       const minHolders = parseFloat(filters.holdersMin);
       filtered = filtered.filter((token) => {
-        const holders = (token as any).unique_wallets_24h ?? 0;
+        const holders = (token as any).holder_count ?? (token as any).holders ?? (token as any).unique_wallets_24h ?? 0;
         return holders >= minHolders;
       });
     }
@@ -3814,8 +3866,195 @@ function PulseTable({
     if (filters.holdersMax) {
       const maxHolders = parseFloat(filters.holdersMax);
       filtered = filtered.filter((token) => {
-        const holders = (token as any).unique_wallets_24h ?? 0;
+        const holders = (token as any).holder_count ?? (token as any).holders ?? (token as any).unique_wallets_24h ?? 0;
         return holders <= maxHolders;
+      });
+    }
+
+    // Apply KOL count filters
+    if (filters.kolCountMin) {
+      const minKol = parseFloat(filters.kolCountMin);
+      filtered = filtered.filter((token) => {
+        const kolCount = (token as any).kol_count ?? 0;
+        return kolCount >= minKol;
+      });
+    }
+
+    if (filters.kolCountMax) {
+      const maxKol = parseFloat(filters.kolCountMax);
+      filtered = filtered.filter((token) => {
+        const kolCount = (token as any).kol_count ?? 0;
+        return kolCount <= maxKol;
+      });
+    }
+
+    // Apply dev holding percent filters (values are decimals 0-1, filter input is percentage 0-100)
+    if (filters.devHoldingPercentMin) {
+      const minPercent = parseFloat(filters.devHoldingPercentMin) / 100;
+      filtered = filtered.filter((token) => {
+        const devPercent = (token as any).dev_percent ?? (token as any).dev_held_percentage ?? 0;
+        return devPercent >= minPercent;
+      });
+    }
+
+    if (filters.devHoldingPercentMax) {
+      const maxPercent = parseFloat(filters.devHoldingPercentMax) / 100;
+      filtered = filtered.filter((token) => {
+        const devPercent = (token as any).dev_percent ?? (token as any).dev_held_percentage ?? 0;
+        return devPercent <= maxPercent;
+      });
+    }
+
+    // Apply sniper percent filters (values are decimals 0-1, filter input is percentage 0-100)
+    if (filters.snipersPercentMin) {
+      const minPercent = parseFloat(filters.snipersPercentMin) / 100;
+      filtered = filtered.filter((token) => {
+        const sniperPercent = (token as any).sniper_percent ?? (token as any).sniper_held_percentage ?? 0;
+        return sniperPercent >= minPercent;
+      });
+    }
+
+    if (filters.snipersPercentMax) {
+      const maxPercent = parseFloat(filters.snipersPercentMax) / 100;
+      filtered = filtered.filter((token) => {
+        const sniperPercent = (token as any).sniper_percent ?? (token as any).sniper_held_percentage ?? 0;
+        return sniperPercent <= maxPercent;
+      });
+    }
+
+    // Apply insider percent filters (values are decimals 0-1, filter input is percentage 0-100)
+    if (filters.insidersPercentMin) {
+      const minPercent = parseFloat(filters.insidersPercentMin) / 100;
+      filtered = filtered.filter((token) => {
+        const insiderPercent = (token as any).insider_percent ?? (token as any).insider_held_percentage ?? 0;
+        return insiderPercent >= minPercent;
+      });
+    }
+
+    if (filters.insidersPercentMax) {
+      const maxPercent = parseFloat(filters.insidersPercentMax) / 100;
+      filtered = filtered.filter((token) => {
+        const insiderPercent = (token as any).insider_percent ?? (token as any).insider_held_percentage ?? 0;
+        return insiderPercent <= maxPercent;
+      });
+    }
+
+    // Apply dev migrations filters (number of tokens migrated by dev)
+    if (filters.devMigrationsMin) {
+      const minMigrations = parseFloat(filters.devMigrationsMin);
+      filtered = filtered.filter((token) => {
+        const devMigrated = (token as any).dev_tokens_migrated ?? 0;
+        return devMigrated >= minMigrations;
+      });
+    }
+
+    if (filters.devMigrationsMax) {
+      const maxMigrations = parseFloat(filters.devMigrationsMax);
+      filtered = filtered.filter((token) => {
+        const devMigrated = (token as any).dev_tokens_migrated ?? 0;
+        return devMigrated <= maxMigrations;
+      });
+    }
+
+    // Apply dev pairs created filters (number of tokens created by dev)
+    if (filters.devPairsCreatedMin) {
+      const minCreated = parseFloat(filters.devPairsCreatedMin);
+      filtered = filtered.filter((token) => {
+        const devCreated = (token as any).dev_tokens_created ?? 0;
+        return devCreated >= minCreated;
+      });
+    }
+
+    if (filters.devPairsCreatedMax) {
+      const maxCreated = parseFloat(filters.devPairsCreatedMax);
+      filtered = filtered.filter((token) => {
+        const devCreated = (token as any).dev_tokens_created ?? 0;
+        return devCreated <= maxCreated;
+      });
+    }
+
+    // Apply bundle percent filter
+    if (filters.bundlePercentMin) {
+      const minPercent = parseFloat(filters.bundlePercentMin);
+      filtered = filtered.filter((token) => {
+        const bundlePercent = (token as any).bundle_percent ?? (token as any).bundled_percentage ?? (token as any).bundler_held_percentage ?? 0;
+        // Convert to percentage if stored as decimal
+        const percentValue = bundlePercent > 1 ? bundlePercent : bundlePercent * 100;
+        return percentValue >= minPercent;
+      });
+    }
+
+    if (filters.bundlePercentMax) {
+      const maxPercent = parseFloat(filters.bundlePercentMax);
+      filtered = filtered.filter((token) => {
+        const bundlePercent = (token as any).bundle_percent ?? (token as any).bundled_percentage ?? (token as any).bundler_held_percentage ?? 0;
+        // Convert to percentage if stored as decimal
+        const percentValue = bundlePercent > 1 ? bundlePercent : bundlePercent * 100;
+        return percentValue <= maxPercent;
+      });
+    }
+
+    // Apply global fees paid filter (in SOL)
+    if (filters.globalFeesPaidMin) {
+      const minFees = parseFloat(filters.globalFeesPaidMin);
+      filtered = filtered.filter((token) => {
+        const feesPaid = (token as any).global_fees_paid ?? (token as any).globalFeesPaid ?? 0;
+        return feesPaid >= minFees;
+      });
+    }
+
+    if (filters.globalFeesPaidMax) {
+      const maxFees = parseFloat(filters.globalFeesPaidMax);
+      filtered = filtered.filter((token) => {
+        const feesPaid = (token as any).global_fees_paid ?? (token as any).globalFeesPaid ?? 0;
+        return feesPaid <= maxFees;
+      });
+    }
+
+    // Apply Twitter reuses filter
+    if (filters.twitterReusesMin) {
+      const minReuses = parseFloat(filters.twitterReusesMin);
+      filtered = filtered.filter((token) => {
+        const reuses = (token as any).twitter_reuses ?? (token as any).twitterReuses ?? (token as any).twitter_reuse_count ?? 0;
+        return reuses >= minReuses;
+      });
+    }
+
+    if (filters.twitterReusesMax) {
+      const maxReuses = parseFloat(filters.twitterReusesMax);
+      filtered = filtered.filter((token) => {
+        const reuses = (token as any).twitter_reuses ?? (token as any).twitterReuses ?? (token as any).twitter_reuse_count ?? 0;
+        return reuses <= maxReuses;
+      });
+    }
+
+    // Apply tweet age filter
+    if (filters.tweetAgeMin || filters.tweetAgeMax) {
+      filtered = filtered.filter((token) => {
+        const tweetTimestamp = (token as any).tweet_created_at ?? (token as any).tweetCreatedAt ?? (token as any).twitter_created_at;
+        if (!tweetTimestamp) return true; // If no tweet timestamp, don't filter out
+
+        const tweetDate = new Date(tweetTimestamp).getTime();
+        const now = Date.now();
+        const tweetAgeMs = now - tweetDate;
+
+        // Convert to the selected unit
+        let tweetAgeInUnit: number;
+        switch (filters.tweetAgeUnit) {
+          case "h":
+            tweetAgeInUnit = tweetAgeMs / (1000 * 60 * 60); // hours
+            break;
+          case "d":
+            tweetAgeInUnit = tweetAgeMs / (1000 * 60 * 60 * 24); // days
+            break;
+          default:
+            tweetAgeInUnit = tweetAgeMs / (1000 * 60); // minutes
+        }
+
+        const minAge = filters.tweetAgeMin ? parseFloat(filters.tweetAgeMin) : 0;
+        const maxAge = filters.tweetAgeMax ? parseFloat(filters.tweetAgeMax) : Infinity;
+
+        return tweetAgeInUnit >= minAge && tweetAgeInUnit <= maxAge;
       });
     }
 
@@ -3993,35 +4232,6 @@ function PulseTable({
               : BASE_TIMESTAMP_FIELDS;
           aValue = getTokenTimestamp(a, timestampFields);
           bValue = getTokenTimestamp(b, timestampFields);
-
-          // Debug logging for timestamp sorting
-          if (
-            typeof window !== "undefined" &&
-            title.toLowerCase().includes("migrated") &&
-            filtered.length > 0
-          ) {
-            // Log first 3 tokens to verify migrated_time is being used
-            if (filtered.indexOf(a) < 3 || filtered.indexOf(b) < 3) {
-              console.log(`[PulseTable] ${title} timestamp sorting:`, {
-                tokenA: {
-                  name: a.name,
-                  symbol: a.symbol,
-                  ts: aValue,
-                  migrated_time: (a as any).migrated_time,
-                  launch_time: (a as any).launch_time,
-                },
-                tokenB: {
-                  name: b.name,
-                  symbol: b.symbol,
-                  ts: bValue,
-                  migrated_time: (b as any).migrated_time,
-                  launch_time: (b as any).launch_time,
-                },
-                diff: bValue - aValue,
-                result: bValue > aValue ? "B first (newer)" : "A first (newer)",
-              });
-            }
-          }
           break;
         }
         default:
@@ -4035,6 +4245,15 @@ function PulseTable({
         return aValue < bValue ? 1 : -1;
       }
     });
+
+    // DEBUG: Check if specific Meteora token bypasses filter (temporary)
+    if (hasSpecificProtocols && title.toLowerCase().includes("final")) {
+      const DEBUG_MINT = "G6VuahbXzNDc9xeQL8VpRF5AbuRJQF4WSxhmHwWsaEDg";
+      const badToken = filtered.find(t => t.mint === DEBUG_MINT);
+      if (badToken) {
+        console.error(`[FILTER BUG] Token ${badToken.symbol} (${DEBUG_MINT}) in Final Stretch despite filter: ${filters.protocols.join(",")}. Protocol: ${(badToken as any).launchpad_protocol || "NONE"}`);
+      }
+    }
 
     return filtered;
   }, [
@@ -4069,6 +4288,27 @@ function PulseTable({
     filters.numSellsMax,
     filters.holdersMin,
     filters.holdersMax,
+    filters.kolCountMin,
+    filters.kolCountMax,
+    filters.devHoldingPercentMin,
+    filters.devHoldingPercentMax,
+    filters.snipersPercentMin,
+    filters.snipersPercentMax,
+    filters.insidersPercentMin,
+    filters.insidersPercentMax,
+    filters.devMigrationsMin,
+    filters.devMigrationsMax,
+    filters.devPairsCreatedMin,
+    filters.devPairsCreatedMax,
+    filters.bundlePercentMin,
+    filters.bundlePercentMax,
+    filters.globalFeesPaidMin,
+    filters.globalFeesPaidMax,
+    filters.twitterReusesMin,
+    filters.twitterReusesMax,
+    filters.tweetAgeMin,
+    filters.tweetAgeMax,
+    filters.tweetAgeUnit,
     filters.hasWebsite,
     filters.hasTwitter,
     filters.hasTelegram,
@@ -4079,15 +4319,7 @@ function PulseTable({
   ]);
 
   // Memoize token rendering to prevent unnecessary re-renders
-  const memoizedTokens = useMemo(() => {
-    console.log(
-      `[PulseTable ${title}] 🎬 memoizedTokens recomputed, count: ${filteredAndSortedTokens?.length || 0}, first 3:`,
-      filteredAndSortedTokens
-        ?.slice(0, 3)
-        .map((t) => ({ name: t.name, symbol: t.symbol, mint: t.mint })),
-    );
-    return filteredAndSortedTokens;
-  }, [filteredAndSortedTokens, title]);
+  const memoizedTokens = useMemo(() => filteredAndSortedTokens, [filteredAndSortedTokens]);
 
   // Add wave animation for all Meteora tokens with bonding_pct > 98.6% in Final Stretch only
   useEffect(() => {
@@ -4106,17 +4338,10 @@ function PulseTable({
 
         if (isMeteora && bondingPct > 98.6) {
           newWaveTokens.add(idx);
-          console.log(
-            `[Wave Animation] Adding Meteora token ${token.symbol} (bonding: ${bondingPct}%)`,
-          );
         }
       });
     }
 
-    console.log(
-      `[Wave Animation] Setting wave tokens for Final Stretch:`,
-      Array.from(newWaveTokens),
-    );
     setWaveTokens(newWaveTokens);
   }, [memoizedTokens, title]);
 
@@ -4773,6 +4998,8 @@ function PulseTable({
                           devMigrationsMax: "",
                           devPairsCreatedMin: "",
                           devPairsCreatedMax: "",
+                          kolCountMin: "",
+                          kolCountMax: "",
                           minMarketCap: "",
                           maxMarketCap: "",
                           minVolume: "",
@@ -4789,9 +5016,6 @@ function PulseTable({
                           numBuysMax: "",
                           numSellsMin: "",
                           numSellsMax: "",
-                          twitterFollowers: "",
-                          telegramMembers: "",
-                          discordMembers: "",
                           twitterReusesMin: "",
                           twitterReusesMax: "",
                           tweetAgeMin: "",
@@ -5456,7 +5680,7 @@ function PulseTable({
                           </div>
                         </div>
 
-                        {/* Pro Traders */}
+                        {/* Pro Traders - Commented out for now
                         <div>
                           <label
                             className="mb-2 block text-sm font-medium"
@@ -5519,6 +5743,7 @@ function PulseTable({
                             />
                           </div>
                         </div>
+                        */}
                         {/* Dev Migrations */}
                         <div>
                           <label
@@ -5645,6 +5870,69 @@ function PulseTable({
                             />
                           </div>
                         </div>
+                        {/* KOL Count */}
+                        <div>
+                          <label
+                            className="mb-2 block text-sm font-medium"
+                            style={{ color: AX.text }}
+                          >
+                            KOL Count
+                          </label>
+                          <div className="flex gap-1">
+                            <input
+                              type="number"
+                              placeholder="Min"
+                              value={pendingFilters.kolCountMin}
+                              onChange={(e) =>
+                                handlePendingFilterChange((prev) => ({
+                                  ...prev,
+                                  kolCountMin: e.target.value,
+                                }))
+                              }
+                              className="flex-1 rounded border px-3 py-2 text-sm"
+                              style={{
+                                backgroundColor: AX.surface,
+                                borderColor: AX.border,
+                                color: AX.text,
+                                WebkitAppearance: "none",
+                                MozAppearance: "textfield",
+                                outline: "none",
+                                boxShadow: "none",
+                              }}
+                              onFocus={(e) => {
+                                e.target.style.outline = "none";
+                                e.target.style.boxShadow = "none";
+                                e.target.style.borderColor = AX.border;
+                              }}
+                            />
+                            <input
+                              type="number"
+                              placeholder="Max"
+                              value={pendingFilters.kolCountMax}
+                              onChange={(e) =>
+                                handlePendingFilterChange((prev) => ({
+                                  ...prev,
+                                  kolCountMax: e.target.value,
+                                }))
+                              }
+                              className="flex-1 rounded border px-3 py-2 text-sm"
+                              style={{
+                                backgroundColor: AX.surface,
+                                borderColor: AX.border,
+                                color: AX.text,
+                                WebkitAppearance: "none",
+                                MozAppearance: "textfield",
+                                outline: "none",
+                                boxShadow: "none",
+                              }}
+                              onFocus={(e) => {
+                                e.target.style.outline = "none";
+                                e.target.style.boxShadow = "none";
+                                e.target.style.borderColor = AX.border;
+                              }}
+                            />
+                          </div>
+                        </div>
                         {/* Age (existing) */}
                         <div>
                           <label
@@ -5664,7 +5952,7 @@ function PulseTable({
                                   minAge: e.target.value,
                                 }))
                               }
-                              className="minimal-input flex-1 rounded px-2 py-1.5 text-sm"
+                              className="flex-1 rounded border px-3 py-2 text-sm"
                               style={{
                                 backgroundColor: AX.surface,
                                 borderColor: AX.border,
@@ -5709,7 +5997,7 @@ function PulseTable({
                                   maxAge: e.target.value,
                                 }))
                               }
-                              className="minimal-input flex-1 rounded px-2 py-1.5 text-sm"
+                              className="flex-1 rounded border px-3 py-2 text-sm"
                               style={{
                                 backgroundColor: AX.surface,
                                 borderColor: AX.border,
@@ -6613,8 +6901,12 @@ function PulseTable({
                                 try {
                                   const importedFilters = JSON.parse(
                                     event.target?.result as string,
-                                  );
-                                  setFilters(importedFilters);
+                                  ) as PulseFilters;
+                                  // Merge with defaults to ensure all fields exist
+                                  const mergedFilters = { ...getDefaultFilters(), ...importedFilters };
+                                  setFilters(mergedFilters);
+                                  setPendingFilters(mergedFilters);
+                                  setHasPendingChanges(false);
                                 } catch (error) {
                                   console.error(
                                     "Error importing filters:",
@@ -7657,12 +7949,14 @@ function PulseTable({
                                       <p className="text-xs text-gray-400 mt-0.5">Total wallets holding this token</p>
                                     </div>
                                   </div>
+                                  {/* Robot icon - commented out for now
                                   <div className="flex items-center gap-1 text-violet-200">
                                     <PiRobotLight size={16} />
                                     <span className="text-sm text-white">
                                       0
                                     </span>
                                   </div>
+                                  */}
                                 </div>
 
                                 {/* Pump.fun Tooltip */}
@@ -7787,7 +8081,52 @@ function PulseTable({
                                 </span>
                               </div>
                             </div>
-                              <div className="flex items-center justify-end gap-2 text-xs">
+                              <div className="flex items-center justify-end gap-3 text-xs">
+                                {/* Total Fees in SOL */}
+                                <InterstateTooltip label="Global Fees Paid">
+                                  <div
+                                    className="flex cursor-default flex-row items-center gap-1"
+                                    style={{ color: AX.muted }}
+                                  >
+                                    <span className="text-xs">F</span>
+                                    <img
+                                      src="https://cryptologos.cc/logos/solana-sol-logo.svg?v=040"
+                                      alt="SOL"
+                                      className="h-3 w-3"
+                                    />
+                                    <span
+                                      className="number-font text-xs font-medium"
+                                      style={{ color: "#ffffff" }}
+                                    >
+                                      {(() => {
+                                        // Convert lamports to SOL (1 SOL = 1,000,000,000 lamports)
+                                        const lamports = (token as any).total_fees_lamports ?? 0;
+                                        const sol = lamports / 1_000_000_000;
+
+                                        if (sol === 0) return "0";
+                                        if (sol >= 0.001) {
+                                          // Normal display for values >= 0.001, rounded to 3 decimal places
+                                          return sol.toFixed(3).replace(/\.?0+$/, "");
+                                        }
+
+                                        // For very small values, use subscript notation
+                                        // e.g., 0.00003 → 0.0₄3 (1 digit after subscript)
+                                        const str = sol.toFixed(10);
+                                        const match = str.match(/^0\.(0+)(\d+)/);
+                                        if (match) {
+                                          const zeroCount = match[1].length;
+                                          const significantDigit = match[2].slice(0, 1); // Only 1 digit after subscript
+                                          return (
+                                            <>
+                                              0.0<sub style={{ fontSize: "0.6em", verticalAlign: "sub" }}>{zeroCount}</sub>{significantDigit}
+                                            </>
+                                          );
+                                        }
+                                        return sol.toFixed(3).replace(/\.?0+$/, "");
+                                      })()}
+                                    </span>
+                                  </div>
+                                </InterstateTooltip>
                                 <div
                                   className="flex flex-row items-center gap-1"
                                   style={{ color: AX.muted }}
@@ -7801,28 +8140,29 @@ function PulseTable({
                                   >
                                     <SmoothNumber
                                       value={(() => {
-                                        const buys = token.total_buys_24h ?? 0;
-                                        const sells =
-                                          token.total_sells_24h ?? 0;
-                                        const total = buys + sells;
-                                        // Debug logging
-                                        if (
-                                          token.symbol === "HEAVEN" ||
-                                          total < 20
-                                        ) {
-                                          console.log(
-                                            `[PulseTable TX] ${token.symbol}:`,
-                                            {
-                                              total_buys_24h:
-                                                token.total_buys_24h,
-                                              total_sells_24h:
-                                                token.total_sells_24h,
-                                              calculated: total,
-                                              mint: token.mint,
-                                            },
-                                          );
-                                        }
-                                        return total;
+                                        // Use best available timeframe: prefer 5m for new tokens, fallback through 1h, 6h, 24h
+                                        const getBuySellData = () => {
+                                          // Try 5m first (most relevant for new tokens)
+                                          const buys5m = token.total_buys_5m ?? 0;
+                                          const sells5m = token.total_sells_5m ?? 0;
+                                          if (buys5m + sells5m > 0) return { buys: buys5m, sells: sells5m };
+
+                                          // Fallback to 1h
+                                          const buys1h = token.total_buys_1h ?? 0;
+                                          const sells1h = token.total_sells_1h ?? 0;
+                                          if (buys1h + sells1h > 0) return { buys: buys1h, sells: sells1h };
+
+                                          // Fallback to 6h
+                                          const buys6h = token.total_buys_6h ?? 0;
+                                          const sells6h = token.total_sells_6h ?? 0;
+                                          if (buys6h + sells6h > 0) return { buys: buys6h, sells: sells6h };
+
+                                          // Finally try 24h
+                                          return { buys: token.total_buys_24h ?? 0, sells: token.total_sells_24h ?? 0 };
+                                        };
+
+                                        const { buys, sells } = getBuySellData();
+                                        return buys + sells;
                                       })()}
                                       duration={0}
                                     />
@@ -7833,19 +8173,27 @@ function PulseTable({
                                       style={{
                                         backgroundColor: "#31e3ac", // Green for buys
                                         width: `${(() => {
-                                          const buys =
-                                            token.total_buys_24h ?? 0;
-                                          const sells =
-                                            token.total_sells_24h ?? 0;
-                                          const total = Math.max(
-                                            1,
-                                            buys + sells,
-                                          );
+                                          // Use best available timeframe for buy/sell ratio
+                                          const getBuySellData = () => {
+                                            const buys5m = token.total_buys_5m ?? 0;
+                                            const sells5m = token.total_sells_5m ?? 0;
+                                            if (buys5m + sells5m > 0) return { buys: buys5m, sells: sells5m };
+
+                                            const buys1h = token.total_buys_1h ?? 0;
+                                            const sells1h = token.total_sells_1h ?? 0;
+                                            if (buys1h + sells1h > 0) return { buys: buys1h, sells: sells1h };
+
+                                            const buys6h = token.total_buys_6h ?? 0;
+                                            const sells6h = token.total_sells_6h ?? 0;
+                                            if (buys6h + sells6h > 0) return { buys: buys6h, sells: sells6h };
+
+                                            return { buys: token.total_buys_24h ?? 0, sells: token.total_sells_24h ?? 0 };
+                                          };
+
+                                          const { buys, sells } = getBuySellData();
+                                          const total = Math.max(1, buys + sells);
                                           const percent = (buys / total) * 100;
-                                          return Math.min(
-                                            100,
-                                            Math.max(0, percent),
-                                          );
+                                          return Math.min(100, Math.max(0, percent));
                                         })()}%`,
                                       }}
                                     ></div>
@@ -7854,19 +8202,27 @@ function PulseTable({
                                       style={{
                                         backgroundColor: "#d11f3a", // Red for sells
                                         width: `${(() => {
-                                          const buys =
-                                            token.total_buys_24h ?? 0;
-                                          const sells =
-                                            token.total_sells_24h ?? 0;
-                                          const total = Math.max(
-                                            1,
-                                            buys + sells,
-                                          );
+                                          // Use best available timeframe for buy/sell ratio
+                                          const getBuySellData = () => {
+                                            const buys5m = token.total_buys_5m ?? 0;
+                                            const sells5m = token.total_sells_5m ?? 0;
+                                            if (buys5m + sells5m > 0) return { buys: buys5m, sells: sells5m };
+
+                                            const buys1h = token.total_buys_1h ?? 0;
+                                            const sells1h = token.total_sells_1h ?? 0;
+                                            if (buys1h + sells1h > 0) return { buys: buys1h, sells: sells1h };
+
+                                            const buys6h = token.total_buys_6h ?? 0;
+                                            const sells6h = token.total_sells_6h ?? 0;
+                                            if (buys6h + sells6h > 0) return { buys: buys6h, sells: sells6h };
+
+                                            return { buys: token.total_buys_24h ?? 0, sells: token.total_sells_24h ?? 0 };
+                                          };
+
+                                          const { buys, sells } = getBuySellData();
+                                          const total = Math.max(1, buys + sells);
                                           const percent = (sells / total) * 100;
-                                          return Math.min(
-                                            100,
-                                            Math.max(0, percent),
-                                          );
+                                          return Math.min(100, Math.max(0, percent));
                                         })()}%`,
                                       }}
                                     ></div>
@@ -8260,9 +8616,11 @@ function PulseTable({
                     <div className="absolute bottom-2 left-24 flex max-w-[calc(100%-6rem)] flex-row items-center gap-1 overflow-x-auto pr-10 whitespace-break-nowrap">
                       <BottomCardInfoHolder
                         PassedIcon={BsPersonGear}
-                        value={0.2}
+                        token={token}
+                        wsField="top10_holders_pct"
+                        httpField="top10_holders_pct"
                         iconColor={AX.aiGreen}
-                        tooltip="Top 10%"
+                        tooltip="Top 10 Holders %"
                       />
                       <BottomCardInfoHolder
                         PassedIcon={LuChefHat}

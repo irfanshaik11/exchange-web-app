@@ -120,6 +120,18 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
             token.price_percent_change_1h = token.price_percent_change_1h ?? 0;
             token.price_percent_change_6h = token.price_percent_change_6h ?? 0;
             token.price_percent_change_24h = token.price_percent_change_24h ?? 0;
+            // Holder and KOL counts
+            token.holder_count = token.holder_count ?? 0;
+            token.kol_count = token.kol_count ?? 0;
+            // Dev/sniper/insider percentages
+            token.dev_held_percentage = parseFloat(token.dev_held_percentage ?? 0);
+            token.sniper_held_percentage = parseFloat(token.sniper_held_percentage ?? 0);
+            token.insider_held_percentage = parseFloat(token.insider_held_percentage ?? 0);
+            // Top 10 holders percentage
+            token.top10_holders_pct = parseFloat(token.top10_holders_pct ?? 0);
+            // Dev history
+            token.dev_tokens_created = token.dev_tokens_created ?? 0;
+            token.dev_tokens_migrated = token.dev_tokens_migrated ?? 0;
             token.links = token.links || null;
           }
         });
