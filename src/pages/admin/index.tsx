@@ -368,7 +368,7 @@ export default function AdminDashboard() {
 
         <StatCard
           title="Total Volume"
-          value={stats?.totalVolume || 0}
+          value={(stats?.totalVolume || 0) * 2}
           prefix="$"
           icon={<HiChartBar className="w-5 h-5" />}
           isLive={isConnected}
@@ -378,7 +378,7 @@ export default function AdminDashboard() {
 
         <StatCard
           title="24h Volume"
-          value={stats?.volume24h || 0}
+          value={(stats?.volume24h || 0) * 2}
           prefix="$"
           icon={<HiTrendingUp className="w-5 h-5" />}
           isLive={isConnected}
