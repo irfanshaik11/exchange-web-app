@@ -8188,7 +8188,7 @@ function PulseTable({
                                       color: "#ffffff",
                                     }}
                                   >
-                                    <SmoothNumber
+                                    <SimpleNumber
                                       value={(() => {
                                         // Helper to safely parse number (handles strings, NaN, Infinity)
                                         const safeNum = (val: any): number => {
@@ -8222,7 +8222,7 @@ function PulseTable({
                                         const total = buys + sells;
                                         return isFinite(total) ? total : 0;
                                       })()}
-                                      duration={0}
+                                      formatter={(val) => Math.round(val).toString()}
                                     />
                                   </span>
                                   <div className="ml-1 flex h-0.5 w-8 overflow-hidden rounded-full bg-gray-700">
