@@ -8144,92 +8144,91 @@ function PulseTable({
                                   >
                                     <SmoothNumber
                                       value={(() => {
+                                        // Helper to safely parse number (handles strings, NaN, Infinity)
+                                        const safeNum = (val: any): number => {
+                                          if (val === null || val === undefined) return 0;
+                                          const num = typeof val === 'string' ? parseFloat(val) : Number(val);
+                                          return isFinite(num) ? num : 0;
+                                        };
+
                                         // Use best available timeframe: prefer 5m for new tokens, fallback through 1h, 6h, 24h
                                         const getBuySellData = () => {
                                           // Try 5m first (most relevant for new tokens)
-                                          const buys5m = token.total_buys_5m ?? 0;
-                                          const sells5m = token.total_sells_5m ?? 0;
+                                          const buys5m = safeNum(token.total_buys_5m);
+                                          const sells5m = safeNum(token.total_sells_5m);
                                           if (buys5m + sells5m > 0) return { buys: buys5m, sells: sells5m };
 
                                           // Fallback to 1h
-                                          const buys1h = token.total_buys_1h ?? 0;
-                                          const sells1h = token.total_sells_1h ?? 0;
+                                          const buys1h = safeNum(token.total_buys_1h);
+                                          const sells1h = safeNum(token.total_sells_1h);
                                           if (buys1h + sells1h > 0) return { buys: buys1h, sells: sells1h };
 
                                           // Fallback to 6h
-                                          const buys6h = token.total_buys_6h ?? 0;
-                                          const sells6h = token.total_sells_6h ?? 0;
+                                          const buys6h = safeNum(token.total_buys_6h);
+                                          const sells6h = safeNum(token.total_sells_6h);
                                           if (buys6h + sells6h > 0) return { buys: buys6h, sells: sells6h };
 
                                           // Finally try 24h
-                                          return { buys: token.total_buys_24h ?? 0, sells: token.total_sells_24h ?? 0 };
+                                          return { buys: safeNum(token.total_buys_24h), sells: safeNum(token.total_sells_24h) };
                                         };
 
                                         const { buys, sells } = getBuySellData();
-                                        return buys + sells;
+                                        const total = buys + sells;
+                                        return isFinite(total) ? total : 0;
                                       })()}
                                       duration={0}
                                     />
                                   </span>
                                   <div className="ml-1 flex h-0.5 w-8 overflow-hidden rounded-full bg-gray-700">
-                                    <div
-                                      className="h-full"
-                                      style={{
-                                        backgroundColor: "#31e3ac", // Green for buys
-                                        width: `${(() => {
-                                          // Use best available timeframe for buy/sell ratio
-                                          const getBuySellData = () => {
-                                            const buys5m = token.total_buys_5m ?? 0;
-                                            const sells5m = token.total_sells_5m ?? 0;
-                                            if (buys5m + sells5m > 0) return { buys: buys5m, sells: sells5m };
+                                    {(() => {
+                                      // Helper to safely parse number (handles strings, NaN, Infinity)
+                                      const safeNum = (val: any): number => {
+                                        if (val === null || val === undefined) return 0;
+                                        const num = typeof val === 'string' ? parseFloat(val) : Number(val);
+                                        return isFinite(num) ? num : 0;
+                                      };
 
-                                            const buys1h = token.total_buys_1h ?? 0;
-                                            const sells1h = token.total_sells_1h ?? 0;
-                                            if (buys1h + sells1h > 0) return { buys: buys1h, sells: sells1h };
+                                      // Use best available timeframe for buy/sell ratio
+                                      const getBuySellData = () => {
+                                        const buys5m = safeNum(token.total_buys_5m);
+                                        const sells5m = safeNum(token.total_sells_5m);
+                                        if (buys5m + sells5m > 0) return { buys: buys5m, sells: sells5m };
 
-                                            const buys6h = token.total_buys_6h ?? 0;
-                                            const sells6h = token.total_sells_6h ?? 0;
-                                            if (buys6h + sells6h > 0) return { buys: buys6h, sells: sells6h };
+                                        const buys1h = safeNum(token.total_buys_1h);
+                                        const sells1h = safeNum(token.total_sells_1h);
+                                        if (buys1h + sells1h > 0) return { buys: buys1h, sells: sells1h };
 
-                                            return { buys: token.total_buys_24h ?? 0, sells: token.total_sells_24h ?? 0 };
-                                          };
+                                        const buys6h = safeNum(token.total_buys_6h);
+                                        const sells6h = safeNum(token.total_sells_6h);
+                                        if (buys6h + sells6h > 0) return { buys: buys6h, sells: sells6h };
 
-                                          const { buys, sells } = getBuySellData();
-                                          const total = Math.max(1, buys + sells);
-                                          const percent = (buys / total) * 100;
-                                          return Math.min(100, Math.max(0, percent));
-                                        })()}%`,
-                                      }}
-                                    ></div>
-                                    <div
-                                      className="h-full"
-                                      style={{
-                                        backgroundColor: "#d11f3a", // Red for sells
-                                        width: `${(() => {
-                                          // Use best available timeframe for buy/sell ratio
-                                          const getBuySellData = () => {
-                                            const buys5m = token.total_buys_5m ?? 0;
-                                            const sells5m = token.total_sells_5m ?? 0;
-                                            if (buys5m + sells5m > 0) return { buys: buys5m, sells: sells5m };
+                                        return { buys: safeNum(token.total_buys_24h), sells: safeNum(token.total_sells_24h) };
+                                      };
 
-                                            const buys1h = token.total_buys_1h ?? 0;
-                                            const sells1h = token.total_sells_1h ?? 0;
-                                            if (buys1h + sells1h > 0) return { buys: buys1h, sells: sells1h };
+                                      const { buys, sells } = getBuySellData();
+                                      const total = Math.max(1, buys + sells);
+                                      const buyPercent = isFinite(buys / total) ? Math.min(100, Math.max(0, (buys / total) * 100)) : 50;
+                                      const sellPercent = isFinite(sells / total) ? Math.min(100, Math.max(0, (sells / total) * 100)) : 50;
 
-                                            const buys6h = token.total_buys_6h ?? 0;
-                                            const sells6h = token.total_sells_6h ?? 0;
-                                            if (buys6h + sells6h > 0) return { buys: buys6h, sells: sells6h };
-
-                                            return { buys: token.total_buys_24h ?? 0, sells: token.total_sells_24h ?? 0 };
-                                          };
-
-                                          const { buys, sells } = getBuySellData();
-                                          const total = Math.max(1, buys + sells);
-                                          const percent = (sells / total) * 100;
-                                          return Math.min(100, Math.max(0, percent));
-                                        })()}%`,
-                                      }}
-                                    ></div>
+                                      return (
+                                        <>
+                                          <div
+                                            className="h-full"
+                                            style={{
+                                              backgroundColor: "#31e3ac", // Green for buys
+                                              width: `${buyPercent}%`,
+                                            }}
+                                          ></div>
+                                          <div
+                                            className="h-full"
+                                            style={{
+                                              backgroundColor: "#d11f3a", // Red for sells
+                                              width: `${sellPercent}%`,
+                                            }}
+                                          ></div>
+                                        </>
+                                      );
+                                    })()}
                                   </div>
                                 </div>
                               </div>
