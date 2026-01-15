@@ -557,6 +557,28 @@ const SmoothNumber: React.FC<SmoothNumberProps> = ({
   );
 };
 
+// Simple number display - just shows the formatted value (no animation to avoid glitches)
+interface SimpleNumberProps {
+  value: number;
+  formatter?: (value: number) => string;
+  className?: string;
+}
+
+const SimpleNumber: React.FC<SimpleNumberProps> = ({
+  value,
+  formatter = (val) => val.toString(),
+  className = "",
+}) => {
+  // Only update display if value is valid and non-zero
+  const lastValidRef = useRef<string>(formatter(value));
+
+  if (value > 0 && Number.isFinite(value)) {
+    lastValidRef.current = formatter(value);
+  }
+
+  return <span className={className}>{lastValidRef.current}</span>;
+};
+
 // Hook for smooth progress bar animation using requestAnimationFrame
 function useSmoothProgress(targetValue: number, duration: number = 400): number {
   // Clamp to valid range [0, 1] for progress values
@@ -2688,22 +2710,23 @@ function PulseTable({
             ...(update.sol_amount !== undefined && { last_sol_amount: update.sol_amount }),
             ...(update.token_amount !== undefined && { last_token_amount: update.token_amount }),
             ...(update.status !== undefined && { status: update.status }),
-            ...(update.total_buy_volume_5m !== undefined && { total_buy_volume_5m: update.total_buy_volume_5m }),
-            ...(update.total_sell_volume_5m !== undefined && { total_sell_volume_5m: update.total_sell_volume_5m }),
-            ...(update.total_buys_5m !== undefined && { total_buys_5m: update.total_buys_5m }),
-            ...(update.total_sells_5m !== undefined && { total_sells_5m: update.total_sells_5m }),
-            ...(update.total_buy_volume_1h !== undefined && { total_buy_volume_1h: update.total_buy_volume_1h }),
-            ...(update.total_sell_volume_1h !== undefined && { total_sell_volume_1h: update.total_sell_volume_1h }),
-            ...(update.total_buys_1h !== undefined && { total_buys_1h: update.total_buys_1h }),
-            ...(update.total_sells_1h !== undefined && { total_sells_1h: update.total_sells_1h }),
-            ...(update.total_buy_volume_6h !== undefined && { total_buy_volume_6h: update.total_buy_volume_6h }),
-            ...(update.total_sell_volume_6h !== undefined && { total_sell_volume_6h: update.total_sell_volume_6h }),
-            ...(update.total_buys_6h !== undefined && { total_buys_6h: update.total_buys_6h }),
-            ...(update.total_sells_6h !== undefined && { total_sells_6h: update.total_sells_6h }),
-            ...(update.total_buy_volume_24h !== undefined && { total_buy_volume_24h: update.total_buy_volume_24h }),
-            ...(update.total_sell_volume_24h !== undefined && { total_sell_volume_24h: update.total_sell_volume_24h }),
-            ...(update.total_buys_24h !== undefined && { total_buys_24h: update.total_buys_24h }),
-            ...(update.total_sells_24h !== undefined && { total_sells_24h: update.total_sells_24h }),
+            // Buy/sell volumes - only update if non-zero to preserve valid data across timeframes
+            ...(update.total_buy_volume_5m !== undefined && (Number(update.total_buy_volume_5m) !== 0 || !token.total_buy_volume_5m) && { total_buy_volume_5m: update.total_buy_volume_5m }),
+            ...(update.total_sell_volume_5m !== undefined && (Number(update.total_sell_volume_5m) !== 0 || !token.total_sell_volume_5m) && { total_sell_volume_5m: update.total_sell_volume_5m }),
+            ...(update.total_buys_5m !== undefined && (Number(update.total_buys_5m) !== 0 || !token.total_buys_5m) && { total_buys_5m: update.total_buys_5m }),
+            ...(update.total_sells_5m !== undefined && (Number(update.total_sells_5m) !== 0 || !token.total_sells_5m) && { total_sells_5m: update.total_sells_5m }),
+            ...(update.total_buy_volume_1h !== undefined && (Number(update.total_buy_volume_1h) !== 0 || !token.total_buy_volume_1h) && { total_buy_volume_1h: update.total_buy_volume_1h }),
+            ...(update.total_sell_volume_1h !== undefined && (Number(update.total_sell_volume_1h) !== 0 || !token.total_sell_volume_1h) && { total_sell_volume_1h: update.total_sell_volume_1h }),
+            ...(update.total_buys_1h !== undefined && (Number(update.total_buys_1h) !== 0 || !token.total_buys_1h) && { total_buys_1h: update.total_buys_1h }),
+            ...(update.total_sells_1h !== undefined && (Number(update.total_sells_1h) !== 0 || !token.total_sells_1h) && { total_sells_1h: update.total_sells_1h }),
+            ...(update.total_buy_volume_6h !== undefined && (Number(update.total_buy_volume_6h) !== 0 || !token.total_buy_volume_6h) && { total_buy_volume_6h: update.total_buy_volume_6h }),
+            ...(update.total_sell_volume_6h !== undefined && (Number(update.total_sell_volume_6h) !== 0 || !token.total_sell_volume_6h) && { total_sell_volume_6h: update.total_sell_volume_6h }),
+            ...(update.total_buys_6h !== undefined && (Number(update.total_buys_6h) !== 0 || !token.total_buys_6h) && { total_buys_6h: update.total_buys_6h }),
+            ...(update.total_sells_6h !== undefined && (Number(update.total_sells_6h) !== 0 || !token.total_sells_6h) && { total_sells_6h: update.total_sells_6h }),
+            ...(update.total_buy_volume_24h !== undefined && (Number(update.total_buy_volume_24h) !== 0 || !token.total_buy_volume_24h) && { total_buy_volume_24h: update.total_buy_volume_24h }),
+            ...(update.total_sell_volume_24h !== undefined && (Number(update.total_sell_volume_24h) !== 0 || !token.total_sell_volume_24h) && { total_sell_volume_24h: update.total_sell_volume_24h }),
+            ...(update.total_buys_24h !== undefined && (Number(update.total_buys_24h) !== 0 || !token.total_buys_24h) && { total_buys_24h: update.total_buys_24h }),
+            ...(update.total_sells_24h !== undefined && (Number(update.total_sells_24h) !== 0 || !token.total_sells_24h) && { total_sells_24h: update.total_sells_24h }),
             // Map holder percentages from websocket
             // Only update if new value is non-zero OR existing value is 0/undefined (preserve non-zero values)
             ...(update.insider_percent !== undefined && (update.insider_percent !== 0 || !(token as any).insider_percent) && { insider_percent: update.insider_percent }),
@@ -2714,8 +2737,8 @@ function PulseTable({
             // Only update if new value is non-zero OR existing value is 0/undefined
             ...(update.bundle_percent !== undefined && (update.bundle_percent !== 0 || !(token as any).bundle_percent) && { bundle_percent: update.bundle_percent, bundler_held_percentage: update.bundle_percent }),
             ...(update.bundle_wallet_count !== undefined && (update.bundle_wallet_count !== 0 || !(token as any).bundle_wallet_count) && { bundle_wallet_count: update.bundle_wallet_count, bundler_count: update.bundle_wallet_count }),
-            // Map total fees lamports from websocket
-            ...(update.total_fees_lamports !== undefined && { total_fees_lamports: update.total_fees_lamports }),
+            // Map total fees lamports from websocket - only update if non-zero to preserve valid values
+            ...(update.total_fees_lamports !== undefined && (update.total_fees_lamports !== 0 || !(token as any).total_fees_lamports) && { total_fees_lamports: update.total_fees_lamports }),
             updated_at: update.updated_at || token.updated_at,
           };
         });
@@ -8112,12 +8135,11 @@ function PulseTable({
                                       }
 
                                       if (sol >= 0.001) {
-                                        // Normal display for values >= 0.001 - use SmoothNumber for smooth transitions
+                                        // Normal display - use SimpleNumber for calendar-style digit animation
                                         return (
                                           <span className="number-font text-xs font-medium" style={{ color: "#ffffff" }}>
-                                            <SmoothNumber
+                                            <SimpleNumber
                                               value={sol}
-                                              duration={300}
                                               formatter={(val) => val.toFixed(3).replace(/\.?0+$/, "")}
                                             />
                                           </span>
@@ -8133,18 +8155,21 @@ function PulseTable({
                                         const significantDigit = match[2].slice(0, 1); // Only 1 digit after subscript
                                         return (
                                           <span
-                                            className="number-font text-xs font-medium transition-opacity duration-300"
+                                            className="number-font text-xs font-medium"
                                             style={{ color: "#ffffff" }}
                                           >
-                                            0.0<sub style={{ fontSize: "0.6em", verticalAlign: "sub" }}>{zeroCount}</sub>{significantDigit}
+                                            0.0<sub style={{ fontSize: "0.6em", verticalAlign: "sub" }}>{zeroCount}</sub>
+                                            <SimpleNumber
+                                              value={parseInt(significantDigit, 10)}
+                                              formatter={(val) => val.toString()}
+                                            />
                                           </span>
                                         );
                                       }
                                       return (
                                         <span className="number-font text-xs font-medium" style={{ color: "#ffffff" }}>
-                                          <SmoothNumber
+                                          <SimpleNumber
                                             value={sol}
-                                            duration={300}
                                             formatter={(val) => val.toFixed(3).replace(/\.?0+$/, "")}
                                           />
                                         </span>
