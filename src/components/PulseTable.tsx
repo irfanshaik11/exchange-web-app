@@ -2705,13 +2705,15 @@ function PulseTable({
             ...(update.total_buys_24h !== undefined && { total_buys_24h: update.total_buys_24h }),
             ...(update.total_sells_24h !== undefined && { total_sells_24h: update.total_sells_24h }),
             // Map holder percentages from websocket
-            ...(update.insider_percent !== undefined && { insider_percent: update.insider_percent }),
-            ...(update.sniper_percent !== undefined && { sniper_percent: update.sniper_percent }),
-            ...(update.dev_percent !== undefined && { dev_percent: update.dev_percent }),
-            ...(update.top10_holders_pct !== undefined && { top10_holders_pct: update.top10_holders_pct }),
+            // Only update if new value is non-zero OR existing value is 0/undefined (preserve non-zero values)
+            ...(update.insider_percent !== undefined && (update.insider_percent !== 0 || !(token as any).insider_percent) && { insider_percent: update.insider_percent }),
+            ...(update.sniper_percent !== undefined && (update.sniper_percent !== 0 || !(token as any).sniper_percent) && { sniper_percent: update.sniper_percent }),
+            ...(update.dev_percent !== undefined && (update.dev_percent !== 0 || !(token as any).dev_percent) && { dev_percent: update.dev_percent }),
+            ...(update.top10_holders_pct !== undefined && (update.top10_holders_pct !== 0 || !(token as any).top10_holders_pct) && { top10_holders_pct: update.top10_holders_pct }),
             // Map bundler data from websocket (bundle_percent → bundler_held_percentage for BottomCardInfoHolder)
-            ...(update.bundle_percent !== undefined && { bundle_percent: update.bundle_percent, bundler_held_percentage: update.bundle_percent }),
-            ...(update.bundle_wallet_count !== undefined && { bundle_wallet_count: update.bundle_wallet_count, bundler_count: update.bundle_wallet_count }),
+            // Only update if new value is non-zero OR existing value is 0/undefined
+            ...(update.bundle_percent !== undefined && (update.bundle_percent !== 0 || !(token as any).bundle_percent) && { bundle_percent: update.bundle_percent, bundler_held_percentage: update.bundle_percent }),
+            ...(update.bundle_wallet_count !== undefined && (update.bundle_wallet_count !== 0 || !(token as any).bundle_wallet_count) && { bundle_wallet_count: update.bundle_wallet_count, bundler_count: update.bundle_wallet_count }),
             // Map total fees lamports from websocket
             ...(update.total_fees_lamports !== undefined && { total_fees_lamports: update.total_fees_lamports }),
             updated_at: update.updated_at || token.updated_at,
@@ -2737,6 +2739,7 @@ function PulseTable({
     }, [isNewPairs]),
     onTokenInfoUpdate: useCallback((update: { mint_address: string; holder_count: number; kol_count: number }) => {
       // Apply holder_count and kol_count updates from token_info_update WebSocket messages
+      // Only update if new value is non-zero OR existing value is 0/undefined (preserve non-zero values)
       const applyTokenInfoUpdate = (tokens: Token[]): Token[] => {
         if (!tokens || tokens.length === 0) return tokens;
 
@@ -2746,8 +2749,9 @@ function PulseTable({
           hasChanges = true;
           return {
             ...token,
-            holder_count: update.holder_count,
-            kol_count: update.kol_count,
+            // Only update if new value is non-zero OR existing value is 0/undefined
+            ...(update.holder_count !== 0 || !(token as any).holder_count) && { holder_count: update.holder_count },
+            ...(update.kol_count !== 0 || !(token as any).kol_count) && { kol_count: update.kol_count },
           };
         });
 
