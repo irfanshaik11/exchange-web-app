@@ -339,17 +339,25 @@ const getTokenTimestamp = (token: any, fields: readonly string[]): number => {
 
 /**
  * Safely extract market cap from token, skipping 0/negative/invalid values.
- * Uses || instead of ?? to properly fall through when value is 0.
+ * Handles both number and string values from API.
  * Priority: fully_diluted_value > market_cap_usd > 0
  */
 const getTokenMarketCap = (token: any): number => {
   if (!token) return 0;
-  const fdv = token.fully_diluted_value;
-  const mc = token.market_cap_usd;
-  // Use || to skip 0 values (|| treats 0 as falsy, ?? does not)
-  // This ensures we fall through to the next value if current is 0
-  if (typeof fdv === 'number' && fdv > 0) return fdv;
-  if (typeof mc === 'number' && mc > 0) return mc;
+
+  // Helper to safely parse value (handles strings, numbers, null, undefined)
+  const parseValue = (val: any): number => {
+    if (val === null || val === undefined) return 0;
+    const num = typeof val === 'string' ? parseFloat(val) : Number(val);
+    return isFinite(num) && num > 0 ? num : 0;
+  };
+
+  const fdv = parseValue(token.fully_diluted_value);
+  if (fdv > 0) return fdv;
+
+  const mc = parseValue(token.market_cap_usd);
+  if (mc > 0) return mc;
+
   return 0;
 };
 
