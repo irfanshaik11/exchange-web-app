@@ -1116,7 +1116,7 @@ export default function PulsePopoutContent({ forceMobileView = false }: PulsePop
                 />
               </div>
             </div>
-        )}
+      )}
       </div>
     </div>
   );

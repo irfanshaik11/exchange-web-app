@@ -8,6 +8,7 @@ import {
   isIndexedDBAvailable,
   type PulseToken,
 } from '~/utils/pulseCache';
+import { extractTokenImage } from '~/utils/images';
 
 /**
  * Persistent WebSocket hook for Pulse token updates
@@ -17,6 +18,12 @@ import {
  * 2. Caching token data in IndexedDB for instant display on page load
  * 3. Falling back to regular WebSocket if SharedWorker is unavailable
  */
+
+export interface TokenInfoUpdate {
+  mint_address: string;
+  holder_count: number;
+  kol_count: number;
+}
 
 interface UsePulseWebSocketPersistentOptions {
   enabled?: boolean;
@@ -30,6 +37,7 @@ interface UsePulseWebSocketPersistentOptions {
   onFinalStretchToken?: (token: PulseToken) => void;
   onMigratedToken?: (token: PulseToken) => void;
   onPriceUpdate?: (updates: PulseToken[]) => void;
+  onTokenInfoUpdate?: (update: TokenInfoUpdate) => void;
 }
 
 interface UsePulseWebSocketPersistentReturn {
@@ -56,6 +64,7 @@ export function usePulseWebSocketPersistent(
     onFinalStretchToken,
     onMigratedToken,
     onPriceUpdate,
+    onTokenInfoUpdate,
   } = options;
 
   const { url: customUrl } = options;
@@ -100,13 +109,15 @@ export function usePulseWebSocketPersistent(
   const onFinalStretchTokenRef = useRef(onFinalStretchToken);
   const onMigratedTokenRef = useRef(onMigratedToken);
   const onPriceUpdateRef = useRef(onPriceUpdate);
+  const onTokenInfoUpdateRef = useRef(onTokenInfoUpdate);
 
   useEffect(() => {
     onNewTokenRef.current = onNewToken;
     onFinalStretchTokenRef.current = onFinalStretchToken;
     onMigratedTokenRef.current = onMigratedToken;
     onPriceUpdateRef.current = onPriceUpdate;
-  }, [onNewToken, onFinalStretchToken, onMigratedToken, onPriceUpdate]);
+    onTokenInfoUpdateRef.current = onTokenInfoUpdate;
+  }, [onNewToken, onFinalStretchToken, onMigratedToken, onPriceUpdate, onTokenInfoUpdate]);
 
   const clearTokens = useCallback(() => {
     setNewTokens([]);
@@ -171,6 +182,92 @@ export function usePulseWebSocketPersistent(
     });
   }, []);
 
+  // Helper to normalize WebSocket tokens with default values for filter-relevant fields
+  // This ensures filtering works correctly even when WebSocket data is incomplete
+  // IMPORTANT: We normalize BOTH field name variants (e.g., dev_percent AND dev_held_percentage)
+  // because filters use fallback chains and different APIs may use different field names
+  const normalizeToken = useCallback((rawToken: any): PulseToken => {
+    // Pre-compute common fallback values to ensure both field name variants are populated
+    const holderValue = rawToken.holder_count ?? rawToken.holders ?? rawToken.unique_wallets_24h ?? 0;
+    const devPercentValue = rawToken.dev_percent ?? rawToken.dev_held_percentage ?? 0;
+    const sniperPercentValue = rawToken.sniper_percent ?? rawToken.sniper_held_percentage ?? 0;
+    const insiderPercentValue = rawToken.insider_percent ?? rawToken.insider_held_percentage ?? 0;
+    const bundlePercentValue = rawToken.bundle_percent ?? rawToken.bundled_percentage ?? 0;
+
+    return {
+      ...rawToken,
+      mint: rawToken.address || rawToken.mint,
+      mint_address: rawToken.mint_address || rawToken.address || rawToken.mint,
+      // Extract image from various possible field names
+      image: extractTokenImage(rawToken) || rawToken.image,
+
+      // === Holder count (multiple field name variants) ===
+      holder_count: holderValue,
+      holders: holderValue,
+      unique_wallets_24h: rawToken.unique_wallets_24h ?? holderValue,
+
+      // === KOL count ===
+      kol_count: rawToken.kol_count ?? 0,
+
+      // === Transaction counts (all timeframes) ===
+      total_buys_24h: rawToken.total_buys_24h ?? 0,
+      total_sells_24h: rawToken.total_sells_24h ?? 0,
+      total_buys_5m: rawToken.total_buys_5m ?? 0,
+      total_sells_5m: rawToken.total_sells_5m ?? 0,
+      total_buys_1h: rawToken.total_buys_1h ?? 0,
+      total_sells_1h: rawToken.total_sells_1h ?? 0,
+      total_buys_6h: rawToken.total_buys_6h ?? 0,
+      total_sells_6h: rawToken.total_sells_6h ?? 0,
+
+      // === Volume (all timeframes) ===
+      total_buy_volume_24h: rawToken.total_buy_volume_24h ?? 0,
+      total_sell_volume_24h: rawToken.total_sell_volume_24h ?? 0,
+      total_buy_volume_5m: rawToken.total_buy_volume_5m ?? 0,
+      total_sell_volume_5m: rawToken.total_sell_volume_5m ?? 0,
+      total_buy_volume_1h: rawToken.total_buy_volume_1h ?? 0,
+      total_sell_volume_1h: rawToken.total_sell_volume_1h ?? 0,
+      total_buy_volume_6h: rawToken.total_buy_volume_6h ?? 0,
+      total_sell_volume_6h: rawToken.total_sell_volume_6h ?? 0,
+
+      // === Dev holding percentage (both field name variants) ===
+      dev_percent: devPercentValue,
+      dev_held_percentage: devPercentValue,
+
+      // === Sniper percentage (both field name variants) ===
+      sniper_percent: sniperPercentValue,
+      sniper_held_percentage: sniperPercentValue,
+
+      // === Insider percentage (both field name variants) ===
+      insider_percent: insiderPercentValue,
+      insider_held_percentage: insiderPercentValue,
+
+      // === Bundle percentage (all field name variants for BottomCardInfoHolder compatibility) ===
+      bundle_percent: bundlePercentValue,
+      bundled_percentage: bundlePercentValue,
+      bundler_held_percentage: bundlePercentValue,  // For BottomCardInfoHolder
+      bundle_wallet_count: rawToken.bundle_wallet_count ?? 0,
+      bundler_count: rawToken.bundle_wallet_count ?? rawToken.bundler_count ?? 0,  // For BottomCardInfoHolder
+
+      // === Top holders percentage ===
+      top10_holders_pct: rawToken.top10_holders_pct ?? rawToken.top_10_holders_percent ?? 0,
+
+      // === Dev activity stats ===
+      dev_tokens_created: rawToken.dev_tokens_created ?? 0,
+      dev_tokens_migrated: rawToken.dev_tokens_migrated ?? 0,
+
+      // === Bonding curve ===
+      bonding_pct: rawToken.bonding_pct ?? rawToken.bonding_percent ?? 0,
+
+      // === Market metrics ===
+      market_cap_usd: rawToken.market_cap_usd ?? rawToken.fully_diluted_value ?? rawToken.fdv ?? 0,
+      liquidity_usd: rawToken.liquidity_usd ?? rawToken.total_liquidity_usd ?? 0,
+      volume_24h: rawToken.volume_24h ?? 0,
+
+      // === Pro traders ===
+      pro_traders_count: rawToken.pro_traders_count ?? rawToken.pro_traders ?? 0,
+    };
+  }, []);
+
   // Regular WebSocket connection (fallback or primary if SharedWorker unavailable)
   const connectWebSocket = useCallback(() => {
     if (!enabled) {
@@ -211,11 +308,7 @@ export function usePulseWebSocketPersistent(
               const message = JSON.parse(msgStr);
 
               if (message.type === 'new_token' && message.data && !Array.isArray(message.data)) {
-                const rawToken = message.data;
-                const token: PulseToken = {
-                  ...rawToken,
-                  mint: rawToken.address || rawToken.mint,
-                };
+                const token = normalizeToken(message.data);
 
                 flushSync(() => {
                   onNewTokenRef.current?.(token);
@@ -231,11 +324,7 @@ export function usePulseWebSocketPersistent(
                   });
                 });
               } else if (message.type === 'final_stretch_token' && message.data && !Array.isArray(message.data)) {
-                const rawToken = message.data;
-                const token: PulseToken = {
-                  ...rawToken,
-                  mint: rawToken.address || rawToken.mint,
-                };
+                const token = normalizeToken(message.data);
 
                 flushSync(() => {
                   onFinalStretchTokenRef.current?.(token);
@@ -251,11 +340,7 @@ export function usePulseWebSocketPersistent(
                   });
                 });
               } else if (message.type === 'migrated_token' && message.data && !Array.isArray(message.data)) {
-                const rawToken = message.data;
-                const token: PulseToken = {
-                  ...rawToken,
-                  mint: rawToken.address || rawToken.mint,
-                };
+                const token = normalizeToken(message.data);
 
                 flushSync(() => {
                   onMigratedTokenRef.current?.(token);
@@ -294,6 +379,9 @@ export function usePulseWebSocketPersistent(
                       ...(update.bonding_pct !== undefined && { bonding_pct: update.bonding_pct }),
                       ...(update.graduation_percent !== undefined && { graduation_percent: update.graduation_percent }),
                       ...(update.liquidity_usd !== undefined && { liquidity_usd: update.liquidity_usd }),
+                      // Bundler data mapping (bundle_percent → bundler_held_percentage for BottomCardInfoHolder)
+                      ...(update.bundle_percent !== undefined && { bundle_percent: update.bundle_percent, bundler_held_percentage: update.bundle_percent }),
+                      ...(update.bundle_wallet_count !== undefined && { bundle_wallet_count: update.bundle_wallet_count, bundler_count: update.bundle_wallet_count }),
                     };
                   });
                   return hasChanges ? updated : tokens;
@@ -309,6 +397,63 @@ export function usePulseWebSocketPersistent(
                 }
 
                 onPriceUpdateRef.current?.(updates);
+              } else if (message.type === 'token_info_update' && message.data) {
+                // Handle KOL count and holder count updates
+                const data = message.data;
+                const mintAddress = data.mint_address || data.mint || data.address;
+
+                console.log(`[usePulseWebSocketPersistent] 📊 token_info_update received:`, {
+                  mintAddress,
+                  holder_count: data.holder_count,
+                  kol_count: data.kol_count,
+                  raw: data,
+                });
+
+                if (!mintAddress) {
+                  console.warn(`[usePulseWebSocketPersistent] ⚠️ No mint address in token_info_update`);
+                  return;
+                }
+
+                const applyTokenInfoUpdate = (tokens: PulseToken[], arrayName: string): PulseToken[] => {
+                  if (tokens.length === 0) {
+                    console.log(`[usePulseWebSocketPersistent] ${arrayName} is empty, skipping`);
+                    return tokens;
+                  }
+
+                  // Debug: log all mints in the array to see if there's a match
+                  const tokenMints = tokens.map(t => t.mint);
+                  const foundIndex = tokenMints.indexOf(mintAddress);
+                  console.log(`[usePulseWebSocketPersistent] Searching ${arrayName} (${tokens.length} tokens), found at index: ${foundIndex}`);
+
+                  if (foundIndex === -1) {
+                    // Log first few mints to help debug
+                    console.log(`[usePulseWebSocketPersistent] First 3 mints in ${arrayName}:`, tokenMints.slice(0, 3));
+                    return tokens;
+                  }
+
+                  const updated = tokens.map(token => {
+                    if (token.mint !== mintAddress) return token;
+                    console.log(`[usePulseWebSocketPersistent] ✅ Updating ${token.symbol} (${token.mint.slice(0, 8)}...) - holders: ${token.holder_count} → ${data.holder_count}, kols: ${token.kol_count} → ${data.kol_count}`);
+                    return {
+                      ...token,
+                      holder_count: data.holder_count,
+                      kol_count: data.kol_count,
+                    };
+                  });
+                  return updated;
+                };
+
+                // Update all arrays since token_info_update can apply to any token
+                setNewTokens(prev => applyTokenInfoUpdate(prev, 'newTokens'));
+                setFinalStretchTokens(prev => applyTokenInfoUpdate(prev, 'finalStretchTokens'));
+                setMigratedTokens(prev => applyTokenInfoUpdate(prev, 'migratedTokens'));
+
+                // Call the callback so parent components can update their local state
+                onTokenInfoUpdateRef.current?.({
+                  mint_address: mintAddress,
+                  holder_count: data.holder_count,
+                  kol_count: data.kol_count,
+                });
               }
             } catch {
               // Skip parse errors

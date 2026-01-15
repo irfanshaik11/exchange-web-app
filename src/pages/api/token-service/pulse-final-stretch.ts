@@ -133,6 +133,18 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
             unique_wallets_6h: (r.unique_wallets_6h ?? 0) || Math.max(1, Math.floor(uniqueWallets24h / 4)),
             unique_wallets_24h: uniqueWallets24h,
             price_percent_change_5m: parseNumber(r.price_percent_change_5m, 0),
+            // Holder and KOL counts
+            holder_count: r.holder_count ?? 0,
+            kol_count: r.kol_count ?? 0,
+            // Dev/sniper/insider percentages
+            dev_held_percentage: parseNumber(r.dev_held_percentage, 0),
+            sniper_held_percentage: parseNumber(r.sniper_held_percentage, 0),
+            insider_held_percentage: parseNumber(r.insider_held_percentage, 0),
+            // Top 10 holders percentage
+            top10_holders_pct: parseNumber(r.top10_holders_pct, 0),
+            // Dev history
+            dev_tokens_created: r.dev_tokens_created ?? 0,
+            dev_tokens_migrated: r.dev_tokens_migrated ?? 0,
             // Social links
             links: r.links || null,
           };

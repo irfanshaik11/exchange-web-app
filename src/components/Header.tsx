@@ -518,11 +518,11 @@ export default function Header({
   };
   
   const chainLogos: Record<string, string> = {
-    sol: "https://www.pngall.com/wp-content/uploads/10/Solana-Crypto-Logo-PNG-File.png",
+    sol: "https://cryptologos.cc/logos/solana-sol-logo.svg?v=040",
     monad: "https://i0.wp.com/www.gizmotimes.com/wp-content/uploads/2023/10/Monad-Logo.png?fit=1920%2C1080&ssl=1",
-    eth: "https://www.pngall.com/wp-content/uploads/10/Solana-Crypto-Logo-PNG-File.png", // Fallback to Solana for now
-    bnb: "https://www.pngall.com/wp-content/uploads/10/Solana-Crypto-Logo-PNG-File.png", // Fallback to Solana for now
-    base: "https://www.pngall.com/wp-content/uploads/10/Solana-Crypto-Logo-PNG-File.png", // Fallback to Solana for now
+    eth: "https://cryptologos.cc/logos/solana-sol-logo.svg?v=040", // Fallback to Solana for now
+    bnb: "https://cryptologos.cc/logos/solana-sol-logo.svg?v=040", // Fallback to Solana for now
+    base: "https://cryptologos.cc/logos/solana-sol-logo.svg?v=040", // Fallback to Solana for now
   };
   
   // Use chainBalances from UserContext as the single source of truth

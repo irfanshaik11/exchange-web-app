@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState, useRef } from "react";
 import Head from "next/head";
 import { useRouter } from "next/router";
 import { Copy, Gift, Users, Wallet } from "lucide-react";
@@ -59,9 +59,56 @@ export default function RewardsPage() {
     handleStatsUpdate
   );
 
-  useEffect(() => {
-    let cancelled = false;
+  // Ref to track if initial load is done (to avoid showing loading state during polling)
+  const initialLoadDoneRef = useRef(false);
+  const pollingIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
+  // Reusable function to fetch referral data
+  const fetchReferralData = useCallback(async (showLoading = true) => {
+    if (!user?.bearerToken) return;
+
+    try {
+      if (showLoading && !initialLoadDoneRef.current) {
+        setLoadingReferral(true);
+        setLoadingReferrals(true);
+      }
+      setReferralError(null);
+
+      // Fetch referral code and referrals list in parallel
+      const [codeRecord, referralsData] = await Promise.all([
+        fetchReferralCodeForUser(user.bearerToken).catch(() => null),
+        fetchReferrals(user.bearerToken).catch(() => ({
+          referrals: [],
+          totalVolume: 0,
+          totalReferrals: 0,
+        })),
+      ]);
+
+      if (codeRecord) {
+        setReferralCode(codeRecord.referralCode);
+      } else {
+        setReferralCode(null);
+      }
+
+      setReferrals(referralsData.referrals);
+      setTotalVolume(referralsData.totalVolume);
+      setTotalReferrals(referralsData.totalReferrals);
+      initialLoadDoneRef.current = true;
+    } catch (error: any) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : "Failed to load referral data";
+      setReferralError(message);
+      setReferralCode(null);
+    } finally {
+      setLoadingReferral(false);
+      setLoadingReferrals(false);
+    }
+  }, [user?.bearerToken]);
+
+  // Initial load and polling setup
+  useEffect(() => {
     if (!user?.bearerToken) {
       setReferralCode(null);
       setReferralError(null);
@@ -69,61 +116,31 @@ export default function RewardsPage() {
       setReferrals([]);
       setTotalVolume(0);
       setTotalReferrals(0);
-      return () => {
-        cancelled = true;
-      };
+      initialLoadDoneRef.current = false;
+      return;
     }
 
-    const loadReferralData = async () => {
-      try {
-        setLoadingReferral(true);
-        setLoadingReferrals(true);
-        setReferralError(null);
+    // Initial fetch
+    fetchReferralData(true);
 
-        // Fetch referral code and referrals list in parallel
-        const [codeRecord, referralsData] = await Promise.all([
-          fetchReferralCodeForUser(user.bearerToken).catch(() => null),
-          fetchReferrals(user.bearerToken).catch(() => ({
-            referrals: [],
-            totalVolume: 0,
-            totalReferrals: 0,
-          })),
-        ]);
+    // Set up polling every 30 seconds
+    pollingIntervalRef.current = setInterval(() => {
+      fetchReferralData(false); // Don't show loading during polling
+    }, 30000);
 
-        if (cancelled) return;
-
-        if (codeRecord) {
-          setReferralCode(codeRecord.referralCode);
-        } else {
-          setReferralCode(null);
-        }
-
-        setReferrals(referralsData.referrals);
-        setTotalVolume(referralsData.totalVolume);
-        setTotalReferrals(referralsData.totalReferrals);
-        setCopied(false);
-      } catch (error: any) {
-        if (cancelled) return;
-        const message =
-          error instanceof Error
-            ? error.message
-            : "Failed to load referral data";
-        setReferralError(message);
-        setReferralCode(null);
-      } finally {
-        if (!cancelled) {
-          setLoadingReferral(false);
-          setLoadingReferrals(false);
-        }
-      }
+    // Refetch when window regains focus
+    const handleFocus = () => {
+      fetchReferralData(false);
     };
-
-    loadReferralData();
+    window.addEventListener('focus', handleFocus);
 
     return () => {
-      cancelled = true;
+      if (pollingIntervalRef.current) {
+        clearInterval(pollingIntervalRef.current);
+      }
+      window.removeEventListener('focus', handleFocus);
     };
-  }, [user?.bearerToken]);
+  }, [user?.bearerToken, fetchReferralData]);
 
   const handleCopy = useCallback(async () => {
     try {
