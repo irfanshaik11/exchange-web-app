@@ -8098,37 +8098,58 @@ function PulseTable({
                                       alt="SOL"
                                       className="h-3 w-3"
                                     />
-                                    <span
-                                      className="number-font text-xs font-medium"
-                                      style={{ color: "#ffffff" }}
-                                    >
-                                      {(() => {
-                                        // Convert lamports to SOL (1 SOL = 1,000,000,000 lamports)
-                                        const lamports = (token as any).total_fees_lamports ?? 0;
-                                        const sol = lamports / 1_000_000_000;
+                                    {(() => {
+                                      // Convert lamports to SOL (1 SOL = 1,000,000,000 lamports)
+                                      const lamports = (token as any).total_fees_lamports ?? 0;
+                                      const sol = isFinite(lamports) ? lamports / 1_000_000_000 : 0;
 
-                                        if (sol === 0) return "0";
-                                        if (sol >= 0.001) {
-                                          // Normal display for values >= 0.001, rounded to 3 decimal places
-                                          return sol.toFixed(3).replace(/\.?0+$/, "");
-                                        }
+                                      if (sol === 0) {
+                                        return (
+                                          <span className="number-font text-xs font-medium" style={{ color: "#ffffff" }}>
+                                            0
+                                          </span>
+                                        );
+                                      }
 
-                                        // For very small values, use subscript notation
-                                        // e.g., 0.00003 → 0.0₄3 (1 digit after subscript)
-                                        const str = sol.toFixed(10);
-                                        const match = str.match(/^0\.(0+)(\d+)/);
-                                        if (match) {
-                                          const zeroCount = match[1].length;
-                                          const significantDigit = match[2].slice(0, 1); // Only 1 digit after subscript
-                                          return (
-                                            <>
-                                              0.0<sub style={{ fontSize: "0.6em", verticalAlign: "sub" }}>{zeroCount}</sub>{significantDigit}
-                                            </>
-                                          );
-                                        }
-                                        return sol.toFixed(3).replace(/\.?0+$/, "");
-                                      })()}
-                                    </span>
+                                      if (sol >= 0.001) {
+                                        // Normal display for values >= 0.001 - use SmoothNumber for smooth transitions
+                                        return (
+                                          <span className="number-font text-xs font-medium" style={{ color: "#ffffff" }}>
+                                            <SmoothNumber
+                                              value={sol}
+                                              duration={300}
+                                              formatter={(val) => val.toFixed(3).replace(/\.?0+$/, "")}
+                                            />
+                                          </span>
+                                        );
+                                      }
+
+                                      // For very small values, use subscript notation
+                                      // e.g., 0.00003 → 0.0₄3 (1 digit after subscript)
+                                      const str = sol.toFixed(10);
+                                      const match = str.match(/^0\.(0+)(\d+)/);
+                                      if (match) {
+                                        const zeroCount = match[1].length;
+                                        const significantDigit = match[2].slice(0, 1); // Only 1 digit after subscript
+                                        return (
+                                          <span
+                                            className="number-font text-xs font-medium transition-opacity duration-300"
+                                            style={{ color: "#ffffff" }}
+                                          >
+                                            0.0<sub style={{ fontSize: "0.6em", verticalAlign: "sub" }}>{zeroCount}</sub>{significantDigit}
+                                          </span>
+                                        );
+                                      }
+                                      return (
+                                        <span className="number-font text-xs font-medium" style={{ color: "#ffffff" }}>
+                                          <SmoothNumber
+                                            value={sol}
+                                            duration={300}
+                                            formatter={(val) => val.toFixed(3).replace(/\.?0+$/, "")}
+                                          />
+                                        </span>
+                                      );
+                                    })()}
                                   </div>
                                 </InterstateTooltip>
                                 <div
