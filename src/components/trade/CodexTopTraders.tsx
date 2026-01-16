@@ -913,8 +913,8 @@ const CodexTopTraders: React.FC<CodexTopTradersProps> = ({ token, pairAddress, c
       <div className="flex-1 overflow-y-auto min-h-0 pb-18">
         <table className="w-full text-xs">
         <thead className="sticky top-0 z-10" style={{ backgroundColor: '#101114' }}>
-          <tr style={{ borderBottom: '1px solid #27282e' }}>
-            <th className="px-2 py-1.5 text-left text-[11px] font-medium whitespace-nowrap" style={{ color: '#9ca3af' }}>
+          <tr className='border-t border-b border-[#27282e]'>
+            <th className="px-2 py-3 text-left text-[11px] font-medium whitespace-nowrap" style={{ color: '#9ca3af' }}>
               <div className="flex items-center gap-1">
                 <span className="text-[11px]">Wallet</span>
                 <button
@@ -937,7 +937,7 @@ const CodexTopTraders: React.FC<CodexTopTradersProps> = ({ token, pairAddress, c
                 )}
               </div>
             </th>
-            <th className="px-2 py-1.5 text-left whitespace-nowrap">
+            <th className="px-2 py-3 text-left whitespace-nowrap">
               <div className="flex items-center gap-1">
                 <SortableHeader
                   label="Bought"
@@ -958,7 +958,7 @@ const CodexTopTraders: React.FC<CodexTopTradersProps> = ({ token, pairAddress, c
                 />
               </div>
             </th>
-            <th className="px-2 py-1.5 text-left whitespace-nowrap">
+            <th className="px-2 py-3 text-left whitespace-nowrap">
               <div className="flex items-center gap-1">
                 <SortableHeader
                   label="Sold"
@@ -979,7 +979,7 @@ const CodexTopTraders: React.FC<CodexTopTradersProps> = ({ token, pairAddress, c
                 />
               </div>
             </th>
-            <th className="px-2 py-1.5 text-left whitespace-nowrap">
+            <th className="px-2 py-3 text-left whitespace-nowrap">
               <div className="flex items-center gap-1">
                 <SortableHeader
                   label="PnL"
@@ -1000,7 +1000,7 @@ const CodexTopTraders: React.FC<CodexTopTradersProps> = ({ token, pairAddress, c
                 />
               </div>
             </th>
-            <th className="px-2 py-1.5 text-left whitespace-nowrap">
+            <th className="px-2 py-3 text-left whitespace-nowrap">
               <div className="flex items-center gap-1">
                 <SortableHeader
                   label="Remaining"
@@ -1021,7 +1021,7 @@ const CodexTopTraders: React.FC<CodexTopTradersProps> = ({ token, pairAddress, c
                 />
               </div>
             </th>
-            <th className="px-2 py-1.5 text-left whitespace-nowrap">
+            <th className="px-2 py-3 text-left whitespace-nowrap">
               <SortableHeader
                 label="Last Active"
                 sortDirection={filters.lastActive.sort}
@@ -1068,7 +1068,7 @@ const CodexTopTraders: React.FC<CodexTopTradersProps> = ({ token, pairAddress, c
                     backgroundColor: idx % 2 === 0 ? '#101114' : '#161719',
                   }}
                 >
-                  <td className="px-2 py-2">
+                  <td className="px-2 py-3">
                     <div className="flex items-center space-x-2">
                       <span className="text-[10px]" style={{ color: '#9ca3af' }}>{idx + 1}</span>
                       {(() => {
@@ -1111,19 +1111,19 @@ const CodexTopTraders: React.FC<CodexTopTradersProps> = ({ token, pairAddress, c
                       })()}
                     </div>
                   </td>
-                  <td className="px-2 py-2">
+                  <td className="px-2 py-3">
                     <div className="flex flex-col">
                       <span className="text-[11px] text-emerald-400 font-semibold">${formatSmartNumber(boughtUsd)}</span>
                       <span className="text-[10px]" style={{ color: '#9ca3af' }}>({avgBuyPrice}) {trader.buys}</span>
                     </div>
                   </td>
-                  <td className="px-2 py-2">
+                  <td className="px-2 py-3">
                     <div className="flex flex-col">
                       <span className="text-[11px] text-red-400 font-semibold">${formatSmartNumber(soldUsd)}</span>
                       <span className="text-[10px]" style={{ color: '#9ca3af' }}>({avgSellPrice}) {trader.sells}</span>
                     </div>
                   </td>
-                  <td className="px-2 py-2">
+                  <td className="px-2 py-3">
                     <div className="flex flex-col">
                       <span className={`text-[11px] font-semibold ${realizedProfit >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
                         {realizedProfit >= 0 ? '+' : ''}${formatSmartNumber(realizedProfit)}
@@ -1131,13 +1131,13 @@ const CodexTopTraders: React.FC<CodexTopTradersProps> = ({ token, pairAddress, c
                       <span className="text-[10px]" style={{ color: '#9ca3af' }}>{realizedProfitPct.toFixed(1)}%</span>
                     </div>
                   </td>
-                  <td className="px-2 py-2">
+                  <td className="px-2 py-3">
                     <div className="flex flex-col">
                       <span className="text-[11px]" style={{ color: '#d1d5db' }}>${formatSmartNumber(tokenBalance)}</span>
                       <span className="text-[10px]" style={{ color: '#9ca3af' }}>{(trader.remainingPercent || 0).toFixed(1)}%</span>
                     </div>
                   </td>
-                  <td className="px-2 py-2">
+                  <td className="px-2 py-3">
                     <span className="text-[11px]" style={{ color: '#9ca3af' }}>{lastActive}</span>
                   </td>
                 </tr>

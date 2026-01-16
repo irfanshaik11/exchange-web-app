@@ -309,8 +309,8 @@ const TokenInfoDropdown: React.FC<{ token: any }> = ({ token }) => {
           {/* Token Metrics Grid - First Row */}
           <div className="grid grid-cols-3 gap-1.5">
             {/* Top 10 Holders */}
-            <div className="rounded-md p-2 border" style={{ backgroundColor: 'rgba(30, 31, 38, 0.3)', borderColor: AX.border }}>
-              <div className="flex flex-col items-center gap-1">
+            <div className="rounded-md p-2 border h-[68px]" style={{ backgroundColor: 'rgba(30, 31, 38, 0.3)', borderColor: AX.border }}>
+              <div className="flex flex-col items-center justify-center gap-1 h-full">
                 <div className="flex items-center gap-1.5">
                   <BsPersonGear size={16} style={{ color: AX.aiGreen }} />
                   <div className="text-[12px] font-bold" style={{ color: AX.aiGreen }}>
@@ -322,9 +322,9 @@ const TokenInfoDropdown: React.FC<{ token: any }> = ({ token }) => {
             </div>
 
             {/* Dev Holdings - with hover popout */}
-            <div className="relative group">
-              <div className="rounded-md p-2 border cursor-pointer hover:border-[#3A3B43] transition-colors" style={{ backgroundColor: 'rgba(30, 31, 38, 0.3)', borderColor: AX.border }}>
-                <div className="flex flex-col items-center gap-1">
+            <div className="relative group h-[68px]">
+              <div className="rounded-md p-2 border cursor-pointer hover:border-[#3A3B43] transition-colors h-full" style={{ backgroundColor: 'rgba(30, 31, 38, 0.3)', borderColor: AX.border }}>
+                <div className="flex flex-col items-center justify-center gap-1 h-full">
                   <div className="flex items-center gap-1.5">
                     <LuChefHat size={16} style={{ color: AX.aiGreen }} />
                     <div className="text-[12px] font-bold" style={{ color: AX.aiGreen }}>
@@ -436,8 +436,8 @@ const TokenInfoDropdown: React.FC<{ token: any }> = ({ token }) => {
             </div>
 
             {/* Sniper Holdings */}
-            <div className="rounded-md p-2 border" style={{ backgroundColor: 'rgba(30, 31, 38, 0.3)', borderColor: AX.border }}>
-              <div className="flex flex-col items-center gap-1">
+            <div className="rounded-md p-2 border h-[68px]" style={{ backgroundColor: 'rgba(30, 31, 38, 0.3)', borderColor: AX.border }}>
+              <div className="flex flex-col items-center justify-center gap-1 h-full">
                 <div className="flex items-center gap-1.5">
                   <FaCrosshairs size={16} style={{ color: AX.aiGreen }} />
                   <div className="text-[12px] font-bold" style={{ color: AX.aiGreen }}>
@@ -457,8 +457,8 @@ const TokenInfoDropdown: React.FC<{ token: any }> = ({ token }) => {
           {/* Token Metrics Grid - Second Row */}
           <div className="grid grid-cols-3 gap-1.5">
             {/* Insider Holdings */}
-            <div className="rounded-md p-2 border" style={{ backgroundColor: 'rgba(30, 31, 38, 0.3)', borderColor: AX.border }}>
-              <div className="flex flex-col items-center gap-1">
+            <div className="rounded-md p-2 border h-[68px]" style={{ backgroundColor: 'rgba(30, 31, 38, 0.3)', borderColor: AX.border }}>
+              <div className="flex flex-col items-center justify-center gap-1 h-full">
                 <div className="flex items-center gap-1.5">
                   <RiGhostLine size={16} style={{ color: AX.aiGreen }} />
                   <div className="text-[12px] font-bold" style={{ color: AX.aiGreen }}>
@@ -475,8 +475,8 @@ const TokenInfoDropdown: React.FC<{ token: any }> = ({ token }) => {
             </div>
 
             {/* Bundle Holdings */}
-            <div className="rounded-md p-2 border" style={{ backgroundColor: 'rgba(30, 31, 38, 0.3)', borderColor: AX.border }}>
-              <div className="flex flex-col items-center gap-1">
+            <div className="rounded-md p-2 border h-[68px]" style={{ backgroundColor: 'rgba(30, 31, 38, 0.3)', borderColor: AX.border }}>
+              <div className="flex flex-col items-center justify-center gap-1 h-full">
                 <div className="flex items-center gap-1.5">
                   <FaDice size={16} style={{ color: AX.aiGreen }} />
                   <div className="text-[12px] font-bold" style={{ color: AX.aiGreen }}>
@@ -493,8 +493,8 @@ const TokenInfoDropdown: React.FC<{ token: any }> = ({ token }) => {
             </div>
 
             {/* LP Burned */}
-            <div className="rounded-md p-2 border" style={{ backgroundColor: 'rgba(30, 31, 38, 0.3)', borderColor: AX.border }}>
-              <div className="flex flex-col items-center gap-1">
+            <div className="rounded-md p-2 border h-[68px]" style={{ backgroundColor: 'rgba(30, 31, 38, 0.3)', borderColor: AX.border }}>
+              <div className="flex flex-col items-center justify-center gap-1 h-full">
                 <div className="flex items-center gap-1.5">
                   <FaFire size={16} style={{ color: AX.aiGreen }} />
                   <div className="text-[12px] font-bold" style={{ color: AX.aiGreen }}>
@@ -512,8 +512,8 @@ const TokenInfoDropdown: React.FC<{ token: any }> = ({ token }) => {
           {/* Additional Metrics - Third Row */}
           <div className="grid grid-cols-3 gap-1.5">
             {/* Holders */}
-            <div className="rounded-md p-2 border" style={{ backgroundColor: 'rgba(30, 31, 38, 0.3)', borderColor: AX.border }}>
-              <div className="flex flex-col items-center gap-1">
+            <div className="rounded-md p-2 border h-[68px]" style={{ backgroundColor: 'rgba(30, 31, 38, 0.3)', borderColor: AX.border }}>
+              <div className="flex flex-col items-center justify-center gap-1 h-full">
                 <div className="flex items-center gap-1.5">
                   <FaUsers className="text-white" size={16} />
                   <div className="text-[12px] font-bold" style={{ color: AX.muted }}>
@@ -525,8 +525,8 @@ const TokenInfoDropdown: React.FC<{ token: any }> = ({ token }) => {
             </div>
 
             {/* Pro Traders */}
-            <div className="rounded-md p-2 border" style={{ backgroundColor: 'rgba(30, 31, 38, 0.3)', borderColor: AX.border }}>
-              <div className="flex flex-col items-center gap-1">
+            <div className="rounded-md p-2 border h-[68px]" style={{ backgroundColor: 'rgba(30, 31, 38, 0.3)', borderColor: AX.border }}>
+              <div className="flex flex-col items-center justify-center gap-1 h-full">
                 <div className="flex items-center gap-1.5">
                   <BiCandles className="text-white" size={16} />
                   <div className="text-[12px] font-bold" style={{ color: AX.muted }}>
@@ -538,8 +538,8 @@ const TokenInfoDropdown: React.FC<{ token: any }> = ({ token }) => {
             </div>
 
             {/* Dex Paid */}
-            <div className="rounded-md p-2 border" style={{ backgroundColor: 'rgba(30, 31, 38, 0.3)', borderColor: AX.border }}>
-              <div className="flex flex-col items-center gap-1">
+            <div className="rounded-md p-2 border h-[68px]" style={{ backgroundColor: 'rgba(30, 31, 38, 0.3)', borderColor: AX.border }}>
+              <div className="flex flex-col items-center justify-center gap-1 h-full">
                 <div className="flex items-center gap-1.5">
                   <img 
                     src="https://i.pinimg.com/736x/e6/2d/e6/e62de698746dfcb09d2d64f85371eed1.jpg" 
