@@ -33,7 +33,7 @@ export interface QuickBuyPreset {
 
 const defaultSettings: QuickBuySettings = {
   maxSlippage: 0.2, // 20%
-  priority: 0.0001,
+  priority: 0.00005, // Low default - dynamic fee calculator optimizes based on trade size/token age
   bribe: 0, // No bribe by default (was 0.01)
   mevMode: 'off',
   autoFee: false,

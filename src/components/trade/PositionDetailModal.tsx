@@ -618,12 +618,36 @@ export default function PositionDetailModal({
   const displayImage = tokenMetadata?.imageUrl || position.imageUrl || '';
 
   const handleViewChart = () => {
+    // Build query params for proper page state and optimistic loading
+    const params = new URLSearchParams({
+      mode: 'sell', // User owns the token, default to sell mode
+      tab: 'market',
+      timeRange: '5m',
+      sliderPct: '0',
+    });
+
+    // Add optimistic data for instant display (prevents blank loading state)
+    if (tokenMetadata?.name || position.tokenName) {
+      params.set('_name', tokenMetadata?.name || position.tokenName || '');
+    }
+    if (tokenMetadata?.symbol || position.tokenSymbol) {
+      params.set('_symbol', tokenMetadata?.symbol || position.tokenSymbol || '');
+    }
+    if (displayImage) {
+      params.set('_image', displayImage);
+    }
+    if (position.tokenAddress) {
+      params.set('_mint', position.tokenAddress);
+    }
+
+    const queryString = params.toString();
+
     if (isMonad && position.tokenAddress) {
-      router.push(`/trade/monad/${position.tokenAddress}`);
+      router.push(`/trade/monad/${position.tokenAddress}?${queryString}`);
     } else {
       const navigateAddress = position.pairAddress || position.tokenAddress;
       if (navigateAddress) {
-        router.push(`/trade/${navigateAddress}`);
+        router.push(`/trade/${navigateAddress}?${queryString}`);
       }
     }
     onClose();
