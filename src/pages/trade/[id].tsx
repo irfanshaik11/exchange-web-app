@@ -979,17 +979,17 @@ export default function TradePage() {
                 (e.target as Element).addEventListener("pointerup", onUp, { passive: false });
                 (e.target as Element).addEventListener("pointercancel", onUp, { passive: false });
               }}
-              className="relative h-1.5 cursor-row-resize select-none touch-none flex-shrink-0 flex items-center justify-center hover:bg-gray-800/20 transition-colors"
+              className="relative cursor-row-resize select-none touch-none flex-shrink-0 flex items-center justify-center hover:bg-gray-800/20 transition-colors"
               style={{ touchAction: "none", zIndex: 10, pointerEvents: "auto" }}
             >
               {/* Visible dots handle - smaller, thinner dots */}
               <div className="flex items-center gap-0.5">
-                <div className="w-0.5 h-0.5 rounded-full bg-gray-500" />
-                <div className="w-0.5 h-0.5 rounded-full bg-gray-500" />
-                <div className="w-0.5 h-0.5 rounded-full bg-gray-500" />
+                <div className="w-0.5 h-0.5 rounded-full bg-[#757e80] z-10" />
+                <div className="w-0.5 h-0.5 rounded-full bg-[#757e80] z-10" />
+                <div className="w-0.5 h-0.5 rounded-full bg-[#757e80] z-10" />
               </div>
               {/* Visual separator line */}
-              <div className="absolute inset-x-0 top-1/2 -translate-y-1/2 h-px bg-gray-700/20" />
+              <div className="absolute inset-x-0 top-1/2 -translate-y-1/2 h-[4px] bg-gray-700/20 hover:bg-[#27282e]" />
             </div>
 
             {/* BOTTOM pane (tabs + tables) - min-h-[500px] ensures scrollable content */}
