@@ -333,6 +333,14 @@ const CodexDevTokens: React.FC<CodexDevTokensProps> = ({ token, chain = 'sol', o
     }
   }, [allTokens, token?.mint, saveToCache]);
 
+  // Filter displayTokens to exclude tokens with 0 or missing 1h volume
+  const filteredDisplayTokens = React.useMemo(() => {
+    return displayTokens.filter((devToken) => {
+      const volume = parseFloat(devToken.volume24 || '0');
+      return !isNaN(volume) && volume > 0;
+    });
+  }, [displayTokens]);
+
   // Only show loading if we don't have any tokens at all (not even cached ones)
   // Consider both WebSocket and REST API loading states
   const showLoading = (wsLoading || isLoading) && displayTokens.length === 0 && cachedLimitedTokensFromStorage.length === 0;
@@ -503,7 +511,7 @@ const CodexDevTokens: React.FC<CodexDevTokensProps> = ({ token, chain = 'sol', o
       )}
 
       {/* Open Button - Absolutely positioned on right side when collapsed */}
-      {isRightPanelCollapsed && (
+      {isRightPanelCollapsed && filteredDisplayTokens.length > 0 && (
         <button
           onClick={() => setIsRightPanelCollapsed(false)}
           className="w-5 h-5 hidden lg:flex items-center justify-center absolute right-0 top-6.5 z-30 rounded p-1 transition-opacity hover:opacity-80 cursor-pointer"
@@ -572,14 +580,14 @@ const CodexDevTokens: React.FC<CodexDevTokensProps> = ({ token, chain = 'sol', o
                   Loading dev tokens...
                 </td>
               </tr>
-            ) : !displayTokens || displayTokens.length === 0 ? (
+            ) : !filteredDisplayTokens || filteredDisplayTokens.length === 0 ? (
               <tr>
                 <td colSpan={5} className="py-6 text-center text-neutral-500">
                   No dev tokens found.
                 </td>
               </tr>
             ) : (
-              displayTokens.map((devToken, idx) => {
+              filteredDisplayTokens.map((devToken, idx) => {
                 const age = getAge(devToken.token.createdAt);
                 const marketCap = formatMarketCap(devToken.marketCap);
                 const liquidity = formatLiquidity(devToken.liquidity);
