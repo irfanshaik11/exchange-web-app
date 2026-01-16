@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useState, useEffect, useLayoutEffect, useMemo, useCallback } from 'react';
 import { formatSmartNumber } from '~/utils/db';
 import useCodexDevTokens from '../../hooks/useCodexDevTokens';
 import useSolanaTokenWebSocket, { type SolanaDevToken } from '../../hooks/useSolanaTokenWebSocket';
@@ -115,21 +115,45 @@ function copyToClipboard(text: string) {
   }
 }
 
-const CodexDevTokens: React.FC<CodexDevTokensProps> = ({ token, chain = 'sol', onTotalCountChange }) => {
-  // Collapsible state for right panel
-  const [isRightPanelCollapsed, setIsRightPanelCollapsed] = React.useState(false);
+// Client-side localStorage cache constants
+const CACHE_KEY_PREFIX_LIMITED = 'codex_dev_tokens_limited_cache_';
+const CACHE_KEY_PREFIX_ALL = 'codex_dev_tokens_all_cache_';
+const CACHE_EXPIRY_MS = 5 * 60 * 1000; // 5 minutes cache expiry
 
-  // Client-side localStorage cache for dev tokens (persists across page reloads)
-  const CACHE_KEY_PREFIX_LIMITED = 'codex_dev_tokens_limited_cache_';
-  const CACHE_KEY_PREFIX_ALL = 'codex_dev_tokens_all_cache_';
-  const CACHE_EXPIRY_MS = 5 * 60 * 1000; // 5 minutes cache expiry
+const CodexDevTokens: React.FC<CodexDevTokensProps> = ({ token, chain = 'sol', onTotalCountChange }) => {
+  // Collapsible state for right panel - initialize based on cached tokens if available
+  const [isRightPanelCollapsed, setIsRightPanelCollapsed] = useState<boolean>(() => {
+    // Check if any cached tokens have volume > 0 to set initial state
+    // Default to true (collapsed) to hide empty panel when there are no tokens
+    if (typeof window === 'undefined' || !token?.mint) return true;
+    try {
+      const cacheKey = `${CACHE_KEY_PREFIX_LIMITED}${token.mint}`;
+      const cached = localStorage.getItem(cacheKey);
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        const now = Date.now();
+        if (parsed.timestamp && (now - parsed.timestamp) < CACHE_EXPIRY_MS && parsed.tokens) {
+          const hasVolume = parsed.tokens.some((devToken: any) => {
+            const volume = parseFloat(devToken.volume24 || '0');
+            return !isNaN(volume) && volume > 0;
+          });
+          // Collapse if there are tokens with volume, or if there are no tokens at all
+          return hasVolume || parsed.tokens.length === 0;
+        }
+      }
+    } catch (error) {
+      // Ignore errors in initializer
+    }
+    // Default to collapsed when there are no cached tokens
+    return true;
+  });
   
   const getCacheKey = (mint: string, isAll: boolean) => {
     return isAll ? `${CACHE_KEY_PREFIX_ALL}${mint}` : `${CACHE_KEY_PREFIX_LIMITED}${mint}`;
   };
 
   // Load cached limited tokens from localStorage on mount
-  const [cachedLimitedTokensFromStorage, setCachedLimitedTokensFromStorage] = React.useState<any[]>(() => {
+  const [cachedLimitedTokensFromStorage, setCachedLimitedTokensFromStorage] = useState<any[]>(() => {
     if (!token?.mint || typeof window === 'undefined') return [];
     
     try {
@@ -151,7 +175,7 @@ const CodexDevTokens: React.FC<CodexDevTokensProps> = ({ token, chain = 'sol', o
   });
 
   // Load cached all tokens from localStorage on mount
-  const [cachedAllTokensFromStorage, setCachedAllTokensFromStorage] = React.useState<any[]>(() => {
+  const [cachedAllTokensFromStorage, setCachedAllTokensFromStorage] = useState<any[]>(() => {
     if (!token?.mint || typeof window === 'undefined') return [];
     
     try {
@@ -173,7 +197,7 @@ const CodexDevTokens: React.FC<CodexDevTokensProps> = ({ token, chain = 'sol', o
   });
 
   // Reload cache when mint changes
-  React.useEffect(() => {
+  useEffect(() => {
     if (!token?.mint || typeof window === 'undefined') {
       setCachedLimitedTokensFromStorage([]);
       setCachedAllTokensFromStorage([]);
@@ -220,7 +244,7 @@ const CodexDevTokens: React.FC<CodexDevTokensProps> = ({ token, chain = 'sol', o
   }, [token?.mint]);
 
   // Save tokens to localStorage cache
-  const saveToCache = React.useCallback((tokens: any[], mint: string, isAll: boolean) => {
+  const saveToCache = useCallback((tokens: any[], mint: string, isAll: boolean) => {
     if (!mint || typeof window === 'undefined' || tokens.length === 0) return;
     
     try {
@@ -274,7 +298,7 @@ const CodexDevTokens: React.FC<CodexDevTokensProps> = ({ token, chain = 'sol', o
   );
 
   // Map WebSocket dev tokens to display format (Solana only)
-  const mappedWsDevTokens = React.useMemo(() => {
+  const mappedWsDevTokens = useMemo(() => {
     if (chain !== 'sol' || !wsDevTokens || wsDevTokens.length === 0) return [];
     return wsDevTokens.map(mapWebSocketDevTokenToDisplay);
   }, [chain, wsDevTokens]);
@@ -293,7 +317,7 @@ const CodexDevTokens: React.FC<CodexDevTokensProps> = ({ token, chain = 'sol', o
 
   // Use WebSocket data as primary, then REST API, then cache as fallback
   // Priority: WebSocket > REST API > LocalStorage cache
-  const displayTokens = React.useMemo(() => {
+  const displayTokens = useMemo(() => {
     // WebSocket data takes priority when available
     if (mappedWsDevTokens.length > 0) {
       console.log('[CodexDevTokens] Using WebSocket dev tokens:', mappedWsDevTokens.length);
@@ -307,7 +331,7 @@ const CodexDevTokens: React.FC<CodexDevTokensProps> = ({ token, chain = 'sol', o
     return cachedLimitedTokensFromStorage;
   }, [mappedWsDevTokens, tokens, cachedLimitedTokensFromStorage]);
 
-  const displayAllTokens = React.useMemo(() => {
+  const displayAllTokens = useMemo(() => {
     // WebSocket data takes priority when available
     if (mappedWsDevTokens.length > 0) {
       return mappedWsDevTokens;
@@ -321,25 +345,32 @@ const CodexDevTokens: React.FC<CodexDevTokensProps> = ({ token, chain = 'sol', o
   }, [mappedWsDevTokens, allTokens, cachedAllTokensFromStorage]);
 
   // Save to cache when tokens update
-  React.useEffect(() => {
+  useEffect(() => {
     if (token?.mint && tokens.length > 0) {
       saveToCache(tokens, token.mint, false);
     }
   }, [tokens, token?.mint, saveToCache]);
 
-  React.useEffect(() => {
+  useEffect(() => {
     if (token?.mint && allTokens.length > 0) {
       saveToCache(allTokens, token.mint, true);
     }
   }, [allTokens, token?.mint, saveToCache]);
 
   // Filter displayTokens to exclude tokens with 0 or missing 1h volume
-  const filteredDisplayTokens = React.useMemo(() => {
+  const filteredDisplayTokens = useMemo(() => {
     return displayTokens.filter((devToken) => {
       const volume = parseFloat(devToken.volume24 || '0');
       return !isNaN(volume) && volume > 0;
     });
   }, [displayTokens]);
+
+  // Keep right panel collapsed when filteredDisplayTokens has items (volume > 0)
+  // Also collapse when there are no tokens to avoid showing empty panel
+  useEffect(() => {
+    // Always collapse: when there are filtered tokens (original requirement) or when there are no tokens (hide empty panel)
+    setIsRightPanelCollapsed(true);
+  }, [filteredDisplayTokens]);
 
   // Only show loading if we don't have any tokens at all (not even cached ones)
   // Consider both WebSocket and REST API loading states
@@ -367,12 +398,12 @@ const CodexDevTokens: React.FC<CodexDevTokensProps> = ({ token, chain = 'sol', o
     return { migrated: migratedCount, nonMigrated: nonMigratedCount, total: migratedCount + nonMigratedCount };
   }, [displayAllTokens]);
 
-  // Notify parent of total count changes
-  React.useEffect(() => {
+  // Notify parent of filtered tokens count changes (only tokens with volume > 0)
+  useEffect(() => {
     if (onTotalCountChange) {
-      onTotalCountChange(total);
+      onTotalCountChange(filteredDisplayTokens.length);
     }
-  }, [total, onTotalCountChange]);
+  }, [filteredDisplayTokens.length, onTotalCountChange]);
 
   // Calculate highlights (use displayAllTokens which includes cache)
   const { topMCAP, lastTokenLaunched } = useMemo(() => {
@@ -535,45 +566,45 @@ const CodexDevTokens: React.FC<CodexDevTokensProps> = ({ token, chain = 'sol', o
           paddingBottom: "4.5rem",
         }}
       >
-        <table className="w-full text-xs">
+        <table className="w-full !font-geist">
           <thead
-            className="sticky top-0 z-10"
+            className="sticky top-0 z-10 !text-xs"
             style={{ backgroundColor: "#101114" }}
           >
-            <tr style={{ borderBottom: "1px solid #27282e" }}>
+            <tr style={{ borderBottom: "1px solid #27282e" }} className='!text-xs'>
               <th
-                className="px-2 py-1.5 text-left text-[11px] font-medium whitespace-nowrap"
+                className="px-4 py-1.5 text-left text-xs font-medium whitespace-nowrap text-[#757e80]"
                 style={{ color: "#9ca3af" }}
               >
                 Token ↓
               </th>
               <th
-                className="px-2 py-1.5 text-left text-[11px] font-medium whitespace-nowrap"
+                className="px-2 py-1.5 text-left text-xs font-medium whitespace-nowrap text-[#757e80]"
                 style={{ color: "#9ca3af" }}
               >
                 Migrated
               </th>
               <th
-                className="px-2 py-1.5 text-left text-[11px] font-medium whitespace-nowrap"
+                className="px-2 py-1.5 text-left text-xs font-medium whitespace-nowrap text-[#757e80]"
                 style={{ color: "#9ca3af" }}
               >
                 Market Cap
               </th>
               <th
-                className="px-2 py-1.5 text-left text-[11px] font-medium whitespace-nowrap"
+                className="px-2 py-1.5 text-left text-xs font-medium whitespace-nowrap text-[#757e80]"
                 style={{ color: "#9ca3af" }}
               >
                 Liquidity
               </th>
               <th
-                className="px-2 py-1.5 text-left text-[11px] font-medium whitespace-nowrap"
+                className="px-2 py-1.5 text-left text-xs font-medium whitespace-nowrap text-[#757e80]"
                 style={{ color: "#9ca3af" }}
               >
                 1h Volume
               </th>
             </tr>
           </thead>
-          <tbody className='border-r border border-[#27282e]'>
+          <tbody className='border-r border border-[#27282e] !text-[13px]'>
             {showLoading ? (
               <tr>
                 <td colSpan={5} className="py-6 text-center text-neutral-500">
@@ -602,10 +633,10 @@ const CodexDevTokens: React.FC<CodexDevTokensProps> = ({ token, chain = 'sol', o
                       backgroundColor: idx % 2 === 0 ? "#101114" : "#161719",
                     }}
                   >
-                    <td className="px-2 py-2">
+                    <td className="px-4 py-2">
                       <div className="flex flex-col">
                         <div
-                          className="text-[11px] font-semibold"
+                          className="text-[13px] font-normal"
                           style={{ color: "#d1d5db" }}
                         >
                           {devToken.token.symbol ||
@@ -613,7 +644,7 @@ const CodexDevTokens: React.FC<CodexDevTokensProps> = ({ token, chain = 'sol', o
                             `${devToken.token.address.slice(0, 4)}...${devToken.token.address.slice(-4)}`}
                         </div>
                         <div
-                          className="text-[10px]"
+                          className="text-xs font-normal"
                           style={{ color: "#9ca3af" }}
                         >
                           {age} ago
@@ -623,15 +654,15 @@ const CodexDevTokens: React.FC<CodexDevTokensProps> = ({ token, chain = 'sol', o
                     <td className="px-2 py-2">
                       <div className="flex items-center">
                         {isMigrated ? (
-                          <span className="text-[11px] text-green-400">✓</span>
+                          <span className="text-[11px] text-green-400 font-normal">✓</span>
                         ) : (
-                          <span className="text-[11px] text-pink-400">✗</span>
+                          <span className="text-[11px] text-pink-400 font-normal">✗</span>
                         )}
                       </div>
                     </td>
                     <td className="px-2 py-2">
                       <div
-                        className="text-[11px] font-semibold"
+                        className="text-[13px] font-normal"
                         style={{ color: "#d1d5db" }}
                       >
                         {marketCap}
@@ -639,7 +670,7 @@ const CodexDevTokens: React.FC<CodexDevTokensProps> = ({ token, chain = 'sol', o
                     </td>
                     <td className="px-2 py-2">
                       <div
-                        className="text-[11px] font-semibold"
+                        className="text-[13px] font-normal"
                         style={{ color: "#d1d5db" }}
                       >
                         {liquidity}
@@ -647,7 +678,7 @@ const CodexDevTokens: React.FC<CodexDevTokensProps> = ({ token, chain = 'sol', o
                     </td>
                     <td className="px-2 py-2">
                       <div
-                        className="text-[11px] font-semibold"
+                        className="text-[13px] font-normal"
                         style={{ color: "#d1d5db" }}
                       >
                         {volume}
