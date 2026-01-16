@@ -560,7 +560,11 @@ const SmoothNumber: React.FC<SmoothNumberProps> = ({
     };
   }, [value, duration]);
 
-  return <span className={className}>{formatter(displayValue)}</span>;
+  return (
+    <span className={className}>
+      {formatter(displayValue)}
+    </span>
+  );
 };
 
 // Simple number display - just shows the formatted value (no animation to avoid glitches)
@@ -8080,36 +8084,9 @@ function PulseTable({
                                   className="flex flex-row items-center gap-1"
                                   style={{ color: AX.muted }}
                                 >
-                                  <SmoothNumber
-                                    value={(() => {
-                                      const buys = token.total_buys_24h ?? 0;
-                                      const sells = token.total_sells_24h ?? 0;
-                                      const total = buys + sells;
-                                      // Debug logging
-                                      if (
-                                        token.symbol === "HEAVEN" ||
-                                        total < 20
-                                      ) {
-                                        console.log(
-                                          `[PulseTable TX] ${token.symbol}:`,
-                                          {
-                                            total_buys_24h:
-                                              token.total_buys_24h,
-                                            total_sells_24h:
-                                              token.total_sells_24h,
-                                            calculated: total,
-                                            mint: token.mint,
-                                          },
-                                        );
-                                      }
-                                      return total;
-                                    })()}
-                                    duration={0}
-                                  />
-                                </span>
-                                <div className="ml-1 flex h-0.5 w-8 overflow-hidden rounded-full bg-gray-700">
-                                  <div
-                                    className="h-full"
+                                  <span className="text-xs">TX</span>{" "}
+                                  <span
+                                    className="number-font text-xs font-medium"
                                     style={{
                                       color: "#ffffff",
                                     }}
@@ -8204,7 +8181,6 @@ function PulseTable({
                                   </div>
                                 </div>
                               </div>
-                            </div>
 
                             {/* Buy button */}
                             <button
