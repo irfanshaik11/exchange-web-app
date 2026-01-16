@@ -506,7 +506,7 @@ const CodexDevTokens: React.FC<CodexDevTokensProps> = ({ token, chain = 'sol', o
       {isRightPanelCollapsed && (
         <button
           onClick={() => setIsRightPanelCollapsed(false)}
-          className="w-5 h-5 hidden lg:flex items-center justify-center absolute right-0 top-5 z-30 rounded p-1 transition-opacity hover:opacity-80 cursor-pointer"
+          className="w-5 h-5 hidden lg:flex items-center justify-center absolute right-0 top-6.5 z-30 rounded p-1 transition-opacity hover:opacity-80 cursor-pointer"
           style={{
             backgroundColor: `${AX.surface2}`,
             border: `1px solid ${AX.border}`,
@@ -565,7 +565,7 @@ const CodexDevTokens: React.FC<CodexDevTokensProps> = ({ token, chain = 'sol', o
               </th>
             </tr>
           </thead>
-          <tbody>
+          <tbody className='border-r border border-[#27282e]'>
             {showLoading ? (
               <tr>
                 <td colSpan={5} className="py-6 text-center text-neutral-500">
@@ -658,12 +658,12 @@ const CodexDevTokens: React.FC<CodexDevTokensProps> = ({ token, chain = 'sol', o
         className={`relative min-h-0 flex-shrink-0 overflow-hidden transition-all duration-300`}
         style={{
           width: isRightPanelCollapsed ? "40px" : "50%",
-          borderLeft: isRightPanelCollapsed ? "none" : `1px solid ${AX.border}`,
+          // borderLeft: isRightPanelCollapsed ? "none" : `1px solid ${AX.border}`,
         }}
       >
         <button
           onClick={() => setIsRightPanelCollapsed(true)}
-          className="absolute top-2 flex h-5 w-5 items-center justify-center rounded p-1 transition-opacity hover:opacity-80 cursor-pointer"
+          className="absolute top-6.5 flex h-5 w-5 items-center justify-center rounded p-1 transition-opacity hover:opacity-80 cursor-pointer"
           style={{
             backgroundColor: `${AX.surface2}`,
             border: `1px solid ${AX.border}`,
@@ -676,7 +676,7 @@ const CodexDevTokens: React.FC<CodexDevTokensProps> = ({ token, chain = 'sol', o
         {/* Panel Content */}
         {!isRightPanelCollapsed && (
           <div
-            className="h-full min-h-0 overflow-y-auto p-2 pb-[4.5rem]"
+            className="h-full min-h-0 overflow-y-auto mt-6.5 p-2 pb-[4.5rem] border-t border-[#27282e]"
           >
             {/* Header with Hide Button - Centered */}
             <div className="mb-3 flex items-center justify-center gap-2">

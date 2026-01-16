@@ -1399,7 +1399,7 @@ const CodexTrades: React.FC<CodexTradesProps> = ({ token, initialTrades = [], on
           <thead className="sticky top-0 z-10" style={{ backgroundColor: '#101114' }}>
             <tr className='py-4 border-t border-b border-[#27282e]'>
               {/* Age / Time */}
-              <th className="w-[12%] px-2 py-3 text-left whitespace-nowrap" style={{ color: '#9ca3af' }}>
+              <th className="w-[12%] px-4 py-3 text-left whitespace-nowrap" style={{ color: '#9ca3af' }}>
                 <button
                   type="button"
                   onClick={() => setShowAge(prev => !prev)}
@@ -1532,7 +1532,7 @@ const CodexTrades: React.FC<CodexTradesProps> = ({ token, initialTrades = [], on
               </th>
             </tr>
           </thead>
-          <tbody style={{ backgroundColor: '#101114' }}>
+          <tbody className='bg-[#101114] px-4'>
             {isLoading ? (
               <tr style={{ backgroundColor: '#101114' }}>
                 <td colSpan={6} className="text-center py-6 text-neutral-500" style={{ backgroundColor: '#101114' }}>
@@ -1615,7 +1615,7 @@ const CodexTrades: React.FC<CodexTradesProps> = ({ token, initialTrades = [], on
                   >
                     {/* Age / Time */}
                     <td
-                      className="px-2 py-3 text-[11px]"
+                      className="px-4 py-3 text-[11px]"
                       style={{ color: "#d1d5db" }}
                     >
                       {showAge ? age : timeStr}
