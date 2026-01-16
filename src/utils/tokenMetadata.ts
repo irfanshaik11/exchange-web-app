@@ -423,3 +423,46 @@ export async function batchFetchChainTokenMetadata(
   return results;
 }
 
+/**
+ * Check if a token address is a Pump.fun token (ends with 'pump')
+ */
+export function isPumpfunToken(address?: string | null): boolean {
+  return typeof address === 'string' && address.toLowerCase().endsWith('pump');
+}
+
+/**
+ * Fetch image from Pump.fun API as a fallback for tokens with missing images
+ * This is useful for new tokens that haven't been indexed by the token-service yet
+ */
+export async function fetchPumpfunImage(
+  mintAddress: string,
+  signal?: AbortSignal
+): Promise<{ imageUrl?: string; name?: string; symbol?: string } | null> {
+  if (!isPumpfunToken(mintAddress)) {
+    return null;
+  }
+
+  try {
+    const response = await fetch(
+      `https://frontend-api.pump.fun/coins/${mintAddress}`,
+      { signal: signal || AbortSignal.timeout(5000) }
+    );
+
+    if (!response.ok) {
+      return null;
+    }
+
+    const data = await response.json();
+
+    return {
+      imageUrl: data.image_uri || undefined,
+      name: data.name || undefined,
+      symbol: data.symbol || undefined,
+    };
+  } catch (error) {
+    // Silently fail - this is just a fallback
+    console.warn(`Pump.fun image fallback failed for ${mintAddress}:`, error);
+    return null;
+  }
+}
+
