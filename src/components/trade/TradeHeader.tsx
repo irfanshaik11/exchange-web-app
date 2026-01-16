@@ -360,13 +360,13 @@ function StatInline({
   return (
     <div className="flex flex-col items-start gap-0.5">
       <span
-        className="text-[10px] tracking-wider uppercase"
+        className="text-[9px] sm:text-[10px] tracking-wider uppercase"
         style={{ color: AX.muted }}
       >
         {label}
       </span>
       <span
-        className="text-[12px] tabular-nums"
+        className="text-[11px] sm:text-[12px] tabular-nums"
         style={{
           color:
             accent === "green"
@@ -1016,35 +1016,35 @@ const TradeHeader: React.FC<TradeHeaderProps> = ({ token, livePriceUsd, liveMark
 
   return (
     <div
-      className="flex w-full items-center gap-6 px-2 py-2"
+      className="relative flex w-full flex-col gap-2 px-1.5 py-1.5 sm:flex-row sm:items-center sm:gap-4 sm:px-2 sm:py-2 lg:gap-6"
       style={{ color: AX.text }}
     >
       {/* WS banner(s) */}
       {wsError && (
-        <div className="absolute top-0 right-0 left-0 z-10 border-b border-red-500/30 bg-red-900/20 px-3 py-1">
-          <div className="text-center text-[10px] text-red-400">
+        <div className="absolute top-0 right-0 left-0 z-10 border-b border-red-500/30 bg-red-900/20 px-2 py-0.5 sm:px-3 sm:py-1">
+          <div className="text-center text-[9px] sm:text-[10px] text-red-400 truncate">
             Market Data Error: {wsError}
           </div>
         </div>
       )}
       {!wsConnected && !wsLoading && (
-        <div className="absolute top-0 right-0 left-0 z-10 border-b border-yellow-500/30 bg-yellow-900/20 px-3 py-1">
-          <div className="text-center text-[10px] text-yellow-400">
+        <div className="absolute top-0 right-0 left-0 z-10 border-b border-yellow-500/30 bg-yellow-900/20 px-2 py-0.5 sm:px-3 sm:py-1">
+          <div className="text-center text-[9px] sm:text-[10px] text-yellow-400">
             Using static market data
           </div>
         </div>
       )}
 
       {/* LEFT: token avatar + meta */}
-      <div className="flex items-center gap-3">
+      <div className="flex flex-shrink-0 items-center gap-2 sm:gap-3">
         {/* Avatar with PulseTable-style border + protocol badge */}
         <div
           className="relative flex cursor-pointer items-center justify-center rounded-sm transition-all duration-300 ease-out"
           onMouseEnter={handleImageHover}
           onMouseLeave={handleImageLeave}
           style={{
-            width: 44,
-            height: 44,
+            width: "clamp(36px, 8vw, 44px)",
+            height: "clamp(36px, 8vw, 44px)",
             overflow: "visible",
             boxShadow: showPreview
               ? `0 0 5px ${AX.glowCyan}, 0 0 10px ${AX.glowCyan}`
@@ -1066,7 +1066,7 @@ const TradeHeader: React.FC<TradeHeaderProps> = ({ token, livePriceUsd, liveMark
             >
               <div
                 className="relative overflow-hidden rounded-sm"
-                style={{ width: 36, height: 36 }}
+                style={{ width: "clamp(28px, 6.5vw, 36px)", height: "clamp(28px, 6.5vw, 36px)" }}
               >
                 <FastImage
                   src={imgSrc ?? undefined}
@@ -1086,8 +1086,8 @@ const TradeHeader: React.FC<TradeHeaderProps> = ({ token, livePriceUsd, liveMark
           <div
             className="absolute right-0 bottom-0 z-10 flex translate-x-1/5 translate-y-1/4 transform items-center justify-center rounded-full bg-white"
             style={{
-              width: 12,
-              height: 12,
+              width: "clamp(10px, 2.5vw, 12px)",
+              height: "clamp(10px, 2.5vw, 12px)",
               border: `1px solid ${protocolColor}`,
               boxShadow: `0 0 2px ${protocolColor}60`,
             }}
@@ -1121,27 +1121,27 @@ const TradeHeader: React.FC<TradeHeaderProps> = ({ token, livePriceUsd, liveMark
               }}
             >
               <FaCamera
-                size={16}
+                size={14}
+                className="sm:w-4 sm:h-4 drop-shadow-lg"
                 style={{ color: "#000000" }}
-                className="drop-shadow-lg"
               />
             </div>
           </div>
         </div>
 
         {/* Name / symbol / age + quick actions */}
-        <div className="flex flex-col gap-0.5">
-          <div className="flex items-center gap-1.5">
-            <span className="text-[14px]">{token.symbol}</span>
-            <span className="text-[11px]" style={{ color: AX.muted }}>
+        <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+          <div className="flex items-center gap-1 sm:gap-1.5">
+            <span className="truncate text-xs sm:text-sm">{token.symbol}</span>
+            <span className="hidden truncate text-[10px] sm:inline sm:text-[11px]" style={{ color: AX.muted }}>
               {token.name}
             </span>
 
             {!!token.mint && (
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
-                  <button className="ml-1 p-1" style={{ color: AX.muted }}>
-                    <LuCopy size={14} />
+                  <button className="ml-0.5 sm:ml-1 p-0.5 sm:p-1 flex-shrink-0" style={{ color: AX.muted }}>
+                    <LuCopy size={12} className="sm:w-3.5 sm:h-3.5" />
                   </button>
                 </DropdownMenuTrigger>
 
@@ -1203,7 +1203,7 @@ const TradeHeader: React.FC<TradeHeaderProps> = ({ token, livePriceUsd, liveMark
             )}
 
             <button
-              className="ml-1 cursor-pointer"
+              className="ml-0.5 sm:ml-1 cursor-pointer flex-shrink-0"
               title="Share page link"
               onClick={async (e) => {
                 e.stopPropagation();
@@ -1229,14 +1229,14 @@ const TradeHeader: React.FC<TradeHeaderProps> = ({ token, livePriceUsd, liveMark
               }}
               style={{ color: AX.muted }}
             >
-              <IoShareSocialOutline size={14} />
+              <IoShareSocialOutline size={12} className="sm:w-3.5 sm:h-3.5" />
             </button>
           </div>
 
-          <div className="mt-1 flex items-center gap-1 text-xs lg:gap-2">
-            <span>{tokenAgeLabel}</span>
+          <div className="mt-1 flex flex-wrap items-center gap-1 text-[10px] sm:gap-1 sm:text-xs lg:gap-2">
+            <span className="whitespace-nowrap">{tokenAgeLabel}</span>
             {/* Socials */}
-            <div className="relative flex items-center gap-1 text-neutral-400 lg:gap-1">
+            <div className="relative flex items-center gap-0.5 text-neutral-400 sm:gap-1 lg:gap-1">
               {/* Pump.fun Link - only show for pump tokens */}
               {/* {token.mint.slice(-4) === "pump" && (
                               <Link
@@ -1310,7 +1310,7 @@ const TradeHeader: React.FC<TradeHeaderProps> = ({ token, livePriceUsd, liveMark
                     }, 200);
                   }}
                 >
-                  <FaXTwitter size={16} className="text-neutral-400 hover:text-white" />
+                  <FaXTwitter size={14} className="sm:w-4 sm:h-4 text-neutral-400 hover:text-white" />
                 </button>
 
                 {/* X Profile Preview Popup - PulseTable style */}
@@ -1416,14 +1416,14 @@ const TradeHeader: React.FC<TradeHeaderProps> = ({ token, livePriceUsd, liveMark
               </div>
 
               {token.links && (
-                <button>
-                  <PiTelegramLogo size={16} />
+                <button className="flex-shrink-0">
+                  <PiTelegramLogo size={14} className="sm:w-4 sm:h-4" />
                 </button>
               )}
 
               {token.links && (
-                <button>
-                  <FiGlobe size={16} />
+                <button className="flex-shrink-0">
+                  <FiGlobe size={14} className="sm:w-4 sm:h-4" />
                 </button>
               )}
 
@@ -1459,7 +1459,7 @@ const TradeHeader: React.FC<TradeHeaderProps> = ({ token, livePriceUsd, liveMark
                     e.preventDefault();
                   }}
                 >
-                  <LuSearch size={16} />
+                  <LuSearch size={14} className="sm:w-4 sm:h-4" />
                 </button>
 
                 {/* Search Dropdown Menu */}
@@ -1554,7 +1554,7 @@ const TradeHeader: React.FC<TradeHeaderProps> = ({ token, livePriceUsd, liveMark
                 )}
               </div>
 
-              <div className="ml-1 flex flex-row gap-2 font-light">
+              <div className="ml-1 flex flex-row flex-wrap gap-1.5 sm:gap-2 font-light">
                 {/* Check if this is a Monad token - hide icons for Monad */}
                 {(() => {
                   const protocol = extractProtocolRaw(token);
@@ -1583,9 +1583,9 @@ const TradeHeader: React.FC<TradeHeaderProps> = ({ token, livePriceUsd, liveMark
                   return (
                     <>
                       {/* Crown Icon - Dev Migration Stats */}
-                      <div className="group/dev relative flex items-center gap-1 cursor-pointer">
-                        <PiCrownSimpleLight size={16} style={{ color: "#dcc13c" }} />
-                        <span className="text-sm text-white">
+                      <div className="group/dev relative flex items-center gap-0.5 sm:gap-1 cursor-pointer">
+                        <PiCrownSimpleLight size={14} className="sm:w-4 sm:h-4" style={{ color: "#dcc13c" }} />
+                        <span className="text-xs sm:text-sm text-white">
                           {devMigrated}/{devCreated}
                         </span>
                         {/* Dev Migration Tooltip */}
@@ -1611,9 +1611,9 @@ const TradeHeader: React.FC<TradeHeaderProps> = ({ token, livePriceUsd, liveMark
                       </div>
 
                       {/* KOL Count - Trophy Icon */}
-                      <div className="group/kol relative flex items-center gap-1 text-violet-200">
-                        <CiTrophy size={16} />
-                        <span className="text-sm text-white">{kolCount}</span>
+                      <div className="group/kol relative flex items-center gap-0.5 sm:gap-1 text-violet-200">
+                        <CiTrophy size={14} className="sm:w-4 sm:h-4" />
+                        <span className="text-xs sm:text-sm text-white">{kolCount}</span>
                         {/* Tooltip */}
                         <div className="pointer-events-none absolute top-full left-0 z-[99999] mt-2 rounded-lg border border-[#2a2b33] bg-[#1a1b1f] px-3 py-2 whitespace-nowrap opacity-0 shadow-xl transition-opacity duration-100 group-hover/kol:opacity-100">
                           <span className="text-sm font-medium text-white">
@@ -1626,14 +1626,14 @@ const TradeHeader: React.FC<TradeHeaderProps> = ({ token, livePriceUsd, liveMark
                       </div>
 
                       {/* People Icon - Total Holders */}
-                      <div className="group/holder relative flex items-center gap-1">
+                      <div className="group/holder relative flex items-center gap-0.5 sm:gap-1">
                         <div
                           className="flex cursor-help items-center justify-center rounded"
                           style={{ color: "#36d8ff" }}
                         >
-                          <GoPeople size={16} />
+                          <GoPeople size={14} className="sm:w-4 sm:h-4" />
                         </div>
-                        <span className="text-sm text-white">
+                        <span className="text-xs sm:text-sm text-white">
                           {(() => {
                             const holders = totalHolders;
                             if (holders >= 1e9)
@@ -1655,9 +1655,9 @@ const TradeHeader: React.FC<TradeHeaderProps> = ({ token, livePriceUsd, liveMark
                           </p>
                         </div>
                       </div>
-                      <div className="flex items-center gap-1 text-violet-200">
-                        <PiRobotLight size={16} />
-                        <span className="text-sm text-white">0</span>
+                      <div className="flex items-center gap-0.5 sm:gap-1 text-violet-200">
+                        <PiRobotLight size={14} className="sm:w-4 sm:h-4" />
+                        <span className="text-xs sm:text-sm text-white">0</span>
                       </div>
                     </>
                   );
@@ -1690,14 +1690,14 @@ const TradeHeader: React.FC<TradeHeaderProps> = ({ token, livePriceUsd, liveMark
       </div>
 
       {/* CENTER: compact stats */}
-      <div className="flex items-center gap-6">
+      <div className="flex flex-1 flex-wrap items-center gap-3 sm:gap-4 lg:gap-6">
         <div className="text-left">
-          <div className="flex items-center gap-1 text-[18px] tabular-nums">
+          <div className="flex items-center gap-1 text-sm sm:text-base lg:text-[18px] tabular-nums">
             {formattedMarketCap === "-" ? "-" : `$${formattedMarketCap}`}
           </div>
         </div>
 
-        <div className="flex items-center gap-4">
+        <div className="flex flex-wrap items-center gap-2 sm:gap-3 lg:gap-4">
           <StatInline label="Price">
             ${<SubscriptNumber value={price} />}
           </StatInline>
@@ -1715,10 +1715,10 @@ const TradeHeader: React.FC<TradeHeaderProps> = ({ token, livePriceUsd, liveMark
                 {isLiquidityLoading ? "..." : `$${formatSmartNumber(liq)}`}
               </span>
               {!isLiquidityLoading && isLowLiquidity && (
-                <span className="group relative inline-flex items-center">
-                  <LuDroplet size={16} color={AX.warning} />
+                <span className="group relative inline-flex items-center flex-shrink-0">
+                  <LuDroplet size={14} className="sm:w-4 sm:h-4" color={AX.warning} />
                   <span
-                    className="absolute bottom-full left-1/2 z-50 mb-1.5 w-max -translate-x-1/2 rounded bg-black px-2 py-1 text-[10px] font-medium text-yellow-200 opacity-0 transition-opacity duration-150 group-hover:opacity-100"
+                    className="absolute bottom-full left-1/2 z-50 mb-1.5 w-max -translate-x-1/2 rounded bg-black px-2 py-1 text-[9px] sm:text-[10px] font-medium text-yellow-200 opacity-0 transition-opacity duration-150 group-hover:opacity-100"
                     style={{ border: `1px solid rgba(250, 204, 21, 0.4)` }}
                   >
                     Warning: Low liquidity
@@ -1766,7 +1766,7 @@ const TradeHeader: React.FC<TradeHeaderProps> = ({ token, livePriceUsd, liveMark
           </StatInline>
           */}
           <StatInline label="B. Curve">
-            <div className="flex flex-row items-center gap-2 text-xs">
+            <div className="flex flex-row items-center gap-1 sm:gap-2 text-[10px] sm:text-xs">
               {Number.isFinite(Number(curvePct))
                 ? `${Number(curvePct).toFixed(1)}%`
                 : "—"}
@@ -1792,20 +1792,20 @@ const TradeHeader: React.FC<TradeHeaderProps> = ({ token, livePriceUsd, liveMark
 
         return (
           <div
-            className={`flex items-center gap-2 ${isMonad ? "ml-auto" : ""}`}
+            className={`flex flex-shrink-0 items-center gap-1.5 sm:gap-2 ${isMonad ? "ml-auto" : ""}`}
           >
             <button
               onClick={handleWatchlistClick}
-              className="cursor-pointer text-[14px]"
+              className="cursor-pointer flex-shrink-0 text-xs sm:text-sm"
               aria-label={
                 isWatched ? "Remove from Watchlist" : "Add to Watchlist"
               }
               title={isWatched ? "Remove from Watchlist" : "Add to Watchlist"}
             >
               {isWatched ? (
-                <FaStar className="text-yellow-400" />
+                <FaStar className="text-yellow-400 w-4 h-4 sm:w-3.5 sm:h-3.5" />
               ) : (
-                <FaRegStar style={{ color: AX.muted }} />
+                <FaRegStar className="w-4 h-4 sm:w-3.5 sm:h-3.5" style={{ color: AX.muted }} />
               )}
             </button>
 
@@ -1813,10 +1813,10 @@ const TradeHeader: React.FC<TradeHeaderProps> = ({ token, livePriceUsd, liveMark
             {!isMonad && (
               <button
                 title="Expand chart"
-                className="grid h-6 w-6 place-items-center"
+                className="grid h-5 w-5 sm:h-6 sm:w-6 place-items-center flex-shrink-0"
                 style={{ color: AX.muted }}
               >
-                <FaExpand size={12} />
+                <FaExpand size={10} className="sm:w-3 sm:h-3" />
               </button>
             )}
           </div>
