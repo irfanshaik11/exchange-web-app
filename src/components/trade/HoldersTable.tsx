@@ -1054,9 +1054,9 @@ const HoldersTable: React.FC<HoldersTableProps> = ({
       <div className="flex-1 overflow-y-auto min-h-0 pb-18">
         <table className="w-full" style={{ borderCollapse: 'collapse' }}>
           <thead className="sticky top-0 z-10" style={{ backgroundColor: '#101114' }}>
-            <tr style={{ borderBottom: '1px solid #27282e' }}>
+            <tr className='border-t border-b border-[#27282e]'>
               {/* Wallet Column */}
-              <th className="px-2 py-1.5 text-left text-[11px] font-medium whitespace-nowrap" style={{ color: AX.muted }}>
+              <th className="px-2 py-3 text-left text-[11px] font-medium whitespace-nowrap" style={{ color: AX.muted }}>
                 <div className="flex items-center gap-1">
                   <span className="text-[11px]">Wallet</span>
                   <button
@@ -1081,7 +1081,7 @@ const HoldersTable: React.FC<HoldersTableProps> = ({
               </th>
 
               {/* SOL Bal / Last Active */}
-              <th className="px-2 py-1.5 text-left text-[11px] font-medium whitespace-nowrap" style={{ color: AX.muted }}>
+              <th className="px-2 py-3 text-left text-[11px] font-medium whitespace-nowrap" style={{ color: AX.muted }}>
                 <div className="flex items-center gap-1">
                   <SortableHeader
                     label={chain === 'monad' ? 'MON Bal' : 'SOL Bal'}
@@ -1104,7 +1104,7 @@ const HoldersTable: React.FC<HoldersTableProps> = ({
               </th>
 
               {/* Bought / Avg MC (using Avg Buy for now) */}
-              <th className="px-2 py-1.5 text-left text-[11px] font-medium whitespace-nowrap" style={{ color: AX.muted }}>
+              <th className="px-2 py-3 text-left text-[11px] font-medium whitespace-nowrap" style={{ color: AX.muted }}>
                 <div className="flex items-center gap-1">
                   <SortableHeader
                     label="Bought"
@@ -1127,7 +1127,7 @@ const HoldersTable: React.FC<HoldersTableProps> = ({
               </th>
 
               {/* Sold / Avg Sell */}
-              <th className="px-2 py-1.5 text-left text-[11px] font-medium whitespace-nowrap" style={{ color: AX.muted }}>
+              <th className="px-2 py-3 text-left text-[11px] font-medium whitespace-nowrap" style={{ color: AX.muted }}>
                 <div className="flex items-center gap-1">
                   <SortableHeader
                     label="Sold"
@@ -1150,7 +1150,7 @@ const HoldersTable: React.FC<HoldersTableProps> = ({
               </th>
 
               {/* PNL (no arrows) */}
-              <th className="px-2 py-1.5 text-left text-[11px] font-medium whitespace-nowrap" style={{ color: AX.muted }}>
+              <th className="px-2 py-3 text-left text-[11px] font-medium whitespace-nowrap" style={{ color: AX.muted }}>
                 <SortableHeader
                   label="PNL"
                   sortDirection={filters.pnl.sort}
@@ -1162,7 +1162,7 @@ const HoldersTable: React.FC<HoldersTableProps> = ({
               </th>
 
               {/* Remaining with USD/SOL toggle */}
-              <th className="px-2 py-1.5 text-left text-[11px] font-medium whitespace-nowrap" style={{ color: AX.muted }}>
+              <th className="px-2 py-3 text-left text-[11px] font-medium whitespace-nowrap" style={{ color: AX.muted }}>
                 <div className="flex items-center gap-1">
                   <SortableHeader
                     label="Remaining"
@@ -1187,7 +1187,7 @@ const HoldersTable: React.FC<HoldersTableProps> = ({
               </th>
 
               {/* Funding / TF Amount */}
-              <th className="px-2 py-1.5 text-left text-[11px] font-medium whitespace-nowrap" style={{ color: AX.muted }}>
+              <th className="px-2 py-3 text-left text-[11px] font-medium whitespace-nowrap" style={{ color: AX.muted }}>
                 <div className="flex items-center gap-1">
                   <SortableHeader
                     label="Funding"
@@ -1210,7 +1210,7 @@ const HoldersTable: React.FC<HoldersTableProps> = ({
               </th>
 
               {/* Bubblemap Toggle */}
-              <th className="px-1 py-1.5 text-right" style={{ color: AX.muted }}>
+              <th className="px-1 py-3 text-right" style={{ color: AX.muted }}>
                 {isBubblemapVisible ? (
                   <button
                     onClick={handleHideBubblemap}
@@ -1282,7 +1282,7 @@ const HoldersTable: React.FC<HoldersTableProps> = ({
                       backgroundColor: index % 2 === 0 ? '#101114' : '#161719',
                     }}
                   >
-                    <td className="px-2 py-1.5">
+                    <td className="px-2 py-3">
                       <div className="flex items-center gap-1.5">
                         {(() => {
                           const walletKey = (holder.address || '').toLowerCase();
@@ -1322,7 +1322,7 @@ const HoldersTable: React.FC<HoldersTableProps> = ({
                         })()}
                       </div>
                     </td>
-                    <td className="px-2 py-1.5">
+                    <td className="px-2 py-3">
                       <div className="flex items-center gap-1.5">
                         <SolanaIcon size={12} />
                         <span className="text-[11px]" style={{ color: AX.text }}>
@@ -1339,7 +1339,7 @@ const HoldersTable: React.FC<HoldersTableProps> = ({
                         </span>
                       </div>
                     </td>
-                    <td className="px-2 py-1.5">
+                    <td className="px-2 py-3">
                       <div className="flex flex-col">
                         <span className="text-[11px]" style={{ color: boughtUsd > 0 ? AX.mint : AX.text }}>
                           {formatUsd(boughtUsd)}
@@ -1350,7 +1350,7 @@ const HoldersTable: React.FC<HoldersTableProps> = ({
                         </span>
                       </div>
                     </td>
-                    <td className="px-2 py-1.5">
+                    <td className="px-2 py-3">
                       <div className="flex flex-col">
                         <span className="text-[11px]" style={{ color: soldUsd > 0 ? AX.sell : AX.text }}>
                           {formatUsd(soldUsd)}
@@ -1361,7 +1361,7 @@ const HoldersTable: React.FC<HoldersTableProps> = ({
                         </span>
                       </div>
                     </td>
-                    <td className="px-2 py-1.5">
+                    <td className="px-2 py-3">
                       <span
                         className="text-[11px] font-medium"
                         style={{ color: unrealizedPnL >= 0 ? AX.mint : AX.sell }}
@@ -1369,7 +1369,7 @@ const HoldersTable: React.FC<HoldersTableProps> = ({
                         {unrealizedPnL >= 0 ? '+' : ''}{formatUsd(unrealizedPnL)}
                       </span>
                     </td>
-                    <td className="px-2 py-1.5">
+                    <td className="px-2 py-3">
                       <div className="flex flex-col gap-0.5">
                         <div className="flex items-center gap-1.5">
                           {showRemainingInSol ? (
@@ -1408,7 +1408,7 @@ const HoldersTable: React.FC<HoldersTableProps> = ({
                         </div>
                       </div>
                     </td>
-                    <td className="px-2 py-1.5">
+                    <td className="px-2 py-3">
                       <div className="flex flex-col">
                         {funding.sourceAddress ? (
                           <a
@@ -1437,7 +1437,7 @@ const HoldersTable: React.FC<HoldersTableProps> = ({
                       </div>
                     </td>
                     {/* Empty cell for bubblemap column */}
-                    <td className="px-1 py-1.5" />
+                    <td className="px-1 py-3" />
                   </tr>
                 );
               })
