@@ -360,13 +360,13 @@ function StatInline({
   return (
     <div className="flex flex-col items-start gap-0.5">
       <span
-        className="text-[9px] sm:text-[10px] tracking-wider uppercase"
-        style={{ color: AX.muted }}
+        className="text-[9px] sm:text-xs tracking-wider uppercase text-[#C4CCCC]"
+        // style={{ color: AX.muted }}
       >
         {label}
       </span>
       <span
-        className="text-[11px] sm:text-[12px] tabular-nums"
+        className="text-[11px] sm:text-sm tabular-nums"
         style={{
           color:
             accent === "green"
@@ -1016,7 +1016,7 @@ const TradeHeader: React.FC<TradeHeaderProps> = ({ token, livePriceUsd, liveMark
 
   return (
     <div
-      className="relative flex w-full flex-col gap-2 px-1.5 py-1.5 sm:flex-row sm:items-center sm:gap-4 sm:px-2 sm:py-2 lg:gap-6"
+      className="relative flex w-full flex-col gap-2 px-1.5 py-1.5 sm:flex-row sm:items-center sm:gap-4 sm:px-2 sm:py-2 md:gap-8 lg:gap-10 !font-geist"
       style={{ color: AX.text }}
     >
       {/* WS banner(s) */}
@@ -1037,6 +1037,22 @@ const TradeHeader: React.FC<TradeHeaderProps> = ({ token, livePriceUsd, liveMark
 
       {/* LEFT: token avatar + meta */}
       <div className="flex flex-shrink-0 items-center gap-2 sm:gap-3">
+        {/* Star icon - far left */}
+        <button
+          onClick={handleWatchlistClick}
+          className="cursor-pointer flex-shrink-0 transition-colors hover:bg-white/10 rounded p-1"
+          aria-label={
+            isWatched ? "Remove from Watchlist" : "Add to Watchlist"
+          }
+          title={isWatched ? "Remove from Watchlist" : "Add to Watchlist"}
+        >
+          {isWatched ? (
+            <FaStar className="w-4 h-4 sm:w-3.5 sm:h-3.5 text-yellow-400" />
+          ) : (
+            <FaRegStar className="w-4 h-4 sm:w-3.5 sm:h-3.5" style={{ color: AX.muted }} />
+          )}
+        </button>
+
         {/* Avatar with PulseTable-style border + protocol badge */}
         <div
           className="relative flex cursor-pointer items-center justify-center rounded-sm transition-all duration-300 ease-out"
@@ -1130,10 +1146,10 @@ const TradeHeader: React.FC<TradeHeaderProps> = ({ token, livePriceUsd, liveMark
         </div>
 
         {/* Name / symbol / age + quick actions */}
-        <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+        <div className="flex min-w-0 flex-1 flex-col">
           <div className="flex items-center gap-1 sm:gap-1.5">
-            <span className="truncate text-xs sm:text-sm">{token.symbol}</span>
-            <span className="hidden truncate text-[10px] sm:inline sm:text-[11px]" style={{ color: AX.muted }}>
+            <span className="truncate text-xs sm:text-xl">{token.symbol}</span>
+            <span className="hidden truncate text-[10px] sm:inline sm:text-base" style={{ color: AX.muted }}>
               {token.name}
             </span>
 
@@ -1692,7 +1708,7 @@ const TradeHeader: React.FC<TradeHeaderProps> = ({ token, livePriceUsd, liveMark
       {/* CENTER: compact stats */}
       <div className="flex flex-1 flex-wrap items-center gap-3 sm:gap-4 lg:gap-6">
         <div className="text-left">
-          <div className="flex items-center gap-1 text-sm sm:text-base lg:text-[18px] tabular-nums">
+          <div className="flex items-center gap-1 text-sm sm:text-base lg:text-[20px] tabular-nums">
             {formattedMarketCap === "-" ? "-" : `$${formattedMarketCap}`}
           </div>
         </div>
@@ -1794,21 +1810,6 @@ const TradeHeader: React.FC<TradeHeaderProps> = ({ token, livePriceUsd, liveMark
           <div
             className={`flex flex-shrink-0 items-center gap-1.5 sm:gap-2 ${isMonad ? "ml-auto" : ""}`}
           >
-            <button
-              onClick={handleWatchlistClick}
-              className="cursor-pointer flex-shrink-0 text-xs sm:text-sm"
-              aria-label={
-                isWatched ? "Remove from Watchlist" : "Add to Watchlist"
-              }
-              title={isWatched ? "Remove from Watchlist" : "Add to Watchlist"}
-            >
-              {isWatched ? (
-                <FaStar className="text-yellow-400 w-4 h-4 sm:w-3.5 sm:h-3.5" />
-              ) : (
-                <FaRegStar className="w-4 h-4 sm:w-3.5 sm:h-3.5" style={{ color: AX.muted }} />
-              )}
-            </button>
-
             {/* Hide expand button for Monad tokens */}
             {!isMonad && (
               <button
