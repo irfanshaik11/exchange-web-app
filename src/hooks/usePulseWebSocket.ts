@@ -37,6 +37,12 @@ interface PulseToken {
   insider_percent?: number;
   sniper_percent?: number;
   dev_percent?: number;
+  // Dev token tracking
+  dev_tokens_created?: number;
+  dev_tokens_migrated?: number;
+  // Additional fields
+  kol_count?: number;
+  holder_count?: number;
 }
 
 interface WebSocketMessage {

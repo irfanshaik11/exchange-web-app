@@ -3036,12 +3036,14 @@ export default function DiscoverPage() {
             {/* Hide xStocks, surge, and live tabs when Monad is selected */}
             {currentChain !== "monad" && (
               <>
+                {/* xStocks tab temporarily disabled
                 <button
                   className={`text-sm font-light whitespace-nowrap transition-colors sm:text-base lg:text-lg ${activeTab === "xStocks" ? "text-[#f0f5f5]" : "text-[#6B7280] hover:text-[#f0f5f5]"} cursor-pointer`}
                   onClick={() => setActiveTab("xStocks")}
                 >
                   xStocks
                 </button>
+                */}
                 {/* <button
                   className={`text-sm sm:text-base lg:text-lg font-light transition-colors whitespace-nowrap ${activeTab === "surge" ? "text-[#f0f5f5]" : "text-[#6B7280] hover:text-[#f0f5f5]"} cursor-pointer`}
                   onClick={() => setActiveTab("surge")}

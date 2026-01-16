@@ -290,7 +290,7 @@ export default function Footer() {
   const chainBalance = chainBalances[currentChain] ?? (currentChain === "sol" ? solBalance : 0);
 
   const chainLogos: Record<string, string> = {
-    sol: "https://www.pngall.com/wp-content/uploads/10/Solana-Crypto-Logo-PNG-File.png",
+    sol: "https://cryptologos.cc/logos/solana-sol-logo.svg?v=040",
     monad:
       "https://i0.wp.com/www.gizmotimes.com/wp-content/uploads/2023/10/Monad-Logo.png?fit=1920%2C1080&ssl=1",
   };

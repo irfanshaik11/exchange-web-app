@@ -45,6 +45,19 @@ export interface PulseToken {
   insider_percent?: number;
   sniper_percent?: number;
   dev_percent?: number;
+  // Dev token tracking
+  dev_tokens_created?: number;
+  dev_tokens_migrated?: number;
+  // Bundler data
+  bundle_percent?: number;
+  bundle_wallet_count?: number;
+  bundler_held_percentage?: number;
+  bundler_count?: number;
+  // Additional fields
+  kol_count?: number;
+  holder_count?: number;
+  // Total fees in lamports
+  total_fees_lamports?: number;
 }
 
 export interface PulseCacheData {

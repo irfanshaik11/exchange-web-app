@@ -862,7 +862,7 @@ export default function TradePage() {
               }}
             >
               <div className="px-2 flex-shrink-0">
-                <TradeHeader token={validatedCorrectTokenData || displayToken} wsTokenInfo={wsTokenInfo} wsVolume={wsVolume} />
+                <TradeHeader token={validatedCorrectTokenData || displayToken} wsTokenInfo={wsTokenInfo} wsVolume={wsVolume} holderSummary={holderSummary} livePriceUsd={chartMetrics.lastPriceUsd} liveMarketCapUsd={chartMetrics.lastMarketCapUsd} />
               </div>
 
               {/* Separator line after TradeHeader */}

@@ -212,6 +212,18 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
             price_percent_change_5m: toNumber(r.price_percent_change_5m),
             price_percent_change_6h: toNumber(r.price_percent_change_6h),
             price_percent_change_24h: toNumber(r.price_percent_change_24h),
+            // Holder and KOL counts
+            holder_count: r.holder_count ?? 0,
+            kol_count: r.kol_count ?? 0,
+            // Dev/sniper/insider percentages
+            dev_held_percentage: toNumber(r.dev_held_percentage),
+            sniper_held_percentage: toNumber(r.sniper_held_percentage),
+            insider_held_percentage: toNumber(r.insider_held_percentage),
+            // Top 10 holders percentage
+            top10_holders_pct: toNumber(r.top10_holders_pct),
+            // Dev history
+            dev_tokens_created: r.dev_tokens_created ?? 0,
+            dev_tokens_migrated: r.dev_tokens_migrated ?? 0,
             // Social links
             links: r.links || null,
           };
