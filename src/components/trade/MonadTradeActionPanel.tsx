@@ -1582,8 +1582,8 @@ const MonadTradeActionPanel: React.FC<MonadTradeActionPanelProps> = ({ token }) 
             {/* Token Metrics Grid - First Row */}
             <div className="grid grid-cols-3 gap-1.5">
               {/* Top 10 Holders */}
-              <div className="rounded-md p-2 border" style={{ backgroundColor: 'rgba(30, 31, 38, 0.3)', borderColor: AX.border }}>
-                <div className="flex flex-col items-center gap-1">
+              <div className="rounded-md p-2 border h-[68px]" style={{ backgroundColor: 'rgba(30, 31, 38, 0.3)', borderColor: AX.border }}>
+                <div className="flex flex-col items-center justify-center gap-1 h-full">
                   <div className="flex items-center gap-1.5">
                     <BsPersonGear size={16} style={{ color: '#31e3ac' }} />
                     <div className="text-[12px] font-bold" style={{ color: '#31e3ac' }}>
@@ -1595,8 +1595,8 @@ const MonadTradeActionPanel: React.FC<MonadTradeActionPanelProps> = ({ token }) 
               </div>
 
               {/* Dev Holdings */}
-              <div className="rounded-md p-2 border" style={{ backgroundColor: 'rgba(30, 31, 38, 0.3)', borderColor: AX.border }}>
-                <div className="flex flex-col items-center gap-1">
+              <div className="rounded-md p-2 border h-[68px]" style={{ backgroundColor: 'rgba(30, 31, 38, 0.3)', borderColor: AX.border }}>
+                <div className="flex flex-col items-center justify-center gap-1 h-full">
                   <div className="flex items-center gap-1.5">
                     <LuChefHat size={16} style={{ color: '#566cdc' }} />
                     <div className="text-[12px] font-bold" style={{ color: '#566cdc' }}>
@@ -1608,8 +1608,8 @@ const MonadTradeActionPanel: React.FC<MonadTradeActionPanelProps> = ({ token }) 
               </div>
 
               {/* Sniper Holdings */}
-              <div className="rounded-md p-2 border" style={{ backgroundColor: 'rgba(30, 31, 38, 0.3)', borderColor: AX.border }}>
-                <div className="flex flex-col items-center gap-1">
+              <div className="rounded-md p-2 border h-[68px]" style={{ backgroundColor: 'rgba(30, 31, 38, 0.3)', borderColor: AX.border }}>
+                <div className="flex flex-col items-center justify-center gap-1 h-full">
                   <div className="flex items-center gap-1.5">
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style={{ color: '#f26681' }}>
                       <circle cx="12" cy="12" r="8" stroke="currentColor" strokeWidth="1.5" fill="none"/>
@@ -1631,8 +1631,8 @@ const MonadTradeActionPanel: React.FC<MonadTradeActionPanelProps> = ({ token }) 
             {/* Token Metrics Grid - Second Row */}
             <div className="grid grid-cols-3 gap-1.5">
               {/* Insider Holdings */}
-              <div className="rounded-md p-2 border" style={{ backgroundColor: 'rgba(30, 31, 38, 0.3)', borderColor: AX.border }}>
-                <div className="flex flex-col items-center gap-1">
+              <div className="rounded-md p-2 border h-[68px]" style={{ backgroundColor: 'rgba(30, 31, 38, 0.3)', borderColor: AX.border }}>
+                <div className="flex flex-col items-center justify-center gap-1 h-full">
                   <div className="flex items-center gap-1.5">
                     <RiGhostLine size={16} style={{ color: '#31e3ac' }} />
                     <div className="text-[12px] font-bold" style={{ color: '#31e3ac' }}>
@@ -1644,8 +1644,8 @@ const MonadTradeActionPanel: React.FC<MonadTradeActionPanelProps> = ({ token }) 
               </div>
 
               {/* Bonding Curve Progress */}
-              <div className="rounded-md p-2 border" style={{ backgroundColor: 'rgba(30, 31, 38, 0.3)', borderColor: AX.border }}>
-                <div className="flex flex-col items-center gap-1">
+              <div className="rounded-md p-2 border h-[68px]" style={{ backgroundColor: 'rgba(30, 31, 38, 0.3)', borderColor: AX.border }}>
+                <div className="flex flex-col items-center justify-center gap-1 h-full">
                   <div className="flex items-center gap-1.5">
                     <FaChartBar size={16} style={{ color: AX.aiGreen }} />
                     <div className="text-[12px] font-bold" style={{ color: AX.aiGreen }}>
@@ -1657,8 +1657,8 @@ const MonadTradeActionPanel: React.FC<MonadTradeActionPanelProps> = ({ token }) 
               </div>
 
               {/* Graduated Status */}
-              <div className="rounded-md p-2 border" style={{ backgroundColor: 'rgba(30, 31, 38, 0.3)', borderColor: AX.border }}>
-                <div className="flex flex-col items-center gap-1">
+              <div className="rounded-md p-2 border h-[68px]" style={{ backgroundColor: 'rgba(30, 31, 38, 0.3)', borderColor: AX.border }}>
+                <div className="flex flex-col items-center justify-center gap-1 h-full">
                   <div className="flex items-center gap-1.5">
                     <FaFire size={16} style={{ color: AX.aiGreen }} />
                     <div className="text-[12px] font-bold" style={{ color: xrayData.is_graduated ? AX.aiGreen : AX.muted }}>
@@ -1676,8 +1676,8 @@ const MonadTradeActionPanel: React.FC<MonadTradeActionPanelProps> = ({ token }) 
             {/* Trading Activity - Third Row */}
             <div className="grid grid-cols-3 gap-1.5">
               {/* Total Transactions */}
-              <div className="rounded-md p-2 border" style={{ backgroundColor: 'rgba(30, 31, 38, 0.3)', borderColor: AX.border }}>
-                <div className="flex flex-col items-center gap-1">
+              <div className="rounded-md p-2 border h-[68px]" style={{ backgroundColor: 'rgba(30, 31, 38, 0.3)', borderColor: AX.border }}>
+                <div className="flex flex-col items-center justify-center gap-1 h-full">
                   <div className="flex items-center gap-1.5">
                     <FaChartBar size={16} style={{ color: '#31e3ac' }} />
                     <div className="text-[12px] font-bold" style={{ color: AX.muted }}>
@@ -1689,8 +1689,8 @@ const MonadTradeActionPanel: React.FC<MonadTradeActionPanelProps> = ({ token }) 
               </div>
 
               {/* Unique Traders */}
-              <div className="rounded-md p-2 border" style={{ backgroundColor: 'rgba(30, 31, 38, 0.3)', borderColor: AX.border }}>
-                <div className="flex flex-col items-center gap-1">
+              <div className="rounded-md p-2 border h-[68px]" style={{ backgroundColor: 'rgba(30, 31, 38, 0.3)', borderColor: AX.border }}>
+                <div className="flex flex-col items-center justify-center gap-1 h-full">
                   <div className="flex items-center gap-1.5">
                     <GoPeople size={16} style={{ color: '#31e3ac' }} />
                     <div className="text-[12px] font-bold" style={{ color: AX.muted }}>
@@ -1702,8 +1702,8 @@ const MonadTradeActionPanel: React.FC<MonadTradeActionPanelProps> = ({ token }) 
               </div>
 
               {/* Buy/Sell Ratio */}
-              <div className="rounded-md p-2 border" style={{ backgroundColor: 'rgba(30, 31, 38, 0.3)', borderColor: AX.border }}>
-                <div className="flex flex-col items-center gap-1">
+              <div className="rounded-md p-2 border h-[68px]" style={{ backgroundColor: 'rgba(30, 31, 38, 0.3)', borderColor: AX.border }}>
+                <div className="flex flex-col items-center justify-center gap-1 h-full">
                   <div className="flex items-center gap-1.5">
                     <BiCandles size={16} style={{ color: '#31e3ac' }} />
                     <div className="text-[12px] font-bold" style={{ color: AX.muted }}>

@@ -1165,7 +1165,7 @@ export default function MonadTradePage() {
           </div>
 
           {/* RIGHT: action panel */}
-          <div className="flex-shrink-0 min-w-[260px] basis-[280px] md:basis-[310px] lg:basis-[330px] hidden lg:flex flex-col overflow-y-auto h-full">
+          <div className="flex-shrink-0 min-w-[260px] basis-[280px] md:basis-[310px] lg:basis-[330px] hidden lg:flex flex-col overflow-y-auto h-full pb-12">
             <div className="right-rail-panel token-info-panel">
               <MonadTradeActionPanel token={displayToken as any} />
             </div>
