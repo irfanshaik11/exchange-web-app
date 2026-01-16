@@ -2,7 +2,7 @@ import React, { useState, useMemo } from 'react';
 import Head from 'next/head';
 import Image from 'next/image';
 import { motion, AnimatePresence } from 'framer-motion';
-import { HiOutlineSearch, HiOutlineRefresh, HiOutlineTrendingUp, HiOutlineGlobeAlt } from 'react-icons/hi';
+import { HiOutlineSearch, HiOutlineRefresh, HiOutlineTrendingUp, HiOutlineViewGrid, HiOutlineCollection } from 'react-icons/hi';
 import Header from '../../components/Header';
 import Footer from '../../components/Footer';
 import {
@@ -16,6 +16,7 @@ import {
   applyMarketFilters,
   DEFAULT_FILTERS,
   FavoritesCarousel,
+  CuratedSections,
   type PredictionMarket,
   type SortOption,
   type MarketFilterState,
@@ -66,6 +67,7 @@ export default function PredictionsPage() {
   const [selectedSort, setSelectedSort] = useState<SortOption>('hot');
   const [searchQuery, setSearchQuery] = useState('');
   const [marketFilters, setMarketFilters] = useState<MarketFilterState>(DEFAULT_FILTERS);
+  const [viewMode, setViewMode] = useState<'curated' | 'grid'>('curated');
   // TODO: dFlow is disabled for now - only Polymarket is active
   // const [dataSource, setDataSource] = useState<PredictionDataSource>('all');
   const [dataSource, setDataSource] = useState<PredictionDataSource>('polymarket');
@@ -228,11 +230,12 @@ export default function PredictionsPage() {
                       Beta
                     </motion.span>
                   </div>
-                  <div className="flex items-center gap-2 mt-1">
-                    <HiOutlineGlobeAlt className="w-3.5 h-3.5" style={{ color: AX.muted }} />
-                    <p className="text-sm" style={{ color: AX.muted }}>
-                      Trade on real-world events
-                    </p>
+                  <div className="mt-1.5">
+                    <StatsBar
+                      totalMarkets={allMarkets.length}
+                      totalVolume={totalVolume}
+                      activeTraders={12_450}
+                    />
                   </div>
                 </div>
               </div>
@@ -268,13 +271,6 @@ export default function PredictionsPage() {
                 )}
               </div>
             </div>
-
-            {/* Stats Bar */}
-            <StatsBar
-              totalMarkets={allMarkets.length}
-              totalVolume={totalVolume}
-              activeTraders={12_450}
-            />
 
             {/* Error display with refresh button */}
             {error && (
@@ -326,6 +322,22 @@ export default function PredictionsPage() {
               markets={allMarkets}
               onRemoveFavorite={removeFavorite}
             />
+          )}
+
+          {/* Curated Sections (when in curated view and no search/filters) */}
+          {viewMode === 'curated' && !searchQuery && selectedCategory === 'all' && allMarkets.length > 0 && (
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.5, delay: 0.15 }}
+              className="mb-8"
+            >
+              <CuratedSections
+                markets={allMarkets}
+                onToggleFavorite={toggleFavorite}
+                isFavorite={isFavorite}
+              />
+            </motion.div>
           )}
 
           {/* Data Source Switcher */}
@@ -390,11 +402,61 @@ export default function PredictionsPage() {
                   onFiltersChange={setMarketFilters}
                 />
               </div>
+
+              {/* View Toggle */}
+              <div
+                className="flex-shrink-0 flex items-center gap-1 p-1.5 rounded-xl"
+                style={{
+                  backgroundColor: AX.surface,
+                  border: `1px solid ${AX.border}`,
+                }}
+              >
+                <button
+                  onClick={() => setViewMode('curated')}
+                  className="p-2 rounded-lg transition-all"
+                  style={{
+                    backgroundColor: viewMode === 'curated' ? `${AX.accent}15` : 'transparent',
+                    color: viewMode === 'curated' ? AX.accent : AX.muted,
+                  }}
+                  title="Curated sections"
+                >
+                  <HiOutlineCollection className="w-4 h-4" />
+                </button>
+                <button
+                  onClick={() => setViewMode('grid')}
+                  className="p-2 rounded-lg transition-all"
+                  style={{
+                    backgroundColor: viewMode === 'grid' ? `${AX.accent}15` : 'transparent',
+                    color: viewMode === 'grid' ? AX.accent : AX.muted,
+                  }}
+                  title="Grid view"
+                >
+                  <HiOutlineViewGrid className="w-4 h-4" />
+                </button>
+              </div>
             </div>
           </motion.div>
 
           {/* Markets Grid */}
           <div className="mb-8">
+            {/* Section Header for Grid View */}
+            {(viewMode === 'grid' || searchQuery || selectedCategory !== 'all') && !isLoading && filteredMarkets.length > 0 && (
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center gap-2">
+                  <HiOutlineViewGrid className="w-5 h-5" style={{ color: AX.accent }} />
+                  <h2 className="text-lg font-semibold" style={{ color: AX.text }}>
+                    {searchQuery ? `Search Results` : selectedCategory !== 'all' ? `${selectedCategory.charAt(0).toUpperCase() + selectedCategory.slice(1)} Markets` : 'All Markets'}
+                  </h2>
+                  <span
+                    className="px-2 py-0.5 rounded-full text-xs font-medium"
+                    style={{ backgroundColor: `${AX.accent}15`, color: AX.accent }}
+                  >
+                    {filteredMarkets.length}
+                  </span>
+                </div>
+              </div>
+            )}
+
             {isLoading ? (
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
                 {[...Array(8)].map((_, i) => (

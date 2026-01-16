@@ -1,19 +1,14 @@
 import React from 'react';
 import { motion } from 'framer-motion';
-import { HiOutlineChartPie, HiOutlineChartBar, HiOutlineUserGroup } from 'react-icons/hi';
-import type { IconType } from 'react-icons';
+import { HiOutlineTrendingUp } from 'react-icons/hi';
 
-const AX = {
-  bg: "#0a0b0d",
-  surface: "#12141a",
-  surface2: "#0e1012",
-  border: "#1e2028",
+const C = {
   text: "#f0f0f0",
   muted: "#6b7280",
-  // Vibrant colors
   green: "#4ADE80",
   cyan: "#22D3EE",
   purple: "#818CF8",
+  yellow: "#FBBF24",
 };
 
 interface StatsBarProps {
@@ -29,77 +24,48 @@ const formatNumber = (num: number): string => {
 };
 
 export default function StatsBar({ totalMarkets, totalVolume, activeTraders = 0 }: StatsBarProps) {
-  const stats: { label: string; value: number | string; icon: IconType; color: string; isString?: boolean }[] = [
-    {
-      label: "Active Markets",
-      value: totalMarkets,
-      icon: HiOutlineChartPie,
-      color: AX.purple,
-    },
-    {
-      label: "24h Volume",
-      value: `$${formatNumber(totalVolume)}`,
-      icon: HiOutlineChartBar,
-      color: AX.green,
-      isString: true,
-    },
-    {
-      label: "Traders",
-      value: activeTraders,
-      icon: HiOutlineUserGroup,
-      color: AX.cyan,
-    },
-  ];
-
   return (
     <motion.div
-      initial={{ opacity: 0, y: -10 }}
-      animate={{ opacity: 1, y: 0 }}
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
       transition={{ duration: 0.4 }}
-      className="flex flex-wrap items-center justify-center gap-4 md:gap-8 py-4 px-6 rounded-xl"
-      style={{
-        backgroundColor: AX.surface,
-        border: `1px solid ${AX.border}`,
-      }}
+      className="flex flex-wrap items-center gap-x-4 gap-y-2 text-xs"
     >
-      {stats.map((stat, index) => {
-        const IconComponent = stat.icon;
-        return (
-          <React.Fragment key={stat.label}>
-            <motion.div
-              initial={{ opacity: 0, scale: 0.9 }}
-              animate={{ opacity: 1, scale: 1 }}
-              transition={{ duration: 0.3, delay: index * 0.1 }}
-              className="flex items-center gap-3"
-            >
-              <div
-                className="w-10 h-10 rounded-lg flex items-center justify-center"
-                style={{ backgroundColor: `${stat.color}15` }}
-              >
-                <IconComponent className="w-5 h-5" style={{ color: stat.color }} />
-              </div>
-              <div>
-                <div className="text-xs uppercase tracking-wider" style={{ color: AX.muted }}>
-                  {stat.label}
-                </div>
-                <div
-                  className="text-lg font-bold"
-                  style={{ color: stat.color }}
-                >
-                  {stat.isString ? stat.value : formatNumber(stat.value as number)}
-                </div>
-              </div>
-            </motion.div>
+      {/* Live indicator */}
+      <div className="flex items-center gap-2">
+        <span className="relative flex h-1.5 w-1.5">
+          <span
+            className="animate-ping absolute inline-flex h-full w-full rounded-full opacity-75"
+            style={{ backgroundColor: C.green }}
+          />
+          <span
+            className="relative inline-flex rounded-full h-1.5 w-1.5"
+            style={{ backgroundColor: C.green }}
+          />
+        </span>
+        <span style={{ color: C.muted }}>
+          <span className="font-semibold" style={{ color: C.text }}>{totalMarkets}</span> markets live
+        </span>
+      </div>
 
-            {index < stats.length - 1 && (
-              <div
-                className="hidden md:block w-px h-10"
-                style={{ backgroundColor: AX.border }}
-              />
-            )}
-          </React.Fragment>
-        );
-      })}
+      <span style={{ color: C.muted }}>•</span>
+
+      {/* Volume */}
+      <div className="flex items-center gap-1.5">
+        <HiOutlineTrendingUp className="w-4 h-4" style={{ color: C.green }} />
+        <span style={{ color: C.muted }}>
+          <span className="font-semibold" style={{ color: C.green }}>${formatNumber(totalVolume)}</span> 24h volume
+        </span>
+      </div>
+
+      <span style={{ color: C.muted }}>•</span>
+
+      {/* Traders */}
+      <div className="flex items-center gap-1.5">
+        <span style={{ color: C.muted }}>
+          <span className="font-semibold" style={{ color: C.text }}>{formatNumber(activeTraders)}</span> traders
+        </span>
+      </div>
     </motion.div>
   );
 }

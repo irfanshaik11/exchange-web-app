@@ -1,39 +1,62 @@
-import React from 'react';
+import React, { useState, useMemo } from 'react';
 import Link from 'next/link';
-import { HiOutlineClock, HiOutlineLockClosed, HiOutlineCheckCircle, HiOutlineStar, HiStar } from 'react-icons/hi';
+import Image from 'next/image';
+import { motion, AnimatePresence } from 'framer-motion';
+import {
+  HiOutlineClock,
+  HiOutlineLockClosed,
+  HiOutlineCheckCircle,
+  HiOutlineStar,
+  HiStar,
+  HiOutlineTrendingUp,
+  HiOutlineTrendingDown,
+  HiOutlineUsers,
+  HiOutlineChartBar,
+  HiOutlineScale,
+  HiOutlineFilm,
+  HiOutlineBeaker,
+  HiOutlineCloud,
+  HiOutlineBriefcase,
+  HiOutlineTag,
+  HiOutlineGlobeAlt,
+} from 'react-icons/hi';
+import { BiFootball, BiBitcoin } from 'react-icons/bi';
+import type { IconType } from 'react-icons';
+import MiniSparkline from './MiniSparkline';
 
 // Vibrant color palette
 const C = {
   bg: "#0a0b0d",
   surface: "#12141a",
+  surface2: "#1a1d24",
   border: "#1e2028",
   text: "#f0f0f0",
   muted: "#6b7280",
-  // More saturated greens and reds
   green: "#4ADE80",
-  greenBg: "rgba(74, 222, 128, 0.15)",
+  greenBg: "rgba(74, 222, 128, 0.12)",
   red: "#F87171",
-  redBg: "rgba(248, 113, 113, 0.15)",
+  redBg: "rgba(248, 113, 113, 0.12)",
   yellow: "#FBBF24",
   purple: "#818CF8",
   orange: "#FB923C",
   cyan: "#22D3EE",
   pink: "#F472B6",
-  // Status colors
   live: "#4ADE80",
   closed: "#6B7280",
 };
 
-// Category colors for left accent
-const categoryColors: Record<string, string> = {
-  politics: "#818CF8",     // Purple/indigo
-  crypto: "#FBBF24",       // Yellow/gold
-  sports: "#4ADE80",       // Green
-  economics: "#22D3EE",    // Cyan
-  entertainment: "#F472B6", // Pink
-  science: "#FB923C",      // Orange
-  weather: "#38BDF8",      // Sky blue
-  other: "#6B7280",        // Gray
+// Category icons and colors
+export const categoryConfig: Record<string, { Icon: IconType; label: string; color: string }> = {
+  politics: { Icon: HiOutlineScale, label: "Politics", color: "#818CF8" },
+  crypto: { Icon: BiBitcoin, label: "Crypto", color: "#FBBF24" },
+  sports: { Icon: BiFootball, label: "Sports", color: "#4ADE80" },
+  economics: { Icon: HiOutlineTrendingUp, label: "Economics", color: "#22D3EE" },
+  entertainment: { Icon: HiOutlineFilm, label: "Entertainment", color: "#F472B6" },
+  science: { Icon: HiOutlineBeaker, label: "Science", color: "#FB923C" },
+  weather: { Icon: HiOutlineCloud, label: "Weather", color: "#38BDF8" },
+  pop_culture: { Icon: HiOutlineGlobeAlt, label: "Culture", color: "#F472B6" },
+  business: { Icon: HiOutlineBriefcase, label: "Business", color: "#22D3EE" },
+  other: { Icon: HiOutlineTag, label: "Other", color: "#6B7280" },
 };
 
 export interface PredictionMarket {
@@ -51,6 +74,10 @@ export interface PredictionMarket {
   resolution?: 'yes' | 'no';
   imageUrl?: string;
   source?: 'dflow' | 'polymarket';
+  // New fields for enhanced UI
+  priceHistory?: number[];
+  traderCount?: number;
+  recentTrades?: number;
 }
 
 interface PredictionCardProps {
@@ -59,268 +86,444 @@ interface PredictionCardProps {
   showSource?: boolean;
   isFavorite?: boolean;
   onToggleFavorite?: (market: PredictionMarket) => void;
+  onQuickTrade?: (market: PredictionMarket, side: 'yes' | 'no') => void;
+  compact?: boolean;
 }
 
 const formatVolume = (volume: number): string => {
   if (volume >= 1_000_000) return `$${(volume / 1_000_000).toFixed(1)}M`;
-  if (volume >= 1_000) return `$${(volume / 1_000).toFixed(1)}K`;
+  if (volume >= 1_000) return `$${(volume / 1_000).toFixed(0)}K`;
   return `$${volume.toFixed(0)}`;
 };
 
-const formatTimeRemaining = (closesAt: string): string => {
+const formatTimeRemaining = (closesAt: string): { text: string; isUrgent: boolean; isWarning: boolean } => {
   const diff = new Date(closesAt).getTime() - Date.now();
-  if (diff <= 0) return "Closed";
+  if (diff <= 0) return { text: "Ended", isUrgent: false, isWarning: false };
+
   const days = Math.floor(diff / 86400000);
   const hours = Math.floor((diff % 86400000) / 3600000);
-  if (days > 0) return `${days}d`;
-  if (hours > 0) return `${hours}h`;
-  return "<1h";
+  const isUrgent = diff <= 86400000;
+  const isWarning = diff <= 7 * 86400000 && !isUrgent;
+
+  let text = "";
+  if (days > 0) text = `${days}d ${hours}h`;
+  else if (hours > 0) text = `${hours}h`;
+  else text = "<1h";
+
+  return { text, isUrgent, isWarning };
 };
 
-export default function PredictionCard({ market, showSource = false, isFavorite = false, onToggleFavorite }: PredictionCardProps) {
+export default function PredictionCard({
+  market,
+  showSource = false,
+  isFavorite = false,
+  onToggleFavorite,
+  onQuickTrade,
+  compact = false,
+}: PredictionCardProps) {
+  const [isHovered, setIsHovered] = useState(false);
+
   const isResolved = market.status === 'resolved';
   const isClosed = market.status === 'closed';
   const isActive = market.status === 'active';
   const isPolymarket = market.source === 'polymarket';
 
-  // Build the URL - for Polymarket, add source query param
   const href = isPolymarket
     ? `/predictions/${market.ticker}?source=polymarket`
     : `/predictions/${market.ticker}`;
 
-  // Determine status color and styling
-  const getStatusConfig = () => {
-    if (isResolved) {
-      return {
-        color: market.resolution === 'yes' ? C.green : C.red,
-        bgColor: market.resolution === 'yes' ? C.greenBg : C.redBg,
-        label: `Resolved ${market.resolution?.toUpperCase()}`,
-        icon: <HiOutlineCheckCircle className="w-3 h-3" />,
-      };
-    }
-    if (isClosed) {
-      return {
-        color: C.closed,
-        bgColor: `${C.closed}15`,
-        label: 'Closed',
-        icon: <HiOutlineLockClosed className="w-3 h-3" />,
-      };
-    }
-    return {
-      color: C.live,
-      bgColor: `${C.live}15`,
-      label: 'Live',
-      icon: null, // Will use pulsing dot instead
-    };
-  };
+  const yesPercent = Math.round(market.yesPrice * 100);
+  const noPercent = Math.round(market.noPrice * 100);
+  const priceChange = market.yesPriceChange24h;
+  const isPositive = priceChange > 0;
+  const isNegative = priceChange < 0;
 
-  const statusConfig = getStatusConfig();
+  const timeInfo = formatTimeRemaining(market.closesAt);
+  const categoryInfo = categoryConfig[market.category] || categoryConfig.other;
+
+  // Generate mock sparkline data if not provided - memoized to prevent regenerating on hover
+  const sparklineData = useMemo(() => {
+    return market.priceHistory || generateMockSparkline(market.yesPrice, priceChange);
+  }, [market.ticker, market.yesPrice, priceChange, market.priceHistory]);
 
   return (
     <Link href={href}>
-      <div
-        className="group relative rounded-xl p-4 cursor-pointer transition-all duration-200 hover:translate-y-[-2px]"
+      <motion.div
+        className="group relative rounded-xl cursor-pointer overflow-hidden"
         style={{
           backgroundColor: C.surface,
           border: `1px solid ${C.border}`,
-          // Dim closed/resolved markets slightly
-          opacity: isActive ? 1 : 0.7,
+          opacity: isActive ? 1 : 0.75,
         }}
+        onMouseEnter={() => setIsHovered(true)}
+        onMouseLeave={() => setIsHovered(false)}
+        whileHover={{ y: -4, transition: { duration: 0.2 } }}
       >
-        {/* Hover glow effect - only for active markets */}
-        {isActive && (
-          <div
-            className="absolute inset-0 rounded-xl opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none"
-            style={{
-              background: `radial-gradient(ellipse at center, ${C.green}08, transparent 70%)`,
-            }}
-          />
+        {/* Image Header (if available) */}
+        {market.imageUrl && (
+          <div className="relative h-24 overflow-hidden">
+            <Image
+              src={market.imageUrl}
+              alt={market.title}
+              fill
+              className="object-cover transition-transform duration-300 group-hover:scale-105"
+            />
+            <div
+              className="absolute inset-0"
+              style={{
+                background: `linear-gradient(to top, ${C.surface} 0%, transparent 100%)`,
+              }}
+            />
+            {/* Category badge on image */}
+            <div className="absolute top-2 left-2">
+              <span
+                className="px-2 py-1 rounded-lg text-[11px] font-semibold flex items-center gap-1.5"
+                style={{
+                  backgroundColor: categoryInfo.color,
+                  color: '#000',
+                }}
+              >
+                <categoryInfo.Icon className="w-3.5 h-3.5" />
+                {categoryInfo.label}
+              </span>
+            </div>
+          </div>
         )}
 
-        {/* Status badge - top left, always visible */}
-        <div className="flex items-center justify-between mb-3">
-          <span
-            className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md text-[10px] font-semibold uppercase tracking-wider"
-            style={{
-              backgroundColor: statusConfig.bgColor,
-              color: statusConfig.color,
-            }}
-          >
-            {isActive ? (
-              <>
-                {/* Pulsing live dot */}
-                <span className="relative flex h-2 w-2">
-                  <span
-                    className="animate-ping absolute inline-flex h-full w-full rounded-full opacity-75"
-                    style={{ backgroundColor: C.live }}
-                  />
-                  <span
-                    className="relative inline-flex rounded-full h-2 w-2"
-                    style={{ backgroundColor: C.live }}
-                  />
+        {/* Card Content */}
+        <div className="p-4">
+          {/* Top Row: Status + Actions */}
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center gap-2">
+              {/* Status Badge */}
+              <StatusBadge status={market.status} resolution={market.resolution} />
+
+              {/* Category (if no image) */}
+              {!market.imageUrl && (
+                <span
+                  className="text-[10px] px-2 py-1 rounded-md font-semibold flex items-center gap-1"
+                  style={{
+                    backgroundColor: categoryInfo.color,
+                    color: '#000',
+                  }}
+                >
+                  <categoryInfo.Icon className="w-3 h-3" />
+                  {categoryInfo.label}
                 </span>
-                {statusConfig.label}
-              </>
-            ) : (
-              <>
-                {statusConfig.icon}
-                {statusConfig.label}
-              </>
-            )}
-          </span>
+              )}
+            </div>
 
-          <div className="flex items-center gap-2">
-            {/* Source badge */}
-            {showSource && market.source && (
-              <span
-                className="text-[9px] px-1.5 py-0.5 rounded font-medium uppercase tracking-wider"
-                style={{
-                  backgroundColor: isPolymarket ? `${C.purple}20` : `${C.green}20`,
-                  color: isPolymarket ? C.purple : C.green,
-                  border: `1px solid ${isPolymarket ? C.purple : C.green}40`,
-                }}
-              >
-                {isPolymarket ? 'PM' : 'dFlow'}
-              </span>
-            )}
+            <div className="flex items-center gap-1.5">
+              {/* Source badge */}
+              {showSource && market.source && (
+                <span
+                  className="text-[9px] px-1.5 py-0.5 rounded font-medium uppercase"
+                  style={{
+                    backgroundColor: isPolymarket ? `${C.purple}20` : `${C.green}20`,
+                    color: isPolymarket ? C.purple : C.green,
+                  }}
+                >
+                  {isPolymarket ? 'PM' : 'dF'}
+                </span>
+              )}
 
-            {/* Favorite/Star button */}
-            {onToggleFavorite && (
-              <button
-                onClick={(e) => {
-                  e.preventDefault();
-                  e.stopPropagation();
-                  onToggleFavorite(market);
-                }}
-                className="p-1 rounded-lg transition-all hover:scale-110"
-                style={{
-                  backgroundColor: isFavorite ? `${C.yellow}15` : 'transparent',
-                  color: isFavorite ? C.yellow : C.muted,
-                }}
-              >
-                {isFavorite ? (
-                  <HiStar className="w-4 h-4" />
-                ) : (
-                  <HiOutlineStar className="w-4 h-4" />
-                )}
-              </button>
-            )}
+              {/* Favorite button */}
+              {onToggleFavorite && (
+                <button
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    onToggleFavorite(market);
+                  }}
+                  className="p-1 rounded-lg transition-all hover:scale-110"
+                  style={{
+                    backgroundColor: isFavorite ? `${C.yellow}15` : 'transparent',
+                    color: isFavorite ? C.yellow : C.muted,
+                  }}
+                >
+                  {isFavorite ? <HiStar className="w-4 h-4" /> : <HiOutlineStar className="w-4 h-4" />}
+                </button>
+              )}
+            </div>
           </div>
-        </div>
 
-        {/* Title */}
-        <div className="mb-4">
-          <h3 className="font-medium text-sm leading-snug line-clamp-2" style={{ color: C.text }}>
+          {/* Title */}
+          <h3
+            className="font-semibold text-sm leading-snug line-clamp-2 mb-3"
+            style={{ color: C.text }}
+          >
             {market.title}
           </h3>
-        </div>
 
-        {/* Prices */}
-        <div className="flex gap-2 mb-4">
-          <div className="flex-1 rounded-lg p-3 text-center" style={{ backgroundColor: C.greenBg }}>
-            <div className="text-[10px] uppercase mb-1" style={{ color: C.green }}>Yes</div>
-            <div className="text-xl font-bold" style={{ color: C.green }}>
-              {Math.round(market.yesPrice * 100)}¢
+          {/* Probability Gauge Bar */}
+          <div className="mb-3">
+            <div className="flex items-center justify-between text-[10px] mb-1.5">
+              <span style={{ color: C.green }}>Yes {yesPercent}%</span>
+              <span style={{ color: C.red }}>No {noPercent}%</span>
+            </div>
+            <div
+              className="h-2 rounded-full overflow-hidden flex"
+              style={{ backgroundColor: C.redBg }}
+            >
+              <motion.div
+                className="h-full rounded-full"
+                style={{ backgroundColor: C.green }}
+                initial={{ width: 0 }}
+                animate={{ width: `${yesPercent}%` }}
+                transition={{ duration: 0.5, ease: "easeOut" }}
+              />
             </div>
           </div>
-          <div className="flex-1 rounded-lg p-3 text-center" style={{ backgroundColor: C.redBg }}>
-            <div className="text-[10px] uppercase mb-1" style={{ color: C.red }}>No</div>
-            <div className="text-xl font-bold" style={{ color: C.red }}>
-              {Math.round(market.noPrice * 100)}¢
+
+          {/* Price + Sparkline Row */}
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center gap-3">
+              {/* Yes Price */}
+              <div>
+                <div className="text-lg font-bold" style={{ color: C.green }}>
+                  {yesPercent}¢
+                </div>
+                {priceChange !== 0 && (
+                  <div
+                    className="flex items-center gap-0.5 text-[10px] font-medium"
+                    style={{ color: isPositive ? C.green : isNegative ? C.red : C.muted }}
+                  >
+                    {isPositive ? <HiOutlineTrendingUp className="w-3 h-3" /> : <HiOutlineTrendingDown className="w-3 h-3" />}
+                    {isPositive ? '+' : ''}{(priceChange * 100).toFixed(1)}%
+                  </div>
+                )}
+              </div>
             </div>
+
+            {/* Sparkline */}
+            <MiniSparkline
+              data={sparklineData}
+              width={70}
+              height={28}
+              color={isPositive ? C.green : isNegative ? C.red : C.muted}
+            />
           </div>
+
+          {/* Stats Row */}
+          <div
+            className="flex items-center justify-between pt-3 text-[11px]"
+            style={{ borderTop: `1px solid ${C.border}`, color: C.muted }}
+          >
+            <div className="flex items-center gap-3">
+              {/* Volume */}
+              <div className="flex items-center gap-1">
+                <HiOutlineChartBar className="w-3 h-3" />
+                {formatVolume(market.volume24h)}
+              </div>
+
+              {/* Trader count (if available) */}
+              {market.traderCount && (
+                <div className="flex items-center gap-1">
+                  <HiOutlineUsers className="w-3 h-3" />
+                  {market.traderCount > 1000 ? `${(market.traderCount / 1000).toFixed(1)}K` : market.traderCount}
+                </div>
+              )}
+            </div>
+
+            {/* Time Remaining */}
+            <TimeBadge {...timeInfo} />
+          </div>
+
+          {/* Quick Trade Buttons (on hover) */}
+          <AnimatePresence>
+            {isHovered && isActive && onQuickTrade && (
+              <motion.div
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: 10 }}
+                transition={{ duration: 0.15 }}
+                className="absolute bottom-0 left-0 right-0 p-3 flex gap-2"
+                style={{
+                  background: `linear-gradient(to top, ${C.surface} 80%, transparent)`,
+                }}
+              >
+                <button
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    onQuickTrade(market, 'yes');
+                  }}
+                  className="flex-1 py-2 rounded-lg text-xs font-semibold transition-all hover:scale-[1.02]"
+                  style={{
+                    backgroundColor: C.green,
+                    color: '#000',
+                  }}
+                >
+                  Buy Yes {yesPercent}¢
+                </button>
+                <button
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    onQuickTrade(market, 'no');
+                  }}
+                  className="flex-1 py-2 rounded-lg text-xs font-semibold transition-all hover:scale-[1.02]"
+                  style={{
+                    backgroundColor: C.red,
+                    color: '#fff',
+                  }}
+                >
+                  Buy No {noPercent}¢
+                </button>
+              </motion.div>
+            )}
+          </AnimatePresence>
         </div>
 
-        {/* Footer */}
-        <div className="flex items-center justify-between text-xs" style={{ color: C.muted }}>
-          <span className="flex items-center gap-1">
-            <span className="font-medium">Vol:</span>
-            {formatVolume(market.volume24h)}
-          </span>
-          {isActive ? (
-            <TimeRemainingBadge closesAt={market.closesAt} />
-          ) : (
-            <span className="flex items-center gap-1 px-2 py-0.5 rounded" style={{ backgroundColor: `${C.closed}10` }}>
-              <HiOutlineLockClosed className="w-3 h-3" />
-              Ended
-            </span>
-          )}
-        </div>
-      </div>
+        {/* Volume indicator bar (subtle background) */}
+        <div
+          className="absolute bottom-0 left-0 h-0.5 transition-all duration-500"
+          style={{
+            width: `${Math.min((market.volume24h / 100000) * 100, 100)}%`,
+            backgroundColor: `${C.cyan}40`,
+          }}
+        />
+      </motion.div>
     </Link>
   );
 }
 
-// Separate component for time remaining with urgency styling
-function TimeRemainingBadge({ closesAt }: { closesAt: string }) {
-  const diff = new Date(closesAt).getTime() - Date.now();
-  const days = Math.floor(diff / 86400000);
-  const hours = Math.floor((diff % 86400000) / 3600000);
+// Status Badge Component
+function StatusBadge({ status, resolution }: { status: string; resolution?: string }) {
+  if (status === 'resolved') {
+    const isYes = resolution === 'yes';
+    return (
+      <span
+        className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-[10px] font-semibold uppercase"
+        style={{
+          backgroundColor: isYes ? C.greenBg : C.redBg,
+          color: isYes ? C.green : C.red,
+        }}
+      >
+        <HiOutlineCheckCircle className="w-3 h-3" />
+        {resolution?.toUpperCase()}
+      </span>
+    );
+  }
 
-  // Determine urgency level
-  const isUrgent = diff <= 86400000; // Less than 24 hours
-  const isWarning = diff <= 7 * 86400000 && !isUrgent; // Less than 7 days
-
-  const timeText = days > 0 ? `${days}d ${hours}h` : hours > 0 ? `${hours}h` : '<1h';
-
-  const getBadgeStyle = () => {
-    if (isUrgent) {
-      return {
-        backgroundColor: `${C.red}15`,
-        color: C.red,
-        borderColor: `${C.red}30`,
-      };
-    }
-    if (isWarning) {
-      return {
-        backgroundColor: `${C.yellow}15`,
-        color: C.yellow,
-        borderColor: `${C.yellow}30`,
-      };
-    }
-    return {
-      backgroundColor: `${C.muted}10`,
-      color: C.muted,
-      borderColor: 'transparent',
-    };
-  };
-
-  const style = getBadgeStyle();
+  if (status === 'closed') {
+    return (
+      <span
+        className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-[10px] font-semibold uppercase"
+        style={{
+          backgroundColor: `${C.closed}15`,
+          color: C.closed,
+        }}
+      >
+        <HiOutlineLockClosed className="w-3 h-3" />
+        Closed
+      </span>
+    );
+  }
 
   return (
     <span
-      className="flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-medium"
+      className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md text-[10px] font-semibold uppercase"
       style={{
-        backgroundColor: style.backgroundColor,
-        color: style.color,
-        border: `1px solid ${style.borderColor}`,
+        backgroundColor: `${C.live}15`,
+        color: C.live,
       }}
     >
-      <HiOutlineClock className="w-3 h-3" />
-      {isUrgent && <span className="font-semibold">Ends:</span>}
-      {timeText}
+      <span className="relative flex h-2 w-2">
+        <span
+          className="animate-ping absolute inline-flex h-full w-full rounded-full opacity-75"
+          style={{ backgroundColor: C.live }}
+        />
+        <span
+          className="relative inline-flex rounded-full h-2 w-2"
+          style={{ backgroundColor: C.live }}
+        />
+      </span>
+      Live
     </span>
   );
 }
 
+// Time Badge Component
+function TimeBadge({ text, isUrgent, isWarning }: { text: string; isUrgent: boolean; isWarning: boolean }) {
+  const getStyle = () => {
+    if (isUrgent) return { bg: `${C.red}15`, color: C.red, border: `${C.red}30` };
+    if (isWarning) return { bg: `${C.yellow}15`, color: C.yellow, border: `${C.yellow}30` };
+    return { bg: `${C.muted}10`, color: C.muted, border: 'transparent' };
+  };
+
+  const style = getStyle();
+
+  return (
+    <span
+      className="flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-medium"
+      style={{
+        backgroundColor: style.bg,
+        color: style.color,
+        border: `1px solid ${style.border}`,
+      }}
+    >
+      <HiOutlineClock className="w-3 h-3" />
+      {isUrgent && <span className="font-bold">⚡</span>}
+      {text}
+    </span>
+  );
+}
+
+// Generate mock sparkline data based on current price and change
+function generateMockSparkline(currentPrice: number, change: number): number[] {
+  const points = 12;
+  const data: number[] = [];
+  const startPrice = currentPrice / (1 + change);
+
+  for (let i = 0; i < points; i++) {
+    const progress = i / (points - 1);
+    const noise = (Math.random() - 0.5) * 0.02;
+    const value = startPrice + (currentPrice - startPrice) * progress + noise;
+    data.push(Math.max(0, Math.min(1, value)));
+  }
+
+  return data;
+}
+
+// Skeleton Component
 export function PredictionCardSkeleton() {
   return (
     <div
-      className="rounded-xl p-4"
+      className="rounded-xl overflow-hidden"
       style={{
         backgroundColor: C.surface,
         border: `1px solid ${C.border}`,
       }}
     >
-      <div className="h-4 w-3/4 rounded mb-2 animate-pulse" style={{ backgroundColor: C.bg }} />
-      <div className="h-4 w-1/2 rounded mb-4 animate-pulse" style={{ backgroundColor: C.bg }} />
-      <div className="flex gap-2 mb-4">
-        <div className="flex-1 h-16 rounded-lg animate-pulse" style={{ backgroundColor: C.greenBg }} />
-        <div className="flex-1 h-16 rounded-lg animate-pulse" style={{ backgroundColor: C.redBg }} />
-      </div>
-      <div className="flex justify-between">
-        <div className="h-3 w-12 rounded animate-pulse" style={{ backgroundColor: C.bg }} />
-        <div className="h-3 w-8 rounded animate-pulse" style={{ backgroundColor: C.bg }} />
+      {/* Image skeleton */}
+      <div className="h-24 animate-pulse" style={{ backgroundColor: C.bg }} />
+
+      <div className="p-4">
+        {/* Status skeleton */}
+        <div className="flex justify-between mb-3">
+          <div className="h-5 w-16 rounded animate-pulse" style={{ backgroundColor: C.bg }} />
+          <div className="h-5 w-5 rounded animate-pulse" style={{ backgroundColor: C.bg }} />
+        </div>
+
+        {/* Title skeleton */}
+        <div className="h-4 w-full rounded mb-2 animate-pulse" style={{ backgroundColor: C.bg }} />
+        <div className="h-4 w-2/3 rounded mb-3 animate-pulse" style={{ backgroundColor: C.bg }} />
+
+        {/* Gauge skeleton */}
+        <div className="h-2 rounded-full mb-3 animate-pulse" style={{ backgroundColor: C.bg }} />
+
+        {/* Price skeleton */}
+        <div className="flex justify-between mb-3">
+          <div className="h-6 w-12 rounded animate-pulse" style={{ backgroundColor: C.bg }} />
+          <div className="h-6 w-16 rounded animate-pulse" style={{ backgroundColor: C.bg }} />
+        </div>
+
+        {/* Stats skeleton */}
+        <div className="flex justify-between pt-3" style={{ borderTop: `1px solid ${C.border}` }}>
+          <div className="h-4 w-16 rounded animate-pulse" style={{ backgroundColor: C.bg }} />
+          <div className="h-4 w-12 rounded animate-pulse" style={{ backgroundColor: C.bg }} />
+        </div>
       </div>
     </div>
   );

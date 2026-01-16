@@ -1,4 +1,4 @@
-export { default as PredictionCard, PredictionCardSkeleton } from './PredictionCard';
+export { default as PredictionCard, PredictionCardSkeleton, categoryConfig } from './PredictionCard';
 export type { PredictionMarket } from './PredictionCard';
 export { default as CategoryFilter, SortFilter } from './CategoryFilter';
 export type { Category, SortOption } from './CategoryFilter';
@@ -11,3 +11,5 @@ export type { PredictionDataSource } from './DataSourceSwitcher';
 export { default as MarketFilters, applyMarketFilters, DEFAULT_FILTERS } from './MarketFilters';
 export type { MarketFilterState } from './MarketFilters';
 export { default as FavoritesCarousel } from './FavoritesCarousel';
+export { default as MiniSparkline } from './MiniSparkline';
+export { default as CuratedSections } from './CuratedSections';
