@@ -5816,7 +5816,7 @@ Maker: ${walletAddress}`;
             },
           ],
           // Remove custom_css_url to avoid pink theme issues
-          // custom_css_url: '/charting_library/themed.css',
+          custom_css_url: '/charting_library/themed.css',
           loading_screen: { backgroundColor: "transparent" },
           overrides: {
             "paneProperties.background": "#111214",
