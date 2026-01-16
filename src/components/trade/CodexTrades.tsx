@@ -1396,9 +1396,9 @@ const CodexTrades: React.FC<CodexTradesProps> = ({ token, initialTrades = [], on
       <div className="flex-1 overflow-y-auto min-h-0 pb-18" style={{ backgroundColor: '#101114' }}>
         <table className="w-full text-[11px] border-collapse table-fixed" style={{ backgroundColor: '#101114' }}>
           <thead className="sticky top-0 z-10" style={{ backgroundColor: '#101114' }}>
-            <tr style={{ borderBottom: '1px solid #27282e' }}>
+            <tr className='py-4 border-t border-b border-[#27282e]'>
               {/* Age / Time */}
-              <th className="w-[16.66%] px-2 py-1.5 text-left whitespace-nowrap" style={{ color: '#9ca3af' }}>
+              <th className="w-[12%] px-2 py-3 text-left whitespace-nowrap" style={{ color: '#9ca3af' }}>
                 <button
                   type="button"
                   onClick={() => setShowAge(prev => !prev)}
@@ -1415,7 +1415,7 @@ const CodexTrades: React.FC<CodexTradesProps> = ({ token, initialTrades = [], on
               </th>
 
               {/* Type */}
-              <th className="w-[16.66%] px-2 py-1.5 text-left whitespace-nowrap" style={{ color: '#9ca3af' }}>
+              <th className="w-[10%] px-2 py-3 text-left whitespace-nowrap" style={{ color: '#9ca3af' }}>
                 <div className="flex items-center gap-1">
                   <span className="text-[11px]">Type</span>
                   <button
@@ -1440,7 +1440,7 @@ const CodexTrades: React.FC<CodexTradesProps> = ({ token, initialTrades = [], on
               </th>
 
               {/* MC / Price column with filter */}
-              <th className="w-[16.66%] px-2 py-1.5 text-left whitespace-nowrap" style={{ color: '#9ca3af' }}>
+              <th className="w-[13%] px-2 py-3 text-left whitespace-nowrap" style={{ color: '#9ca3af' }}>
                 <div className="flex items-center gap-1">
                   <button
                     type="button"
@@ -1463,7 +1463,7 @@ const CodexTrades: React.FC<CodexTradesProps> = ({ token, initialTrades = [], on
               </th>
 
               {/* Amount with filter */}
-              <th className="w-[16.66%] px-2 py-1.5 text-left whitespace-nowrap">
+              <th className="w-[15%] px-2 py-3 text-left whitespace-nowrap">
                 <SortableHeader
                   label="Amount"
                   sortDirection={filters.amount.sort}
@@ -1475,7 +1475,7 @@ const CodexTrades: React.FC<CodexTradesProps> = ({ token, initialTrades = [], on
               </th>
 
               {/* Total USD / SOL/MON toggle column with filter */}
-              <th className="w-[16.66%] px-2 py-1.5 text-left whitespace-nowrap" style={{ color: '#9ca3af' }}>
+              <th className="w-[15%] px-2 py-3 text-left whitespace-nowrap" style={{ color: '#9ca3af' }}>
                 <div className="flex items-center gap-1">
                   <button
                     type="button"
@@ -1506,8 +1506,8 @@ const CodexTrades: React.FC<CodexTradesProps> = ({ token, initialTrades = [], on
               </th>
 
               {/* Trader */}
-              <th className="w-[16.66%] px-2 py-1.5 text-left whitespace-nowrap" style={{ color: '#9ca3af' }}>
-                <div className="flex items-center gap-1">
+              <th className="w-[35%] px-2 py-3 text-right whitespace-nowrap" style={{ color: '#9ca3af' }}>
+                <div className="flex items-center justify-end gap-1">
                   <span className="text-[11px]">Trader</span>
                   <button
                     onClick={handleWalletFilterClick}
@@ -1613,13 +1613,13 @@ const CodexTrades: React.FC<CodexTradesProps> = ({ token, initialTrades = [], on
                     }}
                   >
                     {/* Age / Time */}
-                    <td className="px-2 py-2 text-[11px]" style={{ color: '#d1d5db' }}>
+                    <td className="px-2 py-3 text-[11px]" style={{ color: '#d1d5db' }}>
                       {showAge ? age : timeStr}
                     </td>
 
                     {/* Type */}
                     <td
-                      className={`px-2 py-2 text-[11px] font-semibold ${
+                      className={`px-2 py-3 text-[11px] font-semibold ${
                         n.isBuy ? 'text-emerald-400' : 'text-red-400'
                       }`}
                     >
@@ -1627,18 +1627,18 @@ const CodexTrades: React.FC<CodexTradesProps> = ({ token, initialTrades = [], on
                     </td>
 
                     {/* MC / Price */}
-                    <td className="px-2 py-2 text-[11px]" style={{ color: '#d1d5db' }}>
+                    <td className="px-2 py-3 text-[11px]" style={{ color: '#d1d5db' }}>
                       {mcMode === 'mc' ? mcStr : priceStr}
                     </td>
 
                     {/* Amount */}
-                    <td className="px-2 py-2 text-[11px]" style={{ color: '#d1d5db' }}>
+                    <td className="px-2 py-3 text-[11px]" style={{ color: '#d1d5db' }}>
                       {tokenAmountStr}
                     </td>
 
                     {/* merged Total column */}
                     <td
-                      className="px-2 py-2 text-[11px] font-semibold relative overflow-hidden"
+                      className="px-2 py-3 text-[11px] font-semibold relative overflow-hidden"
                       title={title}
                     >
                       {showingUsd || hasSol ? (
@@ -1676,8 +1676,8 @@ const CodexTrades: React.FC<CodexTradesProps> = ({ token, initialTrades = [], on
                     </td>
 
                     {/* Trader */}
-                    <td className="px-2 py-2 text-[11px] align-middle" style={{ color: '#d1d5db' }}>
-                      <div className="flex items-center flex-nowrap gap-2 min-w-0">
+                    <td className="px-2 py-3 text-[11px] align-middle text-right" style={{ color: '#d1d5db' }}>
+                      <div className="flex items-center justify-end flex-nowrap gap-2 min-w-0">
                         {(() => {
                           const walletKey = (n.maker || '').toLowerCase();
                           const walletData = walletDataMap.get(walletKey);
