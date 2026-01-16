@@ -91,7 +91,7 @@ function mapWebSocketDevTokenToDisplay(wsToken: SolanaDevToken) {
 }
 
 const AX = {
-  bg: "#101114",
+  bg: "#111214",
   surface: "#1E1F26",
   surface2: "#17191E",
   border: "#2A2B33",
