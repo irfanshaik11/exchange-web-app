@@ -10,6 +10,8 @@ import useSolanaTokenWebSocket, { type SolanaTopTrader } from '../../hooks/useSo
 import useMonadTopTraders, { type MonadTopTrader } from '../../hooks/useMonadTopTraders';
 import type { Token } from '~/utils/db';
 import WalletHoverCard, { type WalletHoverCardData } from './WalletHoverCard';
+import { CiFilter } from 'react-icons/ci';
+import { SiSolana } from 'react-icons/si';
 
 interface CodexTopTradersProps {
   token: Token | null;
@@ -206,7 +208,7 @@ const SortableHeader: React.FC<SortableHeaderProps> = ({
       className="flex items-center gap-0.5 hover:opacity-80 transition-opacity cursor-pointer"
       style={{ color: sortDirection ? AX.mint : AX.muted }}
     >
-      <span className="text-[11px]">{label}</span>
+      <span className="text-[12px] font-normal">{label}</span>
       <FaCaretDown
         size={8}
         style={{
@@ -221,7 +223,7 @@ const SortableHeader: React.FC<SortableHeaderProps> = ({
         className="p-0.5 rounded hover:bg-opacity-20 transition-colors"
         style={{ color: isFilterActive ? AX.mint : AX.muted }}
       >
-        <FaFilter size={8} />
+        <CiFilter size={14} />
       </button>
     )}
   </div>
@@ -365,7 +367,7 @@ function getAge(timestamp: number) {
 
 function shortAddr(addr: string) {
   if (!addr) return '';
-  return addr.slice(0, 6) + '...' + addr.slice(-4);
+  return addr.slice(0, 4) + '...' + addr.slice(-4);
 }
 
 function formatVolume(volumeUsd: string) {
@@ -914,15 +916,15 @@ const CodexTopTraders: React.FC<CodexTopTradersProps> = ({ token, pairAddress, c
         <table className="w-full text-xs">
         <thead className="sticky top-0 z-10" style={{ backgroundColor: '#101114' }}>
           <tr className='border-t border-b border-[#27282e]'>
-            <th className="px-2 py-3 text-left text-[11px] font-medium whitespace-nowrap" style={{ color: '#9ca3af' }}>
+            <th className="px-4 py-3 text-left text-xs font-medium whitespace-nowrap" style={{ color: '#9ca3af' }}>
               <div className="flex items-center gap-1">
-                <span className="text-[11px]">Wallet</span>
+                <span className="text-xs">Wallet</span>
                 <button
                   onClick={handleWalletFilterClick}
                   className="p-0.5 rounded hover:bg-opacity-20 transition-colors"
                   style={{ color: isWalletFilterActive ? AX.mint : AX.muted }}
                 >
-                  <FaFilter size={8} />
+                  <CiFilter size={14} />
                 </button>
                 {isWalletFilterActive && (
                   <span
@@ -947,7 +949,7 @@ const CodexTopTraders: React.FC<CodexTopTradersProps> = ({ token, pairAddress, c
                   onFilterClick={(e) => handleFilterClick('bought', e)}
                   isFilterActive={!!filters.bought.range.min || !!filters.bought.range.max}
                 />
-                <span className="text-[11px]" style={{ color: '#9ca3af' }}>/</span>
+                <span className="text-xs" style={{ color: '#9ca3af' }}>/</span>
                 <SortableHeader
                   label="Avg Buy"
                   sortDirection={filters.avgBuy.sort}
@@ -968,7 +970,7 @@ const CodexTopTraders: React.FC<CodexTopTradersProps> = ({ token, pairAddress, c
                   onFilterClick={(e) => handleFilterClick('sold', e)}
                   isFilterActive={!!filters.sold.range.min || !!filters.sold.range.max}
                 />
-                <span className="text-[11px]" style={{ color: '#9ca3af' }}>/</span>
+                <span className="text-xs" style={{ color: '#9ca3af' }}>/</span>
                 <SortableHeader
                   label="Avg Sell"
                   sortDirection={filters.avgSell.sort}
@@ -989,7 +991,7 @@ const CodexTopTraders: React.FC<CodexTopTradersProps> = ({ token, pairAddress, c
                   onFilterClick={(e) => handleFilterClick('pnl', e)}
                   isFilterActive={!!filters.pnl.range.min || !!filters.pnl.range.max}
                 />
-                <span className="text-[11px]" style={{ color: '#9ca3af' }}>/</span>
+                <span className="text-xs" style={{ color: '#9ca3af' }}>/</span>
                 <SortableHeader
                   label="%"
                   sortDirection={filters.pnlPct.sort}
@@ -1010,7 +1012,7 @@ const CodexTopTraders: React.FC<CodexTopTradersProps> = ({ token, pairAddress, c
                   onFilterClick={(e) => handleFilterClick('remaining', e)}
                   isFilterActive={!!filters.remaining.range.min || !!filters.remaining.range.max}
                 />
-                <span className="text-[11px]" style={{ color: '#9ca3af' }}>/</span>
+                <span className="text-xs" style={{ color: '#9ca3af' }}>/</span>
                 <SortableHeader
                   label="%"
                   sortDirection={filters.remainingPct.sort}
@@ -1065,14 +1067,27 @@ const CodexTopTraders: React.FC<CodexTopTradersProps> = ({ token, pairAddress, c
                   key={trader.walletAddress}
                   className="transition-colors hover:brightness-110"
                   style={{
-                    backgroundColor: idx % 2 === 0 ? '#101114' : '#161719',
+                    backgroundColor: idx % 2 === 0 ? "#101114" : "#161719",
                   }}
                 >
-                  <td className="px-2 py-3">
-                    <div className="flex items-center space-x-2">
-                      <span className="text-[10px]" style={{ color: '#9ca3af' }}>{idx + 1}</span>
+                  <td className="px-4 py-3">
+                    <div className="flex items-center gap-1.5">
+                      <a
+                        href={`https://solscan.io/account/${trader.walletAddress}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="rounded-full bg-[#757E80] p-1"
+                      >
+                        <SiSolana
+                          size={8}
+                          className="flex-shrink-0 text-black"
+                        />
+                      </a>
+
                       {(() => {
-                        const walletKey = (trader.walletAddress || '').toLowerCase();
+                        const walletKey = (
+                          trader.walletAddress || ""
+                        ).toLowerCase();
                         const walletData = walletDataMap.get(walletKey);
                         const holderType = holderTypeMap.get(walletKey);
 
@@ -1092,18 +1107,27 @@ const CodexTopTraders: React.FC<CodexTopTradersProps> = ({ token, pairAddress, c
                         return (
                           <WalletHoverCard data={hoverData} chain={chain}>
                             <div className="flex items-center gap-1.5">
-                              <span className="text-[11px] font-mono text-gray-300 hover:text-emerald-400 cursor-pointer transition-colors">
+                              <span className="cursor-pointer font-mono text-xs text-gray-300 transition-colors hover:text-emerald-400">
                                 {wallet}
                               </span>
                               {/* Holder type icons */}
-                              {holderType === 'dev' && (
-                                <LuChefHat size={12} className="text-yellow-400 flex-shrink-0" />
+                              {holderType === "dev" && (
+                                <LuChefHat
+                                  size={12}
+                                  className="flex-shrink-0 text-yellow-400"
+                                />
                               )}
-                              {holderType === 'sniper' && (
-                                <TfiTarget size={12} className="text-red-400 flex-shrink-0" />
+                              {holderType === "sniper" && (
+                                <TfiTarget
+                                  size={12}
+                                  className="flex-shrink-0 text-red-400"
+                                />
                               )}
-                              {holderType === 'bundler' && (
-                                <HiOutlineCubeTransparent size={12} className="text-orange-400 flex-shrink-0" />
+                              {holderType === "bundler" && (
+                                <HiOutlineCubeTransparent
+                                  size={12}
+                                  className="flex-shrink-0 text-orange-400"
+                                />
                               )}
                             </div>
                           </WalletHoverCard>
@@ -1113,32 +1137,59 @@ const CodexTopTraders: React.FC<CodexTopTradersProps> = ({ token, pairAddress, c
                   </td>
                   <td className="px-2 py-3">
                     <div className="flex flex-col">
-                      <span className="text-[11px] text-emerald-400 font-semibold">${formatSmartNumber(boughtUsd)}</span>
-                      <span className="text-[10px]" style={{ color: '#9ca3af' }}>({avgBuyPrice}) {trader.buys}</span>
-                    </div>
-                  </td>
-                  <td className="px-2 py-3">
-                    <div className="flex flex-col">
-                      <span className="text-[11px] text-red-400 font-semibold">${formatSmartNumber(soldUsd)}</span>
-                      <span className="text-[10px]" style={{ color: '#9ca3af' }}>({avgSellPrice}) {trader.sells}</span>
-                    </div>
-                  </td>
-                  <td className="px-2 py-3">
-                    <div className="flex flex-col">
-                      <span className={`text-[11px] font-semibold ${realizedProfit >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
-                        {realizedProfit >= 0 ? '+' : ''}${formatSmartNumber(realizedProfit)}
+                      <span className="text-xs font-semibold text-emerald-400">
+                        ${formatSmartNumber(boughtUsd)}
                       </span>
-                      <span className="text-[10px]" style={{ color: '#9ca3af' }}>{realizedProfitPct.toFixed(1)}%</span>
+                      <span
+                        className="text-[10px] text-[#757e80]"
+                      >
+                        ({avgBuyPrice}) {trader.buys}
+                      </span>
                     </div>
                   </td>
                   <td className="px-2 py-3">
                     <div className="flex flex-col">
-                      <span className="text-[11px]" style={{ color: '#d1d5db' }}>${formatSmartNumber(tokenBalance)}</span>
-                      <span className="text-[10px]" style={{ color: '#9ca3af' }}>{(trader.remainingPercent || 0).toFixed(1)}%</span>
+                      <span className="text-xs font-semibold text-red-400">
+                        ${formatSmartNumber(soldUsd)}
+                      </span>
+                      <span
+                        className="text-[10px] text-[#757e80]"
+                      >
+                        ({avgSellPrice}) {trader.sells}
+                      </span>
                     </div>
                   </td>
                   <td className="px-2 py-3">
-                    <span className="text-[11px]" style={{ color: '#9ca3af' }}>{lastActive}</span>
+                    <div className="flex flex-col">
+                      <span
+                        className={`text-xs font-semibold ${realizedProfit >= 0 ? "text-emerald-400" : "text-red-400"}`}
+                      >
+                        {realizedProfit >= 0 ? "+" : ""}$
+                        {formatSmartNumber(realizedProfit)}
+                      </span>
+                      <span
+                        className="text-[10px] text-[#757e80]"
+                      >
+                        {realizedProfitPct.toFixed(1)}%
+                      </span>
+                    </div>
+                  </td>
+                  <td className="px-2 py-3">
+                    <div className="flex flex-col">
+                      <span className="text-xs" style={{ color: "#d1d5db" }}>
+                        ${formatSmartNumber(tokenBalance)}
+                      </span>
+                      <span
+                        className="text-[10px] text-[#757e80]"
+                      >
+                        {(trader.remainingPercent || 0).toFixed(1)}%
+                      </span>
+                    </div>
+                  </td>
+                  <td className="px-2 py-3">
+                    <span className="text-xs" style={{ color: "#9ca3af" }}>
+                      {lastActive}
+                    </span>
                   </td>
                 </tr>
               );

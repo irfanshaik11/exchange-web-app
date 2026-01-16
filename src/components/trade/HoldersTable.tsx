@@ -5,6 +5,7 @@ import { RiExchangeDollarLine } from 'react-icons/ri';
 import { MdOutlineBubbleChart, MdRefresh } from 'react-icons/md';
 import { LuChefHat } from 'react-icons/lu';
 import { TfiTarget } from 'react-icons/tfi';
+import { SiSolana } from "react-icons/si";
 import { HiOutlineCubeTransparent } from 'react-icons/hi2';
 import useCodexHolders from '../../hooks/useCodexHolders';
 import useSolanaTokenWebSocket, { type SolanaTokenHolder, type SolanaTopTrader } from '../../hooks/useSolanaTokenWebSocket';
@@ -13,6 +14,7 @@ import { getWalletSolBalance } from '../../utils/walletTracking';
 import { useSolPrice } from '../SolPriceContext';
 import type { Token } from '~/utils/db';
 import WalletHoverCard, { type WalletHoverCardData } from './WalletHoverCard';
+import { CiFilter } from 'react-icons/ci';
 
 // Official Solana logo component (imported from Footer pattern)
 const SolanaIcon = ({ size = 16 }: { size?: number }) => (
@@ -75,6 +77,7 @@ interface HoldersTableProps {
   isBubblemapVisible?: boolean;
   containerWidth?: number;
   chain?: 'sol' | 'monad'; // Chain to determine which endpoint to use
+  onTotalCountChange?: (count: number) => void; // Callback to pass total count to parent
 }
 
 interface HolderWithBalance {
@@ -109,7 +112,7 @@ function getTimeAgo(timestamp: number): string {
 
 function shortAddr(addr: string): string {
   if (!addr) return '';
-  return addr.slice(0, 8) + '...' + addr.slice(-4);
+  return addr.slice(0, 4) + '...' + addr.slice(-4);
 }
 
 function formatUsd(value: string | number | null | undefined): string {
@@ -516,7 +519,7 @@ const SortableHeader: React.FC<SortableHeaderProps> = ({
       className="flex items-center gap-0.5 hover:opacity-80 transition-opacity cursor-pointer"
       style={{ color: sortDirection ? AX.mint : AX.muted }}
     >
-      <span className="text-[11px]">{label}</span>
+      <span className="text-xs font-normal">{label}</span>
       <FaCaretDown
         size={8}
         style={{
@@ -531,7 +534,7 @@ const SortableHeader: React.FC<SortableHeaderProps> = ({
         className="p-0.5 rounded hover:bg-opacity-20 transition-colors"
         style={{ color: isFilterActive ? AX.mint : AX.muted }}
       >
-        <FaFilter size={8} />
+        <CiFilter size={14} />
       </button>
     )}
   </div>
@@ -543,6 +546,7 @@ const HoldersTable: React.FC<HoldersTableProps> = ({
   isBubblemapVisible = false,
   containerWidth = 1000,
   chain = 'sol',
+  onTotalCountChange,
 }) => {
   // Get SOL price for USD/SOL conversion
   const { solPrice, monPrice } = useSolPrice();
@@ -806,6 +810,13 @@ const HoldersTable: React.FC<HoldersTableProps> = ({
     return [];
   }, [chain, monadHolders, useWebSocketData, wsHolders, codexHolders]);
 
+  // Notify parent of total count changes
+  useEffect(() => {
+    if (onTotalCountChange) {
+      onTotalCountChange(normalizedHolders.length);
+    }
+  }, [normalizedHolders.length, onTotalCountChange]);
+
   // Fetch SOL balances for holders (only for Solana chain and only if not provided by WebSocket)
   useEffect(() => {
     if (normalizedHolders.length === 0) {
@@ -1048,23 +1059,41 @@ const HoldersTable: React.FC<HoldersTableProps> = ({
   return (
     <div
       ref={tableRef}
-      className="flex-1 min-h-0 flex flex-col overflow-hidden"
+      className="relative flex-1 min-h-0 flex flex-col overflow-hidden"
       style={{ backgroundColor: AX.bg }}
     >
+      {/* Bubblemap Toggle Button - Absolutely positioned */}
+      <button
+        onClick={isBubblemapVisible ? handleHideBubblemap : handleBubblemapClick}
+        className="absolute top-8 right-0 flex h-6 w-6 items-center justify-center rounded p-1 transition-opacity hover:opacity-80 cursor-pointer z-20"
+        style={{
+          backgroundColor: `${AX.surface2}`,
+          border: `1px solid ${AX.border}`,
+          color: AX.text,
+        }}
+        title={isBubblemapVisible ? "Hide bubblemap" : "Show bubblemap"}
+      >
+        {isBubblemapVisible ? (
+          <FiX size={14} />
+        ) : (
+          <MdOutlineBubbleChart size={14} />
+        )}
+      </button>
+
       <div className="flex-1 overflow-y-auto min-h-0 pb-18">
         <table className="w-full" style={{ borderCollapse: 'collapse' }}>
           <thead className="sticky top-0 z-10" style={{ backgroundColor: '#101114' }}>
             <tr className='border-t border-b border-[#27282e]'>
               {/* Wallet Column */}
-              <th className="px-2 py-3 text-left text-[11px] font-medium whitespace-nowrap" style={{ color: AX.muted }}>
+              <th className="px-4 py-3 text-left text-xs font-medium whitespace-nowrap" style={{ color: AX.muted }}>
                 <div className="flex items-center gap-1">
-                  <span className="text-[11px]">Wallet</span>
+                  <span className="text-xs font-normal">Wallet</span>
                   <button
                     onClick={handleWalletFilterClick}
                     className="p-0.5 rounded hover:bg-opacity-20 transition-colors"
                     style={{ color: isWalletFilterActive ? AX.mint : AX.muted }}
                   >
-                    <FaFilter size={8} />
+                    <CiFilter size={14} />
                   </button>
                   {isWalletFilterActive && (
                     <span
@@ -1081,7 +1110,7 @@ const HoldersTable: React.FC<HoldersTableProps> = ({
               </th>
 
               {/* SOL Bal / Last Active */}
-              <th className="px-2 py-3 text-left text-[11px] font-medium whitespace-nowrap" style={{ color: AX.muted }}>
+              <th className="px-2 py-3 text-left text-xs font-medium whitespace-nowrap" style={{ color: AX.muted }}>
                 <div className="flex items-center gap-1">
                   <SortableHeader
                     label={chain === 'monad' ? 'MON Bal' : 'SOL Bal'}
@@ -1104,7 +1133,7 @@ const HoldersTable: React.FC<HoldersTableProps> = ({
               </th>
 
               {/* Bought / Avg MC (using Avg Buy for now) */}
-              <th className="px-2 py-3 text-left text-[11px] font-medium whitespace-nowrap" style={{ color: AX.muted }}>
+              <th className="px-2 py-3 text-left text-xs font-medium whitespace-nowrap" style={{ color: AX.muted }}>
                 <div className="flex items-center gap-1">
                   <SortableHeader
                     label="Bought"
@@ -1127,7 +1156,7 @@ const HoldersTable: React.FC<HoldersTableProps> = ({
               </th>
 
               {/* Sold / Avg Sell */}
-              <th className="px-2 py-3 text-left text-[11px] font-medium whitespace-nowrap" style={{ color: AX.muted }}>
+              <th className="px-2 py-3 text-left text-xs font-medium whitespace-nowrap" style={{ color: AX.muted }}>
                 <div className="flex items-center gap-1">
                   <SortableHeader
                     label="Sold"
@@ -1150,7 +1179,7 @@ const HoldersTable: React.FC<HoldersTableProps> = ({
               </th>
 
               {/* PNL (no arrows) */}
-              <th className="px-2 py-3 text-left text-[11px] font-medium whitespace-nowrap" style={{ color: AX.muted }}>
+              <th className="px-2 py-3 text-left text-xs font-medium whitespace-nowrap" style={{ color: AX.muted }}>
                 <SortableHeader
                   label="PNL"
                   sortDirection={filters.pnl.sort}
@@ -1162,7 +1191,7 @@ const HoldersTable: React.FC<HoldersTableProps> = ({
               </th>
 
               {/* Remaining with USD/SOL toggle */}
-              <th className="px-2 py-3 text-left text-[11px] font-medium whitespace-nowrap" style={{ color: AX.muted }}>
+              <th className="px-2 py-3 text-left text-xs font-medium whitespace-nowrap" style={{ color: AX.muted }}>
                 <div className="flex items-center gap-1">
                   <SortableHeader
                     label="Remaining"
@@ -1187,7 +1216,7 @@ const HoldersTable: React.FC<HoldersTableProps> = ({
               </th>
 
               {/* Funding / TF Amount */}
-              <th className="px-2 py-3 text-left text-[11px] font-medium whitespace-nowrap" style={{ color: AX.muted }}>
+              <th className="px-2 py-3 text-left text-xs font-medium whitespace-nowrap" style={{ color: AX.muted }}>
                 <div className="flex items-center gap-1">
                   <SortableHeader
                     label="Funding"
@@ -1207,29 +1236,6 @@ const HoldersTable: React.FC<HoldersTableProps> = ({
                     isFilterActive={hasActiveRange(filters.tfAmount.range)}
                   />
                 </div>
-              </th>
-
-              {/* Bubblemap Toggle */}
-              <th className="px-1 py-3 text-right" style={{ color: AX.muted }}>
-                {isBubblemapVisible ? (
-                  <button
-                    onClick={handleHideBubblemap}
-                    className="p-0.5 rounded hover:bg-opacity-20 transition-colors"
-                    style={{ color: AX.muted }}
-                    title="Hide bubblemap"
-                  >
-                    <FiX size={14} />
-                  </button>
-                ) : (
-                  <button
-                    onClick={handleBubblemapClick}
-                    className="p-0.5 rounded hover:bg-opacity-20 transition-colors"
-                    style={{ color: AX.muted }}
-                    title="Show bubblemap"
-                  >
-                    <MdOutlineBubbleChart size={14} />
-                  </button>
-                )}
               </th>
             </tr>
           </thead>
@@ -1279,23 +1285,28 @@ const HoldersTable: React.FC<HoldersTableProps> = ({
                     key={holder.address}
                     className="transition-colors hover:brightness-110"
                     style={{
-                      backgroundColor: index % 2 === 0 ? '#101114' : '#161719',
+                      backgroundColor: index % 2 === 0 ? "#101114" : "#161719",
                     }}
                   >
-                    <td className="px-2 py-3">
+                    <td className="px-4 py-3">
                       <div className="flex items-center gap-1.5">
                         {(() => {
-                          const walletKey = (holder.address || '').toLowerCase();
+                          const walletKey = (
+                            holder.address || ""
+                          ).toLowerCase();
                           const walletData = walletDataMap.get(walletKey);
 
                           // Build hover card data - use existing data or create from holder info
                           const hoverData: WalletHoverCardData = walletData || {
                             walletAddress: holder.address,
-                            totalBoughtUsd: parseFloat(holder.amountBoughtUsd30d) || 0,
-                            totalSoldUsd: parseFloat(holder.amountSoldUsd30d) || 0,
+                            totalBoughtUsd:
+                              parseFloat(holder.amountBoughtUsd30d) || 0,
+                            totalSoldUsd:
+                              parseFloat(holder.amountSoldUsd30d) || 0,
                             buyCount: holder.buys30d,
                             sellCount: holder.sells30d,
-                            remainingTokens: parseFloat(holder.tokenBalance) || 0,
+                            remainingTokens:
+                              parseFloat(holder.tokenBalance) || 0,
                             solBalance: holder.solBalance ?? undefined,
                             holderType: holder.holderType,
                           };
@@ -1303,18 +1314,38 @@ const HoldersTable: React.FC<HoldersTableProps> = ({
                           return (
                             <WalletHoverCard data={hoverData} chain={chain}>
                               <div className="flex items-center gap-1.5">
-                                <span className="text-[11px] font-mono text-gray-300 hover:text-emerald-400 cursor-pointer transition-colors">
+                                <a
+                                  href={`https://solscan.io/account/${holder.address}`}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="rounded-full bg-[#757E80] p-1"
+                                >
+                                  <SiSolana
+                                    size={8}
+                                    className="flex-shrink-0 text-black"
+                                  />
+                                </a>
+                                <span className="cursor-pointer font-mono text-xs text-gray-300 transition-colors hover:text-emerald-400">
                                   {shortAddr(holder.address)}
                                 </span>
                                 {/* Holder type icons */}
-                                {holder.holderType === 'dev' && (
-                                  <LuChefHat size={12} className="text-yellow-400 flex-shrink-0" />
+                                {holder.holderType === "dev" && (
+                                  <LuChefHat
+                                    size={12}
+                                    className="flex-shrink-0 text-yellow-400"
+                                  />
                                 )}
-                                {holder.holderType === 'sniper' && (
-                                  <TfiTarget size={12} className="text-red-400 flex-shrink-0" />
+                                {holder.holderType === "sniper" && (
+                                  <TfiTarget
+                                    size={12}
+                                    className="flex-shrink-0 text-red-400"
+                                  />
                                 )}
-                                {holder.holderType === 'bundler' && (
-                                  <HiOutlineCubeTransparent size={12} className="text-orange-400 flex-shrink-0" />
+                                {holder.holderType === "bundler" && (
+                                  <HiOutlineCubeTransparent
+                                    size={12}
+                                    className="flex-shrink-0 text-orange-400"
+                                  />
                                 )}
                               </div>
                             </WalletHoverCard>
@@ -1325,7 +1356,7 @@ const HoldersTable: React.FC<HoldersTableProps> = ({
                     <td className="px-2 py-3">
                       <div className="flex items-center gap-1.5">
                         <SolanaIcon size={12} />
-                        <span className="text-[11px]" style={{ color: AX.text }}>
+                        <span className="text-xs" style={{ color: AX.text }}>
                           {holder.isLoadingBalance ? (
                             <span style={{ color: AX.muted }}>...</span>
                           ) : holder.solBalance !== null ? (
@@ -1334,39 +1365,50 @@ const HoldersTable: React.FC<HoldersTableProps> = ({
                             <span style={{ color: AX.muted }}>N/A</span>
                           )}
                         </span>
-                        <span className="text-[10px]" style={{ color: AX.muted }}>
+                        <span className="text-[10px] text-[#757e80]">
                           ({getTimeAgo(holder.lastTransactionAt)})
                         </span>
                       </div>
                     </td>
                     <td className="px-2 py-3">
                       <div className="flex flex-col">
-                        <span className="text-[11px]" style={{ color: boughtUsd > 0 ? AX.mint : AX.text }}>
+                        <span
+                          className="text-xs"
+                          style={{ color: boughtUsd > 0 ? AX.mint : AX.text }}
+                        >
                           {formatUsd(boughtUsd)}
                         </span>
-                        <span className="text-[10px]" style={{ color: AX.muted }}>
-                          {formatNumber(holder.tokenAmountBought30d)} / {holder.buys30d}
+                        <span className="text-[10px] text-[#757e80]">
+                          {formatNumber(holder.tokenAmountBought30d)} /{" "}
+                          {holder.buys30d}
                           {avgBuyPrice > 0 && ` (${formatUsd(avgBuyPrice)})`}
                         </span>
                       </div>
                     </td>
                     <td className="px-2 py-3">
                       <div className="flex flex-col">
-                        <span className="text-[11px]" style={{ color: soldUsd > 0 ? AX.sell : AX.text }}>
+                        <span
+                          className="text-xs"
+                          style={{ color: soldUsd > 0 ? AX.sell : AX.text }}
+                        >
                           {formatUsd(soldUsd)}
                         </span>
-                        <span className="text-[10px]" style={{ color: AX.muted }}>
-                          {formatNumber(holder.tokenAmountSold30d)} / {holder.sells30d}
+                        <span className="text-[10px] text-[#757e80]">
+                          {formatNumber(holder.tokenAmountSold30d)} /{" "}
+                          {holder.sells30d}
                           {avgSellPrice > 0 && ` (${formatUsd(avgSellPrice)})`}
                         </span>
                       </div>
                     </td>
                     <td className="px-2 py-3">
                       <span
-                        className="text-[11px] font-medium"
-                        style={{ color: unrealizedPnL >= 0 ? AX.mint : AX.sell }}
+                        className="text-xs font-medium"
+                        style={{
+                          color: unrealizedPnL >= 0 ? AX.mint : AX.sell,
+                        }}
                       >
-                        {unrealizedPnL >= 0 ? '+' : ''}{formatUsd(unrealizedPnL)}
+                        {unrealizedPnL >= 0 ? "+" : ""}
+                        {formatUsd(unrealizedPnL)}
                       </span>
                     </td>
                     <td className="px-2 py-3">
@@ -1375,34 +1417,42 @@ const HoldersTable: React.FC<HoldersTableProps> = ({
                           {showRemainingInSol ? (
                             <div className="flex items-center gap-0.5">
                               <SolanaIcon size={10} />
-                              <span className="text-[11px]" style={{ color: AX.mint }}>
-                                {chainPrice > 0 ? (remaining.value / chainPrice).toFixed(4) : '0'}
+                              <span
+                                className="text-xs"
+                                style={{ color: AX.mint }}
+                              >
+                                {chainPrice > 0
+                                  ? (remaining.value / chainPrice).toFixed(4)
+                                  : "0"}
                               </span>
                             </div>
                           ) : (
-                            <span className="text-[11px]" style={{ color: AX.mint }}>
+                            <span
+                              className="text-xs"
+                              style={{ color: AX.mint }}
+                            >
                               {formatUsd(remaining.value)}
                             </span>
                           )}
                           <span
-                            className="text-[9px] px-1 py-0.5 rounded"
+                            className="rounded px-1 py-0.5 text-[9px]"
                             style={{
                               backgroundColor: `${AX.surface2}80`,
-                              color: AX.muted
+                              color: AX.muted,
                             }}
                           >
                             {formatPercentage(remaining.percentage)}
                           </span>
                         </div>
                         <div
-                          className="h-0.5 rounded-full overflow-hidden"
+                          className="h-0.5 overflow-hidden rounded-full"
                           style={{ backgroundColor: `${AX.border}40` }}
                         >
                           <div
                             className="h-full rounded-full transition-all"
                             style={{
                               width: `${Math.min(remaining.percentage, 100)}%`,
-                              backgroundColor: '#3B82F6'
+                              backgroundColor: "#3B82F6",
                             }}
                           />
                         </div>
@@ -1412,23 +1462,35 @@ const HoldersTable: React.FC<HoldersTableProps> = ({
                       <div className="flex flex-col">
                         {funding.sourceAddress ? (
                           <a
-                            href={chain === 'monad'
-                              ? `https://testnet.monadexplorer.com/address/${funding.sourceAddress}`
-                              : `https://solscan.io/account/${funding.sourceAddress}`}
+                            href={
+                              chain === "monad"
+                                ? `https://testnet.monadexplorer.com/address/${funding.sourceAddress}`
+                                : `https://solscan.io/account/${funding.sourceAddress}`
+                            }
                             target="_blank"
                             rel="noopener noreferrer"
                             className="flex items-center gap-1 transition-colors hover:text-emerald-400 hover:underline"
                             style={{ color: AX.text }}
                           >
-                            <span className="text-[11px] font-mono">{funding.source}</span>
-                            <FiExternalLink size={10} style={{ color: AX.muted }} />
+                            <span className="font-mono text-xs">
+                              {funding.source}
+                            </span>
+                            <div className="rounded-full bg-[#757E80] p-0.5 ml-1">
+                              <SiSolana
+                                size={8}
+                                className="flex-shrink-0 text-black"
+                              />
+                            </div>
                           </a>
                         ) : (
-                          <span className="text-[11px] font-mono" style={{ color: AX.text }}>
+                          <span
+                            className="font-mono text-xs"
+                            style={{ color: AX.text }}
+                          >
                             {funding.source}
                           </span>
                         )}
-                        <div className="flex items-center gap-1 text-[10px]" style={{ color: AX.muted }}>
+                        <div className="flex items-center gap-1 text-[10px] text-[#757e80]">
                           <span>{formatFundingAge(funding.timeAgo)}</span>
                           <span>•</span>
                           <SolanaIcon size={10} />
@@ -1436,8 +1498,6 @@ const HoldersTable: React.FC<HoldersTableProps> = ({
                         </div>
                       </div>
                     </td>
-                    {/* Empty cell for bubblemap column */}
-                    <td className="px-1 py-3" />
                   </tr>
                 );
               })
@@ -1480,4 +1540,3 @@ const HoldersTable: React.FC<HoldersTableProps> = ({
 };
 
 export default HoldersTable;
-
