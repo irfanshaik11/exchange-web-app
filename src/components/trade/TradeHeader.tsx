@@ -60,7 +60,7 @@ const MONAD_RED = "#f26682";
 
 /* ---------- AXIOM palette ---------- */
 const AX = {
-  bg: "#0f1012",
+  bg: "#111214",
   surface: "#1A1A1A",
   surface2: "#17191E",
   border: "#2A2B33",

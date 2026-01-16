@@ -4546,13 +4546,13 @@ Maker: ${walletAddress}`;
           // custom_css_url: '/charting_library/themed.css',
           loading_screen: { backgroundColor: 'transparent' },
           overrides: {
-            'paneProperties.background': '#000000',
+            'paneProperties.background': '#111214',
             'paneProperties.backgroundType': 'solid',
-            'paneProperties.vertGridProperties.color': '#2B2B43',
-            'paneProperties.horzGridProperties.color': '#2B2B43',
+            'paneProperties.vertGridProperties.color': '#1E1F21',
+            'paneProperties.horzGridProperties.color': '#1E1F21',
             'symbolWatermarkProperties.transparency': 90,
             'scalesProperties.textColor': '#d1d4dc',
-            'scalesProperties.lineColor': '#2B2B43',
+            'scalesProperties.lineColor': '#1E1F21',
             // Explicitly set chart type to candlesticks
             'paneProperties.backgroundGradientStartColor': '#000000',
             'paneProperties.backgroundGradientEndColor': '#000000',

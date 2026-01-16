@@ -637,7 +637,7 @@ const PoolInfoSection: React.FC<{ token: any }> = ({ token }) => {
       </button>
 
       {isOpen && (
-        <div style={{ backgroundColor: '#0f1012' }}>
+        <div style={{ backgroundColor: '#111214' }}>
           {/* Liquidity Section */}
           <div className="px-3 py-2.5 space-y-2">
             {/* Total Liquidity */}
@@ -2831,7 +2831,7 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
   return (
     <div
       className="flex flex-col text-[12px] leading-tight"
-      style={{ backgroundColor: '#0f1012', fontFamily: '-apple-system, BlinkMacSystemFont, "SF Pro Text", "Inter", system-ui, sans-serif', paddingBottom: '100px' }}
+      style={{ backgroundColor: '#111214', fontFamily: '-apple-system, BlinkMacSystemFont, "SF Pro Text", "Inter", system-ui, sans-serif', paddingBottom: '100px' }}
     >
       {/* ===== A. Time buttons ===== */}
       <div className="px-3 pt-2 pb-2 border-neutral-800">
@@ -2925,7 +2925,7 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
             </div>
           </div>
         </div>
-        <div className="mt-1 h-0.5 w-full rounded-full bg-[#17191E] relative overflow-hidden">
+        <div className="mt-1 h-0.5 w-full rounded-full bg-[#25282B] relative overflow-hidden">
           <div className="absolute left-0 top-0 h-full" style={{ width: `${buyPercentage}%`, background: AX.mint }} />
           <div className="absolute right-0 top-0 h-full" style={{ width: `${sellPercentage}%`, background: AX.sell }} />
         </div>
@@ -3056,7 +3056,7 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
 
       {/* ===== F. Amount ===== */}
       <div className="px-3 pt-2">
-        <div className="mx-auto w-full max-w-xl relative rounded-lg border border-[#2A2B33] bg-[#1E1F26]">
+        <div className="mx-auto w-full max-w-xl relative rounded-lg border border-[#2A2B33] bg-[#25282B]">
           <div className="flex items-center justify-between gap-3 px-3 py-1.5">
             <div className="flex items-center gap-1">
               <span className="text-[10px] font-semibold text-[#9CA3AF] uppercase tracking-wide">
@@ -3138,18 +3138,18 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
           {/* Minimum hint removed per request */}
 
           {/* Presets */}
-          <div className="border-t border-[#2A2B33] rounded-b-lg overflow-hidden">
+          <div className="border-t border-[#000] rounded-b-lg overflow-hidden">
             <div className="grid grid-cols-5">
               {amountPresets.map((opt, i) => {
                 const currentValue = editingPresets ? (presetDrafts[i] || "") : String(opt);
                 const active = (isSniperMode ? sniperAmount : amount) === currentValue;
                 if (editingPresets) {
                   return (
-                    <div key={i} className="h-9 border-r border-[#2A2B33] last:border-r-0 min-w-0">
+                    <div key={i} className="h-9 border-r border-[#000] last:border-r-0 min-w-0">
                       <input
                         type="text"
                         inputMode="decimal"
-                        className="h-full w-full bg-[#17191E] text-center text-[12px] font-semibold text-[#E6E7EA]
+                        className="h-full w-full bg-[#25282B] text-center text-[12px] font-semibold text-[#E6E7EA]
                                    outline-none focus:bg-[#1E1F26]"
                         value={presetDrafts[i] ?? ""}
                         onChange={(e) => {
@@ -3173,10 +3173,10 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
                     key={i}
                     type="button"
                     className={cx(
-                      "h-9 border-r border-[#2A2B33] last:border-r-0 text-[12px] font-semibold tabular-nums",
+                      "h-9 border-r border-[#000] last:border-r-0 text-[12px] font-semibold tabular-nums",
                       active
                         ? "bg-[#2A2B33] text-[#E6E7EA]"
-                        : "bg-[#17191E] hover:bg-[#1E1F26] text-[#E6E7EA]"
+                        : "bg-[#25282B] hover:bg-[#1E1F26] text-[#E6E7EA]"
                     )}
                     onClick={() => {
                       if (isSniperMode) {
@@ -3194,7 +3194,7 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
                 <button
                   type="button"
                   onClick={() => setEditingPresets(true)}
-                  className="h-9 bg-[#17191E] hover:bg-[#1E1F26] text-[#E6E7EA]"
+                  className="h-9 bg-[#25282B] hover:bg-[#1E1F26] text-[#E6E7EA]"
                   title="Edit preset values"
                 >
                   <LuPencil className="mx-auto h-4 w-4" />
@@ -3203,7 +3203,7 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
                 <button
                   type="button"
                   onClick={commitPresetDrafts}
-                  className="h-9 bg-[#1E1F26] text-[#E6E7EA] hover:bg-[#17191E]"
+                  className="h-9 bg-[#1E1F26] text-[#E6E7EA] hover:bg-[#25282B]"
                   title="Done"
                 >
                   <LuCheck className="mx-auto h-4 w-4" />
@@ -3219,7 +3219,7 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
         <div className="px-3 pt-2 space-y-3">
           {/* Market cap input */}
           <div className=" pt-2 pb-3">
-            <div className="mx-auto w-full max-w-xl relative rounded-lg border border-[#2A2B33] bg-[#1E1F26] mb-3">
+            <div className="mx-auto w-full max-w-xl relative rounded-lg border border-[#2A2B33] bg-[#25282B] mb-3">
               <div className="flex items-center justify-between gap-3 px-3 py-1.5">
                 <div className="flex items-center gap-1">
                   <span className="text-[10px] font-semibold text-[#9CA3AF] uppercase tracking-wide">MKT CAP</span>
@@ -3534,7 +3534,7 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
 
       {/* footer mini stats */}
       <div className="grid grid-cols-4 gap-1 p-3" style={{ borderTop: `1px solid ${AX.border}` }}>
-        <div className="flex flex-col items-center justify-center gap-1 p-2 rounded-lg bg-[#17191E] border border-[#2A2B33]">
+        <div className="flex flex-col items-center justify-center gap-1 p-2 rounded-lg bg-[#25282B] border border-[#2A2B33]">
           <span className="text-[9px] text-[#9CA3AF] uppercase tracking-wide">Bought</span>
           <div className="flex items-center gap-1">
             <div className="w-2.5 h-2.5">
@@ -3563,7 +3563,7 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
             </span>
           </div>
         </div>
-        <div className="flex flex-col items-center justify-center gap-1 p-2 rounded-lg bg-[#17191E] border border-[#2A2B33]">
+        <div className="flex flex-col items-center justify-center gap-1 p-2 rounded-lg bg-[#25282B] border border-[#2A2B33]">
           <span className="text-[9px] text-[#9CA3AF] uppercase tracking-wide">Sold</span>
           <div className="flex items-center gap-1">
             <div className="w-2.5 h-2.5">
@@ -3592,7 +3592,7 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
             </span>
           </div>
         </div>
-        <div className="flex flex-col items-center justify-center gap-1 p-2 rounded-lg bg-[#17191E] border border-[#2A2B33]">
+        <div className="flex flex-col items-center justify-center gap-1 p-2 rounded-lg bg-[#25282B] border border-[#2A2B33]">
           <span className="text-[9px] text-[#9CA3AF] uppercase tracking-wide">Holding</span>
           <div className="flex items-center gap-1">
             <div className="w-2.5 h-2.5">

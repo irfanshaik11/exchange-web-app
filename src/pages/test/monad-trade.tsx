@@ -296,7 +296,7 @@ export default function MonadTradeTestPage() {
       </Head>
       <div style={{ 
         minHeight: "100vh", 
-        backgroundColor: "#0f1012", 
+        backgroundColor: "#111214", 
         color: "#f0f5f5",
         padding: "2rem",
         fontFamily: "Inter, -apple-system, BlinkMacSystemFont, 'SF Pro Text', system-ui, sans-serif"

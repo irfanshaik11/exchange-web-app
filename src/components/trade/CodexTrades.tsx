@@ -48,7 +48,7 @@ interface TradeFilters {
 }
 
 const AX = {
-  bg: "#101114",
+  bg: "#111214",
   surface: "#1E1F26",
   surface2: "#17191E",
   border: "#2A2B33",
@@ -1358,7 +1358,7 @@ const CodexTrades: React.FC<CodexTradesProps> = ({ token, initialTrades = [], on
   }
 
   return (
-    <div className="w-full h-full flex flex-col" style={{ backgroundColor: '#101114' }}>
+    <div className="w-full h-full flex flex-col bg-[#111214]">
       {/* Filter Popout */}
       {activeFilterPopout && (
         <FilterPopout
@@ -1394,9 +1394,9 @@ const CodexTrades: React.FC<CodexTradesProps> = ({ token, initialTrades = [], on
         position={filterPopoutPosition}
       />
 
-      <div className="flex-1 overflow-y-auto min-h-0 pb-18" style={{ backgroundColor: '#101114' }}>
-        <table className="w-full text-[11px] border-collapse table-fixed" style={{ backgroundColor: '#101114' }}>
-          <thead className="sticky top-0 z-10" style={{ backgroundColor: '#101114' }}>
+      <div className="flex-1 overflow-y-auto min-h-0 pb-18 bg-[#111214]">
+        <table className="w-full text-[11px] border-collapse table-fixed bg-[#111214]">
+          <thead className="sticky top-0 z-10 bg-[#111214]">
             <tr className='py-4 border-t border-b border-[#27282e]'>
               {/* Age / Time */}
               <th className="w-[12%] px-4 py-3 text-left whitespace-nowrap" style={{ color: '#9ca3af' }}>
@@ -1532,16 +1532,16 @@ const CodexTrades: React.FC<CodexTradesProps> = ({ token, initialTrades = [], on
               </th>
             </tr>
           </thead>
-          <tbody className='bg-[#101114] px-4'>
+          <tbody className='bg-[#111214] px-4'>
             {isLoading ? (
-              <tr style={{ backgroundColor: '#101114' }}>
-                <td colSpan={6} className="text-center py-6 text-neutral-500" style={{ backgroundColor: '#101114' }}>
+              <tr className="bg-[#111214]">
+                <td colSpan={6} className="text-center py-6 text-neutral-500 bg-[#111214]">
                   Loading trades...
                 </td>
               </tr>
             ) : !normalized.length ? (
-              <tr style={{ backgroundColor: '#101114' }}>
-                <td colSpan={6} className="text-center py-6 text-neutral-500" style={{ backgroundColor: '#101114' }}>
+              <tr className="bg-[#111214]">
+                <td colSpan={6} className="text-center py-6 text-neutral-500 bg-[#111214]">
                   No trades available.
                 </td>
               </tr>
@@ -1610,7 +1610,7 @@ const CodexTrades: React.FC<CodexTradesProps> = ({ token, initialTrades = [], on
                     key={n.keyPart || n.idx}
                     className="transition-colors hover:brightness-110"
                     style={{
-                      backgroundColor: index % 2 === 0 ? "#101114" : "#161719",
+                      backgroundColor: index % 2 === 0 ? "#111214" : "#161719",
                     }}
                   >
                     {/* Age / Time */}
@@ -1785,9 +1785,9 @@ const CodexTrades: React.FC<CodexTradesProps> = ({ token, initialTrades = [], on
           </tbody>
 
           {!!p95Display && (
-            <tfoot style={{ backgroundColor: '#101114' }}>
+            <tfoot className="bg-[#111214]">
               <tr>
-                <td colSpan={6} style={{ backgroundColor: '#101114' }}>
+                <td colSpan={6} className="bg-[#111214]">
                   <div className="px-2 py-1.5 text-[10px] flex items-center gap-2" style={{ color: '#6b7280' }}>
                     <span className="inline-block">
                       Total heat = relative to ~95th percentile

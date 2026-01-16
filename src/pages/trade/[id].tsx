@@ -35,7 +35,7 @@ const CodexHolders = dynamic(() => import("../../components/trade/CodexHolders")
 
 /* ---------- AXIOM palette ---------- */
 const AX = {
-  bg: "#101114",
+  bg: "#0C0C0F",
   surface: "#1E1F26",
   surface2: "#17191E",
   border: "#2A2B33",
@@ -822,7 +822,7 @@ export default function TradePage() {
       <div
         className="min-h-screen w-full flex flex-col overflow-y-auto"
         style={{
-          backgroundColor: "#0f1012",
+          backgroundColor: "#111214",
           color: AX.text,
           fontFamily: "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", \"Inter\", system-ui, sans-serif",
         }}
@@ -1090,7 +1090,7 @@ export default function TradePage() {
         <div className="fixed inset-0 z-[100] lg:hidden">
           <div className={`absolute inset-0 bg-black/70 bg-opacity-50 transition-opacity duration-300 ${isClosingModal ? "opacity-0" : "opacity-100"}`} onClick={closeModal}/>
           <div ref={modalDragRef}
-               className={`absolute bottom-0 left-0 right-0 bg-[#0f1012] rounded-t-xl shadow-2xl max-h-[85vh] flex flex-col ${isClosingModal ? "mobile-trade-modal-closing" : "mobile-trade-modal"}`}
+               className={`absolute bottom-0 left-0 right-0 bg-[#111214] rounded-t-xl shadow-2xl max-h-[85vh] flex flex-col ${isClosingModal ? "mobile-trade-modal-closing" : "mobile-trade-modal"}`}
                style={{ touchAction: "none" }}>
             <div className="flex justify-center pt-3 pb-2 cursor-grab active:cursor-grabbing select-none"
                  onTouchStart={handleDragStart} onTouchMove={handleDragMove} onTouchEnd={handleDragEnd}

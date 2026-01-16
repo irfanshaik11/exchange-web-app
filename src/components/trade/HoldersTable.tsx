@@ -238,7 +238,7 @@ function calculateUnrealizedPnL(
 }
 
 const AX = {
-  bg: "#101114",
+  bg: "#111214",
   surface: "#1E1F26",
   surface2: "#17191E",
   border: "#2A2B33",
@@ -1082,7 +1082,7 @@ const HoldersTable: React.FC<HoldersTableProps> = ({
 
       <div className="flex-1 overflow-y-auto min-h-0 pb-18">
         <table className="w-full" style={{ borderCollapse: 'collapse' }}>
-          <thead className="sticky top-0 z-10" style={{ backgroundColor: '#101114' }}>
+          <thead className="sticky top-0 z-10 bg-[#111214]">
             <tr className='border-t border-b border-[#27282e]'>
               {/* Wallet Column */}
               <th className="px-4 py-3 text-left text-xs font-medium whitespace-nowrap" style={{ color: AX.muted }}>
