@@ -196,7 +196,7 @@ const DevTokensPieChart: React.FC<DevTokensPieChartProps> = ({ migrated, nonMigr
   };
 
   return (
-    <div className="flex flex-col items-center justify-center" style={{ width: '100%', backgroundColor: '#000000' }}>
+    <div className="w-full flex flex-col items-center justify-center">
       <div style={{ width: '100%', height: '256px', maxWidth: '256px' }}>
         <ResponsiveContainer width="100%" height="100%">
           <PieChart>

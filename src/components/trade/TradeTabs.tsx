@@ -14,9 +14,10 @@ interface TradeTabsProps {
   setSelectedTab: (tab: string) => void;
   onInstantTradeClick?: () => void;
   isInstantTradeOpen?: boolean;
+  devTokensCount?: number; // Total count of dev tokens
 }
 
-const TradeTabs: React.FC<TradeTabsProps> = ({ selectedTab, setSelectedTab, onInstantTradeClick, isInstantTradeOpen = false }) => {
+const TradeTabs: React.FC<TradeTabsProps> = ({ selectedTab, setSelectedTab, onInstantTradeClick, isInstantTradeOpen = false, devTokensCount }) => {
   return (
     <div className="flex gap-4 pt-2 text-xs items-center justify-between">
       <div className="flex gap-4 items-center">
@@ -27,6 +28,9 @@ const TradeTabs: React.FC<TradeTabsProps> = ({ selectedTab, setSelectedTab, onIn
             onClick={() => setSelectedTab(tab)}
           >
             {tab}
+            {tab === 'Dev Tokens' && devTokensCount !== undefined && (
+              <> {devTokensCount}</>
+            )}
           </button>
         ))}
       </div>

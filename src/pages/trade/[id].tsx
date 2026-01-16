@@ -128,6 +128,7 @@ export default function TradePage() {
   const { isConnected } = useWallet();
   const { user } = useUser();
   const [selectedTab, setSelectedTab] = useState("Trades");
+  const [devTokensCount, setDevTokensCount] = useState<number | undefined>(undefined);
   const [search, setSearch] = useState("");
   const [showMobileTradeModal, setShowMobileTradeModal] = useState(false);
   const [isClosingModal, setIsClosingModal] = useState(false);
@@ -998,6 +999,7 @@ export default function TradePage() {
                   setSelectedTab={setSelectedTab}
                   onInstantTradeClick={() => setIsInstantTradeOpen(true)}
                   isInstantTradeOpen={isInstantTradeOpen}
+                  devTokensCount={devTokensCount}
                 />
               </div>
               <div className="flex-1 min-h-[400px]">
@@ -1025,7 +1027,7 @@ export default function TradePage() {
                 </div>
                 <div className={`flex flex-col h-full ${selectedTab === "Dev Tokens" ? "" : "hidden"}`}>
                   <React.Suspense fallback={<div className="flex items-center justify-center h-full text-neutral-400">Loading...</div>}>
-                    <CodexDevTokens token={displayToken} chain="sol" />
+                    <CodexDevTokens token={displayToken} chain="sol" onTotalCountChange={setDevTokensCount} />
                   </React.Suspense>
                 </div>
               </div>

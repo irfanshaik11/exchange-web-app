@@ -1,7 +1,8 @@
 import { RiExchangeDollarLine } from "react-icons/ri";
 import { SiSolana } from "react-icons/si";
 import { FaArrowRightArrowLeft } from "react-icons/fa6";
-import { FaFilter, FaCaretDown } from "react-icons/fa";
+import { FaCaretDown } from "react-icons/fa";
+import { CiFilter } from "react-icons/ci";
 import { FiX } from "react-icons/fi";
 import { MdRefresh } from "react-icons/md";
 import { IoOpenOutline } from "react-icons/io5";
@@ -461,7 +462,7 @@ const SortableHeader: React.FC<SortableHeaderProps> = ({
         className="p-0.5 rounded hover:bg-opacity-20 transition-colors"
         style={{ color: isFilterActive ? AX.mint : AX.muted }}
       >
-        <FaFilter size={8} />
+        <CiFilter size={14} />
       </button>
     )}
   </div>
@@ -1408,7 +1409,7 @@ const CodexTrades: React.FC<CodexTradesProps> = ({ token, initialTrades = [], on
                   <span className="font-medium">
                     {showAge ? 'Age' : 'Time'}
                   </span>
-                  <span className="text-[10px]" style={{ color: '#6b7280' }}>
+                  <span className="text-[10px] font-medium" style={{ color: '#6b7280' }}>
                     / {showAge ? 'Time' : 'Age'}
                   </span>
                 </button>
@@ -1417,13 +1418,13 @@ const CodexTrades: React.FC<CodexTradesProps> = ({ token, initialTrades = [], on
               {/* Type */}
               <th className="w-[10%] px-2 py-3 text-left whitespace-nowrap" style={{ color: '#9ca3af' }}>
                 <div className="flex items-center gap-1">
-                  <span className="text-[11px]">Type</span>
+                  <span className="text-[11px] font-medium">Type</span>
                   <button
                     onClick={handleTypeFilterClick}
                     className="p-0.5 rounded hover:bg-opacity-20 transition-colors"
                     style={{ color: filters.type.filter !== 'all' ? AX.mint : AX.muted }}
                   >
-                    <FaFilter size={8} />
+                    <CiFilter size={14} />
                   </button>
                   {filters.type.filter !== 'all' && (
                     <span
@@ -1463,7 +1464,7 @@ const CodexTrades: React.FC<CodexTradesProps> = ({ token, initialTrades = [], on
               </th>
 
               {/* Amount with filter */}
-              <th className="w-[15%] px-2 py-3 text-left whitespace-nowrap">
+              <th className="w-[15%] font-medium px-2 py-3 text-left whitespace-nowrap">
                 <SortableHeader
                   label="Amount"
                   sortDirection={filters.amount.sort}
@@ -1514,7 +1515,7 @@ const CodexTrades: React.FC<CodexTradesProps> = ({ token, initialTrades = [], on
                     className="p-0.5 rounded hover:bg-opacity-20 transition-colors"
                     style={{ color: isWalletFilterActive ? AX.mint : AX.muted }}
                   >
-                    <FaFilter size={8} />
+                    <CiFilter size={14} />
                   </button>
                   {isWalletFilterActive && (
                     <span
@@ -1609,59 +1610,68 @@ const CodexTrades: React.FC<CodexTradesProps> = ({ token, initialTrades = [], on
                     key={n.keyPart || n.idx}
                     className="transition-colors hover:brightness-110"
                     style={{
-                      backgroundColor: index % 2 === 0 ? '#101114' : '#161719',
+                      backgroundColor: index % 2 === 0 ? "#101114" : "#161719",
                     }}
                   >
                     {/* Age / Time */}
-                    <td className="px-2 py-3 text-[11px]" style={{ color: '#d1d5db' }}>
+                    <td
+                      className="px-2 py-3 text-[11px]"
+                      style={{ color: "#d1d5db" }}
+                    >
                       {showAge ? age : timeStr}
                     </td>
 
                     {/* Type */}
                     <td
                       className={`px-2 py-3 text-[11px] font-semibold ${
-                        n.isBuy ? 'text-emerald-400' : 'text-red-400'
+                        n.isBuy ? "text-emerald-400" : "text-red-400"
                       }`}
                     >
                       {typeLabel}
                     </td>
 
                     {/* MC / Price */}
-                    <td className="px-2 py-3 text-[11px]" style={{ color: '#d1d5db' }}>
-                      {mcMode === 'mc' ? mcStr : priceStr}
+                    <td
+                      className="px-2 py-3 text-[11px]"
+                      style={{ color: "#d1d5db" }}
+                    >
+                      {mcMode === "mc" ? mcStr : priceStr}
                     </td>
 
                     {/* Amount */}
-                    <td className="px-2 py-3 text-[11px]" style={{ color: '#d1d5db' }}>
+                    <td
+                      className="px-2 py-3 text-[11px]"
+                      style={{ color: "#d1d5db" }}
+                    >
                       {tokenAmountStr}
                     </td>
 
                     {/* merged Total column */}
                     <td
-                      className="px-2 py-3 text-[11px] font-semibold relative overflow-hidden"
+                      className="relative overflow-hidden px-2 py-3 text-[11px] font-semibold"
                       title={title}
                     >
                       {showingUsd || hasSol ? (
                         <>
                           <div
                             aria-hidden
-                            className="absolute left-0 top-0 bottom-0 z-0"
+                            className="absolute top-0 bottom-0 left-0 z-0"
                             style={{
                               width: `${Math.max(6, intensity * 100)}%`,
                               backgroundImage: gradient,
-                              mixBlendMode: 'screen',
-                              pointerEvents: 'none',
-                              transition: 'width 160ms ease',
+                              mixBlendMode: "screen",
+                              pointerEvents: "none",
+                              transition: "width 160ms ease",
                             }}
                           />
                           <div
                             className={`relative z-10 flex items-center gap-1 ${
-                              n.isBuy ? 'text-emerald-300' : 'text-red-300'
+                              n.isBuy ? "text-emerald-300" : "text-red-300"
                             }`}
                           >
                             {/* Sol icon ALWAYS shown in SOL mode, dimmed if no SOL amount */}
                             {!showingUsd && (
-                              <span className={hasSol ? '' : 'opacity-40'}>
+                              <span className={hasSol ? "" : "opacity-40"}>
                                 <SolIcon />
                               </span>
                             )}
@@ -1676,47 +1686,73 @@ const CodexTrades: React.FC<CodexTradesProps> = ({ token, initialTrades = [], on
                     </td>
 
                     {/* Trader */}
-                    <td className="px-2 py-3 text-[11px] align-middle text-right" style={{ color: '#d1d5db' }}>
-                      <div className="flex items-center justify-end flex-nowrap gap-2 min-w-0">
+                    <td
+                      className="px-2 py-3 text-right align-middle text-[11px]"
+                      style={{ color: "#d1d5db" }}
+                    >
+                      <div className="flex min-w-0 flex-nowrap items-center justify-end gap-2">
                         {(() => {
-                          const walletKey = (n.maker || '').toLowerCase();
+                          const walletKey = (n.maker || "").toLowerCase();
                           const walletData = walletDataMap.get(walletKey);
                           const holderType = holderTypeMap.get(walletKey);
 
                           // Build hover card data - use existing data or create minimal data
                           const hoverData: WalletHoverCardData = walletData || {
-                            walletAddress: n.maker || '',
+                            walletAddress: n.maker || "",
                             holderType: holderType,
                           };
 
                           return (
                             <WalletHoverCard data={hoverData} chain={chain}>
                               <div className="flex items-center gap-1.5">
-                                <span className="truncate text-[11px] font-mono whitespace-nowrap text-gray-300 hover:text-emerald-400 cursor-pointer transition-colors">
-                                  {shortAddr(n.maker || '')}
+                                <span className="cursor-pointer truncate font-mono text-[11px] whitespace-nowrap text-gray-300 transition-colors hover:text-emerald-400">
+                                  {shortAddr(n.maker || "")}
                                 </span>
                                 {/* Holder type icons */}
-                                {holderType === 'dev' && (
-                                  <LuChefHat size={12} className="text-yellow-400 flex-shrink-0" />
+                                {holderType === "dev" && (
+                                  <LuChefHat
+                                    size={12}
+                                    className="flex-shrink-0 text-yellow-400"
+                                  />
                                 )}
-                                {holderType === 'sniper' && (
-                                  <TfiTarget size={12} className="text-red-400 flex-shrink-0" />
+                                {holderType === "sniper" && (
+                                  <TfiTarget
+                                    size={12}
+                                    className="flex-shrink-0 text-red-400"
+                                  />
                                 )}
-                                {holderType === 'bundler' && (
-                                  <HiOutlineCubeTransparent size={12} className="text-orange-400 flex-shrink-0" />
+                                {holderType === "bundler" && (
+                                  <HiOutlineCubeTransparent
+                                    size={12}
+                                    className="flex-shrink-0 text-orange-400"
+                                  />
                                 )}
                               </div>
                             </WalletHoverCard>
                           );
                         })()}
-                        <div className="flex items-center flex-nowrap gap-1 flex-shrink-0">
+                        <div className="flex flex-shrink-0 flex-nowrap items-center gap-1">
                           {(() => {
-                            const traderKey = (n.completeTraderAddress || n.maker || '').toString()
-                              .replace(/\./g, '').replace(/\s/g, '').toLowerCase().trim();
+                            const traderKey = (
+                              n.completeTraderAddress ||
+                              n.maker ||
+                              ""
+                            )
+                              .toString()
+                              .replace(/\./g, "")
+                              .replace(/\s/g, "")
+                              .toLowerCase()
+                              .trim();
                             const count = traderTradeCounts[traderKey] || 0;
                             if (count > 0) {
                               return (
-                                <span className="inline-flex items-center justify-center min-w-[16px] px-1 text-[10px] font-medium rounded whitespace-nowrap" style={{ backgroundColor: '#27282e', color: '#d1d5db' }}>
+                                <span
+                                  className="inline-flex min-w-[16px] items-center justify-center rounded px-1 text-[10px] font-medium whitespace-nowrap"
+                                  style={{
+                                    backgroundColor: "#27282e",
+                                    color: "#d1d5db",
+                                  }}
+                                >
                                   {count}
                                 </span>
                               );
@@ -1724,16 +1760,20 @@ const CodexTrades: React.FC<CodexTradesProps> = ({ token, initialTrades = [], on
                             return null;
                           })()}
                           <a
-                            href={chain === 'monad'
-                              ? `https://testnet.monadexplorer.com/address/${n.maker || ''}`
-                              : `https://solscan.io/account/${n.maker || ''}`}
+                            href={
+                              chain === "monad"
+                                ? `https://testnet.monadexplorer.com/address/${n.maker || ""}`
+                                : `https://solscan.io/account/${n.maker || ""}`
+                            }
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="hover:opacity-70 transition-opacity inline-flex items-center justify-center flex-shrink-0"
-                            style={{ color: '#6b7280' }}
+                            className="inline-flex flex-shrink-0 items-center justify-center transition-opacity hover:opacity-70"
+                            style={{ color: "#6b7280" }}
                             onClick={(e) => e.stopPropagation()}
                           >
-                            <IoOpenOutline size={12} className="flex-shrink-0" />
+                            <div className="rounded-full bg-[#757E80] p-1">
+                              <SiSolana size={8} className="flex-shrink-0 text-black" />
+                            </div>
                           </a>
                         </div>
                       </div>
