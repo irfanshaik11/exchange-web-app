@@ -2734,26 +2734,26 @@ export default function PortfolioPage() {
       </Head>
       <div className="min-h-screen bg-[#050608] text-[#E6E7EA]">
         <Header />
-        <div className="px-3 sm:px-4 md:px-6 pt-4 sm:pt-5">
+        <div className="px-3 sm:px-4 md:px-6 pt-4 sm:pt-6">
 
           {/* Section Tabs */}
           <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-4 px-2 gap-3 sm:gap-0">
-            <div className="flex gap-4 sm:gap-8">
+            <div className="flex gap-2 sm:gap-4">
               <button
-                className={`text-base sm:text-lg font-light transition cursor-pointer ${
+                className={`text-xl font-medium transition cursor-pointer ${
                   activeSection === "spot"
-                    ? "text-[#f0f5f5]"
-                    : "text-[#6B7280] hover:text-[#f0f5f5]"
+                    ? "text-white"
+                    : "text-[#6B7280] hover:text-white"
                 }`}
                 onClick={() => setActiveSection("spot")}
               >
                 Spot
               </button>
               <button
-                className={`text-base sm:text-lg font-light transition cursor-pointer ${
+                className={`text-xl font-medium transition cursor-pointer ${
                   activeSection === "wallet"
-                    ? "text-[#f0f5f5]"
-                    : "text-[#6B7280] hover:text-[#f0f5f5]"
+                    ? "text-white"
+                    : "text-[#6B7280] hover:text-white"
                 }`}
                 onClick={() => setActiveSection("wallet")}
               >

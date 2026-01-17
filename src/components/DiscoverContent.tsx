@@ -6,6 +6,8 @@ import InterstateTable from './InterstateTable';
 import type { Token } from '~/utils/db';
 import usePaginatedTokensWithFallback from '../hooks/usePaginatedTokensWithFallback';
 import { usePumpPortalWebSocket } from '../hooks/usePumpPortalWebSocket';
+// NOTE: DiscoverContent is not currently used - discover.tsx handles trending directly
+// import { useTrendingWebSocket, type TrendingTimeframe } from '../hooks/useTrendingWebSocket';
 import { useQuickBuy } from "./QuickBuyContext";
 import QuickBuySettingsModal from './QuickBuySettingsModal';
 import { useFilter } from './FilterContext';
@@ -174,6 +176,11 @@ export default function DiscoverContent() {
     timeframe: selectedTimeframe,
     limit: 200
   });
+
+  // NOTE: DiscoverContent is not currently used - discover.tsx handles trending directly
+  // The useTrendingWebSocket hook has been removed to prevent duplicate connections
+  // Trending data (holder_count, bundle_percent, etc.) is included in tokens from usePaginatedTokensWithFallback
+  const trendingDataMap = useMemo(() => new Map<string, any>(), []);
 
   // PumpPortal WebSocket for live pump section
   const {
@@ -826,7 +833,21 @@ export default function DiscoverContent() {
         if (address && seenAddresses.has(address)) continue;
         if (mint) seenMints.add(mint);
         if (address) seenAddresses.add(address);
-        uniqueSafe.push(token);
+
+        // Merge trending WebSocket data (holder metrics) if available
+        const trendingData = mint ? trendingDataMap.get(mint) : null;
+        if (trendingData) {
+          uniqueSafe.push({
+            ...token,
+            holder_count: trendingData.holder_count,
+            bundle_percent: trendingData.bundle_percent,
+            insider_percent: trendingData.insider_percent,
+            sniper_percent: trendingData.sniper_percent,
+            top10_holders_percent: trendingData.top10_holders_percent,
+          } as TokenWithDexPaid);
+        } else {
+          uniqueSafe.push(token);
+        }
       }
       setDisplayed(uniqueSafe);
     } else if (activeTab === "dex") {
@@ -835,7 +856,7 @@ export default function DiscoverContent() {
     } else {
       setDisplayed([]);
     }
-  }, [activeTab, filteredTokens, sortKey, sortDirection, selectedTimeframe, applyFilters, getVolumeForTimeframe, isWrappedSol, activeFilterCount]);
+  }, [activeTab, filteredTokens, sortKey, sortDirection, selectedTimeframe, applyFilters, getVolumeForTimeframe, isWrappedSol, activeFilterCount, trendingDataMap]);
 
   const processedNewPairs = useMemo(() => {
     if (!newPairsRaw || newPairsRaw.length === 0) return [] as TokenWithDexPaid[];
@@ -1373,6 +1394,7 @@ export default function DiscoverContent() {
                 setSort={handleSort}
                 selectedTimeframe={selectedTimeframe}
                 quickBuyAmount={Number(quickBuyAmount) || 0}
+                tableType="newPairs"
               />
             ) : (
               <div className="py-10 text-center text-[#9CA3AF]">

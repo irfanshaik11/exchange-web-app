@@ -75,14 +75,15 @@ async function preloadPageData(user: any) {
   const preloadPromises: Promise<any>[] = [];
 
   // 1. Preload Discover page data (trending tokens)
-  preloadPromises.push(
-    fetch('/api/token-service/pulse-trending?timeframe=1h&limit=50', {
-      method: 'GET',
-      headers: { 'Content-Type': 'application/json' },
-    }).catch(err => {
-      console.log('[Preloader] Discover data preload failed:', err);
-    })
-  );
+  // COMMENTED OUT: Now using WebSocket for trending data, API preload not needed
+  // preloadPromises.push(
+  //   fetch('/api/token-service/pulse-trending?timeframe=1h&limit=50', {
+  //     method: 'GET',
+  //     headers: { 'Content-Type': 'application/json' },
+  //   }).catch(err => {
+  //     console.log('[Preloader] Discover data preload failed:', err);
+  //   })
+  // );
 
   // 2. Preload Pulse page data (new, final-stretch, migrated)
   if (baseUrl) {

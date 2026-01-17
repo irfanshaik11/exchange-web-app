@@ -1,10 +1,16 @@
-import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import type { ExtendedPredictionMarket } from './useDFlowMarkets';
 import { env } from '~/env';
 
 // Polymarket API Configuration
 // Use backend API (no API keys exposed on frontend)
 const API_BASE = `${env.NEXT_PUBLIC_BACKEND_URL}/api/prediction/polymarket`;
+
+// Cache configuration for React Query
+// Show cached data INSTANTLY, but ALWAYS fetch fresh data in background
+const STALE_TIME = 0;             // Always refetch (data is never "fresh enough")
+const CACHE_TIME = 5 * 60 * 1000; // Keep in cache for 5 minutes (for instant placeholder)
 
 // Polymarket API response types
 export interface PolymarketTag {
@@ -195,11 +201,48 @@ interface UsePolymarketMarketsOptions {
 interface UsePolymarketMarketsResult {
   markets: ExtendedPredictionMarket[];
   events: PolymarketEvent[];
-  isLoading: boolean;
+  isLoading: boolean;      // True only on first load (no cached data yet)
+  isRefreshing?: boolean;  // True when fetching fresh data with cache displayed
   error: string | null;
   refetch: () => Promise<void>;
   totalVolume: number;
   totalMarkets: number;
+}
+
+// Fetch function for React Query
+async function fetchPolymarketEvents(limit: number): Promise<{
+  events: PolymarketEvent[];
+  markets: ExtendedPredictionMarket[];
+  totalVolume: number;
+}> {
+  const params = new URLSearchParams();
+  params.set('limit', limit.toString());
+  params.set('active', 'true');
+  params.set('closed', 'false');
+  params.set('order', 'volume24hr');
+  params.set('ascending', 'false');
+
+  const response = await fetch(`${API_BASE}/events?${params}`);
+
+  if (!response.ok) {
+    throw new Error(`Polymarket API error: ${response.status}`);
+  }
+
+  const json = await response.json();
+  const eventsData: PolymarketEvent[] = json.data || json.events || [];
+
+  // Transform all events to unified market format
+  const allMarkets: ExtendedPredictionMarket[] = [];
+  for (const event of eventsData) {
+    const transformed = transformToUnified(event);
+    allMarkets.push(...transformed);
+  }
+
+  const totalVolume = allMarkets.reduce((sum, m) => sum + (m.volume24h || 0), 0);
+
+  console.log(`[Polymarket] Fetched ${allMarkets.length} markets from ${eventsData.length} events`);
+
+  return { events: eventsData, markets: allMarkets, totalVolume };
 }
 
 export default function usePolymarketMarkets(options: UsePolymarketMarketsOptions = {}): UsePolymarketMarketsResult {
@@ -207,105 +250,46 @@ export default function usePolymarketMarkets(options: UsePolymarketMarketsOption
     enabled = true,
     limit = 50,
     category,
-    refreshInterval = 60000, // Polymarket has lower rate limits, use 60s
+    refreshInterval = 60000,
   } = options;
 
-  const [markets, setMarkets] = useState<ExtendedPredictionMarket[]>([]);
-  const [events, setEvents] = useState<PolymarketEvent[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [totalVolume, setTotalVolume] = useState(0);
-  const [totalMarkets, setTotalMarkets] = useState(0);
+  // Use React Query for instant loading + always fresh data
+  const {
+    data,
+    isLoading,
+    isFetching,
+    error,
+    refetch,
+  } = useQuery({
+    queryKey: ['polymarket', 'events', limit],
+    queryFn: () => fetchPolymarketEvents(limit),
+    enabled,
+    staleTime: STALE_TIME,           // 0 = always refetch fresh data
+    gcTime: CACHE_TIME,              // Keep in cache for instant placeholder
+    refetchInterval: refreshInterval, // Background refresh every 60s
+    refetchOnWindowFocus: true,      // Refresh when user comes back to tab
+    refetchOnMount: true,            // Always fetch on mount
+    retry: 2,                        // Retry failed requests twice
+    // Show cached data instantly while fetching fresh
+    placeholderData: (previousData) => previousData,
+  });
 
-  const fetchInProgress = useRef(false);
-  const intervalRef = useRef<NodeJS.Timeout | null>(null);
-
-  const fetchMarkets = useCallback(async () => {
-    if (fetchInProgress.current) return;
-
-    try {
-      fetchInProgress.current = true;
-      setError(null);
-
-      // Fetch from our proxy
-      const params = new URLSearchParams();
-      params.set('limit', limit.toString());
-      params.set('active', 'true');
-      params.set('closed', 'false');
-      params.set('order', 'volume24hr');
-      params.set('ascending', 'false');
-
-      const response = await fetch(`${API_BASE}/events?${params}`);
-
-      if (!response.ok) {
-        throw new Error(`Polymarket API error: ${response.status}`);
-      }
-
-      const json = await response.json();
-      // Backend returns { success: true, data: [...] }
-      const eventsData: PolymarketEvent[] = json.data || json.events || [];
-
-      // Transform all events to unified market format
-      let allMarkets: ExtendedPredictionMarket[] = [];
-      for (const event of eventsData) {
-        const transformed = transformToUnified(event);
-        allMarkets.push(...transformed);
-      }
-
-      // Filter by category if specified
-      if (category && category !== 'all') {
-        allMarkets = allMarkets.filter(m => m.category === category);
-      }
-
-      // Calculate totals
-      const total24hVolume = allMarkets.reduce((sum, m) => sum + (m.volume24h || 0), 0);
-
-      setMarkets(allMarkets);
-      setEvents(eventsData);
-      setTotalVolume(total24hVolume);
-      setTotalMarkets(allMarkets.length);
-
-      console.log(`[Polymarket] Fetched ${allMarkets.length} markets from ${eventsData.length} events`);
-
-    } catch (err) {
-      console.error('[Polymarket] Failed to fetch markets:', err);
-      setError(err instanceof Error ? err.message : 'Failed to fetch Polymarket data');
-    } finally {
-      setIsLoading(false);
-      fetchInProgress.current = false;
-    }
-  }, [limit, category]);
-
-  // Initial fetch and refresh interval
-  useEffect(() => {
-    if (!enabled) {
-      setMarkets([]);
-      setEvents([]);
-      setIsLoading(false);
-      return;
-    }
-
-    fetchMarkets();
-
-    if (refreshInterval > 0) {
-      intervalRef.current = setInterval(fetchMarkets, refreshInterval);
-    }
-
-    return () => {
-      if (intervalRef.current) {
-        clearInterval(intervalRef.current);
-      }
-    };
-  }, [enabled, fetchMarkets, refreshInterval]);
+  // Filter by category (applied client-side for instant filtering)
+  const filteredMarkets = useMemo(() => {
+    if (!data?.markets) return [];
+    if (!category || category === 'all') return data.markets;
+    return data.markets.filter(m => m.category === category);
+  }, [data?.markets, category]);
 
   return {
-    markets,
-    events,
-    isLoading,
-    error,
-    refetch: fetchMarkets,
-    totalVolume,
-    totalMarkets,
+    markets: filteredMarkets,
+    events: data?.events || [],
+    isLoading: isLoading && !data,  // Only true on first load (no cached data)
+    isRefreshing: isFetching && !!data, // True when refreshing with cached data shown
+    error: error ? (error instanceof Error ? error.message : 'Failed to fetch Polymarket data') : null,
+    refetch: async () => { await refetch(); },
+    totalVolume: data?.totalVolume || 0,
+    totalMarkets: filteredMarkets.length,
   };
 }
 
