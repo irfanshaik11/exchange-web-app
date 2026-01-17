@@ -1238,9 +1238,10 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
         console.log('🔍 TradeActionPanel - Fetched trade activity:', trades.length, 'trades');
         console.log('🔍 TradeActionPanel - Looking for token:', token.mint || '');
         
-        // Filter trades for this specific token
-        const tokenTrades = trades.filter((trade: any) => 
-          trade.tokenAddress?.toLowerCase() === token.mint || ''?.toLowerCase()
+        // Filter trades for this specific token (case-insensitive comparison)
+        const tokenMint = (token.mint || '').toLowerCase();
+        const tokenTrades = trades.filter((trade: any) =>
+          (trade.tokenAddress || '').toLowerCase() === tokenMint
         );
         
         console.log('🔍 TradeActionPanel - Found', tokenTrades.length, 'trades for this token');
@@ -2430,31 +2431,139 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
         }
       }
 
-      // For SELL trades, use the existing enhanced trade flow
+      // For SELL trades, use the same animated toast flow as buy
       if (mode === "sell") {
-        const result = await executeEnhancedTrade({
-          token,
-          amount: Number(amount),
-          side: mode,
-          settings,
-          user: { bearerToken: user.bearerToken, id: user.id },
-          solBalance: Number(solBalance),
-          solPriceUsd: 150,
-          walletContext: {
-            selectedWalletIds: selectedWalletIds?.sol || [],
-            walletList: walletList || [],
-            walletBalances: walletBalances || {},
-            chain: "sol",
-          },
-          refreshBalance,
-          onSuccess: async (txHash, stats) => {
-            console.log("✅ Enhanced Trade successful:", { txHash, stats });
-            setSuccessMessage(
-              `✅ Trade successful! Sold ${stats.tokenAmount || "tokens"} ${token.symbol}. Tx: ${String(
-                txHash
-              ).slice(0, 8)}...`
-            );
+        const sellPercentage = Number(amount);
+        const poolType = getPoolTypeFromToken(token);
 
+        // Generate random timer cap (0.40-0.60s)
+        const timerCap = 0.40 + Math.random() * 0.20;
+        const uniqueToastId = `solana-sell-${Date.now()}-${Math.random()}`;
+        const startTime = Date.now();
+        let timerFinished = false;
+
+        // Extract token image
+        const tokenImage = extractTokenImage(token);
+        const tokenName = token.symbol || token.name || 'Token';
+        const SOLANA_LOGO = 'https://avatars.githubusercontent.com/u/92743431?s=200&v=4';
+
+        // Show animated toast with timer (same style as buy)
+        toast(
+          (t) => (
+            <div className="flex items-center gap-3">
+              {tokenImage && (
+                <img
+                  src={tokenImage}
+                  alt={tokenName}
+                  className="w-6 h-6 rounded-full flex-shrink-0"
+                />
+              )}
+              <div className="flex items-center gap-2 flex-1 min-w-0">
+                <span className="text-sm text-neutral-200 truncate">
+                  Selling {tokenName}
+                </span>
+                <span
+                  id={`timer-${uniqueToastId}`}
+                  className="text-xs text-neutral-400 flex-shrink-0"
+                >
+                  (0.00s)
+                </span>
+                <span
+                  id={`check-${uniqueToastId}`}
+                  className="text-green-400 flex-shrink-0"
+                  style={{ display: 'none' }}
+                >
+                  ✓
+                </span>
+                <span
+                  id={`link-${uniqueToastId}`}
+                  className="flex-shrink-0"
+                  style={{ display: 'inline-flex' }}
+                >
+                  <img
+                    src={SOLANA_LOGO}
+                    alt="Solana"
+                    className="w-4 h-4 rounded-full opacity-70"
+                    style={{ cursor: 'default' }}
+                  />
+                </span>
+              </div>
+            </div>
+          ),
+          {
+            id: uniqueToastId,
+            duration: Infinity,
+            style: {
+              background: '#1a1a1a',
+              border: '1px solid #333',
+              borderRadius: '8px',
+              padding: '12px',
+            },
+          }
+        );
+
+        // Start timer animation
+        const tick = () => {
+          const elapsed = (Date.now() - startTime) / 1000;
+          const displayTime = Math.min(elapsed, timerCap).toFixed(2);
+          const timerEl = document.getElementById(`timer-${uniqueToastId}`);
+          if (timerEl) {
+            timerEl.textContent = `(${displayTime}s)`;
+          }
+
+          if (!timerFinished && elapsed >= timerCap) {
+            timerFinished = true;
+            const checkEl = document.getElementById(`check-${uniqueToastId}`);
+            if (checkEl) {
+              checkEl.style.display = 'block';
+            }
+            timerHandle = null as any;
+            return;
+          }
+          timerHandle = requestAnimationFrame(tick) as any;
+        };
+        let timerHandle = requestAnimationFrame(tick) as any;
+
+        try {
+          const sellResult = await tradeSellPercentage(
+            {
+              tokenAddress: token.mint || '',
+              percentageToSell: sellPercentage,
+              poolAddress: resolvedPoolAddress,
+              baseMint: token.mint || '',
+              quoteMint: SOL_MINT_ADDRESS,
+              poolType,
+              originalPairAddress: resolvedPoolAddress,
+              slippage: (settings.maxSlippage || 0.2) * 100,
+              priorityFee: settings.priority ?? 0.0001,
+              bribe: settings.bribe ?? 0,
+            },
+            user.bearerToken
+          );
+
+          // Stop timer
+          if (timerHandle) {
+            cancelAnimationFrame(timerHandle);
+          }
+
+          if (sellResult?.hash) {
+            // Success - update link to be clickable
+            const linkEl = document.getElementById(`link-${uniqueToastId}`);
+            if (linkEl) {
+              const explorerUrl = `https://solscan.io/tx/${sellResult.hash}`;
+              linkEl.innerHTML = `<a href="${explorerUrl}" target="_blank" rel="noopener noreferrer" class="hover:opacity-80 transition-opacity"><img src="${SOLANA_LOGO}" alt="Solana" class="w-4 h-4 rounded-full" style="cursor: pointer;" /></a>`;
+            }
+            const checkEl = document.getElementById(`check-${uniqueToastId}`);
+            if (checkEl) {
+              checkEl.style.display = 'block';
+            }
+
+            setSuccessMessage(`✅ Sold ${sellPercentage}% of ${tokenName}`);
+
+            // Auto-dismiss after 10s
+            setTimeout(() => toast.dismiss(uniqueToastId), 10000);
+
+            // Refresh position data after successful sell
             setTimeout(async () => {
               try {
                 const trades = await getTradeActivityByUser(user.id.toString());
@@ -2484,7 +2593,7 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
                   const pnl = soldUsdValue + remainingUsdValue - boughtUsdValue;
                   const pnlPercentage = boughtUsdValue > 0 ? (pnl / boughtUsdValue) * 100 : 0;
 
-                  const newData = {
+                  setPositionData({
                     bought,
                     boughtUsdValue,
                     sold,
@@ -2493,32 +2602,45 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
                     remainingUsdValue,
                     pnl,
                     pnlPercentage,
-                  };
-
-                  setPositionData(newData);
-                  console.log("🔄 TradeActionPanel - Position data refreshed after trade:", newData);
+                  });
                 }
 
                 // Dispatch event to refresh chart price lines
                 if (typeof window !== "undefined" && token.mint) {
                   window.dispatchEvent(new CustomEvent("solanaQuickTrade", { detail: { tokenAddress: token.mint } }));
                 }
+
+                // Refresh balance
+                if (refreshBalance) {
+                  refreshBalance();
+                }
               } catch (error) {
                 console.error("Error refreshing position data:", error);
               }
             }, 2000);
-          },
-          onError: (error) => {
-            console.error("❌ Enhanced Trade failed:", error);
-            setSuccessMessage(null);
-          },
-          onWarning: (warnings) => {
-            console.warn("⚠️ Pre-transaction warnings:", warnings);
-          },
-        });
 
-        setIsLoading(false);
-        return result;
+            setIsLoading(false);
+            return { success: true, txHash: sellResult.hash };
+          } else {
+            // Sell returned but no hash
+            toast.error(sellResult?.message || 'Sell failed', { id: uniqueToastId, duration: 6000 });
+            setSuccessMessage(null);
+            setIsLoading(false);
+            return { success: false };
+          }
+        } catch (error: any) {
+          // Stop timer on error
+          if (timerHandle) {
+            cancelAnimationFrame(timerHandle);
+          }
+
+          const errorMessage = error?.message || error?.error || 'Sell failed. Please try again.';
+          toast.error(errorMessage, { id: uniqueToastId, duration: 6000 });
+          console.error("❌ Sell failed:", error);
+          setSuccessMessage(null);
+          setIsLoading(false);
+          return { success: false, error };
+        }
       }
 
       // For BUY trades, use the new Monad-style toast flow

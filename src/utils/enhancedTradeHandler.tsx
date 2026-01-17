@@ -8,6 +8,7 @@ import {
   getExplorerLink,
   type ToastAction
 } from './enhancedToast';
+import { calculateDynamicPriorityFee } from './dynamicFees';
 import { TransactionProgressTracker, transactionStages } from './transactionProgress';
 import {
   performPreTransactionCheck,
@@ -171,6 +172,15 @@ export async function executeEnhancedTrade(params: EnhancedTradeParams): Promise
   let progressTracker: TransactionProgressTracker | null = null;
   const chain = params.walletContext?.chain || "sol";
 
+  // Calculate dynamic priority fee early - used in validation and execution
+  // Fee scales with trade size and considers token age for competitive scenarios
+  const dynamicPriorityFee = calculateDynamicPriorityFee({
+    tradeAmount: amount,
+    tokenCreatedAt: token.created_at,
+    userPriorityFee: settings.priority,
+    isUserOverride: settings.priority !== undefined && settings.priority > 0.0001,
+  });
+
   // Build wallet allocations for Solana trades (equal split across selected wallets)
   let walletAllocations: WalletAllocation[] = [];
   let walletsConsidered = 0;
@@ -234,7 +244,7 @@ export async function executeEnhancedTrade(params: EnhancedTradeParams): Promise
             const balanceWarning = checkBalanceSufficiency(
               balance,
               perWalletAmount,
-              settings.priority || 0.0001,
+              dynamicPriorityFee,
               settings.bribe || 0,
               false,
               0.0001
@@ -372,7 +382,7 @@ export async function executeEnhancedTrade(params: EnhancedTradeParams): Promise
       token,
       amount,
       validationBalance,
-      settings.priority || 0.0001,
+      dynamicPriorityFee,
       settings.bribe || 0,
       (settings.maxSlippage || 0.4) * 100,
       poolType,
@@ -542,7 +552,7 @@ export async function executeEnhancedTrade(params: EnhancedTradeParams): Promise
       poolType: poolType || undefined, // Always send poolType if detected (helps backend with discovery)
       originalPairAddress: token.pair_address || undefined,
       slippage: (settings.maxSlippage || 0.4) * 100,
-      priorityFee: settings.priority || 0.0001,
+      priorityFee: dynamicPriorityFee,
       bribe: settings.bribe || 0,
       mevMode: settings.mevMode,
       autoFee: settings.autoFee || false,
@@ -688,7 +698,7 @@ export async function executeEnhancedTrade(params: EnhancedTradeParams): Promise
           token,
           amount,
           slippage: (settings.maxSlippage || 0.4) * 100,
-          priorityFee: settings.priority || 0.0001,
+          priorityFee: dynamicPriorityFee,
           poolType: getPoolTypeFromToken(token),
           mevMode: settings.mevMode,
           rpcUrl: settings.rpc,
@@ -761,10 +771,10 @@ export async function executeEnhancedTrade(params: EnhancedTradeParams): Promise
         received: side === 'sell' ? resultAny.solReceived : tokenAmount,
         pricePerToken: token.usd_price,
         fees: {
-          priorityFee: settings.priority || 0.0001,
+          priorityFee: dynamicPriorityFee,
           bribe: settings.bribe || 0,
           networkFee,
-          total: (settings.priority || 0.0001) + (settings.bribe || 0) + networkFee,
+          total: dynamicPriorityFee + (settings.bribe || 0) + networkFee,
         },
         walletsUsed: walletsUsedSummary,
       };
@@ -849,7 +859,7 @@ export async function executeEnhancedTrade(params: EnhancedTradeParams): Promise
       token,
       amount,
       slippage: (settings.maxSlippage || 0.4) * 100,
-      priorityFee: settings.priority || 0.0001,
+      priorityFee: dynamicPriorityFee,
       poolType: getPoolTypeFromToken(token),
       mevMode: settings.mevMode,
       rpcUrl: settings.rpc,
@@ -938,6 +948,14 @@ async function monitorPendingConfirmation({
   params: EnhancedTradeParams;
   onError?: (error: EnhancedError) => void;
 }) {
+  // Calculate dynamic priority fee for error context
+  const dynamicPriorityFee = calculateDynamicPriorityFee({
+    tradeAmount: amount,
+    tokenCreatedAt: token.created_at,
+    userPriorityFee: settings.priority,
+    isUserOverride: settings.priority !== undefined && settings.priority > 0.0001,
+  });
+
   try {
     const rpcUrl = process.env.NEXT_PUBLIC_SOLANA_RPC || 'https://api.mainnet-beta.solana.com';
     const connection = new Connection(rpcUrl, 'confirmed');
@@ -989,7 +1007,7 @@ async function monitorPendingConfirmation({
           token,
           amount,
           slippage: (settings.maxSlippage || 0.4) * 100,
-          priorityFee: settings.priority || 0.0001,
+          priorityFee: dynamicPriorityFee,
           poolType: getPoolTypeFromToken(token),
           mevMode: settings.mevMode,
           rpcUrl: settings.rpc,
