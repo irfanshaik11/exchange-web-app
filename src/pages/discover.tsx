@@ -3007,7 +3007,7 @@ export default function DiscoverPage() {
         />
       </Head>
 
-      <div className="relative min-h-screen bg-[#111214] text-[#E6E7EA]">
+      <div className="relative min-h-screen bg-[#050608] text-[#E6E7EA]">
         {/* Header */}
         <div className="relative z-[100]">
           <Header
@@ -3018,17 +3018,17 @@ export default function DiscoverPage() {
         </div>
 
         {/* Tab Navigation */}
-        <div className="my-4 flex flex-col gap-4 px-4 sm:px-6 lg:flex-row lg:items-center lg:justify-between lg:gap-6 lg:px-8">
+        <div className="my-4 flex flex-col gap-4 px-4 sm:px-6 lg:flex-row lg:items-center lg:justify-between lg:gap-6 lg:px-8 mt-6 ">
           {/* Tabs Section - Scrollable on mobile */}
-          <div className="scrollbar-hide -mx-4 flex items-center gap-3 overflow-x-auto px-4 pb-2 sm:-mx-6 sm:gap-4 sm:px-6 lg:mx-0 lg:gap-6 lg:px-0 lg:pb-0">
+          <div className="scrollbar-hide -mx-4 flex items-center gap-3 overflow-x-auto px-4 pb-2 sm:-mx-6 sm:gap-4 sm:px-6 lg:mx-0 lg:gap-4 lg:px-0 lg:pb-0">
             <button
-              className={`text-sm font-light whitespace-nowrap transition-colors sm:text-base lg:text-lg ${activeTab === "trending" ? "text-[#f0f5f5]" : "text-[#6B7280] hover:text-[#f0f5f5]"} cursor-pointer`}
+              className={`text-sm whitespace-nowrap transition-colors sm:text-base lg:text-xl font-geist font-bold ${activeTab === "trending" ? "text-white" : "text-[#6B7280] hover:text-white"} cursor-pointer`}
               onClick={() => setActiveTab("trending")}
             >
               Trending
             </button>
             <button
-              className={`text-sm font-light whitespace-nowrap transition-colors sm:text-base lg:text-lg ${activeTab === "newPairs" ? "text-[#f0f5f5]" : "text-[#6B7280] hover:text-[#f0f5f5]"} cursor-pointer`}
+              className={`text-sm whitespace-nowrap transition-colors sm:text-base lg:text-xl font-geist font-bold ${activeTab === "newPairs" ? "text-white" : "text-[#6B7280] hover:text-white"} cursor-pointer`}
               onClick={() => setActiveTab("newPairs")}
             >
               New Pairs
