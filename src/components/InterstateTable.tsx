@@ -3,9 +3,16 @@ import {
   FaQuestionCircle,
   FaRegStar,
   FaStar,
+  FaUsers,
+  FaTelegram,
 } from "react-icons/fa";
+import { FaXTwitter } from "react-icons/fa6";
 import { User, Globe, Search, Copy } from "lucide-react";
 import { HiLightningBolt } from "react-icons/hi";
+import { BsPersonGear } from "react-icons/bs";
+import { RiGhostLine } from "react-icons/ri";
+import { GoStack } from "react-icons/go";
+import { FiGlobe } from "react-icons/fi";
 import InterstateButton from "./InterstateButton";
 import Image from 'next/image';
 import InterstateTooltip from './InterstateTooltip';
@@ -65,6 +72,7 @@ interface InterstateTableProps {
   skeletonRowCount?: number;
   isDiscoverPage?: boolean;
   chain?: string; // 'sol' | 'monad' - chain identifier
+  tableType?: 'trending' | 'newPairs' | 'xStocks'; // Section type for different column displays
 }
 
 interface HeaderConfig {
@@ -81,10 +89,30 @@ const TABLE_HEADERS: HeaderConfig[] = [
   { key: 'total_liquidity_usd', label: 'Liquidity', align: 'right', width: 'w-28' },
   { key: 'volume', label: 'Volume', align: 'right', width: 'w-28' },
   { key: 'txns', label: 'TXNS', align: 'right', width: 'w-24' },
+  { key: null, label: '24h', align: 'center', width: 'w-24' }, // Mini chart column
   // { key: 'total_fees_lamports', label: 'Gas Fees', align: 'right', width: 'w-28' },
-  // { key: null, label: 'Token Info', align: 'center', width: 'w-24' },
+  { key: null, label: 'Token Info', align: 'center', width: 'w-40' },
   { key: null, label: 'Action', align: 'center', width: 'w-32' },
 ];
+
+// Sniper Icon component
+const SnipperIcon = ({ size = 16, ...props }: { size?: number; [key: string]: any }) => (
+  <svg
+    {...props}
+    width={size}
+    height={size}
+    viewBox="0 0 24 24"
+    fill="currentColor"
+  >
+    <circle cx="12" cy="12" r="2" />
+    <circle cx="12" cy="12" r="5" fill="none" stroke="currentColor" strokeWidth="1.5" />
+    <circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" strokeWidth="1.5" />
+    <line x1="12" y1="2" x2="12" y2="5" stroke="currentColor" strokeWidth="1.5" />
+    <line x1="12" y1="19" x2="12" y2="22" stroke="currentColor" strokeWidth="1.5" />
+    <line x1="2" y1="12" x2="5" y2="12" stroke="currentColor" strokeWidth="1.5" />
+    <line x1="19" y1="12" x2="22" y2="12" stroke="currentColor" strokeWidth="1.5" />
+  </svg>
+);
 
 const TIME_LABELS = ['2h', '1d', '3d', '1h', '6h'];
 
@@ -317,19 +345,90 @@ function useTokenMetadata(uri?: string) {
   return { meta, loading, showInitial };
 }
 
+// Helper to extract Twitter handle from URL
+function extractTwitterHandle(url: string): string | null {
+  if (!url) return null;
+  const patterns = [
+    /(?:twitter\.com|x\.com)\/(@?\w+)/i,
+    /(?:twitter\.com|x\.com)\/intent\/user\?screen_name=(\w+)/i,
+  ];
+  for (const pattern of patterns) {
+    const match = url.match(pattern);
+    if (match?.[1]) {
+      return match[1].replace("@", "");
+    }
+  }
+  return null;
+}
+
+// Helper to extract social links from token metadata
+interface SocialLinks {
+  twitter?: string;
+  website?: string;
+  telegram?: string;
+}
+
+function extractSocialLinks(token: Token, meta: any): SocialLinks {
+  const links: SocialLinks = {};
+
+  // Try to get links from metadata extensions first (most common format)
+  if (meta?.extensions) {
+    if (meta.extensions.twitter) links.twitter = meta.extensions.twitter;
+    if (meta.extensions.website || meta.extensions.homepage) {
+      links.website = meta.extensions.website || meta.extensions.homepage;
+    }
+    if (meta.extensions.telegram) links.telegram = meta.extensions.telegram;
+  }
+
+  // Also try top-level metadata fields
+  if (meta) {
+    if (meta.twitter && !links.twitter) links.twitter = meta.twitter;
+    if (meta.website && !links.website) links.website = meta.website;
+    if (meta.telegram && !links.telegram) links.telegram = meta.telegram;
+    if (meta.external_url && !links.website) links.website = meta.external_url;
+  }
+
+  // Also try to parse token.links if it's a JSON string
+  if (token.links) {
+    try {
+      const parsedLinks =
+        typeof token.links === "string" ? JSON.parse(token.links) : token.links;
+      if (parsedLinks.twitter && !links.twitter) links.twitter = parsedLinks.twitter;
+      if (parsedLinks.website && !links.website) links.website = parsedLinks.website;
+      if (parsedLinks.telegram && !links.telegram) links.telegram = parsedLinks.telegram;
+    } catch {
+      // Ignore parsing errors
+    }
+  }
+
+  // Filter out empty strings
+  if (links.twitter === '' || links.twitter === null) delete links.twitter;
+  if (links.website === '' || links.website === null) delete links.website;
+  if (links.telegram === '' || links.telegram === null) delete links.telegram;
+
+  return links;
+}
+
 // Table Header Component
 const TableHeader: React.FC<{
   sortKey?: string;
   sortDirection?: 'asc' | 'desc';
   onSort?: (key: string) => void;
   isDiscoverPage?: boolean;
-  isTrending?: boolean; // New prop to indicate if showing trending/Birdeye data
-}> = ({ sortKey, sortDirection, onSort, isDiscoverPage = false, isTrending = false }) => (
+  tableType?: 'trending' | 'newPairs' | 'xStocks';
+}> = ({ sortKey, sortDirection, onSort, isDiscoverPage = false, tableType = 'trending' }) => (
   <thead>
     <tr style={{ backgroundColor: 'transparent', borderBottom: `1px solid ${AX.border}` }}>
       {TABLE_HEADERS.map((header, idx) => {
-        // Use "Rank" instead of "TXNS" for trending filter
-        const label = (header.key === 'txns' && isTrending) ? 'Rank' : header.label;
+        // For newPairs, show "Holders" instead of "Token Info"
+        let label = header.label;
+        if (header.label === 'Token Info' && tableType === 'newPairs') {
+          label = 'Holders';
+        }
+        // Hide the 24h chart column for newPairs
+        if (header.label === '24h' && tableType === 'newPairs') {
+          return null;
+        }
         return (
           <th
             key={idx}
@@ -492,9 +591,9 @@ const TokenAvatar: React.FC<{
 };
 
 // Token Info Component
-const TokenInfo: React.FC<{ 
-  token: Token; 
-  i: number; 
+const TokenInfo: React.FC<{
+  token: Token;
+  i: number;
   sortedRows: InterstateTableRow[];
   isDiscoverPage?: boolean;
   chain?: string; // 'sol' | 'monad' - chain identifier
@@ -503,6 +602,40 @@ const TokenInfo: React.FC<{
   const timeLabel = TIME_LABELS[i % TIME_LABELS.length];
   const [showXPreview, setShowXPreview] = useState(false);
   const [buttonPosition, setButtonPosition] = useState<{left: number, top: number} | null>(null);
+  const [showSearchMenu, setShowSearchMenu] = useState(false);
+  const searchButtonRef = useRef<HTMLButtonElement>(null);
+
+  // Refs for X preview hover state management
+  const xButtonRef = useRef<HTMLButtonElement>(null);
+  const isOverXPreview = useRef(false);
+  const isOverXButton = useRef(false);
+
+  // Close search menu when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (showSearchMenu && searchButtonRef.current && !searchButtonRef.current.contains(e.target as Node)) {
+        setShowSearchMenu(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [showSearchMenu]);
+
+  // Extract social links from metadata
+  const socialLinks = useMemo(() => extractSocialLinks(token, meta), [token, meta]);
+  const hasTwitter = !!socialLinks.twitter;
+  const hasWebsite = !!socialLinks.website;
+  const hasTelegram = !!socialLinks.telegram;
+  const twitterHandle = hasTwitter ? extractTwitterHandle(socialLinks.twitter!) : null;
+
+  // Get token image from metadata or token
+  const tokenImage = useMemo(() => {
+    if (meta?.image) return meta.image;
+    if ((token as any).image_url) return (token as any).image_url;
+    if ((token as any).image) return (token as any).image;
+    if (token.logo) return token.logo;
+    return null;
+  }, [meta, token]);
   
   // Watchlist functionality
   const { addToWatchlist, removeFromWatchlist, isInWatchlist } = useWatchlist();
@@ -699,94 +832,169 @@ const TokenInfo: React.FC<{
           <span className={`text-xs ${isDiscoverPage ? 'number-font' : 'text-emerald-400'}`} style={{ color: isDiscoverPage ? ageColor : undefined, fontWeight: isDiscoverPage ? 700 : 400, ...(isDiscoverPage ? {} : { fontFamily: 'ui-monospace, SFMono-Regular, "SF Mono", Consolas, "Liberation Mono", Menlo, monospace' }) }}>
             {tokenAge}
           </span>
-          <div className="flex items-center gap-1.5 text-sky-400">
-            {/* User icon - Twitter profile */}
-            <button
-              className="transition-colors duration-200 cursor-pointer hover:text-blue-400"
-              style={{ color: isDiscoverPage ? '#73c5ff' : AX.muted }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.color = isDiscoverPage ? '#73c5ff' : AX.aiBlue;
-                // Show X profile preview
-                setShowXPreview(true);
-                // Store button position for popup positioning
-                const buttonRect = e.currentTarget.getBoundingClientRect();
-                const screenWidth = window.innerWidth;
-                const screenHeight = window.innerHeight;
-                
-                // Calculate optimal position
-                let left = buttonRect.left + buttonRect.width / 2;
-                let top = buttonRect.top - 20;
-                
-                // Check if there's enough space above (popup height is ~280px)
-                if (top < 50 || (top - 280) < 0) {
-                  top = buttonRect.bottom + 20;
-                  // If showing below, check if it would go off bottom of screen
-                  if (top + 280 > screenHeight) {
-                    top = screenHeight - 300; // Position near top of screen
+          <div className="flex items-center gap-1 text-sky-400">
+            {/* X/Twitter Icon - only show if twitter URL exists in metadata */}
+            {hasTwitter && (
+              <button
+                ref={xButtonRef}
+                className="flex items-center justify-center rounded p-0.5 transition-colors duration-200 cursor-pointer hover:bg-white/10"
+                style={{ color: AX.muted }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.color = '#fff';
+                  isOverXButton.current = true;
+                  // Position the preview popup
+                  if (xButtonRef.current) {
+                    const rect = xButtonRef.current.getBoundingClientRect();
+                    setButtonPosition({
+                      left: rect.left + rect.width / 2,
+                      top: rect.bottom + 10,
+                    });
                   }
-                }
-                
-                // Ensure popup doesn't go off screen horizontally
-                if (left < 140) left = 140;
-                if (left > screenWidth - 140) left = screenWidth - 140;
-                
-                setButtonPosition({ left, top });
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.color = isDiscoverPage ? '#73c5ff' : AX.muted;
-                setShowXPreview(false);
-              }}
-              onClick={(e) => {
-                e.stopPropagation();
-                const profileUrl = `https://twitter.com/${token.symbol?.toLowerCase() || 'search'}`;
-                window.open(profileUrl, '_blank');
-              }}
-              title="View Twitter profile"
-            >
-              <User className="w-3 h-3" strokeWidth={2.5} />
-            </button>
+                  setShowXPreview(true);
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.color = AX.muted;
+                  isOverXButton.current = false;
+                  // Delay to allow moving to popup
+                  setTimeout(() => {
+                    if (!isOverXPreview.current && !isOverXButton.current) {
+                      setShowXPreview(false);
+                    }
+                  }, 200);
+                }}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  window.open(socialLinks.twitter, '_blank');
+                }}
+                title="Twitter/X"
+              >
+                <FaXTwitter size={11} />
+              </button>
+            )}
 
-            {/* Globe icon - Block explorer / Website */}
-            <button
-              className="transition-colors duration-200 cursor-pointer hover:text-cyan-400"
-              style={{ color: AX.muted }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.color = AX.aiCyan;
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.color = AX.muted;
-              }}
-              onClick={(e) => {
-                e.stopPropagation();
-                // Open token on Solscan
-                const explorerUrl = `https://solscan.io/token/${token.mint}`;
-                window.open(explorerUrl, '_blank');
-              }}
-              title="View on Solscan"
-            >
-              <Globe className="w-3 h-3" />
-            </button>
+            {/* Telegram Icon - only show if telegram URL exists in metadata */}
+            {hasTelegram && (
+              <button
+                className="flex items-center justify-center rounded p-0.5 transition-colors duration-200 cursor-pointer hover:bg-white/10"
+                style={{ color: AX.muted }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.color = '#0088cc';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.color = AX.muted;
+                }}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  window.open(socialLinks.telegram, '_blank');
+                }}
+                title="Telegram"
+              >
+                <FaTelegram size={11} />
+              </button>
+            )}
 
-            {/* Search icon - Twitter search */}
-            <button
-              className={`transition-colors duration-200 cursor-pointer ${isDiscoverPage ? '' : 'hover:text-emerald-400'}`}
-              style={{ color: AX.muted }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.color = isDiscoverPage ? '#85d99f' : AX.aiCyan;
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.color = AX.muted;
-              }}
-              onClick={(e) => {
-                e.stopPropagation();
-                const searchQuery = `${token.symbol} ${token.name}`.trim();
-                const twitterUrl = `https://twitter.com/search?q=${encodeURIComponent(searchQuery)}`;
-                window.open(twitterUrl, '_blank');
-              }}
-              title="Search on Twitter"
+            {/* Website Icon - only show if website URL exists in metadata */}
+            {hasWebsite && (
+              <button
+                className="flex items-center justify-center rounded p-0.5 transition-colors duration-200 cursor-pointer hover:bg-white/10"
+                style={{ color: AX.muted }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.color = '#fff';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.color = AX.muted;
+                }}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  window.open(socialLinks.website, '_blank');
+                }}
+                title="Website"
+              >
+                <FiGlobe size={11} />
+              </button>
+            )}
+
+            {/* Search icon with dropdown menu */}
+            <div
+              className="relative"
+              onMouseEnter={() => setShowSearchMenu(true)}
+              onMouseLeave={() => setShowSearchMenu(false)}
             >
-              <Search className="w-3 h-3" />
-            </button>
+              <button
+                ref={searchButtonRef}
+                className="flex items-center justify-center rounded p-0.5 transition-colors duration-200 cursor-pointer hover:bg-white/10"
+                style={{ color: showSearchMenu ? (isDiscoverPage ? '#85d99f' : AX.aiCyan) : AX.muted }}
+                title="Search options"
+              >
+                <Search className="w-3 h-3" />
+              </button>
+
+              {/* Search dropdown menu */}
+              {showSearchMenu && (
+                <div
+                  className="absolute left-full top-0 ml-1 z-[99999] min-w-[180px] rounded-lg overflow-hidden"
+                  style={{
+                    backgroundColor: '#1a1b1f',
+                    border: `1px solid ${AX.border}`,
+                    boxShadow: '0 8px 32px rgba(0, 0, 0, 0.4)'
+                  }}
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <button
+                    className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs text-white hover:bg-white/10 transition-colors"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      window.open(`https://twitter.com/search?q=${encodeURIComponent(token.mint || token.pair_address || '')}`, '_blank');
+                      setShowSearchMenu(false);
+                    }}
+                  >
+                    <FaXTwitter size={12} className="text-neutral-400" />
+                    X Search Address
+                  </button>
+                  <button
+                    className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs text-white hover:bg-white/10 transition-colors"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      window.open(`https://twitter.com/search?q=${encodeURIComponent(`${token.symbol} ${token.name}`.trim())}`, '_blank');
+                      setShowSearchMenu(false);
+                    }}
+                  >
+                    <FaXTwitter size={12} className="text-neutral-400" />
+                    X Search Name
+                  </button>
+                  <div className="my-0.5 border-t" style={{ borderColor: AX.border }} />
+                  <button
+                    className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs text-white hover:bg-white/10 transition-colors"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      window.open(`https://www.google.com/search?q=${encodeURIComponent(`${token.symbol} ${token.name} crypto`.trim())}`, '_blank');
+                      setShowSearchMenu(false);
+                    }}
+                  >
+                    <svg className="w-3 h-3" viewBox="0 0 24 24">
+                      <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
+                      <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
+                      <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/>
+                      <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/>
+                    </svg>
+                    Google Search
+                  </button>
+                  <button
+                    className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs text-white hover:bg-white/10 transition-colors"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      const address = token.mint || token.pair_address || '';
+                      const chainPath = chain === 'monad' ? 'monad' : 'solana';
+                      window.open(`https://dexscreener.com/${chainPath}/${address}`, '_blank');
+                      setShowSearchMenu(false);
+                    }}
+                  >
+                    <Search className="w-3 h-3 text-[#36d8ff]" />
+                    DexScreener
+                  </button>
+                </div>
+              )}
+            </div>
 
             {/* Copy icon */}
             <button
@@ -817,21 +1025,24 @@ const TokenInfo: React.FC<{
 
       {/* X Profile Preview Popup */}
       {showXPreview && buttonPosition && (
-        <div 
+        <div
           className="fixed"
           style={{
-            left: `${buttonPosition.left}px`,
+            left: `${buttonPosition.left + 20}px`,
             top: `${buttonPosition.top}px`,
-            transform: 'translate(-50%, 0)',
             width: '280px',
             zIndex: 999999
           }}
           onMouseEnter={() => {
-            // Keep popup open when hovering over it
+            isOverXPreview.current = true;
           }}
           onMouseLeave={() => {
-            // Hide popup when leaving the popup area
-            setShowXPreview(false);
+            isOverXPreview.current = false;
+            setTimeout(() => {
+              if (!isOverXPreview.current && !isOverXButton.current) {
+                setShowXPreview(false);
+              }
+            }, 200);
           }}
         >
           <div 
@@ -844,9 +1055,9 @@ const TokenInfo: React.FC<{
             }}
           >
             {/* X Icon Header */}
-            <div className="flex items-center justify-between px-4 py-3 border-b" style={{ borderColor: '#2f3336' }}>
+            <div className="flex items-center px-4 py-3 border-b" style={{ borderColor: '#2f3336' }}>
               <div className="flex items-center gap-3">
-                <div 
+                <div
                   className="w-7 h-7 rounded-full flex items-center justify-center"
                   style={{ backgroundColor: '#1d9bf0' }}
                 >
@@ -854,95 +1065,69 @@ const TokenInfo: React.FC<{
                     <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/>
                   </svg>
                 </div>
-                <div>
-                  <div className="text-sm font-bold text-white">X Profile</div>
-                  <div className="text-xs text-gray-400">Live Preview</div>
-                </div>
-              </div>
-              <div className="flex items-center gap-1">
-                <div className={`w-2 h-2 rounded-full ${isDiscoverPage ? '' : 'bg-green-500'}`} style={isDiscoverPage ? { backgroundColor: '#85d99f' } : {}}></div>
-                <span className="text-xs text-gray-400">Live</span>
+                <div className="text-sm font-bold text-white">X Profile</div>
               </div>
             </div>
 
-            {/* Official X Profile Layout */}
-            <div className="px-4 py-4">
-              {/* Profile Picture */}
-              <div className="flex justify-center mb-4">
-                <div 
-                  className="w-20 h-20 rounded-full overflow-hidden"
-                  style={{ 
-                    backgroundColor: '#1a1a1a',
-                    border: `3px solid #2f3336`
-                  }}
+            {/* X Profile Content */}
+            <div className="px-4 py-3">
+              {/* Profile Header */}
+              <div className="flex items-center gap-3 mb-3">
+                <div
+                  className="w-12 h-12 rounded-full overflow-hidden flex-shrink-0"
+                  style={{ backgroundColor: '#1a1a1a' }}
                 >
                   <img
-                    src={`https://ui-avatars.com/api/?name=${token.symbol || 'Token'}&size=80&background=1a1a1a&color=ffffff&bold=true`}
+                    src={tokenImage
+                      ? `/api/image?url=${encodeURIComponent(tokenImage)}`
+                      : `https://ui-avatars.com/api/?name=${token.symbol || 'Token'}&size=48&background=1a1a1a&color=ffffff&bold=true`
+                    }
                     alt={`${token.symbol} profile`}
                     className="w-full h-full object-cover"
                     onError={(e) => {
-                      const target = e.target as HTMLImageElement;
-                      target.style.display = 'none';
-                      const fallback = target.nextElementSibling as HTMLElement;
-                      if (fallback) fallback.style.display = 'flex';
+                      (e.target as HTMLImageElement).src = `https://ui-avatars.com/api/?name=${token.symbol || 'Token'}&size=48&background=1a1a1a&color=ffffff&bold=true`;
                     }}
                   />
-                  <div 
-                    className="w-full h-full flex items-center justify-center font-bold text-xl"
-                    style={{ 
-                      backgroundColor: '#1a1a1a',
-                      color: '#ffffff',
-                      display: 'none'
-                    }}
-                  >
-                    {token.symbol?.slice(0, 2) || '??'}
-                  </div>
                 </div>
-              </div>
-              
-              {/* Profile Info */}
-              <div className="text-center mb-4">
-                <div className="flex items-center justify-center gap-2 mb-1">
-                  <h3 className="text-xl font-bold text-white">
-                    {token.symbol || 'Unknown'}
-                  </h3>
-                  {/* Verified Badge */}
-                  <div 
-                    className="w-6 h-6 rounded-full flex items-center justify-center"
-                    style={{ backgroundColor: '#1d9bf0' }}
-                  >
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#ffffff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                      <path d="M9 12l2 2 4-4"/>
-                      <path d="M21 12c0 4.97-4.03 9-9 9s-9-4.03-9-9 4.03-9 9-9 9 4.03 9 9z"/>
+                <div>
+                  <div className="flex items-center gap-1">
+                    <span className="text-sm font-bold text-white">{token.name || token.symbol}</span>
+                    <svg className="h-4 w-4 text-[#1d9bf0]" viewBox="0 0 24 24" fill="currentColor">
+                      <path d="M22.5 12.5c0-1.58-.875-2.95-2.148-3.6.154-.435.238-.905.238-1.4 0-2.21-1.71-3.998-3.818-3.998-.47 0-.92.084-1.336.25C14.818 2.415 13.51 1.5 12 1.5s-2.816.917-3.437 2.25c-.415-.165-.866-.25-1.336-.25-2.11 0-3.818 1.79-3.818 4 0 .494.083.964.237 1.4-1.272.65-2.147 2.018-2.147 3.6 0 1.495.782 2.798 1.942 3.486-.02.17-.032.34-.032.514 0 2.21 1.708 4 3.818 4 .47 0 .92-.086 1.335-.25.62 1.334 1.926 2.25 3.437 2.25 1.512 0 2.818-.916 3.437-2.25.415.163.865.248 1.336.248 2.11 0 3.818-1.79 3.818-4 0-.174-.012-.344-.033-.513 1.158-.687 1.943-1.99 1.943-3.484zm-6.616-3.334l-4.334 6.5c-.145.217-.382.334-.625.334-.143 0-.288-.04-.416-.126l-.115-.094-2.415-2.415c-.293-.293-.293-.768 0-1.06s.768-.294 1.06 0l1.77 1.767 3.825-5.74c.23-.345.696-.436 1.04-.207.346.23.44.696.21 1.04z" />
                     </svg>
                   </div>
+                  <span className="text-xs text-gray-500">@{twitterHandle || token.symbol?.toLowerCase()}</span>
                 </div>
-                <p className="text-sm text-gray-400 mb-3">
-                  @{token.symbol?.toLowerCase() || 'unknown'}
-                </p>
-                <p className="text-sm text-white leading-relaxed px-2">
-                  {token.description || `Official ${token.symbol || 'token'} community. Join the conversation!`}
-                </p>
               </div>
-              
-              {/* Follow Button */}
-              <div className="flex justify-center mb-4">
-                <button
-                  className="px-6 py-2 rounded-full text-sm font-semibold transition-all duration-200"
-                  style={{
-                    backgroundColor: '#ffffff',
-                    color: '#000000'
-                  }}
-                  onMouseEnter={(e) => {
-                    e.currentTarget.style.backgroundColor = '#e7e9ea';
-                  }}
-                  onMouseLeave={(e) => {
-                    e.currentTarget.style.backgroundColor = '#ffffff';
-                  }}
+
+              {/* Bio/Description */}
+              <p className="text-sm leading-relaxed text-white mb-2">
+                {meta?.description || token.description || `Official ${token.symbol} token`}
+              </p>
+              {hasWebsite && (
+                <a
+                  href={socialLinks.website}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="block truncate text-sm text-[#1d9bf0] hover:underline mb-3"
+                  onClick={(e) => e.stopPropagation()}
                 >
-                  Follow
-                </button>
-              </div>
+                  {socialLinks.website}
+                </a>
+              )}
+            </div>
+
+            {/* CTA Button */}
+            <div className="px-4 pb-4">
+              <button
+                className="w-full rounded-full border border-[#536471] py-2 text-sm font-semibold text-[#1d9bf0] transition-colors hover:bg-[#1d9bf0]/10"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  window.open(socialLinks.twitter, '_blank');
+                }}
+              >
+                See Profile on X
+              </button>
             </div>
 
             {/* Join Date Section */}
@@ -1111,47 +1296,9 @@ const TxnsCell: React.FC<{
   selectedTimeframe: string;
   isDiscoverPage?: boolean;
 }> = ({ token, selectedTimeframe, isDiscoverPage = false }) => {
-  // Check if this is a Birdeye token (has rank)
-  const birdeyeRank = (token as any).birdeye_rank || (token as any).rank;
-  const volumeChangePercent = (token as any).volume24hChangePercent;
-
   const monospaceFont = 'ui-monospace, SFMono-Regular, "SF Mono", Consolas, "Liberation Mono", Menlo, monospace';
 
-  // For Birdeye tokens, show rank and volume change % instead of transaction counts
-  if (birdeyeRank && birdeyeRank > 0) {
-    const formatPercentChange = (val: number | null | undefined): string => {
-      if (val == null) return '';
-      const sign = val > 0 ? '+' : '';
-      return sign + formatSmartNumber(val);
-    };
-
-    return (
-      <div className="flex flex-col h-full justify-center">
-        <div className="flex items-center justify-end gap-2">
-          <span className={`text-sm font-medium ${isDiscoverPage ? 'number-font' : ''}`} style={{
-            color: AX.text,
-            ...(isDiscoverPage ? {} : { fontFamily: monospaceFont, fontWeight: '400' })
-          }}>
-            #{birdeyeRank}
-          </span>
-        </div>
-        <div className="flex items-center justify-end min-h-[18px]">
-          {volumeChangePercent != null ? (
-            <span className={`text-xs font-medium ${isDiscoverPage ? 'number-font' : ''}`} style={{
-              color: volumeChangePercent >= 0 ? (isDiscoverPage ? '#85d99f' : '#10b981') : (isDiscoverPage ? '#f26681' : '#ef4444'),
-              ...(isDiscoverPage ? {} : { fontFamily: monospaceFont, fontWeight: '400' })
-            }}>
-              {formatPercentChange(volumeChangePercent)}% vol
-            </span>
-          ) : (
-            <span className="text-xs" style={{ color: AX.muted }}>-</span>
-          )}
-        </div>
-      </div>
-    );
-  }
-
-  // Default: show transaction counts for non-Birdeye tokens
+  // Always show transaction counts (no more rank display)
   const { total, buys, sells } = getTxns(token, selectedTimeframe);
 
   // For discover page (xStocks), show "0" instead of "-" when value is 0
@@ -1187,6 +1334,325 @@ const TxnsCell: React.FC<{
           {formatTxnValue(sells)}
         </span>
       </div>
+    </div>
+  );
+};
+
+// Mini Sparkline Chart Component - shows 24h price movement
+// Uses intersection observer for lazy loading + in-memory cache
+const sparklineCache = new Map<string, { data: number[]; timestamp: number; priceChange: number }>();
+const SPARKLINE_CACHE_TTL = 10 * 60 * 1000; // 10 minute cache for chart data
+
+const MiniSparkline: React.FC<{
+  token: Token;
+  width?: number;
+  height?: number;
+}> = ({ token, width = 80, height = 32 }) => {
+  const [priceData, setPriceData] = useState<number[]>([]);
+  const [priceChange, setPriceChange] = useState<number>(0);
+  const [loading, setLoading] = useState(true);
+  const [isVisible, setIsVisible] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const hasFetchedRef = useRef(false);
+  const mintAddress = token.mint || (token as any).contractAddress || (token as any).address;
+
+  // Use existing price change from token data for instant display
+  const existingPriceChange = (token as any).price_percent_change_24h ||
+    (token as any).priceChange24h ||
+    (token as any).price24hChangePercent || 0;
+
+  // Intersection observer for lazy loading
+  useEffect(() => {
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry?.isIntersecting) {
+          setIsVisible(true);
+        }
+      },
+      { rootMargin: '100px' } // Start loading 100px before visible
+    );
+
+    if (containerRef.current) {
+      observer.observe(containerRef.current);
+    }
+
+    return () => observer.disconnect();
+  }, []);
+
+  useEffect(() => {
+    if (!mintAddress || !isVisible || hasFetchedRef.current) {
+      return;
+    }
+
+    // Check cache first
+    const cached = sparklineCache.get(mintAddress);
+    if (cached && Date.now() - cached.timestamp < SPARKLINE_CACHE_TTL) {
+      setPriceData(cached.data);
+      setPriceChange(cached.priceChange);
+      setLoading(false);
+      hasFetchedRef.current = true;
+      return;
+    }
+
+    // Mark as fetched to prevent duplicate requests
+    hasFetchedRef.current = true;
+
+    // Fetch OHLC data
+    const fetchSparkline = async () => {
+      try {
+        const response = await fetch(
+          `/api/token-service/ohlc?mint=${mintAddress}&interval=1h&timeframe=24h`
+        );
+        if (!response.ok) throw new Error('Failed to fetch');
+
+        const result = await response.json();
+        if (result.success && result.data?.items?.length > 0) {
+          // Extract close prices for sparkline
+          const closes = result.data.items.map((item: any) => item.c);
+          const firstPrice = closes[0] || 0;
+          const lastPrice = closes[closes.length - 1] || 0;
+          const change = firstPrice > 0 ? ((lastPrice - firstPrice) / firstPrice) * 100 : 0;
+
+          // Cache the result
+          sparklineCache.set(mintAddress, {
+            data: closes,
+            timestamp: Date.now(),
+            priceChange: change
+          });
+
+          setPriceData(closes);
+          setPriceChange(change);
+        }
+      } catch (err) {
+        // Silently fail - sparkline is a nice-to-have
+        console.debug('[Sparkline] Failed to fetch for', mintAddress);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchSparkline();
+  }, [mintAddress, isVisible]);
+
+  // Generate a simple placeholder line based on existing price change data
+  const generatePlaceholderLine = () => {
+    const isUp = existingPriceChange >= 0;
+    const color = isUp ? '#85d99f' : '#f26681';
+    // Create a simple diagonal line
+    const y1 = isUp ? height - 4 : 4;
+    const y2 = isUp ? 4 : height - 4;
+    return (
+      <svg width={width} height={height}>
+        <line
+          x1={4}
+          y1={y1}
+          x2={width - 4}
+          y2={y2}
+          stroke={color}
+          strokeWidth="1.5"
+          strokeLinecap="round"
+        />
+      </svg>
+    );
+  };
+
+  // If not visible yet or loading, show placeholder with direction indicator
+  if (!isVisible || loading) {
+    return (
+      <div ref={containerRef} className="flex items-center justify-center" style={{ width, height }}>
+        {existingPriceChange !== 0 ? generatePlaceholderLine() : (
+          <div className="w-full h-1 rounded" style={{ backgroundColor: AX.border }}>
+            <div
+              className="h-full rounded animate-pulse"
+              style={{ backgroundColor: AX.muted, width: '60%' }}
+            />
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  // Need at least 5 data points for a meaningful chart
+  // Otherwise show a simple direction indicator
+  if (priceData.length < 5) {
+    const hasData = priceData.length >= 2;
+    const change = hasData
+      ? ((priceData[priceData.length - 1] - priceData[0]) / priceData[0]) * 100
+      : existingPriceChange;
+    const isUp = change >= 0;
+    const color = isUp ? '#85d99f' : '#f26681';
+
+    return (
+      <div ref={containerRef} className="flex items-center justify-center" style={{ width, height }}>
+        <svg width={width} height={height}>
+          {/* Simple curved line showing direction */}
+          <path
+            d={isUp
+              ? `M 4 ${height - 6} Q ${width / 2} ${height / 2} ${width - 4} 6`
+              : `M 4 6 Q ${width / 2} ${height / 2} ${width - 4} ${height - 6}`
+            }
+            fill="none"
+            stroke={color}
+            strokeWidth="1.5"
+            strokeLinecap="round"
+          />
+        </svg>
+      </div>
+    );
+  }
+
+  // Downsample and smooth data for clean sparkline
+  const processData = (data: number[]): number[] => {
+    if (data.length < 3) return data;
+
+    // Target ~12-16 points for a clean sparkline
+    const targetPoints = 14;
+
+    // Downsample by averaging chunks
+    const chunkSize = Math.max(1, Math.floor(data.length / targetPoints));
+    const downsampled: number[] = [];
+
+    for (let i = 0; i < data.length; i += chunkSize) {
+      const chunk = data.slice(i, Math.min(i + chunkSize, data.length));
+      const avg = chunk.reduce((a, b) => a + b, 0) / chunk.length;
+      downsampled.push(avg);
+    }
+
+    // Apply gaussian-like smoothing (weighted moving average)
+    const smoothed: number[] = [];
+    for (let i = 0; i < downsampled.length; i++) {
+      if (i === 0) {
+        smoothed.push(downsampled[0] * 0.6 + downsampled[1] * 0.4);
+      } else if (i === downsampled.length - 1) {
+        smoothed.push(downsampled[i - 1] * 0.4 + downsampled[i] * 0.6);
+      } else {
+        // Weighted: 25% prev, 50% current, 25% next
+        smoothed.push(downsampled[i - 1] * 0.25 + downsampled[i] * 0.5 + downsampled[i + 1] * 0.25);
+      }
+    }
+
+    return smoothed;
+  };
+
+  const smoothedData = processData(priceData);
+
+  // Calculate bounds
+  const minPrice = Math.min(...smoothedData);
+  const maxPrice = Math.max(...smoothedData);
+  const priceRange = maxPrice - minPrice || 1;
+
+  const padding = 2;
+  const chartWidth = width - padding * 2;
+  const chartHeight = height - padding * 2;
+
+  // Convert to coordinates
+  const coords = smoothedData.map((price, i) => ({
+    x: padding + (i / (smoothedData.length - 1)) * chartWidth,
+    y: padding + chartHeight - ((price - minPrice) / priceRange) * chartHeight
+  }));
+
+  // Create smooth bezier curve path
+  const createSmoothPath = (pts: { x: number; y: number }[]): string => {
+    if (pts.length < 2) return '';
+
+    let path = `M ${pts[0].x},${pts[0].y}`;
+
+    for (let i = 0; i < pts.length - 1; i++) {
+      const p0 = pts[Math.max(0, i - 1)];
+      const p1 = pts[i];
+      const p2 = pts[i + 1];
+      const p3 = pts[Math.min(pts.length - 1, i + 2)];
+
+      // Catmull-Rom to Bezier conversion for smooth curves
+      const tension = 0.3;
+      const cp1x = p1.x + (p2.x - p0.x) * tension;
+      const cp1y = p1.y + (p2.y - p0.y) * tension;
+      const cp2x = p2.x - (p3.x - p1.x) * tension;
+      const cp2y = p2.y - (p3.y - p1.y) * tension;
+
+      path += ` C ${cp1x},${cp1y} ${cp2x},${cp2y} ${p2.x},${p2.y}`;
+    }
+
+    return path;
+  };
+
+  const linePath = createSmoothPath(coords);
+
+  // Create closed path for gradient fill
+  const fillPath = linePath +
+    ` L ${coords[coords.length - 1].x},${padding + chartHeight}` +
+    ` L ${coords[0].x},${padding + chartHeight} Z`;
+
+  const isPositive = priceChange >= 0;
+  const strokeColor = isPositive ? '#85d99f' : '#f26681';
+  const gradientId = `sparkline-gradient-${mintAddress?.slice(0, 8)}`;
+
+  // Calculate approximate path length for animation (overestimate to ensure full draw)
+  const pathLength = chartWidth * 3;
+
+  return (
+    <div ref={containerRef} className="flex items-center justify-center">
+      <svg width={width} height={height} className="overflow-visible">
+        <defs>
+          {/* Gradient for the fill area */}
+          <linearGradient id={gradientId} x1="0%" y1="0%" x2="0%" y2="100%">
+            <stop offset="0%" stopColor={strokeColor} stopOpacity="0.3" />
+            <stop offset="100%" stopColor={strokeColor} stopOpacity="0" />
+          </linearGradient>
+          {/* Clip path for animated reveal */}
+          <clipPath id={`clip-${gradientId}`}>
+            <rect
+              x="0"
+              y="0"
+              width={width}
+              height={height}
+              style={{
+                animation: 'sparkline-reveal 0.6s ease-out forwards',
+                transformOrigin: 'left',
+              }}
+            />
+          </clipPath>
+        </defs>
+
+        {/* Gradient fill area */}
+        <path
+          d={fillPath}
+          fill={`url(#${gradientId})`}
+          clipPath={`url(#clip-${gradientId})`}
+        />
+
+        {/* Smooth bezier curve line */}
+        <path
+          d={linePath}
+          fill="none"
+          stroke={strokeColor}
+          strokeWidth="1.5"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          strokeDasharray={pathLength}
+          strokeDashoffset={pathLength}
+          style={{
+            animation: 'sparkline-draw 0.6s ease-out forwards'
+          }}
+        />
+        <style>
+          {`
+            @keyframes sparkline-draw {
+              to {
+                stroke-dashoffset: 0;
+              }
+            }
+            @keyframes sparkline-reveal {
+              from {
+                transform: scaleX(0);
+              }
+              to {
+                transform: scaleX(1);
+              }
+            }
+          `}
+        </style>
+      </svg>
     </div>
   );
 };
@@ -1230,6 +1696,130 @@ const AuditLogCell: React.FC<{
   );
 };
 
+// Compact Token Metric Display Component
+const TokenMetric: React.FC<{
+  icon: React.ReactNode;
+  value: string;
+  color: string;
+  tooltip: string;
+}> = ({ icon, value, color, tooltip }) => (
+  <div
+    className="flex items-center gap-1 cursor-help"
+    title={tooltip}
+  >
+    <span style={{ color }}>{icon}</span>
+    <span className="number-font text-xs font-medium" style={{ color }}>{value}</span>
+  </div>
+);
+
+// Format percentage value for display
+const formatPercent = (val: number | undefined): string => {
+  if (val === undefined || val === null) return '0';
+  // If value is <= 1, it's a decimal that needs to be converted to percentage
+  const percent = val <= 1 ? val * 100 : val;
+  if (percent >= 100) return `${Math.round(percent)}`;
+  if (percent >= 10) return `${percent.toFixed(1)}`;
+  return `${percent.toFixed(2)}`;
+};
+
+// Token Info Cell Component - displays holder metrics from trending WebSocket
+const TokenInfoCell: React.FC<{
+  token: Token;
+  isDiscoverPage?: boolean;
+  tableType?: 'trending' | 'newPairs' | 'xStocks';
+}> = ({ token, isDiscoverPage = false, tableType = 'trending' }) => {
+  const holderCount = (token as any).holder_count;
+  const top10Percent = (token as any).top10_holders_percent;
+  const insiderPercent = (token as any).insider_percent;
+  const sniperPercent = (token as any).sniper_percent;
+  const bundlePercent = (token as any).bundle_percent;
+
+  // For newPairs, just show holder count
+  if (tableType === 'newPairs') {
+    return (
+      <div className="flex items-center justify-center">
+        <span className="text-sm font-medium number-font" style={{ color: '#31e3ac' }}>
+          {holderCount !== undefined && holderCount > 0
+            ? formatSmartNumber(holderCount)
+            : '—'}
+        </span>
+      </div>
+    );
+  }
+
+  // Check if this token has trending data (from useTrendingWebSocket)
+  const hasTrendingData = holderCount !== undefined ||
+    bundlePercent !== undefined ||
+    insiderPercent !== undefined ||
+    sniperPercent !== undefined ||
+    top10Percent !== undefined;
+
+  // If no trending data, show placeholder
+  if (!hasTrendingData) {
+    return (
+      <div className="flex items-center justify-center">
+        <span className="text-xs" style={{ color: AX.muted }}>—</span>
+      </div>
+    );
+  }
+
+  // Colors
+  const greenColor = '#31e3ac';
+  const yellowColor = '#f2c367';
+  const redColor = '#f26681';
+
+  return (
+    <div className="flex flex-col gap-0.5">
+      {/* Row 1: Holders + Top 10 */}
+      <div className="flex items-center gap-3">
+        {holderCount !== undefined && holderCount > 0 && (
+          <TokenMetric
+            icon={<FaUsers size={11} />}
+            value={formatSmartNumber(holderCount)}
+            color={greenColor}
+            tooltip={`Holders: ${holderCount.toLocaleString()}`}
+          />
+        )}
+        {top10Percent !== undefined && top10Percent > 0 && (
+          <TokenMetric
+            icon={<BsPersonGear size={11} />}
+            value={`${formatPercent(top10Percent)}%`}
+            color={greenColor}
+            tooltip={`Top 10 Holders: ${formatPercent(top10Percent)}%`}
+          />
+        )}
+      </div>
+      {/* Row 2: Insider + Sniper + Bundle */}
+      <div className="flex items-center gap-3">
+        {insiderPercent !== undefined && insiderPercent > 0 && (
+          <TokenMetric
+            icon={<RiGhostLine size={11} />}
+            value={`${formatPercent(insiderPercent)}%`}
+            color={yellowColor}
+            tooltip={`Insider Holding: ${formatPercent(insiderPercent)}%`}
+          />
+        )}
+        {sniperPercent !== undefined && sniperPercent > 0 && (
+          <TokenMetric
+            icon={<SnipperIcon size={11} />}
+            value={`${formatPercent(sniperPercent)}%`}
+            color={redColor}
+            tooltip={`Sniper Holding: ${formatPercent(sniperPercent)}%`}
+          />
+        )}
+        {bundlePercent !== undefined && bundlePercent > 0 && (
+          <TokenMetric
+            icon={<GoStack size={11} />}
+            value={`${formatPercent(bundlePercent)}%`}
+            color={yellowColor}
+            tooltip={`Bundler Holdings: ${formatPercent(bundlePercent)}%`}
+          />
+        )}
+      </div>
+    </div>
+  );
+};
+
 // Table Row Component
 const TableRow: React.FC<{
   token: Token;
@@ -1242,17 +1832,19 @@ const TableRow: React.FC<{
   onClick: () => void;
   isDiscoverPage?: boolean;
   chain?: string; // 'sol' | 'monad' - chain identifier
-}> = React.memo(({ 
-  token, 
-  i, 
-  selectedTimeframe, 
-  onQuickBuy, 
-  quickBuyAmount, 
-  animationState, 
-  sortedRows, 
+  tableType?: 'trending' | 'newPairs' | 'xStocks';
+}> = React.memo(({
+  token,
+  i,
+  selectedTimeframe,
+  onQuickBuy,
+  quickBuyAmount,
+  animationState,
+  sortedRows,
   onClick,
   isDiscoverPage = false,
-  chain = 'sol'
+  chain = 'sol',
+  tableType = 'trending'
 }) => {
   const handleQuickBuy = useCallback((e: React.MouseEvent) => {
     e.stopPropagation();
@@ -1302,11 +1894,11 @@ const TableRow: React.FC<{
       }}
       onClick={onClick}
     >
-      <td className="w-80 px-4 py-2 align-middle">
+      <td className="w-80 px-4 py-4 align-middle">
         <TokenInfo token={token} i={i} sortedRows={sortedRows} isDiscoverPage={isDiscoverPage} chain={chain} />
       </td>
 
-      <td className="w-32 px-4 py-2 align-middle">
+      <td className="w-32 px-4 py-4 align-middle">
         <MarketCapCell
           token={token}
           selectedTimeframe={selectedTimeframe}
@@ -1315,7 +1907,7 @@ const TableRow: React.FC<{
         />
       </td>
 
-      <td className="w-28 px-4 py-2 align-middle text-right">
+      <td className="w-28 px-4 py-4 align-middle text-right">
         {/* {(() => {
           console.log('Liquidity Debug:', {
             tokenName: token.name,
@@ -1331,9 +1923,9 @@ const TableRow: React.FC<{
           if (isDiscoverPage && liquidity < 1000) {
             liquidityColor = '#f26681';
           }
-          
+
           return (
-            <div className={`text-sm font-medium ${isDiscoverPage ? 'number-font' : ''}`} style={{ 
+            <div className={`text-sm font-medium ${isDiscoverPage ? 'number-font' : ''}`} style={{
               color: isDiscoverPage ? liquidityColor : AX.text,
               ...(isDiscoverPage ? {} : {
                 fontFamily: 'ui-monospace, SFMono-Regular, "SF Mono", Consolas, "Liberation Mono", Menlo, monospace',
@@ -1345,8 +1937,8 @@ const TableRow: React.FC<{
           );
         })()}
       </td>
-      
-      <td className="w-28 px-4 py-2 align-middle text-right">
+
+      <td className="w-28 px-4 py-4 align-middle text-right">
         <div className={`text-sm font-medium ${isDiscoverPage ? 'number-font' : ''}`} style={{
           color: AX.text,
           ...(isDiscoverPage ? {} : {
@@ -1359,9 +1951,16 @@ const TableRow: React.FC<{
         </div>
       </td>
 
-      <td className="w-28 px-4 py-2 align-middle">
+      <td className="w-28 px-4 py-4 align-middle">
         <TxnsCell token={token} selectedTimeframe={selectedTimeframe} isDiscoverPage={isDiscoverPage} />
       </td>
+
+      {/* 24h Mini Chart column - hidden for newPairs */}
+      {tableType !== 'newPairs' && (
+        <td className="w-24 px-2 py-4 align-middle">
+          <MiniSparkline token={token} width={80} height={40} />
+        </td>
+      )}
 
       {/* Gas Fees column - commented out per user request
       <td className="w-28 px-4 py-4 align-middle text-right">
@@ -1377,10 +1976,10 @@ const TableRow: React.FC<{
       </td>
       */}
 
-      {/* Token Info column - commented out per user request */}
-      {/* <td className="w-24 px-4 py-4 align-middle">
-        <AuditLogCell token={token} selectedTimeframe={selectedTimeframe} />
-      </td> */}
+      {/* Token Info column - displays holder metrics from trending WebSocket */}
+      <td className="w-40 px-2 py-4 align-middle">
+        <TokenInfoCell token={token} isDiscoverPage={isDiscoverPage} tableType={tableType} />
+      </td>
 
       <td className="w-32 px-4 py-4 align-middle text-center">
         {isDiscoverPage ? (
@@ -1424,17 +2023,18 @@ const TableRow: React.FC<{
 TableRow.displayName = 'TableRow';
 
 // Main Table Component
-export default function InterstateTable({ 
-  rows, 
-  onQuickBuy, 
-  sortKey, 
-  sortDirection, 
-  setSort, 
-  selectedTimeframe, 
-  quickBuyAmount = 0.44, 
+export default function InterstateTable({
+  rows,
+  onQuickBuy,
+  sortKey,
+  sortDirection,
+  setSort,
+  selectedTimeframe,
+  quickBuyAmount = 0.44,
   skeletonRowCount = 6,
   isDiscoverPage: isDiscoverPageProp,
-  chain = 'sol'
+  chain = 'sol',
+  tableType = 'trending'
 }: InterstateTableProps) {
   const router = useRouter();
   const { filter } = useFilter();
@@ -1512,13 +2112,7 @@ export default function InterstateTable({
   }, [rows, selectedTimeframe]);
 
   const isDiscoverPage = isDiscoverPageProp !== undefined ? isDiscoverPageProp : router.pathname === '/discover';
-  
-  // Check if we're showing trending/Birdeye data (any token has birdeye_rank)
-  const isTrending = rows.length > 0 && rows.some(({ token }) => {
-    const birdeyeRank = (token as any).birdeye_rank || (token as any).rank;
-    return birdeyeRank && birdeyeRank > 0;
-  });
-  
+
   return (
     <div className="overflow-x-auto shadow-lg w-full" style={{
       backgroundColor: isDiscoverPage ? '#111214' : 'rgba(30, 31, 38, 0.3)',
@@ -1577,12 +2171,12 @@ export default function InterstateTable({
       `}</style>
       
       <table className="table-wrapper min-w-full" style={{ borderCollapse: 'collapse', borderSpacing: 0, tableLayout: 'fixed', width: '100%' }}>
-        <TableHeader 
-          sortKey={sortKey} 
-          sortDirection={sortDirection} 
+        <TableHeader
+          sortKey={sortKey}
+          sortDirection={sortDirection}
           onSort={setSort}
           isDiscoverPage={isDiscoverPage}
-          isTrending={isTrending}
+          tableType={tableType}
         />
         
         <tbody>
@@ -1677,6 +2271,7 @@ export default function InterstateTable({
                   onClick={handleTokenClick}
                   isDiscoverPage={isDiscoverPage}
                   chain={chain}
+                  tableType={tableType}
                 />
               );
             })

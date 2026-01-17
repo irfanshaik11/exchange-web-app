@@ -7,6 +7,7 @@ import type { Token } from '~/utils/db';
 import Header from '../components/Header';
 import Footer from '../components/Footer';
 import usePaginatedTokensWithFallback from '../hooks/usePaginatedTokensWithFallback';
+import useTrendingWebSocket, { type TrendingTimeframe, type NormalizedTrendingToken } from '../hooks/useTrendingWebSocket';
 import { usePumpPortalWebSocket } from '../hooks/usePumpPortalWebSocket';
 import { useQuickBuy } from "~/components/QuickBuyContext";
 import QuickBuySettingsModal from '../components/QuickBuySettingsModal';
@@ -196,7 +197,7 @@ export default function DiscoverPage() {
   const tokenMapRef = useRef<Map<string, TokenWithDexPaid>>(new Map());
   const [filteredTokens, setFilteredTokens] = useState<TokenWithDexPaid[]>([]);
   const [displayed, setDisplayed] = useState<TokenWithDexPaid[]>([]);
-  const [sortKey, setSortKey] = useState<"market_cap_total" | "liquidity" | "volume" | "txns" | "name" | "total_liquidity_usd" | "fully_diluted_value">("volume");
+  const [sortKey, setSortKey] = useState<"market_cap_total" | "liquidity" | "volume" | "txns" | "name" | "total_liquidity_usd" | "fully_diluted_value" | "score">("score"); // Default to composite score - balances MC, liquidity, volume, and transactions
   const [sortDirection, setSortDirection] = useState<"asc" | "desc">("desc");
   // Store new pairs data per chain to preserve data when switching chains
   const [newPairsRawByChain, setNewPairsRawByChain] = useState<Record<string, TokenWithDexPaid[]>>(() => {
@@ -455,31 +456,94 @@ export default function DiscoverPage() {
     setDisplayed([]);
     // Force a small delay to ensure state is cleared before hook re-runs
   }, [currentChain]);
+
+  // Tab switching - no complex logic needed here anymore!
+  //
+  // KEY ARCHITECTURE FIX:
+  // - Solana trending: Uses wsTokens directly (React state from useTrendingWebSocket)
+  //   → No flicker because wsTokens is properly tracked and has cached data
+  // - Monad trending: Uses tokenMapRef (fallback)
+  // - New pairs: Uses separate newPairsRaw state (already fully separated)
+  //
+  // We only need to clear tokenMapRef when switching between non-Solana tabs
+  // to prevent Monad trending data from mixing with other tabs.
+  const prevActiveTabRef = useRef(activeTab);
+  useEffect(() => {
+    if (prevActiveTabRef.current !== activeTab) {
+      const fromTab = prevActiveTabRef.current;
+      const toTab = activeTab;
+      console.log('[Discover] 🔄 Tab changed from', fromTab, 'to', toTab);
+
+      // Clear tokenMapRef when switching tabs for Monad (non-Solana) to prevent data mixing
+      // For Solana, we use wsTokens directly so tokenMapRef isn't used
+      if (currentChain !== 'sol') {
+        tokenMapRef.current.clear();
+        setFilteredTokens([]);
+        console.log('[Discover] Cleared tokenMapRef for Monad tab switch');
+      }
+
+      prevActiveTabRef.current = activeTab;
+    }
+  }, [activeTab, currentChain]);
   
+  // Use fallback hook for non-trending tabs and Monad chain
   const {
-    data: allTokens,
-    loading: tokensLoading,
-    isConnected,
-    error: tokenError,
-    isReconnecting,
+    data: fallbackTokens,
+    loading: fallbackLoading,
+    isConnected: fallbackConnected,
+    error: fallbackError,
+    isReconnecting: fallbackReconnecting,
     usingFallback,
   } = usePaginatedTokensWithFallback({
-    // Always use trending endpoint
     filter: 'trending',
     timeframe: selectedTimeframe,
-    chain: currentChain, // Use state value - this will trigger re-fetch when chain changes
-    limit: 500 // Fetch 500 tokens for trending tab to show more results
+    chain: currentChain,
+    // Only enable for Monad or non-trending tabs
+    limit: (currentChain === 'monad' || activeTab !== 'trending') ? 500 : 0
   });
-  
+
+  // Use WebSocket for Solana trending - real-time updates!
+  // Server sends all timeframes (5m, 1h, 6h) in one snapshot, so we just filter by selected
+  const trendingWsTimeframe = (selectedTimeframe === '24h' ? '6h' : selectedTimeframe) as TrendingTimeframe;
+  const {
+    tokens: wsTokens,
+    loading: wsLoading,
+    isConnected: wsConnected,
+    error: wsError,
+    isReconnecting: wsReconnecting,
+    lastUpdate: wsLastUpdate,
+  } = useTrendingWebSocket({
+    timeframe: trendingWsTimeframe, // Just for filtering which data to return
+    // Only enable for Solana chain on trending tab
+    enabled: currentChain === 'sol' && activeTab === 'trending',
+  });
+
+  // Merge data sources: WebSocket for Solana trending, fallback for everything else
+  const allTokens = useMemo(() => {
+    if (currentChain === 'sol' && activeTab === 'trending') {
+      // Use WebSocket data for Solana trending
+      return wsTokens as unknown as TokenWithDexPaid[];
+    }
+    return fallbackTokens;
+  }, [currentChain, activeTab, wsTokens, fallbackTokens]);
+
+  const tokensLoading = currentChain === 'sol' && activeTab === 'trending' ? wsLoading : fallbackLoading;
+  const isConnected = currentChain === 'sol' && activeTab === 'trending' ? wsConnected : fallbackConnected;
+  const tokenError = currentChain === 'sol' && activeTab === 'trending' ? wsError : fallbackError;
+  const isReconnecting = currentChain === 'sol' && activeTab === 'trending' ? wsReconnecting : fallbackReconnecting;
+
   // CRITICAL: Log when hook data changes to track chain switching
   useEffect(() => {
     console.log('[Discover] Hook data updated:', {
       chain: currentChain,
+      activeTab,
       tokenCount: allTokens?.length || 0,
       loading: tokensLoading,
-      usingFallback: usingFallback
+      usingWebSocket: currentChain === 'sol' && activeTab === 'trending',
+      wsConnected,
+      wsLastUpdate,
     });
-  }, [allTokens, tokensLoading, currentChain, usingFallback]);
+  }, [allTokens, tokensLoading, currentChain, activeTab, wsConnected, wsLastUpdate]);
 
   // Featured tokens for Monad trending section
   const [featuredTokens, setFeaturedTokens] = useState<TokenWithDexPaid[]>([]);
@@ -2168,6 +2232,68 @@ export default function DiscoverPage() {
     return sum > 0 ? sum : 0;
   }, []);
 
+  // Helper to compute total transactions (buys + sells) by timeframe for sorting
+  // Used when sorting by TXNS column - shows tokens with most activity first
+  const getTxnsForTimeframe = useCallback((t: any, tf: Timeframe) => {
+    // Map timeframe to field suffix
+    const tfMap: Record<Timeframe, string> = {
+      '5m': '5m',
+      '1h': '1h',
+      '6h': '6h',
+      '24h': '24h',
+    };
+    const suffix = tfMap[tf] || '5m';
+
+    // Get buy and sell counts for the timeframe
+    const buys = Number(t?.[`total_buys_${suffix}`]) || 0;
+    const sells = Number(t?.[`total_sells_${suffix}`]) || 0;
+
+    // Also check txnCount field as fallback (some APIs use this)
+    const txnCount = Number(t?.[`txnCount${suffix}`] || t?.[`txnCount_${suffix}`]) || 0;
+
+    const total = buys + sells;
+    return total > 0 ? total : txnCount;
+  }, []);
+
+  // Composite scoring function for ranking tokens
+  // Combines: Transactions (40%), Volume (30%), Market Cap (15%), Liquidity (15%)
+  // Uses logarithmic scaling to handle the wide range of values in crypto
+  const getCompositeScore = useCallback((t: any, tf: Timeframe, maxValues: {
+    maxTxns: number;
+    maxVolume: number;
+    maxMc: number;
+    maxLiq: number;
+  }) => {
+    const { maxTxns, maxVolume, maxMc, maxLiq } = maxValues;
+
+    // Get raw values
+    const txns = getTxnsForTimeframe(t, tf);
+    const volume = getVolumeForTimeframe(t, tf);
+    const mc = Number((t as any).fully_diluted_value || (t as any).market_cap_usd) || 0;
+    const liq = Number((t as any).total_liquidity_usd || (t as any).liquidity_usd) || 0;
+
+    // Normalize to 0-1 using log scale (handles wide value ranges better)
+    // Add 1 before log to handle 0 values
+    const normalize = (val: number, max: number) => {
+      if (max <= 0) return 0;
+      return Math.log10(val + 1) / Math.log10(max + 1);
+    };
+
+    const txnScore = normalize(txns, maxTxns);
+    const volScore = normalize(volume, maxVolume);
+    const mcScore = normalize(mc, maxMc);
+    const liqScore = normalize(liq, maxLiq);
+
+    // Weighted combination:
+    // - Transactions 40%: Most important for trending (activity indicator)
+    // - Volume 30%: Trading interest
+    // - Market Cap 15%: Size/legitimacy
+    // - Liquidity 15%: Tradability
+    const score = (txnScore * 0.40) + (volScore * 0.30) + (mcScore * 0.15) + (liqScore * 0.15);
+
+    return score;
+  }, [getTxnsForTimeframe, getVolumeForTimeframe]);
+
   // Map AMM IDs to protocol patterns (same logic as PulseTable)
   const mapAmmToProtocolPatterns = useCallback((ammId: string): string[] => {
     switch (ammId) {
@@ -2347,11 +2473,26 @@ export default function DiscoverPage() {
 
   // Update displayed tokens
   // CRITICAL: This effect applies filters and updates displayed tokens
-  // It depends on filteredTokens (which comes from allTokens) and filter context
+  // For Solana trending, we use wsTokens directly (React state) instead of tokenMapRef (ref)
+  // This prevents flicker during tab switches because wsTokens is properly tracked by React
   useEffect(() => {
     if (activeTab === "trending") {
-      const arr = Array.from(tokenMapRef.current.values());
-      
+      // CRITICAL FIX: For Solana trending, use wsTokens directly instead of tokenMapRef
+      // This prevents data mixing and flicker when switching tabs because:
+      // 1. wsTokens is React state from useTrendingWebSocket, properly tracked
+      // 2. tokenMapRef is a ref that can contain stale data from other tabs
+      // 3. wsTokens already has cached data from localStorage/memory on mount
+      let arr: TokenWithDexPaid[];
+      if (currentChain === 'sol' && wsTokens && wsTokens.length > 0) {
+        // Use WebSocket data directly for Solana
+        arr = wsTokens as unknown as TokenWithDexPaid[];
+        console.log(`[Trending] Using wsTokens directly for Solana: ${arr.length} tokens`);
+      } else {
+        // Fall back to tokenMapRef for Monad or when wsTokens is empty
+        arr = Array.from(tokenMapRef.current.values());
+        console.log(`[Trending] Using tokenMapRef for ${currentChain}: ${arr.length} tokens`);
+      }
+
       // Safety check: filter out wrapped SOL before processing
       let safeArr = arr.filter(t => t && t.mint && !isWrappedSol(t));
       
@@ -2409,15 +2550,31 @@ export default function DiscoverPage() {
       
       // Create deep copies to avoid mutation during sort
       const sortedTokens = workingTokens.map(t => JSON.parse(JSON.stringify(t)));
-      
+
+      // Pre-calculate max values for composite score normalization
+      const maxValues = sortKey === 'score' ? {
+        maxTxns: Math.max(...sortedTokens.map(t => getTxnsForTimeframe(t, selectedTimeframe)), 1),
+        maxVolume: Math.max(...sortedTokens.map(t => getVolumeForTimeframe(t, selectedTimeframe)), 1),
+        maxMc: Math.max(...sortedTokens.map(t => Number((t as any).fully_diluted_value) || 0), 1),
+        maxLiq: Math.max(...sortedTokens.map(t => Number((t as any).total_liquidity_usd) || 0), 1),
+      } : { maxTxns: 1, maxVolume: 1, maxMc: 1, maxLiq: 1 };
+
       sortedTokens.sort((a, b) => {
         // Final safety check in sort
         if (!a || !b || isWrappedSol(a) || isWrappedSol(b)) {
           return 0;
         }
-        
+
         let aVal = 0, bVal = 0;
-        if (sortKey === 'volume') {
+        if (sortKey === 'score') {
+          // Composite score: balances txns (40%), volume (30%), MC (15%), liquidity (15%)
+          aVal = getCompositeScore(a, selectedTimeframe, maxValues);
+          bVal = getCompositeScore(b, selectedTimeframe, maxValues);
+        } else if (sortKey === 'txns') {
+          // Sort by total transactions (buys + sells) for the selected timeframe
+          aVal = getTxnsForTimeframe(a, selectedTimeframe);
+          bVal = getTxnsForTimeframe(b, selectedTimeframe);
+        } else if (sortKey === 'volume') {
           aVal = getVolumeForTimeframe(a, selectedTimeframe);
           bVal = getVolumeForTimeframe(b, selectedTimeframe);
         } else if (sortKey === 'liquidity' || sortKey === 'total_liquidity_usd') {
@@ -2432,7 +2589,7 @@ export default function DiscoverPage() {
         }
         return sortDirection === 'asc' ? aVal - bVal : bVal - aVal;
       });
-      
+
       // Final filter before setting displayed - also deduplicate by mint/address
       const finalSafe = sortedTokens.filter(t => t && t.mint && !isWrappedSol(t));
       
@@ -2627,7 +2784,7 @@ export default function DiscoverPage() {
     } else {
       setDisplayed([]);
     }
-  }, [activeTab, filteredTokens, sortKey, sortDirection, selectedTimeframe, applyFilters, getVolumeForTimeframe, isWrappedSol, filter, activeFilterCount, newPairsRaw, currentChain, isZeroLiquidityToken, featuredTokens]); // Ensure filters are reapplied when they change
+  }, [activeTab, filteredTokens, sortKey, sortDirection, selectedTimeframe, applyFilters, getVolumeForTimeframe, isWrappedSol, filter, activeFilterCount, newPairsRaw, currentChain, isZeroLiquidityToken, featuredTokens, wsTokens]); // Ensure filters are reapplied when they change; wsTokens added to fix tab switch flicker
 
   const processedNewPairs = useMemo(() => {
     if (!newPairsRaw || newPairsRaw.length === 0) {
@@ -2664,12 +2821,26 @@ export default function DiscoverPage() {
     const filtered = applyFilters(base);
     const sortedTokens = filtered.map((token) => JSON.parse(JSON.stringify(token)) as TokenWithDexPaid);
 
+    // Pre-calculate max values for composite score normalization
+    const maxValuesNewPairs = sortKey === 'score' ? {
+      maxTxns: Math.max(...sortedTokens.map(t => getTxnsForTimeframe(t, selectedTimeframe)), 1),
+      maxVolume: Math.max(...sortedTokens.map(t => getVolumeForTimeframe(t, selectedTimeframe)), 1),
+      maxMc: Math.max(...sortedTokens.map(t => Number((t as any).fully_diluted_value) || 0), 1),
+      maxLiq: Math.max(...sortedTokens.map(t => Number((t as any).total_liquidity_usd) || 0), 1),
+    } : { maxTxns: 1, maxVolume: 1, maxMc: 1, maxLiq: 1 };
+
     sortedTokens.sort((a, b) => {
       if (!a || !b) return 0;
       let aVal = 0;
       let bVal = 0;
 
-      if (sortKey === 'volume') {
+      if (sortKey === 'score') {
+        aVal = getCompositeScore(a, selectedTimeframe, maxValuesNewPairs);
+        bVal = getCompositeScore(b, selectedTimeframe, maxValuesNewPairs);
+      } else if (sortKey === 'txns') {
+        aVal = getTxnsForTimeframe(a, selectedTimeframe);
+        bVal = getTxnsForTimeframe(b, selectedTimeframe);
+      } else if (sortKey === 'volume') {
         aVal = getVolumeForTimeframe(a, selectedTimeframe);
         bVal = getVolumeForTimeframe(b, selectedTimeframe);
       } else if (sortKey === 'liquidity' || sortKey === 'total_liquidity_usd') {
@@ -2710,7 +2881,7 @@ export default function DiscoverPage() {
     }
 
     return unique;
-  }, [newPairsRaw, applyFilters, getVolumeForTimeframe, getNewPairTimestamp, isWrappedSol, isZeroLiquidityToken, currentChain, sortDirection, sortKey, selectedTimeframe]);
+  }, [newPairsRaw, applyFilters, getVolumeForTimeframe, getTxnsForTimeframe, getCompositeScore, getNewPairTimestamp, isWrappedSol, isZeroLiquidityToken, currentChain, sortDirection, sortKey, selectedTimeframe]);
 
   const newPairsRows = useMemo(
     () =>
@@ -2742,10 +2913,24 @@ export default function DiscoverPage() {
     // Apply filters
     const filtered = applyFilters(base);
 
+    // Pre-calculate max values for composite score normalization
+    const maxValuesXStocks = sortKey === 'score' ? {
+      maxTxns: Math.max(...filtered.map(t => getTxnsForTimeframe(t, selectedTimeframe)), 1),
+      maxVolume: Math.max(...filtered.map(t => getVolumeForTimeframe(t, selectedTimeframe)), 1),
+      maxMc: Math.max(...filtered.map(t => Number((t as any).fully_diluted_value) || 0), 1),
+      maxLiq: Math.max(...filtered.map(t => Number((t as any).total_liquidity_usd) || 0), 1),
+    } : { maxTxns: 1, maxVolume: 1, maxMc: 1, maxLiq: 1 };
+
     // Sort tokens
     const sortedTokens = [...filtered].sort((a, b) => {
       let aVal = 0, bVal = 0;
-      if (sortKey === 'volume') {
+      if (sortKey === 'score') {
+        aVal = getCompositeScore(a, selectedTimeframe, maxValuesXStocks);
+        bVal = getCompositeScore(b, selectedTimeframe, maxValuesXStocks);
+      } else if (sortKey === 'txns') {
+        aVal = getTxnsForTimeframe(a, selectedTimeframe);
+        bVal = getTxnsForTimeframe(b, selectedTimeframe);
+      } else if (sortKey === 'volume') {
         aVal = getVolumeForTimeframe(a, selectedTimeframe);
         bVal = getVolumeForTimeframe(b, selectedTimeframe);
       } else if (sortKey === 'liquidity' || sortKey === 'total_liquidity_usd') {
@@ -2779,7 +2964,7 @@ export default function DiscoverPage() {
     }
 
     return unique;
-  }, [xStocksRaw, applyFilters, getVolumeForTimeframe, isWrappedSol, sortDirection, sortKey, selectedTimeframe]);
+  }, [xStocksRaw, applyFilters, getVolumeForTimeframe, getTxnsForTimeframe, getCompositeScore, isWrappedSol, sortDirection, sortKey, selectedTimeframe]);
 
   const xStocksRows = useMemo(
     () =>
@@ -3007,7 +3192,7 @@ export default function DiscoverPage() {
         />
       </Head>
 
-      <div className="relative min-h-screen bg-[#050608] text-[#E6E7EA]">
+      <div className="relative min-h-screen bg-[#111214] text-[#E6E7EA]">
         {/* Header */}
         <div className="relative z-[100]">
           <Header
@@ -3022,13 +3207,13 @@ export default function DiscoverPage() {
           {/* Tabs Section - Scrollable on mobile */}
           <div className="scrollbar-hide -mx-4 flex items-center gap-3 overflow-x-auto px-4 pb-2 sm:-mx-6 sm:gap-4 sm:px-6 lg:mx-0 lg:gap-4 lg:px-0 lg:pb-0">
             <button
-              className={`text-sm whitespace-nowrap transition-colors sm:text-base lg:text-xl font-geist font-bold ${activeTab === "trending" ? "text-white" : "text-[#6B7280] hover:text-white"} cursor-pointer`}
+              className={`text-sm whitespace-nowrap transition-colors sm:text-base lg:text-xl font-medium ${activeTab === "trending" ? "text-white" : "text-[#6B7280] hover:text-white"} cursor-pointer`}
               onClick={() => setActiveTab("trending")}
             >
               Trending
             </button>
             <button
-              className={`text-sm whitespace-nowrap transition-colors sm:text-base lg:text-xl font-geist font-bold ${activeTab === "newPairs" ? "text-white" : "text-[#6B7280] hover:text-white"} cursor-pointer`}
+              className={`text-sm whitespace-nowrap transition-colors sm:text-base lg:text-xl font-medium ${activeTab === "newPairs" ? "text-white" : "text-[#6B7280] hover:text-white"} cursor-pointer`}
               onClick={() => setActiveTab("newPairs")}
             >
               New Pairs
@@ -3076,15 +3261,16 @@ export default function DiscoverPage() {
               </span>
             </div> */}
 
-            {/* Timeframes - hide when on live tab, new pairs, xStocks, surge, or trending (for both Solana and Monad) */}
-            {/* COMMENTED OUT: Timeframe selector hidden for trending section */}
+            {/* Timeframes - show for trending (Solana only), hide for live, newPairs, xStocks, surge */}
             {activeTab !== "live" &&
               activeTab !== "newPairs" &&
               activeTab !== "xStocks" &&
               activeTab !== "surge" &&
-              activeTab !== "trending" && (
-                <div className="relative hidden h-7 w-[130px] min-w-[130px] items-center justify-center gap-1 rounded-md border border-[#24252C] bg-[#272a2e] px-1.5 py-1 sm:flex">
-                  {(["5m", "1h", "6h", "24h"] as Timeframe[]).map(
+              // Show timeframes for Solana trending with WebSocket support
+              (activeTab !== "trending" || currentChain === "sol") && (
+                <div className="relative hidden h-7 min-w-[100px] items-center justify-center gap-1 rounded-md border border-[#24252C] bg-[#272a2e] px-1.5 py-1 sm:flex">
+                  {/* For trending tab, only show 5m, 1h, 6h (WebSocket supported timeframes) */}
+                  {((activeTab === "trending" ? ["5m", "1h", "6h"] : ["5m", "1h", "6h", "24h"]) as Timeframe[]).map(
                     (tf: Timeframe) => (
                       <div
                         key={tf}
@@ -3431,6 +3617,7 @@ export default function DiscoverPage() {
                   selectedTimeframe={selectedTimeframe}
                   quickBuyAmount={Number(quickBuyAmount) || 0}
                   chain={currentChain}
+                  tableType="newPairs"
                 />
               ) : (
                 <div className="py-10 text-center text-[#9CA3AF]">

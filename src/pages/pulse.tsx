@@ -1591,13 +1591,13 @@ export default function PulsePage() {
         <title>Trenches | Interstate Memeboard</title>
         <meta name="description" content="Token tracking dashboard" />
       </Head>
-      <div className="flex h-screen flex-col overflow-hidden bg-[#06070b] text-neutral-100">
+      <div className="flex h-screen flex-col overflow-hidden bg-[#111214] text-neutral-100">
         <Header />
         <div className="flex min-h-0 w-full flex-1 flex-col overflow-hidden px-4 py-4 sm:px-6">
           <div className="mb-2">
             <div className="mb-1 flex flex-col gap-3 px-2 pt-2 sm:flex-row sm:items-center sm:justify-between">
               <div className="flex items-center gap-3">
-                <h1 className="text-xl !font-bold">Trenches</h1>
+                <h1 className="text-xl font-medium text-white">Trenches</h1>
                 <div className="flex items-center gap-3">
                   <Link
                     href="/pulse?chain=sol"
@@ -1627,7 +1627,7 @@ export default function PulsePage() {
                     className={bnbButtonClasses}
                   >
                     <SiBinance className="h-4 w-4 text-[#F3BA2F]" />
-                    <span className="absolute -bottom-1 -right-3 rounded-full border border-blue-500 px-1.5 py-px text-[6px] font-semibold uppercase tracking-[0.18em] text-blue-500 shadow-lg shadow-blue-500/30 bg-[#06070b]">
+                    <span className="absolute -bottom-1 -right-3 rounded-full border border-blue-500 px-1.5 py-px text-[6px] font-semibold uppercase tracking-[0.18em] text-blue-500 shadow-lg shadow-blue-500/30 bg-[#111214]">
                       Beta
                     </span>
                   </Link> */}
@@ -1641,7 +1641,7 @@ export default function PulsePage() {
                       alt="Base"
                       className="h-7 w-7 rounded-full object-cover"
                     />
-                    <span className="absolute -bottom-1 -right-4 rounded-full border border-sky-400 px-1.5 py-px text-[6px] font-semibold uppercase tracking-[0.18em] text-sky-300 shadow-lg shadow-sky-500/30 bg-[#06070b]">
+                    <span className="absolute -bottom-1 -right-4 rounded-full border border-sky-400 px-1.5 py-px text-[6px] font-semibold uppercase tracking-[0.18em] text-sky-300 shadow-lg shadow-sky-500/30 bg-[#111214]">
                       Soon
                     </span>
                   </Link> */}
@@ -1655,7 +1655,7 @@ export default function PulsePage() {
                       alt="Ethereum"
                       className="h-7 w-7 rounded-full object-cover"
                     />
-                    <span className="absolute -bottom-1 -right-4 rounded-full border border-emerald-400 px-1.5 py-px text-[6px] font-semibold uppercase tracking-[0.18em] text-emerald-300 shadow-lg shadow-emerald-500/30 bg-[#06070b]">
+                    <span className="absolute -bottom-1 -right-4 rounded-full border border-emerald-400 px-1.5 py-px text-[6px] font-semibold uppercase tracking-[0.18em] text-emerald-300 shadow-lg shadow-emerald-500/30 bg-[#111214]">
                       Soon
                     </span>
                   </Link> */}

@@ -32,20 +32,11 @@ export default function usePaginatedTokensWithFallback({
   chain = 'sol', // Default to Solana
 }: UsePaginatedTokensParams = {}) {
   //console.log('🔧 [HOOK] usePaginatedTokensWithFallback called with:', { filter, order, offset, limit, timeframe });
-  
-  // Early return if limit is 0 (used to disable the hook)
-  if (limit === 0) {
-    //console.log('🔧 [HOOK] Disabled - limit is 0, returning empty state');
-    return {
-      data: [],
-      loading: false,
-      isConnected: false,
-      isReconnecting: false,
-      error: null,
-      usingFallback: false,
-    };
-  }
-  
+
+  // Track if hook is disabled (limit === 0)
+  // NOTE: We can't early return before hooks - that violates Rules of Hooks
+  const isDisabled = limit === 0;
+
   // console.log('🔧 Environment check:', {
   //   WEBSOCKET_URL: env.NEXT_PUBLIC_WEBSOCKET_URL,
   //   BACKEND_URL: env.NEXT_PUBLIC_BACKEND_URL
@@ -1157,6 +1148,11 @@ export default function usePaginatedTokensWithFallback({
 
   // Effect for managing connection (WebSocket + fallback)
   useEffect(() => {
+    // Skip all connection logic if hook is disabled
+    if (isDisabled) {
+      return;
+    }
+
     // CRITICAL: Log when effect runs to track chain/timeframe changes
     const previousChain = lastChainRef.current;
     const previousTimeframe = lastTimeframeRef.current;
@@ -1570,7 +1566,20 @@ export default function usePaginatedTokensWithFallback({
         ws.close();
       }
     };
-  }, [filter, order, offset, limit, timeframe, chain, throttledSetData, startPolling, clearPolling]); // chain is in deps - will re-run when chain changes
+  }, [filter, order, offset, limit, timeframe, chain, throttledSetData, startPolling, clearPolling, isDisabled]); // chain is in deps - will re-run when chain changes
+
+  // Return empty state if disabled (limit === 0)
+  // This must be after all hooks to comply with Rules of Hooks
+  if (isDisabled) {
+    return {
+      data: [],
+      loading: false,
+      isConnected: false,
+      isReconnecting: false,
+      error: null,
+      usingFallback: false,
+    };
+  }
 
   return state;
 }

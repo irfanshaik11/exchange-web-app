@@ -31,6 +31,7 @@ export interface MarketFilterState {
   ending: 'all' | 'today' | 'week' | 'month' | 'later';
   volume: 'all' | 'high' | 'medium' | 'low';
   probability: 'all' | 'high' | 'medium' | 'low';
+  hideResolved: boolean;
 }
 
 export const DEFAULT_FILTERS: MarketFilterState = {
@@ -38,6 +39,7 @@ export const DEFAULT_FILTERS: MarketFilterState = {
   ending: 'all',
   volume: 'all',
   probability: 'all',
+  hideResolved: true, // Hide resolved markets by default
 };
 
 interface FilterOption {
@@ -128,10 +130,10 @@ export default function MarketFilters({ filters, onFiltersChange }: MarketFilter
   const popoutRef = useRef<HTMLDivElement>(null);
   const buttonRef = useRef<HTMLButtonElement>(null);
 
-  // Count active filters
+  // Count active filters (excluding hideResolved since it's a toggle, not a dropdown)
   const activeFilterCount = Object.entries(filters).filter(
-    ([key, value]) => value !== 'all'
-  ).length;
+    ([key, value]) => key !== 'hideResolved' && value !== 'all'
+  ).length + (filters.hideResolved ? 1 : 0);
 
   // Close popout when clicking outside
   useEffect(() => {
@@ -238,6 +240,35 @@ export default function MarketFilters({ filters, onFiltersChange }: MarketFilter
 
             {/* Filter Sections */}
             <div className="p-4">
+              {/* Hide Resolved Toggle */}
+              <div
+                className="flex items-center justify-between mb-4 pb-4"
+                style={{ borderBottom: `1px solid ${AX.border}` }}
+              >
+                <div className="flex items-center gap-2">
+                  <HiOutlineStatusOnline className="w-4 h-4" style={{ color: AX.red }} />
+                  <span className="text-sm font-medium" style={{ color: AX.text }}>
+                    Hide Resolved
+                  </span>
+                </div>
+                <button
+                  onClick={() => updateFilter('hideResolved', !filters.hideResolved)}
+                  className="relative w-11 h-6 rounded-full transition-all duration-200"
+                  style={{
+                    backgroundColor: filters.hideResolved ? AX.accent : AX.surface2,
+                    border: `1px solid ${filters.hideResolved ? AX.accent : AX.border}`,
+                  }}
+                >
+                  <span
+                    className="absolute top-0.5 w-5 h-5 rounded-full transition-all duration-200 shadow-sm"
+                    style={{
+                      backgroundColor: filters.hideResolved ? AX.bg : AX.muted,
+                      left: filters.hideResolved ? '20px' : '2px',
+                    }}
+                  />
+                </button>
+              </div>
+
               <FilterSection
                 title="Status"
                 icon={<HiOutlineStatusOnline className="w-4 h-4" />}
@@ -306,6 +337,11 @@ export function applyMarketFilters<T extends {
   filters: MarketFilterState
 ): T[] {
   return markets.filter((market) => {
+    // Hide resolved toggle (takes priority)
+    if (filters.hideResolved && market.status === 'resolved') {
+      return false;
+    }
+
     // Status filter
     if (filters.status !== 'all') {
       if (filters.status === 'active' && market.status !== 'active') return false;

@@ -4784,7 +4784,7 @@ function PulseTable({
       }}
     >
       <div
-        className="group relative mb-2 flex items-center justify-between border-b p-2 text-lg font-bold"
+        className="group relative mb-2 flex items-center justify-between border-b p-2 text-lg font-medium"
         style={{
           backgroundColor: "transparent",
           borderColor: AX.border,
@@ -4798,7 +4798,7 @@ function PulseTable({
           <span
             className="text-sm lg:text-base"
             style={{
-              fontWeight: "600",
+              fontWeight: "500",
               letterSpacing: "0.5px",
             }}
           >

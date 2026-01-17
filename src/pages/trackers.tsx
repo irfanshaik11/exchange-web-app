@@ -1572,7 +1572,7 @@ export default function TrackersPage() {
           <div className="mt-4 mb-2 flex flex-col gap-4 px-4 sm:my-6 sm:mb-4 sm:px-6 lg:flex-row lg:items-center lg:justify-between lg:gap-6 lg:px-8">
             {/* Tabs Section - Scrollable on mobile */}
             <div className="scrollbar-hide -mx-4 flex items-center gap-3 overflow-x-auto px-4 pb-2 sm:-mx-6 sm:gap-4 sm:px-6 lg:mx-0 lg:gap-6 lg:px-0 lg:pb-0">
-              <h1 className="text-lg lg:text-xl !font-bold text-white font-geist">
+              <h1 className="text-xl font-medium text-white">
                 Trackers
               </h1>
             </div>

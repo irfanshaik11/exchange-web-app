@@ -303,7 +303,7 @@ export default function PredictionsPage() {
             )}
           </motion.div>
 
-          {/* Featured Market */}
+          {/* Featured Market - Hidden for now
           {featuredMarket && (
             <motion.div
               initial={{ opacity: 0, y: 20 }}
@@ -314,6 +314,7 @@ export default function PredictionsPage() {
               <FeaturedMarket market={featuredMarket} />
             </motion.div>
           )}
+          */}
 
           {/* Favorites Carousel */}
           {favorites.length > 0 && allMarkets.length > 0 && (
