@@ -1339,9 +1339,8 @@ const TxnsCell: React.FC<{
 };
 
 // Mini Sparkline Chart Component - shows 24h price movement
-// Uses intersection observer for lazy loading + in-memory cache
-const sparklineCache = new Map<string, { data: number[]; timestamp: number; priceChange: number }>();
-const SPARKLINE_CACHE_TTL = 10 * 60 * 1000; // 10 minute cache for chart data
+// Uses intersection observer for lazy loading + permanent in-memory cache (until page refresh)
+const sparklineCache = new Map<string, { data: number[]; priceChange: number }>();
 
 const MiniSparkline: React.FC<{
   token: Token;
@@ -1384,9 +1383,9 @@ const MiniSparkline: React.FC<{
       return;
     }
 
-    // Check cache first
+    // Check cache first - permanent cache until page refresh
     const cached = sparklineCache.get(mintAddress);
-    if (cached && Date.now() - cached.timestamp < SPARKLINE_CACHE_TTL) {
+    if (cached) {
       setPriceData(cached.data);
       setPriceChange(cached.priceChange);
       setLoading(false);
@@ -1413,10 +1412,9 @@ const MiniSparkline: React.FC<{
           const lastPrice = closes[closes.length - 1] || 0;
           const change = firstPrice > 0 ? ((lastPrice - firstPrice) / firstPrice) * 100 : 0;
 
-          // Cache the result
+          // Cache the result permanently (until page refresh)
           sparklineCache.set(mintAddress, {
             data: closes,
-            timestamp: Date.now(),
             priceChange: change
           });
 
