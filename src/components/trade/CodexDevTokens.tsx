@@ -7,6 +7,7 @@ import type { Token } from '~/utils/db';
 import DevTokensPieChart from './DevTokensPieChart';
 import { FaChevronLeft, FaChevronRight, FaCopy, FaDownload, FaSearch, FaBars } from 'react-icons/fa';
 import { SiSolana } from 'react-icons/si';
+import { IoIosCloseCircleOutline } from 'react-icons/io';
 
 interface CodexDevTokensProps {
   token: Token | null;
@@ -573,31 +574,31 @@ const CodexDevTokens: React.FC<CodexDevTokensProps> = ({ token, chain = 'sol', o
           >
             <tr style={{ borderBottom: "1px solid #27282e" }} className='!text-xs'>
               <th
-                className="px-4 py-1.5 text-left text-xs font-medium whitespace-nowrap text-[#757e80]"
+                className="px-4 py-1.5 text-left text-xs font-normal whitespace-nowrap text-[#757e80]"
                 style={{ color: "#9ca3af" }}
               >
                 Token ↓
               </th>
               <th
-                className="px-2 py-1.5 text-left text-xs font-medium whitespace-nowrap text-[#757e80]"
+                className="px-2 py-1.5 text-left text-xs font-normal whitespace-nowrap text-[#757e80]"
                 style={{ color: "#9ca3af" }}
               >
                 Migrated
               </th>
               <th
-                className="px-2 py-1.5 text-left text-xs font-medium whitespace-nowrap text-[#757e80]"
+                className="px-2 py-1.5 text-left text-xs font-normal whitespace-nowrap text-[#757e80]"
                 style={{ color: "#9ca3af" }}
               >
                 Market Cap
               </th>
               <th
-                className="px-2 py-1.5 text-left text-xs font-medium whitespace-nowrap text-[#757e80]"
+                className="px-2 py-1.5 text-left text-xs font-normal whitespace-nowrap text-[#757e80]"
                 style={{ color: "#9ca3af" }}
               >
                 Liquidity
               </th>
               <th
-                className="px-2 py-1.5 text-left text-xs font-medium whitespace-nowrap text-[#757e80]"
+                className="px-2 py-1.5 text-left text-xs font-normal whitespace-nowrap text-[#757e80]"
                 style={{ color: "#9ca3af" }}
               >
                 1h Volume
@@ -628,24 +629,22 @@ const CodexDevTokens: React.FC<CodexDevTokensProps> = ({ token, chain = 'sol', o
                 return (
                   <tr
                     key={devToken.token.address}
-                    className="transition-colors hover:brightness-110"
+                    className="transition-colors"
                     style={{
-                      backgroundColor: idx % 2 === 0 ? "#101114" : "#161719",
+                      backgroundColor: idx % 2 === 0 ? "#111214" : "#15161a",
                     }}
                   >
-                    <td className="px-4 py-2">
+                    <td className="px-4 py-1">
                       <div className="flex flex-col">
                         <div
-                          className="text-[13px] font-normal"
-                          style={{ color: "#d1d5db" }}
+                          className="text-[13px] font-normal text-[#f0f5f5]"
                         >
                           {devToken.token.symbol ||
                             devToken.token.name ||
                             `${devToken.token.address.slice(0, 4)}...${devToken.token.address.slice(-4)}`}
                         </div>
                         <div
-                          className="text-xs font-normal"
-                          style={{ color: "#9ca3af" }}
+                          className="text-xs font-normal text-[#c4cccc]"
                         >
                           {age} ago
                         </div>
@@ -656,30 +655,29 @@ const CodexDevTokens: React.FC<CodexDevTokensProps> = ({ token, chain = 'sol', o
                         {isMigrated ? (
                           <span className="text-[11px] text-green-400 font-normal">✓</span>
                         ) : (
-                          <span className="text-[11px] text-pink-400 font-normal">✗</span>
+                          <span className="text-[11px] text-[#f26682] font-normal">
+                            <IoIosCloseCircleOutline size={14} />
+                          </span>
                         )}
                       </div>
                     </td>
                     <td className="px-2 py-2">
                       <div
-                        className="text-[13px] font-normal"
-                        style={{ color: "#d1d5db" }}
+                        className="text-[13px] font-normal text-[#c4cccc]"
                       >
                         {marketCap}
                       </div>
                     </td>
                     <td className="px-2 py-2">
                       <div
-                        className="text-[13px] font-normal"
-                        style={{ color: "#d1d5db" }}
+                        className="text-[13px] font-normal text-[#c4cccc]"
                       >
                         {liquidity}
                       </div>
                     </td>
                     <td className="px-2 py-2">
                       <div
-                        className="text-[13px] font-normal"
-                        style={{ color: "#d1d5db" }}
+                        className="text-[13px] font-normal text-[#c4cccc]"
                       >
                         {volume}
                       </div>
