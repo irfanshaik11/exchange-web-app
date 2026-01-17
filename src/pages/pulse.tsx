@@ -1594,10 +1594,10 @@ export default function PulsePage() {
       <div className="flex h-screen flex-col overflow-hidden bg-[#06070b] text-neutral-100">
         <Header />
         <div className="flex min-h-0 w-full flex-1 flex-col overflow-hidden px-4 py-4 sm:px-6">
-          <div className="mb-1">
+          <div className="mb-2">
             <div className="mb-1 flex flex-col gap-3 px-2 pt-2 sm:flex-row sm:items-center sm:justify-between">
               <div className="flex items-center gap-3">
-                <h1 className="text-xl font-bold">Trenches</h1>
+                <h1 className="text-xl !font-bold">Trenches</h1>
                 <div className="flex items-center gap-3">
                   <Link
                     href="/pulse?chain=sol"
@@ -1921,7 +1921,7 @@ export default function PulsePage() {
                 </div>
               </div>
               {/* Desktop: All tables horizontally */}
-              <div className="hidden min-h-0 w-full flex-1 flex-row overflow-hidden lg:flex">
+              <div className="hidden min-h-0 w-full flex-1 flex-row overflow-hidden lg:flex two">
                 <PulseTable
                   title="New Pairs"
                   tokens={enrichedNewPairsToShow as any}

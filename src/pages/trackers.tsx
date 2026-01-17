@@ -1569,15 +1569,15 @@ export default function TrackersPage() {
       <div className="mb-20">
         <div className="flex min-h-screen flex-col bg-[#050608] text-neutral-100">
           <Header isSticky={false} />
-          <div className="my-4 flex flex-col gap-4 px-4 sm:my-6 sm:px-6 lg:flex-row lg:items-center lg:justify-between lg:gap-6 lg:px-8">
+          <div className="mt-4 mb-2 flex flex-col gap-4 px-4 sm:my-6 sm:mb-4 sm:px-6 lg:flex-row lg:items-center lg:justify-between lg:gap-6 lg:px-8">
             {/* Tabs Section - Scrollable on mobile */}
             <div className="scrollbar-hide -mx-4 flex items-center gap-3 overflow-x-auto px-4 pb-2 sm:-mx-6 sm:gap-4 sm:px-6 lg:mx-0 lg:gap-6 lg:px-0 lg:pb-0">
-              <h1 className="text-xl font-semibold whitespace-nowrap text-neutral-100 sm:text-2xl lg:text-3xl">
+              <h1 className="text-lg lg:text-xl !font-bold text-white font-geist">
                 Trackers
               </h1>
             </div>
           </div>
-          <div className="mb-4 flex min-h-0 w-full flex-1 flex-col px-2 sm:mb-8 sm:px-4">
+          <div className="mb-4 flex min-h-0 w-full flex-1 flex-col px-2 sm:mb-8 sm:px-6">
             {/* Main Content Area: Two Columns */}
             <div className="flex min-h-0 flex-1 flex-col gap-3 sm:gap-4 lg:flex-row">
               {isMobile && (
@@ -1608,7 +1608,7 @@ export default function TrackersPage() {
               {/* LEFT: WALLET SECTION */}
               {showWalletSection && (
                 <div
-                  className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-xl border border-neutral-800/60 bg-[#0A0A0A] px-3 pb-4 shadow-2xl backdrop-blur-sm sm:px-5"
+                  className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-md border border-neutral-800/60 bg-[#0A0A0A] px-3 pb-4 shadow-2xl backdrop-blur-sm sm:px-5"
                   style={{
                     boxShadow:
                       "0 8px 32px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(127, 255, 201, 0.05)",
