@@ -1339,7 +1339,7 @@ const TxnsCell: React.FC<{
 };
 
 // Mini Sparkline Chart Component - shows 24h price movement
-// Uses intersection observer for lazy loading + permanent in-memory cache (until page refresh)
+// Loads immediately on mount + permanent in-memory cache (until page refresh)
 const sparklineCache = new Map<string, { data: number[]; priceChange: number }>();
 
 const MiniSparkline: React.FC<{
@@ -1350,9 +1350,6 @@ const MiniSparkline: React.FC<{
   const [priceData, setPriceData] = useState<number[]>([]);
   const [priceChange, setPriceChange] = useState<number>(0);
   const [loading, setLoading] = useState(true);
-  const [isVisible, setIsVisible] = useState(false);
-  const containerRef = useRef<HTMLDivElement>(null);
-  const hasFetchedRef = useRef(false);
   const mintAddress = token.mint || (token as any).contractAddress || (token as any).address;
 
   // Use existing price change from token data for instant display
@@ -1360,28 +1357,9 @@ const MiniSparkline: React.FC<{
     (token as any).priceChange24h ||
     (token as any).price24hChangePercent || 0;
 
-  // Intersection observer for lazy loading
+  // Fetch chart data immediately on mount
   useEffect(() => {
-    const observer = new IntersectionObserver(
-      ([entry]) => {
-        if (entry?.isIntersecting) {
-          setIsVisible(true);
-        }
-      },
-      { rootMargin: '100px' } // Start loading 100px before visible
-    );
-
-    if (containerRef.current) {
-      observer.observe(containerRef.current);
-    }
-
-    return () => observer.disconnect();
-  }, []);
-
-  useEffect(() => {
-    if (!mintAddress || !isVisible || hasFetchedRef.current) {
-      return;
-    }
+    if (!mintAddress) return;
 
     // Check cache first - permanent cache until page refresh
     const cached = sparklineCache.get(mintAddress);
@@ -1389,12 +1367,8 @@ const MiniSparkline: React.FC<{
       setPriceData(cached.data);
       setPriceChange(cached.priceChange);
       setLoading(false);
-      hasFetchedRef.current = true;
       return;
     }
-
-    // Mark as fetched to prevent duplicate requests
-    hasFetchedRef.current = true;
 
     // Fetch OHLC data
     const fetchSparkline = async () => {
@@ -1430,7 +1404,7 @@ const MiniSparkline: React.FC<{
     };
 
     fetchSparkline();
-  }, [mintAddress, isVisible]);
+  }, [mintAddress]);
 
   // Generate a simple placeholder line based on existing price change data
   const generatePlaceholderLine = () => {
@@ -1454,10 +1428,10 @@ const MiniSparkline: React.FC<{
     );
   };
 
-  // If not visible yet or loading, show placeholder with direction indicator
-  if (!isVisible || loading) {
+  // Show placeholder while loading
+  if (loading) {
     return (
-      <div ref={containerRef} className="flex items-center justify-center" style={{ width, height }}>
+      <div className="flex items-center justify-center" style={{ width, height }}>
         {existingPriceChange !== 0 ? generatePlaceholderLine() : (
           <div className="w-full h-1 rounded" style={{ backgroundColor: AX.border }}>
             <div
@@ -1481,7 +1455,7 @@ const MiniSparkline: React.FC<{
     const color = isUp ? '#85d99f' : '#f26681';
 
     return (
-      <div ref={containerRef} className="flex items-center justify-center" style={{ width, height }}>
+      <div className="flex items-center justify-center" style={{ width, height }}>
         <svg width={width} height={height}>
           {/* Simple curved line showing direction */}
           <path
@@ -1589,7 +1563,7 @@ const MiniSparkline: React.FC<{
   const pathLength = chartWidth * 3;
 
   return (
-    <div ref={containerRef} className="flex items-center justify-center">
+    <div className="flex items-center justify-center">
       <svg width={width} height={height} className="overflow-visible">
         <defs>
           {/* Gradient for the fill area */}
