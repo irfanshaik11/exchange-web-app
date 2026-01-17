@@ -10,7 +10,7 @@ import { FaArrowUp, FaCheckCircle, FaEye, FaEyeSlash } from 'react-icons/fa';
 import { SiSolana } from 'react-icons/si';
 import Image from 'next/image';
 import SellPopup from '../SellPopup';
-import { fetchChainTokenMetadata, type UnifiedTokenMetadata } from '~/utils/tokenMetadata';
+import { fetchChainTokenMetadata, fetchPumpfunImage, isPumpfunToken, type UnifiedTokenMetadata } from '~/utils/tokenMetadata';
 import { getProtocolBranding } from '~/utils/protocolBranding';
 import { usePositionPrices } from '~/hooks/usePositionPrices';
 import PositionDetailModal from './PositionDetailModal';
@@ -138,6 +138,7 @@ const Positions: React.FC<PositionsProps> = ({
   
   const [loading, setLoading] = useState(true); // Start with loading, will be set based on cache in useEffect
   const [tokenMetadata, setTokenMetadata] = useState<Record<string, TokenMetadata>>({});
+  const [pumpfunImages, setPumpfunImages] = useState<Record<string, string>>({}); // Fallback images from Pump.fun API
   const [hiddenTokens, setHiddenTokens] = useState<Set<string>>(new Set());
   const [showSellPopup, setShowSellPopup] = useState(false);
   const [selectedPosition, setSelectedPosition] = useState<PositionRow | null>(null);
@@ -237,12 +238,17 @@ const Positions: React.FC<PositionsProps> = ({
     [],
   );
 
-  const createQuickTradeToast = useCallback((tokenImage?: string | null, tokenName?: string) => {
+  // Chain-specific logos for toast
+  const SOLANA_LOGO = 'https://avatars.githubusercontent.com/u/92743431?s=200&v=4';
+  const MONAD_LOGO = 'https://pbs.twimg.com/profile_images/1749618187489206272/rDaFjEhN_400x400.jpg';
+
+  const createQuickTradeToast = useCallback((tokenImage?: string | null, tokenName?: string, chain: 'solana' | 'monad' = 'solana') => {
     const toastId = `quick-trade-${Date.now()}`;
     const startTime = Date.now();
     const timerCap = 0.40 + Math.random() * 0.20;
     let timerFinished = false;
     let timerInterval: NodeJS.Timeout | null = null;
+    const defaultLogo = chain === 'monad' ? MONAD_LOGO : SOLANA_LOGO;
 
     toast.custom(
       () => (
@@ -262,7 +268,7 @@ const Positions: React.FC<PositionsProps> = ({
           <span className="font-semibold text-sm" style={{ color: '#31e3ac' }}>Trade placed!</span>
           <span id={`timer-${toastId}`} className="text-[#9CA3AF] text-xs ml-1">(0.00s)</span>
           <span id={`link-${toastId}`} className="inline-flex items-center ml-1" style={{ display: 'none' }}>
-            <img src="https://pbs.twimg.com/profile_images/1749618187489206272/rDaFjEhN_400x400.jpg" alt="Monad" className="w-4 h-4 rounded-full" style={{ cursor: 'default' }} />
+            <img src={defaultLogo} alt={chain === 'monad' ? 'Monad' : 'Solana'} className="w-4 h-4 rounded-full" style={{ cursor: 'default' }} />
           </span>
         </div>
       ),
@@ -306,7 +312,7 @@ const Positions: React.FC<PositionsProps> = ({
       const linkEl = document.getElementById(`link-${toastId}`);
       if (linkEl) {
         if (explorerUrl) {
-          const icon = iconUrl || 'https://pbs.twimg.com/profile_images/1749618187489206272/rDaFjEhN_400x400.jpg';
+          const icon = iconUrl || defaultLogo;
           linkEl.innerHTML = `<a href="${explorerUrl}" target="_blank" rel="noopener noreferrer" class="hover:opacity-80 transition-opacity"><img src="${icon}" alt="tx" class="w-4 h-4 rounded-full" style="cursor: pointer;" /></a>`;
           linkEl.style.display = 'inline-flex';
         } else {
@@ -385,10 +391,11 @@ const Positions: React.FC<PositionsProps> = ({
       const tokenMeta = tokenMetadata[position.tokenAddress];
       const tokenImage = tokenMeta?.imageUrl || position.imageUrl || null;
       const tokenName = tokenMeta?.name || tokenMeta?.symbol || shortAddr(position.tokenAddress);
-      const toastControls = createQuickTradeToast(tokenImage, tokenName);
+      const isMonad = isMonadPosition(position);
+      const toastControls = createQuickTradeToast(tokenImage, tokenName, isMonad ? 'monad' : 'solana');
 
       try {
-        if (isMonadPosition(position)) {
+        if (isMonad) {
           const tokenAddress =
             normalizeMonadAddress(position.tokenAddress) || position.tokenAddress;
           const slippage =
@@ -467,12 +474,11 @@ const Positions: React.FC<PositionsProps> = ({
           );
 
           const explorerUrl = sellResult?.hash ? `https://solscan.io/tx/${sellResult.hash}` : undefined;
-          const solIcon = 'https://cryptologos.cc/logos/solana-sol-logo.png';
-          toastControls.markSuccess(explorerUrl, solIcon);
+          toastControls.markSuccess(explorerUrl);
           refreshPositions();
         }
       } catch (error: any) {
-        const message = isMonadPosition(position)
+        const message = isMonad
           ? formatMonadError(error?.message || error?.error)
           : (error?.message || error?.error || 'Sell failed. Please try again.');
         toastControls.fail(message);
@@ -497,13 +503,35 @@ const Positions: React.FC<PositionsProps> = ({
   );
 
   const handleTokenNavigation = useCallback(
-    (event: React.MouseEvent, position: PositionRow, navigateAddress?: string) => {
+    (
+      event: React.MouseEvent,
+      position: PositionRow,
+      navigateAddress?: string,
+      metadata?: { name?: string; symbol?: string; imageUrl?: string }
+    ) => {
       event.stopPropagation();
+
+      // Build query params for proper page state and optimistic loading
+      const params = new URLSearchParams({
+        mode: 'sell', // User owns the token, default to sell
+        tab: 'market',
+        timeRange: '5m',
+        sliderPct: '0',
+      });
+
+      // Add optimistic data for instant display (prevents blank loading state)
+      if (metadata?.name) params.set('_name', metadata.name);
+      if (metadata?.symbol) params.set('_symbol', metadata.symbol);
+      if (metadata?.imageUrl) params.set('_image', metadata.imageUrl);
+      if (position.tokenAddress) params.set('_mint', position.tokenAddress);
+
+      const queryString = params.toString();
+
       if (isMonadPosition(position)) {
         const normalized = normalizeMonadAddress(position.tokenAddress) || position.tokenAddress;
-        router.push(`/trade/monad/${normalized}`);
+        router.push(`/trade/monad/${normalized}?${queryString}`);
       } else if (navigateAddress) {
-        router.push(`/trade/${navigateAddress}`);
+        router.push(`/trade/${navigateAddress}?${queryString}`);
       }
     },
     [isMonadPosition, router],
@@ -938,6 +966,49 @@ const Positions: React.FC<PositionsProps> = ({
     return () => clearInterval(intervalId);
   }, [userId, onPositionsChange, skipFetch, blockchain, requestMetadataForTokens, positionsCacheKey, POSITIONS_CACHE_TTL_MS]);
 
+  // Fetch Pump.fun images for positions with missing images
+  useEffect(() => {
+    const fetchMissingPumpfunImages = async () => {
+      // Find Pump.fun tokens that have no image in metadata or position
+      const tokensNeedingImages = positions
+        .filter((pos) => pos.remaining > 0)
+        .filter((pos) => isPumpfunToken(pos.tokenAddress))
+        .filter((pos) => {
+          const metadata = tokenMetadata[pos.tokenAddress];
+          const hasImage = metadata?.imageUrl || pos.imageUrl || pumpfunImages[pos.tokenAddress];
+          return !hasImage;
+        })
+        .map((pos) => pos.tokenAddress);
+
+      if (tokensNeedingImages.length === 0) return;
+
+      // Fetch images in parallel
+      const results = await Promise.allSettled(
+        tokensNeedingImages.map(async (tokenAddress) => {
+          const result = await fetchPumpfunImage(tokenAddress);
+          return { tokenAddress, imageUrl: result?.imageUrl };
+        })
+      );
+
+      // Update state with fetched images
+      const newImages: Record<string, string> = {};
+      results.forEach((result) => {
+        if (result.status === 'fulfilled' && result.value.imageUrl) {
+          newImages[result.value.tokenAddress] = result.value.imageUrl;
+        }
+      });
+
+      if (Object.keys(newImages).length > 0) {
+        setPumpfunImages((prev) => ({ ...prev, ...newImages }));
+      }
+    };
+
+    // Only run after initial metadata fetch completes
+    if (Object.keys(tokenMetadata).length > 0 || positions.length > 0) {
+      fetchMissingPumpfunImages();
+    }
+  }, [positions, tokenMetadata, pumpfunImages]);
+
   return (
     <div className="w-full overflow-y-scroll scrollbar-thin scrollbar-thumb-gray-600 scrollbar-track-gray-800" style={{ maxHeight: '500px' }}>
       <table className="w-full text-xs">
@@ -1129,8 +1200,8 @@ const Positions: React.FC<PositionsProps> = ({
               const isFullCircleImage = branding.isFullCircle;
               const isHidden = hiddenTokens.has(pos.tokenAddress);
               
-              // Use position.imageUrl as final fallback if metadata doesn't have it
-              const finalImageUrl = metadata?.imageUrl || sourcePosition.imageUrl || '';
+              // Use position.imageUrl as fallback, then Pump.fun API fallback for pump tokens
+              const finalImageUrl = metadata?.imageUrl || sourcePosition.imageUrl || pumpfunImages[pos.tokenAddress] || '';
               const tokenKey = getPositionKey(sourcePosition);
               const quickSellValue = quickSellInputs[tokenKey] ?? '100';
               const isSelling = sellingTokens.has(tokenKey);
@@ -1208,7 +1279,7 @@ const Positions: React.FC<PositionsProps> = ({
                       <button
                         type="button"
                         className="font-medium text-sm text-neutral-100 truncate text-left hover:text-[#70E0B0] transition-colors"
-                        onClick={(e) => handleTokenNavigation(e, sourcePosition, navigateAddress)}
+                        onClick={(e) => handleTokenNavigation(e, sourcePosition, navigateAddress, { ...metadata, imageUrl: finalImageUrl })}
                       >
                         {metadata?.name || shortAddr(displayAddress)}
                       </button>

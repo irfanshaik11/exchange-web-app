@@ -2899,7 +2899,7 @@ export default function PortfolioPage() {
                         {currentChain === 'monad' ? (
                           `$${formatSmartNumber((monBalance || 0) * (monPrice || 0.025))}`
                         ) : (
-                          `$${formatSmartNumber(solBalance)}`
+                          `$${formatSmartNumber((solBalance || 0) * (solPrice || 0))}`
                         )}
                       </div>
                     </div>

@@ -21,12 +21,11 @@ import { LuPill, LuSearch } from "react-icons/lu";
 import type { Timeframe } from "../pages/index";
 import { GoClock, GoGlobe } from "react-icons/go";
 import { BiBarChartAlt2 } from "react-icons/bi";
-import { FiDroplet } from "react-icons/fi";
+import { FiDroplet, FiZap } from "react-icons/fi";
 import { FaChartLine, FaXTwitter } from "react-icons/fa6";
 import BlockchainSwitcher from "./BlockchainSwitcher";
 import { BsLightningChargeFill, BsTwitterX } from "react-icons/bs";
 import { showEnhancedToast } from "~/utils/enhancedToast";
-import { useSearch } from "./ui/SearchContext";
 import { getHistory, addToHistory, clearHistory, removeFromHistory, type SearchHistoryItem } from "~/utils/searchHistory";
 import { useUser } from "./UserContext";
 // TODO: SOCIAL LINKS NOT PRESENT FOR NOW
@@ -53,7 +52,7 @@ export interface Token {
   pair_address: string; // Added for consistency
 }
 
-export type SortOption = "time" | "market_cap" | "volume_1h" | "liquidity";
+export type SortOption = "smart" | "time" | "market_cap" | "volume_1h" | "liquidity";
 
 export interface SearchFilters {
   isPumpSearch: boolean;
@@ -70,6 +69,7 @@ const sortingOptions = [
 ];
 
 const sortByOptions = [
+  { key: "smart" as const, icon: FiZap },
   { key: "time" as const, icon: GoClock },
   { key: "market_cap" as const, icon: FaChartLine },
   { key: "volume_1h" as const, icon: BiBarChartAlt2 },
@@ -144,6 +144,55 @@ function normalizeAssetUrl(raw?: string | null): string | null {
   if (s.startsWith("http://")) return s.replace(/^http:\/\//i, "https://");
   if (s.startsWith("https://")) return s;
   return null;
+}
+
+/**
+ * Get market cap color based on value tiers (matching PulseTable)
+ * Tiers: 0-20k: blue, 20k-30k: green, 30k-100k: yellow, 100k+: green
+ */
+function getMarketCapColor(mc: number): string {
+  if (mc >= 100_000) return "#31e3ac"; // Green: 100k+
+  if (mc >= 30_000) return "#ddc13d";  // Yellow: 30k-100k
+  if (mc >= 20_000) return "#31e3ac";  // Green: 20k-30k
+  return "#52c6ff"; // Blue: <20k
+}
+
+/**
+ * Simple text component
+ */
+function HighlightedText({ text, className = "" }: { text: string; query?: string; className?: string }) {
+  return <span className={className}>{text}</span>;
+}
+
+/**
+ * Truncate text in the center with ellipsis (e.g., "Very Long Token Name" → "Very Lo...n Name")
+ */
+function centerTruncate(text: string, maxLength: number = 20): string {
+  if (!text || text.length <= maxLength) return text;
+  const halfLength = Math.floor((maxLength - 3) / 2);
+  return `${text.slice(0, halfLength)}...${text.slice(-halfLength)}`;
+}
+
+/**
+ * Check if a token is "new" (created within last 24 hours)
+ */
+function isNewToken(createdAt: string | number | undefined): boolean {
+  if (!createdAt) return false;
+  const created = typeof createdAt === 'number'
+    ? (createdAt < 10000000000 ? createdAt * 1000 : createdAt)
+    : new Date(createdAt).getTime();
+  const now = Date.now();
+  const hoursDiff = (now - created) / (1000 * 60 * 60);
+  return hoursDiff <= 24;
+}
+
+/**
+ * Check if token is "trending" based on volume/liquidity ratio
+ */
+function isTrendingToken(token: any): boolean {
+  const volume = token.volume_1h || token.total_buy_volume_1h || 0;
+  const liquidity = token.total_liquidity_usd || 1;
+  return volume / liquidity > 0.1; // Volume > 10% of liquidity = trending
 }
 
 function extractProtocolRaw(
@@ -359,7 +408,7 @@ function resolveProtocolIcon(
   }
 
   if (launchpadProtocol.includes("bags")) {
-    return "https://bags.fm/assets/images/bags-icon.png";
+    return "https://play-lh.googleusercontent.com/7AxVcu1pumxavcGTb16WBJQU88CDZd0v8q0WzFwfin7zbBvItYMuNQ0Xkqq4srTw4A=w240-h480-rw";
   }
 
   // Default to pump.fun icon for unknown protocols
@@ -399,25 +448,101 @@ function resolveTwitterInfo(token: Partial<Token> & Record<string, any>): {
   return { url: null, handle: null };
 }
 
-function resolveSearchVolume1h(
+function resolveSearchVolume(
   token: Partial<Token> & Record<string, any>,
-): number {
-  const buy = Number((token as any).total_buy_volume_1h) || 0;
-  const sell = Number((token as any).total_sell_volume_1h) || 0;
-  if (buy || sell) return buy + sell;
-  const direct =
+): { volume: number; is24h: boolean } {
+  // Check for 1h volume first
+  const buy1h = Number((token as any).total_buy_volume_1h) || 0;
+  const sell1h = Number((token as any).total_sell_volume_1h) || 0;
+  if (buy1h || sell1h) return { volume: buy1h + sell1h, is24h: false };
+
+  const direct1h =
     (token as any).volume_1h ??
     (token as any).volume1h ??
     (token as any).volume60m ??
     (token as any).volume_60m ??
-    0;
-  if (direct) return Number(direct) || 0;
-  const fallback =
     (token as any).total_volume_1h ??
     (token as any).buy_volume_1h ??
-    (token as any).volume_24h ??
     0;
-  return Number(fallback) || 0;
+  if (direct1h) return { volume: Number(direct1h) || 0, is24h: false };
+
+  // Fall back to 24h volume (from search API)
+  const volume24h =
+    (token as any).volume_24h ??
+    (token as any).volume24h ??
+    (token as any).volume_usd ??
+    (token as any).volume_24h_usd ??
+    0;
+  if (volume24h) return { volume: Number(volume24h) || 0, is24h: true };
+
+  return { volume: 0, is24h: false };
+}
+
+// Simple in-memory cache for token metadata (like PulseTable)
+const tokenMetadataCache: Record<string, any> = {};
+
+// Hook to fetch metadata from URI (like PulseTable)
+function useTokenMetadata(uri?: string) {
+  const [meta, setMeta] = useState<any | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    if (!uri) {
+      setMeta(null);
+      return;
+    }
+    if (tokenMetadataCache[uri]) {
+      setMeta(tokenMetadataCache[uri]);
+      return;
+    }
+    fetchTokenMetadata(uri).then((data) => {
+      if (!cancelled) {
+        if (data) tokenMetadataCache[uri] = data;
+        setMeta(data);
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [uri]);
+  return meta;
+}
+
+// Helper to extract social links from token metadata (like PulseTable)
+interface SocialLinks {
+  twitter?: string;
+  website?: string;
+  telegram?: string;
+}
+
+function extractSocialLinks(token: Partial<Token> & Record<string, any>, meta: any): SocialLinks {
+  const links: SocialLinks = {};
+
+  // Try to get links from metadata first
+  if (meta) {
+    if (meta.twitter) links.twitter = meta.twitter;
+    if (meta.website) links.website = meta.website;
+    if (meta.telegram) links.telegram = meta.telegram;
+  }
+
+  // Also try to parse token.links if it's a JSON string
+  if (typeof (token as any).links === "string") {
+    try {
+      const parsed = JSON.parse((token as any).links);
+      if (parsed.twitter && !links.twitter) links.twitter = parsed.twitter;
+      if (parsed.website && !links.website) links.website = parsed.website;
+      if (parsed.telegram && !links.telegram) links.telegram = parsed.telegram;
+    } catch {
+      // Ignore parse errors
+    }
+  }
+
+  // Check direct fields on token as last resort
+  if (!links.twitter && (token as any).twitter) links.twitter = (token as any).twitter;
+  if (!links.website && (token as any).website) links.website = (token as any).website;
+  if (!links.telegram && (token as any).telegram) links.telegram = (token as any).telegram;
+
+  return links;
 }
 
 const getSortingButtonClasses = (isActive: boolean, color: string) => {
@@ -438,7 +563,7 @@ interface SearchModalProps {
 
 // The new inner component that contains the actual modal content and logic
 const SearchModalContent = React.memo(function SearchModalContent({
-  open: propOpen,
+  open,
   onClose,
   onSubmit,
   onQueryChange,
@@ -446,11 +571,9 @@ const SearchModalContent = React.memo(function SearchModalContent({
   chain = "sol",
 }: SearchModalProps) {
   const router = useRouter();
-  const context = useSearch();
-  const open = propOpen ?? context.isOpen;
-  const [query, setQuery] = useState(context.query);
   const { user } = useUser();
-  const [sortBy, setSortBy] = useState<SortOption>("time");
+  const [query, setQuery] = useState("");
+  const [sortBy, setSortBy] = useState<SortOption>("smart");
   const [filters, setFilters] = useState<SearchFilters>({
     isPumpSearch: false,
     isBonkSearch: false,
@@ -462,9 +585,12 @@ const SearchModalContent = React.memo(function SearchModalContent({
   const [lastFetchTime, setLastFetchTime] = useState(0);
   const [hasSearched, setHasSearched] = useState(false);
   const [recentSearches, setRecentSearches] = useState<SearchHistoryItem[]>([]);
+  const [selectedIndex, setSelectedIndex] = useState(-1); // Keyboard navigation
 
   const inputRef = useRef<HTMLInputElement>(null);
   const searchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const abortControllerRef = useRef<AbortController | null>(null);
+  const searchRequestIdRef = useRef(0);
 
   // Map timeframes to valid filters
   const getFilterForTimeframe = (timeframe: string) => {
@@ -486,11 +612,99 @@ const SearchModalContent = React.memo(function SearchModalContent({
   // No need for filteredTokens since we're searching via API
   const filteredTokens: Token[] = [];
 
+  /**
+   * Calculate composite score for smart sorting
+   * Combines: relevance (query match), recency, and volume
+   * Higher scores = better ranking
+   */
+  const calculateSmartScore = (token: Token, searchQuery: string): number => {
+    const q = searchQuery.toLowerCase().trim();
+    const symbol = (token.symbol || "").toLowerCase();
+    const name = (token.name || "").toLowerCase();
+
+    // === RELEVANCE SCORE (0-10000) ===
+    // Exact matches and prefix matches are heavily prioritized
+    let relevanceScore = 0;
+    if (q) {
+      if (symbol === q) {
+        relevanceScore = 10000; // Exact symbol match
+      } else if (symbol.startsWith(q)) {
+        relevanceScore = 7500; // Symbol starts with query
+      } else if (name === q) {
+        relevanceScore = 6000; // Exact name match
+      } else if (name.startsWith(q)) {
+        relevanceScore = 4500; // Name starts with query
+      } else if (symbol.includes(q)) {
+        relevanceScore = 3000; // Symbol contains query
+      } else if (name.includes(q)) {
+        relevanceScore = 1500; // Name contains query
+      } else {
+        relevanceScore = 500; // Fallback (API returned it, so some match)
+      }
+    } else {
+      // No query - all tokens are equally relevant
+      relevanceScore = 5000;
+    }
+
+    // === RECENCY SCORE (0-2000) ===
+    // Newer tokens get a boost, with logarithmic decay
+    const createdAt = token.created_at ? new Date(token.created_at).getTime() : 0;
+    const now = Date.now();
+    const ageMs = now - createdAt;
+    const ageHours = ageMs / (1000 * 60 * 60);
+
+    let recencyScore = 0;
+    if (ageHours < 1) {
+      recencyScore = 2000; // Less than 1 hour old
+    } else if (ageHours < 6) {
+      recencyScore = 1500; // 1-6 hours old
+    } else if (ageHours < 24) {
+      recencyScore = 1000; // 6-24 hours old
+    } else if (ageHours < 72) {
+      recencyScore = 500; // 1-3 days old
+    } else {
+      recencyScore = 100; // Older than 3 days
+    }
+
+    // === VOLUME SCORE (0-1500) with ZERO PENALTY ===
+    // Use log scale since volume varies widely (from 0 to millions)
+    // IMPORTANT: 0 volume tokens get a significant penalty to push them down
+    const volume = token.volume_1h || 0;
+    let volumeScore = 0;
+    let zeroVolumePenalty = 0;
+    if (volume > 0) {
+      // log10(1000) = 3, log10(1000000) = 6
+      // Scale: $100 vol = ~300pts, $10k vol = ~600pts, $1M vol = ~900pts
+      volumeScore = Math.min(1500, Math.log10(volume + 1) * 250);
+    } else {
+      // Penalty for 0 volume - pushes these tokens below active ones
+      zeroVolumePenalty = 5000;
+    }
+
+    // === LIQUIDITY BONUS (0-500) ===
+    // Tokens with good liquidity are more tradeable
+    const liquidity = token.total_liquidity_usd || 0;
+    let liquidityBonus = 0;
+    if (liquidity >= 50000) {
+      liquidityBonus = 500;
+    } else if (liquidity >= 10000) {
+      liquidityBonus = 300;
+    } else if (liquidity >= 1000) {
+      liquidityBonus = 100;
+    }
+
+    return relevanceScore + recencyScore + volumeScore + liquidityBonus - zeroVolumePenalty;
+  };
+
   // Helper function to sort tokens on the frontend
-  const sortTokens = (tokens: Token[], sortBy: SortOption): Token[] => {
+  const sortTokens = (tokens: Token[], sortBy: SortOption, searchQuery: string = ""): Token[] => {
     const sortedTokens = [...tokens];
 
     switch (sortBy) {
+      case "smart":
+        return sortedTokens.sort(
+          (a, b) => calculateSmartScore(b, searchQuery) - calculateSmartScore(a, searchQuery),
+        );
       case "time":
         return sortedTokens.sort(
           (a, b) =>
@@ -563,10 +777,20 @@ const SearchModalContent = React.memo(function SearchModalContent({
         return;
       }
 
+      // Cancel any in-flight request
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+      }
+
+      // Create new abort controller and increment request ID
+      const controller = new AbortController();
+      abortControllerRef.current = controller;
+      const currentRequestId = ++searchRequestIdRef.current;
+
       setSearchLoading(true);
       setHasSearched(true);
       try {
-        console.log("🔍 Searching:", { query: searchQuery.trim() });
+        console.log("🔍 Searching:", { query: searchQuery.trim(), requestId: currentRequestId });
 
         // Use different endpoint based on chain
         const isMonad = chain === "monad";
@@ -574,11 +798,15 @@ const SearchModalContent = React.memo(function SearchModalContent({
           ? `/api/token-service/search-monad?q=${encodeURIComponent(searchQuery.trim())}&limit=50`
           : `/api/token-service/search?phrase=${encodeURIComponent(searchQuery.trim())}&limit=50`;
 
-        const response = await fetch(endpoint);
+        const response = await fetch(endpoint, { signal: controller.signal });
 
         if (!response.ok) {
           console.error("❌ Search API error:", response.status);
-          setSearchResults([]);
+          // Only set empty results if this is still the latest request
+          if (currentRequestId === searchRequestIdRef.current) {
+            setSearchResults([]);
+            setSearchLoading(false);
+          }
           return;
         }
 
@@ -671,12 +899,28 @@ const SearchModalContent = React.memo(function SearchModalContent({
           } as Token & { launchpad_protocol?: string };
         });
 
-        setSearchResults(tokens);
-      } catch (error) {
+        // Only set results if this is still the latest request
+        if (currentRequestId === searchRequestIdRef.current) {
+          setSearchResults(tokens);
+        } else {
+          console.log("🔍 Ignoring stale search results:", { requestId: currentRequestId, latestId: searchRequestIdRef.current });
+        }
+      } catch (error: any) {
+        // Ignore abort errors (expected when user types quickly)
+        if (error?.name === "AbortError") {
+          console.log("🔍 Search aborted:", { requestId: currentRequestId });
+          return;
+        }
         console.error("Search error:", error);
-        setSearchResults([]);
+        // Only set empty results if this is still the latest request
+        if (currentRequestId === searchRequestIdRef.current) {
+          setSearchResults([]);
+        }
       } finally {
-        setSearchLoading(false);
+        // Only stop loading if this is still the latest request
+        if (currentRequestId === searchRequestIdRef.current) {
+          setSearchLoading(false);
+        }
       }
     },
     [chain],
@@ -769,6 +1013,7 @@ const SearchModalContent = React.memo(function SearchModalContent({
           if (token.uri || token.logo) queryParams.set('_image', token.uri || token.logo || '');
           queryParams.set('_mint', address);
           if ((token as any).launchpad_protocol) queryParams.set('_launchpad_protocol', (token as any).launchpad_protocol);
+          if (token.created_at) queryParams.set('_created_at', token.created_at);
           queryParams.set('chain', 'monad');
 
           const url = `/trade/monad/${address}?${queryParams.toString()}`;
@@ -778,14 +1023,15 @@ const SearchModalContent = React.memo(function SearchModalContent({
           // IMPORTANT: Always set _name and _symbol (even if empty) to match PulseTable behavior
           // Otherwise TradeActionPanel shows skeleton instead of buy/sell buttons
           // Also include UI state params to prevent double navigation
-          // Use `address` for _mint to match the URL path (address = pair_address || mint)
+          // URL path uses pair_address, but _mint should be the actual mint address
           const queryParams = new URLSearchParams({
             _name: token.name || token.symbol || "",
             _symbol: token.symbol || "",
             _mcap: token.fully_diluted_value?.toString() || "",
             _image: token.uri || token.logo || "",
-            _mint: address,
+            _mint: token.mint || address,
             _launchpad_protocol: (token as any).launchpad_protocol || "",
+            _created_at: token.created_at || "",
             chain: chain || 'sol',
             // UI state defaults - prevents trade page from doing a second navigation
             mode: 'buy',
@@ -814,6 +1060,7 @@ const SearchModalContent = React.memo(function SearchModalContent({
           if (token.uri || token.logo) queryParams.set('_image', token.uri || token.logo || '');
           queryParams.set('_mint', address);
           if ((token as any).launchpad_protocol) queryParams.set('_launchpad_protocol', (token as any).launchpad_protocol);
+          if (token.created_at) queryParams.set('_created_at', token.created_at);
           queryParams.set('chain', 'monad');
 
           const url = `/trade/monad/${address}?${queryParams.toString()}`;
@@ -823,14 +1070,15 @@ const SearchModalContent = React.memo(function SearchModalContent({
           // IMPORTANT: Always set _name and _symbol (even if empty) to match PulseTable behavior
           // Otherwise TradeActionPanel shows skeleton instead of buy/sell buttons
           // Also include UI state params to prevent double navigation
-          // Use `address` for _mint to match the URL path (address = pair_address || mint)
+          // URL path uses pair_address, but _mint should be the actual mint address
           const queryParams = new URLSearchParams({
             _name: token.name || token.symbol || "",
             _symbol: token.symbol || "",
             _mcap: token.fully_diluted_value?.toString() || "",
             _image: token.uri || token.logo || "",
-            _mint: address,
+            _mint: token.mint || address,
             _launchpad_protocol: (token as any).launchpad_protocol || "",
+            _created_at: token.created_at || "",
             chain: chain || 'sol',
             // UI state defaults - prevents trade page from doing a second navigation
             mode: 'buy',
@@ -878,19 +1126,42 @@ const SearchModalContent = React.memo(function SearchModalContent({
     setFilters((prev) => ({ ...prev, [filterName]: !prev[filterName] }));
   }, []);
 
+  // Move displayTokens before handleInputKeyDown so it can be used in the callback
+  const isSearching = useMemo(() => query.trim().length > 0, [query]);
+  const displayTokens = useMemo(() => {
+    if (!hasSearched) return [];
+    return sortTokens(searchResults, sortBy, query);
+  }, [hasSearched, searchResults, sortBy, query]);
+
   const handleInputKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
       if (e.key === "Escape") {
         onClose();
-      } else if (e.key === "Enter") {
-        // Search only when Enter is pressed
+      } else if (e.key === "ArrowDown") {
         e.preventDefault();
-        searchTokens(query);
-        // Don't call onQueryChange - we want to show results in modal, not redirect
+        const maxIndex = displayTokens.length - 1;
+        setSelectedIndex((prev) => (prev < maxIndex ? prev + 1 : prev));
+      } else if (e.key === "ArrowUp") {
+        e.preventDefault();
+        setSelectedIndex((prev) => (prev > 0 ? prev - 1 : 0));
+      } else if (e.key === "Enter") {
+        e.preventDefault();
+        // If a token is selected via keyboard, navigate to it
+        if (selectedIndex >= 0 && displayTokens[selectedIndex]) {
+          handleSelectToken(displayTokens[selectedIndex]);
+        } else {
+          // Otherwise, trigger search
+          searchTokens(query);
+        }
       }
     },
-    [onClose, searchTokens, query],
+    [onClose, searchTokens, query, displayTokens, selectedIndex, handleSelectToken],
   );
+
+  // Reset selected index when search results change
+  useEffect(() => {
+    setSelectedIndex(-1);
+  }, [searchResults]);
 
   useEffect(() => {
     if (open) {
@@ -915,35 +1186,6 @@ const SearchModalContent = React.memo(function SearchModalContent({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, user?.id]);
 
-  useEffect(() => {
-    if (!open && context.query) {
-      context.setSearchQuery("");
-    }
-  }, [open, context]);
-
-  useEffect(() => {
-    if (context.query) {
-      setQuery(context.query);
-    }
-  }, [context.query]);
-
-  useEffect(() => {
-    if (open && context.query && context.query.trim().length > 0) {
-      const searchQuery = context.query.trim();
-      if (!hasSearched || searchQuery !== query) {
-        searchTokens(searchQuery);
-      }
-    }
-  }, [open, context.query, hasSearched, searchTokens, query]);
-
-  // No need to re-run search when sort changes - we sort on the frontend now
-
-  const isSearching = useMemo(() => query.trim().length > 0, [query]);
-  const displayTokens = useMemo(() => {
-    if (!hasSearched) return [];
-    return sortTokens(searchResults, sortBy);
-  }, [hasSearched, searchResults, sortBy]);
-
   // Debug: log render state
   console.log("🔍 SearchModal render:", {
     hasSearched,
@@ -953,13 +1195,27 @@ const SearchModalContent = React.memo(function SearchModalContent({
   });
 
   return (
-    <InterstatePopout
-      open={open}
-      onClose={onClose}
-      align="center"
-      className="mx-auto w-full max-w-[94vw] rounded-xl bg-[#0f0f0f] shadow-sm transition-all duration-200 sm:w-[600px] md:w-[800px]"
-      disableClickOutside={false}
-    >
+    <>
+      {/* CSS Keyframes for staggered animation */}
+      <style jsx global>{`
+        @keyframes fadeSlideIn {
+          0% {
+            opacity: 0;
+            transform: translateY(8px);
+          }
+          100% {
+            opacity: 1;
+            transform: translateY(0);
+          }
+        }
+      `}</style>
+      <InterstatePopout
+        open={open}
+        onClose={onClose}
+        align="center"
+        className="mx-auto w-full max-w-[94vw] rounded-xl bg-[#080808] shadow-sm transition-all duration-200 sm:w-[600px] md:w-[800px]"
+        disableClickOutside={false}
+      >
       {/* Close Button - Mobile */}
       <div className="flex items-center justify-between px-4 pt-3 pb-2 sm:hidden">
         <div className="flex w-full items-center sm:w-auto">
@@ -1018,19 +1274,21 @@ const SearchModalContent = React.memo(function SearchModalContent({
             Sort by:
           </span>
 
-          <div className="flex flex-1 items-center gap-1 rounded-lg border border-[#FFFFFF0F] bg-[#0f0f0f] p-0.5 sm:flex-initial sm:gap-1.5 sm:p-1">
+          <div className="flex flex-1 items-center gap-1 rounded-lg border border-[#FFFFFF0F] bg-[#080808] p-0.5 sm:flex-initial sm:gap-1.5 sm:p-1">
             {sortByOptions.map((option) => {
               const IconComponent = option.icon;
               const isActive = sortBy === option.key;
 
               const tooltipText =
-                option.key === "time"
-                  ? "Sort results by time"
-                  : option.key === "market_cap"
-                    ? "Sort results by Market Cap"
-                    : option.key === "volume_1h"
-                      ? "Sort results by 1h Volume"
-                      : "Sort results by Liquidity";
+                option.key === "smart"
+                  ? "Smart sort (relevance + time + volume)"
+                  : option.key === "time"
+                    ? "Sort results by time"
+                    : option.key === "market_cap"
+                      ? "Sort results by Market Cap"
+                      : option.key === "volume_1h"
+                        ? "Sort results by 1h Volume"
+                        : "Sort results by Liquidity";
 
               return (
                 <div
@@ -1049,11 +1307,11 @@ const SearchModalContent = React.memo(function SearchModalContent({
                   </button>
 
                   {/* Tooltip */}
-                  <div className="pointer-events-none absolute top-[-20px] left-1/2 -translate-x-1/2 -translate-y-full rounded-md border border-[#2a2a2a] bg-[#0f0f0f] px-2 py-1 text-[11px] whitespace-nowrap text-[#d1d1e9] opacity-0 shadow-lg transition-all duration-200 group-hover:translate-y-[-6px] group-hover:opacity-100">
+                  <div className="pointer-events-none absolute top-[-20px] left-1/2 -translate-x-1/2 -translate-y-full rounded-md border border-[#2a2a2a] bg-[#080808] px-2 py-1 text-[11px] whitespace-nowrap text-[#d1d1e9] opacity-0 shadow-lg transition-all duration-200 group-hover:translate-y-[-6px] group-hover:opacity-100">
                     {tooltipText}
 
                     {/* Tooltip arrow */}
-                    <div className="absolute top-full left-1/2 -translate-x-1/2 border-x-4 border-t-4 border-x-transparent border-t-[#0f0f0f]" />
+                    <div className="absolute top-full left-1/2 -translate-x-1/2 border-x-4 border-t-4 border-x-transparent border-t-[#080808]" />
                   </div>
                 </div>
               );
@@ -1064,7 +1322,7 @@ const SearchModalContent = React.memo(function SearchModalContent({
 
       {/* Search Input */}
       <div className="relative px-3 py-2 sm:px-4 sm:py-3">
-        <div className="relative flex items-center gap-2 rounded-xl border border-[#FFFFFF0F] bg-[#0f0f0f] px-3 py-2.5 transition-all duration-200 focus-within:border-[#7FFFC940] focus-within:bg-[#1a1a1a] sm:gap-3 sm:px-4 sm:py-3">
+        <div className="relative flex items-center gap-2 rounded-xl border border-[#FFFFFF0F] bg-[#080808] px-3 py-2.5 transition-all duration-200 focus-within:border-[#7FFFC940] focus-within:bg-[#1a1a1a] sm:gap-3 sm:px-4 sm:py-3">
           <FaSearch className="flex-shrink-0 text-base text-[#666666] sm:text-lg" />
           <input
             ref={inputRef}
@@ -1113,7 +1371,7 @@ const SearchModalContent = React.memo(function SearchModalContent({
       </div>
 
       {/* Token List */}
-      <div className="max-h-[60vh] min-h-[320px] flex-1 overflow-y-auto border-t border-[#FFFFFF0F] px-3 pt-2 sm:max-h-[70vh] sm:min-h-[450px] sm:px-3 sm:pt-3 md:px-4">
+      <div className="max-h-[60vh] min-h-[320px] flex-1 overflow-y-auto px-3 pt-2 sm:max-h-[70vh] sm:min-h-[450px] sm:px-3 sm:pt-3 md:px-4">
         {(searchLoading || displayTokens.length > 0) && (
           <div className="mb-2 sm:mb-3">
             <span className="text-sm tracking-wider text-[#9595B5] sm:text-base">
@@ -1128,7 +1386,7 @@ const SearchModalContent = React.memo(function SearchModalContent({
             {[...Array(5)].map((_, index) => (
               <div
                 key={index}
-                className="relative flex min-h-[120px] animate-pulse flex-col items-start justify-between gap-3 rounded-lg border border-[#FFFFFF0F] bg-[#0f0f0f] px-3 py-3 sm:min-h-[96px] sm:flex-row sm:items-center sm:gap-6 sm:px-5 sm:py-4"
+                className="relative flex min-h-[120px] animate-pulse flex-col items-start justify-between gap-3 rounded-lg border border-[#FFFFFF0F] bg-[#080808] px-3 py-3 sm:min-h-[96px] sm:flex-row sm:items-center sm:gap-6 sm:px-5 sm:py-4"
               >
                 <div className="flex w-full max-w-full items-center gap-3 sm:max-w-72 sm:gap-4">
                   {/* Logo skeleton */}
@@ -1187,9 +1445,11 @@ const SearchModalContent = React.memo(function SearchModalContent({
                     Clear All
                   </button>
                 </div>
-                <ul className="flex flex-col gap-2 overflow-y-auto">
+                <ul className="flex flex-col overflow-y-auto">
                   {recentSearches.map((item) => {
-                    const mc = formatMarketCap(item.fully_diluted_value || item.total_fully_diluted_valuation || 0);
+                    const mcRaw = item.fully_diluted_value || item.total_fully_diluted_valuation || 0;
+                    const mc = formatMarketCap(mcRaw);
+                    const mcColor = getMarketCapColor(mcRaw);
                     const liq = formatSmartNumber(item.total_liquidity_usd || 0);
                     const normalizedLogo = normalizeAssetUrl(item.logo || item.uri || null);
                     const fallbackAvatar = `https://ui-avatars.com/api/?name=${encodeURIComponent(item.symbol || item.name || "T")}&background=0f1012&color=E6E7EA&size=56`;
@@ -1227,7 +1487,7 @@ const SearchModalContent = React.memo(function SearchModalContent({
                           } as Token & { launchpad_protocol?: string };
                           handleSelectToken(token);
                         }}
-                        className="group flex cursor-pointer items-center gap-3 rounded-lg border border-transparent bg-[#0f0f0f] px-3 py-2.5 transition-all duration-200 hover:border-[#FFFFFF0F] hover:bg-[#1a1a1a] sm:px-4 sm:py-3"
+                        className="group flex cursor-pointer items-center gap-3 rounded-lg border border-transparent bg-[#080808] px-3 py-2.5 transition-all duration-200 hover:border-[#FFFFFF0F] hover:bg-[#1a1a1a] sm:px-4 sm:py-3"
                       >
                         {/* Token Logo with Protocol Border */}
                         <div
@@ -1287,16 +1547,16 @@ const SearchModalContent = React.memo(function SearchModalContent({
                         {/* Token Info */}
                         <div className="min-w-0 flex-1">
                           <div className="flex items-center gap-2">
-                            <span className="truncate text-sm font-bold text-white sm:text-base">
+                            <span className="flex-shrink-0 text-sm font-bold text-white sm:text-base">
                               {item.symbol}
                             </span>
-                            <span className="truncate text-xs text-neutral-500 sm:text-sm">
+                            <span className="min-w-0 truncate text-xs text-neutral-500">
                               {item.name}
                             </span>
                           </div>
                           <div className="flex items-center gap-3 text-xs text-[#9595B5]">
                             <span>
-                              MC: <span className="font-medium text-white">${mc}</span>
+                              MC: <span className="font-medium" style={{ color: mcColor }}>${mc}</span>
                             </span>
                             <span>
                               L: <span className="font-medium text-white">${liq}</span>
@@ -1420,10 +1680,12 @@ const SearchModalContent = React.memo(function SearchModalContent({
             ) : null}
           </div>
         ) : (
-          <ul className="flex h-full list-none flex-col gap-2 overflow-y-auto pb-2">
-            {displayTokens.map((token) => {
-              const mc = formatMarketCap(token.fully_diluted_value || 0);
-              const vol = formatSmartNumber(resolveSearchVolume1h(token));
+          <ul className="flex h-full list-none flex-col overflow-y-auto pb-2">
+            {displayTokens.map((token, index) => {
+              const mcRaw = token.fully_diluted_value || 0;
+              const mc = formatMarketCap(mcRaw);
+              const { volume, is24h } = resolveSearchVolume(token);
+              const vol = formatSmartNumber(volume);
               const liq = formatSmartNumber(token.total_liquidity_usd || 0);
 
               return (
@@ -1431,10 +1693,15 @@ const SearchModalContent = React.memo(function SearchModalContent({
                   key={`${token.pair_address || ''}-${token.mint || ''}-${token.symbol || ''}`}
                   token={token}
                   mc={mc}
+                  mcRaw={mcRaw}
                   vol={vol}
+                  volIs24h={is24h}
                   liq={liq}
                   onSelect={handleSelectToken}
                   chain={chain}
+                  searchQuery={query}
+                  index={index}
+                  isSelected={index === selectedIndex}
                 />
               );
             })}
@@ -1442,6 +1709,7 @@ const SearchModalContent = React.memo(function SearchModalContent({
         )}
       </div>
     </InterstatePopout>
+    </>
   );
 });
 
@@ -1478,30 +1746,39 @@ const TokenListItem = React.memo(
   ({
     token,
     mc,
+    mcRaw,
     vol,
+    volIs24h = false,
     liq,
     onSelect,
     chain = "sol",
+    searchQuery = "",
+    index = 0,
+    isSelected = false,
   }: {
     token: Token;
     mc: string;
+    mcRaw: number;
     vol: string;
+    volIs24h?: boolean;
     liq: string;
     onSelect: (token: Token) => void;
     chain?: string;
+    searchQuery?: string;
+    index?: number;
+    isSelected?: boolean;
   }) => {
+    const mcColor = getMarketCapColor(mcRaw);
+    const tokenIsNew = isNewToken(token.created_at);
+    const tokenIsTrending = isTrendingToken(token);
     const [logoUrl, setLogoUrl] = useState<string | null>(
-      token.uri || token.logo || null,
+      // Prioritize logo (direct image URL) over uri (often metadata JSON)
+      token.logo || token.uri || null,
     );
     const [showXPreview, setShowXPreview] = useState(false);
     const [xPreviewPosition, setXPreviewPosition] = useState({ x: 0, y: 0 });
     const xPreviewTimeoutRef = useRef<number | null>(null);
     const [isMobile, setIsMobile] = useState(false);
-
-    // Image preview state (like PulseTable)
-    const [showImagePreview, setShowImagePreview] = useState(false);
-    const [imagePreviewPosition, setImagePreviewPosition] = useState({ top: 0, left: 0 });
-    const imageContainerRef = useRef<HTMLDivElement>(null);
 
     // Search menu state (like PulseTable)
     const [showSearchMenu, setShowSearchMenu] = useState(false);
@@ -1515,6 +1792,10 @@ const TokenListItem = React.memo(
     const resolvedImageRef = useRef<string | null>(null);
     // Track the mint we resolved for to know when to re-resolve
     const resolvedForMintRef = useRef<string | null>(null);
+
+    // Fetch metadata from URI for social links (like PulseTable)
+    const meta = useTokenMetadata(token.uri);
+    const socialLinks = useMemo(() => extractSocialLinks(token, meta), [token, meta]);
 
     useEffect(() => {
       const checkMobile = () => {
@@ -1530,7 +1811,8 @@ const TokenListItem = React.memo(
     useEffect(() => {
       if (resolvedForMintRef.current !== token.mint) {
         // New token - reset and start fresh
-        const initialUrl = token.uri || token.logo || null;
+        // Prioritize logo (direct image URL) over uri (often metadata JSON)
+        const initialUrl = token.logo || token.uri || null;
         setLogoUrl(initialUrl);
         resolvedImageRef.current = null;
         resolvedForMintRef.current = token.mint;
@@ -1579,34 +1861,6 @@ const TokenListItem = React.memo(
       onSelect(token);
     }, [onSelect, token]);
 
-    // Image hover handlers (like PulseTable)
-    const handleImageMouseEnter = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
-      if (isMobile) return; // Don't show preview on mobile
-      setShowImagePreview(true);
-      const target = e.currentTarget as HTMLDivElement;
-      target.style.transform = "scale(1.05)";
-
-      // Calculate preview window position
-      if (imageContainerRef.current) {
-        const rect = imageContainerRef.current.getBoundingClientRect();
-        const viewportWidth = window.innerWidth;
-        const previewWidth = 180;
-
-        // Show on right if enough space, otherwise on left
-        const showOnRight = rect.right + previewWidth + 20 < viewportWidth;
-        setImagePreviewPosition({
-          top: rect.top,
-          left: showOnRight ? rect.right + 12 : rect.left - previewWidth - 12,
-        });
-      }
-    }, [isMobile]);
-
-    const handleImageMouseLeave = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
-      setShowImagePreview(false);
-      const target = e.currentTarget as HTMLDivElement;
-      target.style.transform = "scale(1)";
-    }, []);
-
     const protocolColor = useMemo(
       () => resolveProtocolColor(token, chain),
       [token, chain],
@@ -1632,7 +1886,28 @@ const TokenListItem = React.memo(
       () => (token.mint || "").toLowerCase().endsWith("pump"),
       [token.mint],
     );
-    const twitterInfo = useMemo(() => resolveTwitterInfo(token), [token]);
+    // Twitter info - prioritize social links from metadata, then fall back to token fields
+    const twitterInfo = useMemo(() => {
+      // First check socialLinks from URI metadata
+      if (socialLinks.twitter) {
+        const twitterValue = socialLinks.twitter;
+        // Extract handle from URL if needed
+        const handleMatch = twitterValue.match(/(?:twitter\.com|x\.com)\/(@?\w+)/i);
+        if (handleMatch) {
+          const handle = handleMatch[1]?.replace(/^@/, '');
+          return { url: `https://twitter.com/${handle}`, handle };
+        }
+        // If it looks like a handle (starts with @ or is just a word)
+        if (twitterValue.startsWith('@') || /^\w+$/.test(twitterValue)) {
+          const handle = twitterValue.replace(/^@/, '');
+          return { url: `https://twitter.com/${handle}`, handle };
+        }
+        // Otherwise use as-is
+        return { url: twitterValue, handle: null };
+      }
+      // Fall back to resolveTwitterInfo for direct token fields
+      return resolveTwitterInfo(token);
+    }, [token, socialLinks.twitter]);
     const twitterProfileUrl = twitterInfo.url;
     const twitterHandle = twitterInfo.handle;
     const twitterSearchQuery = useMemo(
@@ -1800,12 +2075,15 @@ const TokenListItem = React.memo(
     const handleCopyAddress = useCallback(
       (event: React.MouseEvent<HTMLButtonElement>) => {
         event.stopPropagation();
-        if (!token.pair_address) return;
+        // Copy the mint address (token contract), not the pair_address (trading pair/pool)
+        const addressToCopy = token.mint || token.pair_address;
+        if (!addressToCopy) return;
+        const shortAddr = `${addressToCopy.slice(0, 6)}...${addressToCopy.slice(-4)}`;
         navigator.clipboard
-          .writeText(token.pair_address)
+          .writeText(addressToCopy)
           .then(() => {
-            showEnhancedToast("success", "Address copied to clipboard", {
-              title: "Copied!",
+            showEnhancedToast("success", shortAddr, {
+              title: "Address Copied",
               duration: 2000,
             });
           })
@@ -1816,7 +2094,7 @@ const TokenListItem = React.memo(
             });
           });
       },
-      [token.pair_address],
+      [token.mint, token.pair_address],
     );
 
     const handleShareLink = useCallback(
@@ -1849,7 +2127,14 @@ const TokenListItem = React.memo(
     return (
       <>
         <li
-          className="group relative block rounded-lg border border-transparent bg-[#0f0f0f] px-3 py-3 text-sm transition-all duration-200 hover:border-[#FFFFFF0F] hover:bg-[#1a1a1a] sm:px-4 sm:py-4 sm:text-base md:px-5"
+          className={`group relative block rounded-lg border bg-[#080808] px-3 py-3 text-sm transition-all duration-200 sm:px-4 sm:py-4 sm:text-base md:px-5 ${
+            isSelected
+              ? "border-[#7FFFC940] bg-[#7FFFC908]"
+              : "border-transparent hover:border-[#FFFFFF0F] hover:bg-[#1a1a1a]"
+          }`}
+          style={{
+            animation: `fadeSlideIn 0.3s ease-out ${index * 0.05}s both`,
+          }}
           onClick={(e) => {
             // Only trigger if click is not on a button or button child
             const target = e.target as HTMLElement;
@@ -1899,7 +2184,7 @@ const TokenListItem = React.memo(
                     </div>
                   </div>
                   <div
-                    className="absolute -right-0.5 -bottom-0.5 flex h-4 w-4 items-center justify-center rounded-full border-2 border-[#0f0f0f] bg-[#0f0f0f] transition-transform duration-200 group-hover:scale-110"
+                    className="absolute -right-0.5 -bottom-0.5 flex h-4 w-4 items-center justify-center rounded-full border-2 border-[#080808] bg-[#080808] transition-transform duration-200 group-hover:scale-110"
                     style={{
                       borderColor: protocolColor,
                       boxShadow: `0 0 6px ${protocolColor}50`,
@@ -1922,16 +2207,18 @@ const TokenListItem = React.memo(
                   </div>
                 </div>
                 <div className="min-w-0 flex-1">
-                  <div className="mb-1 flex flex-wrap items-center gap-1.5">
-                    <span className="block truncate text-base font-bold text-white">
+                  <div className="mb-1 flex items-center gap-1.5">
+                    <span className="flex-shrink-0 text-base font-bold text-white">
                       {token.symbol}
+                    </span>
+                    <span className="truncate text-xs text-neutral-500">
+                      {token.name}
                     </span>
                     <button
                       type="button"
                       onClick={handleCopyAddress}
                       className="relative z-10 flex-shrink-0 p-1 text-[#7FFFC9] transition-all duration-200 hover:text-[#5FE0A0] active:scale-95"
                       style={{ pointerEvents: "auto" }}
-                      title="Copy address"
                     >
                       <LuCopy size={14} />
                     </button>
@@ -1940,13 +2227,9 @@ const TokenListItem = React.memo(
                       onClick={handleShareLink}
                       className="relative z-10 flex-shrink-0 p-1 text-neutral-500 transition-all duration-200 hover:text-emerald-400 active:scale-95"
                       style={{ pointerEvents: "auto" }}
-                      title="Copy trade link"
                     >
                       <IoShareSocialOutline size={16} />
                     </button>
-                  </div>
-                  <div className="flex items-center gap-2 truncate text-xs text-neutral-400">
-                    <span>{token.name}</span>
                   </div>
                 </div>
               </div>
@@ -2075,10 +2358,10 @@ const TokenListItem = React.memo(
             <div className="flex items-center gap-4 pt-2 text-xs text-[#9595B5]">
               <div>
                 <span className="text-[#666666]">MC: </span>
-                <span className="font-bold text-white">${mc}</span>
+                <span className="font-bold" style={{ color: mcColor }}>${mc}</span>
               </div>
               <div>
-                <span className="text-[#666666]">V: </span>
+                <span className="text-[#666666]">{volIs24h ? "V(24h): " : "V: "}</span>
                 <span className="font-bold text-white">${vol}</span>
               </div>
               <div>
@@ -2092,17 +2375,14 @@ const TokenListItem = React.memo(
           <div className="hidden w-full min-w-0 items-center justify-between gap-4 sm:flex md:gap-6">
             <div className="flex w-full max-w-72 min-w-0 flex-1 items-center gap-4">
               <div
-                ref={imageContainerRef}
                 className="relative flex h-16 w-16 flex-shrink-0 items-center justify-center"
                 style={{
                   overflow: "visible",
                 }}
               >
                 <div
-                  className="relative rounded-lg cursor-pointer transition-all duration-200"
+                  className="relative rounded-lg transition-all duration-200"
                   style={{ border: "none", padding: 0 }}
-                  onMouseEnter={handleImageMouseEnter}
-                  onMouseLeave={handleImageMouseLeave}
                 >
                   <div
                     className="relative rounded-lg transition-all duration-200"
@@ -2129,7 +2409,7 @@ const TokenListItem = React.memo(
                   </div>
                 </div>
                 <div
-                  className="pointer-events-none absolute -right-0.5 -bottom-0.5 flex h-5 w-5 items-center justify-center rounded-full border-2 border-[#0f0f0f] bg-[#0f0f0f] transition-transform duration-200 group-hover:scale-110"
+                  className="pointer-events-none absolute -right-0.5 -bottom-0.5 flex h-5 w-5 items-center justify-center rounded-full border-2 border-[#080808] bg-[#080808] transition-transform duration-200 group-hover:scale-110"
                   style={{
                     borderColor: protocolColor,
                     boxShadow: `0 0 6px ${protocolColor}50`,
@@ -2154,10 +2434,10 @@ const TokenListItem = React.memo(
 
               <div className="max-w-[380px] min-w-0 flex-1">
                 <div className="mb-1.5 flex min-w-0 items-center gap-2">
-                  <span className="block min-w-0 truncate text-base font-bold text-white">
+                  <span className="flex-shrink-0 text-base font-bold text-white">
                     {token.symbol}
                   </span>
-                  <span className="block min-w-0 flex-shrink truncate text-sm text-neutral-500">
+                  <span className="min-w-0 truncate text-xs text-neutral-500">
                     {token.name}
                   </span>
                   <button
@@ -2165,7 +2445,6 @@ const TokenListItem = React.memo(
                     onClick={handleCopyAddress}
                     className="relative z-10 ml-1 flex-shrink-0 p-0.5 text-[#7FFFC9] transition-all duration-200 hover:scale-110 hover:text-[#5FE0A0] active:scale-95"
                     style={{ pointerEvents: "auto" }}
-                    title="Copy address"
                   >
                     <LuCopy size={13} />
                   </button>
@@ -2508,10 +2787,10 @@ const TokenListItem = React.memo(
             {/* MC, V and L */}
             <div className="flex h-full flex-shrink-0 items-center gap-3 text-xs whitespace-nowrap text-[#9595B5] sm:text-sm md:gap-5">
               <span>
-                MC: <span className="font-bold text-white">${mc}</span>
+                MC: <span className="font-bold" style={{ color: mcColor }}>${mc}</span>
               </span>
               <span>
-                V: <span className="font-bold text-white">${vol}</span>
+                {volIs24h ? "V(24h): " : "V: "}<span className="font-bold text-white">${vol}</span>
               </span>
               <span>
                 L: <span className="font-bold text-white">${liq}</span>
@@ -2534,57 +2813,6 @@ const TokenListItem = React.memo(
             </button>
           </div>
         </li>
-
-        {/* Image Preview Window (like PulseTable) */}
-        {showImagePreview && (
-          <div
-            className="pointer-events-none fixed z-[9999]"
-            style={{
-              top: `${imagePreviewPosition.top}px`,
-              left: `${imagePreviewPosition.left}px`,
-            }}
-          >
-            <div className="relative">
-              {/* Main preview container */}
-              <div
-                className="relative overflow-hidden rounded-xl border"
-                style={{
-                  width: "180px",
-                  height: "180px",
-                  backgroundColor: AX.surface,
-                  borderColor: protocolColor,
-                  borderWidth: "2px",
-                  boxShadow: `0 8px 32px rgba(0, 0, 0, 0.4), 0 0 20px ${protocolColor}30`,
-                }}
-              >
-                <FastImage
-                  src={normalizedLogo ?? undefined}
-                  fallbackSrc={fallbackAvatar}
-                  alt={token.name || token.symbol || ""}
-                  width={180}
-                  height={180}
-                  className="h-full w-full object-cover"
-                  symbol={token.symbol}
-                  name={token.name}
-                  showBubble={false}
-                />
-              </div>
-
-              {/* Token info overlay */}
-              <div
-                className="absolute -bottom-8 left-1/2 -translate-x-1/2 transform rounded px-2 py-1 text-xs font-medium whitespace-nowrap"
-                style={{
-                  backgroundColor: AX.surface,
-                  color: AX.text,
-                  border: `1px solid ${AX.border}`,
-                  boxShadow: "0 4px 12px rgba(0, 0, 0, 0.3)",
-                }}
-              >
-                {token.symbol} - {token.name}
-              </div>
-            </div>
-          </div>
-        )}
 
       </>
     );

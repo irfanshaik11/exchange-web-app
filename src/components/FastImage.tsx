@@ -62,36 +62,43 @@ export default function FastImage({
     setImageError(false);
   }, [resolvedSrc]);
 
-  // Use proxy for IPFS URLs, defined.fi, debridge, and other CORS-prone domains
-  // IPFS gateways can have CORS restrictions, so proxy them
-  // Don't proxy URLs that are already going through our API endpoints
-  const alreadyProxied = finalSrc?.startsWith('/api/');
-  const needsProxy = finalSrc && !alreadyProxied && (
-    finalSrc.includes('token-media.defined.fi') ||
-    finalSrc.includes('ipfs.io') ||
-    finalSrc.includes('cloudflare-ipfs.com') ||
-    finalSrc.includes('gateway.pinata.cloud') ||
-    finalSrc.includes('ipfs/') ||
-    finalSrc.startsWith('ipfs://') ||
-    finalSrc.includes('tokens.debridge.finance') ||
-    finalSrc.includes('debridge.finance') ||
-    finalSrc.includes('launchonsoar.com') ||
-    finalSrc.includes('metadata.rapidlaunch.io') ||
-    finalSrc.includes('rapidlaunch.io') ||
-    finalSrc.includes('metadata.j7tracker.com') ||
-    finalSrc.includes('j7tracker.com') ||
-    finalSrc.includes('edge.uxento.io') ||
-    finalSrc.includes('uxento.io') ||
-    finalSrc.includes('image.solanatracker.io') ||
-    finalSrc.includes('ipfs-forward.solanatracker.io') ||
-    finalSrc.includes('instagram.com') ||
-    finalSrc.includes('cdninstagram.com') ||
-    finalSrc.includes('ipfs.storacha.link') ||
-    finalSrc.includes('storacha.link') ||
-    finalSrc.includes('content.coinwave.gg') ||
-    finalSrc.includes('digitaloceanspaces.com')
-  );
-  
+  // Proxy all external URLs to avoid CORS issues
+  // Don't proxy URLs that are already going through our API endpoints or are data URIs
+  const alreadyProxied = finalSrc?.startsWith('/api/') || finalSrc?.startsWith('data:');
+
+  // TEMPORARILY allowing ALL external domains through proxy
+  // TODO: Re-enable domain restrictions when needed by uncommenting the block below
+  const needsProxy = finalSrc && !alreadyProxied && finalSrc.startsWith('http');
+
+  // COMMENTED OUT - Domain restrictions for future use:
+  // const needsProxy = finalSrc && !alreadyProxied && (
+  //   finalSrc.includes('token-media.defined.fi') ||
+  //   finalSrc.includes('ipfs.io') ||
+  //   finalSrc.includes('cloudflare-ipfs.com') ||
+  //   finalSrc.includes('gateway.pinata.cloud') ||
+  //   finalSrc.includes('ipfs/') ||
+  //   finalSrc.startsWith('ipfs://') ||
+  //   finalSrc.includes('tokens.debridge.finance') ||
+  //   finalSrc.includes('debridge.finance') ||
+  //   finalSrc.includes('launchonsoar.com') ||
+  //   finalSrc.includes('metadata.rapidlaunch.io') ||
+  //   finalSrc.includes('rapidlaunch.io') ||
+  //   finalSrc.includes('metadata.j7tracker.com') ||
+  //   finalSrc.includes('j7tracker.com') ||
+  //   finalSrc.includes('edge.uxento.io') ||
+  //   finalSrc.includes('uxento.io') ||
+  //   finalSrc.includes('image.solanatracker.io') ||
+  //   finalSrc.includes('ipfs-forward.solanatracker.io') ||
+  //   finalSrc.includes('instagram.com') ||
+  //   finalSrc.includes('cdninstagram.com') ||
+  //   finalSrc.includes('ipfs.storacha.link') ||
+  //   finalSrc.includes('storacha.link') ||
+  //   finalSrc.includes('content.coinwave.gg') ||
+  //   finalSrc.includes('digitaloceanspaces.com') ||
+  //   finalSrc.includes('gateway.irys.xyz') ||
+  //   finalSrc.includes('irys.xyz')
+  // );
+
   const imageUrl = needsProxy && finalSrc
     ? `/api/image?url=${encodeURIComponent(finalSrc)}`
     : finalSrc;

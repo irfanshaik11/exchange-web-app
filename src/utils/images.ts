@@ -25,6 +25,29 @@ export function normalizeImageUrl(src?: string | null): string | null {
       }
     } catch {}
 
+    // Unwrap pump.fun image CDN URLs that have variant params (often fail with 403)
+    // Extract the underlying IPFS URL from the 'src' or 'ipfs' query param
+    try {
+      const u = new URL(src);
+      if (u.hostname === 'images.pump.fun' || u.hostname.endsWith('.pump.fun')) {
+        // First try 'src' param (contains full IPFS URL)
+        const srcParam = u.searchParams.get('src');
+        if (srcParam) {
+          const decodedSrc = decodeURIComponent(srcParam);
+          if (decodedSrc.includes('ipfs')) {
+            src = decodedSrc;
+          }
+        }
+        // Fall back to 'ipfs' param (contains just the CID)
+        else {
+          const ipfsParam = u.searchParams.get('ipfs');
+          if (ipfsParam) {
+            src = `https://cloudflare-ipfs.com/ipfs/${ipfsParam}`;
+          }
+        }
+      }
+    } catch {}
+
     // Force https for http URLs (most hosts support TLS)
     if (src.startsWith('http://')) {
       src = src.replace(/^http:\/\//i, 'https://');
