@@ -1,15 +1,16 @@
-import React, { useState, useRef, useCallback, useEffect } from 'react';
-import type { Token } from '~/utils/db';
-import HoldersTable from './HoldersTable';
+import React, { useState, useRef, useCallback, useEffect } from "react";
+import type { Token } from "~/utils/db";
+import HoldersTable from "./HoldersTable";
 
 interface CodexHoldersProps {
   token: Token | null;
   pairAddress?: string; // Fallback pair address when token doesn't have mint
-  chain?: 'sol' | 'monad'; // Chain to determine which endpoint to use
+  chain?: "sol" | "monad"; // Chain to determine which endpoint to use
+  onTotalCountChange?: (count: number) => void; // Callback to pass total count to parent
 }
 
 const AX = {
-  bg: "#101114",
+  bg: "#111214",
   surface: "#1E1F26",
   surface2: "#17191E",
   border: "#2A2B33",
@@ -20,19 +21,24 @@ const AX = {
   sell: "#FF4D7F",
 };
 
-const CodexHolders: React.FC<CodexHoldersProps> = ({ token, pairAddress, chain = 'sol' }) => {
+const CodexHolders: React.FC<CodexHoldersProps> = ({
+  token,
+  pairAddress,
+  chain = "sol",
+  onTotalCountChange,
+}) => {
   // Use mint if available, fallback to pair_address, then fallback to pairAddress prop
   const mintAddress = token?.mint || token?.pair_address || pairAddress;
 
   // Only show skeleton if we have absolutely no address to work with
   if (!mintAddress) {
     return (
-      <div className="flex-1 min-h-0 p-4">
+      <div className="min-h-0 flex-1 p-4">
         <div className="animate-pulse">
-          <div className="h-6 w-32 bg-neutral-700 rounded mb-4" />
+          <div className="mb-4 h-6 w-32 rounded bg-neutral-700" />
           <div className="space-y-2">
             {Array.from({ length: 5 }).map((_, i) => (
-              <div key={i} className="h-12 bg-neutral-700 rounded" />
+              <div key={i} className="h-12 rounded bg-neutral-700" />
             ))}
           </div>
         </div>
@@ -43,8 +49,8 @@ const CodexHolders: React.FC<CodexHoldersProps> = ({ token, pairAddress, chain =
   // Create a token object with at least the mint for HoldersTable
   // Ensure mint is always set even if token exists but token.mint is undefined
   const tokenForTable = token
-    ? { ...token, mint: token.mint || mintAddress } as Token
-    : { mint: mintAddress } as Token;
+    ? ({ ...token, mint: token.mint || mintAddress } as Token)
+    : ({ mint: mintAddress } as Token);
 
   const [isLoading, setIsLoading] = useState(true);
   const [showBubblemap, setShowBubblemap] = useState(false);
@@ -61,12 +67,12 @@ const CodexHolders: React.FC<CodexHoldersProps> = ({ token, pairAddress, chain =
 
   // Save to localStorage
   useEffect(() => {
-    localStorage.setItem('holdersSplitWidth', String(leftPaneWidth));
+    localStorage.setItem("holdersSplitWidth", String(leftPaneWidth));
   }, [leftPaneWidth]);
 
   // Load from localStorage on mount
   useEffect(() => {
-    const saved = localStorage.getItem('holdersSplitWidth');
+    const saved = localStorage.getItem("holdersSplitWidth");
     if (saved) {
       const parsed = parseFloat(saved);
       if (Number.isFinite(parsed) && parsed >= 0 && parsed <= 100) {
@@ -84,15 +90,15 @@ const CodexHolders: React.FC<CodexHoldersProps> = ({ token, pairAddress, chain =
 
   // Common chain IDs for InsightX Bubblemaps
   const chainIds: Record<string, string> = {
-    'ethereum': '1',
-    'solana': 'sol',
-    'sol': 'sol',
-    'bsc': '56',
-    'polygon': '137',
-    'arbitrum': '42161',
-    'optimism': '10',
-    'base': '8453',
-    'monad': 'monad', // Monad chain ID for InsightX (may need to be updated when they support it)
+    ethereum: "1",
+    solana: "sol",
+    sol: "sol",
+    bsc: "56",
+    polygon: "137",
+    arbitrum: "42161",
+    optimism: "10",
+    base: "8453",
+    monad: "monad", // Monad chain ID for InsightX (may need to be updated when they support it)
   };
 
   const getChainId = (chain: string): string => {
@@ -112,93 +118,108 @@ const CodexHolders: React.FC<CodexHoldersProps> = ({ token, pairAddress, chain =
     setIsLoading(false);
   };
 
-  const bubblemapsUrl = buildBubblemapsUrl(mintAddress, chain === 'monad' ? 'monad' : 'sol');
+  const bubblemapsUrl = buildBubblemapsUrl(
+    mintAddress,
+    chain === "monad" ? "monad" : "sol",
+  );
 
-  const handleResizeStart = useCallback((e: React.MouseEvent) => {
-    // Only handle left mouse button
-    if (e.button !== 0) return;
-    
-    e.preventDefault();
-    e.stopPropagation();
-    
-    // Set resizing state immediately
-    setIsResizing(true);
-    document.body.style.cursor = 'col-resize';
-    document.body.style.userSelect = 'none';
-    document.body.style.pointerEvents = 'auto';
-    
-    let isActive = true; // Track if resize is still active
-    
-    const onMove = (ev: MouseEvent) => {
-      // Only resize if we're still in active resize mode
-      if (!isActive) return;
-      
-      ev.preventDefault();
-      ev.stopPropagation();
-      
-      if (!containerRef.current) return;
-      
-      // Get container's bounding rectangle to calculate relative position
-      const containerRect = containerRef.current.getBoundingClientRect();
-      const containerWidth = containerRect.width;
-      if (containerWidth === 0) return; // Avoid division by zero
-      
-      // Calculate cursor position relative to container's left edge
-      // Allow cursor to be outside container - clamp the percentage result instead
-      const cursorX = ev.clientX - containerRect.left;
-      
-      // Calculate new width as percentage based on cursor position
-      // Clamp to 0-100% to handle cases where cursor is outside container bounds
-      const newWidthPercent = Math.max(0, Math.min(100, (cursorX / containerWidth) * 100));
-      const newWidth = clampWidth(newWidthPercent);
-      
-      setLeftPaneWidth(newWidth);
-      leftPaneWidthRef.current = newWidth;
-    };
-    
-    // Also handle window blur to stop resizing if window loses focus
-    const onBlur = () => {
-      if (isActive) {
+  const handleResizeStart = useCallback(
+    (e: React.MouseEvent) => {
+      // Only handle left mouse button
+      if (e.button !== 0) return;
+
+      e.preventDefault();
+      e.stopPropagation();
+
+      // Set resizing state immediately
+      setIsResizing(true);
+      document.body.style.cursor = "col-resize";
+      document.body.style.userSelect = "none";
+      document.body.style.pointerEvents = "auto";
+
+      let isActive = true; // Track if resize is still active
+
+      const onMove = (ev: MouseEvent) => {
+        // Only resize if we're still in active resize mode
+        if (!isActive) return;
+
+        ev.preventDefault();
+        ev.stopPropagation();
+
+        if (!containerRef.current) return;
+
+        // Get container's bounding rectangle to calculate relative position
+        const containerRect = containerRef.current.getBoundingClientRect();
+        const containerWidth = containerRect.width;
+        if (containerWidth === 0) return; // Avoid division by zero
+
+        // Calculate cursor position relative to container's left edge
+        // Allow cursor to be outside container - clamp the percentage result instead
+        const cursorX = ev.clientX - containerRect.left;
+
+        // Calculate new width as percentage based on cursor position
+        // Clamp to 0-100% to handle cases where cursor is outside container bounds
+        const newWidthPercent = Math.max(
+          0,
+          Math.min(100, (cursorX / containerWidth) * 100),
+        );
+        const newWidth = clampWidth(newWidthPercent);
+
+        setLeftPaneWidth(newWidth);
+        leftPaneWidthRef.current = newWidth;
+      };
+
+      // Also handle window blur to stop resizing if window loses focus
+      const onBlur = () => {
+        if (isActive) {
+          isActive = false;
+          setIsResizing(false);
+          document.body.style.cursor = "";
+          document.body.style.userSelect = "";
+          document.body.style.pointerEvents = "";
+
+          // Remove all listeners
+          document.removeEventListener("mousemove", onMove, true);
+          document.removeEventListener("mouseup", onUp, true);
+          window.removeEventListener("blur", onBlur);
+        }
+      };
+
+      const onUp = (ev: MouseEvent) => {
+        // Mark as inactive and clean up
+        if (!isActive) return; // Already cleaned up
         isActive = false;
+
+        ev.preventDefault();
+        ev.stopPropagation();
+
         setIsResizing(false);
-        document.body.style.cursor = '';
-        document.body.style.userSelect = '';
-        document.body.style.pointerEvents = '';
-        
-        // Remove all listeners
-        document.removeEventListener('mousemove', onMove, true);
-        document.removeEventListener('mouseup', onUp, true);
-        window.removeEventListener('blur', onBlur);
-      }
-    };
-    
-    const onUp = (ev: MouseEvent) => {
-      // Mark as inactive and clean up
-      if (!isActive) return; // Already cleaned up
-      isActive = false;
-      
-      ev.preventDefault();
-      ev.stopPropagation();
-      
-      setIsResizing(false);
-      document.body.style.cursor = '';
-      document.body.style.userSelect = '';
-      document.body.style.pointerEvents = '';
-      
-      // Remove all listeners - use same options as when adding
-      document.removeEventListener('mousemove', onMove, true);
-      document.removeEventListener('mouseup', onUp, true);
-      window.removeEventListener('blur', onBlur);
-    };
-    
-    // Add listeners to document to track mouse movement anywhere on the page
-    // This allows resizing even when mouse moves away from the resizer
-    // The resize follows the cursor position naturally
-    // Use capture phase to ensure we catch events even when cursor is outside
-    document.addEventListener('mousemove', onMove, { passive: false, capture: true });
-    document.addEventListener('mouseup', onUp, { passive: false, capture: true });
-    window.addEventListener('blur', onBlur);
-  }, [clampWidth]);
+        document.body.style.cursor = "";
+        document.body.style.userSelect = "";
+        document.body.style.pointerEvents = "";
+
+        // Remove all listeners - use same options as when adding
+        document.removeEventListener("mousemove", onMove, true);
+        document.removeEventListener("mouseup", onUp, true);
+        window.removeEventListener("blur", onBlur);
+      };
+
+      // Add listeners to document to track mouse movement anywhere on the page
+      // This allows resizing even when mouse moves away from the resizer
+      // The resize follows the cursor position naturally
+      // Use capture phase to ensure we catch events even when cursor is outside
+      document.addEventListener("mousemove", onMove, {
+        passive: false,
+        capture: true,
+      });
+      document.addEventListener("mouseup", onUp, {
+        passive: false,
+        capture: true,
+      });
+      window.addEventListener("blur", onBlur);
+    },
+    [clampWidth],
+  );
 
   const handleBubblemapToggle = useCallback((show: boolean) => {
     setShowBubblemap(show);
@@ -215,19 +236,19 @@ const CodexHolders: React.FC<CodexHoldersProps> = ({ token, pairAddress, chain =
   const [tableWidth, setTableWidth] = useState(1000);
   useEffect(() => {
     if (!tableContainerRef.current) return;
-    
+
     const updateWidth = () => {
       if (tableContainerRef.current) {
         setTableWidth(tableContainerRef.current.offsetWidth);
       }
     };
-    
+
     updateWidth();
     const resizeObserver = new ResizeObserver(updateWidth);
     if (tableContainerRef.current) {
       resizeObserver.observe(tableContainerRef.current);
     }
-    
+
     return () => resizeObserver.disconnect();
   }, [showBubblemap, leftPaneWidth]);
 
@@ -261,7 +282,7 @@ const CodexHolders: React.FC<CodexHoldersProps> = ({ token, pairAddress, chain =
           background-color: ${AX.muted};
         }
         .holders-resizer::before {
-          content: '';
+          content: "";
           position: absolute;
           left: 50%;
           top: 0;
@@ -284,16 +305,16 @@ const CodexHolders: React.FC<CodexHoldersProps> = ({ token, pairAddress, chain =
       `}</style>
       <div
         ref={containerRef}
-        className="w-full h-full flex flex-row overflow-hidden min-h-0 holders-container"
+        className="holders-container flex h-full min-h-0 w-full flex-row overflow-hidden"
       >
         {/* Left side: Holders Table */}
-        <div 
+        <div
           ref={tableContainerRef}
           className="holders-table-container"
-          style={{ 
-            width: showBubblemap ? `${leftPaneWidth}%` : '100%',
-            minWidth: showBubblemap && leftPaneWidth === 0 ? 0 : 'auto',
-            transition: isResizing ? 'none' : 'width 0.2s ease-out',
+          style={{
+            width: showBubblemap ? `${leftPaneWidth}%` : "100%",
+            minWidth: showBubblemap && leftPaneWidth === 0 ? 0 : "auto",
+            transition: isResizing ? "none" : "width 0.2s ease-out",
           }}
         >
           <HoldersTable
@@ -302,71 +323,75 @@ const CodexHolders: React.FC<CodexHoldersProps> = ({ token, pairAddress, chain =
             isBubblemapVisible={showBubblemap}
             containerWidth={tableWidth}
             chain={chain}
+            onTotalCountChange={onTotalCountChange}
           />
         </div>
 
         {/* Resizer - show when bubblemap is visible (even at extremes when resizing) */}
-        {showBubblemap && (leftPaneWidth > 0 && leftPaneWidth < 100 || isResizing) && (
-          <div
-            role="separator"
-            aria-orientation="vertical"
-            aria-label="Resize holders table and bubble map"
-            tabIndex={0}
-            onMouseDown={handleResizeStart}
-            className="holders-resizer"
-            style={{ 
-              cursor: 'col-resize',
-              userSelect: 'none',
-              touchAction: 'none',
-              pointerEvents: 'auto',
-            }}
-          />
-        )}
+        {showBubblemap &&
+          ((leftPaneWidth > 0 && leftPaneWidth < 100) || isResizing) && (
+            <div
+              role="separator"
+              aria-orientation="vertical"
+              aria-label="Resize holders table and bubble map"
+              tabIndex={0}
+              onMouseDown={handleResizeStart}
+              className="holders-resizer"
+              style={{
+                cursor: "col-resize",
+                userSelect: "none",
+                touchAction: "none",
+                pointerEvents: "auto",
+              }}
+            />
+          )}
 
         {/* Right side: Bubble Map - only show when visible and has width */}
         {showBubblemap && leftPaneWidth < 100 && (
-          <div 
-            className="flex-1 flex flex-col overflow-hidden"
-            style={{ 
+          <div
+            className="flex flex-1 flex-col overflow-hidden"
+            style={{
               width: `${100 - leftPaneWidth}%`,
-              minWidth: leftPaneWidth === 100 ? 0 : 'auto',
-              transition: isResizing ? 'none' : 'width 0.2s ease-out',
+              minWidth: leftPaneWidth === 100 ? 0 : "auto",
+              transition: isResizing ? "none" : "width 0.2s ease-out",
             }}
           >
-          <div className="flex-1 relative bg-neutral-900 rounded-lg overflow-hidden holders-iframe-container">
-            {isLoading && (
-              <div className="absolute inset-0 flex items-center justify-center bg-neutral-900 z-10">
-                <div className="text-center">
-                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-emerald-400 mx-auto mb-2"></div>
-                  <p className="text-neutral-400">Loading holder insights...</p>
+            <div className="holders-iframe-container relative flex-1 overflow-hidden rounded-lg bg-neutral-900">
+              {isLoading && (
+                <div className="absolute inset-0 z-10 flex items-center justify-center bg-neutral-900">
+                  <div className="text-center">
+                    <div className="mx-auto mb-2 h-8 w-8 animate-spin rounded-full border-b-2 border-emerald-400"></div>
+                    <p className="text-neutral-400">
+                      Loading holder insights...
+                    </p>
+                  </div>
                 </div>
-              </div>
-            )}
-            
-            <iframe
-              src={bubblemapsUrl}
-              allow="clipboard-write"
-              onLoad={handleIframeLoad}
-              onError={handleIframeError}
-              className="holders-iframe"
-              title="Token Holders Bubblemap"
-              sandbox="allow-same-origin allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox"
-            />
-          </div>
+              )}
 
-          <div className="mt-4 text-center flex-shrink-0 px-4 pb-4">
-            <p className="text-xs" style={{ color: AX.muted }}>
-              Data provided by{' '}
-              <a 
-                href="https://insightx.network" 
-                target="_blank" 
-                rel="noopener noreferrer"
-                className="text-emerald-400 hover:text-emerald-300 transition-colors"
-              >
-                InsightX Bubblemaps
-              </a>
-            </p>
-          </div>
+              <iframe
+                src={bubblemapsUrl}
+                allow="clipboard-write"
+                onLoad={handleIframeLoad}
+                onError={handleIframeError}
+                className="holders-iframe"
+                title="Token Holders Bubblemap"
+                sandbox="allow-same-origin allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox"
+              />
+            </div>
+
+            <div className="mt-4 flex-shrink-0 px-4 pb-4 text-center">
+              <p className="text-xs" style={{ color: AX.muted }}>
+                Data provided by{" "}
+                <a
+                  href="https://insightx.network"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-emerald-400 transition-colors hover:text-emerald-300"
+                >
+                  InsightX Bubblemaps
+                </a>
+              </p>
+            </div>
           </div>
         )}
       </div>

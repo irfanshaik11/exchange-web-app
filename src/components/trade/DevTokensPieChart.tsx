@@ -7,7 +7,7 @@ interface DevTokensPieChartProps {
 }
 
 const AX = {
-  bg: "#101114",
+  bg: "#111214",
   surface: "#1E1F26",
   surface2: "#17191E",
   border: "#2A2B33",
@@ -196,7 +196,7 @@ const DevTokensPieChart: React.FC<DevTokensPieChartProps> = ({ migrated, nonMigr
   };
 
   return (
-    <div className="flex flex-col items-center justify-center" style={{ width: '100%', backgroundColor: '#000000' }}>
+    <div className="w-full flex flex-col items-center justify-center">
       <div style={{ width: '100%', height: '256px', maxWidth: '256px' }}>
         <ResponsiveContainer width="100%" height="100%">
           <PieChart>

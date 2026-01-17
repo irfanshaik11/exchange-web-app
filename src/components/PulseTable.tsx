@@ -512,8 +512,10 @@ const SmoothNumber: React.FC<SmoothNumberProps> = ({
     // COMPONENT REUSE DETECTION: If value changed by more than 50%,
     // this is likely a different token (component reuse), not a price update.
     // Reset immediately without animation to avoid weird transitions.
-    const prevValid = prevValueRef.current > 0 ? prevValueRef.current : displayValue;
-    const changeRatio = prevValid > 0 ? Math.abs(value - prevValid) / prevValid : 1;
+    const prevValid =
+      prevValueRef.current > 0 ? prevValueRef.current : displayValue;
+    const changeRatio =
+      prevValid > 0 ? Math.abs(value - prevValid) / prevValid : 1;
 
     if (changeRatio > 0.5) {
       // Large change = different token, reset immediately
@@ -588,9 +590,15 @@ const SimpleNumber: React.FC<SimpleNumberProps> = ({
 };
 
 // Hook for smooth progress bar animation using requestAnimationFrame
-function useSmoothProgress(targetValue: number, duration: number = 400): number {
+function useSmoothProgress(
+  targetValue: number,
+  duration: number = 400,
+): number {
   // Clamp to valid range [0, 1] for progress values
-  const validTarget = Math.max(0, Math.min(1, Number.isFinite(targetValue) ? targetValue : 0));
+  const validTarget = Math.max(
+    0,
+    Math.min(1, Number.isFinite(targetValue) ? targetValue : 0),
+  );
   const [smoothValue, setSmoothValue] = useState(validTarget);
   const animationRef = useRef<number | undefined>(undefined);
   const prevTargetRef = useRef<number>(validTarget);
@@ -652,23 +660,28 @@ const calculateVolumeUsd = (token: any, solPrice: number): number => {
   // Parse volume string to number, handling undefined/null
   const parseVol = (val: string | number | undefined): number => {
     if (val === undefined || val === null) return 0;
-    if (typeof val === 'number') return val;
+    if (typeof val === "number") return val;
     const parsed = parseFloat(val);
     return isNaN(parsed) ? 0 : parsed;
   };
 
   // Check each time period from highest to lowest
   // Use the first period that has non-zero data
-  const vol24h = parseVol(token.total_buy_volume_24h) + parseVol(token.total_sell_volume_24h);
+  const vol24h =
+    parseVol(token.total_buy_volume_24h) +
+    parseVol(token.total_sell_volume_24h);
   if (vol24h > 0) return vol24h * solPrice;
 
-  const vol6h = parseVol(token.total_buy_volume_6h) + parseVol(token.total_sell_volume_6h);
+  const vol6h =
+    parseVol(token.total_buy_volume_6h) + parseVol(token.total_sell_volume_6h);
   if (vol6h > 0) return vol6h * solPrice;
 
-  const vol1h = parseVol(token.total_buy_volume_1h) + parseVol(token.total_sell_volume_1h);
+  const vol1h =
+    parseVol(token.total_buy_volume_1h) + parseVol(token.total_sell_volume_1h);
   if (vol1h > 0) return vol1h * solPrice;
 
-  const vol5m = parseVol(token.total_buy_volume_5m) + parseVol(token.total_sell_volume_5m);
+  const vol5m =
+    parseVol(token.total_buy_volume_5m) + parseVol(token.total_sell_volume_5m);
   if (vol5m > 0) return vol5m * solPrice;
 
   // Fallback to existing volume_24h field if available
@@ -695,7 +708,11 @@ function TokenMetrics({
 
   // Real data from token - prioritize holder_count and kol_count from WebSocket
   const rawMetrics = {
-    holders: token.holder_count ?? token.total_holders ?? token.unique_wallets_24h ?? 0,
+    holders:
+      token.holder_count ??
+      token.total_holders ??
+      token.unique_wallets_24h ??
+      0,
     kols: token.kol_count ?? 0,
     trades: token.unique_wallets_5m || token.unique_wallets_1h || 0,
     rank: "0/1",
@@ -712,7 +729,7 @@ function TokenMetrics({
   return (
     <div className="relative z-10 flex items-center gap-2">
       {/* Trophy Icon - KOL Count */}
-      <div className="group/kol relative flex items-center gap-1 cursor-help">
+      <div className="group/kol relative flex cursor-help items-center gap-1">
         <div
           className="flex items-center justify-center rounded"
           style={{
@@ -728,15 +745,17 @@ function TokenMetrics({
           {metrics.kols}
         </span>
         {/* Tooltip - appears below */}
-        <div className="pointer-events-none absolute left-0 top-full mt-2 px-3 py-2 bg-[#1a1b1f] border border-[#2a2b33] rounded-lg opacity-0 group-hover/kol:opacity-100 transition-opacity duration-100 whitespace-nowrap z-[99999] shadow-xl">
-          <span className="text-sm text-white font-medium">KOL Count</span>
-          <p className="text-xs text-gray-400 mt-0.5">Key Opinion Leaders holding this token</p>
-          <div className="absolute left-4 bottom-full w-0 h-0 border-l-[6px] border-l-transparent border-r-[6px] border-r-transparent border-b-[6px] border-b-[#2a2b33]"></div>
+        <div className="pointer-events-none absolute top-full left-0 z-[99999] mt-2 rounded-lg border border-[#2a2b33] bg-[#1a1b1f] px-3 py-2 whitespace-nowrap opacity-0 shadow-xl transition-opacity duration-100 group-hover/kol:opacity-100">
+          <span className="text-sm font-medium text-white">KOL Count</span>
+          <p className="mt-0.5 text-xs text-gray-400">
+            Key Opinion Leaders holding this token
+          </p>
+          <div className="absolute bottom-full left-4 h-0 w-0 border-r-[6px] border-b-[6px] border-l-[6px] border-r-transparent border-b-[#2a2b33] border-l-transparent"></div>
         </div>
       </div>
 
       {/* Users Icon - Holder Count */}
-      <div className="group/holder relative flex items-center gap-1 cursor-help">
+      <div className="group/holder relative flex cursor-help items-center gap-1">
         <div
           className="flex items-center justify-center rounded"
           style={{
@@ -752,10 +771,12 @@ function TokenMetrics({
           {metrics.holders}
         </span>
         {/* Tooltip - appears below */}
-        <div className="pointer-events-none absolute left-0 top-full mt-2 px-3 py-2 bg-[#1a1b1f] border border-[#2a2b33] rounded-lg opacity-0 group-hover/holder:opacity-100 transition-opacity duration-100 whitespace-nowrap z-[99999] shadow-xl">
-          <span className="text-sm text-white font-medium">Holder Count</span>
-          <p className="text-xs text-gray-400 mt-0.5">Total wallets holding this token</p>
-          <div className="absolute left-4 bottom-full w-0 h-0 border-l-[6px] border-l-transparent border-r-[6px] border-r-transparent border-b-[6px] border-b-[#2a2b33]"></div>
+        <div className="pointer-events-none absolute top-full left-0 z-[99999] mt-2 rounded-lg border border-[#2a2b33] bg-[#1a1b1f] px-3 py-2 whitespace-nowrap opacity-0 shadow-xl transition-opacity duration-100 group-hover/holder:opacity-100">
+          <span className="text-sm font-medium text-white">Holder Count</span>
+          <p className="mt-0.5 text-xs text-gray-400">
+            Total wallets holding this token
+          </p>
+          <div className="absolute bottom-full left-4 h-0 w-0 border-r-[6px] border-b-[6px] border-l-[6px] border-r-transparent border-b-[#2a2b33] border-l-transparent"></div>
         </div>
       </div>
 
@@ -831,12 +852,14 @@ function extractSocialLinks(token: Token, meta: any): SocialLinks {
   // Also try to parse token.links if it's a JSON string
   if (token.links) {
     try {
-      const parsedLinks = typeof token.links === 'string'
-        ? JSON.parse(token.links)
-        : token.links;
-      if (parsedLinks.twitter && !links.twitter) links.twitter = parsedLinks.twitter;
-      if (parsedLinks.website && !links.website) links.website = parsedLinks.website;
-      if (parsedLinks.telegram && !links.telegram) links.telegram = parsedLinks.telegram;
+      const parsedLinks =
+        typeof token.links === "string" ? JSON.parse(token.links) : token.links;
+      if (parsedLinks.twitter && !links.twitter)
+        links.twitter = parsedLinks.twitter;
+      if (parsedLinks.website && !links.website)
+        links.website = parsedLinks.website;
+      if (parsedLinks.telegram && !links.telegram)
+        links.telegram = parsedLinks.telegram;
     } catch {
       // Ignore parsing errors
     }
@@ -856,7 +879,7 @@ function extractTwitterHandle(url: string): string | null {
   for (const pattern of patterns) {
     const match = url.match(pattern);
     if (match?.[1]) {
-      return match[1].replace('@', '');
+      return match[1].replace("@", "");
     }
   }
   return null;
@@ -881,9 +904,17 @@ function SocialIconsWithMetadata({
   const searchButtonRef = useRef<HTMLButtonElement>(null);
   const searchMenuRef = useRef<HTMLDivElement>(null);
   const [showXPreview, setShowXPreview] = useState(false);
-  const [previewPosition, setPreviewPosition] = useState({ left: 0, top: 0, openBelow: false });
+  const [previewPosition, setPreviewPosition] = useState({
+    left: 0,
+    top: 0,
+    openBelow: false,
+  });
   const [showSearchMenu, setShowSearchMenu] = useState(false);
-  const [searchMenuPosition, setSearchMenuPosition] = useState({ left: 0, top: 0, openAbove: false });
+  const [searchMenuPosition, setSearchMenuPosition] = useState({
+    left: 0,
+    top: 0,
+    openAbove: false,
+  });
   const isOverSearchMenu = useRef(false);
   const isOverSearchButton = useRef(false);
   const isOverXPreview = useRef(false);
@@ -892,7 +923,9 @@ function SocialIconsWithMetadata({
   const hasTwitter = !!socialLinks.twitter;
   const hasWebsite = !!socialLinks.website;
   const hasTelegram = !!socialLinks.telegram;
-  const twitterHandle = hasTwitter ? extractTwitterHandle(socialLinks.twitter!) : null;
+  const twitterHandle = hasTwitter
+    ? extractTwitterHandle(socialLinks.twitter!)
+    : null;
 
   return (
     <div className="flex items-center gap-1">
@@ -933,7 +966,10 @@ function SocialIconsWithMetadata({
               }, 200);
             }}
           >
-            <FaXTwitter size={12} className="text-neutral-400 hover:text-white" />
+            <FaXTwitter
+              size={12}
+              className="text-neutral-400 hover:text-white"
+            />
           </button>
 
           {/* X Profile Preview Popup */}
@@ -961,7 +997,7 @@ function SocialIconsWithMetadata({
               }}
             >
               <div
-                className="overflow-hidden rounded-xl w-[280px]"
+                className="w-[280px] overflow-hidden rounded-xl"
                 style={{
                   backgroundColor: "#16181c",
                   border: "1px solid #2f3336",
@@ -969,28 +1005,40 @@ function SocialIconsWithMetadata({
                 }}
               >
                 {/* Header with X logo */}
-                <div className="flex items-center justify-between px-4 py-3 border-b border-[#2f3336]">
+                <div className="flex items-center justify-between border-b border-[#2f3336] px-4 py-3">
                   <div className="flex items-center gap-2">
                     {/* Profile Picture */}
-                    <div className="h-12 w-12 rounded-full overflow-hidden bg-[#1a1a1a] flex-shrink-0">
+                    <div className="h-12 w-12 flex-shrink-0 overflow-hidden rounded-full bg-[#1a1a1a]">
                       <img
-                        src={token.logo || `https://ui-avatars.com/api/?name=${token.symbol}&background=1a1a1a&color=fff`}
+                        src={
+                          token.logo ||
+                          `https://ui-avatars.com/api/?name=${token.symbol}&background=1a1a1a&color=fff`
+                        }
                         alt={token.symbol}
                         className="h-full w-full object-cover"
                         onError={(e) => {
-                          (e.target as HTMLImageElement).src = `https://ui-avatars.com/api/?name=${token.symbol}&background=1a1a1a&color=fff`;
+                          (e.target as HTMLImageElement).src =
+                            `https://ui-avatars.com/api/?name=${token.symbol}&background=1a1a1a&color=fff`;
                         }}
                       />
                     </div>
                     <div>
                       <div className="flex items-center gap-1">
-                        <span className="text-white font-bold text-sm">{token.name || token.symbol}</span>
-                        <svg className="w-4 h-4 text-[#1d9bf0]" viewBox="0 0 24 24" fill="currentColor">
-                          <path d="M22.5 12.5c0-1.58-.875-2.95-2.148-3.6.154-.435.238-.905.238-1.4 0-2.21-1.71-3.998-3.818-3.998-.47 0-.92.084-1.336.25C14.818 2.415 13.51 1.5 12 1.5s-2.816.917-3.437 2.25c-.415-.165-.866-.25-1.336-.25-2.11 0-3.818 1.79-3.818 4 0 .494.083.964.237 1.4-1.272.65-2.147 2.018-2.147 3.6 0 1.495.782 2.798 1.942 3.486-.02.17-.032.34-.032.514 0 2.21 1.708 4 3.818 4 .47 0 .92-.086 1.335-.25.62 1.334 1.926 2.25 3.437 2.25 1.512 0 2.818-.916 3.437-2.25.415.163.865.248 1.336.248 2.11 0 3.818-1.79 3.818-4 0-.174-.012-.344-.033-.513 1.158-.687 1.943-1.99 1.943-3.484zm-6.616-3.334l-4.334 6.5c-.145.217-.382.334-.625.334-.143 0-.288-.04-.416-.126l-.115-.094-2.415-2.415c-.293-.293-.293-.768 0-1.06s.768-.294 1.06 0l1.77 1.767 3.825-5.74c.23-.345.696-.436 1.04-.207.346.23.44.696.21 1.04z"/>
+                        <span className="text-sm font-bold text-white">
+                          {token.name || token.symbol}
+                        </span>
+                        <svg
+                          className="h-4 w-4 text-[#1d9bf0]"
+                          viewBox="0 0 24 24"
+                          fill="currentColor"
+                        >
+                          <path d="M22.5 12.5c0-1.58-.875-2.95-2.148-3.6.154-.435.238-.905.238-1.4 0-2.21-1.71-3.998-3.818-3.998-.47 0-.92.084-1.336.25C14.818 2.415 13.51 1.5 12 1.5s-2.816.917-3.437 2.25c-.415-.165-.866-.25-1.336-.25-2.11 0-3.818 1.79-3.818 4 0 .494.083.964.237 1.4-1.272.65-2.147 2.018-2.147 3.6 0 1.495.782 2.798 1.942 3.486-.02.17-.032.34-.032.514 0 2.21 1.708 4 3.818 4 .47 0 .92-.086 1.335-.25.62 1.334 1.926 2.25 3.437 2.25 1.512 0 2.818-.916 3.437-2.25.415.163.865.248 1.336.248 2.11 0 3.818-1.79 3.818-4 0-.174-.012-.344-.033-.513 1.158-.687 1.943-1.99 1.943-3.484zm-6.616-3.334l-4.334 6.5c-.145.217-.382.334-.625.334-.143 0-.288-.04-.416-.126l-.115-.094-2.415-2.415c-.293-.293-.293-.768 0-1.06s.768-.294 1.06 0l1.77 1.767 3.825-5.74c.23-.345.696-.436 1.04-.207.346.23.44.696.21 1.04z" />
                         </svg>
                       </div>
-                      <div className="flex items-center gap-1 text-gray-500 text-xs">
-                        <span>@{twitterHandle || token.symbol?.toLowerCase()}</span>
+                      <div className="flex items-center gap-1 text-xs text-gray-500">
+                        <span>
+                          @{twitterHandle || token.symbol?.toLowerCase()}
+                        </span>
                         <span>·</span>
                         <span>+</span>
                       </div>
@@ -1001,15 +1049,17 @@ function SocialIconsWithMetadata({
 
                 {/* Bio/Description */}
                 <div className="px-4 py-3">
-                  <p className="text-white text-sm leading-relaxed">
-                    {meta?.description || token.description || `Official ${token.symbol} token`}
+                  <p className="text-sm leading-relaxed text-white">
+                    {meta?.description ||
+                      token.description ||
+                      `Official ${token.symbol} token`}
                   </p>
                   {hasWebsite && (
                     <a
                       href={socialLinks.website}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="text-[#1d9bf0] text-sm hover:underline block mt-1 truncate"
+                      className="mt-1 block truncate text-sm text-[#1d9bf0] hover:underline"
                       onClick={(e) => e.stopPropagation()}
                     >
                       {socialLinks.website}
@@ -1018,28 +1068,55 @@ function SocialIconsWithMetadata({
                 </div>
 
                 {/* Stats */}
-                <div className="px-4 pb-3 flex items-center gap-4 text-sm">
+                <div className="flex items-center gap-4 px-4 pb-3 text-sm">
                   <div className="flex items-center gap-1 text-gray-500">
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <rect x="3" y="4" width="18" height="18" rx="2" ry="2" strokeWidth="2"/>
-                      <line x1="16" y1="2" x2="16" y2="6" strokeWidth="2"/>
-                      <line x1="8" y1="2" x2="8" y2="6" strokeWidth="2"/>
-                      <line x1="3" y1="10" x2="21" y2="10" strokeWidth="2"/>
+                    <svg
+                      className="h-4 w-4"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <rect
+                        x="3"
+                        y="4"
+                        width="18"
+                        height="18"
+                        rx="2"
+                        ry="2"
+                        strokeWidth="2"
+                      />
+                      <line x1="16" y1="2" x2="16" y2="6" strokeWidth="2" />
+                      <line x1="8" y1="2" x2="8" y2="6" strokeWidth="2" />
+                      <line x1="3" y1="10" x2="21" y2="10" strokeWidth="2" />
                     </svg>
-                    <span>Joined {new Date(token.created_at || Date.now()).toLocaleDateString('en-US', { month: 'short', year: 'numeric' })}</span>
+                    <span>
+                      Joined{" "}
+                      {new Date(
+                        token.created_at || Date.now(),
+                      ).toLocaleDateString("en-US", {
+                        month: "short",
+                        year: "numeric",
+                      })}
+                    </span>
                   </div>
                 </div>
 
                 {/* Following/Followers */}
-                <div className="px-4 pb-3 flex items-center gap-4 text-sm">
-                  <span><strong className="text-white">--</strong> <span className="text-gray-500">Following</span></span>
-                  <span><strong className="text-white">--</strong> <span className="text-gray-500">Followers</span></span>
+                <div className="flex items-center gap-4 px-4 pb-3 text-sm">
+                  <span>
+                    <strong className="text-white">--</strong>{" "}
+                    <span className="text-gray-500">Following</span>
+                  </span>
+                  <span>
+                    <strong className="text-white">--</strong>{" "}
+                    <span className="text-gray-500">Followers</span>
+                  </span>
                 </div>
 
                 {/* CTA Button */}
                 <div className="px-4 pb-4">
                   <button
-                    className="w-full py-2.5 rounded-full text-[#1d9bf0] font-semibold text-sm border border-[#536471] hover:bg-[#1d9bf0]/10 transition-colors"
+                    className="w-full rounded-full border border-[#536471] py-2.5 text-sm font-semibold text-[#1d9bf0] transition-colors hover:bg-[#1d9bf0]/10"
                     onClick={(e) => {
                       e.stopPropagation();
                       window.open(socialLinks.twitter, "_blank");
@@ -1065,7 +1142,10 @@ function SocialIconsWithMetadata({
           }}
           title="Join Telegram"
         >
-          <FaTelegram size={12} className="text-neutral-400 hover:text-[#0088cc]" />
+          <FaTelegram
+            size={12}
+            className="text-neutral-400 hover:text-[#0088cc]"
+          />
         </button>
       )}
 
@@ -1083,9 +1163,11 @@ function SocialIconsWithMetadata({
             <FiGlobe size={12} className="text-neutral-400 hover:text-white" />
           </button>
           {/* Website URL Tooltip */}
-          <div className="pointer-events-none absolute left-1/2 top-full mt-2 -translate-x-1/2 px-3 py-2 bg-[#1a1b1f] border border-[#2a2b33] rounded-lg opacity-0 group-hover/website:opacity-100 transition-opacity duration-100 whitespace-nowrap z-[99999] shadow-xl">
+          <div className="pointer-events-none absolute top-full left-1/2 z-[99999] mt-2 -translate-x-1/2 rounded-lg border border-[#2a2b33] bg-[#1a1b1f] px-3 py-2 whitespace-nowrap opacity-0 shadow-xl transition-opacity duration-100 group-hover/website:opacity-100">
             <span className="text-xs text-gray-400">Website</span>
-            <p className="text-sm text-white font-medium max-w-[200px] truncate">{socialLinks.website}</p>
+            <p className="max-w-[200px] truncate text-sm font-medium text-white">
+              {socialLinks.website}
+            </p>
           </div>
         </div>
       )}
@@ -1125,20 +1207,25 @@ function SocialIconsWithMetadata({
             e.preventDefault();
           }}
         >
-          <FaSearch size={10} className="text-neutral-400 hover:text-[#36d8ff]" />
+          <FaSearch
+            size={10}
+            className="text-neutral-400 hover:text-[#36d8ff]"
+          />
         </button>
 
         {/* Search Dropdown Menu - Fixed positioning, appears to the right */}
         {showSearchMenu && (
           <div
             ref={searchMenuRef}
-            className="fixed min-w-[220px] rounded-lg border border-[#2a2b33] bg-[#16171C] py-1 z-[999999]"
+            className="fixed z-[999999] min-w-[220px] rounded-lg border border-[#2a2b33] bg-[#16171C] py-1"
             style={{
               // Ensure dropdown doesn't go off the right edge of the screen
               left: `${Math.min(searchMenuPosition.left, window.innerWidth - 230)}px`,
               top: `${searchMenuPosition.top}px`,
               // If opening above, translate up by full height
-              transform: searchMenuPosition.openAbove ? "translateY(-100%)" : "none",
+              transform: searchMenuPosition.openAbove
+                ? "translateY(-100%)"
+                : "none",
               boxShadow: "0 8px 32px rgba(0, 0, 0, 0.6)",
             }}
             onMouseEnter={() => {
@@ -1156,7 +1243,7 @@ function SocialIconsWithMetadata({
           >
             {/* X Search for Address */}
             <button
-              className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-sm text-white hover:bg-white/10 transition-colors"
+              className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-sm text-white transition-colors hover:bg-white/10"
               onClick={(e) => {
                 e.stopPropagation();
                 const url = `https://twitter.com/search?q=${encodeURIComponent(token.mint)}`;
@@ -1164,13 +1251,13 @@ function SocialIconsWithMetadata({
                 setShowSearchMenu(false);
               }}
             >
-              <FaXTwitter size={14} className="text-neutral-400" />
-              X Search for Address
+              <FaXTwitter size={14} className="text-neutral-400" />X Search for
+              Address
             </button>
 
             {/* X Search for Name */}
             <button
-              className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-sm text-white hover:bg-white/10 transition-colors"
+              className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-sm text-white transition-colors hover:bg-white/10"
               onClick={(e) => {
                 e.stopPropagation();
                 const searchQuery = `${token.symbol} ${token.name}`.trim();
@@ -1179,8 +1266,8 @@ function SocialIconsWithMetadata({
                 setShowSearchMenu(false);
               }}
             >
-              <FaXTwitter size={14} className="text-neutral-400" />
-              X Search for Name
+              <FaXTwitter size={14} className="text-neutral-400" />X Search for
+              Name
             </button>
 
             {/* Divider */}
@@ -1188,27 +1275,46 @@ function SocialIconsWithMetadata({
 
             {/* Google Search for Name */}
             <button
-              className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-sm text-white hover:bg-white/10 transition-colors"
+              className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-sm text-white transition-colors hover:bg-white/10"
               onClick={(e) => {
                 e.stopPropagation();
-                const searchQuery = `${token.symbol} ${token.name} crypto`.trim();
+                const searchQuery =
+                  `${token.symbol} ${token.name} crypto`.trim();
                 const url = `https://www.google.com/search?q=${encodeURIComponent(searchQuery)}`;
                 window.open(url, "_blank");
                 setShowSearchMenu(false);
               }}
             >
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" className="text-neutral-400">
-                <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
-                <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
-                <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/>
-                <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/>
+              <svg
+                width="14"
+                height="14"
+                viewBox="0 0 24 24"
+                fill="none"
+                className="text-neutral-400"
+              >
+                <path
+                  d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
+                  fill="#4285F4"
+                />
+                <path
+                  d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
+                  fill="#34A853"
+                />
+                <path
+                  d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"
+                  fill="#FBBC05"
+                />
+                <path
+                  d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"
+                  fill="#EA4335"
+                />
               </svg>
               Google Search for Name
             </button>
 
             {/* Interstate Search for Name */}
             <button
-              className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-sm text-white hover:bg-white/10 transition-colors"
+              className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-sm text-white transition-colors hover:bg-white/10"
               onClick={(e) => {
                 e.stopPropagation();
                 const url = `https://dexscreener.com/solana/${token.mint}`;
@@ -1245,7 +1351,11 @@ function TokenImage({
   // Extract image URL from token data, checking multiple possible field names
   // Priority: image_url, image, logo, uri (updated for API compatibility)
   const rawImageUrl = extractTokenImage(token as any) || null;
-  const metadataCandidate = isMetadataUrl(rawImageUrl || '') ? rawImageUrl : (isMetadataUrl((token as any)?.uri) ? (token as any).uri : null);
+  const metadataCandidate = isMetadataUrl(rawImageUrl || "")
+    ? rawImageUrl
+    : isMetadataUrl((token as any)?.uri)
+      ? (token as any).uri
+      : null;
 
   // If the image URL is a JSON metadata URL, resolve it asynchronously
   useEffect(() => {
@@ -1260,7 +1370,9 @@ function TokenImage({
           } else {
             // Metadata resolution failed - only use rawImageUrl if it's not a metadata URL
             // Never fallback to metadataCandidate (JSON URL) as that would try to load JSON as image
-            setResolvedImageUrl(rawImageUrl && !isMetadataUrl(rawImageUrl) ? rawImageUrl : null);
+            setResolvedImageUrl(
+              rawImageUrl && !isMetadataUrl(rawImageUrl) ? rawImageUrl : null,
+            );
           }
         }
       });
@@ -1503,13 +1615,18 @@ function TokenImage({
   // Check both launchpad_protocol AND mint address suffix for bonk (mint ends in "bonk")
   const isBonk = launchpadProtocol.includes("bonk") || launchpadProtocol.includes("launchlab") || mintAddressLower.endsWith("bonk");
   // Check both launchpad_protocol AND mint address for bags
-  const isBags = launchpadProtocol.includes("bags") || mintAddressLower.includes("bags");
+  const isBags =
+    launchpadProtocol.includes("bags") || mintAddressLower.includes("bags");
   const isMoonit =
     launchpadProtocol.includes("moonit") ||
     launchpadProtocol.includes("moonshot") ||
     launchpadProtocol.includes("moonshoot");
   // If mint contains "bags", it overrides Meteora - don't show as Meteora
-  const isFullCircleImage = (isMeteora && !mintAddressLower.includes("bags")) || isBonk || isBags || isMoonit;
+  const isFullCircleImage =
+    (isMeteora && !mintAddressLower.includes("bags")) ||
+    isBonk ||
+    isBags ||
+    isMoonit;
 
   // Debug logging for protocol detection
   if (
@@ -2257,7 +2374,9 @@ function PulseTable({
   const [thunderAmount, setThunderAmount] = useState(getInitialThunderAmount);
   const [showPillTooltip, setShowPillTooltip] = useState<string | null>(null);
   const [showXPreview, setShowXPreview] = useState<number | null>(null);
-  const [showSearchDropdown, setShowSearchDropdown] = useState<number | null>(null);
+  const [showSearchDropdown, setShowSearchDropdown] = useState<number | null>(
+    null,
+  );
   const [buttonPosition, setButtonPosition] = useState<{
     left: number;
     top: number;
@@ -2685,23 +2804,24 @@ function PulseTable({
       },
       [channel],
     ),
-    onPriceUpdate: useCallback((updates: any[]) => {
-      // PERFORMANCE FIX: Don't use flushSync for price updates
-      // Let React batch these naturally - flushSync was causing render storms
-      // The hook already handles updating its internal arrays efficiently
+    onPriceUpdate: useCallback(
+      (updates: any[]) => {
+        // PERFORMANCE FIX: Don't use flushSync for price updates
+        // Let React batch these naturally - flushSync was causing render storms
+        // The hook already handles updating its internal arrays efficiently
 
-      // Pre-compute updates map once (O(n) instead of O(n*m))
-      const updatesMap = new Map(updates.map((u) => [u.mint, u]));
+        // Pre-compute updates map once (O(n) instead of O(n*m))
+        const updatesMap = new Map(updates.map((u) => [u.mint, u]));
 
-      // Helper to apply updates - returns same array ref if no changes (prevents re-render)
-      const applyPriceUpdates = (tokens: Token[]): Token[] => {
-        if (!tokens || tokens.length === 0) return tokens;
+        // Helper to apply updates - returns same array ref if no changes (prevents re-render)
+        const applyPriceUpdates = (tokens: Token[]): Token[] => {
+          if (!tokens || tokens.length === 0) return tokens;
 
-        let hasChanges = false;
-        const updatedTokens = tokens.map((token) => {
-          const update = updatesMap.get(token.mint);
-          if (!update) return token;
-          hasChanges = true;
+          let hasChanges = false;
+          const updatedTokens = tokens.map((token) => {
+            const update = updatesMap.get(token.mint);
+            if (!update) return token;
+            hasChanges = true;
 
           // Merge update - only include fields with valid values
           return {
@@ -2751,17 +2871,17 @@ function PulseTable({
           };
         });
 
-        // CRITICAL: Return same array ref if no changes - prevents unnecessary re-render
-        if (!hasChanges) return tokens;
+          // CRITICAL: Return same array ref if no changes - prevents unnecessary re-render
+          if (!hasChanges) return tokens;
 
-        // Skip liquidity filtering for New Pairs - keep all tokens
-        if (isNewPairs) return updatedTokens as Token[];
-        return filterNonZeroLiquidity(updatedTokens as Token[]);
-      };
+          // Skip liquidity filtering for New Pairs - keep all tokens
+          if (isNewPairs) return updatedTokens as Token[];
+          return filterNonZeroLiquidity(updatedTokens as Token[]);
+        };
 
-      // Apply to both arrays using the same helper - reuses the updatesMap
-      setFilteredTokens(applyPriceUpdates);
-      setWsTokens(applyPriceUpdates);
+        // Apply to both arrays using the same helper - reuses the updatesMap
+        setFilteredTokens(applyPriceUpdates);
+        setWsTokens(applyPriceUpdates);
 
       // PERFORMANCE FIX: Removed setBaseTokens from here
       // baseTokens updates were triggering useMemo recalculations on every price update
@@ -3111,18 +3231,22 @@ function PulseTable({
 
     try {
       // CRITICAL: Verify the pair address from the token service before executing trade
-      let poolAddress = token.migrated_pool_address || token.pair_address || '';
+      let poolAddress = token.migrated_pool_address || token.pair_address || "";
       if (token.mint) {
-        console.log(`[PulseTable] Verifying pair address for quick buy: ${token.mint}`);
+        console.log(
+          `[PulseTable] Verifying pair address for quick buy: ${token.mint}`,
+        );
         const verifiedPairAddress = await fetchVerifiedPairAddress(token.mint);
         if (verifiedPairAddress) {
           if (verifiedPairAddress !== poolAddress) {
-            console.log(`[PulseTable] Pair address mismatch! Local: ${poolAddress}, Verified: ${verifiedPairAddress}`);
+            console.log(
+              `[PulseTable] Pair address mismatch! Local: ${poolAddress}, Verified: ${verifiedPairAddress}`,
+            );
           }
           poolAddress = verifiedPairAddress;
         }
       }
-      const baseMint = token.mint || '';
+      const baseMint = token.mint || "";
       const quoteMint = SOL_MINT_ADDRESS;
 
       const multiResult = await executeSolanaMultiBuy({
@@ -3186,7 +3310,11 @@ function PulseTable({
 
       // Dispatch event to refresh chart price lines
       if (typeof window !== "undefined" && token.mint) {
-        window.dispatchEvent(new CustomEvent("solanaQuickTrade", { detail: { tokenAddress: token.mint } }));
+        window.dispatchEvent(
+          new CustomEvent("solanaQuickTrade", {
+            detail: { tokenAddress: token.mint },
+          }),
+        );
       }
 
       return { success: true };
@@ -3499,9 +3627,10 @@ function PulseTable({
       if (wsTokens.length > 0) {
         // When WebSocket is active, it's the source of truth for new tokens
         // Use Set for O(1) deduplication check (instead of O(n) with .some())
-        const wsMints = new Set(wsTokens.map(t => t.mint));
+        const wsMints = new Set(wsTokens.map((t) => t.mint));
         // Use baseTokens (local state with price updates) instead of tokens prop
-        const tokensSource = filteredTokens.length > 0 ? filteredTokens : baseTokens;
+        const tokensSource =
+          filteredTokens.length > 0 ? filteredTokens : baseTokens;
 
         // O(n) single pass with O(1) Set lookup - much faster than O(n*m)
         const uniqueBaseTokens: Token[] = [];
@@ -3516,7 +3645,8 @@ function PulseTable({
 
       // No WebSocket tokens yet - initial load from HTTP
       // Use baseTokens (local state with price updates) instead of tokens prop
-      const tokensSource = filteredTokens.length > 0 ? filteredTokens : baseTokens;
+      const tokensSource =
+        filteredTokens.length > 0 ? filteredTokens : baseTokens;
       return tokensSource.slice(0, 100);
     }
     // ═══════════════════════════════════════════════════════════════════════════
@@ -3570,7 +3700,8 @@ function PulseTable({
 
     // Use filteredTokens if available (either from specific filters or fresh "All" fetch)
     // Otherwise fall back to baseTokens (local state with price updates)
-    const tokensSource = filteredTokens.length > 0 ? filteredTokens : baseTokens;
+    const tokensSource =
+      filteredTokens.length > 0 ? filteredTokens : baseTokens;
 
     // First add HTTP API tokens (either filtered or from local state)
     // Apply client-side filter validation to ensure consistency with icon display
@@ -3627,8 +3758,8 @@ function PulseTable({
     // Special handling for "Bags" filter: also include tokens where mint contains "bags"
     // This catches tokens that have "bags" in mint but different launchpad_protocol (e.g., "meteora")
     if (filters.protocols.includes("Bags") && tokens.length > 0) {
-      const existingMints = new Set(filtered.map(t => t.mint));
-      const bagsFromMint = tokens.filter(token => {
+      const existingMints = new Set(filtered.map((t) => t.mint));
+      const bagsFromMint = tokens.filter((token) => {
         const mintLower = token.mint?.toLowerCase() || "";
         return mintLower.includes("bags") && !existingMints.has(token.mint);
       });
@@ -4429,11 +4560,15 @@ function PulseTable({
 
     // CRITICAL: Verify the pair address from the token service before creating sniper
     if (token.mint) {
-      console.log(`[PulseTable] Verifying pair address for sniper: ${token.mint}`);
+      console.log(
+        `[PulseTable] Verifying pair address for sniper: ${token.mint}`,
+      );
       const verifiedPairAddress = await fetchVerifiedPairAddress(token.mint);
       if (verifiedPairAddress) {
         if (verifiedPairAddress !== poolAddress) {
-          console.log(`[PulseTable] Sniper: Pair address mismatch! Local: ${poolAddress}, Verified: ${verifiedPairAddress}`);
+          console.log(
+            `[PulseTable] Sniper: Pair address mismatch! Local: ${poolAddress}, Verified: ${verifiedPairAddress}`,
+          );
         }
         poolAddress = verifiedPairAddress;
       }
@@ -7168,9 +7303,14 @@ function PulseTable({
                 _mint: (token as any)?.mint || "", // CRITICAL: Required for cache lookup
                 _launchpad_protocol: (token as any)?.launchpad_protocol || "", // Required for poolType detection
                 _liquidity: String(
-                  (token as any)?.liquidity_usd || (token as any)?.total_liquidity_usd || "",
+                  (token as any)?.liquidity_usd ||
+                    (token as any)?.total_liquidity_usd ||
+                    "",
                 ),
-                _created_at: (token as any)?.launch_time || (token as any)?.created_at || "",
+                _created_at:
+                  (token as any)?.launch_time ||
+                  (token as any)?.created_at ||
+                  "",
                 chain: currentChain, // Preserve chain selection
               }).toString();
 
@@ -7207,7 +7347,8 @@ function PulseTable({
                         image: extractTokenImage(token as any) || "",
                         mint: (token as any)?.mint || "",
                         pair_address: pairAddress,
-                        launchpad_protocol: (token as any)?.launchpad_protocol || "",
+                        launchpad_protocol:
+                          (token as any)?.launchpad_protocol || "",
                         timestamp: Date.now(),
                       };
                       localStorage.setItem(
@@ -7416,11 +7557,11 @@ function PulseTable({
                     />
                   </div> */}
                         <span
-                      className="mt-2 mb-1 max-w-[60px] truncate font-mono text-[9px] lg:max-w-[70px] lg:text-[10px]"
-                      style={{ color: AX.muted }}
-                    >
-                      {shortAddr(token)}
-                    </span>
+                          className="mt-2 mb-1 max-w-[60px] truncate font-mono text-[9px] lg:max-w-[70px] lg:text-[10px]"
+                          style={{ color: AX.muted }}
+                        >
+                          {shortAddr(token)}
+                        </span>
                       </div>
                       {/* Main Info Section */}
                       <div className="flex w-full min-w-0 flex-col gap-1">
@@ -7582,320 +7723,63 @@ function PulseTable({
                                 />
 
                                 {/* OLD X Profile Preview Button - kept for reference */}
-                                {false && <div className="relative">
-                                  <button
-                                    className="flex items-center justify-center rounded transition-colors duration-200"
-                                    onMouseEnter={(e) => {
-                                      const tooltip = document.getElementById(
-                                        `profile-tooltip-${idx}`,
-                                      ) as HTMLElement;
-                                      if (tooltip) {
-                                        const rect =
+                                {false && (
+                                  <div className="relative">
+                                    <button
+                                      className="flex items-center justify-center rounded transition-colors duration-200"
+                                      onMouseEnter={(e) => {
+                                        const tooltip = document.getElementById(
+                                          `profile-tooltip-${idx}`,
+                                        ) as HTMLElement;
+                                        if (tooltip) {
+                                          const rect =
+                                            e.currentTarget.getBoundingClientRect();
+                                          tooltip.style.left = `${rect.left + rect.width / 2}px`;
+                                          tooltip.style.top = `${rect.top - 10}px`;
+                                          tooltip.style.opacity = "1";
+                                        }
+                                        // Show X profile preview
+                                        setShowXPreview(idx);
+                                        // Store button position for popup positioning
+                                        const buttonRect =
                                           e.currentTarget.getBoundingClientRect();
-                                        tooltip.style.left = `${rect.left + rect.width / 2}px`;
-                                        tooltip.style.top = `${rect.top - 10}px`;
-                                        tooltip.style.opacity = "1";
-                                      }
-                                      // Show X profile preview
-                                      setShowXPreview(idx);
-                                      // Store button position for popup positioning
-                                      const buttonRect =
-                                        e.currentTarget.getBoundingClientRect();
-                                      setButtonPosition({
-                                        left:
-                                          buttonRect.left +
-                                          buttonRect.width / 2,
-                                        top: buttonRect.top - 20,
-                                      });
-                                    }}
-                                    onMouseLeave={(e) => {
-                                      const tooltip = document.getElementById(
-                                        `profile-tooltip-${idx}`,
-                                      ) as HTMLElement;
-                                      if (tooltip) tooltip.style.opacity = "0";
-                                    }}
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      e.preventDefault(); // Prevent Link navigation
-                                      // Open X profile in new tab
-                                      const profileUrl = `https://twitter.com/${token.symbol?.toLowerCase() || "search"}`;
-                                      window.open(profileUrl, "_blank");
-                                    }}
-                                  >
-                                    <FaXTwitter
-                                      size={12}
-                                      className="text-neutral-400"
-                                    />
-                                  </button>
-
-                                  {/* Small X Profile Preview - positioned near token */}
-                                  {showXPreview === idx && buttonPosition && (
-                                    <div
-                                      className="fixed"
-                                      style={{
-                                        left: `${buttonPosition.left}px`,
-                                        top: `${buttonPosition.top - 300}px`,
-                                        transform: "translate(-50%, 0)",
-                                        width: "280px",
-                                        zIndex: 999999,
+                                        setButtonPosition({
+                                          left:
+                                            buttonRect.left +
+                                            buttonRect.width / 2,
+                                          top: buttonRect.top - 20,
+                                        });
                                       }}
-                                      onMouseEnter={() => {
-                                        // Keep popup open when hovering over it
+                                      onMouseLeave={(e) => {
+                                        const tooltip = document.getElementById(
+                                          `profile-tooltip-${idx}`,
+                                        ) as HTMLElement;
+                                        if (tooltip)
+                                          tooltip.style.opacity = "0";
                                       }}
-                                      onMouseLeave={() => {
-                                        // Hide popup when leaving the popup area
-                                        setShowXPreview(null);
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        e.preventDefault(); // Prevent Link navigation
+                                        // Open X profile in new tab
+                                        const profileUrl = `https://twitter.com/${token.symbol?.toLowerCase() || "search"}`;
+                                        window.open(profileUrl, "_blank");
                                       }}
                                     >
-                                      <div
-                                        className="overflow-hidden rounded-xl"
-                                        style={{
-                                          backgroundColor: AX.surface,
-                                          border: `1px solid ${AX.border}`,
-                                          boxShadow: `0 12px 48px rgba(0, 0, 0, 0.5), 0 0 24px ${AX.glowBlue}`,
-                                          backdropFilter: "blur(10px)",
-                                        }}
-                                      >
-                                        {/* X Icon Header */}
-                                        <div
-                                          className="flex items-center justify-between border-b px-4 py-3"
-                                          style={{ borderColor: "#2f3336" }}
-                                        >
-                                          <div className="flex items-center gap-3">
-                                            <div
-                                              className="flex h-7 w-7 items-center justify-center rounded-full"
-                                              style={{
-                                                backgroundColor: "#1d9bf0",
-                                              }}
-                                            >
-                                              <svg
-                                                width="16"
-                                                height="16"
-                                                viewBox="0 0 24 24"
-                                                fill="currentColor"
-                                                style={{ color: "#f0f5f5" }}
-                                              >
-                                                <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z" />
-                                              </svg>
-                                            </div>
-                                            <div>
-                                              <div
-                                                className="text-sm font-bold"
-                                                style={{ color: "#f0f5f5" }}
-                                              >
-                                                X Profile
-                                              </div>
-                                              <div className="text-xs text-gray-400">
-                                                Live Preview
-                                              </div>
-                                            </div>
-                                          </div>
-                                          <div className="flex items-center gap-1">
-                                            <div
-                                              className="h-2 w-2 rounded-full"
-                                              style={{
-                                                backgroundColor: "#31e3ac",
-                                              }}
-                                            ></div>
-                                            <span className="text-xs text-gray-400">
-                                              Live
-                                            </span>
-                                          </div>
-                                        </div>
+                                      <FaXTwitter
+                                        size={12}
+                                        className="text-neutral-400"
+                                      />
+                                    </button>
 
-                                        {/* Official X Profile Layout */}
-                                        <div className="px-4 py-4">
-                                          {/* Profile Picture */}
-                                          <div className="mb-4 flex justify-center">
-                                            <div
-                                              className="h-20 w-20 overflow-hidden rounded-full"
-                                              style={{
-                                                backgroundColor: "#1a1a1a",
-                                                border: `3px solid #2f3336`,
-                                              }}
-                                            >
-                                              <img
-                                                src={`https://ui-avatars.com/api/?name=${token.symbol || "Token"}&size=80&background=1a1a1a&color=ffffff&bold=true`}
-                                                alt={`${token.symbol} profile`}
-                                                className="h-full w-full object-cover"
-                                                onError={(e) => {
-                                                  const target =
-                                                    e.target as HTMLImageElement;
-                                                  target.style.display = "none";
-                                                  const fallback =
-                                                    target.nextElementSibling as HTMLElement;
-                                                  if (fallback)
-                                                    fallback.style.display =
-                                                      "flex";
-                                                }}
-                                              />
-                                              <div
-                                                className="flex h-full w-full items-center justify-center text-xl font-bold"
-                                                style={{
-                                                  backgroundColor: "#1a1a1a",
-                                                  color: "#f0f5f5",
-                                                  display: "none",
-                                                }}
-                                              >
-                                                {token.symbol?.slice(0, 2) ||
-                                                  "??"}
-                                              </div>
-                                            </div>
-                                          </div>
-
-                                          {/* Profile Info */}
-                                          <div className="mb-4 text-center">
-                                            <div className="mb-1 flex items-center justify-center gap-2">
-                                              <h3
-                                                className="text-xl font-bold"
-                                                style={{ color: "#f0f5f5" }}
-                                              >
-                                                {token.symbol || "Unknown"}
-                                              </h3>
-                                              {/* Verified Badge */}
-                                              <div
-                                                className="flex h-6 w-6 items-center justify-center rounded-full"
-                                                style={{
-                                                  backgroundColor: "#1d9bf0",
-                                                }}
-                                              >
-                                                <svg
-                                                  width="14"
-                                                  height="14"
-                                                  viewBox="0 0 24 24"
-                                                  fill="none"
-                                                  stroke="#f0f5f5"
-                                                  strokeWidth="2"
-                                                  strokeLinecap="round"
-                                                  strokeLinejoin="round"
-                                                >
-                                                  <path d="M9 12l2 2 4-4" />
-                                                  <path d="M21 12c0 4.97-4.03 9-9 9s-9-4.03-9-9 4.03-9 9-9 9 4.03 9 9z" />
-                                                </svg>
-                                              </div>
-                                            </div>
-                                            <p className="mb-3 text-sm text-gray-400">
-                                              @
-                                              {token.symbol?.toLowerCase() ||
-                                                "unknown"}
-                                            </p>
-                                            <p
-                                              className="px-2 text-sm leading-relaxed"
-                                              style={{ color: "#f0f5f5" }}
-                                            >
-                                              {token.description ||
-                                                `Official ${token.symbol || "token"} community. Join the conversation!`}
-                                            </p>
-                                          </div>
-
-                                          {/* Follow Button */}
-                                          <div className="mb-4 flex justify-center">
-                                            <button
-                                              className="rounded-full px-6 py-2 text-sm font-semibold transition-all duration-200"
-                                              style={{
-                                                backgroundColor: "#f0f5f5",
-                                                color: "#000000",
-                                              }}
-                                              onMouseEnter={(e) => {
-                                                e.currentTarget.style.backgroundColor =
-                                                  "#e7e9ea";
-                                              }}
-                                              onMouseLeave={(e) => {
-                                                e.currentTarget.style.backgroundColor =
-                                                  "#f0f5f5";
-                                              }}
-                                            >
-                                              Follow
-                                            </button>
-                                          </div>
-                                        </div>
-
-                                        {/* Join Date Section */}
-                                        <div className="px-4 pb-3">
-                                          <div className="flex items-center justify-center gap-2 text-sm text-gray-400">
-                                            <svg
-                                              width="14"
-                                              height="14"
-                                              viewBox="0 0 24 24"
-                                              fill="none"
-                                              stroke="currentColor"
-                                              strokeWidth="2"
-                                              strokeLinecap="round"
-                                              strokeLinejoin="round"
-                                            >
-                                              <rect
-                                                x="3"
-                                                y="4"
-                                                width="18"
-                                                height="18"
-                                                rx="2"
-                                                ry="2"
-                                              />
-                                              <line
-                                                x1="16"
-                                                y1="2"
-                                                x2="16"
-                                                y2="6"
-                                              />
-                                              <line
-                                                x1="8"
-                                                y1="2"
-                                                x2="8"
-                                                y2="6"
-                                              />
-                                              <line
-                                                x1="3"
-                                                y1="10"
-                                                x2="21"
-                                                y2="10"
-                                              />
-                                            </svg>
-                                            <span>
-                                              Joined{" "}
-                                              {new Date().toLocaleDateString(
-                                                "en-US",
-                                                {
-                                                  month: "short",
-                                                  year: "numeric",
-                                                },
-                                              )}
-                                            </span>
-                                          </div>
-                                        </div>
-                                        {/* Action Button */}
-                                        <div className="px-4 pb-4">
-                                          <button
-                                            className="w-full rounded-full px-4 py-3 text-sm font-semibold transition-all duration-200"
-                                            style={{
-                                              backgroundColor: "#1d9bf0",
-                                              color: "#ffffff",
-                                              border: "1px solid #1d9bf0",
-                                            }}
-                                            onMouseEnter={(e) => {
-                                              e.currentTarget.style.backgroundColor =
-                                                "#1a8cd8";
-                                              e.currentTarget.style.borderColor =
-                                                "#1a8cd8";
-                                            }}
-                                            onMouseLeave={(e) => {
-                                              e.currentTarget.style.backgroundColor =
-                                                "#1d9bf0";
-                                              e.currentTarget.style.borderColor =
-                                                "#1d9bf0";
-                                            }}
-                                            onClick={(e) => {
-                                              e.stopPropagation();
-                                              const profileUrl = `https://twitter.com/${token.symbol?.toLowerCase() || "search"}`;
-                                              window.open(profileUrl, "_blank");
-                                            }}
-                                          >
-                                            See profile on X
-                                          </button>
-                                        </div>
-                                      </div>
-                                    </div>
-                                  )}
-                                </div>}
+                                    {/* Small X Profile Preview - positioned near token */}
+                                    {/* {showXPreview === idx && buttonPosition && (
+                                      <TokenXProfile
+                                        token={token}
+                                        setShowXPreview={setShowXPreview}
+                                      />
+                                    )} */}
+                                  </div>
+                                )}
 
                                 <div className="ml-1 flex flex-row gap-2 font-light">
                                   {/* Crown Icon - Dev Migration Stats */}
@@ -7940,9 +7824,13 @@ function PulseTable({
                                       {token.kol_count ?? 0}
                                     </span>
                                     {/* Tooltip */}
-                                    <div className="pointer-events-none absolute left-0 top-full mt-2 px-3 py-2 bg-[#1a1b1f] border border-[#2a2b33] rounded-lg opacity-0 group-hover/kol2:opacity-100 transition-opacity duration-100 whitespace-nowrap z-[99999] shadow-xl">
-                                      <span className="text-sm text-white font-medium">KOL Count</span>
-                                      <p className="text-xs text-gray-400 mt-0.5">Key Opinion Leaders holding this token</p>
+                                    <div className="pointer-events-none absolute top-full left-0 z-[99999] mt-2 rounded-lg border border-[#2a2b33] bg-[#1a1b1f] px-3 py-2 whitespace-nowrap opacity-0 shadow-xl transition-opacity duration-100 group-hover/kol2:opacity-100">
+                                      <span className="text-sm font-medium text-white">
+                                        KOL Count
+                                      </span>
+                                      <p className="mt-0.5 text-xs text-gray-400">
+                                        Key Opinion Leaders holding this token
+                                      </p>
                                     </div>
                                   </div>
 
@@ -7979,9 +7867,13 @@ function PulseTable({
                                       })()}
                                     </span>
                                     {/* Tooltip */}
-                                    <div className="pointer-events-none absolute left-0 top-full mt-2 px-3 py-2 bg-[#1a1b1f] border border-[#2a2b33] rounded-lg opacity-0 group-hover/holder2:opacity-100 transition-opacity duration-100 whitespace-nowrap z-[99999] shadow-xl">
-                                      <span className="text-sm text-white font-medium">Holder Count</span>
-                                      <p className="text-xs text-gray-400 mt-0.5">Total wallets holding this token</p>
+                                    <div className="pointer-events-none absolute top-full left-0 z-[99999] mt-2 rounded-lg border border-[#2a2b33] bg-[#1a1b1f] px-3 py-2 whitespace-nowrap opacity-0 shadow-xl transition-opacity duration-100 group-hover/holder2:opacity-100">
+                                      <span className="text-sm font-medium text-white">
+                                        Holder Count
+                                      </span>
+                                      <p className="mt-0.5 text-xs text-gray-400">
+                                        Total wallets holding this token
+                                      </p>
                                     </div>
                                   </div>
                                   {/* Robot icon - commented out for now
@@ -7995,6 +7887,7 @@ function PulseTable({
                                 </div>
 
                                 {/* Pump.fun Tooltip */}
+
                                 {token.mint?.slice(-4) === "pump" && (
                                   <div
                                     className="pointer-events-none absolute bottom-full left-1/2 mb-2 -translate-x-1/2 transform rounded px-2 py-1 text-xs font-medium whitespace-nowrap opacity-0 transition-opacity duration-200"
@@ -8018,7 +7911,7 @@ function PulseTable({
                             </div>
                           </div>
                           {/* Right: MC, V, F, TX */}
-                        <div className="items-right justify-right flex min-w-[100px] flex-col items-end gap-1 text-right lg:min-w-[140px]">
+                          <div className="items-right justify-right flex min-w-[100px] flex-col items-end gap-1 text-right lg:min-w-[140px]">
                             <div
                               className={"justify-right flex flex-col text-xs"}
                             >
@@ -8090,7 +7983,9 @@ function PulseTable({
                                 style={{ color: AX.muted }}
                                 className="flex items-end gap-1"
                               >
-                                <span className="ml-auto text-xs mb-[1px]">V</span>{" "}
+                                <span className="mb-[1px] ml-auto text-xs">
+                                  V
+                                </span>{" "}
                                 <span
                                   className="number-font text-xs font-medium lg:text-sm"
                                   style={{
@@ -8670,7 +8565,7 @@ function PulseTable({
                         return null;
                       })()}
                     </div>
-                    <div className="absolute bottom-2 left-24 flex max-w-[calc(100%-6rem)] flex-row items-center gap-1 overflow-x-auto pr-10 whitespace-break-nowrap">
+                    <div className="whitespace-break-nowrap absolute bottom-2 left-24 flex max-w-[calc(100%-6rem)] flex-row items-center gap-1 overflow-x-auto pr-10">
                       <BottomCardInfoHolder
                         PassedIcon={BsPersonGear}
                         token={token}
@@ -8721,12 +8616,14 @@ function PulseTable({
                       <BottomCardInfoHolder
                         PassedIcon={PiFishSimpleLight}
                         value={0.2}
+                        tooltip="Phishing Hold"
                       />
                       */}
                       {/* Leaf icon - commented out
                       <BottomCardInfoHolder
                         PassedIcon={PiLeafLight}
                         value={0.2}
+                        tooltip="Fresh Hold"
                       />
                       */}
                     </div>
@@ -9001,7 +8898,6 @@ function PulseTable({
 }
 
 export default PulseTable;
-
 
 const SnipperIcon = ({ ...props }) => {
   return (

@@ -17,6 +17,7 @@ import { useUser } from "./UserContext";
 import { useSolPrice } from "./SolPriceContext";
 import { useWatchlist } from "./WatchlistContext";
 import { useQuickBuy } from "./QuickBuyContext";
+import { useSearch } from "./ui/SearchContext";
 import { formatSmartNumber } from "../utils/db";
 import type { Token } from "../utils/db";
 import { executeEnhancedTrade } from "~/utils/enhancedTradeHandler";
@@ -39,7 +40,7 @@ import { CiBellOn, CiStar } from "react-icons/ci";
 
 /* ---- style palette ---- */
 const AX = {
-  bg: "#101114",
+  bg: "#111214",
   surface: "#1E1F26",
   surface2: "#17191E",
   border: "#2A2B33",
@@ -473,7 +474,7 @@ export default function Header({
   >("deposit");
   const [withdrawOpen, setWithdrawOpen] = useState(false);
   const [watchlistOpen, setWatchlistOpen] = useState(false);
-  const [searchModalOpen, setSearchModalOpen] = useState(false);
+  const { isOpen: searchModalOpen, openSearch, closeSearch } = useSearch();
   const [profileMenuOpen, setProfileMenuOpen] = useState(false);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [showUpdatesModal, setShowUpdatesModal] = useState(false);
@@ -952,7 +953,7 @@ export default function Header({
         // If modal is open, close it immediately on Tab
         if (searchModalOpen) {
           e.preventDefault();
-          setSearchModalOpen(false);
+          closeSearch();
           return;
         }
         // Else, only open when focus isn't in an editable element
@@ -965,7 +966,6 @@ export default function Header({
             (t as any).isContentEditable);
         if (isEditable) return; // allow normal tabbing in forms
         e.preventDefault();
-        setSearchModalOpen(true);
       }
 
       // Toggle on '/' (slash). Some keyboards send '?' with Shift+'/'; we support both.
@@ -979,7 +979,11 @@ export default function Header({
             (t as any).isContentEditable);
         if (isEditable) return; // do not steal from inputs
         e.preventDefault();
-        setSearchModalOpen((prev) => !prev);
+        if (searchModalOpen) {
+          closeSearch();
+        } else {
+          openSearch();
+        }
       }
     };
     window.addEventListener("keydown", onKeyDown);
@@ -1128,12 +1132,12 @@ export default function Header({
   return (
     <>
       <header
-        className={`${isSticky ? "sticky top-0 z-20" : "relative z-10"} w-full border-b backdrop-blur`}
-        style={{ backgroundColor: "#0f1012", borderColor: AX.border }}
+        className={`${isSticky ? "sticky top-0 z-20" : "relative z-10"} w-full border-b backdrop-blur bg-[#0C0C0F]`}
+        style={{ borderColor: AX.border }}
       >
         <div
           className="flex max-w-full items-center justify-between border-b px-2 pt-4 pb-2.5 md:px-4"
-          style={{ backgroundColor: "#06070b", borderColor: AX.border }}
+          style={{ backgroundColor: "#0C0C0F", borderColor: AX.border }}
         >
           <div className="flex min-w-0 flex-1 items-center gap-2 overflow-hidden md:gap-3">
             <Link
@@ -1245,7 +1249,7 @@ export default function Header({
               <div className="flex items-center gap-1 sm:gap-1.5 md:gap-2">
                 {/* Smaller search button (desktop) */}
                 <button
-                  onClick={() => setSearchModalOpen(true)}
+                  onClick={() => openSearch()}
                   className="hidden h-10 items-center gap-1.5 rounded-3xl border px-4 transition-all duration-300 ease-out xl:flex"
                   style={{
                     borderColor: AX.border,
@@ -1269,7 +1273,7 @@ export default function Header({
 
                 {/* Medium search button (for tablets) - shows icon + text without Tab keycap */}
                 <button
-                  onClick={() => setSearchModalOpen(true)}
+                  onClick={() => openSearch()}
                   className="hidden h-8 min-w-[180px] items-center gap-1.5 rounded-md border px-2.5 transition-all duration-300 ease-out lg:flex xl:hidden"
                   style={{
                     backgroundColor: AX.surface,
@@ -1294,7 +1298,7 @@ export default function Header({
 
                 {/* Compact icon-only trigger on small screens */}
                 <button
-                  onClick={() => setSearchModalOpen(true)}
+                  onClick={() => openSearch()}
                   className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-md border transition-all duration-300 ease-out lg:hidden"
                   style={{
                     backgroundColor: AX.surface,
@@ -1585,7 +1589,7 @@ export default function Header({
                       </div>
 
                       {/* Balance Display */}
-                      <div className="mb-4 flex items-center justify-between rounded-lg bg-[#17191e] p-2">
+                      <div className="mb-4 flex items-center justify-between rounded-lg bg-[#25282B] p-2">
                         <div className="flex items-center gap-2">
                           <img
                             src={chainLogos[currentChain] ?? chainLogos.monad}
@@ -1693,7 +1697,7 @@ export default function Header({
                               setProfileMenuOpen(false);
                               handleConvertClick();
                             }}
-                            className="flex flex-1 items-center justify-center gap-1.5 rounded-lg border border-[#2A2B33] bg-[#0f1012] px-3 py-2 text-sm font-medium text-[#ffffff] transition-all duration-200"
+                            className="flex flex-1 items-center justify-center gap-1.5 rounded-lg border border-[#2A2B33] bg-[#0C0C0F] px-3 py-2 text-sm font-medium text-[#ffffff] transition-all duration-200"
                             onMouseEnter={(e) => {
                               e.currentTarget.style.backgroundColor = "#1A1B1F";
                             }}
@@ -1721,7 +1725,7 @@ export default function Header({
                               setProfileMenuOpen(false);
                               handleBuyClick();
                             }}
-                            className="flex flex-1 items-center justify-center gap-1.5 rounded-lg border border-[#2A2B33] bg-[#0f1012] px-3 py-2 text-sm font-medium text-[#ffffff] transition-all duration-200"
+                            className="flex flex-1 items-center justify-center gap-1.5 rounded-lg border border-[#2A2B33] bg-[#0C0C0F] px-3 py-2 text-sm font-medium text-[#ffffff] transition-all duration-200"
                             onMouseEnter={(e) => {
                               e.currentTarget.style.backgroundColor = "#1A1B1F";
                             }}
@@ -1853,7 +1857,7 @@ export default function Header({
           </div>
         </div>
         {headerBarVisible && (
-          <div className="flex items-center gap-2 bg-[#06070b] px-3 py-0.5">
+          <div className="flex items-center gap-2 bg-[#0C0C0F] px-3 py-0.5">
             {/* extra toolbar section */}
             <div className="group relative">
               <button
@@ -2310,7 +2314,7 @@ export default function Header({
       {/* Search Modal */}
       <SearchModal
         open={searchModalOpen}
-        onClose={() => setSearchModalOpen(false)}
+        onClose={() => closeSearch()}
         selectedTimeframe={selectedTimeframe}
         chain={currentChain}
         onSubmit={(q) => {

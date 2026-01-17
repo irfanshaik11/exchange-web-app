@@ -36,6 +36,7 @@ import { SolPriceProvider } from '../components/SolPriceContext';
 import { WalletTrackerProvider } from '../components/WalletTrackerContext';
 import { ReferralAccessGate } from '../components/ReferralAccessGate';
 import { ThemeProvider } from '../components/ThemeContext';
+import { SearchProvider } from '../components/ui/SearchContext';
 import Head from 'next/head';
 import 'react-datepicker/dist/react-datepicker.css';
 import { showEnhancedToast } from '../utils/enhancedToast';
@@ -715,16 +716,18 @@ const MyApp: AppType = ({ Component, pageProps }) => {
                 <SolPriceProvider>
                   <ThemeProvider>
                     <QuickBuyProvider>
-                      <WatchlistProvider>
-                        <FilterProvider>
-                          <WalletTrackerProvider>
-                            <ReferralAccessGate>
-                              <PagePreloader />
-                              <Component {...pageProps} />
-                            </ReferralAccessGate>
-                          </WalletTrackerProvider>
-                        </FilterProvider>
-                      </WatchlistProvider>
+                      <SearchProvider>
+                        <WatchlistProvider>
+                          <FilterProvider>
+                            <WalletTrackerProvider>
+                              <ReferralAccessGate>
+                                <PagePreloader />
+                                <Component {...pageProps} />
+                              </ReferralAccessGate>
+                            </WalletTrackerProvider>
+                          </FilterProvider>
+                        </WatchlistProvider>
+                      </SearchProvider>
                     </QuickBuyProvider>
                     <GlobalLoginModalManager enforceLogin={!!env.NEXT_PUBLIC_IS_BACKEND_DEPLOYED} />
                     <WalletExportGuard />

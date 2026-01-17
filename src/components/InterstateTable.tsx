@@ -333,7 +333,7 @@ const TableHeader: React.FC<{
         return (
           <th
             key={idx}
-            className={`${header.width} px-4 ${isDiscoverPage ? 'py-2' : 'py-4'} text-${header.align} ${isDiscoverPage ? 'text-[10px]' : 'text-xs'} font-medium tracking-wide uppercase ${
+            className={`${header.width} px-4 py-3 text-${header.align} ${isDiscoverPage ? 'text-[10px]' : 'text-xs'} font-medium tracking-wide uppercase ${
               header.key ? 'cursor-pointer hover:opacity-80 transition-opacity' : ''
             }`}
             style={{ color: '#787a8d', fontWeight: '300' }}
@@ -1114,9 +1114,9 @@ const TxnsCell: React.FC<{
   // Check if this is a Birdeye token (has rank)
   const birdeyeRank = (token as any).birdeye_rank || (token as any).rank;
   const volumeChangePercent = (token as any).volume24hChangePercent;
-  
+
   const monospaceFont = 'ui-monospace, SFMono-Regular, "SF Mono", Consolas, "Liberation Mono", Menlo, monospace';
-  
+
   // For Birdeye tokens, show rank and volume change % instead of transaction counts
   if (birdeyeRank && birdeyeRank > 0) {
     const formatPercentChange = (val: number | null | undefined): string => {
@@ -1124,36 +1124,36 @@ const TxnsCell: React.FC<{
       const sign = val > 0 ? '+' : '';
       return sign + formatSmartNumber(val);
     };
-    
+
     return (
-      <div className="text-right">
-        <div className={`text-sm font-medium mb-1 ${isDiscoverPage ? 'number-font' : ''}`} style={{ 
-          color: AX.text,
-          ...(isDiscoverPage ? {} : {
-            fontFamily: monospaceFont,
-            fontWeight: '400'
-          })
-        }}>
-          #{birdeyeRank}
-        </div>
-        {volumeChangePercent != null && (
-          <div className={`text-xs font-medium ${isDiscoverPage ? 'number-font' : ''}`} style={{
-            color: volumeChangePercent >= 0 ? (isDiscoverPage ? '#85d99f' : '#10b981') : (isDiscoverPage ? '#f26681' : '#ef4444'),
-            ...(isDiscoverPage ? {} : {
-              fontFamily: monospaceFont,
-              fontWeight: '400'
-            })
+      <div className="flex flex-col h-full justify-center">
+        <div className="flex items-center justify-end gap-2">
+          <span className={`text-sm font-medium ${isDiscoverPage ? 'number-font' : ''}`} style={{
+            color: AX.text,
+            ...(isDiscoverPage ? {} : { fontFamily: monospaceFont, fontWeight: '400' })
           }}>
-            {formatPercentChange(volumeChangePercent)}% vol
-          </div>
-        )}
+            #{birdeyeRank}
+          </span>
+        </div>
+        <div className="flex items-center justify-end min-h-[18px]">
+          {volumeChangePercent != null ? (
+            <span className={`text-xs font-medium ${isDiscoverPage ? 'number-font' : ''}`} style={{
+              color: volumeChangePercent >= 0 ? (isDiscoverPage ? '#85d99f' : '#10b981') : (isDiscoverPage ? '#f26681' : '#ef4444'),
+              ...(isDiscoverPage ? {} : { fontFamily: monospaceFont, fontWeight: '400' })
+            }}>
+              {formatPercentChange(volumeChangePercent)}% vol
+            </span>
+          ) : (
+            <span className="text-xs" style={{ color: AX.muted }}>-</span>
+          )}
+        </div>
       </div>
     );
   }
-  
+
   // Default: show transaction counts for non-Birdeye tokens
   const { total, buys, sells } = getTxns(token, selectedTimeframe);
-  
+
   // For discover page (xStocks), show "0" instead of "-" when value is 0
   const formatTxnValue = (value: number) => {
     if (value === 0) {
@@ -1161,24 +1161,29 @@ const TxnsCell: React.FC<{
     }
     return formatSmartNumber(value);
   };
-  
+
   return (
-    <div className="text-right">
-      <div className={`text-sm font-medium mb-1 ${isDiscoverPage ? 'number-font' : ''}`} style={{ 
-        color: AX.text,
-        ...(isDiscoverPage ? {} : {
-          fontFamily: monospaceFont,
-          fontWeight: '400'
-        })
-      }}>
-        {formatTxnValue(total)}
+    <div className="flex flex-col h-full justify-center">
+      <div className="flex items-center justify-end">
+        <span className={`text-sm font-medium ${isDiscoverPage ? 'number-font' : ''}`} style={{
+          color: AX.text,
+          ...(isDiscoverPage ? {} : { fontFamily: monospaceFont, fontWeight: '400' })
+        }}>
+          {formatTxnValue(total)}
+        </span>
       </div>
-      <div className="text-xs font-medium">
-        <span className={`${isDiscoverPage ? '' : 'text-emerald-400'} ${isDiscoverPage ? 'number-font' : ''}`} style={isDiscoverPage ? { color: '#85d99f', fontFamily: monospaceFont, fontWeight: '400' } : { fontFamily: monospaceFont, fontWeight: '400' }}>
+      <div className="flex items-center justify-end text-xs font-medium">
+        <span className={isDiscoverPage ? 'number-font' : ''} style={{
+          color: isDiscoverPage ? '#85d99f' : '#34d399',
+          ...(isDiscoverPage ? {} : { fontFamily: monospaceFont, fontWeight: '400' })
+        }}>
           {formatTxnValue(buys)}
         </span>
         <span className="mx-1" style={{ color: AX.muted }}>/</span>
-        <span className={`${isDiscoverPage ? '' : 'text-red-400'} ${isDiscoverPage ? 'number-font' : ''}`} style={isDiscoverPage ? { color: '#f26681', fontFamily: monospaceFont, fontWeight: '400' } : { fontFamily: monospaceFont, fontWeight: '400' }}>
+        <span className={isDiscoverPage ? 'number-font' : ''} style={{
+          color: isDiscoverPage ? '#f26681' : '#f87171',
+          ...(isDiscoverPage ? {} : { fontFamily: monospaceFont, fontWeight: '400' })
+        }}>
           {formatTxnValue(sells)}
         </span>
       </div>
@@ -1279,38 +1284,38 @@ const TableRow: React.FC<{
   
   return (
     <tr 
-      className={`cursor-pointer ${isDiscoverPage ? '' : 'border-b'}`} 
-      style={{ 
+      className={`cursor-pointer h-16 ${isDiscoverPage ? '' : 'border-b'}`}
+      style={{
         ...(isDiscoverPage ? {} : { borderColor: AX.border }),
         backgroundColor: rowBgColor,
         transition: 'none' // Disable all transitions for instant rendering
       }}
-      onMouseEnter={(e) => { 
+      onMouseEnter={(e) => {
         if (isDiscoverPage) {
           e.currentTarget.style.backgroundColor = i % 2 === 0 ? '#1a1b1f' : '#1c1d22';
         } else {
           e.currentTarget.style.backgroundColor = AX.surface2;
         }
       }}
-      onMouseLeave={(e) => { 
+      onMouseLeave={(e) => {
         e.currentTarget.style.backgroundColor = rowBgColor;
       }}
       onClick={onClick}
     >
-      <td className="w-80 px-4 py-4 align-middle">
+      <td className="w-80 px-4 py-2 align-middle">
         <TokenInfo token={token} i={i} sortedRows={sortedRows} isDiscoverPage={isDiscoverPage} chain={chain} />
       </td>
-      
-      <td className="w-32 px-4 py-4 align-middle">
-        <MarketCapCell 
-          token={token} 
-          selectedTimeframe={selectedTimeframe} 
+
+      <td className="w-32 px-4 py-2 align-middle">
+        <MarketCapCell
+          token={token}
+          selectedTimeframe={selectedTimeframe}
           animationState={animationState}
           isDiscoverPage={isDiscoverPage}
         />
       </td>
-      
-      <td className="w-28 px-4 py-4 align-middle text-right">
+
+      <td className="w-28 px-4 py-2 align-middle text-right">
         {/* {(() => {
           console.log('Liquidity Debug:', {
             tokenName: token.name,
@@ -1341,8 +1346,8 @@ const TableRow: React.FC<{
         })()}
       </td>
       
-      <td className="w-28 px-4 py-4 align-middle text-right">
-        <div className={`text-sm font-medium ${isDiscoverPage ? 'number-font' : ''}`} style={{ 
+      <td className="w-28 px-4 py-2 align-middle text-right">
+        <div className={`text-sm font-medium ${isDiscoverPage ? 'number-font' : ''}`} style={{
           color: AX.text,
           ...(isDiscoverPage ? {} : {
             fontFamily: 'ui-monospace, SFMono-Regular, "SF Mono", Consolas, "Liberation Mono", Menlo, monospace',
@@ -1353,8 +1358,8 @@ const TableRow: React.FC<{
           {volume === 0 ? (isDiscoverPage ? "$0" : "-") : `$${formatSmartNumber(volume)}`}
         </div>
       </td>
-      
-      <td className="w-24 px-4 py-4 align-middle">
+
+      <td className="w-28 px-4 py-2 align-middle">
         <TxnsCell token={token} selectedTimeframe={selectedTimeframe} isDiscoverPage={isDiscoverPage} />
       </td>
 
@@ -1515,8 +1520,8 @@ export default function InterstateTable({
   });
   
   return (
-    <div className="overflow-x-auto shadow-lg" style={{ 
-      backgroundColor: isDiscoverPage ? '#111214' : 'rgba(30, 31, 38, 0.3)', 
+    <div className="overflow-x-auto shadow-lg w-full" style={{
+      backgroundColor: isDiscoverPage ? '#111214' : 'rgba(30, 31, 38, 0.3)',
       ...(isDiscoverPage ? {
         borderTop: `1px solid ${AX.border}`,
         borderLeft: 'none',
@@ -1550,20 +1555,28 @@ export default function InterstateTable({
           0% { background: ${isDiscoverPage ? 'rgba(242, 102, 129, 0.4)' : 'rgba(248, 113, 113, 0.4)'}; }
           100% { background: transparent; }
         }
-        table {
+        .table-wrapper {
           table-layout: fixed;
+          width: 100%;
+          min-width: 1000px;
         }
-        tbody tr {
+        .table-wrapper tbody tr {
           transition: none !important;
           animation: none !important;
         }
-        tbody tr td {
+        .table-wrapper tbody tr td {
           transition: none !important;
           animation: none !important;
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+        }
+        .table-wrapper thead th {
+          white-space: nowrap;
         }
       `}</style>
       
-      <table className="min-w-full" style={{ borderCollapse: 'collapse', borderSpacing: 0 }}>
+      <table className="table-wrapper min-w-full" style={{ borderCollapse: 'collapse', borderSpacing: 0, tableLayout: 'fixed', width: '100%' }}>
         <TableHeader 
           sortKey={sortKey} 
           sortDirection={sortDirection} 

@@ -35,7 +35,7 @@ const CodexHolders = dynamic(() => import("../../components/trade/CodexHolders")
 
 /* ---------- AXIOM palette ---------- */
 const AX = {
-  bg: "#101114",
+  bg: "#0C0C0F",
   surface: "#1E1F26",
   surface2: "#17191E",
   border: "#2A2B33",
@@ -128,6 +128,8 @@ export default function TradePage() {
   const { isConnected } = useWallet();
   const { user } = useUser();
   const [selectedTab, setSelectedTab] = useState("Trades");
+  const [devTokensCount, setDevTokensCount] = useState<number | undefined>(undefined);
+  const [holdersCount, setHoldersCount] = useState<number | undefined>(undefined);
   const [search, setSearch] = useState("");
   const [showMobileTradeModal, setShowMobileTradeModal] = useState(false);
   const [isClosingModal, setIsClosingModal] = useState(false);
@@ -820,7 +822,7 @@ export default function TradePage() {
       <div
         className="min-h-screen w-full flex flex-col overflow-y-auto"
         style={{
-          backgroundColor: "#0f1012",
+          backgroundColor: "#111214",
           color: AX.text,
           fontFamily: "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", \"Inter\", system-ui, sans-serif",
         }}
@@ -977,17 +979,17 @@ export default function TradePage() {
                 (e.target as Element).addEventListener("pointerup", onUp, { passive: false });
                 (e.target as Element).addEventListener("pointercancel", onUp, { passive: false });
               }}
-              className="relative h-1.5 cursor-row-resize select-none touch-none flex-shrink-0 flex items-center justify-center hover:bg-gray-800/20 transition-colors"
+              className="relative cursor-row-resize select-none touch-none flex-shrink-0 flex items-center justify-center hover:bg-gray-800/20 transition-colors"
               style={{ touchAction: "none", zIndex: 10, pointerEvents: "auto" }}
             >
               {/* Visible dots handle - smaller, thinner dots */}
               <div className="flex items-center gap-0.5">
-                <div className="w-0.5 h-0.5 rounded-full bg-gray-500" />
-                <div className="w-0.5 h-0.5 rounded-full bg-gray-500" />
-                <div className="w-0.5 h-0.5 rounded-full bg-gray-500" />
+                <div className="w-0.5 h-0.5 rounded-full bg-[#757e80] z-10" />
+                <div className="w-0.5 h-0.5 rounded-full bg-[#757e80] z-10" />
+                <div className="w-0.5 h-0.5 rounded-full bg-[#757e80] z-10" />
               </div>
               {/* Visual separator line */}
-              <div className="absolute inset-x-0 top-1/2 -translate-y-1/2 h-px bg-gray-700/20" />
+              <div className="absolute inset-x-0 top-1/2 -translate-y-1/2 h-[4px] bg-gray-700/20 hover:bg-[#27282e]" />
             </div>
 
             {/* BOTTOM pane (tabs + tables) - min-h-[500px] ensures scrollable content */}
@@ -998,6 +1000,8 @@ export default function TradePage() {
                   setSelectedTab={setSelectedTab}
                   onInstantTradeClick={() => setIsInstantTradeOpen(true)}
                   isInstantTradeOpen={isInstantTradeOpen}
+                  devTokensCount={devTokensCount}
+                  holdersCount={holdersCount}
                 />
               </div>
               <div className="flex-1 min-h-[400px]">
@@ -1020,12 +1024,12 @@ export default function TradePage() {
                 </div>
                 <div className={`flex flex-col h-full ${selectedTab === "Holders" ? "" : "hidden"}`}>
                   <React.Suspense fallback={<div className="flex items-center justify-center h-full text-neutral-400">Loading...</div>}>
-                    <CodexHolders token={displayToken} pairAddress={idString || resolvedPairAddress} chain="sol" />
+                    <CodexHolders token={displayToken} pairAddress={idString || resolvedPairAddress} chain="sol" onTotalCountChange={setHoldersCount} />
                   </React.Suspense>
                 </div>
                 <div className={`flex flex-col h-full ${selectedTab === "Dev Tokens" ? "" : "hidden"}`}>
                   <React.Suspense fallback={<div className="flex items-center justify-center h-full text-neutral-400">Loading...</div>}>
-                    <CodexDevTokens token={displayToken} chain="sol" />
+                    <CodexDevTokens token={displayToken} chain="sol" onTotalCountChange={setDevTokensCount} />
                   </React.Suspense>
                 </div>
               </div>
@@ -1033,7 +1037,7 @@ export default function TradePage() {
           </div>
 
           {/* RIGHT: action panel + reused image + similar tokens */}
-          <div className="flex-shrink-0 min-w-[260px] basis-[280px] md:basis-[310px] lg:basis-[330px] hidden lg:flex flex-col">
+          <div className="flex-shrink-0 min-w-[260px] basis-[280px] md:basis-[310px] lg:basis-[330px] hidden lg:flex flex-col pb-12">
 
             {/* Token Info / actions */}
             <div className="right-rail-panel token-info-panel">
@@ -1086,7 +1090,7 @@ export default function TradePage() {
         <div className="fixed inset-0 z-[100] lg:hidden">
           <div className={`absolute inset-0 bg-black/70 bg-opacity-50 transition-opacity duration-300 ${isClosingModal ? "opacity-0" : "opacity-100"}`} onClick={closeModal}/>
           <div ref={modalDragRef}
-               className={`absolute bottom-0 left-0 right-0 bg-[#0f1012] rounded-t-xl shadow-2xl max-h-[85vh] flex flex-col ${isClosingModal ? "mobile-trade-modal-closing" : "mobile-trade-modal"}`}
+               className={`absolute bottom-0 left-0 right-0 bg-[#111214] rounded-t-xl shadow-2xl max-h-[85vh] flex flex-col ${isClosingModal ? "mobile-trade-modal-closing" : "mobile-trade-modal"}`}
                style={{ touchAction: "none" }}>
             <div className="flex justify-center pt-3 pb-2 cursor-grab active:cursor-grabbing select-none"
                  onTouchStart={handleDragStart} onTouchMove={handleDragMove} onTouchEnd={handleDragEnd}

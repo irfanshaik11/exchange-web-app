@@ -1,44 +1,85 @@
-import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
-import { FiExternalLink, FiX } from 'react-icons/fi';
-import { FaFilter, FaCaretDown } from 'react-icons/fa';
-import { RiExchangeDollarLine } from 'react-icons/ri';
-import { MdOutlineBubbleChart, MdRefresh } from 'react-icons/md';
-import { LuChefHat } from 'react-icons/lu';
-import { TfiTarget } from 'react-icons/tfi';
-import { HiOutlineCubeTransparent } from 'react-icons/hi2';
-import useCodexHolders from '../../hooks/useCodexHolders';
-import useSolanaTokenWebSocket, { type SolanaTokenHolder, type SolanaTopTrader } from '../../hooks/useSolanaTokenWebSocket';
-import useMonadHolders, { type MonadHolder } from '../../hooks/useMonadHolders';
-import { getWalletSolBalance } from '../../utils/walletTracking';
-import { useSolPrice } from '../SolPriceContext';
-import type { Token } from '~/utils/db';
-import WalletHoverCard, { type WalletHoverCardData } from './WalletHoverCard';
+import React, {
+  useState,
+  useEffect,
+  useRef,
+  useCallback,
+  useMemo,
+} from "react";
+import { FiExternalLink, FiX } from "react-icons/fi";
+import { FaFilter, FaCaretDown } from "react-icons/fa";
+import { RiExchangeDollarLine } from "react-icons/ri";
+import { MdOutlineBubbleChart, MdRefresh } from "react-icons/md";
+import { LuChefHat } from "react-icons/lu";
+import { TfiTarget } from "react-icons/tfi";
+import { SiSolana } from "react-icons/si";
+import { HiOutlineCubeTransparent } from "react-icons/hi2";
+import useCodexHolders from "../../hooks/useCodexHolders";
+import useSolanaTokenWebSocket, {
+  type SolanaTokenHolder,
+  type SolanaTopTrader,
+} from "../../hooks/useSolanaTokenWebSocket";
+import useMonadHolders, { type MonadHolder } from "../../hooks/useMonadHolders";
+import { getWalletSolBalance } from "../../utils/walletTracking";
+import { useSolPrice } from "../SolPriceContext";
+import type { Token } from "~/utils/db";
+import WalletHoverCard, { type WalletHoverCardData } from "./WalletHoverCard";
+import { CiFilter } from "react-icons/ci";
 
 // Official Solana logo component (imported from Footer pattern)
 const SolanaIcon = ({ size = 16 }: { size?: number }) => (
   <svg width={size} height={size} viewBox="0 0 397.7 311.7" fill="currentColor">
     <defs>
-      <linearGradient id="solanaGradientHolders" x1="360.8791" y1="351.4553" x2="141.213" y2="-69.2936" gradientUnits="userSpaceOnUse">
+      <linearGradient
+        id="solanaGradientHolders"
+        x1="360.8791"
+        y1="351.4553"
+        x2="141.213"
+        y2="-69.2936"
+        gradientUnits="userSpaceOnUse"
+      >
         <stop offset="0" stopColor="#00FFA3" />
         <stop offset="1" stopColor="#DC1FFF" />
       </linearGradient>
-      <linearGradient id="solanaGradient2Holders" x1="264.8291" y1="401.6014" x2="45.163" y2="-19.1475" gradientUnits="userSpaceOnUse">
+      <linearGradient
+        id="solanaGradient2Holders"
+        x1="264.8291"
+        y1="401.6014"
+        x2="45.163"
+        y2="-19.1475"
+        gradientUnits="userSpaceOnUse"
+      >
         <stop offset="0" stopColor="#00FFA3" />
         <stop offset="1" stopColor="#DC1FFF" />
       </linearGradient>
-      <linearGradient id="solanaGradient3Holders" x1="312.5484" y1="376.688" x2="92.8822" y2="-44.061" gradientUnits="userSpaceOnUse">
+      <linearGradient
+        id="solanaGradient3Holders"
+        x1="312.5484"
+        y1="376.688"
+        x2="92.8822"
+        y2="-44.061"
+        gradientUnits="userSpaceOnUse"
+      >
         <stop offset="0" stopColor="#00FFA3" />
         <stop offset="1" stopColor="#DC1FFF" />
       </linearGradient>
     </defs>
-    <path d="M64.6,237.9c2.4-2.4,5.7-3.8,9.2-3.8h317.4c5.8,0,8.7,7,4.6,11.1l-62.7,62.7c-2.4,2.4-5.7,3.8-9.2,3.8H6.5c-5.8,0-8.7-7-4.6-11.1L64.6,237.9z" fill="url(#solanaGradientHolders)" />
-    <path d="M64.6,3.8C67.1,1.4,70.4,0,73.8,0h317.4c5.8,0,8.7,7,4.6,11.1l-62.7,62.7c-2.4,2.4-5.7,3.8-9.2,3.8H6.5c-5.8,0-8.7-7-4.6-11.1L64.6,3.8z" fill="url(#solanaGradient2Holders)" />
-    <path d="M333.1,120.1c-2.4-2.4-5.7-3.8-9.2-3.8H6.5c-5.8,0-8.7,7-4.6,11.1l62.7,62.7c2.4,2.4,5.7,3.8,9.2,3.8h317.4c5.8,0,8.7-7,4.6-11.1L333.1,120.1z" fill="url(#solanaGradient3Holders)" />
+    <path
+      d="M64.6,237.9c2.4-2.4,5.7-3.8,9.2-3.8h317.4c5.8,0,8.7,7,4.6,11.1l-62.7,62.7c-2.4,2.4-5.7,3.8-9.2,3.8H6.5c-5.8,0-8.7-7-4.6-11.1L64.6,237.9z"
+      fill="url(#solanaGradientHolders)"
+    />
+    <path
+      d="M64.6,3.8C67.1,1.4,70.4,0,73.8,0h317.4c5.8,0,8.7,7,4.6,11.1l-62.7,62.7c-2.4,2.4-5.7,3.8-9.2,3.8H6.5c-5.8,0-8.7-7-4.6-11.1L64.6,3.8z"
+      fill="url(#solanaGradient2Holders)"
+    />
+    <path
+      d="M333.1,120.1c-2.4-2.4-5.7-3.8-9.2-3.8H6.5c-5.8,0-8.7,7-4.6,11.1l62.7,62.7c2.4,2.4,5.7,3.8,9.2,3.8h317.4c5.8,0,8.7-7,4.6-11.1L333.1,120.1z"
+      fill="url(#solanaGradient3Holders)"
+    />
   </svg>
 );
 
 // Sort direction type
-type SortDirection = 'asc' | 'desc' | null;
+type SortDirection = "asc" | "desc" | null;
 
 // Filter range type
 interface FilterRange {
@@ -47,7 +88,7 @@ interface FilterRange {
 }
 
 // Holder type tags available for filtering
-type HolderTypeTag = 'dev' | 'sniper' | 'bundler';
+type HolderTypeTag = "dev" | "sniper" | "bundler";
 
 // Wallet filter state
 interface WalletFilter {
@@ -74,7 +115,8 @@ interface HoldersTableProps {
   onBubblemapToggle?: (show: boolean) => void;
   isBubblemapVisible?: boolean;
   containerWidth?: number;
-  chain?: 'sol' | 'monad'; // Chain to determine which endpoint to use
+  chain?: "sol" | "monad"; // Chain to determine which endpoint to use
+  onTotalCountChange?: (count: number) => void; // Callback to pass total count to parent
 }
 
 interface HolderWithBalance {
@@ -90,11 +132,11 @@ interface HolderWithBalance {
   tokenBalance: string;
   buys30d: number;
   sells30d: number;
-  holderType?: 'dev' | 'sniper' | 'bundler' | 'holder';
+  holderType?: "dev" | "sniper" | "bundler" | "holder";
 }
 
 function getTimeAgo(timestamp: number): string {
-  if (!timestamp) return 'N/A';
+  if (!timestamp) return "N/A";
   const now = Date.now() / 1000; // seconds
   const diffSeconds = now - timestamp;
   const diffMins = Math.floor(diffSeconds / 60);
@@ -108,22 +150,22 @@ function getTimeAgo(timestamp: number): string {
 }
 
 function shortAddr(addr: string): string {
-  if (!addr) return '';
-  return addr.slice(0, 8) + '...' + addr.slice(-4);
+  if (!addr) return "";
+  return addr.slice(0, 4) + "..." + addr.slice(-4);
 }
 
 function formatUsd(value: string | number | null | undefined): string {
-  if (!value) return '$0';
-  const num = typeof value === 'string' ? parseFloat(value) : value;
-  if (!Number.isFinite(num) || num === 0) return '$0';
+  if (!value) return "$0";
+  const num = typeof value === "string" ? parseFloat(value) : value;
+  if (!Number.isFinite(num) || num === 0) return "$0";
   if (num >= 1000) return `$${(num / 1000).toFixed(1)}K`;
   return `$${num.toFixed(2)}`;
 }
 
 function formatNumber(value: string | number | null | undefined): string {
-  if (!value) return '0';
-  const num = typeof value === 'string' ? parseFloat(value) : value;
-  if (!Number.isFinite(num) || num === 0) return '0';
+  if (!value) return "0";
+  const num = typeof value === "string" ? parseFloat(value) : value;
+  if (!Number.isFinite(num) || num === 0) return "0";
   if (num >= 1e9) return `${(num / 1e9).toFixed(1)}B`;
   if (num >= 1e6) return `${(num / 1e6).toFixed(1)}M`;
   if (num >= 1e3) return `${(num / 1e3).toFixed(1)}K`;
@@ -131,15 +173,15 @@ function formatNumber(value: string | number | null | undefined): string {
 }
 
 function formatPercentage(value: number | null | undefined): string {
-  if (!value || !Number.isFinite(value) || value === 0) return '0%';
-  if (value < 0.01) return value.toFixed(3) + '%';
-  if (value < 1) return value.toFixed(2) + '%';
-  return value.toFixed(2) + '%';
+  if (!value || !Number.isFinite(value) || value === 0) return "0%";
+  if (value < 0.01) return value.toFixed(3) + "%";
+  if (value < 1) return value.toFixed(2) + "%";
+  return value.toFixed(2) + "%";
 }
 
 // Convert funding age to hours (if < 24h) or days format
 function formatFundingAge(timeAgo: string): string {
-  if (!timeAgo) return 'N/A';
+  if (!timeAgo) return "N/A";
 
   // Parse the time string and convert to hours
   const match = timeAgo.match(/^(\d+)(s|m|h|d|mo|y)$/i);
@@ -150,13 +192,26 @@ function formatFundingAge(timeAgo: string): string {
 
   let totalHours = 0;
   switch (unit) {
-    case 's': totalHours = value / 3600; break;
-    case 'm': totalHours = value / 60; break;
-    case 'h': totalHours = value; break;
-    case 'd': totalHours = value * 24; break;
-    case 'mo': totalHours = value * 30 * 24; break;
-    case 'y': totalHours = value * 365 * 24; break;
-    default: return timeAgo;
+    case "s":
+      totalHours = value / 3600;
+      break;
+    case "m":
+      totalHours = value / 60;
+      break;
+    case "h":
+      totalHours = value;
+      break;
+    case "d":
+      totalHours = value * 24;
+      break;
+    case "mo":
+      totalHours = value * 30 * 24;
+      break;
+    case "y":
+      totalHours = value * 365 * 24;
+      break;
+    default:
+      return timeAgo;
   }
 
   // If less than 24 hours, show hours
@@ -173,38 +228,66 @@ function calculateRemaining(
   tokenBalance: string,
   currentPrice?: number,
   marketCapUsd?: number,
-  decimals?: number
+  decimals?: number,
 ): { value: number; percentage: number } {
-  if (!currentPrice || currentPrice <= 0 || !marketCapUsd || marketCapUsd <= 0) {
+  if (
+    !currentPrice ||
+    currentPrice <= 0 ||
+    !marketCapUsd ||
+    marketCapUsd <= 0
+  ) {
     return { value: 0, percentage: 0 };
   }
-  
+
   const balance = parseFloat(tokenBalance) || 0;
   if (balance === 0) return { value: 0, percentage: 0 };
-  
+
   // Adjust balance for decimals if needed
   let adjustedBalance = balance;
   if (decimals && balance > 0 && balance > 1e15) {
     adjustedBalance = balance / Math.pow(10, decimals);
   }
-  
+
   // Calculate current USD value of remaining tokens
   const currentValue = adjustedBalance * currentPrice;
-  
+
   // Calculate percentage of market cap
   const percentage = (currentValue / marketCapUsd) * 100;
-  
+
   return { value: currentValue, percentage };
 }
 
-function getFundingSource(address: string, index: number): { source: string; sourceAddress: string | null; timeAgo: string; solAmount: number } {
+function getFundingSource(
+  address: string,
+  index: number,
+): {
+  source: string;
+  sourceAddress: string | null;
+  timeAgo: string;
+  solAmount: number;
+} {
   // Generate placeholder funding data
   // sourceAddress is the full address for links, source is the display name
   const sources = [
-    { source: shortAddr(address), sourceAddress: address, timeAgo: '21h', solAmount: 0.023 },
-    { source: shortAddr(address), sourceAddress: address, timeAgo: '3mo', solAmount: 0.022 },
-    { source: 'Kucoin', sourceAddress: null, timeAgo: '3y', solAmount: 1 }, // Exchange, no direct link
-    { source: shortAddr(address), sourceAddress: address, timeAgo: '3d', solAmount: 10.22 },
+    {
+      source: shortAddr(address),
+      sourceAddress: address,
+      timeAgo: "21h",
+      solAmount: 0.023,
+    },
+    {
+      source: shortAddr(address),
+      sourceAddress: address,
+      timeAgo: "3mo",
+      solAmount: 0.022,
+    },
+    { source: "Kucoin", sourceAddress: null, timeAgo: "3y", solAmount: 1 }, // Exchange, no direct link
+    {
+      source: shortAddr(address),
+      sourceAddress: address,
+      timeAgo: "3d",
+      solAmount: 10.22,
+    },
   ];
 
   return sources[index % sources.length];
@@ -214,20 +297,20 @@ function calculateUnrealizedPnL(
   tokenBalance: string,
   tokenAcquisitionCostUsd: string,
   currentPrice?: number,
-  decimals?: number
+  decimals?: number,
 ): number {
   if (!currentPrice || currentPrice <= 0) return 0;
   const balance = parseFloat(tokenBalance) || 0;
   const cost = parseFloat(tokenAcquisitionCostUsd) || 0;
   if (balance === 0 || cost === 0) return 0;
-  
+
   // Adjust balance for decimals if needed (assuming tokenBalance might be in raw units)
   // If decimals are provided and balance seems too large, adjust it
   let adjustedBalance = balance;
   if (decimals && balance > 0 && balance > 1e15) {
     adjustedBalance = balance / Math.pow(10, decimals);
   }
-  
+
   // Unrealized PnL = (current token value) - (acquisition cost)
   // current token value = balance * currentPrice
   const currentValue = adjustedBalance * currentPrice;
@@ -235,7 +318,7 @@ function calculateUnrealizedPnL(
 }
 
 const AX = {
-  bg: "#101114",
+  bg: "#111214",
   surface: "#1E1F26",
   surface2: "#17191E",
   border: "#2A2B33",
@@ -280,14 +363,20 @@ const FilterPopout: React.FC<FilterPopoutProps> = ({
         borderColor: AX.border,
         top: position.top,
         left: position.left,
-        minWidth: '280px',
+        minWidth: "280px",
       }}
       onClick={(e) => e.stopPropagation()}
     >
       <div className="p-4">
-        <div className="flex items-center justify-between mb-3">
-          <span className="text-sm font-medium" style={{ color: AX.text }}>{title}</span>
-          <button onClick={onClose} className="p-1 rounded hover:bg-opacity-20" style={{ color: AX.muted }}>
+        <div className="mb-3 flex items-center justify-between">
+          <span className="text-sm font-medium" style={{ color: AX.text }}>
+            {title}
+          </span>
+          <button
+            onClick={onClose}
+            className="hover:bg-opacity-20 rounded p-1"
+            style={{ color: AX.muted }}
+          >
             <FiX size={14} />
           </button>
         </div>
@@ -300,26 +389,28 @@ const FilterPopout: React.FC<FilterPopoutProps> = ({
               value={range.min}
               onChange={(e) => {
                 const val = e.target.value;
-                if (val === '' || /^-?\d*\.?\d*$/.test(val)) {
+                if (val === "" || /^-?\d*\.?\d*$/.test(val)) {
                   onRangeChange({ ...range, min: val });
                 }
               }}
-              className="w-full px-3 py-2 text-sm rounded border"
+              className="w-full rounded border px-3 py-2 text-sm"
               style={{
                 backgroundColor: AX.surface2,
                 borderColor: AX.border,
                 color: AX.text,
-                outline: 'none',
+                outline: "none",
               }}
             />
             <div
-              className="text-center text-xs mt-1 px-2 py-1 rounded"
+              className="mt-1 rounded px-2 py-1 text-center text-[13px]"
               style={{ backgroundColor: AX.surface2, color: AX.muted }}
             >
               {unit}
             </div>
           </div>
-          <span className="text-sm" style={{ color: AX.muted }}>to</span>
+          <span className="text-sm" style={{ color: AX.muted }}>
+            to
+          </span>
           <div className="flex-1">
             <input
               type="text"
@@ -328,30 +419,30 @@ const FilterPopout: React.FC<FilterPopoutProps> = ({
               value={range.max}
               onChange={(e) => {
                 const val = e.target.value;
-                if (val === '' || /^-?\d*\.?\d*$/.test(val)) {
+                if (val === "" || /^-?\d*\.?\d*$/.test(val)) {
                   onRangeChange({ ...range, max: val });
                 }
               }}
-              className="w-full px-3 py-2 text-sm rounded border"
+              className="w-full rounded border px-3 py-2 text-sm"
               style={{
                 backgroundColor: AX.surface2,
                 borderColor: AX.border,
                 color: AX.text,
-                outline: 'none',
+                outline: "none",
               }}
             />
             <div
-              className="text-center text-xs mt-1 px-2 py-1 rounded"
+              className="mt-1 rounded px-2 py-1 text-center text-[13px]"
               style={{ backgroundColor: AX.surface2, color: AX.muted }}
             >
               {unit}
             </div>
           </div>
         </div>
-        <div className="flex items-center justify-between mt-4">
+        <div className="mt-4 flex items-center justify-between">
           <button
             onClick={onReset}
-            className="flex items-center gap-1 px-3 py-1.5 text-sm rounded hover:opacity-80 transition-opacity"
+            className="flex items-center gap-1 rounded px-3 py-1.5 text-sm transition-opacity hover:opacity-80"
             style={{ color: AX.muted }}
           >
             <MdRefresh size={14} />
@@ -359,7 +450,7 @@ const FilterPopout: React.FC<FilterPopoutProps> = ({
           </button>
           <button
             onClick={onApply}
-            className="px-4 py-1.5 text-sm rounded font-medium transition-colors"
+            className="rounded px-4 py-1.5 text-sm font-medium transition-colors"
             style={{ backgroundColor: AX.text, color: AX.bg }}
           >
             Apply
@@ -392,15 +483,35 @@ const WalletFilterPopout: React.FC<WalletFilterPopoutProps> = ({
 }) => {
   if (!isOpen) return null;
 
-  const tagOptions: { value: HolderTypeTag; label: string; color: string; icon: React.ReactNode }[] = [
-    { value: 'dev', label: 'DEV', color: '#facc15', icon: <LuChefHat size={12} className="text-yellow-400" /> },
-    { value: 'sniper', label: 'Sniper', color: '#f87171', icon: <TfiTarget size={12} className="text-red-400" /> },
-    { value: 'bundler', label: 'Bundler', color: '#fb923c', icon: <HiOutlineCubeTransparent size={12} className="text-orange-400" /> },
+  const tagOptions: {
+    value: HolderTypeTag;
+    label: string;
+    color: string;
+    icon: React.ReactNode;
+  }[] = [
+    {
+      value: "dev",
+      label: "DEV",
+      color: "#facc15",
+      icon: <LuChefHat size={12} className="text-yellow-400" />,
+    },
+    {
+      value: "sniper",
+      label: "Sniper",
+      color: "#f87171",
+      icon: <TfiTarget size={12} className="text-red-400" />,
+    },
+    {
+      value: "bundler",
+      label: "Bundler",
+      color: "#fb923c",
+      icon: <HiOutlineCubeTransparent size={12} className="text-orange-400" />,
+    },
   ];
 
   const handleTagToggle = (tag: HolderTypeTag) => {
     const newTags = filter.tags.includes(tag)
-      ? filter.tags.filter(t => t !== tag)
+      ? filter.tags.filter((t) => t !== tag)
       : [...filter.tags, tag];
     onFilterChange({ ...filter, tags: newTags });
   };
@@ -413,40 +524,58 @@ const WalletFilterPopout: React.FC<WalletFilterPopoutProps> = ({
         borderColor: AX.border,
         top: position.top,
         left: position.left,
-        minWidth: '280px',
+        minWidth: "280px",
       }}
       onClick={(e) => e.stopPropagation()}
     >
       <div className="p-4">
         {/* Header */}
-        <div className="flex items-center justify-between mb-3">
-          <span className="text-sm font-medium" style={{ color: AX.text }}>Filter Wallet</span>
-          <button onClick={onClose} className="p-1 rounded hover:bg-opacity-20" style={{ color: AX.muted }}>
+        <div className="mb-3 flex items-center justify-between">
+          <span className="text-sm font-medium" style={{ color: AX.text }}>
+            Filter Wallet
+          </span>
+          <button
+            onClick={onClose}
+            className="hover:bg-opacity-20 rounded p-1"
+            style={{ color: AX.muted }}
+          >
             <FiX size={14} />
           </button>
         </div>
 
         {/* Wallet Address Filter */}
         <div className="mb-4">
-          <label className="text-xs mb-1.5 block" style={{ color: AX.muted }}>Wallet Address</label>
+          <label
+            className="mb-1.5 block text-[13px]"
+            style={{ color: AX.muted }}
+          >
+            Wallet Address
+          </label>
           <input
             type="text"
             placeholder="Enter wallet address..."
             value={filter.address}
-            onChange={(e) => onFilterChange({ ...filter, address: e.target.value })}
-            className="w-full px-3 py-2 text-sm rounded border"
+            onChange={(e) =>
+              onFilterChange({ ...filter, address: e.target.value })
+            }
+            className="w-full rounded border px-3 py-2 text-sm"
             style={{
               backgroundColor: AX.surface2,
               borderColor: AX.border,
               color: AX.text,
-              outline: 'none',
+              outline: "none",
             }}
           />
         </div>
 
         {/* Tag Filters */}
         <div className="mb-4">
-          <label className="text-xs mb-1.5 block" style={{ color: AX.muted }}>Filter by Tag</label>
+          <label
+            className="mb-1.5 block text-[13px]"
+            style={{ color: AX.muted }}
+          >
+            Filter by Tag
+          </label>
           <div className="flex flex-wrap gap-2">
             {tagOptions.map((opt) => {
               const isSelected = filter.tags.includes(opt.value);
@@ -454,9 +583,11 @@ const WalletFilterPopout: React.FC<WalletFilterPopoutProps> = ({
                 <button
                   key={opt.value}
                   onClick={() => handleTagToggle(opt.value)}
-                  className="flex items-center gap-1.5 px-2.5 py-1.5 rounded text-xs font-medium transition-colors"
+                  className="flex items-center gap-1.5 rounded px-2.5 py-1.5 text-[13px] font-medium transition-colors"
                   style={{
-                    backgroundColor: isSelected ? `${opt.color}20` : AX.surface2,
+                    backgroundColor: isSelected
+                      ? `${opt.color}20`
+                      : AX.surface2,
                     border: `1px solid ${isSelected ? opt.color : AX.border}`,
                     color: isSelected ? opt.color : AX.muted,
                   }}
@@ -470,10 +601,10 @@ const WalletFilterPopout: React.FC<WalletFilterPopoutProps> = ({
         </div>
 
         {/* Action Buttons */}
-        <div className="flex items-center justify-between mt-4">
+        <div className="mt-4 flex items-center justify-between">
           <button
             onClick={onReset}
-            className="flex items-center gap-1 px-3 py-1.5 text-sm rounded hover:opacity-80 transition-opacity"
+            className="flex items-center gap-1 rounded px-3 py-1.5 text-sm transition-opacity hover:opacity-80"
             style={{ color: AX.muted }}
           >
             <MdRefresh size={14} />
@@ -481,7 +612,7 @@ const WalletFilterPopout: React.FC<WalletFilterPopoutProps> = ({
           </button>
           <button
             onClick={onApply}
-            className="px-4 py-1.5 text-sm rounded font-medium transition-colors"
+            className="rounded px-4 py-1.5 text-sm font-medium transition-colors"
             style={{ backgroundColor: AX.text, color: AX.bg }}
           >
             Apply
@@ -513,14 +644,15 @@ const SortableHeader: React.FC<SortableHeaderProps> = ({
   <div className="flex items-center gap-0.5">
     <button
       onClick={onSort}
-      className="flex items-center gap-0.5 hover:opacity-80 transition-opacity cursor-pointer"
-      style={{ color: sortDirection ? AX.mint : AX.muted }}
+      className="flex cursor-pointer items-center gap-0.5 transition-opacity hover:opacity-80"
+      style={{ color: sortDirection ? AX.mint : '#757e80' }}
     >
-      <span className="text-[11px]">{label}</span>
+      <span className="font-normal">{label}</span>
       <FaCaretDown
         size={8}
         style={{
-          transform: sortDirection === 'asc' ? 'rotate(180deg)' : 'rotate(0deg)',
+          transform:
+            sortDirection === "asc" ? "rotate(180deg)" : "rotate(0deg)",
           opacity: sortDirection ? 1 : 0.5,
         }}
       />
@@ -528,10 +660,10 @@ const SortableHeader: React.FC<SortableHeaderProps> = ({
     {hasFilter && (
       <button
         onClick={onFilterClick}
-        className="p-0.5 rounded hover:bg-opacity-20 transition-colors"
+        className="hover:bg-opacity-20 rounded p-0.5 transition-colors"
         style={{ color: isFilterActive ? AX.mint : AX.muted }}
       >
-        <FaFilter size={8} />
+        <CiFilter size={14} />
       </button>
     )}
   </div>
@@ -542,48 +674,67 @@ const HoldersTable: React.FC<HoldersTableProps> = ({
   onBubblemapToggle,
   isBubblemapVisible = false,
   containerWidth = 1000,
-  chain = 'sol',
+  chain = "sol",
+  onTotalCountChange,
 }) => {
   // Get SOL price for USD/SOL conversion
   const { solPrice, monPrice } = useSolPrice();
-  const chainPrice = chain === 'monad' ? monPrice : solPrice;
+  const chainPrice = chain === "monad" ? monPrice : solPrice;
 
   // USD/SOL toggle state for Remaining column
   const [showRemainingInSol, setShowRemainingInSol] = useState(false);
 
   // Filter states
   const initialFilters: ColumnFilters = {
-    solBal: { sort: null, range: { min: '', max: '' } },
-    lastActive: { sort: null, range: { min: '', max: '' } },
-    bought: { sort: null, range: { min: '', max: '' } },
-    avgBuy: { sort: null, range: { min: '', max: '' } },
-    sold: { sort: null, range: { min: '', max: '' } },
-    avgSell: { sort: null, range: { min: '', max: '' } },
-    pnl: { sort: null, range: { min: '', max: '' } },
-    remaining: { sort: null, range: { min: '', max: '' } },
-    funding: { sort: null, range: { min: '', max: '' } },
-    tfAmount: { sort: null, range: { min: '', max: '' } },
+    solBal: { sort: null, range: { min: "", max: "" } },
+    lastActive: { sort: null, range: { min: "", max: "" } },
+    bought: { sort: null, range: { min: "", max: "" } },
+    avgBuy: { sort: null, range: { min: "", max: "" } },
+    sold: { sort: null, range: { min: "", max: "" } },
+    avgSell: { sort: null, range: { min: "", max: "" } },
+    pnl: { sort: null, range: { min: "", max: "" } },
+    remaining: { sort: null, range: { min: "", max: "" } },
+    funding: { sort: null, range: { min: "", max: "" } },
+    tfAmount: { sort: null, range: { min: "", max: "" } },
   };
   const [filters, setFilters] = useState<ColumnFilters>(initialFilters);
-  const [activeFilterPopout, setActiveFilterPopout] = useState<keyof ColumnFilters | null>(null);
-  const [filterPopoutPosition, setFilterPopoutPosition] = useState({ top: 0, left: 0 });
-  const [tempFilterRange, setTempFilterRange] = useState<FilterRange>({ min: '', max: '' });
+  const [activeFilterPopout, setActiveFilterPopout] = useState<
+    keyof ColumnFilters | null
+  >(null);
+  const [filterPopoutPosition, setFilterPopoutPosition] = useState({
+    top: 0,
+    left: 0,
+  });
+  const [tempFilterRange, setTempFilterRange] = useState<FilterRange>({
+    min: "",
+    max: "",
+  });
 
   // Wallet filter state
-  const [walletFilter, setWalletFilter] = useState<WalletFilter>({ address: '', tags: [] });
+  const [walletFilter, setWalletFilter] = useState<WalletFilter>({
+    address: "",
+    tags: [],
+  });
   const [walletFilterPopoutOpen, setWalletFilterPopoutOpen] = useState(false);
-  const [tempWalletFilter, setTempWalletFilter] = useState<WalletFilter>({ address: '', tags: [] });
+  const [tempWalletFilter, setTempWalletFilter] = useState<WalletFilter>({
+    address: "",
+    tags: [],
+  });
 
   // Use Solana WebSocket for holders (Solana chain)
-  const { holders: wsHolders, topTraders: wsTopTraders, loading: wsLoading } = useSolanaTokenWebSocket({
+  const {
+    holders: wsHolders,
+    topTraders: wsTopTraders,
+    loading: wsLoading,
+  } = useSolanaTokenWebSocket({
     mintAddress: token?.mint,
-    enabled: chain === 'sol' && !!token?.mint,
+    enabled: chain === "sol" && !!token?.mint,
   });
 
   // Create a lookup map of wallet addresses to full holder data for hover cards
   const walletDataMap = useMemo(() => {
     const map = new Map<string, WalletHoverCardData>();
-    if (chain === 'sol') {
+    if (chain === "sol") {
       // First, populate with holder data from WebSocket
       if (wsHolders) {
         for (const holder of wsHolders) {
@@ -598,7 +749,9 @@ const HoldersTable: React.FC<HoldersTableProps> = ({
               sellCount: holder.sell_count,
               avgSellPrice: holder.avg_sell_price,
               remainingTokens: holder.remaining_tokens,
-              solBalance: holder.sol_balance_lamports ? holder.sol_balance_lamports / 1e9 : undefined,
+              solBalance: holder.sol_balance_lamports
+                ? holder.sol_balance_lamports / 1e9
+                : undefined,
               firstBuyAt: holder.first_buy_at,
               lastActivityAt: holder.last_activity_at,
               holderType: holder.holder_type,
@@ -638,39 +791,48 @@ const HoldersTable: React.FC<HoldersTableProps> = ({
   }, [chain, wsHolders, wsTopTraders]);
 
   // Use Monad hook for holders (Monad chain)
-  const { holders: monadHolders, isLoading: monadLoading, error: monadError } = useMonadHolders(
-    token?.mint,
-    { enabled: chain === 'monad' && !!token?.mint }
-  );
+  const {
+    holders: monadHolders,
+    isLoading: monadLoading,
+    error: monadError,
+  } = useMonadHolders(token?.mint, {
+    enabled: chain === "monad" && !!token?.mint,
+  });
 
   // Fallback to Codex if WebSocket holders are empty (Solana only)
-  const { holders: codexHolders, isLoading: codexLoading, error: codexError } = useCodexHolders(
-    chain === 'sol' ? token?.mint : undefined
-  );
+  const {
+    holders: codexHolders,
+    isLoading: codexLoading,
+    error: codexError,
+  } = useCodexHolders(chain === "sol" ? token?.mint : undefined);
 
   // Prefer WebSocket holders, fall back to Codex (Solana only)
   // Only use WebSocket data if it's not loading AND has data
   const wsFinished = !wsLoading;
-  const useWebSocketData = chain === 'sol' && wsFinished && wsHolders && wsHolders.length > 0;
+  const useWebSocketData =
+    chain === "sol" && wsFinished && wsHolders && wsHolders.length > 0;
   // Loading state based on chain
-  const isLoading = chain === 'sol'
-    ? (wsLoading || (!useWebSocketData && codexLoading))
-    : monadLoading;
-  const error = chain === 'sol'
-    ? (useWebSocketData ? null : codexError)
-    : monadError;
+  const isLoading =
+    chain === "sol"
+      ? wsLoading || (!useWebSocketData && codexLoading)
+      : monadLoading;
+  const error =
+    chain === "sol" ? (useWebSocketData ? null : codexError) : monadError;
 
-  const [holdersWithBalances, setHoldersWithBalances] = useState<HolderWithBalance[]>([]);
+  const [holdersWithBalances, setHoldersWithBalances] = useState<
+    HolderWithBalance[]
+  >([]);
   const tableRef = useRef<HTMLDivElement>(null);
 
   // Handle sort toggle
   const handleSort = useCallback((column: keyof ColumnFilters) => {
-    setFilters(prev => {
+    setFilters((prev) => {
       const currentSort = prev[column].sort;
-      const newSort: SortDirection = currentSort === null ? 'desc' : currentSort === 'desc' ? 'asc' : null;
+      const newSort: SortDirection =
+        currentSort === null ? "desc" : currentSort === "desc" ? "asc" : null;
       // Reset other sorts
       const newFilters = { ...initialFilters };
-      Object.keys(newFilters).forEach(key => {
+      Object.keys(newFilters).forEach((key) => {
         newFilters[key as keyof ColumnFilters] = {
           ...prev[key as keyof ColumnFilters],
           sort: null,
@@ -682,20 +844,29 @@ const HoldersTable: React.FC<HoldersTableProps> = ({
   }, []);
 
   // Handle filter popout open
-  const handleFilterClick = useCallback((column: keyof ColumnFilters, e: React.MouseEvent) => {
-    e.stopPropagation();
-    const rect = (e.target as HTMLElement).getBoundingClientRect();
-    setFilterPopoutPosition({ top: rect.bottom + 8, left: Math.max(8, rect.left - 100) });
-    setTempFilterRange(filters[column].range);
-    setActiveFilterPopout(activeFilterPopout === column ? null : column);
-  }, [activeFilterPopout, filters]);
+  const handleFilterClick = useCallback(
+    (column: keyof ColumnFilters, e: React.MouseEvent) => {
+      e.stopPropagation();
+      const rect = (e.target as HTMLElement).getBoundingClientRect();
+      setFilterPopoutPosition({
+        top: rect.bottom + 8,
+        left: Math.max(8, rect.left - 100),
+      });
+      setTempFilterRange(filters[column].range);
+      setActiveFilterPopout(activeFilterPopout === column ? null : column);
+    },
+    [activeFilterPopout, filters],
+  );
 
   // Handle filter apply
   const handleFilterApply = useCallback(() => {
     if (activeFilterPopout) {
-      setFilters(prev => ({
+      setFilters((prev) => ({
         ...prev,
-        [activeFilterPopout]: { ...prev[activeFilterPopout], range: tempFilterRange },
+        [activeFilterPopout]: {
+          ...prev[activeFilterPopout],
+          range: tempFilterRange,
+        },
       }));
       setActiveFilterPopout(null);
     }
@@ -703,11 +874,14 @@ const HoldersTable: React.FC<HoldersTableProps> = ({
 
   // Handle filter reset
   const handleFilterReset = useCallback(() => {
-    setTempFilterRange({ min: '', max: '' });
+    setTempFilterRange({ min: "", max: "" });
     if (activeFilterPopout) {
-      setFilters(prev => ({
+      setFilters((prev) => ({
         ...prev,
-        [activeFilterPopout]: { ...prev[activeFilterPopout], range: { min: '', max: '' } },
+        [activeFilterPopout]: {
+          ...prev[activeFilterPopout],
+          range: { min: "", max: "" },
+        },
       }));
     }
   }, [activeFilterPopout]);
@@ -716,24 +890,30 @@ const HoldersTable: React.FC<HoldersTableProps> = ({
   useEffect(() => {
     const handleClickOutside = () => setActiveFilterPopout(null);
     if (activeFilterPopout) {
-      document.addEventListener('click', handleClickOutside);
-      return () => document.removeEventListener('click', handleClickOutside);
+      document.addEventListener("click", handleClickOutside);
+      return () => document.removeEventListener("click", handleClickOutside);
     }
   }, [activeFilterPopout]);
 
   // Check if a filter has active range
   const hasActiveRange = useCallback((range: FilterRange) => {
-    return range.min !== '' || range.max !== '';
+    return range.min !== "" || range.max !== "";
   }, []);
 
   // Handle wallet filter popout open
-  const handleWalletFilterClick = useCallback((e: React.MouseEvent) => {
-    e.stopPropagation();
-    const rect = (e.target as HTMLElement).getBoundingClientRect();
-    setFilterPopoutPosition({ top: rect.bottom + 8, left: Math.max(8, rect.left - 100) });
-    setTempWalletFilter(walletFilter);
-    setWalletFilterPopoutOpen(prev => !prev);
-  }, [walletFilter]);
+  const handleWalletFilterClick = useCallback(
+    (e: React.MouseEvent) => {
+      e.stopPropagation();
+      const rect = (e.target as HTMLElement).getBoundingClientRect();
+      setFilterPopoutPosition({
+        top: rect.bottom + 8,
+        left: Math.max(8, rect.left - 100),
+      });
+      setTempWalletFilter(walletFilter);
+      setWalletFilterPopoutOpen((prev) => !prev);
+    },
+    [walletFilter],
+  );
 
   // Handle wallet filter apply
   const handleWalletFilterApply = useCallback(() => {
@@ -743,15 +923,16 @@ const HoldersTable: React.FC<HoldersTableProps> = ({
 
   // Handle wallet filter reset
   const handleWalletFilterReset = useCallback(() => {
-    setTempWalletFilter({ address: '', tags: [] });
+    setTempWalletFilter({ address: "", tags: [] });
   }, []);
 
   // Check if wallet filter is active
-  const isWalletFilterActive = walletFilter.address !== '' || walletFilter.tags.length > 0;
+  const isWalletFilterActive =
+    walletFilter.address !== "" || walletFilter.tags.length > 0;
 
   // Convert holders to HolderWithBalance format based on chain
   const normalizedHolders = useMemo(() => {
-    if (chain === 'monad' && monadHolders && monadHolders.length > 0) {
+    if (chain === "monad" && monadHolders && monadHolders.length > 0) {
       // Use Monad holders data
       return monadHolders.map((h: MonadHolder) => ({
         address: h.wallet_address,
@@ -771,9 +952,12 @@ const HoldersTable: React.FC<HoldersTableProps> = ({
       // Use Solana WebSocket holders data
       return wsHolders.map((h: SolanaTokenHolder) => ({
         address: h.wallet_address,
-        lastTransactionAt: h.last_activity_at ? Math.floor(new Date(h.last_activity_at).getTime() / 1000) : 0,
+        lastTransactionAt: h.last_activity_at
+          ? Math.floor(new Date(h.last_activity_at).getTime() / 1000)
+          : 0,
         // Use sol_balance_lamports from WebSocket if available (convert lamports to SOL)
-        solBalance: h.sol_balance_lamports != null ? h.sol_balance_lamports / 1e9 : null,
+        solBalance:
+          h.sol_balance_lamports != null ? h.sol_balance_lamports / 1e9 : null,
         isLoadingBalance: h.sol_balance_lamports == null, // Only loading if not provided
         // Convert SOL amounts to USD (approximate, using SOL price ~$200)
         amountBoughtUsd30d: String(h.total_bought_sol * 200),
@@ -786,9 +970,9 @@ const HoldersTable: React.FC<HoldersTableProps> = ({
         sells30d: h.sell_count,
         holderType: h.holder_type,
       }));
-    } else if (chain === 'sol' && codexHolders && codexHolders.length > 0) {
+    } else if (chain === "sol" && codexHolders && codexHolders.length > 0) {
       // Use Codex holders data (Solana fallback)
-      return codexHolders.map(h => ({
+      return codexHolders.map((h) => ({
         address: h.address,
         lastTransactionAt: h.lastTransactionAt,
         solBalance: null,
@@ -806,6 +990,13 @@ const HoldersTable: React.FC<HoldersTableProps> = ({
     return [];
   }, [chain, monadHolders, useWebSocketData, wsHolders, codexHolders]);
 
+  // Notify parent of total count changes
+  useEffect(() => {
+    if (onTotalCountChange) {
+      onTotalCountChange(normalizedHolders.length);
+    }
+  }, [normalizedHolders.length, onTotalCountChange]);
+
   // Fetch SOL balances for holders (only for Solana chain and only if not provided by WebSocket)
   useEffect(() => {
     if (normalizedHolders.length === 0) {
@@ -817,12 +1008,14 @@ const HoldersTable: React.FC<HoldersTableProps> = ({
     setHoldersWithBalances(normalizedHolders);
 
     // Skip balance fetching for Monad (already included in data)
-    if (chain === 'monad') {
+    if (chain === "monad") {
       return;
     }
 
     // Filter holders that need balance fetching (those without sol_balance from WebSocket)
-    const holdersNeedingBalance = normalizedHolders.filter(h => h.solBalance === null && h.isLoadingBalance);
+    const holdersNeedingBalance = normalizedHolders.filter(
+      (h) => h.solBalance === null && h.isLoadingBalance,
+    );
 
     // If all holders already have balance from WebSocket, skip fetching
     if (holdersNeedingBalance.length === 0) {
@@ -839,16 +1032,19 @@ const HoldersTable: React.FC<HoldersTableProps> = ({
             const balance = await getWalletSolBalance(holder.address);
             return { address: holder.address, balance };
           } catch (error) {
-            console.error(`Failed to fetch balance for ${holder.address}:`, error);
+            console.error(
+              `Failed to fetch balance for ${holder.address}:`,
+              error,
+            );
             return { address: holder.address, balance: null };
           }
         });
 
         const results = await Promise.all(balancePromises);
 
-        setHoldersWithBalances(prev =>
-          prev.map(h => {
-            const result = results.find(r => r.address === h.address);
+        setHoldersWithBalances((prev) =>
+          prev.map((h) => {
+            const result = results.find((r) => r.address === h.address);
             if (result) {
               return {
                 ...h,
@@ -857,12 +1053,12 @@ const HoldersTable: React.FC<HoldersTableProps> = ({
               };
             }
             return h;
-          })
+          }),
         );
 
         // Small delay between batches to avoid rate limiting
         if (i + batchSize < holdersNeedingBalance.length) {
-          await new Promise(resolve => setTimeout(resolve, 200));
+          await new Promise((resolve) => setTimeout(resolve, 200));
         }
       }
     };
@@ -882,20 +1078,19 @@ const HoldersTable: React.FC<HoldersTableProps> = ({
     }
   }, [onBubblemapToggle]);
 
-
   // Get filter popout title based on column
   const getFilterTitle = (column: keyof ColumnFilters): string => {
     const titles: Record<keyof ColumnFilters, string> = {
-      solBal: chain === 'monad' ? 'MON Balance' : 'SOL Bal',
-      lastActive: 'Last Active',
-      bought: 'Bought',
-      avgBuy: 'Avg Buy',
-      sold: 'Sold',
-      avgSell: 'Avg Sell',
-      pnl: 'PNL',
-      remaining: 'Remaining',
-      funding: 'Funding',
-      tfAmount: 'TF Amount',
+      solBal: chain === "monad" ? "MON Balance" : "SOL Bal",
+      lastActive: "Last Active",
+      bought: "Bought",
+      avgBuy: "Avg Buy",
+      sold: "Sold",
+      avgSell: "Avg Sell",
+      pnl: "PNL",
+      remaining: "Remaining",
+      funding: "Funding",
+      tfAmount: "TF Amount",
     };
     return titles[column];
   };
@@ -903,16 +1098,20 @@ const HoldersTable: React.FC<HoldersTableProps> = ({
   // Get filter unit based on column
   const getFilterUnit = (column: keyof ColumnFilters): string => {
     const units: Record<keyof ColumnFilters, string> = {
-      solBal: chain === 'monad' ? 'MON' : 'SOL',
-      lastActive: 'hours',
-      bought: 'USD',
-      avgBuy: 'USD',
-      sold: 'USD',
-      avgSell: 'USD',
-      pnl: 'USD',
-      remaining: showRemainingInSol ? (chain === 'monad' ? 'MON' : 'SOL') : 'USD',
-      funding: chain === 'monad' ? 'MON' : 'SOL',
-      tfAmount: chain === 'monad' ? 'MON' : 'SOL',
+      solBal: chain === "monad" ? "MON" : "SOL",
+      lastActive: "hours",
+      bought: "USD",
+      avgBuy: "USD",
+      sold: "USD",
+      avgSell: "USD",
+      pnl: "USD",
+      remaining: showRemainingInSol
+        ? chain === "monad"
+          ? "MON"
+          : "SOL"
+        : "USD",
+      funding: chain === "monad" ? "MON" : "SOL",
+      tfAmount: chain === "monad" ? "MON" : "SOL",
     };
     return units[column];
   };
@@ -924,39 +1123,52 @@ const HoldersTable: React.FC<HoldersTableProps> = ({
     // Apply range filters
     Object.entries(filters).forEach(([key, filter]) => {
       const range = filter.range;
-      if (range.min !== '' || range.max !== '') {
-        const minVal = range.min !== '' ? parseFloat(range.min) : -Infinity;
-        const maxVal = range.max !== '' ? parseFloat(range.max) : Infinity;
+      if (range.min !== "" || range.max !== "") {
+        const minVal = range.min !== "" ? parseFloat(range.min) : -Infinity;
+        const maxVal = range.max !== "" ? parseFloat(range.max) : Infinity;
 
-        result = result.filter(holder => {
+        result = result.filter((holder) => {
           let value: number;
           switch (key) {
-            case 'solBal':
+            case "solBal":
               value = holder.solBalance ?? 0;
               break;
-            case 'lastActive':
+            case "lastActive":
               value = (Date.now() / 1000 - holder.lastTransactionAt) / 3600; // hours
               break;
-            case 'bought':
+            case "bought":
               value = parseFloat(holder.amountBoughtUsd30d) || 0;
               break;
-            case 'avgBuy':
+            case "avgBuy":
               const buys = holder.buys30d || 1;
               value = (parseFloat(holder.amountBoughtUsd30d) || 0) / buys;
               break;
-            case 'sold':
+            case "sold":
               value = parseFloat(holder.amountSoldUsd30d) || 0;
               break;
-            case 'avgSell':
+            case "avgSell":
               const sells = holder.sells30d || 1;
               value = (parseFloat(holder.amountSoldUsd30d) || 0) / sells;
               break;
-            case 'pnl':
-              value = calculateUnrealizedPnL(holder.tokenBalance, holder.tokenAcquisitionCostUsd, token?.usd_price, token?.decimals);
+            case "pnl":
+              value = calculateUnrealizedPnL(
+                holder.tokenBalance,
+                holder.tokenAcquisitionCostUsd,
+                token?.usd_price,
+                token?.decimals,
+              );
               break;
-            case 'remaining':
-              const rem = calculateRemaining(holder.tokenBalance, token?.usd_price, token?.market_cap_usd, token?.decimals);
-              value = showRemainingInSol && chainPrice > 0 ? rem.value / chainPrice : rem.value;
+            case "remaining":
+              const rem = calculateRemaining(
+                holder.tokenBalance,
+                token?.usd_price,
+                token?.market_cap_usd,
+                token?.decimals,
+              );
+              value =
+                showRemainingInSol && chainPrice > 0
+                  ? rem.value / chainPrice
+                  : rem.value;
               break;
             default:
               value = 0;
@@ -967,12 +1179,12 @@ const HoldersTable: React.FC<HoldersTableProps> = ({
     });
 
     // Apply wallet filter
-    const hasWalletAddressFilter = walletFilter.address.trim() !== '';
+    const hasWalletAddressFilter = walletFilter.address.trim() !== "";
     const hasTagFilter = walletFilter.tags.length > 0;
 
     if (hasWalletAddressFilter || hasTagFilter) {
       result = result.filter((holder) => {
-        const holderAddress = (holder.address || '').toLowerCase().trim();
+        const holderAddress = (holder.address || "").toLowerCase().trim();
 
         // Filter by wallet address (case-insensitive contains match)
         if (hasWalletAddressFilter) {
@@ -984,7 +1196,11 @@ const HoldersTable: React.FC<HoldersTableProps> = ({
         if (hasTagFilter) {
           const holderType = holder.holderType;
           // Only show holders that have one of the selected tags
-          if (!holderType || !walletFilter.tags.includes(holderType as HolderTypeTag)) return false;
+          if (
+            !holderType ||
+            !walletFilter.tags.includes(holderType as HolderTypeTag)
+          )
+            return false;
         }
 
         return true;
@@ -995,42 +1211,74 @@ const HoldersTable: React.FC<HoldersTableProps> = ({
     const sortColumn = Object.entries(filters).find(([, f]) => f.sort !== null);
     if (sortColumn) {
       const [key, filter] = sortColumn;
-      const direction = filter.sort === 'asc' ? 1 : -1;
+      const direction = filter.sort === "asc" ? 1 : -1;
 
       result.sort((a, b) => {
         let aVal: number, bVal: number;
         switch (key) {
-          case 'solBal':
+          case "solBal":
             aVal = a.solBalance ?? 0;
             bVal = b.solBalance ?? 0;
             break;
-          case 'lastActive':
+          case "lastActive":
             aVal = a.lastTransactionAt;
             bVal = b.lastTransactionAt;
             break;
-          case 'bought':
+          case "bought":
             aVal = parseFloat(a.amountBoughtUsd30d) || 0;
             bVal = parseFloat(b.amountBoughtUsd30d) || 0;
             break;
-          case 'avgBuy':
-            aVal = a.buys30d > 0 ? (parseFloat(a.amountBoughtUsd30d) || 0) / a.buys30d : 0;
-            bVal = b.buys30d > 0 ? (parseFloat(b.amountBoughtUsd30d) || 0) / b.buys30d : 0;
+          case "avgBuy":
+            aVal =
+              a.buys30d > 0
+                ? (parseFloat(a.amountBoughtUsd30d) || 0) / a.buys30d
+                : 0;
+            bVal =
+              b.buys30d > 0
+                ? (parseFloat(b.amountBoughtUsd30d) || 0) / b.buys30d
+                : 0;
             break;
-          case 'sold':
+          case "sold":
             aVal = parseFloat(a.amountSoldUsd30d) || 0;
             bVal = parseFloat(b.amountSoldUsd30d) || 0;
             break;
-          case 'avgSell':
-            aVal = a.sells30d > 0 ? (parseFloat(a.amountSoldUsd30d) || 0) / a.sells30d : 0;
-            bVal = b.sells30d > 0 ? (parseFloat(b.amountSoldUsd30d) || 0) / b.sells30d : 0;
+          case "avgSell":
+            aVal =
+              a.sells30d > 0
+                ? (parseFloat(a.amountSoldUsd30d) || 0) / a.sells30d
+                : 0;
+            bVal =
+              b.sells30d > 0
+                ? (parseFloat(b.amountSoldUsd30d) || 0) / b.sells30d
+                : 0;
             break;
-          case 'pnl':
-            aVal = calculateUnrealizedPnL(a.tokenBalance, a.tokenAcquisitionCostUsd, token?.usd_price, token?.decimals);
-            bVal = calculateUnrealizedPnL(b.tokenBalance, b.tokenAcquisitionCostUsd, token?.usd_price, token?.decimals);
+          case "pnl":
+            aVal = calculateUnrealizedPnL(
+              a.tokenBalance,
+              a.tokenAcquisitionCostUsd,
+              token?.usd_price,
+              token?.decimals,
+            );
+            bVal = calculateUnrealizedPnL(
+              b.tokenBalance,
+              b.tokenAcquisitionCostUsd,
+              token?.usd_price,
+              token?.decimals,
+            );
             break;
-          case 'remaining':
-            const remA = calculateRemaining(a.tokenBalance, token?.usd_price, token?.market_cap_usd, token?.decimals);
-            const remB = calculateRemaining(b.tokenBalance, token?.usd_price, token?.market_cap_usd, token?.decimals);
+          case "remaining":
+            const remA = calculateRemaining(
+              a.tokenBalance,
+              token?.usd_price,
+              token?.market_cap_usd,
+              token?.decimals,
+            );
+            const remB = calculateRemaining(
+              b.tokenBalance,
+              token?.usd_price,
+              token?.market_cap_usd,
+              token?.decimals,
+            );
             aVal = remA.value;
             bVal = remB.value;
             break;
@@ -1043,143 +1291,192 @@ const HoldersTable: React.FC<HoldersTableProps> = ({
     }
 
     return result;
-  }, [holdersWithBalances, filters, token, showRemainingInSol, chainPrice, walletFilter]);
+  }, [
+    holdersWithBalances,
+    filters,
+    token,
+    showRemainingInSol,
+    chainPrice,
+    walletFilter,
+  ]);
 
   return (
     <div
       ref={tableRef}
-      className="flex-1 min-h-0 flex flex-col overflow-hidden"
+      className="relative flex min-h-0 flex-1 flex-col overflow-hidden"
       style={{ backgroundColor: AX.bg }}
     >
-      <div className="flex-1 overflow-y-auto min-h-0 pb-18">
-        <table className="w-full" style={{ borderCollapse: 'collapse' }}>
-          <thead className="sticky top-0 z-10" style={{ backgroundColor: '#101114' }}>
-            <tr style={{ borderBottom: '1px solid #27282e' }}>
+      {/* Bubblemap Toggle Button - Absolutely positioned */}
+      <button
+        onClick={
+          isBubblemapVisible ? handleHideBubblemap : handleBubblemapClick
+        }
+        className="absolute top-8 right-0 z-20 flex h-6 w-6 cursor-pointer items-center justify-center rounded p-1 transition-opacity hover:opacity-80"
+        style={{
+          backgroundColor: `${AX.surface2}`,
+          border: `1px solid ${AX.border}`,
+          color: AX.text,
+        }}
+        title={isBubblemapVisible ? "Hide bubblemap" : "Show bubblemap"}
+      >
+        {isBubblemapVisible ? (
+          <FiX size={14} />
+        ) : (
+          <MdOutlineBubbleChart size={14} />
+        )}
+      </button>
+
+      <div className="min-h-0 flex-1 overflow-y-auto pb-18">
+        <table className="!font-geist w-full border-collapse">
+          <thead className="sticky top-0 z-10 bg-[#111214] !text-xs">
+            <tr className="border-t border-b border-[#27282e]">
               {/* Wallet Column */}
-              <th className="px-2 py-1.5 text-left text-[11px] font-medium whitespace-nowrap" style={{ color: AX.muted }}>
+              <th
+                className="px-4 py-3 text-left font-medium whitespace-nowrap text-[#757e80]"
+              >
                 <div className="flex items-center gap-1">
-                  <span className="text-[11px]">Wallet</span>
+                  <span className="text-[13px] font-normal">Wallet</span>
                   <button
                     onClick={handleWalletFilterClick}
-                    className="p-0.5 rounded hover:bg-opacity-20 transition-colors"
+                    className="hover:bg-opacity-20 rounded p-0.5 transition-colors"
                     style={{ color: isWalletFilterActive ? AX.mint : AX.muted }}
                   >
-                    <FaFilter size={8} />
+                    <CiFilter size={14} />
                   </button>
                   {isWalletFilterActive && (
                     <span
-                      className="text-[9px] px-1 rounded"
+                      className="rounded px-1 text-[9px]"
                       style={{
                         backgroundColor: `${AX.mint}20`,
                         color: AX.mint,
                       }}
                     >
-                      {walletFilter.tags.length > 0 ? walletFilter.tags.length : ''}{walletFilter.address ? '🔍' : ''}
+                      {walletFilter.tags.length > 0
+                        ? walletFilter.tags.length
+                        : ""}
+                      {walletFilter.address ? "🔍" : ""}
                     </span>
                   )}
                 </div>
               </th>
 
               {/* SOL Bal / Last Active */}
-              <th className="px-2 py-1.5 text-left text-[11px] font-medium whitespace-nowrap" style={{ color: AX.muted }}>
-                <div className="flex items-center gap-1">
+              <th
+                className="px-2 py-3 text-left font-medium whitespace-nowrap !text-[#757e80]"
+              >
+                <div className="flex items-center gap-1 !text-[#757e80]">
                   <SortableHeader
-                    label={chain === 'monad' ? 'MON Bal' : 'SOL Bal'}
+                    label={chain === "monad" ? "MON Bal" : "SOL Bal"}
                     sortDirection={filters.solBal.sort}
-                    onSort={() => handleSort('solBal')}
+                    onSort={() => handleSort("solBal")}
                     hasFilter
-                    onFilterClick={(e) => handleFilterClick('solBal', e)}
+                    onFilterClick={(e) => handleFilterClick("solBal", e)}
                     isFilterActive={hasActiveRange(filters.solBal.range)}
                   />
-                  <span style={{ color: AX.muted }}>/</span>
+                  <span className='!text-[#757e80]'>/</span>
                   <SortableHeader
                     label="Last Active"
                     sortDirection={filters.lastActive.sort}
-                    onSort={() => handleSort('lastActive')}
+                    onSort={() => handleSort("lastActive")}
                     hasFilter
-                    onFilterClick={(e) => handleFilterClick('lastActive', e)}
+                    onFilterClick={(e) => handleFilterClick("lastActive", e)}
                     isFilterActive={hasActiveRange(filters.lastActive.range)}
                   />
                 </div>
               </th>
 
               {/* Bought / Avg MC (using Avg Buy for now) */}
-              <th className="px-2 py-1.5 text-left text-[11px] font-medium whitespace-nowrap" style={{ color: AX.muted }}>
+              <th
+                className="px-2 py-3 text-left font-medium whitespace-nowrap text-[#757e80]"
+              >
                 <div className="flex items-center gap-1">
                   <SortableHeader
                     label="Bought"
                     sortDirection={filters.bought.sort}
-                    onSort={() => handleSort('bought')}
+                    onSort={() => handleSort("bought")}
                     hasFilter
-                    onFilterClick={(e) => handleFilterClick('bought', e)}
+                    onFilterClick={(e) => handleFilterClick("bought", e)}
                     isFilterActive={hasActiveRange(filters.bought.range)}
                   />
-                  <span style={{ color: AX.muted }}>/</span>
+                  <span className='text-[#757e80]'>/</span>
                   <SortableHeader
                     label="Avg Buy"
                     sortDirection={filters.avgBuy.sort}
-                    onSort={() => handleSort('avgBuy')}
+                    onSort={() => handleSort("avgBuy")}
                     hasFilter
-                    onFilterClick={(e) => handleFilterClick('avgBuy', e)}
+                    onFilterClick={(e) => handleFilterClick("avgBuy", e)}
                     isFilterActive={hasActiveRange(filters.avgBuy.range)}
                   />
                 </div>
               </th>
 
               {/* Sold / Avg Sell */}
-              <th className="px-2 py-1.5 text-left text-[11px] font-medium whitespace-nowrap" style={{ color: AX.muted }}>
+              <th
+                className="px-2 py-3 text-left font-medium whitespace-nowrap text-[#757e80]"
+              >
                 <div className="flex items-center gap-1">
                   <SortableHeader
                     label="Sold"
                     sortDirection={filters.sold.sort}
-                    onSort={() => handleSort('sold')}
+                    onSort={() => handleSort("sold")}
                     hasFilter
-                    onFilterClick={(e) => handleFilterClick('sold', e)}
+                    onFilterClick={(e) => handleFilterClick("sold", e)}
                     isFilterActive={hasActiveRange(filters.sold.range)}
                   />
-                  <span style={{ color: AX.muted }}>/</span>
+                  <span className='text-[#757e80]'>/</span>
                   <SortableHeader
                     label="Avg Sell"
                     sortDirection={filters.avgSell.sort}
-                    onSort={() => handleSort('avgSell')}
+                    onSort={() => handleSort("avgSell")}
                     hasFilter
-                    onFilterClick={(e) => handleFilterClick('avgSell', e)}
+                    onFilterClick={(e) => handleFilterClick("avgSell", e)}
                     isFilterActive={hasActiveRange(filters.avgSell.range)}
                   />
                 </div>
               </th>
 
               {/* PNL (no arrows) */}
-              <th className="px-2 py-1.5 text-left text-[11px] font-medium whitespace-nowrap" style={{ color: AX.muted }}>
+              <th
+                className="px-2 py-3 text-left font-medium whitespace-nowrap text-[#757e80]"
+              >
                 <SortableHeader
                   label="PNL"
                   sortDirection={filters.pnl.sort}
-                  onSort={() => handleSort('pnl')}
+                  onSort={() => handleSort("pnl")}
                   hasFilter
-                  onFilterClick={(e) => handleFilterClick('pnl', e)}
+                  onFilterClick={(e) => handleFilterClick("pnl", e)}
                   isFilterActive={hasActiveRange(filters.pnl.range)}
                 />
               </th>
 
               {/* Remaining with USD/SOL toggle */}
-              <th className="px-2 py-1.5 text-left text-[11px] font-medium whitespace-nowrap" style={{ color: AX.muted }}>
+              <th
+                className="px-2 py-3 text-left font-medium whitespace-nowrap text-[#757e80]"
+              >
                 <div className="flex items-center gap-1">
                   <SortableHeader
                     label="Remaining"
                     sortDirection={filters.remaining.sort}
-                    onSort={() => handleSort('remaining')}
+                    onSort={() => handleSort("remaining")}
                     hasFilter
-                    onFilterClick={(e) => handleFilterClick('remaining', e)}
+                    onFilterClick={(e) => handleFilterClick("remaining", e)}
                     isFilterActive={hasActiveRange(filters.remaining.range)}
                   />
                   <button
                     onClick={() => setShowRemainingInSol(!showRemainingInSol)}
-                    className="flex items-center gap-0.5 p-0.5 rounded hover:opacity-70 transition-opacity ml-0.5"
-                    style={{ color: AX.muted }}
-                    title={showRemainingInSol ? 'Show in USD' : `Show in ${chain === 'monad' ? 'MON' : 'SOL'}`}
+                    className="ml-0.5 flex items-center gap-0.5 rounded p-0.5 transition-opacity hover:opacity-70 text-[#757e80]"
+                    title={
+                      showRemainingInSol
+                        ? "Show in USD"
+                        : `Show in ${chain === "monad" ? "MON" : "SOL"}`
+                    }
                   >
                     <span className="text-[10px]">
-                      {showRemainingInSol ? (chain === 'monad' ? 'MON' : 'SOL') : 'USD'}
+                      {showRemainingInSol
+                        ? chain === "monad"
+                          ? "MON"
+                          : "SOL"
+                        : "USD"}
                     </span>
                     <RiExchangeDollarLine size={12} />
                   </button>
@@ -1187,90 +1484,76 @@ const HoldersTable: React.FC<HoldersTableProps> = ({
               </th>
 
               {/* Funding / TF Amount */}
-              <th className="px-2 py-1.5 text-left text-[11px] font-medium whitespace-nowrap" style={{ color: AX.muted }}>
+              <th
+                className="px-2 py-3 text-left font-medium whitespace-nowrap text-[#757e80]"
+                style={{ color: AX.muted }}
+              >
                 <div className="flex items-center gap-1">
                   <SortableHeader
                     label="Funding"
                     sortDirection={filters.funding.sort}
-                    onSort={() => handleSort('funding')}
+                    onSort={() => handleSort("funding")}
                     hasFilter
-                    onFilterClick={(e) => handleFilterClick('funding', e)}
+                    onFilterClick={(e) => handleFilterClick("funding", e)}
                     isFilterActive={hasActiveRange(filters.funding.range)}
                   />
-                  <span style={{ color: AX.muted }}>/</span>
+                  <span className='text-[#757e80]'>/</span>
                   <SortableHeader
                     label="TF Amt"
                     sortDirection={filters.tfAmount.sort}
-                    onSort={() => handleSort('tfAmount')}
+                    onSort={() => handleSort("tfAmount")}
                     hasFilter
-                    onFilterClick={(e) => handleFilterClick('tfAmount', e)}
+                    onFilterClick={(e) => handleFilterClick("tfAmount", e)}
                     isFilterActive={hasActiveRange(filters.tfAmount.range)}
                   />
                 </div>
               </th>
-
-              {/* Bubblemap Toggle */}
-              <th className="px-1 py-1.5 text-right" style={{ color: AX.muted }}>
-                {isBubblemapVisible ? (
-                  <button
-                    onClick={handleHideBubblemap}
-                    className="p-0.5 rounded hover:bg-opacity-20 transition-colors"
-                    style={{ color: AX.muted }}
-                    title="Hide bubblemap"
-                  >
-                    <FiX size={14} />
-                  </button>
-                ) : (
-                  <button
-                    onClick={handleBubblemapClick}
-                    className="p-0.5 rounded hover:bg-opacity-20 transition-colors"
-                    style={{ color: AX.muted }}
-                    title="Show bubblemap"
-                  >
-                    <MdOutlineBubbleChart size={14} />
-                  </button>
-                )}
-              </th>
             </tr>
           </thead>
-          <tbody>
+          <tbody className='text-[13px]'>
             {isLoading ? (
               <tr>
                 <td colSpan={8} className="px-4 py-8 text-center">
                   <div className="animate-pulse">
-                    <div className="text-neutral-400 text-sm">Loading holders...</div>
+                    <div className="text-sm text-neutral-400">
+                      Loading holders...
+                    </div>
                   </div>
                 </td>
               </tr>
             ) : error ? (
               <tr>
                 <td colSpan={8} className="px-4 py-8 text-center">
-                  <div className="text-red-400 text-sm">{error}</div>
+                  <div className="text-sm text-red-400">{error}</div>
                 </td>
               </tr>
             ) : sortedAndFilteredHolders.length === 0 ? (
               <tr>
                 <td colSpan={8} className="px-4 py-8 text-center">
-                  <div className="text-neutral-400 text-sm">No holders data available</div>
+                  <div className="text-sm text-neutral-400">
+                    No holders data available
+                  </div>
                 </td>
               </tr>
             ) : (
               sortedAndFilteredHolders.map((holder, index) => {
                 const boughtUsd = parseFloat(holder.amountBoughtUsd30d) || 0;
                 const soldUsd = parseFloat(holder.amountSoldUsd30d) || 0;
-                const avgBuyPrice = holder.buys30d > 0 ? boughtUsd / holder.buys30d : 0;
-                const avgSellPrice = holder.sells30d > 0 ? soldUsd / holder.sells30d : 0;
+                const avgBuyPrice =
+                  holder.buys30d > 0 ? boughtUsd / holder.buys30d : 0;
+                const avgSellPrice =
+                  holder.sells30d > 0 ? soldUsd / holder.sells30d : 0;
                 const unrealizedPnL = calculateUnrealizedPnL(
                   holder.tokenBalance,
                   holder.tokenAcquisitionCostUsd,
                   token?.usd_price,
-                  token?.decimals
+                  token?.decimals,
                 );
                 const remaining = calculateRemaining(
                   holder.tokenBalance,
                   token?.usd_price,
                   token?.market_cap_usd,
-                  token?.decimals
+                  token?.decimals,
                 );
                 const funding = getFundingSource(holder.address, index);
 
@@ -1279,23 +1562,28 @@ const HoldersTable: React.FC<HoldersTableProps> = ({
                     key={holder.address}
                     className="transition-colors hover:brightness-110"
                     style={{
-                      backgroundColor: index % 2 === 0 ? '#101114' : '#161719',
+                      backgroundColor: index % 2 === 0 ? "#101114" : "#161719",
                     }}
                   >
-                    <td className="px-2 py-1.5">
+                    <td className="px-4 py-3">
                       <div className="flex items-center gap-1.5">
                         {(() => {
-                          const walletKey = (holder.address || '').toLowerCase();
+                          const walletKey = (
+                            holder.address || ""
+                          ).toLowerCase();
                           const walletData = walletDataMap.get(walletKey);
 
                           // Build hover card data - use existing data or create from holder info
                           const hoverData: WalletHoverCardData = walletData || {
                             walletAddress: holder.address,
-                            totalBoughtUsd: parseFloat(holder.amountBoughtUsd30d) || 0,
-                            totalSoldUsd: parseFloat(holder.amountSoldUsd30d) || 0,
+                            totalBoughtUsd:
+                              parseFloat(holder.amountBoughtUsd30d) || 0,
+                            totalSoldUsd:
+                              parseFloat(holder.amountSoldUsd30d) || 0,
                             buyCount: holder.buys30d,
                             sellCount: holder.sells30d,
-                            remainingTokens: parseFloat(holder.tokenBalance) || 0,
+                            remainingTokens:
+                              parseFloat(holder.tokenBalance) || 0,
                             solBalance: holder.solBalance ?? undefined,
                             holderType: holder.holderType,
                           };
@@ -1303,18 +1591,38 @@ const HoldersTable: React.FC<HoldersTableProps> = ({
                           return (
                             <WalletHoverCard data={hoverData} chain={chain}>
                               <div className="flex items-center gap-1.5">
-                                <span className="text-[11px] font-mono text-gray-300 hover:text-emerald-400 cursor-pointer transition-colors">
+                                <a
+                                  href={`https://solscan.io/account/${holder.address}`}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="rounded-full bg-[#757E80] p-1"
+                                >
+                                  <SiSolana
+                                    size={8}
+                                    className="flex-shrink-0 text-black"
+                                  />
+                                </a>
+                                <span className="!font-geist cursor-pointer text-[13px] text-gray-300 transition-colors hover:text-emerald-400">
                                   {shortAddr(holder.address)}
                                 </span>
                                 {/* Holder type icons */}
-                                {holder.holderType === 'dev' && (
-                                  <LuChefHat size={12} className="text-yellow-400 flex-shrink-0" />
+                                {holder.holderType === "dev" && (
+                                  <LuChefHat
+                                    size={12}
+                                    className="flex-shrink-0 text-yellow-400"
+                                  />
                                 )}
-                                {holder.holderType === 'sniper' && (
-                                  <TfiTarget size={12} className="text-red-400 flex-shrink-0" />
+                                {holder.holderType === "sniper" && (
+                                  <TfiTarget
+                                    size={12}
+                                    className="flex-shrink-0 text-red-400"
+                                  />
                                 )}
-                                {holder.holderType === 'bundler' && (
-                                  <HiOutlineCubeTransparent size={12} className="text-orange-400 flex-shrink-0" />
+                                {holder.holderType === "bundler" && (
+                                  <HiOutlineCubeTransparent
+                                    size={12}
+                                    className="flex-shrink-0 text-orange-400"
+                                  />
                                 )}
                               </div>
                             </WalletHoverCard>
@@ -1322,10 +1630,13 @@ const HoldersTable: React.FC<HoldersTableProps> = ({
                         })()}
                       </div>
                     </td>
-                    <td className="px-2 py-1.5">
+                    <td className="px-2 py-3">
                       <div className="flex items-center gap-1.5">
                         <SolanaIcon size={12} />
-                        <span className="text-[11px]" style={{ color: AX.text }}>
+                        <span
+                          className="text-[13px]"
+                          style={{ color: AX.text }}
+                        >
                           {holder.isLoadingBalance ? (
                             <span style={{ color: AX.muted }}>...</span>
                           ) : holder.solBalance !== null ? (
@@ -1334,101 +1645,119 @@ const HoldersTable: React.FC<HoldersTableProps> = ({
                             <span style={{ color: AX.muted }}>N/A</span>
                           )}
                         </span>
-                        <span className="text-[10px]" style={{ color: AX.muted }}>
+                        <span className="text-[10px] text-[#757e80]">
                           ({getTimeAgo(holder.lastTransactionAt)})
                         </span>
                       </div>
                     </td>
-                    <td className="px-2 py-1.5">
+                    <td className="px-2 py-3">
                       <div className="flex flex-col">
-                        <span className="text-[11px]" style={{ color: boughtUsd > 0 ? AX.mint : AX.text }}>
+                        <span
+                          className="text-[13px]"
+                          style={{ color: boughtUsd > 0 ? AX.mint : AX.text }}
+                        >
                           {formatUsd(boughtUsd)}
                         </span>
-                        <span className="text-[10px]" style={{ color: AX.muted }}>
-                          {formatNumber(holder.tokenAmountBought30d)} / {holder.buys30d}
+                        <span className="text-xs text-[#757e80]">
+                          {formatNumber(holder.tokenAmountBought30d)} /{" "}
+                          {holder.buys30d}
                           {avgBuyPrice > 0 && ` (${formatUsd(avgBuyPrice)})`}
                         </span>
                       </div>
                     </td>
-                    <td className="px-2 py-1.5">
+                    <td className="px-2 py-3">
                       <div className="flex flex-col">
-                        <span className="text-[11px]" style={{ color: soldUsd > 0 ? AX.sell : AX.text }}>
+                        <span
+                          className="text-[13px]"
+                          style={{ color: soldUsd > 0 ? AX.sell : AX.text }}
+                        >
                           {formatUsd(soldUsd)}
                         </span>
-                        <span className="text-[10px]" style={{ color: AX.muted }}>
-                          {formatNumber(holder.tokenAmountSold30d)} / {holder.sells30d}
+                        <span className="text-xs text-[#757e80]">
+                          {formatNumber(holder.tokenAmountSold30d)} /{" "}
+                          {holder.sells30d}
                           {avgSellPrice > 0 && ` (${formatUsd(avgSellPrice)})`}
                         </span>
                       </div>
                     </td>
-                    <td className="px-2 py-1.5">
+                    <td className="px-2 py-3">
                       <span
-                        className="text-[11px] font-medium"
-                        style={{ color: unrealizedPnL >= 0 ? AX.mint : AX.sell }}
+                        className="text-[13px] font-medium"
+                        style={{
+                          color: unrealizedPnL >= 0 ? AX.mint : AX.sell,
+                        }}
                       >
-                        {unrealizedPnL >= 0 ? '+' : ''}{formatUsd(unrealizedPnL)}
+                        {unrealizedPnL >= 0 ? "+" : ""}
+                        {formatUsd(unrealizedPnL)}
                       </span>
                     </td>
-                    <td className="px-2 py-1.5">
+                    <td className="px-2 py-3">
                       <div className="flex flex-col gap-0.5">
                         <div className="flex items-center gap-1.5">
                           {showRemainingInSol ? (
                             <div className="flex items-center gap-0.5">
                               <SolanaIcon size={10} />
-                              <span className="text-[11px]" style={{ color: AX.mint }}>
-                                {chainPrice > 0 ? (remaining.value / chainPrice).toFixed(4) : '0'}
+                              <span className="text-[13px] text-[#c4cccc]">
+                                {chainPrice > 0
+                                  ? (remaining.value / chainPrice).toFixed(4)
+                                  : "0"}
                               </span>
                             </div>
                           ) : (
-                            <span className="text-[11px]" style={{ color: AX.mint }}>
+                            <span className="text-[13px] text-[#c4cccc]">
                               {formatUsd(remaining.value)}
                             </span>
                           )}
-                          <span
-                            className="text-[9px] px-1 py-0.5 rounded"
-                            style={{
-                              backgroundColor: `${AX.surface2}80`,
-                              color: AX.muted
-                            }}
-                          >
+                          <span className="rounded bg-[#26282b] px-1 py-0.5 text-[9px] text-[#c4cccc]">
                             {formatPercentage(remaining.percentage)}
                           </span>
                         </div>
                         <div
-                          className="h-0.5 rounded-full overflow-hidden"
+                          className="h-0.5 overflow-hidden rounded-full"
                           style={{ backgroundColor: `${AX.border}40` }}
                         >
                           <div
-                            className="h-full rounded-full transition-all"
+                            className="h-full rounded-full bg-[#c4cccc] transition-all"
                             style={{
                               width: `${Math.min(remaining.percentage, 100)}%`,
-                              backgroundColor: '#3B82F6'
                             }}
                           />
                         </div>
                       </div>
                     </td>
-                    <td className="px-2 py-1.5">
+                    <td className="px-2 py-3">
                       <div className="flex flex-col">
                         {funding.sourceAddress ? (
                           <a
-                            href={chain === 'monad'
-                              ? `https://testnet.monadexplorer.com/address/${funding.sourceAddress}`
-                              : `https://solscan.io/account/${funding.sourceAddress}`}
+                            href={
+                              chain === "monad"
+                                ? `https://testnet.monadexplorer.com/address/${funding.sourceAddress}`
+                                : `https://solscan.io/account/${funding.sourceAddress}`
+                            }
                             target="_blank"
                             rel="noopener noreferrer"
                             className="flex items-center gap-1 transition-colors hover:text-emerald-400 hover:underline"
                             style={{ color: AX.text }}
                           >
-                            <span className="text-[11px] font-mono">{funding.source}</span>
-                            <FiExternalLink size={10} style={{ color: AX.muted }} />
+                            <span className="!font-geist text-[13px]">
+                              {funding.source}
+                            </span>
+                            <div className="ml-1 rounded-full bg-[#757E80] p-0.5">
+                              <SiSolana
+                                size={8}
+                                className="flex-shrink-0 text-black"
+                              />
+                            </div>
                           </a>
                         ) : (
-                          <span className="text-[11px] font-mono" style={{ color: AX.text }}>
+                          <span
+                            className="!font-geist text-[13px]"
+                            style={{ color: AX.text }}
+                          >
                             {funding.source}
                           </span>
                         )}
-                        <div className="flex items-center gap-1 text-[10px]" style={{ color: AX.muted }}>
+                        <div className="flex items-center gap-1 text-xs text-[#757e80]">
                           <span>{formatFundingAge(funding.timeAgo)}</span>
                           <span>•</span>
                           <SolanaIcon size={10} />
@@ -1436,8 +1765,6 @@ const HoldersTable: React.FC<HoldersTableProps> = ({
                         </div>
                       </div>
                     </td>
-                    {/* Empty cell for bubblemap column */}
-                    <td className="px-1 py-1.5" />
                   </tr>
                 );
               })
@@ -1480,4 +1807,3 @@ const HoldersTable: React.FC<HoldersTableProps> = ({
 };
 
 export default HoldersTable;
-

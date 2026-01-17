@@ -51,7 +51,7 @@ function cx(...parts: Array<string | false | null | undefined>) {
 const AX = {
   bg: "#101114",
   surface: "#1E1F26",
-  surface2: "#17191E",
+  surface2: "#25282B",
   border: "#2A2B33",
   text: "#f0f5f5",
   muted: "#9CA3AF",
@@ -517,8 +517,8 @@ const MonadTradeActionPanel: React.FC<MonadTradeActionPanelProps> = ({ token }) 
   if (!token || (!token.name && !token.symbol)) {
     return (
       <div
-        className="flex flex-col text-[12px] leading-tight"
-        style={{ backgroundColor: '#0f1012', fontFamily: 'Inter, -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif', paddingBottom: '100px' }}
+        className="flex flex-col text-[12px] leading-tight bg-[#111214]"
+        style={{ fontFamily: 'Inter, -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif', paddingBottom: '100px' }}
       >
         <div className="h-full bg-neutral-800/50 rounded-lg p-4">
           <div className="animate-pulse">
@@ -911,7 +911,7 @@ const MonadTradeActionPanel: React.FC<MonadTradeActionPanelProps> = ({ token }) 
   return (
     <div
       className="flex flex-col text-[12px] leading-tight"
-      style={{ backgroundColor: '#0f1012', fontFamily: 'Inter, -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif', paddingBottom: '100px' }}
+      style={{ backgroundColor: '#111214', fontFamily: 'Inter, -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif', paddingBottom: '100px' }}
     >
       {/* ===== A. Time buttons ===== */}
       {/* Commented out - Monad may not have timeframe data
@@ -931,7 +931,7 @@ const MonadTradeActionPanel: React.FC<MonadTradeActionPanelProps> = ({ token }) 
                   aria-pressed={timeRange === rng}
                   className={cx(
                     "flex-1 h-9 rounded-lg px-2 text-left flex flex-col items-start justify-center cursor-pointer",
-                    timeRange === rng ? "bg-[#17191E] ring-1 ring-white/10" : "hover:bg-[#1E1F26]"
+                    timeRange === rng ? "bg-[#25282B] ring-1 ring-white/10" : "hover:bg-[#1E1F26]"
                   )}
                 >
                   <span
@@ -1001,7 +1001,7 @@ const MonadTradeActionPanel: React.FC<MonadTradeActionPanelProps> = ({ token }) 
             </div>
           </div>
         </div>
-        <div className="mt-1 h-0.5 w-full rounded-full bg-[#17191E] relative overflow-hidden">
+        <div className="mt-1 h-0.5 w-full rounded-full bg-[#25282B] relative overflow-hidden">
           <div className="absolute left-0 top-0 h-full" style={{ width: `${buyPercentage}%`, background: AX.mint }} />
           <div className="absolute right-0 top-0 h-full" style={{ width: `${sellPercentage}%`, background: AX.sell }} />
         </div>
@@ -1079,7 +1079,7 @@ const MonadTradeActionPanel: React.FC<MonadTradeActionPanelProps> = ({ token }) 
 
       {/* ===== E. Amount ===== */}
       <div className="px-3 pt-2">
-        <div className="mx-auto w-full max-w-xl relative rounded-lg border border-[#2A2B33] bg-[#1E1F26]">
+        <div className="mx-auto w-full max-w-xl relative rounded-lg border border-[#000] bg-[#25282B]">
           <div className="flex items-center justify-between gap-3 px-3 py-1.5">
             <div className="flex items-center gap-1">
               <span className="text-[10px] font-semibold text-[#9CA3AF] uppercase tracking-wide">
@@ -1116,18 +1116,18 @@ const MonadTradeActionPanel: React.FC<MonadTradeActionPanelProps> = ({ token }) 
           </div>
           
           {/* Presets */}
-          <div className="border-t border-[#2A2B33] rounded-b-lg overflow-hidden">
+          <div className="border-t border-[#000] rounded-b-lg overflow-hidden">
             <div className="grid grid-cols-6">
               {amountPresets.map((opt, i) => {
                 const currentValue = editingPresets ? (presetDrafts[i] || "") : opt;
                 const active = amount === currentValue;
                 if (editingPresets) {
                   return (
-                    <div key={i} className="h-9 border-r border-[#2A2B33] last:border-r-0 min-w-0">
+                    <div key={i} className="h-9 border-r border-[#000] last:border-r-0 min-w-0">
                       <input
                         type="text"
                         inputMode="decimal"
-                        className="h-full w-full bg-[#17191E] text-center text-[12px] font-semibold text-[#E6E7EA]
+                        className="h-full w-full bg-[#25282B] text-center text-[12px] font-semibold text-[#E6E7EA]
                                    outline-none focus:bg-[#1E1F26]"
                         value={presetDrafts[i] ?? ""}
                         onChange={(e) => {
@@ -1151,10 +1151,10 @@ const MonadTradeActionPanel: React.FC<MonadTradeActionPanelProps> = ({ token }) 
                     key={i}
                     type="button"
                     className={cx(
-                      "h-9 border-r border-[#2A2B33] last:border-r-0 text-[12px] font-semibold tabular-nums",
+                      "h-9 border-r border-[#000] last:border-r-0 text-[12px] font-semibold tabular-nums",
                       active
                         ? "bg-[#2A2B33] text-[#E6E7EA]"
-                        : "bg-[#17191E] hover:bg-[#1E1F26] text-[#E6E7EA]"
+                        : "bg-[#25282B] hover:bg-[#1E1F26] text-[#E6E7EA]"
                     )}
                     style={{ fontFamily: 'ui-monospace, SFMono-Regular, "SF Mono", Consolas, "Liberation Mono", Menlo, monospace' }}
                     onClick={() => setAmount(opt)}
@@ -1167,7 +1167,7 @@ const MonadTradeActionPanel: React.FC<MonadTradeActionPanelProps> = ({ token }) 
                 <button
                   type="button"
                   onClick={() => setEditingPresets(true)}
-                  className="h-9 bg-[#17191E] hover:bg-[#1E1F26] text-[#E6E7EA]"
+                  className="h-9 bg-[#25282B] hover:bg-[#1E1F26] text-[#E6E7EA]"
                   title="Edit preset values"
                 >
                   <LuPencil className="mx-auto h-4 w-4" />
@@ -1176,7 +1176,7 @@ const MonadTradeActionPanel: React.FC<MonadTradeActionPanelProps> = ({ token }) 
                 <button
                   type="button"
                   onClick={commitPresetDrafts}
-                  className="h-9 bg-[#1E1F26] text-[#E6E7EA] hover:bg-[#17191E]"
+                  className="h-9 bg-[#1E1F26] text-[#E6E7EA] hover:bg-[#25282B]"
                   title="Done"
                 >
                   <LuCheck className="mx-auto h-4 w-4" />
@@ -1295,7 +1295,7 @@ const MonadTradeActionPanel: React.FC<MonadTradeActionPanelProps> = ({ token }) 
                       setMaxSlippage(val / 100);
                     }
                   }}
-                  className="w-24 bg-[#17191E] border border-[#2A2B33] rounded px-2 py-1 text-center text-[#E6E7EA] text-[12px] outline-none focus:border-[#70E0B0] focus:ring-1 focus:ring-[#70E0B0] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none [-moz-appearance:textfield]"
+                  className="w-24 bg-[#25282B] border border-[#2A2B33] rounded px-2 py-1 text-center text-[#E6E7EA] text-[12px] outline-none focus:border-[#70E0B0] focus:ring-1 focus:ring-[#70E0B0] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none [-moz-appearance:textfield]"
                   style={{ 
                     fontFamily: 'ui-monospace, SFMono-Regular, "SF Mono", Consolas, "Liberation Mono", Menlo, monospace',
                     MozAppearance: 'textfield'
@@ -1366,7 +1366,7 @@ const MonadTradeActionPanel: React.FC<MonadTradeActionPanelProps> = ({ token }) 
                     }
                   }}
                   placeholder="Auto"
-                  className="w-24 bg-[#17191E] border border-[#2A2B33] rounded px-2 py-1 text-center text-[#E6E7EA] text-[12px] outline-none focus:border-[#70E0B0] focus:ring-1 focus:ring-[#70E0B0] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none [-moz-appearance:textfield] placeholder:text-[#6B7280]"
+                  className="w-24 bg-[#25282B] border border-[#2A2B33] rounded px-2 py-1 text-center text-[#E6E7EA] text-[12px] outline-none focus:border-[#70E0B0] focus:ring-1 focus:ring-[#70E0B0] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none [-moz-appearance:textfield] placeholder:text-[#6B7280]"
                   style={{ 
                     fontFamily: 'ui-monospace, SFMono-Regular, "SF Mono", Consolas, "Liberation Mono", Menlo, monospace',
                     MozAppearance: 'textfield'
@@ -1582,8 +1582,8 @@ const MonadTradeActionPanel: React.FC<MonadTradeActionPanelProps> = ({ token }) 
             {/* Token Metrics Grid - First Row */}
             <div className="grid grid-cols-3 gap-1.5">
               {/* Top 10 Holders */}
-              <div className="rounded-md p-2 border" style={{ backgroundColor: 'rgba(30, 31, 38, 0.3)', borderColor: AX.border }}>
-                <div className="flex flex-col items-center gap-1">
+              <div className="rounded-md p-2 border h-[68px]" style={{ backgroundColor: 'rgba(30, 31, 38, 0.3)', borderColor: AX.border }}>
+                <div className="flex flex-col items-center justify-center gap-1 h-full">
                   <div className="flex items-center gap-1.5">
                     <BsPersonGear size={16} style={{ color: '#31e3ac' }} />
                     <div className="text-[12px] font-bold" style={{ color: '#31e3ac' }}>
@@ -1595,8 +1595,8 @@ const MonadTradeActionPanel: React.FC<MonadTradeActionPanelProps> = ({ token }) 
               </div>
 
               {/* Dev Holdings */}
-              <div className="rounded-md p-2 border" style={{ backgroundColor: 'rgba(30, 31, 38, 0.3)', borderColor: AX.border }}>
-                <div className="flex flex-col items-center gap-1">
+              <div className="rounded-md p-2 border h-[68px]" style={{ backgroundColor: 'rgba(30, 31, 38, 0.3)', borderColor: AX.border }}>
+                <div className="flex flex-col items-center justify-center gap-1 h-full">
                   <div className="flex items-center gap-1.5">
                     <LuChefHat size={16} style={{ color: '#566cdc' }} />
                     <div className="text-[12px] font-bold" style={{ color: '#566cdc' }}>
@@ -1608,8 +1608,8 @@ const MonadTradeActionPanel: React.FC<MonadTradeActionPanelProps> = ({ token }) 
               </div>
 
               {/* Sniper Holdings */}
-              <div className="rounded-md p-2 border" style={{ backgroundColor: 'rgba(30, 31, 38, 0.3)', borderColor: AX.border }}>
-                <div className="flex flex-col items-center gap-1">
+              <div className="rounded-md p-2 border h-[68px]" style={{ backgroundColor: 'rgba(30, 31, 38, 0.3)', borderColor: AX.border }}>
+                <div className="flex flex-col items-center justify-center gap-1 h-full">
                   <div className="flex items-center gap-1.5">
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style={{ color: '#f26681' }}>
                       <circle cx="12" cy="12" r="8" stroke="currentColor" strokeWidth="1.5" fill="none"/>
@@ -1631,8 +1631,8 @@ const MonadTradeActionPanel: React.FC<MonadTradeActionPanelProps> = ({ token }) 
             {/* Token Metrics Grid - Second Row */}
             <div className="grid grid-cols-3 gap-1.5">
               {/* Insider Holdings */}
-              <div className="rounded-md p-2 border" style={{ backgroundColor: 'rgba(30, 31, 38, 0.3)', borderColor: AX.border }}>
-                <div className="flex flex-col items-center gap-1">
+              <div className="rounded-md p-2 border h-[68px]" style={{ backgroundColor: 'rgba(30, 31, 38, 0.3)', borderColor: AX.border }}>
+                <div className="flex flex-col items-center justify-center gap-1 h-full">
                   <div className="flex items-center gap-1.5">
                     <RiGhostLine size={16} style={{ color: '#31e3ac' }} />
                     <div className="text-[12px] font-bold" style={{ color: '#31e3ac' }}>
@@ -1644,8 +1644,8 @@ const MonadTradeActionPanel: React.FC<MonadTradeActionPanelProps> = ({ token }) 
               </div>
 
               {/* Bonding Curve Progress */}
-              <div className="rounded-md p-2 border" style={{ backgroundColor: 'rgba(30, 31, 38, 0.3)', borderColor: AX.border }}>
-                <div className="flex flex-col items-center gap-1">
+              <div className="rounded-md p-2 border h-[68px]" style={{ backgroundColor: 'rgba(30, 31, 38, 0.3)', borderColor: AX.border }}>
+                <div className="flex flex-col items-center justify-center gap-1 h-full">
                   <div className="flex items-center gap-1.5">
                     <FaChartBar size={16} style={{ color: AX.aiGreen }} />
                     <div className="text-[12px] font-bold" style={{ color: AX.aiGreen }}>
@@ -1657,8 +1657,8 @@ const MonadTradeActionPanel: React.FC<MonadTradeActionPanelProps> = ({ token }) 
               </div>
 
               {/* Graduated Status */}
-              <div className="rounded-md p-2 border" style={{ backgroundColor: 'rgba(30, 31, 38, 0.3)', borderColor: AX.border }}>
-                <div className="flex flex-col items-center gap-1">
+              <div className="rounded-md p-2 border h-[68px]" style={{ backgroundColor: 'rgba(30, 31, 38, 0.3)', borderColor: AX.border }}>
+                <div className="flex flex-col items-center justify-center gap-1 h-full">
                   <div className="flex items-center gap-1.5">
                     <FaFire size={16} style={{ color: AX.aiGreen }} />
                     <div className="text-[12px] font-bold" style={{ color: xrayData.is_graduated ? AX.aiGreen : AX.muted }}>
@@ -1676,8 +1676,8 @@ const MonadTradeActionPanel: React.FC<MonadTradeActionPanelProps> = ({ token }) 
             {/* Trading Activity - Third Row */}
             <div className="grid grid-cols-3 gap-1.5">
               {/* Total Transactions */}
-              <div className="rounded-md p-2 border" style={{ backgroundColor: 'rgba(30, 31, 38, 0.3)', borderColor: AX.border }}>
-                <div className="flex flex-col items-center gap-1">
+              <div className="rounded-md p-2 border h-[68px]" style={{ backgroundColor: 'rgba(30, 31, 38, 0.3)', borderColor: AX.border }}>
+                <div className="flex flex-col items-center justify-center gap-1 h-full">
                   <div className="flex items-center gap-1.5">
                     <FaChartBar size={16} style={{ color: '#31e3ac' }} />
                     <div className="text-[12px] font-bold" style={{ color: AX.muted }}>
@@ -1689,8 +1689,8 @@ const MonadTradeActionPanel: React.FC<MonadTradeActionPanelProps> = ({ token }) 
               </div>
 
               {/* Unique Traders */}
-              <div className="rounded-md p-2 border" style={{ backgroundColor: 'rgba(30, 31, 38, 0.3)', borderColor: AX.border }}>
-                <div className="flex flex-col items-center gap-1">
+              <div className="rounded-md p-2 border h-[68px]" style={{ backgroundColor: 'rgba(30, 31, 38, 0.3)', borderColor: AX.border }}>
+                <div className="flex flex-col items-center justify-center gap-1 h-full">
                   <div className="flex items-center gap-1.5">
                     <GoPeople size={16} style={{ color: '#31e3ac' }} />
                     <div className="text-[12px] font-bold" style={{ color: AX.muted }}>
@@ -1702,8 +1702,8 @@ const MonadTradeActionPanel: React.FC<MonadTradeActionPanelProps> = ({ token }) 
               </div>
 
               {/* Buy/Sell Ratio */}
-              <div className="rounded-md p-2 border" style={{ backgroundColor: 'rgba(30, 31, 38, 0.3)', borderColor: AX.border }}>
-                <div className="flex flex-col items-center gap-1">
+              <div className="rounded-md p-2 border h-[68px]" style={{ backgroundColor: 'rgba(30, 31, 38, 0.3)', borderColor: AX.border }}>
+                <div className="flex flex-col items-center justify-center gap-1 h-full">
                   <div className="flex items-center gap-1.5">
                     <BiCandles size={16} style={{ color: '#31e3ac' }} />
                     <div className="text-[12px] font-bold" style={{ color: AX.muted }}>
@@ -1766,25 +1766,25 @@ const MonadTradeActionPanel: React.FC<MonadTradeActionPanelProps> = ({ token }) 
       {/* footer mini stats - simplified for Monad */}
       {/* Commented out - footer stats section
       <div className="grid grid-cols-4 gap-1 p-3" style={{ borderTop: `1px solid ${AX.border}` }}>
-        <div className="flex flex-col items-center justify-center gap-1 p-2 rounded-lg bg-[#17191E] border border-[#2A2B33]">
+        <div className="flex flex-col items-center justify-center gap-1 p-2 rounded-lg bg-[#25282B] border border-[#2A2B33]">
           <span className="text-[9px] text-[#9CA3AF] uppercase tracking-wide">Price</span>
           <div className="text-[#E6E7EA] text-[10px] font-semibold">
             ${formatSmartNumber(price)}
           </div>
         </div>
-        <div className="flex flex-col items-center justify-center gap-1 p-2 rounded-lg bg-[#17191E] border border-[#2A2B33]">
+        <div className="flex flex-col items-center justify-center gap-1 p-2 rounded-lg bg-[#25282B] border border-[#2A2B33]">
           <span className="text-[9px] text-[#9CA3AF] uppercase tracking-wide">Market Cap</span>
           <div className="text-[#E6E7EA] text-[10px] font-semibold">
             ${formatCompactNumber(Math.round(marketCap))}
           </div>
         </div>
-        <div className="flex flex-col items-center justify-center gap-1 p-2 rounded-lg bg-[#17191E] border border-[#2A2B33]">
+        <div className="flex flex-col items-center justify-center gap-1 p-2 rounded-lg bg-[#25282B] border border-[#2A2B33]">
           <span className="text-[9px] text-[#9CA3AF] uppercase tracking-wide">Volume</span>
           <div className="text-[#E6E7EA] text-[10px] font-semibold">
             ${formatCompactNumber(Math.round(volume))}
           </div>
         </div>
-        <div className="flex flex-col items-center justify-center gap-1 p-2 rounded-lg bg-[#17191E] border border-[#2A2B33]">
+        <div className="flex flex-col items-center justify-center gap-1 p-2 rounded-lg bg-[#25282B] border border-[#2A2B33]">
           <span className="text-[9px] text-[#9CA3AF] uppercase tracking-wide">Change</span>
           <div className={`text-[10px] font-semibold ${change >= 0 ? 'text-[#70E0B0]' : 'text-[#FF4D7F]'}`}>
             {change >= 0 ? '+' : ''}{change.toFixed(2)}%
@@ -1810,7 +1810,7 @@ const MonadTradeActionPanel: React.FC<MonadTradeActionPanelProps> = ({ token }) 
         </button>
         
         {isPoolInfoOpen && (
-          <div className="border-t border-[#2A2B33]" style={{ backgroundColor: '#0f1012' }}>
+          <div className="border-t border-[#2A2B33] bg-[#111214]">
             {/* Pool Info Section */}
             <div className="px-3 py-2.5 space-y-2.5">
               {/* Total Liq */}

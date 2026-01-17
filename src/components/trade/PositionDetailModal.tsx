@@ -1119,7 +1119,7 @@ export default function PositionDetailModal({
 
         {/* Deep Dive Stats */}
         <div className="px-4 pb-4">
-          <div className="bg-[#0F1012] border border-[#1E1F26] rounded-lg p-4 grid grid-cols-2 gap-x-6 gap-y-4">
+          <div className="bg-[#111214] border border-[#1E1F26] rounded-lg p-4 grid grid-cols-2 gap-x-6 gap-y-4">
             <div>
               <p className="text-[11px] text-[#9CA3AF] uppercase">Avg Entry</p>
               <p className="text-white text-sm font-semibold">{avgEntryDisplay}</p>
@@ -1172,7 +1172,7 @@ export default function PositionDetailModal({
         {/* Transaction History Table */}
         <div className="px-4 pb-6">
           {loadingTrades ? (
-            <div className="bg-[#0F1012] rounded-lg border border-[#1E1F26] p-8 text-center">
+            <div className="bg-[#111214] rounded-lg border border-[#1E1F26] p-8 text-center">
               <p className="text-[#9CA3AF] text-sm">Loading transactions...</p>
             </div>
           ) : trades.length > 0 ? (
@@ -1271,7 +1271,7 @@ export default function PositionDetailModal({
               })}
             </div>
           ) : (
-            <div className="bg-[#0F1012] rounded-lg border border-[#1E1F26] p-8 text-center">
+            <div className="bg-[#111214] rounded-lg border border-[#1E1F26] p-8 text-center">
               <p className="text-[#9CA3AF] text-sm">No transactions found</p>
             </div>
           )}

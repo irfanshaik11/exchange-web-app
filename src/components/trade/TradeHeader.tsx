@@ -17,9 +17,10 @@ import {
   FaSearch,
   FaExpand,
   FaCamera,
-  FaRegCopy,
   FaUser,
+  FaTelegram,
 } from "react-icons/fa";
+import { LuCopy } from "react-icons/lu";
 import { LuPill, LuDroplet, LuSearch } from "react-icons/lu";
 import Link from "next/link";
 import { CiTrophy } from "react-icons/ci";
@@ -32,18 +33,34 @@ import {
   PiRobotLight,
 } from "react-icons/pi";
 import ColorFillBar from "../ColorFillBar";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuGroup,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuTrigger,
+} from "../ui/dropdown-menu";
+import { useSearch } from "../ui/SearchContext";
+import { TradeSocialIcons } from "../TradeSocialIcons";
 
-const MONAD_PROTOCOL_KEYWORDS = ["nad.fun", "nadfun", "flap.sh", "flapsh", "kuru"];
+const MONAD_PROTOCOL_KEYWORDS = [
+  "nad.fun",
+  "nadfun",
+  "flap.sh",
+  "flapsh",
+  "kuru",
+];
 const MONAD_BRAND = {
   color: "#9B59B6",
   icon: "https://i0.wp.com/www.gizmotimes.com/wp-content/uploads/2023/10/Monad-Logo.png?fit=1920%2C1080&ssl=1",
 };
 // Monad candle colors (matches chart colors)
-const MONAD_RED = '#f26682';
+const MONAD_RED = "#f26682";
 
 /* ---------- AXIOM palette ---------- */
 const AX = {
-  bg: "#0f1012",
+  bg: "#111214",
   surface: "#1A1A1A",
   surface2: "#17191E",
   border: "#2A2B33",
@@ -243,6 +260,11 @@ function shouldFillProtocolBadge(token: Token): boolean {
 }
 
 /* ---------- helpers ---------- */
+function shortenAddress(address: string, chars = 4): string {
+  if (!address || address.length < chars * 2) return address;
+  return `${address.slice(0, chars)}...${address.slice(-chars)}`;
+}
+
 function getTokenAge(createdAt: string | number) {
   if (!createdAt && createdAt !== 0) return "Unknown";
   let timestamp = createdAt as any;
@@ -338,13 +360,13 @@ function StatInline({
   return (
     <div className="flex flex-col items-start gap-0.5">
       <span
-        className="text-[10px] tracking-wider uppercase"
-        style={{ color: AX.muted }}
+        className="text-[9px] sm:text-xs tracking-wider text-[#C4CCCC]"
+        // style={{ color: AX.muted }}
       >
         {label}
       </span>
       <span
-        className="text-[12px] tabular-nums"
+        className="text-[11px] sm:text-sm tabular-nums"
         style={{
           color:
             accent === "green"
@@ -428,7 +450,13 @@ const TradeHeader: React.FC<TradeHeaderProps> = ({ token, livePriceUsd, liveMark
   }
 
   const router = useRouter();
-  const { addToWatchlist, removeFromWatchlist, isInWatchlist, updateWatchlistToken } = useWatchlist();
+  const { openSearch } = useSearch();
+  const {
+    addToWatchlist,
+    removeFromWatchlist,
+    isInWatchlist,
+    updateWatchlistToken,
+  } = useWatchlist();
   const watchlistKey = token.pair_address || (token as any).mint || "";
   const isWatched = isInWatchlist(watchlistKey);
 
@@ -443,11 +471,20 @@ const TradeHeader: React.FC<TradeHeaderProps> = ({ token, livePriceUsd, liveMark
       undefined;
     const normalizedProtocol = (protocolSource || "").toLowerCase();
     const isMonadProtocol = normalizedProtocol
-      ? MONAD_PROTOCOL_KEYWORDS.some((keyword) => normalizedProtocol.includes(keyword))
+      ? MONAD_PROTOCOL_KEYWORDS.some((keyword) =>
+          normalizedProtocol.includes(keyword),
+        )
       : false;
-    const tokenChain = ((token as any).blockchain || (token as any).network || (token as any).chain || "") as string;
+    const tokenChain = ((token as any).blockchain ||
+      (token as any).network ||
+      (token as any).chain ||
+      "") as string;
     const normalizedChain = tokenChain.toLowerCase();
-    return normalizedChain === "monad" || router?.pathname?.includes("/trade/monad") || isMonadProtocol;
+    return (
+      normalizedChain === "monad" ||
+      router?.pathname?.includes("/trade/monad") ||
+      isMonadProtocol
+    );
   }, [token, router?.pathname]);
 
   // For Solana tokens, we only use data from /v1/trade/view endpoint (token prop)
@@ -498,12 +535,19 @@ const TradeHeader: React.FC<TradeHeaderProps> = ({ token, livePriceUsd, liveMark
   const searchMenuRef = useRef<HTMLDivElement>(null);
   
   // State for fetched age from search endpoint
-  const [fetchedCreatedAt, setFetchedCreatedAt] = useState<string | number | null>(null);
+  const [fetchedCreatedAt, setFetchedCreatedAt] = useState<
+    string | number | null
+  >(null);
   const fetchingAgeRef = useRef(false);
-  
+
   // Check if we have age data (include launch_time which backend often uses instead of created_at)
-  const hasAge = (token as any).created_at || (token as any).createdAt || (token as any).CreatedAt || (token as any).launch_time || fetchedCreatedAt;
-  
+  const hasAge =
+    (token as any).created_at ||
+    (token as any).createdAt ||
+    (token as any).CreatedAt ||
+    (token as any).launch_time ||
+    fetchedCreatedAt;
+
   // Fetch age from search endpoint if missing (for Monad tokens only)
   useEffect(() => {
     // Only fetch if:
@@ -515,16 +559,19 @@ const TradeHeader: React.FC<TradeHeaderProps> = ({ token, livePriceUsd, liveMark
 
     // Only fetch for Monad tokens - Solana uses /v1/trade/view endpoint only
     if (!isMonadContext) return;
-    
-    const tokenAddress = token.mint || token.pair_address || (token as any).address;
+
+    const tokenAddress =
+      token.mint || token.pair_address || (token as any).address;
     if (!tokenAddress) return;
-    
+
     fetchingAgeRef.current = true;
-    const monadServiceUrl = process.env.NEXT_PUBLIC_MONAD_TOKEN_SERVICE_URL || 'https://monad-token-service.narrative.trade';
+    const monadServiceUrl =
+      process.env.NEXT_PUBLIC_MONAD_TOKEN_SERVICE_URL ||
+      "https://monad-token-service.narrative.trade";
     const searchUrl = `${monadServiceUrl}/v1/search?q=${encodeURIComponent(tokenAddress)}`;
-    
+
     fetch(searchUrl, {
-      headers: { 'Accept': 'application/json' }
+      headers: { Accept: "application/json" },
     })
       .then((res) => {
         if (!res.ok) return null;
@@ -540,7 +587,10 @@ const TradeHeader: React.FC<TradeHeaderProps> = ({ token, livePriceUsd, liveMark
         }
       })
       .catch((err) => {
-        console.debug('[TradeHeader] Failed to fetch age from search endpoint:', err);
+        console.debug(
+          "[TradeHeader] Failed to fetch age from search endpoint:",
+          err,
+        );
       })
       .finally(() => {
         fetchingAgeRef.current = false;
@@ -561,30 +611,30 @@ const TradeHeader: React.FC<TradeHeaderProps> = ({ token, livePriceUsd, liveMark
     // For Monad, can also use fetchedCreatedAt from search endpoint
     const createdAt = isSolanaToken
       ? // Solana: Only use token data from /v1/trade/view endpoint
-        ((token as any).created_at ||
+        (token as any).created_at ||
         (token as any).createdAt ||
         (token as any).CreatedAt ||
-        (token as any).launch_time)
+        (token as any).launch_time
       : // Monad: Can also use fetched data
-        ((token as any).created_at ||
+        (token as any).created_at ||
         (token as any).createdAt ||
         (token as any).CreatedAt ||
         (token as any).launch_time ||
-        fetchedCreatedAt);
+        fetchedCreatedAt;
 
     // Check if we have any age data defined (vs still loading)
     const hasAnyAgeField = isSolanaToken
       ? // Solana: Only check token fields
-        ((token as any).created_at !== undefined ||
+        (token as any).created_at !== undefined ||
         (token as any).createdAt !== undefined ||
         (token as any).CreatedAt !== undefined ||
-        (token as any).launch_time !== undefined)
+        (token as any).launch_time !== undefined
       : // Monad: Also check fetched data
-        ((token as any).created_at !== undefined ||
+        (token as any).created_at !== undefined ||
         (token as any).createdAt !== undefined ||
         (token as any).CreatedAt !== undefined ||
         (token as any).launch_time !== undefined ||
-        fetchedCreatedAt !== null);
+        fetchedCreatedAt !== null;
 
     const age = getTokenAge(createdAt);
 
@@ -616,11 +666,11 @@ const TradeHeader: React.FC<TradeHeaderProps> = ({ token, livePriceUsd, liveMark
   const marketData = getMarketData();
   const chartPriceUsd = coalesceNumber(
     livePriceUsd,
-    (token as any)?.chart_live_price_usd
+    (token as any)?.chart_live_price_usd,
   );
   const chartMarketCapUsd = coalesceNumber(
     liveMarketCapUsd,
-    (token as any)?.chart_live_market_cap_usd
+    (token as any)?.chart_live_market_cap_usd,
   );
   // Priority: chartPriceUsd (OHLC chart) > wsTokenInfo > marketData > token
   // Chart price has highest priority to ensure header stays in sync with displayed chart
@@ -630,7 +680,7 @@ const TradeHeader: React.FC<TradeHeaderProps> = ({ token, livePriceUsd, liveMark
       wsTokenInfo?.price_usd,
       marketData?.price_usd,
       (token as any).usd_price,
-      (token as any).price_usd
+      (token as any).price_usd,
     ) ?? 0;
   // Priority: chartMarketCapUsd (OHLC chart) > wsTokenInfo > marketData > token
   // Chart market cap has highest priority to ensure header stays in sync with displayed chart
@@ -641,14 +691,14 @@ const TradeHeader: React.FC<TradeHeaderProps> = ({ token, livePriceUsd, liveMark
       marketData?.market_cap_usd,
       (token as any).market_cap_usd,
       (token as any).fully_diluted_value,
-      token.market_cap_usd
+      token.market_cap_usd,
     ) ?? 0;
   const effectivePriceChange1h = coalesceNumber(
     (token as any)?.price_percent_change_1h,
     (token as any)?.price_change_1h,
     (token as any)?.price_change,
     (token as any)?.price_percent_change_24h,
-    (token as any)?.price_change_24h
+    (token as any)?.price_change_24h,
   );
 
   // Keep watchlist entry hydrated with fresh price/percent/mcap when viewed on trade page
@@ -657,7 +707,8 @@ const TradeHeader: React.FC<TradeHeaderProps> = ({ token, livePriceUsd, liveMark
 
     // Only update when we have meaningful data
     const hasPrice = Number.isFinite(effectivePrice) && effectivePrice > 0;
-    const hasMcap = Number.isFinite(effectiveMarketCap) && effectiveMarketCap > 0;
+    const hasMcap =
+      Number.isFinite(effectiveMarketCap) && effectiveMarketCap > 0;
     const hasChange = Number.isFinite(effectivePriceChange1h ?? NaN);
     if (!hasPrice && !hasMcap && !hasChange) return;
 
@@ -665,27 +716,55 @@ const TradeHeader: React.FC<TradeHeaderProps> = ({ token, livePriceUsd, liveMark
       ...token,
       price_usd: hasPrice ? effectivePrice : (token as any).price_usd,
       usd_price: hasPrice ? effectivePrice : (token as any).usd_price,
-      market_cap_usd: hasMcap ? effectiveMarketCap : (token as any).market_cap_usd,
-      fully_diluted_value: hasMcap ? effectiveMarketCap : (token as any).fully_diluted_value,
-      price_percent_change_1h: hasChange ? (effectivePriceChange1h as number) : (token as any).price_percent_change_1h,
-      price_change_1h: hasChange ? (effectivePriceChange1h as number) : (token as any).price_change_1h,
+      market_cap_usd: hasMcap
+        ? effectiveMarketCap
+        : (token as any).market_cap_usd,
+      fully_diluted_value: hasMcap
+        ? effectiveMarketCap
+        : (token as any).fully_diluted_value,
+      price_percent_change_1h: hasChange
+        ? (effectivePriceChange1h as number)
+        : (token as any).price_percent_change_1h,
+      price_change_1h: hasChange
+        ? (effectivePriceChange1h as number)
+        : (token as any).price_change_1h,
     } as any);
-  }, [effectiveMarketCap, effectivePrice, effectivePriceChange1h, isWatched, token, updateWatchlistToken, watchlistKey]);
+  }, [
+    effectiveMarketCap,
+    effectivePrice,
+    effectivePriceChange1h,
+    isWatched,
+    token,
+    updateWatchlistToken,
+    watchlistKey,
+  ]);
   const mcap = effectiveMarketCap;
   const price = effectivePrice;
 
   // LIQUIDITY: Priority: wsTokenInfo (unified WebSocket) > token prop > marketData
   // Check if liquidity data actually exists (vs being undefined/null)
-  const hasWsLiquidity = wsTokenInfo?.liquidity_usd !== undefined && wsTokenInfo.liquidity_usd > 0;
-  const hasTokenLiquidity = (token as any).liquidity_usd !== undefined || (token as any).total_liquidity_usd !== undefined;
-  const tokenLiquidity = (token as any).liquidity_usd ?? (token as any).total_liquidity_usd ?? 0;
+  const hasWsLiquidity =
+    wsTokenInfo?.liquidity_usd !== undefined && wsTokenInfo.liquidity_usd > 0;
+  const hasTokenLiquidity =
+    (token as any).liquidity_usd !== undefined ||
+    (token as any).total_liquidity_usd !== undefined;
+  const tokenLiquidity =
+    (token as any).liquidity_usd ?? (token as any).total_liquidity_usd ?? 0;
   // For Solana: Prefer unified WebSocket, fallback to token data
   // For Monad: Can also use marketData WebSocket as additional source
-  const wsLiquidityFromMarketData = isSolanaToken ? null : (marketData?.liquidity_usd ?? marketData?.volume_usd);
+  const wsLiquidityFromMarketData = isSolanaToken
+    ? null
+    : (marketData?.liquidity_usd ?? marketData?.volume_usd);
   // Unified WebSocket liquidity has highest priority
-  const liq = hasWsLiquidity ? wsTokenInfo!.liquidity_usd : ((wsLiquidityFromMarketData && wsLiquidityFromMarketData > 0) ? wsLiquidityFromMarketData : tokenLiquidity);
+  const liq = hasWsLiquidity
+    ? wsTokenInfo!.liquidity_usd
+    : wsLiquidityFromMarketData && wsLiquidityFromMarketData > 0
+      ? wsLiquidityFromMarketData
+      : tokenLiquidity;
   // Track if we're still loading liquidity data (no source has provided it yet)
-  const isLiquidityLoading = isSolanaToken ? (!hasWsLiquidity && !hasTokenLiquidity) : (!hasWsLiquidity && !hasTokenLiquidity && !wsLiquidityFromMarketData);
+  const isLiquidityLoading = isSolanaToken
+    ? !hasWsLiquidity && !hasTokenLiquidity
+    : !hasWsLiquidity && !hasTokenLiquidity && !wsLiquidityFromMarketData;
   const supply = (token as any).total_supply ?? (token as any).supply ?? 0;
   const formattedMarketCap = useMemo(() => formatMarketCap(mcap), [mcap]);
   const isLowLiquidity = Number(liq) < 1000;
@@ -706,10 +785,7 @@ const TradeHeader: React.FC<TradeHeaderProps> = ({ token, livePriceUsd, liveMark
       (token as any).graduationPercent ??
       0;
     if (v) return v;
-    const mc =
-      effectiveMarketCap ||
-      (token as any).fully_diluted_value ||
-      0;
+    const mc = effectiveMarketCap || (token as any).fully_diluted_value || 0;
     return mc ? Math.min((mc / 69000000) * 100, 100) : 0;
   })();
 
@@ -813,8 +889,10 @@ const TradeHeader: React.FC<TradeHeaderProps> = ({ token, livePriceUsd, liveMark
         ...(token as any),
         price_usd: effectivePrice,
         usd_price: effectivePrice,
-        price_percent_change_1h: effectivePriceChange1h ?? (token as any).price_percent_change_1h,
-        price_change_1h: effectivePriceChange1h ?? (token as any).price_change_1h,
+        price_percent_change_1h:
+          effectivePriceChange1h ?? (token as any).price_percent_change_1h,
+        price_change_1h:
+          effectivePriceChange1h ?? (token as any).price_change_1h,
         market_cap_usd: effectiveMarketCap,
         fully_diluted_value: effectiveMarketCap,
       } as any);
@@ -938,35 +1016,51 @@ const TradeHeader: React.FC<TradeHeaderProps> = ({ token, livePriceUsd, liveMark
 
   return (
     <div
-      className="flex w-full items-center gap-6 px-2 py-2"
+      className="relative flex w-full flex-col gap-2 px-1.5 py-1.5 sm:flex-row sm:items-center sm:gap-4 sm:px-2 sm:py-2 md:gap-8 lg:gap-10 !font-geist"
       style={{ color: AX.text }}
     >
       {/* WS banner(s) */}
       {wsError && (
-        <div className="absolute top-0 right-0 left-0 z-10 border-b border-red-500/30 bg-red-900/20 px-3 py-1">
-          <div className="text-center text-[10px] text-red-400">
+        <div className="absolute top-0 right-0 left-0 z-10 border-b border-red-500/30 bg-red-900/20 px-2 py-0.5 sm:px-3 sm:py-1">
+          <div className="text-center text-[9px] sm:text-[10px] text-red-400 truncate">
             Market Data Error: {wsError}
           </div>
         </div>
       )}
       {!wsConnected && !wsLoading && (
-        <div className="absolute top-0 right-0 left-0 z-10 border-b border-yellow-500/30 bg-yellow-900/20 px-3 py-1">
-          <div className="text-center text-[10px] text-yellow-400">
+        <div className="absolute top-0 right-0 left-0 z-10 border-b border-yellow-500/30 bg-yellow-900/20 px-2 py-0.5 sm:px-3 sm:py-1">
+          <div className="text-center text-[9px] sm:text-[10px] text-yellow-400">
             Using static market data
           </div>
         </div>
       )}
 
       {/* LEFT: token avatar + meta */}
-      <div className="flex items-center gap-3">
+      <div className="flex flex-shrink-0 items-center gap-2 sm:gap-3">
+        {/* Star icon - far left */}
+        <button
+          onClick={handleWatchlistClick}
+          className="cursor-pointer flex-shrink-0 transition-colors hover:bg-white/10 rounded p-1"
+          aria-label={
+            isWatched ? "Remove from Watchlist" : "Add to Watchlist"
+          }
+          title={isWatched ? "Remove from Watchlist" : "Add to Watchlist"}
+        >
+          {isWatched ? (
+            <FaStar className="w-4 h-4 sm:w-3.5 sm:h-3.5 text-yellow-400" />
+          ) : (
+            <FaRegStar className="w-4 h-4 sm:w-3.5 sm:h-3.5" style={{ color: AX.muted }} />
+          )}
+        </button>
+
         {/* Avatar with PulseTable-style border + protocol badge */}
         <div
           className="relative flex cursor-pointer items-center justify-center rounded-sm transition-all duration-300 ease-out"
           onMouseEnter={handleImageHover}
           onMouseLeave={handleImageLeave}
           style={{
-            width: 44,
-            height: 44,
+            width: "clamp(36px, 8vw, 44px)",
+            height: "clamp(36px, 8vw, 44px)",
             overflow: "visible",
             boxShadow: showPreview
               ? `0 0 5px ${AX.glowCyan}, 0 0 10px ${AX.glowCyan}`
@@ -988,7 +1082,7 @@ const TradeHeader: React.FC<TradeHeaderProps> = ({ token, livePriceUsd, liveMark
             >
               <div
                 className="relative overflow-hidden rounded-sm"
-                style={{ width: 36, height: 36 }}
+                style={{ width: "clamp(28px, 6.5vw, 36px)", height: "clamp(28px, 6.5vw, 36px)" }}
               >
                 <FastImage
                   src={imgSrc ?? undefined}
@@ -1008,8 +1102,8 @@ const TradeHeader: React.FC<TradeHeaderProps> = ({ token, livePriceUsd, liveMark
           <div
             className="absolute right-0 bottom-0 z-10 flex translate-x-1/5 translate-y-1/4 transform items-center justify-center rounded-full bg-white"
             style={{
-              width: 12,
-              height: 12,
+              width: "clamp(10px, 2.5vw, 12px)",
+              height: "clamp(10px, 2.5vw, 12px)",
               border: `1px solid ${protocolColor}`,
               boxShadow: `0 0 2px ${protocolColor}60`,
             }}
@@ -1043,41 +1137,89 @@ const TradeHeader: React.FC<TradeHeaderProps> = ({ token, livePriceUsd, liveMark
               }}
             >
               <FaCamera
-                size={16}
+                size={14}
+                className="sm:w-4 sm:h-4 drop-shadow-lg"
                 style={{ color: "#000000" }}
-                className="drop-shadow-lg"
               />
             </div>
           </div>
         </div>
 
         {/* Name / symbol / age + quick actions */}
-        <div className="flex flex-col gap-0.5">
-          <div className="flex items-center gap-1.5">
-            <span className="text-[14px]">{token.symbol}</span>
-            <span className="text-[11px]" style={{ color: AX.muted }}>
+        <div className="flex min-w-0 flex-1 flex-col">
+          <div className="flex items-center gap-1 sm:gap-1.5">
+            <span className="truncate text-xs sm:text-xl">{token.symbol}</span>
+            <span className="hidden truncate text-[10px] sm:inline sm:text-base" style={{ color: AX.muted }}>
               {token.name}
             </span>
 
             {!!token.mint && (
-              <button
-                className="ml-1 cursor-pointer"
-                title="Copy contract"
-                onClick={async (e) => {
-                  e.stopPropagation();
-                  try {
-                    await navigator.clipboard.writeText(token.mint!);
-                    showToast("Address copied to clipboard");
-                  } catch {}
-                }}
-                style={{ color: AX.muted }}
-              >
-                <FaRegCopy size={12} />
-              </button>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <button className="ml-0.5 sm:ml-1 p-0.5 sm:p-1 flex-shrink-0" style={{ color: AX.muted }}>
+                    <LuCopy size={12} className="sm:w-3.5 sm:h-3.5" />
+                  </button>
+                </DropdownMenuTrigger>
+
+                <DropdownMenuContent className="dark bg-popover border-border">
+                  <DropdownMenuItem
+                    className="dark:focus:bg-accent focus:bg-accent dark:text-popover-foreground"
+                    onClick={async () => {
+                      await navigator.clipboard.writeText(token.name);
+                      showToast(`${token.name} copied`);
+                    }}
+                  >
+                    Copy {token.name}
+                  </DropdownMenuItem>
+
+                  <DropdownMenuItem
+                    className="dark:focus:bg-accent focus:bg-accent dark:text-popover-foreground"
+                    onClick={async () => {
+                      await navigator.clipboard.writeText(token.pair_address);
+                      showToast(`Pair address copied`);
+                    }}
+                  >
+                    Copy {shortenAddress(token.pair_address)}
+                  </DropdownMenuItem>
+
+                  <DropdownMenuItem
+                    className="dark:focus:bg-accent focus:bg-accent dark:text-popover-foreground"
+                    onClick={() => {
+                      window.open(
+                        `https://www.google.com/search?q=${encodeURIComponent(token.name)}`,
+                        "_blank",
+                      );
+                    }}
+                  >
+                    Google for {token.name}
+                  </DropdownMenuItem>
+
+                  <DropdownMenuItem
+                    className="dark:focus:bg-accent focus:bg-accent dark:text-popover-foreground"
+                    onClick={() => {
+                      window.open(
+                        `https://x.com/search?q=${encodeURIComponent(token.name)}`,
+                        "_blank",
+                      );
+                    }}
+                  >
+                    X search for {token.name}
+                  </DropdownMenuItem>
+
+                  <DropdownMenuItem
+                    className="dark:focus:bg-accent focus:bg-accent dark:text-popover-foreground"
+                    onClick={() => {
+                      openSearch(token.name);
+                    }}
+                  >
+                    Search for {token.name}
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
             )}
 
             <button
-              className="ml-1 cursor-pointer"
+              className="ml-0.5 sm:ml-1 cursor-pointer flex-shrink-0"
               title="Share page link"
               onClick={async (e) => {
                 e.stopPropagation();
@@ -1103,14 +1245,14 @@ const TradeHeader: React.FC<TradeHeaderProps> = ({ token, livePriceUsd, liveMark
               }}
               style={{ color: AX.muted }}
             >
-              <IoShareSocialOutline size={14} />
+              <IoShareSocialOutline size={12} className="sm:w-3.5 sm:h-3.5" />
             </button>
           </div>
 
-          <div className="mt-1 flex items-center gap-1 text-xs lg:gap-2">
-            <span>{tokenAgeLabel}</span>
+          <div className="mt-1 flex flex-wrap items-center gap-1 text-[10px] sm:gap-1 sm:text-xs lg:gap-2">
+            <span className="whitespace-nowrap">{tokenAgeLabel}</span>
             {/* Socials */}
-            <div className="relative flex items-center gap-1 text-neutral-400 lg:gap-1">
+            <div className="relative flex items-center gap-0.5 text-neutral-400 sm:gap-1 lg:gap-1">
               {/* Pump.fun Link - only show for pump tokens */}
               {/* {token.mint.slice(-4) === "pump" && (
                               <Link
@@ -1184,13 +1326,13 @@ const TradeHeader: React.FC<TradeHeaderProps> = ({ token, livePriceUsd, liveMark
                     }, 200);
                   }}
                 >
-                  <FaXTwitter size={16} className="text-neutral-400 hover:text-white" />
+                  <FaXTwitter size={14} className="sm:w-4 sm:h-4 text-neutral-400 hover:text-white" />
                 </button>
 
                 {/* X Profile Preview Popup - PulseTable style */}
                 {showXPreview && (
                   <div
-                    className="fixed z-[999999]"
+                    className="fixed z-[999999] pointer-events-auto"
                     style={{
                       left: `${xPreviewPos.left}px`,
                       top: `${xPreviewPos.top}px`,
@@ -1290,14 +1432,14 @@ const TradeHeader: React.FC<TradeHeaderProps> = ({ token, livePriceUsd, liveMark
               </div>
 
               {token.links && (
-                <button>
-                  <PiTelegramLogo size={16} />
+                <button className="flex-shrink-0">
+                  <PiTelegramLogo size={14} className="sm:w-4 sm:h-4" />
                 </button>
               )}
 
               {token.links && (
-                <button>
-                  <FiGlobe size={16} />
+                <button className="flex-shrink-0">
+                  <FiGlobe size={14} className="sm:w-4 sm:h-4" />
                 </button>
               )}
 
@@ -1333,7 +1475,7 @@ const TradeHeader: React.FC<TradeHeaderProps> = ({ token, livePriceUsd, liveMark
                     e.preventDefault();
                   }}
                 >
-                  <LuSearch size={16} />
+                  <LuSearch size={14} className="sm:w-4 sm:h-4" />
                 </button>
 
                 {/* Search Dropdown Menu */}
@@ -1428,17 +1570,17 @@ const TradeHeader: React.FC<TradeHeaderProps> = ({ token, livePriceUsd, liveMark
                 )}
               </div>
 
-              <div className="ml-1 flex flex-row gap-2 font-light">
+              <div className="ml-1 flex flex-row flex-wrap gap-1.5 sm:gap-2 font-light">
                 {/* Check if this is a Monad token - hide icons for Monad */}
                 {(() => {
                   const protocol = extractProtocolRaw(token);
-                  const isMonad = protocol && (
-                    protocol.includes('nad.fun') || 
-                    protocol.includes('nadfun') || 
-                    protocol.includes('flapsh') ||
-                    protocol.includes('flap.sh')
-                  );
-                  
+                  const isMonad =
+                    protocol &&
+                    (protocol.includes("nad.fun") ||
+                      protocol.includes("nadfun") ||
+                      protocol.includes("flapsh") ||
+                      protocol.includes("flap.sh"));
+
                   if (isMonad) {
                     return null; // Hide all icons for Monad tokens
                   }
@@ -1457,9 +1599,9 @@ const TradeHeader: React.FC<TradeHeaderProps> = ({ token, livePriceUsd, liveMark
                   return (
                     <>
                       {/* Crown Icon - Dev Migration Stats */}
-                      <div className="group/dev relative flex items-center gap-1 cursor-pointer">
-                        <PiCrownSimpleLight size={16} style={{ color: "#dcc13c" }} />
-                        <span className="text-sm text-white">
+                      <div className="group/dev relative flex items-center gap-0.5 sm:gap-1 cursor-pointer">
+                        <PiCrownSimpleLight size={14} className="sm:w-4 sm:h-4" style={{ color: "#dcc13c" }} />
+                        <span className="text-xs sm:text-sm text-white">
                           {devMigrated}/{devCreated}
                         </span>
                         {/* Dev Migration Tooltip */}
@@ -1485,25 +1627,29 @@ const TradeHeader: React.FC<TradeHeaderProps> = ({ token, livePriceUsd, liveMark
                       </div>
 
                       {/* KOL Count - Trophy Icon */}
-                      <div className="group/kol relative flex items-center gap-1 text-violet-200">
-                        <CiTrophy size={16} />
-                        <span className="text-sm text-white">{kolCount}</span>
+                      <div className="group/kol relative flex items-center gap-0.5 sm:gap-1 text-violet-200">
+                        <CiTrophy size={14} className="sm:w-4 sm:h-4" />
+                        <span className="text-xs sm:text-sm text-white">{kolCount}</span>
                         {/* Tooltip */}
-                        <div className="pointer-events-none absolute left-0 top-full mt-2 px-3 py-2 bg-[#1a1b1f] border border-[#2a2b33] rounded-lg opacity-0 group-hover/kol:opacity-100 transition-opacity duration-100 whitespace-nowrap z-[99999] shadow-xl">
-                          <span className="text-sm text-white font-medium">KOL Count</span>
-                          <p className="text-xs text-gray-400 mt-0.5">Key Opinion Leaders holding this token</p>
+                        <div className="pointer-events-none absolute top-full left-0 z-[99999] mt-2 rounded-lg border border-[#2a2b33] bg-[#1a1b1f] px-3 py-2 whitespace-nowrap opacity-0 shadow-xl transition-opacity duration-100 group-hover/kol:opacity-100">
+                          <span className="text-sm font-medium text-white">
+                            KOL Count
+                          </span>
+                          <p className="mt-0.5 text-xs text-gray-400">
+                            Key Opinion Leaders holding this token
+                          </p>
                         </div>
                       </div>
 
                       {/* People Icon - Total Holders */}
-                      <div className="group/holder relative flex items-center gap-1">
+                      <div className="group/holder relative flex items-center gap-0.5 sm:gap-1">
                         <div
                           className="flex cursor-help items-center justify-center rounded"
                           style={{ color: "#36d8ff" }}
                         >
-                          <GoPeople size={16} />
+                          <GoPeople size={14} className="sm:w-4 sm:h-4" />
                         </div>
-                        <span className="text-sm text-white">
+                        <span className="text-xs sm:text-sm text-white">
                           {(() => {
                             const holders = totalHolders;
                             if (holders >= 1e9)
@@ -1516,14 +1662,18 @@ const TradeHeader: React.FC<TradeHeaderProps> = ({ token, livePriceUsd, liveMark
                           })()}
                         </span>
                         {/* Tooltip */}
-                        <div className="pointer-events-none absolute left-0 top-full mt-2 px-3 py-2 bg-[#1a1b1f] border border-[#2a2b33] rounded-lg opacity-0 group-hover/holder:opacity-100 transition-opacity duration-100 whitespace-nowrap z-[99999] shadow-xl">
-                          <span className="text-sm text-white font-medium">Holder Count</span>
-                          <p className="text-xs text-gray-400 mt-0.5">Total wallets holding this token</p>
+                        <div className="pointer-events-none absolute top-full left-0 z-[99999] mt-2 rounded-lg border border-[#2a2b33] bg-[#1a1b1f] px-3 py-2 whitespace-nowrap opacity-0 shadow-xl transition-opacity duration-100 group-hover/holder:opacity-100">
+                          <span className="text-sm font-medium text-white">
+                            Holder Count
+                          </span>
+                          <p className="mt-0.5 text-xs text-gray-400">
+                            Total wallets holding this token
+                          </p>
                         </div>
                       </div>
-                      <div className="flex items-center gap-1 text-violet-200">
-                        <PiRobotLight size={16} />
-                        <span className="text-sm text-white">0</span>
+                      <div className="flex items-center gap-0.5 sm:gap-1 text-violet-200">
+                        <PiRobotLight size={14} className="sm:w-4 sm:h-4" />
+                        <span className="text-xs sm:text-sm text-white">0</span>
                       </div>
                     </>
                   );
@@ -1556,27 +1706,35 @@ const TradeHeader: React.FC<TradeHeaderProps> = ({ token, livePriceUsd, liveMark
       </div>
 
       {/* CENTER: compact stats */}
-      <div className="flex items-center gap-6">
+      <div className="flex flex-1 flex-wrap items-center gap-3 sm:gap-4 lg:gap-6">
         <div className="text-left">
-          <div className="flex items-center gap-1 text-[18px] tabular-nums">
+          <div className="flex items-center gap-1 text-sm sm:text-base lg:text-[20px] tabular-nums">
             {formattedMarketCap === "-" ? "-" : `$${formattedMarketCap}`}
           </div>
         </div>
 
-        <div className="flex items-center gap-4">
+        <div className="flex flex-wrap items-center gap-2 sm:gap-3 lg:gap-4">
           <StatInline label="Price">
             ${<SubscriptNumber value={price} />}
           </StatInline>
           <StatInline label="Liquidity">
             <span className="inline-flex items-center gap-1">
-              <span style={{ color: isLiquidityLoading ? AX.muted : (isLowLiquidity ? AX.warning : AX.text) }}>
-                {isLiquidityLoading ? '...' : `$${formatSmartNumber(liq)}`}
+              <span
+                style={{
+                  color: isLiquidityLoading
+                    ? AX.muted
+                    : isLowLiquidity
+                      ? AX.warning
+                      : AX.text,
+                }}
+              >
+                {isLiquidityLoading ? "..." : `$${formatSmartNumber(liq)}`}
               </span>
               {!isLiquidityLoading && isLowLiquidity && (
-                <span className="group relative inline-flex items-center">
-                  <LuDroplet size={16} color={AX.warning} />
+                <span className="group relative inline-flex items-center flex-shrink-0">
+                  <LuDroplet size={14} className="sm:w-4 sm:h-4" color={AX.warning} />
                   <span
-                    className="absolute bottom-full left-1/2 z-50 mb-1.5 w-max -translate-x-1/2 rounded bg-black px-2 py-1 text-[10px] font-medium text-yellow-200 opacity-0 transition-opacity duration-150 group-hover:opacity-100"
+                    className="absolute bottom-full left-1/2 z-50 mb-1.5 w-max -translate-x-1/2 rounded bg-black px-2 py-1 text-[9px] sm:text-[10px] font-medium text-yellow-200 opacity-0 transition-opacity duration-150 group-hover:opacity-100"
                     style={{ border: `1px solid rgba(250, 204, 21, 0.4)` }}
                   >
                     Warning: Low liquidity
@@ -1589,13 +1747,13 @@ const TradeHeader: React.FC<TradeHeaderProps> = ({ token, livePriceUsd, liveMark
           {(() => {
             // Hide for Monad tokens
             const protocol = extractProtocolRaw(token);
-            const isMonad = protocol && (
-              protocol.includes('nad.fun') ||
-              protocol.includes('nadfun') ||
-              protocol.includes('flapsh') ||
-              protocol.includes('flap.sh') ||
-              protocol.includes('kuru')
-            );
+            const isMonad =
+              protocol &&
+              (protocol.includes("nad.fun") ||
+                protocol.includes("nadfun") ||
+                protocol.includes("flapsh") ||
+                protocol.includes("flap.sh") ||
+                protocol.includes("kuru"));
             if (isMonad) return null;
 
             // SOL price for converting volume from SOL to USD
@@ -1617,11 +1775,14 @@ const TradeHeader: React.FC<TradeHeaderProps> = ({ token, livePriceUsd, liveMark
           <StatInline label="Supply">{formatSmartNumber(supply)}</StatInline>
           {/* Gas Fees - Commented out per request
           <StatInline label="Gas Fees">
-            {formatLamportsToSol((wsTokenInfo as any)?.total_fees_lamports ?? (token as any)?.total_fees_lamports)}
+            {formatLamportsToSol(
+              (wsTokenInfo as any)?.total_fees_lamports ??
+                (token as any)?.total_fees_lamports,
+            )}
           </StatInline>
           */}
           <StatInline label="B. Curve">
-            <div className="flex flex-row items-center gap-2 text-xs">
+            <div className="flex flex-row items-center gap-1 sm:gap-2">
               {Number.isFinite(Number(curvePct))
                 ? `${Number(curvePct).toFixed(1)}%`
                 : "—"}
@@ -1635,44 +1796,32 @@ const TradeHeader: React.FC<TradeHeaderProps> = ({ token, livePriceUsd, liveMark
       </div>
 
       {/* RIGHT: actions */}
-      {(() => {
+      {/* {(() => {
         const protocol = extractProtocolRaw(token);
-        const isMonad = protocol && (
-          protocol.includes('nad.fun') || 
-          protocol.includes('nadfun') || 
-          protocol.includes('flapsh') ||
-          protocol.includes('flap.sh') ||
-          protocol.includes('kuru')
-        );
-        
-        return (
-          <div className={`flex items-center gap-2 ${isMonad ? 'ml-auto' : ''}`}>
-            <button
-              onClick={handleWatchlistClick}
-              className="cursor-pointer text-[14px]"
-              aria-label={isWatched ? "Remove from Watchlist" : "Add to Watchlist"}
-              title={isWatched ? "Remove from Watchlist" : "Add to Watchlist"}
-            >
-              {isWatched ? (
-                <FaStar className="text-yellow-400" />
-              ) : (
-                <FaRegStar style={{ color: AX.muted }} />
-              )}
-            </button>
+        const isMonad =
+          protocol &&
+          (protocol.includes("nad.fun") ||
+            protocol.includes("nadfun") ||
+            protocol.includes("flapsh") ||
+            protocol.includes("flap.sh") ||
+            protocol.includes("kuru"));
 
-            {/* Hide expand button for Monad tokens */}
+        return (
+          <div
+            className={`flex flex-shrink-0 items-center gap-1.5 sm:gap-2 ${isMonad ? "ml-auto" : ""}`}
+          >
             {!isMonad && (
               <button
                 title="Expand chart"
-                className="grid h-6 w-6 place-items-center"
+                className="grid h-5 w-5 sm:h-6 sm:w-6 place-items-center flex-shrink-0"
                 style={{ color: AX.muted }}
               >
-                <FaExpand size={12} />
+                <FaExpand size={10} className="sm:w-3 sm:h-3" />
               </button>
             )}
           </div>
         );
-      })()}
+      })()} */}
 
       {/* tiny toast */}
       {toastMessage && (

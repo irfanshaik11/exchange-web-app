@@ -934,7 +934,7 @@ export default function MonadTradePage() {
       <div
         className="h-screen w-full flex flex-col overflow-hidden"
         style={{
-          backgroundColor: "#0f1012",
+          backgroundColor: "#111214",
           color: AX.text,
           fontFamily: 'Inter, -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif',
         }}
@@ -1165,7 +1165,7 @@ export default function MonadTradePage() {
           </div>
 
           {/* RIGHT: action panel */}
-          <div className="flex-shrink-0 min-w-[260px] basis-[280px] md:basis-[310px] lg:basis-[330px] hidden lg:flex flex-col overflow-y-auto h-full">
+          <div className="flex-shrink-0 min-w-[260px] basis-[280px] md:basis-[310px] lg:basis-[330px] hidden lg:flex flex-col overflow-y-auto h-full pb-12">
             <div className="right-rail-panel token-info-panel">
               <MonadTradeActionPanel token={displayToken as any} />
             </div>
@@ -1186,7 +1186,7 @@ export default function MonadTradePage() {
         <div className="fixed inset-0 z-[100] lg:hidden">
           <div className={`absolute inset-0 bg-black/70 bg-opacity-50 transition-opacity duration-300 ${isClosingModal ? "opacity-0" : "opacity-100"}`} onClick={closeModal}/>
           <div ref={modalDragRef}
-               className={`absolute bottom-0 left-0 right-0 bg-[#0f1012] rounded-t-xl shadow-2xl max-h-[85vh] flex flex-col ${isClosingModal ? "mobile-trade-modal-closing" : "mobile-trade-modal"}`}
+               className={`absolute bottom-0 left-0 right-0 bg-[#111214] rounded-t-xl shadow-2xl max-h-[85vh] flex flex-col ${isClosingModal ? "mobile-trade-modal-closing" : "mobile-trade-modal"}`}
                style={{ touchAction: "none" }}>
             <div className="flex justify-center pt-3 pb-2 cursor-grab active:cursor-grabbing select-none"
                  onTouchStart={handleDragStart} onTouchMove={handleDragMove} onTouchEnd={handleDragEnd}

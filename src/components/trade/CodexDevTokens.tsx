@@ -1,14 +1,20 @@
-import React, { useMemo } from 'react';
+import React, { useState, useEffect, useLayoutEffect, useMemo, useCallback } from 'react';
 import { formatSmartNumber } from '~/utils/db';
 import useCodexDevTokens from '../../hooks/useCodexDevTokens';
 import useSolanaTokenWebSocket, { type SolanaDevToken } from '../../hooks/useSolanaTokenWebSocket';
 import useMonadDevTokens from '../../hooks/useMonadDevTokens';
 import type { Token } from '~/utils/db';
 import DevTokensPieChart from './DevTokensPieChart';
+import { FaChevronLeft, FaChevronRight, FaCopy, FaDownload, FaSearch, FaBars } from 'react-icons/fa';
+import { SiSolana } from 'react-icons/si';
+import { IoIosCloseCircleOutline } from 'react-icons/io';
+import toast from 'react-hot-toast';
+import InterstateTooltip from '../InterstateTooltip';
 
 interface CodexDevTokensProps {
   token: Token | null;
   chain?: 'sol' | 'monad'; // Chain to determine which endpoint to use
+  onTotalCountChange?: (count: number) => void; // Callback to pass total count to parent
 }
 
 function getAge(timestamp: number) {
@@ -88,7 +94,7 @@ function mapWebSocketDevTokenToDisplay(wsToken: SolanaDevToken) {
 }
 
 const AX = {
-  bg: "#101114",
+  bg: "#111214",
   surface: "#1E1F26",
   surface2: "#17191E",
   border: "#2A2B33",
@@ -96,20 +102,61 @@ const AX = {
   muted: "#9CA3AF",
   migrated: "#70E0B0", // Green for migrated
   nonMigrated: "#EC4899", // Pink/magenta for non-migrated
+  link: "#8B5CF6", // Vibrant blue/purple for links
 };
 
-const CodexDevTokens: React.FC<CodexDevTokensProps> = ({ token, chain = 'sol' }) => {
-  // Client-side localStorage cache for dev tokens (persists across page reloads)
-  const CACHE_KEY_PREFIX_LIMITED = 'codex_dev_tokens_limited_cache_';
-  const CACHE_KEY_PREFIX_ALL = 'codex_dev_tokens_all_cache_';
-  const CACHE_EXPIRY_MS = 5 * 60 * 1000; // 5 minutes cache expiry
+// Helper function to truncate address
+function truncateAddress(address: string, start: number = 4, end: number = 4): string {
+  if (!address || address.length <= start + end) return address;
+  return `${address.slice(0, start)}...${address.slice(-end)}`;
+}
+
+// Helper function to copy to clipboard
+function copyToClipboard(text: string) {
+  if (typeof navigator !== 'undefined' && navigator.clipboard) {
+    navigator.clipboard.writeText(text).catch(console.error);
+  }
+}
+
+// Client-side localStorage cache constants
+const CACHE_KEY_PREFIX_LIMITED = 'codex_dev_tokens_limited_cache_';
+const CACHE_KEY_PREFIX_ALL = 'codex_dev_tokens_all_cache_';
+const CACHE_EXPIRY_MS = 5 * 60 * 1000; // 5 minutes cache expiry
+
+const CodexDevTokens: React.FC<CodexDevTokensProps> = ({ token, chain = 'sol', onTotalCountChange }) => {
+  // Collapsible state for right panel - initialize based on cached tokens if available
+  const [isRightPanelCollapsed, setIsRightPanelCollapsed] = useState<boolean>(() => {
+    // Check if any cached tokens have volume > 0 to set initial state
+    // Default to true (collapsed) to hide empty panel when there are no tokens
+    if (typeof window === 'undefined' || !token?.mint) return true;
+    try {
+      const cacheKey = `${CACHE_KEY_PREFIX_LIMITED}${token.mint}`;
+      const cached = localStorage.getItem(cacheKey);
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        const now = Date.now();
+        if (parsed.timestamp && (now - parsed.timestamp) < CACHE_EXPIRY_MS && parsed.tokens) {
+          const hasVolume = parsed.tokens.some((devToken: any) => {
+            const volume = parseFloat(devToken.volume24 || '0');
+            return !isNaN(volume) && volume > 0;
+          });
+          // Collapse if there are tokens with volume, or if there are no tokens at all
+          return hasVolume || parsed.tokens.length === 0;
+        }
+      }
+    } catch (error) {
+      // Ignore errors in initializer
+    }
+    // Default to collapsed when there are no cached tokens
+    return true;
+  });
   
   const getCacheKey = (mint: string, isAll: boolean) => {
     return isAll ? `${CACHE_KEY_PREFIX_ALL}${mint}` : `${CACHE_KEY_PREFIX_LIMITED}${mint}`;
   };
 
   // Load cached limited tokens from localStorage on mount
-  const [cachedLimitedTokensFromStorage, setCachedLimitedTokensFromStorage] = React.useState<any[]>(() => {
+  const [cachedLimitedTokensFromStorage, setCachedLimitedTokensFromStorage] = useState<any[]>(() => {
     if (!token?.mint || typeof window === 'undefined') return [];
     
     try {
@@ -131,7 +178,7 @@ const CodexDevTokens: React.FC<CodexDevTokensProps> = ({ token, chain = 'sol' })
   });
 
   // Load cached all tokens from localStorage on mount
-  const [cachedAllTokensFromStorage, setCachedAllTokensFromStorage] = React.useState<any[]>(() => {
+  const [cachedAllTokensFromStorage, setCachedAllTokensFromStorage] = useState<any[]>(() => {
     if (!token?.mint || typeof window === 'undefined') return [];
     
     try {
@@ -153,7 +200,7 @@ const CodexDevTokens: React.FC<CodexDevTokensProps> = ({ token, chain = 'sol' })
   });
 
   // Reload cache when mint changes
-  React.useEffect(() => {
+  useEffect(() => {
     if (!token?.mint || typeof window === 'undefined') {
       setCachedLimitedTokensFromStorage([]);
       setCachedAllTokensFromStorage([]);
@@ -200,7 +247,7 @@ const CodexDevTokens: React.FC<CodexDevTokensProps> = ({ token, chain = 'sol' })
   }, [token?.mint]);
 
   // Save tokens to localStorage cache
-  const saveToCache = React.useCallback((tokens: any[], mint: string, isAll: boolean) => {
+  const saveToCache = useCallback((tokens: any[], mint: string, isAll: boolean) => {
     if (!mint || typeof window === 'undefined' || tokens.length === 0) return;
     
     try {
@@ -254,7 +301,7 @@ const CodexDevTokens: React.FC<CodexDevTokensProps> = ({ token, chain = 'sol' })
   );
 
   // Map WebSocket dev tokens to display format (Solana only)
-  const mappedWsDevTokens = React.useMemo(() => {
+  const mappedWsDevTokens = useMemo(() => {
     if (chain !== 'sol' || !wsDevTokens || wsDevTokens.length === 0) return [];
     return wsDevTokens.map(mapWebSocketDevTokenToDisplay);
   }, [chain, wsDevTokens]);
@@ -273,7 +320,7 @@ const CodexDevTokens: React.FC<CodexDevTokensProps> = ({ token, chain = 'sol' })
 
   // Use WebSocket data as primary, then REST API, then cache as fallback
   // Priority: WebSocket > REST API > LocalStorage cache
-  const displayTokens = React.useMemo(() => {
+  const displayTokens = useMemo(() => {
     // WebSocket data takes priority when available
     if (mappedWsDevTokens.length > 0) {
       console.log('[CodexDevTokens] Using WebSocket dev tokens:', mappedWsDevTokens.length);
@@ -287,7 +334,7 @@ const CodexDevTokens: React.FC<CodexDevTokensProps> = ({ token, chain = 'sol' })
     return cachedLimitedTokensFromStorage;
   }, [mappedWsDevTokens, tokens, cachedLimitedTokensFromStorage]);
 
-  const displayAllTokens = React.useMemo(() => {
+  const displayAllTokens = useMemo(() => {
     // WebSocket data takes priority when available
     if (mappedWsDevTokens.length > 0) {
       return mappedWsDevTokens;
@@ -301,17 +348,32 @@ const CodexDevTokens: React.FC<CodexDevTokensProps> = ({ token, chain = 'sol' })
   }, [mappedWsDevTokens, allTokens, cachedAllTokensFromStorage]);
 
   // Save to cache when tokens update
-  React.useEffect(() => {
+  useEffect(() => {
     if (token?.mint && tokens.length > 0) {
       saveToCache(tokens, token.mint, false);
     }
   }, [tokens, token?.mint, saveToCache]);
 
-  React.useEffect(() => {
+  useEffect(() => {
     if (token?.mint && allTokens.length > 0) {
       saveToCache(allTokens, token.mint, true);
     }
   }, [allTokens, token?.mint, saveToCache]);
+
+  // Filter displayTokens to exclude tokens with 0 or missing 1h volume
+  const filteredDisplayTokens = useMemo(() => {
+    return displayTokens.filter((devToken) => {
+      const volume = parseFloat(devToken.volume24 || '0');
+      return !isNaN(volume) && volume > 0;
+    });
+  }, [displayTokens]);
+
+  // Keep right panel collapsed when filteredDisplayTokens has items (volume > 0)
+  // Also collapse when there are no tokens to avoid showing empty panel
+  useEffect(() => {
+    // Always collapse: when there are filtered tokens (original requirement) or when there are no tokens (hide empty panel)
+    setIsRightPanelCollapsed(true);
+  }, [filteredDisplayTokens]);
 
   // Only show loading if we don't have any tokens at all (not even cached ones)
   // Consider both WebSocket and REST API loading states
@@ -338,6 +400,13 @@ const CodexDevTokens: React.FC<CodexDevTokensProps> = ({ token, chain = 'sol' })
 
     return { migrated: migratedCount, nonMigrated: nonMigratedCount, total: migratedCount + nonMigratedCount };
   }, [displayAllTokens]);
+
+  // Notify parent of filtered tokens count changes (only tokens with volume > 0)
+  useEffect(() => {
+    if (onTotalCountChange) {
+      onTotalCountChange(filteredDisplayTokens.length);
+    }
+  }, [filteredDisplayTokens.length, onTotalCountChange]);
 
   // Calculate highlights (use displayAllTokens which includes cache)
   const { topMCAP, lastTokenLaunched } = useMemo(() => {
@@ -391,12 +460,10 @@ const CodexDevTokens: React.FC<CodexDevTokensProps> = ({ token, chain = 'sol' })
     );
   }
 
-  const matteBlack = '#000000';
-
   // Monad: Show dev wallet data instead of dev tokens list
   if (chain === 'monad') {
     return (
-      <div className="w-full h-full flex flex-col p-4" style={{ backgroundColor: matteBlack }}>
+      <div className="w-full h-full flex flex-col p-4">
         <h3 className="text-lg font-semibold text-white mb-4">Dev Wallet Analysis</h3>
 
         {monadError && (
@@ -467,40 +534,94 @@ const CodexDevTokens: React.FC<CodexDevTokensProps> = ({ token, chain = 'sol' })
   }
 
   return (
-    <div className="w-full h-full flex flex-row min-h-0" style={{ backgroundColor: matteBlack, overflow: 'hidden' }}>
+    <div
+      className="relative flex h-full min-h-0 w-full flex-row"
+      style={{ overflow: "hidden" }}
+    >
       {error && (
-        <div className="absolute top-0 left-0 right-0 p-3 bg-red-900/20 border border-red-500/30 rounded-lg z-20">
-          <p className="text-red-400 text-sm">{error}</p>
+        <div className="absolute top-0 right-0 left-0 z-20 rounded-lg border border-red-500/30 bg-red-900/20 p-3">
+          <p className="text-sm text-red-400">{error}</p>
         </div>
       )}
 
+      {/* Open Button - Absolutely positioned on right side when collapsed */}
+      {isRightPanelCollapsed && filteredDisplayTokens.length > 0 && (
+        <button
+          onClick={() => setIsRightPanelCollapsed(false)}
+          className="w-5 h-5 hidden lg:flex items-center justify-center absolute right-0 top-6.5 z-30 rounded p-1 transition-opacity hover:opacity-80 cursor-pointer"
+          style={{
+            backgroundColor: `${AX.surface2}`,
+            border: `1px solid ${AX.border}`,
+            color: AX.text,
+          }}
+          title="Open panel"
+        >
+          <FaChevronLeft size={12} />
+        </button>
+      )}
+
       {/* Left side: Table */}
-      <div className="w-1/2 flex-shrink-0 overflow-y-auto min-h-0" style={{ minWidth: 0, borderRight: `1px solid ${AX.border}`, backgroundColor: matteBlack, paddingBottom: '4.5rem' }}>
-        <table className="w-full text-xs">
-          <thead className="sticky top-0 z-10" style={{ backgroundColor: '#101114' }}>
-            <tr style={{ borderBottom: '1px solid #27282e' }}>
-              <th className="px-2 py-1.5 text-left text-[11px] font-medium whitespace-nowrap" style={{ color: '#9ca3af' }}>Token ↓</th>
-              <th className="px-2 py-1.5 text-left text-[11px] font-medium whitespace-nowrap" style={{ color: '#9ca3af' }}>Migrated</th>
-              <th className="px-2 py-1.5 text-left text-[11px] font-medium whitespace-nowrap" style={{ color: '#9ca3af' }}>Market Cap</th>
-              <th className="px-2 py-1.5 text-left text-[11px] font-medium whitespace-nowrap" style={{ color: '#9ca3af' }}>Liquidity</th>
-              <th className="px-2 py-1.5 text-left text-[11px] font-medium whitespace-nowrap" style={{ color: '#9ca3af' }}>1h Volume</th>
+      <div
+        className={`min-h-0 flex-shrink-0 overflow-y-auto transition-all duration-300`}
+        style={{
+          width: isRightPanelCollapsed ? "100%" : "50%",
+          minWidth: 0,
+          paddingBottom: "4.5rem",
+        }}
+      >
+        <table className="w-full !font-geist">
+          <thead
+            className="sticky top-0 z-10 !text-xs"
+            style={{ backgroundColor: "#101114" }}
+          >
+            <tr style={{ borderBottom: "1px solid #27282e" }} className='!text-xs'>
+              <th
+                className="px-4 py-1.5 text-left text-xs font-normal whitespace-nowrap text-[#757e80]"
+                style={{ color: "#9ca3af" }}
+              >
+                Token ↓
+              </th>
+              <th
+                className="px-2 py-1.5 text-left text-xs font-normal whitespace-nowrap text-[#757e80]"
+                style={{ color: "#9ca3af" }}
+              >
+                Migrated
+              </th>
+              <th
+                className="px-2 py-1.5 text-left text-xs font-normal whitespace-nowrap text-[#757e80]"
+                style={{ color: "#9ca3af" }}
+              >
+                Market Cap
+              </th>
+              <th
+                className="px-2 py-1.5 text-left text-xs font-normal whitespace-nowrap text-[#757e80]"
+                style={{ color: "#9ca3af" }}
+              >
+                Liquidity
+              </th>
+              <th
+                className="px-2 py-1.5 text-left text-xs font-normal whitespace-nowrap text-[#757e80]"
+                style={{ color: "#9ca3af" }}
+              >
+                1h Volume
+              </th>
             </tr>
           </thead>
-          <tbody>
+          <tbody className='border-r border border-[#27282e] !text-[13px]'>
             {showLoading ? (
               <tr>
-                <td colSpan={5} className="text-center py-6 text-neutral-500">
+                <td colSpan={5} className="py-6 text-center text-neutral-500">
                   Loading dev tokens...
                 </td>
               </tr>
-            ) : !displayTokens || displayTokens.length === 0 ? (
+            ) : !filteredDisplayTokens || filteredDisplayTokens.length === 0 ? (
               <tr>
-                <td colSpan={5} className="text-center py-6 text-neutral-500">
+                <td colSpan={5} className="py-6 text-center text-neutral-500">
                   No dev tokens found.
                 </td>
               </tr>
             ) : (
-              displayTokens.map((devToken, idx) => {
+              filteredDisplayTokens.map((devToken, idx) => {
                 const age = getAge(devToken.token.createdAt);
                 const marketCap = formatMarketCap(devToken.marketCap);
                 const liquidity = formatLiquidity(devToken.liquidity);
@@ -510,36 +631,58 @@ const CodexDevTokens: React.FC<CodexDevTokensProps> = ({ token, chain = 'sol' })
                 return (
                   <tr
                     key={devToken.token.address}
-                    className="transition-colors hover:brightness-110"
+                    className="transition-colors"
                     style={{
-                      backgroundColor: idx % 2 === 0 ? '#101114' : '#161719',
+                      backgroundColor: idx % 2 === 0 ? "#111214" : "#15161a",
                     }}
                   >
-                    <td className="px-2 py-2">
+                    <td className="px-4 py-1">
                       <div className="flex flex-col">
-                        <div className="text-[11px] font-semibold" style={{ color: '#d1d5db' }}>
-                          {devToken.token.symbol || devToken.token.name || `${devToken.token.address.slice(0, 4)}...${devToken.token.address.slice(-4)}`}
+                        <div
+                          className="text-[13px] font-normal text-[#f0f5f5]"
+                        >
+                          {devToken.token.symbol ||
+                            devToken.token.name ||
+                            `${devToken.token.address.slice(0, 4)}...${devToken.token.address.slice(-4)}`}
                         </div>
-                        <div className="text-[10px]" style={{ color: '#9ca3af' }}>{age} ago</div>
+                        <div
+                          className="text-xs font-normal text-[#c4cccc]"
+                        >
+                          {age} ago
+                        </div>
                       </div>
                     </td>
                     <td className="px-2 py-2">
                       <div className="flex items-center">
                         {isMigrated ? (
-                          <span className="text-green-400 text-[11px]">✓</span>
+                          <span className="text-[11px] text-green-400 font-normal">✓</span>
                         ) : (
-                          <span className="text-pink-400 text-[11px]">✗</span>
+                          <span className="text-[11px] text-[#f26682] font-normal">
+                            <IoIosCloseCircleOutline size={14} />
+                          </span>
                         )}
                       </div>
                     </td>
                     <td className="px-2 py-2">
-                      <div className="text-[11px] font-semibold" style={{ color: '#d1d5db' }}>{marketCap}</div>
+                      <div
+                        className="text-[13px] font-normal text-[#c4cccc]"
+                      >
+                        {marketCap}
+                      </div>
                     </td>
                     <td className="px-2 py-2">
-                      <div className="text-[11px] font-semibold" style={{ color: '#d1d5db' }}>{liquidity}</div>
+                      <div
+                        className="text-[13px] font-normal text-[#c4cccc]"
+                      >
+                        {liquidity}
+                      </div>
                     </td>
                     <td className="px-2 py-2">
-                      <div className="text-[11px] font-semibold" style={{ color: '#d1d5db' }}>{volume}</div>
+                      <div
+                        className="text-[13px] font-normal text-[#c4cccc]"
+                      >
+                        {volume}
+                      </div>
                     </td>
                   </tr>
                 );
@@ -550,74 +693,263 @@ const CodexDevTokens: React.FC<CodexDevTokensProps> = ({ token, chain = 'sol' })
       </div>
 
       {/* Right side: Stats Panels and Pie Chart */}
-      <div className="w-1/2 flex-shrink-0 p-2 overflow-y-auto min-h-0" style={{ backgroundColor: matteBlack, paddingBottom: '4.5rem' }}>
-        <div className="flex flex-row gap-3 items-start">
-          {/* Left: Stats Panels - Fixed narrow width */}
-          <div className="flex-shrink-0 space-y-3" style={{ width: '240px', minWidth: '240px' }}>
-            {/* Token Stats Box */}
-            <div className="p-3 rounded-lg" style={{ backgroundColor: AX.surface2, border: `1px solid ${AX.border}` }}>
-              <div className="space-y-2">
-                <div className="text-sm" style={{ color: AX.muted, fontFamily: 'system-ui, sans-serif' }}>
-                  Token Stats
-                </div>
-                <div className="space-y-1.5">
-                  <div className="flex items-center gap-2" style={{ whiteSpace: 'nowrap' }}>
-                    <div className="w-3 h-3 rounded flex-shrink-0" style={{ backgroundColor: AX.migrated }}></div>
-                    <span className="text-xs" style={{ color: AX.muted, fontFamily: 'system-ui, sans-serif' }}>
-                      Migrated: <span style={{ color: AX.muted }}>{migrated}</span>
-                    </span>
+      <div
+        className={`relative min-h-0 flex-shrink-0 overflow-hidden transition-all duration-300`}
+        style={{
+          width: isRightPanelCollapsed ? "40px" : "50%",
+          // borderLeft: isRightPanelCollapsed ? "none" : `1px solid ${AX.border}`,
+        }}
+      >
+        <button
+          onClick={() => setIsRightPanelCollapsed(true)}
+          className="absolute top-6.5 flex h-5 w-5 items-center justify-center rounded p-1 transition-opacity hover:opacity-80 cursor-pointer"
+          style={{
+            backgroundColor: `${AX.surface2}`,
+            border: `1px solid ${AX.border}`,
+            color: AX.text,
+          }}
+          title="Hide panel"
+        >
+          <FaChevronRight size={12} />
+        </button>
+        {/* Panel Content */}
+        {!isRightPanelCollapsed && (
+          <div
+            className="h-full min-h-0 overflow-y-auto mt-6.5 p-2 pb-[4.5rem] border-t border-[#27282e]"
+          >
+            {/* Header with Hide Button - Centered */}
+            <div className="mb-3 flex items-center justify-center gap-2">
+              <span
+                className="text-sm"
+                style={{ color: AX.muted, fontFamily: "system-ui, sans-serif" }}
+              >
+                Dev Tokens
+              </span>
+            </div>
+
+            <div className="flex flex-row items-start gap-3">
+              {/* Left: Stats Panels - Fixed narrow width */}
+              <div
+                className="w-60 min-w-60 flex-shrink-0 space-y-8 ml-3"
+              >
+                {/* Token Stats Box */}
+                <div className="">
+                  <div className="space-y-2">
+                    <div
+                      className="text-sm"
+                      style={{
+                        color: AX.muted,
+                        fontFamily: "system-ui, sans-serif",
+                      }}
+                    >
+                      Token Stats
+                    </div>
+                    <div className="space-y-3">
+                      {/* DEV */}
+                      {token && ((token as any).dev_wallet) && (
+                        <div className="space-y-1">
+                          <div className="flex items-center">
+                            <span
+                              className="text-xs"
+                              style={{
+                                color: AX.muted,
+                                fontFamily: "system-ui, sans-serif",
+                              }}
+                            >
+                              DEV: &nbsp;
+                            </span>
+                            <div className="flex items-center gap-1.5">
+                              <a
+                                href={`https://solscan.io/account/${(token as any).dev_wallet}`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="text-xs font-mono underline text-white"
+                              >
+                                {" "} {truncateAddress((token as any).dev_wallet)}
+                              </a>
+                              {(token as any).dev_sol_balance !== undefined && (token as any).dev_sol_balance !== null && (
+                                <span
+                                  className="text-xs"
+                                  style={{ color: AX.text }}
+                                >
+                                  ({parseFloat(String((token as any).dev_sol_balance)).toFixed(2)} SOL)
+                                </span>
+                              )}
+                              <div className="flex items-center gap-1">
+                                <button
+                                  onClick={async () => {
+                                    const address = (token as any).dev_wallet || '';
+                                    if (address) {
+                                      await copyToClipboard(address);
+                                      toast.success('Address copied to clipboard');
+                                    }
+                                  }}
+                                  className="p-0.5 hover:opacity-70 transition-opacity"
+                                  title="Copy address"
+                                >
+                                  <FaCopy size={10} style={{ color: AX.muted }} />
+                                </button>
+                                <InterstateTooltip label="Search on X">
+                                  <button
+                                    onClick={() => {
+                                      const address = (token as any).dev_wallet || '';
+                                      if (address) {
+                                        window.open(
+                                          `https://x.com/search?q=${encodeURIComponent(address)}`,
+                                          '_blank',
+                                          'noopener,noreferrer'
+                                        );
+                                      }
+                                    }}
+                                    className="p-0.5 hover:opacity-70 transition-opacity"
+                                  >
+                                    <FaSearch size={10} style={{ color: AX.muted }} />
+                                  </button>
+                                </InterstateTooltip>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Total Pairs */}
+                      <div className="space-y-1">
+                        <span
+                          className="text-xs"
+                          style={{
+                            color: AX.muted,
+                            fontFamily: "system-ui, sans-serif",
+                          }}
+                        >
+                          Total Pairs: {" "}
+                        </span>
+                        <span
+                          className="text-xs"
+                          style={{ color: AX.text }}
+                        >
+                          {total}
+                        </span>
+                      </div>
+
+                      {/* Migrated */}
+                      <div className="flex items-center gap-2 whitespace-nowrap">
+                        <div
+                          className="h-3 w-3 flex-shrink-0 rounded"
+                          style={{ backgroundColor: AX.migrated }}
+                        ></div>
+                        <span
+                          className="text-xs"
+                          style={{
+                            color: AX.muted,
+                            fontFamily: "system-ui, sans-serif",
+                          }}
+                        >
+                          Migrated:{" "}
+                          <span style={{ color: AX.text }}>{migrated}</span>
+                        </span>
+                      </div>
+
+                      {/* Non Migrated */}
+                      <div className="flex items-center gap-2 whitespace-nowrap">
+                        <div
+                          className="h-3 w-3 flex-shrink-0 rounded"
+                          style={{ backgroundColor: AX.nonMigrated }}
+                        ></div>
+                        <span
+                          className="text-xs"
+                          style={{
+                            color: AX.muted,
+                            fontFamily: "system-ui, sans-serif",
+                          }}
+                        >
+                          Non Migrated:{" "}
+                          <span style={{ color: AX.text }}>{nonMigrated}</span>
+                        </span>
+                      </div>
+                    </div>
                   </div>
-                  <div className="flex items-center gap-2" style={{ whiteSpace: 'nowrap' }}>
-                    <div className="w-3 h-3 rounded flex-shrink-0" style={{ backgroundColor: AX.nonMigrated }}></div>
-                    <span className="text-xs" style={{ color: AX.muted, fontFamily: 'system-ui, sans-serif' }}>
-                      Non-migrated: <span style={{ color: AX.muted }}>{nonMigrated}</span>
-                    </span>
+                </div>
+
+                {/* Highlights Box */}
+                <div className="">
+                  <div className="space-y-2">
+                    <div
+                      className="text-sm"
+                      style={{
+                        color: AX.muted,
+                        fontFamily: "system-ui, sans-serif",
+                      }}
+                    >
+                      Highlights
+                    </div>
+                    <div className="space-y-1.5">
+                      {topMCAP && (
+                        <div style={{ whiteSpace: "nowrap" }}>
+                          <span
+                            className="text-xs"
+                            style={{
+                              color: AX.muted,
+                              fontFamily: "system-ui, sans-serif",
+                            }}
+                          >
+                            ATH MC:{" "}
+                            <span style={{ color: AX.text }}>{topMCAP}</span>
+                          </span>
+                        </div>
+                      )}
+                      {lastTokenLaunched && (
+                        <div style={{ whiteSpace: "nowrap" }}>
+                          <span
+                            className="text-xs"
+                            style={{
+                              color: AX.muted,
+                              fontFamily: "system-ui, sans-serif",
+                            }}
+                          >
+                            Last Token Launched:{" "}
+                            <span style={{ color: AX.migrated }}>
+                              {lastTokenLaunched}
+                            </span>
+                          </span>
+                        </div>
+                      )}
+                    </div>
                   </div>
                 </div>
               </div>
-            </div>
 
-            {/* Highlights Box */}
-            <div className="p-3 rounded-lg" style={{ backgroundColor: AX.surface2, border: `1px solid ${AX.border}` }}>
-              <div className="space-y-2">
-                <div className="text-sm" style={{ color: AX.muted, fontFamily: 'system-ui, sans-serif' }}>
-                  Highlights
-                </div>
-                <div className="space-y-1.5">
-                  {topMCAP && (
-                    <div style={{ whiteSpace: 'nowrap' }}>
-                      <span className="text-xs" style={{ color: AX.muted, fontFamily: 'system-ui, sans-serif' }}>
-                        Top MCAP: <span style={{ color: AX.muted }}>{topMCAP}</span>
-                      </span>
+              {/* Right: Pie Chart */}
+              <div
+                className="min-w-0 flex flex-1 items-center justify-center"
+              >
+                {showLoadingAll ? (
+                  <div
+                    className="flex items-center justify-center"
+                    style={{ width: 256, height: 256 }}
+                  >
+                    <div className="text-sm" style={{ color: AX.muted }}>
+                      Loading...
                     </div>
-                  )}
-                  {lastTokenLaunched && (
-                    <div style={{ whiteSpace: 'nowrap' }}>
-                      <span className="text-xs" style={{ color: AX.muted, fontFamily: 'system-ui, sans-serif' }}>
-                        Last Token Launched: <span style={{ color: AX.muted }}>{lastTokenLaunched}</span>
-                      </span>
+                  </div>
+                ) : total > 0 ? (
+                  <DevTokensPieChart
+                    migrated={migrated}
+                    nonMigrated={nonMigrated}
+                  />
+                ) : (
+                  <div
+                    className="flex items-center justify-center"
+                    style={{ width: 256, height: 256 }}
+                  >
+                    <div className="text-sm" style={{ color: AX.muted }}>
+                      No data available
                     </div>
-                  )}
-                </div>
+                  </div>
+                )}
               </div>
             </div>
           </div>
-
-          {/* Right: Pie Chart */}
-          <div className="flex-1 flex justify-center items-center" style={{ backgroundColor: matteBlack, minWidth: 0 }}>
-            {showLoadingAll ? (
-              <div className="flex items-center justify-center" style={{ width: 256, height: 256 }}>
-                <div className="text-sm" style={{ color: AX.muted }}>Loading...</div>
-              </div>
-            ) : total > 0 ? (
-              <DevTokensPieChart migrated={migrated} nonMigrated={nonMigrated} />
-            ) : (
-              <div className="flex items-center justify-center" style={{ width: 256, height: 256 }}>
-                <div className="text-sm" style={{ color: AX.muted }}>No data available</div>
-              </div>
-            )}
-          </div>
-        </div>
+        )}
       </div>
     </div>
   );
