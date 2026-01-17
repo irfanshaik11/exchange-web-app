@@ -1796,7 +1796,7 @@ const TradeHeader: React.FC<TradeHeaderProps> = ({ token, livePriceUsd, liveMark
       </div>
 
       {/* RIGHT: actions */}
-      {(() => {
+      {/* {(() => {
         const protocol = extractProtocolRaw(token);
         const isMonad =
           protocol &&
@@ -1810,7 +1810,6 @@ const TradeHeader: React.FC<TradeHeaderProps> = ({ token, livePriceUsd, liveMark
           <div
             className={`flex flex-shrink-0 items-center gap-1.5 sm:gap-2 ${isMonad ? "ml-auto" : ""}`}
           >
-            {/* Hide expand button for Monad tokens */}
             {!isMonad && (
               <button
                 title="Expand chart"
@@ -1822,7 +1821,7 @@ const TradeHeader: React.FC<TradeHeaderProps> = ({ token, livePriceUsd, liveMark
             )}
           </div>
         );
-      })()}
+      })()} */}
 
       {/* tiny toast */}
       {toastMessage && (
