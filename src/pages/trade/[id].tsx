@@ -979,7 +979,7 @@ export default function TradePage() {
                 (e.target as Element).addEventListener("pointerup", onUp, { passive: false });
                 (e.target as Element).addEventListener("pointercancel", onUp, { passive: false });
               }}
-              className="relative cursor-row-resize select-none touch-none flex-shrink-0 flex items-center justify-center hover:bg-gray-800/20 transition-colors"
+              className="relative h-2 cursor-row-resize select-none touch-none flex-shrink-0 flex items-center justify-center hover:bg-gray-800/20 transition-colors"
               style={{ touchAction: "none", zIndex: 10, pointerEvents: "auto" }}
             >
               {/* Visible dots handle - smaller, thinner dots */}
