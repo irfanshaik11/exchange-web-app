@@ -360,7 +360,7 @@ function StatInline({
   return (
     <div className="flex flex-col items-start gap-0.5">
       <span
-        className="text-[9px] sm:text-xs tracking-wider uppercase text-[#C4CCCC]"
+        className="text-[9px] sm:text-xs tracking-wider text-[#C4CCCC]"
         // style={{ color: AX.muted }}
       >
         {label}
@@ -1782,7 +1782,7 @@ const TradeHeader: React.FC<TradeHeaderProps> = ({ token, livePriceUsd, liveMark
           </StatInline>
           */}
           <StatInline label="B. Curve">
-            <div className="flex flex-row items-center gap-1 sm:gap-2 text-[10px] sm:text-xs">
+            <div className="flex flex-row items-center gap-1 sm:gap-2">
               {Number.isFinite(Number(curvePct))
                 ? `${Number(curvePct).toFixed(1)}%`
                 : "—"}
