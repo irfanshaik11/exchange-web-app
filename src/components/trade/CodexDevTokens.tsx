@@ -8,6 +8,8 @@ import DevTokensPieChart from './DevTokensPieChart';
 import { FaChevronLeft, FaChevronRight, FaCopy, FaDownload, FaSearch, FaBars } from 'react-icons/fa';
 import { SiSolana } from 'react-icons/si';
 import { IoIosCloseCircleOutline } from 'react-icons/io';
+import toast from 'react-hot-toast';
+import InterstateTooltip from '../InterstateTooltip';
 
 interface CodexDevTokensProps {
   token: Token | null;
@@ -743,6 +745,72 @@ const CodexDevTokens: React.FC<CodexDevTokensProps> = ({ token, chain = 'sol', o
                       Token Stats
                     </div>
                     <div className="space-y-3">
+                      {/* DEV */}
+                      {token && ((token as any).dev_wallet) && (
+                        <div className="space-y-1">
+                          <div className="flex items-center">
+                            <span
+                              className="text-xs"
+                              style={{
+                                color: AX.muted,
+                                fontFamily: "system-ui, sans-serif",
+                              }}
+                            >
+                              DEV: &nbsp;
+                            </span>
+                            <div className="flex items-center gap-1.5">
+                              <a
+                                href={`https://solscan.io/account/${(token as any).dev_wallet}`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="text-xs font-mono underline text-white"
+                              >
+                                {" "} {truncateAddress((token as any).dev_wallet)}
+                              </a>
+                              {(token as any).dev_sol_balance !== undefined && (token as any).dev_sol_balance !== null && (
+                                <span
+                                  className="text-xs"
+                                  style={{ color: AX.text }}
+                                >
+                                  ({parseFloat(String((token as any).dev_sol_balance)).toFixed(2)} SOL)
+                                </span>
+                              )}
+                              <div className="flex items-center gap-1">
+                                <button
+                                  onClick={async () => {
+                                    const address = (token as any).dev_wallet || '';
+                                    if (address) {
+                                      await copyToClipboard(address);
+                                      toast.success('Address copied to clipboard');
+                                    }
+                                  }}
+                                  className="p-0.5 hover:opacity-70 transition-opacity"
+                                  title="Copy address"
+                                >
+                                  <FaCopy size={10} style={{ color: AX.muted }} />
+                                </button>
+                                <InterstateTooltip label="Search on X">
+                                  <button
+                                    onClick={() => {
+                                      const address = (token as any).dev_wallet || '';
+                                      if (address) {
+                                        window.open(
+                                          `https://x.com/search?q=${encodeURIComponent(address)}`,
+                                          '_blank',
+                                          'noopener,noreferrer'
+                                        );
+                                      }
+                                    }}
+                                    className="p-0.5 hover:opacity-70 transition-opacity"
+                                  >
+                                    <FaSearch size={10} style={{ color: AX.muted }} />
+                                  </button>
+                                </InterstateTooltip>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      )}
 
                       {/* Total Pairs */}
                       <div className="space-y-1">
