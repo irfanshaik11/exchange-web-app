@@ -20,6 +20,8 @@ import { executeEnhancedTrade } from "~/utils/enhancedTradeHandler";
 import { showEnhancedToast, updateEnhancedToast } from "~/utils/enhancedToast";
 import { useUser } from "~/components/UserContext";
 import PumpLive, { type PumpItem, demoLeft as demoLeftPump, demoRight as demoRightPump } from '../components/PumpLive';
+import PumpLiveGrid, { type PumpLiveSortField, type PumpLiveSortDirection } from '../components/PumpLiveGrid';
+import { type PumpLiveToken } from '../hooks/usePumpLive';
 import { FaRunning, FaGasPump, FaCoins, FaBan, FaCheckCircle } from "react-icons/fa";
 import { HiLightningBolt } from "react-icons/hi";
 import { BsSliders2 } from "react-icons/bs";
@@ -142,6 +144,10 @@ export default function DiscoverPage() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [isFilterPopoutOpen, setIsFilterPopoutOpen] = useState(false);
   const { filter } = useFilter();
+
+  // Pump Live sorting state
+  const [pumpLiveSortField, setPumpLiveSortField] = useState<PumpLiveSortField>('time');
+  const [pumpLiveSortDirection, setPumpLiveSortDirection] = useState<PumpLiveSortDirection>('desc');
   
   // Debug: Log when filter context changes to track filter application
   useEffect(() => {
@@ -3233,13 +3239,13 @@ export default function DiscoverPage() {
                   onClick={() => setActiveTab("surge")}
                 >
                   Surge
-                </button>
+                </button> */}
                 <button
-                  className={`text-sm sm:text-base lg:text-lg font-light transition-colors whitespace-nowrap ${activeTab === "live" ? "text-[#f0f5f5]" : "text-[#6B7280] hover:text-[#f0f5f5]"} cursor-pointer`}
+                  className={`text-sm whitespace-nowrap transition-colors sm:text-base lg:text-xl font-medium ${activeTab === "live" ? "text-white" : "text-[#6B7280] hover:text-white"} cursor-pointer`}
                   onClick={() => setActiveTab("live")}
                 >
                   Pump Live
-                </button> */}
+                </button>
               </>
             )}
             {/* <button
@@ -3335,6 +3341,50 @@ export default function DiscoverPage() {
                       {activeFilterCount}
                     </span>
                   )}
+                </button>
+              </div>
+            )}
+
+            {/* Pump Live Sort Controls - Only show when live tab is active */}
+            {activeTab === 'live' && (
+              <div className="hidden h-7 items-center gap-2 rounded-md border border-[#24252C] bg-[#272a2e] px-2 py-1 sm:flex">
+                {/* MC Sort */}
+                <button
+                  onClick={() => {
+                    setPumpLiveSortField('mc');
+                    setPumpLiveSortDirection(prev =>
+                      pumpLiveSortField === 'mc'
+                        ? (prev === 'desc' ? 'asc' : 'desc')
+                        : 'desc'
+                    );
+                  }}
+                  className="flex items-center gap-0.5 text-xs font-medium text-[#9CA3AF] hover:text-[#f0f5f5] transition-colors"
+                >
+                  MC
+                  <svg className="w-3 h-3" viewBox="0 0 24 24" fill="currentColor">
+                    {pumpLiveSortField === 'mc' && pumpLiveSortDirection === 'asc'
+                      ? <path d="M7 14l5-5 5 5H7z" />
+                      : <path d="M7 10l5 5 5-5H7z" />}
+                  </svg>
+                </button>
+                {/* Time Sort */}
+                <button
+                  onClick={() => {
+                    setPumpLiveSortField('time');
+                    setPumpLiveSortDirection(prev =>
+                      pumpLiveSortField === 'time'
+                        ? (prev === 'desc' ? 'asc' : 'desc')
+                        : 'desc'
+                    );
+                  }}
+                  className="flex items-center gap-0.5 text-xs font-medium text-[#9CA3AF] hover:text-[#f0f5f5] transition-colors"
+                >
+                  Time
+                  <svg className="w-3 h-3" viewBox="0 0 24 24" fill="currentColor">
+                    {pumpLiveSortField === 'time' && pumpLiveSortDirection === 'asc'
+                      ? <path d="M7 14l5-5 5 5H7z" />
+                      : <path d="M7 10l5 5 5-5H7z" />}
+                  </svg>
                 </button>
               </div>
             )}
@@ -3490,98 +3540,29 @@ export default function DiscoverPage() {
 
         {/* Main Content */}
         <main className="w-full">
-          {/* {activeTab === 'live' ? (
-            pumpPortalTokens.length > 0 ? (
-              <PumpLive
-                leftItems={liveLeftItems}
-                rightItems={liveRightItems}
-                onAction={async (id, rawToken) => {
-                  // Backfill token data first
-                  if (rawToken) {
-                    try {
-                      console.log('[Discover] Backfilling token:', rawToken);
-                      const backfillResponse = await fetch('/api/token-service/backfill-token', {
-                        method: 'POST',
-                        headers: {
-                          'Content-Type': 'application/json',
-                        },
-                        body: JSON.stringify({
-                          mint: rawToken.mint,
-                          name: rawToken.name,
-                          symbol: rawToken.symbol,
-                          uri: rawToken.uri,
-                          market_cap_usd: rawToken.market_cap_usd || rawToken.marketCapSol ? (rawToken.marketCapSol * 170) : undefined,
-                          liquidity_usd: undefined, // PumpPortal doesn't provide liquidity data
-                          pair_address: rawToken.pair_address || rawToken.bondingCurveKey
-                        })
-                      });
-
-                      if (backfillResponse.ok) {
-                        console.log('[Discover] Token backfilled successfully');
-                      } else {
-                        console.warn('[Discover] Token backfill failed, but continuing with navigation');
-                      }
-                    } catch (err) {
-                      console.error('[Discover] Error backfilling token:', err);
-                    }
-                  }
-
-                  // Prefetch trade data before navigating
-                  console.log('[Discover] Prefetching trade data for:', id);
-                  try {
-                    await prefetchTradeData(id);
-                    console.log('[Discover] Prefetch complete for:', id);
-                  } catch (err) {
-                    console.error('[Discover] Prefetch failed:', err);
-                  }
-                  // Navigate to trade page
-                  // Check if this is a Monad token
-                  const isMonad = currentChain === 'monad';
-                  
-                  if (isMonad && rawToken) {
-                    // Build Monad trade URL with query parameters
-                    const queryParams = new URLSearchParams();
-                    if (rawToken.name) queryParams.set('_name', rawToken.name);
-                    if (rawToken.symbol) queryParams.set('_symbol', rawToken.symbol);
-                    if (rawToken.market_cap_usd) queryParams.set('_mcap', rawToken.market_cap_usd.toString());
-                    if (rawToken.total_liquidity_usd || rawToken.liquidity_usd || rawToken.liquidity) {
-                      const liq = rawToken.total_liquidity_usd || rawToken.liquidity_usd || rawToken.liquidity;
-                      if (typeof liq === 'number' && Number.isFinite(liq)) {
-                        queryParams.set('_liq', liq.toString());
-                      }
-                    }
-                    if (rawToken.uri || rawToken.image || rawToken.imageUrl) {
-                      queryParams.set('_image', rawToken.uri || rawToken.image || rawToken.imageUrl || '');
-                    }
-                    queryParams.set('_mint', id);
-                    queryParams.set('chain', 'monad');
-                    
-                    const url = `/trade/monad/${id}?${queryParams.toString()}`;
-                    router.push(url);
-                  } else {
-                    router.push(`/trade/${id}`);
-                  }
-                }}
+          {activeTab === 'live' ? (
+            <section aria-label="Pump Live" className="pb-16">
+              <PumpLiveGrid
                 quickBuyAmount={Number(quickBuyAmount) || 0}
-                onQuickBuy={handleQuickBuy}
+                sortField={pumpLiveSortField}
+                sortDirection={pumpLiveSortDirection}
+                onQuickBuy={async (token: PumpLiveToken, amount: number) => {
+                  // Use the existing quick buy handler
+                  // Map PumpLiveToken to Token format expected by handleQuickBuy
+                  const tokenForTrade = {
+                    mint: token.mint,
+                    name: token.name,
+                    symbol: token.symbol,
+                    pair_address: token.bonding_curve,
+                    launchpad_protocol: 'Pumpfun', // Critical: tells trade handler this is a pump.fun token
+                    market_cap_usd: token.usd_market_cap,
+                    image_uri: token.image_uri,
+                  };
+                  await handleQuickBuy(tokenForTrade as any);
+                }}
               />
-            ) : pumpPortalConnected && pumpPortalTokens.length === 0 ? (
-              <div className="py-10 text-center text-[#9CA3AF]">
-                Waiting for live tokens...
-              </div>
-            ) : !pumpPortalConnected && pumpPortalError ? (
-              <div className="py-10 text-center text-[#f26681]">
-                Connection error: {pumpPortalError}
-              </div>
-            ) : (
-              <div className="space-y-4">
-                {Array.from({ length: 6 }).map((_, i) => (
-                  <div key={i} className="h-20 w-full bg-[#1E1F26] animate-pulse rounded" />
-                ))}
-              </div>
-            )
-          ) : */}{" "}
-          {activeTab === "newPairs" ? (
+            </section>
+          ) : activeTab === "newPairs" ? (
             <section aria-label="New Pairs" className="pb-16">
               {/* <div className="mb-4 flex items-center justify-between">
                 {newPairsLoading && (

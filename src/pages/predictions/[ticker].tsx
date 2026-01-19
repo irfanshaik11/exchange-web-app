@@ -30,7 +30,16 @@ import type { ExtendedPredictionMarket } from '~/hooks/useDFlowMarkets';
 import { useUser } from '~/components/UserContext';
 import { useTurnkeySigner } from '~/components/TurnkeySignerContext';
 import { showEnhancedToast, updateEnhancedToast } from '~/utils/enhancedToast';
-import { SourceBadge } from '~/components/predictions';
+import { SourceBadge, PolygonWalletCard } from '~/components/predictions';
+import {
+  getPolymarketQuote,
+  getPolymarketBalance,
+  executePolymarketOrder,
+  checkPolymarketGeoblock,
+  type PolymarketQuote,
+  type PolymarketBalance,
+  type PolymarketGeoblock,
+} from '~/utils/api';
 
 // Lazy load heavy components
 const PredictionPositions = dynamic(() => import('~/components/predictions/PredictionPositions'), { ssr: false });
@@ -1169,6 +1178,14 @@ export default function MarketDetailPage() {
   const [selectedOutcomeMarket, setSelectedOutcomeMarket] = useState<PolymarketMarket | null>(null);
   const [tradeMode, setTradeMode] = useState<'buy' | 'sell'>('buy');
 
+  // Polymarket trading state
+  const [polymarketQuote, setPolymarketQuote] = useState<PolymarketQuote | null>(null);
+  const [isLoadingQuote, setIsLoadingQuote] = useState(false);
+  const [polygonBalance, setPolygonBalance] = useState<PolymarketBalance | null>(null);
+  const [geoblockStatus, setGeoblockStatus] = useState<PolymarketGeoblock | null>(null);
+  const [isExecutingTrade, setIsExecutingTrade] = useState(false);
+  const [showWalletModal, setShowWalletModal] = useState(false);
+
   // Collapsible sections in trade panel (all open by default)
   const [showMarketStats, setShowMarketStats] = useState(true);
   const [showAbout, setShowAbout] = useState(true);
@@ -1332,6 +1349,132 @@ export default function MarketDetailPage() {
       hasAutoSelectedRef.current = true;
     }
   }, [polyEvent]);
+
+  // Polymarket Trading: Check geoblock status on mount
+  useEffect(() => {
+    if (!isPolymarket) return;
+    checkPolymarketGeoblock()
+      .then((res) => {
+        if (res.success) setGeoblockStatus(res.data);
+      })
+      .catch((err) => console.warn('[Polymarket] Geoblock check failed:', err.message));
+  }, [isPolymarket]);
+
+  // Polymarket Trading: Fetch Polygon balance when user is authenticated
+  useEffect(() => {
+    if (!isPolymarket || !user?.bearerToken) return;
+    getPolymarketBalance(user.bearerToken)
+      .then((res) => {
+        if (res.success) setPolygonBalance(res.data);
+      })
+      .catch((err) => console.warn('[Polymarket] Balance fetch failed:', err.message));
+  }, [isPolymarket, user?.bearerToken]);
+
+  // Polymarket Trading: Fetch quote when amount/token/side changes
+  useEffect(() => {
+    const amountNum = parseFloat(amount);
+    if (!isPolymarket || !amountNum || amountNum <= 0) {
+      setPolymarketQuote(null);
+      return;
+    }
+
+    // Get token ID based on selected side (yes/no)
+    const tokenId = selectedSide === 'yes' ? polyTokenIds.yes : polyTokenIds.no;
+    if (!tokenId) {
+      setPolymarketQuote(null);
+      return;
+    }
+
+    setIsLoadingQuote(true);
+    const side = tradeMode === 'buy' ? 'BUY' : 'SELL';
+
+    getPolymarketQuote({ tokenId, side, amount: amountNum })
+      .then((res) => {
+        if (res.success) setPolymarketQuote(res.data);
+      })
+      .catch((err) => {
+        console.warn('[Polymarket] Quote fetch failed:', err.message);
+        setPolymarketQuote(null);
+      })
+      .finally(() => setIsLoadingQuote(false));
+  }, [isPolymarket, amount, selectedSide, tradeMode, polyTokenIds.yes, polyTokenIds.no]);
+
+  // Polymarket Trading: Execute trade handler
+  const handlePolymarketTrade = useCallback(async () => {
+    if (!user?.bearerToken) {
+      showEnhancedToast('error', 'Please log in to trade');
+      return;
+    }
+
+    const amountNum = parseFloat(amount);
+    if (!amountNum || amountNum <= 0) {
+      showEnhancedToast('error', 'Please enter a valid amount');
+      return;
+    }
+
+    // Check geoblock
+    if (geoblockStatus?.blocked) {
+      showEnhancedToast('error', `Trading not available in ${geoblockStatus.country}`);
+      return;
+    }
+
+    // Check balance
+    if (polygonBalance && amountNum > polygonBalance.usdc) {
+      showEnhancedToast('error', `Insufficient balance. You have ${polygonBalance.usdcFormatted}`);
+      return;
+    }
+
+    // Get token ID
+    const tokenId = selectedSide === 'yes' ? polyTokenIds.yes : polyTokenIds.no;
+    if (!tokenId) {
+      showEnhancedToast('error', 'Please select an outcome');
+      return;
+    }
+
+    setIsExecutingTrade(true);
+    const toastId = showEnhancedToast(
+      'loading',
+      `Placing ${tradeMode.toUpperCase()} order for $${amountNum}...`
+    );
+
+    try {
+      const result = await executePolymarketOrder(
+        {
+          tokenId,
+          side: tradeMode === 'buy' ? 'BUY' : 'SELL',
+          amountUSDC: amountNum,
+          orderType: 'GTC',
+          marketId: selectedOutcomeMarket?.id || polyEvent?.slug,
+          marketTitle: selectedOutcomeMarket?.question || polyEvent?.title,
+          conditionId: selectedOutcomeMarket?.conditionId,
+        },
+        user.bearerToken
+      );
+
+      if (result.success) {
+        updateEnhancedToast(
+          toastId,
+          'success',
+          `Order placed! ${polymarketQuote?.expectedTokens?.toFixed(2) || ''} shares`
+        );
+        setAmount('');
+        setPolymarketQuote(null);
+        // Refresh balance
+        getPolymarketBalance(user.bearerToken).then((res) => {
+          if (res.success) setPolygonBalance(res.data);
+        });
+      } else {
+        throw new Error('Order failed');
+      }
+    } catch (err: any) {
+      updateEnhancedToast(toastId, 'error', err.message || 'Trade failed');
+    } finally {
+      setIsExecutingTrade(false);
+    }
+  }, [
+    user?.bearerToken, amount, geoblockStatus, polygonBalance, selectedSide,
+    polyTokenIds, tradeMode, selectedOutcomeMarket, polyEvent, polymarketQuote
+  ]);
 
   // Extract market info for multi-series price history (top 4 by probability)
   const multiOutcomeMarketInfo = useMemo(() => {
@@ -2030,27 +2173,148 @@ export default function MarketDetailPage() {
                       </button>
                     </div>
 
-                    {/* Trade Button - Links to Polymarket */}
-                    <a
-                      href={selectedOutcomeMarket
-                        ? `https://polymarket.com/event/${tickerString}?tid=${selectedOutcomeMarket.id}`
-                        : `https://polymarket.com/event/${tickerString}`
+                    {/* Quote Display */}
+                    {polymarketQuote && parseFloat(amount) > 0 && (
+                      <div className="mb-3 p-3 rounded-lg" style={{ backgroundColor: AX.bg, border: `1px solid ${AX.border}` }}>
+                        <div className="space-y-1.5">
+                          {polymarketQuote.price && (
+                            <div className="flex justify-between text-xs">
+                              <span style={{ color: AX.muted }}>Price</span>
+                              <span style={{ color: AX.text }}>{(polymarketQuote.price * 100).toFixed(1)}¢</span>
+                            </div>
+                          )}
+                          <div className="flex justify-between text-xs">
+                            <span style={{ color: AX.muted }}>Platform Fee ({polymarketQuote.platformFeeBps / 100}%)</span>
+                            <span style={{ color: AX.muted }}>-${polymarketQuote.platformFee.toFixed(2)}</span>
+                          </div>
+                          <div className="flex justify-between text-xs">
+                            <span style={{ color: AX.muted }}>Net Amount</span>
+                            <span style={{ color: AX.text }}>${polymarketQuote.netAmount.toFixed(2)}</span>
+                          </div>
+                          {polymarketQuote.expectedTokens && (
+                            <>
+                              <div className="border-t my-1.5" style={{ borderColor: AX.border }} />
+                              <div className="flex justify-between text-xs">
+                                <span style={{ color: AX.muted }}>Est. Shares</span>
+                                <span style={{ color: AX.text }}>{polymarketQuote.expectedTokens.toFixed(2)}</span>
+                              </div>
+                              <div className="flex justify-between text-xs">
+                                <span style={{ color: AX.muted }}>Potential Payout</span>
+                                <span style={{ color: AX.green }}>${polymarketQuote.potentialPayout?.toFixed(2)}</span>
+                              </div>
+                              <div className="flex justify-between text-xs">
+                                <span style={{ color: AX.muted }}>Potential Profit</span>
+                                <span style={{ color: AX.green }}>
+                                  +${polymarketQuote.potentialProfit?.toFixed(2)} ({polymarketQuote.potentialProfitPercent?.toFixed(1)}%)
+                                </span>
+                              </div>
+                            </>
+                          )}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Loading Quote */}
+                    {isLoadingQuote && parseFloat(amount) > 0 && (
+                      <div className="mb-3 p-3 rounded-lg flex items-center justify-center" style={{ backgroundColor: AX.bg }}>
+                        <div className="animate-spin w-4 h-4 border-2 border-t-transparent rounded-full" style={{ borderColor: AX.muted }} />
+                        <span className="ml-2 text-xs" style={{ color: AX.muted }}>Fetching quote...</span>
+                      </div>
+                    )}
+
+                    {/* Geoblock Warning */}
+                    {geoblockStatus?.blocked && (
+                      <div className="mb-3 p-2 rounded-lg flex items-center gap-2" style={{ backgroundColor: AX.redBg, border: `1px solid ${AX.redBorder}` }}>
+                        <HiOutlineExclamation className="w-4 h-4" style={{ color: AX.red }} />
+                        <span className="text-xs" style={{ color: AX.red }}>
+                          Trading unavailable in {geoblockStatus.country}
+                        </span>
+                      </div>
+                    )}
+
+                    {/* Polygon Balance Display */}
+                    {user?.bearerToken && (
+                      <div className="mb-3 p-2.5 rounded-lg" style={{ backgroundColor: AX.bg, border: `1px solid ${AX.border}` }}>
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs" style={{ color: AX.muted }}>Polygon Wallet</span>
+                            {polygonBalance && !polygonBalance.hasTradingBalance && (
+                              <span className="text-[10px] px-1.5 py-0.5 rounded" style={{ backgroundColor: `${AX.yellow}20`, color: AX.yellow }}>
+                                Low
+                              </span>
+                            )}
+                          </div>
+                          <div className="flex items-center gap-2">
+                            {polygonBalance ? (
+                              <span className="text-xs font-medium" style={{ color: polygonBalance.hasTradingBalance ? AX.text : AX.red }}>
+                                {polygonBalance.usdcFormatted}
+                              </span>
+                            ) : (
+                              <span className="text-xs" style={{ color: AX.muted }}>--</span>
+                            )}
+                            <button
+                              onClick={() => setShowWalletModal(true)}
+                              className="text-[10px] px-2 py-1 rounded hover:opacity-80 transition-opacity"
+                              style={{ backgroundColor: `${AX.green}15`, color: AX.green }}
+                            >
+                              {polygonBalance?.hasTradingBalance ? 'Details' : 'Fund'}
+                            </button>
+                          </div>
+                        </div>
+                        {polygonBalance && !polygonBalance.hasGasBalance && (
+                          <div className="mt-2 text-[10px] flex items-center gap-1" style={{ color: AX.yellow }}>
+                            <HiOutlineExclamation className="w-3 h-3" />
+                            Need MATIC for gas fees
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Trade Button */}
+                    <button
+                      onClick={handlePolymarketTrade}
+                      disabled={
+                        !selectedOutcomeMarket ||
+                        !amount ||
+                        parseFloat(amount) <= 0 ||
+                        isExecutingTrade ||
+                        isLoadingQuote ||
+                        geoblockStatus?.blocked ||
+                        !user?.bearerToken
                       }
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="w-full py-3 rounded-lg font-semibold flex items-center justify-center gap-2 transition-all"
+                      className="w-full py-3 rounded-lg font-semibold flex items-center justify-center gap-2 transition-all disabled:cursor-not-allowed"
                       style={{
                         backgroundColor: tradeMode === 'buy' ? AX.green : AX.red,
                         color: tradeMode === 'buy' ? '#000' : '#fff',
-                        opacity: !selectedOutcomeMarket || !amount ? 0.5 : 1,
+                        opacity: (!selectedOutcomeMarket || !amount || parseFloat(amount) <= 0 || isExecutingTrade || geoblockStatus?.blocked || !user?.bearerToken) ? 0.5 : 1,
                       }}
                     >
-                      {tradeMode === 'buy' ? 'Buy' : 'Sell'} {selectedSide.toUpperCase()} on Polymarket
-                      <HiOutlineExternalLink className="w-4 h-4" />
-                    </a>
+                      {isExecutingTrade ? (
+                        <>
+                          <div className="animate-spin w-4 h-4 border-2 border-t-transparent rounded-full" style={{ borderColor: 'currentColor' }} />
+                          Processing...
+                        </>
+                      ) : !user?.bearerToken ? (
+                        'Log in to Trade'
+                      ) : geoblockStatus?.blocked ? (
+                        'Trading Unavailable'
+                      ) : (
+                        <>
+                          {tradeMode === 'buy' ? 'Buy' : 'Sell'} {selectedSide.toUpperCase()}
+                          {polymarketQuote?.expectedTokens && ` (${polymarketQuote.expectedTokens.toFixed(1)} shares)`}
+                        </>
+                      )}
+                    </button>
 
+                    {/* Help Text */}
                     <p className="text-[10px] mt-3 text-center" style={{ color: AX.muted }}>
-                      Requires Polygon wallet on Polymarket
+                      {!user?.bearerToken ? (
+                        'Log in to trade on Polymarket'
+                      ) : !polygonBalance?.hasTradingBalance ? (
+                        'Fund your Polygon wallet with USDC to trade'
+                      ) : (
+                        'Trades execute on Polygon via Polymarket CLOB'
+                      )}
                     </p>
 
                     {/* Market Stats Section */}
@@ -2533,6 +2797,35 @@ export default function MarketDetailPage() {
       )}
 
       <Footer />
+
+      {/* Polygon Wallet Modal */}
+      {showWalletModal && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4"
+          style={{ backgroundColor: 'rgba(0, 0, 0, 0.8)' }}
+          onClick={() => setShowWalletModal(false)}
+        >
+          <div
+            className="relative w-full max-w-md"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <button
+              onClick={() => setShowWalletModal(false)}
+              className="absolute -top-2 -right-2 z-10 w-8 h-8 rounded-full flex items-center justify-center transition-colors hover:opacity-80"
+              style={{ backgroundColor: AX.surface, border: `1px solid ${AX.border}`, color: AX.muted }}
+            >
+              <HiOutlineX className="w-4 h-4" />
+            </button>
+            <PolygonWalletCard
+              variant="expanded"
+              initialBalance={polygonBalance}
+              onBalanceChange={(balance) => {
+                if (balance) setPolygonBalance(balance);
+              }}
+            />
+          </div>
+        </div>
+      )}
 
       <style jsx global>{`
         .mobile-trade-modal { animation: slideUp 0.3s ease-out; }

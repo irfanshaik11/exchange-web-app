@@ -947,4 +947,192 @@ export const getTokenHolders = async (
   return res.json();
 };
 
+/* -------------------------------------------------------------------------- */
+/*                         Polymarket Trading endpoints                        */
+/* -------------------------------------------------------------------------- */
+
+export interface PolymarketQuote {
+  grossAmount: number;
+  platformFee: number;
+  platformFeeBps: number;
+  netAmount: number;
+  price: number | null;
+  expectedTokens: number | null;
+  potentialPayout: number | null;
+  potentialProfit: number | null;
+  potentialProfitPercent: number | null;
+}
+
+export interface PolymarketOrderResult {
+  orderId?: string;
+  transactionHashes?: string[];
+  status?: string;
+  takingAmount?: string;
+  makingAmount?: string;
+  feeDeducted?: number;
+  netAmount?: number;
+  tradeId?: number;
+}
+
+export interface PolymarketBalance {
+  address: string;
+  matic: number;
+  maticFormatted: string;
+  usdc: number;
+  usdcFormatted: string;
+  hasGasBalance: boolean;
+  hasTradingBalance: boolean;
+}
+
+export interface PolymarketGeoblock {
+  allowed: boolean;
+  blocked: boolean;
+  ip: string;
+  country: string;
+  region: string;
+}
+
+export interface PolymarketFeeConfig {
+  feeBps: number;
+  feePercent: number;
+  treasuryAddress?: string;
+  minFeeUsd: number;
+}
+
+/**
+ * Get Polymarket fee configuration
+ */
+export const getPolymarketFeeConfig = () =>
+  apiFetch<{ success: boolean; data: PolymarketFeeConfig }>("/api/prediction/polymarket/fee-config", {
+    method: "GET",
+  });
+
+/**
+ * Check if user is geoblocked from Polymarket
+ */
+export const checkPolymarketGeoblock = () =>
+  apiFetch<{ success: boolean; data: PolymarketGeoblock }>("/api/prediction/polymarket/geoblock", {
+    method: "GET",
+  });
+
+/**
+ * Get quote for a Polymarket trade
+ */
+export const getPolymarketQuote = (params: {
+  tokenId: string;
+  side: "BUY" | "SELL";
+  amount: number;
+  price?: number;
+}) => {
+  const qs = new URLSearchParams({
+    token_id: params.tokenId,
+    side: params.side,
+    amount: String(params.amount),
+  });
+  if (params.price) qs.set("price", String(params.price));
+
+  return apiFetch<{ success: boolean; data: PolymarketQuote }>(
+    `/api/prediction/polymarket/quote?${qs.toString()}`,
+    { method: "GET" }
+  );
+};
+
+/**
+ * Get user's Polygon wallet balance for Polymarket trading
+ */
+export const getPolymarketBalance = (authToken: string) =>
+  apiFetch<{ success: boolean; data: PolymarketBalance }>("/api/prediction/polymarket/balance", {
+    method: "GET",
+    authToken,
+  });
+
+/**
+ * Execute a Polymarket trade
+ */
+export const executePolymarketOrder = (
+  params: {
+    tokenId: string;
+    side: "BUY" | "SELL";
+    amountUSDC: number;
+    price?: number;
+    orderType?: "GTC" | "GTD" | "FOK" | "FAK";
+    expiration?: number;
+    walletId?: string;
+    marketId?: string;
+    marketTitle?: string;
+    conditionId?: string;
+  },
+  authToken: string
+) =>
+  apiFetch<{ success: boolean; data: PolymarketOrderResult; responseTime?: number }>(
+    "/api/prediction/polymarket/order",
+    {
+      method: "POST",
+      body: params,
+      authToken,
+    }
+  );
+
+/**
+ * Cancel a specific Polymarket order
+ */
+export const cancelPolymarketOrder = (
+  orderId: string,
+  authToken: string,
+  walletId?: string
+) => {
+  const qs = walletId ? `?walletId=${encodeURIComponent(walletId)}` : "";
+  return apiFetch<{ success: boolean; data: { canceled: string[]; notCanceled: any } }>(
+    `/api/prediction/polymarket/order/${orderId}${qs}`,
+    {
+      method: "DELETE",
+      authToken,
+    }
+  );
+};
+
+/**
+ * Cancel all Polymarket orders (optionally for a specific market)
+ */
+export const cancelAllPolymarketOrders = (
+  authToken: string,
+  conditionId?: string,
+  walletId?: string
+) => {
+  const qs = new URLSearchParams();
+  if (conditionId) qs.set("conditionId", conditionId);
+  if (walletId) qs.set("walletId", walletId);
+  const queryString = qs.toString() ? `?${qs.toString()}` : "";
+
+  return apiFetch<{ success: boolean; data: { canceled: string[]; notCanceled: any; count: number } }>(
+    `/api/prediction/polymarket/orders${queryString}`,
+    {
+      method: "DELETE",
+      authToken,
+    }
+  );
+};
+
+/**
+ * Get user's open orders on Polymarket
+ */
+export const getPolymarketOpenOrders = (
+  authToken: string,
+  marketId?: string,
+  walletId?: string
+) => {
+  const qs = new URLSearchParams();
+  if (marketId) qs.set("marketId", marketId);
+  if (walletId) qs.set("walletId", walletId);
+  const queryString = qs.toString() ? `?${qs.toString()}` : "";
+
+  return apiFetch<{ success: boolean; data: any[]; count: number }>(
+    `/api/prediction/polymarket/open-orders${queryString}`,
+    {
+      method: "GET",
+      authToken,
+    }
+  );
+};
+
 export { apiFetch };

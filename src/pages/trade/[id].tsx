@@ -830,12 +830,7 @@ export default function TradePage() {
         {/* Top global header */}
         <Header search={search} setSearch={setSearch} />
 
-        {isHydrating && (
-          <div className="text-center text-xs px-2 py-1.5 flex-shrink-0"
-               style={{ color: AX.text, backgroundColor: "#2A2414", borderTop: `1px solid ${AX.border}`, borderBottom: `1px solid ${AX.border}` }}>
-            Finding trading pair for this token…
-          </div>
-        )}
+        {/* Hydrating status hidden from users - data loads silently in background */}
 
         <div
           className="flex flex-1 w-full max-w-full min-h-0"
@@ -916,11 +911,7 @@ export default function TradePage() {
                   //   tradeData={tradeDataForChart}
                   //   creatorAddress={creatorAddress}
                   // />
-                ) : (
-                  <div className="flex items-center justify-center h-full" style={{ color: AX.muted }}>
-                    {isHydrating ? "Resolving pair address..." : "No mint or pair address available"}
-                  </div>
-                )}
+                ) : null}
               </div>
             </div>
 
