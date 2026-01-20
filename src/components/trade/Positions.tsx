@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState, useMemo } from 'react';
+import React, { useCallback, useEffect, useState, useMemo, useRef } from 'react';
 import type { Dispatch, SetStateAction } from 'react';
 import { formatSmartNumber, formatSmallPrice } from '~/utils/db';
 import { getActivePositionsByUser } from '~/utils/functions';
@@ -90,7 +90,7 @@ const Positions: React.FC<PositionsProps> = ({
   isCacheValid,
   fallbackPositions
 }) => {
-  const { selectedWalletIds } = useUser();
+  const { selectedWalletIds, user } = useUser();
   const router = useRouter();
   const currentChain = (router.query.chain as string) || 'sol';
   const blockchain = useMemo(() => {
@@ -136,9 +136,97 @@ const Positions: React.FC<PositionsProps> = ({
     return [];
   });
   
-  const [loading, setLoading] = useState(true); // Start with loading, will be set based on cache in useEffect
+  // Initialize loading state based on whether we have cached positions
+  // If we have cached positions from the initializer, don't show loading
+  const [loading, setLoading] = useState(() => {
+    if (skipFetch || !userId || typeof window === 'undefined') return false;
+    try {
+      const chain = router.query.chain as string || 'sol';
+      const chainSuffix = (chain === 'monad' ? 'monad' : chain === 'sol' || chain === 'solana' ? 'solana' : undefined) || 'all';
+      const cacheKey = `positions_cache_${userId}_${chainSuffix}`;
+      const cached = window.localStorage.getItem(cacheKey);
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        if (parsed?.data?.length > 0 && Date.now() - parsed.timestamp <= 30000) {
+          return false; // Have valid cache, don't show loading
+        }
+      }
+    } catch { /* ignore */ }
+    return true; // No cache, show loading
+  });
   const [tokenMetadata, setTokenMetadata] = useState<Record<string, TokenMetadata>>({});
   const [pumpfunImages, setPumpfunImages] = useState<Record<string, string>>({}); // Fallback images from Pump.fun API
+
+  // Helper to get cached positions (used for ref initialization)
+  const getCachedPositions = (): PositionRow[] => {
+    if (skipFetch || !userId || typeof window === 'undefined') return [];
+    try {
+      const chain = router.query.chain as string || 'sol';
+      const chainSuffix = (chain === 'monad' ? 'monad' : chain === 'sol' || chain === 'solana' ? 'solana' : undefined) || 'all';
+      const cacheKey = `positions_cache_${userId}_${chainSuffix}`;
+      const cached = window.localStorage.getItem(cacheKey);
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        if (parsed?.data?.length > 0 && Date.now() - parsed.timestamp <= 30000) {
+          return parsed.data as PositionRow[];
+        }
+      }
+    } catch { /* ignore */ }
+    return [];
+  };
+
+  // Ref to track current positions (avoids stale closure in async functions)
+  // Initialize immediately with cached data so it's available before first useEffect runs
+  const positionsRef = useRef<PositionRow[]>(getCachedPositions());
+  // Ref to track if we've ever loaded positions successfully
+  const hasEverLoadedRef = useRef<boolean>(positionsRef.current.length > 0);
+  // Ref to track if initial load has completed (persists across effect re-runs)
+  const isInitialLoadRef = useRef(true);
+  // Ref to track empty-state retry attempts (prevents infinite loops)
+  const emptyRetryCountRef = useRef(0);
+  const MAX_EMPTY_RETRIES = 3;
+  // Ref to store fetchPositions function for retry logic
+  const fetchPositionsRef = useRef<(() => Promise<void>) | null>(null);
+  // Ref to track if a fetch is currently in progress
+  const isFetchingRef = useRef(false);
+
+  // Keep refs in sync with state
+  useEffect(() => {
+    positionsRef.current = positions;
+    if (positions.length > 0) {
+      hasEverLoadedRef.current = true;
+      emptyRetryCountRef.current = 0; // Reset retry counter on successful load
+    }
+  }, [positions]);
+
+  // Safety net: Auto-retry when positions become empty but we had data before
+  useEffect(() => {
+    if (
+      positions.length === 0 &&
+      hasEverLoadedRef.current &&
+      !loading &&
+      !isFetchingRef.current &&
+      emptyRetryCountRef.current < MAX_EMPTY_RETRIES &&
+      fetchPositionsRef.current
+    ) {
+      console.log(`[Positions] 🔄 Safety net triggered - retrying fetch (attempt ${emptyRetryCountRef.current + 1}/${MAX_EMPTY_RETRIES})`);
+      emptyRetryCountRef.current += 1;
+
+      // Show cached data while re-fetching
+      const cached = getCachedPositions();
+      if (cached.length > 0) {
+        console.log(`[Positions] 📦 Showing ${cached.length} cached positions while re-fetching`);
+        setPositions(cached);
+      }
+
+      // Trigger re-fetch after small delay
+      setTimeout(() => {
+        if (fetchPositionsRef.current) {
+          fetchPositionsRef.current();
+        }
+      }, 500);
+    }
+  }, [positions, loading]);
   const [hiddenTokens, setHiddenTokens] = useState<Set<string>>(new Set());
   const [showSellPopup, setShowSellPopup] = useState(false);
   const [selectedPosition, setSelectedPosition] = useState<PositionRow | null>(null);
@@ -335,11 +423,19 @@ const Positions: React.FC<PositionsProps> = ({
     if (userId) {
       try {
         const updatedPositions = await getActivePositionsByUser(userId, blockchain);
+
+        // CRITICAL: Only update positions if we got valid data
+        // Don't clear positions if API returned empty due to error/timeout
+        if (!Array.isArray(updatedPositions)) {
+          console.warn('[Positions] ⚠️ Invalid response from getActivePositionsByUser, keeping existing positions');
+          return;
+        }
+
         // Reverse so newest positions appear at the top
         const reversedPositions = [...updatedPositions].reverse();
         setPositions(reversedPositions);
         onPositionsChange(reversedPositions);
-        
+
         // Save to localStorage cache after refresh (e.g., after sell)
         if (!skipFetch && typeof window !== 'undefined') {
           try {
@@ -354,7 +450,8 @@ const Positions: React.FC<PositionsProps> = ({
           }
         }
       } catch (error) {
-        console.error('Failed to refresh positions:', error);
+        console.error('[Positions] ❌ Failed to refresh positions, keeping existing positions:', error);
+        // Don't clear positions on error - keep showing existing ones
       }
     }
   };
@@ -440,6 +537,8 @@ const Positions: React.FC<PositionsProps> = ({
         } else {
           // CRITICAL: Verify the pair address from the token service before selling
           let verifiedPoolAddress = position.pairAddress;
+          let poolSource = 'position';
+
           if (position.tokenAddress) {
             console.log(`[Positions] Verifying pair address for quick sell: ${position.tokenAddress}`);
             const fetchedAddress = await fetchVerifiedPairAddress(position.tokenAddress);
@@ -448,6 +547,68 @@ const Positions: React.FC<PositionsProps> = ({
                 console.log(`[Positions] Pair address mismatch! Local: ${position.pairAddress}, Verified: ${fetchedAddress}`);
               }
               verifiedPoolAddress = fetchedAddress;
+              poolSource = 'token-service';
+            }
+          }
+
+          // Check if the pool address looks invalid (might be wallet address or token address)
+          // This is a safety check to prevent sending the wrong address to the backend
+          const userWalletAddress = user?.publicKey || '';
+          const poolLooksInvalid = verifiedPoolAddress === position.tokenAddress ||
+                                    verifiedPoolAddress === userWalletAddress ||
+                                    !verifiedPoolAddress ||
+                                    verifiedPoolAddress.length < 30;
+
+          // DexScreener fallback if pool address looks invalid
+          if (poolLooksInvalid && position.tokenAddress) {
+            console.log(`[Positions] ⚠️ Pool address looks invalid (${verifiedPoolAddress}), trying DexScreener fallback...`);
+            try {
+              const controller = new AbortController();
+              const timeoutId = setTimeout(() => controller.abort(), 5000);
+
+              const dexResponse = await fetch(
+                `https://api.dexscreener.com/latest/dex/tokens/${position.tokenAddress}`,
+                { signal: controller.signal }
+              );
+              clearTimeout(timeoutId);
+
+              if (dexResponse.ok) {
+                const dexData = await dexResponse.json();
+                if (dexData?.pairs && dexData.pairs.length > 0) {
+                  // Filter for Solana pairs and sort by liquidity
+                  const solanaPairs = dexData.pairs
+                    .filter((pair: any) => pair.chainId === 'solana' && pair.pairAddress)
+                    .sort((a: any, b: any) => (b.liquidity?.usd || 0) - (a.liquidity?.usd || 0));
+
+                  if (solanaPairs.length > 0) {
+                    const bestPair = solanaPairs[0];
+                    console.log(`[Positions] ✅ DexScreener found pool: ${bestPair.pairAddress} (${bestPair.dexId}, $${bestPair.liquidity?.usd || 0} liq)`);
+                    verifiedPoolAddress = bestPair.pairAddress;
+                    poolSource = `dexscreener-${bestPair.dexId}`;
+                  }
+                }
+              }
+            } catch (dexError: any) {
+              console.warn(`[Positions] DexScreener fallback failed:`, dexError?.message || dexError);
+            }
+          }
+
+          console.log(`[Positions] Using pool address: ${verifiedPoolAddress} (source: ${poolSource})`);
+
+          // If pool address looks invalid, use position.pairAddress as fallback
+          // Let the backend handle pool discovery - it has more robust findBestActivePool() logic
+          if (!verifiedPoolAddress ||
+              verifiedPoolAddress === position.tokenAddress ||
+              verifiedPoolAddress === userWalletAddress) {
+            console.log(`[Positions] ⚠️ Pool address looks invalid (${verifiedPoolAddress}), using position.pairAddress and letting backend discover pool`);
+            // Use the original pairAddress from position - backend will validate and find alternatives
+            verifiedPoolAddress = position.pairAddress || '';
+            poolSource = 'position-fallback';
+
+            // If still no pool address at all, let backend discover it
+            if (!verifiedPoolAddress) {
+              console.log(`[Positions] 📡 No pool address available - backend will auto-discover`);
+              poolSource = 'backend-discovery';
             }
           }
 
@@ -475,12 +636,59 @@ const Positions: React.FC<PositionsProps> = ({
 
           const explorerUrl = sellResult?.hash ? `https://solscan.io/tx/${sellResult.hash}` : undefined;
           toastControls.markSuccess(explorerUrl);
-          refreshPositions();
+
+          // Optimistically update the position in the UI immediately
+          // This provides instant feedback while we wait for the backend to commit
+          setPositions((prevPositions) => {
+            const soldPercent = percent / 100;
+            return prevPositions
+              .map((p) => {
+                if (getPositionKey(p) === tokenKey) {
+                  const newRemaining = p.remaining * (1 - soldPercent);
+                  // If sold ~100%, mark for removal
+                  if (soldPercent >= 0.99 || newRemaining < 0.0001) {
+                    return { ...p, remaining: 0, _shouldRemove: true } as any;
+                  }
+                  return { ...p, remaining: newRemaining };
+                }
+                return p;
+              })
+              .filter((p) => !(p as any)._shouldRemove);
+          });
+
+          // Dispatch event to notify other components (TradeActionPanel, charts, etc.)
+          if (typeof window !== 'undefined' && position.tokenAddress) {
+            window.dispatchEvent(new CustomEvent('solanaQuickTrade', {
+              detail: { tokenAddress: position.tokenAddress }
+            }));
+          }
+
+          // Delay refresh to allow backend to commit the transaction
+          setTimeout(() => {
+            refreshPositions();
+          }, 1500);
         }
       } catch (error: any) {
-        const message = isMonad
-          ? formatMonadError(error?.message || error?.error)
-          : (error?.message || error?.error || 'Sell failed. Please try again.');
+        // Check for POOL_GRADUATED error (bonding curve completed, liquidity migrated)
+        const errorCode = error?.code || error?.response?.data?.code;
+        const errorMessage = error?.message || error?.error || error?.response?.data?.error;
+
+        let message: string;
+        if (errorCode === 'POOL_GRADUATED') {
+          message = 'Pool graduated - liquidity migrated. Refresh and try again.';
+        } else if (errorMessage?.includes('graduated') || errorMessage?.includes('Virtual pool is completed')) {
+          message = 'Pool graduated - liquidity migrated. Refresh and try again.';
+        } else if (errorCode === 'NO_HOLDINGS' || errorMessage?.includes('Insufficient token')) {
+          // Token already sold or transferred - remove from UI and refresh
+          message = 'Token already sold or transferred.';
+          setPositions((prev) => prev.filter((p) => getPositionKey(p) !== tokenKey));
+          // Immediately refresh to get accurate data
+          refreshPositions();
+        } else if (isMonad) {
+          message = formatMonadError(errorMessage);
+        } else {
+          message = errorMessage || 'Sell failed. Please try again.';
+        }
         toastControls.fail(message);
       } finally {
         toastControls.cleanup();
@@ -883,12 +1091,16 @@ const Positions: React.FC<PositionsProps> = ({
       console.log('⚠️ Positions: No userId provided');
       return;
     }
-    
-    let isInitialLoad = true;
-    
+
     const fetchPositions = async () => {
+      // Prevent concurrent fetches
+      if (isFetchingRef.current) {
+        console.log(`[Positions] ⏳ Fetch already in progress, skipping`);
+        return;
+      }
+      isFetchingRef.current = true;
       console.log(`🔍 Fetching positions for userId: ${userId}`);
-      
+
       // Check cache to determine if we should show loading
       let hasValidCache = false;
       if (typeof window !== 'undefined') {
@@ -911,11 +1123,12 @@ const Positions: React.FC<PositionsProps> = ({
         }
       }
 
-      // Only show loading if we don't have valid cache (for instant display)
-      if (isInitialLoad && !hasValidCache) {
+      // Only show loading on FIRST load if we don't have valid cache
+      // Use ref to persist across effect re-runs (prevents "Loading..." flicker)
+      if (isInitialLoadRef.current && !hasValidCache && positionsRef.current.length === 0) {
         setLoading(true);
-      } else if (hasValidCache) {
-        console.log(`[Positions] 🔄 Refreshing positions in background (cache available for instant display)`);
+      } else if (hasValidCache || positionsRef.current.length > 0) {
+        console.log(`[Positions] 🔄 Refreshing in background (have ${positionsRef.current.length} positions)`);
       }
       try {
         console.log(`🔍 [Positions] Fetching with blockchain: ${blockchain || 'all'}`);
@@ -928,42 +1141,88 @@ const Positions: React.FC<PositionsProps> = ({
 
         // Reverse so newest positions appear at the top
         const reversedPositions = [...fetchedPositions].reverse();
-        setPositions(reversedPositions);
-        onPositionsChange(reversedPositions);
-        
-        // Save to localStorage cache for instant loading when navigating back
-        if (!skipFetch && typeof window !== 'undefined') {
-          try {
-            const payload = {
-              data: reversedPositions,
-              timestamp: Date.now(),
-            };
-            window.localStorage.setItem(positionsCacheKey, JSON.stringify(payload));
-            console.log(`[Positions] 💾 Cached ${reversedPositions.length} positions to localStorage`);
-          } catch (error) {
-            console.warn(`[Positions] Failed to cache positions:`, error);
+
+        // CRITICAL FIX: Only update positions if we got actual data
+        // Don't clear existing positions when API returns empty (timeout/error)
+        let positionsToUse = reversedPositions;
+        let shouldUpdate = true;
+
+        if (reversedPositions.length === 0) {
+          // API returned empty - check if we should preserve existing
+          // Use ref to get current positions (avoids stale closure)
+          const currentPositions = positionsRef.current;
+          const hasEverLoaded = hasEverLoadedRef.current;
+
+          // Preserve existing positions if:
+          // 1. We have positions currently displayed, OR
+          // 2. We've ever successfully loaded positions (prevents clearing after temporary API error)
+          if (currentPositions.length > 0 || hasEverLoaded) {
+            console.log(`[Positions] ⚠️ API returned empty - preserving (current: ${currentPositions.length}, hasEverLoaded: ${hasEverLoaded})`);
+            shouldUpdate = false; // Don't update state or cache
+          } else {
+            console.log(`[Positions] ℹ️ First load returned empty - accepting (user has no positions)`);
           }
         }
-        
-        requestMetadataForTokens(fetchedPositions);
+
+        if (shouldUpdate) {
+          setPositions(positionsToUse);
+          onPositionsChange(positionsToUse);
+
+          // Save to localStorage cache for instant loading when navigating back
+          if (!skipFetch && typeof window !== 'undefined' && positionsToUse.length > 0) {
+            try {
+              const payload = {
+                data: positionsToUse,
+                timestamp: Date.now(),
+              };
+              window.localStorage.setItem(positionsCacheKey, JSON.stringify(payload));
+              console.log(`[Positions] 💾 Cached ${positionsToUse.length} positions to localStorage`);
+            } catch (error) {
+              console.warn(`[Positions] Failed to cache positions:`, error);
+            }
+          }
+
+          requestMetadataForTokens(fetchedPositions);
+        }
       } catch (error) {
         console.error('❌ Error fetching positions:', error);
       } finally {
-        if (isInitialLoad) {
+        isFetchingRef.current = false;
+        // Mark initial load as complete (use ref to persist across effect re-runs)
+        if (isInitialLoadRef.current) {
           setLoading(false);
-          isInitialLoad = false;
+          isInitialLoadRef.current = false;
         }
       }
     };
-    
+
+    // Store function reference for retry logic
+    fetchPositionsRef.current = fetchPositions;
+
     fetchPositions();
-    
+
     // Auto-refresh every 5 seconds to get latest positions
     const intervalId = setInterval(() => {
       fetchPositions();
     }, 5000);
-    
-    return () => clearInterval(intervalId);
+
+    // Listen for trade events from other components (TradeActionPanel, InstantTradeModal)
+    // This ensures Positions refreshes when a sell happens elsewhere
+    const handleQuickTradeEvent = (event: Event) => {
+      const customEvent = event as CustomEvent<{ tokenAddress: string }>;
+      console.log(`[Positions] 📡 Received solanaQuickTrade event for ${customEvent.detail?.tokenAddress}`);
+      // Delay slightly to let backend commit the transaction
+      setTimeout(() => {
+        fetchPositions();
+      }, 1500);
+    };
+
+    window.addEventListener('solanaQuickTrade', handleQuickTradeEvent);
+
+    return () => {
+      clearInterval(intervalId);
+      window.removeEventListener('solanaQuickTrade', handleQuickTradeEvent);
+    };
   }, [userId, onPositionsChange, skipFetch, blockchain, requestMetadataForTokens, positionsCacheKey, POSITIONS_CACHE_TTL_MS]);
 
   // Fetch Pump.fun images for positions with missing images
@@ -1025,8 +1284,12 @@ const Positions: React.FC<PositionsProps> = ({
         <tbody>
           {loading ? (
             <tr><td colSpan={6} className="text-center py-6 text-neutral-500">Loading...</td></tr>
-          ) : positions.length === 0 ? (
+          ) : positions.length === 0 && !sellingTokens.size ? (
+            // Only show "No positions" if we're not in the middle of a sell operation
             <tr><td colSpan={6} className="text-center py-6 text-neutral-500">No positions found.</td></tr>
+          ) : positions.length === 0 && sellingTokens.size > 0 ? (
+            // During sell, show loading instead of "No positions" to prevent flicker
+            <tr><td colSpan={6} className="text-center py-6 text-neutral-500">Updating positions...</td></tr>
           ) : (
             positions
               .filter(pos => (pos.remaining > 0) && (showHidden || !hiddenTokens.has(pos.tokenAddress)))

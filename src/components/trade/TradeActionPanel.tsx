@@ -2220,6 +2220,55 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
         }
       }
 
+      // Validate pool address - check if it looks invalid (equals wallet or token address)
+      const userWalletAddress = user?.publicKey || '';
+      const poolLooksInvalid = resolvedPoolAddress === userWalletAddress ||
+                               resolvedPoolAddress === token.mint ||
+                               !resolvedPoolAddress ||
+                               resolvedPoolAddress.length < 30;
+
+      // DexScreener fallback if pool address looks invalid
+      if (poolLooksInvalid && token.mint) {
+        console.log(`[TradeActionPanel] ⚠️ Pool address looks invalid (${resolvedPoolAddress}), trying DexScreener fallback...`);
+        try {
+          const controller = new AbortController();
+          const timeoutId = setTimeout(() => controller.abort(), 5000);
+
+          const dexResponse = await fetch(
+            `https://api.dexscreener.com/latest/dex/tokens/${token.mint}`,
+            { signal: controller.signal }
+          );
+          clearTimeout(timeoutId);
+
+          if (dexResponse.ok) {
+            const dexData = await dexResponse.json();
+            if (dexData?.pairs && dexData.pairs.length > 0) {
+              // Filter for Solana pairs and sort by liquidity
+              const solanaPairs = dexData.pairs
+                .filter((pair: any) => pair.chainId === 'solana' && pair.pairAddress)
+                .sort((a: any, b: any) => (b.liquidity?.usd || 0) - (a.liquidity?.usd || 0));
+
+              if (solanaPairs.length > 0) {
+                const bestPair = solanaPairs[0];
+                console.log(`[TradeActionPanel] ✅ DexScreener found pool: ${bestPair.pairAddress} (${bestPair.dexId}, $${bestPair.liquidity?.usd || 0} liq)`);
+                resolvedPoolAddress = bestPair.pairAddress;
+              }
+            }
+          }
+        } catch (dexError: any) {
+          console.warn(`[TradeActionPanel] DexScreener fallback failed:`, dexError?.message || dexError);
+        }
+      }
+
+      // Final validation for sell mode - don't proceed if pool address is clearly invalid
+      if (mode === 'sell' && (!resolvedPoolAddress || resolvedPoolAddress === userWalletAddress || resolvedPoolAddress === token.mint)) {
+        setIsLoading(false);
+        showEnhancedToast("error", "Could not find valid pool address. The token may have graduated or migrated.", {
+          title: "Pool Address Invalid",
+        });
+        return;
+      }
+
       if (tab === "limit") {
         if (!amount || !targetMC) {
           setSuccessMessage(null);
@@ -2634,7 +2683,26 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
             cancelAnimationFrame(timerHandle);
           }
 
-          const errorMessage = error?.message || error?.error || 'Sell failed. Please try again.';
+          // Check for POOL_GRADUATED error (bonding curve completed, liquidity migrated)
+          const errorCode = error?.code || error?.response?.data?.code;
+          const rawMessage = error?.message || error?.error || error?.response?.data?.error;
+
+          let errorMessage: string;
+          if (errorCode === 'POOL_GRADUATED') {
+            errorMessage = 'Pool graduated - liquidity migrated. Refresh and try again.';
+          } else if (rawMessage?.includes('graduated') || rawMessage?.includes('Virtual pool is completed')) {
+            errorMessage = 'Pool graduated - liquidity migrated. Refresh and try again.';
+          } else if (errorCode === 'NO_HOLDINGS' || rawMessage?.includes('Insufficient token')) {
+            errorMessage = 'Token already sold or transferred.';
+            // Clear position data since token is no longer held
+            setPositionData({
+              bought: 0, boughtUsdValue: 0, sold: 0, soldUsdValue: 0,
+              remaining: 0, remainingUsdValue: 0, pnl: 0, pnlPercentage: 0,
+            });
+          } else {
+            errorMessage = rawMessage || 'Sell failed. Please try again.';
+          }
+
           toast.error(errorMessage, { id: uniqueToastId, duration: 6000 });
           console.error("❌ Sell failed:", error);
           setSuccessMessage(null);
