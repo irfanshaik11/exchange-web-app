@@ -1135,4 +1135,91 @@ export const getPolymarketOpenOrders = (
   );
 };
 
+/* -------------------------------------------------------------------------- */
+/*                          Pool Resolution (Cached)                           */
+/* -------------------------------------------------------------------------- */
+
+export interface ResolvedPoolData {
+  tokenAddress: string;
+  poolAddress: string;
+  poolType: string;       // Our format: "PumpAmm", "Meteora", "Raydium", etc.
+  protocol: string;       // Raw protocol from source
+  liquidity?: number;
+  source: string;
+  isGraduated?: boolean;
+  cachedAt: number;
+  responseTimeMs: number;
+  cacheHit: boolean;
+}
+
+/**
+ * Resolve pool for a token using the backend's Redis-cached pool service
+ * This is much faster than calling DexScreener directly (cache hits < 10ms)
+ *
+ * @param tokenAddress - Token mint address
+ * @param forceRefresh - Force fresh lookup, bypassing cache
+ * @param poolTypeHint - Optional hint about expected pool type
+ */
+export const resolvePool = async (
+  tokenAddress: string,
+  forceRefresh: boolean = false,
+  poolTypeHint?: string
+): Promise<ResolvedPoolData | null> => {
+  try {
+    const params = new URLSearchParams({ tokenAddress });
+    if (forceRefresh) params.append('forceRefresh', 'true');
+    if (poolTypeHint) params.append('poolTypeHint', poolTypeHint);
+
+    const response = await apiFetch<{ success: boolean; data?: ResolvedPoolData; error?: string }>(
+      `/api/trade/resolve_pool?${params.toString()}`,
+      { method: 'GET' }
+    );
+
+    if (response?.success && response?.data) {
+      return response.data;
+    }
+
+    return null;
+  } catch (error: any) {
+    console.warn('[resolvePool] Error:', error?.message || error);
+    return null;
+  }
+};
+
+/**
+ * Batch resolve pools for multiple tokens
+ * Useful for pre-warming cache when loading portfolio
+ *
+ * @param tokenAddresses - Array of token mint addresses (max 50)
+ */
+export const batchResolvePools = async (
+  tokenAddresses: string[]
+): Promise<{
+  resolved: ResolvedPoolData[];
+  failed: string[];
+}> => {
+  try {
+    const response = await apiFetch<{
+      success: boolean;
+      data?: {
+        resolved: ResolvedPoolData[];
+        failed: string[];
+      };
+      error?: string;
+    }>('/api/trade/resolve_pools', {
+      method: 'POST',
+      body: { tokenAddresses },
+    });
+
+    if (response?.success && response?.data) {
+      return response.data;
+    }
+
+    return { resolved: [], failed: tokenAddresses };
+  } catch (error: any) {
+    console.warn('[batchResolvePools] Error:', error?.message || error);
+    return { resolved: [], failed: tokenAddresses };
+  }
+};
+
 export { apiFetch };

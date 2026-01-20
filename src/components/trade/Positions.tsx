@@ -16,7 +16,7 @@ import { usePositionPrices } from '~/hooks/usePositionPrices';
 import PositionDetailModal from './PositionDetailModal';
 import toast from 'react-hot-toast';
 import { useQuickBuy, type QuickBuySettings } from '~/components/QuickBuyContext';
-import { SOL_MINT_ADDRESS, tradeMonadSell, tradeSellPercentage } from '~/utils/api';
+import { SOL_MINT_ADDRESS, tradeMonadSell, tradeSellPercentage, resolvePool } from '~/utils/api';
 import { getPoolTypeFromToken } from '~/utils/poolTypeDetection';
 import { normalizeMonadAddress } from '~/utils/normalizeMonadAddress';
 import { broadcastMonadQuickTrade } from '~/utils/monadTradeEvents';
@@ -535,88 +535,81 @@ const Positions: React.FC<PositionsProps> = ({
             return;
           }
         } else {
-          // CRITICAL: Verify the pair address from the token service before selling
+          // CRITICAL: Use CACHED pool resolution (Redis-backed) for fast, reliable pool lookups
+          // This handles graduated tokens and provides sub-10ms response for cache hits
           let verifiedPoolAddress = position.pairAddress;
           let poolSource = 'position';
+          let poolType = '';
 
           if (position.tokenAddress) {
-            console.log(`[Positions] Verifying pair address for quick sell: ${position.tokenAddress}`);
-            const fetchedAddress = await fetchVerifiedPairAddress(position.tokenAddress);
-            if (fetchedAddress) {
-              if (fetchedAddress !== position.pairAddress) {
-                console.log(`[Positions] Pair address mismatch! Local: ${position.pairAddress}, Verified: ${fetchedAddress}`);
-              }
-              verifiedPoolAddress = fetchedAddress;
-              poolSource = 'token-service';
-            }
-          }
+            console.log(`[Positions] 🔍 Resolving pool for sell via cached API: ${position.tokenAddress}`);
 
-          // Check if the pool address looks invalid (might be wallet address or token address)
-          // This is a safety check to prevent sending the wrong address to the backend
-          const userWalletAddress = user?.publicKey || '';
-          const poolLooksInvalid = verifiedPoolAddress === position.tokenAddress ||
-                                    verifiedPoolAddress === userWalletAddress ||
-                                    !verifiedPoolAddress ||
-                                    verifiedPoolAddress.length < 30;
-
-          // DexScreener fallback if pool address looks invalid
-          if (poolLooksInvalid && position.tokenAddress) {
-            console.log(`[Positions] ⚠️ Pool address looks invalid (${verifiedPoolAddress}), trying DexScreener fallback...`);
+            // Use the cached pool resolution API - much faster than direct DexScreener calls
+            // Cache is shared across all users, so one resolution benefits everyone
             try {
-              const controller = new AbortController();
-              const timeoutId = setTimeout(() => controller.abort(), 5000);
-
-              const dexResponse = await fetch(
-                `https://api.dexscreener.com/latest/dex/tokens/${position.tokenAddress}`,
-                { signal: controller.signal }
+              const resolvedPool = await resolvePool(
+                position.tokenAddress,
+                false, // Don't force refresh - use cache
+                position.launchpad || undefined // Optional hint
               );
-              clearTimeout(timeoutId);
 
-              if (dexResponse.ok) {
-                const dexData = await dexResponse.json();
-                if (dexData?.pairs && dexData.pairs.length > 0) {
-                  // Filter for Solana pairs and sort by liquidity
-                  const solanaPairs = dexData.pairs
-                    .filter((pair: any) => pair.chainId === 'solana' && pair.pairAddress)
-                    .sort((a: any, b: any) => (b.liquidity?.usd || 0) - (a.liquidity?.usd || 0));
+              if (resolvedPool) {
+                console.log(`[Positions] ✅ Pool resolved: ${resolvedPool.poolAddress} (${resolvedPool.poolType}, ${resolvedPool.responseTimeMs}ms, ${resolvedPool.cacheHit ? 'CACHE HIT' : 'FRESH'})`);
 
-                  if (solanaPairs.length > 0) {
-                    const bestPair = solanaPairs[0];
-                    console.log(`[Positions] ✅ DexScreener found pool: ${bestPair.pairAddress} (${bestPair.dexId}, $${bestPair.liquidity?.usd || 0} liq)`);
-                    verifiedPoolAddress = bestPair.pairAddress;
-                    poolSource = `dexscreener-${bestPair.dexId}`;
+                // Check if token graduated (stored pool differs from resolved pool)
+                if (position.pairAddress && resolvedPool.poolAddress !== position.pairAddress) {
+                  console.log(`[Positions] 🎓 Token appears to have graduated!`);
+                  console.log(`   Old pool (stored): ${position.pairAddress}`);
+                  console.log(`   New pool (active): ${resolvedPool.poolAddress}`);
+                  if (resolvedPool.isGraduated) {
+                    console.log(`   ✅ Confirmed graduated token`);
                   }
                 }
+
+                verifiedPoolAddress = resolvedPool.poolAddress;
+                poolType = resolvedPool.poolType;
+                poolSource = `cached-${resolvedPool.source}`;
+              } else {
+                console.log(`[Positions] ⚠️ Cached pool resolution returned null, falling back to token service...`);
               }
-            } catch (dexError: any) {
-              console.warn(`[Positions] DexScreener fallback failed:`, dexError?.message || dexError);
+            } catch (cacheError: any) {
+              console.warn(`[Positions] Cached pool resolution failed:`, cacheError?.message || cacheError);
+            }
+
+            // Fallback to token service if cached resolution failed
+            if (!poolType || poolSource === 'position') {
+              console.log(`[Positions] Trying token service fallback...`);
+              const fetchedAddress = await fetchVerifiedPairAddress(position.tokenAddress);
+              if (fetchedAddress) {
+                verifiedPoolAddress = fetchedAddress;
+                poolSource = 'token-service';
+              }
             }
           }
 
           console.log(`[Positions] Using pool address: ${verifiedPoolAddress} (source: ${poolSource})`);
 
-          // If pool address looks invalid, use position.pairAddress as fallback
-          // Let the backend handle pool discovery - it has more robust findBestActivePool() logic
+          // Final validation - let backend discover if we still don't have a valid pool
+          const userWalletAddress = user?.publicKey || '';
           if (!verifiedPoolAddress ||
               verifiedPoolAddress === position.tokenAddress ||
               verifiedPoolAddress === userWalletAddress) {
-            console.log(`[Positions] ⚠️ Pool address looks invalid (${verifiedPoolAddress}), using position.pairAddress and letting backend discover pool`);
-            // Use the original pairAddress from position - backend will validate and find alternatives
+            console.log(`[Positions] ⚠️ Pool address looks invalid (${verifiedPoolAddress}), letting backend discover pool`);
             verifiedPoolAddress = position.pairAddress || '';
-            poolSource = 'position-fallback';
-
-            // If still no pool address at all, let backend discover it
-            if (!verifiedPoolAddress) {
-              console.log(`[Positions] 📡 No pool address available - backend will auto-discover`);
-              poolSource = 'backend-discovery';
-            }
+            poolSource = 'backend-discovery';
           }
 
-          const poolType = getPoolTypeFromToken({
-            mint: position.tokenAddress,
-            pair_address: verifiedPoolAddress,
-            launchpad_protocol: tokenMeta?.protocol || position.launchpad || '',
-          } as any);
+          // If poolType not set from cache, derive from token metadata
+          if (!poolType) {
+            const effectiveProtocol = tokenMeta?.protocol || position.launchpad || '';
+            poolType = getPoolTypeFromToken({
+              mint: position.tokenAddress,
+              pair_address: verifiedPoolAddress,
+              launchpad_protocol: effectiveProtocol,
+            } as any);
+          }
+
+          console.log(`[Positions] 🎯 Pool type for sell: "${poolType}"`);
 
           const sellResult = await tradeSellPercentage(
             {
