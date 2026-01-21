@@ -17,6 +17,7 @@ import {
   DEFAULT_FILTERS,
   FavoritesCarousel,
   CuratedSections,
+  PolygonWalletCard,
   type PredictionMarket,
   type SortOption,
   type MarketFilterState,
@@ -301,6 +302,16 @@ export default function PredictionsPage() {
                 </motion.button>
               </motion.div>
             )}
+          </motion.div>
+
+          {/* Polygon Wallet Card - Shows balance and deposit instructions */}
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.5, delay: 0.1 }}
+            className="mb-6"
+          >
+            <PolygonWalletCard variant="compact" />
           </motion.div>
 
           {/* Featured Market - Hidden for now

@@ -16,10 +16,11 @@ import FilterPopout from '../components/FilterPopout';
 import { SOL_MINT_ADDRESS } from "~/utils/api";
 import { executeMonadMultiBuy, formatMonadTxSummary } from "~/utils/monadWalletAllocation";
 import { formatMonadError } from "~/utils/monadError";
-import { executeEnhancedTrade } from "~/utils/enhancedTradeHandler";
 import { showEnhancedToast, updateEnhancedToast } from "~/utils/enhancedToast";
 import { useUser } from "~/components/UserContext";
 import PumpLive, { type PumpItem, demoLeft as demoLeftPump, demoRight as demoRightPump } from '../components/PumpLive';
+import PumpLiveGrid, { type PumpLiveSortField, type PumpLiveSortDirection } from '../components/PumpLiveGrid';
+import { type PumpLiveToken } from '../hooks/usePumpLive';
 import { FaRunning, FaGasPump, FaCoins, FaBan, FaCheckCircle } from "react-icons/fa";
 import { HiLightningBolt } from "react-icons/hi";
 import { BsSliders2 } from "react-icons/bs";
@@ -27,6 +28,9 @@ import { prefetchTradeData } from "~/utils/tokenCache";
 import { extractTokenImage } from "~/utils/images";
 import { broadcastMonadQuickTrade } from "~/utils/monadTradeEvents";
 import toast from "react-hot-toast";
+import { executeSolanaMultiBuy, buildSolanaWalletAllocations } from "~/utils/solanaWalletAllocation";
+import { getPoolTypeFromToken } from "~/utils/poolTypeDetection";
+import { fetchVerifiedPairAddress } from "~/hooks/useSingleTokenPolling";
 
 const WRAPPED_SOL_MINT = SOL_MINT_ADDRESS;
 
@@ -142,6 +146,10 @@ export default function DiscoverPage() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [isFilterPopoutOpen, setIsFilterPopoutOpen] = useState(false);
   const { filter } = useFilter();
+
+  // Pump Live sorting state
+  const [pumpLiveSortField, setPumpLiveSortField] = useState<PumpLiveSortField>('time');
+  const [pumpLiveSortDirection, setPumpLiveSortDirection] = useState<PumpLiveSortDirection>('desc');
   
   // Debug: Log when filter context changes to track filter application
   useEffect(() => {
@@ -2170,37 +2178,455 @@ export default function DiscoverPage() {
       }
     }
 
-    // For Solana chain, use enhanced trade flow
+    // For Solana chain, use executeSolanaMultiBuy directly (same as PulseTable)
     const settings = preset.quickBuySettings;
+    const poolType = getPoolTypeFromToken(token);
+    console.log(`🎯 Quick Buy - Pool type detection: "${poolType}" (from launchpad_protocol: "${(token as any).launchpad_protocol || 'none'}")`);
 
-    // Execute enhanced trade with all features
-    const result = await executeEnhancedTrade({
-      token,
+    // Pre-calculate which wallets will actually be used (have sufficient balance)
+    const { allocations, total } = buildSolanaWalletAllocations({
       amount: buyAmount,
-      side: 'buy',
-      settings,
-      user: { bearerToken: user.bearerToken, id: user.id },
-      solBalance: Number(solBalance || 0),
-      solPriceUsd: 150, // TODO: Get real SOL price
-      walletContext: {
-        selectedWalletIds: selectedWalletIds?.sol || [],
+      walletList: walletList || [],
+      walletBalances: walletBalances || {},
+      selectedWalletIds: selectedWalletIds?.sol || [],
+      priorityFee: settings.priority || 0.0001,
+      bribe: settings.bribe || 0,
+    });
+    const walletsWithBalance = allocations.length;
+    const isMultiWallet = walletsWithBalance > 1;
+
+    // Generate random timer cap (0.40-0.60s)
+    const timerCap = 0.4 + Math.random() * 0.2;
+    const uniqueToastId = `solana-quickbuy-${Date.now()}-${Math.random()}`;
+    const startTime = Date.now();
+    let timerFinished = false;
+
+    // Extract token image
+    const tokenImage = extractTokenImage(token);
+    const tokenName = token.symbol || token.name || "Token";
+
+    // Show animated toast with timer (same as PulseTable)
+    toast(
+      (t) => (
+        <div className="flex items-center gap-3">
+          {tokenImage && (
+            <img
+              src={tokenImage}
+              alt={tokenName}
+              className="h-6 w-6 flex-shrink-0 rounded-full"
+            />
+          )}
+          <div className="flex min-w-0 flex-1 items-center gap-2">
+            <span className="truncate text-sm text-neutral-200">
+              Buying {tokenName}
+            </span>
+            <span
+              id={`timer-${uniqueToastId}`}
+              className="flex-shrink-0 text-xs text-neutral-400"
+            >
+              (0.00s)
+            </span>
+            <span
+              id={`check-${uniqueToastId}`}
+              className="flex-shrink-0 text-green-400"
+              style={{ display: "none" }}
+            >
+              ✓
+            </span>
+            <span
+              id={`link-${uniqueToastId}`}
+              className="flex-shrink-0"
+              style={{ display: "inline-flex" }}
+            >
+              <img
+                src="https://avatars.githubusercontent.com/u/92743431?s=200&v=4"
+                alt="Solana"
+                className="h-4 w-4 rounded-full opacity-70"
+                style={{ cursor: "default" }}
+              />
+            </span>
+          </div>
+        </div>
+      ),
+      {
+        id: uniqueToastId,
+        duration: Infinity,
+        style: {
+          background: "#1a1a1a",
+          border: "1px solid #333",
+          borderRadius: "8px",
+          padding: "12px",
+        },
+      },
+    );
+
+    // Start timer animation
+    let timerHandle: number | null = null;
+    const tick = () => {
+      const elapsed = (Date.now() - startTime) / 1000;
+      const displayTime = Math.min(elapsed, timerCap).toFixed(2);
+      const timerEl = document.getElementById(`timer-${uniqueToastId}`);
+      if (timerEl) {
+        timerEl.textContent = `(${displayTime}s)`;
+      }
+
+      if (!timerFinished && elapsed >= timerCap) {
+        timerFinished = true;
+        const checkEl = document.getElementById(`check-${uniqueToastId}`);
+        if (checkEl) {
+          checkEl.style.display = "block";
+        }
+        const linkEl = document.getElementById(`link-${uniqueToastId}`);
+        if (linkEl) {
+          if (isMultiWallet) {
+            linkEl.textContent = `${walletsWithBalance}/${total}`;
+            linkEl.className = "text-xs text-blue-400 font-medium flex-shrink-0";
+          }
+        }
+        timerHandle = null;
+        return;
+      }
+      timerHandle = requestAnimationFrame(tick);
+    };
+    timerHandle = requestAnimationFrame(tick);
+
+    try {
+      // Verify the pair address from the token service before executing trade
+      let poolAddress = token.migrated_pool_address || token.pair_address || "";
+      if (token.mint) {
+        console.log(`[Discover] Verifying pair address for quick buy: ${token.mint}`);
+        const verifiedPairAddress = await fetchVerifiedPairAddress(token.mint);
+        if (verifiedPairAddress) {
+          if (verifiedPairAddress !== poolAddress) {
+            console.log(`[Discover] Pair address mismatch! Local: ${poolAddress}, Verified: ${verifiedPairAddress}`);
+          }
+          poolAddress = verifiedPairAddress;
+        }
+      }
+      const baseMint = token.mint || "";
+      const quoteMint = SOL_MINT_ADDRESS;
+
+      const multiResult = await executeSolanaMultiBuy({
+        poolAddress,
+        baseMint,
+        quoteMint,
+        amountSOL: buyAmount,
+        poolType,
+        originalPairAddress: token.pair_address,
+        slippage: settings.maxSlippage,
+        priorityFee: settings.priority,
+        bribe: settings.bribe,
+        mevMode: settings.mevMode,
+        autoFee: settings.autoFee,
+        maxFee: settings.maxFee,
+        rpc: settings.rpc,
+        tokenName: token.name,
+        tokenSymbol: token.symbol,
+        authToken: user.bearerToken,
         walletList: walletList || [],
         walletBalances: walletBalances || {},
-        chain: currentChain === 'monad' ? 'monad' : 'sol',
-      },
-      refreshBalance,
-      onSuccess: (txHash, stats) => {
-        console.log('✅ Enhanced Quick Buy successful:', { txHash, stats });
-      },
-      onError: (error) => {
-        console.error('❌ Enhanced Quick Buy failed:', error);
-      },
-      onWarning: (warnings) => {
-        console.warn('⚠️ Pre-transaction warnings:', warnings);
-      },
-    });
+        selectedWalletIds: selectedWalletIds?.sol || [],
+        onTxHash: ({ txHash }) => {
+          if (txHash) {
+            const linkEl = document.getElementById(`link-${uniqueToastId}`);
+            if (linkEl) {
+              const explorerUrl = `https://solscan.io/tx/${txHash}`;
+              linkEl.innerHTML = `<a href="${explorerUrl}" target="_blank" rel="noopener noreferrer" class="hover:opacity-80 transition-opacity"><img src="https://avatars.githubusercontent.com/u/92743431?s=200&v=4" alt="Solana" class="w-4 h-4 rounded-full" style="cursor: pointer;" /></a>`;
+              linkEl.className = "";
+            }
+          }
+        },
+      });
 
-    return result;
+      // Get first tx hash for single wallet case
+      const firstTxHash =
+        multiResult?.results?.find(
+          (r: any) => (r.result as any)?.hash || (r.result as any)?.txid,
+        )?.result?.hash ||
+        multiResult?.results?.find(
+          (r: any) => (r.result as any)?.hash || (r.result as any)?.txid,
+        )?.result?.txid;
+
+      if (firstTxHash && !isMultiWallet) {
+        const linkEl = document.getElementById(`link-${uniqueToastId}`);
+        if (linkEl) {
+          const explorerUrl = `https://solscan.io/tx/${firstTxHash}`;
+          linkEl.innerHTML = `<a href="${explorerUrl}" target="_blank" rel="noopener noreferrer" class="hover:opacity-80 transition-opacity"><img src="https://avatars.githubusercontent.com/u/92743431?s=200&v=4" alt="Solana" class="w-4 h-4 rounded-full" style="cursor: pointer;" /></a>`;
+          linkEl.className = "";
+        }
+        if (timerHandle) {
+          cancelAnimationFrame(timerHandle);
+        }
+        setTimeout(() => toast.dismiss(uniqueToastId), 10000);
+      }
+
+      console.log("✅ Discover Quick Buy successful");
+
+      // Dispatch event to refresh chart price lines
+      if (typeof window !== "undefined" && token.mint) {
+        window.dispatchEvent(
+          new CustomEvent("solanaQuickTrade", {
+            detail: { tokenAddress: token.mint },
+          }),
+        );
+      }
+
+      return { success: true };
+    } catch (error: any) {
+      // Stop timer on error
+      if (timerHandle) {
+        cancelAnimationFrame(timerHandle);
+      }
+
+      // Dismiss pending toast
+      toast.dismiss(uniqueToastId);
+
+      // Show error toast
+      console.error("❌ Discover Quick Buy failed:", error);
+      showEnhancedToast("error", error.message || "Buy failed", {
+        title: "Trade Failed",
+      });
+
+      return { success: false, error };
+    }
+  };
+
+  // PumpLive Quick Buy handler - uses executeSolanaMultiBuy directly (same as PulseTable)
+  const handlePumpLiveQuickBuy = async (token: PumpLiveToken, amount: number) => {
+    console.log("🎯 PumpLive Quick Buy called for token:", token.symbol);
+
+    if (!user?.bearerToken || !user?.id) {
+      console.log("❌ User not logged in");
+      showEnhancedToast("warning", "Please connect your wallet to trade", {
+        title: "Authentication Required",
+      });
+      return;
+    }
+
+    const buyAmount = amount;
+    if (isNaN(buyAmount) || buyAmount <= 0) {
+      console.log("❌ Invalid buy amount:", amount);
+      showEnhancedToast(
+        "warning",
+        "Please enter a valid SOL amount (minimum 0.001 SOL)",
+        {
+          title: "Invalid Amount",
+        },
+      );
+      return;
+    }
+
+    const presetIndex = parseInt(selectedPill.replace("P", "")) - 1;
+    const preset = presets[presetIndex];
+    if (!preset) {
+      console.log("❌ Quick buy preset missing for index", presetIndex);
+      showEnhancedToast("error", "Quick buy preset not configured", {
+        title: "Configuration Error",
+        suggestions: ["Update your presets in settings"],
+      });
+      return;
+    }
+
+    const settings = preset.quickBuySettings;
+    // PumpLive tokens are always Pumpfun type
+    const poolType = 'Pumpfun' as const;
+
+    // Pre-calculate which wallets will actually be used (have sufficient balance)
+    const { allocations, total } = buildSolanaWalletAllocations({
+      amount: buyAmount,
+      walletList: walletList || [],
+      walletBalances: walletBalances || {},
+      selectedWalletIds: selectedWalletIds?.sol || [],
+      priorityFee: settings.priority || 0.0001,
+      bribe: settings.bribe || 0,
+    });
+    const walletsWithBalance = allocations.length;
+    const isMultiWallet = walletsWithBalance > 1;
+
+    // Generate random timer cap (0.40-0.60s)
+    const timerCap = 0.4 + Math.random() * 0.2;
+    const uniqueToastId = `pumplive-quickbuy-${Date.now()}-${Math.random()}`;
+    const startTime = Date.now();
+    let timerFinished = false;
+
+    // Extract token image
+    const tokenImage = token.image_uri || null;
+    const tokenName = token.symbol || token.name || "Token";
+
+    // Show animated toast with timer (same as PulseTable)
+    toast(
+      (t) => (
+        <div className="flex items-center gap-3">
+          {tokenImage && (
+            <img
+              src={tokenImage}
+              alt={tokenName}
+              className="h-6 w-6 flex-shrink-0 rounded-full"
+            />
+          )}
+          <div className="flex min-w-0 flex-1 items-center gap-2">
+            <span className="truncate text-sm text-neutral-200">
+              Buying {tokenName}
+            </span>
+            <span
+              id={`timer-${uniqueToastId}`}
+              className="flex-shrink-0 text-xs text-neutral-400"
+            >
+              (0.00s)
+            </span>
+            <span
+              id={`check-${uniqueToastId}`}
+              className="flex-shrink-0 text-green-400"
+              style={{ display: "none" }}
+            >
+              ✓
+            </span>
+            <span
+              id={`link-${uniqueToastId}`}
+              className="flex-shrink-0"
+              style={{ display: "inline-flex" }}
+            >
+              <img
+                src="https://avatars.githubusercontent.com/u/92743431?s=200&v=4"
+                alt="Solana"
+                className="h-4 w-4 rounded-full opacity-70"
+                style={{ cursor: "default" }}
+              />
+            </span>
+          </div>
+        </div>
+      ),
+      {
+        id: uniqueToastId,
+        duration: Infinity,
+        style: {
+          background: "#1a1a1a",
+          border: "1px solid #333",
+          borderRadius: "8px",
+          padding: "12px",
+        },
+      },
+    );
+
+    // Start timer animation
+    let timerHandle: number | null = null;
+    const tick = () => {
+      const elapsed = (Date.now() - startTime) / 1000;
+      const displayTime = Math.min(elapsed, timerCap).toFixed(2);
+      const timerEl = document.getElementById(`timer-${uniqueToastId}`);
+      if (timerEl) {
+        timerEl.textContent = `(${displayTime}s)`;
+      }
+
+      if (!timerFinished && elapsed >= timerCap) {
+        timerFinished = true;
+        const checkEl = document.getElementById(`check-${uniqueToastId}`);
+        if (checkEl) {
+          checkEl.style.display = "block";
+        }
+        const linkEl = document.getElementById(`link-${uniqueToastId}`);
+        if (linkEl) {
+          if (isMultiWallet) {
+            linkEl.textContent = `${walletsWithBalance}/${total}`;
+            linkEl.className = "text-xs text-blue-400 font-medium flex-shrink-0";
+          }
+        }
+        timerHandle = null;
+        return;
+      }
+      timerHandle = requestAnimationFrame(tick);
+    };
+    timerHandle = requestAnimationFrame(tick);
+
+    try {
+      // For PumpLive tokens, use the bonding_curve as the pool address
+      const poolAddress = token.bonding_curve || "";
+      const baseMint = token.mint || "";
+      const quoteMint = SOL_MINT_ADDRESS;
+
+      const multiResult = await executeSolanaMultiBuy({
+        poolAddress,
+        baseMint,
+        quoteMint,
+        amountSOL: buyAmount,
+        poolType,
+        originalPairAddress: token.bonding_curve,
+        slippage: settings.maxSlippage,
+        priorityFee: settings.priority,
+        bribe: settings.bribe,
+        mevMode: settings.mevMode,
+        autoFee: settings.autoFee,
+        maxFee: settings.maxFee,
+        rpc: settings.rpc,
+        tokenName: token.name,
+        tokenSymbol: token.symbol,
+        authToken: user.bearerToken,
+        walletList: walletList || [],
+        walletBalances: walletBalances || {},
+        selectedWalletIds: selectedWalletIds?.sol || [],
+        onTxHash: ({ txHash }) => {
+          if (txHash) {
+            const linkEl = document.getElementById(`link-${uniqueToastId}`);
+            if (linkEl) {
+              const explorerUrl = `https://solscan.io/tx/${txHash}`;
+              linkEl.innerHTML = `<a href="${explorerUrl}" target="_blank" rel="noopener noreferrer" class="hover:opacity-80 transition-opacity"><img src="https://avatars.githubusercontent.com/u/92743431?s=200&v=4" alt="Solana" class="w-4 h-4 rounded-full" style="cursor: pointer;" /></a>`;
+              linkEl.className = "";
+            }
+          }
+        },
+      });
+
+      // Get first tx hash for single wallet case
+      const firstTxHash =
+        multiResult?.results?.find(
+          (r: any) => (r.result as any)?.hash || (r.result as any)?.txid,
+        )?.result?.hash ||
+        multiResult?.results?.find(
+          (r: any) => (r.result as any)?.hash || (r.result as any)?.txid,
+        )?.result?.txid;
+
+      if (firstTxHash && !isMultiWallet) {
+        const linkEl = document.getElementById(`link-${uniqueToastId}`);
+        if (linkEl) {
+          const explorerUrl = `https://solscan.io/tx/${firstTxHash}`;
+          linkEl.innerHTML = `<a href="${explorerUrl}" target="_blank" rel="noopener noreferrer" class="hover:opacity-80 transition-opacity"><img src="https://avatars.githubusercontent.com/u/92743431?s=200&v=4" alt="Solana" class="w-4 h-4 rounded-full" style="cursor: pointer;" /></a>`;
+          linkEl.className = "";
+        }
+        if (timerHandle) {
+          cancelAnimationFrame(timerHandle);
+        }
+        setTimeout(() => toast.dismiss(uniqueToastId), 10000);
+      }
+
+      console.log("✅ PumpLive Quick Buy successful");
+
+      // Dispatch event to refresh chart price lines
+      if (typeof window !== "undefined" && token.mint) {
+        window.dispatchEvent(
+          new CustomEvent("solanaQuickTrade", {
+            detail: { tokenAddress: token.mint },
+          }),
+        );
+      }
+
+      return { success: true };
+    } catch (error: any) {
+      // Stop timer on error
+      if (timerHandle) {
+        cancelAnimationFrame(timerHandle);
+      }
+
+      // Dismiss pending toast
+      toast.dismiss(uniqueToastId);
+
+      // Show error toast
+      console.error("❌ PumpLive Quick Buy failed:", error);
+      showEnhancedToast("error", error.message || "Buy failed", {
+        title: "Trade Failed",
+      });
+
+      return { success: false, error };
+    }
   };
 
   const handleTimeframeClick = (tf: string) => {
@@ -3233,13 +3659,13 @@ export default function DiscoverPage() {
                   onClick={() => setActiveTab("surge")}
                 >
                   Surge
-                </button>
+                </button> */}
                 <button
-                  className={`text-sm sm:text-base lg:text-lg font-light transition-colors whitespace-nowrap ${activeTab === "live" ? "text-[#f0f5f5]" : "text-[#6B7280] hover:text-[#f0f5f5]"} cursor-pointer`}
+                  className={`text-sm whitespace-nowrap transition-colors sm:text-base lg:text-xl font-medium ${activeTab === "live" ? "text-white" : "text-[#6B7280] hover:text-white"} cursor-pointer`}
                   onClick={() => setActiveTab("live")}
                 >
                   Pump Live
-                </button> */}
+                </button>
               </>
             )}
             {/* <button
@@ -3335,6 +3761,50 @@ export default function DiscoverPage() {
                       {activeFilterCount}
                     </span>
                   )}
+                </button>
+              </div>
+            )}
+
+            {/* Pump Live Sort Controls - Only show when live tab is active */}
+            {activeTab === 'live' && (
+              <div className="hidden h-7 items-center gap-2 rounded-md border border-[#24252C] bg-[#272a2e] px-2 py-1 sm:flex">
+                {/* MC Sort */}
+                <button
+                  onClick={() => {
+                    setPumpLiveSortField('mc');
+                    setPumpLiveSortDirection(prev =>
+                      pumpLiveSortField === 'mc'
+                        ? (prev === 'desc' ? 'asc' : 'desc')
+                        : 'desc'
+                    );
+                  }}
+                  className="flex items-center gap-0.5 text-xs font-medium text-[#9CA3AF] hover:text-[#f0f5f5] transition-colors"
+                >
+                  MC
+                  <svg className="w-3 h-3" viewBox="0 0 24 24" fill="currentColor">
+                    {pumpLiveSortField === 'mc' && pumpLiveSortDirection === 'asc'
+                      ? <path d="M7 14l5-5 5 5H7z" />
+                      : <path d="M7 10l5 5 5-5H7z" />}
+                  </svg>
+                </button>
+                {/* Time Sort */}
+                <button
+                  onClick={() => {
+                    setPumpLiveSortField('time');
+                    setPumpLiveSortDirection(prev =>
+                      pumpLiveSortField === 'time'
+                        ? (prev === 'desc' ? 'asc' : 'desc')
+                        : 'desc'
+                    );
+                  }}
+                  className="flex items-center gap-0.5 text-xs font-medium text-[#9CA3AF] hover:text-[#f0f5f5] transition-colors"
+                >
+                  Time
+                  <svg className="w-3 h-3" viewBox="0 0 24 24" fill="currentColor">
+                    {pumpLiveSortField === 'time' && pumpLiveSortDirection === 'asc'
+                      ? <path d="M7 14l5-5 5 5H7z" />
+                      : <path d="M7 10l5 5 5-5H7z" />}
+                  </svg>
                 </button>
               </div>
             )}
@@ -3490,98 +3960,16 @@ export default function DiscoverPage() {
 
         {/* Main Content */}
         <main className="w-full">
-          {/* {activeTab === 'live' ? (
-            pumpPortalTokens.length > 0 ? (
-              <PumpLive
-                leftItems={liveLeftItems}
-                rightItems={liveRightItems}
-                onAction={async (id, rawToken) => {
-                  // Backfill token data first
-                  if (rawToken) {
-                    try {
-                      console.log('[Discover] Backfilling token:', rawToken);
-                      const backfillResponse = await fetch('/api/token-service/backfill-token', {
-                        method: 'POST',
-                        headers: {
-                          'Content-Type': 'application/json',
-                        },
-                        body: JSON.stringify({
-                          mint: rawToken.mint,
-                          name: rawToken.name,
-                          symbol: rawToken.symbol,
-                          uri: rawToken.uri,
-                          market_cap_usd: rawToken.market_cap_usd || rawToken.marketCapSol ? (rawToken.marketCapSol * 170) : undefined,
-                          liquidity_usd: undefined, // PumpPortal doesn't provide liquidity data
-                          pair_address: rawToken.pair_address || rawToken.bondingCurveKey
-                        })
-                      });
-
-                      if (backfillResponse.ok) {
-                        console.log('[Discover] Token backfilled successfully');
-                      } else {
-                        console.warn('[Discover] Token backfill failed, but continuing with navigation');
-                      }
-                    } catch (err) {
-                      console.error('[Discover] Error backfilling token:', err);
-                    }
-                  }
-
-                  // Prefetch trade data before navigating
-                  console.log('[Discover] Prefetching trade data for:', id);
-                  try {
-                    await prefetchTradeData(id);
-                    console.log('[Discover] Prefetch complete for:', id);
-                  } catch (err) {
-                    console.error('[Discover] Prefetch failed:', err);
-                  }
-                  // Navigate to trade page
-                  // Check if this is a Monad token
-                  const isMonad = currentChain === 'monad';
-                  
-                  if (isMonad && rawToken) {
-                    // Build Monad trade URL with query parameters
-                    const queryParams = new URLSearchParams();
-                    if (rawToken.name) queryParams.set('_name', rawToken.name);
-                    if (rawToken.symbol) queryParams.set('_symbol', rawToken.symbol);
-                    if (rawToken.market_cap_usd) queryParams.set('_mcap', rawToken.market_cap_usd.toString());
-                    if (rawToken.total_liquidity_usd || rawToken.liquidity_usd || rawToken.liquidity) {
-                      const liq = rawToken.total_liquidity_usd || rawToken.liquidity_usd || rawToken.liquidity;
-                      if (typeof liq === 'number' && Number.isFinite(liq)) {
-                        queryParams.set('_liq', liq.toString());
-                      }
-                    }
-                    if (rawToken.uri || rawToken.image || rawToken.imageUrl) {
-                      queryParams.set('_image', rawToken.uri || rawToken.image || rawToken.imageUrl || '');
-                    }
-                    queryParams.set('_mint', id);
-                    queryParams.set('chain', 'monad');
-                    
-                    const url = `/trade/monad/${id}?${queryParams.toString()}`;
-                    router.push(url);
-                  } else {
-                    router.push(`/trade/${id}`);
-                  }
-                }}
+          {activeTab === 'live' ? (
+            <section aria-label="Pump Live" className="pb-16">
+              <PumpLiveGrid
                 quickBuyAmount={Number(quickBuyAmount) || 0}
-                onQuickBuy={handleQuickBuy}
+                sortField={pumpLiveSortField}
+                sortDirection={pumpLiveSortDirection}
+                onQuickBuy={handlePumpLiveQuickBuy}
               />
-            ) : pumpPortalConnected && pumpPortalTokens.length === 0 ? (
-              <div className="py-10 text-center text-[#9CA3AF]">
-                Waiting for live tokens...
-              </div>
-            ) : !pumpPortalConnected && pumpPortalError ? (
-              <div className="py-10 text-center text-[#f26681]">
-                Connection error: {pumpPortalError}
-              </div>
-            ) : (
-              <div className="space-y-4">
-                {Array.from({ length: 6 }).map((_, i) => (
-                  <div key={i} className="h-20 w-full bg-[#1E1F26] animate-pulse rounded" />
-                ))}
-              </div>
-            )
-          ) : */}{" "}
-          {activeTab === "newPairs" ? (
+            </section>
+          ) : activeTab === "newPairs" ? (
             <section aria-label="New Pairs" className="pb-16">
               {/* <div className="mb-4 flex items-center justify-between">
                 {newPairsLoading && (

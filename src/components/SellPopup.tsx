@@ -191,6 +191,8 @@ const SellPopup: React.FC<SellPopupProps> = ({ isOpen, onClose, position, tokenM
     try {
       // CRITICAL: Verify the pair address from the token service before selling
       let verifiedPoolAddress = effectivePoolAddress;
+      let poolSource = 'position';
+
       if (position.tokenAddress) {
         console.log(`[SellPopup] Verifying pair address for sell: ${position.tokenAddress}`);
         const fetchedAddress = await fetchVerifiedPairAddress(position.tokenAddress);
@@ -199,7 +201,61 @@ const SellPopup: React.FC<SellPopupProps> = ({ isOpen, onClose, position, tokenM
             console.log(`[SellPopup] Pair address mismatch! Local: ${effectivePoolAddress}, Verified: ${fetchedAddress}`);
           }
           verifiedPoolAddress = fetchedAddress;
+          poolSource = 'token-service';
         }
+      }
+
+      // Check if the pool address looks invalid (might be user's wallet address or token address)
+      const userWalletAddress = user?.publicKey || '';
+      const poolLooksInvalid = verifiedPoolAddress === position.tokenAddress ||
+                                verifiedPoolAddress === userWalletAddress ||
+                                !verifiedPoolAddress ||
+                                verifiedPoolAddress.length < 30;
+
+      // DexScreener fallback if pool address looks invalid
+      if (poolLooksInvalid && position.tokenAddress) {
+        console.log(`[SellPopup] ⚠️ Pool address looks invalid (${verifiedPoolAddress}), trying DexScreener fallback...`);
+        try {
+          const controller = new AbortController();
+          const timeoutId = setTimeout(() => controller.abort(), 5000);
+
+          const dexResponse = await fetch(
+            `https://api.dexscreener.com/latest/dex/tokens/${position.tokenAddress}`,
+            { signal: controller.signal }
+          );
+          clearTimeout(timeoutId);
+
+          if (dexResponse.ok) {
+            const dexData = await dexResponse.json();
+            if (dexData?.pairs && dexData.pairs.length > 0) {
+              // Filter for Solana pairs and sort by liquidity
+              const solanaPairs = dexData.pairs
+                .filter((pair: any) => pair.chainId === 'solana' && pair.pairAddress)
+                .sort((a: any, b: any) => (b.liquidity?.usd || 0) - (a.liquidity?.usd || 0));
+
+              if (solanaPairs.length > 0) {
+                const bestPair = solanaPairs[0];
+                console.log(`[SellPopup] ✅ DexScreener found pool: ${bestPair.pairAddress} (${bestPair.dexId}, $${bestPair.liquidity?.usd || 0} liq)`);
+                verifiedPoolAddress = bestPair.pairAddress;
+                poolSource = `dexscreener-${bestPair.dexId}`;
+              }
+            }
+          }
+        } catch (dexError: any) {
+          console.warn(`[SellPopup] DexScreener fallback failed:`, dexError?.message || dexError);
+        }
+      }
+
+      console.log(`[SellPopup] Using pool address: ${verifiedPoolAddress} (source: ${poolSource})`);
+
+      // Final validation - don't proceed if pool address is still clearly invalid
+      if (!verifiedPoolAddress ||
+          verifiedPoolAddress === position.tokenAddress ||
+          verifiedPoolAddress === userWalletAddress) {
+        console.error(`[SellPopup] ❌ Pool address is invalid: ${verifiedPoolAddress}`);
+        toast.error('Could not find valid pool address for this token. Please try selling from the token page.');
+        setIsLoading(false);
+        return;
       }
 
       const sellParams = {

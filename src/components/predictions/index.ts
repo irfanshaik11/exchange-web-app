@@ -13,3 +13,4 @@ export type { MarketFilterState } from './MarketFilters';
 export { default as FavoritesCarousel } from './FavoritesCarousel';
 export { default as MiniSparkline } from './MiniSparkline';
 export { default as CuratedSections } from './CuratedSections';
+export { default as PolygonWalletCard, PolygonBalanceInline } from './PolygonWalletCard';

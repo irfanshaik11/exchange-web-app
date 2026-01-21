@@ -87,6 +87,9 @@ export interface NormalizedTrendingToken {
   total_sells_1h?: number;
   total_buys_6h?: number;
   total_sells_6h?: number;
+  // Protocol/launchpad info for trade routing (critical for quick buy!)
+  launchpad_protocol?: string;
+  protocol?: string;
 }
 
 interface TrendingWebSocketState {
@@ -137,6 +140,10 @@ function normalizeToken(raw: any): NormalizedTrendingToken {
     total_sells_1h: raw.total_sells_1h || 0,
     total_buys_6h: raw.total_buys_6h || 0,
     total_sells_6h: raw.total_sells_6h || 0,
+    // CRITICAL: Preserve launchpad_protocol for pool type detection in quick buy
+    // Without this, backend has to do expensive pool discovery (~6 seconds)
+    launchpad_protocol: raw.launchpad_protocol || raw.launchpadProtocol || raw.protocol || '',
+    protocol: raw.protocol || raw.launchpad_protocol || raw.launchpadProtocol || '',
   };
 }
 

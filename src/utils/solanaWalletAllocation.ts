@@ -571,6 +571,58 @@ export async function executeSolanaMultiBuy({
       }
 
       if (!isSuccessful) {
+        // Check if this is a bonding curve complete error with retry info
+        const errorCode = (result as any)?.code;
+        const retryWith = (result as any)?.retryWith;
+
+        if (errorCode === 'BONDING_CURVE_COMPLETE' && retryWith?.poolAddress && retryWith?.poolType) {
+          console.log(`🔄 Token graduated - retrying with migrated pool: ${retryWith.poolType}`);
+
+          // Retry the trade with the migrated pool info
+          try {
+            const retryResult = await tradeBuy(
+              {
+                poolAddress: retryWith.poolAddress,
+                baseMint,
+                quoteMint,
+                amount: allocation.amount,
+                walletId: allocation.walletId,
+                poolType: retryWith.poolType,
+                originalPairAddress,
+                slippage: normalizedSlippage,
+                priorityFee,
+                bribe,
+                mevMode,
+                autoFee,
+                maxFee,
+                rpc,
+                tokenName,
+                tokenSymbol,
+              },
+              authToken
+            );
+
+            const retryTxHash = (retryResult as any)?.hash || (retryResult as any)?.txid || null;
+            const retryIsSuccessful = retryResult && (retryResult as any).success !== false && retryTxHash;
+
+            if (retryIsSuccessful && retryTxHash) {
+              console.log(`✅ Retry with migrated pool successful: ${retryTxHash}`);
+              onTxHash?.({ allocation, txHash: retryTxHash });
+              results.push({ allocation, result: retryResult });
+              onWalletSuccess?.({
+                allocation,
+                index: i,
+                total: allocationsToUse.length,
+                totalConsidered: total || allocationsToUse.length,
+                result: retryResult,
+              });
+              continue;
+            }
+          } catch (retryError: any) {
+            console.error(`❌ Retry with migrated pool failed:`, retryError);
+          }
+        }
+
         const err = new Error((result as any)?.error || "Solana buy failed");
         onWalletError?.({
           allocation,

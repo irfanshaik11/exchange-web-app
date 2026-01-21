@@ -947,4 +947,279 @@ export const getTokenHolders = async (
   return res.json();
 };
 
+/* -------------------------------------------------------------------------- */
+/*                         Polymarket Trading endpoints                        */
+/* -------------------------------------------------------------------------- */
+
+export interface PolymarketQuote {
+  grossAmount: number;
+  platformFee: number;
+  platformFeeBps: number;
+  netAmount: number;
+  price: number | null;
+  expectedTokens: number | null;
+  potentialPayout: number | null;
+  potentialProfit: number | null;
+  potentialProfitPercent: number | null;
+}
+
+export interface PolymarketOrderResult {
+  orderId?: string;
+  transactionHashes?: string[];
+  status?: string;
+  takingAmount?: string;
+  makingAmount?: string;
+  feeDeducted?: number;
+  netAmount?: number;
+  tradeId?: number;
+}
+
+export interface PolymarketBalance {
+  address: string;
+  matic: number;
+  maticFormatted: string;
+  usdc: number;
+  usdcFormatted: string;
+  hasGasBalance: boolean;
+  hasTradingBalance: boolean;
+}
+
+export interface PolymarketGeoblock {
+  allowed: boolean;
+  blocked: boolean;
+  ip: string;
+  country: string;
+  region: string;
+}
+
+export interface PolymarketFeeConfig {
+  feeBps: number;
+  feePercent: number;
+  treasuryAddress?: string;
+  minFeeUsd: number;
+}
+
+/**
+ * Get Polymarket fee configuration
+ */
+export const getPolymarketFeeConfig = () =>
+  apiFetch<{ success: boolean; data: PolymarketFeeConfig }>("/api/prediction/polymarket/fee-config", {
+    method: "GET",
+  });
+
+/**
+ * Check if user is geoblocked from Polymarket
+ */
+export const checkPolymarketGeoblock = () =>
+  apiFetch<{ success: boolean; data: PolymarketGeoblock }>("/api/prediction/polymarket/geoblock", {
+    method: "GET",
+  });
+
+/**
+ * Get quote for a Polymarket trade
+ */
+export const getPolymarketQuote = (params: {
+  tokenId: string;
+  side: "BUY" | "SELL";
+  amount: number;
+  price?: number;
+}) => {
+  const qs = new URLSearchParams({
+    token_id: params.tokenId,
+    side: params.side,
+    amount: String(params.amount),
+  });
+  if (params.price) qs.set("price", String(params.price));
+
+  return apiFetch<{ success: boolean; data: PolymarketQuote }>(
+    `/api/prediction/polymarket/quote?${qs.toString()}`,
+    { method: "GET" }
+  );
+};
+
+/**
+ * Get user's Polygon wallet balance for Polymarket trading
+ */
+export const getPolymarketBalance = (authToken: string) =>
+  apiFetch<{ success: boolean; data: PolymarketBalance }>("/api/prediction/polymarket/balance", {
+    method: "GET",
+    authToken,
+  });
+
+/**
+ * Execute a Polymarket trade
+ */
+export const executePolymarketOrder = (
+  params: {
+    tokenId: string;
+    side: "BUY" | "SELL";
+    amountUSDC: number;
+    price?: number;
+    orderType?: "GTC" | "GTD" | "FOK" | "FAK";
+    expiration?: number;
+    walletId?: string;
+    marketId?: string;
+    marketTitle?: string;
+    conditionId?: string;
+  },
+  authToken: string
+) =>
+  apiFetch<{ success: boolean; data: PolymarketOrderResult; responseTime?: number }>(
+    "/api/prediction/polymarket/order",
+    {
+      method: "POST",
+      body: params,
+      authToken,
+    }
+  );
+
+/**
+ * Cancel a specific Polymarket order
+ */
+export const cancelPolymarketOrder = (
+  orderId: string,
+  authToken: string,
+  walletId?: string
+) => {
+  const qs = walletId ? `?walletId=${encodeURIComponent(walletId)}` : "";
+  return apiFetch<{ success: boolean; data: { canceled: string[]; notCanceled: any } }>(
+    `/api/prediction/polymarket/order/${orderId}${qs}`,
+    {
+      method: "DELETE",
+      authToken,
+    }
+  );
+};
+
+/**
+ * Cancel all Polymarket orders (optionally for a specific market)
+ */
+export const cancelAllPolymarketOrders = (
+  authToken: string,
+  conditionId?: string,
+  walletId?: string
+) => {
+  const qs = new URLSearchParams();
+  if (conditionId) qs.set("conditionId", conditionId);
+  if (walletId) qs.set("walletId", walletId);
+  const queryString = qs.toString() ? `?${qs.toString()}` : "";
+
+  return apiFetch<{ success: boolean; data: { canceled: string[]; notCanceled: any; count: number } }>(
+    `/api/prediction/polymarket/orders${queryString}`,
+    {
+      method: "DELETE",
+      authToken,
+    }
+  );
+};
+
+/**
+ * Get user's open orders on Polymarket
+ */
+export const getPolymarketOpenOrders = (
+  authToken: string,
+  marketId?: string,
+  walletId?: string
+) => {
+  const qs = new URLSearchParams();
+  if (marketId) qs.set("marketId", marketId);
+  if (walletId) qs.set("walletId", walletId);
+  const queryString = qs.toString() ? `?${qs.toString()}` : "";
+
+  return apiFetch<{ success: boolean; data: any[]; count: number }>(
+    `/api/prediction/polymarket/open-orders${queryString}`,
+    {
+      method: "GET",
+      authToken,
+    }
+  );
+};
+
+/* -------------------------------------------------------------------------- */
+/*                          Pool Resolution (Cached)                           */
+/* -------------------------------------------------------------------------- */
+
+export interface ResolvedPoolData {
+  tokenAddress: string;
+  poolAddress: string;
+  poolType: string;       // Our format: "PumpAmm", "Meteora", "Raydium", etc.
+  protocol: string;       // Raw protocol from source
+  liquidity?: number;
+  source: string;
+  isGraduated?: boolean;
+  cachedAt: number;
+  responseTimeMs: number;
+  cacheHit: boolean;
+}
+
+/**
+ * Resolve pool for a token using the backend's Redis-cached pool service
+ * This is much faster than calling DexScreener directly (cache hits < 10ms)
+ *
+ * @param tokenAddress - Token mint address
+ * @param forceRefresh - Force fresh lookup, bypassing cache
+ * @param poolTypeHint - Optional hint about expected pool type
+ */
+export const resolvePool = async (
+  tokenAddress: string,
+  forceRefresh: boolean = false,
+  poolTypeHint?: string
+): Promise<ResolvedPoolData | null> => {
+  try {
+    const params = new URLSearchParams({ tokenAddress });
+    if (forceRefresh) params.append('forceRefresh', 'true');
+    if (poolTypeHint) params.append('poolTypeHint', poolTypeHint);
+
+    const response = await apiFetch<{ success: boolean; data?: ResolvedPoolData; error?: string }>(
+      `/api/trade/resolve_pool?${params.toString()}`,
+      { method: 'GET' }
+    );
+
+    if (response?.success && response?.data) {
+      return response.data;
+    }
+
+    return null;
+  } catch (error: any) {
+    console.warn('[resolvePool] Error:', error?.message || error);
+    return null;
+  }
+};
+
+/**
+ * Batch resolve pools for multiple tokens
+ * Useful for pre-warming cache when loading portfolio
+ *
+ * @param tokenAddresses - Array of token mint addresses (max 50)
+ */
+export const batchResolvePools = async (
+  tokenAddresses: string[]
+): Promise<{
+  resolved: ResolvedPoolData[];
+  failed: string[];
+}> => {
+  try {
+    const response = await apiFetch<{
+      success: boolean;
+      data?: {
+        resolved: ResolvedPoolData[];
+        failed: string[];
+      };
+      error?: string;
+    }>('/api/trade/resolve_pools', {
+      method: 'POST',
+      body: { tokenAddresses },
+    });
+
+    if (response?.success && response?.data) {
+      return response.data;
+    }
+
+    return { resolved: [], failed: tokenAddresses };
+  } catch (error: any) {
+    console.warn('[batchResolvePools] Error:', error?.message || error);
+    return { resolved: [], failed: tokenAddresses };
+  }
+};
+
 export { apiFetch };

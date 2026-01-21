@@ -1019,21 +1019,7 @@ const TradeHeader: React.FC<TradeHeaderProps> = ({ token, livePriceUsd, liveMark
       className="relative flex w-full flex-col gap-2 px-1.5 py-1.5 sm:flex-row sm:items-center sm:gap-4 sm:px-2 sm:py-2 md:gap-8 lg:gap-10 !font-geist"
       style={{ color: AX.text }}
     >
-      {/* WS banner(s) */}
-      {wsError && (
-        <div className="absolute top-0 right-0 left-0 z-10 border-b border-red-500/30 bg-red-900/20 px-2 py-0.5 sm:px-3 sm:py-1">
-          <div className="text-center text-[9px] sm:text-[10px] text-red-400 truncate">
-            Market Data Error: {wsError}
-          </div>
-        </div>
-      )}
-      {!wsConnected && !wsLoading && (
-        <div className="absolute top-0 right-0 left-0 z-10 border-b border-yellow-500/30 bg-yellow-900/20 px-2 py-0.5 sm:px-3 sm:py-1">
-          <div className="text-center text-[9px] sm:text-[10px] text-yellow-400">
-            Using static market data
-          </div>
-        </div>
-      )}
+      {/* WS status banners hidden from users - errors logged to console only */}
 
       {/* LEFT: token avatar + meta */}
       <div className="flex flex-shrink-0 items-center gap-2 sm:gap-3">
