@@ -303,5 +303,102 @@ export function formatLamportsToSol(lamports: number | null | undefined): string
   }
 }
 
+/**
+ * Normalize a timestamp value to milliseconds.
+ * Handles multiple formats:
+ * - Unix timestamp in seconds (number): 1737470242
+ * - Unix timestamp in milliseconds (number): 1737470242000
+ * - Unix timestamp as string: "1737470242" or "1737470242000"
+ * - ISO date string: "2026-01-21T14:37:22.657244Z"
+ * - Object formats: { Time: "..." }, { seconds: 123 }, { millis: 123 }
+ * - Date objects
+ *
+ * @param value - The timestamp value to normalize
+ * @param options - Optional configuration
+ * @param options.rejectUnreasonable - If true, reject dates > 5 years in past (default: true)
+ * @returns Timestamp in milliseconds, or null if invalid/unreasonable
+ */
+export function normalizeTimestampMs(
+  value: any,
+  options?: { rejectUnreasonable?: boolean }
+): number | null {
+  const { rejectUnreasonable = true } = options || {};
+
+  if (value === null || value === undefined || value === "") return null;
+
+  let v: any = value;
+
+  // Handle object formats (e.g., { Time: "..." }, { seconds: 123 })
+  if (typeof v === "object" && v !== null) {
+    if ("Time" in v && typeof v.Time === "string") v = v.Time;
+    else if ("time" in v && typeof v.time === "string") v = v.time;
+    else if ("seconds" in v && typeof v.seconds === "number") v = v.seconds * 1000;
+    else if ("millis" in v && typeof v.millis === "number") v = v.millis;
+    else if (v instanceof Date) v = v.getTime();
+    else return null;
+  }
+
+  let ts: number | null = null;
+
+  if (typeof v === "number") {
+    // Heuristic: 13+ digits = milliseconds, 10-12 digits = seconds
+    if (v > 1e12) ts = v;
+    else if (v > 1e9) ts = v * 1000;
+    else ts = null;
+  } else if (typeof v === "string") {
+    // First try parsing as a numeric string (Unix timestamp)
+    const num = Number(v);
+    if (!Number.isNaN(num) && num > 0) {
+      if (num > 1e12) ts = num;
+      else if (num > 1e9) ts = num * 1000;
+    }
+    // If not a valid number, try parsing as ISO date string
+    if (ts === null) {
+      const parsed = Date.parse(v);
+      if (!Number.isNaN(parsed)) ts = parsed;
+    }
+  }
+
+  if (ts === null) return null;
+
+  // Sanity check: reject dates that are clearly unreasonable for token ages
+  // - More than 5 years in the past (no crypto token is that old in this context)
+  // - More than 1 day in the future (clock skew tolerance)
+  if (rejectUnreasonable) {
+    const now = Date.now();
+    const fiveYearsMs = 5 * 365 * 24 * 60 * 60 * 1000;
+    const oneDayMs = 24 * 60 * 60 * 1000;
+
+    if (ts < now - fiveYearsMs) {
+      console.warn(
+        "[normalizeTimestampMs] Rejecting unreasonable timestamp (>5 years old):",
+        { value, parsedTs: ts, parsedDate: new Date(ts).toISOString() }
+      );
+      return null;
+    }
+    if (ts > now + oneDayMs) {
+      console.warn(
+        "[normalizeTimestampMs] Rejecting unreasonable timestamp (>1 day in future):",
+        { value, parsedTs: ts, parsedDate: new Date(ts).toISOString() }
+      );
+      return null;
+    }
+  }
+
+  return ts;
+}
+
+/**
+ * Normalize a timestamp value to an ISO string.
+ * Use this when storing/passing timestamp data to ensure consistent format.
+ *
+ * @returns ISO string like "2026-01-21T14:37:22.657Z", or null if invalid
+ */
+export function normalizeTimestampToISO(value: any): string | null {
+  const ts = normalizeTimestampMs(value);
+  if (ts === null) return null;
+  return new Date(ts).toISOString();
+}
+
 
 

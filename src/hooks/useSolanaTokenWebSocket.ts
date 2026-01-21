@@ -441,24 +441,35 @@ export function useSolanaTokenWebSocket(
               console.log('[useSolanaTokenWebSocket] Received token info:', message.data.token);
               const rawToken = message.data.token;
 
-              // If we have a URI, fetch image and twitter from metadata
-              if (rawToken.uri && (!rawToken.image_url || !rawToken.twitter)) {
-                fetchMetadataFromUri(rawToken.uri).then((metadata) => {
-                  if (mountedRef.current && (metadata.image_url || metadata.twitter)) {
-                    const tokenWithMetadata: SolanaTokenInfo = {
-                      ...rawToken,
-                      image_url: metadata.image_url || rawToken.image_url,
-                      twitter: metadata.twitter || rawToken.twitter,
-                    };
-                    setTokenInfo(tokenWithMetadata);
-                    onTokenInfoUpdateRef.current?.(tokenWithMetadata);
-                  }
+              // CRITICAL: Validate that received token matches requested mint
+              // This prevents showing wrong token data if WebSocket returns stale/wrong data
+              if (rawToken.mint && mintAddress && rawToken.mint !== mintAddress) {
+                console.warn('[useSolanaTokenWebSocket] Token mint mismatch! Ignoring wrong token data.', {
+                  expectedMint: mintAddress,
+                  actualMint: rawToken.mint,
+                  actualName: rawToken.name || rawToken.symbol,
                 });
-              }
+                // Don't update tokenInfo with wrong data
+              } else {
+                // If we have a URI, fetch image and twitter from metadata
+                if (rawToken.uri && (!rawToken.image_url || !rawToken.twitter)) {
+                  fetchMetadataFromUri(rawToken.uri).then((metadata) => {
+                    if (mountedRef.current && (metadata.image_url || metadata.twitter)) {
+                      const tokenWithMetadata: SolanaTokenInfo = {
+                        ...rawToken,
+                        image_url: metadata.image_url || rawToken.image_url,
+                        twitter: metadata.twitter || rawToken.twitter,
+                      };
+                      setTokenInfo(tokenWithMetadata);
+                      onTokenInfoUpdateRef.current?.(tokenWithMetadata);
+                    }
+                  });
+                }
 
-              // Set token info immediately (image/twitter will be updated async if available)
-              setTokenInfo(rawToken);
-              onTokenInfoUpdateRef.current?.(rawToken);
+                // Set token info immediately (image/twitter will be updated async if available)
+                setTokenInfo(rawToken);
+                onTokenInfoUpdateRef.current?.(rawToken);
+              }
             } else {
               setTokenInfo(null);
             }
@@ -607,13 +618,21 @@ export function useSolanaTokenWebSocket(
               console.log('[useSolanaTokenWebSocket] Token info update:', message.data.token);
               const rawToken = message.data.token;
 
-              // Preserve image_url and twitter if we already have them (from initial URI fetch)
-              setTokenInfo((prev) => ({
-                ...rawToken,
-                image_url: rawToken.image_url || prev?.image_url,
-                twitter: rawToken.twitter || prev?.twitter,
-              }));
-              onTokenInfoUpdateRef.current?.(rawToken);
+              // CRITICAL: Validate that received token matches requested mint
+              if (rawToken.mint && mintAddress && rawToken.mint !== mintAddress) {
+                console.warn('[useSolanaTokenWebSocket] Token update mint mismatch! Ignoring.', {
+                  expectedMint: mintAddress,
+                  actualMint: rawToken.mint,
+                });
+              } else {
+                // Preserve image_url and twitter if we already have them (from initial URI fetch)
+                setTokenInfo((prev) => ({
+                  ...rawToken,
+                  image_url: rawToken.image_url || prev?.image_url,
+                  twitter: rawToken.twitter || prev?.twitter,
+                }));
+                onTokenInfoUpdateRef.current?.(rawToken);
+              }
             }
           }
           // Ignore pong messages

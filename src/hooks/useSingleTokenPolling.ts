@@ -141,6 +141,20 @@ export default function useSingleTokenPolling(address: string | undefined, mintH
           // Use mintHint from URL query params as fallback if token.mint is not available
           const mintAddress = data.token.mint || data.token.mint_address || mintHint;
 
+          // CRITICAL: If mintHint is provided, verify the returned token matches
+          // This prevents showing wrong token data when cache returns stale data
+          if (mintHint && data.token.mint && data.token.mint !== mintHint) {
+            console.warn('[useSingleTokenPolling] Token mint mismatch! Backend returned wrong token.', {
+              expectedMint: mintHint,
+              actualMint: data.token.mint,
+              actualName: data.token.name || data.token.symbol,
+              resolvedPairAddress,
+            });
+            // Don't set the token - let the UI use optimistic data from URL
+            setState(prev => ({ ...prev, loading: false }));
+            return;
+          }
+
           // Verify pair address and use it for the token (don't reload page)
           let effectivePairAddress = resolvedPairAddress;
 
