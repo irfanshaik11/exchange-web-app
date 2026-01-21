@@ -265,22 +265,52 @@ function shortenAddress(address: string, chars = 4): string {
   return `${address.slice(0, chars)}...${address.slice(-chars)}`;
 }
 
-function getTokenAge(createdAt: string | number) {
-  if (!createdAt && createdAt !== 0) return "Unknown";
-  let timestamp = createdAt as any;
-  if (typeof timestamp === "number" && timestamp < 10000000000)
-    timestamp *= 1000;
-  const d = new Date(timestamp);
-  if (isNaN(d.getTime())) return "Unknown";
-  const ms = Date.now() - d.getTime();
-  const secs = Math.floor(ms / 1000);
-  const mins = Math.floor(ms / 60000);
-  const hours = Math.floor(ms / 3600000);
-  const days = Math.floor(ms / 86400000);
-  if (days > 0) return `${days}d`;
-  if (hours > 0) return `${hours}h`;
-  if (mins > 0) return `${mins}m`;
-  return `${secs}s`;
+function getTokenAge(createdAt: string | number | object | null | undefined) {
+  if (createdAt === null || createdAt === undefined) return "Unknown";
+
+  let v: any = createdAt;
+
+  // Handle object formats (e.g., { Time: "..." }, { seconds: 123 })
+  if (typeof v === "object" && v !== null) {
+    if ("Time" in v && typeof v.Time === "string") v = v.Time;
+    else if ("time" in v && typeof v.time === "string") v = v.time;
+    else if ("seconds" in v && typeof v.seconds === "number") v = v.seconds * 1000;
+    else if ("millis" in v && typeof v.millis === "number") v = v.millis;
+    else if (v instanceof Date) v = v.getTime();
+    else return "Unknown";
+  }
+
+  let ts: number | null = null;
+
+  if (typeof v === "number") {
+    // Heuristic: 13+ digits = milliseconds, 10-12 digits = seconds
+    if (v > 1e12) ts = v;
+    else if (v > 1e9) ts = v * 1000;
+    else ts = null;
+  } else if (typeof v === "string") {
+    // First try parsing as a numeric string (Unix timestamp)
+    const num = Number(v);
+    if (!Number.isNaN(num) && num > 0) {
+      if (num > 1e12) ts = num;
+      else if (num > 1e9) ts = num * 1000;
+    }
+    // If not a valid number, try parsing as ISO date string
+    if (ts === null) {
+      const parsed = Date.parse(v);
+      if (!Number.isNaN(parsed)) ts = parsed;
+    }
+  }
+
+  if (ts === null) return "Unknown";
+
+  const diffMs = Date.now() - ts;
+  if (diffMs < 0) return "0s"; // Future date, show as just created
+
+  const diffSec = Math.floor(diffMs / 1000);
+  if (diffSec < 60) return `${diffSec}s`;
+  if (diffSec < 3600) return `${Math.floor(diffSec / 60)}m`;
+  if (diffSec < 86400) return `${Math.floor(diffSec / 3600)}h`;
+  return `${Math.floor(diffSec / 86400)}d`;
 }
 
 function normalizeAssetUrl(raw?: string): string | null {
