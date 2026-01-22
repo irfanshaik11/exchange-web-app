@@ -832,6 +832,9 @@ export default function TradePage() {
     return () => { abort = true; };
   }, [displayToken?.mint]);
 
+  // Right Panel Visibility Toggle
+  const [isRightPanelVisible, setIsRightPanelVisible] = useState<boolean>(true);
+
   // -------- Reused Image Tokens (right rail) --------
   const [reusedTokens, setReusedTokens] = useState<ReusedTokenLite[]>([]);
   const [reusedLoading, setReusedLoading] = useState<boolean>(false);
@@ -908,8 +911,17 @@ export default function TradePage() {
                 willChange: isResizing ? 'height' : 'auto',
               }}
             >
-              <div className="px-2 flex-shrink-0">
-                <TradeHeader token={validatedCorrectTokenData || displayToken} wsTokenInfo={wsTokenInfo} wsVolume={wsVolume} holderSummary={holderSummary} livePriceUsd={chartMetrics.lastPriceUsd} liveMarketCapUsd={chartMetrics.lastMarketCapUsd} />
+              <div className="pl-2 flex-shrink-0">
+                <TradeHeader 
+                  token={validatedCorrectTokenData || displayToken} 
+                  wsTokenInfo={wsTokenInfo} 
+                  wsVolume={wsVolume} 
+                  holderSummary={holderSummary} 
+                  livePriceUsd={chartMetrics.lastPriceUsd} 
+                  liveMarketCapUsd={chartMetrics.lastMarketCapUsd}
+                  onToggleRightPanel={() => setIsRightPanelVisible(!isRightPanelVisible)}
+                  isRightPanelVisible={isRightPanelVisible}
+                />
               </div>
 
               {/* Separator line after TradeHeader */}
@@ -1078,43 +1090,45 @@ export default function TradePage() {
           </div>
 
           {/* RIGHT: action panel + reused image + similar tokens */}
-          <div className="flex-shrink-0 min-w-[260px] basis-[280px] md:basis-[310px] lg:basis-[330px] hidden lg:flex flex-col pb-12">
+          {isRightPanelVisible && (
+            <div className="flex-shrink-0 min-w-[260px] basis-[280px] md:basis-[310px] lg:basis-[330px] hidden lg:flex flex-col pb-12">
 
-            {/* Token Info / actions */}
-            <div className="right-rail-panel token-info-panel">
-              <TradeActionPanel
-                token={enhancedDisplayToken}
-                tradeParams={tradeParams}
-                setTradeParams={setTradeParams}
-                quickBuySettings={quickBuySettings}
-                quickBuySide={quickBuySide}
-                initialStats={initialTradeData?.stats}
-                wsVolume={wsVolume}
-              />
-            </div>
+              {/* Token Info / actions */}
+              <div className="right-rail-panel token-info-panel">
+                <TradeActionPanel
+                  token={enhancedDisplayToken}
+                  tradeParams={tradeParams}
+                  setTradeParams={setTradeParams}
+                  quickBuySettings={quickBuySettings}
+                  quickBuySide={quickBuySide}
+                  initialStats={initialTradeData?.stats}
+                  wsVolume={wsVolume}
+                />
+              </div>
 
-            {/* Reused Image Tokens — flush against Token Info */}
-            <div className="right-rail-panel hug-previous">
-              <ReusedImageTokensPanel
-                tokens={reusedTokens}
-                loading={reusedLoading}
-                maxHeight={360}
-                className="mx-2"
-                title="Reused Image Tokens (O)"
-              />
-            </div>
+              {/* Reused Image Tokens — flush against Token Info */}
+              <div className="right-rail-panel hug-previous">
+                <ReusedImageTokensPanel
+                  tokens={reusedTokens}
+                  loading={reusedLoading}
+                  maxHeight={360}
+                  className="mx-2"
+                  title="Reused Image Tokens (O)"
+                />
+              </div>
 
-            {/* Similar Tokens — keep a small gap below reused panel */}
-            <div className="right-rail-panel spaced-above">
-              <SimilarTokensPanel
-                tokens={similarTokens}
-                loading={similarLoading}
-                maxHeight={360}
-                title="Similar Tokens"
-                className="mx-2"
-              />
+              {/* Similar Tokens — keep a small gap below reused panel */}
+              <div className="right-rail-panel spaced-above">
+                <SimilarTokensPanel
+                  tokens={similarTokens}
+                  loading={similarLoading}
+                  maxHeight={360}
+                  title="Similar Tokens"
+                  className="mx-2"
+                />
+              </div>
             </div>
-          </div>
+          )}
 
           {/* Trade button for mobile */}
           <div className="fixed bottom-0 left-0 w-full p-4 z-50 lg:hidden mb-10">
