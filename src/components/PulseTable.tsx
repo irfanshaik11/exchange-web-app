@@ -69,7 +69,7 @@ import { SiSolana } from "react-icons/si";
 import Image from "next/image";
 import InterstatePopout from "./InterstatePopout";
 import VerticalInput from "./VerticalInput";
-import { usePulseFromStore } from "~/hooks/usePulseFromStore";
+import { usePulseFromQueryCache } from "~/hooks/usePulseFromQueryCache";
 import { flushSync } from "react-dom";
 
 import { useRouter } from "next/router";
@@ -2728,7 +2728,7 @@ function PulseTable({
     finalStretchTokens: storeFinalStretchTokens,
     migratedTokens: storeMigratedTokens,
     connected: wsConnected,
-  } = usePulseFromStore({ channel });
+  } = usePulseFromQueryCache({ channel });
 
   // Keep wsTokens synced with store tokens
   // Store tokens have complete price updates applied by PulseBackgroundLoader

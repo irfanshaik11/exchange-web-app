@@ -8,7 +8,7 @@
  * PulseTable uses this hook to read from the store - no WebSocket connection needed.
  */
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import * as pulseStore from '~/stores/pulseStore';
 import { type PulseToken } from '~/utils/pulseCache';
 
@@ -30,6 +30,9 @@ export function usePulseFromStore(
 ): UsePulseFromStoreReturn {
   const { channel } = options;
 
+  // Track mounted state to prevent setState on unmounted components
+  const mountedRef = useRef(true);
+
   // Track individual arrays separately so React detects array reference changes
   const [newTokens, setNewTokens] = useState<PulseToken[]>(() => pulseStore.getState().newTokens);
   const [finalStretchTokens, setFinalStretchTokens] = useState<PulseToken[]>(() => pulseStore.getState().finalStretchTokens);
@@ -37,18 +40,27 @@ export function usePulseFromStore(
   const [connections, setConnections] = useState(() => pulseStore.getState().connections);
 
   // Subscribe to store changes
+  // Navigation pausing is handled globally by usePulseNavigationGuard in _app.tsx
   useEffect(() => {
+    mountedRef.current = true;
+
     const unsubscribe = pulseStore.subscribe(() => {
+      // Don't update state if component is unmounted
+      if (!mountedRef.current) return;
+
       const storeState = pulseStore.getState();
 
-      // Update state - React will only re-render if array reference changed
-      setNewTokens(storeState.newTokens);
-      setFinalStretchTokens(storeState.finalStretchTokens);
-      setMigratedTokens(storeState.migratedTokens);
-      setConnections(storeState.connections);
+      // Only update state if array reference actually changed
+      setNewTokens(prev => prev !== storeState.newTokens ? storeState.newTokens : prev);
+      setFinalStretchTokens(prev => prev !== storeState.finalStretchTokens ? storeState.finalStretchTokens : prev);
+      setMigratedTokens(prev => prev !== storeState.migratedTokens ? storeState.migratedTokens : prev);
+      setConnections(prev => prev !== storeState.connections ? storeState.connections : prev);
     });
 
-    return unsubscribe;
+    return () => {
+      mountedRef.current = false;
+      unsubscribe();
+    };
   }, []);
 
   const clearTokens = useCallback(() => {

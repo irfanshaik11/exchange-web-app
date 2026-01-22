@@ -5,7 +5,7 @@
  * - PulseBackgroundLoader (updates the store)
  * - PulseTable (if needed for local state)
  *
- * All 37+ fields are mapped with proper conditional logic.
+ * All 45+ fields are mapped with proper conditional logic.
  */
 
 export interface PriceUpdate {
@@ -51,6 +51,14 @@ export interface PriceUpdate {
   bundle_wallet_count?: number;
   // Fees
   total_fees_lamports?: number;
+  // Holder/KOL data (also comes in price_update, not just token_info_update)
+  holder_count?: number;
+  kol_count?: number;
+  // Dev stats
+  dev_tokens_created?: number;
+  dev_tokens_migrated?: number;
+  // Smart money
+  smart_money_count?: number;
 }
 
 export interface TokenInfoUpdate {
@@ -170,6 +178,25 @@ export function applyPriceUpdate<T extends { mint: string }>(token: T, update: P
     ...(update.total_fees_lamports !== undefined &&
         (update.total_fees_lamports !== 0 || !(token as any).total_fees_lamports) &&
         { total_fees_lamports: update.total_fees_lamports }),
+
+    // Holder/KOL counts (also come in price_update messages)
+    ...(update.holder_count !== undefined &&
+        (update.holder_count !== 0 || !(token as any).holder_count) &&
+        { holder_count: update.holder_count, holders: update.holder_count }),
+    ...(update.kol_count !== undefined &&
+        (update.kol_count !== 0 || !(token as any).kol_count) &&
+        { kol_count: update.kol_count }),
+
+    // Dev stats
+    ...(update.dev_tokens_created !== undefined &&
+        { dev_tokens_created: update.dev_tokens_created }),
+    ...(update.dev_tokens_migrated !== undefined &&
+        { dev_tokens_migrated: update.dev_tokens_migrated }),
+
+    // Smart money
+    ...(update.smart_money_count !== undefined &&
+        (update.smart_money_count !== 0 || !(token as any).smart_money_count) &&
+        { smart_money_count: update.smart_money_count }),
 
     // Timestamp
     updated_at: update.updated_at || (token as any).updated_at,

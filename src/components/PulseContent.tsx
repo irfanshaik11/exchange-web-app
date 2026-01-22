@@ -8,7 +8,7 @@ import type { Token } from "~/utils/db";
 import { useUser } from "./UserContext";
 import Cookies from "js-cookie";
 import { useRealtimeWebSocket } from "../hooks/useRealtimeWebSocket";
-import { usePulseFromStore } from "../hooks/usePulseFromStore";
+// import { usePulseFromStore } from "../hooks/usePulseFromStore";
 import { useImagePreloader } from "../hooks/useImagePreloader";
 import {
   useQueryNewPairs,
@@ -123,16 +123,8 @@ export default function PulseContent({ forceMobileView = false }: PulseContentPr
   const { data: finalStretchTokensQuery = [] } = useQueryFinalStretch(shouldFetchSolanaData);
   const { data: migratedTokensQuery = [] } = useQueryMigrated(shouldFetchSolanaData);
 
-  // ✅ REAL-TIME UPDATES: Read from PulseBackgroundLoader via global store
-  // PulseBackgroundLoader maintains WebSocket connections and pushes updates to the store
-  // PulseTable reads directly from the store via usePulseFromStore hook
-  const { connected: pulseWsConnected, error: pulseWsError } = usePulseFromStore();
-
-  useEffect(() => {
-    if (pulseWsError) {
-      console.error("[Pulse] WebSocket error", pulseWsError);
-    }
-  }, [pulseWsConnected, pulseWsError]);
+  // ✅ REAL-TIME UPDATES: PulseBackgroundLoader (in _app.tsx) maintains WebSocket connections
+  // and pushes updates to the global pulseStore. PulseTable reads from the store directly.
 
   // State for HTTP polling data
   const [httpNew, setHttpNew] = useState<any[]>([]);

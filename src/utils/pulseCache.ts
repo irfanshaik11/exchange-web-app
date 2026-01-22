@@ -19,21 +19,41 @@ export interface PulseToken {
   name: string;
   symbol: string;
   status: string;
+
+  // Alternate mint field name
+  mint_address?: string;
+
+  // Price fields
   price_usd?: number;
+  price_change_5m?: number;
+  price_change_24h?: number;
+
+  // Market metrics
   market_cap_usd?: number;
   volume_24h?: number;
-  price_change_24h?: number;
-  updated_at?: string;
+  liquidity_usd?: number;
+
+  // Bonding curve
   bonding_pct?: number;
   graduation_percent?: number;
-  liquidity_usd?: number;
   bonding_curve_progress?: number;
-  trade_type?: string;
-  sol_amount?: number;
-  token_amount?: number;
-  launchpad_protocol?: string;
-  pair_address?: string;
-  image?: string;
+
+  // Holder counts (multiple field names for compatibility)
+  holder_count?: number;
+  holders?: number;
+  unique_wallets_24h?: number;
+
+  // Transaction counts (all timeframes)
+  total_buys_24h?: number;
+  total_sells_24h?: number;
+  total_buys_5m?: number;
+  total_sells_5m?: number;
+  total_buys_1h?: number;
+  total_sells_1h?: number;
+  total_buys_6h?: number;
+  total_sells_6h?: number;
+
+  // Volume (all timeframes)
   total_buy_volume_5m?: string | number;
   total_sell_volume_5m?: string | number;
   total_buy_volume_1h?: string | number;
@@ -42,22 +62,46 @@ export interface PulseToken {
   total_sell_volume_6h?: string | number;
   total_buy_volume_24h?: string | number;
   total_sell_volume_24h?: string | number;
+
+  // Percentage holdings (multiple field name variants)
   insider_percent?: number;
+  insider_held_percentage?: number;
   sniper_percent?: number;
+  sniper_held_percentage?: number;
   dev_percent?: number;
+  dev_held_percentage?: number;
+  bundle_percent?: number;
+  bundled_percentage?: number;
+  bundler_held_percentage?: number;
+  bundle_wallet_count?: number;
+  bundler_count?: number;
+
+  // Top holders
+  top10_holders_pct?: number;
+
   // Dev token tracking
   dev_tokens_created?: number;
   dev_tokens_migrated?: number;
-  // Bundler data
-  bundle_percent?: number;
-  bundle_wallet_count?: number;
-  bundler_held_percentage?: number;
-  bundler_count?: number;
-  // Additional fields
+
+  // KOL & Pro traders
   kol_count?: number;
-  holder_count?: number;
-  // Total fees in lamports
+  pro_traders_count?: number;
+
+  // Trade info
+  trade_type?: string;
+  sol_amount?: number;
+  token_amount?: number;
+
+  // Metadata
+  launchpad_protocol?: string;
+  pair_address?: string;
+  image?: string;
+  updated_at?: string;
+
+  // Total fees in lamports / gas
   total_fees_lamports?: number;
+  global_fees_paid?: number;
+  globalFeesPaid?: number;
 }
 
 export interface PulseCacheData {
