@@ -12,7 +12,7 @@ env:
   PROJECT_ID: "interstate-dev"
   WORKLOAD_IDENTITY_PROVIDER: "projects/486942555299/locations/global/workloadIdentityPools/github-cicd-pool/providers/github"
   SERVICE_ACCOUNT: "github-cicd@interstate-dev.iam.gserviceaccount.com"
-  STARTUP_SCRIPT: "deployment/startup-script/interstate-narrative-frontend-prod-startup.sh"
+  STARTUP_SCRIPT: "deployment/startup-script/interstate-prod-frontend-startup.sh"
 
   # List of MIGs with their zones (MIG:ZONE)
   MIG_LIST: >
@@ -48,19 +48,19 @@ jobs:
       # Step 4 — Create GLOBAL Instance Template
       - name: Create Global Instance Template
         run: |
-          TEMPLATE_NAME="interstate-narrative-frontend-prod-${GITHUB_SHA::8}"
+          TEMPLATE_NAME="interstate-prod-frontend-${GITHUB_SHA::8}"
           echo "Creating GLOBAL template: $TEMPLATE_NAME"
 
           gcloud compute instance-templates create $TEMPLATE_NAME \
             --project=$PROJECT_ID \
-            --machine-type=c2-standard-4 \
+            --machine-type=n2-standard-2 \
             --network-interface=network=interstate-narrative-vpc-global,network-tier=PREMIUM,stack-type=IPV4_ONLY,no-address \
             --maintenance-policy=MIGRATE \
             --provisioning-model=STANDARD \
             --service-account=486942555299-compute@developer.gserviceaccount.com \
             --scopes=https://www.googleapis.com/auth/devstorage.read_only,https://www.googleapis.com/auth/logging.write,https://www.googleapis.com/auth/monitoring.write,https://www.googleapis.com/auth/service.management.readonly,https://www.googleapis.com/auth/servicecontrol,https://www.googleapis.com/auth/trace.append \
             --tags=lb-health-check \
-            --create-disk=auto-delete=yes,boot=yes,device-name=$TEMPLATE_NAME,image=projects/interstate-dev/global/images/interstate-narrative-frontend-prod-image-17112025,mode=rw,size=150,type=pd-ssd \
+            --create-disk=auto-delete=yes,boot=yes,device-name=$TEMPLATE_NAME,image=projects/interstate-dev/global/images/interstate-prod-frontend-image-14012026,mode=rw,size=150,type=pd-ssd \
             --no-shielded-secure-boot \
             --shielded-vtpm \
             --shielded-integrity-monitoring \
