@@ -69,8 +69,7 @@ import { SiSolana } from "react-icons/si";
 import Image from "next/image";
 import InterstatePopout from "./InterstatePopout";
 import VerticalInput from "./VerticalInput";
-import { usePulseWebSocketPersistent } from "~/hooks/usePulseWebSocketPersistent";
-import * as pulseStore from "~/stores/pulseStore";
+import { usePulseFromStore } from "~/hooks/usePulseFromStore";
 import { flushSync } from "react-dom";
 
 import { useRouter } from "next/router";
@@ -2722,221 +2721,34 @@ function PulseTable({
     if (lowerTitle.includes("migrated")) return "migrated";
     return undefined;
   }, [title]);
-  // WebSocket for real-time updates - direct connection for fast updates
+  // Read tokens from global store (populated by PulseBackgroundLoader)
+  // No WebSocket connection here - PulseBackgroundLoader handles all WebSocket logic
   const {
-    newTokens: wsNewTokens,
-    finalStretchTokens: wsFinalStretchTokens,
-    migratedTokens: wsMigratedTokens,
+    newTokens: storeNewTokens,
+    finalStretchTokens: storeFinalStretchTokens,
+    migratedTokens: storeMigratedTokens,
     connected: wsConnected,
-    error: wsError,
-  } = usePulseWebSocketPersistent({
-    enabled: true,
-    channel,
-    onNewToken: useCallback(
-      (token: any) => {
-        if (channel === "new") {
-          // ⚡ INSTANT PATH: Minimal processing for maximum speed
-          flushSync(() => {
-            setWsTokens((prev) => {
-              // O(1) check - skip if duplicate of most recent token
-              if (prev.length > 0 && prev[0].mint === token.mint) {
-                return prev;
-              }
-              // Prepend new token, limit to 50 (slice is O(k) where k=50, not O(n))
-              return [token as Token, ...prev].slice(0, 50);
-            });
-          });
-        }
-      },
-      [channel],
-    ),
-    onFinalStretchToken: useCallback(
-      (token: any) => {
-        if (channel === "final_stretch" && !hasZeroLiquidity(token)) {
-          // Use flushSync to force immediate update, bypassing React 18's automatic batching
-          // Optimized with Map-based deduplication (O(1) instead of O(n))
-          flushSync(() => {
-            setWsTokens((prev) => {
-              const map = new Map<string, Token>();
-              map.set(token.mint, token as Token);
-              for (const t of prev) {
-                if (
-                  t.mint !== token.mint &&
-                  !hasZeroLiquidity(t) &&
-                  map.size < 50
-                ) {
-                  map.set(t.mint, t);
-                }
-              }
-              return Array.from(map.values());
-            });
-          });
-        }
-      },
-      [channel],
-    ),
-    onMigratedToken: useCallback(
-      (token: any) => {
-        if (channel === "migrated" && !hasZeroLiquidity(token)) {
-          // Use flushSync to force immediate update, bypassing React 18's automatic batching
-          // Optimized with Map-based deduplication (O(1) instead of O(n))
-          flushSync(() => {
-            setWsTokens((prev) => {
-              const map = new Map<string, Token>();
-              map.set(token.mint, token as Token);
-              for (const t of prev) {
-                if (
-                  t.mint !== token.mint &&
-                  !hasZeroLiquidity(t) &&
-                  map.size < 50
-                ) {
-                  map.set(t.mint, t);
-                }
-              }
-              return Array.from(map.values());
-            });
-          });
-        }
-      },
-      [channel],
-    ),
-    onPriceUpdate: useCallback(
-      (updates: any[]) => {
-        // PERFORMANCE FIX: Don't use flushSync for price updates
-        // Let React batch these naturally - flushSync was causing render storms
-        // The hook already handles updating its internal arrays efficiently
+  } = usePulseFromStore({ channel });
 
-        // Pre-compute updates map once (O(n) instead of O(n*m))
-        const updatesMap = new Map(updates.map((u) => [u.mint, u]));
-
-        // Helper to apply updates - returns same array ref if no changes (prevents re-render)
-        const applyPriceUpdates = (tokens: Token[]): Token[] => {
-          if (!tokens || tokens.length === 0) return tokens;
-
-          let hasChanges = false;
-          const updatedTokens = tokens.map((token) => {
-            const update = updatesMap.get(token.mint);
-            if (!update) return token;
-            hasChanges = true;
-
-          // Merge update - only include fields with valid values
-          return {
-            ...token,
-            ...(update.price_usd !== undefined && { price_usd: update.price_usd }),
-            ...(update.market_cap_usd !== undefined && update.market_cap_usd > 0 && { market_cap_usd: update.market_cap_usd }),
-            ...(update.volume_24h !== undefined && { volume_24h: update.volume_24h }),
-            ...(update.bonding_pct !== undefined && update.bonding_pct >= 0 && { bonding_pct: update.bonding_pct, bonding_curve_progress: update.bonding_pct / 100 }),
-            ...(update.graduation_percent !== undefined && update.graduation_percent >= 0 && { graduation_percent: update.graduation_percent }),
-            ...(update.bonding_curve_progress !== undefined && update.bonding_curve_progress >= 0 && { bonding_curve_progress: update.bonding_curve_progress }),
-            ...(update.liquidity_usd !== undefined && update.liquidity_usd >= 0 && { liquidity_usd: update.liquidity_usd, total_liquidity_usd: update.liquidity_usd }),
-            ...(update.price_change_24h !== undefined && { price_change_24h: update.price_change_24h }),
-            ...(update.trade_type !== undefined && { last_trade_type: update.trade_type }),
-            ...(update.sol_amount !== undefined && { last_sol_amount: update.sol_amount }),
-            ...(update.token_amount !== undefined && { last_token_amount: update.token_amount }),
-            ...(update.status !== undefined && { status: update.status }),
-            // Buy/sell volumes - only update if non-zero to preserve valid data across timeframes
-            ...(update.total_buy_volume_5m !== undefined && (Number(update.total_buy_volume_5m) !== 0 || !token.total_buy_volume_5m) && { total_buy_volume_5m: update.total_buy_volume_5m }),
-            ...(update.total_sell_volume_5m !== undefined && (Number(update.total_sell_volume_5m) !== 0 || !token.total_sell_volume_5m) && { total_sell_volume_5m: update.total_sell_volume_5m }),
-            ...(update.total_buys_5m !== undefined && (Number(update.total_buys_5m) !== 0 || !token.total_buys_5m) && { total_buys_5m: update.total_buys_5m }),
-            ...(update.total_sells_5m !== undefined && (Number(update.total_sells_5m) !== 0 || !token.total_sells_5m) && { total_sells_5m: update.total_sells_5m }),
-            ...(update.total_buy_volume_1h !== undefined && (Number(update.total_buy_volume_1h) !== 0 || !token.total_buy_volume_1h) && { total_buy_volume_1h: update.total_buy_volume_1h }),
-            ...(update.total_sell_volume_1h !== undefined && (Number(update.total_sell_volume_1h) !== 0 || !token.total_sell_volume_1h) && { total_sell_volume_1h: update.total_sell_volume_1h }),
-            ...(update.total_buys_1h !== undefined && (Number(update.total_buys_1h) !== 0 || !token.total_buys_1h) && { total_buys_1h: update.total_buys_1h }),
-            ...(update.total_sells_1h !== undefined && (Number(update.total_sells_1h) !== 0 || !token.total_sells_1h) && { total_sells_1h: update.total_sells_1h }),
-            ...(update.total_buy_volume_6h !== undefined && (Number(update.total_buy_volume_6h) !== 0 || !token.total_buy_volume_6h) && { total_buy_volume_6h: update.total_buy_volume_6h }),
-            ...(update.total_sell_volume_6h !== undefined && (Number(update.total_sell_volume_6h) !== 0 || !token.total_sell_volume_6h) && { total_sell_volume_6h: update.total_sell_volume_6h }),
-            ...(update.total_buys_6h !== undefined && (Number(update.total_buys_6h) !== 0 || !token.total_buys_6h) && { total_buys_6h: update.total_buys_6h }),
-            ...(update.total_sells_6h !== undefined && (Number(update.total_sells_6h) !== 0 || !token.total_sells_6h) && { total_sells_6h: update.total_sells_6h }),
-            ...(update.total_buy_volume_24h !== undefined && (Number(update.total_buy_volume_24h) !== 0 || !token.total_buy_volume_24h) && { total_buy_volume_24h: update.total_buy_volume_24h }),
-            ...(update.total_sell_volume_24h !== undefined && (Number(update.total_sell_volume_24h) !== 0 || !token.total_sell_volume_24h) && { total_sell_volume_24h: update.total_sell_volume_24h }),
-            ...(update.total_buys_24h !== undefined && (Number(update.total_buys_24h) !== 0 || !token.total_buys_24h) && { total_buys_24h: update.total_buys_24h }),
-            ...(update.total_sells_24h !== undefined && (Number(update.total_sells_24h) !== 0 || !token.total_sells_24h) && { total_sells_24h: update.total_sells_24h }),
-            // Map holder percentages from websocket
-            // Only update if new value is non-zero OR existing value is 0/undefined (preserve non-zero values)
-            ...(update.insider_percent !== undefined && (update.insider_percent !== 0 || !(token as any).insider_percent) && { insider_percent: update.insider_percent }),
-            ...(update.sniper_percent !== undefined && (update.sniper_percent !== 0 || !(token as any).sniper_percent) && { sniper_percent: update.sniper_percent }),
-            ...(update.dev_percent !== undefined && (update.dev_percent !== 0 || !(token as any).dev_percent) && { dev_percent: update.dev_percent }),
-            ...(update.top10_holders_pct !== undefined && (update.top10_holders_pct !== 0 || !(token as any).top10_holders_pct) && { top10_holders_pct: update.top10_holders_pct }),
-            // Map bundler data from websocket (bundle_percent → bundler_held_percentage for BottomCardInfoHolder)
-            // Only update if new value is non-zero OR existing value is 0/undefined
-            ...(update.bundle_percent !== undefined && (update.bundle_percent !== 0 || !(token as any).bundle_percent) && { bundle_percent: update.bundle_percent, bundler_held_percentage: update.bundle_percent }),
-            ...(update.bundle_wallet_count !== undefined && (update.bundle_wallet_count !== 0 || !(token as any).bundle_wallet_count) && { bundle_wallet_count: update.bundle_wallet_count, bundler_count: update.bundle_wallet_count }),
-            // Map total fees lamports from websocket - only update if non-zero to preserve valid values
-            ...(update.total_fees_lamports !== undefined && (update.total_fees_lamports !== 0 || !(token as any).total_fees_lamports) && { total_fees_lamports: update.total_fees_lamports }),
-            updated_at: update.updated_at || token.updated_at,
-          };
-        });
-
-          // CRITICAL: Return same array ref if no changes - prevents unnecessary re-render
-          if (!hasChanges) return tokens;
-
-          // Skip liquidity filtering for New Pairs - keep all tokens
-          if (isNewPairs) return updatedTokens as Token[];
-          return filterNonZeroLiquidity(updatedTokens as Token[]);
-        };
-
-        // Apply to both arrays using the same helper - reuses the updatesMap
-        setFilteredTokens(applyPriceUpdates);
-        setWsTokens(applyPriceUpdates);
-
-      // PERFORMANCE FIX: Removed setBaseTokens from here
-      // baseTokens updates were triggering useMemo recalculations on every price update
-      // The hook's internal arrays (newTokens, finalStretchTokens, migratedTokens)
-      // already get price updates applied directly
-    }, [isNewPairs]),
-    onTokenInfoUpdate: useCallback((update: { mint_address: string; holder_count: number; kol_count: number }) => {
-      // Apply holder_count and kol_count updates from token_info_update WebSocket messages
-      // Only update if new value is non-zero OR existing value is 0/undefined (preserve non-zero values)
-      const applyTokenInfoUpdate = (tokens: Token[]): Token[] => {
-        if (!tokens || tokens.length === 0) return tokens;
-
-        let hasChanges = false;
-        const updatedTokens = tokens.map((token) => {
-          if (token.mint !== update.mint_address) return token;
-          hasChanges = true;
-          return {
-            ...token,
-            // Only update if new value is non-zero OR existing value is 0/undefined
-            ...(update.holder_count !== 0 || !(token as any).holder_count) && { holder_count: update.holder_count },
-            ...(update.kol_count !== 0 || !(token as any).kol_count) && { kol_count: update.kol_count },
-          };
-        });
-
-        return hasChanges ? updatedTokens : tokens;
-      };
-
-      // Update all local arrays to ensure holder/KOL counts are reflected everywhere
-      setFilteredTokens(applyTokenInfoUpdate);
-      setWsTokens(applyTokenInfoUpdate);
-      setBaseTokens(applyTokenInfoUpdate);
-    }, []),
-  });
-
-  // One-time initialization from store on mount
-  // This loads tokens collected by PulseBackgroundLoader while user was on other pages
-  const hasInitializedFromStore = useRef(false);
+  // Keep wsTokens synced with store tokens
+  // Store tokens have complete price updates applied by PulseBackgroundLoader
   useEffect(() => {
-    if (hasInitializedFromStore.current) return;
-
-    const storeState = pulseStore.getState();
     const storeTokens = channel === 'new'
-      ? storeState.newTokens
+      ? storeNewTokens
       : channel === 'final_stretch'
-        ? storeState.finalStretchTokens
+        ? storeFinalStretchTokens
         : channel === 'migrated'
-          ? storeState.migratedTokens
+          ? storeMigratedTokens
           : [];
 
     if (storeTokens.length > 0) {
-      hasInitializedFromStore.current = true;
-      console.log(`[PulseTable] Initializing from store: ${storeTokens.length} tokens`);
       if (isNewPairs) {
         setWsTokens(storeTokens as unknown as Token[]);
       } else {
         setWsTokens(filterNonZeroLiquidity(storeTokens as unknown as Token[]));
       }
     }
-  }, [channel, isNewPairs]);
+  }, [channel, storeNewTokens, storeFinalStretchTokens, storeMigratedTokens, isNewPairs]);
 
   // Fetch filtered tokens when protocols change
   useEffect(() => {

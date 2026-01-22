@@ -9,6 +9,7 @@ import {
   type PulseToken,
 } from '~/utils/pulseCache';
 import { extractTokenImage } from '~/utils/images';
+import { applyPriceUpdate, type PriceUpdate } from '~/utils/applyPriceUpdate';
 
 /**
  * Persistent WebSocket hook for Pulse token updates
@@ -360,10 +361,12 @@ export function usePulseWebSocketPersistent(
                 const updates = rawUpdates.map((u: any) => ({
                   ...u,
                   mint: u.address || u.mint,
-                }));
+                })) as PriceUpdate[];
 
-                const updatesMap = new Map<string, PulseToken>(updates.map((u: PulseToken) => [u.mint, u]));
+                const updatesMap = new Map<string, PriceUpdate>(updates.map((u) => [u.mint!, u]));
 
+                // Use shared utility for COMPLETE field mapping (all 37+ fields)
+                // This ensures gas price, buy/sell bars, holder %, etc. all update correctly
                 const applyUpdates = (tokens: PulseToken[]): PulseToken[] => {
                   if (tokens.length === 0) return tokens;
                   let hasChanges = false;
@@ -371,18 +374,8 @@ export function usePulseWebSocketPersistent(
                     const update = updatesMap.get(token.mint);
                     if (!update) return token;
                     hasChanges = true;
-                    return {
-                      ...token,
-                      ...(update.price_usd !== undefined && { price_usd: update.price_usd }),
-                      ...(update.market_cap_usd !== undefined && update.market_cap_usd > 0 && { market_cap_usd: update.market_cap_usd }),
-                      ...(update.volume_24h !== undefined && { volume_24h: update.volume_24h }),
-                      ...(update.bonding_pct !== undefined && { bonding_pct: update.bonding_pct }),
-                      ...(update.graduation_percent !== undefined && { graduation_percent: update.graduation_percent }),
-                      ...(update.liquidity_usd !== undefined && { liquidity_usd: update.liquidity_usd }),
-                      // Bundler data mapping (bundle_percent → bundler_held_percentage for BottomCardInfoHolder)
-                      ...(update.bundle_percent !== undefined && { bundle_percent: update.bundle_percent, bundler_held_percentage: update.bundle_percent }),
-                      ...(update.bundle_wallet_count !== undefined && { bundle_wallet_count: update.bundle_wallet_count, bundler_count: update.bundle_wallet_count }),
-                    };
+                    // Use the shared applyPriceUpdate utility for complete field mapping
+                    return applyPriceUpdate(token, update) as PulseToken;
                   });
                   return hasChanges ? updated : tokens;
                 };
@@ -396,7 +389,7 @@ export function usePulseWebSocketPersistent(
                   setMigratedTokens(applyUpdates);
                 }
 
-                onPriceUpdateRef.current?.(updates);
+                onPriceUpdateRef.current?.(updates as PulseToken[]);
               } else if (message.type === 'token_info_update' && message.data) {
                 // Handle KOL count and holder count updates
                 const data = message.data;

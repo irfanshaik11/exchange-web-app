@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useState, useMemo, useCallback, useRef } from "react";
+import React, { useEffect, useState, useMemo, useCallback } from "react";
 import { useRouter } from "next/router";
 import PulseTable from "./PulseTable";
 import MonadTable from "./MonadTable";
@@ -15,9 +15,7 @@ import {
   useQueryLaunchpadData,
   useQueryFinalStretch,
   useQueryMigrated,
-  tokenKeys,
 } from "../hooks/useQueryTokens";
-import { useQueryClient } from "@tanstack/react-query";
 import { env } from "~/env";
 import { extractTokenImage } from "../utils/images";
 
@@ -101,9 +99,6 @@ export default function PulseContent({ forceMobileView = false }: PulseContentPr
       : "bg-[#141821] text-neutral-500 opacity-75 hover:opacity-100 hover:text-neutral-100"
   }`;
 
-  // React Query client for manual cache updates from WebSocket
-  const queryClient = useQueryClient();
-
   // React Query hooks - only enable Solana data fetching when NOT on Monad route
   const shouldFetchSolanaData = router.isReady && !isMonadRoute;
 
@@ -129,103 +124,15 @@ export default function PulseContent({ forceMobileView = false }: PulseContentPr
   const { data: migratedTokensQuery = [] } = useQueryMigrated(shouldFetchSolanaData);
 
   // ✅ REAL-TIME UPDATES: Read from PulseBackgroundLoader via global store
-  // This uses the persistent WebSocket connections maintained by PulseBackgroundLoader
-  // Throttle ref for price updates to prevent excessive React Query updates
-  const priceUpdateThrottleRef = useRef<NodeJS.Timeout | null>(null);
-  const pendingPriceUpdatesRef = useRef<Map<string, any>>(new Map());
+  // PulseBackgroundLoader maintains WebSocket connections and pushes updates to the store
+  // PulseTable reads directly from the store via usePulseFromStore hook
+  const { connected: pulseWsConnected, error: pulseWsError } = usePulseFromStore();
 
-  const { connected: pulseWsConnected, error: pulseWsError, isUsingSharedWorker } = usePulseFromStore({
-    onNewToken: useCallback((token) => {
-      queryClient.setQueryData(tokenKeys.trenches.newPairs(), (oldData: any[] | undefined) => {
-        if (!oldData) return [token];
-        const filtered = oldData.filter((t: any) => t.mint !== token.mint);
-        return [token, ...filtered].slice(0, 200);
-      });
-    }, [queryClient]),
-    onFinalStretchToken: useCallback((token) => {
-      queryClient.setQueryData(tokenKeys.trenches.finalStretch(), (oldData: any[] | undefined) => {
-        if (!oldData) return [token];
-        const filtered = oldData.filter((t: any) => t.mint !== token.mint);
-        return [token, ...filtered].slice(0, 50);
-      });
-    }, [queryClient]),
-    onMigratedToken: useCallback((token) => {
-      queryClient.setQueryData(tokenKeys.trenches.migrated(), (oldData: any[] | undefined) => {
-        if (!oldData) return [token];
-        const filtered = oldData.filter((t: any) => t.mint !== token.mint);
-        return [token, ...filtered].slice(0, 50);
-      });
-    }, [queryClient]),
-    // Throttled price updates - batch updates and apply every 2 seconds
-    onPriceUpdate: useCallback((updates: any[]) => {
-      if (!updates || updates.length === 0) return;
-
-      // Accumulate updates in the pending map
-      for (const update of updates) {
-        if (update.mint) {
-          pendingPriceUpdatesRef.current.set(update.mint, update);
-        }
-      }
-
-      // If throttle timer is already running, let it handle the batch
-      if (priceUpdateThrottleRef.current) return;
-
-      // Set up throttled flush
-      priceUpdateThrottleRef.current = setTimeout(() => {
-        priceUpdateThrottleRef.current = null;
-        const pending = pendingPriceUpdatesRef.current;
-        if (pending.size === 0) return;
-
-        const updatesMap = new Map(pending);
-        pendingPriceUpdatesRef.current = new Map();
-
-        // Helper to apply price updates
-        const applyPriceUpdates = (oldData: any[] | undefined): any[] | undefined => {
-          if (!oldData || oldData.length === 0) return oldData;
-          let hasChanges = false;
-          const updated = oldData.map((token: any) => {
-            const update = updatesMap.get(token.mint);
-            if (!update) return token;
-            hasChanges = true;
-            return {
-              ...token,
-              ...(update.price_usd !== undefined && { price_usd: update.price_usd, usd_price: update.price_usd }),
-              ...(update.market_cap_usd !== undefined && update.market_cap_usd > 0 && {
-                market_cap_usd: update.market_cap_usd,
-                fully_diluted_value: update.market_cap_usd,
-                total_fully_diluted_valuation: update.market_cap_usd
-              }),
-              ...(update.volume_24h !== undefined && { volume_24h: update.volume_24h }),
-              ...(update.bonding_pct !== undefined && { bonding_pct: update.bonding_pct, bonding_curve_progress: update.bonding_pct }),
-              ...(update.liquidity_usd !== undefined && { liquidity_usd: update.liquidity_usd, total_liquidity_usd: update.liquidity_usd }),
-              ...(update.holder_count !== undefined && { holder_count: update.holder_count, holders: update.holder_count }),
-              ...(update.kol_count !== undefined && { kol_count: update.kol_count }),
-            };
-          });
-          return hasChanges ? updated : oldData;
-        };
-
-        // Apply batched updates to React Query caches
-        queryClient.setQueryData(tokenKeys.trenches.newPairs(), applyPriceUpdates);
-        queryClient.setQueryData(tokenKeys.trenches.finalStretch(), applyPriceUpdates);
-        queryClient.setQueryData(tokenKeys.trenches.migrated(), applyPriceUpdates);
-      }, 2000); // Flush every 2 seconds
-    }, [queryClient]),
-  });
   useEffect(() => {
     if (pulseWsError) {
       console.error("[Pulse] WebSocket error", pulseWsError);
     }
   }, [pulseWsConnected, pulseWsError]);
-
-  // Cleanup throttle timer on unmount
-  useEffect(() => {
-    return () => {
-      if (priceUpdateThrottleRef.current) {
-        clearTimeout(priceUpdateThrottleRef.current);
-      }
-    };
-  }, []);
 
   // State for HTTP polling data
   const [httpNew, setHttpNew] = useState<any[]>([]);
