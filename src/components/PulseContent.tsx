@@ -8,7 +8,7 @@ import type { Token } from "~/utils/db";
 import { useUser } from "./UserContext";
 import Cookies from "js-cookie";
 import { useRealtimeWebSocket } from "../hooks/useRealtimeWebSocket";
-import { usePulseWebSocketPersistent } from "../hooks/usePulseWebSocketPersistent";
+import { usePulseFromStore } from "../hooks/usePulseFromStore";
 import { useImagePreloader } from "../hooks/useImagePreloader";
 import {
   useQueryNewPairs,
@@ -128,10 +128,13 @@ export default function PulseContent({ forceMobileView = false }: PulseContentPr
   const { data: finalStretchTokensQuery = [] } = useQueryFinalStretch(shouldFetchSolanaData);
   const { data: migratedTokensQuery = [] } = useQueryMigrated(shouldFetchSolanaData);
 
-  // ✅ REAL-TIME WEBSOCKET: Direct cache updates (NO REFETCH)
-  // Using persistent WebSocket that survives tab switches and page refreshes
-  const { connected: pulseWsConnected, error: pulseWsError, isUsingSharedWorker } = usePulseWebSocketPersistent({
-    enabled: shouldFetchSolanaData,
+  // ✅ REAL-TIME UPDATES: Read from PulseBackgroundLoader via global store
+  // This uses the persistent WebSocket connections maintained by PulseBackgroundLoader
+  // Throttle ref for price updates to prevent excessive React Query updates
+  const priceUpdateThrottleRef = useRef<NodeJS.Timeout | null>(null);
+  const pendingPriceUpdatesRef = useRef<Map<string, any>>(new Map());
+
+  const { connected: pulseWsConnected, error: pulseWsError, isUsingSharedWorker } = usePulseFromStore({
     onNewToken: useCallback((token) => {
       queryClient.setQueryData(tokenKeys.trenches.newPairs(), (oldData: any[] | undefined) => {
         if (!oldData) return [token];
@@ -153,12 +156,76 @@ export default function PulseContent({ forceMobileView = false }: PulseContentPr
         return [token, ...filtered].slice(0, 50);
       });
     }, [queryClient]),
+    // Throttled price updates - batch updates and apply every 2 seconds
+    onPriceUpdate: useCallback((updates: any[]) => {
+      if (!updates || updates.length === 0) return;
+
+      // Accumulate updates in the pending map
+      for (const update of updates) {
+        if (update.mint) {
+          pendingPriceUpdatesRef.current.set(update.mint, update);
+        }
+      }
+
+      // If throttle timer is already running, let it handle the batch
+      if (priceUpdateThrottleRef.current) return;
+
+      // Set up throttled flush
+      priceUpdateThrottleRef.current = setTimeout(() => {
+        priceUpdateThrottleRef.current = null;
+        const pending = pendingPriceUpdatesRef.current;
+        if (pending.size === 0) return;
+
+        const updatesMap = new Map(pending);
+        pendingPriceUpdatesRef.current = new Map();
+
+        // Helper to apply price updates
+        const applyPriceUpdates = (oldData: any[] | undefined): any[] | undefined => {
+          if (!oldData || oldData.length === 0) return oldData;
+          let hasChanges = false;
+          const updated = oldData.map((token: any) => {
+            const update = updatesMap.get(token.mint);
+            if (!update) return token;
+            hasChanges = true;
+            return {
+              ...token,
+              ...(update.price_usd !== undefined && { price_usd: update.price_usd, usd_price: update.price_usd }),
+              ...(update.market_cap_usd !== undefined && update.market_cap_usd > 0 && {
+                market_cap_usd: update.market_cap_usd,
+                fully_diluted_value: update.market_cap_usd,
+                total_fully_diluted_valuation: update.market_cap_usd
+              }),
+              ...(update.volume_24h !== undefined && { volume_24h: update.volume_24h }),
+              ...(update.bonding_pct !== undefined && { bonding_pct: update.bonding_pct, bonding_curve_progress: update.bonding_pct }),
+              ...(update.liquidity_usd !== undefined && { liquidity_usd: update.liquidity_usd, total_liquidity_usd: update.liquidity_usd }),
+              ...(update.holder_count !== undefined && { holder_count: update.holder_count, holders: update.holder_count }),
+              ...(update.kol_count !== undefined && { kol_count: update.kol_count }),
+            };
+          });
+          return hasChanges ? updated : oldData;
+        };
+
+        // Apply batched updates to React Query caches
+        queryClient.setQueryData(tokenKeys.trenches.newPairs(), applyPriceUpdates);
+        queryClient.setQueryData(tokenKeys.trenches.finalStretch(), applyPriceUpdates);
+        queryClient.setQueryData(tokenKeys.trenches.migrated(), applyPriceUpdates);
+      }, 2000); // Flush every 2 seconds
+    }, [queryClient]),
   });
   useEffect(() => {
     if (pulseWsError) {
       console.error("[Pulse] WebSocket error", pulseWsError);
     }
   }, [pulseWsConnected, pulseWsError]);
+
+  // Cleanup throttle timer on unmount
+  useEffect(() => {
+    return () => {
+      if (priceUpdateThrottleRef.current) {
+        clearTimeout(priceUpdateThrottleRef.current);
+      }
+    };
+  }, []);
 
   // State for HTTP polling data
   const [httpNew, setHttpNew] = useState<any[]>([]);

@@ -42,6 +42,7 @@ import 'react-datepicker/dist/react-datepicker.css';
 import { showEnhancedToast } from '../utils/enhancedToast';
 import { storeReferralCodeHint, getStoredReferralCodeHint, clearStoredReferralCodeHint } from '~/utils/referralStorage';
 import PagePreloader from '../components/PagePreloader';
+import { PulseBackgroundLoader } from '../components/PulseBackgroundLoader';
 
 // Suppress Next.js error overlay for caught errors in development
 if (typeof window !== 'undefined' && process.env.NODE_ENV === 'development') {
@@ -722,6 +723,7 @@ const MyApp: AppType = ({ Component, pageProps }) => {
                             <WalletTrackerProvider>
                               <ReferralAccessGate>
                                 <PagePreloader />
+                                <PulseBackgroundLoader />
                                 <Component {...pageProps} />
                               </ReferralAccessGate>
                             </WalletTrackerProvider>

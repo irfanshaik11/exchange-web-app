@@ -70,6 +70,7 @@ import Image from "next/image";
 import InterstatePopout from "./InterstatePopout";
 import VerticalInput from "./VerticalInput";
 import { usePulseWebSocketPersistent } from "~/hooks/usePulseWebSocketPersistent";
+import * as pulseStore from "~/stores/pulseStore";
 import { flushSync } from "react-dom";
 
 import { useRouter } from "next/router";
@@ -2721,7 +2722,7 @@ function PulseTable({
     if (lowerTitle.includes("migrated")) return "migrated";
     return undefined;
   }, [title]);
-  // WebSocket for real-time updates with server-side filtering
+  // WebSocket for real-time updates - direct connection for fast updates
   const {
     newTokens: wsNewTokens,
     finalStretchTokens: wsFinalStretchTokens,
@@ -2731,11 +2732,6 @@ function PulseTable({
   } = usePulseWebSocketPersistent({
     enabled: true,
     channel,
-    // Only pass protocol filter if specific protocols are selected (not "All")
-    protocols:
-      filters.protocols.length > 0 && !filters.protocols.includes("All")
-        ? filters.protocols.flatMap(mapProtocolToBackend)
-        : undefined,
     onNewToken: useCallback(
       (token: any) => {
         if (channel === "new") {
@@ -2915,6 +2911,32 @@ function PulseTable({
       setBaseTokens(applyTokenInfoUpdate);
     }, []),
   });
+
+  // One-time initialization from store on mount
+  // This loads tokens collected by PulseBackgroundLoader while user was on other pages
+  const hasInitializedFromStore = useRef(false);
+  useEffect(() => {
+    if (hasInitializedFromStore.current) return;
+
+    const storeState = pulseStore.getState();
+    const storeTokens = channel === 'new'
+      ? storeState.newTokens
+      : channel === 'final_stretch'
+        ? storeState.finalStretchTokens
+        : channel === 'migrated'
+          ? storeState.migratedTokens
+          : [];
+
+    if (storeTokens.length > 0) {
+      hasInitializedFromStore.current = true;
+      console.log(`[PulseTable] Initializing from store: ${storeTokens.length} tokens`);
+      if (isNewPairs) {
+        setWsTokens(storeTokens as unknown as Token[]);
+      } else {
+        setWsTokens(filterNonZeroLiquidity(storeTokens as unknown as Token[]));
+      }
+    }
+  }, [channel, isNewPairs]);
 
   // Fetch filtered tokens when protocols change
   useEffect(() => {
