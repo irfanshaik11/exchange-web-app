@@ -42,6 +42,22 @@ import 'react-datepicker/dist/react-datepicker.css';
 import { showEnhancedToast } from '../utils/enhancedToast';
 import { storeReferralCodeHint, getStoredReferralCodeHint, clearStoredReferralCodeHint } from '~/utils/referralStorage';
 import PagePreloader from '../components/PagePreloader';
+import { usePulseNavigationGuard } from '../hooks/usePulseNavigationGuard';
+
+// Dynamically import PulseBackgroundLoader with no SSR
+// Rendered globally to maintain WebSocket connections across all pages
+// Now only updates React Query cache (not pulseStore) so it doesn't block navigation
+const PulseBackgroundLoader = dynamic(
+  () => import('../components/PulseBackgroundLoader').then(mod => ({ default: mod.PulseBackgroundLoader })),
+  { ssr: false, loading: () => null }
+);
+
+// Component that sets up the navigation guard for pulse store
+// RE-ENABLED: Required to pause store notifications during navigation
+function PulseNavigationGuard() {
+  usePulseNavigationGuard();
+  return null;
+}
 
 // Suppress Next.js error overlay for caught errors in development
 if (typeof window !== 'undefined' && process.env.NODE_ENV === 'development') {
@@ -705,9 +721,12 @@ const MyApp: AppType = ({ Component, pageProps }) => {
         {/* MobileBlocker disabled - MOBILE VIEW DISABLED
         <MobileBlocker>
         */}
+        {/* PulseNavigationGuard removed - PulseBackgroundLoader handles navigation internally */}
         <TurnkeyRootProvider>
           {/* <MonadTradeBanner /> */}
           <WagmiProviderWrapper config={config} queryClient={queryClient}>
+            {/* PulseBackgroundLoader: global, only updates React Query (not pulseStore) */}
+            <PulseBackgroundLoader />
             <UserProvider>
               <UserLimitProvider>
                 <TurnkeySessionBridge />

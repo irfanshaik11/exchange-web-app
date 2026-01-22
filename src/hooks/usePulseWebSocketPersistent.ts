@@ -1,5 +1,4 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
-import { flushSync } from 'react-dom';
 import { env } from '~/env';
 import {
   savePulseCache,
@@ -9,6 +8,7 @@ import {
   type PulseToken,
 } from '~/utils/pulseCache';
 import { extractTokenImage } from '~/utils/images';
+import { applyPriceUpdate, type PriceUpdate } from '~/utils/applyPriceUpdate';
 
 /**
  * Persistent WebSocket hook for Pulse token updates
@@ -38,6 +38,17 @@ interface UsePulseWebSocketPersistentOptions {
   onMigratedToken?: (token: PulseToken) => void;
   onPriceUpdate?: (updates: PulseToken[]) => void;
   onTokenInfoUpdate?: (update: TokenInfoUpdate) => void;
+  /**
+   * When true, the hook will NOT update internal React state (newTokens, finalStretchTokens, migratedTokens).
+   * Callbacks will still be called. This prevents re-renders that can block navigation.
+   * Use this when you only need the callbacks (e.g., to update React Query directly).
+   */
+  skipInternalState?: boolean;
+  /**
+   * When true, the hook will skip processing messages entirely (messages are dropped).
+   * Use this during navigation to completely prevent any main thread work.
+   */
+  pauseProcessing?: boolean;
 }
 
 interface UsePulseWebSocketPersistentReturn {
@@ -65,6 +76,8 @@ export function usePulseWebSocketPersistent(
     onMigratedToken,
     onPriceUpdate,
     onTokenInfoUpdate,
+    skipInternalState = false,
+    pauseProcessing = false,
   } = options;
 
   const { url: customUrl } = options;
@@ -104,12 +117,18 @@ export function usePulseWebSocketPersistent(
   const mountedRef = useRef(true);
   const cacheLoadedRef = useRef(false);
 
-  // Store callbacks in refs
+  // Message batching to prevent blocking the main thread
+  const pendingMessagesRef = useRef<string[]>([]);
+  const processingScheduledRef = useRef(false);
+
+  // Store callbacks and options in refs
   const onNewTokenRef = useRef(onNewToken);
   const onFinalStretchTokenRef = useRef(onFinalStretchToken);
   const onMigratedTokenRef = useRef(onMigratedToken);
   const onPriceUpdateRef = useRef(onPriceUpdate);
   const onTokenInfoUpdateRef = useRef(onTokenInfoUpdate);
+  const skipInternalStateRef = useRef(skipInternalState);
+  const pauseProcessingRef = useRef(pauseProcessing);
 
   useEffect(() => {
     onNewTokenRef.current = onNewToken;
@@ -117,7 +136,9 @@ export function usePulseWebSocketPersistent(
     onMigratedTokenRef.current = onMigratedToken;
     onPriceUpdateRef.current = onPriceUpdate;
     onTokenInfoUpdateRef.current = onTokenInfoUpdate;
-  }, [onNewToken, onFinalStretchToken, onMigratedToken, onPriceUpdate, onTokenInfoUpdate]);
+    skipInternalStateRef.current = skipInternalState;
+    pauseProcessingRef.current = pauseProcessing;
+  }, [onNewToken, onFinalStretchToken, onMigratedToken, onPriceUpdate, onTokenInfoUpdate, skipInternalState, pauseProcessing]);
 
   const clearTokens = useCallback(() => {
     setNewTokens([]);
@@ -194,10 +215,14 @@ export function usePulseWebSocketPersistent(
     const insiderPercentValue = rawToken.insider_percent ?? rawToken.insider_held_percentage ?? 0;
     const bundlePercentValue = rawToken.bundle_percent ?? rawToken.bundled_percentage ?? 0;
 
+    // Extract mint address from various possible field names
+    // Priority: mint > address > mint_address > token_address > contract_address
+    const mintValue = rawToken.mint || rawToken.address || rawToken.mint_address || rawToken.token_address || rawToken.contract_address;
+
     return {
       ...rawToken,
-      mint: rawToken.address || rawToken.mint,
-      mint_address: rawToken.mint_address || rawToken.address || rawToken.mint,
+      mint: mintValue,
+      mint_address: mintValue,
       // Extract image from various possible field names
       image: extractTokenImage(rawToken) || rawToken.image,
 
@@ -297,170 +322,246 @@ export function usePulseWebSocketPersistent(
         reconnectAttemptsRef.current = 0;
       };
 
-      ws.onmessage = (event) => {
-        if (!mountedRef.current) return;
+      // Process queued messages in batches to avoid blocking main thread
+      const processMessages = () => {
+        if (!mountedRef.current) {
+          pendingMessagesRef.current = [];
+          processingScheduledRef.current = false;
+          return;
+        }
 
-        try {
-          const messages = event.data.split('\n').filter((msg: string) => msg.trim());
+        // Skip processing if paused (e.g., during navigation)
+        // Drop messages to prevent queue buildup
+        if (pauseProcessingRef.current) {
+          pendingMessagesRef.current = [];
+          processingScheduledRef.current = false;
+          return;
+        }
 
-          for (const msgStr of messages) {
-            try {
-              const message = JSON.parse(msgStr);
+        const messagesToProcess = pendingMessagesRef.current;
+        pendingMessagesRef.current = [];
+        processingScheduledRef.current = false;
 
-              if (message.type === 'new_token' && message.data && !Array.isArray(message.data)) {
-                const token = normalizeToken(message.data);
+        // Batch accumulators
+        const newTokensBatch: PulseToken[] = [];
+        const finalStretchTokensBatch: PulseToken[] = [];
+        const migratedTokensBatch: PulseToken[] = [];
+        const priceUpdatesBatch: PriceUpdate[] = [];
+        const tokenInfoUpdatesBatch: any[] = [];
 
-                flushSync(() => {
-                  onNewTokenRef.current?.(token);
-                  setNewTokens(prev => {
-                    const map = new Map<string, PulseToken>();
-                    map.set(token.mint, token);
-                    for (const t of prev) {
-                      if (t.mint !== token.mint && map.size < 50) {
-                        map.set(t.mint, t);
-                      }
-                    }
-                    return Array.from(map.values());
-                  });
-                });
-              } else if (message.type === 'final_stretch_token' && message.data && !Array.isArray(message.data)) {
-                const token = normalizeToken(message.data);
+        // Parse and categorize all messages
+        for (const msgStr of messagesToProcess) {
+          try {
+            const message = JSON.parse(msgStr);
 
-                flushSync(() => {
-                  onFinalStretchTokenRef.current?.(token);
-                  setFinalStretchTokens(prev => {
-                    const map = new Map<string, PulseToken>();
-                    map.set(token.mint, token);
-                    for (const t of prev) {
-                      if (t.mint !== token.mint && map.size < 50) {
-                        map.set(t.mint, t);
-                      }
-                    }
-                    return Array.from(map.values());
-                  });
-                });
-              } else if (message.type === 'migrated_token' && message.data && !Array.isArray(message.data)) {
-                const token = normalizeToken(message.data);
-
-                flushSync(() => {
-                  onMigratedTokenRef.current?.(token);
-                  setMigratedTokens(prev => {
-                    const map = new Map<string, PulseToken>();
-                    map.set(token.mint, token);
-                    for (const t of prev) {
-                      if (t.mint !== token.mint && map.size < 50) {
-                        map.set(t.mint, t);
-                      }
-                    }
-                    return Array.from(map.values());
-                  });
-                });
-              } else if (message.type === 'price_update' && message.data) {
-                const rawUpdates = Array.isArray(message.data) ? message.data : [message.data];
-                const updates = rawUpdates.map((u: any) => ({
-                  ...u,
-                  mint: u.address || u.mint,
-                }));
-
-                const updatesMap = new Map<string, PulseToken>(updates.map((u: PulseToken) => [u.mint, u]));
-
-                const applyUpdates = (tokens: PulseToken[]): PulseToken[] => {
-                  if (tokens.length === 0) return tokens;
-                  let hasChanges = false;
-                  const updated = tokens.map(token => {
-                    const update = updatesMap.get(token.mint);
-                    if (!update) return token;
-                    hasChanges = true;
-                    return {
-                      ...token,
-                      ...(update.price_usd !== undefined && { price_usd: update.price_usd }),
-                      ...(update.market_cap_usd !== undefined && update.market_cap_usd > 0 && { market_cap_usd: update.market_cap_usd }),
-                      ...(update.volume_24h !== undefined && { volume_24h: update.volume_24h }),
-                      ...(update.bonding_pct !== undefined && { bonding_pct: update.bonding_pct }),
-                      ...(update.graduation_percent !== undefined && { graduation_percent: update.graduation_percent }),
-                      ...(update.liquidity_usd !== undefined && { liquidity_usd: update.liquidity_usd }),
-                      // Bundler data mapping (bundle_percent → bundler_held_percentage for BottomCardInfoHolder)
-                      ...(update.bundle_percent !== undefined && { bundle_percent: update.bundle_percent, bundler_held_percentage: update.bundle_percent }),
-                      ...(update.bundle_wallet_count !== undefined && { bundle_wallet_count: update.bundle_wallet_count, bundler_count: update.bundle_wallet_count }),
-                    };
-                  });
-                  return hasChanges ? updated : tokens;
-                };
-
-                // Only update the array for the channel we're connected to
-                if (channel === 'new') {
-                  setNewTokens(applyUpdates);
-                } else if (channel === 'final_stretch') {
-                  setFinalStretchTokens(applyUpdates);
-                } else if (channel === 'migrated') {
-                  setMigratedTokens(applyUpdates);
+            if (message.type === 'new_token' && message.data) {
+              // Handle both single token and array of tokens
+              const tokens = Array.isArray(message.data) ? message.data : [message.data];
+              console.log(`[usePulseWebSocketPersistent][${channel}] 🆕 Received ${tokens.length} new token(s):`, tokens.map((t: any) => t.mint || t.address || t.mint_address || 'NO_MINT'));
+              for (const t of tokens) {
+                const normalized = normalizeToken(t);
+                if (normalized.mint) {
+                  newTokensBatch.push(normalized);
+                } else {
+                  console.warn(`[usePulseWebSocketPersistent][${channel}] ⚠️ Skipping token with no mint:`, t);
                 }
-
-                onPriceUpdateRef.current?.(updates);
-              } else if (message.type === 'token_info_update' && message.data) {
-                // Handle KOL count and holder count updates
-                const data = message.data;
-                const mintAddress = data.mint_address || data.mint || data.address;
-
-                console.log(`[usePulseWebSocketPersistent] 📊 token_info_update received:`, {
-                  mintAddress,
-                  holder_count: data.holder_count,
-                  kol_count: data.kol_count,
-                  raw: data,
-                });
-
-                if (!mintAddress) {
-                  console.warn(`[usePulseWebSocketPersistent] ⚠️ No mint address in token_info_update`);
-                  return;
+              }
+            } else if (message.type === 'final_stretch_token' && message.data) {
+              const tokens = Array.isArray(message.data) ? message.data : [message.data];
+              console.log(`[usePulseWebSocketPersistent][${channel}] 🎯 Received ${tokens.length} final_stretch token(s):`, tokens.map((t: any) => t.mint || t.address || t.mint_address || 'NO_MINT'));
+              for (const t of tokens) {
+                const normalized = normalizeToken(t);
+                if (normalized.mint) {
+                  finalStretchTokensBatch.push(normalized);
+                } else {
+                  console.warn(`[usePulseWebSocketPersistent][${channel}] ⚠️ Skipping final_stretch token with no mint:`, t);
                 }
+              }
+            } else if (message.type === 'migrated_token' && message.data) {
+              const tokens = Array.isArray(message.data) ? message.data : [message.data];
+              console.log(`[usePulseWebSocketPersistent][${channel}] ✅ Received ${tokens.length} migrated token(s):`, tokens.map((t: any) => t.mint || t.address || t.mint_address || 'NO_MINT'));
+              for (const t of tokens) {
+                const normalized = normalizeToken(t);
+                if (normalized.mint) {
+                  migratedTokensBatch.push(normalized);
+                } else {
+                  console.warn(`[usePulseWebSocketPersistent][${channel}] ⚠️ Skipping migrated token with no mint:`, t);
+                }
+              }
+            } else if (message.type === 'price_update' && message.data) {
+              const rawUpdates = Array.isArray(message.data) ? message.data : [message.data];
+              console.log(`[usePulseWebSocketPersistent][${channel}] 📊 Received ${rawUpdates.length} price updates`);
+              for (const u of rawUpdates) {
+                priceUpdatesBatch.push({ ...u, mint: u.address || u.mint });
+              }
+            } else if (message.type === 'token_info_update' && message.data) {
+              tokenInfoUpdatesBatch.push(message.data);
+            }
+          } catch {
+            // Skip parse errors
+          }
+        }
 
-                const applyTokenInfoUpdate = (tokens: PulseToken[], arrayName: string): PulseToken[] => {
-                  if (tokens.length === 0) {
-                    console.log(`[usePulseWebSocketPersistent] ${arrayName} is empty, skipping`);
-                    return tokens;
-                  }
+        // Apply batched new tokens
+        if (newTokensBatch.length > 0) {
+          for (const token of newTokensBatch) {
+            onNewTokenRef.current?.(token);
+          }
+          // Skip internal state update if skipInternalState is true (prevents re-renders)
+          if (!skipInternalStateRef.current) {
+            setNewTokens(prev => {
+              const map = new Map<string, PulseToken>();
+              for (const token of newTokensBatch) {
+                map.set(token.mint, token);
+              }
+              for (const t of prev) {
+                if (!map.has(t.mint) && map.size < 50) {
+                  map.set(t.mint, t);
+                }
+              }
+              return Array.from(map.values());
+            });
+          }
+        }
 
-                  // Debug: log all mints in the array to see if there's a match
-                  const tokenMints = tokens.map(t => t.mint);
-                  const foundIndex = tokenMints.indexOf(mintAddress);
-                  console.log(`[usePulseWebSocketPersistent] Searching ${arrayName} (${tokens.length} tokens), found at index: ${foundIndex}`);
+        // Apply batched final stretch tokens
+        if (finalStretchTokensBatch.length > 0) {
+          for (const token of finalStretchTokensBatch) {
+            onFinalStretchTokenRef.current?.(token);
+          }
+          // Skip internal state update if skipInternalState is true (prevents re-renders)
+          if (!skipInternalStateRef.current) {
+            setFinalStretchTokens(prev => {
+              const map = new Map<string, PulseToken>();
+              for (const token of finalStretchTokensBatch) {
+                map.set(token.mint, token);
+              }
+              for (const t of prev) {
+                if (!map.has(t.mint) && map.size < 50) {
+                  map.set(t.mint, t);
+                }
+              }
+              return Array.from(map.values());
+            });
+          }
+        }
 
-                  if (foundIndex === -1) {
-                    // Log first few mints to help debug
-                    console.log(`[usePulseWebSocketPersistent] First 3 mints in ${arrayName}:`, tokenMints.slice(0, 3));
-                    return tokens;
-                  }
+        // Apply batched migrated tokens
+        if (migratedTokensBatch.length > 0) {
+          for (const token of migratedTokensBatch) {
+            onMigratedTokenRef.current?.(token);
+          }
+          // Skip internal state update if skipInternalState is true (prevents re-renders)
+          if (!skipInternalStateRef.current) {
+            setMigratedTokens(prev => {
+              const map = new Map<string, PulseToken>();
+              for (const token of migratedTokensBatch) {
+                map.set(token.mint, token);
+              }
+              for (const t of prev) {
+                if (!map.has(t.mint) && map.size < 50) {
+                  map.set(t.mint, t);
+                }
+              }
+              return Array.from(map.values());
+            });
+          }
+        }
 
-                  const updated = tokens.map(token => {
-                    if (token.mint !== mintAddress) return token;
-                    console.log(`[usePulseWebSocketPersistent] ✅ Updating ${token.symbol} (${token.mint.slice(0, 8)}...) - holders: ${token.holder_count} → ${data.holder_count}, kols: ${token.kol_count} → ${data.kol_count}`);
-                    return {
-                      ...token,
-                      holder_count: data.holder_count,
-                      kol_count: data.kol_count,
-                    };
-                  });
-                  return updated;
-                };
+        // Apply batched price updates
+        if (priceUpdatesBatch.length > 0) {
+          // Skip internal state update if skipInternalState is true (prevents re-renders)
+          if (!skipInternalStateRef.current) {
+            const updatesMap = new Map<string, PriceUpdate>(
+              priceUpdatesBatch.map((u) => [u.mint!, u])
+            );
 
-                // Update all arrays since token_info_update can apply to any token
-                setNewTokens(prev => applyTokenInfoUpdate(prev, 'newTokens'));
-                setFinalStretchTokens(prev => applyTokenInfoUpdate(prev, 'finalStretchTokens'));
-                setMigratedTokens(prev => applyTokenInfoUpdate(prev, 'migratedTokens'));
+            const applyUpdates = (tokens: PulseToken[]): PulseToken[] => {
+              if (tokens.length === 0) return tokens;
+              let hasChanges = false;
+              const updated = tokens.map(token => {
+                const update = updatesMap.get(token.mint);
+                if (!update) return token;
+                hasChanges = true;
+                return applyPriceUpdate(token, update) as PulseToken;
+              });
+              return hasChanges ? updated : tokens;
+            };
 
-                // Call the callback so parent components can update their local state
-                onTokenInfoUpdateRef.current?.({
-                  mint_address: mintAddress,
+            if (channel === 'new') {
+              setNewTokens(applyUpdates);
+            } else if (channel === 'final_stretch') {
+              setFinalStretchTokens(applyUpdates);
+            } else if (channel === 'migrated') {
+              setMigratedTokens(applyUpdates);
+            }
+          }
+
+          console.log(`[usePulseWebSocketPersistent][${channel}] 📤 Calling onPriceUpdate with ${priceUpdatesBatch.length} updates, callback exists:`, !!onPriceUpdateRef.current);
+          onPriceUpdateRef.current?.(priceUpdatesBatch as PulseToken[]);
+        }
+
+        // Apply batched token info updates - SINGLE setState per array to prevent render storms
+        if (tokenInfoUpdatesBatch.length > 0) {
+          // Skip internal state update if skipInternalState is true (prevents re-renders)
+          if (!skipInternalStateRef.current) {
+            // Build a map of all token info updates
+            const tokenInfoMap = new Map<string, { holder_count: number; kol_count: number }>();
+            for (const data of tokenInfoUpdatesBatch) {
+              const mintAddress = data.mint_address || data.mint || data.address;
+              if (mintAddress) {
+                tokenInfoMap.set(mintAddress, {
                   holder_count: data.holder_count,
                   kol_count: data.kol_count,
                 });
               }
-            } catch {
-              // Skip parse errors
+            }
+
+            // Single setState call per array
+            const applyAllTokenInfoUpdates = (tokens: PulseToken[]): PulseToken[] => {
+              if (tokens.length === 0 || tokenInfoMap.size === 0) return tokens;
+              let hasChanges = false;
+              const updated = tokens.map(token => {
+                const update = tokenInfoMap.get(token.mint);
+                if (!update) return token;
+                hasChanges = true;
+                return { ...token, holder_count: update.holder_count, kol_count: update.kol_count };
+              });
+              return hasChanges ? updated : tokens;
+            };
+
+            setNewTokens(applyAllTokenInfoUpdates);
+            setFinalStretchTokens(applyAllTokenInfoUpdates);
+            setMigratedTokens(applyAllTokenInfoUpdates);
+          }
+
+          // Fire callbacks for each update (always, regardless of skipInternalState)
+          for (const data of tokenInfoUpdatesBatch) {
+            const mintAddress = data.mint_address || data.mint || data.address;
+            if (mintAddress) {
+              onTokenInfoUpdateRef.current?.({
+                mint_address: mintAddress,
+                holder_count: data.holder_count,
+                kol_count: data.kol_count,
+              });
             }
           }
-        } catch {
-          // Handle errors silently
+        }
+      };
+
+      ws.onmessage = (event) => {
+        if (!mountedRef.current) return;
+
+        // Queue messages for batched processing
+        const messages = event.data.split('\n').filter((msg: string) => msg.trim());
+        pendingMessagesRef.current.push(...messages);
+
+        // Schedule processing if not already scheduled
+        // Use setTimeout(0) instead of requestAnimationFrame to yield to browser more aggressively
+        // This allows navigation and other high-priority events to process
+        if (!processingScheduledRef.current) {
+          processingScheduledRef.current = true;
+          setTimeout(processMessages, 0);
         }
       };
 

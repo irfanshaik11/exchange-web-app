@@ -1,7 +1,7 @@
 // components/trade/TradeHeader.tsx
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import type { Token } from "~/utils/db";
-import { formatSmartNumber, formatLamportsToSol } from "~/utils/db";
+import { formatSmartNumber, formatLamportsToSol, normalizeTimestampMs } from "~/utils/db";
 import { useWatchlist } from "../WatchlistContext";
 import { SubscriptNumber } from "../InterstateTable";
 import FastImage from "../FastImage";
@@ -265,42 +265,20 @@ function shortenAddress(address: string, chars = 4): string {
   return `${address.slice(0, chars)}...${address.slice(-chars)}`;
 }
 
+/**
+ * Get the first valid timestamp from multiple candidates.
+ * Skips null/undefined/invalid values.
+ */
+function getFirstValidTimestamp(...candidates: any[]): number | null {
+  for (const candidate of candidates) {
+    const ts = normalizeTimestampMs(candidate);
+    if (ts !== null) return ts;
+  }
+  return null;
+}
+
 function getTokenAge(createdAt: string | number | object | null | undefined) {
-  if (createdAt === null || createdAt === undefined) return "Unknown";
-
-  let v: any = createdAt;
-
-  // Handle object formats (e.g., { Time: "..." }, { seconds: 123 })
-  if (typeof v === "object" && v !== null) {
-    if ("Time" in v && typeof v.Time === "string") v = v.Time;
-    else if ("time" in v && typeof v.time === "string") v = v.time;
-    else if ("seconds" in v && typeof v.seconds === "number") v = v.seconds * 1000;
-    else if ("millis" in v && typeof v.millis === "number") v = v.millis;
-    else if (v instanceof Date) v = v.getTime();
-    else return "Unknown";
-  }
-
-  let ts: number | null = null;
-
-  if (typeof v === "number") {
-    // Heuristic: 13+ digits = milliseconds, 10-12 digits = seconds
-    if (v > 1e12) ts = v;
-    else if (v > 1e9) ts = v * 1000;
-    else ts = null;
-  } else if (typeof v === "string") {
-    // First try parsing as a numeric string (Unix timestamp)
-    const num = Number(v);
-    if (!Number.isNaN(num) && num > 0) {
-      if (num > 1e12) ts = num;
-      else if (num > 1e9) ts = num * 1000;
-    }
-    // If not a valid number, try parsing as ISO date string
-    if (ts === null) {
-      const parsed = Date.parse(v);
-      if (!Number.isNaN(parsed)) ts = parsed;
-    }
-  }
-
+  const ts = normalizeTimestampMs(createdAt);
   if (ts === null) return "Unknown";
 
   const diffMs = Date.now() - ts;
@@ -570,6 +548,10 @@ const TradeHeader: React.FC<TradeHeaderProps> = ({ token, livePriceUsd, liveMark
   >(null);
   const fetchingAgeRef = useRef(false);
 
+  // Track last valid age to prevent overwriting with invalid values
+  const lastValidAgeRef = useRef<string | null>(null);
+  const lastValidTokenMintRef = useRef<string | null>(null);
+
   // Check if we have age data (include launch_time which backend often uses instead of created_at)
   const hasAge =
     (token as any).created_at ||
@@ -637,6 +619,8 @@ const TradeHeader: React.FC<TradeHeaderProps> = ({ token, livePriceUsd, liveMark
   }, []);
 
   const tokenAgeLabel = useMemo(() => {
+    const currentMint = token?.mint || (token as any)?.address || "";
+
     // AGE: For Solana, only use /v1/trade/view endpoint data (token prop)
     // For Monad, can also use fetchedCreatedAt from search endpoint
     const createdAt = isSolanaToken
@@ -668,11 +652,42 @@ const TradeHeader: React.FC<TradeHeaderProps> = ({ token, livePriceUsd, liveMark
 
     const age = getTokenAge(createdAt);
 
+    // Debug logging to trace the age calculation issue
+    if (process.env.NODE_ENV === "development" || (age.includes("d") && parseInt(age) > 365)) {
+      console.log("[TradeHeader] Age debug:", {
+        selectedCreatedAt: createdAt,
+        selectedType: typeof createdAt,
+        parsedTs: normalizeTimestampMs(createdAt),
+        calculatedAge: age,
+        tokenFields: {
+          created_at: (token as any).created_at,
+          createdAt: (token as any).createdAt,
+          CreatedAt: (token as any).CreatedAt,
+          launch_time: (token as any).launch_time,
+        },
+        tokenName: token?.name || token?.symbol,
+        tokenMint: currentMint,
+        lastValidAge: lastValidAgeRef.current,
+        lastValidMint: lastValidTokenMintRef.current,
+      });
+    }
+
     // If age is unknown and we have no age fields defined, show loading indicator
     // If age is unknown but we have fields (they're just empty), show "-"
     if (age === "Unknown") {
+      // If we have a last valid age for the SAME token, keep showing it
+      // This prevents flashing to "-" when data temporarily becomes invalid
+      if (lastValidAgeRef.current && lastValidTokenMintRef.current === currentMint) {
+        console.log("[TradeHeader] Preserving last valid age:", lastValidAgeRef.current);
+        return lastValidAgeRef.current;
+      }
       return hasAnyAgeField ? "-" : "...";
     }
+
+    // Store this valid age for the current token
+    lastValidAgeRef.current = age;
+    lastValidTokenMintRef.current = currentMint;
+
     return age;
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token, fetchedCreatedAt, isSolanaToken, ageTick]);

@@ -3,6 +3,7 @@ import React, { useEffect, useState, useCallback, useRef } from "react";
 import Head from "next/head";
 import { useWallet } from "../../components/useWallet";
 import { useUser } from "../../components/UserContext";
+import { normalizeTimestampMs, normalizeTimestampToISO } from "../../utils/db";
 import Header from "../../components/Header";
 import Footer from "../../components/Footer";
 import TradeHeader from "../../components/trade/TradeHeader";
@@ -206,7 +207,17 @@ export default function TradePage() {
         const response = await fetch(`${process.env.NEXT_PUBLIC_GO_SERVICE_URL}/v1/search?phrase=${encodeURIComponent(token.mint)}&limit=1`);
         if (response.ok) {
           const data = await response.json();
-          if (data.tokens && data.tokens.length > 0) setCorrectTokenData(data.tokens[0]);
+          if (data.tokens && data.tokens.length > 0) {
+            const fetchedToken = data.tokens[0];
+            // Debug: Log the created_at from search endpoint
+            console.log("[TradePage] correctTokenData from /v1/search:", {
+              created_at: fetchedToken.created_at,
+              createdAt: fetchedToken.createdAt,
+              launch_time: fetchedToken.launch_time,
+              name: fetchedToken.name || fetchedToken.symbol,
+            });
+            setCorrectTokenData(fetchedToken);
+          }
         }
       } catch (error) {
         console.error("[Trade Page] Failed to fetch correct token data:", error);
@@ -450,15 +461,51 @@ export default function TradePage() {
         token.pair_address === idString ||
         token.mint === idString;
       if (tokenMatchesId) {
+        // CRITICAL: Additional validation - if we have optimistic mint from URL, ensure token mint matches
+        // This prevents showing wrong token data when the backend returns data for a different token
+        const optimisticMint = (baseOptimistic as any).mint || (baseOptimistic as any)._mint;
+        if (optimisticMint && token.mint && token.mint !== optimisticMint) {
+          console.warn('[TradePage] Token mint mismatch! Rejecting backend data.', {
+            tokenMint: token.mint,
+            optimisticMint,
+            tokenName: token.name,
+            optimisticName: (baseOptimistic as any).name,
+            idString,
+          });
+          // Return optimistic data only to prevent showing wrong token
+          return optimisticToken;
+        }
+
+        // Normalize timestamps from all sources to ensure consistent format
+        // This handles cases where backend returns seconds vs ms, or string vs number
+        const normalizedTokenCreatedAt = normalizeTimestampToISO(token.created_at);
+        const normalizedTokenLaunchTime = normalizeTimestampToISO(token.launch_time);
+        const normalizedOptimisticCreatedAt = normalizeTimestampToISO((baseOptimistic as any).created_at);
+        const normalizedOptimisticLaunchTime = normalizeTimestampToISO((baseOptimistic as any).launch_time);
+
+        // Debug: Log created_at values to trace the overwrite issue
+        if (process.env.NODE_ENV === "development") {
+          console.log("[TradePage] displayToken merge - created_at sources:", {
+            "token.created_at (raw)": token.created_at,
+            "token.created_at (normalized)": normalizedTokenCreatedAt,
+            "token.launch_time (raw)": token.launch_time,
+            "token.launch_time (normalized)": normalizedTokenLaunchTime,
+            "optimistic.created_at (raw)": (baseOptimistic as any).created_at,
+            "optimistic.created_at (normalized)": normalizedOptimisticCreatedAt,
+            tokenName: token.name || token.symbol,
+            tokenMint: token.mint,
+          });
+        }
         // Merge: token data takes priority, but fill gaps with optimistic data
+        // Use normalized timestamps to ensure consistent parsing
         return {
           ...baseOptimistic,
           ...token,
           // Ensure these fields use token data when available, fallback to optimistic
           liquidity_usd: token.liquidity_usd ?? token.total_liquidity_usd ?? (baseOptimistic as any).liquidity_usd,
           total_liquidity_usd: token.total_liquidity_usd ?? token.liquidity_usd ?? (baseOptimistic as any).liquidity_usd,
-          created_at: token.created_at ?? (baseOptimistic as any).created_at,
-          launch_time: token.launch_time ?? (baseOptimistic as any).launch_time,
+          created_at: normalizedTokenCreatedAt ?? normalizedOptimisticCreatedAt,
+          launch_time: normalizedTokenLaunchTime ?? normalizedOptimisticLaunchTime,
           image: token.image ?? token.image_url ?? token.logo ?? (baseOptimistic as any).image,
         };
       }
@@ -477,12 +524,15 @@ export default function TradePage() {
         cachedTokenMetadata.pair_address === idString ||
         cachedTokenMetadata.mint === idString;
       if (cacheMatchesId) {
+        // Normalize timestamps from cache and optimistic sources
+        const normalizedCacheCreatedAt = normalizeTimestampToISO(cachedTokenMetadata.created_at);
+        const normalizedOptCreatedAt = normalizeTimestampToISO((baseOptimistic as any).created_at);
         return {
           ...baseOptimistic,
           ...cachedTokenMetadata,
           mint: cachedTokenMetadata.mint || "",
           pair_address: cachedTokenMetadata.pair_address || "",
-          created_at: cachedTokenMetadata.created_at || (baseOptimistic as any).created_at || null,
+          created_at: normalizedCacheCreatedAt || normalizedOptCreatedAt || null,
           liquidity_usd: (cachedTokenMetadata as any).liquidity_usd ?? (baseOptimistic as any).liquidity_usd,
         };
       }

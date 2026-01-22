@@ -20,7 +20,8 @@ import { useUser } from "../components/UserContext";
 import Cookies from "js-cookie";
 import usePaginatedTokensWebSocket from "../hooks/usePaginatedTokensWebSocket";
 import { useRealtimeWebSocket } from "../hooks/useRealtimeWebSocket";
-import { usePulseWebSocketPersistent } from "../hooks/usePulseWebSocketPersistent";
+// usePulseWebSocketPersistent moved to PulseBackgroundLoader for data persistence
+import * as pulseStore from "~/stores/pulseStore";
 // import { PriorityImageSearcher } from '../utils/imageSearch'; // DISABLED - no external image searches
 import { useImagePreloader } from "../hooks/useImagePreloader";
 import {
@@ -315,76 +316,9 @@ export default function PulsePage() {
     shouldFetchSolanaData,
   );
 
-  // ✅ REAL-TIME WEBSOCKET: Direct cache updates (NO REFETCH)
-  // Only enable WebSocket for Solana route, not Monad
-  // Using persistent WebSocket that survives tab switches and page refreshes
-  const { connected: pulseWsConnected, error: pulseWsError } =
-    usePulseWebSocketPersistent({
-      enabled: shouldFetchSolanaData, // Only enable WebSocket for Solana route
-      onNewToken: useCallback(
-        (token) => {
-          console.log(
-            "[Pulse] 🔥 WebSocket: New token received, adding to cache!",
-            token.mint,
-          );
-
-          // Directly update cache without triggering refetch
-          queryClient.setQueryData(
-            tokenKeys.trenches.newPairs(),
-            (oldData: any[] | undefined) => {
-              if (!oldData) return [token];
-
-              // Deduplicate by mint and prepend new token
-              const filtered = oldData.filter(
-                (t: any) => t.mint !== token.mint,
-              );
-              return [token, ...filtered].slice(0, 200); // Keep max 200 tokens
-            },
-          );
-        },
-        [queryClient],
-      ),
-      onFinalStretchToken: useCallback(
-        (token) => {
-          console.log(
-            "[Pulse] 🎯 WebSocket: Final stretch token received, adding to cache!",
-            token.mint,
-          );
-
-          queryClient.setQueryData(
-            tokenKeys.trenches.finalStretch(),
-            (oldData: any[] | undefined) => {
-              if (!oldData) return [token];
-              const filtered = oldData.filter(
-                (t: any) => t.mint !== token.mint,
-              );
-              return [token, ...filtered].slice(0, 50);
-            },
-          );
-        },
-        [queryClient],
-      ),
-      onMigratedToken: useCallback(
-        (token) => {
-          console.log(
-            "[Pulse] ✅ WebSocket: Migrated token received, adding to cache!",
-            token.mint,
-          );
-
-          queryClient.setQueryData(
-            tokenKeys.trenches.migrated(),
-            (oldData: any[] | undefined) => {
-              if (!oldData) return [token];
-              const filtered = oldData.filter(
-                (t: any) => t.mint !== token.mint,
-              );
-              return [token, ...filtered].slice(0, 50);
-            },
-          );
-        },
-        [queryClient],
-      ),
-    });
+  // ✅ REAL-TIME WEBSOCKET: Handled by PulseBackgroundLoader in _app.tsx
+  // PulseBackgroundLoader maintains WebSocket connections and updates React Query cache
+  // This provides data persistence across page navigation
 
   // State for HTTP polling data - no localStorage caching for fresh data always
   const [httpNew, setHttpNew] = useState<any[]>([]);
@@ -1243,12 +1177,9 @@ export default function PulsePage() {
     // Optional: Add minimal logging if needed for debugging
   }, [httpNew]);
 
-  // Track websocket connection status
-  const wsPulseConnected = pulseWsConnected;
-  const wsPulseError = pulseWsError;
-  useEffect(() => {
-    // Optional: Add minimal logging if needed for debugging
-  }, [wsPulseConnected, wsPulseError]);
+  // Track websocket connection status (from PulseBackgroundLoader via pulseStore)
+  const wsPulseConnected = pulseStore.isBackgroundLoaderActive();
+  const wsPulseError = null; // Errors handled by PulseBackgroundLoader
 
   // Track tick values for debugging
   useEffect(() => {

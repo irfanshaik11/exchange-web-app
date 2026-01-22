@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useState, useMemo, useCallback, useRef } from "react";
+import React, { useEffect, useState, useMemo, useCallback } from "react";
 import { useRouter } from "next/router";
 import PulseTable from "./PulseTable";
 import MonadTable from "./MonadTable";
@@ -8,16 +8,14 @@ import type { Token } from "~/utils/db";
 import { useUser } from "./UserContext";
 import Cookies from "js-cookie";
 import { useRealtimeWebSocket } from "../hooks/useRealtimeWebSocket";
-import { usePulseWebSocketPersistent } from "../hooks/usePulseWebSocketPersistent";
+// import { usePulseFromStore } from "../hooks/usePulseFromStore";
 import { useImagePreloader } from "../hooks/useImagePreloader";
 import {
   useQueryNewPairs,
   useQueryLaunchpadData,
   useQueryFinalStretch,
   useQueryMigrated,
-  tokenKeys,
 } from "../hooks/useQueryTokens";
-import { useQueryClient } from "@tanstack/react-query";
 import { env } from "~/env";
 import { extractTokenImage } from "../utils/images";
 
@@ -101,9 +99,6 @@ export default function PulseContent({ forceMobileView = false }: PulseContentPr
       : "bg-[#141821] text-neutral-500 opacity-75 hover:opacity-100 hover:text-neutral-100"
   }`;
 
-  // React Query client for manual cache updates from WebSocket
-  const queryClient = useQueryClient();
-
   // React Query hooks - only enable Solana data fetching when NOT on Monad route
   const shouldFetchSolanaData = router.isReady && !isMonadRoute;
 
@@ -128,37 +123,8 @@ export default function PulseContent({ forceMobileView = false }: PulseContentPr
   const { data: finalStretchTokensQuery = [] } = useQueryFinalStretch(shouldFetchSolanaData);
   const { data: migratedTokensQuery = [] } = useQueryMigrated(shouldFetchSolanaData);
 
-  // ✅ REAL-TIME WEBSOCKET: Direct cache updates (NO REFETCH)
-  // Using persistent WebSocket that survives tab switches and page refreshes
-  const { connected: pulseWsConnected, error: pulseWsError, isUsingSharedWorker } = usePulseWebSocketPersistent({
-    enabled: shouldFetchSolanaData,
-    onNewToken: useCallback((token) => {
-      queryClient.setQueryData(tokenKeys.trenches.newPairs(), (oldData: any[] | undefined) => {
-        if (!oldData) return [token];
-        const filtered = oldData.filter((t: any) => t.mint !== token.mint);
-        return [token, ...filtered].slice(0, 200);
-      });
-    }, [queryClient]),
-    onFinalStretchToken: useCallback((token) => {
-      queryClient.setQueryData(tokenKeys.trenches.finalStretch(), (oldData: any[] | undefined) => {
-        if (!oldData) return [token];
-        const filtered = oldData.filter((t: any) => t.mint !== token.mint);
-        return [token, ...filtered].slice(0, 50);
-      });
-    }, [queryClient]),
-    onMigratedToken: useCallback((token) => {
-      queryClient.setQueryData(tokenKeys.trenches.migrated(), (oldData: any[] | undefined) => {
-        if (!oldData) return [token];
-        const filtered = oldData.filter((t: any) => t.mint !== token.mint);
-        return [token, ...filtered].slice(0, 50);
-      });
-    }, [queryClient]),
-  });
-  useEffect(() => {
-    if (pulseWsError) {
-      console.error("[Pulse] WebSocket error", pulseWsError);
-    }
-  }, [pulseWsConnected, pulseWsError]);
+  // ✅ REAL-TIME UPDATES: PulseBackgroundLoader (in _app.tsx) maintains WebSocket connections
+  // and pushes updates to the global pulseStore. PulseTable reads from the store directly.
 
   // State for HTTP polling data
   const [httpNew, setHttpNew] = useState<any[]>([]);
