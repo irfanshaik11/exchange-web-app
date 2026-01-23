@@ -625,14 +625,14 @@ const MyApp: AppType = ({ Component, pageProps }) => {
   // Preload TradingView library script early for faster chart loading
   useEffect(() => {
     if (typeof window === 'undefined') return;
-    
+
     // Check if already loaded or loading
     if ((window as any).TradingView) return;
-    
+
     // Check if script tag already exists
     const existingScript = document.querySelector('script[src="/charting_library/charting_library/charting_library.standalone.js"]');
     if (existingScript) return;
-    
+
     // Preload the script in the background
     const script = document.createElement('script');
     script.src = '/charting_library/charting_library/charting_library.standalone.js';
@@ -640,6 +640,28 @@ const MyApp: AppType = ({ Component, pageProps }) => {
     script.defer = true;
     // Don't set onload - let AdvancedOHLCChart handle it
     document.head.appendChild(script);
+  }, []);
+
+  // Register Service Worker for image caching
+  // Images load instantly when returning to Pulse page after navigating away
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    if (!('serviceWorker' in navigator)) return;
+
+    // Register the service worker
+    navigator.serviceWorker.register('/sw.js')
+      .then((registration) => {
+        console.log('[App] Service Worker registered for image caching');
+
+        // Check for updates periodically (every hour)
+        setInterval(() => {
+          registration.update();
+        }, 60 * 60 * 1000);
+      })
+      .catch((err) => {
+        // Non-fatal - app works fine without SW, just no image caching
+        console.warn('[App] Service Worker registration failed:', err);
+      });
   }, []);
 
   return (
