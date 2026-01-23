@@ -1,6 +1,28 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import ImageBubble from './ImageBubble';
 import { isMetadataUrl, resolveMetadataImage } from '~/utils/images';
+
+/**
+ * Global tracker for loaded image URLs
+ * Persists across all FastImage instances and re-renders
+ * Prevents flickering when the same image URL is rendered multiple times
+ * (e.g., same token in New Pairs → Final Stretch → Migrated)
+ */
+const globalLoadedImages = new Set<string>();
+
+// Limit the Set size to prevent memory leaks (keep last 500 URLs)
+const MAX_TRACKED_IMAGES = 500;
+function trackLoadedImage(url: string) {
+  if (globalLoadedImages.size >= MAX_TRACKED_IMAGES) {
+    // Remove oldest entries (first 100)
+    const iterator = globalLoadedImages.values();
+    for (let i = 0; i < 100; i++) {
+      const first = iterator.next().value;
+      if (first) globalLoadedImages.delete(first);
+    }
+  }
+  globalLoadedImages.add(url);
+}
 
 interface FastImageProps {
   src?: string | null;
@@ -31,9 +53,14 @@ export default function FastImage({
   showBubble = true,
   bubbleSrc,
 }: FastImageProps) {
-  const [imageLoaded, setImageLoaded] = useState(false);
   const [imageError, setImageError] = useState(false);
   const [resolvedSrc, setResolvedSrc] = useState<string | null>(null);
+
+  // Track if this specific image has loaded in this component instance
+  const [imageLoaded, setImageLoaded] = useState(false);
+
+  // Ref to track the current URL being loaded (prevents stale closure issues)
+  const currentUrlRef = useRef<string | null>(null);
 
   const inputSrc = src || fallbackSrc;
 
@@ -56,10 +83,35 @@ export default function FastImage({
   // Use resolved URL (or original if not metadata)
   const finalSrc = resolvedSrc;
 
-  // CRITICAL: Reset loading state when src changes to prevent stale image display
+  // When src changes, check if it's already in global cache
+  // If yes, skip the loading state entirely (no flicker!)
+  // If no, reset to loading state
   useEffect(() => {
-    setImageLoaded(false);
-    setImageError(false);
+    if (!resolvedSrc) {
+      setImageLoaded(false);
+      setImageError(false);
+      return;
+    }
+
+    // Build the final URL to check against global tracker
+    const alreadyProxiedCheck = resolvedSrc.startsWith('/api/') || resolvedSrc.startsWith('data:');
+    const needsProxyCheck = !alreadyProxiedCheck && resolvedSrc.startsWith('http');
+    const urlToCheck = needsProxyCheck
+      ? `/api/image?url=${encodeURIComponent(resolvedSrc)}`
+      : resolvedSrc;
+
+    currentUrlRef.current = urlToCheck;
+
+    // Check if this URL was already loaded globally
+    if (globalLoadedImages.has(urlToCheck)) {
+      // Already loaded before - show immediately, no flicker!
+      setImageLoaded(true);
+      setImageError(false);
+    } else {
+      // New URL - show loading state
+      setImageLoaded(false);
+      setImageError(false);
+    }
   }, [resolvedSrc]);
 
   // Proxy all external URLs to avoid CORS issues
@@ -115,6 +167,11 @@ export default function FastImage({
   const handleLoad = () => {
     setImageLoaded(true);
     setImageError(false);
+
+    // Track this URL globally so future renders skip loading state
+    if (currentUrlRef.current) {
+      trackLoadedImage(currentUrlRef.current);
+    }
   };
 
   const handleError = () => {
@@ -165,29 +222,29 @@ export default function FastImage({
 
   return (
     <div className={`relative ${className}`} style={{ width, height }}>
-      {/* Loading skeleton */}
+      {/* Loading placeholder - shown until image loads */}
       {!imageLoaded && (
         <div
-          className="absolute inset-0 flex items-center justify-center bg-gradient-to-br from-gray-800 to-black text-white font-bold shadow-lg animate-pulse"
+          className="absolute inset-0 flex items-center justify-center bg-gradient-to-br from-gray-800 to-black text-white font-bold shadow-lg"
         >
           <span className="text-lg">{getFirstLetter()}</span>
         </div>
       )}
       
-      {/* Actual image - key forces DOM recreation when src changes */}
+      {/* Actual image - no fade transition for instant display */}
       <img
         key={imageUrl}
         src={imageUrl}
         alt={alt}
         width={width}
         height={height}
-        className={`transition-opacity duration-200 ${imageLoaded ? 'opacity-100' : 'opacity-0'}`}
+        className={imageLoaded ? 'opacity-100' : 'opacity-0'}
         style={{ width: '100%', height: '100%', objectFit: 'cover' }}
         onLoad={handleLoad}
         onError={handleError}
-        loading={priority ? 'eager' : 'lazy'} // Eager loading for priority images
+        loading={priority ? 'eager' : 'lazy'}
         decoding="async"
-        fetchPriority={priority ? 'high' : 'auto'} // High priority for important images
+        fetchPriority={priority ? 'high' : 'auto'}
       />
       
       {/* Pump logo bubble */}
