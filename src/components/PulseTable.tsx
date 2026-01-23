@@ -2598,6 +2598,15 @@ function PulseTable({
   const prevHasSpecificProtocolsRef = useRef(false);
   const isInitialMountRef = useRef(true);
 
+  // Determine channel from title (moved up for use in localStorage caching)
+  const channel = useMemo(() => {
+    const lowerTitle = title.toLowerCase();
+    if (lowerTitle.includes("new")) return "new";
+    if (lowerTitle.includes("final")) return "final_stretch";
+    if (lowerTitle.includes("migrated")) return "migrated";
+    return undefined;
+  }, [title]);
+
   // Sync pendingFilters with filters on initial mount (for persisted filters)
   useEffect(() => {
     if (isInitialMountRef.current) {
@@ -2607,21 +2616,8 @@ function PulseTable({
     }
   }, [filters, title]);
 
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    const hasSpecificProtocols =
-      filters.protocols.length > 0 && !filters.protocols.includes("All");
-    if (hasSpecificProtocols) return;
-    try {
-      const payload = {
-        data: wsTokens,
-        timestamp: Date.now(),
-      };
-      window.localStorage.setItem(wsCacheStorageKey, JSON.stringify(payload));
-    } catch (error) {
-      console.warn("[PulseTable] Failed to persist ws cache:", error);
-    }
-  }, [wsTokens, wsCacheStorageKey, filters.protocols]);
+  // NOTE: localStorage caching moved down to after usePulseFromQueryCache for variable ordering
+  const lastCacheWriteRef = useRef(0);
 
   // Functions to handle filter changes
   const handleApplyFilters = () => {
@@ -2713,42 +2709,71 @@ function PulseTable({
     [title, normalizeHttpToken],
   );
 
-  // Determine channel from title
-  const channel = useMemo(() => {
-    const lowerTitle = title.toLowerCase();
-    if (lowerTitle.includes("new")) return "new";
-    if (lowerTitle.includes("final")) return "final_stretch";
-    if (lowerTitle.includes("migrated")) return "migrated";
-    return undefined;
-  }, [title]);
-  // Read tokens from global store (populated by PulseBackgroundLoader)
-  // No WebSocket connection here - PulseBackgroundLoader handles all WebSocket logic
+  // ═══════════════════════════════════════════════════════════════════════════
+  // WORKER-BASED WEBSOCKET: Stays alive during navigation + all fixes applied
+  // - New object references for React change detection
+  // - No requestAnimationFrame batching
+  // - IndexedDB persistence + Cross-tab sync
+  // ═══════════════════════════════════════════════════════════════════════════
   const {
-    newTokens: storeNewTokens,
-    finalStretchTokens: storeFinalStretchTokens,
-    migratedTokens: storeMigratedTokens,
-    connected: wsConnected,
+    newTokens: directNewTokens,
+    finalStretchTokens: directFinalStretchTokens,
+    migratedTokens: directMigratedTokens,
+    connected: directConnected,
   } = usePulseFromQueryCache({ channel });
 
-  // Keep wsTokens synced with store tokens
-  // Store tokens have complete price updates applied by PulseBackgroundLoader
-  useEffect(() => {
-    const storeTokens = channel === 'new'
-      ? storeNewTokens
-      : channel === 'final_stretch'
-        ? storeFinalStretchTokens
-        : channel === 'migrated'
-          ? storeMigratedTokens
-          : [];
+  // ═══════════════════════════════════════════════════════════════════════════
+  // REMOVED: wsTokens sync effect - was causing progressive latency!
+  // The effect was calling setWsTokens() on every WebSocket message, creating
+  // duplicate state updates. Now we use directNewTokens/directFinalStretchTokens/
+  // directMigratedTokens directly in the memoized tokens computation.
+  // wsTokens is only used as initial cache fallback from localStorage.
+  // ═══════════════════════════════════════════════════════════════════════════
 
-    if (storeTokens.length > 0) {
-      if (isNewPairs) {
-        setWsTokens(storeTokens as unknown as Token[]);
-      } else {
-        setWsTokens(filterNonZeroLiquidity(storeTokens as unknown as Token[]));
+  // THROTTLED localStorage writes - prevent blocking main thread on rapid updates
+  // Only write every 5 seconds max to avoid performance degradation
+  // Uses direct bridge tokens (not wsTokens state) for freshest data
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const hasSpecificProtocols =
+      filters.protocols.length > 0 && !filters.protocols.includes("All");
+    if (hasSpecificProtocols) return;
+
+    // Select the right direct tokens based on channel
+    const directTokensForChannel = (
+      channel === 'new' ? directNewTokens :
+      channel === 'final_stretch' ? directFinalStretchTokens :
+      channel === 'migrated' ? directMigratedTokens :
+      []
+    );
+
+    // Only cache if we have data
+    if (directTokensForChannel.length === 0) return;
+
+    // Throttle writes to prevent main thread blocking
+    const now = Date.now();
+    if (now - lastCacheWriteRef.current < 5000) return;
+    lastCacheWriteRef.current = now;
+
+    // Use requestIdleCallback for non-blocking write (falls back to setTimeout)
+    const writeCache = () => {
+      try {
+        const payload = {
+          data: directTokensForChannel.slice(0, 50), // Only cache first 50 tokens
+          timestamp: Date.now(),
+        };
+        window.localStorage.setItem(wsCacheStorageKey, JSON.stringify(payload));
+      } catch (error) {
+        // Silent fail - not critical
       }
+    };
+
+    if ('requestIdleCallback' in window) {
+      (window as any).requestIdleCallback(writeCache, { timeout: 2000 });
+    } else {
+      setTimeout(writeCache, 100);
     }
-  }, [channel, storeNewTokens, storeFinalStretchTokens, storeMigratedTokens, isNewPairs]);
+  }, [channel, directNewTokens, directFinalStretchTokens, directMigratedTokens, wsCacheStorageKey, filters.protocols]);
 
   // Fetch filtered tokens when protocols change
   useEffect(() => {
@@ -3399,6 +3424,7 @@ function PulseTable({
   const filteredAndSortedTokens = useMemo(() => {
     const isNewPairs = title.toLowerCase().includes("new");
 
+
     // ═══════════════════════════════════════════════════════════════════════════
     // ULTRA-FAST PATH FOR NEW PAIRS: Skip ALL filtering when no custom filters set
     // This ensures WebSocket tokens render instantly without any processing delay
@@ -3455,33 +3481,66 @@ function PulseTable({
       !filters.atLeastOneSocial &&
       !filters.onlyPumpLive;
 
-    if (isNewPairs && hasNoCustomFilters) {
-      // ⚡ INSTANT PATH: Render WebSocket tokens immediately, no processing
-      // WebSocket sends newest first - trust that order completely
-      if (wsTokens.length > 0) {
-        // When WebSocket is active, it's the source of truth for new tokens
-        // Use Set for O(1) deduplication check (instead of O(n) with .some())
-        const wsMints = new Set(wsTokens.map((t) => t.mint));
-        // Use baseTokens (local state with price updates) instead of tokens prop
-        const tokensSource =
-          filteredTokens.length > 0 ? filteredTokens : baseTokens;
+    // ═══════════════════════════════════════════════════════════════════════════
+    // 🚀 FAST PATH FOR ALL COLUMNS - HTTP FIRST, WebSocket ON TOP
+    // Priority: HTTP shows immediately → WebSocket merges on top → IndexedDB caches both
+    // ═══════════════════════════════════════════════════════════════════════════
+    if (hasNoCustomFilters) {
+      const isFinalStretch = title.toLowerCase().includes("final") || title.toLowerCase().includes("stretch");
+      const isMigrated = title.toLowerCase().includes("migrated");
 
-        // O(n) single pass with O(1) Set lookup - much faster than O(n*m)
-        const uniqueBaseTokens: Token[] = [];
-        for (const bt of tokensSource) {
-          if (!wsMints.has(bt.mint) && uniqueBaseTokens.length < 50) {
-            uniqueBaseTokens.push(bt);
-          }
-        }
+      // 1. Start with HTTP data as the BASE (shows immediately on page load)
+      const httpSource = filteredTokens.length > 0 ? filteredTokens : baseTokens;
 
-        return [...wsTokens, ...uniqueBaseTokens];
+      // 2. Get WebSocket tokens for this column
+      let wsSource: typeof directNewTokens = [];
+      if (isNewPairs) {
+        wsSource = directNewTokens.length > 0 ? directNewTokens : [];
+      } else if (isFinalStretch) {
+        wsSource = directFinalStretchTokens.length > 0 ? directFinalStretchTokens : [];
+      } else if (isMigrated) {
+        wsSource = directMigratedTokens.length > 0 ? directMigratedTokens : [];
       }
 
-      // No WebSocket tokens yet - initial load from HTTP
-      // Use baseTokens (local state with price updates) instead of tokens prop
-      const tokensSource =
-        filteredTokens.length > 0 ? filteredTokens : baseTokens;
-      return tokensSource.slice(0, 100);
+      // 3. Also check IndexedDB cache (wsTokens) as additional source
+      const cacheSource = wsTokens.length > 0 ? wsTokens : [];
+
+      // 4. MERGE: WebSocket on top → IndexedDB cache → HTTP base
+      // WebSocket tokens are newest, they go first
+      // Then fill in with cache/HTTP tokens that aren't duplicates
+      const seenMints = new Set<string>();
+      const merged: Token[] = [];
+
+      // Add WebSocket tokens first (newest, real-time)
+      for (const t of wsSource as unknown as Token[]) {
+        if (t.mint && !seenMints.has(t.mint)) {
+          seenMints.add(t.mint);
+          merged.push(t);
+        }
+      }
+
+      // Add IndexedDB cache tokens (persisted from previous session)
+      for (const t of cacheSource) {
+        if (t.mint && !seenMints.has(t.mint)) {
+          seenMints.add(t.mint);
+          merged.push(t);
+        }
+      }
+
+      // Add HTTP tokens (base data from API)
+      for (const t of httpSource) {
+        if (t.mint && !seenMints.has(t.mint)) {
+          seenMints.add(t.mint);
+          merged.push(t);
+        }
+      }
+
+      // Apply filters and limits
+      if (isNewPairs) {
+        return merged.slice(0, 100);
+      } else {
+        return filterNonZeroLiquidity(merged).slice(0, 100);
+      }
     }
     // ═══════════════════════════════════════════════════════════════════════════
 
@@ -3550,16 +3609,27 @@ function PulseTable({
     }
 
     // Then add/overwrite with WebSocket tokens (they're more recent and real-time)
-    // IMPORTANT: Filter WebSocket tokens by protocol if specific protocols are selected
+    // IMPORTANT: Use direct bridge tokens instead of wsTokens state for instant updates
+    // This eliminates the state copy that was causing progressive latency
+    const directTokensForChannel = (
+      channel === 'new' ? directNewTokens :
+      channel === 'final_stretch' ? directFinalStretchTokens :
+      channel === 'migrated' ? directMigratedTokens :
+      []
+    ) as unknown as Token[];
+
+    // Use direct tokens if available, fall back to wsTokens cache (initial load only)
+    const wsSource = directTokensForChannel.length > 0 ? directTokensForChannel : wsTokens;
+
     if (hasSpecificProtocols) {
-      wsTokens.forEach((token) => {
+      wsSource.forEach((token) => {
         if (tokenMatchesFilters(token)) {
           mergedMap.set(token.mint, token);
         }
       });
     } else {
       // No specific protocols selected - include all WebSocket tokens
-      wsTokens.forEach((token) => mergedMap.set(token.mint, token));
+      wsSource.forEach((token) => mergedMap.set(token.mint, token));
     }
 
     // Filter zero liquidity tokens - DISABLED for new pairs to maximize speed
@@ -3574,17 +3644,10 @@ function PulseTable({
       );
     }
 
-    // Filter out tokens without migrated_pool_address in the Migrated column
-    // Skip this filter when protocol filtering is applied (API already returns valid migrated tokens)
-    if (
-      title.toLowerCase().includes("migrated") &&
-      filters.protocols.length === 0
-    ) {
-      filtered = filtered.filter((token) => {
-        const hasMigratedPoolAddress = !!(token as any).migrated_pool_address;
-        return hasMigratedPoolAddress;
-      });
-    }
+    // NOTE: migrated_pool_address filter REMOVED
+    // WebSocket tokens from the 'migrated' channel are already migrated by definition.
+    // The backend only sends tokens to that channel after migration occurs.
+    // Previously this filter was blocking WebSocket tokens that didn't have the field.
 
     // Protocol filtering is now handled by the API, so we skip client-side filtering
     // when protocols are selected (filteredTokens already contains the filtered results)
@@ -4261,6 +4324,9 @@ function PulseTable({
     baseTokens,
     filteredTokens,
     wsTokens,
+    directNewTokens, // Direct bridge - WebSocket in main thread
+    directFinalStretchTokens,
+    directMigratedTokens,
     title,
     filters.protocols,
     filters.quoteTokens,
@@ -4316,34 +4382,69 @@ function PulseTable({
     filters.onlyPumpLive,
     filters.sortBy,
     filters.sortOrder,
+    channel, // Used to select direct token source (new/final_stretch/migrated)
   ]);
 
-  // Memoize token rendering to prevent unnecessary re-renders
-  const memoizedTokens = useMemo(() => filteredAndSortedTokens, [filteredAndSortedTokens]);
+  // REMOVED redundant useMemo - filteredAndSortedTokens is already memoized
+  // Using it directly saves one layer of memoization overhead
+  const memoizedTokens = filteredAndSortedTokens;
 
-  // Add wave animation for all Meteora tokens with bonding_pct > 98.6% in Final Stretch only
+  // Add wave animation for Meteora tokens with bonding_pct > 98.6% in Final Stretch ONLY
+  // PERFORMANCE: Skip this effect entirely for New Pairs and Migrated columns
+  const waveTokensRef = useRef<Set<number>>(new Set());
+  const isFinalStretch = useMemo(() =>
+    title.toLowerCase().includes("final") || title.toLowerCase().includes("stretch"),
+    [title]
+  );
+
   useEffect(() => {
-    const isFinalStretch =
-      title.toLowerCase().includes("final") ||
-      title.toLowerCase().includes("stretch");
-    const newWaveTokens = new Set<number>();
-
-    if (isFinalStretch) {
-      // Add ALL Meteora tokens with high bonding (they're now sorted to the top)
-      memoizedTokens.forEach((token, idx) => {
-        const launchpadProtocol =
-          (token as any).launchpad_protocol?.toLowerCase() || "";
-        const isMeteora = launchpadProtocol.includes("meteora");
-        const bondingPct = (token as any).bonding_pct ?? 0;
-
-        if (isMeteora && bondingPct > 98.6) {
-          newWaveTokens.add(idx);
-        }
-      });
+    // FAST PATH: Skip for non-Final Stretch columns
+    if (!isFinalStretch) {
+      if (waveTokensRef.current.size > 0) {
+        waveTokensRef.current = new Set();
+        setWaveTokens(new Set());
+      }
+      return;
     }
 
-    setWaveTokens(newWaveTokens);
-  }, [memoizedTokens, title]);
+    // Only compute wave tokens for Final Stretch column
+    const newWaveTokens = new Set<number>();
+    const tokens = memoizedTokens;
+    const len = Math.min(tokens.length, 50); // Only check first 50 for performance
+
+    for (let idx = 0; idx < len; idx++) {
+      const token = tokens[idx];
+      const launchpadProtocol = (token as any).launchpad_protocol?.toLowerCase() || "";
+      const isMeteora = launchpadProtocol.includes("meteora");
+      const bondingPct = (token as any).bonding_pct ?? 0;
+
+      if (isMeteora && bondingPct > 98.6) {
+        newWaveTokens.add(idx);
+      }
+    }
+
+    // Only update state if the wave tokens actually changed
+    const prevWave = waveTokensRef.current;
+    if (prevWave.size !== newWaveTokens.size) {
+      waveTokensRef.current = newWaveTokens;
+      setWaveTokens(newWaveTokens);
+      return;
+    }
+
+    // Check if contents are the same (avoid array spread)
+    let isSame = true;
+    for (const idx of prevWave) {
+      if (!newWaveTokens.has(idx)) {
+        isSame = false;
+        break;
+      }
+    }
+
+    if (!isSame) {
+      waveTokensRef.current = newWaveTokens;
+      setWaveTokens(newWaveTokens);
+    }
+  }, [memoizedTokens, isFinalStretch]);
 
   const shortAddr = (token: any): string => {
     try {
@@ -4538,7 +4639,10 @@ function PulseTable({
   const getAgeLabel = (token: any): string => {
     try {
       // Accept multiple possible fields and formats
+      // PRIORITY: launch_time first (backend primary field for new tokens)
       let v: any =
+        token?.launch_time ??
+        token?.launchTime ??
         token?.created_at ??
         token?.createdAt ??
         token?.listedAt ??
@@ -4551,8 +4655,6 @@ function PulseTable({
         token?.exchangeCreatedAt ??
         token?.firstSeen ??
         token?.first_seen ??
-        token?.launch_time ??
-        token?.launchTime ??
         token?.timestamp ??
         token?.ts ??
         token?.block_time ??

@@ -35,37 +35,32 @@ const state: PulseStoreState = {
 // Listeners for reactivity
 const listeners = new Set<Listener>();
 
-// Navigation state - when true, ALL notifications are paused
+// Navigation state - DISABLED for instant updates
+// The previous implementation blocked ALL notifications during navigation,
+// which caused 10+ second delays. React 18 handles rapid updates fine.
 let isNavigating = false;
 
-// Pause/resume notifications during navigation
+// Pause/resume notifications - NOW NO-OPS for instant updates
 export function pauseNotifications() {
-  isNavigating = true;
+  // NO-OP - don't block notifications
+  // isNavigating = true;
 }
 
 export function resumeNotifications() {
-  isNavigating = false;
+  // NO-OP
+  // isNavigating = false;
 }
 
-// Batch notifications using requestAnimationFrame to avoid blocking the main thread
-let notificationScheduled = false;
-
+// INSTANT notifications - no batching, no delays
+// React 18's concurrent features handle rapid updates efficiently
 function notifyListeners() {
-  // Skip ALL notifications during navigation - this is critical for performance
-  if (isNavigating) return;
-
-  // If already scheduled, skip - the scheduled frame will pick up the latest state
-  if (notificationScheduled) return;
-
-  notificationScheduled = true;
-
-  // Use requestAnimationFrame to batch multiple rapid updates into one notification
-  // This prevents blocking navigation and other UI interactions
-  requestAnimationFrame(() => {
-    notificationScheduled = false;
-    // Double-check navigation state in case it changed
-    if (isNavigating) return;
-    listeners.forEach(listener => listener());
+  // INSTANT: Notify all listeners immediately
+  listeners.forEach(listener => {
+    try {
+      listener();
+    } catch (err) {
+      console.error('[pulseStore] Listener error:', err);
+    }
   });
 }
 

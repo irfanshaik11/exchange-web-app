@@ -12,8 +12,12 @@
 const DB_NAME = 'pulse-websocket-cache';
 const DB_VERSION = 1;
 const STORE_NAME = 'tokens';
-const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
+const CACHE_TTL_MS = 30 * 60 * 1000; // 30 minutes - longer TTL for better persistence
 
+/**
+ * PulseToken interface - MUST include BOTH PulseToken AND Token (db.ts) field names!
+ * This ensures compatibility when casting between types in PulseTable.
+ */
 export interface PulseToken {
   mint: string;
   name: string;
@@ -23,27 +27,50 @@ export interface PulseToken {
   // Alternate mint field name
   mint_address?: string;
 
-  // Price fields
+  // CRITICAL: created_at for age display
+  // Backend sends launch_time as ISO string (e.g., "2025-01-22T10:30:00Z")
+  created_at?: number | string;
+  createdAt?: number | string;
+  launch_time?: string | number;
+
+  // Price fields (ALL format variants for Token + PulseToken compatibility)
+  price?: number;
   price_usd?: number;
+  usd_price?: number; // Token type uses usd_price
+  priceChange5m?: number;
   price_change_5m?: number;
+  price_percent_change_5m?: number; // Token type uses price_percent_change_*
+  price_change_1h?: number;
+  price_percent_change_1h?: number;
+  price_change_6h?: number;
+  price_percent_change_6h?: number;
   price_change_24h?: number;
+  price_percent_change_24h?: number;
 
-  // Market metrics
+  // Market metrics (ALL format variants)
+  marketCap?: number;
   market_cap_usd?: number;
+  fully_diluted_value?: number; // Token type uses this
+  volume?: number;
   volume_24h?: number;
+  liquidity?: number;
   liquidity_usd?: number;
+  total_liquidity_usd?: number; // Token type uses total_liquidity_usd
 
-  // Bonding curve
+  // Bonding curve (ALL format variants)
+  bondingCurveProgress?: number;
+  bonding_curve_progress?: number | string; // Token type uses bonding_curve_progress
   bonding_pct?: number;
   graduation_percent?: number;
-  bonding_curve_progress?: number;
 
-  // Holder counts (multiple field names for compatibility)
+  // Holder counts (ALL field name variants)
   holder_count?: number;
   holders?: number;
+  total_holders?: number; // Token type uses total_holders
   unique_wallets_24h?: number;
 
   // Transaction counts (all timeframes)
+  // NOTE: total_buys_* = number of buy transactions, total_buyers_* = unique buyer wallets
   total_buys_24h?: number;
   total_sells_24h?: number;
   total_buys_5m?: number;
@@ -52,6 +79,23 @@ export interface PulseToken {
   total_sells_1h?: number;
   total_buys_6h?: number;
   total_sells_6h?: number;
+  txns?: { buys: number; sells: number };
+
+  // Unique buyers/sellers counts (different from transaction counts!)
+  // Backend sends total_buyers_* (unique wallet count) vs total_buys_* (transaction count)
+  total_buyers_5m?: number;
+  total_sellers_5m?: number;
+  total_buyers_1h?: number;
+  total_sellers_1h?: number;
+  total_buyers_6h?: number;
+  total_sellers_6h?: number;
+  total_buyers_24h?: number;
+  total_sellers_24h?: number;
+
+  // Unique wallets (all timeframes)
+  unique_wallets_5m?: number;
+  unique_wallets_1h?: number;
+  unique_wallets_6h?: number;
 
   // Volume (all timeframes)
   total_buy_volume_5m?: string | number;
@@ -68,6 +112,7 @@ export interface PulseToken {
   insider_held_percentage?: number;
   sniper_percent?: number;
   sniper_held_percentage?: number;
+  total_snipers?: number; // Token type field
   dev_percent?: number;
   dev_held_percentage?: number;
   bundle_percent?: number;
@@ -83,9 +128,10 @@ export interface PulseToken {
   dev_tokens_created?: number;
   dev_tokens_migrated?: number;
 
-  // KOL & Pro traders
+  // KOL & Pro traders / Smart money
   kol_count?: number;
   pro_traders_count?: number;
+  smart_money_count?: number;
 
   // Trade info
   trade_type?: string;
@@ -96,12 +142,22 @@ export interface PulseToken {
   launchpad_protocol?: string;
   pair_address?: string;
   image?: string;
+  logo?: string; // Token type uses 'logo'
   updated_at?: string;
+
+  // Migrated pool (Token type field)
+  migrated_pool_address?: string;
 
   // Total fees in lamports / gas
   total_fees_lamports?: number;
   global_fees_paid?: number;
   globalFeesPaid?: number;
+
+  // String versions (some components may expect these)
+  priceUSD?: string;
+  marketCapUSD?: string;
+  volume24h?: string;
+  liquidityUSD?: string;
 }
 
 export interface PulseCacheData {
@@ -118,8 +174,20 @@ let dbPromise: Promise<IDBDatabase> | null = null;
  * Open or get the IndexedDB database
  */
 function openDB(): Promise<IDBDatabase> {
+  // Check if existing instance is still valid
   if (dbInstance) {
-    return Promise.resolve(dbInstance);
+    try {
+      // Test if the connection is still open by checking objectStoreNames
+      // This will throw if the connection is closed
+      if (dbInstance.objectStoreNames.contains(STORE_NAME)) {
+        return Promise.resolve(dbInstance);
+      }
+    } catch {
+      // Connection is stale, reset and reopen
+      console.log('[PulseCache] Stale connection detected, reopening...');
+      dbInstance = null;
+      dbPromise = null;
+    }
   }
 
   if (dbPromise) {
