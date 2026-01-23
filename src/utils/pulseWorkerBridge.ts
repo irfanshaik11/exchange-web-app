@@ -64,15 +64,21 @@ let lastSaveTime = 0;
 let broadcastTimeout: ReturnType<typeof setTimeout> | null = null;
 let pendingBroadcast = false;
 
+// Cutoff timestamp for filtering stale messages from worker
+// When tab becomes visible, we set this to ignore queued TOKEN_DELTA messages
+// that were sent while the main thread was throttled
+let messageCutoffTime = 0;
+
 function scheduleSave() {
   const now = Date.now();
-  if (now - lastSaveTime < 5000) {
+  // Throttle to every 2 seconds (reduced from 5 for better persistence)
+  if (now - lastSaveTime < 2000) {
     if (!saveTimeout) {
       saveTimeout = setTimeout(() => {
         saveTimeout = null;
         lastSaveTime = Date.now();
         doSave();
-      }, 5000);
+      }, 2000);
     }
     return;
   }
@@ -84,8 +90,15 @@ function doSave() {
   if (currentData.newTokens.length === 0 &&
       currentData.finalStretchTokens.length === 0 &&
       currentData.migratedTokens.length === 0) {
+    console.log('[PulseWorkerBridge] Skip save - no data');
     return;
   }
+
+  console.log('[PulseWorkerBridge] Saving to IndexedDB:', {
+    new: currentData.newTokens.length,
+    final: currentData.finalStretchTokens.length,
+    migrated: currentData.migratedTokens.length,
+  });
 
   savePulseCache({
     newTokens: currentData.newTokens,
@@ -133,65 +146,77 @@ function initBroadcastChannel() {
   broadcastChannel = new BroadcastChannel('pulse-websocket-sync');
 
   broadcastChannel.onmessage = (event) => {
-    const { type, data, from, leaderId: msgLeaderId } = event.data;
+    try {
+      const { type, data, from } = event.data || {};
 
-    switch (type) {
-      case 'LEADER_HEARTBEAT':
-        // Another tab is the leader
-        if (from !== tabId) {
-          leaderId = from;
-          lastLeaderHeartbeat = Date.now();
-          if (isLeader) {
-            // We were leader but someone else claimed it - step down
-            console.log('[PulseWorkerBridge] Another tab is leader, stepping down');
-            isLeader = false;
-            stopWorker();
+      switch (type) {
+        case 'LEADER_HEARTBEAT':
+          // Another tab is the leader
+          if (from && from !== tabId) {
+            leaderId = from;
+            lastLeaderHeartbeat = Date.now();
+            if (isLeader) {
+              console.log('[PulseWorkerBridge] Another tab is leader, stepping down');
+              isLeader = false;
+              stopWorker();
+            }
           }
-        }
-        break;
+          break;
 
-      case 'LEADER_ELECTION':
-        // A tab is asking who the leader is
-        if (isLeader) {
-          broadcastChannel?.postMessage({
-            type: 'LEADER_HEARTBEAT',
-            from: tabId,
-          });
-        }
-        break;
+        case 'LEADER_ELECTION':
+          // A tab is asking who the leader is
+          if (isLeader) {
+            broadcastChannel?.postMessage({
+              type: 'LEADER_HEARTBEAT',
+              from: tabId,
+            });
+          }
+          break;
 
-      case 'DATA_UPDATE':
-        // Receive data from leader tab
-        if (from !== tabId && !isLeader) {
-          currentData = data;
-          notifyDataListeners();
-          scheduleSave();
-        }
-        break;
+        case 'DATA_UPDATE':
+          // Receive data from leader tab
+          if (from !== tabId && !isLeader && data) {
+            // Validate data structure before using
+            currentData = {
+              newTokens: Array.isArray(data.newTokens) ? data.newTokens : currentData.newTokens,
+              finalStretchTokens: Array.isArray(data.finalStretchTokens) ? data.finalStretchTokens : currentData.finalStretchTokens,
+              migratedTokens: Array.isArray(data.migratedTokens) ? data.migratedTokens : currentData.migratedTokens,
+            };
+            notifyDataListeners();
+            scheduleSave();
+          }
+          break;
 
-      case 'CONNECTION_STATUS':
-        // Receive connection status from leader
-        if (from !== tabId && !isLeader) {
-          connectionStatus = data;
-          notifyConnectionListeners();
-        }
-        break;
+        case 'CONNECTION_STATUS':
+          // Receive connection status from leader
+          if (from !== tabId && !isLeader && data) {
+            connectionStatus = {
+              new: !!data.new,
+              final_stretch: !!data.final_stretch,
+              migrated: !!data.migrated,
+            };
+            notifyConnectionListeners();
+          }
+          break;
 
-      case 'REQUEST_DATA':
-        // Another tab is asking for current data (e.g., just opened)
-        if (isLeader && from !== tabId) {
-          broadcastChannel?.postMessage({
-            type: 'DATA_UPDATE',
-            data: currentData,
-            from: tabId,
-          });
-          broadcastChannel?.postMessage({
-            type: 'CONNECTION_STATUS',
-            data: connectionStatus,
-            from: tabId,
-          });
-        }
-        break;
+        case 'REQUEST_DATA':
+          // Another tab is asking for current data (e.g., just opened)
+          if (isLeader && from && from !== tabId) {
+            broadcastChannel?.postMessage({
+              type: 'DATA_UPDATE',
+              data: currentData,
+              from: tabId,
+            });
+            broadcastChannel?.postMessage({
+              type: 'CONNECTION_STATUS',
+              data: connectionStatus,
+              from: tabId,
+            });
+          }
+          break;
+      }
+    } catch (err) {
+      console.error('[PulseWorkerBridge] BroadcastChannel error:', err);
     }
   };
 
@@ -201,6 +226,9 @@ function initBroadcastChannel() {
 
 /**
  * Leader election: determine which tab should run the WebSocket
+ *
+ * FAST PATH: Start worker immediately, step down later if another leader exists.
+ * This eliminates the 200ms delay on page load.
  */
 function electLeader() {
   // Ask if there's an existing leader
@@ -209,25 +237,30 @@ function electLeader() {
     from: tabId,
   });
 
-  // Wait a bit for responses
+  // START IMMEDIATELY - don't wait for responses
+  // We'll step down if another leader responds within 200ms
+  console.log('[PulseWorkerBridge] Starting as leader (optimistic)');
+  isLeader = true;
+  leaderId = tabId;
+  startWorker();
+  sendHeartbeat();
+
+  // After 50ms, check if another tab claimed leadership
+  // Reduced from 200ms for faster startup
   setTimeout(() => {
     const now = Date.now();
-    // If no leader heartbeat received recently, become leader
-    if (!leaderId || now - lastLeaderHeartbeat > 5000) {
-      console.log('[PulseWorkerBridge] Becoming leader tab');
-      isLeader = true;
-      leaderId = tabId;
-      startWorker();
-      sendHeartbeat();
-    } else {
-      console.log('[PulseWorkerBridge] Following leader:', leaderId);
-      // Request current data from leader
+    // If we received a heartbeat from another leader, step down
+    if (leaderId !== tabId && now - lastLeaderHeartbeat < 1000) {
+      console.log('[PulseWorkerBridge] Another leader found, stepping down:', leaderId);
+      isLeader = false;
+      stopWorker();
+      // Request current data from the actual leader
       broadcastChannel?.postMessage({
         type: 'REQUEST_DATA',
         from: tabId,
       });
     }
-  }, 200);
+  }, 50);
 
   // Check for leader health periodically
   if (leaderCheckInterval) clearInterval(leaderCheckInterval);
@@ -270,33 +303,65 @@ function startWorker() {
     worker = new Worker('/workers/pulseWorker.js');
 
     worker.onmessage = (e) => {
-      const { type, payload } = e.data;
+      try {
+        const { type, payload, timestamp } = e.data;
 
-      switch (type) {
-        case 'DATA':
-          currentData = payload;
-          notifyDataListeners();
-          scheduleSave();
-          scheduleBroadcast(); // Share with other tabs
-          break;
+        switch (type) {
+          case 'DATA':
+            // Validate payload before using
+            if (payload && typeof payload === 'object') {
+              currentData = {
+                newTokens: Array.isArray(payload.newTokens) ? payload.newTokens : [],
+                finalStretchTokens: Array.isArray(payload.finalStretchTokens) ? payload.finalStretchTokens : [],
+                migratedTokens: Array.isArray(payload.migratedTokens) ? payload.migratedTokens : [],
+              };
+              notifyDataListeners();
+              scheduleSave();
+              scheduleBroadcast();
+            }
+            break;
 
-        case 'DATA_UPDATED':
-          worker?.postMessage({ type: 'GET_DATA' });
-          break;
+          case 'TOKEN_DELTA':
+            // Filter out stale messages from the postMessage queue
+            // These accumulated while the main thread was throttled in background
+            if (messageCutoffTime > 0 && timestamp && timestamp < messageCutoffTime) {
+              // This message was sent before we became visible - it's stale backlog
+              // Skip it silently to avoid the 45-second lag
+              return;
+            }
 
-        case 'CONNECTION_STATUS':
-          connectionStatus = {
-            ...connectionStatus,
-            [payload.channel]: payload.connected,
-          };
-          notifyConnectionListeners();
-          // Broadcast connection status to other tabs
-          broadcastChannel?.postMessage({
-            type: 'CONNECTION_STATUS',
-            data: connectionStatus,
-            from: tabId,
-          });
-          break;
+            // Fast path: apply single token update immediately
+            // Validate token has required fields
+            if (payload?.token?.mint && payload?.deltaType) {
+              applyTokenDelta(payload.deltaType, payload.token);
+              notifyDataListeners();
+              scheduleSave();
+              scheduleBroadcast();
+            }
+            break;
+
+          case 'DATA_UPDATED':
+            worker?.postMessage({ type: 'GET_DATA' });
+            break;
+
+          case 'CONNECTION_STATUS':
+            if (payload?.channel) {
+              connectionStatus = {
+                ...connectionStatus,
+                [payload.channel]: !!payload.connected,
+              };
+              notifyConnectionListeners();
+              broadcastChannel?.postMessage({
+                type: 'CONNECTION_STATUS',
+                data: connectionStatus,
+                from: tabId,
+              });
+            }
+            break;
+        }
+      } catch (err) {
+        console.error('[PulseWorkerBridge] Message handler error:', err);
+        // Don't crash the app - just log and continue
       }
     };
 
@@ -354,41 +419,112 @@ export async function initPulseWorker(baseUrl: string): Promise<void> {
 }
 
 async function doInit(): Promise<void> {
-  // Load cached data first
-  try {
-    const cached = await loadPulseCache();
-    if (cached) {
-      currentData = {
-        newTokens: cached.newTokens || [],
-        finalStretchTokens: cached.finalStretchTokens || [],
-        migratedTokens: cached.migratedTokens || [],
-      };
-      console.log('[PulseWorkerBridge] Loaded from cache:', {
-        new: currentData.newTokens.length,
-        final: currentData.finalStretchTokens.length,
-        migrated: currentData.migratedTokens.length,
-      });
-      notifyDataListeners();
-    }
-  } catch (err) {
-    console.error('[PulseWorkerBridge] Failed to load cache:', err);
-  }
+  // FAST PATH: Start WebSocket IMMEDIATELY - don't wait for cache
+  // Cache loading happens in parallel for fallback data
 
-  // Initialize cross-tab communication and leader election
-  initBroadcastChannel();
+  // Initialize cross-tab communication and leader election FIRST
+  // This starts the WebSocket worker immediately
+  try {
+    initBroadcastChannel();
+  } catch (err) {
+    console.warn('[PulseWorkerBridge] BroadcastChannel init failed (non-fatal):', err);
+    // Fallback: become leader and start worker directly
+    isLeader = true;
+    startWorker();
+  }
 
   isInitialized = true;
 
   // Handle tab close - if we're leader, another tab should take over
-  window.addEventListener('beforeunload', () => {
-    if (isLeader) {
-      // Give other tabs a chance to become leader
-      broadcastChannel?.postMessage({
-        type: 'LEADER_LEAVING',
-        from: tabId,
-      });
-    }
-  });
+  // Also save cache to IndexedDB before leaving
+  try {
+    window.addEventListener('beforeunload', () => {
+      // Save cache immediately (synchronous attempt for beforeunload)
+      doSave();
+
+      if (isLeader) {
+        // Give other tabs a chance to become leader
+        broadcastChannel?.postMessage({
+          type: 'LEADER_LEAVING',
+          from: tabId,
+        });
+      }
+    });
+
+    // Handle tab visibility changes - track time hidden for smart reconnect
+    let hiddenAt = 0;
+    const STALE_THRESHOLD_MS = 5000; // Filter stale messages if hidden for > 5 seconds
+
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'hidden') {
+        hiddenAt = Date.now();
+        // Save immediately when user navigates away
+        doSave();
+        console.log('[PulseWorkerBridge] Tab hidden - saved cache');
+      } else if (document.visibilityState === 'visible') {
+        const hiddenDuration = hiddenAt > 0 ? Date.now() - hiddenAt : 0;
+        console.log(`[PulseWorkerBridge] Tab visible after ${Math.round(hiddenDuration / 1000)}s`);
+
+        // If hidden long enough, the postMessage queue has stale TOKEN_DELTAs
+        // Set cutoff to filter them out - worker's data is still fresh!
+        if (hiddenDuration > STALE_THRESHOLD_MS && worker) {
+          // Set cutoff timestamp - any TOKEN_DELTA older than this will be ignored
+          messageCutoffTime = Date.now();
+          console.log('[PulseWorkerBridge] Set message cutoff to filter stale queue');
+
+          // Ask worker for its FRESH data snapshot
+          // Worker has been receiving WebSocket data the whole time (workers aren't throttled)
+          worker.postMessage({ type: 'RECONNECT' });
+
+          // Clear the cutoff after 2 seconds (queue should be drained by then)
+          // New messages after this point are genuinely fresh
+          setTimeout(() => {
+            messageCutoffTime = 0;
+            console.log('[PulseWorkerBridge] Cleared message cutoff - queue drained');
+          }, 2000);
+        } else {
+          // Short absence - just request latest data, no filtering needed
+          worker?.postMessage({ type: 'GET_DATA' });
+        }
+
+        hiddenAt = 0;
+      }
+    });
+  } catch (err) {
+    console.warn('[PulseWorkerBridge] Failed to add event listeners:', err);
+  }
+
+  // Load cached data IN PARALLEL (non-blocking)
+  // This provides fallback data while WebSocket connects
+  loadPulseCache()
+    .then(cached => {
+      if (cached) {
+        // Only use cache if we don't already have live data
+        const hasLiveData = currentData.newTokens.length > 0 ||
+                           currentData.finalStretchTokens.length > 0 ||
+                           currentData.migratedTokens.length > 0;
+
+        if (!hasLiveData) {
+          currentData = {
+            newTokens: cached.newTokens || [],
+            finalStretchTokens: cached.finalStretchTokens || [],
+            migratedTokens: cached.migratedTokens || [],
+          };
+          console.log('[PulseWorkerBridge] Loaded fallback from cache:', {
+            new: currentData.newTokens.length,
+            final: currentData.finalStretchTokens.length,
+            migrated: currentData.migratedTokens.length,
+          });
+          notifyDataListeners();
+        } else {
+          console.log('[PulseWorkerBridge] Live data already present, skipping cache');
+        }
+      }
+    })
+    .catch(err => {
+      console.warn('[PulseWorkerBridge] Failed to load cache (non-fatal):', err);
+      // Continue without cache - WebSocket will provide data
+    });
 }
 
 /**
@@ -454,11 +590,31 @@ function connectFallbackChannel(baseUrl: string, channel: 'new' | 'final_stretch
 function handleFallbackMessage(channel: 'new' | 'final_stretch' | 'migrated', data: any) {
   const msgType = data.type || data.event;
 
+  // Helper to extract token(s) from various message formats
+  const extractTokens = (msg: any): any[] => {
+    if (msg.data) {
+      return Array.isArray(msg.data) ? msg.data : [msg.data];
+    }
+    if (msg.token) {
+      return [msg.token];
+    }
+    if (msg.tokens) {
+      return Array.isArray(msg.tokens) ? msg.tokens : [msg.tokens];
+    }
+    // If the message itself has a mint, it might BE the token
+    if (msg.mint || msg.address || msg.mint_address) {
+      return [msg];
+    }
+    return [];
+  };
+
   switch (msgType) {
     case 'new_token':
     case 'newToken':
-      if (data.data) {
-        const tokens = Array.isArray(data.data) ? data.data : [data.data];
+    case 'new':
+    case 'token_new':
+      {
+        const tokens = extractTokens(data);
         for (const t of tokens) {
           const normalized = normalizeToken(t);
           if (normalized) addToken('newTokens', normalized);
@@ -468,8 +624,11 @@ function handleFallbackMessage(channel: 'new' | 'final_stretch' | 'migrated', da
 
     case 'final_stretch_token':
     case 'finalStretch':
-      if (data.data) {
-        const tokens = Array.isArray(data.data) ? data.data : [data.data];
+    case 'final_stretch':
+    case 'completing':
+    case 'token_final_stretch':
+      {
+        const tokens = extractTokens(data);
         for (const t of tokens) {
           const normalized = normalizeToken(t);
           if (normalized) addToken('finalStretchTokens', normalized);
@@ -480,8 +639,10 @@ function handleFallbackMessage(channel: 'new' | 'final_stretch' | 'migrated', da
     case 'migrated_token':
     case 'migrated':
     case 'migration':
-      if (data.data) {
-        const tokens = Array.isArray(data.data) ? data.data : [data.data];
+    case 'completed':
+    case 'token_migrated':
+      {
+        const tokens = extractTokens(data);
         for (const t of tokens) {
           const normalized = normalizeToken(t);
           if (normalized) addToken('migratedTokens', normalized);
@@ -491,18 +652,39 @@ function handleFallbackMessage(channel: 'new' | 'final_stretch' | 'migrated', da
 
     case 'price_update':
     case 'priceUpdate':
+    case 'price':
       handlePriceUpdate(data.data || data.updates || [data]);
       break;
 
     case 'token_info_update':
     case 'tokenInfo':
+    case 'token_info':
+    case 'info':
       handleTokenInfoUpdate(data.data || data);
+      break;
+
+    default:
+      // Try to infer from channel if no explicit type
+      if (data.mint || data.address || data.mint_address) {
+        const normalized = normalizeToken(data);
+        if (normalized) {
+          if (channel === 'new') {
+            addToken('newTokens', normalized);
+          } else if (channel === 'final_stretch') {
+            addToken('finalStretchTokens', normalized);
+          } else if (channel === 'migrated') {
+            addToken('migratedTokens', normalized);
+          }
+        }
+      }
       break;
   }
 }
 
 /**
- * Normalize token with ALL fields - matches usePulseWebSocketPersistent
+ * Normalize token with ALL fields - MUST match pulseWorker.js normalizeToken exactly!
+ * CRITICAL: Must include BOTH PulseToken AND Token (db.ts) field names for compatibility!
+ * This is used for the fallback WebSocket and IndexedDB cache.
  */
 function normalizeToken(rawToken: any): PulseToken | null {
   if (!rawToken) return null;
@@ -511,16 +693,44 @@ function normalizeToken(rawToken: any): PulseToken | null {
   if (!mint) return null;
 
   // Pre-compute common fallback values
-  const holderValue = rawToken.holder_count ?? rawToken.holders ?? rawToken.unique_wallets_24h ?? 0;
+  const holderValue = rawToken.holder_count ?? rawToken.holders ?? rawToken.total_holders ?? rawToken.unique_wallets_24h ?? 0;
   const devPercentValue = rawToken.dev_percent ?? rawToken.dev_held_percentage ?? 0;
   const sniperPercentValue = rawToken.sniper_percent ?? rawToken.sniper_held_percentage ?? 0;
   const insiderPercentValue = rawToken.insider_percent ?? rawToken.insider_held_percentage ?? 0;
   const bundlePercentValue = rawToken.bundle_percent ?? rawToken.bundled_percentage ?? 0;
 
-  return {
-    // Spread original data first
-    ...rawToken,
+  // Price values (Token type uses usd_price, price_percent_change_*)
+  // Helper to parse string/number values from backend (backend often sends strings)
+  const toNum = (val: any): number => {
+    if (val === null || val === undefined) return 0;
+    if (typeof val === 'number') return val;
+    if (typeof val === 'string') {
+      const parsed = parseFloat(val);
+      return isNaN(parsed) ? 0 : parsed;
+    }
+    return 0;
+  };
 
+  // IMPORTANT: Backend sends these as STRINGS - must parseFloat!
+  const priceValue = toNum(rawToken.price ?? rawToken.price_usd ?? rawToken.usd_price ?? rawToken.priceUsd ?? rawToken.priceUSD ?? 0);
+  const priceChange5mValue = toNum(rawToken.price_change_5m ?? rawToken.priceChange5m ?? rawToken.price_percent_change_5m ?? 0);
+  const priceChange1hValue = toNum(rawToken.price_change_1h ?? rawToken.priceChange1h ?? rawToken.price_percent_change_1h ?? 0);
+  const priceChange6hValue = toNum(rawToken.price_change_6h ?? rawToken.priceChange6h ?? rawToken.price_percent_change_6h ?? 0);
+  const priceChange24hValue = toNum(rawToken.price_change_24h ?? rawToken.priceChange24h ?? rawToken.price_percent_change_24h ?? 0);
+
+  // Market metrics (Token type uses total_liquidity_usd, fully_diluted_value)
+  // IMPORTANT: Backend sends these as STRINGS - must parseFloat!
+  const marketCapValue = toNum(rawToken.market_cap_usd ?? rawToken.marketCap ?? rawToken.market_cap ?? rawToken.marketCapUSD ?? rawToken.fully_diluted_value ?? rawToken.fdv ?? rawToken.mcap ?? 0);
+  const liquidityValue = toNum(rawToken.liquidity_usd ?? rawToken.liquidity ?? rawToken.liquidityUSD ?? rawToken.total_liquidity_usd ?? rawToken.liq ?? 0);
+  const volumeValue = toNum(rawToken.volume_24h ?? rawToken.volume ?? rawToken.volume24h ?? 0);
+
+  // Bonding curve (Token type uses bonding_curve_progress)
+  // IMPORTANT: Backend sends this as STRING - must parseFloat!
+  const bondingValue = toNum(rawToken.bonding_curve_progress ?? rawToken.bondingCurveProgress ?? rawToken.bonding_pct ?? rawToken.bonding_percent ?? 0);
+
+  // NOTE: Do NOT spread ...rawToken - it may contain large nested objects
+  // that cause memory bloat. Only include explicitly needed fields.
+  return {
     // === Core identifiers ===
     mint,
     mint_address: mint,
@@ -529,47 +739,97 @@ function normalizeToken(rawToken: any): PulseToken | null {
     name: rawToken.name || rawToken.token_name || 'Unknown',
     symbol: rawToken.symbol || rawToken.token_symbol || '???',
     image: rawToken.image || rawToken.image_uri || rawToken.imageUrl || rawToken.logo || undefined,
+    logo: rawToken.logo || rawToken.image || rawToken.image_uri || undefined, // Token type uses 'logo'
     status: rawToken.status || 'active',
     launchpad_protocol: rawToken.launchpad_protocol || rawToken.protocol || 'pumpfun',
     pair_address: rawToken.pair_address || undefined,
 
-    // === Price data ===
-    price_usd: rawToken.price_usd || rawToken.price || 0,
-    price_change_5m: rawToken.price_change_5m || rawToken.priceChange5m || 0,
-    price_change_24h: rawToken.price_change_24h || rawToken.priceChange24h || 0,
+    // === CRITICAL: created_at for age display ===
+    // Backend sends launch_time as ISO string (e.g., "2025-01-22T10:30:00Z")
+    // Need to handle both timestamp and ISO string formats
+    created_at: (() => {
+      const val = rawToken.launch_time || rawToken.created_at || rawToken.createdAt;
+      if (!val) return Date.now();
+      if (typeof val === 'number') return val;
+      if (typeof val === 'string') {
+        // If it's an ISO string, convert to timestamp
+        const parsed = new Date(val).getTime();
+        return isNaN(parsed) ? Date.now() : parsed;
+      }
+      return Date.now();
+    })(),
+    launch_time: rawToken.launch_time || rawToken.created_at || rawToken.createdAt,
 
-    // === Market metrics ===
-    market_cap_usd: rawToken.market_cap_usd || rawToken.marketCap || rawToken.market_cap || rawToken.fully_diluted_value || rawToken.fdv || 0,
-    volume_24h: rawToken.volume_24h || rawToken.volume || 0,
-    liquidity_usd: rawToken.liquidity_usd || rawToken.liquidity || rawToken.total_liquidity_usd || 0,
+    // === Price data (ALL format variants for Token + PulseToken compatibility) ===
+    price: priceValue,
+    price_usd: priceValue,
+    usd_price: priceValue, // Token type uses usd_price
+    priceChange5m: priceChange5mValue,
+    price_change_5m: priceChange5mValue,
+    price_percent_change_5m: priceChange5mValue, // Token type uses price_percent_change_*
+    price_change_1h: priceChange1hValue,
+    price_percent_change_1h: priceChange1hValue,
+    price_change_6h: priceChange6hValue,
+    price_percent_change_6h: priceChange6hValue,
+    price_change_24h: priceChange24hValue,
+    price_percent_change_24h: priceChange24hValue,
 
-    // === Holder count (multiple field name variants) ===
+    // === Market metrics (ALL format variants) ===
+    marketCap: marketCapValue,
+    market_cap_usd: marketCapValue,
+    fully_diluted_value: marketCapValue, // Token type uses this
+    volume: volumeValue,
+    volume_24h: volumeValue,
+    liquidity: liquidityValue,
+    liquidity_usd: liquidityValue,
+    total_liquidity_usd: liquidityValue, // Token type uses total_liquidity_usd
+
+    // === Holder count (ALL field name variants) ===
     holders: holderValue,
     holder_count: holderValue,
-    unique_wallets_24h: rawToken.unique_wallets_24h ?? holderValue,
+    total_holders: holderValue, // Token type uses total_holders
+    unique_wallets_24h: toNum(rawToken.unique_wallets_24h) || holderValue,
 
     // === KOL count ===
     kol_count: rawToken.kol_count ?? 0,
 
     // === Transaction counts (all timeframes) ===
-    total_buys_24h: rawToken.total_buys_24h ?? 0,
-    total_sells_24h: rawToken.total_sells_24h ?? 0,
-    total_buys_5m: rawToken.total_buys_5m ?? 0,
-    total_sells_5m: rawToken.total_sells_5m ?? 0,
-    total_buys_1h: rawToken.total_buys_1h ?? 0,
-    total_sells_1h: rawToken.total_sells_1h ?? 0,
-    total_buys_6h: rawToken.total_buys_6h ?? 0,
-    total_sells_6h: rawToken.total_sells_6h ?? 0,
+    // NOTE: total_buys_* = number of buy transactions, total_buyers_* = unique buyer wallets
+    total_buys_24h: toNum(rawToken.total_buys_24h ?? 0),
+    total_sells_24h: toNum(rawToken.total_sells_24h ?? 0),
+    total_buys_5m: toNum(rawToken.total_buys_5m ?? 0),
+    total_sells_5m: toNum(rawToken.total_sells_5m ?? 0),
+    total_buys_1h: toNum(rawToken.total_buys_1h ?? 0),
+    total_sells_1h: toNum(rawToken.total_sells_1h ?? 0),
+    total_buys_6h: toNum(rawToken.total_buys_6h ?? 0),
+    total_sells_6h: toNum(rawToken.total_sells_6h ?? 0),
+    txns: rawToken.txns || { buys: 0, sells: 0 },
 
-    // === Volume (all timeframes) ===
-    total_buy_volume_24h: rawToken.total_buy_volume_24h ?? 0,
-    total_sell_volume_24h: rawToken.total_sell_volume_24h ?? 0,
-    total_buy_volume_5m: rawToken.total_buy_volume_5m ?? 0,
-    total_sell_volume_5m: rawToken.total_sell_volume_5m ?? 0,
-    total_buy_volume_1h: rawToken.total_buy_volume_1h ?? 0,
-    total_sell_volume_1h: rawToken.total_sell_volume_1h ?? 0,
-    total_buy_volume_6h: rawToken.total_buy_volume_6h ?? 0,
-    total_sell_volume_6h: rawToken.total_sell_volume_6h ?? 0,
+    // === Unique buyers/sellers counts (different from transaction counts!) ===
+    // Backend sends total_buyers_* (unique wallet count) vs total_buys_* (transaction count)
+    total_buyers_5m: toNum(rawToken.total_buyers_5m ?? 0),
+    total_sellers_5m: toNum(rawToken.total_sellers_5m ?? 0),
+    total_buyers_1h: toNum(rawToken.total_buyers_1h ?? 0),
+    total_sellers_1h: toNum(rawToken.total_sellers_1h ?? 0),
+    total_buyers_6h: toNum(rawToken.total_buyers_6h ?? 0),
+    total_sellers_6h: toNum(rawToken.total_sellers_6h ?? 0),
+    total_buyers_24h: toNum(rawToken.total_buyers_24h ?? 0),
+    total_sellers_24h: toNum(rawToken.total_sellers_24h ?? 0),
+
+    // === Unique wallets (all timeframes) ===
+    unique_wallets_5m: toNum(rawToken.unique_wallets_5m ?? 0),
+    unique_wallets_1h: toNum(rawToken.unique_wallets_1h ?? 0),
+    unique_wallets_6h: toNum(rawToken.unique_wallets_6h ?? 0),
+
+    // === Volume (all timeframes) - IMPORTANT: Backend sends as strings ===
+    total_buy_volume_24h: toNum(rawToken.total_buy_volume_24h ?? 0),
+    total_sell_volume_24h: toNum(rawToken.total_sell_volume_24h ?? 0),
+    total_buy_volume_5m: toNum(rawToken.total_buy_volume_5m ?? 0),
+    total_sell_volume_5m: toNum(rawToken.total_sell_volume_5m ?? 0),
+    total_buy_volume_1h: toNum(rawToken.total_buy_volume_1h ?? 0),
+    total_sell_volume_1h: toNum(rawToken.total_sell_volume_1h ?? 0),
+    total_buy_volume_6h: toNum(rawToken.total_buy_volume_6h ?? 0),
+    total_sell_volume_6h: toNum(rawToken.total_sell_volume_6h ?? 0),
 
     // === Dev holding percentage (both field name variants) ===
     dev_percent: devPercentValue,
@@ -578,6 +838,7 @@ function normalizeToken(rawToken: any): PulseToken | null {
     // === Sniper percentage (both field name variants) ===
     sniper_percent: sniperPercentValue,
     sniper_held_percentage: sniperPercentValue,
+    total_snipers: rawToken.total_snipers ?? 0, // Token type field
 
     // === Insider percentage (both field name variants) ===
     insider_percent: insiderPercentValue,
@@ -597,17 +858,34 @@ function normalizeToken(rawToken: any): PulseToken | null {
     dev_tokens_created: rawToken.dev_tokens_created ?? 0,
     dev_tokens_migrated: rawToken.dev_tokens_migrated ?? 0,
 
-    // === Bonding curve ===
-    bonding_pct: rawToken.bonding_pct || rawToken.bonding_percent || rawToken.bondingCurveProgress || rawToken.bonding_curve_progress || 0,
-    graduation_percent: rawToken.graduation_percent || rawToken.bonding_pct || 0,
+    // === Bonding curve (ALL format variants) ===
+    bondingCurveProgress: bondingValue,
+    bonding_curve_progress: bondingValue, // Token type uses bonding_curve_progress
+    bonding_pct: bondingValue,
+    graduation_percent: rawToken.graduation_percent || bondingValue,
 
-    // === Pro traders ===
+    // === Pro traders / Smart money ===
     pro_traders_count: rawToken.pro_traders_count ?? rawToken.pro_traders ?? 0,
+    smart_money_count: rawToken.smart_money_count ?? 0,
 
     // === Fees / Gas ===
     total_fees_lamports: rawToken.total_fees_lamports ?? 0,
     global_fees_paid: rawToken.global_fees_paid ?? rawToken.globalFeesPaid ?? 0,
     globalFeesPaid: rawToken.globalFeesPaid ?? rawToken.global_fees_paid ?? 0,
+
+    // === Trade info ===
+    trade_type: rawToken.trade_type || undefined,
+    sol_amount: rawToken.sol_amount ?? 0,
+    token_amount: rawToken.token_amount ?? 0,
+
+    // === Migrated pool (Token type field) ===
+    migrated_pool_address: rawToken.migrated_pool_address || undefined,
+
+    // === String versions (some components may expect these) ===
+    priceUSD: String(priceValue),
+    marketCapUSD: String(marketCapValue),
+    volume24h: String(volumeValue),
+    liquidityUSD: String(liquidityValue),
   } as PulseToken;
 }
 
@@ -615,84 +893,214 @@ function addToken(key: 'newTokens' | 'finalStretchTokens' | 'migratedTokens', to
   const arr = currentData[key];
   const filtered = arr.filter(t => t.mint !== token.mint);
   const maxSize = key === 'newTokens' ? 200 : 50;
-  currentData[key] = [token, ...filtered].slice(0, maxSize);
+
+  // CRITICAL: Create a NEW currentData object so useSyncExternalStore detects the change
+  // Object.is() compares references - same reference = no re-render
+  currentData = {
+    ...currentData,
+    [key]: [token, ...filtered].slice(0, maxSize),
+  };
+}
+
+/**
+ * Apply a single token delta update - fast path for real-time updates
+ * This is MUCH faster than receiving full 300-token DATA updates
+ */
+function applyTokenDelta(deltaType: string, token: PulseToken) {
+  if (!token || !token.mint) return;
+
+  switch (deltaType) {
+    case 'new':
+      addToken('newTokens', token);
+      break;
+    case 'final_stretch':
+      addToken('finalStretchTokens', token);
+      break;
+    case 'migrated':
+      addToken('migratedTokens', token);
+      break;
+    case 'price_update':
+    case 'token_info':
+      // Update existing token with new data (price, holder count, etc.)
+      // CRITICAL: Create new object reference so useSyncExternalStore detects change
+      {
+        let updated = false;
+        const newData = { ...currentData };
+
+        for (const key of ['newTokens', 'finalStretchTokens', 'migratedTokens'] as const) {
+          const arr = currentData[key];
+          const idx = arr.findIndex(t => t.mint === token.mint);
+          if (idx !== -1) {
+            // Create new array with updated token
+            const newArr = [...arr];
+            newArr[idx] = { ...arr[idx], ...token };
+            newData[key] = newArr;
+            updated = true;
+          }
+        }
+
+        if (updated) {
+          currentData = newData;
+        }
+      }
+      break;
+  }
 }
 
 function handlePriceUpdate(updates: any[]) {
   const updatesArray = Array.isArray(updates) ? updates : [updates];
+  let newData = { ...currentData };
+  let anyUpdated = false;
+
+  // Helper to parse string/number values - returns null if not present
+  // CRITICAL: Different from toNum - returns null instead of 0 so we can detect missing fields
+  const getNum = (val: any): number | null => {
+    if (val === null || val === undefined) return null;
+    if (typeof val === 'number') return val;
+    if (typeof val === 'string') {
+      const parsed = parseFloat(val);
+      return isNaN(parsed) ? null : parsed;
+    }
+    return null;
+  };
 
   for (const update of updatesArray) {
     const mint = update.mint || update.address || update.mint_address;
     if (!mint) continue;
 
     for (const key of ['newTokens', 'finalStretchTokens', 'migratedTokens'] as const) {
-      const arr = currentData[key];
+      const arr = newData[key];
       const idx = arr.findIndex(t => t.mint === mint);
       if (idx !== -1) {
-        const token = arr[idx];
-        currentData[key][idx] = {
+        const token = arr[idx] as any;
+
+        // Compute updated values with all format variants
+        // IMPORTANT: Use getNum to parse strings, fall back to existing token value
+        const priceValue = getNum(update.price ?? update.price_usd ?? update.usd_price ?? update.priceUSD) ?? token.price;
+        const priceChange5mValue = getNum(update.price_change_5m ?? update.priceChange5m ?? update.price_percent_change_5m) ?? token.price_change_5m;
+        const priceChange1hValue = getNum(update.price_change_1h ?? update.priceChange1h ?? update.price_percent_change_1h) ?? token.price_change_1h;
+        const priceChange6hValue = getNum(update.price_change_6h ?? update.priceChange6h ?? update.price_percent_change_6h) ?? token.price_change_6h;
+        const priceChange24hValue = getNum(update.price_change_24h ?? update.priceChange24h ?? update.price_percent_change_24h) ?? token.price_change_24h;
+        const marketCapValue = getNum(update.market_cap_usd ?? update.marketCap ?? update.market_cap ?? update.marketCapUSD ?? update.fully_diluted_value) ?? token.market_cap_usd;
+        const liquidityValue = getNum(update.liquidity_usd ?? update.liquidity ?? update.liquidityUSD ?? update.total_liquidity_usd) ?? token.liquidity_usd;
+        const volumeValue = getNum(update.volume_24h ?? update.volume ?? update.volume24h) ?? token.volume_24h;
+        const holderValue = getNum(update.holders ?? update.holder_count ?? update.total_holders) ?? token.holders;
+        const bondingValue = getNum(update.bonding_curve_progress ?? update.bondingCurveProgress ?? update.bonding_pct) ?? token.bonding_curve_progress;
+
+        // Create new array to trigger React re-render
+        const newArr = [...arr];
+        newArr[idx] = {
           ...token,
-          // Price
-          price_usd: update.price_usd ?? update.price ?? token.price_usd,
-          price_change_5m: update.price_change_5m ?? update.priceChange5m ?? token.price_change_5m,
-          price_change_24h: update.price_change_24h ?? token.price_change_24h,
+          // Price (ALL format variants for Token + PulseToken)
+          price: priceValue,
+          price_usd: priceValue,
+          usd_price: priceValue, // Token type
+          priceChange5m: priceChange5mValue,
+          price_change_5m: priceChange5mValue,
+          price_percent_change_5m: priceChange5mValue, // Token type
+          price_change_1h: priceChange1hValue,
+          price_percent_change_1h: priceChange1hValue, // Token type
+          price_change_6h: priceChange6hValue,
+          price_percent_change_6h: priceChange6hValue, // Token type
+          price_change_24h: priceChange24hValue,
+          price_percent_change_24h: priceChange24hValue, // Token type
 
-          // Market metrics
-          market_cap_usd: update.market_cap_usd ?? update.marketCap ?? token.market_cap_usd,
-          volume_24h: update.volume_24h ?? update.volume ?? token.volume_24h,
-          liquidity_usd: update.liquidity_usd ?? update.liquidity ?? token.liquidity_usd,
+          // Market metrics (ALL format variants)
+          marketCap: marketCapValue,
+          market_cap_usd: marketCapValue,
+          fully_diluted_value: marketCapValue, // Token type
+          volume: volumeValue,
+          volume_24h: volumeValue,
+          liquidity: liquidityValue,
+          liquidity_usd: liquidityValue,
+          total_liquidity_usd: liquidityValue, // Token type
 
-          // Holders
-          holders: update.holders ?? update.holder_count ?? token.holders,
-          holder_count: update.holder_count ?? update.holders ?? token.holder_count,
+          // Holders (ALL format variants)
+          holders: holderValue,
+          holder_count: holderValue,
+          total_holders: holderValue, // Token type
 
-          // Transaction counts
-          total_buys_24h: update.total_buys_24h ?? token.total_buys_24h,
-          total_sells_24h: update.total_sells_24h ?? token.total_sells_24h,
-          total_buys_5m: update.total_buys_5m ?? token.total_buys_5m,
-          total_sells_5m: update.total_sells_5m ?? token.total_sells_5m,
-          total_buys_1h: update.total_buys_1h ?? token.total_buys_1h,
-          total_sells_1h: update.total_sells_1h ?? token.total_sells_1h,
-          total_buys_6h: update.total_buys_6h ?? token.total_buys_6h,
-          total_sells_6h: update.total_sells_6h ?? token.total_sells_6h,
+          // Transaction counts (use getNum to handle strings)
+          total_buys_24h: getNum(update.total_buys_24h) ?? token.total_buys_24h,
+          total_sells_24h: getNum(update.total_sells_24h) ?? token.total_sells_24h,
+          total_buys_5m: getNum(update.total_buys_5m) ?? token.total_buys_5m,
+          total_sells_5m: getNum(update.total_sells_5m) ?? token.total_sells_5m,
+          total_buys_1h: getNum(update.total_buys_1h) ?? token.total_buys_1h,
+          total_sells_1h: getNum(update.total_sells_1h) ?? token.total_sells_1h,
+          total_buys_6h: getNum(update.total_buys_6h) ?? token.total_buys_6h,
+          total_sells_6h: getNum(update.total_sells_6h) ?? token.total_sells_6h,
+          txns: update.txns ?? token.txns,
 
-          // Volume timeframes
-          total_buy_volume_5m: update.total_buy_volume_5m ?? token.total_buy_volume_5m,
-          total_sell_volume_5m: update.total_sell_volume_5m ?? token.total_sell_volume_5m,
-          total_buy_volume_1h: update.total_buy_volume_1h ?? token.total_buy_volume_1h,
-          total_sell_volume_1h: update.total_sell_volume_1h ?? token.total_sell_volume_1h,
-          total_buy_volume_6h: update.total_buy_volume_6h ?? token.total_buy_volume_6h,
-          total_sell_volume_6h: update.total_sell_volume_6h ?? token.total_sell_volume_6h,
-          total_buy_volume_24h: update.total_buy_volume_24h ?? token.total_buy_volume_24h,
-          total_sell_volume_24h: update.total_sell_volume_24h ?? token.total_sell_volume_24h,
+          // Unique buyers/sellers counts (different from transaction counts!)
+          total_buyers_5m: getNum(update.total_buyers_5m) ?? token.total_buyers_5m,
+          total_sellers_5m: getNum(update.total_sellers_5m) ?? token.total_sellers_5m,
+          total_buyers_1h: getNum(update.total_buyers_1h) ?? token.total_buyers_1h,
+          total_sellers_1h: getNum(update.total_sellers_1h) ?? token.total_sellers_1h,
+          total_buyers_6h: getNum(update.total_buyers_6h) ?? token.total_buyers_6h,
+          total_sellers_6h: getNum(update.total_sellers_6h) ?? token.total_sellers_6h,
+          total_buyers_24h: getNum(update.total_buyers_24h) ?? token.total_buyers_24h,
+          total_sellers_24h: getNum(update.total_sellers_24h) ?? token.total_sellers_24h,
+
+          // Unique wallets (all timeframes)
+          unique_wallets_5m: getNum(update.unique_wallets_5m) ?? token.unique_wallets_5m,
+          unique_wallets_1h: getNum(update.unique_wallets_1h) ?? token.unique_wallets_1h,
+          unique_wallets_6h: getNum(update.unique_wallets_6h) ?? token.unique_wallets_6h,
+          unique_wallets_24h: getNum(update.unique_wallets_24h) ?? token.unique_wallets_24h,
+
+          // Volume timeframes (use getNum to handle strings)
+          total_buy_volume_5m: getNum(update.total_buy_volume_5m) ?? token.total_buy_volume_5m,
+          total_sell_volume_5m: getNum(update.total_sell_volume_5m) ?? token.total_sell_volume_5m,
+          total_buy_volume_1h: getNum(update.total_buy_volume_1h) ?? token.total_buy_volume_1h,
+          total_sell_volume_1h: getNum(update.total_sell_volume_1h) ?? token.total_sell_volume_1h,
+          total_buy_volume_6h: getNum(update.total_buy_volume_6h) ?? token.total_buy_volume_6h,
+          total_sell_volume_6h: getNum(update.total_sell_volume_6h) ?? token.total_sell_volume_6h,
+          total_buy_volume_24h: getNum(update.total_buy_volume_24h) ?? token.total_buy_volume_24h,
+          total_sell_volume_24h: getNum(update.total_sell_volume_24h) ?? token.total_sell_volume_24h,
 
           // Percentages
           dev_percent: update.dev_percent ?? update.dev_held_percentage ?? token.dev_percent,
           dev_held_percentage: update.dev_held_percentage ?? update.dev_percent ?? token.dev_held_percentage,
           sniper_percent: update.sniper_percent ?? update.sniper_held_percentage ?? token.sniper_percent,
           sniper_held_percentage: update.sniper_held_percentage ?? update.sniper_percent ?? token.sniper_held_percentage,
+          total_snipers: update.total_snipers ?? token.total_snipers, // Token type
           insider_percent: update.insider_percent ?? update.insider_held_percentage ?? token.insider_percent,
           insider_held_percentage: update.insider_held_percentage ?? update.insider_percent ?? token.insider_held_percentage,
           bundle_percent: update.bundle_percent ?? update.bundled_percentage ?? token.bundle_percent,
           bundled_percentage: update.bundled_percentage ?? update.bundle_percent ?? token.bundled_percentage,
           bundler_held_percentage: update.bundler_held_percentage ?? token.bundler_held_percentage,
 
-          // Bonding curve
-          bonding_pct: update.bonding_pct ?? update.bondingCurveProgress ?? token.bonding_pct,
+          // Bonding curve (ALL format variants)
+          bondingCurveProgress: bondingValue,
+          bonding_curve_progress: bondingValue, // Token type
+          bonding_pct: bondingValue,
 
           // KOL
           kol_count: update.kol_count ?? token.kol_count,
 
-          // Pro traders
+          // Pro traders / Smart money
           pro_traders_count: update.pro_traders_count ?? token.pro_traders_count,
+          smart_money_count: update.smart_money_count ?? token.smart_money_count,
 
           // Gas / Fees
-          total_fees_lamports: update.total_fees_lamports ?? token.total_fees_lamports,
-          global_fees_paid: update.global_fees_paid ?? update.globalFeesPaid ?? token.global_fees_paid,
-          globalFeesPaid: update.globalFeesPaid ?? update.global_fees_paid ?? token.globalFeesPaid,
+          total_fees_lamports: getNum(update.total_fees_lamports) ?? token.total_fees_lamports,
+          global_fees_paid: getNum(update.global_fees_paid ?? update.globalFeesPaid) ?? token.global_fees_paid,
+          globalFeesPaid: getNum(update.globalFeesPaid ?? update.global_fees_paid) ?? token.globalFeesPaid,
+
+          // String versions (some components may expect these)
+          priceUSD: String(priceValue),
+          marketCapUSD: String(marketCapValue),
+          volume24h: String(volumeValue),
+          liquidityUSD: String(liquidityValue),
         };
+        newData[key] = newArr;
+        anyUpdated = true;
       }
     }
+  }
+
+  // Only update if we actually changed something
+  if (anyUpdated) {
+    currentData = newData;
   }
 }
 
@@ -700,16 +1108,27 @@ function handleTokenInfoUpdate(update: any) {
   const mint = update.mint_address || update.mint || update.address;
   if (!mint) return;
 
+  let newData = { ...currentData };
+  let anyUpdated = false;
+
   for (const key of ['newTokens', 'finalStretchTokens', 'migratedTokens'] as const) {
-    const arr = currentData[key];
+    const arr = newData[key];
     const idx = arr.findIndex(t => t.mint === mint);
     if (idx !== -1) {
-      currentData[key][idx] = {
+      // Create new array to trigger React re-render
+      const newArr = [...arr];
+      newArr[idx] = {
         ...arr[idx],
         holder_count: update.holder_count ?? arr[idx].holder_count,
         kol_count: update.kol_count ?? arr[idx].kol_count,
       };
+      newData[key] = newArr;
+      anyUpdated = true;
     }
+  }
+
+  if (anyUpdated) {
+    currentData = newData;
   }
 }
 
@@ -736,6 +1155,50 @@ export function requestData(): void {
   worker?.postMessage({ type: 'GET_DATA' });
 }
 
+/**
+ * Reload cache from IndexedDB if bridge has no data
+ * Call this when a component mounts to ensure data is available
+ */
+export async function ensureDataLoaded(): Promise<void> {
+  // Check if we already have data
+  const hasData = currentData.newTokens.length > 0 ||
+                  currentData.finalStretchTokens.length > 0 ||
+                  currentData.migratedTokens.length > 0;
+
+  console.log('[PulseWorkerBridge] ensureDataLoaded called, hasData:', hasData, {
+    new: currentData.newTokens.length,
+    final: currentData.finalStretchTokens.length,
+    migrated: currentData.migratedTokens.length,
+  });
+
+  if (hasData) {
+    return; // Already have data, no need to reload
+  }
+
+  // No data - try to load from IndexedDB cache
+  try {
+    console.log('[PulseWorkerBridge] Loading from IndexedDB...');
+    const cached = await loadPulseCache();
+    if (cached) {
+      currentData = {
+        newTokens: cached.newTokens || [],
+        finalStretchTokens: cached.finalStretchTokens || [],
+        migratedTokens: cached.migratedTokens || [],
+      };
+      console.log('[PulseWorkerBridge] Loaded from IndexedDB:', {
+        new: currentData.newTokens.length,
+        final: currentData.finalStretchTokens.length,
+        migrated: currentData.migratedTokens.length,
+      });
+      notifyDataListeners();
+    } else {
+      console.log('[PulseWorkerBridge] IndexedDB cache empty or expired');
+    }
+  } catch (err) {
+    console.warn('[PulseWorkerBridge] Failed to reload cache:', err);
+  }
+}
+
 export function terminateWorker(): void {
   if (worker) {
     worker.postMessage({ type: 'DISCONNECT' });
@@ -752,8 +1215,21 @@ export function terminateWorker(): void {
   }
 }
 
+// INSTANT UPDATES - 0ms latency, no batching
+// React 18's useSyncExternalStore handles rapid updates efficiently
+let lastListenerCountLog = 0;
+
 function notifyDataListeners() {
-  // Notify all listeners immediately - navigation blocking is handled in the hook
+  // Log listener count every 60 seconds to detect leaks (reduced frequency)
+  const now = Date.now();
+  if (now - lastListenerCountLog > 60000) {
+    lastListenerCountLog = now;
+    if (dataListeners.size > 5) {
+      console.log('[PulseWorkerBridge] Listeners:', dataListeners.size);
+    }
+  }
+
+  // INSTANT: Notify all listeners immediately
   dataListeners.forEach(fn => {
     try {
       fn(currentData);

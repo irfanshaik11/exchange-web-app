@@ -874,12 +874,16 @@ export default function PulsePage() {
 
   // Memoize the loading state to prevent unnecessary re-renders
   // For Monad route, check Monad data; for Solana route, check Solana data
+  // NOTE: PulseTable handles its own data from WebSocket/IndexedDB cache internally
+  // So we only show loading if HTTP data hasn't arrived yet
+  // PulseTable will show cached data even while HTTP is loading
   const isLoading = useMemo(() => {
     if (isMonadRoute) {
       // For Monad, check if Monad data is loaded
       return monadNew.length === 0 && monadNewTick === 0;
     }
-    // For Solana, use existing logic
+    // For Solana: Only show loading on very first load when no HTTP data exists
+    // After first load, HTTP data is cached by React Query
     return !tokens.length && !launchpadData?.new?.length && !httpNew.length;
   }, [
     isMonadRoute,
@@ -1778,25 +1782,28 @@ export default function PulsePage() {
               </div>
             </div>
           ) : isLoading ? (
+            // IMPORTANT: Pass actual tokens even during loading!
+            // PulseTable has internal cache from WebSocket/IndexedDB that will show
+            // Passing tokens={[]} would override the cache and show blank screen
             <div className="flex min-h-0 w-full flex-1 flex-row overflow-hidden">
               <PulseTable
                 title="New Pairs"
-                tokens={[]}
+                tokens={enrichedNewPairsToShow as any}
                 loading={true}
                 isFirstOrLast="first"
                 showBubbleMetrics={false}
                 currentChain={currentChain}
               />
-              <MonadTable
+              <PulseTable
                 title="Final Stretch"
-                tokens={[]}
+                tokens={enrichedFinalStretch as any}
                 loading={true}
                 showBubbleMetrics={false}
                 currentChain={currentChain}
               />
-              <MonadTable
+              <PulseTable
                 title="Migrated"
-                tokens={[]}
+                tokens={enrichedMigrated as any}
                 loading={true}
                 isFirstOrLast="last"
                 showBubbleMetrics={false}

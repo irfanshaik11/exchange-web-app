@@ -43,6 +43,7 @@ import { showEnhancedToast } from '../utils/enhancedToast';
 import { storeReferralCodeHint, getStoredReferralCodeHint, clearStoredReferralCodeHint } from '~/utils/referralStorage';
 import PagePreloader from '../components/PagePreloader';
 import { usePulseNavigationGuard } from '../hooks/usePulseNavigationGuard';
+import ErrorBoundary from '../components/ErrorBoundary';
 
 // Dynamically import PulseBackgroundLoader with no SSR
 // Rendered globally to maintain WebSocket connections across all pages
@@ -663,6 +664,30 @@ const MyApp: AppType = ({ Component, pageProps }) => {
         <meta name="twitter:title" content="Interstate - The Fastest Exchange" />
         <meta name="twitter:description" content="Get ready to win on Interstate, the fastest exchange! Get free Solana for joining today, win daily Jackpots, level up and earn progressively higher rewards. Start trading today!" />
         <meta name="twitter:image" content="https://app.interstate.so/referral-share.png" />
+
+        {/* Preconnect to WebSocket server - starts TCP+TLS handshake before JS runs */}
+        {env.NEXT_PUBLIC_WEBSOCKET_URL && (
+          <>
+            <link
+              rel="preconnect"
+              href={env.NEXT_PUBLIC_WEBSOCKET_URL.replace(/^ws/, 'http')}
+              crossOrigin="anonymous"
+            />
+            <link
+              rel="dns-prefetch"
+              href={env.NEXT_PUBLIC_WEBSOCKET_URL.replace(/^ws/, 'http')}
+            />
+          </>
+        )}
+
+        {/* Preload worker script for faster WebSocket initialization */}
+        <link
+          rel="preload"
+          href="/workers/pulseWorker.js"
+          as="script"
+          crossOrigin="anonymous"
+        />
+
         {/* Preload TradingView library for faster chart loading */}
         <link
           rel="preload"
@@ -725,7 +750,7 @@ const MyApp: AppType = ({ Component, pageProps }) => {
         <TurnkeyRootProvider>
           {/* <MonadTradeBanner /> */}
           <WagmiProviderWrapper config={config} queryClient={queryClient}>
-            {/* PulseBackgroundLoader: global, only updates React Query (not pulseStore) */}
+            {/* PulseBackgroundLoader: Worker-based WebSocket - stays alive during navigation */}
             <PulseBackgroundLoader />
             <UserProvider>
               <UserLimitProvider>
@@ -741,7 +766,9 @@ const MyApp: AppType = ({ Component, pageProps }) => {
                             <WalletTrackerProvider>
                               <ReferralAccessGate>
                                 <PagePreloader />
-                                <Component {...pageProps} />
+                                <ErrorBoundary>
+                                  <Component {...pageProps} />
+                                </ErrorBoundary>
                               </ReferralAccessGate>
                             </WalletTrackerProvider>
                           </FilterProvider>

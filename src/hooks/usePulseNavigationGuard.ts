@@ -1,47 +1,13 @@
 /**
  * Navigation guard for Pulse WebSocket processing
  *
- * This hook sets global navigation state so WebSocket handlers can
- * completely pause processing during navigation to prevent blocking.
+ * DISABLED: The navigation blocking was causing 10+ second delays.
+ * React 18's concurrent features handle rapid updates efficiently.
+ * Keeping this hook as a no-op for backwards compatibility.
  */
 
-import { useEffect } from 'react';
-import { useRouter } from 'next/router';
-import { setNavigating } from '~/utils/navigationState';
-import { pauseNotifications, resumeNotifications } from '~/stores/pulseStore';
-
 export function usePulseNavigationGuard() {
-  const router = useRouter();
-
-  useEffect(() => {
-    const handleRouteChangeStart = () => {
-      // Set global navigation state - WebSocket handlers will check this
-      setNavigating(true);
-      // Also pause store notifications (legacy)
-      pauseNotifications();
-    };
-
-    const handleRouteChangeComplete = () => {
-      // Resume after navigation completes with small delay
-      setTimeout(() => {
-        setNavigating(false);
-        resumeNotifications();
-      }, 50);
-    };
-
-    const handleRouteChangeError = () => {
-      setNavigating(false);
-      resumeNotifications();
-    };
-
-    router.events.on('routeChangeStart', handleRouteChangeStart);
-    router.events.on('routeChangeComplete', handleRouteChangeComplete);
-    router.events.on('routeChangeError', handleRouteChangeError);
-
-    return () => {
-      router.events.off('routeChangeStart', handleRouteChangeStart);
-      router.events.off('routeChangeComplete', handleRouteChangeComplete);
-      router.events.off('routeChangeError', handleRouteChangeError);
-    };
-  }, [router]);
+  // NO-OP - navigation blocking disabled for instant updates
+  // The previous implementation paused ALL notifications during navigation,
+  // which caused massive delays when routeChangeComplete didn't fire quickly.
 }

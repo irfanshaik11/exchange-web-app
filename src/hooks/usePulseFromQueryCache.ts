@@ -1,17 +1,17 @@
 /**
  * Hook to read Pulse data with REAL-TIME updates
  *
- * Uses subscriptions for instant updates, but FREEZES during navigation
- * to prevent blocking. After navigation, resumes with latest data.
+ * INSTANT updates - no delays, no navigation blocking.
+ * React 18's useSyncExternalStore handles rapid updates efficiently.
  */
 
-import { useState, useEffect, useCallback, useRef, useSyncExternalStore } from 'react';
-import { useRouter } from 'next/router';
+import { useCallback, useEffect, useSyncExternalStore } from 'react';
 import {
   subscribeToData,
   getPulseData,
   getConnectionStatus,
   subscribeToConnection,
+  ensureDataLoaded,
 } from '~/utils/pulseWorkerBridge';
 import { type PulseToken } from '~/utils/pulseCache';
 
@@ -28,113 +28,36 @@ interface UsePulseFromQueryCacheReturn {
   clearTokens: () => void;
 }
 
-// Global navigation state - shared across all hook instances
-let isNavigating = false;
-let navigationListeners = new Set<() => void>();
-
-function setNavigating(value: boolean) {
-  isNavigating = value;
-  if (!value) {
-    // When navigation ends, notify all listeners to refresh
-    navigationListeners.forEach(fn => fn());
-  }
-}
-
-// Empty defaults
+// Empty defaults for SSR
 const emptyTokens: PulseToken[] = [];
+const emptyData = { newTokens: emptyTokens, finalStretchTokens: emptyTokens, migratedTokens: emptyTokens };
 const emptyConnection = { new: false, final_stretch: false, migrated: false };
 
 export function usePulseFromQueryCache(
   options: UsePulseFromQueryCacheOptions = {}
 ): UsePulseFromQueryCacheReturn {
   const { channel } = options;
-  const router = useRouter();
 
-  // Force update trigger
-  const [, forceUpdate] = useState(0);
-  const mountedRef = useRef(true);
-
-  // Track if we missed updates during navigation
-  const missedUpdateRef = useRef(false);
-
-  // Custom subscribe that respects navigation state
-  const subscribeWithNavCheck = useCallback((onStoreChange: () => void) => {
-    // Subscribe to data changes
-    const unsubData = subscribeToData(() => {
-      if (isNavigating) {
-        // Mark that we missed an update
-        missedUpdateRef.current = true;
-        return; // Don't notify React during navigation
-      }
-      if (mountedRef.current) {
-        onStoreChange();
-      }
-    });
-
-    // Subscribe to navigation end events
-    const onNavEnd = () => {
-      if (missedUpdateRef.current && mountedRef.current) {
-        missedUpdateRef.current = false;
-        onStoreChange();
-      }
-    };
-    navigationListeners.add(onNavEnd);
-
-    return () => {
-      unsubData();
-      navigationListeners.delete(onNavEnd);
-    };
+  // On mount, ensure data is loaded from IndexedDB cache if bridge is empty
+  // This handles the case where user navigates away and comes back
+  useEffect(() => {
+    ensureDataLoaded();
   }, []);
 
-  // Use useSyncExternalStore with navigation-aware subscription
+  // INSTANT subscription - no navigation blocking, no delays
+  // React 18's useSyncExternalStore handles concurrent updates efficiently
   const data = useSyncExternalStore(
-    subscribeWithNavCheck,
+    subscribeToData,
     getPulseData,
-    () => ({ newTokens: emptyTokens, finalStretchTokens: emptyTokens, migratedTokens: emptyTokens })
+    () => emptyData
   );
 
-  // Connection status - less frequent, can use simple subscription
+  // Connection status subscription
   const connectionStatus = useSyncExternalStore(
     subscribeToConnection,
     getConnectionStatus,
     () => emptyConnection
   );
-
-  // Handle navigation events
-  useEffect(() => {
-    const handleRouteChangeStart = () => {
-      setNavigating(true);
-    };
-
-    const handleRouteChangeComplete = () => {
-      // Wait for next frame to let React finish unmounting - faster than setTimeout
-      requestAnimationFrame(() => {
-        setNavigating(false);
-      });
-    };
-
-    const handleRouteChangeError = () => {
-      setNavigating(false);
-    };
-
-    router.events.on('routeChangeStart', handleRouteChangeStart);
-    router.events.on('routeChangeComplete', handleRouteChangeComplete);
-    router.events.on('routeChangeError', handleRouteChangeError);
-
-    return () => {
-      router.events.off('routeChangeStart', handleRouteChangeStart);
-      router.events.off('routeChangeComplete', handleRouteChangeComplete);
-      router.events.off('routeChangeError', handleRouteChangeError);
-    };
-  }, [router]);
-
-  // Cleanup on unmount
-  useEffect(() => {
-    mountedRef.current = true;
-    return () => {
-      mountedRef.current = false;
-    };
-  }, []);
 
   // Compute connected status
   const connected = channel
@@ -142,7 +65,7 @@ export function usePulseFromQueryCache(
     : connectionStatus.new || connectionStatus.final_stretch || connectionStatus.migrated;
 
   const clearTokens = useCallback(() => {
-    forceUpdate(n => n + 1);
+    // No-op for now - data is managed by the bridge
   }, []);
 
   // Return based on channel filter
