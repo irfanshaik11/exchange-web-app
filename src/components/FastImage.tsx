@@ -59,8 +59,13 @@ export default function FastImage({
   // Track if this specific image has loaded in this component instance
   const [imageLoaded, setImageLoaded] = useState(false);
 
+  // Delay showing skeleton to prevent flash when image loads from cache
+  // If image loads within 50ms (typical for cached), skeleton never shows
+  const [showSkeleton, setShowSkeleton] = useState(false);
+
   // Ref to track the current URL being loaded (prevents stale closure issues)
   const currentUrlRef = useRef<string | null>(null);
+  const skeletonTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const inputSrc = src || fallbackSrc;
 
@@ -85,11 +90,18 @@ export default function FastImage({
 
   // When src changes, check if it's already in global cache
   // If yes, skip the loading state entirely (no flicker!)
-  // If no, reset to loading state
+  // If no, delay showing skeleton to prevent flash for cached images
   useEffect(() => {
+    // Clear any pending skeleton timeout
+    if (skeletonTimeoutRef.current) {
+      clearTimeout(skeletonTimeoutRef.current);
+      skeletonTimeoutRef.current = null;
+    }
+
     if (!resolvedSrc) {
       setImageLoaded(false);
       setImageError(false);
+      setShowSkeleton(true); // Show skeleton immediately for no-URL case
       return;
     }
 
@@ -107,11 +119,26 @@ export default function FastImage({
       // Already loaded before - show immediately, no flicker!
       setImageLoaded(true);
       setImageError(false);
+      setShowSkeleton(false);
     } else {
-      // New URL - show loading state
+      // New URL - don't show skeleton immediately
+      // Wait 50ms to see if image loads from cache first
+      // This prevents the brief flash when same token appears in multiple columns
       setImageLoaded(false);
       setImageError(false);
+      setShowSkeleton(false); // Hide skeleton initially
+
+      skeletonTimeoutRef.current = setTimeout(() => {
+        // Only show skeleton if image still hasn't loaded after 50ms
+        setShowSkeleton(true);
+      }, 50);
     }
+
+    return () => {
+      if (skeletonTimeoutRef.current) {
+        clearTimeout(skeletonTimeoutRef.current);
+      }
+    };
   }, [resolvedSrc]);
 
   // Proxy all external URLs to avoid CORS issues
@@ -165,8 +192,15 @@ export default function FastImage({
   // }, [imageUrl, symbol, name, alt]);
 
   const handleLoad = () => {
+    // Cancel skeleton timeout - image loaded before it could show
+    if (skeletonTimeoutRef.current) {
+      clearTimeout(skeletonTimeoutRef.current);
+      skeletonTimeoutRef.current = null;
+    }
+
     setImageLoaded(true);
     setImageError(false);
+    setShowSkeleton(false);
 
     // Track this URL globally so future renders skip loading state
     if (currentUrlRef.current) {
@@ -222,8 +256,9 @@ export default function FastImage({
 
   return (
     <div className={`relative ${className}`} style={{ width, height }}>
-      {/* Loading placeholder - shown until image loads */}
-      {!imageLoaded && (
+      {/* Loading placeholder - only shown after 50ms delay if image hasn't loaded */}
+      {/* This prevents flash when cached images load quickly */}
+      {!imageLoaded && showSkeleton && (
         <div
           className="absolute inset-0 flex items-center justify-center bg-gradient-to-br from-gray-800 to-black text-white font-bold shadow-lg"
         >
