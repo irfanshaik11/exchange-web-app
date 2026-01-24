@@ -70,7 +70,7 @@ import Image from "next/image";
 import InterstatePopout from "./InterstatePopout";
 import VerticalInput from "./VerticalInput";
 import { usePulseFromQueryCache } from "~/hooks/usePulseFromQueryCache";
-import { flushSync } from "react-dom";
+// flushSync removed in Phase 1/4 - was causing unnecessary rerenders
 
 import { useRouter } from "next/router";
 import { fetchTokenMetadata } from "~/utils/functions";
@@ -150,8 +150,98 @@ interface PulseTableProps {
   currentChain?: string; // Chain from parent to avoid router.query timing issues
 }
 
-// Add a simple in-memory cache for token metadata
-const tokenMetadataCache: Record<string, any> = {};
+// PHASE 4 (M1): LRU Cache to prevent unbounded memory growth
+// Sized for 3 columns × 100 tokens + buffer = 1000 entries max
+const TOKEN_CACHE_MAX_SIZE = 1000;
+
+class LRUCache<K, V> {
+  private cache = new Map<K, V>();
+  private maxSize: number;
+
+  constructor(maxSize: number) {
+    this.maxSize = maxSize;
+  }
+
+  get(key: K): V | undefined {
+    const value = this.cache.get(key);
+    if (value !== undefined) {
+      // Move to end (most recently used)
+      this.cache.delete(key);
+      this.cache.set(key, value);
+    }
+    return value;
+  }
+
+  set(key: K, value: V): void {
+    if (this.cache.has(key)) {
+      this.cache.delete(key);
+    } else if (this.cache.size >= this.maxSize) {
+      // Remove oldest (first) entry - O(1) with Map's insertion order
+      const firstKey = this.cache.keys().next().value;
+      if (firstKey !== undefined) {
+        this.cache.delete(firstKey);
+      }
+    }
+    this.cache.set(key, value);
+  }
+
+  has(key: K): boolean {
+    return this.cache.has(key);
+  }
+
+  clear(): void {
+    this.cache.clear();
+  }
+}
+
+const tokenMetadataCache = new LRUCache<string, any>(TOKEN_CACHE_MAX_SIZE);
+
+// PHASE 4 (C2): Helper functions extracted from IIFEs to avoid recreation per render
+// Safe number parser - handles strings, NaN, Infinity
+const safeNum = (val: any): number => {
+  if (val === null || val === undefined) return 0;
+  const num = typeof val === 'string' ? parseFloat(val) : Number(val);
+  return isFinite(num) ? num : 0;
+};
+
+// Get best available buy/sell data from token (prefers 5m, falls back through timeframes)
+const getBuySellData = (token: Token): { buys: number; sells: number } => {
+  // Try 5m first (most relevant for new tokens)
+  const buys5m = safeNum(token.total_buys_5m);
+  const sells5m = safeNum(token.total_sells_5m);
+  if (buys5m + sells5m > 0) return { buys: buys5m, sells: sells5m };
+
+  // Fallback to 1h
+  const buys1h = safeNum(token.total_buys_1h);
+  const sells1h = safeNum(token.total_sells_1h);
+  if (buys1h + sells1h > 0) return { buys: buys1h, sells: sells1h };
+
+  // Fallback to 6h
+  const buys6h = safeNum(token.total_buys_6h);
+  const sells6h = safeNum(token.total_sells_6h);
+  if (buys6h + sells6h > 0) return { buys: buys6h, sells: sells6h };
+
+  // Finally try 24h
+  return { buys: safeNum(token.total_buys_24h), sells: safeNum(token.total_sells_24h) };
+};
+
+// Format holder count (e.g., 1500 -> "1.5K")
+const formatHolderCount = (holders: number): string => {
+  if (holders >= 1e9) return `${(holders / 1e9).toFixed(1)}B`;
+  if (holders >= 1e6) return `${(holders / 1e6).toFixed(1)}M`;
+  if (holders >= 1e3) return `${(holders / 1e3).toFixed(1)}K`;
+  return holders.toString();
+};
+
+// Format volume value (e.g., 1500000 -> "$1.5M")
+const formatVolumeDisplay = (val: number): string => {
+  const rounded = Math.round(val);
+  if (rounded >= 1e12) return `$${Math.round(rounded / 1e12)}T`;
+  if (rounded >= 1e9) return `$${Math.round(rounded / 1e9)}B`;
+  if (rounded >= 1e6) return `$${Math.round(rounded / 1e6)}M`;
+  if (rounded >= 1e3) return `$${Math.round(rounded / 1e3)}K`;
+  return `$${rounded}`;
+};
 
 const WS_CACHE_TTL_MS = 2 * 60 * 1000; // 2 minutes
 
@@ -809,8 +899,9 @@ function useTokenMetadata(uri?: string) {
       setLoading(false);
       return;
     }
-    if (tokenMetadataCache[uri]) {
-      setMeta(tokenMetadataCache[uri]);
+    const cachedMeta = tokenMetadataCache.get(uri);
+    if (cachedMeta) {
+      setMeta(cachedMeta);
       setLoading(false);
       return;
     }
@@ -819,7 +910,7 @@ function useTokenMetadata(uri?: string) {
     const timer = setTimeout(() => setShowInitial(true), 150);
     fetchTokenMetadata(uri).then((data) => {
       if (!cancelled) {
-        if (data) tokenMetadataCache[uri] = data;
+        if (data) tokenMetadataCache.set(uri, data);
         setMeta(data);
         setLoading(false);
       }
@@ -885,6 +976,73 @@ function extractTwitterHandle(url: string): string | null {
   return null;
 }
 
+// PHASE 3: Memoized StatusPopup component - eliminates IIFE overhead (Fix #4)
+interface StatusPopupProps {
+  token: Token;
+  title: string;
+}
+
+const StatusPopupContent = React.memo(function StatusPopupContent({
+  token,
+  title,
+}: StatusPopupProps) {
+  // Pre-compute status type once
+  const titleLower = title.toLowerCase();
+  const isNewPairs = titleLower.includes("new");
+  const isFinalStretch = titleLower.includes("final") || titleLower.includes("stretch");
+  const isMigrated = titleLower.includes("migrated");
+  const launchpadProtocol = ((token as any).launchpad_protocol || "").toLowerCase();
+
+  // Compute bonding progress once
+  const bondingProgress = useMemo(() => {
+    if (isNewPairs) {
+      return typeof token.bonding_pct === "number"
+        ? token.bonding_pct
+        : parseFloat(token.bonding_pct || "0");
+    }
+    return typeof token.bonding_curve_progress === "number"
+      ? token.bonding_curve_progress
+      : parseFloat(token.bonding_curve_progress || "0");
+  }, [isNewPairs, token.bonding_pct, token.bonding_curve_progress]);
+
+  // Render status content based on type
+  if (isNewPairs) {
+    return (
+      <span style={{ color: AX.aiGreen }}>
+        Bonding Curve: {Math.round(bondingProgress)}%
+      </span>
+    );
+  }
+
+  if (isFinalStretch) {
+    return <span style={{ color: AX.aiCyan }}>Migrating</span>;
+  }
+
+  if (isMigrated) {
+    if (launchpadProtocol.includes("meteora")) {
+      return <span style={{ color: AX.aiBlue }}>Virtual Curve</span>;
+    }
+    if (launchpadProtocol.includes("pump")) {
+      return <span style={{ color: AX.aiBlue }}>PumpV1</span>;
+    }
+    if (
+      launchpadProtocol.includes("bonk") ||
+      launchpadProtocol.includes("raydium") ||
+      launchpadProtocol.includes("launchlab")
+    ) {
+      return <span style={{ color: AX.aiBlue }}>LaunchLab</span>;
+    }
+    return <span style={{ color: AX.aiBlue }}>Migrated</span>;
+  }
+
+  // Fallback
+  return (
+    <span style={{ color: AX.aiGreen }}>
+      Bonding: {Math.round(bondingProgress)}%
+    </span>
+  );
+});
+
 // Social Icons Component with URI metadata parsing and search dropdown
 function SocialIconsWithMetadata({
   token,
@@ -931,7 +1089,7 @@ function SocialIconsWithMetadata({
     <div className="flex items-center gap-1">
       {/* X/Twitter Icon - only show if twitter URL exists */}
       {hasTwitter && (
-        <div className="relative">
+        <div className="relative flex items-center">
           <button
             ref={xButtonRef}
             className="flex items-center justify-center rounded p-1 transition-colors duration-200 hover:bg-white/10"
@@ -944,21 +1102,16 @@ function SocialIconsWithMetadata({
               isOverXButton.current = true;
               if (xButtonRef.current) {
                 const rect = xButtonRef.current.getBoundingClientRect();
-                const previewHeight = 320; // Approximate height of X preview
-                const spaceAbove = rect.top;
-                const openBelow = spaceAbove < previewHeight + 20;
-
                 setPreviewPosition({
-                  left: rect.left + rect.width / 2,
-                  top: openBelow ? rect.bottom + 10 : rect.top - 10,
-                  openBelow,
+                  left: rect.right + 8,
+                  top: rect.top - 50,
+                  openBelow: false,
                 });
               }
               setShowXPreview(true);
             }}
             onMouseLeave={() => {
               isOverXButton.current = false;
-              // Delay to allow moving to popup
               setTimeout(() => {
                 if (!isOverXPreview.current && !isOverXButton.current) {
                   setShowXPreview(false);
@@ -972,38 +1125,26 @@ function SocialIconsWithMetadata({
             />
           </button>
 
-          {/* X Profile Preview Popup */}
+          {/* X Profile Preview Popup - PHASE 3: JS-based fixed positioning */}
           {showXPreview && (
-            <div
-              className="fixed z-[999999]"
-              style={{
-                left: `${previewPosition.left}px`,
-                top: `${previewPosition.top}px`,
-                // If opening below, no Y transform; if above, translate up by full height
-                transform: previewPosition.openBelow
-                  ? "translateX(-50%)"
-                  : "translate(-50%, -100%)",
-              }}
-              onMouseEnter={() => {
-                isOverXPreview.current = true;
-              }}
-              onMouseLeave={() => {
-                isOverXPreview.current = false;
-                setTimeout(() => {
-                  if (!isOverXPreview.current && !isOverXButton.current) {
-                    setShowXPreview(false);
-                  }
-                }, 200);
-              }}
-            >
-              <div
-                className="w-[280px] overflow-hidden rounded-xl"
-                style={{
-                  backgroundColor: "#16181c",
-                  border: "1px solid #2f3336",
-                  boxShadow: "0 8px 28px rgba(0, 0, 0, 0.75)",
-                }}
-              >
+          <div
+            className="fixed w-[280px] rounded-xl z-[99999] overflow-hidden"
+            style={{
+              left: `${previewPosition.left}px`,
+              top: `${previewPosition.top}px`,
+              backgroundColor: AX.surface,
+              border: `1px solid ${AX.border}`,
+            }}
+            onMouseEnter={() => { isOverXPreview.current = true; }}
+            onMouseLeave={() => {
+              isOverXPreview.current = false;
+              setTimeout(() => {
+                if (!isOverXPreview.current && !isOverXButton.current) {
+                  setShowXPreview(false);
+                }
+              }, 200);
+            }}
+          >
                 {/* Header with X logo */}
                 <div className="flex items-center justify-between border-b border-[#2f3336] px-4 py-3">
                   <div className="flex items-center gap-2">
@@ -1125,8 +1266,7 @@ function SocialIconsWithMetadata({
                     See Profile on X
                   </button>
                 </div>
-              </div>
-            </div>
+          </div>
           )}
         </div>
       )}
@@ -1162,49 +1302,50 @@ function SocialIconsWithMetadata({
           >
             <FiGlobe size={12} className="text-neutral-400 hover:text-white" />
           </button>
-          {/* Website URL Tooltip */}
-          <div className="pointer-events-none absolute top-full left-1/2 z-[99999] mt-2 -translate-x-1/2 rounded-lg border border-[#2a2b33] bg-[#1a1b1f] px-3 py-2 whitespace-nowrap opacity-0 shadow-xl transition-opacity duration-100 group-hover/website:opacity-100">
-            <span className="text-xs text-gray-400">Website</span>
-            <p className="max-w-[200px] truncate text-sm font-medium text-white">
+          {/* Website URL Tooltip - PHASE 3: Unified AX styling */}
+          <div
+            className="pointer-events-none absolute top-full left-1/2 z-[99999] mt-2 -translate-x-1/2 rounded-lg px-3 py-2 whitespace-nowrap opacity-0 group-hover/website:opacity-100"
+            style={{
+              backgroundColor: AX.surface,
+              border: `1px solid ${AX.border}`,
+            }}
+          >
+            <span className="text-xs" style={{ color: AX.muted }}>Website</span>
+            <p className="max-w-[200px] truncate text-sm font-medium" style={{ color: AX.text }}>
               {socialLinks.website}
             </p>
           </div>
         </div>
       )}
 
-      {/* Search Icon with Dropdown - hover triggered */}
-      <div className="relative" ref={dropdownRef}>
+      {/* Search Icon with Dropdown - PHASE 3: JS-based fixed positioning */}
+      <div className="relative flex items-center">
         <button
           ref={searchButtonRef}
           className="flex items-center justify-center rounded p-1 transition-colors duration-200 hover:bg-white/10"
+          onClick={(e) => {
+            e.stopPropagation();
+            e.preventDefault();
+          }}
           onMouseEnter={() => {
             isOverSearchButton.current = true;
             if (searchButtonRef.current) {
               const rect = searchButtonRef.current.getBoundingClientRect();
-              const dropdownHeight = 200; // Approximate height of dropdown
-              const spaceBelow = window.innerHeight - rect.bottom;
-              const openAbove = spaceBelow < dropdownHeight + 20;
-
               setSearchMenuPosition({
-                left: rect.left,
-                top: openAbove ? rect.top - 8 : rect.bottom + 8,
-                openAbove,
+                left: rect.right + 8,
+                top: rect.top,
+                openAbove: false,
               });
             }
             setShowSearchMenu(true);
           }}
           onMouseLeave={() => {
             isOverSearchButton.current = false;
-            // Delay to allow moving to the dropdown
             setTimeout(() => {
               if (!isOverSearchMenu.current && !isOverSearchButton.current) {
                 setShowSearchMenu(false);
               }
             }, 200);
-          }}
-          onClick={(e) => {
-            e.stopPropagation();
-            e.preventDefault();
           }}
         >
           <FaSearch
@@ -1213,119 +1354,107 @@ function SocialIconsWithMetadata({
           />
         </button>
 
-        {/* Search Dropdown Menu - Fixed positioning, appears to the right */}
+        {/* Search Dropdown Menu - PHASE 3: JS-based fixed positioning */}
         {showSearchMenu && (
-          <div
-            ref={searchMenuRef}
-            className="fixed z-[999999] min-w-[220px] rounded-lg border border-[#2a2b33] bg-[#16171C] py-1"
-            style={{
-              // Ensure dropdown doesn't go off the right edge of the screen
-              left: `${Math.min(searchMenuPosition.left, window.innerWidth - 230)}px`,
-              top: `${searchMenuPosition.top}px`,
-              // If opening above, translate up by full height
-              transform: searchMenuPosition.openAbove
-                ? "translateY(-100%)"
-                : "none",
-              boxShadow: "0 8px 32px rgba(0, 0, 0, 0.6)",
-            }}
-            onMouseEnter={() => {
-              isOverSearchMenu.current = true;
-            }}
-            onMouseLeave={() => {
-              isOverSearchMenu.current = false;
-              // Delay to allow moving back to button if needed
-              setTimeout(() => {
-                if (!isOverSearchMenu.current && !isOverSearchButton.current) {
-                  setShowSearchMenu(false);
-                }
-              }, 200);
+        <div
+          ref={searchMenuRef}
+          className="fixed min-w-[220px] rounded-lg py-1 z-[99999] overflow-hidden"
+          style={{
+            left: `${searchMenuPosition.left}px`,
+            top: `${searchMenuPosition.top}px`,
+            backgroundColor: AX.surface,
+            border: `1px solid ${AX.border}`,
+          }}
+          onMouseEnter={() => { isOverSearchMenu.current = true; }}
+          onMouseLeave={() => {
+            isOverSearchMenu.current = false;
+            setTimeout(() => {
+              if (!isOverSearchMenu.current && !isOverSearchButton.current) {
+                setShowSearchMenu(false);
+              }
+            }, 200);
+          }}
+        >
+          {/* X Search for Address */}
+          <button
+            className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-sm text-white transition-colors hover:bg-white/10"
+            onClick={(e) => {
+              e.stopPropagation();
+              const url = `https://twitter.com/search?q=${encodeURIComponent(token.mint)}`;
+              window.open(url, "_blank");
             }}
           >
-            {/* X Search for Address */}
-            <button
-              className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-sm text-white transition-colors hover:bg-white/10"
-              onClick={(e) => {
-                e.stopPropagation();
-                const url = `https://twitter.com/search?q=${encodeURIComponent(token.mint)}`;
-                window.open(url, "_blank");
-                setShowSearchMenu(false);
-              }}
-            >
-              <FaXTwitter size={14} className="text-neutral-400" />X Search for
-              Address
-            </button>
+            <FaXTwitter size={14} className="text-neutral-400" />
+            X Search for Address
+          </button>
 
-            {/* X Search for Name */}
-            <button
-              className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-sm text-white transition-colors hover:bg-white/10"
-              onClick={(e) => {
-                e.stopPropagation();
-                const searchQuery = `${token.symbol} ${token.name}`.trim();
-                const url = `https://twitter.com/search?q=${encodeURIComponent(searchQuery)}`;
-                window.open(url, "_blank");
-                setShowSearchMenu(false);
-              }}
-            >
-              <FaXTwitter size={14} className="text-neutral-400" />X Search for
-              Name
-            </button>
+          {/* X Search for Name */}
+          <button
+            className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-sm text-white transition-colors hover:bg-white/10"
+            onClick={(e) => {
+              e.stopPropagation();
+              const searchQuery = `${token.symbol} ${token.name}`.trim();
+              const url = `https://twitter.com/search?q=${encodeURIComponent(searchQuery)}`;
+              window.open(url, "_blank");
+            }}
+          >
+            <FaXTwitter size={14} className="text-neutral-400" />
+            X Search for Name
+          </button>
 
-            {/* Divider */}
-            <div className="my-1 border-t border-[#2a2b33]" />
+          {/* Divider - PHASE 3: Unified AX styling */}
+          <div className="my-1" style={{ borderTop: `1px solid ${AX.border}` }} />
 
-            {/* Google Search for Name */}
-            <button
-              className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-sm text-white transition-colors hover:bg-white/10"
-              onClick={(e) => {
-                e.stopPropagation();
-                const searchQuery =
-                  `${token.symbol} ${token.name} crypto`.trim();
-                const url = `https://www.google.com/search?q=${encodeURIComponent(searchQuery)}`;
-                window.open(url, "_blank");
-                setShowSearchMenu(false);
-              }}
+          {/* Google Search for Name */}
+          <button
+            className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-sm text-white transition-colors hover:bg-white/10"
+            onClick={(e) => {
+              e.stopPropagation();
+              const searchQuery = `${token.symbol} ${token.name} crypto`.trim();
+              const url = `https://www.google.com/search?q=${encodeURIComponent(searchQuery)}`;
+              window.open(url, "_blank");
+            }}
+          >
+            <svg
+              width="14"
+              height="14"
+              viewBox="0 0 24 24"
+              fill="none"
+              className="text-neutral-400"
             >
-              <svg
-                width="14"
-                height="14"
-                viewBox="0 0 24 24"
-                fill="none"
-                className="text-neutral-400"
-              >
-                <path
-                  d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
-                  fill="#4285F4"
-                />
-                <path
-                  d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
-                  fill="#34A853"
-                />
-                <path
-                  d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"
-                  fill="#FBBC05"
-                />
-                <path
-                  d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"
-                  fill="#EA4335"
-                />
-              </svg>
-              Google Search for Name
-            </button>
+              <path
+                d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
+                fill="#4285F4"
+              />
+              <path
+                d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
+                fill="#34A853"
+              />
+              <path
+                d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"
+                fill="#FBBC05"
+              />
+              <path
+                d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"
+                fill="#EA4335"
+              />
+            </svg>
+            Google Search for Name
+          </button>
 
-            {/* Interstate Search for Name */}
-            <button
-              className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-sm text-white transition-colors hover:bg-white/10"
-              onClick={(e) => {
-                e.stopPropagation();
-                const url = `https://dexscreener.com/solana/${token.mint}`;
-                window.open(url, "_blank");
-                setShowSearchMenu(false);
-              }}
-            >
-              <LuSearch size={14} className="text-[#36d8ff]" />
-              Interstate Search for Name
-            </button>
-          </div>
+          {/* DexScreener Search */}
+          <button
+            className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-sm text-white transition-colors hover:bg-white/10"
+            onClick={(e) => {
+              e.stopPropagation();
+              const url = `https://dexscreener.com/solana/${token.mint}`;
+              window.open(url, "_blank");
+            }}
+          >
+            <LuSearch size={14} className="text-[#36d8ff]" />
+            DexScreener
+          </button>
+        </div>
         )}
       </div>
     </div>
@@ -7254,85 +7383,76 @@ function PulseTable({
                 <Link
                   href={`/trade/${pairAddress}?${queryParams}`}
                   key={pairAddress}
-                  className="group relative flex w-full cursor-pointer flex-row items-start gap-2 border-b px-2 pt-1 text-lg transition-all duration-300 ease-out"
+                  className="token-row group relative flex w-full cursor-pointer flex-row items-start gap-2 border-b px-2 pt-1 text-lg"
                   style={{
                     borderColor: AX.border,
-                    backgroundColor: "transparent",
                     color: AX.text,
                   }}
                   onMouseEnter={(e) => {
-                    e.currentTarget.style.backgroundColor =
-                      "rgba(107, 114, 128, 0.1)";
+                    // PHASE 3: Use CSS class instead of inline style (GPU-accelerated)
+                    e.currentTarget.classList.add('row-hovered');
 
-                    // Prefetch trade page for instant navigation
-                    router.prefetch(`/trade/${pairAddress}?${queryParams}`);
-
-                    // Cache token metadata for instant display
-                    try {
-                      const tokenMetadata = {
-                        name: (token as any)?.name || "",
-                        symbol: (token as any)?.symbol || "",
-                        price_usd:
-                          (token as any)?.price_usd ||
-                          (token as any)?.priceUsd ||
-                          0,
-                        market_cap_usd:
-                          (token as any)?.market_cap_usd ||
-                          (token as any)?.marketCapUSD ||
-                          0,
-                        image: extractTokenImage(token as any) || "",
-                        mint: (token as any)?.mint || "",
-                        pair_address: pairAddress,
-                        launchpad_protocol:
-                          (token as any)?.launchpad_protocol || "",
-                        timestamp: Date.now(),
-                      };
-                      localStorage.setItem(
-                        `token_metadata_${pairAddress}`,
-                        JSON.stringify(tokenMetadata),
-                      );
-                      console.log(
-                        `[PulseTable] Cached token metadata for ${pairAddress}`,
-                      );
-                    } catch (error) {
-                      console.warn(
-                        "[PulseTable] Failed to cache token metadata:",
-                        error,
-                      );
-                    }
-
-                    // Show and position the popup
+                    // Show the status popup via CSS class
                     const popup = e.currentTarget.querySelector(
                       ".status-popup",
                     ) as HTMLElement;
                     if (popup) {
-                      const rect = e.currentTarget.getBoundingClientRect();
-                      popup.style.display = "block";
-                      popup.style.left = `${rect.left + rect.width / 2}px`;
-                      popup.style.top = `${rect.top - 30}px`;
-                      popup.style.transform = "translateX(-50%)";
+                      popup.classList.add('popup-visible');
                     }
-                    // Prefetch trade data on hover for instant navigation
-                    // COMMENTED OUT: Testing without prefetch
-                    // if (pairAddress) {
-                    //   prefetchTradeData(pairAddress, pairAddress);
-                    // }
+
+                    // PHASE 3: Defer expensive operations to idle time
+                    if (typeof requestIdleCallback !== 'undefined') {
+                      requestIdleCallback(() => {
+                        // Prefetch trade page for instant navigation
+                        router.prefetch(`/trade/${pairAddress}?${queryParams}`);
+
+                        // Cache token metadata for instant display
+                        try {
+                          const tokenMetadata = {
+                            name: (token as any)?.name || "",
+                            symbol: (token as any)?.symbol || "",
+                            price_usd:
+                              (token as any)?.price_usd ||
+                              (token as any)?.priceUsd ||
+                              0,
+                            market_cap_usd:
+                              (token as any)?.market_cap_usd ||
+                              (token as any)?.marketCapUSD ||
+                              0,
+                            image: extractTokenImage(token as any) || "",
+                            mint: (token as any)?.mint || "",
+                            pair_address: pairAddress,
+                            launchpad_protocol:
+                              (token as any)?.launchpad_protocol || "",
+                            timestamp: Date.now(),
+                          };
+                          localStorage.setItem(
+                            `token_metadata_${pairAddress}`,
+                            JSON.stringify(tokenMetadata),
+                          );
+                        } catch {
+                          // Silently fail - non-critical operation
+                        }
+                      }, { timeout: 500 });
+                    }
                   }}
                   onMouseLeave={(e) => {
-                    e.currentTarget.style.backgroundColor = "transparent";
-                    // Hide the popup
+                    // PHASE 3: Use CSS class instead of inline style
+                    e.currentTarget.classList.remove('row-hovered');
+                    // Hide the status popup via CSS class
                     const popup = e.currentTarget.querySelector(
                       ".status-popup",
                     ) as HTMLElement;
                     if (popup) {
-                      popup.style.display = "none";
+                      popup.classList.remove('popup-visible');
                     }
                   }}
                 >
                   <div className="flex w-full flex-col gap-2">
                     <div className="flex w-full flex-row gap-2">
                       {/* Subtle wave animation for top 3 final stretch tokens */}
-                      {waveTokens.has(idx) && (
+                      {/* PHASE 3: Only animate if few tokens need it (performance optimization) */}
+                      {waveTokens.has(idx) && waveTokens.size <= 5 && memoizedTokens.length <= 50 && (
                         <div className="pointer-events-none absolute inset-0 z-10 overflow-hidden rounded-lg">
                           <div
                             className="absolute top-0 left-0 h-full w-full"
@@ -7347,121 +7467,22 @@ function PulseTable({
                         </div>
                       )}
 
-                      {/* Status popout on hover */}
-                      {(() => {
-                        // Determine token status based on title and token data
-                        const isNewPairs = title.toLowerCase().includes("new");
-                        const isFinalStretch =
-                          title.toLowerCase().includes("final") ||
-                          title.toLowerCase().includes("stretch");
-                        const isMigrated = title
-                          .toLowerCase()
-                          .includes("migrated");
-
-                        // Get launchpad protocol
-                        const launchpadProtocol =
-                          (token as any).launchpad_protocol?.toLowerCase() ||
-                          "";
-
-                        return (
-                          <span
-                            className={`status-popup fixed hidden border px-2 py-1 text-xs shadow-none`}
-                            style={{
-                              pointerEvents: "none",
-                              backgroundColor: AX.surface,
-                              borderColor: AX.border,
-                              color: AX.text,
-                              zIndex: 99999,
-                              left: "50%",
-                              top: "100px",
-                              transform: "translateX(-50%)",
-                              borderRadius: "6px",
-                              fontSize: "11px",
-                              fontWeight: "500",
-                            }}
-                          >
-                            {(() => {
-                              if (isNewPairs) {
-                                // Show bonding curve progress for tokens in new pairs
-                                // bonding_pct is already in 0-100 range from backend (percentages)
-                                const bondingProgress =
-                                  typeof token.bonding_pct === "number"
-                                    ? token.bonding_pct
-                                    : parseFloat(token.bonding_pct || "0");
-
-                                return (
-                                  <span style={{ color: AX.aiGreen }}>
-                                    Bonding Curve:{" "}
-                                    <SmoothNumber
-                                      value={bondingProgress}
-                                      formatter={(val) => `${Math.round(val)}%`}
-                                      duration={400}
-                                    />
-                                  </span>
-                                );
-                              } else if (isFinalStretch) {
-                                // Show "Migrating" for final stretch tokens
-                                return (
-                                  <span style={{ color: AX.aiCyan }}>
-                                    Migrating
-                                  </span>
-                                );
-                              } else if (isMigrated) {
-                                // Show protocol-specific text for migrated tokens
-                                if (launchpadProtocol.includes("meteora")) {
-                                  return (
-                                    <span style={{ color: AX.aiBlue }}>
-                                      Virtual Curve
-                                    </span>
-                                  );
-                                } else if (launchpadProtocol.includes("pump")) {
-                                  return (
-                                    <span style={{ color: AX.aiBlue }}>
-                                      PumpV1
-                                    </span>
-                                  );
-                                } else if (
-                                  launchpadProtocol.includes("bonk") ||
-                                  launchpadProtocol.includes("raydium") ||
-                                  launchpadProtocol.includes("launchlab")
-                                ) {
-                                  return (
-                                    <span style={{ color: AX.aiBlue }}>
-                                      LaunchLab
-                                    </span>
-                                  );
-                                } else {
-                                  // Fallback to "Migrated" for unknown protocols
-                                  return (
-                                    <span style={{ color: AX.aiBlue }}>
-                                      Migrated
-                                    </span>
-                                  );
-                                }
-                              } else {
-                                // Fallback to bonding curve progress
-                                const bondingProgress =
-                                  typeof token.bonding_curve_progress ===
-                                  "number"
-                                    ? token.bonding_curve_progress
-                                    : parseFloat(
-                                        token.bonding_curve_progress || "0",
-                                      );
-                                return (
-                                  <span style={{ color: AX.aiGreen }}>
-                                    Bonding:{" "}
-                                    <SmoothNumber
-                                      value={bondingProgress}
-                                      formatter={(val) => `${Math.round(val)}%`}
-                                      duration={400}
-                                    />
-                                  </span>
-                                );
-                              }
-                            })()}
-                          </span>
-                        );
-                      })()}
+                      {/* Status popout on hover - PHASE 3: Uses memoized component */}
+                      <span
+                        className="status-popup absolute -top-8 left-1/2 -translate-x-1/2 border px-2 py-1 text-xs"
+                        style={{
+                          pointerEvents: "none",
+                          backgroundColor: AX.surface,
+                          borderColor: AX.border,
+                          color: AX.text,
+                          zIndex: 99999,
+                          borderRadius: "6px",
+                          fontSize: "11px",
+                          fontWeight: "500",
+                        }}
+                      >
+                        <StatusPopupContent token={token} title={title} />
+                      </span>
                       {/* Profile Picture & Address */}
                       <div
                         className="relative flex flex-shrink-0 flex-col items-center pt-1"
@@ -7727,28 +7748,34 @@ function PulseTable({
                                     <span className="text-sm text-white">
                                       {token.dev_tokens_migrated ?? 0}/{token.dev_tokens_created ?? 0}
                                     </span>
-                                    {/* Dev Migration Tooltip */}
-                                    <div className="pointer-events-none absolute left-0 top-full mt-2 min-w-[180px] bg-[#1a1b1f] border border-[#2a2b33] rounded-lg opacity-0 group-hover/dev:opacity-100 group-hover/dev:pointer-events-auto transition-opacity duration-100 z-[99999] shadow-xl overflow-hidden">
+                                    {/* Dev Migration Tooltip - PHASE 3: Unified AX styling */}
+                                    <div
+                                      className="pointer-events-none absolute left-0 top-full mt-2 min-w-[180px] rounded-lg opacity-0 group-hover/dev:opacity-100 group-hover/dev:pointer-events-auto z-[99999] overflow-hidden"
+                                      style={{
+                                        backgroundColor: AX.surface,
+                                        border: `1px solid ${AX.border}`,
+                                      }}
+                                    >
                                       <div className="px-3 py-2 space-y-1.5">
                                         <div className="flex justify-between items-center">
-                                          <span className="text-sm text-gray-400">Dev Migrated</span>
-                                          <span className="text-sm text-white font-medium">{token.dev_tokens_migrated ?? 0}</span>
+                                          <span className="text-sm" style={{ color: AX.muted }}>Dev Migrated</span>
+                                          <span className="text-sm font-medium" style={{ color: AX.text }}>{token.dev_tokens_migrated ?? 0}</span>
                                         </div>
                                         <div className="flex justify-between items-center">
-                                          <span className="text-sm text-gray-400">Dev Launched</span>
-                                          <span className="text-sm text-white font-medium">{token.dev_tokens_created ?? 0}</span>
+                                          <span className="text-sm" style={{ color: AX.muted }}>Dev Launched</span>
+                                          <span className="text-sm font-medium" style={{ color: AX.text }}>{token.dev_tokens_created ?? 0}</span>
                                         </div>
                                         <div className="flex justify-between items-center">
-                                          <span className="text-sm text-gray-400">Migrated</span>
-                                          <span className="text-sm text-white font-medium">
+                                          <span className="text-sm" style={{ color: AX.muted }}>Migrated</span>
+                                          <span className="text-sm font-medium" style={{ color: AX.text }}>
                                             {token.dev_tokens_created && token.dev_tokens_created > 0
                                               ? `${Math.round((token.dev_tokens_migrated ?? 0) / token.dev_tokens_created * 100)}%`
                                               : '0%'}
                                           </span>
                                         </div>
                                       </div>
-                                      <div className="px-3 py-2 border-t border-[#2a2b33] bg-[#16171a]">
-                                        <span className="text-xs text-gray-500">Click to open Dev Tokens</span>
+                                      <div className="px-3 py-2" style={{ borderTop: `1px solid ${AX.border}`, backgroundColor: AX.surface2 }}>
+                                        <span className="text-xs" style={{ color: AX.muted }}>Click to open Dev Tokens</span>
                                       </div>
                                     </div>
                                   </div>
@@ -7759,12 +7786,18 @@ function PulseTable({
                                     <span className="text-sm text-white">
                                       {token.kol_count ?? 0}
                                     </span>
-                                    {/* Tooltip */}
-                                    <div className="pointer-events-none absolute top-full left-0 z-[99999] mt-2 rounded-lg border border-[#2a2b33] bg-[#1a1b1f] px-3 py-2 whitespace-nowrap opacity-0 shadow-xl transition-opacity duration-100 group-hover/kol2:opacity-100">
-                                      <span className="text-sm font-medium text-white">
+                                    {/* Tooltip - PHASE 3: Unified AX styling */}
+                                    <div
+                                      className="pointer-events-none absolute top-full left-0 z-[99999] mt-2 rounded-lg px-3 py-2 whitespace-nowrap opacity-0 group-hover/kol2:opacity-100"
+                                      style={{
+                                        backgroundColor: AX.surface,
+                                        border: `1px solid ${AX.border}`,
+                                      }}
+                                    >
+                                      <span className="text-sm font-medium" style={{ color: AX.text }}>
                                         KOL Count
                                       </span>
-                                      <p className="mt-0.5 text-xs text-gray-400">
+                                      <p className="mt-0.5 text-xs" style={{ color: AX.muted }}>
                                         Key Opinion Leaders holding this token
                                       </p>
                                     </div>
@@ -7786,28 +7819,27 @@ function PulseTable({
                                         style={{ color: "#36d8ff" }}
                                       />
                                     </div>
+                                    {/* PHASE 4 (C2): Replaced IIFE with helper function */}
                                     <span className="text-sm text-white">
-                                      {(() => {
-                                        const holders =
-                                          token.holder_count ??
-                                          token.total_holders ??
-                                          token.unique_wallets_24h ??
-                                          0;
-                                        if (holders >= 1e9)
-                                          return `${(holders / 1e9).toFixed(1)}B`;
-                                        if (holders >= 1e6)
-                                          return `${(holders / 1e6).toFixed(1)}M`;
-                                        if (holders >= 1e3)
-                                          return `${(holders / 1e3).toFixed(1)}K`;
-                                        return holders.toString();
-                                      })()}
+                                      {formatHolderCount(
+                                        token.holder_count ??
+                                        token.total_holders ??
+                                        token.unique_wallets_24h ??
+                                        0
+                                      )}
                                     </span>
-                                    {/* Tooltip */}
-                                    <div className="pointer-events-none absolute top-full left-0 z-[99999] mt-2 rounded-lg border border-[#2a2b33] bg-[#1a1b1f] px-3 py-2 whitespace-nowrap opacity-0 shadow-xl transition-opacity duration-100 group-hover/holder2:opacity-100">
-                                      <span className="text-sm font-medium text-white">
+                                    {/* Tooltip - PHASE 3: Unified AX styling */}
+                                    <div
+                                      className="pointer-events-none absolute top-full left-0 z-[99999] mt-2 rounded-lg px-3 py-2 whitespace-nowrap opacity-0 group-hover/holder2:opacity-100"
+                                      style={{
+                                        backgroundColor: AX.surface,
+                                        border: `1px solid ${AX.border}`,
+                                      }}
+                                    >
+                                      <span className="text-sm font-medium" style={{ color: AX.text }}>
                                         Holder Count
                                       </span>
-                                      <p className="mt-0.5 text-xs text-gray-400">
+                                      <p className="mt-0.5 text-xs" style={{ color: AX.muted }}>
                                         Total wallets holding this token
                                       </p>
                                     </div>
@@ -7856,6 +7888,7 @@ function PulseTable({
                                 style={{ color: AX.muted }}
                               >
                                 <span className="mb-[3px]">MC </span>
+                                {/* PHASE 4 (C1): Replaced SmoothNumber with static span - eliminates RAF animations */}
                                 {(() => {
                                   const isFinalStretchColumn =
                                     title.toLowerCase().includes("final") ||
@@ -7876,13 +7909,7 @@ function PulseTable({
                                         className="number-font text-sm font-medium lg:text-base"
                                         style={{ color: "#31e3ac" }}
                                       >
-                                        <SmoothNumber
-                                          value={mcVal}
-                                          formatter={(val) =>
-                                            `${formatMarketCap(val)}`
-                                          }
-                                          duration={300}
-                                        />
+                                        {formatMarketCap(mcVal)}
                                       </span>
                                     );
                                   }
@@ -7892,27 +7919,9 @@ function PulseTable({
                                       metricType="marketCap"
                                       className="number-font text-sm font-medium lg:text-base"
                                     >
-                                      <SmoothNumber
-                                        value={mcVal}
-                                        formatter={(val) =>
-                                          `$${formatMarketCap(val)}`
-                                        }
-                                        duration={300}
-                                      />
+                                      ${formatMarketCap(mcVal)}
                                     </SmartColor>
                                   );
-                                  /*  if (hasGreenWave) {
-                               return (
-                                 <span className="text-sm lg:text-base font-medium number-font text-white">
-                                   <SmoothNumber value={mcVal} formatter={(val) => `$${formatMarketCap(val)}`} duration={300} />
-                                 </span>
-                               );
-                             }
-                             return (
-                               <SmartColor token={token} metricType="marketCap" className="text-sm lg:text-base font-medium number-font text-white">
-                                 <SmoothNumber value={mcVal} formatter={(val) => `$${formatMarketCap(val)}`} duration={300} />
-                               </SmartColor>
-                             ); */
                                 })()}
                               </div>
                               <div
@@ -7922,28 +7931,14 @@ function PulseTable({
                                 <span className="mb-[1px] ml-auto text-xs">
                                   V
                                 </span>{" "}
+                                {/* PHASE 4 (C1): Replaced SmoothNumber with static span */}
                                 <span
                                   className="number-font text-xs font-medium lg:text-sm"
                                   style={{
                                     color: "#ffffff",
                                   }}
                                 >
-                                  <SmoothNumber
-                                    value={calculateVolumeUsd(token, solPrice)}
-                                    formatter={(val) => {
-                                      const rounded = Math.round(val);
-                                      if (rounded >= 1e12)
-                                        return `$${Math.round(rounded / 1e12)}T`;
-                                      if (rounded >= 1e9)
-                                        return `$${Math.round(rounded / 1e9)}B`;
-                                      if (rounded >= 1e6)
-                                        return `$${Math.round(rounded / 1e6)}M`;
-                                      if (rounded >= 1e3)
-                                        return `$${Math.round(rounded / 1e3)}K`;
-                                      return `$${rounded}`;
-                                    }}
-                                    duration={300}
-                                  />
+                                  {formatVolumeDisplay(calculateVolumeUsd(token, solPrice))}
                                 </span>
                               </div>
                             </div>
@@ -8020,101 +8015,41 @@ function PulseTable({
                                   className="flex flex-row items-center gap-1"
                                   style={{ color: AX.muted }}
                                 >
-                                  <span className="text-xs">TX</span>{" "}
-                                  <span
-                                    className="number-font text-xs font-medium"
-                                    style={{
-                                      color: "#ffffff",
-                                    }}
-                                  >
-                                    <SimpleNumber
-                                      value={(() => {
-                                        // Helper to safely parse number (handles strings, NaN, Infinity)
-                                        const safeNum = (val: any): number => {
-                                          if (val === null || val === undefined) return 0;
-                                          const num = typeof val === 'string' ? parseFloat(val) : Number(val);
-                                          return isFinite(num) ? num : 0;
-                                        };
-
-                                        // Use best available timeframe: prefer 5m for new tokens, fallback through 1h, 6h, 24h
-                                        const getBuySellData = () => {
-                                          // Try 5m first (most relevant for new tokens)
-                                          const buys5m = safeNum(token.total_buys_5m);
-                                          const sells5m = safeNum(token.total_sells_5m);
-                                          if (buys5m + sells5m > 0) return { buys: buys5m, sells: sells5m };
-
-                                          // Fallback to 1h
-                                          const buys1h = safeNum(token.total_buys_1h);
-                                          const sells1h = safeNum(token.total_sells_1h);
-                                          if (buys1h + sells1h > 0) return { buys: buys1h, sells: sells1h };
-
-                                          // Fallback to 6h
-                                          const buys6h = safeNum(token.total_buys_6h);
-                                          const sells6h = safeNum(token.total_sells_6h);
-                                          if (buys6h + sells6h > 0) return { buys: buys6h, sells: sells6h };
-
-                                          // Finally try 24h
-                                          return { buys: safeNum(token.total_buys_24h), sells: safeNum(token.total_sells_24h) };
-                                        };
-
-                                        const { buys, sells } = getBuySellData();
-                                        const total = buys + sells;
-                                        return isFinite(total) ? total : 0;
-                                      })()}
-                                      formatter={(val) => Math.round(val).toString()}
-                                    />
-                                  </span>
-                                  <div className="ml-1 flex h-0.5 w-8 overflow-hidden rounded-full bg-gray-700">
-                                    {(() => {
-                                      // Helper to safely parse number (handles strings, NaN, Infinity)
-                                      const safeNum = (val: any): number => {
-                                        if (val === null || val === undefined) return 0;
-                                        const num = typeof val === 'string' ? parseFloat(val) : Number(val);
-                                        return isFinite(num) ? num : 0;
-                                      };
-
-                                      // Use best available timeframe for buy/sell ratio
-                                      const getBuySellData = () => {
-                                        const buys5m = safeNum(token.total_buys_5m);
-                                        const sells5m = safeNum(token.total_sells_5m);
-                                        if (buys5m + sells5m > 0) return { buys: buys5m, sells: sells5m };
-
-                                        const buys1h = safeNum(token.total_buys_1h);
-                                        const sells1h = safeNum(token.total_sells_1h);
-                                        if (buys1h + sells1h > 0) return { buys: buys1h, sells: sells1h };
-
-                                        const buys6h = safeNum(token.total_buys_6h);
-                                        const sells6h = safeNum(token.total_sells_6h);
-                                        if (buys6h + sells6h > 0) return { buys: buys6h, sells: sells6h };
-
-                                        return { buys: safeNum(token.total_buys_24h), sells: safeNum(token.total_sells_24h) };
-                                      };
-
-                                      const { buys, sells } = getBuySellData();
-                                      const total = Math.max(1, buys + sells);
-                                      const buyPercent = isFinite(buys / total) ? Math.min(100, Math.max(0, (buys / total) * 100)) : 50;
-                                      const sellPercent = isFinite(sells / total) ? Math.min(100, Math.max(0, (sells / total) * 100)) : 50;
-
-                                      return (
-                                        <>
+                                  {/* PHASE 4 (C2): Replaced IIFEs with module-level helpers */}
+                                  {(() => {
+                                    const { buys, sells } = getBuySellData(token);
+                                    const total = buys + sells;
+                                    const displayTotal = Math.max(1, total);
+                                    const buyPercent = Math.min(100, Math.max(0, (buys / displayTotal) * 100));
+                                    const sellPercent = Math.min(100, Math.max(0, (sells / displayTotal) * 100));
+                                    return (
+                                      <>
+                                        <span className="text-xs">TX</span>{" "}
+                                        <span
+                                          className="number-font text-xs font-medium"
+                                          style={{ color: "#ffffff" }}
+                                        >
+                                          {Math.round(total)}
+                                        </span>
+                                        <div className="ml-1 flex h-0.5 w-8 overflow-hidden rounded-full bg-gray-700">
                                           <div
                                             className="h-full"
                                             style={{
-                                              backgroundColor: "#31e3ac", // Green for buys
+                                              backgroundColor: "#31e3ac",
                                               width: `${buyPercent}%`,
                                             }}
                                           ></div>
                                           <div
                                             className="h-full"
                                             style={{
-                                              backgroundColor: "#d11f3a", // Red for sells
+                                              backgroundColor: "#d11f3a",
                                               width: `${sellPercent}%`,
                                             }}
                                           ></div>
-                                        </>
-                                      );
-                                    })()}
-                                  </div>
+                                        </div>
+                                      </>
+                                    );
+                                  })()}
                                 </div>
                               </div>
 

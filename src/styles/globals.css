@@ -320,3 +320,45 @@ input[type="number"] {
   -moz-appearance: textfield;
   appearance: textfield;
 }
+
+/* PHASE 3 CPU Optimization: Token Row Hover Styles */
+/* These classes use GPU-accelerated transforms and opacity instead of JS style manipulation */
+.token-row {
+  background-color: transparent;
+  transition: background-color 150ms ease-out !important;
+}
+
+.token-row.row-hovered {
+  background-color: rgba(107, 114, 128, 0.1) !important;
+}
+
+/* Status popup visibility - CSS-only show/hide */
+.status-popup {
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 150ms ease-out !important;
+}
+
+.status-popup.popup-visible {
+  opacity: 1 !important;
+  display: block !important;
+}
+
+/* Pulse table action buttons - smooth opacity transitions */
+.pulse-action-btn {
+  transition: color 200ms ease-out, box-shadow 200ms ease-out !important;
+}
+
+.pulse-action-btn:hover {
+  box-shadow: 0 0 6px rgba(54, 216, 255, 0.5);
+}
+
+/* Wave animation - can be conditionally disabled for performance */
+@keyframes subtleWaveFlow {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(100%); }
+}
+
+.wave-animation-disabled .wave-animation {
+  animation: none !important;
+}

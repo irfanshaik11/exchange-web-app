@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useState, useMemo, useCallback } from "react";
+import React, { useEffect, useState, useMemo, useCallback, useRef } from "react";
 import { useRouter } from "next/router";
 import PulseTable from "./PulseTable";
 import MonadTable from "./MonadTable";
@@ -499,14 +499,28 @@ export default function PulseContent({ forceMobileView = false }: PulseContentPr
   const combinedFinalStretch = useMemo(() => [...finalStretch], [finalStretch]);
   const combinedMigrated = useMemo(() => [...migrated], [migrated]);
 
+  // Track if we've ever had pulse data - prevents grey screen on tab return
+  // Once data has been shown, we never flash skeleton again
+  const hasEverHadData = useRef(false);
+
   // Memoize the loading state
   const isLoading = useMemo(() => {
+    // Once we've had data, never show skeleton again (prevents grey screen on tab return)
+    if (hasEverHadData.current) return false;
+
     if (isMonadRoute) {
       return monadNew.length === 0 && monadNewTick === 0;
     }
     return !tokens.length && !launchpadData?.new?.length && !httpNew.length;
   }, [isMonadRoute, tokens.length, launchpadData?.new?.length, httpNew.length, monadNew.length, monadNewTick]);
-  
+
+  // Mark that we've had data - once true, never show skeleton again
+  useEffect(() => {
+    if (tokens.length > 0 || launchpadData?.new?.length || httpNew.length > 0) {
+      hasEverHadData.current = true;
+    }
+  }, [tokens.length, launchpadData?.new?.length, httpNew.length]);
+
   const newPairsLoading = isLoading;
   
   const hasError = useMemo(() => {

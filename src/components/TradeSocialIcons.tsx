@@ -277,10 +277,16 @@ export function TradeSocialIcons({ token }: { token: Token }) {
           >
             <FiGlobe size={14} className="text-neutral-400 hover:text-white" />
           </button>
-          {/* Website URL Tooltip */}
-          <div className="pointer-events-none absolute top-full left-1/2 z-[99999] mt-2 -translate-x-1/2 rounded-lg border border-[#2a2b33] bg-[#1a1b1f] px-3 py-2 whitespace-nowrap opacity-0 shadow-xl transition-opacity duration-100 group-hover/website:opacity-100">
-            <span className="text-xs text-gray-400">Website</span>
-            <p className="max-w-[200px] truncate text-sm font-medium text-white">
+          {/* Website URL Tooltip - solid background, no shadow, positioned right */}
+          <div
+            className="pointer-events-none absolute left-full top-0 z-[99999] ml-2 rounded-lg px-3 py-2 whitespace-nowrap opacity-0 transition-opacity duration-100 group-hover/website:opacity-100"
+            style={{
+              backgroundColor: "#16171C",
+              border: "1px solid #24252C",
+            }}
+          >
+            <span className="text-xs" style={{ color: "#9CA3AF" }}>Website</span>
+            <p className="max-w-[200px] truncate text-sm font-medium" style={{ color: "#f0f5f5" }}>
               {socialLinks.website}
             </p>
           </div>

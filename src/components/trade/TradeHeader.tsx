@@ -1641,24 +1641,30 @@ const TradeHeader: React.FC<TradeHeaderProps> = ({ token, livePriceUsd, liveMark
 													<span className="text-xs sm:text-sm text-white">
 														{devMigrated}/{devCreated}
 													</span>
-													{/* Dev Migration Tooltip */}
-													<div className="pointer-events-none absolute left-0 top-full mt-2 min-w-[180px] bg-[#1a1b1f] border border-[#2a2b33] rounded-lg opacity-0 group-hover/dev:opacity-100 group-hover/dev:pointer-events-auto transition-opacity duration-100 z-[99999] shadow-xl overflow-hidden">
+													{/* Dev Migration Tooltip - solid background, no shadow */}
+													<div
+														className="pointer-events-none absolute left-full top-0 ml-2 min-w-[180px] rounded-lg opacity-0 group-hover/dev:opacity-100 group-hover/dev:pointer-events-auto transition-opacity duration-100 z-[99999] overflow-hidden"
+														style={{
+															backgroundColor: AX.surface,
+															border: `1px solid ${AX.border}`,
+														}}
+													>
 														<div className="px-3 py-2 space-y-1.5">
 															<div className="flex justify-between items-center">
-																<span className="text-sm text-gray-400">Dev Migrated</span>
-																<span className="text-sm text-white font-medium">{devMigrated}</span>
+																<span className="text-sm" style={{ color: AX.muted }}>Dev Migrated</span>
+																<span className="text-sm font-medium" style={{ color: AX.text }}>{devMigrated}</span>
 															</div>
 															<div className="flex justify-between items-center">
-																<span className="text-sm text-gray-400">Dev Launched</span>
-																<span className="text-sm text-white font-medium">{devCreated}</span>
+																<span className="text-sm" style={{ color: AX.muted }}>Dev Launched</span>
+																<span className="text-sm font-medium" style={{ color: AX.text }}>{devCreated}</span>
 															</div>
 															<div className="flex justify-between items-center">
-																<span className="text-sm text-gray-400">Migrated</span>
-																<span className="text-sm text-white font-medium">{devMigratedPct}%</span>
+																<span className="text-sm" style={{ color: AX.muted }}>Migrated</span>
+																<span className="text-sm font-medium" style={{ color: AX.text }}>{devMigratedPct}%</span>
 															</div>
 														</div>
-														<div className="px-3 py-2 border-t border-[#2a2b33] bg-[#16171a]">
-															<span className="text-xs text-gray-500">Click to open Dev Tokens</span>
+														<div className="px-3 py-2" style={{ borderTop: `1px solid ${AX.border}`, backgroundColor: AX.surface2 }}>
+															<span className="text-xs" style={{ color: AX.muted }}>Click to open Dev Tokens</span>
 														</div>
 													</div>
 												</div>
@@ -1667,12 +1673,18 @@ const TradeHeader: React.FC<TradeHeaderProps> = ({ token, livePriceUsd, liveMark
 												<div className="group/kol relative flex items-center gap-0.5 sm:gap-1 text-violet-200">
 													<CiTrophy size={14} className="sm:w-4 sm:h-4" />
 													<span className="text-xs sm:text-sm text-white">{kolCount}</span>
-													{/* Tooltip */}
-													<div className="pointer-events-none absolute top-full left-0 z-[99999] mt-2 rounded-lg border border-[#2a2b33] bg-[#1a1b1f] px-3 py-2 whitespace-nowrap opacity-0 shadow-xl transition-opacity duration-100 group-hover/kol:opacity-100">
-														<span className="text-sm font-medium text-white">
+													{/* Tooltip - solid background, no shadow */}
+													<div
+														className="pointer-events-none absolute left-full top-0 z-[99999] ml-2 rounded-lg px-3 py-2 whitespace-nowrap opacity-0 transition-opacity duration-100 group-hover/kol:opacity-100"
+														style={{
+															backgroundColor: AX.surface,
+															border: `1px solid ${AX.border}`,
+														}}
+													>
+														<span className="text-sm font-medium" style={{ color: AX.text }}>
 															KOL Count
 														</span>
-														<p className="mt-0.5 text-xs text-gray-400">
+														<p className="mt-0.5 text-xs" style={{ color: AX.muted }}>
 															Key Opinion Leaders holding this token
 														</p>
 													</div>
@@ -1698,12 +1710,18 @@ const TradeHeader: React.FC<TradeHeaderProps> = ({ token, livePriceUsd, liveMark
 															return holders.toString();
 														})()}
 													</span>
-													{/* Tooltip */}
-													<div className="pointer-events-none absolute top-full left-0 z-[99999] mt-2 rounded-lg border border-[#2a2b33] bg-[#1a1b1f] px-3 py-2 whitespace-nowrap opacity-0 shadow-xl transition-opacity duration-100 group-hover/holder:opacity-100">
-														<span className="text-sm font-medium text-white">
+													{/* Tooltip - solid background, no shadow */}
+													<div
+														className="pointer-events-none absolute left-full top-0 z-[99999] ml-2 rounded-lg px-3 py-2 whitespace-nowrap opacity-0 transition-opacity duration-100 group-hover/holder:opacity-100"
+														style={{
+															backgroundColor: AX.surface,
+															border: `1px solid ${AX.border}`,
+														}}
+													>
+														<span className="text-sm font-medium" style={{ color: AX.text }}>
 															Holder Count
 														</span>
-														<p className="mt-0.5 text-xs text-gray-400">
+														<p className="mt-0.5 text-xs" style={{ color: AX.muted }}>
 															Total wallets holding this token
 														</p>
 													</div>

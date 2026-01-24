@@ -1,6 +1,5 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
-import { flushSync } from 'react-dom';
-// flushSync is used to bypass React 18's automatic batching for instant UI updates
+// REMOVED: flushSync import - React 18 batching is sufficient and prevents blank screens
 import { env } from '~/env';
 
 interface PulseToken {
@@ -147,12 +146,7 @@ export function usePulseWebSocket(
     onFinalStretchTokenRef.current = onFinalStretchToken;
     onMigratedTokenRef.current = onMigratedToken;
     onPriceUpdateRef.current = onPriceUpdate;
-    console.log('[usePulseWebSocket] Callback refs updated:', {
-      onNewToken: typeof onNewToken,
-      onFinalStretchToken: typeof onFinalStretchToken,
-      onMigratedToken: typeof onMigratedToken,
-      onPriceUpdate: typeof onPriceUpdate
-    });
+    // DEBUG REMOVED: Callback ref logging runs on every prop change
   }, [onNewToken, onFinalStretchToken, onMigratedToken, onPriceUpdate]);
 
   const clearTokens = useCallback(() => {
@@ -164,7 +158,6 @@ export function usePulseWebSocket(
   const connect = useCallback(() => {
     // Don't connect if feature is disabled
     if (!enabled) {
-      console.log('[usePulseWebSocket] WebSocket disabled via feature flag');
       return;
     }
 
@@ -174,23 +167,18 @@ export function usePulseWebSocket(
     }
 
     if (reconnectAttemptsRef.current >= maxReconnectAttempts) {
-      console.log('[usePulseWebSocket] Max reconnect attempts reached');
       setError('Max reconnection attempts reached');
       return;
     }
 
     try {
-      console.log('[usePulseWebSocket] Connecting to:', url);
       const ws = new WebSocket(url);
 
       ws.onopen = () => {
         if (!mountedRef.current) return;
-        console.log('[usePulseWebSocket] ✅ Connected to websocket stream');
         setConnected(true);
         setError(null);
         reconnectAttemptsRef.current = 0;
-
-        // No subscription needed - hub broadcasts to all connected clients automatically
       };
 
       ws.onmessage = (event) => {
@@ -212,24 +200,22 @@ export function usePulseWebSocket(
                   mint: rawToken.address || rawToken.mint,  // Backend uses 'address', frontend expects 'mint'
                 };
 
-                // Use flushSync to combine callback + state update in one synchronous render
-                // This ensures tokens appear instantly without any delay
-                flushSync(() => {
-                  // Call callback immediately for instant updates
-                  onNewTokenRef.current?.(token);
-                  
-                  // Update state immediately with O(1) Map-based deduplication
-                  setNewTokens((prev) => {
-                    const map = new Map<string, PulseToken>();
-                    map.set(token.mint, token); // New token first
-                    // Add existing tokens, skipping duplicates
-                    for (const t of prev) {
-                      if (t.mint !== token.mint && map.size < 50) {
-                        map.set(t.mint, t);
-                      }
+                // React 18 automatically batches these within 16ms - imperceptible delay
+                // REMOVED flushSync: Was blocking main thread causing 100%+ CPU and
+                // blank screens when returning to tab (queued messages blocked paint)
+                onNewTokenRef.current?.(token);
+
+                // Update state with O(1) Map-based deduplication
+                setNewTokens((prev) => {
+                  const map = new Map<string, PulseToken>();
+                  map.set(token.mint, token); // New token first
+                  // Add existing tokens, skipping duplicates
+                  for (const t of prev) {
+                    if (t.mint !== token.mint && map.size < 50) {
+                      map.set(t.mint, t);
                     }
-                    return Array.from(map.values()); // Keep only latest 50
-                  });
+                  }
+                  return Array.from(map.values()); // Keep only latest 50
                 });
               } else if (message.type === 'final_stretch_token' && message.data && !Array.isArray(message.data)) {
                 // Transform backend response: map 'address' to 'mint' for frontend compatibility
@@ -239,19 +225,18 @@ export function usePulseWebSocket(
                   mint: rawToken.address || rawToken.mint,  // Backend uses 'address', frontend expects 'mint'
                 };
 
-                flushSync(() => {
-                  onFinalStretchTokenRef.current?.(token);
-                  
-                  setFinalStretchTokens((prev) => {
-                    const map = new Map<string, PulseToken>();
-                    map.set(token.mint, token);
-                    for (const t of prev) {
-                      if (t.mint !== token.mint && map.size < 50) {
-                        map.set(t.mint, t);
-                      }
+                // React 18 batches automatically - REMOVED flushSync for performance
+                onFinalStretchTokenRef.current?.(token);
+
+                setFinalStretchTokens((prev) => {
+                  const map = new Map<string, PulseToken>();
+                  map.set(token.mint, token);
+                  for (const t of prev) {
+                    if (t.mint !== token.mint && map.size < 50) {
+                      map.set(t.mint, t);
                     }
-                    return Array.from(map.values());
-                  });
+                  }
+                  return Array.from(map.values());
                 });
               } else if (message.type === 'migrated_token' && message.data && !Array.isArray(message.data)) {
                 // Transform backend response: map 'address' to 'mint' for frontend compatibility
@@ -261,19 +246,18 @@ export function usePulseWebSocket(
                   mint: rawToken.address || rawToken.mint,  // Backend uses 'address', frontend expects 'mint'
                 };
 
-                flushSync(() => {
-                  onMigratedTokenRef.current?.(token);
-                  
-                  setMigratedTokens((prev) => {
-                    const map = new Map<string, PulseToken>();
-                    map.set(token.mint, token);
-                    for (const t of prev) {
-                      if (t.mint !== token.mint && map.size < 50) {
-                        map.set(t.mint, t);
-                      }
+                // React 18 batches automatically - REMOVED flushSync for performance
+                onMigratedTokenRef.current?.(token);
+
+                setMigratedTokens((prev) => {
+                  const map = new Map<string, PulseToken>();
+                  map.set(token.mint, token);
+                  for (const t of prev) {
+                    if (t.mint !== token.mint && map.size < 50) {
+                      map.set(t.mint, t);
                     }
-                    return Array.from(map.values());
-                  });
+                  }
+                  return Array.from(map.values());
                 });
               } else if (message.type === 'price_update' && message.data) {
                 const rawUpdates = Array.isArray(message.data) ? message.data : [message.data];
@@ -334,24 +318,18 @@ export function usePulseWebSocket(
         }
       };
 
-      ws.onerror = (event) => {
+      ws.onerror = () => {
         if (!mountedRef.current) return;
-        console.error('[usePulseWebSocket] WebSocket error:', event);
         setError('WebSocket connection error');
       };
 
       ws.onclose = () => {
         if (!mountedRef.current) return;
-        console.log('[usePulseWebSocket] Disconnected');
         setConnected(false);
 
         // Attempt to reconnect
         if (enabled && reconnectAttemptsRef.current < maxReconnectAttempts) {
           reconnectAttemptsRef.current += 1;
-          console.log(
-            `[usePulseWebSocket] Reconnecting in ${reconnectInterval}ms (attempt ${reconnectAttemptsRef.current}/${maxReconnectAttempts})`
-          );
-
           reconnectTimeoutRef.current = setTimeout(() => {
             if (mountedRef.current) {
               connect();
@@ -362,7 +340,6 @@ export function usePulseWebSocket(
 
       wsRef.current = ws;
     } catch (err) {
-      console.error('[usePulseWebSocket] Failed to create WebSocket:', err);
       setError(err instanceof Error ? err.message : 'Failed to connect');
     }
   }, [enabled, url, channel, reconnectInterval, maxReconnectAttempts]);

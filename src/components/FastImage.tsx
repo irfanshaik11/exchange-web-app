@@ -1,27 +1,50 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, memo } from 'react';
 import ImageBubble from './ImageBubble';
 import { isMetadataUrl, resolveMetadataImage } from '~/utils/images';
 
 /**
- * Global tracker for loaded image URLs
- * Persists across all FastImage instances and re-renders
- * Prevents flickering when the same image URL is rendered multiple times
- * (e.g., same token in New Pairs → Final Stretch → Migrated)
+ * Global tracker for loaded image URLs with LRU eviction
+ * Uses Map instead of Set to track access times for proper LRU
  */
-const globalLoadedImages = new Set<string>();
-
-// Limit the Set size to prevent memory leaks (keep last 500 URLs)
+const globalLoadedImages = new Map<string, number>(); // url -> last access timestamp
 const MAX_TRACKED_IMAGES = 500;
+
 function trackLoadedImage(url: string) {
-  if (globalLoadedImages.size >= MAX_TRACKED_IMAGES) {
-    // Remove oldest entries (first 100)
-    const iterator = globalLoadedImages.values();
-    for (let i = 0; i < 100; i++) {
-      const first = iterator.next().value;
-      if (first) globalLoadedImages.delete(first);
+  // Update timestamp (moves to "recent" in LRU sense)
+  globalLoadedImages.set(url, Date.now());
+
+  // Evict oldest if over limit
+  if (globalLoadedImages.size > MAX_TRACKED_IMAGES) {
+    let oldestUrl = '';
+    let oldestTime = Infinity;
+    for (const [u, time] of globalLoadedImages) {
+      if (time < oldestTime) {
+        oldestTime = time;
+        oldestUrl = u;
+      }
     }
+    if (oldestUrl) globalLoadedImages.delete(oldestUrl);
   }
-  globalLoadedImages.add(url);
+}
+
+function isImageTracked(url: string): boolean {
+  if (globalLoadedImages.has(url)) {
+    // Update access time (LRU touch) - keeps active images in cache
+    globalLoadedImages.set(url, Date.now());
+    return true;
+  }
+  return false;
+}
+
+/**
+ * Helper to compute imageUrl from a source URL
+ * Used for synchronous initialization
+ */
+function computeImageUrl(src: string | null): string | null {
+  if (!src) return null;
+  const alreadyProxied = src.startsWith('/api/') || src.startsWith('data:');
+  const needsProxy = !alreadyProxied && src.startsWith('http');
+  return needsProxy ? `/api/image?url=${encodeURIComponent(src)}` : src;
 }
 
 interface FastImageProps {
@@ -31,16 +54,23 @@ interface FastImageProps {
   width?: number;
   height?: number;
   className?: string;
-  priority?: boolean; // For new pairs tokens
-  symbol?: string; // Token symbol for fallback letter
-  name?: string; // Token name for fallback letter
-  showBubble?: boolean; // Whether to show the pump logo bubble
-  bubbleSrc?: string; // Custom bubble image source
+  priority?: boolean;
+  symbol?: string;
+  name?: string;
+  showBubble?: boolean;
+  bubbleSrc?: string;
 }
 
-// Direct image loading - no proxy or domain checking needed
-
-export default function FastImage({
+/**
+ * FastImage - Flicker-free image component
+ *
+ * KEY FIX: State is initialized SYNCHRONOUSLY from props, not in effects.
+ * This prevents the flicker cycle: skeleton → image → skeleton → image
+ *
+ * Uses CSS background as fallback instead of conditional rendering.
+ * The image loads ON TOP of the background, so there's no flicker.
+ */
+function FastImageInner({
   src,
   fallbackSrc,
   alt = '',
@@ -53,156 +83,80 @@ export default function FastImage({
   showBubble = true,
   bubbleSrc,
 }: FastImageProps) {
-  const [imageError, setImageError] = useState(false);
-  const [resolvedSrc, setResolvedSrc] = useState<string | null>(null);
-
-  // Track if this specific image has loaded in this component instance
-  const [imageLoaded, setImageLoaded] = useState(false);
-
-  // Delay showing skeleton to prevent flash when image loads from cache
-  // If image loads within 50ms (typical for cached), skeleton never shows
-  const [showSkeleton, setShowSkeleton] = useState(false);
-
-  // Ref to track the current URL being loaded (prevents stale closure issues)
-  const currentUrlRef = useRef<string | null>(null);
-  const skeletonTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
   const inputSrc = src || fallbackSrc;
 
-  // If src is a metadata URL (JSON), resolve it to get actual image URL
+  // CRITICAL: Initialize resolvedSrc SYNCHRONOUSLY from props
+  // Only use null for metadata URLs (which need async resolution)
+  // This prevents the flicker caused by: null → effect sets value → re-render
+  const [resolvedSrc, setResolvedSrc] = useState<string | null>(() => {
+    if (inputSrc && !isMetadataUrl(inputSrc)) {
+      return inputSrc; // Regular URL - use immediately!
+    }
+    return null; // Metadata URL - will resolve in effect
+  });
+
+  // CRITICAL: Initialize imageLoaded from global tracker SYNCHRONOUSLY
+  // This prevents: false → effect checks tracker → true → re-render
+  const [imageLoaded, setImageLoaded] = useState(() => {
+    const initialSrc = inputSrc && !isMetadataUrl(inputSrc) ? inputSrc : null;
+    const initialUrl = computeImageUrl(initialSrc);
+    return initialUrl ? isImageTracked(initialUrl) : false;
+  });
+
+  const [imageError, setImageError] = useState(false);
+  const currentUrlRef = useRef<string | null>(null);
+
+  // Get first letter for fallback
+  const firstLetter = (() => {
+    if (symbol && symbol.length > 0) return symbol.charAt(0).toUpperCase();
+    if (name && name.length > 0) return name.charAt(0).toUpperCase();
+    if (alt && alt.length > 0) return alt.charAt(0).toUpperCase();
+    return '?';
+  })();
+
+  // Resolve metadata URLs (only runs for metadata URLs, not regular URLs)
   useEffect(() => {
     if (inputSrc && isMetadataUrl(inputSrc)) {
-      // Don't fall back to metadata URL if resolution fails - that would try to load JSON as image
       resolveMetadataImage(inputSrc).then(resolved => {
         if (resolved) {
-          setResolvedSrc(resolved);
+          setResolvedSrc(prev => prev === resolved ? prev : resolved);
         }
-        // If null, keep resolvedSrc as null - shows fallback letter
-        // TTL cache will allow retry after 30 seconds
       });
+    } else if (inputSrc) {
+      // For regular URLs, only update if changed (prevents unnecessary re-renders)
+      setResolvedSrc(prev => prev === inputSrc ? prev : inputSrc);
     } else {
-      setResolvedSrc(inputSrc || null);
+      setResolvedSrc(prev => prev === null ? prev : null);
     }
   }, [inputSrc]);
 
-  // Use resolved URL (or original if not metadata)
-  const finalSrc = resolvedSrc;
+  // Build final image URL
+  const imageUrl = computeImageUrl(resolvedSrc);
 
-  // When src changes, check if it's already in global cache
-  // If yes, skip the loading state entirely (no flicker!)
-  // If no, delay showing skeleton to prevent flash for cached images
+  // Update ref and check tracker when URL changes
   useEffect(() => {
-    // Clear any pending skeleton timeout
-    if (skeletonTimeoutRef.current) {
-      clearTimeout(skeletonTimeoutRef.current);
-      skeletonTimeoutRef.current = null;
-    }
-
-    if (!resolvedSrc) {
+    if (!imageUrl) {
       setImageLoaded(false);
       setImageError(false);
-      setShowSkeleton(true); // Show skeleton immediately for no-URL case
       return;
     }
 
-    // Build the final URL to check against global tracker
-    const alreadyProxiedCheck = resolvedSrc.startsWith('/api/') || resolvedSrc.startsWith('data:');
-    const needsProxyCheck = !alreadyProxiedCheck && resolvedSrc.startsWith('http');
-    const urlToCheck = needsProxyCheck
-      ? `/api/image?url=${encodeURIComponent(resolvedSrc)}`
-      : resolvedSrc;
+    currentUrlRef.current = imageUrl;
 
-    currentUrlRef.current = urlToCheck;
-
-    // Check if this URL was already loaded globally
-    if (globalLoadedImages.has(urlToCheck)) {
-      // Already loaded before - show immediately, no flicker!
-      setImageLoaded(true);
+    // If already in global tracker, set loaded immediately
+    if (isImageTracked(imageUrl)) {
+      setImageLoaded(prev => prev ? prev : true); // Only update if not already true
       setImageError(false);
-      setShowSkeleton(false);
     } else {
-      // New URL - don't show skeleton immediately
-      // Wait 50ms to see if image loads from cache first
-      // This prevents the brief flash when same token appears in multiple columns
-      setImageLoaded(false);
+      // New URL - don't reset imageLoaded (prevents flicker)
+      // The img onLoad will set it to true when loaded
       setImageError(false);
-      setShowSkeleton(false); // Hide skeleton initially
-
-      skeletonTimeoutRef.current = setTimeout(() => {
-        // Only show skeleton if image still hasn't loaded after 50ms
-        setShowSkeleton(true);
-      }, 50);
     }
-
-    return () => {
-      if (skeletonTimeoutRef.current) {
-        clearTimeout(skeletonTimeoutRef.current);
-      }
-    };
-  }, [resolvedSrc]);
-
-  // Proxy all external URLs to avoid CORS issues
-  // Don't proxy URLs that are already going through our API endpoints or are data URIs
-  const alreadyProxied = finalSrc?.startsWith('/api/') || finalSrc?.startsWith('data:');
-
-  // TEMPORARILY allowing ALL external domains through proxy
-  // TODO: Re-enable domain restrictions when needed by uncommenting the block below
-  const needsProxy = finalSrc && !alreadyProxied && finalSrc.startsWith('http');
-
-  // COMMENTED OUT - Domain restrictions for future use:
-  // const needsProxy = finalSrc && !alreadyProxied && (
-  //   finalSrc.includes('token-media.defined.fi') ||
-  //   finalSrc.includes('ipfs.io') ||
-  //   finalSrc.includes('cloudflare-ipfs.com') ||
-  //   finalSrc.includes('gateway.pinata.cloud') ||
-  //   finalSrc.includes('ipfs/') ||
-  //   finalSrc.startsWith('ipfs://') ||
-  //   finalSrc.includes('tokens.debridge.finance') ||
-  //   finalSrc.includes('debridge.finance') ||
-  //   finalSrc.includes('launchonsoar.com') ||
-  //   finalSrc.includes('metadata.rapidlaunch.io') ||
-  //   finalSrc.includes('rapidlaunch.io') ||
-  //   finalSrc.includes('metadata.j7tracker.com') ||
-  //   finalSrc.includes('j7tracker.com') ||
-  //   finalSrc.includes('edge.uxento.io') ||
-  //   finalSrc.includes('uxento.io') ||
-  //   finalSrc.includes('image.solanatracker.io') ||
-  //   finalSrc.includes('ipfs-forward.solanatracker.io') ||
-  //   finalSrc.includes('instagram.com') ||
-  //   finalSrc.includes('cdninstagram.com') ||
-  //   finalSrc.includes('ipfs.storacha.link') ||
-  //   finalSrc.includes('storacha.link') ||
-  //   finalSrc.includes('content.coinwave.gg') ||
-  //   finalSrc.includes('digitaloceanspaces.com') ||
-  //   finalSrc.includes('gateway.irys.xyz') ||
-  //   finalSrc.includes('irys.xyz')
-  // );
-
-  const imageUrl = needsProxy && finalSrc
-    ? `/api/image?url=${encodeURIComponent(finalSrc)}`
-    : finalSrc;
-
-  // Debug logging disabled for cleaner console
-  // React.useEffect(() => {
-  //   if (imageUrl) {
-  //     console.log(`[FastImage] Loading image:`, imageUrl, `for ${symbol || name || alt}`);
-  //   } else {
-  //     console.warn(`[FastImage] No image URL provided for ${symbol || name || alt}`);
-  //   }
-  // }, [imageUrl, symbol, name, alt]);
+  }, [imageUrl]);
 
   const handleLoad = () => {
-    // Cancel skeleton timeout - image loaded before it could show
-    if (skeletonTimeoutRef.current) {
-      clearTimeout(skeletonTimeoutRef.current);
-      skeletonTimeoutRef.current = null;
-    }
-
     setImageLoaded(true);
     setImageError(false);
-    setShowSkeleton(false);
-
-    // Track this URL globally so future renders skip loading state
     if (currentUrlRef.current) {
       trackLoadedImage(currentUrlRef.current);
     }
@@ -211,79 +165,91 @@ export default function FastImage({
   const handleError = () => {
     setImageError(true);
     setImageLoaded(false);
+    // Remove from tracker on error so it can retry
+    if (currentUrlRef.current) {
+      globalLoadedImages.delete(currentUrlRef.current);
+    }
   };
 
-  // Get the first letter for fallback display
-  const getFirstLetter = () => {
-    if (symbol && symbol.length > 0) {
-      return symbol.charAt(0).toUpperCase();
-    }
-    if (name && name.length > 0) {
-      return name.charAt(0).toUpperCase();
-    }
-    if (alt && alt.length > 0) {
-      return alt.charAt(0).toUpperCase();
-    }
-    return '?';
-  };
-
-  // Only show fallback if there's truly no image URL or if there was an error
-  // Don't show fallback while image is still loading
-  if (!imageUrl) {
+  // No URL - show fallback only
+  if (!imageUrl || imageError) {
     return (
       <div
         className={`relative ${className} flex items-center justify-center bg-gradient-to-br from-gray-800 to-black text-white font-bold shadow-lg`}
-        style={{ width, height }}
+        style={{ width, height, borderRadius: 'inherit' }}
       >
-        <span className="text-lg">{getFirstLetter()}</span>
+        <span className="text-lg select-none">{firstLetter}</span>
         {showBubble && <ImageBubble src={bubbleSrc} />}
       </div>
     );
   }
 
-  if (imageError) {
-    // Show fallback on error but log for debugging
-    return (
-      <div
-        className={`relative ${className} flex items-center justify-center bg-gradient-to-br from-gray-800 to-black text-white font-bold shadow-lg`}
-        style={{ width, height }}
-      >
-        <span className="text-lg">{getFirstLetter()}</span>
-        {showBubble && <ImageBubble src={bubbleSrc} />}
-      </div>
-    );
-  }
-
+  // Has URL - render background + image layered
+  // Background shows through until image loads, then image covers it
+  // NO conditional rendering = NO flicker
   return (
-    <div className={`relative ${className}`} style={{ width, height }}>
-      {/* Loading placeholder - only shown after 50ms delay if image hasn't loaded */}
-      {/* This prevents flash when cached images load quickly */}
-      {!imageLoaded && showSkeleton && (
-        <div
-          className="absolute inset-0 flex items-center justify-center bg-gradient-to-br from-gray-800 to-black text-white font-bold shadow-lg"
-        >
-          <span className="text-lg">{getFirstLetter()}</span>
-        </div>
-      )}
-      
-      {/* Actual image - no fade transition for instant display */}
+    <div
+      className={`relative ${className} overflow-hidden`}
+      style={{
+        width,
+        height,
+        borderRadius: 'inherit',
+        // Background gradient serves as the "skeleton"
+        background: 'linear-gradient(to bottom right, #1f2937, #000000)',
+      }}
+    >
+      {/* Fallback letter - always rendered, hidden by image when loaded */}
+      <div
+        className="absolute inset-0 flex items-center justify-center text-white font-bold"
+        style={{
+          // Hide when image is loaded (image will cover this anyway, but this ensures clean state)
+          opacity: imageLoaded ? 0 : 1,
+          pointerEvents: 'none',
+        }}
+      >
+        <span className="text-lg select-none">{firstLetter}</span>
+      </div>
+
+      {/* Image - always rendered, naturally covers background when loaded */}
       <img
-        key={imageUrl}
         src={imageUrl}
         alt={alt}
         width={width}
         height={height}
-        className={imageLoaded ? 'opacity-100' : 'opacity-0'}
-        style={{ width: '100%', height: '100%', objectFit: 'cover' }}
         onLoad={handleLoad}
         onError={handleError}
         loading={priority ? 'eager' : 'lazy'}
         decoding="async"
         fetchPriority={priority ? 'high' : 'auto'}
+        style={{
+          width: '100%',
+          height: '100%',
+          objectFit: 'cover',
+          // Image is always "visible" in DOM, browser just shows it when loaded
+          display: 'block',
+        }}
       />
-      
-      {/* Pump logo bubble */}
+
+      {/* Bubble overlay */}
       {showBubble && <ImageBubble src={bubbleSrc} />}
     </div>
   );
 }
+
+// Memoize to prevent unnecessary re-renders when parent updates
+// FIXED: Added className and alt to comparison
+export default memo(FastImageInner, (prevProps, nextProps) => {
+  return (
+    prevProps.src === nextProps.src &&
+    prevProps.fallbackSrc === nextProps.fallbackSrc &&
+    prevProps.width === nextProps.width &&
+    prevProps.height === nextProps.height &&
+    prevProps.className === nextProps.className &&
+    prevProps.alt === nextProps.alt &&
+    prevProps.symbol === nextProps.symbol &&
+    prevProps.name === nextProps.name &&
+    prevProps.showBubble === nextProps.showBubble &&
+    prevProps.bubbleSrc === nextProps.bubbleSrc &&
+    prevProps.priority === nextProps.priority
+  );
+});
