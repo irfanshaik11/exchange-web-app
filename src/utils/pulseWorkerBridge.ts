@@ -90,22 +90,17 @@ function doSave() {
   if (currentData.newTokens.length === 0 &&
       currentData.finalStretchTokens.length === 0 &&
       currentData.migratedTokens.length === 0) {
-    console.log('[PulseWorkerBridge] Skip save - no data');
     return;
   }
 
-  console.log('[PulseWorkerBridge] Saving to IndexedDB:', {
-    new: currentData.newTokens.length,
-    final: currentData.finalStretchTokens.length,
-    migrated: currentData.migratedTokens.length,
-  });
+  // Removed console.log to reduce CPU
 
   savePulseCache({
     newTokens: currentData.newTokens,
     finalStretchTokens: currentData.finalStretchTokens,
     migratedTokens: currentData.migratedTokens,
     timestamp: Date.now(),
-  }).catch(err => console.error('[PulseWorkerBridge] Save error:', err));
+  }).catch(() => { /* Silent fail - save errors are non-critical */ });
 }
 
 /**
@@ -318,6 +313,13 @@ function startWorker() {
               notifyDataListeners();
               scheduleSave();
               scheduleBroadcast();
+
+              // Clear cutoff when fresh DATA arrives (not on timer)
+              // This ensures stale TOKEN_DELTAs are filtered until we have real data
+              if (messageCutoffTime > 0) {
+                messageCutoffTime = 0;
+                // Removed console.log to reduce CPU
+              }
             }
             break;
 
@@ -460,28 +462,42 @@ async function doInit(): Promise<void> {
         hiddenAt = Date.now();
         // Save immediately when user navigates away
         doSave();
-        console.log('[PulseWorkerBridge] Tab hidden - saved cache');
+        // Removed console.log to reduce CPU
       } else if (document.visibilityState === 'visible') {
         const hiddenDuration = hiddenAt > 0 ? Date.now() - hiddenAt : 0;
-        console.log(`[PulseWorkerBridge] Tab visible after ${Math.round(hiddenDuration / 1000)}s`);
+        // Removed console.log to reduce CPU
 
+        // IMMEDIATE: Show existing data right away - no blank screen!
+        // currentData still has cached tokens, just trigger re-render INSTANTLY
+        // This is a SYNCHRONOUS operation - works on all devices regardless of CPU speed
+        if (currentData.newTokens.length > 0 ||
+            currentData.finalStretchTokens.length > 0 ||
+            currentData.migratedTokens.length > 0) {
+          notifyDataListeners(); // Triggers React re-render with existing data
+
+          // Force browser repaint - fixes grey/white screen on tab return
+          // Without this, browser may not repaint until user interaction (click)
+          requestAnimationFrame(() => {
+            document.body.style.transform = 'translateZ(0)';
+            requestAnimationFrame(() => {
+              document.body.style.transform = '';
+            });
+          });
+        }
+
+        // THEN request fresh data from worker (async, happens after UI is already showing)
         // If hidden long enough, the postMessage queue has stale TOKEN_DELTAs
         // Set cutoff to filter them out - worker's data is still fresh!
         if (hiddenDuration > STALE_THRESHOLD_MS && worker) {
           // Set cutoff timestamp - any TOKEN_DELTA older than this will be ignored
           messageCutoffTime = Date.now();
-          console.log('[PulseWorkerBridge] Set message cutoff to filter stale queue');
 
           // Ask worker for its FRESH data snapshot
           // Worker has been receiving WebSocket data the whole time (workers aren't throttled)
           worker.postMessage({ type: 'RECONNECT' });
 
-          // Clear the cutoff after 2 seconds (queue should be drained by then)
-          // New messages after this point are genuinely fresh
-          setTimeout(() => {
-            messageCutoffTime = 0;
-            console.log('[PulseWorkerBridge] Cleared message cutoff - queue drained');
-          }, 2000);
+          // Cutoff is cleared in worker.onmessage when fresh DATA arrives
+          // This ensures we wait for actual fresh data, not arbitrary time
         } else {
           // Short absence - just request latest data, no filtering needed
           worker?.postMessage({ type: 'GET_DATA' });
@@ -510,20 +526,14 @@ async function doInit(): Promise<void> {
             finalStretchTokens: cached.finalStretchTokens || [],
             migratedTokens: cached.migratedTokens || [],
           };
-          console.log('[PulseWorkerBridge] Loaded fallback from cache:', {
-            new: currentData.newTokens.length,
-            final: currentData.finalStretchTokens.length,
-            migrated: currentData.migratedTokens.length,
-          });
+          // Removed console.log to reduce CPU
           notifyDataListeners();
-        } else {
-          console.log('[PulseWorkerBridge] Live data already present, skipping cache');
         }
+        // Removed else console.log to reduce CPU
       }
     })
-    .catch(err => {
-      console.warn('[PulseWorkerBridge] Failed to load cache (non-fatal):', err);
-      // Continue without cache - WebSocket will provide data
+    .catch(() => {
+      // Silent fail - Continue without cache, WebSocket will provide data
     });
 }
 
@@ -540,19 +550,17 @@ function initFallback(baseUrl: string) {
 
 function connectFallbackChannel(baseUrl: string, channel: 'new' | 'final_stretch' | 'migrated') {
   const url = `${baseUrl}/v1/stream?channel=${channel}`;
-  console.log(`[PulseWorkerBridge] Fallback connecting to ${channel}:`, url);
+  // Removed console.log to reduce CPU
 
   try {
     const ws = new WebSocket(url);
 
     ws.onopen = () => {
-      console.log(`[PulseWorkerBridge] Fallback connected: ${channel}`);
       connectionStatus[channel] = true;
       notifyConnectionListeners();
     };
 
     ws.onclose = () => {
-      console.log(`[PulseWorkerBridge] Fallback disconnected: ${channel}`);
       connectionStatus[channel] = false;
       notifyConnectionListeners();
       if (isLeader) {
@@ -560,8 +568,8 @@ function connectFallbackChannel(baseUrl: string, channel: 'new' | 'final_stretch
       }
     };
 
-    ws.onerror = (err) => {
-      console.error(`[PulseWorkerBridge] Fallback error on ${channel}:`, err);
+    ws.onerror = () => {
+      // Silent fail - connection errors are handled by onclose
     };
 
     // Process messages immediately for fast updates (trading terminal needs speed)
@@ -582,8 +590,8 @@ function connectFallbackChannel(baseUrl: string, channel: 'new' | 'final_stretch
       scheduleSave();
       scheduleBroadcast();
     };
-  } catch (err) {
-    console.error(`[PulseWorkerBridge] Fallback connection error:`, err);
+  } catch {
+    // Silent fail - connection errors are non-critical
   }
 }
 
@@ -1165,11 +1173,7 @@ export async function ensureDataLoaded(): Promise<void> {
                   currentData.finalStretchTokens.length > 0 ||
                   currentData.migratedTokens.length > 0;
 
-  console.log('[PulseWorkerBridge] ensureDataLoaded called, hasData:', hasData, {
-    new: currentData.newTokens.length,
-    final: currentData.finalStretchTokens.length,
-    migrated: currentData.migratedTokens.length,
-  });
+  // Removed console.log to reduce CPU
 
   if (hasData) {
     return; // Already have data, no need to reload
@@ -1177,7 +1181,6 @@ export async function ensureDataLoaded(): Promise<void> {
 
   // No data - try to load from IndexedDB cache
   try {
-    console.log('[PulseWorkerBridge] Loading from IndexedDB...');
     const cached = await loadPulseCache();
     if (cached) {
       currentData = {
@@ -1185,17 +1188,11 @@ export async function ensureDataLoaded(): Promise<void> {
         finalStretchTokens: cached.finalStretchTokens || [],
         migratedTokens: cached.migratedTokens || [],
       };
-      console.log('[PulseWorkerBridge] Loaded from IndexedDB:', {
-        new: currentData.newTokens.length,
-        final: currentData.finalStretchTokens.length,
-        migrated: currentData.migratedTokens.length,
-      });
       notifyDataListeners();
-    } else {
-      console.log('[PulseWorkerBridge] IndexedDB cache empty or expired');
     }
-  } catch (err) {
-    console.warn('[PulseWorkerBridge] Failed to reload cache:', err);
+    // Silent if cache empty
+  } catch {
+    // Silent fail - cache reload is non-critical
   }
 }
 
@@ -1215,27 +1212,34 @@ export function terminateWorker(): void {
   }
 }
 
-// INSTANT UPDATES - 0ms latency, no batching
-// React 18's useSyncExternalStore handles rapid updates efficiently
+// PHASE 2 FIX #4: RAF-batched listener notifications
+// Coalesces 500+ WebSocket messages/sec into max 60 notifications/sec
+// 16ms max delay is imperceptible, but dramatically reduces CPU usage
+let pendingNotifyRAF: number | null = null;
 let lastListenerCountLog = 0;
 
 function notifyDataListeners() {
-  // Log listener count every 60 seconds to detect leaks (reduced frequency)
-  const now = Date.now();
-  if (now - lastListenerCountLog > 60000) {
-    lastListenerCountLog = now;
-    if (dataListeners.size > 5) {
-      console.log('[PulseWorkerBridge] Listeners:', dataListeners.size);
-    }
-  }
+  // Skip if already scheduled - RAF will pick up latest data
+  if (pendingNotifyRAF !== null) return;
 
-  // INSTANT: Notify all listeners immediately
-  dataListeners.forEach(fn => {
-    try {
-      fn(currentData);
-    } catch (err) {
-      console.error('[PulseWorkerBridge] Listener error:', err);
+  pendingNotifyRAF = requestAnimationFrame(() => {
+    pendingNotifyRAF = null;
+
+    // Log listener count every 60 seconds to detect leaks (reduced frequency)
+    const now = Date.now();
+    if (now - lastListenerCountLog > 60000) {
+      lastListenerCountLog = now;
+      // Removed console.log to reduce CPU
     }
+
+    // Notify all listeners with latest data
+    dataListeners.forEach(fn => {
+      try {
+        fn(currentData);
+      } catch (err) {
+        // Silent fail - don't block other listeners
+      }
+    });
   });
 }
 

@@ -14,6 +14,77 @@ export const tokenKeys = {
   },
 };
 
+// ============================================================================
+// LocalStorage Cache Helpers - For instant data display on page return
+// ============================================================================
+const CACHE_TTL_MS = 10 * 60 * 1000; // 10 minutes - matches gcTime
+
+interface CachedData<T> {
+  data: T;
+  timestamp: number;
+  expiresAt: number;
+}
+
+/**
+ * Save data to localStorage for instant display on page return
+ */
+function saveToLocalStorage<T>(key: string, data: T): void {
+  if (typeof window === 'undefined') return;
+  try {
+    const cacheEntry: CachedData<T> = {
+      data,
+      timestamp: Date.now(),
+      expiresAt: Date.now() + CACHE_TTL_MS,
+    };
+    localStorage.setItem(key, JSON.stringify(cacheEntry));
+  } catch (error) {
+    // localStorage might be full or disabled - silently fail
+    console.warn(`[useQueryTokens] Failed to save cache for ${key}:`, error);
+  }
+}
+
+/**
+ * Load data from localStorage synchronously for instant display
+ * Returns undefined if cache is missing or expired
+ */
+function loadFromLocalStorage<T>(key: string): T | undefined {
+  if (typeof window === 'undefined') return undefined;
+  try {
+    const cached = localStorage.getItem(key);
+    if (!cached) return undefined;
+
+    const parsed: CachedData<T> = JSON.parse(cached);
+    const now = Date.now();
+
+    // Check if cache is still valid
+    if (now < parsed.expiresAt && parsed.data) {
+      return parsed.data;
+    }
+
+    // Cache expired - clean it up
+    localStorage.removeItem(key);
+    return undefined;
+  } catch (error) {
+    // Corrupted cache - clean it up
+    try {
+      localStorage.removeItem(key);
+    } catch {}
+    return undefined;
+  }
+}
+
+// Cache keys for Solana pulse data
+const CACHE_KEYS = {
+  newPairs: 'pulse_solana_new_pairs_v1',
+  finalStretch: 'pulse_solana_final_stretch_v1',
+  migrated: 'pulse_solana_migrated_v1',
+  launchpad: 'pulse_solana_launchpad_v1',
+} as const;
+
+// ============================================================================
+// Fetch Functions - Now with localStorage persistence
+// ============================================================================
+
 async function fetchNewPairs(): Promise<Token[]> {
   // Use Next.js API proxy to ensure proper field mapping (mint_address, etc.)
   const apiUrl = `/api/token-service/pulse-new?limit=35&fresh=1&t=${Date.now()}`;
@@ -26,7 +97,12 @@ async function fetchNewPairs(): Promise<Token[]> {
   });
   if (!response.ok) throw new Error(`Failed to fetch: ${response.status}`);
   const data = await response.json();
-  return Array.isArray(data) ? data : (data.result || []);
+  const tokens = Array.isArray(data) ? data : (data.result || []);
+
+  // Save to localStorage for instant display on page return
+  saveToLocalStorage(CACHE_KEYS.newPairs, tokens);
+
+  return tokens;
 }
 
 async function fetchFinalStretch(): Promise<Token[]> {
@@ -34,7 +110,12 @@ async function fetchFinalStretch(): Promise<Token[]> {
   const response = await fetch(apiUrl);
   if (!response.ok) throw new Error(`Failed to fetch: ${response.status}`);
   const data = await response.json();
-  return Array.isArray(data) ? data : [];
+  const tokens = Array.isArray(data) ? data : [];
+
+  // Save to localStorage for instant display on page return
+  saveToLocalStorage(CACHE_KEYS.finalStretch, tokens);
+
+  return tokens;
 }
 
 async function fetchMigrated(): Promise<Token[]> {
@@ -42,7 +123,12 @@ async function fetchMigrated(): Promise<Token[]> {
   const response = await fetch(apiUrl);
   if (!response.ok) throw new Error(`Failed to fetch: ${response.status}`);
   const data = await response.json();
-  return Array.isArray(data) ? data : [];
+  const tokens = Array.isArray(data) ? data : [];
+
+  // Save to localStorage for instant display on page return
+  saveToLocalStorage(CACHE_KEYS.migrated, tokens);
+
+  return tokens;
 }
 
 interface LaunchpadData {
@@ -60,8 +146,17 @@ async function fetchLaunchpadData(): Promise<LaunchpadData> {
     : `/api/launchpad/tokens?limit=30`;
   const response = await fetch(apiUrl);
   if (!response.ok) throw new Error(`Failed to fetch: ${response.status}`);
-  return await response.json();
+  const data = await response.json();
+
+  // Save to localStorage for instant display on page return
+  saveToLocalStorage(CACHE_KEYS.launchpad, data);
+
+  return data;
 }
+
+// ============================================================================
+// React Query Hooks - With placeholderData for instant display
+// ============================================================================
 
 export function useQueryNewPairs(enabled: boolean = true): UseQueryResult<Token[], Error> {
   return useQuery({
@@ -73,7 +168,8 @@ export function useQueryNewPairs(enabled: boolean = true): UseQueryResult<Token[
     refetchOnWindowFocus: false,   // Don't refetch on focus (WebSocket handles updates)
     refetchOnReconnect: true,      // Refetch on reconnect to catch missed updates
     refetchOnMount: true,          // ✅ ALWAYS fetch on mount to ensure fresh data
-    // ✅ NO POLLING - WebSocket provides instant updates via cache updates
+    // ✅ Instant display: Show cached data immediately while fresh data loads
+    placeholderData: () => loadFromLocalStorage<Token[]>(CACHE_KEYS.newPairs),
     retry: 1,
   });
 }
@@ -88,7 +184,8 @@ export function useQueryFinalStretch(enabled: boolean = true): UseQueryResult<To
     refetchOnWindowFocus: false,   // Don't refetch on focus (WebSocket handles updates)
     refetchOnReconnect: true,
     refetchOnMount: true,
-    // ✅ NO POLLING - WebSocket provides instant updates via query invalidation
+    // ✅ Instant display: Show cached data immediately while fresh data loads
+    placeholderData: () => loadFromLocalStorage<Token[]>(CACHE_KEYS.finalStretch),
     retry: 1,
   });
 }
@@ -103,7 +200,8 @@ export function useQueryMigrated(enabled: boolean = true): UseQueryResult<Token[
     refetchOnWindowFocus: false,   // Don't refetch on focus (WebSocket handles updates)
     refetchOnReconnect: true,
     refetchOnMount: true,
-    // ✅ NO POLLING - WebSocket provides instant updates via query invalidation
+    // ✅ Instant display: Show cached data immediately while fresh data loads
+    placeholderData: () => loadFromLocalStorage<Token[]>(CACHE_KEYS.migrated),
     retry: 1,
   });
 }
@@ -118,6 +216,8 @@ export function useQueryLaunchpadData(enabled: boolean = true): UseQueryResult<L
     refetchOnWindowFocus: false,
     refetchOnReconnect: true,
     refetchOnMount: true,
+    // ✅ Instant display: Show cached data immediately while fresh data loads
+    placeholderData: () => loadFromLocalStorage<LaunchpadData>(CACHE_KEYS.launchpad),
     retry: 1,
   });
 }

@@ -1,5 +1,5 @@
-import React, { createContext, useContext, useEffect, useState, useCallback, useRef } from 'react';
-import { flushSync } from 'react-dom';
+import React, { createContext, useContext, useEffect, useState, useCallback, useRef, useMemo } from 'react';
+// REMOVED: flushSync import - was causing 100%+ CPU and blank screens on tab return
 import { env } from '~/env';
 import {
   savePulseCache,
@@ -258,11 +258,9 @@ export function PulseStreamProvider({ children }: { children: React.ReactNode })
 
     if (callbacks.onToken) {
       subs.tokenCallbacks.add(callbacks.onToken);
-      console.log(`[PulseStreamContext:${channel}] ✅ Added token callback, total: ${subs.tokenCallbacks.size}`);
     }
     if (callbacks.onPriceUpdate) {
       subs.priceUpdateCallbacks.add(callbacks.onPriceUpdate);
-      console.log(`[PulseStreamContext:${channel}] ✅ Added price update callback, total: ${subs.priceUpdateCallbacks.size}`);
     }
     if (callbacks.onTokenInfoUpdate) {
       subs.tokenInfoUpdateCallbacks.add(callbacks.onTokenInfoUpdate);
@@ -272,11 +270,9 @@ export function PulseStreamProvider({ children }: { children: React.ReactNode })
     return () => {
       if (callbacks.onToken) {
         subs.tokenCallbacks.delete(callbacks.onToken);
-        console.log(`[PulseStreamContext:${channel}] ❌ Removed token callback, remaining: ${subs.tokenCallbacks.size}`);
       }
       if (callbacks.onPriceUpdate) {
         subs.priceUpdateCallbacks.delete(callbacks.onPriceUpdate);
-        console.log(`[PulseStreamContext:${channel}] ❌ Removed price update callback, remaining: ${subs.priceUpdateCallbacks.size}`);
       }
       if (callbacks.onTokenInfoUpdate) {
         subs.tokenInfoUpdateCallbacks.delete(callbacks.onTokenInfoUpdate);
@@ -310,7 +306,7 @@ export function PulseStreamProvider({ children }: { children: React.ReactNode })
         finalStretchTokens: cachedFinalStretchTokens,
         migratedTokens: cachedMigratedTokens,
         timestamp: Date.now(),
-      }).catch(err => console.warn('[PulseStreamContext] Failed to save cache:', err));
+      }).catch(() => { /* Silent fail - cache saving is not critical */ });
     }, 1000);
 
     return () => {
@@ -328,41 +324,30 @@ export function PulseStreamProvider({ children }: { children: React.ReactNode })
       if (!mountedRef.current || !cached) return;
 
       cacheLoadedRef.current = true;
-      console.log('[PulseStreamContext] Loaded from IndexedDB cache:', {
-        newTokens: cached.newTokens.length,
-        finalStretchTokens: cached.finalStretchTokens.length,
-        migratedTokens: cached.migratedTokens.length,
-        age: Date.now() - cached.timestamp + 'ms'
-      });
-
       setCachedNewTokens(prev => prev.length > 0 ? prev : cached.newTokens);
       setCachedFinalStretchTokens(prev => prev.length > 0 ? prev : cached.finalStretchTokens);
       setCachedMigratedTokens(prev => prev.length > 0 ? prev : cached.migratedTokens);
-    }).catch(err => {
-      console.warn('[PulseStreamContext] Failed to load cache:', err);
+    }).catch(() => {
+      // Silent fail - cache loading is not critical
     });
   }, []);
 
   // Connect to a specific channel
   const connectChannel = useCallback((channel: ChannelType) => {
     if (!isEnabled) {
-      console.log(`[PulseStreamContext:${channel}] WebSocket disabled`);
       return;
     }
 
     if (isConnectingRefs.current[channel]) {
-      console.log(`[PulseStreamContext:${channel}] Already connecting, skipping...`);
       return;
     }
 
     const existingWs = wsRefs.current[channel];
     if (existingWs?.readyState === WebSocket.OPEN || existingWs?.readyState === WebSocket.CONNECTING) {
-      console.log(`[PulseStreamContext:${channel}] Already connected/connecting, skipping...`);
       return;
     }
 
     if (reconnectAttemptsRefs.current[channel] >= maxReconnectAttempts) {
-      console.log(`[PulseStreamContext:${channel}] Max reconnect attempts reached`);
       setChannelStates(prev => ({
         ...prev,
         [channel]: { connected: false, error: 'Max reconnection attempts reached' }
@@ -373,13 +358,11 @@ export function PulseStreamProvider({ children }: { children: React.ReactNode })
     try {
       isConnectingRefs.current[channel] = true;
       const url = `${baseUrl}?channel=${channel}`;
-      console.log(`[PulseStreamContext:${channel}] Connecting to:`, url);
       const ws = new WebSocket(url);
 
       ws.onopen = () => {
         isConnectingRefs.current[channel] = false;
         if (!mountedRef.current) return;
-        console.log(`[PulseStreamContext:${channel}] ✅ Connected (persistent)`);
         setChannelStates(prev => ({
           ...prev,
           [channel]: { connected: true, error: null }
@@ -404,18 +387,9 @@ export function PulseStreamProvider({ children }: { children: React.ReactNode })
               if (message.type === tokenType && message.data) {
                 // Handle both single token and array of tokens
                 const tokenDataArray = Array.isArray(message.data) ? message.data : [message.data];
-                console.log(`[PulseStreamContext:${channel}] 🔥 Received ${tokenType} with ${tokenDataArray.length} token(s)`);
 
                 for (const tokenData of tokenDataArray) {
                   const token = normalizeToken(tokenData);
-                  console.log(`[PulseStreamContext:${channel}] 🔥 Processing ${tokenType}:`, token.symbol, token.mint?.slice(0, 8));
-                  console.log(`[PulseStreamContext:${channel}] Subscribers count:`, subs.tokenCallbacks.size);
-                  console.log(`[PulseStreamContext:${channel}] Token data:`, {
-                    mint: token.mint,
-                    bonding_pct: token.bonding_pct,
-                    bonding_curve_progress: (token as any).bonding_curve_progress,
-                    market_cap_usd: token.market_cap_usd,
-                  });
 
                   // Update cache
                   setCacheTokens(prev => {
@@ -429,11 +403,11 @@ export function PulseStreamProvider({ children }: { children: React.ReactNode })
                     return Array.from(map.values());
                   });
 
-                  // Notify subscribers with flushSync for immediate UI update
+                  // Notify subscribers - React 18 batches automatically within 16ms
+                  // REMOVED flushSync: Was blocking main thread 500+/sec causing 100%+ CPU
+                  // and blank screens on tab return (queued messages blocked paint)
                   if (subs.tokenCallbacks.size > 0) {
-                    flushSync(() => {
-                      subs.tokenCallbacks.forEach(callback => callback(token));
-                    });
+                    subs.tokenCallbacks.forEach(callback => callback(token));
                   }
                 }
 
@@ -441,7 +415,6 @@ export function PulseStreamProvider({ children }: { children: React.ReactNode })
               } else if (message.type === 'price_update' && message.data) {
                 const rawUpdates = Array.isArray(message.data) ? message.data : [message.data];
                 const updates = rawUpdates.map((u: any) => normalizeToken(u));
-                console.log(`[PulseStreamContext:${channel}] 📊 Price update for ${updates.length} tokens, subscribers:`, subs.priceUpdateCallbacks.size);
 
                 // Update cached tokens with price data
                 const updatesMap = new Map(updates.map((u: PulseToken) => [u.mint, u]));
@@ -497,10 +470,9 @@ export function PulseStreamProvider({ children }: { children: React.ReactNode })
         }
       };
 
-      ws.onerror = (event) => {
+      ws.onerror = () => {
         isConnectingRefs.current[channel] = false;
         if (!mountedRef.current) return;
-        console.error(`[PulseStreamContext:${channel}] WebSocket error:`, event);
         setChannelStates(prev => ({
           ...prev,
           [channel]: { ...prev[channel], error: 'WebSocket connection error' }
@@ -510,7 +482,6 @@ export function PulseStreamProvider({ children }: { children: React.ReactNode })
       ws.onclose = () => {
         isConnectingRefs.current[channel] = false;
         if (!mountedRef.current) return;
-        console.log(`[PulseStreamContext:${channel}] Disconnected`);
         setChannelStates(prev => ({
           ...prev,
           [channel]: { connected: false, error: prev[channel].error }
@@ -518,10 +489,6 @@ export function PulseStreamProvider({ children }: { children: React.ReactNode })
 
         if (isEnabled && reconnectAttemptsRefs.current[channel] < maxReconnectAttempts) {
           reconnectAttemptsRefs.current[channel]++;
-          console.log(
-            `[PulseStreamContext:${channel}] Reconnecting in ${reconnectInterval}ms (attempt ${reconnectAttemptsRefs.current[channel]}/${maxReconnectAttempts})`
-          );
-
           reconnectTimeoutRefs.current[channel] = setTimeout(() => {
             if (mountedRef.current) {
               connectChannel(channel);
@@ -533,7 +500,6 @@ export function PulseStreamProvider({ children }: { children: React.ReactNode })
       wsRefs.current[channel] = ws;
     } catch (err) {
       isConnectingRefs.current[channel] = false;
-      console.error(`[PulseStreamContext:${channel}] Failed to create WebSocket:`, err);
       setChannelStates(prev => ({
         ...prev,
         [channel]: { connected: false, error: err instanceof Error ? err.message : 'Failed to connect' }
@@ -584,7 +550,10 @@ export function PulseStreamProvider({ children }: { children: React.ReactNode })
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isEnabled]);
 
-  const value: PulseStreamContextValue = {
+  // Memoize context value to prevent unnecessary re-renders of consumers
+  // Without this, every state change creates a new object reference,
+  // causing all consumers to re-render even if they don't use the changed value
+  const value = useMemo<PulseStreamContextValue>(() => ({
     channels: channelStates,
     subscribeToChannel,
     cachedNewTokens,
@@ -593,7 +562,16 @@ export function PulseStreamProvider({ children }: { children: React.ReactNode })
     setEnabled,
     isEnabled,
     clearCache,
-  };
+  }), [
+    channelStates,
+    subscribeToChannel,
+    cachedNewTokens,
+    cachedFinalStretchTokens,
+    cachedMigratedTokens,
+    setEnabled,
+    isEnabled,
+    clearCache,
+  ]);
 
   return (
     <PulseStreamContext.Provider value={value}>
