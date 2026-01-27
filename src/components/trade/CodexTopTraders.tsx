@@ -6,9 +6,7 @@ import { LuChefHat } from "react-icons/lu";
 import { TfiTarget } from "react-icons/tfi";
 import { HiOutlineCubeTransparent } from "react-icons/hi2";
 import { formatSmartNumber } from "~/utils/db";
-import useSolanaTokenWebSocket, {
-  type SolanaTopTrader,
-} from "../../hooks/useSolanaTokenWebSocket";
+import { useSolanaTokenWebSocketContext, type SolanaTopTrader } from "../../contexts/SolanaTokenWebSocketContext";
 import useMonadTopTraders, {
   type MonadTopTrader,
 } from "../../hooks/useMonadTopTraders";
@@ -682,16 +680,13 @@ const CodexTopTraders: React.FC<CodexTopTradersProps> = ({
     chain,
   });
 
-  // Use Solana WebSocket for top traders (Solana chain)
-  const {
-    topTraders: wsTopTraders,
-    holders: solanaHolders,
-    loading: wsLoading,
-    error: wsError,
-  } = useSolanaTokenWebSocket({
-    mintAddress: mintForWebSocket,
-    enabled: chain === "sol" && !!mintForWebSocket,
-  });
+  // Use shared WebSocket context for Solana chain (eliminates duplicate connections)
+  // Context is provided by parent [id].tsx with SolanaTokenWebSocketProvider
+  const wsContext = useSolanaTokenWebSocketContext();
+  const wsTopTraders = chain === "sol" ? wsContext.topTraders : [];
+  const solanaHolders = chain === "sol" ? wsContext.holders : [];
+  const wsLoading = chain === "sol" ? wsContext.loading : false;
+  const wsError = chain === "sol" ? wsContext.error : null;
 
   // Create a lookup map of wallet addresses to holder data for hover cards
   const walletDataMap = useMemo(() => {

@@ -21,9 +21,8 @@ html, body {
   font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Inter", system-ui, sans-serif;
 }
 
-/* Remove any loading transitions */
+/* Inherit font family globally */
 * {
-  transition: none !important;
   font-family: inherit;
 }
 
@@ -104,6 +103,15 @@ h1, h2, h3, h4, h5, h6,
 }
 
 .num {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum" 1, "ss01" 1;
+}
+
+/* Number font for consistent metric display */
+.number-font {
+  font-family: Inter, -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif;
+  font-weight: 600;
+  letter-spacing: 0.02em;
   font-variant-numeric: tabular-nums;
   font-feature-settings: "tnum" 1, "ss01" 1;
 }
@@ -322,21 +330,28 @@ input[type="number"] {
 }
 
 /* PHASE 3 CPU Optimization: Token Row Hover Styles */
-/* These classes use GPU-accelerated transforms and opacity instead of JS style manipulation */
+/* Clean borderless rows - GPU accelerated */
 .token-row {
   background-color: transparent;
-  transition: background-color 150ms ease-out !important;
+  border: none !important;
+  border-radius: 8px;
+  margin-bottom: 4px;
+  transition: background-color 100ms ease-out !important;
+  max-width: 100%;
+  width: 100%;
+  overflow: hidden;
+  box-sizing: border-box;
 }
 
 .token-row.row-hovered {
-  background-color: rgba(107, 114, 128, 0.1) !important;
+  background-color: rgba(255, 255, 255, 0.04) !important;
 }
 
-/* Status popup visibility - CSS-only show/hide */
+/* Status popup visibility - CSS-only show/hide (GPU accelerated) */
 .status-popup {
   opacity: 0;
   pointer-events: none;
-  transition: opacity 150ms ease-out !important;
+  transition: opacity 100ms ease-out !important;
 }
 
 .status-popup.popup-visible {
@@ -344,13 +359,13 @@ input[type="number"] {
   display: block !important;
 }
 
-/* Pulse table action buttons - smooth opacity transitions */
+/* Pulse table action buttons - GPU accelerated */
 .pulse-action-btn {
-  transition: color 200ms ease-out, box-shadow 200ms ease-out !important;
+  transition: color 100ms ease-out, opacity 100ms ease-out !important;
 }
 
 .pulse-action-btn:hover {
-  box-shadow: 0 0 6px rgba(54, 216, 255, 0.5);
+  opacity: 0.8;
 }
 
 /* Wave animation - can be conditionally disabled for performance */
@@ -361,4 +376,28 @@ input[type="number"] {
 
 .wave-animation-disabled .wave-animation {
   animation: none !important;
+}
+
+/* Bottom card info badges - horizontal scroll without visible scrollbar */
+.badges-scroll {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+.badges-scroll::-webkit-scrollbar {
+  display: none;
+}
+
+/* Pulse Table Column Styling */
+.pulse-column {
+  background-color: #0d1015;
+}
+
+.pulse-column-header {
+  background-color: #0d1015;
+  border-bottom: 1px solid #1e2028;
+}
+
+/* Vertical separator between columns */
+.pulse-column:not(:last-child) {
+  border-right: 1px solid #1e2028;
 }

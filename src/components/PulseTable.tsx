@@ -31,6 +31,7 @@ import {
   FaPlay,
   FaTelegram,
   FaRegUser,
+  FaFire,
 } from "react-icons/fa";
 import { GiSeatedMouse } from "react-icons/gi";
 import {
@@ -60,7 +61,9 @@ import {
   HiUserGroup,
   HiLightningBolt,
   HiSparkles,
+  HiOutlineFire,
 } from "react-icons/hi";
+import { HiOutlineRocketLaunch } from "react-icons/hi2";
 import { GoPeople, GoStack } from "react-icons/go";
 import { IoPersonOutline } from "react-icons/io5";
 import { MdTrendingUp, MdEmojiEvents, MdDynamicFeed } from "react-icons/md";
@@ -111,7 +114,7 @@ import {
   executeSolanaMultiBuy,
   buildSolanaWalletAllocations,
 } from "~/utils/solanaWalletAllocation";
-import useSolanaPositionWebSocket from "~/hooks/useSolanaPositionWebSocket";
+import { useTxHashCallback } from "~/contexts/SolanaPositionWebSocketContext";
 import { fetchVerifiedPairAddress } from "~/hooks/useSingleTokenPolling";
 import toast from "react-hot-toast";
 import { FiGlobe } from "react-icons/fi";
@@ -138,6 +141,16 @@ const AX = {
   glowBlue: "rgba(82, 111, 255, 0.3)", // Blue glow (matching MonadTable)
   glowGreen: "rgba(49, 227, 172, 0.3)", // Green glow (matching MonadTable)
   glowCyan: "rgba(6, 182, 212, 0.3)", // Cyan glow (matching MonadTable)
+  // Risk-based semantic colors
+  riskHigh: "#ef4444",        // Red - risky metrics
+  riskHighBg: "#2a1419",      // Dark red background
+  riskMedium: "#f59e0b",      // Orange/Yellow - caution metrics
+  riskMediumBg: "#2a2314",    // Dark orange background
+  riskLow: "#31e3ac",         // Green - safe metrics (same as mint)
+  riskLowBg: "#0f2419",       // Dark green background
+  // Badge backgrounds
+  badgeBg: "#1a1c23",         // Neutral badge background
+  twitterBlue: "#1DA1F2",     // Twitter brand color
 };
 
 interface PulseTableProps {
@@ -974,6 +987,30 @@ function extractTwitterHandle(url: string): string | null {
     }
   }
   return null;
+}
+
+// Twitter Handle Display Component - shows @handle in Twitter blue (compact inline)
+function TwitterHandleDisplay({ token }: { token: Token }) {
+  const { meta } = useTokenMetadata(token.uri);
+  const socialLinks = extractSocialLinks(token, meta);
+
+  if (!socialLinks.twitter) return null;
+
+  const handle = extractTwitterHandle(socialLinks.twitter);
+  if (!handle) return null;
+
+  return (
+    <a
+      href={socialLinks.twitter}
+      target="_blank"
+      rel="noopener noreferrer"
+      onClick={(e) => e.stopPropagation()}
+      className="text-[10px] font-medium hover:underline whitespace-nowrap"
+      style={{ color: "#1DA1F2" }}
+    >
+      @{handle}
+    </a>
+  );
 }
 
 // PHASE 3: Memoized StatusPopup component - eliminates IIFE overhead (Fix #4)
@@ -1841,36 +1878,36 @@ function TokenImage({
         ref={imageContainerRef}
         className="relative flex items-center justify-center"
         style={{
-          width: "81px",
-          height: "81px",
-          minWidth: "81px",
-          minHeight: "81px",
-          maxWidth: "81px",
-          maxHeight: "81px",
+          width: "68px",
+          height: "68px",
+          minWidth: "68px",
+          minHeight: "68px",
+          maxWidth: "68px",
+          maxHeight: "68px",
           overflow: "visible",
         }}
       >
         {/* Outer border container */}
         <div
-          className="relative rounded-sm transition-all duration-300 ease-out"
+          className="relative rounded-lg transition-all duration-200 ease-out"
           onMouseEnter={handleMouseEnter}
           onMouseLeave={handleMouseLeave}
           style={{
             border: "none",
             padding: "0",
-            width: "79px",
-            height: "79px",
-            minWidth: "79px",
-            minHeight: "79px",
-            maxWidth: "79px",
-            maxHeight: "79px",
+            width: "66px",
+            height: "66px",
+            minWidth: "66px",
+            minHeight: "66px",
+            maxWidth: "66px",
+            maxHeight: "66px",
           }}
         >
           {/* Single colored border container (moved inward) */}
           <div
-            className="relative rounded-sm"
+            className="relative rounded-lg"
             style={{
-              border: `0.5px solid ${(() => {
+              border: `1px solid ${(() => {
                 const isNewColumn = columnType === "new";
                 if (
                   isNewColumn &&
@@ -1886,25 +1923,25 @@ function TokenImage({
                 return protocolColor;
               })()}`,
               padding: "2px",
-              backgroundColor: "#06070b",
-              width: "79px",
-              height: "79px",
-              minWidth: "79px",
-              minHeight: "79px",
-              maxWidth: "79px",
-              maxHeight: "79px",
+              backgroundColor: "#0a0b0d",
+              width: "66px",
+              height: "66px",
+              minWidth: "66px",
+              minHeight: "66px",
+              maxWidth: "66px",
+              maxHeight: "66px",
             }}
           >
             {/* Image container */}
             <div
-              className="relative overflow-hidden rounded-sm"
+              className="relative overflow-hidden rounded-md"
               style={{
-                width: "75px",
-                height: "75px",
-                minWidth: "75px",
-                minHeight: "75px",
-                maxWidth: "75px",
-                maxHeight: "75px",
+                width: "60px",
+                height: "60px",
+                minWidth: "60px",
+                minHeight: "60px",
+                maxWidth: "60px",
+                maxHeight: "60px",
               }}
             >
               <FastImage
@@ -1912,9 +1949,9 @@ function TokenImage({
                 alt={token.name || token.symbol || ""}
                 symbol={token.symbol}
                 name={token.name}
-                width={75}
-                height={75}
-                className="h-full w-full object-cover transition-all duration-300"
+                width={60}
+                height={60}
+                className="h-full w-full object-cover"
                 priority={priority}
                 showBubble={false}
               />
@@ -1924,32 +1961,32 @@ function TokenImage({
         {/* Thin loading border - solid green, clockwise from bottom-right (only for New Pairs) */}
         {isNewPairs && (
           <div className="pointer-events-none absolute inset-0">
-            <svg className="h-full w-full" viewBox="0 0 81 81">
+            <svg className="h-full w-full" viewBox="0 0 68 68">
               {/* Background border - outer grey border */}
 
               {/* Inner grey border */}
               <rect
                 x="2"
                 y="2"
-                width="77"
-                height="77"
+                width="64"
+                height="64"
                 fill="none"
                 stroke="none"
                 strokeWidth="0"
-                rx="4"
+                rx="8"
               />
 
               {/* Progress border - clockwise rounded path starting from bottom-right */}
               {/* Animation handled by useSmoothProgress hook with requestAnimationFrame */}
               <path
-                d="M 79 79 L 8 79 Q 2 79 2 73 L 2 8 Q 2 2 8 2 L 73 2 Q 79 2 79 8 L 79 73 Q 79 79 73 79"
+                d="M 66 66 L 8 66 Q 2 66 2 60 L 2 8 Q 2 2 8 2 L 60 2 Q 66 2 66 8 L 66 60 Q 66 66 60 66"
                 fill="none"
                 stroke={protocolColor}
                 strokeWidth="2"
                 strokeLinecap="round"
                 strokeLinejoin="round"
-                strokeDasharray={`${4 * 77}`} // Total perimeter
-                strokeDashoffset={`${4 * 77 * (1 - scaledProgress)}`}
+                strokeDasharray={`${4 * 64}`} // Total perimeter
+                strokeDashoffset={`${4 * 64 * (1 - scaledProgress)}`}
               />
             </svg>
           </div>
@@ -1980,17 +2017,16 @@ function TokenImage({
         </div>
         {/* Camera icon overlay - minimal grey - only shows on image hover */}
         <div
-          className="pointer-events-none absolute inset-0 flex items-center justify-center bg-black/60 opacity-0 transition-all duration-300"
-          style={{ opacity: showPreview ? 1 : 0 }}
+          className="pointer-events-none absolute inset-0 flex items-center justify-center rounded-lg bg-black/60 opacity-0"
+          style={{ opacity: showPreview ? 1 : 0, transition: "opacity 150ms ease-out" }}
         >
           <div
-            className="flex items-center justify-center rounded-full p-2"
+            className="flex items-center justify-center rounded-full p-1.5"
             style={{
               backgroundColor: "rgba(107, 114, 128, 0.3)",
-              boxShadow: "none",
             }}
           >
-            <FaCamera size={16} style={{ color: "#9ca3af" }} />
+            <FaCamera size={12} style={{ color: "#9ca3af" }} />
           </div>
         </div>
 
@@ -3028,12 +3064,12 @@ function PulseTable({
     [],
   );
 
-  // WebSocket for Solana position updates AND instant txHash
-  const { connected: solanaWsConnected } = useSolanaPositionWebSocket({
-    tokenAddress: "", // Empty for global listening
-    enabled: !!user?.id,
-    onTxHash: handleSolanaQuickBuyWsTxHash, // INSTANT txHash callback
-  });
+  // Use shared WebSocket context for instant txHash notifications
+  // This eliminates duplicate connections - single connection shared via context
+  const { connected: solanaWsConnected } = useTxHashCallback(
+    'pulse-table',
+    handleSolanaQuickBuyWsTxHash
+  );
 
   useEffect(() => {
     if (!showSnipeModal) return;
@@ -4831,40 +4867,50 @@ function PulseTable({
   };
   return (
     <div
-      className={`num flex min-h-0 w-full flex-1 flex-col overflow-hidden shadow-lg lg:min-w-[340px] ${
+      className={`num flex min-h-0 w-full flex-1 flex-col overflow-hidden lg:min-w-[300px] ${
         isFirstOrLast === "first"
-          ? "rounded-tl-md border-t border-r border-l lg:rounded-tl-md"
+          ? "rounded-tl-lg"
           : isFirstOrLast === "last"
-            ? "rounded-tr-md border-t border-r lg:rounded-tr-md"
+            ? "rounded-tr-lg"
             : isFirstOrLast === "only"
-              ? "rounded-md border border-t border-r border-l"
-              : "border-t border-r"
+              ? "rounded-lg"
+              : ""
       }`}
       style={{
-        backgroundColor: "#111214",
-        borderColor: AX.border,
-        borderStyle: "solid",
-        borderWidth: "1px",
-        boxShadow: title.toLowerCase().includes("new") ? "none" : undefined,
+        backgroundColor: "#0d1015",
+        borderRight: isFirstOrLast !== "last" && isFirstOrLast !== "only" ? "1px solid #1e2028" : "none",
+        borderLeft: isFirstOrLast === "first" || isFirstOrLast === "only" ? "1px solid #1e2028" : "none",
+        borderTop: "1px solid #1e2028",
+        borderBottom: "1px solid #1e2028",
       }}
     >
       <div
-        className="group relative mb-2 flex items-center justify-between border-b p-2 text-lg font-medium"
+        className="group relative flex items-center justify-between border-b px-2.5 py-1 text-sm font-medium"
         style={{
-          backgroundColor: "transparent",
-          borderColor: AX.border,
+          backgroundColor: "#0d1015",
+          borderColor: "#1e2028",
           color: AX.text,
         }}
         onMouseEnter={() => setIsHeaderHovered(true)}
         onMouseLeave={() => setIsHeaderHovered(false)}
       >
         {/* Left side container for title */}
-        <div className="flex items-center gap-2 font-normal">
+        <div className="flex flex-shrink-0 items-center gap-1 font-normal">
+          {/* Column icon - outline style */}
+          {title.includes("New Pairs") && (
+            <PiLeafLight size={14} style={{ color: AX.text }} />
+          )}
+          {title.includes("Final Stretch") && (
+            <HiOutlineFire size={14} style={{ color: "#fcaf25" }} />
+          )}
+          {title.includes("Migrated") && (
+            <HiOutlineRocketLaunch size={14} style={{ color: "#52c75f" }} />
+          )}
           <span
-            className="text-sm lg:text-base"
+            className="text-xs lg:text-sm"
             style={{
               fontWeight: "500",
-              letterSpacing: "0.5px",
+              letterSpacing: "0.3px",
             }}
           >
             {title.includes("New Pairs")
@@ -4878,18 +4924,18 @@ function PulseTable({
         </div>
 
         {/* Right side container for pill and filter */}
-        <div className="flex items-center gap-2">
+        <div className="flex min-w-0 flex-1 items-center justify-end gap-2">
           {/* Keyword Search Box */}
           <div
-            className="hidden items-center gap-1 overflow-hidden rounded-md border px-1.5 sm:flex"
+            className="hidden min-w-0 flex-shrink items-center gap-1.5 overflow-hidden rounded-md border px-2 sm:flex"
             style={{
               borderColor: AX.border,
               backgroundColor: "#272a2e",
               paddingTop: "4px",
               paddingBottom: "4px",
-              minWidth: "120px",
-              width: "120px",
-              height: "24px",
+              minWidth: "90px",
+              maxWidth: "110px",
+              height: "26px",
             }}
           >
             <LuSearch size={12} style={{ color: AX.muted, flexShrink: 0 }} />
@@ -4910,15 +4956,14 @@ function PulseTable({
 
           {/* Thunder Icon and Amount Entry - Separate Thin Box */}
           <div
-            className="hidden items-center justify-center gap-1 rounded-md border px-1.5 sm:flex"
+            className="hidden flex-shrink-0 items-center justify-center gap-1 rounded-md border px-2 sm:flex"
             style={{
               borderColor: AX.border,
               backgroundColor: "#272a2e",
               paddingTop: "4px",
               paddingBottom: "4px",
-              minWidth: "70px",
-              width: "70px",
-              height: "24px",
+              width: "65px",
+              height: "26px",
             }}
           >
             <HiLightningBolt size={12} style={{ color: AX.aiGreen }} />
@@ -4957,15 +5002,14 @@ function PulseTable({
 
           {/* P1 P2 P3 Boxes - Separate Thin Box With Background Color */}
           <div
-            className="relative hidden items-center justify-center gap-1 rounded-md border px-1.5 sm:flex"
+            className="relative hidden flex-shrink-0 items-center justify-center gap-1 rounded-md border px-2 sm:flex"
             style={{
               borderColor: AX.border,
-              backgroundColor: "#272a2e",
+              backgroundColor: "#1a1c20",
               paddingTop: "4px",
               paddingBottom: "4px",
-              minWidth: "80px",
-              width: "80px",
-              height: "24px",
+              width: "72px",
+              height: "26px",
             }}
           >
             {["P1", "P2", "P3"].map((pill, i) => (
@@ -4974,11 +5018,15 @@ function PulseTable({
                 className="relative flex items-center justify-center"
               >
                 <button
-                  className={`flex cursor-pointer items-center justify-center rounded px-1 py-[2px] text-xs font-medium transition-all duration-200 ${
+                  className={`flex cursor-pointer items-center justify-center rounded px-1 py-[2px] text-xs font-medium ${
                     selectedPill === pill
-                      ? "bg-[rgba(24,196,140,0.15)]"
-                      : "bg-[rgba(22,23,28,0.6)]"
+                      ? "bg-[rgba(49,227,172,0.15)]"
+                      : "bg-[rgba(22,23,28,0.6)] hover:bg-[rgba(40,43,50,0.6)]"
                   }`}
+                  style={{
+                    color: selectedPill === pill ? "#31e3ac" : AX.muted,
+                    transition: "background-color 100ms ease-out, color 100ms ease-out",
+                  }}
                   onClick={() => {
                     // Update local preset selection for this column only
                     setSelectedPill(pill);
@@ -5091,9 +5139,9 @@ function PulseTable({
           </div>
 
           {/* Filter Controls */}
-          <div className="filter-dropdown relative">
+          <div className="filter-dropdown relative flex-shrink-0">
             <button
-              className="relative flex h-8 w-8 cursor-pointer items-center justify-center rounded-lg transition-all duration-300 ease-out"
+              className="relative flex h-7 w-7 cursor-pointer items-center justify-center rounded-md transition-all duration-300 ease-out"
               style={{
                 backgroundColor: "transparent",
                 color: showFilters ? AX.aiBlue : AX.muted,
@@ -5124,11 +5172,11 @@ function PulseTable({
               )} */}
               {filters.protocols.length > 0 && (
                 <span
-                  className="absolute -top-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full text-xs font-bold"
+                  className="absolute -top-0.5 -right-0.5 flex h-3 w-3 items-center justify-center rounded-full font-bold"
                   style={{
                     backgroundColor: "#31e3ac",
                     color: "#000000",
-                    fontSize: "10px",
+                    fontSize: "8px",
                   }}
                 >
                   {filters.protocols.length}
@@ -7231,7 +7279,7 @@ function PulseTable({
           </div>
         </div>
       </div>
-      <div className="custom-scrollbar flex-1 overflow-y-scroll">
+      <div className="custom-scrollbar flex-1 overflow-x-hidden overflow-y-scroll">
         {loading && tokens.length === 0 ? (
           Array.from({ length: skeletonRowCount }).map((_, idx) => (
             <div
@@ -7344,15 +7392,21 @@ function PulseTable({
               );
             })
             .map((token, idx) => {
-              // Use pair_address if available, otherwise fallback to mint
-              const pairAddress =
-                (token as any)?.pair_address || (token as any)?.mint;
+              // Use mint directly in URL path for cleaner architecture
+              // This allows WebSocket to connect immediately without pair_address resolution
+              const tokenMint = (token as any)?.mint;
+              const pairAddress = (token as any)?.pair_address || tokenMint;
+
+              // Skip tokens without mint (can't navigate properly)
+              if (!tokenMint) return null;
 
               // Build query params for optimistic UI + cache lookup
               // Include chain parameter to preserve chain selection
               // Use prop from parent (more reliable) or fallback to router.query
               const currentChain =
                 chainProp || (router.query.chain as string) || "sol";
+              // Build query params for optimistic UI
+              // Note: mint is in URL path AND query for backward compat + robustness
               const queryParams = new URLSearchParams({
                 _name: (token as any)?.name || (token as any)?.symbol || "",
                 _symbol: (token as any)?.symbol || "",
@@ -7365,7 +7419,7 @@ function PulseTable({
                     "",
                 ),
                 _image: extractTokenImage(token as any) || "",
-                _mint: (token as any)?.mint || "", // CRITICAL: Required for cache lookup
+                _mint: tokenMint, // Redundant with URL path but kept for backward compat
                 _launchpad_protocol: (token as any)?.launchpad_protocol || "", // Required for poolType detection
                 _liquidity: String(
                   (token as any)?.liquidity_usd ||
@@ -7381,11 +7435,10 @@ function PulseTable({
 
               return (
                 <Link
-                  href={`/trade/${pairAddress}?${queryParams}`}
-                  key={pairAddress}
-                  className="token-row group relative flex w-full cursor-pointer flex-row items-start gap-2 border-b px-2 pt-1 text-lg"
+                  href={`/trade/${tokenMint}?${queryParams}`}
+                  key={tokenMint}
+                  className="token-row group relative flex w-full max-w-full cursor-pointer flex-row items-start gap-2 overflow-hidden px-2 py-1.5 text-sm"
                   style={{
-                    borderColor: AX.border,
                     color: AX.text,
                   }}
                   onMouseEnter={(e) => {
@@ -7404,9 +7457,9 @@ function PulseTable({
                     if (typeof requestIdleCallback !== 'undefined') {
                       requestIdleCallback(() => {
                         // Prefetch trade page for instant navigation
-                        router.prefetch(`/trade/${pairAddress}?${queryParams}`);
+                        router.prefetch(`/trade/${tokenMint}?${queryParams}`);
 
-                        // Cache token metadata for instant display
+                        // Cache token metadata for instant display (keyed by mint now)
                         try {
                           const tokenMetadata = {
                             name: (token as any)?.name || "",
@@ -7420,14 +7473,14 @@ function PulseTable({
                               (token as any)?.marketCapUSD ||
                               0,
                             image: extractTokenImage(token as any) || "",
-                            mint: (token as any)?.mint || "",
+                            mint: tokenMint,
                             pair_address: pairAddress,
                             launchpad_protocol:
                               (token as any)?.launchpad_protocol || "",
                             timestamp: Date.now(),
                           };
                           localStorage.setItem(
-                            `token_metadata_${pairAddress}`,
+                            `token_metadata_${tokenMint}`,
                             JSON.stringify(tokenMetadata),
                           );
                         } catch {
@@ -7448,8 +7501,8 @@ function PulseTable({
                     }
                   }}
                 >
-                  <div className="flex w-full flex-col gap-2">
-                    <div className="flex w-full flex-row gap-2">
+                  <div className="flex w-full max-w-full flex-col gap-2 overflow-hidden">
+                    <div className="flex w-full max-w-full flex-row gap-2">
                       {/* Subtle wave animation for top 3 final stretch tokens */}
                       {/* PHASE 3: Only animate if few tokens need it (performance optimization) */}
                       {waveTokens.has(idx) && waveTokens.size <= 5 && memoizedTokens.length <= 50 && (
@@ -7485,11 +7538,11 @@ function PulseTable({
                       </span>
                       {/* Profile Picture & Address */}
                       <div
-                        className="relative flex flex-shrink-0 flex-col items-center pt-1"
+                        className="relative flex flex-shrink-0 flex-col items-center"
                         style={{
-                          width: "81px",
-                          minWidth: "81px",
-                          maxWidth: "81px",
+                          width: "70px",
+                          minWidth: "70px",
+                          maxWidth: "70px",
                         }}
                       >
                         <TokenImage
@@ -7521,20 +7574,20 @@ function PulseTable({
                         </span>
                       </div>
                       {/* Main Info Section */}
-                      <div className="flex w-full min-w-0 flex-col gap-1">
+                      <div className="flex min-w-0 flex-1 flex-col gap-1">
                         {/* Top Row */}
                         <div className="flex flex-row justify-between gap-2">
                           {/* Left: Token Info & Socials */}
                           <div className="flex min-w-0 flex-col">
-                            <div className="flex min-w-0 items-center gap-2">
+                            <div className="flex min-w-0 items-center gap-1.5">
                               <span
-                                className="flex-shrink-0 text-sm font-semibold lg:text-base"
+                                className="flex-shrink-0 text-sm font-semibold"
                                 style={{ color: AX.text }}
                               >
                                 {token.symbol}
                               </span>
                               <span
-                                className="truncate text-xs lg:text-sm"
+                                className="truncate text-xs"
                                 style={{ color: AX.muted }}
                               >
                                 {token.name}
@@ -7634,15 +7687,15 @@ function PulseTable({
                                 </button>
                               </div>
                             </div>
-                            <div className="flex items-center gap-1 text-xs lg:gap-2">
+                            <div className="flex items-center gap-1 text-xs lg:gap-1.5">
                               <span
-                                className="flex items-center gap-1 text-xs lg:gap-2"
+                                className="flex items-center gap-1 text-[10px] lg:gap-1"
                                 style={{ color: "#31e3ac" }}
                               >
                                 {getAgeLabel(token)}
                               </span>
                               {/* Socials */}
-                              <div className="relative flex items-center gap-1 text-neutral-400 lg:gap-2">
+                              <div className="relative flex items-center gap-1 text-neutral-400 lg:gap-1.5">
                                 {/* Pump.fun Link - only show for pump tokens */}
                                 {/* {token.mint.slice(-4) === "pump" && (
                               <Link
@@ -7738,14 +7791,14 @@ function PulseTable({
                                   </div>
                                 )}
 
-                                <div className="ml-1 flex flex-row gap-2 font-light">
+                                <div className="ml-1 flex flex-row gap-1.5 font-light">
                                   {/* Crown Icon - Dev Migration Stats */}
-                                  <div className="group/dev relative flex items-center gap-1 cursor-pointer">
+                                  <div className="group/dev relative flex items-center gap-0.5 cursor-pointer">
                                     <PiCrownSimpleLight
-                                      size={16}
+                                      size={12}
                                       style={{ color: "#dcc13c" }}
                                     />
-                                    <span className="text-sm text-white">
+                                    <span className="text-[10px] text-white">
                                       {token.dev_tokens_migrated ?? 0}/{token.dev_tokens_created ?? 0}
                                     </span>
                                     {/* Dev Migration Tooltip - PHASE 3: Unified AX styling */}
@@ -7781,9 +7834,9 @@ function PulseTable({
                                   </div>
 
                                   {/* KOL Count - Trophy Icon */}
-                                  <div className="group/kol2 relative flex items-center gap-1 text-violet-200">
-                                    <CiTrophy size={16} />
-                                    <span className="text-sm text-white">
+                                  <div className="group/kol2 relative flex items-center gap-0.5 text-violet-200">
+                                    <CiTrophy size={12} />
+                                    <span className="text-[10px] text-white">
                                       {token.kol_count ?? 0}
                                     </span>
                                     {/* Tooltip - PHASE 3: Unified AX styling */}
@@ -7804,23 +7857,13 @@ function PulseTable({
                                   </div>
 
                                   {/* People Icon - Total Holders */}
-                                  <div className="group/holder2 relative flex items-center gap-1">
-                                    <div
-                                      className="flex cursor-help items-center justify-center rounded"
-                                      style={{
-                                        backgroundColor: "#111214",
-                                        padding: "2px",
-                                        width: "18px",
-                                        height: "18px",
-                                      }}
-                                    >
-                                      <GoPeople
-                                        size={12}
-                                        style={{ color: "#36d8ff" }}
-                                      />
-                                    </div>
+                                  <div className="group/holder2 relative flex items-center gap-0.5">
+                                    <GoPeople
+                                      size={12}
+                                      style={{ color: "#36d8ff" }}
+                                    />
                                     {/* PHASE 4 (C2): Replaced IIFE with helper function */}
-                                    <span className="text-sm text-white">
+                                    <span className="text-[10px] text-white">
                                       {formatHolderCount(
                                         token.holder_count ??
                                         token.total_holders ??
@@ -7877,9 +7920,11 @@ function PulseTable({
                                 )}
                               </div>
                             </div>
+                            {/* Twitter Handle - below icons */}
+                            <TwitterHandleDisplay token={token} />
                           </div>
                           {/* Right: MC, V, F, TX */}
-                          <div className="items-right justify-right flex min-w-[100px] flex-col items-end gap-1 text-right lg:min-w-[140px]">
+                          <div className="items-right justify-right flex min-w-[100px] flex-col items-end gap-0.5 text-right lg:min-w-[130px]">
                             <div
                               className={"justify-right flex flex-col text-xs"}
                             >
@@ -7887,7 +7932,7 @@ function PulseTable({
                                 className="flex items-end gap-1"
                                 style={{ color: AX.muted }}
                               >
-                                <span className="mb-[3px]">MC </span>
+                                <span className="mb-[2px] text-xs">MC </span>
                                 {/* PHASE 4 (C1): Replaced SmoothNumber with static span - eliminates RAF animations */}
                                 {(() => {
                                   const isFinalStretchColumn =
@@ -7906,7 +7951,7 @@ function PulseTable({
                                   if (hasGreenWave) {
                                     return (
                                       <span
-                                        className="number-font text-sm font-medium lg:text-base"
+                                        className="number-font text-sm font-medium"
                                         style={{ color: "#31e3ac" }}
                                       >
                                         {formatMarketCap(mcVal)}
@@ -7917,7 +7962,7 @@ function PulseTable({
                                     <SmartColor
                                       token={token}
                                       metricType="marketCap"
-                                      className="number-font text-sm font-medium lg:text-base"
+                                      className="number-font text-sm font-medium"
                                     >
                                       ${formatMarketCap(mcVal)}
                                     </SmartColor>
@@ -7933,7 +7978,7 @@ function PulseTable({
                                 </span>{" "}
                                 {/* PHASE 4 (C1): Replaced SmoothNumber with static span */}
                                 <span
-                                  className="number-font text-xs font-medium lg:text-sm"
+                                  className="number-font text-xs font-medium"
                                   style={{
                                     color: "#ffffff",
                                   }}
@@ -7942,7 +7987,7 @@ function PulseTable({
                                 </span>
                               </div>
                             </div>
-                              <div className="flex items-center justify-end gap-3 text-xs">
+                              <div className="flex items-center justify-end gap-2 text-xs">
                                 {/* Total Fees in SOL */}
                                 <InterstateTooltip label="Global Fees Paid">
                                   <div
@@ -8055,36 +8100,18 @@ function PulseTable({
 
                             {/* Buy button */}
                             <button
-                              className="z-10 flex cursor-pointer items-center gap-2 rounded-full px-3 py-1.5 text-sm font-bold opacity-0 shadow-sm transition-all duration-200 ease-out group-hover:opacity-100"
+                              className="quick-buy-btn z-10 flex cursor-pointer items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold opacity-0 transition-all duration-150 ease-out group-hover:opacity-100"
                               style={{
-                                backgroundColor:
-                                  title.toLowerCase().includes("final") ||
-                                  title.toLowerCase().includes("stretch")
-                                    ? "#101114"
-                                    : AX.aiGreen,
-                                color:
-                                  title.toLowerCase().includes("final") ||
-                                  title.toLowerCase().includes("stretch")
-                                    ? AX.aiGreen
-                                    : "#000000",
-                                border:
-                                  title.toLowerCase().includes("final") ||
-                                  title.toLowerCase().includes("stretch")
-                                    ? `1px solid ${AX.aiGreen}`
-                                    : "1px solid rgba(0,0,0,0.15)",
+                                backgroundColor: "#1a1b1f",
+                                color: "#86efac",
                               }}
                               onMouseEnter={(e) => {
-                                const isFinal =
-                                  title.toLowerCase().includes("final") ||
-                                  title.toLowerCase().includes("stretch");
-                                e.currentTarget.style.backgroundColor = isFinal
-                                  ? "#101114"
-                                  : AX.aiGreenHover;
-                                e.currentTarget.style.transform =
-                                  "translateY(-1px)";
-                                e.currentTarget.style.boxShadow = isFinal
-                                  ? `0 0 10px ${AX.glowGreen}`
-                                  : "0 4px 14px rgba(112, 224, 176, 0.25)";
+                                e.currentTarget.style.backgroundColor = "#86efac";
+                                e.currentTarget.style.color = "#000000";
+                              }}
+                              onMouseLeave={(e) => {
+                                e.currentTarget.style.backgroundColor = "#1a1b1f";
+                                e.currentTarget.style.color = "#86efac";
                               }}
                               onClick={(e) => {
                                 e.stopPropagation();
@@ -8118,115 +8145,9 @@ function PulseTable({
                                 }
                               }}
                             >
-                              {(() => {
-                                const isMigratedColumn = title
-                                  .toLowerCase()
-                                  .includes("migrated");
-
-                                // For migrated column, always show regular thunder (no snipe icon)
-                                if (isMigratedColumn) {
-                                  return (
-                                    <>
-                                      <HiLightningBolt
-                                        className="text-black"
-                                        size={12}
-                                      />
-                                      <span className="number-font">
-                                        {thunderAmount || "0"}
-                                      </span>
-                                      <span className="number-font"> SOL</span>
-                                    </>
-                                  );
-                                }
-
-                                // For other columns, check for high bonding Meteora tokens
-                                const launchpadProtocol =
-                                  (
-                                    token as any
-                                  ).launchpad_protocol?.toLowerCase() || "";
-                                const isMeteora =
-                                  launchpadProtocol.includes("meteora");
-                                const bondingPct =
-                                  (token as any).bonding_pct ?? 0;
-                                const isHighBondingMeteora =
-                                  isMeteora && bondingPct > 98.6;
-
-                                if (isHighBondingMeteora) {
-                                  // Snipe icon (crosshair) rendered in green
-                                  const isFinal =
-                                    title.toLowerCase().includes("final") ||
-                                    title.toLowerCase().includes("stretch");
-                                  return (
-                                    <>
-                                      <svg
-                                        width="18"
-                                        height="18"
-                                        viewBox="0 0 24 24"
-                                        fill="none"
-                                        stroke="currentColor"
-                                        strokeWidth="1.8"
-                                        strokeLinecap="round"
-                                        strokeLinejoin="round"
-                                        style={{ color: AX.aiGreen }}
-                                      >
-                                        <circle cx="12" cy="12" r="7" />
-                                        <line x1="12" y1="3" x2="12" y2="7" />
-                                        <line x1="12" y1="17" x2="12" y2="21" />
-                                        <line x1="3" y1="12" x2="7" y2="12" />
-                                        <line x1="17" y1="12" x2="21" y2="12" />
-                                        <circle cx="12" cy="12" r="2.2" />
-                                      </svg>
-                                      <span
-                                        className="number-font"
-                                        style={{
-                                          color: isFinal
-                                            ? AX.aiGreen
-                                            : undefined,
-                                        }}
-                                      >
-                                        {thunderAmount || "0"} SOL
-                                      </span>
-                                    </>
-                                  );
-                                } else {
-                                  // Regular thunder for other tokens
-                                  return (
-                                    <>
-                                      <HiLightningBolt
-                                        className={"text-black"}
-                                        style={{
-                                          color:
-                                            title
-                                              .toLowerCase()
-                                              .includes("final") ||
-                                            title
-                                              .toLowerCase()
-                                              .includes("stretch")
-                                              ? AX.aiGreen
-                                              : "#000000",
-                                        }}
-                                        size={14}
-                                      />
-                                      <span
-                                        className="number-font"
-                                        style={{
-                                          color:
-                                            title
-                                              .toLowerCase()
-                                              .includes("final") ||
-                                            title
-                                              .toLowerCase()
-                                              .includes("stretch")
-                                              ? AX.aiGreen
-                                              : undefined,
-                                        }}
-                                      >
-                                        {thunderAmount || "0"} SOL
-                                      </span>
-                                    </>
-                                  );
-                                }
-                              })()}
+                              <HiLightningBolt className="buy-icon" size={14} style={{ color: "inherit" }} />
+                              <span className="number-font">{thunderAmount || "0"}</span>
+                              <span>Buy</span>
                             </button>
                           </div>
                         </div>
@@ -8436,7 +8357,7 @@ function PulseTable({
                         return null;
                       })()}
                     </div>
-                    <div className="whitespace-break-nowrap absolute bottom-2 left-24 flex max-w-[calc(100%-6rem)] flex-row items-center gap-1 overflow-x-auto pr-10">
+                    <div className="badges-scroll absolute bottom-1 left-[76px] flex max-w-[calc(100%-6rem)] flex-row items-center gap-1 overflow-x-auto overflow-y-hidden">
                       <BottomCardInfoHolder
                         PassedIcon={BsPersonGear}
                         token={token}

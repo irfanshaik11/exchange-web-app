@@ -27,8 +27,10 @@ const config = {
   compiler: {
     removeConsole: process.env.NODE_ENV === 'production',
   },
-  // Turbopack configuration (empty - using webpack for builds)
-  turbopack: {},
+  // Turbopack configuration - explicitly set root to fix workspace detection
+  turbopack: {
+    root: __dirname,
+  },
   webpack: (config, { isServer, webpack }) => {
     // Handle @react-native-async-storage warning (optional dependency for MetaMask SDK)
     config.resolve.fallback = {

@@ -14,10 +14,11 @@ import { TfiTarget } from "react-icons/tfi";
 import { SiSolana } from "react-icons/si";
 import { HiOutlineCubeTransparent } from "react-icons/hi2";
 import useCodexHolders from "../../hooks/useCodexHolders";
-import useSolanaTokenWebSocket, {
+import {
+  useSolanaTokenWebSocketContext,
   type SolanaTokenHolder,
   type SolanaTopTrader,
-} from "../../hooks/useSolanaTokenWebSocket";
+} from "../../contexts/SolanaTokenWebSocketContext";
 import useMonadHolders, { type MonadHolder } from "../../hooks/useMonadHolders";
 import { getWalletSolBalance } from "../../utils/walletTracking";
 import { useSolPrice } from "../SolPriceContext";
@@ -721,15 +722,12 @@ const HoldersTable: React.FC<HoldersTableProps> = ({
     tags: [],
   });
 
-  // Use Solana WebSocket for holders (Solana chain)
-  const {
-    holders: wsHolders,
-    topTraders: wsTopTraders,
-    loading: wsLoading,
-  } = useSolanaTokenWebSocket({
-    mintAddress: token?.mint,
-    enabled: chain === "sol" && !!token?.mint,
-  });
+  // Use shared WebSocket context for Solana chain (eliminates duplicate connections)
+  // Context is provided by parent [id].tsx with SolanaTokenWebSocketProvider
+  const wsContext = useSolanaTokenWebSocketContext();
+  const wsHolders = chain === "sol" ? wsContext.holders : [];
+  const wsTopTraders = chain === "sol" ? wsContext.topTraders : [];
+  const wsLoading = chain === "sol" ? wsContext.loading : false;
 
   // Create a lookup map of wallet addresses to full holder data for hover cards
   const walletDataMap = useMemo(() => {

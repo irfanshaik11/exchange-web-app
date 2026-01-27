@@ -64,8 +64,9 @@ export function useSolanaPositionWebSocket(
   const mountedRef = useRef(true);
   const onUpdateRef = useRef(onUpdate);
   const onTxHashRef = useRef(onTxHash);
-  const maxReconnectAttempts = 10;
-  const reconnectInterval = 3000;
+  // Reduced max attempts and use exponential backoff to reduce pressure on backend during 429 errors
+  const maxReconnectAttempts = 5;
+  const baseReconnectInterval = 3000;
 
   // Store config in refs to avoid re-creating connect/disconnect
   const configRef = useRef({
@@ -216,16 +217,22 @@ export function useSolanaPositionWebSocket(
         setConnected(false);
         wsRef.current = null;
 
-        // Attempt to reconnect
+        // Attempt to reconnect with exponential backoff
+        // This reduces pressure on backend when it's hitting Solana RPC rate limits (429 errors)
         const { enabled: stillEnabled } = configRef.current;
         if (stillEnabled && reconnectAttemptsRef.current < maxReconnectAttempts) {
           reconnectAttemptsRef.current += 1;
-          console.log(`[useSolanaPositionWebSocket] Reconnecting in ${reconnectInterval}ms (attempt ${reconnectAttemptsRef.current}/${maxReconnectAttempts})`);
+          // Exponential backoff: 3s, 6s, 12s, 24s, 48s (max 60s)
+          const backoffDelay = Math.min(
+            baseReconnectInterval * Math.pow(2, reconnectAttemptsRef.current - 1),
+            60000
+          );
+          console.log(`[useSolanaPositionWebSocket] Reconnecting in ${backoffDelay}ms (attempt ${reconnectAttemptsRef.current}/${maxReconnectAttempts})`);
           reconnectTimeoutRef.current = setTimeout(() => {
             if (mountedRef.current) {
               connect();
             }
-          }, reconnectInterval);
+          }, backoffDelay);
         }
       };
 

@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useLayoutEffect, useMemo, useCallback } from 'react';
 import { formatSmartNumber } from '~/utils/db';
 import useCodexDevTokens from '../../hooks/useCodexDevTokens';
-import useSolanaTokenWebSocket, { type SolanaDevToken } from '../../hooks/useSolanaTokenWebSocket';
+import { useSolanaTokenWebSocketContext, type SolanaDevToken } from '../../contexts/SolanaTokenWebSocketContext';
 import useMonadDevTokens from '../../hooks/useMonadDevTokens';
 import type { Token } from '~/utils/db';
 import DevTokensPieChart from './DevTokensPieChart';
@@ -124,32 +124,8 @@ const CACHE_KEY_PREFIX_ALL = 'codex_dev_tokens_all_cache_';
 const CACHE_EXPIRY_MS = 5 * 60 * 1000; // 5 minutes cache expiry
 
 const CodexDevTokens: React.FC<CodexDevTokensProps> = ({ token, chain = 'sol', onTotalCountChange }) => {
-  // Collapsible state for right panel - initialize based on cached tokens if available
-  const [isRightPanelCollapsed, setIsRightPanelCollapsed] = useState<boolean>(() => {
-    // Check if any cached tokens have volume > 0 to set initial state
-    // Default to true (collapsed) to hide empty panel when there are no tokens
-    if (typeof window === 'undefined' || !token?.mint) return true;
-    try {
-      const cacheKey = `${CACHE_KEY_PREFIX_LIMITED}${token.mint}`;
-      const cached = localStorage.getItem(cacheKey);
-      if (cached) {
-        const parsed = JSON.parse(cached);
-        const now = Date.now();
-        if (parsed.timestamp && (now - parsed.timestamp) < CACHE_EXPIRY_MS && parsed.tokens) {
-          const hasVolume = parsed.tokens.some((devToken: any) => {
-            const volume = parseFloat(devToken.volume24 || '0');
-            return !isNaN(volume) && volume > 0;
-          });
-          // Collapse if there are tokens with volume, or if there are no tokens at all
-          return hasVolume || parsed.tokens.length === 0;
-        }
-      }
-    } catch (error) {
-      // Ignore errors in initializer
-    }
-    // Default to collapsed when there are no cached tokens
-    return true;
-  });
+  // Collapsible state for right panel - default to expanded (false = not collapsed)
+  const [isRightPanelCollapsed, setIsRightPanelCollapsed] = useState<boolean>(false);
   
   const getCacheKey = (mint: string, isAll: boolean) => {
     return isAll ? `${CACHE_KEY_PREFIX_ALL}${mint}` : `${CACHE_KEY_PREFIX_LIMITED}${mint}`;
@@ -286,13 +262,16 @@ const CodexDevTokens: React.FC<CodexDevTokensProps> = ({ token, chain = 'sol', o
     }
   }, []);
 
-  const shouldShowSkeleton = !token || (!token.name && !token.symbol);
+  // Show skeleton only if we have NO token data at all
+  // Mint address is enough to proceed (name/symbol can be empty for new tokens)
+  const tokenMint = token?.mint || (token as any)?.pair_address;
+  const shouldShowSkeleton = !token || (!token.name && !token.symbol && !tokenMint);
 
-  // Solana: WebSocket hook for real-time dev tokens (primary source when available)
-  const { devTokens: wsDevTokens, loading: wsLoading } = useSolanaTokenWebSocket({
-    mintAddress: token?.mint,
-    enabled: chain === 'sol' && !!token?.mint,
-  });
+  // Use shared WebSocket context for Solana chain (eliminates duplicate connections)
+  // Context is provided by parent [id].tsx with SolanaTokenWebSocketProvider
+  const wsContext = useSolanaTokenWebSocketContext();
+  const wsDevTokens = chain === 'sol' ? wsContext.devTokens : [];
+  const wsLoading = chain === 'sol' ? wsContext.loading : false;
 
   // Monad: Dev wallet data hook (shows dev wallet activity for current token)
   const { devTokenData: monadDevData, isLoading: monadLoading, error: monadError } = useMonadDevTokens(
@@ -360,20 +339,15 @@ const CodexDevTokens: React.FC<CodexDevTokensProps> = ({ token, chain = 'sol', o
     }
   }, [allTokens, token?.mint, saveToCache]);
 
-  // Filter displayTokens to exclude tokens with 0 or missing 1h volume
+  // Show all dev tokens regardless of volume
+  // New tokens often have 0 volume initially - hiding them defeats the purpose of this tab
+  // Users can see which tokens have activity via the volume column
   const filteredDisplayTokens = useMemo(() => {
-    return displayTokens.filter((devToken) => {
-      const volume = parseFloat(devToken.volume24 || '0');
-      return !isNaN(volume) && volume > 0;
-    });
+    return displayTokens;
   }, [displayTokens]);
 
-  // Keep right panel collapsed when filteredDisplayTokens has items (volume > 0)
-  // Also collapse when there are no tokens to avoid showing empty panel
-  useEffect(() => {
-    // Always collapse: when there are filtered tokens (original requirement) or when there are no tokens (hide empty panel)
-    setIsRightPanelCollapsed(true);
-  }, [filteredDisplayTokens]);
+  // Right panel stays expanded by default - user can manually collapse if desired
+  // Removed auto-collapse behavior to keep stats panel visible
 
   // Only show loading if we don't have any tokens at all (not even cached ones)
   // Consider both WebSocket and REST API loading states
@@ -599,24 +573,26 @@ const CodexDevTokens: React.FC<CodexDevTokensProps> = ({ token, chain = 'sol', o
               >
                 Liquidity
               </th>
+              {/* 1h Volume column temporarily commented out
               <th
                 className="px-2 py-1.5 text-left text-xs font-normal whitespace-nowrap text-[#757e80]"
                 style={{ color: "#9ca3af" }}
               >
                 1h Volume
               </th>
+              */}
             </tr>
           </thead>
           <tbody className='border-r border border-[#27282e] !text-[13px]'>
             {showLoading ? (
               <tr>
-                <td colSpan={5} className="py-6 text-center text-neutral-500">
+                <td colSpan={4} className="py-6 text-center text-neutral-500">
                   Loading dev tokens...
                 </td>
               </tr>
             ) : !filteredDisplayTokens || filteredDisplayTokens.length === 0 ? (
               <tr>
-                <td colSpan={5} className="py-6 text-center text-neutral-500">
+                <td colSpan={4} className="py-6 text-center text-neutral-500">
                   No dev tokens found.
                 </td>
               </tr>
@@ -625,7 +601,7 @@ const CodexDevTokens: React.FC<CodexDevTokensProps> = ({ token, chain = 'sol', o
                 const age = getAge(devToken.token.createdAt);
                 const marketCap = formatMarketCap(devToken.marketCap);
                 const liquidity = formatLiquidity(devToken.liquidity);
-                const volume = formatVolume(devToken.volume24);
+                // const volume = formatVolume(devToken.volume24); // Temporarily commented out
                 const isMigrated = !!devToken.token.migrated_pool_address;
 
                 return (
@@ -677,6 +653,7 @@ const CodexDevTokens: React.FC<CodexDevTokensProps> = ({ token, chain = 'sol', o
                         {liquidity}
                       </div>
                     </td>
+                    {/* 1h Volume cell temporarily commented out
                     <td className="px-2 py-2">
                       <div
                         className="text-[13px] font-normal text-[#c4cccc]"
@@ -684,6 +661,7 @@ const CodexDevTokens: React.FC<CodexDevTokensProps> = ({ token, chain = 'sol', o
                         {volume}
                       </div>
                     </td>
+                    */}
                   </tr>
                 );
               })
