@@ -1526,9 +1526,9 @@ export default function PulsePage() {
         <title>Trenches | Interstate Memeboard</title>
         <meta name="description" content="Token tracking dashboard" />
       </Head>
-      <div className="flex h-screen flex-col overflow-hidden bg-[#111214] text-neutral-100">
+      <div className="flex h-screen flex-col overflow-hidden bg-[#0a0b0d] text-neutral-100">
         <Header />
-        <div className="flex min-h-0 w-full flex-1 flex-col overflow-hidden px-4 py-4 sm:px-6">
+        <div className="flex min-h-0 w-full flex-1 flex-col overflow-hidden px-2 py-3 sm:px-3">
           <div className="mb-2">
             <div className="mb-1 flex flex-col gap-3 px-2 pt-2 sm:flex-row sm:items-center sm:justify-between">
               <div className="flex items-center gap-3">
@@ -1785,7 +1785,7 @@ export default function PulsePage() {
             // IMPORTANT: Pass actual tokens even during loading!
             // PulseTable has internal cache from WebSocket/IndexedDB that will show
             // Passing tokens={[]} would override the cache and show blank screen
-            <div className="flex min-h-0 w-full flex-1 flex-row overflow-hidden">
+            <div className="flex min-h-0 w-full flex-1 flex-row overflow-hidden rounded-lg border border-[#1e2028] bg-[#0d1015]">
               <PulseTable
                 title="New Pairs"
                 tokens={enrichedNewPairsToShow as any}
@@ -1859,7 +1859,7 @@ export default function PulsePage() {
                 </div>
               </div>
               {/* Desktop: All tables horizontally */}
-              <div className="hidden min-h-0 w-full flex-1 flex-row overflow-hidden lg:flex two">
+              <div className="hidden min-h-0 w-full flex-1 flex-row overflow-hidden rounded-lg border border-[#1e2028] bg-[#0d1015] lg:flex">
                 <PulseTable
                   title="New Pairs"
                   tokens={enrichedNewPairsToShow as any}

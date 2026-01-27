@@ -11,9 +11,7 @@ import { TfiTarget } from "react-icons/tfi";
 import { HiOutlineCubeTransparent } from "react-icons/hi2";
 import React, { useState, useCallback, useMemo } from "react";
 import { formatSmartNumber, formatMarketCap } from "~/utils/db";
-import useSolanaTokenWebSocket, {
-  type SolanaTokenHolder,
-} from "../../hooks/useSolanaTokenWebSocket";
+import { useSolanaTokenWebSocketContext, type SolanaTokenHolder } from "../../contexts/SolanaTokenWebSocketContext";
 import { useMonadTradesWebSocket } from "../../hooks/useMonadTradesWebSocket";
 import type { Token } from "~/utils/db";
 import WalletHoverCard, { type WalletHoverCardData } from "./WalletHoverCard";
@@ -1175,17 +1173,13 @@ const CodexTrades: React.FC<CodexTradesProps> = ({
     chain,
   });
 
-  // Use Solana WebSocket for Solana chain
-  const {
-    loading: solanaWsLoading,
-    trades: solanaTrades,
-    holders: solanaHolders,
-    topTraders: solanaTopTraders,
-  } = useSolanaTokenWebSocket({
-    mintAddress: mintForWebSocket,
-    enabled: chain === "sol" && !!mintForWebSocket,
-    maxTrades: 100,
-  });
+  // Use shared WebSocket context for Solana chain (eliminates duplicate connections)
+  // Context is provided by parent [id].tsx with SolanaTokenWebSocketProvider
+  const wsContext = useSolanaTokenWebSocketContext();
+  const solanaWsLoading = chain === "sol" ? wsContext.loading : false;
+  const solanaTrades = chain === "sol" ? wsContext.trades : [];
+  const solanaHolders = chain === "sol" ? wsContext.holders : [];
+  const solanaTopTraders = chain === "sol" ? wsContext.topTraders : [];
 
   // Create a lookup map of wallet addresses to holder data for hover cards
   const walletDataMap = useMemo(() => {
@@ -1580,7 +1574,10 @@ const CodexTrades: React.FC<CodexTradesProps> = ({
 
   const p95Display = totalMode === "usd" ? p95 : p95Sol;
 
-  if (!stableToken || (!stableToken.name && !stableToken.symbol)) {
+  // Show skeleton only if we have NO token data at all
+  // If we have mint address, we have enough to display (name/symbol can be empty for new tokens)
+  const tokenMint = stableToken?.mint || (stableToken as any)?.pair_address;
+  if (!stableToken || (!stableToken.name && !stableToken.symbol && !tokenMint)) {
     return (
       <div className="min-h-0 flex-1 bg-black p-4">
         <div className="animate-pulse">
@@ -1845,7 +1842,14 @@ const CodexTrades: React.FC<CodexTradesProps> = ({
                     ? n.pricePerToken
                     : fallbackPriceUsd;
 
-                // Get market cap: prioritize token's market cap, then fetched, then calculate
+                // Calculate market cap for THIS trade using THIS trade's price
+                // This ensures each trade row shows MC at the time of that trade
+                const tradePrice = n.pricePerToken > 0 ? n.pricePerToken : unitPriceUsd;
+                const tradeMc = supply > 0 && tradePrice > 0
+                  ? tradePrice * supply
+                  : null;
+
+                // Fallback to static token market cap only if we can't calculate from trade price
                 const anyToken = stableToken as any;
                 const tokenMarketCap =
                   anyToken?.market_cap_usd ??
@@ -1853,14 +1857,14 @@ const CodexTrades: React.FC<CodexTradesProps> = ({
                   anyToken?.marketCapUsd ??
                   anyToken?.fullyDilutedValue;
 
-                const mc =
-                  tokenMarketCap && Number(tokenMarketCap) > 0
+                // Use trade-specific MC first, fallback to static values only if no price data
+                const mc = tradeMc !== null
+                  ? tradeMc
+                  : tokenMarketCap && Number(tokenMarketCap) > 0
                     ? Number(tokenMarketCap)
                     : fetchedMarketCap && fetchedMarketCap > 0
                       ? fetchedMarketCap
-                      : supply > 0 && unitPriceUsd > 0
-                        ? unitPriceUsd * supply
-                        : null;
+                      : null;
 
                 const mcStr = mc !== null ? `$${formatMarketCap(mc)}` : "-";
                 const priceStr = formatUsdPrice(unitPriceUsd);

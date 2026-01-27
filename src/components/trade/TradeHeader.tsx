@@ -445,7 +445,36 @@ const TradeHeader: React.FC<TradeHeaderProps> = ({ token, livePriceUsd, liveMark
 		return null;
 	};
 
-	if (!token || (!token.name && !token.symbol)) {
+	// Check if we have ANY way to identify the token:
+	// 1. name or symbol from token prop
+	// 2. name or symbol from wsTokenInfo
+	// 3. mint address (can show truncated address as fallback)
+	const tokenMint = token?.mint || (token as any)?.pair_address || wsTokenInfo?.mint;
+	const hasTokenIdentity =
+		(token?.name || token?.symbol) ||
+		(wsTokenInfo?.name || wsTokenInfo?.symbol) ||
+		tokenMint; // Mint address is enough - we can show truncated address
+
+	if (!token && !wsTokenInfo) {
+		// No data at all - show skeleton
+		return (
+			<div className="flex-shrink-0 px-2">
+				<div
+					className="flex items-center gap-3 rounded-lg p-3"
+					style={{ backgroundColor: AX.surface }}
+				>
+					<div className="h-10 w-10 animate-pulse rounded-md bg-neutral-800" />
+					<div className="flex flex-col gap-1">
+						<div className="h-4 w-24 animate-pulse rounded bg-neutral-800" />
+						<div className="h-3 w-16 animate-pulse rounded bg-neutral-800" />
+					</div>
+				</div>
+			</div>
+		);
+	}
+
+	if (!hasTokenIdentity) {
+		// Have objects but no identity fields yet - show skeleton
 		return (
 			<div className="flex-shrink-0 px-2">
 				<div

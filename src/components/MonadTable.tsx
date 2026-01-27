@@ -50,7 +50,10 @@ import {
   HiUserGroup,
   HiLightningBolt,
   HiSparkles,
+  HiOutlineFire,
 } from "react-icons/hi";
+import { HiOutlineRocketLaunch } from "react-icons/hi2";
+import { PiLeafLight } from "react-icons/pi";
 import { GoPeople } from "react-icons/go";
 import { IoPersonOutline } from "react-icons/io5";
 import { MdTrendingUp, MdEmojiEvents, MdDynamicFeed } from "react-icons/md";
@@ -438,9 +441,6 @@ const SmartColor: React.FC<SmartColorProps> = ({
       className={className}
       style={{
         color: color,
-        fontFamily:
-          'ui-monospace, SFMono-Regular, "SF Mono", Consolas, "Liberation Mono", Menlo, monospace',
-        fontWeight: "400",
       }}
     >
       {children}
@@ -1045,34 +1045,68 @@ function TokenImage({
     <>
       <div
         ref={imageContainerRef}
-        className="relative flex h-[81px] max-h-[81px] min-h-[81px] w-[81px] max-w-[81px] min-w-[81px] items-center justify-center overflow-visible"
+        className="relative flex items-center justify-center"
+        style={{
+          width: "68px",
+          height: "68px",
+          minWidth: "68px",
+          minHeight: "68px",
+          maxWidth: "68px",
+          maxHeight: "68px",
+          overflow: "visible",
+        }}
       >
         {/* Outer border container */}
         <div
-          className="relative h-[79px] max-h-[79px] min-h-[79px] w-[79px] max-w-[79px] min-w-[79px] rounded-sm border-none p-0 transition-all duration-300 ease-out"
+          className="relative rounded-lg transition-all duration-200 ease-out"
           onMouseEnter={handleMouseEnter}
           onMouseLeave={handleMouseLeave}
+          style={{
+            border: "none",
+            padding: "0",
+            width: "66px",
+            height: "66px",
+            minWidth: "66px",
+            minHeight: "66px",
+            maxWidth: "66px",
+            maxHeight: "66px",
+          }}
         >
           {/* Single colored border container (moved inward) */}
           <div
-            className="relative h-[79px] max-h-[79px] min-h-[79px] w-[79px] max-w-[79px] min-w-[79px] rounded-sm bg-[#06070b] p-[2px]"
+            className="relative rounded-lg"
             style={{
-              border: `0.5px solid ${(() => {
-                // Use grey border for images instead of protocol color
-                return "#6b7280"; // grey-500
-              })()}`,
+              border: "1px solid #9333ea",
+              padding: "2px",
+              backgroundColor: "#0a0b0d",
+              width: "66px",
+              height: "66px",
+              minWidth: "66px",
+              minHeight: "66px",
+              maxWidth: "66px",
+              maxHeight: "66px",
             }}
           >
             {/* Image container */}
-            <div className="relative h-[75px] max-h-[75px] min-h-[75px] w-[75px] max-w-[75px] min-w-[75px] overflow-hidden rounded-sm border border-[#9333ea]">
+            <div
+              className="relative overflow-hidden rounded-md"
+              style={{
+                width: "60px",
+                height: "60px",
+                minWidth: "60px",
+                minHeight: "60px",
+                maxWidth: "60px",
+                maxHeight: "60px",
+              }}
+            >
               <FastImage
                 src={imageUrl}
                 alt={token.name || token.symbol || ""}
                 symbol={token.symbol}
                 name={token.name}
-                width={75}
-                height={75}
-                className="h-full w-full object-cover transition-all duration-300"
+                width={60}
+                height={60}
+                className="h-full w-full object-cover"
                 priority={priority}
                 showBubble={false}
               />
@@ -1082,32 +1116,32 @@ function TokenImage({
         {/* Thin loading border - solid green, clockwise from bottom-right (only for New Pairs) */}
         {isNewPairs && (
           <div className="pointer-events-none absolute inset-0">
-            <svg className="h-full w-full" viewBox="0 0 81 81">
+            <svg className="h-full w-full" viewBox="0 0 68 68">
               {/* Background border - outer grey border */}
 
               {/* Inner grey border */}
               <rect
                 x="2"
                 y="2"
-                width="77"
-                height="77"
+                width="64"
+                height="64"
                 fill="none"
                 stroke="none"
                 strokeWidth="0"
-                rx="4"
+                rx="8"
               />
 
               {/* Progress border - clockwise rounded path starting from bottom-right */}
+              {/* Animation handled by useSmoothProgress hook with requestAnimationFrame */}
               <path
-                d="M 79 79 L 8 79 Q 2 79 2 73 L 2 8 Q 2 2 8 2 L 73 2 Q 79 2 79 8 L 79 73 Q 79 79 73 79"
+                d="M 66 66 L 8 66 Q 2 66 2 60 L 2 8 Q 2 2 8 2 L 60 2 Q 66 2 66 8 L 66 60 Q 66 66 60 66"
                 fill="none"
-                stroke="#c084fc"
+                stroke="#9333ea"
                 strokeWidth="2"
                 strokeLinecap="round"
                 strokeLinejoin="round"
-                strokeDasharray={`${4 * 77}`} // Total perimeter
-                strokeDashoffset={`${4 * 77 * (1 - scaledProgress)}`}
-                className="transition-all duration-700 ease-out"
+                strokeDasharray={`${4 * 64}`} // Total perimeter
+                strokeDashoffset={`${4 * 64 * (1 - scaledProgress)}`}
               />
             </svg>
           </div>
@@ -1115,20 +1149,19 @@ function TokenImage({
 
         {/* Dynamic protocol icon bubble - aligned to the outer border's bottom-right corner */}
         <div
-          className="pointer-events-none absolute right-0 bottom-0 z-[2] flex translate-x-1/5 translate-y-1/4 transform items-center justify-center rounded-full border-none bg-[#000000]"
+          className="pointer-events-none absolute right-0 bottom-0 z-10 flex translate-x-1/5 translate-y-1/4 transform items-center justify-center rounded-full"
           style={{
-            width: 20,
-            height: 20,
-            boxShadow: "none",
+            width: 16,
+            height: 16,
+            backgroundColor: "#000000",
+            border: "1px solid #9333ea",
+            boxShadow: "0 0 4px rgba(147, 51, 234, 0.6)",
           }}
         >
           <img
             src={tokenIcon}
             alt={`${(token as any).launchpad_protocol || (token as any).protocol || (token as any).launchpadName || "Protocol"} logo`}
-            className={`${isFullCircleImage ? "h-full w-full object-cover" : "h-4/5 w-4/5 object-contain"} rounded-full`}
-            style={{
-              filter: "none", // Keep original logo colors - don't apply yellow filter
-            }}
+            className={`${isFullCircleImage ? "h-full w-full object-cover" : "h-3/4 w-3/4 object-contain"} rounded-full`}
           />
         </div>
         {/* Camera icon overlay - minimal grey - only shows on image hover */}
@@ -3706,40 +3739,50 @@ function MonadTable({
   };
   return (
     <div
-      className={`num flex min-h-0 w-full flex-1 flex-col overflow-hidden shadow-lg lg:min-w-[340px] ${
+      className={`num flex min-h-0 w-full flex-1 flex-col overflow-hidden lg:min-w-[300px] ${
         isFirstOrLast === "first"
-          ? "rounded-tl-md border-t border-r border-l lg:rounded-tl-md"
+          ? "rounded-tl-lg"
           : isFirstOrLast === "last"
-            ? "rounded-tr-md border-t border-r lg:rounded-tr-md"
+            ? "rounded-tr-lg"
             : isFirstOrLast === "only"
-              ? "rounded-md border border-t border-r border-l"
-              : "border-t border-r"
+              ? "rounded-lg"
+              : ""
       }`}
       style={{
-        backgroundColor: "#111214",
-        borderColor: AX.border,
-        borderStyle: "solid",
-        borderWidth: "1px",
-        boxShadow: title.toLowerCase().includes("new") ? "none" : undefined,
+        backgroundColor: "#0d1015",
+        borderRight: isFirstOrLast !== "last" && isFirstOrLast !== "only" ? "1px solid #1e2028" : "none",
+        borderLeft: isFirstOrLast === "first" || isFirstOrLast === "only" ? "1px solid #1e2028" : "none",
+        borderTop: "1px solid #1e2028",
+        borderBottom: "1px solid #1e2028",
       }}
     >
       <div
-        className="group relative mb-2 flex items-center justify-between border-b p-2 text-lg font-bold"
+        className="group relative flex items-center justify-between border-b px-2.5 py-1 text-sm font-medium"
         style={{
-          backgroundColor: "transparent",
-          borderColor: AX.border,
+          backgroundColor: "#0d1015",
+          borderColor: "#1e2028",
           color: AX.text,
         }}
         onMouseEnter={() => setIsHeaderHovered(true)}
         onMouseLeave={() => setIsHeaderHovered(false)}
       >
         {/* Left side container for title */}
-        <div className="flex items-center gap-2">
+        <div className="flex flex-shrink-0 items-center gap-1 font-normal">
+          {/* Column icon - outline style */}
+          {title.includes("New Pairs") && (
+            <PiLeafLight size={14} style={{ color: AX.text }} />
+          )}
+          {title.includes("Final Stretch") && (
+            <HiOutlineFire size={14} style={{ color: "#fcaf25" }} />
+          )}
+          {title.includes("Migrated") && (
+            <HiOutlineRocketLaunch size={14} style={{ color: "#52c75f" }} />
+          )}
           <span
-            className="text-sm lg:text-base"
+            className="text-xs lg:text-sm"
             style={{
-              fontWeight: "600",
-              letterSpacing: "0.5px",
+              fontWeight: "500",
+              letterSpacing: "0.3px",
             }}
           >
             {title.includes("New Pairs")
@@ -3753,18 +3796,18 @@ function MonadTable({
         </div>
 
         {/* Right side container for pill and filter */}
-        <div className="flex items-center gap-2">
+        <div className="flex min-w-0 flex-1 items-center justify-end gap-2">
           {/* Keyword Search Box */}
           <div
-            className="hidden items-center gap-1 overflow-hidden rounded-md border px-1.5 sm:flex"
+            className="hidden min-w-0 flex-shrink items-center gap-1.5 overflow-hidden rounded-md border px-2 sm:flex"
             style={{
               borderColor: AX.border,
               backgroundColor: "#272a2e",
               paddingTop: "4px",
               paddingBottom: "4px",
-              minWidth: "120px",
-              width: "120px",
-              height: "24px",
+              minWidth: "90px",
+              maxWidth: "110px",
+              height: "26px",
             }}
           >
             <LuSearch size={12} style={{ color: AX.muted, flexShrink: 0 }} />
@@ -3793,7 +3836,7 @@ function MonadTable({
               paddingBottom: "4px",
               minWidth: "70px",
               width: "70px",
-              height: "24px",
+              height: "26px",
             }}
           >
             <HiLightningBolt size={12} style={{ color: AX.aiGreen }} />
@@ -3832,15 +3875,15 @@ function MonadTable({
 
           {/* P1 P2 P3 Boxes - Separate Thin Box With Background Color */}
           <div
-            className="relative hidden items-center justify-center gap-1 rounded-md border px-1.5 sm:flex"
+            className="relative hidden items-center justify-center gap-1.5 rounded-md border px-1.5 sm:flex"
             style={{
               borderColor: AX.border,
               backgroundColor: "#272a2e",
               paddingTop: "4px",
               paddingBottom: "4px",
-              minWidth: "80px",
-              width: "80px",
-              height: "24px",
+              minWidth: "85px",
+              width: "85px",
+              height: "26px",
             }}
           >
             {["P1", "P2", "P3"].map((pill) => (
@@ -3931,9 +3974,9 @@ function MonadTable({
           </div>
 
           {/* Filter Controls */}
-          <div className="filter-dropdown relative">
+          <div className="filter-dropdown relative flex-shrink-0">
             <button
-              className="relative flex h-8 w-8 cursor-pointer items-center justify-center rounded-lg transition-all duration-300 ease-out"
+              className="relative flex h-7 w-7 cursor-pointer items-center justify-center rounded-md transition-all duration-300 ease-out"
               style={{
                 backgroundColor: "transparent",
                 color: showFilters ? AX.aiBlue : AX.muted,
@@ -5992,14 +6035,13 @@ function MonadTable({
                 <Link
                   href={`/trade/monad/${pairAddress}?${queryParams}`}
                   key={pairAddress}
-                  className="group relative flex w-full cursor-pointer flex-row items-start gap-2 border-b px-2 pt-1 transition-all duration-300 ease-out"
+                  className="token-row group relative flex w-full max-w-full cursor-pointer flex-row items-start gap-2 overflow-hidden px-2 py-1.5 text-sm"
                   style={{
-                    borderColor: AX.border,
-                    backgroundColor: "transparent",
+                    color: AX.text,
                   }}
                   onMouseEnter={(e) => {
-                    e.currentTarget.style.backgroundColor =
-                      "rgba(107, 114, 128, 0.1)";
+                    // PHASE 3: Use CSS class instead of inline style (GPU-accelerated)
+                    e.currentTarget.classList.add('row-hovered');
 
                     // Prefetch Monad trade page for instant navigation
                     router.prefetch(
@@ -6038,17 +6080,12 @@ function MonadTable({
                       );
                     }
 
-                    // Show and position the popup
+                    // Show the status popup via CSS class
                     const popup = e.currentTarget.querySelector(
                       ".status-popup",
                     ) as HTMLElement;
                     if (popup) {
-                      const rect = e.currentTarget.getBoundingClientRect();
-                      popup.style.display = "block";
-                      popup.style.left = `${rect.left + rect.width / 2}px`;
-                      popup.style.top = `${rect.top - 30}px`;
-                      popup.style.transform = "translateX(-50%)";
-                      popup.style.zIndex = "10";
+                      popup.classList.add('popup-visible');
                     }
                     // Prefetch trade data on hover for instant navigation
                     if (pairAddress) {
@@ -6056,13 +6093,14 @@ function MonadTable({
                     }
                   }}
                   onMouseLeave={(e) => {
-                    e.currentTarget.style.backgroundColor = "transparent";
-                    // Hide the popup
+                    // PHASE 3: Use CSS class instead of inline style
+                    e.currentTarget.classList.remove('row-hovered');
+                    // Hide the status popup via CSS class
                     const popup = e.currentTarget.querySelector(
                       ".status-popup",
                     ) as HTMLElement;
                     if (popup) {
-                      popup.style.display = "none";
+                      popup.classList.remove('popup-visible');
                     }
                   }}
                 >
@@ -6096,16 +6134,13 @@ function MonadTable({
 
                     return (
                       <span
-                        className={`status-popup fixed hidden border px-2 py-1 text-xs shadow-none`}
+                        className="status-popup absolute -top-8 left-1/2 -translate-x-1/2 border px-2 py-1 text-xs"
                         style={{
                           pointerEvents: "none",
                           backgroundColor: AX.surface,
                           borderColor: AX.border,
                           color: AX.text,
-                          zIndex: 10,
-                          left: "50%",
-                          top: "100px",
-                          transform: "translateX(-50%)",
+                          zIndex: 99999,
                           borderRadius: "6px",
                           fontSize: "11px",
                           fontWeight: "500",
@@ -6184,13 +6219,15 @@ function MonadTable({
                       </span>
                     );
                   })()}
+                  <div className="flex w-full max-w-full flex-col gap-2 overflow-hidden">
+                    <div className="flex w-full max-w-full flex-row gap-2">
                   {/* Profile Picture & Address */}
                   <div
-                    className="relative flex flex-shrink-0 flex-col items-center pt-1"
+                    className="relative flex flex-shrink-0 flex-col items-center"
                     style={{
-                      width: "81px",
-                      minWidth: "81px",
-                      maxWidth: "81px",
+                      width: "70px",
+                      minWidth: "70px",
+                      maxWidth: "70px",
                     }}
                   >
                     <TokenImage
@@ -6222,25 +6259,25 @@ function MonadTable({
                     </span>
                   </div>
                   {/* Main Info Section */}
-                  <div className="flex w-full min-w-0 flex-col gap-1">
+                  <div className="flex min-w-0 flex-1 flex-col gap-1">
                     {/* Top Row */}
                     <div className="flex flex-row justify-between gap-2">
                       {/* Left: Token Info & Socials */}
                       <div className="flex min-w-0 flex-col">
-                        <div className="flex min-w-0 items-center gap-2">
+                        <div className="flex min-w-0 items-center gap-1.5">
                           <span
-                            className="flex-shrink-0 text-sm font-semibold lg:text-base"
+                            className="flex-shrink-0 text-sm font-semibold"
                             style={{ color: AX.text }}
                           >
                             {token.symbol}
                           </span>
                           <span
-                            className="truncate text-xs lg:text-sm"
+                            className="truncate text-xs"
                             style={{ color: AX.muted }}
                           >
                             {token.name}
                           </span>
-                          <div className="relative ml-1">
+                          <div className="relative">
                             <button
                               className="transition-colors duration-200"
                               style={{ color: AX.muted }}
@@ -6331,13 +6368,15 @@ function MonadTable({
                             </button>
                           </div>
                         </div>
-                        <div
-                          className="mt-1 flex items-center gap-1 text-xs lg:gap-2"
-                          style={{ color: "#31e3ac" }}
-                        >
-                          <span>{getAgeLabel(token)}</span>
+                        <div className="flex items-center gap-1 text-xs lg:gap-1.5">
+                          <span
+                            className="flex items-center gap-1 text-[10px] lg:gap-1"
+                            style={{ color: "#31e3ac" }}
+                          >
+                            {getAgeLabel(token)}
+                          </span>
                           {/* Socials */}
-                          <div className="relative flex items-center gap-1 lg:gap-2">
+                          <div className="relative flex items-center gap-1 text-neutral-400 lg:gap-1.5">
                             {/* Pump.fun Link - only show for pump tokens */}
                             {/* {token.mint.slice(-4) === "pump" && (
                               <Link
@@ -6533,14 +6572,15 @@ function MonadTable({
                         </div>
                       </div>
                       {/* Right: MC, V, F, TX */}
-                      <div className="items-right justify-right flex min-w-[100px] flex-col items-end gap-1 text-right lg:min-w-[140px]">
+                      <div className="items-right justify-right flex min-w-[100px] flex-col items-end gap-0.5 text-right lg:min-w-[130px]">
                         <div
-                          className={
-                            "justify-right flex flex-col text-xs lg:text-xs"
-                          }
+                          className={"justify-right flex flex-col text-xs"}
                         >
-                          <span style={{ color: AX.muted }}>
-                            MC{" "}
+                          <div
+                            className="flex items-end gap-1"
+                            style={{ color: AX.muted }}
+                          >
+                            <span className="mb-[2px] text-xs">MC </span>
                             {(() => {
                               const isFinalStretchColumn =
                                 title.toLowerCase().includes("final") ||
@@ -6560,16 +6600,10 @@ function MonadTable({
                               if (hasGreenWave) {
                                 return (
                                   <span
-                                    className="number-font text-sm font-medium lg:text-base"
+                                    className="number-font text-sm font-medium"
                                     style={{ color: "#31e3ac" }}
                                   >
-                                    <SmoothNumber
-                                      value={mcVal}
-                                      formatter={(val) =>
-                                        `$${formatMarketCap(val)}`
-                                      }
-                                      duration={300}
-                                    />
+                                    ${formatMarketCap(mcVal)}
                                   </span>
                                 );
                               }
@@ -6577,51 +6611,37 @@ function MonadTable({
                                 <SmartColor
                                   token={token}
                                   metricType="marketCap"
-                                  className="number-font text-sm font-medium lg:text-base"
+                                  className="number-font text-sm font-medium"
                                 >
-                                  <SmoothNumber
-                                    value={mcVal}
-                                    formatter={(val) =>
-                                      `$${formatMarketCap(val)}`
-                                    }
-                                    duration={300}
-                                  />
+                                  ${formatMarketCap(mcVal)}
                                 </SmartColor>
                               );
                             })()}
-                          </span>
-                          <span style={{ color: AX.muted }}>
-                            <span className="text-xs">V</span>{" "}
+                          </div>
+                          <div
+                            style={{ color: AX.muted }}
+                            className="flex items-end gap-1"
+                          >
+                            <span className="mb-[1px] ml-auto text-xs">V</span>{" "}
                             <span
-                              className="number-font text-xs font-medium lg:text-sm"
+                              className="number-font text-xs font-medium"
                               style={{
                                 color: "#ffffff",
                               }}
                             >
-                              <SmoothNumber
-                                value={
-                                  (token as any).volume_24h ||
-                                  (token as any).volume_24h_usd ||
-                                  0
-                                }
-                                formatter={(val) => {
-                                  const rounded = Math.round(val);
-                                  if (rounded >= 1e12)
-                                    return `$${Math.round(rounded / 1e12)}T`;
-                                  if (rounded >= 1e9)
-                                    return `$${Math.round(rounded / 1e9)}B`;
-                                  if (rounded >= 1e6)
-                                    return `$${Math.round(rounded / 1e6)}M`;
-                                  if (rounded >= 1e3)
-                                    return `$${Math.round(rounded / 1e3)}K`;
-                                  return `$${rounded}`;
-                                }}
-                                duration={300}
-                              />
+                              {(() => {
+                                const vol = (token as any).volume_24h || (token as any).volume_24h_usd || 0;
+                                const rounded = Math.round(vol);
+                                if (rounded >= 1e12) return `$${Math.round(rounded / 1e12)}T`;
+                                if (rounded >= 1e9) return `$${Math.round(rounded / 1e9)}B`;
+                                if (rounded >= 1e6) return `$${Math.round(rounded / 1e6)}M`;
+                                if (rounded >= 1e3) return `$${Math.round(rounded / 1e3)}K`;
+                                return `$${rounded}`;
+                              })()}
                             </span>
-                          </span>
+                          </div>
                         </div>
-                        <div className="flex items-center gap-2 text-xs">
+                        <div className="flex items-center justify-end gap-2 text-xs">
                           <div
                             className="flex flex-row items-center gap-1"
                             style={{ color: AX.muted }}
@@ -6633,25 +6653,14 @@ function MonadTable({
                                 color: "#ffffff",
                               }}
                             >
-                              <SmoothNumber
-                                value={(() => {
-                                  // Use total_transactions if available, otherwise sum buys/sells
-                                  // Monad API returns total_buys/total_sells, Solana uses _24h suffix
-                                  const totalTxns =
-                                    (token as any).total_transactions ?? 0;
-                                  if (totalTxns > 0) return totalTxns;
-                                  const buys =
-                                    (token as any).total_buys_24h ??
-                                    (token as any).total_buys ??
-                                    0;
-                                  const sells =
-                                    (token as any).total_sells_24h ??
-                                    (token as any).total_sells ??
-                                    0;
-                                  return buys + sells;
-                                })()}
-                                duration={0}
-                              />
+                              {(() => {
+                                // Use total_transactions if available, otherwise sum buys/sells
+                                const totalTxns = (token as any).total_transactions ?? 0;
+                                if (totalTxns > 0) return Math.round(totalTxns);
+                                const buys = (token as any).total_buys_24h ?? (token as any).total_buys ?? 0;
+                                const sells = (token as any).total_sells_24h ?? (token as any).total_sells ?? 0;
+                                return Math.round(buys + sells);
+                              })()}
                             </span>
                             <div className="ml-1 flex h-0.5 w-8 overflow-hidden rounded-full bg-gray-700">
                               <div
@@ -6700,47 +6709,19 @@ function MonadTable({
                           </div>
                         </div>
                         <button
-                          className="z-10 flex cursor-pointer items-center gap-2 rounded-full px-3 py-1.5 text-sm font-bold opacity-0 shadow-sm transition-all duration-200 ease-out group-hover:opacity-100"
+                          className="quick-buy-btn z-10 flex cursor-pointer items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold opacity-0 transition-all duration-150 ease-out group-hover:opacity-100"
                           style={{
-                            backgroundColor:
-                              title.toLowerCase().includes("final") ||
-                              title.toLowerCase().includes("stretch")
-                                ? "#101114"
-                                : AX.aiGreen,
-                            color:
-                              title.toLowerCase().includes("final") ||
-                              title.toLowerCase().includes("stretch")
-                                ? AX.aiGreen
-                                : "#000000",
-                            border:
-                              title.toLowerCase().includes("final") ||
-                              title.toLowerCase().includes("stretch")
-                                ? `1px solid ${AX.aiGreen}`
-                                : "1px solid rgba(0,0,0,0.15)",
+                            backgroundColor: "#1a1b1f",
+                            color: "#86efac",
                           }}
                           title={`Quick Buy ${thunderAmount || "0"} MON`}
                           onMouseEnter={(e) => {
-                            const isFinal =
-                              title.toLowerCase().includes("final") ||
-                              title.toLowerCase().includes("stretch");
-                            e.currentTarget.style.backgroundColor = isFinal
-                              ? "#101114"
-                              : AX.aiGreenHover;
-                            e.currentTarget.style.transform =
-                              "translateY(-1px)";
-                            e.currentTarget.style.boxShadow = isFinal
-                              ? `0 0 10px ${AX.glowGreen}`
-                              : "0 4px 14px rgba(112, 224, 176, 0.25)";
+                            e.currentTarget.style.backgroundColor = "#86efac";
+                            e.currentTarget.style.color = "#000000";
                           }}
                           onMouseLeave={(e) => {
-                            const isFinal =
-                              title.toLowerCase().includes("final") ||
-                              title.toLowerCase().includes("stretch");
-                            e.currentTarget.style.backgroundColor = isFinal
-                              ? "#101114"
-                              : AX.aiGreen;
-                            e.currentTarget.style.transform = "translateY(0)";
-                            e.currentTarget.style.boxShadow = "none";
+                            e.currentTarget.style.backgroundColor = "#1a1b1f";
+                            e.currentTarget.style.color = "#86efac";
                           }}
                           onClick={(e) => {
                             e.stopPropagation();
@@ -6774,132 +6755,48 @@ function MonadTable({
                             }
                           }}
                         >
-                          {(() => {
-                            const isMigratedColumn = title
-                              .toLowerCase()
-                              .includes("migrated");
-
-                            // For migrated column, always show regular thunder (no snipe icon)
-                            if (isMigratedColumn) {
-                              return (
-                                <>
-                                  <HiLightningBolt
-                                    className="text-black"
-                                    size={14}
-                                  />{" "}
-                                  <span className="number-font">
-                                    {thunderAmount || "0"}
-                                  </span>
-                                  <span className="number-font"> MON</span>
-                                </>
-                              );
-                            }
-
-                            // For other columns, check for high bonding Meteora tokens
-                            const launchpadProtocol =
-                              (
-                                token as any
-                              ).launchpad_protocol?.toLowerCase() || "";
-                            const isMeteora =
-                              launchpadProtocol.includes("meteora");
-                            const bondingPct = (token as any).bonding_pct ?? 0;
-                            const isHighBondingMeteora =
-                              isMeteora && bondingPct > 98.6;
-
-                            if (isHighBondingMeteora) {
-                              // Snipe icon (crosshair) rendered in green
-                              const isFinal =
-                                title.toLowerCase().includes("final") ||
-                                title.toLowerCase().includes("stretch");
-                              return (
-                                <>
-                                  <svg
-                                    width="18"
-                                    height="18"
-                                    viewBox="0 0 24 24"
-                                    fill="none"
-                                    stroke="currentColor"
-                                    strokeWidth="1.8"
-                                    strokeLinecap="round"
-                                    strokeLinejoin="round"
-                                    style={{ color: AX.aiGreen }}
-                                  >
-                                    <circle cx="12" cy="12" r="7" />
-                                    <line x1="12" y1="3" x2="12" y2="7" />
-                                    <line x1="12" y1="17" x2="12" y2="21" />
-                                    <line x1="3" y1="12" x2="7" y2="12" />
-                                    <line x1="17" y1="12" x2="21" y2="12" />
-                                    <circle cx="12" cy="12" r="2.2" />
-                                  </svg>
-                                  <span
-                                    className="number-font"
-                                    style={{
-                                      color: isFinal ? AX.aiGreen : undefined,
-                                    }}
-                                  >
-                                    {thunderAmount || "0"} MON
-                                  </span>
-                                </>
-                              );
-                            } else {
-                              // Regular thunder for other tokens
-                              return (
-                                <>
-                                  <HiLightningBolt
-                                    className={"text-black"}
-                                    style={{
-                                      color:
-                                        title.toLowerCase().includes("final") ||
-                                        title.toLowerCase().includes("stretch")
-                                          ? AX.aiGreen
-                                          : "#000000",
-                                    }}
-                                    size={14}
-                                  />
-                                  <span
-                                    className="number-font"
-                                    style={{
-                                      color:
-                                        title.toLowerCase().includes("final") ||
-                                        title.toLowerCase().includes("stretch")
-                                          ? AX.aiGreen
-                                          : undefined,
-                                    }}
-                                  >
-                                    {thunderAmount || "0"} MON
-                                  </span>
-                                </>
-                              );
-                            }
-                          })()}
+                          <HiLightningBolt className="buy-icon" size={14} style={{ color: "inherit" }} />
+                          <span className="number-font">{thunderAmount || "0"}</span>
+                          <span>Buy</span>
                         </button>
                       </div>
                     </div>
                   </div>
-                  {/* Bottom Row */}
-                  <div className="absolute bottom-2 left-24 flex flex-row items-center gap-1">
-                    {/* Top 10% Holders percentage - Green */}
-                    <div className="relative">
+                  {/* Bottom Row - Metrics Badges */}
+                  <div className="badges-scroll absolute right-2 bottom-1 left-[80px] flex flex-row items-center gap-3 overflow-x-auto overflow-y-hidden">
+                    {/* Top 10% Holders percentage */}
+                    {(() => {
+                      const value = (token as any).top10_hold_percent ?? 0;
+                      const displayValue = value > 0 ? value.toFixed(2) : "0";
+                      // Risk thresholds for Top 10 Holders: safe < 40%, risky > 60%
+                      const riskLevel = value <= 40 ? "safe" : value >= 60 ? "risky" : "caution";
+                      const riskColors = {
+                        safe: { bg: "#0f2419", text: "#31e3ac", border: "#1a3d2a" },
+                        caution: { bg: "#2a2314", text: "#f59e0b", border: "#3d351f" },
+                        risky: { bg: "#2a1419", text: "#ef4444", border: "#3d1f24" },
+                      };
+                      const colors = riskColors[riskLevel];
+                      return (
+                    <div className="relative flex-shrink-0">
                       <span
-                        className="number-font flex cursor-help items-center gap-1 rounded border px-2 py-1 text-xs transition-all duration-200"
+                        className="number-font flex cursor-help items-center justify-center gap-1 rounded border px-2 py-1"
                         style={{
-                          color: AX.aiGreen,
-                          fontSize: "13px",
-                          fontWeight: "600",
-                          borderColor: "#27282e",
+                          color: colors.text,
+                          fontSize: "11px",
+                          fontWeight: "500",
+                          borderColor: colors.border,
                           backgroundColor: "transparent",
+                          whiteSpace: "nowrap",
+                          minWidth: "62px",
+                          height: "24px",
                         }}
                         onMouseEnter={() => setShowTop10Tooltip(token.id)}
                         onMouseLeave={() => setShowTop10Tooltip(null)}
                       >
-                        <BsPersonGear size={16} />
-                        <span className="number-font">
-                          {(() => {
-                            const value =
-                              (token as any).top10_hold_percent ?? 0;
-                            return value > 0 ? `${value.toFixed(2)}%` : "0%";
-                          })()}
+                        <span className="flex h-[13px] w-[13px] items-center justify-center">
+                          <BsPersonGear size={13} />
                         </span>
+                        <span className="number-font">{displayValue}%</span>
                       </span>
 
                       {/* Top 10% Tooltip */}
@@ -6941,8 +6838,10 @@ function MonadTable({
                         </div>
                       )}
                     </div>
+                      );
+                    })()}
 
-                    {/* Dev Hold indicator - Blue with percentage */}
+                    {/* Dev Hold indicator - with risk-based colors */}
                     {(() => {
                       const devHoldPercent =
                         (token as any).dev_hold_percent ??
@@ -6959,26 +6858,37 @@ function MonadTable({
                       // Show for tokens with dev info OR for final stretch tokens
                       if (!hasDevInfo && !isFinalStretch) return null;
 
+                      // Risk thresholds for Dev Holding: safe < 5%, risky > 10%
+                      const riskLevel = devHoldPercent <= 5 ? "safe" : devHoldPercent >= 10 ? "risky" : "caution";
+                      const riskColors = {
+                        safe: { bg: "#0f2419", text: "#31e3ac", border: "#1a3d2a" },
+                        caution: { bg: "#2a2314", text: "#f59e0b", border: "#3d351f" },
+                        risky: { bg: "#2a1419", text: "#ef4444", border: "#3d1f24" },
+                      };
+                      const colors = riskColors[riskLevel];
+                      const displayValue = devHoldPercent > 0 ? devHoldPercent.toFixed(2) : "0";
+
                       return (
-                        <div className="relative">
+                        <div className="relative flex-shrink-0">
                           <span
-                            className="flex cursor-help items-center gap-1 rounded border px-2 py-1 text-xs transition-all duration-200"
+                            className="number-font flex cursor-help items-center justify-center gap-1 rounded border px-2 py-1"
                             style={{
-                              color: "#566cdc",
-                              fontSize: "13px",
+                              color: colors.text,
+                              fontSize: "10px",
                               fontWeight: "500",
-                              borderColor: "#27282e",
+                              borderColor: colors.border,
                               backgroundColor: "transparent",
+                              whiteSpace: "nowrap",
+                              minWidth: "58px",
+                              height: "22px",
                             }}
                             onMouseEnter={() => setShowDevTooltip(token.id)}
                             onMouseLeave={() => setShowDevTooltip(null)}
                           >
-                            <LuChefHat size={16} style={{ color: "#566cdc" }} />
-                            <span style={{ color: "#566cdc" }}>
-                              {devHoldPercent > 0
-                                ? `${devHoldPercent.toFixed(2)}%`
-                                : "0%"}
+                            <span className="flex h-[13px] w-[13px] items-center justify-center">
+                              <LuChefHat size={13} />
                             </span>
+                            <span className="number-font">{displayValue}%</span>
                           </span>
 
                           {/* Dev Info Tooltip */}
@@ -7201,23 +7111,39 @@ function MonadTable({
                       );
                     })()}
 
-                    {/* Sniper Hold percentage - Red */}
-                    <div className="relative">
+                    {/* Sniper Hold percentage - with risk-based colors */}
+                    {(() => {
+                      const sniperValue = (token as any).sniper_hold_percent ?? 0;
+                      const displayValue = sniperValue > 0 ? sniperValue.toFixed(2) : "0";
+                      // Risk thresholds for Sniper Holding: safe < 3%, risky > 8%
+                      const riskLevel = sniperValue <= 3 ? "safe" : sniperValue >= 8 ? "risky" : "caution";
+                      const riskColors = {
+                        safe: { bg: "#0f2419", text: "#31e3ac", border: "#1a3d2a" },
+                        caution: { bg: "#2a2314", text: "#f59e0b", border: "#3d351f" },
+                        risky: { bg: "#2a1419", text: "#ef4444", border: "#3d1f24" },
+                      };
+                      const colors = riskColors[riskLevel];
+                      return (
+                    <div className="relative flex-shrink-0">
                       <span
-                        className="flex cursor-help items-center gap-1 rounded border px-2 py-1 text-xs transition-all duration-200"
+                        className="number-font flex cursor-help items-center justify-center gap-1 rounded border px-2 py-1"
                         style={{
-                          color: "#f26681",
-                          fontSize: "13px",
+                          color: colors.text,
+                          fontSize: "11px",
                           fontWeight: "500",
-                          borderColor: "#27282e",
+                          borderColor: colors.border,
                           backgroundColor: "transparent",
+                          whiteSpace: "nowrap",
+                          minWidth: "62px",
+                          height: "24px",
                         }}
                         onMouseEnter={() => setShowSniperTooltip(token.id)}
                         onMouseLeave={() => setShowSniperTooltip(null)}
                       >
+                        <span className="flex h-[13px] w-[13px] items-center justify-center">
                         <svg
-                          width="16"
-                          height="16"
+                          width="13"
+                          height="13"
                           viewBox="0 0 24 24"
                           fill="currentColor"
                         >
@@ -7270,13 +7196,8 @@ function MonadTable({
                             fill="none"
                           />
                         </svg>
-                        <span className="number-font">
-                          {(() => {
-                            const value =
-                              (token as any).sniper_hold_percent ?? 0;
-                            return value > 0 ? `${value.toFixed(2)}%` : "0%";
-                          })()}
                         </span>
+                        <span className="number-font">{displayValue}%</span>
                       </span>
 
                       {/* Sniper Hold Tooltip */}
@@ -7317,29 +7238,42 @@ function MonadTable({
                         </div>
                       )}
                     </div>
+                      );
+                    })()}
 
-                    {/* Insider Hold percentage - Green */}
-                    <div className="relative">
+                    {/* Insider Hold percentage - with risk-based colors */}
+                    {(() => {
+                      const insiderValue = (token as any).insider_hold_percent ?? 0;
+                      const displayValue = insiderValue > 0 ? insiderValue.toFixed(2) : "0";
+                      // Risk thresholds for Insider Holding: safe < 10%, risky > 20%
+                      const riskLevel = insiderValue <= 10 ? "safe" : insiderValue >= 20 ? "risky" : "caution";
+                      const riskColors = {
+                        safe: { bg: "#0f2419", text: "#31e3ac", border: "#1a3d2a" },
+                        caution: { bg: "#2a2314", text: "#f59e0b", border: "#3d351f" },
+                        risky: { bg: "#2a1419", text: "#ef4444", border: "#3d1f24" },
+                      };
+                      const colors = riskColors[riskLevel];
+                      return (
+                    <div className="relative flex-shrink-0">
                       <span
-                        className="flex cursor-help items-center gap-1 rounded border px-2 py-1 text-xs transition-all duration-200"
+                        className="number-font flex cursor-help items-center justify-center gap-1 rounded border px-2 py-1"
                         style={{
-                          color: AX.aiGreen,
-                          fontSize: "13px",
+                          color: colors.text,
+                          fontSize: "11px",
                           fontWeight: "500",
-                          borderColor: "#27282e",
+                          borderColor: colors.border,
                           backgroundColor: "transparent",
+                          whiteSpace: "nowrap",
+                          minWidth: "62px",
+                          height: "24px",
                         }}
                         onMouseEnter={() => setShowInsiderTooltip(token.id)}
                         onMouseLeave={() => setShowInsiderTooltip(null)}
                       >
-                        <RiGhostLine size={16} />
-                        <span className="number-font">
-                          {(() => {
-                            const value =
-                              (token as any).insider_hold_percent ?? 0;
-                            return value > 0 ? `${value.toFixed(2)}%` : "0%";
-                          })()}
+                        <span className="flex h-[13px] w-[13px] items-center justify-center">
+                          <RiGhostLine size={13} />
                         </span>
+                        <span className="number-font">{displayValue}%</span>
                       </span>
 
                       {/* Insider Hold Tooltip */}
@@ -7380,6 +7314,8 @@ function MonadTable({
                         </div>
                       )}
                     </div>
+                      );
+                    })()}
 
                     {/* Three Dice percentage (Dev Holdings/Bundle) - Green */}
                     {/* <span className="flex items-center gap-1 text-xs px-2 py-1 rounded-full border transition-all duration-200"
@@ -7477,6 +7413,8 @@ function MonadTable({
                     }
                     return null;
                   })()}
+                    </div>
+                  </div>
                 </Link>
               );
             })

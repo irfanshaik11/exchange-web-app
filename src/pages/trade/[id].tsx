@@ -20,6 +20,7 @@ import { useTradePageQueryParams } from "../../utils/queryParams";
 import { useComponentCache } from "../../hooks/useComponentCache";
 import useOptimizedTradeEventsWebSocket from "../../hooks/useOptimizedTradeEventsWebSocket";
 import { useSolanaTokenWebSocket } from "../../hooks/useSolanaTokenWebSocket";
+import { SolanaTokenWebSocketProvider } from "../../contexts/SolanaTokenWebSocketContext";
 import dynamic from "next/dynamic";
 import SimilarTokensPanel from "../../components/trade/SimilarTokensPanel";
 import ReusedImageTokensPanel from "../../components/trade/ReusedImageTokensPanel";
@@ -584,18 +585,26 @@ export default function TradePage() {
     ? `${tokenNameForTitle} | Trade`
     : "Trade";
 
+  // URL structure: /trade/{mint}?_name=...&_symbol=...
+  // id IS the mint address now (not pair_address), allowing immediate WebSocket connection
+  // _mint query param kept for backward compatibility with old URLs
   const resolvedTokenMint = React.useMemo(() => {
     if (displayToken?.mint) return displayToken.mint;
-    if (typeof _mint === "string") return _mint;
-    if (typeof id === "string") return id;
+    // Backward compat: Check _mint query param (old URLs had _mint in query string)
+    if (typeof _mint === "string" && _mint.length > 0) return _mint;
+    // New architecture: id is the mint directly
+    if (typeof id === "string" && id.length > 0) return id;
     return undefined;
   }, [displayToken?.mint, _mint, id]);
 
-  // Get holder summary, token info, trades, and volume from unified WebSocket for token info section and dev markers
-  const { holderSummary, topTraders: wsTopTraders, trades: wsHistoricalTrades, tokenInfo: wsTokenInfo, volume: wsVolume } = useSolanaTokenWebSocket({
+  // Single WebSocket connection for entire trade page (shared via context to child components)
+  // This eliminates the 5 duplicate connections that tabs were creating
+  const wsData = useSolanaTokenWebSocket({
     mintAddress: displayToken?.mint || resolvedTokenMint,
     enabled: !!(displayToken?.mint || resolvedTokenMint),
   });
+  // Destructure for local use in this component
+  const { holderSummary, topTraders: wsTopTraders, trades: wsHistoricalTrades, tokenInfo: wsTokenInfo, volume: wsVolume } = wsData;
 
   // Enhance displayToken with holderSummary data for TradeActionPanel
   const enhancedDisplayToken = React.useMemo(() => {
@@ -885,6 +894,8 @@ export default function TradePage() {
 
         {/* Hydrating status hidden from users - data loads silently in background */}
 
+        {/* Provider for shared WebSocket connection - eliminates duplicate connections from tabs */}
+        <SolanaTokenWebSocketProvider value={wsData}>
         <div
           className="flex flex-1 w-full max-w-full min-h-0"
           style={{
@@ -1138,6 +1149,7 @@ export default function TradePage() {
             </button>
           </div>
         </div>
+        </SolanaTokenWebSocketProvider>
       </div>
 
       {/* Mobile Trade Modal */}

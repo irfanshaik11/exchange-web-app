@@ -40,12 +40,12 @@ import { CiBellOn, CiStar } from "react-icons/ci";
 
 /* ---- style palette ---- */
 const AX = {
-  bg: "#111214",
-  surface: "#1E1F26",
-  surface2: "#17191E",
-  border: "#2A2B33",
-  text: "#c7c9d1",
-  muted: "#c7c9d1",
+  bg: "#0a0b0d",
+  surface: "#0d1015",
+  surface2: "#12141a",
+  border: "#1e2028",
+  text: "#9ca3af",
+  muted: "#6b7280",
   mint: "#18c48c",
   mintHover: "#12a877",
   sell: "#FF4D7F",
@@ -1132,12 +1132,12 @@ export default function Header({
   return (
     <>
       <header
-        className={`${isSticky ? "sticky top-0 z-20" : "relative z-10"} w-full border-b backdrop-blur bg-[#0C0C0F]`}
-        style={{ borderColor: AX.border }}
+        className={`${isSticky ? "sticky top-0 z-20" : "relative z-10"} w-full border-b backdrop-blur-sm bg-[#0a0b0d]`}
+        style={{ borderColor: "#1e2028" }}
       >
         <div
-          className="flex max-w-full items-center justify-between border-b px-2 pt-4 pb-2.5 md:px-4"
-          style={{ backgroundColor: "#0C0C0F", borderColor: AX.border }}
+          className="flex max-w-full items-center justify-between border-b px-3 py-2 md:px-4"
+          style={{ backgroundColor: "#0a0b0d", borderColor: "#1e2028" }}
         >
           <div className="flex min-w-0 flex-1 items-center gap-2 overflow-hidden md:gap-3">
             <Link
@@ -1191,28 +1191,27 @@ export default function Header({
                     <Link
                       key={link.name}
                       href={chainAwareHref(link.href)}
-                      className={`flex-shrink-0 rounded px-2 py-1.5 text-sm font-medium whitespace-nowrap transition-all duration-300 ease-out sm:px-3 xl:px-4`}
+                      className={`flex-shrink-0 rounded-md px-2.5 py-1 text-xs font-medium whitespace-nowrap sm:px-3 sm:text-sm`}
                       style={{
-                        color: isActive ? AX.mint : AX.text,
+                        color: isActive ? "#18c48c" : "#9ca3af",
                         backgroundColor: isActive
                           ? "rgba(24, 196, 140, 0.1)"
                           : "transparent",
-                        borderColor: "transparent",
                         position: "relative",
                         zIndex: 1001,
                         pointerEvents: "auto",
                         cursor: "pointer",
+                        transition: "all 150ms ease-out",
                       }}
                       onMouseEnter={(e) => {
                         if (!isActive) {
-                          e.currentTarget.style.color = AX.mint;
-                          e.currentTarget.style.backgroundColor =
-                            "rgba(112, 224, 176, 0.1)";
+                          e.currentTarget.style.color = "#18c48c";
+                          e.currentTarget.style.backgroundColor = "rgba(24, 196, 140, 0.08)";
                         }
                       }}
                       onMouseLeave={(e) => {
                         if (!isActive) {
-                          e.currentTarget.style.color = AX.text;
+                          e.currentTarget.style.color = "#9ca3af";
                           e.currentTarget.style.backgroundColor = "transparent";
                         }
                       }}

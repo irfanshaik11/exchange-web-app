@@ -33,6 +33,7 @@ import { QuickBuyProvider } from '../components/QuickBuyContext';
 import { WatchlistProvider } from '../components/WatchlistContext';
 import { FilterProvider } from '../components/FilterContext';
 import { SolPriceProvider } from '../components/SolPriceContext';
+import { SolanaPositionWebSocketProvider } from '../contexts/SolanaPositionWebSocketContext';
 import { WalletTrackerProvider } from '../components/WalletTrackerContext';
 import { ReferralAccessGate } from '../components/ReferralAccessGate';
 import { ThemeProvider } from '../components/ThemeContext';
@@ -780,6 +781,7 @@ const MyApp: AppType = ({ Component, pageProps }) => {
                 <TokenHandler />
                 <ReferralTracker />
                 <SolPriceProvider>
+                  <SolanaPositionWebSocketProvider>
                   <ThemeProvider>
                     <QuickBuyProvider>
                       <SearchProvider>
@@ -801,6 +803,7 @@ const MyApp: AppType = ({ Component, pageProps }) => {
                     <WalletExportGuard />
                     <UserLimitBlockerWrapper />
                   </ThemeProvider>
+                  </SolanaPositionWebSocketProvider>
                 </SolPriceProvider>
               </UserLimitProvider>
             </UserProvider>

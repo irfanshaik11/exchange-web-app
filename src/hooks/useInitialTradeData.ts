@@ -369,10 +369,11 @@ export default function useInitialTradeData(
       setData(null);
 
       // Step 0: Load cached token metadata for instant display
-      const cachedMetadata = getCachedTokenMetadata(pairAddress);
+      // Try mint first (new URL architecture), then fall back to pairAddress (old URLs)
+      const cachedMetadata = (tokenAddress && getCachedTokenMetadata(tokenAddress)) || getCachedTokenMetadata(pairAddress);
       if (cachedMetadata && mounted) {
         setCachedTokenMetadata(cachedMetadata);
-        console.log(`[useInitialTradeData] Loaded cached token metadata for ${pairAddress}`);
+        console.log(`[useInitialTradeData] Loaded cached token metadata for ${tokenAddress || pairAddress}`);
       }
 
       // Step 1: Check rolling cache first (INSTANT - 0ms for pulse tokens)
