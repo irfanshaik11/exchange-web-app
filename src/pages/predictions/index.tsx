@@ -17,11 +17,12 @@ import {
   DEFAULT_FILTERS,
   FavoritesCarousel,
   CuratedSections,
-  PolygonWalletCard,
+  UnifiedPortfolio,
   type PredictionMarket,
   type SortOption,
   type MarketFilterState,
 } from '../../components/predictions';
+import { useUser } from '../../components/UserContext';
 import useUnifiedPredictionMarkets from '~/hooks/useUnifiedPredictionMarkets';
 import usePredictionFavorites from '~/hooks/usePredictionFavorites';
 import DataSourceSwitcher, { type PredictionDataSource } from '~/components/predictions/DataSourceSwitcher';
@@ -64,11 +65,13 @@ const FALLBACK_MARKETS: PredictionMarket[] = [
 ];
 
 export default function PredictionsPage() {
+  const { user, primaryWalletAddresses } = useUser();
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [selectedSort, setSelectedSort] = useState<SortOption>('hot');
   const [searchQuery, setSearchQuery] = useState('');
   const [marketFilters, setMarketFilters] = useState<MarketFilterState>(DEFAULT_FILTERS);
   const [viewMode, setViewMode] = useState<'curated' | 'grid'>('curated');
+  const [showPortfolio, setShowPortfolio] = useState(true); // Default open to show winnings
   // TODO: dFlow is disabled for now - only Polymarket is active
   // const [dataSource, setDataSource] = useState<PredictionDataSource>('all');
   const [dataSource, setDataSource] = useState<PredictionDataSource>('polymarket');
@@ -304,15 +307,74 @@ export default function PredictionsPage() {
             )}
           </motion.div>
 
-          {/* Polygon Wallet Card - Shows balance and deposit instructions */}
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.5, delay: 0.1 }}
-            className="mb-6"
-          >
-            <PolygonWalletCard variant="compact" />
-          </motion.div>
+          {/* Unified Portfolio Section - Wallet balance, stats, positions, orders, history */}
+          {user?.bearerToken && (
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.5, delay: 0.1 }}
+              className="mb-6"
+            >
+              <div
+                className="rounded-xl overflow-hidden"
+                style={{
+                  backgroundColor: AX.surface,
+                  border: `1px solid ${AX.border}`,
+                }}
+              >
+                {/* Portfolio Header - Clickable to expand/collapse */}
+                <button
+                  onClick={() => setShowPortfolio(!showPortfolio)}
+                  className="w-full flex items-center justify-between px-4 py-3 transition-colors hover:bg-white/5"
+                >
+                  <div className="flex items-center gap-2">
+                    <HiOutlineCollection className="w-5 h-5" style={{ color: AX.accent }} />
+                    <span className="text-sm font-medium" style={{ color: AX.text }}>
+                      My Portfolio
+                    </span>
+                  </div>
+                  <motion.div
+                    animate={{ rotate: showPortfolio ? 180 : 0 }}
+                    transition={{ duration: 0.2 }}
+                  >
+                    <svg
+                      className="w-5 h-5"
+                      fill="none"
+                      viewBox="0 0 24 24"
+                      stroke="currentColor"
+                      style={{ color: AX.muted }}
+                    >
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                    </svg>
+                  </motion.div>
+                </button>
+
+                {/* Portfolio Content */}
+                <AnimatePresence>
+                  {showPortfolio && (
+                    <motion.div
+                      initial={{ height: 0, opacity: 0 }}
+                      animate={{ height: 'auto', opacity: 1 }}
+                      exit={{ height: 0, opacity: 0 }}
+                      transition={{ duration: 0.3 }}
+                      className="overflow-hidden"
+                    >
+                      <div
+                        className="px-4 pb-4 pt-2"
+                        style={{ borderTop: `1px solid ${AX.border}` }}
+                      >
+                        <UnifiedPortfolio
+                          authToken={user.bearerToken}
+                          walletAddress={primaryWalletAddresses?.ethereum}
+                          onClaimSuccess={refetch}
+                        />
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+              </div>
+            </motion.div>
+          )}
 
           {/* Featured Market - Hidden for now
           {featuredMarket && (

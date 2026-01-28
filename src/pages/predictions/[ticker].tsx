@@ -36,6 +36,10 @@ import {
   getPolymarketBalance,
   executePolymarketOrder,
   checkPolymarketGeoblock,
+  approvePolymarketSpending,
+  getPolymarketAllowance,
+  getUserPredictionPositions,
+  getPolymarketTokenBalance,
   type PolymarketQuote,
   type PolymarketBalance,
   type PolymarketGeoblock,
@@ -1186,6 +1190,16 @@ export default function MarketDetailPage() {
   const [isExecutingTrade, setIsExecutingTrade] = useState(false);
   const [showWalletModal, setShowWalletModal] = useState(false);
 
+  // User's position for current token (for SELL orders)
+  const [userTokenPosition, setUserTokenPosition] = useState<{
+    tokenAmount: number;
+    avgEntryPrice: number;
+    side: string;
+  } | null>(null);
+
+  // Track if user clicked "Max" for SELL (to sell exact token balance, avoiding price-based rounding)
+  const [isSellMax, setIsSellMax] = useState(false);
+
   // Collapsible sections in trade panel (all open by default)
   const [showMarketStats, setShowMarketStats] = useState(true);
   const [showAbout, setShowAbout] = useState(true);
@@ -1370,6 +1384,45 @@ export default function MarketDetailPage() {
       .catch((err) => console.warn('[Polymarket] Balance fetch failed:', err.message));
   }, [isPolymarket, user?.bearerToken]);
 
+  // Polymarket Trading: Fetch user's REAL token balance from Polymarket (needed for SELL)
+  // This queries the actual on-chain balance, not our database (which can be stale)
+  useEffect(() => {
+    if (!isPolymarket || !user?.bearerToken) {
+      setUserTokenPosition(null);
+      return;
+    }
+
+    // Get the current token ID based on selected side
+    const tokenId = selectedSide === 'yes' ? polyTokenIds.yes : polyTokenIds.no;
+    if (!tokenId) {
+      setUserTokenPosition(null);
+      return;
+    }
+
+    // Fetch REAL token balance from Polymarket CLOB (not our database)
+    getPolymarketTokenBalance(tokenId, user.bearerToken)
+      .then((res) => {
+        if (res.success && res.data) {
+          const balance = res.data.balance || 0;
+          if (balance > 0) {
+            setUserTokenPosition({
+              tokenAmount: balance,
+              avgEntryPrice: 0, // We don't have this from the CLOB, but it's not needed for selling
+              side: selectedSide.toUpperCase(),
+            });
+          } else {
+            setUserTokenPosition(null);
+          }
+        } else {
+          setUserTokenPosition(null);
+        }
+      })
+      .catch((err) => {
+        console.warn('[Polymarket] Token balance fetch failed:', err.message);
+        setUserTokenPosition(null);
+      });
+  }, [isPolymarket, user?.bearerToken, selectedSide, polyTokenIds.yes, polyTokenIds.no]);
+
   // Polymarket Trading: Fetch quote when amount/token/side changes
   useEffect(() => {
     const amountNum = parseFloat(amount);
@@ -1418,12 +1471,6 @@ export default function MarketDetailPage() {
       return;
     }
 
-    // Check balance
-    if (polygonBalance && amountNum > polygonBalance.usdc) {
-      showEnhancedToast('error', `Insufficient balance. You have ${polygonBalance.usdcFormatted}`);
-      return;
-    }
-
     // Get token ID
     const tokenId = selectedSide === 'yes' ? polyTokenIds.yes : polyTokenIds.no;
     if (!tokenId) {
@@ -1431,38 +1478,135 @@ export default function MarketDetailPage() {
       return;
     }
 
+    // Get current price for the selected side (from market data or quote)
+    let currentPrice = 0.5; // Default fallback
+    if (polymarketQuote?.price) {
+      currentPrice = polymarketQuote.price;
+    } else if (selectedOutcomeMarket?.outcomePrices) {
+      try {
+        const prices = JSON.parse(selectedOutcomeMarket.outcomePrices).map(Number);
+        currentPrice = selectedSide === 'yes' ? (prices[0] || 0.5) : (prices[1] || 0.5);
+      } catch {
+        currentPrice = 0.5;
+      }
+    }
+
+    // For SELL orders: calculate tokens from USD amount and validate
+    let tokensToSell: number | undefined;
+    if (tradeMode === 'sell') {
+      if (!userTokenPosition || userTokenPosition.tokenAmount <= 0) {
+        showEnhancedToast('error', `You don't own any ${selectedSide.toUpperCase()} tokens to sell`);
+        return;
+      }
+
+      // If user clicked "Max", sell ALL tokens (avoid price-based rounding errors)
+      if (isSellMax) {
+        tokensToSell = userTokenPosition.tokenAmount;
+        console.log(`[Polymarket] Selling MAX: ${tokensToSell} tokens`);
+      } else {
+        // Calculate how many tokens the USD amount translates to
+        tokensToSell = amountNum / currentPrice;
+
+        // Validate user has enough tokens (with small buffer for rounding)
+        if (tokensToSell > userTokenPosition.tokenAmount * 1.001) {
+          const maxUsdValue = (userTokenPosition.tokenAmount * currentPrice).toFixed(2);
+          showEnhancedToast('error', `You only have ${userTokenPosition.tokenAmount.toFixed(2)} tokens (≈$${maxUsdValue}). Use "Max" to sell all.`);
+          return;
+        }
+
+        // Cap at actual token balance to avoid rounding errors
+        tokensToSell = Math.min(tokensToSell, userTokenPosition.tokenAmount);
+      }
+    } else {
+      // BUY order: Check USDC balance
+      if (polygonBalance && amountNum > polygonBalance.usdc) {
+        showEnhancedToast('error', `Insufficient balance. You have ${polygonBalance.usdcFormatted}`);
+        return;
+      }
+    }
+
     setIsExecutingTrade(true);
     const toastId = showEnhancedToast(
       'loading',
-      `Placing ${tradeMode.toUpperCase()} order for $${amountNum}...`
+      'Checking allowance...'
     );
 
     try {
+      // Check if USDC allowance is set for Polymarket contracts (for BUY orders)
+      if (tradeMode === 'buy') {
+        const allowanceResult = await getPolymarketAllowance(user.bearerToken);
+
+        // If allowance is 0 or too low, we need to approve first
+        const currentAllowance = parseFloat(allowanceResult?.data?.allowance || '0');
+        if (currentAllowance < amountNum * 1_000_000) { // USDC has 6 decimals
+          updateEnhancedToast(toastId, 'loading', 'Approving USDC spending (one-time)...');
+
+          const approvalResult = await approvePolymarketSpending(user.bearerToken);
+
+          if (!approvalResult.success) {
+            throw new Error(approvalResult.data?.message || 'Failed to approve USDC spending');
+          }
+
+          if (!approvalResult.data.alreadyApproved) {
+            updateEnhancedToast(toastId, 'loading', 'Approval confirmed! Placing order...');
+          }
+        }
+      }
+
+      const orderLabel = tradeMode === 'sell'
+        ? `Selling ${tokensToSell?.toFixed(2)} tokens (~$${amountNum})...`
+        : `Placing ${tradeMode.toUpperCase()} order for $${amountNum}...`;
+      updateEnhancedToast(toastId, 'loading', orderLabel);
+
       const result = await executePolymarketOrder(
         {
           tokenId,
           side: tradeMode === 'buy' ? 'BUY' : 'SELL',
-          amountUSDC: amountNum,
-          orderType: 'GTC',
-          marketId: selectedOutcomeMarket?.id || polyEvent?.slug,
+          // For BUY: use amountUSDC, for SELL: use amountTokens
+          ...(tradeMode === 'buy'
+            ? { amountUSDC: amountNum }
+            : { amountTokens: tokensToSell }),
+          orderType: 'FOK', // Fill Or Kill - instant market order (fills immediately or cancels)
+          // Use event slug as marketId for navigation (human-readable URL)
+          marketId: polyEvent?.slug || tickerString,
           marketTitle: selectedOutcomeMarket?.question || polyEvent?.title,
-          conditionId: selectedOutcomeMarket?.conditionId,
+          conditionId: selectedOutcomeMarket?.conditionId || selectedOutcomeMarket?.id,
         },
         user.bearerToken
       );
 
       if (result.success) {
-        updateEnhancedToast(
-          toastId,
-          'success',
-          `Order placed! ${polymarketQuote?.expectedTokens?.toFixed(2) || ''} shares`
-        );
+        const successMessage = tradeMode === 'sell'
+          ? `Sold ${tokensToSell?.toFixed(2)} ${selectedSide.toUpperCase()} tokens!`
+          : `Bought ${polymarketQuote?.expectedTokens?.toFixed(2) || ''} ${selectedSide.toUpperCase()} shares!`;
+        updateEnhancedToast(toastId, 'success', successMessage);
         setAmount('');
         setPolymarketQuote(null);
-        // Refresh balance
-        getPolymarketBalance(user.bearerToken).then((res) => {
-          if (res.success) setPolygonBalance(res.data);
-        });
+        setIsSellMax(false); // Reset max flag
+
+        // Refresh balances after a short delay (blockchain state needs time to settle)
+        setTimeout(() => {
+          // Refresh USDC balance
+          getPolymarketBalance(user.bearerToken).then((res) => {
+            if (res.success) setPolygonBalance(res.data);
+          });
+          // Refresh REAL token balance from Polymarket (not database)
+          getPolymarketTokenBalance(tokenId, user.bearerToken)
+            .then((res) => {
+              if (res.success && res.data) {
+                const balance = res.data.balance || 0;
+                if (balance > 0) {
+                  setUserTokenPosition({
+                    tokenAmount: balance,
+                    avgEntryPrice: 0,
+                    side: selectedSide.toUpperCase(),
+                  });
+                } else {
+                  setUserTokenPosition(null);
+                }
+              }
+            });
+        }, 2000); // 2 second delay for blockchain state to propagate
       } else {
         throw new Error('Order failed');
       }
@@ -1473,7 +1617,8 @@ export default function MarketDetailPage() {
     }
   }, [
     user?.bearerToken, amount, geoblockStatus, polygonBalance, selectedSide,
-    polyTokenIds, tradeMode, selectedOutcomeMarket, polyEvent, polymarketQuote
+    polyTokenIds, tradeMode, selectedOutcomeMarket, polyEvent, polymarketQuote,
+    userTokenPosition, isSellMax
   ]);
 
   // Extract market info for multi-series price history (top 4 by probability)
@@ -2145,32 +2290,91 @@ export default function MarketDetailPage() {
                       <input
                         type="number"
                         value={amount}
-                        onChange={(e) => setAmount(e.target.value)}
+                        onChange={(e) => { setAmount(e.target.value); setIsSellMax(false); }}
                         placeholder="0"
                         className="w-full px-3 py-3 rounded-lg text-lg font-semibold outline-none text-center"
                         style={{ backgroundColor: AX.bg, border: `1px solid ${AX.border}`, color: AX.text }}
                       />
                     </div>
 
+                    {/* Position Info for SELL mode */}
+                    {tradeMode === 'sell' && (
+                      <div className="mb-3 p-2 rounded-lg" style={{ backgroundColor: AX.bg, border: `1px solid ${AX.border}` }}>
+                        {userTokenPosition && userTokenPosition.tokenAmount > 0 ? (
+                          <div className="flex justify-between items-center text-xs">
+                            <span style={{ color: AX.muted }}>Your {selectedSide.toUpperCase()} tokens:</span>
+                            <span style={{ color: AX.text, fontWeight: 600 }}>
+                              {userTokenPosition.tokenAmount.toFixed(2)} (~${(userTokenPosition.tokenAmount * (selectedSide === 'yes' ? currentYesPrice : currentNoPrice)).toFixed(2)})
+                            </span>
+                          </div>
+                        ) : (
+                          <div className="text-xs text-center" style={{ color: AX.muted }}>
+                            You don't own any {selectedSide.toUpperCase()} tokens
+                          </div>
+                        )}
+                      </div>
+                    )}
+
                     {/* Quick Amount Buttons */}
                     <div className="flex gap-2 mb-4">
-                      {[1, 20, 100].map((qa) => (
-                        <button
-                          key={qa}
-                          onClick={() => setAmount(prev => String((parseFloat(prev) || 0) + qa))}
-                          className="flex-1 py-2 rounded-lg text-xs font-medium transition-colors"
-                          style={{ backgroundColor: AX.bg, color: AX.text, border: `1px solid ${AX.border}` }}
-                        >
-                          +${qa}
-                        </button>
-                      ))}
-                      <button
-                        onClick={() => setAmount('1000')}
-                        className="flex-1 py-2 rounded-lg text-xs font-medium transition-colors"
-                        style={{ backgroundColor: AX.bg, color: AX.text, border: `1px solid ${AX.border}` }}
-                      >
-                        Max
-                      </button>
+                      {tradeMode === 'buy' ? (
+                        // BUY mode: show +$1, +$20, +$100, Max
+                        <>
+                          {[1, 20, 100].map((qa) => (
+                            <button
+                              key={qa}
+                              onClick={() => setAmount(prev => String((parseFloat(prev) || 0) + qa))}
+                              className="flex-1 py-2 rounded-lg text-xs font-medium transition-colors"
+                              style={{ backgroundColor: AX.bg, color: AX.text, border: `1px solid ${AX.border}` }}
+                            >
+                              +${qa}
+                            </button>
+                          ))}
+                          <button
+                            onClick={() => polygonBalance && setAmount(Math.floor(polygonBalance.usdc).toString())}
+                            className="flex-1 py-2 rounded-lg text-xs font-medium transition-colors"
+                            style={{ backgroundColor: AX.bg, color: AX.text, border: `1px solid ${AX.border}` }}
+                          >
+                            Max
+                          </button>
+                        </>
+                      ) : (
+                        // SELL mode: show 25%, 50%, 75%, Max based on position
+                        <>
+                          {[25, 50, 75].map((pct) => {
+                            const tokenValue = userTokenPosition
+                              ? userTokenPosition.tokenAmount * (selectedSide === 'yes' ? currentYesPrice : currentNoPrice) * (pct / 100)
+                              : 0;
+                            return (
+                              <button
+                                key={pct}
+                                onClick={() => { setAmount(tokenValue.toFixed(2)); setIsSellMax(false); }}
+                                disabled={!userTokenPosition || userTokenPosition.tokenAmount <= 0}
+                                className="flex-1 py-2 rounded-lg text-xs font-medium transition-colors disabled:opacity-50"
+                                style={{ backgroundColor: AX.bg, color: AX.text, border: `1px solid ${AX.border}` }}
+                              >
+                                {pct}%
+                              </button>
+                            );
+                          })}
+                          <button
+                            onClick={() => {
+                              if (userTokenPosition && userTokenPosition.tokenAmount > 0) {
+                                // Calculate approximate USD value for display
+                                const maxValue = userTokenPosition.tokenAmount * (selectedSide === 'yes' ? currentYesPrice : currentNoPrice);
+                                setAmount(maxValue.toFixed(2));
+                                // Set flag to sell ALL tokens (bypasses price-based calculation in trade handler)
+                                setIsSellMax(true);
+                              }
+                            }}
+                            disabled={!userTokenPosition || userTokenPosition.tokenAmount <= 0}
+                            className="flex-1 py-2 rounded-lg text-xs font-medium transition-colors disabled:opacity-50"
+                            style={{ backgroundColor: AX.mint, color: '#000', border: `1px solid ${AX.mint}` }}
+                          >
+                            Max
+                          </button>
+                        </>
+                      )}
                     </div>
 
                     {/* Quote Display */}
@@ -2439,11 +2643,15 @@ export default function MarketDetailPage() {
                                 href={`https://polygonscan.com/address/${selectedOutcomeMarket?.resolvedBy || polyEvent?.markets?.[0]?.resolvedBy}`}
                                 target="_blank"
                                 rel="noopener noreferrer"
-                                className="flex items-center gap-1 text-[11px] font-mono hover:opacity-70"
+                                className="flex items-center gap-1.5 text-[11px] font-mono hover:opacity-70"
                                 style={{ color: AX.purple }}
                               >
                                 {(selectedOutcomeMarket?.resolvedBy || polyEvent?.markets?.[0]?.resolvedBy || '').slice(0, 6)}...{(selectedOutcomeMarket?.resolvedBy || polyEvent?.markets?.[0]?.resolvedBy || '').slice(-4)}
-                                <HiOutlineExternalLink className="w-3 h-3" />
+                                <img
+                                  src="https://polygonscan.com/assets/poly/images/svg/logos/chain-dim.svg?v=26.1.4.2"
+                                  alt="Polygonscan"
+                                  className="w-3 h-3"
+                                />
                               </a>
                             </div>
                           )}

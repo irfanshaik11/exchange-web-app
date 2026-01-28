@@ -14,3 +14,8 @@ export { default as FavoritesCarousel } from './FavoritesCarousel';
 export { default as MiniSparkline } from './MiniSparkline';
 export { default as CuratedSections } from './CuratedSections';
 export { default as PolygonWalletCard, PolygonBalanceInline } from './PolygonWalletCard';
+export { default as UnifiedPortfolio } from './UnifiedPortfolio';
+export { PredictionTheme, PortfolioTheme } from './theme';
+
+// Deprecated - use UnifiedPortfolio instead
+export { default as PolymarketPortfolio } from './PolymarketPortfolio';

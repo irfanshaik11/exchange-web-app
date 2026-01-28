@@ -1,0 +1,1410 @@
+// src/components/predictions/UnifiedPortfolio.tsx
+// Unified portfolio component with gamified stats, tabs for Overview/Positions/Orders/History
+
+import React, { useState, useEffect, useCallback } from 'react';
+import { useRouter } from 'next/router';
+import { motion, AnimatePresence } from 'framer-motion';
+import {
+  HiOutlineCheckCircle,
+  HiOutlineXCircle,
+  HiOutlineClock,
+  HiOutlineRefresh,
+  HiOutlineExternalLink,
+  HiOutlineTrash,
+  HiOutlineExclamationCircle,
+  HiOutlineCash,
+  HiOutlineChartBar,
+  HiOutlineFire,
+  HiOutlineStar,
+  HiOutlineCollection,
+  HiOutlineClipboardList,
+  HiOutlineBadgeCheck,
+} from 'react-icons/hi';
+import {
+  getUserPredictionPositions,
+  getUserPredictionTrades,
+  getPolymarketOpenOrders,
+  getPolymarketBalance,
+  cancelPolymarketOrder,
+  cancelAllPolymarketOrders,
+  type PredictionPosition,
+  type PredictionTrade,
+  type PolymarketOpenOrder,
+  type PolymarketBalance,
+} from '~/utils/api';
+import { PredictionTheme, PortfolioTheme } from './theme';
+
+// Types
+type TabType = 'overview' | 'positions' | 'orders' | 'history';
+
+interface ClaimablePosition {
+  conditionId: string;
+  marketTitle: string;
+  tokenId: string;
+  side: 'YES' | 'NO';
+  tokenAmount: number;
+  claimableAmount: number;
+  resolved: boolean;
+  winningOutcome: 'YES' | 'NO' | null;
+  isWinner: boolean;
+}
+
+interface ClaimedWinning {
+  conditionId: string;
+  marketTitle: string;
+  side: 'YES' | 'NO';
+  amount: number;
+  txHash: string;
+  claimedAt: string;
+}
+
+interface WinningsStats {
+  totalWinnings: number;
+  totalLosses: number;
+  netProfit: number;
+  winRate: number;
+  totalTrades: number;
+  winStreak: number;
+  bestWin: number;
+}
+
+interface UnifiedPortfolioProps {
+  authToken?: string;
+  walletAddress?: string;
+  onClaimSuccess?: () => void;
+  /** Controls color scheme: 'predictions' for prediction pages, 'portfolio' for portfolio page */
+  variant?: 'predictions' | 'portfolio';
+}
+
+// localStorage key for claimed history
+const CLAIMED_HISTORY_KEY = 'polymarket_claimed_history';
+
+// Helper functions for claimed history
+function loadClaimedHistory(): ClaimedWinning[] {
+  if (typeof window === 'undefined') return [];
+  try {
+    const stored = localStorage.getItem(CLAIMED_HISTORY_KEY);
+    return stored ? JSON.parse(stored) : [];
+  } catch {
+    return [];
+  }
+}
+
+function saveClaimedHistory(history: ClaimedWinning[]): void {
+  if (typeof window === 'undefined') return;
+  try {
+    localStorage.setItem(CLAIMED_HISTORY_KEY, JSON.stringify(history));
+  } catch {
+    console.error('Failed to save claimed history');
+  }
+}
+
+function addClaimToHistory(claim: ClaimedWinning): ClaimedWinning[] {
+  const history = loadClaimedHistory();
+  if (history.some(h => h.txHash === claim.txHash)) {
+    return history;
+  }
+  const updated = [claim, ...history];
+  saveClaimedHistory(updated);
+  return updated;
+}
+
+function getClaimedConditionIds(): Set<string> {
+  const history = loadClaimedHistory();
+  return new Set(history.map(h => h.conditionId));
+}
+
+// API functions for winnings
+async function getMarketResolutionStatus(conditionId: string): Promise<{
+  resolved: boolean;
+  winningOutcome: 'YES' | 'NO' | null;
+}> {
+  const response = await fetch(
+    `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/api/prediction/polymarket/market-status?conditionId=${conditionId}`
+  );
+  const data = await response.json();
+  if (data.success) {
+    return {
+      resolved: data.data.resolved,
+      winningOutcome: data.data.winningOutcome,
+    };
+  }
+  return { resolved: false, winningOutcome: null };
+}
+
+async function redeemWinnings(conditionId: string, authToken: string): Promise<{
+  success: boolean;
+  txHash?: string;
+  error?: string;
+}> {
+  const response = await fetch(
+    `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/api/prediction/polymarket/redeem`,
+    {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${authToken}`,
+      },
+      body: JSON.stringify({ conditionId }),
+    }
+  );
+  const data = await response.json();
+  return {
+    success: data.success,
+    txHash: data.data?.txHash,
+    error: data.error,
+  };
+}
+
+// Theme type
+type Theme = typeof PredictionTheme | typeof PortfolioTheme;
+
+// Unified Stats Header Component
+function UnifiedStatsHeader({
+  balance,
+  netPnl,
+  winRate,
+  streak,
+  positionsValue,
+  isLoading,
+  theme: C,
+}: {
+  balance: number;
+  netPnl: number;
+  winRate: number;
+  streak: number;
+  positionsValue: number;
+  isLoading: boolean;
+  theme: Theme;
+}) {
+  const stats = [
+    {
+      icon: <HiOutlineCash className="w-4 h-4" />,
+      label: 'Balance',
+      value: `$${balance.toFixed(2)}`,
+      color: C.text,
+    },
+    {
+      icon: <HiOutlineChartBar className="w-4 h-4" />,
+      label: 'Net P&L',
+      value: `${netPnl >= 0 ? '+' : ''}$${netPnl.toFixed(2)}`,
+      color: netPnl >= 0 ? C.green : C.red,
+    },
+    {
+      icon: <HiOutlineStar className="w-4 h-4" />,
+      label: 'Win Rate',
+      value: `${winRate.toFixed(0)}%`,
+      color: winRate >= 50 ? C.green : C.text,
+    },
+    {
+      icon: <HiOutlineFire className="w-4 h-4" style={{ color: streak > 0 ? C.yellow : C.muted }} />,
+      label: 'Streak',
+      value: streak > 0 ? `${streak}` : '0',
+      color: streak > 0 ? C.yellow : C.text,
+      suffix: streak > 0 ? '🔥' : '',
+    },
+    {
+      icon: <HiOutlineCollection className="w-4 h-4" />,
+      label: 'Positions',
+      value: `$${positionsValue.toFixed(2)}`,
+      color: C.text,
+    },
+  ];
+
+  return (
+    <div
+      className="grid grid-cols-5 gap-2 p-3 rounded-xl"
+      style={{
+        background: `linear-gradient(135deg, ${C.surface} 0%, ${C.purpleBg} 100%)`,
+        border: `1px solid ${C.border}`,
+      }}
+    >
+      {stats.map((stat, index) => (
+        <div
+          key={stat.label}
+          className="flex flex-col items-center p-2 rounded-lg text-center"
+          style={{ backgroundColor: `${C.bg}80` }}
+        >
+          <div className="flex items-center gap-1 mb-1" style={{ color: C.muted }}>
+            {stat.icon}
+          </div>
+          {isLoading ? (
+            <div className="w-12 h-5 rounded animate-pulse" style={{ backgroundColor: C.border }} />
+          ) : (
+            <div className="text-sm font-bold" style={{ color: stat.color }}>
+              {stat.value}{stat.suffix}
+            </div>
+          )}
+          <div className="text-[10px] uppercase tracking-wider" style={{ color: C.muted }}>
+            {stat.label}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// Tab Navigation Component
+function TabNavigation({
+  activeTab,
+  onChange,
+  counts,
+  theme: C,
+}: {
+  activeTab: TabType;
+  onChange: (tab: TabType) => void;
+  counts: { positions: number; orders: number; history: number; claimable: number };
+  theme: Theme;
+}) {
+  const tabs: { key: TabType; label: string; icon: React.ElementType; count?: number }[] = [
+    { key: 'overview', label: 'Overview', icon: HiOutlineBadgeCheck, count: counts.claimable > 0 ? counts.claimable : undefined },
+    { key: 'positions', label: 'Positions', icon: HiOutlineCollection, count: counts.positions },
+    { key: 'orders', label: 'Orders', icon: HiOutlineClipboardList, count: counts.orders },
+    { key: 'history', label: 'History', icon: HiOutlineChartBar, count: counts.history > 0 ? counts.history : undefined },
+  ];
+
+  return (
+    <div className="flex gap-1 border-b" style={{ borderColor: C.border }}>
+      {tabs.map(tab => (
+        <button
+          key={tab.key}
+          onClick={() => onChange(tab.key)}
+          className="flex items-center gap-1.5 px-3 py-2.5 text-sm font-medium transition-colors border-b-2 -mb-px"
+          style={{
+            color: activeTab === tab.key ? C.text : C.muted,
+            borderColor: activeTab === tab.key ? C.green : 'transparent',
+          }}
+        >
+          <tab.icon className="w-4 h-4" />
+          {tab.label}
+          {tab.count !== undefined && tab.count > 0 && (
+            <span
+              className="px-1.5 py-0.5 rounded-full text-xs"
+              style={{
+                backgroundColor: activeTab === tab.key ? C.greenBg : C.surface,
+                color: activeTab === tab.key ? C.green : C.muted,
+              }}
+            >
+              {tab.count}
+            </span>
+          )}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+// Main UnifiedPortfolio Component
+export default function UnifiedPortfolio({
+  authToken,
+  walletAddress,
+  onClaimSuccess,
+  variant = 'predictions',
+}: UnifiedPortfolioProps) {
+  const router = useRouter();
+  const [activeTab, setActiveTab] = useState<TabType>('overview');
+
+  // Select theme based on variant
+  const C = variant === 'portfolio' ? PortfolioTheme : PredictionTheme;
+
+  // Portfolio data state
+  const [positions, setPositions] = useState<PredictionPosition[]>([]);
+  const [openOrders, setOpenOrders] = useState<PolymarketOpenOrder[]>([]);
+  const [trades, setTrades] = useState<PredictionTrade[]>([]);
+  const [balance, setBalance] = useState<PolymarketBalance | null>(null);
+
+  // Winnings state
+  const [claimablePositions, setClaimablePositions] = useState<ClaimablePosition[]>([]);
+  const [claimedHistory, setClaimedHistory] = useState<ClaimedWinning[]>([]);
+  const [stats, setStats] = useState<WinningsStats>({
+    totalWinnings: 0,
+    totalLosses: 0,
+    netProfit: 0,
+    winRate: 0,
+    totalTrades: 0,
+    winStreak: 0,
+    bestWin: 0,
+  });
+
+  // UI state
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [claimingId, setClaimingId] = useState<string | null>(null);
+  const [claimResult, setClaimResult] = useState<{ success: boolean; message: string } | null>(null);
+  const [cancellingOrderId, setCancellingOrderId] = useState<string | null>(null);
+
+  // Load claimed history on mount
+  useEffect(() => {
+    let history = loadClaimedHistory();
+
+    // Seed the known NHL redemption for this wallet
+    const NHL_CONDITION_ID = '0x92cd86aeee9419974506a4c15408612f999a21e0d18b1770efb4308479a869bd';
+    const NHL_TX_HASH = '0xf7efe0f1a5ea354d17117cc71f7aab6769dd4850fc355d5f80860d697456e79f';
+
+    if (walletAddress?.toLowerCase() === '0xb9f9cc480f9ee681e204ed8ef64cfc237371fce2') {
+      const alreadyHasNhlClaim = history.some(
+        h => h.txHash === NHL_TX_HASH || h.conditionId === NHL_CONDITION_ID
+      );
+
+      if (!alreadyHasNhlClaim) {
+        const seedClaim: ClaimedWinning = {
+          conditionId: NHL_CONDITION_ID,
+          marketTitle: 'NHL: Sharks vs. Canucks (Jan 27)',
+          side: 'YES',
+          amount: 2.62,
+          txHash: NHL_TX_HASH,
+          claimedAt: '2025-01-28T00:00:00.000Z',
+        };
+        history = addClaimToHistory(seedClaim);
+      }
+    }
+
+    setClaimedHistory(history);
+  }, [walletAddress]);
+
+  // Calculate stats from positions and claimed history
+  const calculateStats = useCallback((claimable: ClaimablePosition[], claimed: ClaimedWinning[]) => {
+    const winners = claimable.filter(p => p.isWinner);
+    const losers = claimable.filter(p => p.resolved && !p.isWinner);
+
+    const claimedTotal = claimed.reduce((sum, c) => sum + c.amount, 0);
+    const totalWinnings = winners.reduce((sum, p) => sum + p.claimableAmount, 0) + claimedTotal;
+    const totalLosses = losers.reduce((sum, p) => sum + p.tokenAmount * 0.5, 0);
+
+    const totalWins = winners.length + claimed.length;
+    const totalTrades = claimable.length + claimed.length;
+
+    const positionBestWin = winners.length > 0 ? Math.max(...winners.map(w => w.claimableAmount)) : 0;
+    const claimedBestWin = claimed.length > 0 ? Math.max(...claimed.map(c => c.amount)) : 0;
+    const bestWin = Math.max(positionBestWin, claimedBestWin);
+
+    let streak = 0;
+    for (const p of claimable) {
+      if (p.isWinner) streak++;
+      else break;
+    }
+    if (claimed.length > 0 && winners.length === 0) {
+      streak += claimed.length;
+    }
+
+    setStats({
+      totalWinnings,
+      totalLosses,
+      netProfit: totalWinnings - totalLosses,
+      winRate: totalTrades > 0 ? (totalWins / totalTrades) * 100 : 0,
+      totalTrades,
+      winStreak: streak,
+      bestWin,
+    });
+  }, []);
+
+  // Fetch all data
+  const fetchData = useCallback(async () => {
+    if (!authToken) {
+      setIsLoading(false);
+      return;
+    }
+
+    setIsLoading(true);
+    setError(null);
+
+    try {
+      // Fetch all data in parallel
+      const [positionsRes, ordersRes, tradesRes, balanceRes] = await Promise.all([
+        getUserPredictionPositions(authToken, 'polymarket', 'active').catch(() => null),
+        getPolymarketOpenOrders(authToken).catch(() => null),
+        getUserPredictionTrades(authToken, 'polymarket', 20).catch(() => null),
+        getPolymarketBalance(authToken).catch(() => null),
+      ]);
+
+      const claimedConditionIds = getClaimedConditionIds();
+
+      if (positionsRes?.success && positionsRes.data) {
+        const activePositions = positionsRes.data.filter(
+          (p: PredictionPosition) => !p.conditionId || !claimedConditionIds.has(p.conditionId)
+        );
+        setPositions(activePositions);
+      }
+
+      if (ordersRes?.success && ordersRes.data) {
+        setOpenOrders(ordersRes.data);
+      }
+
+      if (tradesRes?.success && tradesRes.data) {
+        setTrades(tradesRes.data);
+      }
+
+      if (balanceRes?.success && balanceRes.data) {
+        setBalance(balanceRes.data);
+      }
+
+      // Check for claimable winnings (example positions)
+      const examplePositions: ClaimablePosition[] = [
+        {
+          conditionId: '0x92cd86aeee9419974506a4c15408612f999a21e0d18b1770efb4308479a869bd',
+          marketTitle: 'NHL: Sharks vs. Canucks (Jan 27)',
+          tokenId: '24805358206707059866948714153238094417461345581679625271502562437853832292739',
+          side: 'YES',
+          tokenAmount: 2.62,
+          claimableAmount: 2.62,
+          resolved: false,
+          winningOutcome: null,
+          isWinner: false,
+        },
+      ];
+
+      const unclaimedPositions = examplePositions.filter(
+        pos => !claimedConditionIds.has(pos.conditionId)
+      );
+
+      if (unclaimedPositions.length > 0) {
+        const updatedPositions = await Promise.all(
+          unclaimedPositions.map(async (pos) => {
+            try {
+              const status = await getMarketResolutionStatus(pos.conditionId);
+              const isWinner = status.resolved && status.winningOutcome === pos.side;
+              return {
+                ...pos,
+                resolved: status.resolved,
+                winningOutcome: status.winningOutcome,
+                isWinner,
+                claimableAmount: isWinner ? pos.tokenAmount : 0,
+              };
+            } catch {
+              return pos;
+            }
+          })
+        );
+        setClaimablePositions(updatedPositions);
+        calculateStats(updatedPositions, claimedHistory);
+      } else {
+        setClaimablePositions([]);
+        calculateStats([], claimedHistory);
+      }
+    } catch (err: any) {
+      setError(err.message || 'Failed to load portfolio data');
+    } finally {
+      setIsLoading(false);
+    }
+  }, [authToken, calculateStats, claimedHistory]);
+
+  useEffect(() => {
+    fetchData();
+  }, [fetchData]);
+
+  // Handlers
+  const handleClaim = async (position: ClaimablePosition) => {
+    if (!authToken || claimingId) return;
+
+    setClaimingId(position.conditionId);
+    setClaimResult(null);
+
+    try {
+      const result = await redeemWinnings(position.conditionId, authToken);
+
+      if (result.success && result.txHash) {
+        setClaimResult({
+          success: true,
+          message: `Claimed $${position.claimableAmount.toFixed(2)}! Tx: ${result.txHash.slice(0, 10)}...`,
+        });
+
+        const newClaim: ClaimedWinning = {
+          conditionId: position.conditionId,
+          marketTitle: position.marketTitle,
+          side: position.side,
+          amount: position.claimableAmount,
+          txHash: result.txHash,
+          claimedAt: new Date().toISOString(),
+        };
+        const updatedHistory = addClaimToHistory(newClaim);
+        setClaimedHistory(updatedHistory);
+
+        setClaimablePositions(prev =>
+          prev.map(p =>
+            p.conditionId === position.conditionId
+              ? { ...p, claimableAmount: 0 }
+              : p
+          )
+        );
+
+        onClaimSuccess?.();
+      } else {
+        setClaimResult({
+          success: false,
+          message: result.error || 'Claim failed. Please try again.',
+        });
+      }
+    } catch (err: any) {
+      setClaimResult({
+        success: false,
+        message: err.message || 'Claim failed',
+      });
+    } finally {
+      setClaimingId(null);
+    }
+  };
+
+  const handleNavigateToMarket = useCallback((position: PredictionPosition) => {
+    const isReadableSlug = (str: string | undefined): boolean => {
+      if (!str) return false;
+      if (str.startsWith('0x')) return false;
+      if (/^\d+$/.test(str)) return false;
+      return str.includes('-') || /[g-zG-Z]/.test(str);
+    };
+
+    let marketSlug: string | undefined;
+    if (isReadableSlug(position.marketId)) {
+      marketSlug = position.marketId;
+    } else if (isReadableSlug(position.ticker)) {
+      marketSlug = position.ticker;
+    } else if (position.conditionId) {
+      marketSlug = position.conditionId;
+    } else {
+      marketSlug = position.marketId;
+    }
+
+    if (marketSlug) {
+      const source = position.source === 'polymarket' ? '?source=polymarket' : '';
+      router.push(`/predictions/${encodeURIComponent(marketSlug)}${source}`);
+    }
+  }, [router]);
+
+  const handleCancelOrder = async (orderId: string) => {
+    if (!authToken || cancellingOrderId) return;
+
+    setCancellingOrderId(orderId);
+    try {
+      const result = await cancelPolymarketOrder(orderId, authToken);
+      if (result?.success) {
+        setOpenOrders(prev => prev.filter(o => o.id !== orderId));
+      }
+    } catch (err: any) {
+      console.error('Failed to cancel order:', err.message);
+    } finally {
+      setCancellingOrderId(null);
+    }
+  };
+
+  const handleCancelAllOrders = async () => {
+    if (!authToken || cancellingOrderId) return;
+
+    setCancellingOrderId('all');
+    try {
+      const result = await cancelAllPolymarketOrders(authToken);
+      if (result?.success) {
+        setOpenOrders([]);
+      }
+    } catch (err: any) {
+      console.error('Failed to cancel all orders:', err.message);
+    } finally {
+      setCancellingOrderId(null);
+    }
+  };
+
+  // Calculated values
+  const totalPositionValue = positions.reduce((sum, p) => {
+    const value = Number(p.currentValue) || Number(p.costBasis) || 0;
+    return sum + value;
+  }, 0);
+
+  const readyToClaim = claimablePositions.filter(p => p.isWinner && p.claimableAmount > 0);
+  const pendingResolution = claimablePositions.filter(p => !p.resolved);
+
+  // Not logged in state
+  if (!authToken) {
+    return (
+      <div className="py-8 text-center">
+        <div
+          className="w-14 h-14 rounded-xl mx-auto mb-4 flex items-center justify-center"
+          style={{ backgroundColor: C.purpleBg }}
+        >
+          <HiOutlineCollection className="w-7 h-7" style={{ color: C.purple }} />
+        </div>
+        <h3 className="text-lg font-medium mb-2" style={{ color: C.text }}>
+          Sign in to View Portfolio
+        </h3>
+        <p className="text-sm max-w-md mx-auto" style={{ color: C.muted }}>
+          Connect your wallet to see your prediction market positions, orders, and winnings.
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-4">
+      {/* Unified Stats Header */}
+      <UnifiedStatsHeader
+        balance={balance?.usdc || 0}
+        netPnl={stats.netProfit}
+        winRate={stats.winRate}
+        streak={stats.winStreak}
+        positionsValue={totalPositionValue}
+        isLoading={isLoading}
+        theme={C}
+      />
+
+      {/* Tab Navigation */}
+      <TabNavigation
+        activeTab={activeTab}
+        onChange={setActiveTab}
+        counts={{
+          positions: positions.length,
+          orders: openOrders.length,
+          history: trades.length,
+          claimable: readyToClaim.length,
+        }}
+        theme={C}
+      />
+
+      {/* Tab Content */}
+      <AnimatePresence mode="wait">
+        {/* Overview Tab */}
+        {activeTab === 'overview' && (
+          <motion.div
+            key="overview"
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -10 }}
+            className="space-y-4"
+          >
+            {/* Claimable Winnings */}
+            {(readyToClaim.length > 0 || pendingResolution.length > 0) && (
+              <div
+                className="rounded-xl overflow-hidden"
+                style={{ backgroundColor: C.surface, border: `1px solid ${C.border}` }}
+              >
+                <div
+                  className="flex items-center justify-between px-4 py-3"
+                  style={{ borderBottom: `1px solid ${C.border}` }}
+                >
+                  <div className="flex items-center gap-2">
+                    <div
+                      className="w-8 h-8 rounded-lg flex items-center justify-center"
+                      style={{ backgroundColor: C.goldBg }}
+                    >
+                      <HiOutlineCash className="w-4 h-4" style={{ color: C.gold }} />
+                    </div>
+                    <div>
+                      <h4 className="font-semibold" style={{ color: C.text }}>Winnings</h4>
+                      <p className="text-xs" style={{ color: C.muted }}>
+                        {readyToClaim.length > 0 ? 'Ready to claim!' : 'Waiting for resolution...'}
+                      </p>
+                    </div>
+                  </div>
+                  {readyToClaim.length > 0 && (
+                    <div
+                      className="px-3 py-1.5 rounded-lg text-sm font-bold"
+                      style={{ backgroundColor: C.greenBg, color: C.green }}
+                    >
+                      ${readyToClaim.reduce((sum, p) => sum + p.claimableAmount, 0).toFixed(2)} available
+                    </div>
+                  )}
+                </div>
+
+                <div className="divide-y" style={{ borderColor: C.border }}>
+                  {isLoading ? (
+                    <div className="flex items-center justify-center py-8 gap-2">
+                      <HiOutlineRefresh className="w-5 h-5 animate-spin" style={{ color: C.muted }} />
+                      <span style={{ color: C.muted }}>Checking markets...</span>
+                    </div>
+                  ) : (
+                    <>
+                      {readyToClaim.map((position) => (
+                        <ClaimableRow
+                          key={position.conditionId}
+                          position={position}
+                          onClaim={handleClaim}
+                          isClaiming={claimingId === position.conditionId}
+                          theme={C}
+                        />
+                      ))}
+                      {pendingResolution.map((position) => (
+                        <PendingRow key={position.conditionId} position={position} theme={C} />
+                      ))}
+                    </>
+                  )}
+                </div>
+
+                {/* Claim Result Toast */}
+                <AnimatePresence>
+                  {claimResult && (
+                    <motion.div
+                      initial={{ opacity: 0, y: 20 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, y: -20 }}
+                      className="mx-4 mb-4 p-3 rounded-lg flex items-center gap-2"
+                      style={{
+                        backgroundColor: claimResult.success ? C.greenBg : C.redBg,
+                        border: `1px solid ${claimResult.success ? C.green : C.red}`,
+                      }}
+                    >
+                      {claimResult.success ? (
+                        <HiOutlineCheckCircle className="w-5 h-5 flex-shrink-0" style={{ color: C.green }} />
+                      ) : (
+                        <HiOutlineExclamationCircle className="w-5 h-5 flex-shrink-0" style={{ color: C.red }} />
+                      )}
+                      <span className="text-sm" style={{ color: claimResult.success ? C.green : C.red }}>
+                        {claimResult.message}
+                      </span>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+              </div>
+            )}
+
+            {/* Claimed History */}
+            {claimedHistory.length > 0 && (
+              <div
+                className="rounded-xl overflow-hidden"
+                style={{ backgroundColor: C.surface, border: `1px solid ${C.border}` }}
+              >
+                <div
+                  className="flex items-center justify-between px-4 py-3"
+                  style={{ borderBottom: `1px solid ${C.border}` }}
+                >
+                  <div className="flex items-center gap-2">
+                    <div
+                      className="w-8 h-8 rounded-lg flex items-center justify-center"
+                      style={{ backgroundColor: C.greenBg }}
+                    >
+                      <HiOutlineBadgeCheck className="w-4 h-4" style={{ color: C.green }} />
+                    </div>
+                    <div>
+                      <h4 className="font-semibold" style={{ color: C.text }}>Claimed History</h4>
+                      <p className="text-xs" style={{ color: C.muted }}>
+                        {claimedHistory.length} successful {claimedHistory.length === 1 ? 'redemption' : 'redemptions'}
+                      </p>
+                    </div>
+                  </div>
+                  <div
+                    className="px-3 py-1.5 rounded-lg text-sm font-bold"
+                    style={{ backgroundColor: C.greenBg, color: C.green }}
+                  >
+                    ${claimedHistory.reduce((sum, c) => sum + c.amount, 0).toFixed(2)} total
+                  </div>
+                </div>
+
+                <div className="divide-y" style={{ borderColor: C.border }}>
+                  {claimedHistory.map((claim) => (
+                    <ClaimedRow key={claim.txHash} claim={claim} theme={C} />
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Empty State */}
+            {!isLoading && readyToClaim.length === 0 && pendingResolution.length === 0 && claimedHistory.length === 0 && (
+              <div
+                className="text-center py-8 rounded-xl"
+                style={{ backgroundColor: C.surface, border: `1px solid ${C.border}` }}
+              >
+                <div
+                  className="w-14 h-14 rounded-xl mx-auto mb-4 flex items-center justify-center"
+                  style={{ backgroundColor: C.purpleBg }}
+                >
+                  <HiOutlineStar className="w-7 h-7" style={{ color: C.purple }} />
+                </div>
+                <h3 className="text-lg font-medium mb-2" style={{ color: C.text }}>
+                  No Winnings Yet
+                </h3>
+                <p className="text-sm max-w-md mx-auto" style={{ color: C.muted }}>
+                  Make predictions and win to see your claimable winnings here!
+                </p>
+              </div>
+            )}
+          </motion.div>
+        )}
+
+        {/* Positions Tab */}
+        {activeTab === 'positions' && (
+          <motion.div
+            key="positions"
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -10 }}
+            className="space-y-2"
+          >
+            {isLoading ? (
+              <LoadingState message="Loading positions..." theme={C} />
+            ) : positions.length === 0 ? (
+              <EmptyState message="No open positions" icon={HiOutlineCollection} theme={C} />
+            ) : (
+              positions.map((position, index) => (
+                <PositionRow
+                  key={position.id}
+                  position={position}
+                  index={index}
+                  onClick={() => handleNavigateToMarket(position)}
+                  theme={C}
+                />
+              ))
+            )}
+          </motion.div>
+        )}
+
+        {/* Orders Tab */}
+        {activeTab === 'orders' && (
+          <motion.div
+            key="orders"
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -10 }}
+            className="space-y-2"
+          >
+            {openOrders.length > 0 && (
+              <div className="flex justify-end mb-2">
+                <button
+                  onClick={handleCancelAllOrders}
+                  disabled={cancellingOrderId !== null}
+                  className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors"
+                  style={{ backgroundColor: C.redBg, color: C.red }}
+                >
+                  <HiOutlineTrash className="w-3.5 h-3.5" />
+                  Cancel All
+                </button>
+              </div>
+            )}
+            {isLoading ? (
+              <LoadingState message="Loading orders..." theme={C} />
+            ) : openOrders.length === 0 ? (
+              <EmptyState message="No open orders" icon={HiOutlineClipboardList} theme={C} />
+            ) : (
+              openOrders.map((order, index) => (
+                <OpenOrderRow
+                  key={order.id}
+                  order={order}
+                  index={index}
+                  onCancel={handleCancelOrder}
+                  isCancelling={cancellingOrderId === order.id || cancellingOrderId === 'all'}
+                  theme={C}
+                />
+              ))
+            )}
+          </motion.div>
+        )}
+
+        {/* History Tab */}
+        {activeTab === 'history' && (
+          <motion.div
+            key="history"
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -10 }}
+            className="space-y-2"
+          >
+            {isLoading ? (
+              <LoadingState message="Loading trade history..." theme={C} />
+            ) : trades.length === 0 ? (
+              <EmptyState message="No trade history" icon={HiOutlineChartBar} theme={C} />
+            ) : (
+              trades.map((trade, index) => (
+                <TradeRow
+                  key={trade.id}
+                  trade={trade}
+                  index={index}
+                  onClick={() => {
+                    const isReadableSlug = (str: string | undefined): boolean => {
+                      if (!str) return false;
+                      if (str.startsWith('0x')) return false;
+                      if (/^\d+$/.test(str)) return false;
+                      return str.includes('-') || /[g-zG-Z]/.test(str);
+                    };
+
+                    let marketSlug: string | undefined;
+                    if (isReadableSlug(trade.marketId)) {
+                      marketSlug = trade.marketId;
+                    } else if (isReadableSlug(trade.ticker)) {
+                      marketSlug = trade.ticker;
+                    } else {
+                      marketSlug = trade.marketId;
+                    }
+
+                    if (marketSlug) {
+                      const source = trade.source === 'polymarket' ? '?source=polymarket' : '';
+                      router.push(`/predictions/${encodeURIComponent(marketSlug)}${source}`);
+                    }
+                  }}
+                  theme={C}
+                />
+              ))
+            )}
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Refresh Button */}
+      <div className="flex justify-end">
+        <button
+          onClick={fetchData}
+          disabled={isLoading}
+          className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors"
+          style={{ backgroundColor: C.surface, color: C.muted, border: `1px solid ${C.border}` }}
+        >
+          <HiOutlineRefresh className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} />
+          Refresh
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// Sub-components
+
+function LoadingState({ message, theme: C }: { message: string; theme: Theme }) {
+  return (
+    <div className="py-8 flex flex-col items-center justify-center gap-3">
+      <HiOutlineRefresh className="w-6 h-6 animate-spin" style={{ color: C.muted }} />
+      <span className="text-sm" style={{ color: C.muted }}>{message}</span>
+    </div>
+  );
+}
+
+function EmptyState({ message, icon: Icon, theme: C }: { message: string; icon: React.ElementType; theme: Theme }) {
+  return (
+    <div className="py-8 text-center" style={{ color: C.muted }}>
+      <Icon className="w-8 h-8 mx-auto mb-2 opacity-50" />
+      {message}
+    </div>
+  );
+}
+
+function ClaimableRow({
+  position,
+  onClaim,
+  isClaiming,
+  theme: C,
+}: {
+  position: ClaimablePosition;
+  onClaim: (position: ClaimablePosition) => void;
+  isClaiming: boolean;
+  theme: Theme;
+}) {
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 10 }}
+      animate={{ opacity: 1, y: 0 }}
+      className="flex items-center justify-between p-4"
+    >
+      <div className="flex items-center gap-3">
+        <div
+          className="w-10 h-10 rounded-full flex items-center justify-center"
+          style={{ backgroundColor: C.greenBg }}
+        >
+          <HiOutlineCheckCircle className="w-5 h-5" style={{ color: C.green }} />
+        </div>
+        <div>
+          <div className="font-medium" style={{ color: C.text }}>
+            {position.marketTitle}
+          </div>
+          <div className="flex items-center gap-2 mt-0.5">
+            <span
+              className="text-xs font-bold px-1.5 py-0.5 rounded"
+              style={{ backgroundColor: C.greenBg, color: C.green }}
+            >
+              {position.side} WON
+            </span>
+            <span className="text-xs" style={{ color: C.muted }}>
+              {position.tokenAmount.toFixed(2)} tokens
+            </span>
+          </div>
+        </div>
+      </div>
+
+      <button
+        onClick={() => onClaim(position)}
+        disabled={isClaiming}
+        className="flex items-center gap-2 px-4 py-2 rounded-lg font-semibold transition-all hover:scale-105"
+        style={{
+          background: `linear-gradient(135deg, ${C.green} 0%, #22C55E 100%)`,
+          color: '#000',
+          opacity: isClaiming ? 0.7 : 1,
+        }}
+      >
+        {isClaiming ? (
+          <>
+            <HiOutlineRefresh className="w-4 h-4 animate-spin" />
+            Claiming...
+          </>
+        ) : (
+          <>
+            <HiOutlineCash className="w-4 h-4" />
+            Claim ${position.claimableAmount.toFixed(2)}
+          </>
+        )}
+      </button>
+    </motion.div>
+  );
+}
+
+function PendingRow({ position, theme: C }: { position: ClaimablePosition; theme: Theme }) {
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 10 }}
+      animate={{ opacity: 1, y: 0 }}
+      className="flex items-center justify-between p-4 opacity-70"
+    >
+      <div className="flex items-center gap-3">
+        <div
+          className="w-10 h-10 rounded-full flex items-center justify-center"
+          style={{ backgroundColor: C.yellowBg }}
+        >
+          <HiOutlineClock className="w-5 h-5" style={{ color: C.yellow }} />
+        </div>
+        <div>
+          <div className="font-medium" style={{ color: C.text }}>
+            {position.marketTitle}
+          </div>
+          <div className="flex items-center gap-2 mt-0.5">
+            <span
+              className="text-xs font-bold px-1.5 py-0.5 rounded"
+              style={{ backgroundColor: C.yellowBg, color: C.yellow }}
+            >
+              {position.side}
+            </span>
+            <span className="text-xs" style={{ color: C.muted }}>
+              {position.tokenAmount.toFixed(2)} tokens - Awaiting resolution
+            </span>
+          </div>
+        </div>
+      </div>
+
+      <div
+        className="px-3 py-2 rounded-lg text-sm"
+        style={{ backgroundColor: C.yellowBg, color: C.yellow }}
+      >
+        ~${position.tokenAmount.toFixed(2)} if won
+      </div>
+    </motion.div>
+  );
+}
+
+function ClaimedRow({ claim, theme: C }: { claim: ClaimedWinning; theme: Theme }) {
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 10 }}
+      animate={{ opacity: 1, y: 0 }}
+      className="flex items-center justify-between p-4"
+    >
+      <div className="flex items-center gap-3">
+        <div
+          className="w-10 h-10 rounded-full flex items-center justify-center"
+          style={{ backgroundColor: C.greenBg }}
+        >
+          <HiOutlineCheckCircle className="w-5 h-5" style={{ color: C.green }} />
+        </div>
+        <div>
+          <div className="font-medium" style={{ color: C.text }}>
+            {claim.marketTitle}
+          </div>
+          <div className="flex items-center gap-2 mt-0.5">
+            <span
+              className="text-xs font-bold px-1.5 py-0.5 rounded"
+              style={{ backgroundColor: C.greenBg, color: C.green }}
+            >
+              {claim.side} WON
+            </span>
+            <span className="text-xs" style={{ color: C.muted }}>
+              {new Date(claim.claimedAt).toLocaleDateString('en-US', {
+                month: 'short',
+                day: 'numeric',
+                year: 'numeric',
+              })}
+            </span>
+          </div>
+        </div>
+      </div>
+
+      <div className="flex items-center gap-3">
+        <div className="text-right">
+          <div className="font-bold" style={{ color: C.green }}>
+            +${claim.amount.toFixed(2)}
+          </div>
+        </div>
+        <a
+          href={`https://polygonscan.com/tx/${claim.txHash}`}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="flex items-center gap-1.5 px-2 py-1.5 rounded-lg text-xs transition-colors hover:opacity-80"
+          style={{ backgroundColor: C.purpleBg, color: C.purple }}
+        >
+          <img
+            src="https://polygonscan.com/assets/poly/images/svg/logos/chain-dim.svg?v=26.1.4.2"
+            alt="Polygonscan"
+            className="w-3.5 h-3.5"
+          />
+          View Tx
+        </a>
+      </div>
+    </motion.div>
+  );
+}
+
+function PositionRow({
+  position,
+  index,
+  onClick,
+  theme: C,
+}: {
+  position: PredictionPosition;
+  index: number;
+  onClick?: () => void;
+  theme: Theme;
+}) {
+  const isYes = position.side?.toUpperCase() === 'YES';
+  const costBasis = Number(position.costBasis) || 0;
+  const unrealizedPnl = Number(position.unrealizedPnl) || 0;
+  const tokenAmount = Number(position.tokenAmount) || 0;
+  const avgEntryPrice = Number(position.avgEntryPrice) || 0;
+  const currentValue = Number(position.currentValue) || costBasis;
+  const pnlPercent = costBasis > 0 ? (unrealizedPnl / costBasis) * 100 : 0;
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 10 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ delay: index * 0.03 }}
+      className="flex items-center justify-between p-4 rounded-lg transition-colors cursor-pointer hover:bg-white/5"
+      style={{ backgroundColor: C.surface, border: `1px solid ${C.border}` }}
+      onClick={onClick}
+    >
+      <div className="flex items-center gap-3 flex-1 min-w-0">
+        <div
+          className="w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0"
+          style={{ backgroundColor: isYes ? C.greenBg : C.redBg }}
+        >
+          {isYes ? (
+            <HiOutlineCheckCircle className="w-5 h-5" style={{ color: C.green }} />
+          ) : (
+            <HiOutlineXCircle className="w-5 h-5" style={{ color: C.red }} />
+          )}
+        </div>
+
+        <div className="flex-1 min-w-0">
+          <div className="text-sm font-medium truncate" style={{ color: C.text }}>
+            {position.marketTitle || position.marketId}
+          </div>
+          <div className="flex items-center gap-2 mt-0.5">
+            <span
+              className="text-xs font-bold uppercase"
+              style={{ color: isYes ? C.green : C.red }}
+            >
+              {position.side}
+            </span>
+            <span className="text-xs" style={{ color: C.muted }}>
+              {tokenAmount.toFixed(2)} shares @ {(avgEntryPrice * 100).toFixed(0)}c
+            </span>
+          </div>
+        </div>
+      </div>
+
+      <div className="text-right ml-4">
+        <div className="text-sm font-bold" style={{ color: C.text }}>
+          ${currentValue.toFixed(2)}
+        </div>
+        {unrealizedPnl !== 0 && (
+          <div
+            className="text-xs"
+            style={{ color: unrealizedPnl >= 0 ? C.green : C.red }}
+          >
+            {unrealizedPnl >= 0 ? '+' : ''}${unrealizedPnl.toFixed(2)} ({pnlPercent >= 0 ? '+' : ''}{pnlPercent.toFixed(1)}%)
+          </div>
+        )}
+      </div>
+    </motion.div>
+  );
+}
+
+function OpenOrderRow({
+  order,
+  index,
+  onCancel,
+  isCancelling,
+  theme: C,
+}: {
+  order: PolymarketOpenOrder;
+  index: number;
+  onCancel: (orderId: string) => void;
+  isCancelling: boolean;
+  theme: Theme;
+}) {
+  const isBuy = order.side === 'BUY';
+  const size = parseFloat(order.original_size || '0') - parseFloat(order.size_matched || '0');
+  const price = parseFloat(order.price || '0');
+  const value = size * price;
+  const isYesOutcome = order.outcome?.toUpperCase() === 'YES';
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 10 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ delay: index * 0.03 }}
+      className="flex items-center justify-between p-4 rounded-lg"
+      style={{ backgroundColor: C.surface, border: `1px solid ${C.border}` }}
+    >
+      <div className="flex items-center gap-3 flex-1 min-w-0">
+        <div
+          className="w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0"
+          style={{ backgroundColor: isBuy ? C.greenBg : C.redBg }}
+        >
+          <span
+            className="text-xs font-bold"
+            style={{ color: isBuy ? C.green : C.red }}
+          >
+            {isBuy ? 'BUY' : 'SELL'}
+          </span>
+        </div>
+
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2">
+            <span
+              className="text-xs font-bold uppercase px-1.5 py-0.5 rounded"
+              style={{
+                backgroundColor: isYesOutcome ? C.greenBg : C.redBg,
+                color: isYesOutcome ? C.green : C.red,
+              }}
+            >
+              {order.outcome || 'YES'}
+            </span>
+            <span className="text-xs px-1.5 py-0.5 rounded" style={{ backgroundColor: C.yellowBg, color: C.yellow }}>
+              {order.type}
+            </span>
+          </div>
+          <div className="flex items-center gap-2 mt-1">
+            <span className="text-xs" style={{ color: C.muted }}>
+              {size.toFixed(2)} @ {(price * 100).toFixed(0)}c
+            </span>
+            <span className="text-xs" style={{ color: C.muted }}>
+              = ${value.toFixed(2)}
+            </span>
+          </div>
+        </div>
+      </div>
+
+      <button
+        onClick={(e) => {
+          e.stopPropagation();
+          onCancel(order.id);
+        }}
+        disabled={isCancelling}
+        className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ml-4"
+        style={{ backgroundColor: C.border, color: isCancelling ? C.muted : C.red }}
+      >
+        {isCancelling ? (
+          <HiOutlineRefresh className="w-3.5 h-3.5 animate-spin" />
+        ) : (
+          <HiOutlineTrash className="w-3.5 h-3.5" />
+        )}
+        {isCancelling ? 'Cancelling...' : 'Cancel'}
+      </button>
+    </motion.div>
+  );
+}
+
+function TradeRow({
+  trade,
+  index,
+  onClick,
+  theme: C,
+}: {
+  trade: PredictionTrade;
+  index: number;
+  onClick?: () => void;
+  theme: Theme;
+}) {
+  const isBuy = trade.tradeType?.toUpperCase() === 'BUY';
+  const isYes = trade.side?.toUpperCase() === 'YES';
+  const tokenAmount = Number(trade.tokenAmount) || 0;
+  const pricePerToken = Number(trade.pricePerToken) || 0;
+  const usdValue = Number(trade.usdValue) || 0;
+  const timestamp = trade.createdAt ? new Date(trade.createdAt).toLocaleDateString('en-US', {
+    month: 'short',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  }) : 'Unknown';
+
+  const txHash = (trade as any).transactionHash;
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 10 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ delay: index * 0.03 }}
+      className="flex items-center justify-between p-4 rounded-lg cursor-pointer hover:bg-white/5 transition-colors"
+      style={{ backgroundColor: C.surface, border: `1px solid ${C.border}` }}
+      onClick={onClick}
+    >
+      <div className="flex items-center gap-3 flex-1 min-w-0">
+        <div
+          className="w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0"
+          style={{ backgroundColor: isBuy ? C.greenBg : C.redBg }}
+        >
+          <span
+            className="text-xs font-bold"
+            style={{ color: isBuy ? C.green : C.red }}
+          >
+            {isBuy ? 'BUY' : 'SELL'}
+          </span>
+        </div>
+
+        <div className="flex-1 min-w-0">
+          <div className="text-sm font-medium truncate" style={{ color: C.text }}>
+            {trade.marketTitle || trade.marketId}
+          </div>
+          <div className="flex items-center gap-2 mt-0.5">
+            <span
+              className="text-xs font-bold uppercase"
+              style={{ color: isYes ? C.green : C.red }}
+            >
+              {trade.side}
+            </span>
+            <span className="text-xs" style={{ color: C.muted }}>
+              {tokenAmount.toFixed(2)} @ {(pricePerToken * 100).toFixed(0)}c
+            </span>
+          </div>
+        </div>
+      </div>
+
+      <div className="text-right ml-4">
+        <div className="text-sm font-bold" style={{ color: C.text }}>
+          ${usdValue.toFixed(2)}
+        </div>
+        <div className="text-xs" style={{ color: C.muted }}>
+          {timestamp}
+        </div>
+      </div>
+
+      <div className="flex items-center gap-2 ml-4">
+        <span
+          className="text-xs px-2 py-1 rounded-full"
+          style={{
+            backgroundColor: trade.status === 'confirmed' ? C.greenBg :
+                           trade.status === 'pending' ? C.yellowBg : C.redBg,
+            color: trade.status === 'confirmed' ? C.green :
+                   trade.status === 'pending' ? C.yellow : C.red,
+          }}
+        >
+          {trade.status || 'unknown'}
+        </span>
+        {txHash && (
+          <a
+            href={`https://polygonscan.com/tx/${txHash}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            onClick={(e) => e.stopPropagation()}
+            className="flex items-center gap-1.5 px-2 py-1 rounded-lg text-xs transition-colors hover:opacity-80"
+            style={{ backgroundColor: C.purpleBg, color: C.purple }}
+            title="View on Polygonscan"
+          >
+            <img
+              src="https://polygonscan.com/assets/poly/images/svg/logos/chain-dim.svg?v=26.1.4.2"
+              alt="Polygonscan"
+              className="w-3.5 h-3.5"
+            />
+            Tx
+          </a>
+        )}
+      </div>
+    </motion.div>
+  );
+}

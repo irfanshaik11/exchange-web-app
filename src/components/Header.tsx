@@ -13,6 +13,11 @@ import {
 } from "react-icons/fa";
 import { HiLightningBolt } from "react-icons/hi";
 import { IoShieldCheckmarkOutline } from "react-icons/io5";
+import { SiPolygon } from "react-icons/si";
+import { BiCopy, BiCheck } from "react-icons/bi";
+import { HiOutlineQrcode } from "react-icons/hi";
+import { getPolymarketBalance, autoConvertUsdcToUsdce, type PolymarketBalance } from "~/utils/api";
+import QRCode from "react-qr-code";
 import { useUser } from "./UserContext";
 import { useSolPrice } from "./SolPriceContext";
 import { useWatchlist } from "./WatchlistContext";
@@ -274,6 +279,7 @@ export default function Header({
   }, []);
   const router = useRouter();
   const isDiscover = router.pathname === "/";
+  const isPredictionsPage = router.pathname.startsWith('/predictions');
   const {
     user,
     loading: userLoading,
@@ -489,13 +495,24 @@ export default function Header({
   // Manual balance refresh handler
   const handleManualBalanceRefresh = async (e?: React.MouseEvent) => {
     e?.stopPropagation(); // Prevent dropdown toggle
-    if (isRefreshingBalance) return;
+    if (isRefreshingBalance || polygonBalanceLoading) return;
 
     setIsRefreshingBalance(true);
     try {
-      await refreshBalance({ chain: currentChain, force: true });
+      // If on predictions page, refresh Polygon balance
+      if (isPredictionsPage && user?.bearerToken) {
+        setPolygonBalanceLoading(true);
+        const response = await getPolymarketBalance(user.bearerToken, false);
+        if (response.success && response.data) {
+          setPolygonBalance(response.data);
+        }
+        setPolygonBalanceLoading(false);
+      } else {
+        await refreshBalance({ chain: currentChain, force: true });
+      }
     } catch (error) {
       console.error('Failed to refresh balance:', error);
+      setPolygonBalanceLoading(false);
     } finally {
       setIsRefreshingBalance(false);
     }
@@ -529,6 +546,82 @@ export default function Header({
   // Use chainBalances from UserContext as the single source of truth
   // Derive chainBalance from chainBalances instead of maintaining separate state
   const chainBalance = chainBalances[currentChain] ?? (currentChain === "sol" ? solBalance : 0);
+
+  // Polygon balance state for predictions pages
+  const [polygonBalance, setPolygonBalance] = useState<PolymarketBalance | null>(null);
+  const [polygonBalanceLoading, setPolygonBalanceLoading] = useState(false);
+  const [polygonAddressCopied, setPolygonAddressCopied] = useState(false);
+  const [polygonConverting, setPolygonConverting] = useState(false);
+  const [polygonConvertSuccess, setPolygonConvertSuccess] = useState(false);
+  const [showPolygonQR, setShowPolygonQR] = useState(false);
+
+  // Copy Polygon address handler
+  const handleCopyPolygonAddress = useCallback(() => {
+    const address = primaryWalletAddresses?.ethereum;
+    if (address) {
+      navigator.clipboard.writeText(address);
+      setPolygonAddressCopied(true);
+      toast.success('Address copied successfully', {
+        icon: <BiCheck className="w-5 h-5 text-emerald-400" />,
+        style: {
+          background: '#1a1b1f',
+          color: '#f0f5f5',
+          border: '1px solid #8247E5',
+        },
+      });
+      setTimeout(() => setPolygonAddressCopied(false), 2000);
+    }
+  }, [primaryWalletAddresses?.ethereum]);
+
+  // Convert USDC to USDC.e handler
+  const handleConvertUsdcToUsdce = useCallback(async () => {
+    if (!user?.bearerToken || polygonConverting) return;
+
+    setPolygonConverting(true);
+    try {
+      const response = await autoConvertUsdcToUsdce(user.bearerToken);
+      if (response.success && response.data.converted) {
+        setPolygonConvertSuccess(true);
+        // Update balance from response
+        if (response.data.balances) {
+          setPolygonBalance(response.data.balances);
+        }
+        setTimeout(() => setPolygonConvertSuccess(false), 3000);
+      }
+    } catch (err) {
+      console.error('[Header] Error converting USDC:', err);
+    } finally {
+      setPolygonConverting(false);
+    }
+  }, [user?.bearerToken, polygonConverting]);
+
+  // Fetch Polygon balance when on predictions page
+  useEffect(() => {
+    if (!isPredictionsPage || !user?.bearerToken) {
+      setPolygonBalance(null);
+      return;
+    }
+
+    const fetchPolygonBalance = async () => {
+      setPolygonBalanceLoading(true);
+      try {
+        const response = await getPolymarketBalance(user.bearerToken!, false); // Don't auto-convert from header
+        if (response.success && response.data) {
+          setPolygonBalance(response.data);
+        }
+      } catch (err) {
+        console.error('[Header] Error fetching Polygon balance:', err);
+      } finally {
+        setPolygonBalanceLoading(false);
+      }
+    };
+
+    fetchPolygonBalance();
+
+    // Refresh every 30 seconds when on predictions page
+    const interval = setInterval(fetchPolygonBalance, 30000);
+    return () => clearInterval(interval);
+  }, [isPredictionsPage, user?.bearerToken]);
 
   const chainAwareHref = useCallback(
     (href: string) => ({
@@ -1517,10 +1610,20 @@ export default function Header({
                   </div>
                   <div className="items-left flex flex-col gap-0 text-left">
                     <div className="flex items-center gap-1 text-sm text-white">
-                      <span>
-                        {formatBalance(chainBalance)}{" "}
-                        {chainSymbols[currentChain] ?? "SOL"}
-                      </span>
+                      {isPredictionsPage ? (
+                        <>
+                          <SiPolygon size={12} className="text-[#8247E5]" />
+                          <span>
+                            {polygonBalanceLoading ? '...' :
+                              `$${formatBalance(polygonBalance?.usdc ?? 0, 2)}`}
+                          </span>
+                        </>
+                      ) : (
+                        <span>
+                          {formatBalance(chainBalance)}{" "}
+                          {chainSymbols[currentChain] ?? "SOL"}
+                        </span>
+                      )}
                       <button
                         onClick={handleManualBalanceRefresh}
                         className="p-0.5 rounded-full hover:bg-white/10 transition-colors"
@@ -1528,16 +1631,20 @@ export default function Header({
                       >
                         <FaSync
                           size={10}
-                          className={`text-neutral-500 hover:text-white ${isRefreshingBalance ? 'animate-spin' : ''}`}
+                          className={`text-neutral-500 hover:text-white ${isRefreshingBalance || polygonBalanceLoading ? 'animate-spin' : ''}`}
                         />
                       </button>
                     </div>
                     <div className="text-xs text-neutral-500">
-                      {user.name
-                        ? user.name
-                        : user.publicKey
-                            .slice(0, 4)
-                            .concat(user.name.slice(-4))}
+                      {isPredictionsPage ? (
+                        <span className="text-[#8247E5]">Polygon</span>
+                      ) : (
+                        user.name
+                          ? user.name
+                          : user.publicKey
+                              .slice(0, 4)
+                              .concat(user.name.slice(-4))
+                      )}
                     </div>
                   </div>
                   <FiChevronDown
@@ -1577,251 +1684,348 @@ export default function Header({
                         </div>
                       </div>
 
-                      {/* Total Value */}
-                      <div className="mb-3">
-                        <div className="mb-1 text-xs text-neutral-400">
-                          Total Value
-                        </div>
-                        <div className="text-2xl font-bold text-white">
-                          ${formatCurrency(chainBalance * chainPrice)}
-                        </div>
-                      </div>
+                      {/* Total Value - Conditional for Predictions */}
+                      {isPredictionsPage ? (
+                        <>
+                          {/* Clean Polygon Balance Display */}
+                          <div className="mb-3">
+                            <div className="text-2xl font-bold text-white">
+                              ${formatCurrency(polygonBalance?.usdc ?? 0)}
+                            </div>
+                            <div className="flex items-center gap-3 mt-1 text-xs text-neutral-400">
+                              <span className="flex items-center gap-1">
+                                <span className="w-2 h-2 rounded-full bg-emerald-400"></span>
+                                ${formatBalance(polygonBalance?.usdcBridged ?? 0, 2)} USDC.e
+                              </span>
+                              <span className="flex items-center gap-1">
+                                <SiPolygon className="w-3 h-3" style={{ color: '#8247E5' }} />
+                                {formatBalance(polygonBalance?.matic ?? 0, 2)} MATIC
+                              </span>
+                            </div>
+                          </div>
 
-                      {/* Balance Display */}
-                      <div className="mb-4 flex items-center justify-between rounded-lg bg-[#25282B] p-2">
-                        <div className="flex items-center gap-2">
-                          <img
-                            src={chainLogos[currentChain] ?? chainLogos.monad}
-                            alt={chainSymbols[currentChain] ?? "MON"}
-                            className={
-                              currentChain === "monad"
-                                ? "h-10 w-8 rounded-md object-contain"
-                                : "h-4 w-4 rounded-md object-contain"
-                            }
-                            style={
-                              currentChain === "monad"
-                                ? { minWidth: "32px", minHeight: "40px" }
-                                : { minWidth: "16px", minHeight: "16px" }
-                            }
-                          />
-                          <span className="text-sm text-[#f0f5f5]">
-                            ≈ {formatBalance(chainBalance)}{" "}
-                            {chainSymbols[currentChain] ?? "MON"}
-                          </span>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <svg
-                            className="h-4 w-4 text-neutral-400"
-                            fill="none"
-                            stroke="currentColor"
-                            viewBox="0 0 24 24"
-                          >
-                            <path
-                              strokeLinecap="round"
-                              strokeLinejoin="round"
-                              strokeWidth={2}
-                              d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4"
-                            />
-                          </svg>
-                          <img
-                            src={chainLogos[currentChain] ?? chainLogos.monad}
-                            alt={chainSymbols[currentChain] ?? "MON"}
-                            className={
-                              currentChain === "monad"
-                                ? "h-10 w-8 rounded-md object-contain"
-                                : "h-4 w-4 rounded-md object-contain"
-                            }
-                            style={
-                              currentChain === "monad"
-                                ? { minWidth: "32px", minHeight: "40px" }
-                                : { minWidth: "16px", minHeight: "16px" }
-                            }
-                          />
-                          <span className="text-sm text-[#f0f5f5]">
-                            {formatMultiDigitBalance(chainBalance)}
-                          </span>
-                        </div>
-                      </div>
+                          {/* Compact Address Row */}
+                          <div className="flex items-center justify-between rounded-lg bg-[#1a1b1f] px-3 py-2 mb-3">
+                            <div className="flex items-center gap-2 min-w-0 flex-1">
+                              <span className="text-xs font-mono text-neutral-400 truncate">
+                                {primaryWalletAddresses?.ethereum ?
+                                  `${primaryWalletAddresses.ethereum.slice(0, 6)}...${primaryWalletAddresses.ethereum.slice(-4)}` :
+                                  'Not connected'}
+                              </span>
+                            </div>
+                            <div className="flex items-center gap-1 flex-shrink-0">
+                              <button
+                                onClick={handleCopyPolygonAddress}
+                                className="p-1.5 rounded hover:bg-white/10 transition-colors"
+                                title="Copy address"
+                              >
+                                {polygonAddressCopied ?
+                                  <BiCheck className="w-4 h-4 text-emerald-400" /> :
+                                  <BiCopy className="w-4 h-4 text-neutral-400 hover:text-white" />}
+                              </button>
+                              <a
+                                href={`https://polygonscan.com/address/${primaryWalletAddresses?.ethereum}`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="p-1.5 rounded hover:bg-white/10 transition-colors"
+                                title="View on Polygonscan"
+                              >
+                                <img
+                                  src="https://polygonscan.com/assets/poly/images/svg/logos/chain-dim.svg?v=26.1.4.2"
+                                  alt="Polygonscan"
+                                  className="w-4 h-4"
+                                />
+                              </a>
+                            </div>
+                          </div>
 
-                      {/* Action Buttons */}
-                      <div className="space-y-2">
-                        {/* Deposit/Withdraw Buttons */}
-                        <div className="flex gap-2">
+                          {/* Convert button if needed */}
+                          {(polygonBalance?.usdcNative ?? 0) >= 0.1 && (
+                            <button
+                              onClick={handleConvertUsdcToUsdce}
+                              disabled={polygonConverting}
+                              className="w-full flex items-center justify-center gap-2 rounded-lg px-3 py-2 mb-3 text-xs font-medium transition-all"
+                              style={{
+                                backgroundColor: polygonConvertSuccess ? 'rgba(74, 222, 128, 0.15)' : 'rgba(251, 191, 36, 0.15)',
+                                color: polygonConvertSuccess ? '#4ADE80' : '#FBBF24',
+                                opacity: polygonConverting ? 0.7 : 1,
+                              }}
+                            >
+                              {polygonConverting ? (
+                                <><FaSync className="w-3 h-3 animate-spin" />Converting...</>
+                              ) : polygonConvertSuccess ? (
+                                <><BiCheck className="w-4 h-4" />Converted!</>
+                              ) : (
+                                <>Convert ${formatBalance(polygonBalance?.usdcNative ?? 0, 2)} USDC → USDC.e</>
+                              )}
+                            </button>
+                          )}
+                        </>
+                      ) : (
+                        <>
+                          {/* Standard chain balance display */}
+                          <div className="mb-3">
+                            <div className="mb-1 text-xs text-neutral-400">
+                              Total Value
+                            </div>
+                            <div className="text-2xl font-bold text-white">
+                              ${formatCurrency(chainBalance * chainPrice)}
+                            </div>
+                          </div>
+
+                          {/* Balance Display */}
+                          <div className="mb-4 flex items-center justify-between rounded-lg bg-[#25282B] p-2">
+                            <div className="flex items-center gap-2">
+                              <img
+                                src={chainLogos[currentChain] ?? chainLogos.monad}
+                                alt={chainSymbols[currentChain] ?? "MON"}
+                                className={
+                                  currentChain === "monad"
+                                    ? "h-10 w-8 rounded-md object-contain"
+                                    : "h-4 w-4 rounded-md object-contain"
+                                }
+                                style={
+                                  currentChain === "monad"
+                                    ? { minWidth: "32px", minHeight: "40px" }
+                                    : { minWidth: "16px", minHeight: "16px" }
+                                }
+                              />
+                              <span className="text-sm text-[#f0f5f5]">
+                                ≈ {formatBalance(chainBalance)}{" "}
+                                {chainSymbols[currentChain] ?? "MON"}
+                              </span>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <svg
+                                className="h-4 w-4 text-neutral-400"
+                                fill="none"
+                                stroke="currentColor"
+                                viewBox="0 0 24 24"
+                              >
+                                <path
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                  strokeWidth={2}
+                                  d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4"
+                                />
+                              </svg>
+                              <img
+                                src={chainLogos[currentChain] ?? chainLogos.monad}
+                                alt={chainSymbols[currentChain] ?? "MON"}
+                                className={
+                                  currentChain === "monad"
+                                    ? "h-10 w-8 rounded-md object-contain"
+                                    : "h-4 w-4 rounded-md object-contain"
+                                }
+                                style={
+                                  currentChain === "monad"
+                                    ? { minWidth: "32px", minHeight: "40px" }
+                                    : { minWidth: "16px", minHeight: "16px" }
+                                }
+                              />
+                              <span className="text-sm text-[#f0f5f5]">
+                                {formatMultiDigitBalance(chainBalance)}
+                              </span>
+                            </div>
+                          </div>
+                        </>
+                      )}
+
+                      {/* Action Buttons - Conditional for Predictions */}
+                      {isPredictionsPage ? (
+                        <div>
+                          {/* Deposit Button - Opens QR - Full Width */}
                           <button
-                            onClick={() => {
-                              setProfileMenuOpen(false);
-                              handleDepositClick();
-                            }}
-                            className="flex-1 rounded-lg px-3 py-2 text-sm font-medium transition-all duration-200"
-                            style={{
-                              backgroundColor: AX.mint,
-                              color: "#000000",
-                            }}
-                            onMouseEnter={(e) => {
-                              e.currentTarget.style.backgroundColor =
-                                AX.mintHover;
-                            }}
-                            onMouseLeave={(e) => {
-                              e.currentTarget.style.backgroundColor = AX.mint;
-                            }}
+                            onClick={() => setShowPolygonQR(true)}
+                            className="w-full flex items-center justify-center gap-1.5 rounded-lg px-3 py-2.5 text-sm font-medium transition-all"
+                            style={{ backgroundColor: '#8247E5', color: '#fff' }}
+                            onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = '#7038d4'; }}
+                            onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = '#8247E5'; }}
                           >
+                            <HiOutlineQrcode className="w-4 h-4" />
                             Deposit
                           </button>
-                          <button
-                            onClick={() => {
-                              setProfileMenuOpen(false);
-                              handleWithdrawClick();
-                            }}
-                            className="flex-1 rounded-lg px-3 py-2 text-sm font-medium transition-all duration-200"
-                            style={{
-                              backgroundColor: "#0f1012",
-                              color: "#ffffff",
-                              border: "1px solid #2A2B33",
-                            }}
-                            onMouseEnter={(e) => {
-                              e.currentTarget.style.backgroundColor = "#1A1B1F";
-                            }}
-                            onMouseLeave={(e) => {
-                              e.currentTarget.style.backgroundColor = "#0f1012";
-                            }}
-                          >
-                            Withdraw
-                          </button>
                         </div>
+                      ) : (
+                        <div className="space-y-2">
+                          {/* Deposit/Withdraw Buttons */}
+                          <div className="flex gap-2">
+                            <button
+                              onClick={() => {
+                                setProfileMenuOpen(false);
+                                handleDepositClick();
+                              }}
+                              className="flex-1 rounded-lg px-3 py-2 text-sm font-medium transition-all duration-200"
+                              style={{
+                                backgroundColor: AX.mint,
+                                color: "#000000",
+                              }}
+                              onMouseEnter={(e) => {
+                                e.currentTarget.style.backgroundColor =
+                                  AX.mintHover;
+                              }}
+                              onMouseLeave={(e) => {
+                                e.currentTarget.style.backgroundColor = AX.mint;
+                              }}
+                            >
+                              Deposit
+                            </button>
+                            <button
+                              onClick={() => {
+                                setProfileMenuOpen(false);
+                                handleWithdrawClick();
+                              }}
+                              className="flex-1 rounded-lg px-3 py-2 text-sm font-medium transition-all duration-200"
+                              style={{
+                                backgroundColor: "#0f1012",
+                                color: "#ffffff",
+                                border: "1px solid #2A2B33",
+                              }}
+                              onMouseEnter={(e) => {
+                                e.currentTarget.style.backgroundColor = "#1A1B1F";
+                              }}
+                              onMouseLeave={(e) => {
+                                e.currentTarget.style.backgroundColor = "#0f1012";
+                              }}
+                            >
+                              Withdraw
+                            </button>
+                          </div>
 
-                        {/* Convert/Buy Buttons */}
-                        <div className="flex gap-2">
-                          <button
-                            onClick={() => {
-                              setProfileMenuOpen(false);
-                              handleConvertClick();
-                            }}
-                            className="flex flex-1 items-center justify-center gap-1.5 rounded-lg border border-[#2A2B33] bg-[#0C0C0F] px-3 py-2 text-sm font-medium text-[#ffffff] transition-all duration-200"
-                            onMouseEnter={(e) => {
-                              e.currentTarget.style.backgroundColor = "#1A1B1F";
-                            }}
-                            onMouseLeave={(e) => {
-                              e.currentTarget.style.backgroundColor = "#0f1012";
-                            }}
-                          >
-                            <svg
-                              className="h-3.5 w-3.5"
-                              fill="none"
-                              stroke="currentColor"
-                              viewBox="0 0 24 24"
+                          {/* Convert/Buy Buttons */}
+                          <div className="flex gap-2">
+                            <button
+                              onClick={() => {
+                                setProfileMenuOpen(false);
+                                handleConvertClick();
+                              }}
+                              className="flex flex-1 items-center justify-center gap-1.5 rounded-lg border border-[#2A2B33] bg-[#0C0C0F] px-3 py-2 text-sm font-medium text-[#ffffff] transition-all duration-200"
+                              onMouseEnter={(e) => {
+                                e.currentTarget.style.backgroundColor = "#1A1B1F";
+                              }}
+                              onMouseLeave={(e) => {
+                                e.currentTarget.style.backgroundColor = "#0f1012";
+                              }}
                             >
-                              <path
-                                strokeLinecap="round"
-                                strokeLinejoin="round"
-                                strokeWidth={2}
-                                d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4"
-                              />
-                            </svg>
-                            Convert
-                          </button>
-                          <button
-                            onClick={() => {
-                              setProfileMenuOpen(false);
-                              handleBuyClick();
-                            }}
-                            className="flex flex-1 items-center justify-center gap-1.5 rounded-lg border border-[#2A2B33] bg-[#0C0C0F] px-3 py-2 text-sm font-medium text-[#ffffff] transition-all duration-200"
-                            onMouseEnter={(e) => {
-                              e.currentTarget.style.backgroundColor = "#1A1B1F";
-                            }}
-                            onMouseLeave={(e) => {
-                              e.currentTarget.style.backgroundColor = "#0f1012";
-                            }}
-                          >
-                            <svg
-                              className="h-3.5 w-3.5"
-                              fill="none"
-                              stroke="currentColor"
-                              viewBox="0 0 24 24"
+                              <svg
+                                className="h-3.5 w-3.5"
+                                fill="none"
+                                stroke="currentColor"
+                                viewBox="0 0 24 24"
+                              >
+                                <path
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                  strokeWidth={2}
+                                  d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4"
+                                />
+                              </svg>
+                              Convert
+                            </button>
+                            <button
+                              onClick={() => {
+                                setProfileMenuOpen(false);
+                                handleBuyClick();
+                              }}
+                              className="flex flex-1 items-center justify-center gap-1.5 rounded-lg border border-[#2A2B33] bg-[#0C0C0F] px-3 py-2 text-sm font-medium text-[#ffffff] transition-all duration-200"
+                              onMouseEnter={(e) => {
+                                e.currentTarget.style.backgroundColor = "#1A1B1F";
+                              }}
+                              onMouseLeave={(e) => {
+                                e.currentTarget.style.backgroundColor = "#0f1012";
+                              }}
                             >
-                              <path
-                                strokeLinecap="round"
-                                strokeLinejoin="round"
-                                strokeWidth={2}
-                                d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z"
-                              />
-                            </svg>
-                            Buy
-                          </button>
+                              <svg
+                                className="h-3.5 w-3.5"
+                                fill="none"
+                                stroke="currentColor"
+                                viewBox="0 0 24 24"
+                              >
+                                <path
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                  strokeWidth={2}
+                                  d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z"
+                                />
+                              </svg>
+                              Buy
+                            </button>
+                          </div>
                         </div>
+                      )}
 
-                        {/* Feature Updates Button */}
-                        <button
-                          onClick={() => {
-                            setProfileMenuOpen(false);
-                            setIsFirstLogin(false);
-                            setShowUpdatesModal(true);
-                          }}
-                          className="flex w-full items-center gap-2 rounded-lg bg-transparent px-3 py-2 text-sm font-medium transition-all duration-200"
-                          style={{
-                            color: AX.text,
-                          }}
-                          onMouseEnter={(e) => {
-                            e.currentTarget.style.backgroundColor =
-                              "rgba(24, 196, 140, 0.1)";
-                            e.currentTarget.style.color = AX.mint;
-                          }}
-                          onMouseLeave={(e) => {
-                            e.currentTarget.style.backgroundColor =
-                              "transparent";
-                            e.currentTarget.style.color = AX.text;
-                          }}
+                      {/* Feature Updates Button */}
+                      <button
+                        onClick={() => {
+                          setProfileMenuOpen(false);
+                          setIsFirstLogin(false);
+                          setShowUpdatesModal(true);
+                        }}
+                        className="flex w-full items-center gap-2 rounded-lg bg-transparent px-3 py-2 text-sm font-medium transition-all duration-200"
+                        style={{
+                          color: AX.text,
+                        }}
+                        onMouseEnter={(e) => {
+                          e.currentTarget.style.backgroundColor =
+                            "rgba(24, 196, 140, 0.1)";
+                          e.currentTarget.style.color = AX.mint;
+                        }}
+                        onMouseLeave={(e) => {
+                          e.currentTarget.style.backgroundColor =
+                            "transparent";
+                          e.currentTarget.style.color = AX.text;
+                        }}
+                      >
+                        <svg
+                          className="h-4 w-4"
+                          fill="none"
+                          stroke="currentColor"
+                          viewBox="0 0 24 24"
                         >
-                          <svg
-                            className="h-4 w-4"
-                            fill="none"
-                            stroke="currentColor"
-                            viewBox="0 0 24 24"
-                          >
-                            <path
-                              strokeLinecap="round"
-                              strokeLinejoin="round"
-                              strokeWidth={2}
-                              d="M13 10V3L4 14h7v7l9-11h-7z"
-                            />
-                          </svg>
-                          Feature Updates
-                        </button>
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            strokeWidth={2}
+                            d="M13 10V3L4 14h7v7l9-11h-7z"
+                          />
+                        </svg>
+                        Feature Updates
+                      </button>
 
-                        {/* Logout Button */}
-                        <button
-                          onClick={() => {
-                            setProfileMenuOpen(false);
-                            logout();
-                          }}
-                          className="flex w-full items-center gap-2 rounded-lg bg-transparent px-3 py-2 text-sm font-medium transition-all duration-200"
-                          style={{
-                            color: "#ef4444",
-                          }}
-                          onMouseEnter={(e) => {
-                            e.currentTarget.style.backgroundColor =
-                              "rgba(239, 68, 68, 0.1)";
-                          }}
-                          onMouseLeave={(e) => {
-                            e.currentTarget.style.backgroundColor =
-                              "transparent";
-                          }}
+                      {/* Logout Button */}
+                      <button
+                        onClick={() => {
+                          setProfileMenuOpen(false);
+                          logout();
+                        }}
+                        className="flex w-full items-center gap-2 rounded-lg bg-transparent px-3 py-2 text-sm font-medium transition-all duration-200"
+                        style={{
+                          color: "#ef4444",
+                        }}
+                        onMouseEnter={(e) => {
+                          e.currentTarget.style.backgroundColor =
+                            "rgba(239, 68, 68, 0.1)";
+                        }}
+                        onMouseLeave={(e) => {
+                          e.currentTarget.style.backgroundColor =
+                            "transparent";
+                        }}
+                      >
+                        <svg
+                          className="h-4 w-4"
+                          fill="none"
+                          stroke="currentColor"
+                          viewBox="0 0 24 24"
                         >
-                          <svg
-                            className="h-4 w-4"
-                            fill="none"
-                            stroke="currentColor"
-                            viewBox="0 0 24 24"
-                          >
-                            <path
-                              strokeLinecap="round"
-                              strokeLinejoin="round"
-                              strokeWidth={2}
-                              d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"
-                            />
-                          </svg>
-                          Logout
-                        </button>
-                      </div>
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            strokeWidth={2}
+                            d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"
+                          />
+                        </svg>
+                        Logout
+                      </button>
                     </div>
                   </div>
                 )}
@@ -2296,6 +2500,56 @@ export default function Header({
           </div>
         )}
       </header>
+
+      {/* Polygon QR Code Modal - Rendered at root level for proper positioning */}
+      {showPolygonQR && (
+        <div
+          className="fixed inset-0 z-[9999999] flex items-center justify-center bg-black/70"
+          onClick={() => setShowPolygonQR(false)}
+        >
+          <div
+            className="bg-[#1a1b1f] rounded-xl p-6 max-w-xs w-full mx-4 shadow-2xl"
+            onClick={e => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-2">
+                <SiPolygon className="w-5 h-5" style={{ color: '#8247E5' }} />
+                <span className="text-sm font-semibold text-white">Deposit to Polygon</span>
+              </div>
+              <button
+                onClick={() => setShowPolygonQR(false)}
+                className="text-neutral-400 hover:text-white transition-colors"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            <div className="bg-white p-4 rounded-lg mb-4">
+              <QRCode
+                value={primaryWalletAddresses?.ethereum || ''}
+                size={200}
+                style={{ width: '100%', height: 'auto' }}
+              />
+            </div>
+            <div className="text-center mb-3">
+              <p className="text-xs text-neutral-400 mb-2">Your Polygon Address</p>
+              <p className="text-xs font-mono text-[#f0f5f5] break-all">{primaryWalletAddresses?.ethereum}</p>
+            </div>
+            <button
+              onClick={() => { handleCopyPolygonAddress(); }}
+              className="w-full flex items-center justify-center gap-2 py-2.5 rounded-lg text-sm font-medium transition-colors"
+              style={{ backgroundColor: '#8247E5', color: '#fff' }}
+              onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = '#7038d4'; }}
+              onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = '#8247E5'; }}
+            >
+              {polygonAddressCopied ? <><BiCheck className="w-4 h-4" />Copied!</> : <><BiCopy className="w-4 h-4" />Copy Address</>}
+            </button>
+            <p className="text-[10px] text-amber-400 text-center mt-3">⚠️ Only send USDC/MATIC on Polygon network</p>
+          </div>
+        </div>
+      )}
+
       <DepositModal
         open={depositOpen}
         onClose={() => setDepositOpen(false)}

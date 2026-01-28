@@ -980,8 +980,14 @@ export interface PolymarketBalance {
   maticFormatted: string;
   usdc: number;
   usdcFormatted: string;
+  usdcBridged: number;    // USDC.e balance (used by Polymarket)
+  usdcNative: number;     // Native USDC balance (needs conversion)
   hasGasBalance: boolean;
   hasTradingBalance: boolean;
+  hasPolymarketBalance: boolean;  // Has USDC.e specifically
+  autoConverted?: boolean;         // Was conversion done during this request?
+  conversionTxHash?: string;       // Tx hash if converted
+  conversionError?: string;        // Error message if conversion failed
 }
 
 export interface PolymarketGeoblock {
@@ -1039,12 +1045,48 @@ export const getPolymarketQuote = (params: {
 
 /**
  * Get user's Polygon wallet balance for Polymarket trading
+ * @param authToken - User's bearer token
+ * @param autoConvert - If true, automatically convert native USDC to USDC.e if needed
  */
-export const getPolymarketBalance = (authToken: string) =>
-  apiFetch<{ success: boolean; data: PolymarketBalance }>("/api/prediction/polymarket/balance", {
-    method: "GET",
-    authToken,
-  });
+export const getPolymarketBalance = (
+  authToken: string,
+  autoConvert: boolean = false
+) =>
+  apiFetch<{ success: boolean; data: PolymarketBalance }>(
+    `/api/prediction/polymarket/balance${autoConvert ? '?autoConvert=true' : ''}`,
+    {
+      method: "GET",
+      authToken,
+    }
+  );
+
+/**
+ * Manually trigger conversion of native USDC to USDC.e
+ * @param authToken - User's bearer token
+ * @param amount - Optional specific amount to convert (in USDC). If not provided, converts all.
+ */
+export interface AutoConvertResult {
+  converted: boolean;
+  txHash?: string;
+  amountIn?: string;
+  amountOut?: string;
+  amountInFormatted?: string;
+  amountOutFormatted?: string;
+  balances?: PolymarketBalance;
+}
+
+export const autoConvertUsdcToUsdce = (
+  authToken: string,
+  amount?: number
+) =>
+  apiFetch<{ success: boolean; data: AutoConvertResult; responseTime?: number }>(
+    "/api/prediction/polymarket/auto-convert",
+    {
+      method: "POST",
+      body: amount !== undefined ? { amount } : {},
+      authToken,
+    }
+  );
 
 /**
  * Execute a Polymarket trade
@@ -1053,7 +1095,8 @@ export const executePolymarketOrder = (
   params: {
     tokenId: string;
     side: "BUY" | "SELL";
-    amountUSDC: number;
+    amountUSDC?: number;       // Required for BUY, optional for SELL
+    amountTokens?: number;     // For SELL orders - exact tokens to sell
     price?: number;
     orderType?: "GTC" | "GTD" | "FOK" | "FAK";
     expiration?: number;
@@ -1072,6 +1115,71 @@ export const executePolymarketOrder = (
       authToken,
     }
   );
+
+/**
+ * Get user's actual outcome token balance from Polymarket (real on-chain balance)
+ * Use this to validate SELL orders instead of relying on database positions
+ */
+export const getPolymarketTokenBalance = (
+  tokenId: string,
+  authToken: string,
+  walletId?: string
+) => {
+  const qs = new URLSearchParams();
+  qs.set("tokenId", tokenId);
+  if (walletId) qs.set("walletId", walletId);
+  return apiFetch<{ success: boolean; data: { balance: number; allowance: number } }>(
+    `/api/prediction/polymarket/token-balance?${qs.toString()}`,
+    {
+      method: "GET",
+      authToken,
+    }
+  );
+};
+
+/**
+ * Check if a Polymarket market has been resolved
+ */
+export const getPolymarketMarketStatus = (conditionId: string) => {
+  return apiFetch<{
+    success: boolean;
+    data: {
+      conditionId: string;
+      resolved: boolean;
+      winningOutcome: "YES" | "NO" | null;
+      payoutDenominator: string;
+    };
+  }>(`/api/prediction/polymarket/market-status?conditionId=${encodeURIComponent(conditionId)}`, {
+    method: "GET",
+  });
+};
+
+/**
+ * Redeem winning tokens for USDC after a market has resolved
+ */
+export const redeemPolymarketWinnings = (
+  conditionId: string,
+  authToken: string,
+  walletId?: string
+) => {
+  return apiFetch<{
+    success: boolean;
+    data: {
+      redeemed: boolean;
+      txHash: string;
+      message: string;
+      balances: {
+        address: string;
+        usdc: number;
+        usdcFormatted: string;
+      };
+    };
+  }>(`/api/prediction/polymarket/redeem`, {
+    method: "POST",
+    authToken,
+    body: JSON.stringify({ conditionId, walletId }),
+  });
+};
 
 /**
  * Cancel a specific Polymarket order
@@ -1128,6 +1236,166 @@ export const getPolymarketOpenOrders = (
 
   return apiFetch<{ success: boolean; data: any[]; count: number }>(
     `/api/prediction/polymarket/open-orders${queryString}`,
+    {
+      method: "GET",
+      authToken,
+    }
+  );
+};
+
+/**
+ * Approve Polymarket contracts to spend user's USDC
+ * Required once before placing any orders
+ */
+export interface PolymarketApprovalResult {
+  alreadyApproved: boolean;
+  ctfExchangeTxHash?: string;
+  negRiskExchangeTxHash?: string;
+  message: string;
+}
+
+export const approvePolymarketSpending = (authToken: string) =>
+  apiFetch<{ success: boolean; data: PolymarketApprovalResult; responseTime?: number }>(
+    "/api/prediction/polymarket/approve",
+    {
+      method: "POST",
+      authToken,
+    }
+  );
+
+/**
+ * Get user's current allowance status for Polymarket
+ */
+export interface PolymarketAllowance {
+  balance: string;
+  allowance: string;
+}
+
+export const getPolymarketAllowance = (authToken: string) =>
+  apiFetch<{ success: boolean; data: PolymarketAllowance }>(
+    "/api/prediction/polymarket/allowance",
+    {
+      method: "GET",
+      authToken,
+    }
+  );
+
+/* -------------------------------------------------------------------------- */
+/*                     User Positions & Trades (Polymarket)                    */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * User's prediction position (from database)
+ */
+export interface PredictionPosition {
+  id: number;
+  source: string;           // 'dflow' | 'polymarket'
+  marketId: string;
+  ticker?: string;
+  marketTitle?: string;
+  side: string;             // 'YES' | 'NO'
+  tokenAmount: number;
+  avgEntryPrice: number;
+  costBasis: number;
+  currentValue?: number;
+  unrealizedPnl?: number;
+  tokenMint?: string;
+  conditionId?: string;
+  tokenId?: string;
+  status: string;           // 'active' | 'closed' | 'settled'
+  expiresAt?: string;
+  resolution?: string;      // 'yes' | 'no' | 'pending' | null
+  settlementAmount?: number;
+  walletUsedId?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/**
+ * User's prediction trade history (from database)
+ */
+export interface PredictionTrade {
+  id: number;
+  source: string;           // 'dflow' | 'polymarket'
+  marketId: string;
+  ticker?: string;
+  marketTitle?: string;
+  tradeType: string;        // 'BUY' | 'SELL'
+  side: string;             // 'YES' | 'NO'
+  tokenAmount: number;
+  pricePerToken: number;
+  usdValue: number;
+  fee?: number;
+  transactionHash?: string;
+  status: string;           // 'pending' | 'confirmed' | 'failed'
+  expectedPrice?: number;
+  executedPrice?: number;
+  walletUsedId?: string;
+  createdAt: string;
+}
+
+/**
+ * Open order from Polymarket CLOB (live from exchange)
+ */
+export interface PolymarketOpenOrder {
+  id: string;
+  market: string;           // condition_id
+  asset_id: string;         // token_id
+  side: "BUY" | "SELL";
+  price: string;
+  original_size: string;
+  size_matched: string;
+  outcome: string;          // YES/NO
+  owner: string;
+  expiration: string;
+  type: string;             // GTC, GTD, FOK, FAK
+  created_at: string;
+  associate_trades?: any[];
+}
+
+/**
+ * Get user's prediction positions from database
+ * @param authToken - User's bearer token
+ * @param source - Optional filter by source ('dflow' | 'polymarket')
+ * @param status - Optional filter by status ('active' | 'closed' | 'settled')
+ */
+export const getUserPredictionPositions = (
+  authToken: string,
+  source?: string,
+  status?: string
+) => {
+  const qs = new URLSearchParams();
+  if (source) qs.set("source", source);
+  if (status) qs.set("status", status);
+  const queryString = qs.toString() ? `?${qs.toString()}` : "";
+
+  return apiFetch<{ success: boolean; data: PredictionPosition[]; count: number }>(
+    `/api/prediction/positions${queryString}`,
+    {
+      method: "GET",
+      authToken,
+    }
+  );
+};
+
+/**
+ * Get user's prediction trade history from database
+ * @param authToken - User's bearer token
+ * @param source - Optional filter by source ('dflow' | 'polymarket')
+ * @param limit - Number of trades to return (default 50)
+ */
+export const getUserPredictionTrades = (
+  authToken: string,
+  source?: string,
+  limit?: number
+) => {
+  const qs = new URLSearchParams();
+  if (source) qs.set("source", source);
+  if (limit) qs.set("limit", String(limit));
+  const queryString = qs.toString() ? `?${qs.toString()}` : "";
+
+  return apiFetch<{ success: boolean; data: PredictionTrade[]; count: number }>(
+    `/api/prediction/trades${queryString}`,
     {
       method: "GET",
       authToken,

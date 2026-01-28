@@ -6,8 +6,9 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { BiWallet, BiCopy, BiCheck, BiChevronDown, BiChevronUp, BiRefresh, BiLinkExternal } from 'react-icons/bi';
 import { HiOutlineExclamationCircle, HiOutlineCheckCircle } from 'react-icons/hi';
 import { SiPolygon } from 'react-icons/si';
+import toast from 'react-hot-toast';
 import { useUser } from '../UserContext';
-import { getPolymarketBalance, type PolymarketBalance } from '~/utils/api';
+import { getPolymarketBalance, autoConvertUsdcToUsdce, type PolymarketBalance } from '~/utils/api';
 
 // Color palette matching the predictions page
 const AX = {
@@ -26,6 +27,13 @@ const AX = {
 };
 
 
+interface ConversionStatus {
+  converting: boolean;
+  converted: boolean;
+  txHash?: string;
+  error?: string;
+}
+
 interface PolygonWalletCardProps {
   /** Compact mode shows just balance, expanded shows full details */
   variant?: 'compact' | 'expanded' | 'inline';
@@ -35,6 +43,8 @@ interface PolygonWalletCardProps {
   onBalanceChange?: (balance: PolymarketBalance | null) => void;
   /** Pre-fetched balance to avoid refetching */
   initialBalance?: PolymarketBalance | null;
+  /** Enable auto-convert on balance fetch (default: true) */
+  autoConvert?: boolean;
 }
 
 export default function PolygonWalletCard({
@@ -42,6 +52,7 @@ export default function PolygonWalletCard({
   className = '',
   onBalanceChange,
   initialBalance = null,
+  autoConvert = true,
 }: PolygonWalletCardProps) {
   const { user, primaryWalletAddresses } = useUser();
   const [balance, setBalance] = useState<PolymarketBalance | null>(initialBalance);
@@ -49,45 +60,118 @@ export default function PolygonWalletCard({
   const [error, setError] = useState<string | null>(null);
   const [isExpanded, setIsExpanded] = useState(variant === 'expanded');
   const [copied, setCopied] = useState(false);
+  const [conversionStatus, setConversionStatus] = useState<ConversionStatus | null>(null);
 
   // Get the user's EVM address (same on all EVM chains including Polygon)
   const polygonAddress = primaryWalletAddresses?.ethereum || null;
 
-  // Fetch balance
-  const fetchBalance = useCallback(async () => {
+  // Fetch balance with optional auto-convert
+  const fetchBalance = useCallback(async (triggerAutoConvert = autoConvert) => {
     if (!user?.bearerToken) return;
 
     setIsLoading(true);
     setError(null);
 
+    // If we have native USDC and auto-convert is enabled, show converting status
+    if (triggerAutoConvert && balance?.usdcNative && balance.usdcNative > 0.1 && (!balance?.hasPolymarketBalance)) {
+      setConversionStatus({ converting: true, converted: false });
+    }
+
     try {
-      const response = await getPolymarketBalance(user.bearerToken);
+      const response = await getPolymarketBalance(user.bearerToken, triggerAutoConvert);
       if (response.success && response.data) {
         setBalance(response.data);
         onBalanceChange?.(response.data);
+
+        // Handle conversion status from response
+        if (response.data.autoConverted) {
+          setConversionStatus({
+            converting: false,
+            converted: true,
+            txHash: response.data.conversionTxHash,
+          });
+          // Clear conversion status after 5 seconds
+          setTimeout(() => setConversionStatus(null), 5000);
+        } else if (response.data.conversionError) {
+          setConversionStatus({
+            converting: false,
+            converted: false,
+            error: response.data.conversionError,
+          });
+        } else {
+          setConversionStatus(null);
+        }
       } else {
         setError('Failed to fetch balance');
+        setConversionStatus(null);
       }
     } catch (err) {
       console.error('[PolygonWalletCard] Error fetching balance:', err);
       setError('Failed to fetch balance');
+      setConversionStatus(null);
     } finally {
       setIsLoading(false);
     }
-  }, [user?.bearerToken, onBalanceChange]);
+  }, [user?.bearerToken, onBalanceChange, autoConvert, balance?.usdcNative, balance?.hasPolymarketBalance]);
+
+  // Manual convert handler
+  const handleManualConvert = useCallback(async () => {
+    if (!user?.bearerToken || !balance?.usdcNative || balance.usdcNative < 0.01) return;
+
+    setConversionStatus({ converting: true, converted: false });
+
+    try {
+      const response = await autoConvertUsdcToUsdce(user.bearerToken);
+      if (response.success && response.data.converted) {
+        setConversionStatus({
+          converting: false,
+          converted: true,
+          txHash: response.data.txHash,
+        });
+        // Update balance from response
+        if (response.data.balances) {
+          setBalance(response.data.balances);
+          onBalanceChange?.(response.data.balances);
+        }
+        // Clear conversion status after 5 seconds
+        setTimeout(() => setConversionStatus(null), 5000);
+      } else {
+        setConversionStatus({
+          converting: false,
+          converted: false,
+          error: 'Conversion failed',
+        });
+      }
+    } catch (err: any) {
+      setConversionStatus({
+        converting: false,
+        converted: false,
+        error: err.message || 'Conversion failed',
+      });
+    }
+  }, [user?.bearerToken, balance?.usdcNative, onBalanceChange]);
 
   // Fetch on mount and when user changes (skip if initialBalance provided)
   useEffect(() => {
     if (user?.bearerToken && !initialBalance) {
-      fetchBalance();
+      fetchBalance(autoConvert);
     }
-  }, [user?.bearerToken, fetchBalance, initialBalance]);
+  }, [user?.bearerToken, initialBalance, autoConvert]);
+  // Note: fetchBalance is intentionally excluded to avoid infinite loops
 
   // Copy address to clipboard
   const copyAddress = useCallback(() => {
     if (polygonAddress) {
       navigator.clipboard.writeText(polygonAddress);
       setCopied(true);
+      toast.success('Address copied successfully', {
+        icon: <BiCheck className="w-5 h-5 text-emerald-400" />,
+        style: {
+          background: '#1a1b1f',
+          color: '#f0f5f5',
+          border: '1px solid #8247E5',
+        },
+      });
       setTimeout(() => setCopied(false), 2000);
     }
   }, [polygonAddress]);
@@ -99,7 +183,9 @@ export default function PolygonWalletCard({
   // Check if user has sufficient balance
   const hasGasBalance = balance ? balance.matic >= 0.01 : false;
   const hasTradingBalance = balance ? balance.usdc >= 1 : false;
-  const isReady = hasGasBalance && hasTradingBalance;
+  const hasPolymarketBalance = balance?.hasPolymarketBalance ?? (balance ? (balance.usdcBridged ?? 0) >= 0.1 : false);
+  const hasNativeUsdcToConvert = balance ? (balance.usdcNative ?? 0) >= 0.1 : false;
+  const isReady = hasGasBalance && hasPolymarketBalance;
 
   // If user is not logged in, show login prompt
   if (!user) {
@@ -137,12 +223,32 @@ export default function PolygonWalletCard({
       <div className={`flex items-center gap-2 ${className}`}>
         <SiPolygon className="w-4 h-4" style={{ color: AX.purple }} />
         <span className="text-sm" style={{ color: AX.text }}>
-          {isLoading ? (
+          {conversionStatus?.converting ? (
+            <span style={{ color: AX.yellow }}>Converting USDC...</span>
+          ) : isLoading ? (
             <span style={{ color: AX.muted }}>Loading...</span>
           ) : balance ? (
             <>
               <span className="font-medium">{balance.usdcFormatted}</span>
-              {!hasTradingBalance && (
+              {conversionStatus?.converted && (
+                <span
+                  className="ml-2 text-xs px-1.5 py-0.5 rounded"
+                  style={{ backgroundColor: `${AX.green}20`, color: AX.green }}
+                >
+                  ✓ Converted
+                </span>
+              )}
+              {!hasPolymarketBalance && hasNativeUsdcToConvert && !conversionStatus?.converting && (
+                <span
+                  className="ml-2 text-xs px-1.5 py-0.5 rounded cursor-pointer"
+                  style={{ backgroundColor: `${AX.yellow}20`, color: AX.yellow }}
+                  onClick={handleManualConvert}
+                  title="Click to convert native USDC to USDC.e"
+                >
+                  Convert
+                </span>
+              )}
+              {!hasTradingBalance && !hasNativeUsdcToConvert && (
                 <span
                   className="ml-2 text-xs px-1.5 py-0.5 rounded"
                   style={{ backgroundColor: `${AX.yellow}20`, color: AX.yellow }}
@@ -156,13 +262,13 @@ export default function PolygonWalletCard({
           )}
         </span>
         <button
-          onClick={fetchBalance}
-          disabled={isLoading}
+          onClick={() => fetchBalance(false)}
+          disabled={isLoading || conversionStatus?.converting}
           className="p-1 rounded hover:bg-white/10 transition-colors"
           title="Refresh balance"
         >
           <BiRefresh
-            className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`}
+            className={`w-4 h-4 ${isLoading || conversionStatus?.converting ? 'animate-spin' : ''}`}
             style={{ color: AX.muted }}
           />
         </button>
@@ -236,13 +342,13 @@ export default function PolygonWalletCard({
           {/* Right side - Actions */}
           <div className="flex items-center gap-2">
             <button
-              onClick={fetchBalance}
-              disabled={isLoading}
+              onClick={() => fetchBalance(false)}
+              disabled={isLoading || conversionStatus?.converting}
               className="p-2 rounded-lg hover:bg-white/10 transition-colors"
               title="Refresh balance"
             >
               <BiRefresh
-                className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`}
+                className={`w-4 h-4 ${isLoading || conversionStatus?.converting ? 'animate-spin' : ''}`}
                 style={{ color: AX.muted }}
               />
             </button>
@@ -261,10 +367,77 @@ export default function PolygonWalletCard({
           </div>
         </div>
 
+        {/* Conversion status */}
+        {conversionStatus && (
+          <div className="mt-3">
+            {conversionStatus.converting && (
+              <div
+                className="flex items-center gap-2 text-xs px-3 py-2 rounded-lg"
+                style={{
+                  backgroundColor: `${AX.yellow}15`,
+                  color: AX.yellow,
+                }}
+              >
+                <BiRefresh className="w-4 h-4 animate-spin" />
+                Converting USDC to USDC.e for Polymarket...
+              </div>
+            )}
+            {conversionStatus.converted && (
+              <div
+                className="flex items-center gap-2 text-xs px-3 py-2 rounded-lg"
+                style={{
+                  backgroundColor: `${AX.green}15`,
+                  color: AX.green,
+                }}
+              >
+                <HiOutlineCheckCircle className="w-4 h-4" />
+                <span>Successfully converted to USDC.e</span>
+                {conversionStatus.txHash && (
+                  <a
+                    href={`https://polygonscan.com/tx/${conversionStatus.txHash}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="underline opacity-80 hover:opacity-100"
+                  >
+                    View tx
+                  </a>
+                )}
+              </div>
+            )}
+            {conversionStatus.error && (
+              <div
+                className="flex items-center gap-2 text-xs px-3 py-2 rounded-lg"
+                style={{
+                  backgroundColor: `${AX.red}15`,
+                  color: AX.red,
+                }}
+              >
+                <HiOutlineExclamationCircle className="w-4 h-4" />
+                <span>Conversion failed: {conversionStatus.error}</span>
+              </div>
+            )}
+          </div>
+        )}
+
         {/* Status warnings */}
-        {balance && (!hasTradingBalance || !hasGasBalance) && (
+        {balance && (!hasPolymarketBalance || !hasGasBalance) && !conversionStatus?.converting && (
           <div className="mt-3 flex flex-wrap gap-2">
-            {!hasTradingBalance && (
+            {!hasPolymarketBalance && hasNativeUsdcToConvert && (
+              <button
+                onClick={handleManualConvert}
+                disabled={conversionStatus?.converting}
+                className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg transition-colors hover:opacity-90"
+                style={{
+                  backgroundColor: `${AX.accent}20`,
+                  color: AX.accent,
+                  border: `1px solid ${AX.accent}40`,
+                }}
+              >
+                <BiRefresh className={`w-3.5 h-3.5 ${conversionStatus?.converting ? 'animate-spin' : ''}`} />
+                Convert ${balance.usdcNative?.toFixed(2) || '0'} USDC to USDC.e
+              </button>
+            )}
+            {!hasPolymarketBalance && !hasNativeUsdcToConvert && (
               <div
                 className="flex items-center gap-1.5 text-xs px-2 py-1 rounded-lg"
                 style={{
@@ -273,7 +446,7 @@ export default function PolygonWalletCard({
                 }}
               >
                 <HiOutlineExclamationCircle className="w-3.5 h-3.5" />
-                Need USDC to trade
+                Need USDC.e to trade on Polymarket
               </div>
             )}
             {!hasGasBalance && (
@@ -349,7 +522,11 @@ export default function PolygonWalletCard({
                       className="p-1.5 rounded hover:bg-white/10 transition-colors"
                       title="View on PolygonScan"
                     >
-                      <BiLinkExternal className="w-4 h-4" style={{ color: AX.muted }} />
+                      <img
+                        src="https://polygonscan.com/assets/poly/images/svg/logos/chain-dim.svg?v=26.1.4.2"
+                        alt="Polygonscan"
+                        className="w-4 h-4"
+                      />
                     </a>
                   </div>
                 </div>

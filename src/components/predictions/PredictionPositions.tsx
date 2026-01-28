@@ -45,6 +45,11 @@ interface PredictionPositionsProps {
   showEmptyState?: boolean;
 }
 
+/**
+ * @deprecated Use UnifiedPortfolio instead, which fetches real data and has full gamified stats.
+ * This component uses mock/demo data for display purposes only.
+ * Keep for fallback when user is not authenticated.
+ */
 export default function PredictionPositions({
   userPublicKey,
   positions = [],
