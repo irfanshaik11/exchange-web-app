@@ -438,28 +438,25 @@ export default function UnifiedPortfolio({
         setBalance(balanceRes.data);
       }
 
-      // Check for claimable winnings (example positions)
-      const examplePositions: ClaimablePosition[] = [
-        {
-          conditionId: '0x92cd86aeee9419974506a4c15408612f999a21e0d18b1770efb4308479a869bd',
-          marketTitle: 'NHL: Sharks vs. Canucks (Jan 27)',
-          tokenId: '24805358206707059866948714153238094417461345581679625271502562437853832292739',
-          side: 'YES',
-          tokenAmount: 2.62,
-          claimableAmount: 2.62,
+      // Check for claimable winnings from user's REAL positions
+      // Convert active positions to claimable position format
+      const userPositionsForClaim: ClaimablePosition[] = (positionsRes?.data || [])
+        .filter((p: PredictionPosition) => p.conditionId && !claimedConditionIds.has(p.conditionId))
+        .map((p: PredictionPosition) => ({
+          conditionId: p.conditionId || '',
+          marketTitle: p.marketTitle || p.marketId || 'Unknown Market',
+          tokenId: p.tokenId || '',
+          side: (p.side || 'YES').toUpperCase() as 'YES' | 'NO',
+          tokenAmount: Number(p.tokenAmount) || 0,
+          claimableAmount: 0,
           resolved: false,
           winningOutcome: null,
           isWinner: false,
-        },
-      ];
+        }));
 
-      const unclaimedPositions = examplePositions.filter(
-        pos => !claimedConditionIds.has(pos.conditionId)
-      );
-
-      if (unclaimedPositions.length > 0) {
+      if (userPositionsForClaim.length > 0) {
         const updatedPositions = await Promise.all(
-          unclaimedPositions.map(async (pos) => {
+          userPositionsForClaim.map(async (pos) => {
             try {
               const status = await getMarketResolutionStatus(pos.conditionId);
               const isWinner = status.resolved && status.winningOutcome === pos.side;

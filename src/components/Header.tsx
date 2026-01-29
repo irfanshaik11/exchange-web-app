@@ -620,7 +620,18 @@ export default function Header({
 
     // Refresh every 30 seconds when on predictions page
     const interval = setInterval(fetchPolygonBalance, 30000);
-    return () => clearInterval(interval);
+
+    // Listen for custom event to refresh balance (e.g., after a trade)
+    const handleBalanceRefresh = () => {
+      console.log('[Header] Received polygon-balance-refresh event');
+      fetchPolygonBalance();
+    };
+    window.addEventListener('polygon-balance-refresh', handleBalanceRefresh);
+
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener('polygon-balance-refresh', handleBalanceRefresh);
+    };
   }, [isPredictionsPage, user?.bearerToken]);
 
   const chainAwareHref = useCallback(

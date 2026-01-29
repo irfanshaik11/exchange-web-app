@@ -159,6 +159,17 @@ export default function PolygonWalletCard({
   }, [user?.bearerToken, initialBalance, autoConvert]);
   // Note: fetchBalance is intentionally excluded to avoid infinite loops
 
+  // Listen for balance refresh events (e.g., after a trade)
+  useEffect(() => {
+    const handleBalanceRefresh = () => {
+      if (user?.bearerToken) {
+        fetchBalance(false); // Don't auto-convert on refresh
+      }
+    };
+    window.addEventListener('polygon-balance-refresh', handleBalanceRefresh);
+    return () => window.removeEventListener('polygon-balance-refresh', handleBalanceRefresh);
+  }, [user?.bearerToken, fetchBalance]);
+
   // Copy address to clipboard
   const copyAddress = useCallback(() => {
     if (polygonAddress) {
