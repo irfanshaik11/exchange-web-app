@@ -175,7 +175,12 @@ export default function LeaderboardPage() {
         <div className="relative z-10">
           <Header />
 
-          <main className="mx-auto max-w-6xl px-4 sm:px-6 pt-4 pb-24">
+          <main className="mx-auto max-w-6xl px-4 sm:px-6 pt-8 pb-24">
+            {/* Page Title */}
+            <h1 className="text-5xl md:text-6xl font-black tracking-tight text-white text-center mb-8">
+              LEADERBOARD
+            </h1>
+
             {/* Header Tabs - Three sections: Gold Toggle | Period Selector | Quest Toggle */}
             <div className="flex items-center justify-center mb-6">
               <div className="inline-flex items-center bg-neutral-900/80 backdrop-blur-sm rounded-full border border-neutral-700/50 p-1 gap-1">

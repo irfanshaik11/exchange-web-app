@@ -1387,34 +1387,57 @@ export default function Header({
             </div>
           </div>
           <div className="flex min-w-0 flex-shrink-0 items-center gap-1.5 sm:gap-2 md:gap-3 lg:gap-4">
-            {/* Arena Dropdown Button */}
-            <button
-              ref={arenaButtonRef}
-              onClick={(e) => {
-                e.preventDefault();
-                e.stopPropagation();
-                setArenaDropdownOpen(!arenaDropdownOpen);
-              }}
-              className="flex h-10 items-center gap-2 rounded-lg px-4 text-sm font-bold transition-all duration-200"
-              style={{
-                background: "#0d0d0d",
-                border: "1px solid #f5c518",
-                color: "#f5c518",
-              }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.background = "#1a1a1a";
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.background = "#0d0d0d";
-              }}
-            >
-              <GiTrophy size={18} />
-              <span>ARENA</span>
-              <FaChevronDown
-                size={10}
-                className={`transition-transform duration-200 ${arenaDropdownOpen ? "rotate-180" : ""}`}
-              />
-            </button>
+            {/* Arena Dropdown Button - Matte Gold with dynamic page name */}
+            {(() => {
+              // Determine current arena page
+              const currentArenaPage = arenaMenuItems.find(
+                item => router.pathname === item.href ||
+                (item.href === "/arena" && router.pathname.startsWith("/arena") && !arenaMenuItems.some(i => i.href !== "/arena" && router.pathname === i.href))
+              ) || { name: "ARENA", icon: "trophy" };
+
+              return (
+                <button
+                  ref={arenaButtonRef}
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    setArenaDropdownOpen(!arenaDropdownOpen);
+                  }}
+                  className="flex h-10 items-center gap-2 rounded-lg px-5 cursor-pointer"
+                  style={{
+                    background: 'linear-gradient(180deg, rgba(180, 155, 40, 0.25) 0%, rgba(140, 120, 30, 0.3) 100%)',
+                    border: '1px solid rgba(212, 175, 55, 0.35)',
+                  }}
+                >
+                  {/* Icon - bright gold */}
+                  <span style={{ color: '#D4AF37' }}>
+                    {currentArenaPage.icon === "trophy" && <GiTrophy size={18} />}
+                    {currentArenaPage.icon === "users" && <FiUsers size={18} />}
+                    {currentArenaPage.icon === "chart" && <FiBarChart size={18} />}
+                    {currentArenaPage.icon === "grid" && <FiGrid size={18} />}
+                  </span>
+                  {/* Text - bright gold, extra bold */}
+                  <span
+                    style={{
+                      background: 'linear-gradient(180deg, #FFE55C 0%, #FFD700 30%, #D4AF37 100%)',
+                      WebkitBackgroundClip: 'text',
+                      WebkitTextFillColor: 'transparent',
+                      backgroundClip: 'text',
+                      fontSize: '14px',
+                      fontWeight: 800,
+                      letterSpacing: '0.02em',
+                    }}
+                  >
+                    {currentArenaPage.name}
+                  </span>
+                  <FaChevronDown
+                    size={12}
+                    style={{ color: '#D4AF37', strokeWidth: 1 }}
+                    className={`transition-transform duration-200 ${arenaDropdownOpen ? "rotate-180" : ""}`}
+                  />
+                </button>
+              );
+            })()}
 
             {showSearch && (
               <div className="flex items-center gap-1 sm:gap-1.5 md:gap-2">
@@ -2779,74 +2802,71 @@ export default function Header({
         />
       )}
 
-      {/* Arena Dropdown Menu - Fixed position to escape overflow:hidden */}
-      {arenaDropdownOpen && (
-        <div
-          ref={arenaDropdownRef}
-          className="fixed min-w-[220px] rounded-2xl py-2 shadow-2xl"
-          style={{
-            top: arenaDropdownPos.top,
-            left: arenaDropdownPos.left,
-            background: "linear-gradient(180deg, #1e1e1e 0%, #141414 100%)",
-            border: "1px solid rgba(255, 255, 255, 0.08)",
-            boxShadow: "0 10px 40px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(255, 255, 255, 0.05) inset",
-            zIndex: 99999,
-          }}
-        >
-          {arenaMenuItems.map((item) => {
-            const isActive = router.pathname === item.href ||
-              (item.href === "/arena" && router.pathname.startsWith("/arena"));
-            return (
-              <Link
-                key={item.name}
-                href={item.href}
-                onClick={() => setArenaDropdownOpen(false)}
-                className="flex items-center gap-4 mx-2 px-4 py-3 text-sm font-semibold transition-all duration-150 rounded-lg"
-                style={{
-                  color: isActive ? "#f5c518" : (item as any).comingSoon ? "#555" : "#8a8a8a",
-                  opacity: (item as any).comingSoon ? 0.6 : 1,
-                }}
-                onMouseEnter={(e) => {
-                  if (!(item as any).comingSoon) {
-                    e.currentTarget.style.backgroundColor = "rgba(245, 197, 24, 0.1)";
-                    e.currentTarget.style.color = "#f5c518";
-                  }
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.backgroundColor = "transparent";
-                  if (!isActive && !(item as any).comingSoon) {
-                    e.currentTarget.style.color = "#8a8a8a";
-                  } else if ((item as any).comingSoon) {
-                    e.currentTarget.style.color = "#555";
-                  } else {
-                    e.currentTarget.style.color = "#f5c518";
-                  }
-                }}
-              >
-                <span style={{
-                  opacity: isActive ? 1 : 0.7,
-                  filter: isActive ? "drop-shadow(0 0 4px rgba(245, 197, 24, 0.5))" : "none"
-                }}>
-                  {item.icon === "trophy" && <GiTrophy size={18} />}
-                  {item.icon === "grid" && <FiGrid size={18} />}
-                  {item.icon === "users" && <FiUsers size={18} />}
-                  {item.icon === "chart" && <FiBarChart size={18} />}
-                </span>
-                <div className="flex flex-col">
-                  <span style={{
-                    textShadow: isActive ? "0 0 8px rgba(245, 197, 24, 0.4)" : "none"
-                  }}>
-                    {item.name}
-                  </span>
-                  {(item as any).comingSoon && (
-                    <span className="text-[10px] text-neutral-500 font-normal">Under Construction</span>
-                  )}
-                </div>
-              </Link>
-            );
-          })}
-        </div>
-      )}
+      {/* Arena Dropdown Menu - Fixed position with smooth animation */}
+      <div
+        ref={arenaDropdownRef}
+        className="fixed min-w-[200px] rounded-xl py-2 overflow-hidden"
+        style={{
+          top: arenaDropdownPos.top,
+          left: arenaDropdownPos.left,
+          background: "rgba(12, 12, 12, 0.95)",
+          backdropFilter: "blur(12px)",
+          border: "1px solid rgba(255, 255, 255, 0.06)",
+          zIndex: 99999,
+          opacity: arenaDropdownOpen ? 1 : 0,
+          transform: arenaDropdownOpen ? "translateY(0) scale(1)" : "translateY(-8px) scale(0.96)",
+          transformOrigin: "top center",
+          transition: "opacity 200ms ease-out, transform 200ms ease-out",
+          pointerEvents: arenaDropdownOpen ? "auto" : "none",
+          visibility: arenaDropdownOpen ? "visible" : "hidden",
+        }}
+      >
+        {arenaMenuItems.map((item) => {
+          const isActive = router.pathname === item.href ||
+            (item.href === "/arena" && router.pathname.startsWith("/arena"));
+          return (
+            <Link
+              key={item.name}
+              href={item.href}
+              onClick={() => setArenaDropdownOpen(false)}
+              className="flex items-center gap-3 mx-2 px-4 py-3 text-sm font-bold transition-all duration-150 rounded-lg cursor-pointer"
+              style={{
+                color: isActive ? "#FFD700" : (item as any).comingSoon ? "#444" : "#777",
+                opacity: (item as any).comingSoon ? 0.5 : 1,
+              }}
+              onMouseEnter={(e) => {
+                if (!(item as any).comingSoon) {
+                  e.currentTarget.style.backgroundColor = "rgba(255, 215, 0, 0.08)";
+                  e.currentTarget.style.color = "#FFD700";
+                }
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.backgroundColor = "transparent";
+                if (!isActive && !(item as any).comingSoon) {
+                  e.currentTarget.style.color = "#777";
+                } else if ((item as any).comingSoon) {
+                  e.currentTarget.style.color = "#444";
+                } else {
+                  e.currentTarget.style.color = "#FFD700";
+                }
+              }}
+            >
+              <span style={{ opacity: isActive ? 1 : 0.6 }}>
+                {item.icon === "trophy" && <GiTrophy size={16} />}
+                {item.icon === "grid" && <FiGrid size={16} />}
+                {item.icon === "users" && <FiUsers size={16} />}
+                {item.icon === "chart" && <FiBarChart size={16} />}
+              </span>
+              <div className="flex flex-col">
+                <span>{item.name}</span>
+                {(item as any).comingSoon && (
+                  <span className="text-[10px] text-neutral-600 font-normal">Coming Soon</span>
+                )}
+              </div>
+            </Link>
+          );
+        })}
+      </div>
     </>
   );
 }

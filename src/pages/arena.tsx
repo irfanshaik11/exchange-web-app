@@ -73,12 +73,12 @@ const ALL_RANKS = [
   { rank: 'TITAN', level: 4, name: 'TITAN IV', goldRequired: 10000000 },
 ];
 
-// Space background - seamless fade to black
-const SpaceBackground = () => (
-  <div className="fixed inset-0 overflow-hidden pointer-events-none">
+// Space background - contained within rounded container
+const SpaceBackgroundContained = () => (
+  <div className="absolute inset-0 overflow-hidden pointer-events-none rounded-2xl">
     {/* Main background image - positioned at top */}
     <div
-      className="absolute inset-x-0 top-0 h-[70vh] bg-cover bg-top bg-no-repeat"
+      className="absolute inset-x-0 top-0 h-[60vh] bg-cover bg-top bg-no-repeat"
       style={{ backgroundImage: 'url(https://wallpapercave.com/wp/wp8955056.jpg)' }}
     />
     {/* Dark overlay */}
@@ -340,28 +340,15 @@ const LevelIndicator = ({ currentLevel, totalLevels = 4 }: { currentLevel: numbe
   );
 };
 
-// Card component with hover effects
-const Card = ({ children, className = '', hover = true, glow = false, glowColor = 'neutral' }: {
+// Card component - clean, no hover effects
+const Card = ({ children, className = '' }: {
   children: React.ReactNode;
   className?: string;
-  hover?: boolean;
-  glow?: boolean;
-  glowColor?: 'neutral' | 'yellow' | 'emerald' | 'purple';
 }) => {
-  const glowColors = {
-    neutral: 'hover:border-neutral-700',
-    yellow: 'hover:border-yellow-500/30 hover:shadow-[0_0_30px_rgba(234,179,8,0.1)]',
-    emerald: 'hover:border-emerald-500/30 hover:shadow-[0_0_30px_rgba(16,185,129,0.1)]',
-    purple: 'hover:border-purple-500/30 hover:shadow-[0_0_30px_rgba(168,85,247,0.1)]',
-  };
-
   return (
     <div
       className={`
-        bg-[#0a0a0a]/95 backdrop-blur-sm border border-neutral-800/80 rounded-xl
-        transition-all duration-300
-        ${hover ? `${glowColors[glowColor]}` : ''}
-        ${glow ? 'shadow-lg' : ''}
+        bg-[#0a0a0a]/95 backdrop-blur-sm border border-neutral-800/50 rounded-xl
         ${className}
       `}
     >
@@ -424,58 +411,66 @@ const QuestItem = ({ quest, onClaim, isClaiming, index = 0 }: { quest: any; onCl
   );
 };
 
-// Rank carousel item with polish
-const RankCarouselItem = ({ item, isUnlocked, isCurrent, userGold }: { item: typeof ALL_RANKS[0]; isUnlocked: boolean; isCurrent: boolean; userGold: number }) => {
+// Rank carousel item - clean design with dividers
+const RankCarouselItem = ({ item, isUnlocked, isCurrent, userGold, isLast }: { item: typeof ALL_RANKS[0]; isUnlocked: boolean; isCurrent: boolean; userGold: number; isLast?: boolean }) => {
   const config = RANK_CONFIG[item.rank as keyof typeof RANK_CONFIG];
+  const isLocked = !isUnlocked;
 
   return (
-    <div className={`
-      flex-shrink-0 w-36 flex flex-col items-center p-4 rounded-xl
-      transition-all duration-300
-      ${isCurrent ? 'bg-white/[0.03] border border-white/10' : 'hover:bg-white/[0.02]'}
-    `}>
-      {/* Status badge */}
-      <div className="mb-2 h-6">
-        {isCurrent ? (
-          <span className="inline-flex items-center gap-1 px-2.5 py-1 bg-emerald-500/20 border border-emerald-500/40 text-emerald-400 text-[10px] font-semibold rounded-full shadow-[0_0_10px_rgba(16,185,129,0.2)]">
-            <HiSparkles className="w-3 h-3" />
-            CURRENT
-          </span>
-        ) : !isUnlocked ? (
-          <span className="inline-flex items-center gap-1 px-2.5 py-1 bg-neutral-800/80 border border-neutral-700/50 text-neutral-500 text-[10px] font-medium rounded-full">
-            <FiLock className="w-2.5 h-2.5" />
-            LOCKED
-          </span>
-        ) : isUnlocked && !isCurrent ? (
-          <span className="inline-flex items-center gap-1 px-2.5 py-1 bg-yellow-500/10 border border-yellow-500/30 text-yellow-500 text-[10px] font-medium rounded-full">
-            <FiCheck className="w-2.5 h-2.5" />
-            UNLOCKED
-          </span>
-        ) : null}
+    <div className="flex h-full">
+      <div className={`
+        flex-shrink-0 w-[240px] flex flex-col items-center justify-center px-6 py-5
+        transition-all duration-300
+        ${isLocked ? 'opacity-50' : 'opacity-100'}
+      `}>
+        {/* Status badge - more square with small radius */}
+        <div className="mb-3 h-7">
+          {isCurrent ? (
+            <span className="inline-flex items-center gap-1.5 px-4 py-1.5 bg-emerald-500/20 border border-emerald-500/40 text-emerald-400 text-xs font-semibold rounded">
+              Current Rank
+            </span>
+          ) : isLocked ? (
+            <span className="inline-flex items-center gap-1.5 px-4 py-1.5 bg-neutral-800/80 border border-neutral-600/50 text-neutral-500 text-xs font-medium rounded">
+              <FiLock className="w-3.5 h-3.5" />
+              Rank Locked
+            </span>
+          ) : null}
+        </div>
+
+        {/* Badge */}
+        <HexBadge rank={item.rank} level={item.level} size="md" isLocked={isLocked} isCurrent={isCurrent} />
+
+        {/* Rank Name */}
+        <h4 className={`mt-3 font-black text-2xl tracking-wide ${isLocked ? 'text-neutral-500' : 'text-white'}`}>
+          {item.name}
+        </h4>
+
+        {/* Honors row */}
+        <div className={`mt-1.5 flex items-center gap-2 ${isLocked ? 'text-neutral-600' : 'text-neutral-400'}`}>
+          <FiCheck className={`w-4 h-4 ${isLocked ? 'text-neutral-600' : 'text-emerald-500'}`} />
+          <span className="text-sm">Honors I</span>
+        </div>
+
+        {/* Gold requirement or perks */}
+        {item.isBase ? (
+          <div className="mt-2 text-center space-y-0.5">
+            <p className={`text-sm ${isLocked ? 'text-neutral-600' : 'text-neutral-400'}`}>{config.cashback}% Cashback</p>
+            <p className={`text-sm ${isLocked ? 'text-neutral-600' : 'text-neutral-400'}`}>{config.multiplier}x Gold Boost</p>
+          </div>
+        ) : (
+          <div className="mt-2 text-center">
+            {item.goldRequired > 0 && (
+              <p className={`text-sm flex items-center justify-center gap-1.5 ${isLocked ? 'text-neutral-600' : 'text-neutral-400'}`}>
+                + {item.goldRequired.toLocaleString()} <GoldCoin className="w-4 h-4" />
+              </p>
+            )}
+          </div>
+        )}
       </div>
 
-      {/* Badge */}
-      <HexBadge rank={item.rank} level={item.level} size="md" isLocked={!isUnlocked} isCurrent={isCurrent} />
-
-      {/* Name */}
-      <h4 className={`mt-3 font-bold text-sm tracking-wide ${isUnlocked ? 'text-white' : 'text-neutral-600'}`}>
-        {item.name}
-      </h4>
-
-      {/* Info */}
-      {item.isBase ? (
-        <div className="mt-2 text-center space-y-0.5">
-          <p className="text-neutral-500 text-[11px]">{config.cashback}% Cashback</p>
-          <p className="text-neutral-500 text-[11px]">{config.multiplier}x Gold Boost</p>
-        </div>
-      ) : (
-        <div className="mt-2 text-center">
-          {item.goldRequired > 0 && (
-            <p className={`text-[11px] flex items-center justify-center gap-1 ${isUnlocked ? 'text-neutral-400' : 'text-neutral-600'}`}>
-              {item.goldRequired.toLocaleString()} <GoldCoin className="w-3 h-3" />
-            </p>
-          )}
-        </div>
+      {/* Vertical divider line */}
+      {!isLast && (
+        <div className="w-px bg-neutral-700/40 self-stretch" />
       )}
     </div>
   );
@@ -533,6 +528,7 @@ export default function ArenaPage() {
   const [claimingId, setClaimingId] = useState<number | null>(null);
   const [showRanks, setShowRanks] = useState(true);
   const [mounted, setMounted] = useState(false);
+  const [leaderboardTab, setLeaderboardTab] = useState<'gold' | 'quest'>('gold');
   const carouselRef = useRef<HTMLDivElement>(null);
 
   // Live countdown
@@ -606,19 +602,25 @@ export default function ArenaPage() {
         <meta name="description" content="Level up your trading with Interstate Arena - earn Gold, climb ranks, and compete for rewards." />
       </Head>
 
-      <div className="min-h-screen relative overflow-x-hidden">
-        <SpaceBackground />
+      <div className="min-h-screen bg-black">
+        {/* Header stays outside the rounded container */}
+        <Header />
 
-        <div className="relative z-10">
-          <Header />
+        {/* Outer padding wrapper - uniform padding on all sides */}
+        <div className="p-1 sm:p-1.5">
+          {/* Rounded container with background */}
+          <div className="relative rounded-2xl overflow-hidden min-h-[calc(100vh-80px)] border border-white/[0.06]">
+            {/* Background inside the rounded container */}
+            <SpaceBackgroundContained />
 
-          <main className="mx-auto max-w-6xl px-4 sm:px-6 pt-8 pb-24">
+            {/* Content */}
+            <main className="relative z-10 mx-auto max-w-6xl px-4 sm:px-6 pt-8 pb-24">
             {/* Epic Title Section */}
             <div className={`text-center mb-12 transition-all duration-700 ${mounted ? 'opacity-100 translate-y-0' : 'opacity-0 -translate-y-4'}`}>
               {/* Decorative top element */}
               <div className="flex items-center justify-center gap-4 mb-4">
                 <div className="h-px w-16 bg-gradient-to-r from-transparent via-yellow-500/50 to-yellow-500/20" />
-                <GiTrophy className="w-6 h-6 text-yellow-500/70 animate-pulse-slow" />
+                <GiTrophy className="w-6 h-6 text-yellow-500/70" />
                 <div className="h-px w-16 bg-gradient-to-l from-transparent via-yellow-500/50 to-yellow-500/20" />
               </div>
 
@@ -652,126 +654,135 @@ export default function ArenaPage() {
               </div>
             </div>
 
-            {/* User Stats Bar */}
-            <Card className={`p-4 mb-6 transition-all duration-700 delay-100 ${mounted ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'}`} hover glowColor="yellow">
-              <div className="flex flex-wrap items-center justify-between gap-4">
-                {/* User info */}
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-full bg-gradient-to-br from-neutral-700 to-neutral-900 border border-neutral-700 flex items-center justify-center">
-                    <span className="text-sm">👤</span>
-                  </div>
-                  <div>
-                    <span className="text-white font-semibold">{userName}</span>
-                    <p className="text-xs text-neutral-500">{displayRank} {['', 'I', 'II', 'III', 'IV'][displayLevel]}</p>
-                  </div>
-                </div>
+            {/* User Stats Bar - Clean matte design */}
+            <div className={`flex flex-col sm:flex-row items-stretch gap-3 mb-6 transition-all duration-700 delay-100 ${mounted ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'}`}>
+              {/* Left: Username & Progress */}
+              <div className="flex-1 flex items-center gap-4 px-5 py-4 bg-white/[0.06] backdrop-blur-sm border border-white/[0.08] rounded-xl">
+                {/* Settings icon */}
+                <button className="w-8 h-8 rounded-lg bg-white/[0.08] hover:bg-white/[0.12] border border-white/[0.1] flex items-center justify-center transition-colors">
+                  <svg className="w-4 h-4 text-neutral-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                  </svg>
+                </button>
 
-                {/* Progress to next level */}
-                <div className="flex-1 max-w-xs hidden md:block">
-                  <div className="flex items-center justify-between text-xs mb-1.5">
-                    <span className="text-neutral-400">Progress to next level</span>
-                    <span className="text-yellow-400 font-medium">{displayGoldEarned} / {nextLevelGold.toLocaleString()}</span>
-                  </div>
-                  <AnimatedProgressBar progress={progressToNext} color="yellow" />
-                </div>
-
-                {/* Stats */}
-                <div className="flex items-center gap-6">
-                  <div className="text-right">
-                    <p className="text-neutral-500 text-[10px] uppercase tracking-wider">Gold Earned</p>
-                    <p className="text-white font-bold flex items-center justify-end gap-1.5">
-                      <GoldCoin className="w-4 h-4" animate /> {displayGoldEarned.toLocaleString()}
-                    </p>
-                  </div>
-                  <div className="w-px h-8 bg-neutral-800" />
-                  <div className="text-right">
-                    <p className="text-neutral-500 text-[10px] uppercase tracking-wider">SOL Earned</p>
-                    <p className="text-white font-bold flex items-center justify-end gap-1.5">
-                      <SiSolana className="w-4 h-4 text-purple-400 drop-shadow-[0_0_4px_rgba(168,85,247,0.6)]" /> 0
-                    </p>
+                {/* Username and progress bar */}
+                <div className="flex-1 min-w-0">
+                  <span className="text-white font-semibold text-sm">{userName}</span>
+                  <div className="mt-2 flex items-center gap-3">
+                    <div className="flex-1">
+                      <div className="h-1.5 bg-neutral-800 rounded-full overflow-hidden">
+                        <div
+                          className="h-full bg-gradient-to-r from-neutral-500 to-neutral-400 rounded-full transition-all duration-700"
+                          style={{ width: `${Math.min(progressToNext, 100)}%` }}
+                        />
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-1.5 flex-shrink-0">
+                      <GoldCoin className="w-4 h-4" />
+                      <span className="text-neutral-300 text-sm font-medium">{displayGoldEarned.toLocaleString()} / {nextLevelGold.toLocaleString()}</span>
+                    </div>
                   </div>
                 </div>
               </div>
-            </Card>
+
+              {/* Right: Gold & SOL Earned */}
+              <div className="flex flex-col justify-center gap-2 px-5 py-3 bg-white/[0.06] backdrop-blur-sm border border-white/[0.08] rounded-xl min-w-[180px]">
+                {/* Gold earned row */}
+                <div className="flex items-center justify-between">
+                  <span className="text-neutral-400 text-sm">Gold earned</span>
+                  <div className="flex items-center gap-1.5">
+                    <GoldCoin className="w-4 h-4" />
+                    <span className="text-white font-semibold text-sm">{displayGoldEarned.toLocaleString()}</span>
+                    <span className="text-emerald-400 text-xs">◈</span>
+                  </div>
+                </div>
+                {/* SOL earned row */}
+                <div className="flex items-center justify-between">
+                  <span className="text-neutral-400 text-sm">SOL earned</span>
+                  <div className="flex items-center gap-1.5">
+                    <SiSolana className="w-3.5 h-3.5 text-purple-400" />
+                    <span className="text-white font-semibold text-sm">0 SOL</span>
+                  </div>
+                </div>
+              </div>
+            </div>
 
             {/* Cashback Banner */}
-            <Card className={`p-5 mb-6 relative overflow-hidden group transition-all duration-700 delay-200 ${mounted ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'}`} hover glowColor="emerald">
-              {/* Background image */}
+            <div className={`relative mb-6 px-5 py-4 rounded-xl overflow-hidden transition-all duration-700 delay-200 ${mounted ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'}`}
+              style={{ background: 'linear-gradient(90deg, #2a2310 0%, #1a1a0f 50%, #1f1a10 100%)' }}
+            >
+              {/* Gold accent border on left */}
+              <div className="absolute left-0 top-0 bottom-0 w-1 bg-gradient-to-b from-yellow-500 via-amber-500 to-yellow-600" />
+
+              {/* Coin image on right */}
               <div
-                className="absolute right-0 top-0 bottom-0 w-1/2 bg-cover bg-center opacity-20 group-hover:opacity-30 transition-opacity duration-500"
-                style={{ backgroundImage: 'url(https://live.staticflickr.com/409/19582487531_91f10c05cb_b.jpg)' }}
+                className="absolute right-0 top-1/2 -translate-y-1/2 w-32 h-32 sm:w-40 sm:h-40 bg-contain bg-center bg-no-repeat opacity-60"
+                style={{ backgroundImage: 'url(https://images.unsplash.com/photo-1621778307596-ec0e0abc0e6e?w=200)' }}
               />
-              <div className="absolute right-0 top-0 bottom-0 w-1/2 bg-gradient-to-r from-[#0a0a0a] to-transparent" />
+              <div className="absolute right-0 top-0 bottom-0 w-48 bg-gradient-to-r from-transparent via-[#1a1a0f]/80 to-[#1a1a0f]" />
 
               <div className="relative flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
                 <div>
-                  <div className="flex items-center gap-2 mb-1">
-                    <HiSparkles className="w-5 h-5 text-emerald-400 animate-pulse" />
-                    <h3 className="text-xl sm:text-2xl font-bold text-emerald-400">CLAIM 45% CASHBACK</h3>
-                  </div>
-                  <p className="text-neutral-300 text-sm">
-                    Earn More SOL By Posting About <span className="text-blue-400 hover:text-blue-300 underline cursor-pointer transition-colors">@Interstate</span>
+                  <h3 className="text-xl sm:text-2xl font-black tracking-wide text-transparent bg-clip-text bg-gradient-to-r from-yellow-400 via-amber-400 to-yellow-500 mb-1">
+                    CLAIM 45% CASHBACK
+                  </h3>
+                  <p className="text-neutral-400 text-sm">
+                    Earn More SOL By Posting About <span className="text-amber-400 hover:text-amber-300 cursor-pointer transition-colors">@TrojanOnSolana</span>
                   </p>
                 </div>
-                <button className="px-6 py-2.5 bg-emerald-500 hover:bg-emerald-400 text-black font-bold rounded-lg transition-all duration-200 hover:scale-105 active:scale-95 shadow-[0_0_20px_rgba(16,185,129,0.3)] hover:shadow-[0_0_30px_rgba(16,185,129,0.5)]">
-                  Claim Boost
+                <button className="px-5 py-2.5 text-white font-semibold text-sm rounded-lg border transition-all duration-200 whitespace-nowrap"
+                  style={{
+                    background: 'linear-gradient(180deg, rgba(120, 100, 50, 0.5) 0%, rgba(80, 65, 30, 0.6) 100%)',
+                    borderColor: 'rgba(180, 160, 100, 0.4)'
+                  }}
+                >
+                  Claim Cashback Boost
                 </button>
               </div>
-            </Card>
+            </div>
 
-            {/* Main Content Grid */}
-            <div className={`grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6 transition-all duration-700 delay-300 ${mounted ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'}`}>
-              {/* Left: Current Rank */}
-              <Card className="p-6 relative overflow-hidden" hover glowColor="yellow">
-                {/* Decorative background gradient */}
-                <div
-                  className="absolute inset-0 opacity-30"
-                  style={{
-                    background: `radial-gradient(circle at 50% 0%, ${RANK_CONFIG[displayRank as keyof typeof RANK_CONFIG]?.color || '#FFD700'}20 0%, transparent 60%)`,
-                  }}
-                />
-
-                <div className="relative flex flex-col items-center">
-                  {/* Section header */}
-                  <div className="flex items-center gap-2 mb-4 self-start">
-                    <RiVipCrownFill className="w-4 h-4 text-yellow-500" />
-                    <span className="text-xs uppercase tracking-wider text-neutral-500 font-semibold">Your Rank</span>
-                  </div>
-
-                  {/* Rank Badge with enhanced glow */}
-                  <div className="relative">
-                    <div className="absolute inset-0 blur-2xl opacity-40 animate-pulse-slow" style={{ background: RANK_CONFIG[displayRank as keyof typeof RANK_CONFIG]?.color }} />
+            {/* Main Content - Unified Box */}
+            <Card className={`mb-6 overflow-hidden transition-all duration-700 delay-300 ${mounted ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'}`}>
+              <div className="flex flex-col lg:flex-row">
+                {/* Left: Current Rank */}
+                <div className="lg:w-[380px] p-6 flex flex-col items-center lg:border-r border-neutral-800/60">
+                  {/* Rank Badge */}
+                  <div className="relative mt-4">
                     <HexBadge rank={displayRank} level={displayLevel} size="lg" isCurrent />
                   </div>
 
-                  {/* Rank Name with gradient */}
-                  <h3 className="mt-5 text-2xl font-black tracking-wider bg-gradient-to-r from-white via-neutral-200 to-white bg-clip-text text-transparent">
+                  {/* Rank Name */}
+                  <h3 className="mt-5 text-2xl font-black tracking-wider text-white">
                     {displayRank} {['', 'I', 'II', 'III', 'IV'][displayLevel]}
                   </h3>
 
                   {/* Level Diamonds */}
                   <LevelIndicator currentLevel={displayLevel} />
 
-                  {/* Perks - Trojan style */}
-                  <div className="w-full mt-6 space-y-3">
+                  {/* Perks */}
+                  <div className="w-full mt-4 space-y-2">
                     {/* Cashback Perk */}
-                    <div className="flex items-center gap-4 p-4 bg-neutral-900/60 border border-neutral-700/60 rounded-xl hover:border-neutral-600/80 transition-all">
-                      <div className="w-6 h-6 rounded-full bg-emerald-500/20 border border-emerald-500/40 flex items-center justify-center flex-shrink-0">
-                        <FiCheck className="w-3.5 h-3.5 text-emerald-400" />
-                      </div>
-                      <span className="text-white font-semibold text-lg">{cashbackPercent}% Cashback</span>
+                    <div className="flex items-center gap-3 px-4 py-3 bg-neutral-900/40 border border-neutral-800/60 rounded-lg">
+                      <FiCheck className="w-4 h-4 text-emerald-400 flex-shrink-0" />
+                      <span className="text-white font-medium">{cashbackPercent}% Cashback</span>
                     </div>
 
-                    {/* Gold Boost Perk - highlighted */}
-                    <div className="flex items-center justify-between gap-4 p-4 bg-amber-500/10 border border-amber-500/30 rounded-xl hover:border-amber-500/50 transition-all">
-                      <div className="flex items-center gap-4">
-                        <div className="w-6 h-6 rounded-full bg-amber-500/30 border border-amber-500/50 flex items-center justify-center flex-shrink-0">
-                          <FiCheck className="w-3.5 h-3.5 text-amber-400" />
-                        </div>
-                        <span className="text-white font-semibold text-lg">{displayMultiplier}x Gold Boost</span>
+                    {/* Gold Boost Perk - with gold shine accent */}
+                    <div className="relative flex items-center justify-between gap-3 px-4 py-3 rounded-lg overflow-hidden"
+                      style={{
+                        background: 'linear-gradient(90deg, rgba(212, 175, 55, 0.15) 0%, rgba(30, 30, 25, 0.6) 100%)',
+                        border: '1px solid rgba(212, 175, 55, 0.25)'
+                      }}
+                    >
+                      {/* Gold accent bar on left */}
+                      <div className="absolute left-0 top-0 bottom-0 w-1 bg-gradient-to-b from-yellow-400 via-yellow-500 to-yellow-600" />
+                      <div className="flex items-center gap-3 pl-2">
+                        <FiCheck className="w-4 h-4 flex-shrink-0" style={{ color: '#D4AF37' }} />
+                        <span className="text-white font-medium">{displayMultiplier}x Gold Boost</span>
                       </div>
-                      <button className="p-1.5 rounded-full hover:bg-white/5 transition-colors">
-                        <FiExternalLink className="w-4 h-4 text-neutral-400" />
+                      <button className="p-1 rounded hover:bg-white/5 transition-colors">
+                        <FiExternalLink className="w-4 h-4 text-neutral-500" />
                       </button>
                     </div>
                   </div>
@@ -779,101 +790,89 @@ export default function ArenaPage() {
                   {/* Toggle Ranks Button */}
                   <button
                     onClick={() => setShowRanks(!showRanks)}
-                    className="mt-5 w-full py-3.5 bg-gradient-to-r from-neutral-800/80 to-neutral-900/80 hover:from-neutral-700 hover:to-neutral-800 text-white font-semibold rounded-xl transition-all duration-300 border border-neutral-700/50 hover:border-yellow-500/30 flex items-center justify-center gap-2 group"
+                    className="mt-4 w-full py-3 bg-neutral-800/60 hover:bg-neutral-700/60 text-white font-medium rounded-lg transition-all border border-neutral-700/50"
                   >
-                    {showRanks ? (
-                      <>
-                        <FiChevronLeft className="w-4 h-4 group-hover:-translate-x-1 transition-transform" />
-                        Hide All Ranks
-                      </>
-                    ) : (
-                      <>
-                        View All Ranks
-                        <FiChevronRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
-                      </>
-                    )}
+                    {showRanks ? 'Hide Ranks' : 'View All Ranks'}
                   </button>
                 </div>
-              </Card>
 
-              {/* Right: Quests */}
-              <div className="space-y-5">
-                {/* Daily Quests */}
-                <Card className="p-5" hover>
-                  <div className="flex items-center justify-between mb-4">
-                    <div className="flex items-center gap-2">
-                      <div className="w-2 h-2 rounded-full bg-yellow-500 animate-pulse" />
+                {/* Right: Quests */}
+                <div className="flex-1 p-6">
+                  {/* Daily Quests */}
+                  <div className="mb-6">
+                    <div className="flex items-center justify-between mb-4">
                       <h3 className="text-white font-bold">Daily Quests</h3>
+                      <CountdownDisplay hours={countdown.hours} minutes={countdown.minutes} seconds={countdown.seconds} />
                     </div>
-                    <CountdownDisplay hours={countdown.hours} minutes={countdown.minutes} seconds={countdown.seconds} />
+                    <div className="space-y-2">
+                      {dailyQuests.length > 0 ? (
+                        dailyQuests.map((quest: any) => (
+                          <QuestItem
+                            key={quest.id}
+                            quest={quest}
+                            onClaim={handleClaimQuest}
+                            isClaiming={claimingId === quest.id}
+                          />
+                        ))
+                      ) : (
+                        <>
+                          <QuestItem quest={{ id: 1, title: 'Buy a token which is live streaming', goldReward: 200, isCompleted: false }} onClaim={() => {}} isClaiming={false} />
+                          <QuestItem quest={{ id: 2, title: 'Buy a Pump.Fun token pre-migration', goldReward: 200, isCompleted: false }} onClaim={() => {}} isClaiming={false} />
+                          <QuestItem quest={{ id: 3, title: 'Close a position with at least 0.05 SOL profit', goldReward: 200, isCompleted: false }} onClaim={() => {}} isClaiming={false} />
+                        </>
+                      )}
+                    </div>
                   </div>
-                  <div>
-                    {dailyQuests.length > 0 ? (
-                      dailyQuests.map((quest: any) => (
-                        <QuestItem
-                          key={quest.id}
-                          quest={quest}
-                          onClaim={handleClaimQuest}
-                          isClaiming={claimingId === quest.id}
-                        />
-                      ))
-                    ) : (
-                      <>
-                        <QuestItem quest={{ id: 1, title: 'Make a trade', goldReward: 100, isCompleted: false }} onClaim={() => {}} isClaiming={false} />
-                        <QuestItem quest={{ id: 2, title: 'Trade 1 SOL in volume', goldReward: 225, isCompleted: false }} onClaim={() => {}} isClaiming={false} />
-                        <QuestItem quest={{ id: 3, title: 'Buy a new token', goldReward: 175, isCompleted: false }} onClaim={() => {}} isClaiming={false} />
-                      </>
-                    )}
-                  </div>
-                </Card>
 
-                {/* Seasonal Quests */}
-                <Card className="p-5" hover>
-                  <div className="flex items-center gap-2 mb-4">
-                    <div className="w-2 h-2 rounded-full bg-purple-500" />
-                    <h3 className="text-white font-bold">Seasonal Quests</h3>
-                    <span className="ml-auto text-xs text-neutral-500 bg-neutral-800 px-2 py-1 rounded">Q1 2026</span>
-                  </div>
+                  {/* Divider */}
+                  <div className="h-px bg-neutral-800/60 mb-6" />
+
+                  {/* Seasonal Quests */}
                   <div>
-                    {seasonalQuests.length > 0 ? (
-                      seasonalQuests.map((quest: any) => (
-                        <QuestItem
-                          key={quest.id}
-                          quest={quest}
-                          onClaim={handleClaimQuest}
-                          isClaiming={claimingId === quest.id}
-                        />
-                      ))
-                    ) : (
-                      <>
-                        <QuestItem quest={{ id: 4, title: 'Trade 5 SOL', goldReward: 175, isCompleted: false }} onClaim={() => {}} isClaiming={false} />
-                        <QuestItem quest={{ id: 5, title: 'Make 5 trades', goldReward: 100, isCompleted: false }} onClaim={() => {}} isClaiming={false} />
-                        <QuestItem quest={{ id: 6, title: 'Buy 5 different tokens', goldReward: 100, isCompleted: false }} onClaim={() => {}} isClaiming={false} />
-                        <QuestItem quest={{ id: 7, title: 'Claim 10 SOL in rewards', goldReward: 200, isCompleted: false }} onClaim={() => {}} isClaiming={false} />
-                      </>
-                    )}
+                    <div className="flex items-center justify-between mb-4">
+                      <h3 className="text-white font-bold">Seasonal Quests</h3>
+                    </div>
+                    <div className="space-y-2">
+                      {seasonalQuests.length > 0 ? (
+                        seasonalQuests.map((quest: any) => (
+                          <QuestItem
+                            key={quest.id}
+                            quest={quest}
+                            onClaim={handleClaimQuest}
+                            isClaiming={claimingId === quest.id}
+                          />
+                        ))
+                      ) : (
+                        <>
+                          <QuestItem quest={{ id: 4, title: 'Trade 5 SOL', goldReward: 175, isCompleted: false }} onClaim={() => {}} isClaiming={false} />
+                          <QuestItem quest={{ id: 5, title: 'Make 5 trades', goldReward: 100, isCompleted: false }} onClaim={() => {}} isClaiming={false} />
+                          <QuestItem quest={{ id: 6, title: 'Buy 5 different tokens', goldReward: 100, isCompleted: false }} onClaim={() => {}} isClaiming={false} />
+                          <QuestItem quest={{ id: 7, title: 'Claim 10 SOL in rewards', goldReward: 200, isCompleted: false }} onClaim={() => {}} isClaiming={false} />
+                        </>
+                      )}
+                    </div>
                   </div>
-                </Card>
+                </div>
               </div>
-            </div>
+            </Card>
 
             {/* Rank Carousel */}
             {showRanks && (
-              <Card className={`py-6 mb-6 relative overflow-hidden transition-all duration-500 ${mounted ? 'opacity-100' : 'opacity-0'}`}>
+              <Card className={`mb-6 relative overflow-hidden transition-all duration-500 ${mounted ? 'opacity-100' : 'opacity-0'}`}>
                 {/* Gradient edges for scroll indication */}
-                <div className="absolute left-0 top-0 bottom-0 w-16 bg-gradient-to-r from-[#0a0a0a] to-transparent z-10 pointer-events-none" />
-                <div className="absolute right-0 top-0 bottom-0 w-16 bg-gradient-to-l from-[#0a0a0a] to-transparent z-10 pointer-events-none" />
+                <div className="absolute left-0 top-0 bottom-0 w-12 bg-gradient-to-r from-[#0a0a0a] to-transparent z-10 pointer-events-none" />
+                <div className="absolute right-0 top-0 bottom-0 w-12 bg-gradient-to-l from-[#0a0a0a] to-transparent z-10 pointer-events-none" />
 
                 {/* Navigation buttons */}
                 <button
                   onClick={() => scrollCarousel('left')}
-                  className="absolute left-3 top-1/2 -translate-y-1/2 z-20 w-10 h-10 bg-neutral-900/95 hover:bg-neutral-800 border border-neutral-700 rounded-full flex items-center justify-center transition-all duration-200 hover:scale-110 shadow-lg"
+                  className="absolute left-2 top-1/2 -translate-y-1/2 z-20 w-9 h-9 bg-neutral-800/90 hover:bg-neutral-700 border border-neutral-600/50 rounded-full flex items-center justify-center transition-all duration-200"
                 >
                   <FiChevronLeft className="w-5 h-5 text-white" />
                 </button>
                 <button
                   onClick={() => scrollCarousel('right')}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 z-20 w-10 h-10 bg-neutral-900/95 hover:bg-neutral-800 border border-neutral-700 rounded-full flex items-center justify-center transition-all duration-200 hover:scale-110 shadow-lg"
+                  className="absolute right-2 top-1/2 -translate-y-1/2 z-20 w-9 h-9 bg-neutral-800/90 hover:bg-neutral-700 border border-neutral-600/50 rounded-full flex items-center justify-center transition-all duration-200"
                 >
                   <FiChevronRight className="w-5 h-5 text-white" />
                 </button>
@@ -881,12 +880,13 @@ export default function ArenaPage() {
                 {/* Carousel */}
                 <div
                   ref={carouselRef}
-                  className="flex overflow-x-auto gap-1 px-14 pb-2 scrollbar-hide scroll-smooth snap-x snap-mandatory"
+                  className="flex overflow-x-auto px-10 scrollbar-hide scroll-smooth snap-x snap-mandatory"
                   style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
                 >
                   {ALL_RANKS.map((item, idx) => {
                     const isUnlocked = idx <= currentRankIndex;
                     const isCurrent = idx === currentRankIndex;
+                    const isLast = idx === ALL_RANKS.length - 1;
 
                     return (
                       <div key={`${item.rank}-${item.level}`} className="snap-center">
@@ -895,6 +895,7 @@ export default function ArenaPage() {
                           isUnlocked={isUnlocked}
                           isCurrent={isCurrent}
                           userGold={displayGoldEarned}
+                          isLast={isLast}
                         />
                       </div>
                     );
@@ -903,27 +904,33 @@ export default function ArenaPage() {
               </Card>
             )}
 
-            {/* SOL & Gold Rewards - Trojan style */}
+            {/* SOL & Gold Rewards */}
             <div className={`grid grid-cols-1 md:grid-cols-2 gap-6 mb-8 transition-all duration-700 delay-500 ${mounted ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'}`}>
               {/* SOL Rewards */}
-              <Card className="p-6" hover>
+              <Card className="p-6">
                 <div>
-                  {/* Title with gradient */}
-                  <h3 className="text-xl font-bold tracking-wide bg-gradient-to-r from-emerald-400 via-teal-400 to-cyan-400 bg-clip-text text-transparent mb-1">
+                  {/* Title */}
+                  <h3 className="text-2xl font-black tracking-wide bg-gradient-to-r from-emerald-400 via-teal-400 to-cyan-400 bg-clip-text text-transparent mb-1">
                     SOL REWARDS
                   </h3>
                   <p className="text-neutral-500 text-sm mb-5">Earned Through Referrals and Trading Rewards</p>
 
-                  {/* Balance box */}
-                  <div className="flex items-center justify-between p-4 bg-neutral-900/80 border border-neutral-700/50 rounded-xl">
+                  {/* Balance box - green tint */}
+                  <div
+                    className="flex items-center justify-between p-4 rounded-lg"
+                    style={{
+                      background: 'linear-gradient(90deg, rgba(16, 185, 129, 0.08) 0%, rgba(20, 30, 28, 0.8) 100%)',
+                      border: '1px solid rgba(16, 185, 129, 0.15)'
+                    }}
+                  >
                     <div>
-                      <p className="text-neutral-500 text-sm mb-1">Available SOL</p>
+                      <p className="text-neutral-400 text-sm mb-1">Available SOL</p>
                       <div className="flex items-center gap-2">
-                        <SiSolana className="w-5 h-5 text-purple-400" />
+                        <SiSolana className="w-5 h-5 text-emerald-400" />
                         <span className="text-white text-xl font-bold">0</span>
                       </div>
                     </div>
-                    <button className="px-5 py-2 bg-neutral-800 text-neutral-500 rounded-lg border border-neutral-700/50 cursor-not-allowed hover:bg-neutral-750 transition-colors">
+                    <button className="px-5 py-2 bg-emerald-900/40 text-emerald-400/70 rounded-lg border border-emerald-700/30 cursor-not-allowed transition-colors text-sm font-medium">
                       Claim
                     </button>
                   </div>
@@ -931,29 +938,35 @@ export default function ArenaPage() {
               </Card>
 
               {/* Gold Rewards */}
-              <Card className="p-6" hover>
+              <Card className="p-6">
                 <div>
                   {/* Title with badge */}
                   <div className="flex items-center justify-between mb-1">
-                    <h3 className="text-xl font-bold tracking-wide bg-gradient-to-r from-yellow-400 via-amber-400 to-orange-400 bg-clip-text text-transparent">
+                    <h3 className="text-2xl font-black tracking-wide bg-gradient-to-r from-yellow-400 via-amber-400 to-yellow-500 bg-clip-text text-transparent">
                       GOLD REWARDS
                     </h3>
-                    <span className="px-3 py-1 bg-amber-500/10 border border-amber-500/40 text-amber-400 text-xs font-bold rounded-lg">
+                    <span className="px-4 py-1.5 bg-amber-500/15 border border-amber-500/40 text-amber-400 text-sm font-bold rounded-lg">
                       {displayMultiplier}x Gold Boost
                     </span>
                   </div>
                   <p className="text-neutral-500 text-sm mb-5">Earned Through Quests, Rank Ups and more</p>
 
-                  {/* Balance box */}
-                  <div className="flex items-center justify-between p-4 bg-neutral-900/80 border border-neutral-700/50 rounded-xl">
+                  {/* Balance box - gold tint */}
+                  <div
+                    className="flex items-center justify-between p-4 rounded-lg"
+                    style={{
+                      background: 'linear-gradient(90deg, rgba(212, 175, 55, 0.08) 0%, rgba(30, 28, 20, 0.8) 100%)',
+                      border: '1px solid rgba(212, 175, 55, 0.15)'
+                    }}
+                  >
                     <div>
-                      <p className="text-neutral-500 text-sm mb-1">Available Gold</p>
+                      <p className="text-neutral-400 text-sm mb-1">Available Gold</p>
                       <div className="flex items-center gap-2">
-                        <GoldCoin className="w-5 h-5" animate />
+                        <GoldCoin className="w-5 h-5" />
                         <span className="text-white text-xl font-bold">{displayGoldAvailable.toLocaleString()}</span>
                       </div>
                     </div>
-                    <button className="px-5 py-2 bg-neutral-800 text-neutral-500 rounded-lg border border-neutral-700/50 cursor-not-allowed hover:bg-neutral-750 transition-colors">
+                    <button className="px-5 py-2 bg-amber-900/30 text-amber-400/70 rounded-lg border border-amber-700/30 cursor-not-allowed transition-colors text-sm font-medium">
                       Claim
                     </button>
                   </div>
@@ -962,11 +975,12 @@ export default function ArenaPage() {
             </div>
 
             {/* Overview Section */}
-            <div className={`transition-all duration-700 delay-[600ms] ${mounted ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'}`}>
+            <div className={`mb-10 transition-all duration-700 delay-[600ms] ${mounted ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'}`}>
+              {/* Header with dropdown */}
               <div className="flex items-center justify-between mb-4">
                 <h2 className="text-white font-bold text-lg tracking-wide">OVERVIEW</h2>
                 <div className="relative">
-                  <select className="appearance-none bg-neutral-900/80 text-white text-sm pl-4 pr-10 py-2.5 rounded-xl border border-neutral-700/50 focus:border-neutral-600 focus:outline-none transition-colors cursor-pointer">
+                  <select className="appearance-none bg-neutral-900/80 text-white text-sm pl-4 pr-10 py-2 rounded-lg border border-neutral-700/50 focus:outline-none cursor-pointer">
                     <option>Last 7 Days</option>
                     <option>Last 30 Days</option>
                     <option>All Time</option>
@@ -975,71 +989,8 @@ export default function ArenaPage() {
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-10">
-                {/* Leaderboard Preview */}
-                <Card className="p-5" hover>
-                  <div className="flex items-center gap-6 mb-5">
-                    <button className="text-white font-semibold pb-1 text-sm">Gold Leaderboard</button>
-                    <button className="text-neutral-500 pb-1 hover:text-neutral-300 transition-colors text-sm">Quest Leaderboard</button>
-                    <Link href="/leaderboard" className="ml-auto">
-                      <FiExternalLink className="w-4 h-4 text-neutral-500 hover:text-white transition-colors" />
-                    </Link>
-                  </div>
-                  <div className="space-y-2">
-                    {/* Row 1 */}
-                    <div className="flex items-center justify-between py-3 px-4 rounded-xl bg-neutral-900/50 hover:bg-neutral-900/70 transition-colors">
-                      <div className="flex items-center gap-4">
-                        <span className="text-neutral-400 text-sm font-mono">#131065</span>
-                        <span className="text-white text-sm">shy-stir</span>
-                      </div>
-                      <div className="flex items-center gap-3">
-                        <div className="w-7 h-7 rounded-lg bg-amber-500/20 border border-amber-500/30 flex items-center justify-center">
-                          <GiTrophy className="w-4 h-4 text-amber-400" />
-                        </div>
-                        <div className="flex items-center gap-1.5">
-                          <GoldCoin className="w-4 h-4" />
-                          <span className="text-white text-sm font-semibold">1</span>
-                        </div>
-                      </div>
-                    </div>
-                    {/* Row 2 */}
-                    <div className="flex items-center justify-between py-3 px-4 rounded-xl bg-neutral-900/50 hover:bg-neutral-900/70 transition-colors">
-                      <div className="flex items-center gap-4">
-                        <span className="text-neutral-400 text-sm font-mono">#131066</span>
-                        <span className="text-white text-sm">pdfepeee</span>
-                      </div>
-                      <div className="flex items-center gap-3">
-                        <div className="w-7 h-7 rounded-lg bg-amber-500/20 border border-amber-500/30 flex items-center justify-center">
-                          <GiTrophy className="w-4 h-4 text-amber-400" />
-                        </div>
-                        <div className="flex items-center gap-1.5">
-                          <GoldCoin className="w-4 h-4" />
-                          <span className="text-white text-sm font-semibold">1</span>
-                        </div>
-                      </div>
-                    </div>
-                    {/* Your position - highlighted */}
-                    <div className="flex items-center justify-between py-3 px-4 rounded-xl bg-amber-500/10 border border-amber-500/25">
-                      <div className="flex items-center gap-4">
-                        <span className="text-amber-400 text-sm font-mono">#131067</span>
-                        <span className="text-amber-400 text-sm font-semibold">You</span>
-                        <span className="text-neutral-500 text-xs">[{userName}]</span>
-                      </div>
-                      <div className="flex items-center gap-3">
-                        <div className="w-7 h-7 rounded-lg bg-amber-500/20 border border-amber-500/30 flex items-center justify-center">
-                          <GiTrophy className="w-4 h-4 text-amber-400" />
-                        </div>
-                        <div className="flex items-center gap-1.5">
-                          <GoldCoin className="w-4 h-4" animate />
-                          <span className="text-white text-sm font-semibold">{displayGoldEarned}</span>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </Card>
-
-                {/* SOL Rewards Breakdown */}
-                <Card className="p-5" hover>
+              {/* SOL Rewards Breakdown - Full width on large screens */}
+              <Card className="p-5 mb-6">
                   <h3 className="text-white font-bold mb-4 tracking-wide">SOL REWARDS BREAKDOWN</h3>
 
                   {/* Placeholder chart area */}
@@ -1077,8 +1028,190 @@ export default function ArenaPage() {
                       </div>
                     </div>
                   </div>
-                </Card>
-              </div>
+              </Card>
+
+              {/* Leaderboard - Full width */}
+              <Card className="p-5">
+                {/* Tabs header */}
+                <div className="flex items-center gap-6 mb-5">
+                  <button
+                    onClick={() => setLeaderboardTab('gold')}
+                    className={`text-base font-bold transition-colors ${leaderboardTab === 'gold' ? 'text-white' : 'text-neutral-500 hover:text-neutral-300'}`}
+                  >
+                    Gold Leaderboard
+                  </button>
+                  <button
+                    onClick={() => setLeaderboardTab('quest')}
+                    className={`text-base transition-colors ${leaderboardTab === 'quest' ? 'text-white font-bold' : 'text-neutral-500 hover:text-neutral-300'}`}
+                  >
+                    Quest Leaderboard
+                  </button>
+                  <Link href="/leaderboard" className="ml-auto">
+                    <FiExternalLink className="w-4 h-4 text-neutral-500 hover:text-white transition-colors" />
+                  </Link>
+                </div>
+
+                {/* Leaderboard rows */}
+                <div className="space-y-0">
+                  {/* Row 1 */}
+                  <div className="flex items-center justify-between py-3 px-2">
+                    <div className="flex items-center gap-4">
+                      <span className="text-neutral-500 text-sm font-medium w-14">#1997</span>
+                      <span className="text-white text-sm">{leaderboardTab === 'gold' ? 'deneme' : 'Tego'}</span>
+                    </div>
+                    <div className="flex items-center gap-6">
+                      {/* Mini badge */}
+                      <div className="w-6 h-7 flex items-center justify-center"
+                        style={{
+                          clipPath: 'polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%)',
+                          background: 'linear-gradient(180deg, #8B735550 0%, #8B735520 100%)',
+                        }}
+                      >
+                        <GiSwordman className="w-3 h-3 text-[#8B7355]" />
+                      </div>
+                      <div className="flex items-center gap-1.5 w-20 justify-end">
+                        {leaderboardTab === 'gold' ? (
+                          <>
+                            <GoldCoin className="w-4 h-4" />
+                            <span className="text-white text-sm font-medium">10,378</span>
+                          </>
+                        ) : (
+                          <>
+                            <IoRocketSharp className="w-4 h-4 text-orange-400" />
+                            <span className="text-white text-sm font-medium">13</span>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                  {/* Row 2 */}
+                  <div className="flex items-center justify-between py-3 px-2">
+                    <div className="flex items-center gap-4">
+                      <span className="text-neutral-500 text-sm font-medium w-14">#1998</span>
+                      <span className="text-white text-sm">{leaderboardTab === 'gold' ? 'chief-juice' : 'biting-guide'}</span>
+                    </div>
+                    <div className="flex items-center gap-6">
+                      <div className="w-6 h-7 flex items-center justify-center"
+                        style={{
+                          clipPath: 'polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%)',
+                          background: 'linear-gradient(180deg, #8B735550 0%, #8B735520 100%)',
+                        }}
+                      >
+                        <GiSwordman className="w-3 h-3 text-[#8B7355]" />
+                      </div>
+                      <div className="flex items-center gap-1.5 w-20 justify-end">
+                        {leaderboardTab === 'gold' ? (
+                          <>
+                            <GoldCoin className="w-4 h-4" />
+                            <span className="text-white text-sm font-medium">10,377</span>
+                          </>
+                        ) : (
+                          <>
+                            <IoRocketSharp className="w-4 h-4 text-orange-400" />
+                            <span className="text-white text-sm font-medium">13</span>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                  {/* Row 3 */}
+                  <div className="flex items-center justify-between py-3 px-2">
+                    <div className="flex items-center gap-4">
+                      <span className="text-neutral-500 text-sm font-medium w-14">#1999</span>
+                      <span className="text-white text-sm">{leaderboardTab === 'gold' ? 'amused-shop' : 'ftyjftj'}</span>
+                    </div>
+                    <div className="flex items-center gap-6">
+                      <div className="w-6 h-7 flex items-center justify-center"
+                        style={{
+                          clipPath: 'polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%)',
+                          background: 'linear-gradient(180deg, #8B735550 0%, #8B735520 100%)',
+                        }}
+                      >
+                        <GiSwordman className="w-3 h-3 text-[#8B7355]" />
+                      </div>
+                      <div className="flex items-center gap-1.5 w-20 justify-end">
+                        {leaderboardTab === 'gold' ? (
+                          <>
+                            <GoldCoin className="w-4 h-4" />
+                            <span className="text-white text-sm font-medium">10,371</span>
+                          </>
+                        ) : (
+                          <>
+                            <IoRocketSharp className="w-4 h-4 text-orange-400" />
+                            <span className="text-white text-sm font-medium">13</span>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                  {/* Row 4 */}
+                  <div className="flex items-center justify-between py-3 px-2">
+                    <div className="flex items-center gap-4">
+                      <span className="text-neutral-500 text-sm font-medium w-14">#2000</span>
+                      <span className="text-white text-sm">{leaderboardTab === 'gold' ? 'TajlorAMT' : 'suptempo'}</span>
+                    </div>
+                    <div className="flex items-center gap-6">
+                      <div className="w-6 h-7 flex items-center justify-center"
+                        style={{
+                          clipPath: 'polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%)',
+                          background: 'linear-gradient(180deg, #8B735550 0%, #8B735520 100%)',
+                        }}
+                      >
+                        <GiSwordman className="w-3 h-3 text-[#8B7355]" />
+                      </div>
+                      <div className="flex items-center gap-1.5 w-20 justify-end">
+                        {leaderboardTab === 'gold' ? (
+                          <>
+                            <GoldCoin className="w-4 h-4" />
+                            <span className="text-white text-sm font-medium">10,371</span>
+                          </>
+                        ) : (
+                          <>
+                            <IoRocketSharp className="w-4 h-4 text-orange-400" />
+                            <span className="text-white text-sm font-medium">13</span>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                  {/* Your position - highlighted green */}
+                  <div className="flex items-center justify-between py-3 px-2 rounded-lg mt-1"
+                    style={{
+                      background: 'linear-gradient(90deg, rgba(16, 185, 129, 0.1) 0%, transparent 100%)',
+                      borderLeft: '2px solid rgba(16, 185, 129, 0.6)'
+                    }}
+                  >
+                    <div className="flex items-center gap-4">
+                      <span className="text-emerald-400 text-sm font-medium w-14">#2001</span>
+                      <span className="text-emerald-400 text-sm font-medium">You</span>
+                      <span className="text-neutral-500 text-sm">({userName})</span>
+                    </div>
+                    <div className="flex items-center gap-6">
+                      <div className="w-6 h-7 flex items-center justify-center"
+                        style={{
+                          clipPath: 'polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%)',
+                          background: 'linear-gradient(180deg, #8B735550 0%, #8B735520 100%)',
+                        }}
+                      >
+                        <GiSwordman className="w-3 h-3 text-[#8B7355]" />
+                      </div>
+                      <div className="flex items-center gap-1.5 w-20 justify-end">
+                        {leaderboardTab === 'gold' ? (
+                          <>
+                            <GoldCoin className="w-4 h-4" />
+                            <span className="text-white text-sm font-medium">{displayGoldEarned}</span>
+                          </>
+                        ) : (
+                          <>
+                            <IoRocketSharp className="w-4 h-4 text-orange-400" />
+                            <span className="text-white text-sm font-medium">0</span>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </Card>
             </div>
 
             {/* FAQs - keeping existing */}
@@ -1100,7 +1233,7 @@ export default function ArenaPage() {
             {/* Navigation Links */}
             <div className={`grid grid-cols-1 md:grid-cols-3 gap-4 transition-all duration-700 delay-[800ms] ${mounted ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'}`}>
               <Link href="/leaderboard" className="block group">
-                <Card className="p-5" hover glowColor="yellow">
+                <Card className="p-5">
                   <div className="flex items-center gap-4">
                     <div className="w-12 h-12 bg-yellow-500/10 border border-yellow-500/20 rounded-xl flex items-center justify-center group-hover:scale-110 transition-transform">
                       <GiTrophy className="w-6 h-6 text-yellow-500" />
@@ -1114,7 +1247,7 @@ export default function ArenaPage() {
                 </Card>
               </Link>
               <Link href="/referrals" className="block group">
-                <Card className="p-5" hover glowColor="emerald">
+                <Card className="p-5">
                   <div className="flex items-center gap-4">
                     <div className="w-12 h-12 bg-emerald-500/10 border border-emerald-500/20 rounded-xl flex items-center justify-center group-hover:scale-110 transition-transform">
                       <GiCoins className="w-6 h-6 text-emerald-500" />
@@ -1128,7 +1261,7 @@ export default function ArenaPage() {
                 </Card>
               </Link>
               <Link href="/arena/rewards" className="block group">
-                <Card className="p-5" hover glowColor="purple">
+                <Card className="p-5">
                   <div className="flex items-center gap-4">
                     <div className="w-12 h-12 bg-purple-500/10 border border-purple-500/20 rounded-xl flex items-center justify-center group-hover:scale-110 transition-transform">
                       <SiSolana className="w-6 h-6 text-purple-500" />
@@ -1142,9 +1275,13 @@ export default function ArenaPage() {
                 </Card>
               </Link>
             </div>
-          </main>
+            </main>
 
-          <Footer />
+            {/* Footer inside the rounded container */}
+            <div className="relative z-10">
+              <Footer />
+            </div>
+          </div>
         </div>
       </div>
 
