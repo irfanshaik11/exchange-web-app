@@ -35,7 +35,8 @@ import toast from "react-hot-toast";
 import { FaCheckCircle } from "react-icons/fa";
 import dynamic from "next/dynamic";
 import InterstateButton from "./InterstateButton";
-import { FiBarChart, FiChevronDown, FiStar } from "react-icons/fi";
+import { FiBarChart, FiChevronDown, FiStar, FiUsers, FiGrid } from "react-icons/fi";
+import { GiTrophy } from "react-icons/gi";
 import SearchModal from "./SearchModal";
 import BlockchainSwitcher from "./BlockchainSwitcher";
 import UpdatesModal from "./UpdatesModal";
@@ -96,7 +97,14 @@ const navLinks = [
   // { name: "Predictions", href: "/predictions" },
   // { name: "Perpetuals", href: "/construction" },
   // { name: "Yield", href: "/construction" },
-  { name: "Referral", href: "/rewards" },
+];
+
+// Arena dropdown menu items
+const arenaMenuItems = [
+  { name: "ARENA", href: "/arena", icon: "trophy" },
+  { name: "REFERRALS", href: "/referrals", icon: "users" },
+  { name: "LEADERBOARD", href: "/leaderboard", icon: "chart" },
+  { name: "JACKPOT", href: "/construction", icon: "grid", comingSoon: true },
 ];
 
 interface HeaderProps {
@@ -247,6 +255,37 @@ export default function Header({
   isSticky = true,
 }: HeaderProps) {
   const [headerBarVisible, setHeaderBarVisible] = useState(true);
+  const [arenaDropdownOpen, setArenaDropdownOpen] = useState(false);
+  const [arenaDropdownPos, setArenaDropdownPos] = useState({ top: 0, left: 0 });
+  const arenaDropdownRef = useRef<HTMLDivElement>(null);
+  const arenaButtonRef = useRef<HTMLButtonElement>(null);
+
+  // Close arena dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (
+        arenaDropdownRef.current &&
+        !arenaDropdownRef.current.contains(event.target as Node) &&
+        arenaButtonRef.current &&
+        !arenaButtonRef.current.contains(event.target as Node)
+      ) {
+        setArenaDropdownOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  // Update dropdown position when opening
+  useEffect(() => {
+    if (arenaDropdownOpen && arenaButtonRef.current) {
+      const rect = arenaButtonRef.current.getBoundingClientRect();
+      setArenaDropdownPos({
+        top: rect.bottom + 8,
+        left: rect.left,
+      });
+    }
+  }, [arenaDropdownOpen]);
 
   // Check for header bar visibility on mount and when body class changes
   useEffect(() => {
@@ -1348,6 +1387,35 @@ export default function Header({
             </div>
           </div>
           <div className="flex min-w-0 flex-shrink-0 items-center gap-1.5 sm:gap-2 md:gap-3 lg:gap-4">
+            {/* Arena Dropdown Button */}
+            <button
+              ref={arenaButtonRef}
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                setArenaDropdownOpen(!arenaDropdownOpen);
+              }}
+              className="flex h-10 items-center gap-2 rounded-lg px-4 text-sm font-bold transition-all duration-200"
+              style={{
+                background: "#0d0d0d",
+                border: "1px solid #f5c518",
+                color: "#f5c518",
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.background = "#1a1a1a";
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.background = "#0d0d0d";
+              }}
+            >
+              <GiTrophy size={18} />
+              <span>ARENA</span>
+              <FaChevronDown
+                size={10}
+                className={`transition-transform duration-200 ${arenaDropdownOpen ? "rotate-180" : ""}`}
+              />
+            </button>
+
             {showSearch && (
               <div className="flex items-center gap-1 sm:gap-1.5 md:gap-2">
                 {/* Smaller search button (desktop) */}
@@ -2709,6 +2777,75 @@ export default function Header({
           updates={PLATFORM_UPDATES}
           storageKey={isFirstLogin ? "" : "header-updates-viewed"}
         />
+      )}
+
+      {/* Arena Dropdown Menu - Fixed position to escape overflow:hidden */}
+      {arenaDropdownOpen && (
+        <div
+          ref={arenaDropdownRef}
+          className="fixed min-w-[220px] rounded-2xl py-2 shadow-2xl"
+          style={{
+            top: arenaDropdownPos.top,
+            left: arenaDropdownPos.left,
+            background: "linear-gradient(180deg, #1e1e1e 0%, #141414 100%)",
+            border: "1px solid rgba(255, 255, 255, 0.08)",
+            boxShadow: "0 10px 40px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(255, 255, 255, 0.05) inset",
+            zIndex: 99999,
+          }}
+        >
+          {arenaMenuItems.map((item) => {
+            const isActive = router.pathname === item.href ||
+              (item.href === "/arena" && router.pathname.startsWith("/arena"));
+            return (
+              <Link
+                key={item.name}
+                href={item.href}
+                onClick={() => setArenaDropdownOpen(false)}
+                className="flex items-center gap-4 mx-2 px-4 py-3 text-sm font-semibold transition-all duration-150 rounded-lg"
+                style={{
+                  color: isActive ? "#f5c518" : (item as any).comingSoon ? "#555" : "#8a8a8a",
+                  opacity: (item as any).comingSoon ? 0.6 : 1,
+                }}
+                onMouseEnter={(e) => {
+                  if (!(item as any).comingSoon) {
+                    e.currentTarget.style.backgroundColor = "rgba(245, 197, 24, 0.1)";
+                    e.currentTarget.style.color = "#f5c518";
+                  }
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.backgroundColor = "transparent";
+                  if (!isActive && !(item as any).comingSoon) {
+                    e.currentTarget.style.color = "#8a8a8a";
+                  } else if ((item as any).comingSoon) {
+                    e.currentTarget.style.color = "#555";
+                  } else {
+                    e.currentTarget.style.color = "#f5c518";
+                  }
+                }}
+              >
+                <span style={{
+                  opacity: isActive ? 1 : 0.7,
+                  filter: isActive ? "drop-shadow(0 0 4px rgba(245, 197, 24, 0.5))" : "none"
+                }}>
+                  {item.icon === "trophy" && <GiTrophy size={18} />}
+                  {item.icon === "grid" && <FiGrid size={18} />}
+                  {item.icon === "users" && <FiUsers size={18} />}
+                  {item.icon === "chart" && <FiBarChart size={18} />}
+                </span>
+                <div className="flex flex-col">
+                  <span style={{
+                    textShadow: isActive ? "0 0 8px rgba(245, 197, 24, 0.4)" : "none"
+                  }}>
+                    {item.name}
+                  </span>
+                  {(item as any).comingSoon && (
+                    <span className="text-[10px] text-neutral-500 font-normal">Under Construction</span>
+                  )}
+                </div>
+              </Link>
+            );
+          })}
+        </div>
       )}
     </>
   );
