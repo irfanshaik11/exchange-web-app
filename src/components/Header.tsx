@@ -40,7 +40,9 @@ import { GiTrophy } from "react-icons/gi";
 import SearchModal from "./SearchModal";
 import BlockchainSwitcher from "./BlockchainSwitcher";
 import UpdatesModal from "./UpdatesModal";
+import UsernameEditModal from "./UsernameEditModal";
 import NotificationDropdown from "./NotificationDropdown";
+import { useReferralStats } from "~/hooks/useArena";
 import type { Timeframe } from "../pages/index";
 import { CiBellOn, CiStar } from "react-icons/ci";
 
@@ -331,6 +333,11 @@ export default function Header({
     selectedWalletIds,
     logout,
   } = useUser();
+
+  // Get referral stats for Honors badge display
+  const { data: referralStats } = useReferralStats();
+  const honorsLevel = referralStats?.honorsLevel || 1;
+
   // Get chain from URL first, then localStorage, then default to solana
   const currentChain = (() => {
     if (router.query.chain) {
@@ -458,8 +465,16 @@ export default function Header({
   }, [watchlist, refreshWatchlistToken]);
 
   // Memoize enriched watchlist to avoid recalculating on every render
+  // Also deduplicate by pair_address/mint to prevent showing duplicate tokens
   const enrichedWatchlist = useMemo(() => {
-    return watchlist.map(enrichTokenWithCachedData);
+    const enriched = watchlist.map(enrichTokenWithCachedData);
+    const seen = new Set<string>();
+    return enriched.filter((token) => {
+      const tokenId = token.pair_address || (token as any).mint || '';
+      if (!tokenId || seen.has(tokenId)) return false;
+      seen.add(tokenId);
+      return true;
+    });
   }, [watchlist, enrichTokenWithCachedData]);
   
   const watchlistTickerTotalPages = Math.max(
@@ -523,6 +538,7 @@ export default function Header({
   const [profileMenuOpen, setProfileMenuOpen] = useState(false);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [showUpdatesModal, setShowUpdatesModal] = useState(false);
+  const [showUsernameModal, setShowUsernameModal] = useState(false);
   const [isFirstLogin, setIsFirstLogin] = useState(false);
   const [showLeftArrow, setShowLeftArrow] = useState(false);
   const [showRightArrow, setShowRightArrow] = useState(false);
@@ -1707,8 +1723,12 @@ export default function Header({
                   }}
                   title="Click to view account & wallet"
                 >
-                  <div className="hidden h-8 w-8 items-center justify-center rounded-[125px] bg-emerald-400 text-xs font-bold text-black select-none sm:flex">
-                    {user.name ? user.name.charAt(0).toUpperCase() : "U"}
+                  <div className="hidden h-8 w-8 items-center justify-center select-none sm:flex">
+                    <img
+                      src={`/ranks/degen-${Math.max(1, Math.min(4, honorsLevel))}.png`}
+                      alt={`Honors ${honorsLevel}`}
+                      className="w-8 h-8 object-contain"
+                    />
                   </div>
                   <div className="items-left flex flex-col gap-0 text-left">
                     <div className="flex items-center gap-1 text-sm text-white">
@@ -1770,11 +1790,12 @@ export default function Header({
                         className="mb-3 flex items-center gap-2 border-b pb-3"
                         style={{ borderColor: "#20232b" }}
                       >
-                        <div
-                          className="flex h-6 w-6 items-center justify-center rounded-md text-xs font-bold text-[#f0f5f5] select-none"
-                          style={{ backgroundColor: AX.mint }}
-                        >
-                          {user.name ? user.name.charAt(0).toUpperCase() : "U"}
+                        <div className="flex h-6 w-6 items-center justify-center select-none">
+                          <img
+                            src={`/ranks/degen-${Math.max(1, Math.min(4, honorsLevel))}.png`}
+                            alt={`Honors ${honorsLevel}`}
+                            className="w-6 h-6 object-contain"
+                          />
                         </div>
                         <div className="min-w-0 flex-1">
                           <div className="truncate text-sm font-semibold text-[#f0f5f5]">
@@ -2094,6 +2115,43 @@ export default function Header({
                         Feature Updates
                       </button>
 
+                      {/* Edit Username Button */}
+                      <button
+                        onClick={() => {
+                          setProfileMenuOpen(false);
+                          setShowUsernameModal(true);
+                        }}
+                        className="flex w-full items-center gap-2 rounded-lg bg-transparent px-3 py-2 text-sm font-medium transition-all duration-200"
+                        style={{
+                          color: AX.text,
+                        }}
+                        onMouseEnter={(e) => {
+                          e.currentTarget.style.backgroundColor =
+                            "rgba(24, 196, 140, 0.1)";
+                          e.currentTarget.style.color = AX.mint;
+                        }}
+                        onMouseLeave={(e) => {
+                          e.currentTarget.style.backgroundColor =
+                            "transparent";
+                          e.currentTarget.style.color = AX.text;
+                        }}
+                      >
+                        <svg
+                          className="h-4 w-4"
+                          fill="none"
+                          stroke="currentColor"
+                          viewBox="0 0 24 24"
+                        >
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            strokeWidth={2}
+                            d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"
+                          />
+                        </svg>
+                        Edit Username
+                      </button>
+
                       {/* Logout Button */}
                       <button
                         onClick={() => {
@@ -2286,29 +2344,17 @@ export default function Header({
               </div>
             )}
 
-            {/* Watchlist Tokens Ticker */}
-            {watchlistTickerTotalPages > 1 && (
-              <button
-                className="flex items-center justify-center transition-all duration-200"
-                style={{
-                  color: watchlistTickerCanPrev ? AX.muted : "rgba(199, 201, 209, 0.35)",
-                  opacity: watchlistTickerCanPrev ? 1 : 0.6,
-                  cursor: watchlistTickerCanPrev ? "pointer" : "not-allowed",
-                }}
-                disabled={!watchlistTickerCanPrev}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  if (watchlistTickerCanPrev) {
-                    setWatchlistTickerPage((p) => Math.max(0, p - 1));
-                  }
-                }}
-                title="Previous"
-              >
-                <FaChevronLeft size={12} />
-              </button>
-            )}
-
-            {watchlistTickerVisible.map((token) => {
+            {/* Watchlist Tokens Ticker - Scrollable Container (uses full available panel width) */}
+            {enrichedWatchlist.length > 0 && (
+            <div
+              className="flex-1 flex items-center gap-3 overflow-x-auto scrollbar-hide px-1"
+              style={{
+                minWidth: 0, // Allow flex item to shrink below content size for proper scrolling
+                scrollbarWidth: 'none', // Firefox
+                msOverflowStyle: 'none', // IE/Edge
+              }}
+            >
+            {enrichedWatchlist.map((token, index) => {
               const tokenKey = token.pair_address || (token as any).mint || token.symbol;
               const tokenAddress = token.pair_address || (token as any).mint || '';
               // Use helper function to get correctly mapped price and price change
@@ -2402,7 +2448,12 @@ export default function Header({
               return (
                 <div
                   key={tokenKey}
-                  className="flex items-center gap-1.5 cursor-pointer transition-all duration-200"
+                  className="flex items-center gap-1.5 cursor-pointer transition-all duration-200 shrink-0 px-2 py-1 rounded-md hover:bg-white/5"
+                  style={{
+                    borderRight: index < enrichedWatchlist.length - 1 ? `1px solid ${AX.border}` : 'none',
+                    paddingRight: index < enrichedWatchlist.length - 1 ? '12px' : '8px',
+                    marginRight: index < enrichedWatchlist.length - 1 ? '4px' : '0',
+                  }}
                   onMouseEnter={() => setHoveredWatchlistToken(tokenKey)}
                   onMouseLeave={() => setHoveredWatchlistToken(null)}
                   onClick={() => {
@@ -2572,28 +2623,7 @@ export default function Header({
                 </div>
               );
             })}
-
-            {watchlistTickerTotalPages > 1 && (
-              <button
-                className="flex items-center justify-center transition-all duration-200"
-                style={{
-                  color: watchlistTickerCanNext ? AX.muted : "rgba(199, 201, 209, 0.35)",
-                  opacity: watchlistTickerCanNext ? 1 : 0.6,
-                  cursor: watchlistTickerCanNext ? "pointer" : "not-allowed",
-                }}
-                disabled={!watchlistTickerCanNext}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  if (watchlistTickerCanNext) {
-                    setWatchlistTickerPage((p) =>
-                      Math.min(watchlistTickerTotalPages - 1, p + 1),
-                    );
-                  }
-                }}
-                title="Next"
-              >
-                <FaChevronRight size={12} />
-              </button>
+            </div>
             )}
 
             <div className="h-4 border-r" style={{ borderColor: AX.border }}>
@@ -2801,6 +2831,16 @@ export default function Header({
           storageKey={isFirstLogin ? "" : "header-updates-viewed"}
         />
       )}
+
+      {/* Username Edit Modal */}
+      <UsernameEditModal
+        isOpen={showUsernameModal}
+        onClose={() => setShowUsernameModal(false)}
+        currentUsername={user?.name || null}
+        onSuccess={() => {
+          // User context will be refreshed by the modal
+        }}
+      />
 
       {/* Arena Dropdown Menu - Fixed position with smooth animation */}
       <div

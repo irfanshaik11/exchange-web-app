@@ -142,39 +142,53 @@ export interface UserPosition {
 }
 
 export interface ReferralStats {
+  // Referral counts by tier
   directReferrals: number;
   tier1Referrals: number;
   tier2Referrals: number;
   tier3Referrals: number;
   tier4Referrals: number;
+  totalReferrals: number;
+
+  // Volume
   totalReferralVolume: number;
+
+  // Rewards
   pendingSolRewards: number;
   claimedSolRewards: number;
+  totalEarnedRewards: number;
+
+  // Honors
   honorsLevel: number;
-  referralCode: string;
+  honorsName: string;
+  nextHonorsLevel: number | null;
+  nextHonorsRequirement: number | null;
+  tradersToNextTier: number | null;
+
+  // Referral info
+  referralCode: string | null;
   referralLink: string;
-  honorsInfo: {
-    currentLevel: number;
-    totalRevShare: number;
-    layers: Array<{ layer: string; percentage: number }>;
-    nextLevel: number | null;
-    progressToNext: {
-      referralCount: { current: number; target: number; percentage: number };
-      referralVolume: { current: number; target: number; percentage: number };
-    } | null;
+
+  // Active traders count (for Honors progression)
+  activeTradersCount: number;
+
+  // Fee discount based on Honors level
+  feeDiscount?: {
+    baseFeePercent: number;      // 1%
+    effectiveFeePercent: number; // e.g., 0.7% for Honors IV
+    discountPercent: number;     // e.g., 30% discount
   };
 }
 
 export interface DirectReferral {
   id: number;
   name: string;
+  username: string | null;
   email: string;
-  rank: RankName;
-  rankLevel: number;
   totalVolume: number;
   joinedAt: string;
-  hasCompletedFirstTrade: boolean;
-  status: string;
+  hasTraded: boolean;
+  tradeCount: number;
 }
 
 // ============================================================
@@ -263,7 +277,7 @@ export async function getCashbackSummary(bearerToken: string): Promise<CashbackS
 
 export async function claimCashback(
   bearerToken: string
-): Promise<{ amountClaimed: number; message: string }> {
+): Promise<{ success: boolean; amountClaimed: number; txSignature?: string; message: string }> {
   return fetchWithAuth('/api/arena/cashback/claim', bearerToken, {
     method: 'POST',
   });
@@ -375,33 +389,86 @@ export async function getLeaderboardCountdown(
 }
 
 // ============================================================
-// REFERRALS
+// REFERRALS (5-Layer Referral System)
 // ============================================================
 
+/**
+ * Get comprehensive referral statistics including:
+ * - Tier counts (direct + 4 layers)
+ * - Volume from all referrals
+ * - Pending and claimed SOL rewards
+ * - Honors level and progression
+ */
 export async function getReferralStats(bearerToken: string): Promise<ReferralStats> {
   return fetchWithAuth<ReferralStats>('/api/referrals/stats', bearerToken);
 }
 
+/**
+ * Get list of direct referrals with search and pagination
+ */
 export async function getDirectReferrals(
   bearerToken: string,
-  options: { limit?: number; offset?: number } = {}
-): Promise<{ referrals: DirectReferral[]; total: number }> {
+  options: { limit?: number; offset?: number; search?: string } = {}
+): Promise<{ referrals: DirectReferral[]; total: number; hasMore: boolean }> {
   const params = new URLSearchParams();
   if (options.limit) params.set('limit', options.limit.toString());
   if (options.offset) params.set('offset', options.offset.toString());
+  if (options.search) params.set('search', options.search);
 
   const queryString = params.toString() ? `?${params.toString()}` : '';
   return fetchWithAuth(`/api/referrals/direct${queryString}`, bearerToken);
 }
 
+export interface AllReferral {
+  id: number;
+  name: string;
+  username: string | null;
+  email: string;
+  tier: number;
+  tierLabel: string;
+  totalVolume: number;
+  joinedAt: string;
+  hasTraded: boolean;
+  tradeCount: number;
+}
+
+/**
+ * Get all referrals across all tiers with their tier information
+ */
+export async function getAllReferrals(
+  bearerToken: string,
+  options: { limit?: number; offset?: number; search?: string } = {}
+): Promise<{ referrals: AllReferral[]; total: number; hasMore: boolean }> {
+  const params = new URLSearchParams();
+  if (options.limit) params.set('limit', options.limit.toString());
+  if (options.offset) params.set('offset', options.offset.toString());
+  if (options.search) params.set('search', options.search);
+
+  const queryString = params.toString() ? `?${params.toString()}` : '';
+  return fetchWithAuth(`/api/referrals/all${queryString}`, bearerToken);
+}
+
+/**
+ * Claim pending SOL rewards from referrals
+ * Returns transaction signature on success for Solscan link
+ */
 export async function claimReferralRewards(
   bearerToken: string
-): Promise<{ amountClaimed: number; message: string }> {
-  return fetchWithAuth('/api/referrals/rewards/claim', bearerToken, {
+): Promise<{
+  success: boolean;
+  amountClaimed: number;
+  message: string;
+  txSignature?: string;
+  cooldownRemaining?: number; // Seconds until next claim allowed
+}> {
+  return fetchWithAuth('/api/referrals/claim', bearerToken, {
     method: 'POST',
   });
 }
 
+/**
+ * Apply a referral code (for users who signed up without one)
+ */
 export async function applyReferralCode(
   bearerToken: string,
   code: string
@@ -412,23 +479,101 @@ export async function applyReferralCode(
   });
 }
 
-export async function getHonorsInfo(
-  bearerToken: string
-): Promise<{
+/**
+ * Get Honors tier information and progression
+ */
+export interface HonorsInfo {
   currentLevel: number;
-  currentTier: { totalRevShare: number; layers: Array<{ layer: string; percentage: number }> };
-  nextLevel: number | null;
-  nextTier: { totalRevShare: number; layers: Array<{ layer: string; percentage: number }> } | null;
-  progressToNext: {
-    referralCount: { current: number; target: number; percentage: number };
-    referralVolume: { current: number; target: number; percentage: number };
-  } | null;
+  currentName: string;
+  currentRequirement: number;
+  revSharePercentages: {
+    direct: number;
+    tier1: number;
+    tier2: number;
+    tier3: number;
+    tier4: number;
+  };
+  totalRevShare: number;
+  activeTradersCount: number;
+  tradersToNextTier: number | null;
+  nextTierRequirement: number | null;
   allTiers: Array<{
     level: number;
+    name: string;
+    requirement: number;
+    revSharePercentages: {
+      direct: number;
+      tier1: number;
+      tier2: number;
+      tier3: number;
+      tier4: number;
+    };
     totalRevShare: number;
-    layers: Array<{ layer: string; percentage: number }>;
     isUnlocked: boolean;
+    isCurrent: boolean;
   }>;
-}> {
-  return fetchWithAuth('/api/referrals/honors', bearerToken);
+}
+
+export async function getHonorsInfo(bearerToken: string): Promise<HonorsInfo> {
+  return fetchWithAuth<HonorsInfo>('/api/referrals/honors', bearerToken);
+}
+
+/**
+ * Get referral reward history
+ */
+export interface ReferralReward {
+  id: number;
+  layer: number;
+  percentage: number;
+  amount: number;
+  amountUsd: number;
+  tradeValueUsd: number | null;
+  traderId: number;
+  traderName: string;
+  createdAt: string;
+}
+
+export async function getRewardHistory(
+  bearerToken: string,
+  options: { limit?: number; offset?: number } = {}
+): Promise<{ rewards: ReferralReward[]; total: number; hasMore: boolean }> {
+  const params = new URLSearchParams();
+  if (options.limit) params.set('limit', options.limit.toString());
+  if (options.offset) params.set('offset', options.offset.toString());
+
+  const queryString = params.toString() ? `?${params.toString()}` : '';
+  return fetchWithAuth(`/api/referrals/rewards${queryString}`, bearerToken);
+}
+
+/**
+ * Get referral quests progress
+ */
+export interface ReferralQuest {
+  id: string;
+  type: 'RANK_UP' | 'INFO';
+  title: string;
+  description: string;
+  progress: number;
+  target: number;
+  reward?: {
+    type: string;
+    value: number;
+    description: string;
+  };
+  isComplete: boolean;
+}
+
+export async function getReferralQuests(
+  bearerToken: string
+): Promise<{ quests: ReferralQuest[]; currentHonorsLevel: number; currentHonorsName: string; totalRevShare: number }> {
+  return fetchWithAuth('/api/referrals/quests', bearerToken);
+}
+
+/**
+ * Get referral tree structure for visualization
+ */
+export async function getReferralTree(
+  bearerToken: string
+): Promise<{ directReferrals: any[]; tierCounts: number[]; totalCount: number }> {
+  return fetchWithAuth('/api/referrals/tree', bearerToken);
 }

@@ -20,31 +20,58 @@ import { IoRocketSharp } from 'react-icons/io5';
 type LeaderboardType = 'gold' | 'quests';
 type LeaderboardPeriod = 'DAILY' | 'MONTHLY' | 'LIFETIME';
 
-// Space background - same as arena
-const SpaceBackground = () => (
-  <div className="fixed inset-0 overflow-hidden pointer-events-none">
+// Space background - contained within rounded container (matching Arena)
+const SpaceBackgroundContained = () => (
+  <div className="absolute inset-0 overflow-hidden pointer-events-none rounded-2xl">
+    {/* Main background image - future.png */}
     <div
-      className="absolute inset-x-0 top-0 h-[70vh] bg-cover bg-top bg-no-repeat"
-      style={{ backgroundImage: 'url(https://wallpapercave.com/wp/wp8955056.jpg)' }}
+      className="absolute inset-x-0 top-0 h-[80vh] bg-cover bg-top bg-no-repeat"
+      style={{ backgroundImage: 'url(/future.png)' }}
     />
-    <div className="absolute inset-0 bg-black/50" />
-    <div className="absolute inset-0 bg-gradient-to-b from-transparent via-black/70 to-black" />
-    <div className="absolute inset-x-0 top-1/3 bottom-0 bg-gradient-to-b from-transparent to-black" />
+    {/* Subtle dark overlay */}
+    <div className="absolute inset-0 bg-black/30" />
+    {/* Multi-layer gradual fade for smooth transition */}
+    <div
+      className="absolute inset-0"
+      style={{
+        background: 'linear-gradient(to bottom, transparent 0%, transparent 20%, rgba(0,0,0,0.1) 30%, rgba(0,0,0,0.3) 45%, rgba(0,0,0,0.6) 60%, rgba(0,0,0,0.85) 75%, black 90%)'
+      }}
+    />
+    {/* Extra smooth fade layer */}
+    <div
+      className="absolute inset-x-0 top-1/4 bottom-0"
+      style={{
+        background: 'linear-gradient(to bottom, transparent 0%, rgba(0,0,0,0.2) 25%, rgba(0,0,0,0.5) 50%, rgba(0,0,0,0.8) 75%, black 100%)'
+      }}
+    />
+    {/* Side vignette */}
     <div className="absolute inset-0 bg-gradient-to-r from-black/20 via-transparent to-black/20" />
   </div>
 );
 
 // Card component
 const Card = ({ children, className = '' }: { children: React.ReactNode; className?: string }) => (
-  <div className={`bg-[#0a0a0a]/90 backdrop-blur-sm border border-neutral-800/80 rounded-xl ${className}`}>
+  <div className={`bg-[#0a0a0a]/95 backdrop-blur-sm border border-neutral-800/50 rounded-xl ${className}`}>
     {children}
   </div>
 );
 
-// Gold coin icon
+// Gold coin using PNG image
 const GoldCoin = ({ className = '' }: { className?: string }) => (
-  <GiCoins className={`${className} text-amber-400`} />
+  <img src="/ranks/Coin.png" alt="Gold" className={`${className} object-contain`} />
 );
+
+// Solana logo
+const SolanaLogo = ({ className = '' }: { className?: string }) => (
+  <img src="https://solana.com/src/img/branding/solanaLogoMark.svg" alt="SOL" className={`${className} object-contain`} />
+);
+
+// Helper to get rank image path
+const getRankImage = (rank: string, level: number = 1): string => {
+  const rankLower = rank.toLowerCase();
+  const clampedLevel = Math.max(1, Math.min(4, level || 1));
+  return `/ranks/${rankLower}-${clampedLevel}.png`;
+};
 
 // Rank badge component with hexagonal frame
 const RankBadge = ({ rank, size = 'md', variant = 'default' }: { rank: string; size?: 'sm' | 'md' | 'lg'; variant?: 'gold' | 'silver' | 'bronze' | 'default' }) => {
@@ -169,17 +196,23 @@ export default function LeaderboardPage() {
         <meta name="description" content="Compete for Gold prizes on the Interstate Arena leaderboard." />
       </Head>
 
-      <div className="min-h-screen relative overflow-x-hidden">
-        <SpaceBackground />
+      <div className="min-h-screen bg-black">
+        {/* Header stays outside the rounded container */}
+        <Header />
 
-        <div className="relative z-10">
-          <Header />
+        {/* Outer padding wrapper - uniform padding on all sides */}
+        <div className="p-1 sm:p-1.5">
+          {/* Rounded container with background */}
+          <div className="relative rounded-2xl overflow-hidden min-h-[calc(100vh-80px)] border border-white/[0.06]">
+            {/* Background inside the rounded container */}
+            <SpaceBackgroundContained />
 
-          <main className="mx-auto max-w-6xl px-4 sm:px-6 pt-8 pb-24">
-            {/* Page Title */}
-            <h1 className="text-5xl md:text-6xl font-black tracking-tight text-white text-center mb-8">
-              LEADERBOARD
-            </h1>
+            {/* Content */}
+            <main className="relative z-10 mx-auto max-w-6xl px-4 sm:px-6 pt-8 pb-24">
+              {/* Page Title */}
+              <h1 className="text-5xl md:text-6xl font-black tracking-tight text-white text-center mb-8">
+                LEADERBOARD
+              </h1>
 
             {/* Header Tabs - Three sections: Gold Toggle | Period Selector | Quest Toggle */}
             <div className="flex items-center justify-center mb-6">
@@ -226,11 +259,6 @@ export default function LeaderboardPage() {
                 </button>
               </div>
             </div>
-
-            {/* Title */}
-            <h1 className="text-5xl md:text-6xl font-black tracking-tight text-white text-center mb-8">
-              LEADERBOARD
-            </h1>
 
             {/* Top 3 Podium */}
             {top3Data.length >= 3 && (
@@ -331,54 +359,103 @@ export default function LeaderboardPage() {
               </div>
             )}
 
-            {/* Your Position Bar */}
+            {/* Your Position Bar - Matte opaque style */}
             {user && (
-              <Card className="p-4 mb-6">
+              <div className="mb-6 px-5 py-4 bg-white/[0.06] backdrop-blur-sm border border-white/[0.08] rounded-xl">
                 <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-4">
-                    <span className="text-neutral-500 font-medium">
+                  {/* Left: Position & Username */}
+                  <div className="flex items-center gap-6">
+                    <span className="text-neutral-400 font-medium text-sm">
                       {position.data?.position ? `#${position.data.position}` : 'Not Placed'}
                     </span>
-                    <span className="text-white font-bold">You ({user.name})</span>
+                    <span className="text-white font-bold text-sm">You <span className="text-neutral-300">({user.name})</span></span>
                   </div>
+
+                  {/* Right: Stats */}
                   <div className="flex items-center gap-8">
+                    {/* Rank Badge */}
                     <div className="flex items-center gap-2">
-                      <RankBadge rank={(arenaStats as any)?.rank || 'Degen'} size="sm" />
-                      <span className="text-neutral-400">{(arenaStats as any)?.rank || 'Degen'} {(arenaStats as any)?.rankLevel || 'I'}</span>
+                      <img
+                        src={getRankImage((arenaStats as any)?.rank || 'degen', (arenaStats as any)?.rankLevel || 1)}
+                        alt="Rank"
+                        className="w-6 h-6 object-contain"
+                      />
+                      <span className="text-neutral-300 text-sm">{(arenaStats as any)?.rank || 'Degen'} {['', 'I', 'II', 'III', 'IV'][(arenaStats as any)?.rankLevel || 1]}</span>
                     </div>
-                    {type === 'gold' ? (
-                      <div className="flex items-center gap-1">
-                        <GoldCoin className="w-4 h-4" />
-                        <span className="text-amber-400">{position.data?.value?.toLocaleString() || '0'}</span>
-                      </div>
-                    ) : (
-                      <div className="flex items-center gap-1">
-                        <IoRocketSharp className="w-4 h-4 text-orange-400" />
-                        <span className="text-orange-400">{position.data?.value || 0}</span>
-                      </div>
-                    )}
-                    <div className="flex items-center gap-1">
-                      <GoldCoin className="w-4 h-4" />
-                      <span className="text-amber-400">+{position.data?.prize || 0}</span>
+
+                    {/* SOL */}
+                    <div className="flex items-center gap-1.5">
+                      <SolanaLogo className="w-4 h-4" />
+                      <span className="text-white text-sm font-medium">0 SOL</span>
+                    </div>
+
+                    {/* Gold earned */}
+                    <div className="flex items-center gap-1.5">
+                      <GoldCoin className="w-5 h-5" />
+                      <span className="text-white text-sm font-medium">
+                        {type === 'gold' ? (position.data?.value?.toLocaleString() || '0') : '0'}
+                      </span>
+                    </div>
+
+                    {/* Prize */}
+                    <div className="flex items-center gap-1.5">
+                      <GoldCoin className="w-5 h-5" />
+                      <span className="text-amber-400 text-sm font-medium">+{position.data?.prize || 350}</span>
                     </div>
                   </div>
                 </div>
-              </Card>
+              </div>
             )}
 
-            {/* Jackpot Banner */}
-            <div className="relative mb-6 rounded-xl overflow-hidden">
-              <div className="absolute inset-0 bg-gradient-to-r from-amber-600/80 via-amber-500/60 to-amber-600/80" />
+            {/* Jackpot Banner - Dark style with gold accent */}
+            <div
+              className="relative mb-6 rounded-xl overflow-hidden"
+              style={{
+                background: 'linear-gradient(90deg, #1a1508 0%, #0d0d0a 30%, #0f0e0a 70%, #1a1508 100%)',
+                border: '1px solid rgba(139, 115, 85, 0.3)'
+              }}
+            >
+              {/* Gold accent on left edge */}
               <div
-                className="absolute inset-0 bg-cover bg-center opacity-30"
-                style={{ backgroundImage: 'url(https://wallpapercave.com/wp/wp8955056.jpg)' }}
+                className="absolute left-0 top-0 bottom-0 w-1"
+                style={{ background: 'linear-gradient(180deg, #D4AF37 0%, #B8860B 50%, #8B6914 100%)' }}
               />
-              <div className="relative flex items-center justify-between p-6">
+
+              {/* Subtle coin imagery on right */}
+              <div
+                className="absolute right-0 top-0 bottom-0 w-1/3 opacity-30"
+                style={{
+                  backgroundImage: 'url(/future.png)',
+                  backgroundSize: 'cover',
+                  backgroundPosition: 'center right',
+                  maskImage: 'linear-gradient(to right, transparent, black)',
+                  WebkitMaskImage: 'linear-gradient(to right, transparent, black)'
+                }}
+              />
+
+              <div className="relative flex items-center justify-between px-6 py-5">
                 <div>
-                  <h3 className="text-white font-black text-2xl">$2,159.08 DAILY JACKPOT NOW LIVE</h3>
-                  <p className="text-amber-100">Turn Your Gold Into Huge Solana Rewards!</p>
+                  <h3
+                    className="font-black text-xl tracking-wide"
+                    style={{
+                      background: 'linear-gradient(90deg, #FFD700 0%, #FFC107 50%, #FFB300 100%)',
+                      WebkitBackgroundClip: 'text',
+                      WebkitTextFillColor: 'transparent',
+                      backgroundClip: 'text',
+                    }}
+                  >
+                    $2,574.56 DAILY JACKPOT NOW LIVE
+                  </h3>
+                  <p className="text-neutral-400 text-sm mt-0.5">Turn Your Gold Into Huge Solana Rewards!</p>
                 </div>
-                <button className="px-6 py-3 bg-neutral-900 hover:bg-neutral-800 text-white font-bold rounded-lg transition-colors">
+                <button
+                  className="px-6 py-2.5 text-sm font-semibold rounded-lg transition-all duration-200 cursor-pointer hover:brightness-110"
+                  style={{
+                    background: 'rgba(20, 18, 12, 0.9)',
+                    border: '1px solid rgba(212, 175, 55, 0.5)',
+                    color: '#D4AF37'
+                  }}
+                >
                   Enter The Jackpot
                 </button>
               </div>
@@ -596,9 +673,13 @@ export default function LeaderboardPage() {
                 ))}
               </div>
             </div>
-          </main>
+            </main>
 
-          <Footer />
+            {/* Footer inside the rounded container */}
+            <div className="relative z-10">
+              <Footer />
+            </div>
+          </div>
         </div>
       </div>
     </>

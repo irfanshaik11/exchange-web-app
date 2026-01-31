@@ -23,8 +23,12 @@ import {
   getTop3,
   getReferralStats,
   getDirectReferrals,
+  getAllReferrals,
   claimReferralRewards,
   getHonorsInfo,
+  getRewardHistory,
+  getReferralQuests,
+  getReferralTree,
   type ArenaStats,
   type QuestsResponse,
   type CashbackSummary,
@@ -34,6 +38,10 @@ import {
   type UserPosition,
   type ReferralStats,
   type DirectReferral,
+  type AllReferral,
+  type HonorsInfo,
+  type ReferralReward,
+  type ReferralQuest,
 } from '~/utils/arenaApi';
 
 // ============================================================
@@ -121,9 +129,12 @@ export function useClaimCashback() {
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ['arena', 'stats'] });
       queryClient.invalidateQueries({ queryKey: ['arena', 'cashback'] });
-      toast.success(`💰 Claimed ${data.amountClaimed.toFixed(6)} SOL!`, {
-        duration: 4000,
-      });
+      if (data.success && data.amountClaimed > 0) {
+        toast.success(
+          `💰 Claimed ${data.amountClaimed.toFixed(6)} SOL!${data.txSignature ? ' Check Solscan for details.' : ''}`,
+          { duration: 6000 }
+        );
+      }
     },
     onError: (error: Error) => {
       toast.error(error.message || 'Failed to claim cashback');
@@ -246,12 +257,12 @@ export function useReferralStats() {
     queryKey: ['referrals', 'stats', user?.id],
     queryFn: () => getReferralStats(user!.bearerToken),
     enabled: !!user?.bearerToken,
-    staleTime: 30 * 1000,
-    refetchInterval: 60 * 1000,
+    staleTime: 10 * 1000, // 10 seconds
+    refetchInterval: 30 * 1000, // Refetch every 30 seconds for more responsive updates
   });
 }
 
-export function useDirectReferrals(options: { limit?: number; offset?: number } = {}) {
+export function useDirectReferrals(options: { limit?: number; offset?: number; search?: string } = {}) {
   const { user } = useUser();
 
   return useQuery({
@@ -259,6 +270,18 @@ export function useDirectReferrals(options: { limit?: number; offset?: number } 
     queryFn: () => getDirectReferrals(user!.bearerToken, options),
     enabled: !!user?.bearerToken,
     staleTime: 30 * 1000,
+  });
+}
+
+export function useAllReferrals(options: { limit?: number; offset?: number; search?: string } = {}) {
+  const { user } = useUser();
+
+  return useQuery({
+    queryKey: ['referrals', 'all', user?.id, options],
+    queryFn: () => getAllReferrals(user!.bearerToken, options),
+    enabled: !!user?.bearerToken,
+    staleTime: 10 * 1000, // 10 seconds
+    refetchInterval: 30 * 1000, // Refetch every 30 seconds
   });
 }
 
@@ -271,9 +294,14 @@ export function useClaimReferralRewards() {
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ['arena', 'stats'] });
       queryClient.invalidateQueries({ queryKey: ['referrals'] });
-      toast.success(`💰 Claimed ${data.amountClaimed.toFixed(6)} SOL in referral rewards!`, {
-        duration: 4000,
-      });
+      if (data.success && data.amountClaimed > 0) {
+        // Show success toast - the txSignature is returned for Solscan link
+        // The referrals page component will handle showing the link
+        toast.success(
+          `✅ Claimed ${data.amountClaimed.toFixed(4)} SOL!${data.txSignature ? ' Check Solscan for details.' : ''}`,
+          { duration: 6000 }
+        );
+      }
     },
     onError: (error: Error) => {
       toast.error(error.message || 'Failed to claim referral rewards');
@@ -287,6 +315,40 @@ export function useHonorsInfo() {
   return useQuery({
     queryKey: ['referrals', 'honors', user?.id],
     queryFn: () => getHonorsInfo(user!.bearerToken),
+    enabled: !!user?.bearerToken,
+    staleTime: 10 * 1000, // 10 seconds - keep honors data fresh
+    refetchInterval: 30 * 1000, // Refetch every 30 seconds
+  });
+}
+
+export function useRewardHistory(options: { limit?: number; offset?: number } = {}) {
+  const { user } = useUser();
+
+  return useQuery({
+    queryKey: ['referrals', 'rewards', user?.id, options],
+    queryFn: () => getRewardHistory(user!.bearerToken, options),
+    enabled: !!user?.bearerToken,
+    staleTime: 30 * 1000,
+  });
+}
+
+export function useReferralQuests() {
+  const { user } = useUser();
+
+  return useQuery({
+    queryKey: ['referrals', 'quests', user?.id],
+    queryFn: () => getReferralQuests(user!.bearerToken),
+    enabled: !!user?.bearerToken,
+    staleTime: 30 * 1000,
+  });
+}
+
+export function useReferralTree() {
+  const { user } = useUser();
+
+  return useQuery({
+    queryKey: ['referrals', 'tree', user?.id],
+    queryFn: () => getReferralTree(user!.bearerToken),
     enabled: !!user?.bearerToken,
     staleTime: 60 * 1000,
   });

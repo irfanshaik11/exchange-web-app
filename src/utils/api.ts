@@ -1490,4 +1490,63 @@ export const batchResolvePools = async (
   }
 };
 
+// ============================================================
+// USERNAME FUNCTIONS
+// ============================================================
+
+export interface UsernameCheckResult {
+  valid: boolean;
+  available: boolean;
+  error?: string;
+}
+
+export interface UsernameUpdateResult {
+  success: boolean;
+  username: string;
+  referralCode: string;
+  message: string;
+}
+
+/**
+ * Check if a username is available
+ * @param username - The username to check
+ * @returns Object with valid and available flags
+ */
+export const checkUsernameAvailability = async (username: string): Promise<UsernameCheckResult> => {
+  try {
+    const response = await apiFetch<UsernameCheckResult>(
+      `/api/users/check-username/${encodeURIComponent(username)}`
+    );
+    return response;
+  } catch (error: any) {
+    // API returns error for invalid usernames
+    return {
+      valid: false,
+      available: false,
+      error: error?.message || 'Failed to check username',
+    };
+  }
+};
+
+/**
+ * Update the current user's username
+ * @param authToken - Bearer token for authentication
+ * @param username - The new username to set
+ * @returns Object with success status and updated username
+ */
+export const updateUsername = async (
+  authToken: string,
+  username: string
+): Promise<UsernameUpdateResult> => {
+  const response = await apiFetch<UsernameUpdateResult>(
+    '/api/users/set-username',
+    {
+      method: 'POST',
+      authToken,
+      body: { username },
+    }
+  );
+  return response;
+};
+
 export { apiFetch };

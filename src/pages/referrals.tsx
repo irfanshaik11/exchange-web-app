@@ -5,66 +5,113 @@
  * Features: Space background, Honors system, 5-layer referrals, quests.
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import Head from 'next/head';
 import Header from '~/components/Header';
 import Footer from '~/components/Footer';
 import { useUser } from '~/components/UserContext';
-import { useReferralsPageData, useClaimReferralRewards, useClaimQuest, useDirectReferrals } from '~/hooks/useArena';
+import { useReferralsPageData, useClaimQuest, useAllReferrals, useArenaStats, useReferralQuests } from '~/hooks/useArena';
+import type { ReferralStats, HonorsInfo } from '~/utils/arenaApi';
+import { claimReferralRewards } from '~/utils/arenaApi';
+import UsernameEditModal from '~/components/UsernameEditModal';
+import { toast } from 'react-hot-toast';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 
 // React Icons
 import { GiMedal, GiTrophy, GiCrown, GiCoins, GiSpartanHelmet } from 'react-icons/gi';
-import { FiUsers, FiCopy, FiCheck, FiEdit2, FiEye, FiLock, FiSearch, FiChevronDown, FiInfo } from 'react-icons/fi';
+import { FiUsers, FiCopy, FiCheck, FiEdit2, FiLock, FiSearch, FiChevronDown, FiChevronLeft, FiChevronRight, FiInfo } from 'react-icons/fi';
 import { HiSparkles } from 'react-icons/hi';
 import { IoRocketSharp } from 'react-icons/io5';
 import { BiUser } from 'react-icons/bi';
 
-// Space background - same as arena
-const SpaceBackground = () => (
-  <div className="fixed inset-0 overflow-hidden pointer-events-none">
+// Space background - contained within rounded container (matching Arena)
+const SpaceBackgroundContained = () => (
+  <div className="absolute inset-0 overflow-hidden pointer-events-none rounded-2xl">
+    {/* Main background image - future.png */}
     <div
-      className="absolute inset-x-0 top-0 h-[70vh] bg-cover bg-top bg-no-repeat"
-      style={{ backgroundImage: 'url(https://wallpapercave.com/wp/wp8955056.jpg)' }}
+      className="absolute inset-x-0 top-0 h-[80vh] bg-cover bg-top bg-no-repeat"
+      style={{ backgroundImage: 'url(/future.png)' }}
     />
-    <div className="absolute inset-0 bg-black/50" />
-    <div className="absolute inset-0 bg-gradient-to-b from-transparent via-black/70 to-black" />
-    <div className="absolute inset-x-0 top-1/3 bottom-0 bg-gradient-to-b from-transparent to-black" />
+    {/* Subtle dark overlay */}
+    <div className="absolute inset-0 bg-black/30" />
+    {/* Multi-layer gradual fade for smooth transition */}
+    <div
+      className="absolute inset-0"
+      style={{
+        background: 'linear-gradient(to bottom, transparent 0%, transparent 20%, rgba(0,0,0,0.1) 30%, rgba(0,0,0,0.3) 45%, rgba(0,0,0,0.6) 60%, rgba(0,0,0,0.85) 75%, black 90%)'
+      }}
+    />
+    {/* Extra smooth fade layer */}
+    <div
+      className="absolute inset-x-0 top-1/4 bottom-0"
+      style={{
+        background: 'linear-gradient(to bottom, transparent 0%, rgba(0,0,0,0.2) 25%, rgba(0,0,0,0.5) 50%, rgba(0,0,0,0.8) 75%, black 100%)'
+      }}
+    />
+    {/* Side vignette */}
     <div className="absolute inset-0 bg-gradient-to-r from-black/20 via-transparent to-black/20" />
   </div>
 );
 
-// Hexagonal badge for honors
+// Rank configuration
+const RANK_CONFIG = {
+  DEGEN: { color: '#8B7355' },
+  WARRIOR: { color: '#4A90A4' },
+  GLADIATOR: { color: '#50C878' },
+  COMMANDER: { color: '#9B59B6' },
+  TITAN: { color: '#FFD700' },
+};
+
+// Helper to get rank image path
+const getRankImage = (rank: string, level: number = 1): string => {
+  const rankLower = rank.toLowerCase();
+  const clampedLevel = Math.max(1, Math.min(4, level || 1));
+  return `/ranks/${rankLower}-${clampedLevel}.png`;
+};
+
+// Gold coin using PNG image
+const GoldCoin = ({ className = '' }: { className?: string }) => (
+  <img src="/ranks/Coin.png" alt="Gold" className={`${className} object-contain`} />
+);
+
+// Solana logo
+const SolanaLogo = ({ className = '' }: { className?: string }) => (
+  <img src="https://solana.com/src/img/branding/solanaLogoMark.svg" alt="SOL" className={`${className} object-contain`} />
+);
+
+// Honors badge using DEGEN rank images
 const HonorsBadge = ({ level, size = 'lg', isLocked = false }: { level: number; size?: 'sm' | 'md' | 'lg'; isLocked?: boolean }) => {
-  const sizes = { sm: 'w-16 h-18', md: 'w-24 h-28', lg: 'w-32 h-36' };
-  const iconSizes = { sm: 'w-8 h-8', md: 'w-12 h-12', lg: 'w-16 h-16' };
+  const sizes = { sm: 'w-20 h-20', md: 'w-32 h-32', lg: 'w-40 h-40' };
+  const imageSizes = { sm: 'w-18 h-18', md: 'w-28 h-28', lg: 'w-36 h-36' };
+
+  // Map honors level to degen image level (1-4)
+  const imageLevel = Math.max(1, Math.min(4, level));
 
   return (
     <div className={`relative ${sizes[size]} flex items-center justify-center`}>
-      {/* Hexagonal frame */}
-      <svg viewBox="0 0 100 115" className="absolute inset-0 w-full h-full">
-        <polygon
-          points="50,2 95,28 95,87 50,113 5,87 5,28"
-          fill={isLocked ? '#1a1a1a' : '#2a2a2a'}
-          stroke={isLocked ? '#3a3a3a' : '#4a4a4a'}
-          strokeWidth="2"
+      {/* Glow effect for unlocked */}
+      {!isLocked && (
+        <div
+          className="absolute inset-0 blur-xl opacity-40"
+          style={{
+            background: 'radial-gradient(circle, #8B735560 0%, transparent 70%)',
+            transform: 'scale(1.3)',
+          }}
         />
-        {/* Corner accents */}
-        <circle cx="50" cy="8" r="3" fill={isLocked ? '#3a3a3a' : '#5a5a5a'} />
-        <circle cx="90" cy="30" r="3" fill={isLocked ? '#3a3a3a' : '#5a5a5a'} />
-        <circle cx="90" cy="85" r="3" fill={isLocked ? '#3a3a3a' : '#5a5a5a'} />
-        <circle cx="50" cy="107" r="3" fill={isLocked ? '#3a3a3a' : '#5a5a5a'} />
-        <circle cx="10" cy="85" r="3" fill={isLocked ? '#3a3a3a' : '#5a5a5a'} />
-        <circle cx="10" cy="30" r="3" fill={isLocked ? '#3a3a3a' : '#5a5a5a'} />
-      </svg>
-      {/* Helmet icon */}
-      <GiSpartanHelmet className={`${iconSizes[size]} ${isLocked ? 'text-neutral-600' : 'text-neutral-400'} relative z-10`} />
+      )}
+      {/* Badge image */}
+      <img
+        src={`/ranks/degen-${imageLevel}.png`}
+        alt={`Honors ${level}`}
+        className={`${imageSizes[size]} object-contain relative z-10 ${isLocked ? 'opacity-40 grayscale' : ''}`}
+      />
     </div>
   );
 };
 
-// Card component
+// Card component - matching Arena style
 const Card = ({ children, className = '' }: { children: React.ReactNode; className?: string }) => (
-  <div className={`bg-[#0a0a0a]/90 backdrop-blur-sm border border-neutral-800/80 rounded-xl ${className}`}>
+  <div className={`bg-[#0a0a0a]/95 backdrop-blur-sm border border-neutral-800/50 rounded-xl ${className}`}>
     {children}
   </div>
 );
@@ -83,21 +130,94 @@ const ProgressBar = ({ progress, color = 'purple' }: { progress: number; color?:
   );
 };
 
-// Gold coin icon
-const GoldCoin = ({ className = '' }: { className?: string }) => (
-  <GiCoins className={`${className} text-amber-400`} />
-);
-
 export default function ReferralsPage() {
   const { user } = useUser();
-  const { stats, honors, quests, refetch } = useReferralsPageData();
-  const { data: directReferrals } = useDirectReferrals({ limit: 20 });
-  const claimRewardsMutation = useClaimReferralRewards();
-  const claimQuestMutation = useClaimQuest();
+
+  // State hooks must be defined before any hooks that use them
   const [copied, setCopied] = useState(false);
   const [showAllHonors, setShowAllHonors] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [expandedFaq, setExpandedFaq] = useState<number | null>(null);
+  const [mounted, setMounted] = useState(false);
+  const [isUsernameModalOpen, setIsUsernameModalOpen] = useState(false);
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 10;
+  const honorsCarouselRef = useRef<HTMLDivElement>(null);
+
+  // Data fetching hooks
+  const { stats, honors, quests, refetch } = useReferralsPageData();
+  const { data: allReferrals } = useAllReferrals({
+    limit: itemsPerPage,
+    offset: (currentPage - 1) * itemsPerPage,
+    search: searchQuery || undefined
+  });
+  const { data: arenaStats } = useArenaStats();
+  const claimQuestMutation = useClaimQuest();
+  const queryClient = useQueryClient();
+
+  // Custom claim mutation with Solscan link toast
+  const claimRewardsMutation = useMutation({
+    mutationFn: () => claimReferralRewards(user!.bearerToken),
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ['arena', 'stats'] });
+      queryClient.invalidateQueries({ queryKey: ['referrals'] });
+      if (data.success && data.amountClaimed > 0) {
+        toast.success(
+          (t) => (
+            <div className="flex flex-col gap-1">
+              <span className="font-medium">✅ Claimed {data.amountClaimed.toFixed(4)} SOL!</span>
+              {data.txSignature && (
+                <a
+                  href={`https://solscan.io/tx/${data.txSignature}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-blue-400 underline text-sm hover:text-blue-300"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  View on Solscan →
+                </a>
+              )}
+            </div>
+          ),
+          { duration: 8000 }
+        );
+      }
+    },
+    onError: (error: Error) => {
+      toast.error(error.message || 'Failed to claim referral rewards');
+    },
+  });
+
+  // Carousel scroll function
+  const scrollHonorsCarousel = (direction: 'left' | 'right') => {
+    if (honorsCarouselRef.current) {
+      const scrollAmount = 280;
+      honorsCarouselRef.current.scrollBy({
+        left: direction === 'left' ? -scrollAmount : scrollAmount,
+        behavior: 'smooth',
+      });
+    }
+  };
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  // Reset page when search query changes
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchQuery]);
+
+  // Pagination calculations
+  const totalPages = Math.ceil((allReferrals?.total || 0) / itemsPerPage);
+
+  // Arena stats for user bar
+  const userName = user?.name || 'User';
+  const displayRank = (arenaStats as any)?.rank || 'DEGEN';
+  const displayLevel = (arenaStats as any)?.level || 1;
+  const displayGoldEarned = (arenaStats as any)?.goldEarned || 0;
+  const nextLevelGold = RANK_CONFIG[displayRank as keyof typeof RANK_CONFIG] ? 1000 : 1000;
+  const progressToNext = Math.min((displayGoldEarned / nextLevelGold) * 100, 100);
 
   const handleCopyLink = (link: string) => {
     navigator.clipboard.writeText(link);
@@ -105,59 +225,83 @@ export default function ReferralsPage() {
     setTimeout(() => setCopied(false), 2000);
   };
 
-  // Mock data for display (replace with real data)
-  const statsData = stats.data || {
-    referralCode: user?.name || 'USER',
-    referralLink: `https://interstate.com/@${user?.name || 'user'}`,
+  // Real data from API with fallback defaults
+  const statsData: ReferralStats = stats.data || {
     directReferrals: 0,
     tier1Referrals: 0,
     tier2Referrals: 0,
     tier3Referrals: 0,
     tier4Referrals: 0,
+    totalReferrals: 0,
     totalReferralVolume: 0,
     pendingSolRewards: 0,
     claimedSolRewards: 0,
+    totalEarnedRewards: 0,
+    honorsLevel: 1,
+    honorsName: 'Honors I',
+    nextHonorsLevel: 2,
+    nextHonorsRequirement: 20,
+    tradersToNextTier: 20,
+    referralCode: user?.name?.toUpperCase().substring(0, 6) || 'USER',
+    referralLink: '',
+    activeTradersCount: 0,
   };
 
-  const honorsData = honors.data || {
+  // Always compute referral link locally to use current origin (localhost in dev, production URL in prod)
+  const localReferralLink = typeof window !== 'undefined' && statsData.referralCode
+    ? `${window.location.origin}?ref=${statsData.referralCode}`
+    : statsData.referralLink;
+
+  // Honors data from API
+  const honorsData: HonorsInfo = honors.data || {
     currentLevel: 1,
-    currentTier: {
-      totalRevShare: 27.5,
-      layers: [
-        { layer: 'Direct Ref', percentage: 20 },
-        { layer: 'Ref 1', percentage: 3 },
-        { layer: 'Ref 2', percentage: 2 },
-        { layer: 'Ref 3', percentage: 1.5 },
-        { layer: 'Ref 4', percentage: 1 },
-      ],
+    currentName: 'Honors I',
+    currentRequirement: 0,
+    revSharePercentages: {
+      direct: 20,
+      tier1: 3,
+      tier2: 2,
+      tier3: 1.5,
+      tier4: 1,
     },
-    nextLevel: 2,
-    progressToNext: {
-      referralCount: { current: 0, target: 250, percentage: 0 },
-      referralVolume: { current: 0, target: 5000000, percentage: 0 },
-    },
+    totalRevShare: 27.5,
+    activeTradersCount: 0,
+    tradersToNextTier: 20,
+    nextTierRequirement: 20,
+    allTiers: [
+      { level: 1, name: 'Honors I', requirement: 0, revSharePercentages: { direct: 20, tier1: 3, tier2: 2, tier3: 1.5, tier4: 1 }, totalRevShare: 27.5, isUnlocked: true, isCurrent: true },
+      { level: 2, name: 'Honors II', requirement: 20, revSharePercentages: { direct: 22.5, tier1: 4, tier2: 2.5, tier3: 2, tier4: 1.5 }, totalRevShare: 32.5, isUnlocked: false, isCurrent: false },
+      { level: 3, name: 'Honors III', requirement: 50, revSharePercentages: { direct: 30, tier1: 5, tier2: 3.5, tier3: 2.5, tier4: 1.5 }, totalRevShare: 42.5, isUnlocked: false, isCurrent: false },
+      { level: 4, name: 'Honors IV', requirement: 100, revSharePercentages: { direct: 35, tier1: 6, tier2: 4, tier3: 3, tier4: 2 }, totalRevShare: 50, isUnlocked: false, isCurrent: false },
+    ],
   };
 
-  // All honors tiers
-  const allHonorsTiers = [
-    { level: 1, name: 'HONORS I', totalRevShare: 27.5, isUnlocked: true },
-    { level: 2, name: 'HONORS II', totalRevShare: 32.5, isUnlocked: false },
-    { level: 3, name: 'HONORS III', totalRevShare: 42.5, isUnlocked: false },
-    { level: 4, name: 'HONORS IV', totalRevShare: 50, isUnlocked: false },
+  // All honors tiers from API or default
+  const allHonorsTiers = honorsData.allTiers || [
+    { level: 1, name: 'HONORS I', totalRevShare: 27.5, isUnlocked: true, requirement: 0 },
+    { level: 2, name: 'HONORS II', totalRevShare: 32.5, isUnlocked: false, requirement: 20 },
+    { level: 3, name: 'HONORS III', totalRevShare: 42.5, isUnlocked: false, requirement: 50 },
+    { level: 4, name: 'HONORS IV', totalRevShare: 50, isUnlocked: false, requirement: 100 },
   ];
 
-  // Referral quests
-  const referralRankUpQuests = [
-    { id: 1, title: 'Recruit 250 traders OR Your referrals trade $5M in volume', reward: 'Honors II', type: 'honors' },
-    { id: 2, title: 'Recruit 1000 traders OR Your referrals trade $20M in volume', reward: 'Honors III', type: 'honors' },
-    { id: 3, title: 'Recruit 5000 traders OR Your referrals trade $100M in volume', reward: 'Honors IV', type: 'honors' },
-  ];
+  // Referral quests - show all tiers (completed ones will be greyed out)
+  const referralRankUpQuests = allHonorsTiers
+    .filter(tier => tier.level > 1) // Exclude Honors I (everyone starts there)
+    .map((tier) => ({
+      id: tier.level,
+      title: `Recruit ${tier.requirement} active traders`,
+      reward: tier.name,
+      type: 'honors' as const,
+      progress: statsData.activeTradersCount,
+      target: tier.requirement,
+      isComplete: tier.isUnlocked || honorsData.currentLevel >= tier.level,
+    }));
 
   const referralSeasonalQuests = [
-    { id: 4, title: 'Recruit 5 Warriors', reward: 10000, type: 'gold' },
-    { id: 5, title: 'Recruit 5 Gladiators', reward: 15000, type: 'gold' },
-    { id: 6, title: 'Recruit 2 Commanders', reward: 40000, type: 'gold' },
-    { id: 7, title: 'Recruit 1 Titan', reward: 40000, type: 'gold' },
+    { id: 4, title: 'Recruit 5 Warriors', reward: 10000, type: 'gold' as const },
+    { id: 5, title: 'Recruit 5 Gladiators', reward: 15000, type: 'gold' as const },
+    { id: 6, title: 'Recruit 2 Commanders', reward: 40000, type: 'gold' as const },
+    { id: 7, title: 'Recruit 1 Titan', reward: 40000, type: 'gold' as const },
   ];
 
   const faqs = [
@@ -172,21 +316,27 @@ export default function ReferralsPage() {
     return (
       <>
         <Head><title>Referrals | Interstate Arena</title></Head>
-        <div className="min-h-screen relative overflow-x-hidden">
-          <SpaceBackground />
-          <div className="relative z-10">
-            <Header />
-            <main className="flex flex-col items-center justify-center min-h-[80vh] px-6">
-              <div className="text-center">
-                <GiMedal className="w-20 h-20 text-amber-400 mx-auto mb-6" />
-                <h1 className="text-5xl md:text-7xl font-black tracking-tight text-white mb-4">REFERRALS</h1>
-                <p className="text-neutral-400 text-lg mb-8">Build your trading network. Earn from 5 layers.</p>
-                <button className="px-8 py-4 bg-amber-500 hover:bg-amber-400 text-black font-bold rounded-lg transition-colors flex items-center gap-2 mx-auto">
-                  <IoRocketSharp /> Connect Wallet
-                </button>
+        <div className="min-h-screen bg-black">
+          <Header />
+          {/* Outer padding wrapper - uniform padding on all sides */}
+          <div className="p-1 sm:p-1.5">
+            {/* Rounded container with background */}
+            <div className="relative rounded-2xl overflow-hidden min-h-[calc(100vh-80px)] border border-white/[0.06]">
+              <SpaceBackgroundContained />
+              <main className="relative z-10 flex flex-col items-center justify-center min-h-[80vh] px-6">
+                <div className="text-center">
+                  <GiMedal className="w-20 h-20 text-amber-400 mx-auto mb-6" />
+                  <h1 className="text-5xl md:text-7xl font-black tracking-tight text-white mb-4">REFERRALS</h1>
+                  <p className="text-neutral-400 text-lg mb-8">Build your trading network. Earn from 5 layers.</p>
+                  <button className="px-8 py-4 bg-amber-500 hover:bg-amber-400 text-black font-bold rounded-lg transition-colors flex items-center gap-2 mx-auto cursor-pointer">
+                    <IoRocketSharp /> Connect Wallet
+                  </button>
+                </div>
+              </main>
+              <div className="relative z-10">
+                <Footer />
               </div>
-            </main>
-            <Footer />
+            </div>
           </div>
         </div>
       </>
@@ -200,267 +350,599 @@ export default function ReferralsPage() {
         <meta name="description" content="Build your trading network and earn SOL from 5 layers of referrals." />
       </Head>
 
-      <div className="min-h-screen relative overflow-x-hidden">
-        <SpaceBackground />
+      <div className="min-h-screen bg-black">
+        {/* Header stays outside the rounded container */}
+        <Header />
 
-        <div className="relative z-10">
-          <Header />
+        {/* Outer padding wrapper - uniform padding on all sides */}
+        <div className="p-1 sm:p-1.5">
+          {/* Rounded container with background */}
+          <div className="relative rounded-2xl overflow-hidden min-h-[calc(100vh-80px)] border border-white/[0.06]">
+            {/* Background inside the rounded container */}
+            <SpaceBackgroundContained />
 
-          <main className="mx-auto max-w-6xl px-4 sm:px-6 pt-8 pb-24">
-            {/* Title */}
-            <h1 className="text-5xl md:text-6xl font-black tracking-tight text-white text-center mb-8">
-              REFERRALS
-            </h1>
+            {/* Content */}
+            <main className="relative z-10 mx-auto max-w-6xl px-4 sm:px-6 pt-8 pb-24">
+              {/* Title */}
+              <h1 className="text-5xl md:text-6xl font-black tracking-tight text-white text-center mb-8">
+                REFERRALS
+              </h1>
 
-            {/* Share Your Code Bar */}
-            <Card className="p-4 mb-6">
-              <div className="flex flex-col md:flex-row items-center justify-between gap-4">
-                {/* Left: Share info */}
-                <div>
-                  <h3 className="text-white font-bold text-sm mb-1">SHARE YOUR CODE</h3>
-                  <p className="text-neutral-500 text-xs">Referrals get counted after their first trade.</p>
-                </div>
-
-                {/* Center: Referral link */}
-                <div className="flex items-center gap-2 bg-neutral-900 border border-neutral-700 rounded-lg px-4 py-2">
-                  <span className="text-neutral-300 text-sm font-mono">{statsData.referralLink}</span>
-                  <button
-                    onClick={() => handleCopyLink(statsData.referralLink)}
-                    className="p-1.5 hover:bg-neutral-800 rounded transition-colors"
-                  >
-                    {copied ? <FiCheck className="w-4 h-4 text-emerald-400" /> : <FiCopy className="w-4 h-4 text-neutral-400" />}
-                  </button>
-                  <button className="p-1.5 hover:bg-neutral-800 rounded transition-colors">
-                    <FiEdit2 className="w-4 h-4 text-neutral-400" />
-                  </button>
-                  <button className="p-1.5 hover:bg-neutral-800 rounded transition-colors">
-                    <FiEye className="w-4 h-4 text-neutral-400" />
-                  </button>
-                </div>
-
-                {/* Right: Stats */}
-                <div className="flex items-center gap-6">
-                  <div className="text-right">
-                    <p className="text-neutral-500 text-xs">Gold earned</p>
-                    <div className="flex items-center gap-1 justify-end">
-                      <GoldCoin className="w-4 h-4" />
-                      <span className="text-white font-bold">0</span>
-                      <span className="text-neutral-500">(0)</span>
-                    </div>
+            {/* User Stats Bar - Matte opaque design matching Arena */}
+            <div className={`flex flex-col sm:flex-row items-stretch gap-3 mb-6 transition-all duration-700 ${mounted ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'}`}>
+              {/* Left: Username & Honors Progress */}
+              <div className="flex-1 flex flex-col gap-2 px-5 py-4 bg-white/[0.06] backdrop-blur-sm border border-white/[0.08] rounded-xl">
+                {/* Top row: Honors Badge + Username + Progress to next tier */}
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    {/* Honors badge */}
+                    <img
+                      src={`/ranks/degen-${Math.max(1, Math.min(4, honorsData.currentLevel))}.png`}
+                      alt={`Honors ${honorsData.currentLevel}`}
+                      className="w-6 h-6 object-contain"
+                    />
+                    <span className="text-white font-semibold text-sm">{userName}</span>
+                    <span className="text-amber-400/80 text-xs font-medium">Honors {['I', 'II', 'III', 'IV'][honorsData.currentLevel - 1]}</span>
                   </div>
-                  <div className="text-right">
-                    <p className="text-neutral-500 text-xs">SOL earned</p>
-                    <div className="flex items-center gap-1 justify-end">
-                      <span className="text-purple-400">≡</span>
-                      <span className="text-white font-bold">0 SOL</span>
-                    </div>
+                  <div className="flex items-center gap-1.5">
+                    <FiUsers className="w-4 h-4 text-neutral-400" />
+                    <span className="text-neutral-300 text-sm font-medium">
+                      {statsData.activeTradersCount} / {honorsData.currentLevel < 4 ? (honorsData.nextTierRequirement || 100) : 100} traders
+                    </span>
                   </div>
                 </div>
+                {/* Progress bar - shows progress to next Honors tier */}
+                <div className="h-2.5 bg-neutral-800 rounded-full overflow-hidden">
+                  <div
+                    className={`h-full rounded-full transition-all duration-700 ${
+                      honorsData.currentLevel >= 4
+                        ? 'bg-gradient-to-r from-amber-500 to-yellow-400'
+                        : 'bg-gradient-to-r from-amber-600 to-amber-400'
+                    }`}
+                    style={{
+                      width: `${honorsData.currentLevel >= 4
+                        ? 100
+                        : Math.min((statsData.activeTradersCount / (honorsData.nextTierRequirement || 100)) * 100, 100)}%`
+                    }}
+                  />
+                </div>
+                {honorsData.currentLevel < 4 && (
+                  <p className="text-neutral-500 text-xs">
+                    {(honorsData.nextTierRequirement || 0) - statsData.activeTradersCount} more active traders to Honors {['II', 'III', 'IV'][honorsData.currentLevel - 1]}
+                  </p>
+                )}
               </div>
-            </Card>
 
-            {/* Boost Banner */}
-            <Card className="p-4 mb-6 border-amber-500/30">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-4">
-                  <div className="w-14 h-14 bg-neutral-800 rounded-xl flex items-center justify-center border border-neutral-700">
-                    <GiMedal className="w-7 h-7 text-amber-400" />
-                  </div>
-                  <div>
-                    <p className="text-neutral-400 text-xs uppercase tracking-wider">Boost your refs to 42.5%</p>
-                    <p className="text-white font-black text-xl">
-                      CLAIM <span className="text-amber-400">HONORS III</span>
-                    </p>
-                  </div>
-                </div>
-                <button className="px-6 py-3 bg-neutral-800 hover:bg-neutral-700 text-white font-bold rounded-lg border border-neutral-600 transition-colors">
-                  Claim Your Boost
-                </button>
-              </div>
-            </Card>
-
-            {/* Main Two-Column Layout */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
-              {/* Left: Honors Card */}
-              <Card className="p-6">
-                <div className="flex flex-col items-center mb-6">
-                  <HonorsBadge level={honorsData.currentLevel} size="lg" />
-                  <p className="text-neutral-500 text-xs uppercase tracking-wider mt-4">DEGEN</p>
-                  <h2 className="text-white font-black text-2xl">HONORS {['I', 'II', 'III', 'IV'][honorsData.currentLevel - 1]}</h2>
-                </div>
-
-                {/* Rev Share */}
-                <div className="flex items-center justify-between mb-4 pb-4 border-b border-neutral-800">
-                  <span className="text-white font-bold">Total Rev Share</span>
-                  <span className="text-emerald-400 font-bold text-xl">{honorsData.currentTier.totalRevShare}%</span>
-                </div>
-
-                {/* Layer Breakdown */}
-                <div className="space-y-3">
-                  {[
-                    { label: 'Direct Ref:', icons: 1, percentage: '20%' },
-                    { label: 'Ref 1:', icons: 2, percentage: '3%' },
-                    { label: 'Ref 2:', icons: 3, percentage: '2%' },
-                    { label: 'Ref 3:', icons: 4, percentage: '1.5%' },
-                    { label: 'Ref 4:', icons: 5, percentage: '1%' },
-                  ].map((layer, idx) => (
-                    <div key={idx} className="flex items-center justify-between">
-                      <span className="text-neutral-400 text-sm">{layer.label}</span>
-                      <div className="flex items-center gap-2">
-                        <div className="flex -space-x-1">
-                          {Array.from({ length: layer.icons }).map((_, i) => (
-                            <BiUser key={i} className="w-4 h-4 text-neutral-500" />
-                          ))}
-                        </div>
-                        <span className="text-white font-bold text-sm w-12 text-right">{layer.percentage}</span>
+              {/* Right: Gold & SOL Earned */}
+              <div className="flex flex-col justify-center gap-2.5 px-6 py-3.5 bg-white/[0.06] backdrop-blur-sm border border-white/[0.08] rounded-xl min-w-[280px]">
+                {/* Gold earned row */}
+                <div className="flex items-center justify-between">
+                  <span className="text-neutral-400 text-sm">Gold earned</span>
+                  <div className="flex items-center gap-1.5">
+                    <GoldCoin className="w-4 h-4" />
+                    <span className="text-white font-semibold text-sm">{displayGoldEarned.toLocaleString()}</span>
+                    {/* Info tooltip */}
+                    <div className="relative group">
+                      <FiInfo className="w-3.5 h-3.5 text-neutral-500 hover:text-neutral-300 cursor-pointer transition-colors" />
+                      <div className="absolute bottom-full right-0 mb-2 px-3 py-2 bg-neutral-900 border border-neutral-700 rounded-lg shadow-xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-50 whitespace-nowrap">
+                        <p className="text-white text-xs font-medium mb-1">Available Gold: <span className="text-amber-400">{displayGoldEarned.toLocaleString()}</span></p>
+                        <p className="text-neutral-400 text-xs">You can use your Gold to enter the Jackpot.</p>
+                        <div className="absolute bottom-0 right-3 translate-y-1/2 rotate-45 w-2 h-2 bg-neutral-900 border-r border-b border-neutral-700" />
                       </div>
                     </div>
-                  ))}
+                  </div>
                 </div>
-
-                {/* Hide Ranks Button */}
-                <button
-                  onClick={() => setShowAllHonors(!showAllHonors)}
-                  className="w-full mt-6 py-3 bg-neutral-800 hover:bg-neutral-700 text-white font-medium rounded-lg transition-colors"
-                >
-                  {showAllHonors ? 'Hide Ranks' : 'Show Ranks'}
-                </button>
-              </Card>
-
-              {/* Right: Quests */}
-              <div className="space-y-6">
-                {/* Rank-Up Quests */}
-                <Card className="p-6">
-                  <h3 className="text-white font-bold mb-4">Referral Rank-Up Quests</h3>
-                  <div className="space-y-3">
-                    {referralRankUpQuests.map((quest) => (
-                      <div key={quest.id} className="flex items-center justify-between p-4 bg-neutral-900/50 border border-neutral-800 rounded-lg">
-                        <div className="flex items-center gap-3">
-                          <div className="w-5 h-5 rounded-full border-2 border-neutral-600" />
-                          <span className="text-neutral-300 text-sm">{quest.title}</span>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <GiMedal className="w-4 h-4 text-amber-400" />
-                          <span className="text-white font-bold text-sm">{quest.reward}</span>
-                        </div>
-                      </div>
-                    ))}
+                {/* SOL earned row */}
+                <div className="flex items-center justify-between">
+                  <span className="text-neutral-400 text-sm">SOL earned</span>
+                  <div className="flex items-center gap-2.5">
+                    <SolanaLogo className="w-4 h-4" />
+                    <span className="text-white font-semibold text-sm">{statsData.totalEarnedRewards.toFixed(4)} SOL</span>
                   </div>
-                </Card>
-
-                {/* Seasonal Quests */}
-                <Card className="p-6">
-                  <h3 className="text-white font-bold mb-4">Referral Seasonal Quests</h3>
-                  <div className="space-y-3">
-                    {referralSeasonalQuests.map((quest) => (
-                      <div key={quest.id} className="flex items-center justify-between p-4 bg-neutral-900/50 border border-neutral-800 rounded-lg">
-                        <div className="flex items-center gap-3">
-                          <div className="w-5 h-5 rounded-full border-2 border-neutral-600" />
-                          <span className="text-neutral-300 text-sm">{quest.title}</span>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <GoldCoin className="w-4 h-4" />
-                          <span className="text-amber-400 font-bold text-sm">{quest.reward.toLocaleString()}</span>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </Card>
+                </div>
               </div>
             </div>
 
-            {/* Honors Carousel */}
-            {showAllHonors && (
-              <Card className="p-6 mb-6">
-                <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
-                  {allHonorsTiers.map((tier, idx) => (
-                    <div key={idx} className="text-center p-4 border border-neutral-800 rounded-xl">
-                      <HonorsBadge level={tier.level} size="md" isLocked={!tier.isUnlocked && tier.level !== honorsData.currentLevel} />
-                      <p className="text-neutral-500 text-xs uppercase mt-2">DEGEN</p>
-                      <h4 className="text-white font-bold">{tier.name}</h4>
-                      {tier.level === honorsData.currentLevel ? (
-                        <span className="inline-block mt-2 px-3 py-1 bg-emerald-500/20 text-emerald-400 text-xs font-bold rounded-full border border-emerald-500/30">
-                          Current Rank
-                        </span>
-                      ) : !tier.isUnlocked ? (
-                        <span className="inline-flex items-center gap-1 mt-2 px-3 py-1 bg-neutral-800 text-neutral-500 text-xs font-medium rounded-full">
-                          <FiLock className="w-3 h-3" /> Locked
-                        </span>
-                      ) : null}
-                      <p className="text-neutral-400 text-sm mt-2">
-                        Total Rev Share: <span className="text-white font-bold">{tier.totalRevShare}%</span>
-                      </p>
-                    </div>
-                  ))}
-                  {/* Spartan Partner */}
-                  <div className="text-center p-4 border border-amber-500/30 rounded-xl bg-amber-500/5">
-                    <div className="w-24 h-28 mx-auto flex items-center justify-center">
-                      <GiCrown className="w-12 h-12 text-amber-400" />
-                    </div>
-                    <p className="text-amber-400 text-xs uppercase mt-2">SPARTAN</p>
-                    <h4 className="text-white font-bold">PARTNER</h4>
-                    <button className="mt-2 px-3 py-1 bg-neutral-800 hover:bg-neutral-700 text-white text-xs font-medium rounded-full transition-colors">
-                      Get In Touch
-                    </button>
-                    <p className="text-neutral-400 text-sm mt-2">Custom Rev Share</p>
+            {/* Share Your Code Bar */}
+            <div className={`flex flex-col md:flex-row items-center justify-between gap-4 px-5 py-4 bg-white/[0.06] backdrop-blur-sm border border-white/[0.08] rounded-xl mb-6 transition-all duration-700 delay-100 ${mounted ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'}`}>
+              {/* Left: Share info */}
+              <div className="flex-shrink-0">
+                <h3 className="text-white font-bold text-sm mb-1">SHARE YOUR CODE</h3>
+                <p className="text-neutral-400 text-xs whitespace-nowrap">Referrals get counted after their first trade.</p>
+              </div>
+
+              {/* Center: Referral link */}
+              <div className="flex items-center gap-2 bg-neutral-900/50 border border-neutral-700/50 rounded-lg px-4 py-2">
+                <span className="text-neutral-300 text-sm font-mono">{localReferralLink}</span>
+                <button
+                  onClick={() => handleCopyLink(localReferralLink)}
+                  className="p-1.5 hover:bg-neutral-800 rounded transition-colors cursor-pointer"
+                >
+                  {copied ? <FiCheck className="w-4 h-4 text-emerald-400" /> : <FiCopy className="w-4 h-4 text-neutral-400" />}
+                </button>
+                <button
+                  onClick={() => setIsUsernameModalOpen(true)}
+                  className="p-1.5 hover:bg-neutral-800 rounded transition-colors cursor-pointer"
+                  title="Edit username"
+                >
+                  <FiEdit2 className="w-4 h-4 text-neutral-400" />
+                </button>
+              </div>
+
+              {/* Right: Referral count (total across all tiers) */}
+              <div className="flex items-center gap-2">
+                <FiUsers className="w-5 h-5 text-amber-400" />
+                <span className="text-white font-bold">{statsData.totalReferrals} Referrals</span>
+              </div>
+            </div>
+
+            {/* Boost Banner - Bronze/tan style matching the design */}
+            <div className={`relative mb-6 px-5 py-4 rounded-xl overflow-hidden transition-all duration-700 delay-200 ${mounted ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'}`}
+              style={{
+                background: 'linear-gradient(90deg, #1a1816 0%, #151312 50%, #1a1816 100%)',
+                border: '1px solid rgba(139, 115, 85, 0.25)'
+              }}
+            >
+              {/* Subtle texture overlay */}
+              <div
+                className="absolute inset-0 opacity-10 pointer-events-none"
+                style={{
+                  backgroundImage: 'url(/future.png)',
+                  backgroundSize: 'cover',
+                  backgroundPosition: 'center'
+                }}
+              />
+
+              <div className="relative flex items-center justify-between">
+                <div className="flex items-center gap-4">
+                  {/* Bronze spartan helmet badge */}
+                  <div className="w-12 h-12 flex items-center justify-center">
+                    <GiSpartanHelmet
+                      className="w-10 h-10"
+                      style={{ color: '#8B7355' }}
+                    />
+                  </div>
+                  <div>
+                    <p
+                      className="text-xs uppercase tracking-wider font-medium"
+                      style={{ color: '#9A8872' }}
+                    >
+                      Boost your refs to 42.5%
+                    </p>
+                    <p className="font-black text-lg tracking-wide">
+                      <span className="text-white">CLAIM </span>
+                      <span style={{ color: '#C4A574' }}>HONORS III</span>
+                    </p>
                   </div>
                 </div>
-              </Card>
+                <button
+                  className="px-5 py-2.5 text-sm font-semibold rounded-lg transition-all duration-200 whitespace-nowrap cursor-pointer hover:brightness-110"
+                  style={{
+                    background: 'rgba(30, 26, 22, 0.9)',
+                    border: '1px solid rgba(139, 115, 85, 0.5)',
+                    color: '#C4A574'
+                  }}
+                >
+                  Claim Your Boost
+                </button>
+              </div>
+            </div>
+
+            {/* Main Content - Unified Box (matching Arena style) */}
+            <Card className="mb-6 overflow-hidden">
+              <div className="flex flex-col lg:flex-row">
+                {/* Left: Current Honors */}
+                <div className="lg:w-[380px] p-6 flex flex-col items-center lg:border-r border-neutral-800/60">
+                  {/* Badge using actual degen image */}
+                  <div className="relative mt-4">
+                    <div
+                      className="absolute inset-0 blur-xl opacity-40"
+                      style={{
+                        background: 'radial-gradient(circle, #8B735560 0%, transparent 70%)',
+                        transform: 'scale(1.5)',
+                      }}
+                    />
+                    <img
+                      src={getRankImage('degen', honorsData.currentLevel)}
+                      alt="Honors Badge"
+                      className="w-44 h-44 object-contain relative z-10"
+                      style={{ filter: 'drop-shadow(0 0 15px rgba(139, 115, 85, 0.5))' }}
+                    />
+                  </div>
+
+                  {/* Rank Name */}
+                  <p className="mt-4 text-neutral-500 text-xs uppercase tracking-wider">DEGEN</p>
+                  <h3
+                    className="text-4xl tracking-widest text-white uppercase"
+                    style={{ fontWeight: 900 }}
+                  >
+                    HONORS {['I', 'II', 'III', 'IV'][honorsData.currentLevel - 1]}
+                  </h3>
+
+                  {/* Rev Share */}
+                  <div className="w-full mt-6 flex items-center justify-between pb-4 border-b border-neutral-800/60">
+                    <span className="text-white font-bold">Total Rev Share</span>
+                    <span className="text-emerald-400 font-bold text-xl">{honorsData.totalRevShare}%</span>
+                  </div>
+
+                  {/* Layer Breakdown - Pyramid with people icons */}
+                  <div className="w-full mt-4 space-y-2">
+                    {/* Direct Ref: 1 person at top */}
+                    <div className="flex items-center justify-between py-2 px-3 bg-neutral-900/50 rounded-lg">
+                      <span className="text-neutral-400 text-sm w-20">Direct Ref:</span>
+                      <div className="flex-1 flex justify-center gap-1">
+                        <BiUser className="w-4 h-4 text-amber-400" />
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-neutral-500 text-xs">{statsData.directReferrals}</span>
+                        <span className="text-white font-bold text-sm w-10 text-right">{honorsData.revSharePercentages.direct}%</span>
+                      </div>
+                    </div>
+                    {/* Tier 1: 2 people */}
+                    <div className="flex items-center justify-between py-2 px-3 bg-neutral-900/50 rounded-lg">
+                      <span className="text-neutral-400 text-sm w-20">Tier 1:</span>
+                      <div className="flex-1 flex justify-center gap-1">
+                        <BiUser className="w-4 h-4 text-neutral-400" />
+                        <BiUser className="w-4 h-4 text-neutral-400" />
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-neutral-500 text-xs">{statsData.tier1Referrals}</span>
+                        <span className="text-white font-bold text-sm w-10 text-right">{honorsData.revSharePercentages.tier1}%</span>
+                      </div>
+                    </div>
+                    {/* Tier 2: 3 people */}
+                    <div className="flex items-center justify-between py-2 px-3 bg-neutral-900/50 rounded-lg">
+                      <span className="text-neutral-400 text-sm w-20">Tier 2:</span>
+                      <div className="flex-1 flex justify-center gap-1">
+                        <BiUser className="w-4 h-4 text-neutral-500" />
+                        <BiUser className="w-4 h-4 text-neutral-500" />
+                        <BiUser className="w-4 h-4 text-neutral-500" />
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-neutral-500 text-xs">{statsData.tier2Referrals}</span>
+                        <span className="text-white font-bold text-sm w-10 text-right">{honorsData.revSharePercentages.tier2}%</span>
+                      </div>
+                    </div>
+                    {/* Tier 3: 4 people */}
+                    <div className="flex items-center justify-between py-2 px-3 bg-neutral-900/50 rounded-lg">
+                      <span className="text-neutral-400 text-sm w-20">Tier 3:</span>
+                      <div className="flex-1 flex justify-center gap-1">
+                        <BiUser className="w-4 h-4 text-neutral-600" />
+                        <BiUser className="w-4 h-4 text-neutral-600" />
+                        <BiUser className="w-4 h-4 text-neutral-600" />
+                        <BiUser className="w-4 h-4 text-neutral-600" />
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-neutral-500 text-xs">{statsData.tier3Referrals}</span>
+                        <span className="text-white font-bold text-sm w-10 text-right">{honorsData.revSharePercentages.tier3}%</span>
+                      </div>
+                    </div>
+                    {/* Tier 4: 5 people */}
+                    <div className="flex items-center justify-between py-2 px-3 bg-neutral-900/50 rounded-lg">
+                      <span className="text-neutral-400 text-sm w-20">Tier 4:</span>
+                      <div className="flex-1 flex justify-center gap-1">
+                        <BiUser className="w-4 h-4 text-neutral-700" />
+                        <BiUser className="w-4 h-4 text-neutral-700" />
+                        <BiUser className="w-4 h-4 text-neutral-700" />
+                        <BiUser className="w-4 h-4 text-neutral-700" />
+                        <BiUser className="w-4 h-4 text-neutral-700" />
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-neutral-500 text-xs">{statsData.tier4Referrals}</span>
+                        <span className="text-white font-bold text-sm w-10 text-right">{honorsData.revSharePercentages.tier4}%</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Toggle Ranks Button */}
+                  <button
+                    onClick={() => setShowAllHonors(!showAllHonors)}
+                    className="mt-6 w-full py-3 bg-neutral-800/60 hover:bg-neutral-700/60 text-white font-medium rounded-lg transition-all border border-neutral-700/50 cursor-pointer"
+                  >
+                    {showAllHonors ? 'Hide Ranks' : 'View All Ranks'}
+                  </button>
+                </div>
+
+                {/* Right: Quests - matching Arena's QuestItem style */}
+                <div className="flex-1 p-6">
+                  {/* Referral Rank-Up Quests */}
+                  <div className="mb-6">
+                    <h3 className="text-white font-bold mb-4">Referral Rank-Up Quests</h3>
+                    <div className="space-y-2">
+                      {referralRankUpQuests.map((quest) => (
+                        <div
+                          key={quest.id}
+                          className={`flex items-center justify-between py-4 px-4 rounded-xl border transition-all duration-200 ${
+                            quest.isComplete
+                              ? 'bg-neutral-900/40 border-neutral-800/30 opacity-60'
+                              : 'bg-neutral-900/70 border-neutral-800/50 hover:border-neutral-700/70'
+                          }`}
+                        >
+                          <div className="flex items-center gap-4">
+                            {/* Checkbox - filled with check if complete */}
+                            {quest.isComplete ? (
+                              <div className="w-5 h-5 rounded-full bg-emerald-500/20 border-2 border-emerald-500 flex items-center justify-center flex-shrink-0">
+                                <FiCheck className="w-3 h-3 text-emerald-400" />
+                              </div>
+                            ) : (
+                              <div className="w-5 h-5 rounded-full border-2 border-neutral-600 flex-shrink-0" />
+                            )}
+                            <span className={`text-[15px] ${quest.isComplete ? 'text-neutral-400 line-through' : 'text-white'}`}>
+                              {quest.title}
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            {/* Use badge image for honors reward */}
+                            <img
+                              src={getRankImage('degen', { 'Honors II': 2, 'Honors III': 3, 'Honors IV': 4 }[quest.reward] || 1)}
+                              alt={quest.reward}
+                              className={`w-5 h-5 object-contain ${quest.isComplete ? 'opacity-50' : ''}`}
+                            />
+                            <span
+                              className={`font-bold text-sm ${quest.isComplete ? 'opacity-50' : ''}`}
+                              style={{ color: '#C4A574' }}
+                            >
+                              {quest.reward}
+                            </span>
+                            {quest.isComplete && (
+                              <span className="text-emerald-400 text-xs font-medium ml-1">✓ Claimed</span>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Divider */}
+                  <div className="h-px bg-neutral-800/60 mb-6" />
+
+                  {/* Referral Seasonal Quests */}
+                  <div>
+                    <h3 className="text-white font-bold mb-4">Referral Seasonal Quests</h3>
+                    <div className="space-y-2">
+                      {referralSeasonalQuests.map((quest) => (
+                        <div
+                          key={quest.id}
+                          className="flex items-center justify-between py-4 px-4 rounded-xl bg-neutral-900/70 border border-neutral-800/50 hover:border-neutral-700/70 transition-all duration-200"
+                        >
+                          <div className="flex items-center gap-4">
+                            <div className="w-5 h-5 rounded-full border-2 border-neutral-600 flex-shrink-0" />
+                            <span className="text-white text-[15px]">{quest.title}</span>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <GoldCoin className="w-5 h-5" />
+                            <span className="text-amber-400 font-bold">{quest.reward.toLocaleString()}</span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </Card>
+
+            {/* Honors Carousel - Matching Arena's Rank Carousel Style */}
+            {showAllHonors && (
+              <div className="mb-6 bg-[#0a0a0a]/95 backdrop-blur-sm border border-neutral-800/50 rounded-xl relative overflow-hidden">
+                {/* Gradient edges for scroll indication */}
+                <div className="absolute left-0 top-0 bottom-0 w-12 bg-gradient-to-r from-[#0a0a0a] to-transparent z-10 pointer-events-none" />
+                <div className="absolute right-0 top-0 bottom-0 w-12 bg-gradient-to-l from-[#0a0a0a] to-transparent z-10 pointer-events-none" />
+
+                {/* Navigation buttons */}
+                <button
+                  onClick={() => scrollHonorsCarousel('left')}
+                  className="absolute left-2 top-1/2 -translate-y-1/2 z-20 w-9 h-9 bg-neutral-800/90 hover:bg-neutral-700 border border-neutral-600/50 rounded-full flex items-center justify-center transition-all duration-200 cursor-pointer"
+                >
+                  <FiChevronLeft className="w-5 h-5 text-white" />
+                </button>
+                <button
+                  onClick={() => scrollHonorsCarousel('right')}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 z-20 w-9 h-9 bg-neutral-800/90 hover:bg-neutral-700 border border-neutral-600/50 rounded-full flex items-center justify-center transition-all duration-200 cursor-pointer"
+                >
+                  <FiChevronRight className="w-5 h-5 text-white" />
+                </button>
+
+                {/* Carousel */}
+                <div
+                  ref={honorsCarouselRef}
+                  className="flex overflow-x-auto px-10 scrollbar-hide scroll-smooth snap-x snap-mandatory"
+                  style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
+                >
+                  {allHonorsTiers.map((tier, idx) => {
+                    const isCurrent = tier.level === honorsData.currentLevel;
+                    const isLocked = !tier.isUnlocked && !isCurrent;
+                    const isLast = idx === allHonorsTiers.length - 1 && false; // Not last because Spartan follows
+
+                    return (
+                      <div key={idx} className="snap-center flex h-full">
+                        <div className={`
+                          flex-shrink-0 w-[240px] flex flex-col items-center justify-center px-6 py-5
+                          transition-all duration-300
+                          ${isLocked ? 'opacity-50' : 'opacity-100'}
+                        `}>
+                          {/* Status badge - matching Arena style */}
+                          <div className="mb-3 h-7">
+                            {isCurrent ? (
+                              <span className="inline-flex items-center gap-1.5 px-4 py-1.5 bg-emerald-500/20 border border-emerald-500/40 text-emerald-400 text-xs font-semibold rounded">
+                                Current Rank
+                              </span>
+                            ) : isLocked ? (
+                              <span className="inline-flex items-center gap-1.5 px-4 py-1.5 bg-neutral-800/80 border border-neutral-600/50 text-neutral-500 text-xs font-medium rounded">
+                                <FiLock className="w-3.5 h-3.5" />
+                                Rank Locked
+                              </span>
+                            ) : null}
+                          </div>
+
+                          {/* Badge - larger size */}
+                          <HonorsBadge level={tier.level} size="lg" isLocked={isLocked} />
+
+                          {/* Rank Name */}
+                          <h4
+                            className={`mt-3 text-3xl tracking-wide ${isLocked ? 'text-neutral-500' : 'text-white'}`}
+                            style={{ fontWeight: 900 }}
+                          >
+                            {tier.name}
+                          </h4>
+
+                          {/* Honors row */}
+                          <div className={`mt-2 flex items-center gap-2 ${isLocked ? 'text-neutral-600' : 'text-neutral-400'}`}>
+                            <FiCheck className={`w-5 h-5 ${isLocked ? 'text-neutral-600' : 'text-emerald-500'}`} />
+                            <span className="text-base font-medium">Honors {['I', 'II', 'III', 'IV'][tier.level - 1]}</span>
+                          </div>
+
+                          {/* Rev share details */}
+                          <div className="mt-3 text-center">
+                            <p className={`text-base ${isLocked ? 'text-neutral-600' : 'text-neutral-400'}`}>
+                              {tier.totalRevShare}% Rev Share
+                            </p>
+                          </div>
+                        </div>
+
+                        {/* Vertical divider line */}
+                        <div className="w-px bg-neutral-700/40 self-stretch" />
+                      </div>
+                    );
+                  })}
+
+                  {/* Spartan Partner - Special gold accent card */}
+                  <div className="snap-center flex h-full">
+                    <div className="flex-shrink-0 w-[240px] flex flex-col items-center justify-center px-6 py-5">
+                      {/* Status badge */}
+                      <div className="mb-3 h-7">
+                        <span className="inline-flex items-center gap-1.5 px-4 py-1.5 bg-amber-500/20 border border-amber-500/40 text-amber-400 text-xs font-semibold rounded">
+                          Elite Tier
+                        </span>
+                      </div>
+
+                      {/* Spartan Badge */}
+                      <div className="relative w-32 h-32 flex items-center justify-center">
+                        <div
+                          className="absolute inset-0 blur-xl opacity-50"
+                          style={{
+                            background: 'radial-gradient(circle, #FFD70060 0%, transparent 70%)',
+                            transform: 'scale(1.3)',
+                          }}
+                        />
+                        <img
+                          src="https://cdn.trojan.com/arena/ranks/big/spartan.webp"
+                          alt="Spartan Partner"
+                          className="w-28 h-28 object-contain relative z-10"
+                        />
+                      </div>
+
+                      {/* Rank Name */}
+                      <h4
+                        className="mt-3 text-3xl tracking-wide text-white"
+                        style={{ fontWeight: 900 }}
+                      >
+                        SPARTAN
+                      </h4>
+
+                      {/* Partner badge */}
+                      <div className="mt-2 flex items-center gap-2 text-amber-400">
+                        <GiCrown className="w-5 h-5" />
+                        <span className="text-base font-medium">Partner</span>
+                      </div>
+
+                      {/* Details */}
+                      <div className="mt-3 text-center space-y-0.5">
+                        <p className="text-base text-neutral-400">Custom Rev Share</p>
+                        <button className="mt-2 px-4 py-1.5 bg-neutral-800/80 hover:bg-neutral-700 text-white text-xs font-medium rounded-lg transition-colors cursor-pointer border border-neutral-700/50">
+                          Get In Touch
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
             )}
 
-            {/* Rewards Cards */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+            {/* SOL & Gold Rewards - matching Arena style */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
               {/* SOL Rewards */}
               <Card className="p-6">
-                <div className="flex items-center justify-between mb-4">
-                  <div>
-                    <h3 className="text-emerald-400 font-black text-lg">SOL REWARDS</h3>
-                    <p className="text-neutral-500 text-sm">Earned Through Referrals and Trading Rewards</p>
-                  </div>
-                </div>
-                <div className="flex items-center justify-between p-4 bg-neutral-900/50 border border-neutral-800 rounded-lg">
-                  <div>
-                    <p className="text-neutral-400 text-sm">Available SOL</p>
-                    <div className="flex items-center gap-2 mt-1">
-                      <span className="text-purple-400 text-xl">≡</span>
-                      <span className="text-white font-bold text-2xl">{statsData.pendingSolRewards.toFixed(4)}</span>
-                    </div>
-                  </div>
-                  <button
-                    onClick={() => claimRewardsMutation.mutate()}
-                    disabled={statsData.pendingSolRewards <= 0 || claimRewardsMutation.isPending}
-                    className="px-6 py-3 bg-neutral-700 hover:bg-neutral-600 disabled:opacity-50 disabled:cursor-not-allowed text-white font-bold rounded-lg transition-colors"
+                <div>
+                  {/* Title */}
+                  <h3 className="text-2xl font-black tracking-wide bg-gradient-to-r from-emerald-400 via-teal-400 to-cyan-400 bg-clip-text text-transparent mb-1">
+                    SOL REWARDS
+                  </h3>
+                  <p className="text-neutral-500 text-sm mb-5">Earned Through Referrals and Trading Rewards</p>
+
+                  {/* Balance box - green tint */}
+                  <div
+                    className="flex flex-col gap-3 p-4 rounded-lg"
+                    style={{
+                      background: 'linear-gradient(90deg, rgba(16, 185, 129, 0.08) 0%, rgba(20, 30, 28, 0.8) 100%)',
+                      border: '1px solid rgba(16, 185, 129, 0.15)'
+                    }}
                   >
-                    {claimRewardsMutation.isPending ? 'Claiming...' : 'Claim'}
-                  </button>
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-neutral-400 text-sm mb-1">Available SOL</p>
+                        <div className="flex items-center gap-2">
+                          <SolanaLogo className="w-5 h-5" />
+                          <span className="text-white text-xl font-bold">{statsData.pendingSolRewards.toFixed(4)}</span>
+                        </div>
+                      </div>
+                      <button
+                        onClick={() => claimRewardsMutation.mutate()}
+                        disabled={statsData.pendingSolRewards < 0.005 || claimRewardsMutation.isPending}
+                        className={`px-5 py-2 rounded-lg border text-sm font-medium transition-colors ${
+                          statsData.pendingSolRewards >= 0.005 && !claimRewardsMutation.isPending
+                            ? 'bg-emerald-600 hover:bg-emerald-500 text-white border-emerald-500 cursor-pointer'
+                            : 'bg-emerald-900/40 text-emerald-400/70 border-emerald-700/30 cursor-not-allowed opacity-50'
+                        }`}
+                      >
+                        {claimRewardsMutation.isPending ? 'Claiming...' : 'Claim'}
+                      </button>
+                    </div>
+                    {/* Minimum claim info */}
+                    {statsData.pendingSolRewards > 0 && statsData.pendingSolRewards < 0.005 && (
+                      <p className="text-amber-400/80 text-xs">
+                        Minimum claim: 0.005 SOL ({((0.005 - statsData.pendingSolRewards) * 100 / 0.005).toFixed(0)}% more needed)
+                      </p>
+                    )}
+                  </div>
                 </div>
               </Card>
 
               {/* Gold Rewards */}
               <Card className="p-6">
-                <div className="flex items-center justify-between mb-4">
-                  <div>
-                    <h3 className="text-amber-400 font-black text-lg">GOLD REWARDS</h3>
-                    <p className="text-neutral-500 text-sm">Earned Through Quests, Rank Ups and more</p>
+                <div>
+                  {/* Title with badge */}
+                  <div className="flex items-center justify-between mb-1">
+                    <h3 className="text-2xl font-black tracking-wide bg-gradient-to-r from-yellow-400 via-amber-400 to-yellow-500 bg-clip-text text-transparent">
+                      GOLD REWARDS
+                    </h3>
+                    <span className="px-4 py-1.5 bg-amber-500/15 border border-amber-500/40 text-amber-400 text-sm font-bold rounded-lg">
+                      1x Gold Boost
+                    </span>
                   </div>
-                  <span className="px-3 py-1 bg-amber-500/20 text-amber-400 text-xs font-bold rounded border border-amber-500/30">
-                    1x Gold Boost
-                  </span>
-                </div>
-                <div className="flex items-center justify-between p-4 bg-neutral-900/50 border border-neutral-800 rounded-lg">
-                  <div>
-                    <p className="text-neutral-400 text-sm">Available Gold</p>
-                    <div className="flex items-center gap-2 mt-1">
-                      <GoldCoin className="w-6 h-6" />
-                      <span className="text-white font-bold text-2xl">0</span>
-                    </div>
-                  </div>
-                  <button
-                    disabled
-                    className="px-6 py-3 bg-amber-600 hover:bg-amber-500 disabled:opacity-50 disabled:cursor-not-allowed text-black font-bold rounded-lg transition-colors"
+                  <p className="text-neutral-500 text-sm mb-5">Earned Through Quests, Rank Ups and more</p>
+
+                  {/* Balance box - gold tint */}
+                  <div
+                    className="flex items-center justify-between p-4 rounded-lg"
+                    style={{
+                      background: 'linear-gradient(90deg, rgba(212, 175, 55, 0.08) 0%, rgba(30, 28, 20, 0.8) 100%)',
+                      border: '1px solid rgba(212, 175, 55, 0.15)'
+                    }}
                   >
-                    Claim
-                  </button>
+                    <div>
+                      <p className="text-neutral-400 text-sm mb-1">Available Gold</p>
+                      <div className="flex items-center gap-2">
+                        <GoldCoin className="w-5 h-5" />
+                        <span className="text-white text-xl font-bold">0</span>
+                      </div>
+                    </div>
+                    <button
+                      disabled
+                      className="px-5 py-2 bg-amber-900/30 text-amber-400/70 rounded-lg border border-amber-700/30 cursor-not-allowed transition-colors text-sm font-medium"
+                    >
+                      Claim
+                    </button>
+                  </div>
                 </div>
               </Card>
             </div>
@@ -476,50 +958,202 @@ export default function ReferralsPage() {
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                {/* Rank Breakdown */}
+                {/* Rank Breakdown - Unlocks when user has referrals */}
                 <Card className="p-6 relative overflow-hidden">
-                  <h3 className="text-white font-bold text-sm uppercase mb-4">Rank Breakdown</h3>
-                  <div className="h-48 flex items-center justify-center">
-                    {/* Placeholder chart */}
-                    <div className="w-32 h-32 rounded-full border-8 border-neutral-800 relative">
-                      <div className="absolute inset-0 rounded-full border-8 border-emerald-500/30" style={{ clipPath: 'polygon(0 0, 50% 0, 50% 100%, 0 100%)' }} />
-                    </div>
-                  </div>
-                  {/* Locked overlay */}
-                  <div className="absolute inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center">
-                    <div className="flex items-center gap-2 px-4 py-2 bg-neutral-800 rounded-lg border border-neutral-700">
-                      <FiLock className="w-4 h-4 text-neutral-400" />
-                      <span className="text-neutral-300 text-sm">Unlock rank data by referring users</span>
-                    </div>
-                  </div>
+                  <h3 className="text-white font-bold text-sm uppercase mb-4">Referral Tier Breakdown</h3>
+                  {statsData.totalReferrals > 0 ? (
+                    <>
+                      {/* Unlocked: Show tier breakdown */}
+                      <div className="h-48 flex items-center gap-6">
+                        {/* Donut Chart */}
+                        <div className="relative w-32 h-32 flex-shrink-0">
+                          <svg viewBox="0 0 36 36" className="w-full h-full -rotate-90">
+                            {/* Background circle */}
+                            <circle cx="18" cy="18" r="15.9" fill="transparent" stroke="#262626" strokeWidth="3" />
+                            {/* Direct referrals (amber) */}
+                            <circle
+                              cx="18" cy="18" r="15.9" fill="transparent"
+                              stroke="#F59E0B"
+                              strokeWidth="3"
+                              strokeDasharray={`${(statsData.directReferrals / Math.max(statsData.totalReferrals, 1)) * 100} 100`}
+                              strokeDashoffset="0"
+                            />
+                            {/* Tier 1 (blue) */}
+                            <circle
+                              cx="18" cy="18" r="15.9" fill="transparent"
+                              stroke="#3B82F6"
+                              strokeWidth="3"
+                              strokeDasharray={`${(statsData.tier1Referrals / Math.max(statsData.totalReferrals, 1)) * 100} 100`}
+                              strokeDashoffset={`${-((statsData.directReferrals / Math.max(statsData.totalReferrals, 1)) * 100)}`}
+                            />
+                            {/* Tier 2 (purple) */}
+                            <circle
+                              cx="18" cy="18" r="15.9" fill="transparent"
+                              stroke="#8B5CF6"
+                              strokeWidth="3"
+                              strokeDasharray={`${(statsData.tier2Referrals / Math.max(statsData.totalReferrals, 1)) * 100} 100`}
+                              strokeDashoffset={`${-(((statsData.directReferrals + statsData.tier1Referrals) / Math.max(statsData.totalReferrals, 1)) * 100)}`}
+                            />
+                            {/* Tier 3+4 (teal) */}
+                            <circle
+                              cx="18" cy="18" r="15.9" fill="transparent"
+                              stroke="#14B8A6"
+                              strokeWidth="3"
+                              strokeDasharray={`${((statsData.tier3Referrals + statsData.tier4Referrals) / Math.max(statsData.totalReferrals, 1)) * 100} 100`}
+                              strokeDashoffset={`${-(((statsData.directReferrals + statsData.tier1Referrals + statsData.tier2Referrals) / Math.max(statsData.totalReferrals, 1)) * 100)}`}
+                            />
+                          </svg>
+                          <div className="absolute inset-0 flex items-center justify-center">
+                            <span className="text-2xl font-bold text-white">{statsData.totalReferrals}</span>
+                          </div>
+                        </div>
+                        {/* Legend */}
+                        <div className="flex-1 space-y-2">
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-2">
+                              <div className="w-3 h-3 rounded-full bg-amber-500" />
+                              <span className="text-neutral-400 text-sm">Direct</span>
+                            </div>
+                            <span className="text-white font-bold">{statsData.directReferrals}</span>
+                          </div>
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-2">
+                              <div className="w-3 h-3 rounded-full bg-blue-500" />
+                              <span className="text-neutral-400 text-sm">Tier 1</span>
+                            </div>
+                            <span className="text-white font-bold">{statsData.tier1Referrals}</span>
+                          </div>
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-2">
+                              <div className="w-3 h-3 rounded-full bg-purple-500" />
+                              <span className="text-neutral-400 text-sm">Tier 2</span>
+                            </div>
+                            <span className="text-white font-bold">{statsData.tier2Referrals}</span>
+                          </div>
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-2">
+                              <div className="w-3 h-3 rounded-full bg-teal-500" />
+                              <span className="text-neutral-400 text-sm">Tier 3-4</span>
+                            </div>
+                            <span className="text-white font-bold">{statsData.tier3Referrals + statsData.tier4Referrals}</span>
+                          </div>
+                        </div>
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      {/* Placeholder when no referrals */}
+                      <div className="h-48 flex items-center justify-center">
+                        <div className="w-32 h-32 rounded-full border-8 border-neutral-800 relative">
+                          <div className="absolute inset-0 rounded-full border-8 border-emerald-500/30" style={{ clipPath: 'polygon(0 0, 50% 0, 50% 100%, 0 100%)' }} />
+                        </div>
+                      </div>
+                      {/* Locked overlay */}
+                      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center">
+                        <div className="flex items-center gap-2 px-4 py-2 bg-neutral-800 rounded-lg border border-neutral-700">
+                          <FiLock className="w-4 h-4 text-neutral-400" />
+                          <span className="text-neutral-300 text-sm">Unlock by referring users</span>
+                        </div>
+                      </div>
+                    </>
+                  )}
                 </Card>
 
-                {/* SOL Rewards Breakdown */}
+                {/* SOL Rewards Breakdown - Unlocks when user has earned SOL */}
                 <Card className="p-6 relative overflow-hidden">
                   <h3 className="text-white font-bold text-sm uppercase mb-4">SOL Rewards Breakdown</h3>
-                  <div className="h-48 flex items-center justify-center">
-                    {/* Placeholder chart */}
-                    <div className="w-full h-32 flex items-end justify-between gap-1 px-4">
-                      {[20, 35, 25, 45, 60, 55, 70].map((h, i) => (
-                        <div key={i} className="flex-1 bg-emerald-500/30 rounded-t" style={{ height: `${h}%` }} />
-                      ))}
-                    </div>
-                  </div>
-                  {/* Locked overlay */}
-                  <div className="absolute inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center">
-                    <div className="flex items-center gap-2 px-4 py-2 bg-neutral-800 rounded-lg border border-neutral-700">
-                      <FiLock className="w-4 h-4 text-neutral-400" />
-                      <span className="text-neutral-300 text-sm">Unlock Rewards Breakdown by Earning SOL</span>
-                    </div>
-                  </div>
+                  {statsData.totalEarnedRewards > 0 ? (
+                    <>
+                      {/* Unlocked: Show rewards data */}
+                      <div className="h-48 flex flex-col justify-between">
+                        {/* Stats row */}
+                        <div className="grid grid-cols-2 gap-4 mb-4">
+                          <div className="bg-neutral-900/50 rounded-lg p-3">
+                            <p className="text-neutral-500 text-xs mb-1">Total Earned</p>
+                            <p className="text-emerald-400 font-bold text-lg">{statsData.totalEarnedRewards.toFixed(4)} SOL</p>
+                          </div>
+                          <div className="bg-neutral-900/50 rounded-lg p-3">
+                            <p className="text-neutral-500 text-xs mb-1">Pending</p>
+                            <p className="text-amber-400 font-bold text-lg">{statsData.pendingSolRewards.toFixed(4)} SOL</p>
+                          </div>
+                        </div>
+                        {/* Visual bar representation */}
+                        <div className="space-y-2">
+                          <div className="flex items-center gap-3">
+                            <span className="text-neutral-500 text-xs w-16">Claimed</span>
+                            <div className="flex-1 h-3 bg-neutral-800 rounded-full overflow-hidden">
+                              <div
+                                className="h-full bg-emerald-500 rounded-full transition-all"
+                                style={{ width: `${(statsData.claimedSolRewards / Math.max(statsData.totalEarnedRewards, 0.0001)) * 100}%` }}
+                              />
+                            </div>
+                            <span className="text-white text-sm font-medium w-24 text-right">{statsData.claimedSolRewards.toFixed(4)}</span>
+                          </div>
+                          <div className="flex items-center gap-3">
+                            <span className="text-neutral-500 text-xs w-16">Pending</span>
+                            <div className="flex-1 h-3 bg-neutral-800 rounded-full overflow-hidden">
+                              <div
+                                className="h-full bg-amber-500 rounded-full transition-all"
+                                style={{ width: `${(statsData.pendingSolRewards / Math.max(statsData.totalEarnedRewards, 0.0001)) * 100}%` }}
+                              />
+                            </div>
+                            <span className="text-white text-sm font-medium w-24 text-right">{statsData.pendingSolRewards.toFixed(4)}</span>
+                          </div>
+                        </div>
+                        {/* Claim button if pending rewards */}
+                        {statsData.pendingSolRewards > 0 && (
+                          <div className="mt-3">
+                            <button
+                              onClick={() => claimRewardsMutation.mutate()}
+                              disabled={statsData.pendingSolRewards < 0.005 || claimRewardsMutation.isPending}
+                              className={`w-full py-2 font-medium rounded-lg transition-colors ${
+                                statsData.pendingSolRewards >= 0.005 && !claimRewardsMutation.isPending
+                                  ? 'bg-emerald-600 hover:bg-emerald-500 text-white cursor-pointer'
+                                  : 'bg-emerald-900/40 text-emerald-400/70 cursor-not-allowed opacity-50'
+                              }`}
+                            >
+                              {claimRewardsMutation.isPending ? 'Claiming...' : `Claim ${statsData.pendingSolRewards.toFixed(4)} SOL`}
+                            </button>
+                            {statsData.pendingSolRewards < 0.005 && (
+                              <p className="text-amber-400/80 text-xs text-center mt-2">
+                                Minimum claim: 0.005 SOL
+                              </p>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      {/* Placeholder when no SOL earned */}
+                      <div className="h-48 flex items-center justify-center">
+                        <div className="w-full h-32 flex items-end justify-between gap-1 px-4">
+                          {[20, 35, 25, 45, 60, 55, 70].map((h, i) => (
+                            <div key={i} className="flex-1 bg-emerald-500/30 rounded-t" style={{ height: `${h}%` }} />
+                          ))}
+                        </div>
+                      </div>
+                      {/* Locked overlay */}
+                      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center">
+                        <div className="flex items-center gap-2 px-4 py-2 bg-neutral-800 rounded-lg border border-neutral-700">
+                          <FiLock className="w-4 h-4 text-neutral-400" />
+                          <span className="text-neutral-300 text-sm">Unlock by earning SOL rewards</span>
+                        </div>
+                      </div>
+                    </>
+                  )}
                 </Card>
               </div>
             </div>
 
-            {/* Direct Referrals Table */}
-            <Card className="p-6 mb-6">
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="text-white font-bold">Direct Referrals</h3>
+            {/* All Referrals Table */}
+            <Card className="mb-6 overflow-hidden">
+              {/* Header */}
+              <div className="flex items-center justify-between px-5 py-4 border-b border-neutral-800/50">
+                <div className="flex items-center gap-3">
+                  <h3 className="text-white font-bold text-base">All Referrals</h3>
+                  <span className="text-neutral-500 text-sm">({allReferrals?.total || 0} total)</span>
+                </div>
                 <div className="relative">
                   <FiSearch className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-neutral-500" />
                   <input
@@ -527,42 +1161,109 @@ export default function ReferralsPage() {
                     placeholder="Search Refs"
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
-                    className="pl-10 pr-4 py-2 bg-neutral-800 border border-neutral-700 rounded-lg text-white text-sm placeholder-neutral-500 focus:outline-none focus:border-neutral-600"
+                    className="pl-9 pr-4 py-2 bg-transparent border border-neutral-700/60 rounded-lg text-white text-sm placeholder-neutral-500 focus:outline-none focus:border-neutral-500 w-40"
                   />
                 </div>
               </div>
 
-              {/* Table */}
+              {/* Table with fixed height */}
               <div className="overflow-x-auto">
                 <table className="w-full">
-                  <thead>
-                    <tr className="border-b border-neutral-800">
-                      <th className="text-left py-3 px-4 text-neutral-500 text-sm font-medium">User</th>
-                      <th className="text-left py-3 px-4 text-neutral-500 text-sm font-medium">Date Joined</th>
-                      <th className="text-left py-3 px-4 text-neutral-500 text-sm font-medium">Arena Rank</th>
-                      <th className="text-left py-3 px-4 text-neutral-500 text-sm font-medium">Referral Tier</th>
+                  <thead className="sticky top-0 bg-neutral-900/90 backdrop-blur-sm z-10">
+                    <tr>
+                      <th className="text-left py-3 px-5 text-neutral-400 text-sm font-medium">User</th>
+                      <th className="text-left py-3 px-5 text-neutral-400 text-sm font-medium">Date Joined</th>
+                      <th className="text-left py-3 px-5 text-neutral-400 text-sm font-medium">Volume</th>
+                      <th className="text-left py-3 px-5 text-neutral-400 text-sm font-medium">Referral Tier</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {directReferrals?.referrals && directReferrals.referrals.length > 0 ? (
-                      directReferrals.referrals.map((ref: any) => (
-                        <tr key={ref.id} className="border-b border-neutral-800/50 hover:bg-neutral-800/30">
-                          <td className="py-3 px-4 text-white">{ref.name}</td>
-                          <td className="py-3 px-4 text-neutral-400">{new Date(ref.createdAt).toLocaleDateString()}</td>
-                          <td className="py-3 px-4 text-neutral-400">{ref.rank}</td>
-                          <td className="py-3 px-4 text-neutral-400">Direct</td>
+                    {allReferrals?.referrals && allReferrals.referrals.length > 0 ? (
+                      allReferrals.referrals.map((ref: any) => (
+                        <tr key={ref.id} className="border-b border-neutral-800/30 hover:bg-neutral-800/20 transition-colors">
+                          <td className="py-3 px-5">
+                            <div className="flex flex-col">
+                              <span className="text-white">{ref.name}</span>
+                              {ref.username && <span className="text-neutral-500 text-xs">@{ref.username}</span>}
+                            </div>
+                          </td>
+                          <td className="py-3 px-5 text-neutral-400">{new Date(ref.joinedAt).toLocaleDateString()}</td>
+                          <td className="py-3 px-5 text-neutral-400">${ref.totalVolume?.toLocaleString() || '0'}</td>
+                          <td className="py-3 px-5">
+                            <span className={`px-2 py-1 rounded text-xs font-medium ${
+                              ref.tier === 0 ? 'bg-amber-500/20 text-amber-400' :
+                              ref.tier === 1 ? 'bg-blue-500/20 text-blue-400' :
+                              ref.tier === 2 ? 'bg-purple-500/20 text-purple-400' :
+                              'bg-teal-500/20 text-teal-400'
+                            }`}>
+                              {ref.tierLabel}
+                            </span>
+                          </td>
                         </tr>
                       ))
                     ) : (
                       <tr>
-                        <td colSpan={4} className="py-8 text-center text-neutral-500">
-                          No results found
+                        <td colSpan={4} className="py-10 text-center text-neutral-500">
+                          No referrals found
                         </td>
                       </tr>
                     )}
                   </tbody>
                 </table>
               </div>
+
+              {/* Pagination */}
+              {totalPages > 1 && (
+                <div className="flex items-center justify-between px-5 py-3 border-t border-neutral-800/50">
+                  <span className="text-neutral-500 text-sm">
+                    Showing {((currentPage - 1) * itemsPerPage) + 1}-{Math.min(currentPage * itemsPerPage, allReferrals?.total || 0)} of {allReferrals?.total || 0}
+                  </span>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                      disabled={currentPage === 1}
+                      className="p-2 rounded-lg border border-neutral-700/60 text-neutral-400 hover:bg-neutral-800/50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                    >
+                      <FiChevronLeft className="w-4 h-4" />
+                    </button>
+                    <div className="flex items-center gap-1">
+                      {/* Show page numbers */}
+                      {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                        let pageNum;
+                        if (totalPages <= 5) {
+                          pageNum = i + 1;
+                        } else if (currentPage <= 3) {
+                          pageNum = i + 1;
+                        } else if (currentPage >= totalPages - 2) {
+                          pageNum = totalPages - 4 + i;
+                        } else {
+                          pageNum = currentPage - 2 + i;
+                        }
+                        return (
+                          <button
+                            key={pageNum}
+                            onClick={() => setCurrentPage(pageNum)}
+                            className={`w-8 h-8 rounded-lg text-sm font-medium transition-colors ${
+                              currentPage === pageNum
+                                ? 'bg-amber-500/20 text-amber-400 border border-amber-500/40'
+                                : 'text-neutral-400 hover:bg-neutral-800/50'
+                            }`}
+                          >
+                            {pageNum}
+                          </button>
+                        );
+                      })}
+                    </div>
+                    <button
+                      onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                      disabled={currentPage === totalPages}
+                      className="p-2 rounded-lg border border-neutral-700/60 text-neutral-400 hover:bg-neutral-800/50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                    >
+                      <FiChevronRight className="w-4 h-4" />
+                    </button>
+                  </div>
+                </div>
+              )}
             </Card>
 
             {/* FAQs */}
@@ -593,11 +1294,32 @@ export default function ReferralsPage() {
                 ))}
               </div>
             </div>
-          </main>
+            </main>
 
-          <Footer />
+            {/* Footer inside the rounded container */}
+            <div className="relative z-10">
+              <Footer />
+            </div>
+          </div>
         </div>
       </div>
+
+      <style jsx global>{`
+        .scrollbar-hide::-webkit-scrollbar {
+          display: none;
+        }
+      `}</style>
+
+      {/* Username Edit Modal */}
+      <UsernameEditModal
+        isOpen={isUsernameModalOpen}
+        onClose={() => setIsUsernameModalOpen(false)}
+        currentUsername={user?.name || null}
+        onSuccess={(newUsername) => {
+          // Refresh data after username update
+          refetch();
+        }}
+      />
     </>
   );
 }
