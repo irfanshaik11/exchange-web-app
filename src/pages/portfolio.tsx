@@ -35,7 +35,7 @@ import { normalizeMonadAddress } from "~/utils/normalizeMonadAddress";
 import { acknowledgeWalletExport } from "~/utils/api";
 import { redistributeWalletFunds } from "~/utils/api";
 import { deleteUserWallet } from "~/utils/api";
-import { PredictionPositions } from "~/components/predictions";
+import { PredictionPositions, UnifiedPortfolio, PolygonWalletCard } from "~/components/predictions";
 
 // Interactive Balance Chart Component
 const BalanceChart = ({ 
@@ -3548,11 +3548,25 @@ export default function PortfolioPage() {
                       </div>
                     ))}
                   {activeSpotTab === 3 && (
-                    <div className="w-full">
-                      <PredictionPositions
-                        userPublicKey={user?.publicKey}
-                        showEmptyState={!!user?.id}
-                      />
+                    <div className="w-full space-y-4 pb-16">
+                      {user?.bearerToken ? (
+                        <>
+                          {/* Compact wallet balance at top - shows balance + quick convert */}
+                          <PolygonWalletCard variant="compact" />
+
+                          {/* Full portfolio with gamified stats */}
+                          <UnifiedPortfolio
+                            authToken={user.bearerToken}
+                            walletAddress={primaryWalletAddresses?.ethereum}
+                            variant="portfolio"
+                          />
+                        </>
+                      ) : (
+                        <PredictionPositions
+                          userPublicKey={user?.publicKey}
+                          showEmptyState={!!user?.id}
+                        />
+                      )}
                     </div>
                   )}
                 </div>
@@ -3700,7 +3714,7 @@ export default function PortfolioPage() {
                                 className="object-contain"
                                 style={{ width: 16, height: 16 }}
                               />
-                              Import EVM/Monad Wallet
+                              Import EVM Wallet (Monad/Polygon)
                             </button>
                           </div>
                         </>

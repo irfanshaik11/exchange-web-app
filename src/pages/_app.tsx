@@ -509,29 +509,54 @@ function GlobalLoginModalManager({ enforceLogin }: { enforceLogin: boolean }) {
   const { user, loading: userLoading } = useUser();
   const [loginOpen, setLoginOpen] = useState(false);
   const [isMounted, setIsMounted] = useState(false);
-  
+  const [keepOpen, setKeepOpen] = useState(false);
+
   // Only render on client side to prevent SSR issues with wagmi
   useEffect(() => {
     setIsMounted(true);
   }, []);
-  
+
+  // Listen for custom events from LoginModal to prevent/allow auto-close
+  useEffect(() => {
+    const handleKeepOpen = () => {
+      console.log("[GlobalLoginModalManager] Received keep-open signal");
+      setKeepOpen(true);
+    };
+    const handleCanClose = () => {
+      console.log("[GlobalLoginModalManager] Received can-close signal");
+      setKeepOpen(false);
+    };
+
+    window.addEventListener('login-modal-keep-open', handleKeepOpen);
+    window.addEventListener('login-modal-can-close', handleCanClose);
+
+    return () => {
+      window.removeEventListener('login-modal-keep-open', handleKeepOpen);
+      window.removeEventListener('login-modal-can-close', handleCanClose);
+    };
+  }, []);
+
   useEffect(() => {
     if (!isMounted) return;
     if (enforceLogin && !userLoading && !user) {
       setLoginOpen(true);
     }
-    if (user && loginOpen) {
+    // Only auto-close if user exists AND we're not in a "keep open" state (username step)
+    if (user && loginOpen && !keepOpen) {
       setLoginOpen(false);
     }
-  }, [user, userLoading, enforceLogin, loginOpen, isMounted]);
-  
+  }, [user, userLoading, enforceLogin, loginOpen, isMounted, keepOpen]);
+
   // Prevent closing if not logged in
   const handleLoginClose = () => {
-    if (user) setLoginOpen(false);
+    if (user) {
+      setKeepOpen(false); // Reset the flag
+      setLoginOpen(false);
+    }
   };
-  
+
   if (!enforceLogin || !isMounted) return null;
-  
+
   return (
     <LoginModal open={loginOpen} onClose={handleLoginClose} forceLogin={!user && !userLoading} />
   );

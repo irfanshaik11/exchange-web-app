@@ -1,5 +1,6 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
 import type { Token } from '../utils/db';
+import { extractTokenImage } from '../utils/images';
 
 interface WatchlistContextType {
   watchlist: Token[];
@@ -11,6 +12,10 @@ interface WatchlistContextType {
 }
 
 const WatchlistContext = createContext<WatchlistContextType | undefined>(undefined);
+
+// Key to track if we've already populated defaults (so we don't re-populate after user clears watchlist)
+const DEFAULTS_POPULATED_KEY = 'watchlist_defaults_populated';
+const DEFAULT_WATCHLIST_COUNT = 15;
 
 export function WatchlistProvider({ children }: { children: React.ReactNode }) {
   // Initialize from localStorage to prevent empty state on first render
@@ -27,6 +32,9 @@ export function WatchlistProvider({ children }: { children: React.ReactNode }) {
     return [];
   });
 
+  // Track if we've attempted to populate defaults
+  const defaultsPopulatedRef = useRef(false);
+
   // Save watchlist to localStorage whenever it changes (but not on initial mount)
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -36,6 +44,73 @@ export function WatchlistProvider({ children }: { children: React.ReactNode }) {
       console.error('Failed to save watchlist to localStorage:', e);
     }
   }, [watchlist]);
+
+  // Populate default watchlist with top tokens that have images (only on first visit)
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    if (defaultsPopulatedRef.current) return;
+
+    // Check if we've already populated defaults before (don't re-populate if user cleared watchlist)
+    const alreadyPopulated = localStorage.getItem(DEFAULTS_POPULATED_KEY);
+    if (alreadyPopulated) {
+      defaultsPopulatedRef.current = true;
+      return;
+    }
+
+    // Only populate if watchlist is empty
+    if (watchlist.length > 0) {
+      defaultsPopulatedRef.current = true;
+      localStorage.setItem(DEFAULTS_POPULATED_KEY, 'true');
+      return;
+    }
+
+    defaultsPopulatedRef.current = true;
+
+    // Fetch top tokens from discover/pulse endpoint and filter for tokens with images
+    const fetchDefaultTokens = async () => {
+      try {
+        // Fetch more tokens to ensure we get enough with valid images
+        const response = await fetch('/api/token-service/pulse-new?limit=100&fresh=1', {
+          headers: { 'Accept': 'application/json' },
+        });
+
+        if (!response.ok) {
+          console.warn('Failed to fetch default watchlist tokens');
+          return;
+        }
+
+        const data = await response.json();
+        const tokens: Token[] = Array.isArray(data) ? data : (data?.tokens || data?.data || []);
+
+        // Filter tokens that have valid images and deduplicate by pair_address/mint
+        const seenAddresses = new Set<string>();
+        const tokensWithImages = tokens.filter((token: any) => {
+          const imageUrl = extractTokenImage(token);
+          if (!imageUrl || !imageUrl.trim().length) return false;
+
+          // Deduplicate by pair_address or mint
+          const tokenId = token.pair_address || token.mint || '';
+          if (!tokenId || seenAddresses.has(tokenId)) return false;
+          seenAddresses.add(tokenId);
+
+          return true;
+        });
+
+        // Take the first N unique tokens with images
+        const defaultTokens = tokensWithImages.slice(0, DEFAULT_WATCHLIST_COUNT);
+
+        if (defaultTokens.length > 0) {
+          setWatchlist(defaultTokens);
+          localStorage.setItem(DEFAULTS_POPULATED_KEY, 'true');
+          console.log(`Populated watchlist with ${defaultTokens.length} default tokens`);
+        }
+      } catch (error) {
+        console.warn('Error fetching default watchlist tokens:', error);
+      }
+    };
+
+    fetchDefaultTokens();
+  }, [watchlist.length]);
 
   const addToWatchlist = (token: Token) => {
     setWatchlist(prev => {

@@ -13,6 +13,11 @@ import {
 } from "react-icons/fa";
 import { HiLightningBolt } from "react-icons/hi";
 import { IoShieldCheckmarkOutline } from "react-icons/io5";
+import { SiPolygon } from "react-icons/si";
+import { BiCopy, BiCheck } from "react-icons/bi";
+import { HiOutlineQrcode } from "react-icons/hi";
+import { getPolymarketBalance, autoConvertUsdcToUsdce, type PolymarketBalance } from "~/utils/api";
+import QRCode from "react-qr-code";
 import { useUser } from "./UserContext";
 import { useSolPrice } from "./SolPriceContext";
 import { useWatchlist } from "./WatchlistContext";
@@ -30,11 +35,14 @@ import toast from "react-hot-toast";
 import { FaCheckCircle } from "react-icons/fa";
 import dynamic from "next/dynamic";
 import InterstateButton from "./InterstateButton";
-import { FiBarChart, FiChevronDown, FiStar } from "react-icons/fi";
+import { FiBarChart, FiChevronDown, FiStar, FiUsers, FiGrid } from "react-icons/fi";
+import { GiTrophy } from "react-icons/gi";
 import SearchModal from "./SearchModal";
 import BlockchainSwitcher from "./BlockchainSwitcher";
 import UpdatesModal from "./UpdatesModal";
+import UsernameEditModal from "./UsernameEditModal";
 import NotificationDropdown from "./NotificationDropdown";
+import { useReferralStats } from "~/hooks/useArena";
 import type { Timeframe } from "../pages/index";
 import { CiBellOn, CiStar } from "react-icons/ci";
 
@@ -91,7 +99,14 @@ const navLinks = [
   // { name: "Predictions", href: "/predictions" },
   // { name: "Perpetuals", href: "/construction" },
   // { name: "Yield", href: "/construction" },
-  { name: "Referral", href: "/rewards" },
+];
+
+// Arena dropdown menu items
+const arenaMenuItems = [
+  { name: "ARENA", href: "/arena", icon: "trophy" },
+  { name: "REFERRALS", href: "/referrals", icon: "users" },
+  { name: "LEADERBOARD", href: "/leaderboard", icon: "chart", disabled: true },
+  { name: "JACKPOT", href: "/jackpot", icon: "grid", disabled: true },
 ];
 
 interface HeaderProps {
@@ -242,6 +257,37 @@ export default function Header({
   isSticky = true,
 }: HeaderProps) {
   const [headerBarVisible, setHeaderBarVisible] = useState(true);
+  const [arenaDropdownOpen, setArenaDropdownOpen] = useState(false);
+  const [arenaDropdownPos, setArenaDropdownPos] = useState({ top: 0, left: 0 });
+  const arenaDropdownRef = useRef<HTMLDivElement>(null);
+  const arenaButtonRef = useRef<HTMLButtonElement>(null);
+
+  // Close arena dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (
+        arenaDropdownRef.current &&
+        !arenaDropdownRef.current.contains(event.target as Node) &&
+        arenaButtonRef.current &&
+        !arenaButtonRef.current.contains(event.target as Node)
+      ) {
+        setArenaDropdownOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  // Update dropdown position when opening
+  useEffect(() => {
+    if (arenaDropdownOpen && arenaButtonRef.current) {
+      const rect = arenaButtonRef.current.getBoundingClientRect();
+      setArenaDropdownPos({
+        top: rect.bottom + 8,
+        left: rect.left,
+      });
+    }
+  }, [arenaDropdownOpen]);
 
   // Check for header bar visibility on mount and when body class changes
   useEffect(() => {
@@ -274,6 +320,7 @@ export default function Header({
   }, []);
   const router = useRouter();
   const isDiscover = router.pathname === "/";
+  const isPredictionsPage = router.pathname.startsWith('/predictions');
   const {
     user,
     loading: userLoading,
@@ -286,6 +333,11 @@ export default function Header({
     selectedWalletIds,
     logout,
   } = useUser();
+
+  // Get referral stats for Honors badge display
+  const { data: referralStats } = useReferralStats();
+  const honorsLevel = referralStats?.honorsLevel || 1;
+
   // Get chain from URL first, then localStorage, then default to solana
   const currentChain = (() => {
     if (router.query.chain) {
@@ -413,8 +465,16 @@ export default function Header({
   }, [watchlist, refreshWatchlistToken]);
 
   // Memoize enriched watchlist to avoid recalculating on every render
+  // Also deduplicate by pair_address/mint to prevent showing duplicate tokens
   const enrichedWatchlist = useMemo(() => {
-    return watchlist.map(enrichTokenWithCachedData);
+    const enriched = watchlist.map(enrichTokenWithCachedData);
+    const seen = new Set<string>();
+    return enriched.filter((token) => {
+      const tokenId = token.pair_address || (token as any).mint || '';
+      if (!tokenId || seen.has(tokenId)) return false;
+      seen.add(tokenId);
+      return true;
+    });
   }, [watchlist, enrichTokenWithCachedData]);
   
   const watchlistTickerTotalPages = Math.max(
@@ -478,6 +538,7 @@ export default function Header({
   const [profileMenuOpen, setProfileMenuOpen] = useState(false);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [showUpdatesModal, setShowUpdatesModal] = useState(false);
+  const [showUsernameModal, setShowUsernameModal] = useState(false);
   const [isFirstLogin, setIsFirstLogin] = useState(false);
   const [showLeftArrow, setShowLeftArrow] = useState(false);
   const [showRightArrow, setShowRightArrow] = useState(false);
@@ -489,13 +550,24 @@ export default function Header({
   // Manual balance refresh handler
   const handleManualBalanceRefresh = async (e?: React.MouseEvent) => {
     e?.stopPropagation(); // Prevent dropdown toggle
-    if (isRefreshingBalance) return;
+    if (isRefreshingBalance || polygonBalanceLoading) return;
 
     setIsRefreshingBalance(true);
     try {
-      await refreshBalance({ chain: currentChain, force: true });
+      // If on predictions page, refresh Polygon balance
+      if (isPredictionsPage && user?.bearerToken) {
+        setPolygonBalanceLoading(true);
+        const response = await getPolymarketBalance(user.bearerToken, false);
+        if (response.success && response.data) {
+          setPolygonBalance(response.data);
+        }
+        setPolygonBalanceLoading(false);
+      } else {
+        await refreshBalance({ chain: currentChain, force: true });
+      }
     } catch (error) {
       console.error('Failed to refresh balance:', error);
+      setPolygonBalanceLoading(false);
     } finally {
       setIsRefreshingBalance(false);
     }
@@ -529,6 +601,93 @@ export default function Header({
   // Use chainBalances from UserContext as the single source of truth
   // Derive chainBalance from chainBalances instead of maintaining separate state
   const chainBalance = chainBalances[currentChain] ?? (currentChain === "sol" ? solBalance : 0);
+
+  // Polygon balance state for predictions pages
+  const [polygonBalance, setPolygonBalance] = useState<PolymarketBalance | null>(null);
+  const [polygonBalanceLoading, setPolygonBalanceLoading] = useState(false);
+  const [polygonAddressCopied, setPolygonAddressCopied] = useState(false);
+  const [polygonConverting, setPolygonConverting] = useState(false);
+  const [polygonConvertSuccess, setPolygonConvertSuccess] = useState(false);
+  const [showPolygonQR, setShowPolygonQR] = useState(false);
+
+  // Copy Polygon address handler
+  const handleCopyPolygonAddress = useCallback(() => {
+    const address = primaryWalletAddresses?.ethereum;
+    if (address) {
+      navigator.clipboard.writeText(address);
+      setPolygonAddressCopied(true);
+      toast.success('Address copied successfully', {
+        icon: <BiCheck className="w-5 h-5 text-emerald-400" />,
+        style: {
+          background: '#1a1b1f',
+          color: '#f0f5f5',
+          border: '1px solid #8247E5',
+        },
+      });
+      setTimeout(() => setPolygonAddressCopied(false), 2000);
+    }
+  }, [primaryWalletAddresses?.ethereum]);
+
+  // Convert USDC to USDC.e handler
+  const handleConvertUsdcToUsdce = useCallback(async () => {
+    if (!user?.bearerToken || polygonConverting) return;
+
+    setPolygonConverting(true);
+    try {
+      const response = await autoConvertUsdcToUsdce(user.bearerToken);
+      if (response.success && response.data.converted) {
+        setPolygonConvertSuccess(true);
+        // Update balance from response
+        if (response.data.balances) {
+          setPolygonBalance(response.data.balances);
+        }
+        setTimeout(() => setPolygonConvertSuccess(false), 3000);
+      }
+    } catch (err) {
+      console.error('[Header] Error converting USDC:', err);
+    } finally {
+      setPolygonConverting(false);
+    }
+  }, [user?.bearerToken, polygonConverting]);
+
+  // Fetch Polygon balance when on predictions page
+  useEffect(() => {
+    if (!isPredictionsPage || !user?.bearerToken) {
+      setPolygonBalance(null);
+      return;
+    }
+
+    const fetchPolygonBalance = async () => {
+      setPolygonBalanceLoading(true);
+      try {
+        const response = await getPolymarketBalance(user.bearerToken!, false); // Don't auto-convert from header
+        if (response.success && response.data) {
+          setPolygonBalance(response.data);
+        }
+      } catch (err) {
+        console.error('[Header] Error fetching Polygon balance:', err);
+      } finally {
+        setPolygonBalanceLoading(false);
+      }
+    };
+
+    fetchPolygonBalance();
+
+    // Refresh every 30 seconds when on predictions page
+    const interval = setInterval(fetchPolygonBalance, 30000);
+
+    // Listen for custom event to refresh balance (e.g., after a trade)
+    const handleBalanceRefresh = () => {
+      console.log('[Header] Received polygon-balance-refresh event');
+      fetchPolygonBalance();
+    };
+    window.addEventListener('polygon-balance-refresh', handleBalanceRefresh);
+
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener('polygon-balance-refresh', handleBalanceRefresh);
+    };
+  }, [isPredictionsPage, user?.bearerToken]);
 
   const chainAwareHref = useCallback(
     (href: string) => ({
@@ -1244,6 +1403,58 @@ export default function Header({
             </div>
           </div>
           <div className="flex min-w-0 flex-shrink-0 items-center gap-1.5 sm:gap-2 md:gap-3 lg:gap-4">
+            {/* Arena Dropdown Button - Matte Gold with dynamic page name */}
+            {(() => {
+              // Determine current arena page
+              const currentArenaPage = arenaMenuItems.find(
+                item => router.pathname === item.href ||
+                (item.href === "/arena" && router.pathname.startsWith("/arena") && !arenaMenuItems.some(i => i.href !== "/arena" && router.pathname === i.href))
+              ) || { name: "ARENA", icon: "trophy" };
+
+              return (
+                <button
+                  ref={arenaButtonRef}
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    setArenaDropdownOpen(!arenaDropdownOpen);
+                  }}
+                  className="flex h-10 items-center gap-2 rounded-lg px-5 cursor-pointer"
+                  style={{
+                    background: 'linear-gradient(180deg, rgba(180, 155, 40, 0.25) 0%, rgba(140, 120, 30, 0.3) 100%)',
+                    border: '1px solid rgba(212, 175, 55, 0.35)',
+                  }}
+                >
+                  {/* Icon - bright gold */}
+                  <span style={{ color: '#D4AF37' }}>
+                    {currentArenaPage.icon === "trophy" && <GiTrophy size={18} />}
+                    {currentArenaPage.icon === "users" && <FiUsers size={18} />}
+                    {currentArenaPage.icon === "chart" && <FiBarChart size={18} />}
+                    {currentArenaPage.icon === "grid" && <FiGrid size={18} />}
+                  </span>
+                  {/* Text - bright gold, extra bold */}
+                  <span
+                    style={{
+                      background: 'linear-gradient(180deg, #FFE55C 0%, #FFD700 30%, #D4AF37 100%)',
+                      WebkitBackgroundClip: 'text',
+                      WebkitTextFillColor: 'transparent',
+                      backgroundClip: 'text',
+                      fontSize: '14px',
+                      fontWeight: 800,
+                      letterSpacing: '0.02em',
+                    }}
+                  >
+                    {currentArenaPage.name}
+                  </span>
+                  <FaChevronDown
+                    size={12}
+                    style={{ color: '#D4AF37', strokeWidth: 1 }}
+                    className={`transition-transform duration-200 ${arenaDropdownOpen ? "rotate-180" : ""}`}
+                  />
+                </button>
+              );
+            })()}
+
             {showSearch && (
               <div className="flex items-center gap-1 sm:gap-1.5 md:gap-2">
                 {/* Smaller search button (desktop) */}
@@ -1512,15 +1723,29 @@ export default function Header({
                   }}
                   title="Click to view account & wallet"
                 >
-                  <div className="hidden h-8 w-8 items-center justify-center rounded-[125px] bg-emerald-400 text-xs font-bold text-black select-none sm:flex">
-                    {user.name ? user.name.charAt(0).toUpperCase() : "U"}
+                  <div className="hidden h-8 w-8 items-center justify-center select-none sm:flex">
+                    <img
+                      src={`/ranks/degen-${Math.max(1, Math.min(4, honorsLevel))}.png`}
+                      alt={`Honors ${honorsLevel}`}
+                      className="w-8 h-8 object-contain"
+                    />
                   </div>
                   <div className="items-left flex flex-col gap-0 text-left">
                     <div className="flex items-center gap-1 text-sm text-white">
-                      <span>
-                        {formatBalance(chainBalance)}{" "}
-                        {chainSymbols[currentChain] ?? "SOL"}
-                      </span>
+                      {isPredictionsPage ? (
+                        <>
+                          <SiPolygon size={12} className="text-[#8247E5]" />
+                          <span>
+                            {polygonBalanceLoading ? '...' :
+                              `$${formatBalance(polygonBalance?.usdc ?? 0, 2)}`}
+                          </span>
+                        </>
+                      ) : (
+                        <span>
+                          {formatBalance(chainBalance)}{" "}
+                          {chainSymbols[currentChain] ?? "SOL"}
+                        </span>
+                      )}
                       <button
                         onClick={handleManualBalanceRefresh}
                         className="p-0.5 rounded-full hover:bg-white/10 transition-colors"
@@ -1528,16 +1753,20 @@ export default function Header({
                       >
                         <FaSync
                           size={10}
-                          className={`text-neutral-500 hover:text-white ${isRefreshingBalance ? 'animate-spin' : ''}`}
+                          className={`text-neutral-500 hover:text-white ${isRefreshingBalance || polygonBalanceLoading ? 'animate-spin' : ''}`}
                         />
                       </button>
                     </div>
                     <div className="text-xs text-neutral-500">
-                      {user.name
-                        ? user.name
-                        : user.publicKey
-                            .slice(0, 4)
-                            .concat(user.name.slice(-4))}
+                      {isPredictionsPage ? (
+                        <span className="text-[#8247E5]">Polygon</span>
+                      ) : (
+                        user.name
+                          ? user.name
+                          : user.publicKey
+                              .slice(0, 4)
+                              .concat(user.name.slice(-4))
+                      )}
                     </div>
                   </div>
                   <FiChevronDown
@@ -1561,11 +1790,12 @@ export default function Header({
                         className="mb-3 flex items-center gap-2 border-b pb-3"
                         style={{ borderColor: "#20232b" }}
                       >
-                        <div
-                          className="flex h-6 w-6 items-center justify-center rounded-md text-xs font-bold text-[#f0f5f5] select-none"
-                          style={{ backgroundColor: AX.mint }}
-                        >
-                          {user.name ? user.name.charAt(0).toUpperCase() : "U"}
+                        <div className="flex h-6 w-6 items-center justify-center select-none">
+                          <img
+                            src={`/ranks/degen-${Math.max(1, Math.min(4, honorsLevel))}.png`}
+                            alt={`Honors ${honorsLevel}`}
+                            className="w-6 h-6 object-contain"
+                          />
                         </div>
                         <div className="min-w-0 flex-1">
                           <div className="truncate text-sm font-semibold text-[#f0f5f5]">
@@ -1577,251 +1807,385 @@ export default function Header({
                         </div>
                       </div>
 
-                      {/* Total Value */}
-                      <div className="mb-3">
-                        <div className="mb-1 text-xs text-neutral-400">
-                          Total Value
-                        </div>
-                        <div className="text-2xl font-bold text-white">
-                          ${formatCurrency(chainBalance * chainPrice)}
-                        </div>
-                      </div>
+                      {/* Total Value - Conditional for Predictions */}
+                      {isPredictionsPage ? (
+                        <>
+                          {/* Clean Polygon Balance Display */}
+                          <div className="mb-3">
+                            <div className="text-2xl font-bold text-white">
+                              ${formatCurrency(polygonBalance?.usdc ?? 0)}
+                            </div>
+                            <div className="flex items-center gap-3 mt-1 text-xs text-neutral-400">
+                              <span className="flex items-center gap-1">
+                                <span className="w-2 h-2 rounded-full bg-emerald-400"></span>
+                                ${formatBalance(polygonBalance?.usdcBridged ?? 0, 2)} USDC.e
+                              </span>
+                              <span className="flex items-center gap-1">
+                                <SiPolygon className="w-3 h-3" style={{ color: '#8247E5' }} />
+                                {formatBalance(polygonBalance?.matic ?? 0, 2)} MATIC
+                              </span>
+                            </div>
+                          </div>
 
-                      {/* Balance Display */}
-                      <div className="mb-4 flex items-center justify-between rounded-lg bg-[#25282B] p-2">
-                        <div className="flex items-center gap-2">
-                          <img
-                            src={chainLogos[currentChain] ?? chainLogos.monad}
-                            alt={chainSymbols[currentChain] ?? "MON"}
-                            className={
-                              currentChain === "monad"
-                                ? "h-10 w-8 rounded-md object-contain"
-                                : "h-4 w-4 rounded-md object-contain"
-                            }
-                            style={
-                              currentChain === "monad"
-                                ? { minWidth: "32px", minHeight: "40px" }
-                                : { minWidth: "16px", minHeight: "16px" }
-                            }
-                          />
-                          <span className="text-sm text-[#f0f5f5]">
-                            ≈ {formatBalance(chainBalance)}{" "}
-                            {chainSymbols[currentChain] ?? "MON"}
-                          </span>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <svg
-                            className="h-4 w-4 text-neutral-400"
-                            fill="none"
-                            stroke="currentColor"
-                            viewBox="0 0 24 24"
-                          >
-                            <path
-                              strokeLinecap="round"
-                              strokeLinejoin="round"
-                              strokeWidth={2}
-                              d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4"
-                            />
-                          </svg>
-                          <img
-                            src={chainLogos[currentChain] ?? chainLogos.monad}
-                            alt={chainSymbols[currentChain] ?? "MON"}
-                            className={
-                              currentChain === "monad"
-                                ? "h-10 w-8 rounded-md object-contain"
-                                : "h-4 w-4 rounded-md object-contain"
-                            }
-                            style={
-                              currentChain === "monad"
-                                ? { minWidth: "32px", minHeight: "40px" }
-                                : { minWidth: "16px", minHeight: "16px" }
-                            }
-                          />
-                          <span className="text-sm text-[#f0f5f5]">
-                            {formatMultiDigitBalance(chainBalance)}
-                          </span>
-                        </div>
-                      </div>
+                          {/* Compact Address Row */}
+                          <div className="flex items-center justify-between rounded-lg bg-[#1a1b1f] px-3 py-2 mb-3">
+                            <div className="flex items-center gap-2 min-w-0 flex-1">
+                              <span className="text-xs font-mono text-neutral-400 truncate">
+                                {primaryWalletAddresses?.ethereum ?
+                                  `${primaryWalletAddresses.ethereum.slice(0, 6)}...${primaryWalletAddresses.ethereum.slice(-4)}` :
+                                  'Not connected'}
+                              </span>
+                            </div>
+                            <div className="flex items-center gap-1 flex-shrink-0">
+                              <button
+                                onClick={handleCopyPolygonAddress}
+                                className="p-1.5 rounded hover:bg-white/10 transition-colors"
+                                title="Copy address"
+                              >
+                                {polygonAddressCopied ?
+                                  <BiCheck className="w-4 h-4 text-emerald-400" /> :
+                                  <BiCopy className="w-4 h-4 text-neutral-400 hover:text-white" />}
+                              </button>
+                              <a
+                                href={`https://polygonscan.com/address/${primaryWalletAddresses?.ethereum}`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="p-1.5 rounded hover:bg-white/10 transition-colors"
+                                title="View on Polygonscan"
+                              >
+                                <img
+                                  src="https://polygonscan.com/assets/poly/images/svg/logos/chain-dim.svg?v=26.1.4.2"
+                                  alt="Polygonscan"
+                                  className="w-4 h-4"
+                                />
+                              </a>
+                            </div>
+                          </div>
 
-                      {/* Action Buttons */}
-                      <div className="space-y-2">
-                        {/* Deposit/Withdraw Buttons */}
-                        <div className="flex gap-2">
+                          {/* Convert button if needed */}
+                          {(polygonBalance?.usdcNative ?? 0) >= 0.1 && (
+                            <button
+                              onClick={handleConvertUsdcToUsdce}
+                              disabled={polygonConverting}
+                              className="w-full flex items-center justify-center gap-2 rounded-lg px-3 py-2 mb-3 text-xs font-medium transition-all"
+                              style={{
+                                backgroundColor: polygonConvertSuccess ? 'rgba(74, 222, 128, 0.15)' : 'rgba(251, 191, 36, 0.15)',
+                                color: polygonConvertSuccess ? '#4ADE80' : '#FBBF24',
+                                opacity: polygonConverting ? 0.7 : 1,
+                              }}
+                            >
+                              {polygonConverting ? (
+                                <><FaSync className="w-3 h-3 animate-spin" />Converting...</>
+                              ) : polygonConvertSuccess ? (
+                                <><BiCheck className="w-4 h-4" />Converted!</>
+                              ) : (
+                                <>Convert ${formatBalance(polygonBalance?.usdcNative ?? 0, 2)} USDC → USDC.e</>
+                              )}
+                            </button>
+                          )}
+                        </>
+                      ) : (
+                        <>
+                          {/* Standard chain balance display */}
+                          <div className="mb-3">
+                            <div className="mb-1 text-xs text-neutral-400">
+                              Total Value
+                            </div>
+                            <div className="text-2xl font-bold text-white">
+                              ${formatCurrency(chainBalance * chainPrice)}
+                            </div>
+                          </div>
+
+                          {/* Balance Display */}
+                          <div className="mb-4 flex items-center justify-between rounded-lg bg-[#25282B] p-2">
+                            <div className="flex items-center gap-2">
+                              <img
+                                src={chainLogos[currentChain] ?? chainLogos.monad}
+                                alt={chainSymbols[currentChain] ?? "MON"}
+                                className={
+                                  currentChain === "monad"
+                                    ? "h-10 w-8 rounded-md object-contain"
+                                    : "h-4 w-4 rounded-md object-contain"
+                                }
+                                style={
+                                  currentChain === "monad"
+                                    ? { minWidth: "32px", minHeight: "40px" }
+                                    : { minWidth: "16px", minHeight: "16px" }
+                                }
+                              />
+                              <span className="text-sm text-[#f0f5f5]">
+                                ≈ {formatBalance(chainBalance)}{" "}
+                                {chainSymbols[currentChain] ?? "MON"}
+                              </span>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <svg
+                                className="h-4 w-4 text-neutral-400"
+                                fill="none"
+                                stroke="currentColor"
+                                viewBox="0 0 24 24"
+                              >
+                                <path
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                  strokeWidth={2}
+                                  d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4"
+                                />
+                              </svg>
+                              <img
+                                src={chainLogos[currentChain] ?? chainLogos.monad}
+                                alt={chainSymbols[currentChain] ?? "MON"}
+                                className={
+                                  currentChain === "monad"
+                                    ? "h-10 w-8 rounded-md object-contain"
+                                    : "h-4 w-4 rounded-md object-contain"
+                                }
+                                style={
+                                  currentChain === "monad"
+                                    ? { minWidth: "32px", minHeight: "40px" }
+                                    : { minWidth: "16px", minHeight: "16px" }
+                                }
+                              />
+                              <span className="text-sm text-[#f0f5f5]">
+                                {formatMultiDigitBalance(chainBalance)}
+                              </span>
+                            </div>
+                          </div>
+                        </>
+                      )}
+
+                      {/* Action Buttons - Conditional for Predictions */}
+                      {isPredictionsPage ? (
+                        <div>
+                          {/* Deposit Button - Opens QR - Full Width */}
                           <button
-                            onClick={() => {
-                              setProfileMenuOpen(false);
-                              handleDepositClick();
-                            }}
-                            className="flex-1 rounded-lg px-3 py-2 text-sm font-medium transition-all duration-200"
-                            style={{
-                              backgroundColor: AX.mint,
-                              color: "#000000",
-                            }}
-                            onMouseEnter={(e) => {
-                              e.currentTarget.style.backgroundColor =
-                                AX.mintHover;
-                            }}
-                            onMouseLeave={(e) => {
-                              e.currentTarget.style.backgroundColor = AX.mint;
-                            }}
+                            onClick={() => setShowPolygonQR(true)}
+                            className="w-full flex items-center justify-center gap-1.5 rounded-lg px-3 py-2.5 text-sm font-medium transition-all"
+                            style={{ backgroundColor: '#8247E5', color: '#fff' }}
+                            onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = '#7038d4'; }}
+                            onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = '#8247E5'; }}
                           >
+                            <HiOutlineQrcode className="w-4 h-4" />
                             Deposit
                           </button>
-                          <button
-                            onClick={() => {
-                              setProfileMenuOpen(false);
-                              handleWithdrawClick();
-                            }}
-                            className="flex-1 rounded-lg px-3 py-2 text-sm font-medium transition-all duration-200"
-                            style={{
-                              backgroundColor: "#0f1012",
-                              color: "#ffffff",
-                              border: "1px solid #2A2B33",
-                            }}
-                            onMouseEnter={(e) => {
-                              e.currentTarget.style.backgroundColor = "#1A1B1F";
-                            }}
-                            onMouseLeave={(e) => {
-                              e.currentTarget.style.backgroundColor = "#0f1012";
-                            }}
-                          >
-                            Withdraw
-                          </button>
                         </div>
+                      ) : (
+                        <div className="space-y-2">
+                          {/* Deposit/Withdraw Buttons */}
+                          <div className="flex gap-2">
+                            <button
+                              onClick={() => {
+                                setProfileMenuOpen(false);
+                                handleDepositClick();
+                              }}
+                              className="flex-1 rounded-lg px-3 py-2 text-sm font-medium transition-all duration-200"
+                              style={{
+                                backgroundColor: AX.mint,
+                                color: "#000000",
+                              }}
+                              onMouseEnter={(e) => {
+                                e.currentTarget.style.backgroundColor =
+                                  AX.mintHover;
+                              }}
+                              onMouseLeave={(e) => {
+                                e.currentTarget.style.backgroundColor = AX.mint;
+                              }}
+                            >
+                              Deposit
+                            </button>
+                            <button
+                              onClick={() => {
+                                setProfileMenuOpen(false);
+                                handleWithdrawClick();
+                              }}
+                              className="flex-1 rounded-lg px-3 py-2 text-sm font-medium transition-all duration-200"
+                              style={{
+                                backgroundColor: "#0f1012",
+                                color: "#ffffff",
+                                border: "1px solid #2A2B33",
+                              }}
+                              onMouseEnter={(e) => {
+                                e.currentTarget.style.backgroundColor = "#1A1B1F";
+                              }}
+                              onMouseLeave={(e) => {
+                                e.currentTarget.style.backgroundColor = "#0f1012";
+                              }}
+                            >
+                              Withdraw
+                            </button>
+                          </div>
 
-                        {/* Convert/Buy Buttons */}
-                        <div className="flex gap-2">
-                          <button
-                            onClick={() => {
-                              setProfileMenuOpen(false);
-                              handleConvertClick();
-                            }}
-                            className="flex flex-1 items-center justify-center gap-1.5 rounded-lg border border-[#2A2B33] bg-[#0C0C0F] px-3 py-2 text-sm font-medium text-[#ffffff] transition-all duration-200"
-                            onMouseEnter={(e) => {
-                              e.currentTarget.style.backgroundColor = "#1A1B1F";
-                            }}
-                            onMouseLeave={(e) => {
-                              e.currentTarget.style.backgroundColor = "#0f1012";
-                            }}
-                          >
-                            <svg
-                              className="h-3.5 w-3.5"
-                              fill="none"
-                              stroke="currentColor"
-                              viewBox="0 0 24 24"
+                          {/* Convert/Buy Buttons */}
+                          <div className="flex gap-2">
+                            <button
+                              onClick={() => {
+                                setProfileMenuOpen(false);
+                                handleConvertClick();
+                              }}
+                              className="flex flex-1 items-center justify-center gap-1.5 rounded-lg border border-[#2A2B33] bg-[#0C0C0F] px-3 py-2 text-sm font-medium text-[#ffffff] transition-all duration-200"
+                              onMouseEnter={(e) => {
+                                e.currentTarget.style.backgroundColor = "#1A1B1F";
+                              }}
+                              onMouseLeave={(e) => {
+                                e.currentTarget.style.backgroundColor = "#0f1012";
+                              }}
                             >
-                              <path
-                                strokeLinecap="round"
-                                strokeLinejoin="round"
-                                strokeWidth={2}
-                                d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4"
-                              />
-                            </svg>
-                            Convert
-                          </button>
-                          <button
-                            onClick={() => {
-                              setProfileMenuOpen(false);
-                              handleBuyClick();
-                            }}
-                            className="flex flex-1 items-center justify-center gap-1.5 rounded-lg border border-[#2A2B33] bg-[#0C0C0F] px-3 py-2 text-sm font-medium text-[#ffffff] transition-all duration-200"
-                            onMouseEnter={(e) => {
-                              e.currentTarget.style.backgroundColor = "#1A1B1F";
-                            }}
-                            onMouseLeave={(e) => {
-                              e.currentTarget.style.backgroundColor = "#0f1012";
-                            }}
-                          >
-                            <svg
-                              className="h-3.5 w-3.5"
-                              fill="none"
-                              stroke="currentColor"
-                              viewBox="0 0 24 24"
+                              <svg
+                                className="h-3.5 w-3.5"
+                                fill="none"
+                                stroke="currentColor"
+                                viewBox="0 0 24 24"
+                              >
+                                <path
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                  strokeWidth={2}
+                                  d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4"
+                                />
+                              </svg>
+                              Convert
+                            </button>
+                            <button
+                              onClick={() => {
+                                setProfileMenuOpen(false);
+                                handleBuyClick();
+                              }}
+                              className="flex flex-1 items-center justify-center gap-1.5 rounded-lg border border-[#2A2B33] bg-[#0C0C0F] px-3 py-2 text-sm font-medium text-[#ffffff] transition-all duration-200"
+                              onMouseEnter={(e) => {
+                                e.currentTarget.style.backgroundColor = "#1A1B1F";
+                              }}
+                              onMouseLeave={(e) => {
+                                e.currentTarget.style.backgroundColor = "#0f1012";
+                              }}
                             >
-                              <path
-                                strokeLinecap="round"
-                                strokeLinejoin="round"
-                                strokeWidth={2}
-                                d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z"
-                              />
-                            </svg>
-                            Buy
-                          </button>
+                              <svg
+                                className="h-3.5 w-3.5"
+                                fill="none"
+                                stroke="currentColor"
+                                viewBox="0 0 24 24"
+                              >
+                                <path
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                  strokeWidth={2}
+                                  d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z"
+                                />
+                              </svg>
+                              Buy
+                            </button>
+                          </div>
                         </div>
+                      )}
 
-                        {/* Feature Updates Button */}
-                        <button
-                          onClick={() => {
-                            setProfileMenuOpen(false);
-                            setIsFirstLogin(false);
-                            setShowUpdatesModal(true);
-                          }}
-                          className="flex w-full items-center gap-2 rounded-lg bg-transparent px-3 py-2 text-sm font-medium transition-all duration-200"
-                          style={{
-                            color: AX.text,
-                          }}
-                          onMouseEnter={(e) => {
-                            e.currentTarget.style.backgroundColor =
-                              "rgba(24, 196, 140, 0.1)";
-                            e.currentTarget.style.color = AX.mint;
-                          }}
-                          onMouseLeave={(e) => {
-                            e.currentTarget.style.backgroundColor =
-                              "transparent";
-                            e.currentTarget.style.color = AX.text;
-                          }}
+                      {/* Feature Updates Button */}
+                      <button
+                        onClick={() => {
+                          setProfileMenuOpen(false);
+                          setIsFirstLogin(false);
+                          setShowUpdatesModal(true);
+                        }}
+                        className="flex w-full items-center gap-2 rounded-lg bg-transparent px-3 py-2 text-sm font-medium transition-all duration-200"
+                        style={{
+                          color: AX.text,
+                        }}
+                        onMouseEnter={(e) => {
+                          e.currentTarget.style.backgroundColor =
+                            "rgba(24, 196, 140, 0.1)";
+                          e.currentTarget.style.color = AX.mint;
+                        }}
+                        onMouseLeave={(e) => {
+                          e.currentTarget.style.backgroundColor =
+                            "transparent";
+                          e.currentTarget.style.color = AX.text;
+                        }}
+                      >
+                        <svg
+                          className="h-4 w-4"
+                          fill="none"
+                          stroke="currentColor"
+                          viewBox="0 0 24 24"
                         >
-                          <svg
-                            className="h-4 w-4"
-                            fill="none"
-                            stroke="currentColor"
-                            viewBox="0 0 24 24"
-                          >
-                            <path
-                              strokeLinecap="round"
-                              strokeLinejoin="round"
-                              strokeWidth={2}
-                              d="M13 10V3L4 14h7v7l9-11h-7z"
-                            />
-                          </svg>
-                          Feature Updates
-                        </button>
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            strokeWidth={2}
+                            d="M13 10V3L4 14h7v7l9-11h-7z"
+                          />
+                        </svg>
+                        Feature Updates
+                      </button>
 
-                        {/* Logout Button */}
-                        <button
-                          onClick={() => {
-                            setProfileMenuOpen(false);
-                            logout();
-                          }}
-                          className="flex w-full items-center gap-2 rounded-lg bg-transparent px-3 py-2 text-sm font-medium transition-all duration-200"
-                          style={{
-                            color: "#ef4444",
-                          }}
-                          onMouseEnter={(e) => {
-                            e.currentTarget.style.backgroundColor =
-                              "rgba(239, 68, 68, 0.1)";
-                          }}
-                          onMouseLeave={(e) => {
-                            e.currentTarget.style.backgroundColor =
-                              "transparent";
-                          }}
+                      {/* Edit Username Button */}
+                      <button
+                        onClick={() => {
+                          setProfileMenuOpen(false);
+                          setShowUsernameModal(true);
+                        }}
+                        className="flex w-full items-center gap-2 rounded-lg bg-transparent px-3 py-2 text-sm font-medium transition-all duration-200"
+                        style={{
+                          color: AX.text,
+                        }}
+                        onMouseEnter={(e) => {
+                          e.currentTarget.style.backgroundColor =
+                            "rgba(24, 196, 140, 0.1)";
+                          e.currentTarget.style.color = AX.mint;
+                        }}
+                        onMouseLeave={(e) => {
+                          e.currentTarget.style.backgroundColor =
+                            "transparent";
+                          e.currentTarget.style.color = AX.text;
+                        }}
+                      >
+                        <svg
+                          className="h-4 w-4"
+                          fill="none"
+                          stroke="currentColor"
+                          viewBox="0 0 24 24"
                         >
-                          <svg
-                            className="h-4 w-4"
-                            fill="none"
-                            stroke="currentColor"
-                            viewBox="0 0 24 24"
-                          >
-                            <path
-                              strokeLinecap="round"
-                              strokeLinejoin="round"
-                              strokeWidth={2}
-                              d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"
-                            />
-                          </svg>
-                          Logout
-                        </button>
-                      </div>
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            strokeWidth={2}
+                            d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"
+                          />
+                        </svg>
+                        Edit Username
+                      </button>
+
+                      {/* Logout Button */}
+                      <button
+                        onClick={() => {
+                          setProfileMenuOpen(false);
+                          logout();
+                        }}
+                        className="flex w-full items-center gap-2 rounded-lg bg-transparent px-3 py-2 text-sm font-medium transition-all duration-200"
+                        style={{
+                          color: "#ef4444",
+                        }}
+                        onMouseEnter={(e) => {
+                          e.currentTarget.style.backgroundColor =
+                            "rgba(239, 68, 68, 0.1)";
+                        }}
+                        onMouseLeave={(e) => {
+                          e.currentTarget.style.backgroundColor =
+                            "transparent";
+                        }}
+                      >
+                        <svg
+                          className="h-4 w-4"
+                          fill="none"
+                          stroke="currentColor"
+                          viewBox="0 0 24 24"
+                        >
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            strokeWidth={2}
+                            d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"
+                          />
+                        </svg>
+                        Logout
+                      </button>
                     </div>
                   </div>
                 )}
@@ -1980,29 +2344,17 @@ export default function Header({
               </div>
             )}
 
-            {/* Watchlist Tokens Ticker */}
-            {watchlistTickerTotalPages > 1 && (
-              <button
-                className="flex items-center justify-center transition-all duration-200"
-                style={{
-                  color: watchlistTickerCanPrev ? AX.muted : "rgba(199, 201, 209, 0.35)",
-                  opacity: watchlistTickerCanPrev ? 1 : 0.6,
-                  cursor: watchlistTickerCanPrev ? "pointer" : "not-allowed",
-                }}
-                disabled={!watchlistTickerCanPrev}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  if (watchlistTickerCanPrev) {
-                    setWatchlistTickerPage((p) => Math.max(0, p - 1));
-                  }
-                }}
-                title="Previous"
-              >
-                <FaChevronLeft size={12} />
-              </button>
-            )}
-
-            {watchlistTickerVisible.map((token) => {
+            {/* Watchlist Tokens Ticker - Scrollable Container (uses full available panel width) */}
+            {enrichedWatchlist.length > 0 && (
+            <div
+              className="flex-1 flex items-center gap-3 overflow-x-auto scrollbar-hide px-1"
+              style={{
+                minWidth: 0, // Allow flex item to shrink below content size for proper scrolling
+                scrollbarWidth: 'none', // Firefox
+                msOverflowStyle: 'none', // IE/Edge
+              }}
+            >
+            {enrichedWatchlist.map((token, index) => {
               const tokenKey = token.pair_address || (token as any).mint || token.symbol;
               const tokenAddress = token.pair_address || (token as any).mint || '';
               // Use helper function to get correctly mapped price and price change
@@ -2096,7 +2448,12 @@ export default function Header({
               return (
                 <div
                   key={tokenKey}
-                  className="flex items-center gap-1.5 cursor-pointer transition-all duration-200"
+                  className="flex items-center gap-1.5 cursor-pointer transition-all duration-200 shrink-0 px-2 py-1 rounded-md hover:bg-white/5"
+                  style={{
+                    borderRight: index < enrichedWatchlist.length - 1 ? `1px solid ${AX.border}` : 'none',
+                    paddingRight: index < enrichedWatchlist.length - 1 ? '12px' : '8px',
+                    marginRight: index < enrichedWatchlist.length - 1 ? '4px' : '0',
+                  }}
                   onMouseEnter={() => setHoveredWatchlistToken(tokenKey)}
                   onMouseLeave={() => setHoveredWatchlistToken(null)}
                   onClick={() => {
@@ -2266,28 +2623,7 @@ export default function Header({
                 </div>
               );
             })}
-
-            {watchlistTickerTotalPages > 1 && (
-              <button
-                className="flex items-center justify-center transition-all duration-200"
-                style={{
-                  color: watchlistTickerCanNext ? AX.muted : "rgba(199, 201, 209, 0.35)",
-                  opacity: watchlistTickerCanNext ? 1 : 0.6,
-                  cursor: watchlistTickerCanNext ? "pointer" : "not-allowed",
-                }}
-                disabled={!watchlistTickerCanNext}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  if (watchlistTickerCanNext) {
-                    setWatchlistTickerPage((p) =>
-                      Math.min(watchlistTickerTotalPages - 1, p + 1),
-                    );
-                  }
-                }}
-                title="Next"
-              >
-                <FaChevronRight size={12} />
-              </button>
+            </div>
             )}
 
             <div className="h-4 border-r" style={{ borderColor: AX.border }}>
@@ -2296,6 +2632,56 @@ export default function Header({
           </div>
         )}
       </header>
+
+      {/* Polygon QR Code Modal - Rendered at root level for proper positioning */}
+      {showPolygonQR && (
+        <div
+          className="fixed inset-0 z-[9999999] flex items-center justify-center bg-black/70"
+          onClick={() => setShowPolygonQR(false)}
+        >
+          <div
+            className="bg-[#1a1b1f] rounded-xl p-6 max-w-xs w-full mx-4 shadow-2xl"
+            onClick={e => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-2">
+                <SiPolygon className="w-5 h-5" style={{ color: '#8247E5' }} />
+                <span className="text-sm font-semibold text-white">Deposit to Polygon</span>
+              </div>
+              <button
+                onClick={() => setShowPolygonQR(false)}
+                className="text-neutral-400 hover:text-white transition-colors"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            <div className="bg-white p-4 rounded-lg mb-4">
+              <QRCode
+                value={primaryWalletAddresses?.ethereum || ''}
+                size={200}
+                style={{ width: '100%', height: 'auto' }}
+              />
+            </div>
+            <div className="text-center mb-3">
+              <p className="text-xs text-neutral-400 mb-2">Your Polygon Address</p>
+              <p className="text-xs font-mono text-[#f0f5f5] break-all">{primaryWalletAddresses?.ethereum}</p>
+            </div>
+            <button
+              onClick={() => { handleCopyPolygonAddress(); }}
+              className="w-full flex items-center justify-center gap-2 py-2.5 rounded-lg text-sm font-medium transition-colors"
+              style={{ backgroundColor: '#8247E5', color: '#fff' }}
+              onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = '#7038d4'; }}
+              onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = '#8247E5'; }}
+            >
+              {polygonAddressCopied ? <><BiCheck className="w-4 h-4" />Copied!</> : <><BiCopy className="w-4 h-4" />Copy Address</>}
+            </button>
+            <p className="text-[10px] text-amber-400 text-center mt-3">⚠️ Only send USDC/MATIC on Polygon network</p>
+          </div>
+        </div>
+      )}
+
       <DepositModal
         open={depositOpen}
         onClose={() => setDepositOpen(false)}
@@ -2445,6 +2831,96 @@ export default function Header({
           storageKey={isFirstLogin ? "" : "header-updates-viewed"}
         />
       )}
+
+      {/* Username Edit Modal */}
+      <UsernameEditModal
+        isOpen={showUsernameModal}
+        onClose={() => setShowUsernameModal(false)}
+        currentUsername={user?.name || null}
+        onSuccess={() => {
+          // User context will be refreshed by the modal
+        }}
+      />
+
+      {/* Arena Dropdown Menu - Fixed position with smooth animation */}
+      <div
+        ref={arenaDropdownRef}
+        className="fixed min-w-[200px] rounded-xl py-2 overflow-hidden"
+        style={{
+          top: arenaDropdownPos.top,
+          left: arenaDropdownPos.left,
+          background: "rgba(12, 12, 12, 0.95)",
+          backdropFilter: "blur(12px)",
+          border: "1px solid rgba(255, 255, 255, 0.06)",
+          zIndex: 99999,
+          opacity: arenaDropdownOpen ? 1 : 0,
+          transform: arenaDropdownOpen ? "translateY(0) scale(1)" : "translateY(-8px) scale(0.96)",
+          transformOrigin: "top center",
+          transition: "opacity 200ms ease-out, transform 200ms ease-out",
+          pointerEvents: arenaDropdownOpen ? "auto" : "none",
+          visibility: arenaDropdownOpen ? "visible" : "hidden",
+        }}
+      >
+        {arenaMenuItems.map((item) => {
+          const isActive = router.pathname === item.href ||
+            (item.href === "/arena" && router.pathname.startsWith("/arena"));
+          const isDisabled = (item as any).disabled;
+
+          // For disabled items, render a div instead of Link to prevent navigation
+          if (isDisabled) {
+            return (
+              <div
+                key={item.name}
+                className="flex items-center gap-3 mx-2 px-4 py-3 text-sm font-bold rounded-lg cursor-not-allowed"
+                style={{
+                  color: "#444",
+                  opacity: 0.5,
+                }}
+              >
+                <span style={{ opacity: 0.4 }}>
+                  {item.icon === "trophy" && <GiTrophy size={16} />}
+                  {item.icon === "grid" && <FiGrid size={16} />}
+                  {item.icon === "users" && <FiUsers size={16} />}
+                  {item.icon === "chart" && <FiBarChart size={16} />}
+                </span>
+                <span>{item.name}</span>
+              </div>
+            );
+          }
+
+          return (
+            <Link
+              key={item.name}
+              href={item.href}
+              onClick={() => setArenaDropdownOpen(false)}
+              className="flex items-center gap-3 mx-2 px-4 py-3 text-sm font-bold transition-all duration-150 rounded-lg cursor-pointer"
+              style={{
+                color: isActive ? "#FFD700" : "#777",
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.backgroundColor = "rgba(255, 215, 0, 0.08)";
+                e.currentTarget.style.color = "#FFD700";
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.backgroundColor = "transparent";
+                if (!isActive) {
+                  e.currentTarget.style.color = "#777";
+                } else {
+                  e.currentTarget.style.color = "#FFD700";
+                }
+              }}
+            >
+              <span style={{ opacity: isActive ? 1 : 0.6 }}>
+                {item.icon === "trophy" && <GiTrophy size={16} />}
+                {item.icon === "grid" && <FiGrid size={16} />}
+                {item.icon === "users" && <FiUsers size={16} />}
+                {item.icon === "chart" && <FiBarChart size={16} />}
+              </span>
+              <span>{item.name}</span>
+            </Link>
+          );
+        })}
+      </div>
     </>
   );
 }
