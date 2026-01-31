@@ -105,8 +105,8 @@ const navLinks = [
 const arenaMenuItems = [
   { name: "ARENA", href: "/arena", icon: "trophy" },
   { name: "REFERRALS", href: "/referrals", icon: "users" },
-  { name: "LEADERBOARD", href: "/leaderboard", icon: "chart" },
-  { name: "JACKPOT", href: "/construction", icon: "grid", comingSoon: true },
+  { name: "LEADERBOARD", href: "/leaderboard", icon: "chart", disabled: true },
+  { name: "JACKPOT", href: "/jackpot", icon: "grid", disabled: true },
 ];
 
 interface HeaderProps {
@@ -2864,6 +2864,30 @@ export default function Header({
         {arenaMenuItems.map((item) => {
           const isActive = router.pathname === item.href ||
             (item.href === "/arena" && router.pathname.startsWith("/arena"));
+          const isDisabled = (item as any).disabled;
+
+          // For disabled items, render a div instead of Link to prevent navigation
+          if (isDisabled) {
+            return (
+              <div
+                key={item.name}
+                className="flex items-center gap-3 mx-2 px-4 py-3 text-sm font-bold rounded-lg cursor-not-allowed"
+                style={{
+                  color: "#444",
+                  opacity: 0.5,
+                }}
+              >
+                <span style={{ opacity: 0.4 }}>
+                  {item.icon === "trophy" && <GiTrophy size={16} />}
+                  {item.icon === "grid" && <FiGrid size={16} />}
+                  {item.icon === "users" && <FiUsers size={16} />}
+                  {item.icon === "chart" && <FiBarChart size={16} />}
+                </span>
+                <span>{item.name}</span>
+              </div>
+            );
+          }
+
           return (
             <Link
               key={item.name}
@@ -2871,21 +2895,16 @@ export default function Header({
               onClick={() => setArenaDropdownOpen(false)}
               className="flex items-center gap-3 mx-2 px-4 py-3 text-sm font-bold transition-all duration-150 rounded-lg cursor-pointer"
               style={{
-                color: isActive ? "#FFD700" : (item as any).comingSoon ? "#444" : "#777",
-                opacity: (item as any).comingSoon ? 0.5 : 1,
+                color: isActive ? "#FFD700" : "#777",
               }}
               onMouseEnter={(e) => {
-                if (!(item as any).comingSoon) {
-                  e.currentTarget.style.backgroundColor = "rgba(255, 215, 0, 0.08)";
-                  e.currentTarget.style.color = "#FFD700";
-                }
+                e.currentTarget.style.backgroundColor = "rgba(255, 215, 0, 0.08)";
+                e.currentTarget.style.color = "#FFD700";
               }}
               onMouseLeave={(e) => {
                 e.currentTarget.style.backgroundColor = "transparent";
-                if (!isActive && !(item as any).comingSoon) {
+                if (!isActive) {
                   e.currentTarget.style.color = "#777";
-                } else if ((item as any).comingSoon) {
-                  e.currentTarget.style.color = "#444";
                 } else {
                   e.currentTarget.style.color = "#FFD700";
                 }
@@ -2897,12 +2916,7 @@ export default function Header({
                 {item.icon === "users" && <FiUsers size={16} />}
                 {item.icon === "chart" && <FiBarChart size={16} />}
               </span>
-              <div className="flex flex-col">
-                <span>{item.name}</span>
-                {(item as any).comingSoon && (
-                  <span className="text-[10px] text-neutral-600 font-normal">Coming Soon</span>
-                )}
-              </div>
+              <span>{item.name}</span>
             </Link>
           );
         })}
