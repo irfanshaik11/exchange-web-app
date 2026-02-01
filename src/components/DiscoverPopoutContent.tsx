@@ -20,7 +20,7 @@ import { HiLightningBolt } from "react-icons/hi";
 import { BsSliders2 } from "react-icons/bs";
 import { prefetchTradeData } from "~/utils/tokenCache";
 import toast from "react-hot-toast";
-import { extractTokenImage } from "~/utils/images";
+import { extractTokenImage, getResolvedTokenImage } from "~/utils/images";
 import { broadcastMonadQuickTrade } from "~/utils/monadTradeEvents";
 import { formatMonadError } from "~/utils/monadError";
 
@@ -1608,8 +1608,8 @@ export default function DiscoverPopoutContent() {
         gasPrice: gasPrice !== undefined ? `${gasPrice} gwei` : 'network suggestion',
       });
 
-      // Get token image and name
-      const tokenImage = token ? extractTokenImage(token as any) : null;
+      // Get token image and name - use resolved version to get cached metadata images
+      const tokenImage = token ? getResolvedTokenImage(token as any) : null;
       const tokenName = token?.name || token?.symbol || '';
       
       // Generate unique toast ID and fake fast time (0.40-0.60s)

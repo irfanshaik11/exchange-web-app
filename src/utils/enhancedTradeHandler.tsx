@@ -21,7 +21,7 @@ import type { QuickBuySettings } from '~/components/QuickBuyContext';
 import { getPoolTypeFromToken } from './poolTypeDetection';
 import { Connection, PublicKey } from '@solana/web3.js';
 import toast from 'react-hot-toast';
-import { extractTokenImage } from './images';
+import { getResolvedTokenImage } from './images';
 import { fetchVerifiedPairAddress } from '~/hooks/useSingleTokenPolling';
 
 // Helper function to get first valid string from multiple candidates
@@ -441,8 +441,8 @@ export async function executeEnhancedTrade(params: EnhancedTradeParams): Promise
     const startTime = Date.now();
     let timerFinished = false;
 
-    // Get token image and wallet info for toast
-    const tokenImage = extractTokenImage(token);
+    // Get token image and wallet info for toast - use resolved version for cached metadata images
+    const tokenImage = getResolvedTokenImage(token);
     const tokenName = token?.symbol || token?.name || 'Token';
     const walletsWithBalance = walletAllocations.length || 1;
     const totalWallets = walletsConsidered || 1;

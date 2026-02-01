@@ -15,7 +15,7 @@ import { validateMonadBalance, validateSolanaBalance, computeMonadBalanceForVali
 import { formatMonadError } from '~/utils/monadError';
 import { getTradeActivityByUser } from '~/utils/functions';
 import { formatSmartNumber } from '~/utils/db';
-import { extractTokenImage } from '~/utils/images';
+import { extractTokenImage, getResolvedTokenImage } from '~/utils/images';
 import HighSlippageWarningDialog from '../HighSlippageWarningDialog';
 import LowLiquidityWarningDialog from '../LowLiquidityWarningDialog';
 import type { Token } from '~/utils/db';
@@ -754,7 +754,7 @@ const InstantTradeModal: React.FC<InstantTradeModalProps> = ({ isOpen, onClose, 
         const tokenAddress = token.mint; // Monad uses mint address (0x format)
         const slippage = settings?.maxSlippage ? settings.maxSlippage * 100 : 15;
         const gasPrice = settings?.gasPrice !== undefined && settings.gasPrice > 0 ? settings.gasPrice : undefined;
-        const tokenImage = token ? extractTokenImage(token as any) : null;
+        const tokenImage = token ? getResolvedTokenImage(token as any) : null;
         const tokenName = token?.name || token?.symbol || '';
         const buyResult = await runMonadBuyWithToast({
           tokenAddress,
@@ -927,7 +927,7 @@ const InstantTradeModal: React.FC<InstantTradeModalProps> = ({ isOpen, onClose, 
         const gasPrice = sellSettings.gasPrice !== undefined && sellSettings.gasPrice > 0 ? sellSettings.gasPrice : undefined;
         
         // Get token image and name
-        const tokenImage = token ? extractTokenImage(token as any) : null;
+        const tokenImage = token ? getResolvedTokenImage(token as any) : null;
         const tokenName = token?.name || token?.symbol || '';
         
         // Generate unique toast ID and fake fast time (0.40-0.60s)
@@ -1143,7 +1143,7 @@ const InstantTradeModal: React.FC<InstantTradeModalProps> = ({ isOpen, onClose, 
     
     setIsLoading(true);
     const { amount, side } = pendingTradeOptions;
-    const tokenImage = token ? extractTokenImage(token as any) : null;
+    const tokenImage = token ? getResolvedTokenImage(token as any) : null;
     const tokenName = token?.name || token?.symbol || '';
     
     try {
@@ -1352,7 +1352,7 @@ const InstantTradeModal: React.FC<InstantTradeModalProps> = ({ isOpen, onClose, 
     
     setIsLoading(true);
     const { amount } = pendingTradeOptions;
-    const tokenImage = token ? extractTokenImage(token as any) : null;
+    const tokenImage = token ? getResolvedTokenImage(token as any) : null;
     const tokenName = token?.name || token?.symbol || '';
     
     const currentSettings = presets[activePreset].quickBuySettings;

@@ -255,6 +255,49 @@ export function extractMetaImage(meta: any): string | null {
 }
 
 /**
+ * Get the cached resolved image URL for a metadata URL (synchronous)
+ * Returns the resolved image if cached, null otherwise
+ * Use this when you need to check the cache without async resolution
+ */
+export function getCachedResolvedImage(url: string | null): string | null {
+  if (!url || !isMetadataUrl(url)) return null;
+
+  const cached = metadataImageCache.get(url);
+  if (cached) {
+    const age = Date.now() - cached.timestamp;
+    const ttl = cached.image ? SUCCESS_TTL_MS : FAILURE_TTL_MS;
+    if (age < ttl && cached.image) {
+      return cached.image;
+    }
+  }
+  return null;
+}
+
+/**
+ * Get the best available image URL for a token (synchronous)
+ * Checks the metadata cache first for resolved images, falls back to raw URL
+ * Use this for toasts and other places where async resolution isn't practical
+ */
+export function getResolvedTokenImage(token: any): string | null {
+  const rawImageUrl = extractTokenImage(token);
+  if (!rawImageUrl) return null;
+
+  // If it's a metadata URL, check the cache for a resolved image
+  if (isMetadataUrl(rawImageUrl)) {
+    const cachedResolved = getCachedResolvedImage(rawImageUrl);
+    if (cachedResolved) {
+      return cachedResolved;
+    }
+    // Metadata URL but not resolved yet - don't return the JSON URL
+    // It would fail to load as an image
+    return null;
+  }
+
+  // Not a metadata URL, return the normalized image URL directly
+  return rawImageUrl;
+}
+
+/**
  * Extract image URL from token data, checking multiple possible field names
  * This ensures we catch image fields from stream data, HTTP data, and various API formats
  * Priority order: image_url (API), image, logo, uri (WebSocket stream fallback), then others
