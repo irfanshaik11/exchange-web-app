@@ -87,6 +87,7 @@ import { useUser } from "~/components/UserContext";
 import { useQuickBuy } from "~/components/QuickBuyContext";
 import {
   extractTokenImage,
+  getResolvedTokenImage,
   isMetadataUrl,
   resolveMetadataImage,
 } from "~/utils/images";
@@ -3143,8 +3144,8 @@ function PulseTable({
     const startTime = Date.now();
     let timerFinished = false;
 
-    // Extract token image
-    const tokenImage = extractTokenImage(token);
+    // Extract token image - use resolved version to get cached metadata images
+    const tokenImage = getResolvedTokenImage(token);
     const tokenName = token.symbol || token.name || "Token";
 
     // Show animated toast with timer
@@ -3156,6 +3157,7 @@ function PulseTable({
               src={tokenImage}
               alt={tokenName}
               className="h-6 w-6 flex-shrink-0 rounded-full"
+              onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
             />
           )}
           <div className="flex min-w-0 flex-1 items-center gap-2">

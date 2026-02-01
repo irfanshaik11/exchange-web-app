@@ -25,7 +25,7 @@ import { FaRunning, FaGasPump, FaCoins, FaBan, FaCheckCircle } from "react-icons
 import { HiLightningBolt } from "react-icons/hi";
 import { BsSliders2 } from "react-icons/bs";
 import { prefetchTradeData } from "~/utils/tokenCache";
-import { extractTokenImage } from "~/utils/images";
+import { extractTokenImage, getResolvedTokenImage } from "~/utils/images";
 import { broadcastMonadQuickTrade } from "~/utils/monadTradeEvents";
 import toast from "react-hot-toast";
 import { executeSolanaMultiBuy, buildSolanaWalletAllocations } from "~/utils/solanaWalletAllocation";
@@ -2059,8 +2059,8 @@ export default function DiscoverPage() {
         };
       };
 
-      // Get token image and name
-      const tokenImage = token ? extractTokenImage(token as any) : null;
+      // Get token image and name - use resolved version to get cached metadata images
+      const tokenImage = token ? getResolvedTokenImage(token as any) : null;
       const tokenName = token?.name || token?.symbol || '';
       
       // Generate unique toast ID and fake fast time (0.40-0.60s)
@@ -2201,8 +2201,8 @@ export default function DiscoverPage() {
     const startTime = Date.now();
     let timerFinished = false;
 
-    // Extract token image
-    const tokenImage = extractTokenImage(token);
+    // Extract token image - use resolved version to get cached metadata images
+    const tokenImage = getResolvedTokenImage(token);
     const tokenName = token.symbol || token.name || "Token";
 
     // Show animated toast with timer (same as PulseTable)
@@ -2214,6 +2214,7 @@ export default function DiscoverPage() {
               src={tokenImage}
               alt={tokenName}
               className="h-6 w-6 flex-shrink-0 rounded-full"
+              onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
             />
           )}
           <div className="flex min-w-0 flex-1 items-center gap-2">
@@ -2449,8 +2450,8 @@ export default function DiscoverPage() {
     const startTime = Date.now();
     let timerFinished = false;
 
-    // Extract token image
-    const tokenImage = token.image_uri || null;
+    // Extract token image - use resolved version to get cached metadata images
+    const tokenImage = getResolvedTokenImage(token);
     const tokenName = token.symbol || token.name || "Token";
 
     // Show animated toast with timer (same as PulseTable)
@@ -2462,6 +2463,7 @@ export default function DiscoverPage() {
               src={tokenImage}
               alt={tokenName}
               className="h-6 w-6 flex-shrink-0 rounded-full"
+              onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
             />
           )}
           <div className="flex min-w-0 flex-1 items-center gap-2">

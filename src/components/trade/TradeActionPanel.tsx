@@ -19,7 +19,7 @@ import { useUser } from "~/components/UserContext";
 import { executeSolanaMultiBuy, formatSolanaTxSummary, buildSolanaWalletAllocations } from "~/utils/solanaWalletAllocation";
 import useSolanaPositionWebSocket from "~/hooks/useSolanaPositionWebSocket";
 import type { SolanaTokenVolume } from "~/hooks/useSolanaTokenWebSocket";
-import { extractTokenImage } from "~/utils/images";
+import { extractTokenImage, getResolvedTokenImage } from "~/utils/images";
 import { SiSolana } from "react-icons/si";
 import useTokenStatsWebSocket from "~/hooks/useTokenStatsWebSocket";
 import { getPoolTypeFromToken } from "~/utils/poolTypeDetection";
@@ -2492,7 +2492,7 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
         let timerFinished = false;
 
         // Extract token image
-        const tokenImage = extractTokenImage(token);
+        const tokenImage = getResolvedTokenImage(token);
         const tokenName = token.symbol || token.name || 'Token';
         const SOLANA_LOGO = 'https://avatars.githubusercontent.com/u/92743431?s=200&v=4';
 
@@ -2505,6 +2505,7 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
                   src={tokenImage}
                   alt={tokenName}
                   className="w-6 h-6 rounded-full flex-shrink-0"
+                  onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
                 />
               )}
               <div className="flex items-center gap-2 flex-1 min-w-0">
@@ -2735,7 +2736,7 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
       let timerFinished = false;
 
       // Extract token image
-      const tokenImage = extractTokenImage(token);
+      const tokenImage = getResolvedTokenImage(token);
       const tokenName = token.symbol || token.name || 'Token';
 
       // Show animated toast with timer
@@ -2747,6 +2748,7 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
                 src={tokenImage}
                 alt={tokenName}
                 className="w-6 h-6 rounded-full flex-shrink-0"
+                onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
               />
             )}
             <div className="flex items-center gap-2 flex-1 min-w-0">

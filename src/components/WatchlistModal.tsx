@@ -23,7 +23,7 @@ import { fetchVerifiedPairAddress } from '~/hooks/useSingleTokenPolling';
 import { validateMonadBalance, computeMonadBalanceForValidation } from '~/utils/tradeBalanceValidation';
 import { formatMonadError } from '~/utils/monadError';
 import { broadcastMonadQuickTrade } from '~/utils/monadTradeEvents';
-import { extractTokenImage } from '~/utils/images';
+import { extractTokenImage, getResolvedTokenImage } from '~/utils/images';
 import { FaCheckCircle } from 'react-icons/fa';
 
 interface WatchlistModalProps {
@@ -498,7 +498,7 @@ export default function WatchlistModal({ open, onClose }: WatchlistModalProps) {
       }
       
       // Get token image and name
-      const tokenImage = extractTokenImage(token as any) || null;
+      const tokenImage = getResolvedTokenImage(token as any) || null;
       const tokenName = token?.name || token?.symbol || '';
       
       // Generate unique toast ID
@@ -639,7 +639,7 @@ export default function WatchlistModal({ open, onClose }: WatchlistModalProps) {
       let timerFinished = false;
 
       // Extract token image
-      const tokenImage = extractTokenImage(token as any) || null;
+      const tokenImage = getResolvedTokenImage(token as any) || null;
       const tokenName = token.symbol || token.name || "Token";
 
       // Show animated toast with timer (same as PulseTable)
@@ -651,6 +651,7 @@ export default function WatchlistModal({ open, onClose }: WatchlistModalProps) {
                 src={tokenImage}
                 alt={tokenName}
                 className="h-6 w-6 flex-shrink-0 rounded-full"
+                onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
               />
             )}
             <div className="flex min-w-0 flex-1 items-center gap-2">

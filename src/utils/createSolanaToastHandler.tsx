@@ -1,5 +1,5 @@
 import toast from "react-hot-toast";
-import { extractTokenImage } from "./images";
+import { getResolvedTokenImage } from "./images";
 import { buildSolanaWalletAllocations, executeSolanaMultiBuy } from "./solanaWalletAllocation";
 import { showEnhancedToast } from "./enhancedToast";
 import { SOL_MINT_ADDRESS } from "./api";
@@ -50,7 +50,8 @@ export function createSolanaTradeToast(
   let timerFinished = false;
 
   // Extract token image
-  const tokenImage = extractTokenImage(token);
+  // Use resolved version to get cached metadata images
+  const tokenImage = getResolvedTokenImage(token);
   const tokenName = token.symbol || token.name || 'Token';
 
   // Show animated toast with timer
@@ -62,6 +63,7 @@ export function createSolanaTradeToast(
             src={tokenImage}
             alt={tokenName}
             className="w-6 h-6 rounded-full flex-shrink-0"
+            onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
           />
         )}
         <div className="flex items-center gap-2 flex-1 min-w-0">
