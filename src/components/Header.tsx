@@ -4,7 +4,6 @@ import { useEffect, useState, useRef, useCallback, useMemo } from "react";
 import {
   FaSearch,
   FaStar,
-  FaWallet,
   FaChevronLeft,
   FaChevronRight,
   FaBell,
@@ -44,7 +43,7 @@ import UsernameEditModal from "./UsernameEditModal";
 import NotificationDropdown from "./NotificationDropdown";
 import { useReferralStats } from "~/hooks/useArena";
 import type { Timeframe } from "../pages/index";
-import { CiBellOn, CiStar } from "react-icons/ci";
+// import MorphingArenaNav from "./MorphingArenaNav"; // Commented out - Arena now in main nav
 
 /* ---- style palette ---- */
 const AX = {
@@ -96,17 +95,10 @@ const navLinks = [
   { name: "Portfolio", href: "/portfolio" },
   { name: "Trending", href: "/discover" },
   { name: "Trackers", href: "/trackers" },
+  { name: "Arena", href: "/arena" },
   // { name: "Predictions", href: "/predictions" },
   // { name: "Perpetuals", href: "/construction" },
   // { name: "Yield", href: "/construction" },
-];
-
-// Arena dropdown menu items
-const arenaMenuItems = [
-  { name: "ARENA", href: "/arena", icon: "trophy" },
-  { name: "REFERRALS", href: "/referrals", icon: "users" },
-  { name: "LEADERBOARD", href: "/leaderboard", icon: "chart", disabled: true },
-  { name: "JACKPOT", href: "/jackpot", icon: "grid", disabled: true },
 ];
 
 interface HeaderProps {
@@ -257,37 +249,6 @@ export default function Header({
   isSticky = true,
 }: HeaderProps) {
   const [headerBarVisible, setHeaderBarVisible] = useState(true);
-  const [arenaDropdownOpen, setArenaDropdownOpen] = useState(false);
-  const [arenaDropdownPos, setArenaDropdownPos] = useState({ top: 0, left: 0 });
-  const arenaDropdownRef = useRef<HTMLDivElement>(null);
-  const arenaButtonRef = useRef<HTMLButtonElement>(null);
-
-  // Close arena dropdown when clicking outside
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (
-        arenaDropdownRef.current &&
-        !arenaDropdownRef.current.contains(event.target as Node) &&
-        arenaButtonRef.current &&
-        !arenaButtonRef.current.contains(event.target as Node)
-      ) {
-        setArenaDropdownOpen(false);
-      }
-    };
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, []);
-
-  // Update dropdown position when opening
-  useEffect(() => {
-    if (arenaDropdownOpen && arenaButtonRef.current) {
-      const rect = arenaButtonRef.current.getBoundingClientRect();
-      setArenaDropdownPos({
-        top: rect.bottom + 8,
-        left: rect.left,
-      });
-    }
-  }, [arenaDropdownOpen]);
 
   // Check for header bar visibility on mount and when body class changes
   useEffect(() => {
@@ -353,7 +314,7 @@ export default function Header({
   })();
   const { solPrice, monPrice } = useSolPrice();
   const chainPrice = currentChain === 'monad' ? monPrice : solPrice;
-  const { watchlist, removeFromWatchlist, refreshWatchlistToken } = useWatchlist();
+  const { watchlist, isHydrated, removeFromWatchlist, refreshWatchlistToken } = useWatchlist();
   const { presets, activePreset } = useQuickBuy();
 
   // Watchlist ticker paging (max 8 tokens visible)
@@ -1345,7 +1306,9 @@ export default function Header({
                   const isActive =
                     router.pathname === link.href ||
                     (link.name === "Trenches" &&
-                      router.pathname.startsWith("/trade/"));
+                      router.pathname.startsWith("/trade/")) ||
+                    (link.name === "Arena" &&
+                      (router.pathname === "/arena" || router.pathname === "/referrals"));
                   return (
                     <Link
                       key={link.name}
@@ -1403,253 +1366,85 @@ export default function Header({
             </div>
           </div>
           <div className="flex min-w-0 flex-shrink-0 items-center gap-1.5 sm:gap-2 md:gap-3 lg:gap-4">
-            {/* Arena Dropdown Button - Matte Gold with dynamic page name */}
-            {(() => {
-              // Determine current arena page
-              const currentArenaPage = arenaMenuItems.find(
-                item => router.pathname === item.href ||
-                (item.href === "/arena" && router.pathname.startsWith("/arena") && !arenaMenuItems.some(i => i.href !== "/arena" && router.pathname === i.href))
-              ) || { name: "ARENA", icon: "trophy" };
-
-              return (
-                <button
-                  ref={arenaButtonRef}
-                  onClick={(e) => {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    setArenaDropdownOpen(!arenaDropdownOpen);
-                  }}
-                  className="flex h-10 items-center gap-2 rounded-lg px-5 cursor-pointer"
-                  style={{
-                    background: 'linear-gradient(180deg, rgba(180, 155, 40, 0.25) 0%, rgba(140, 120, 30, 0.3) 100%)',
-                    border: '1px solid rgba(212, 175, 55, 0.35)',
-                  }}
-                >
-                  {/* Icon - bright gold */}
-                  <span style={{ color: '#D4AF37' }}>
-                    {currentArenaPage.icon === "trophy" && <GiTrophy size={18} />}
-                    {currentArenaPage.icon === "users" && <FiUsers size={18} />}
-                    {currentArenaPage.icon === "chart" && <FiBarChart size={18} />}
-                    {currentArenaPage.icon === "grid" && <FiGrid size={18} />}
-                  </span>
-                  {/* Text - bright gold, extra bold */}
-                  <span
-                    style={{
-                      background: 'linear-gradient(180deg, #FFE55C 0%, #FFD700 30%, #D4AF37 100%)',
-                      WebkitBackgroundClip: 'text',
-                      WebkitTextFillColor: 'transparent',
-                      backgroundClip: 'text',
-                      fontSize: '14px',
-                      fontWeight: 800,
-                      letterSpacing: '0.02em',
-                    }}
-                  >
-                    {currentArenaPage.name}
-                  </span>
-                  <FaChevronDown
-                    size={12}
-                    style={{ color: '#D4AF37', strokeWidth: 1 }}
-                    className={`transition-transform duration-200 ${arenaDropdownOpen ? "rotate-180" : ""}`}
-                  />
-                </button>
-              );
-            })()}
+            {/* Morphing Arena Navigation - commented out, Arena now in main nav
+            <MorphingArenaNav />
+            */}
 
             {showSearch && (
               <div className="flex items-center gap-1 sm:gap-1.5 md:gap-2">
-                {/* Smaller search button (desktop) */}
+                {/* Search button (desktop) - squarish pill */}
                 <button
                   onClick={() => openSearch()}
-                  className="hidden h-10 items-center gap-1.5 rounded-3xl border px-4 transition-all duration-300 ease-out xl:flex"
+                  className="hidden h-8 cursor-pointer items-center gap-2 rounded-md border px-3 transition-all duration-200 ease-out lg:flex"
                   style={{
+                    backgroundColor: "rgba(13, 16, 21, 0.8)",
                     borderColor: AX.border,
                     color: AX.muted,
                   }}
                   onMouseEnter={(e) => {
-                    e.currentTarget.style.borderColor = AX.border;
+                    e.currentTarget.style.backgroundColor = "rgba(255, 255, 255, 0.06)";
                   }}
                   onMouseLeave={(e) => {
-                    e.currentTarget.style.borderColor = AX.border;
+                    e.currentTarget.style.backgroundColor = "rgba(13, 16, 21, 0.8)";
                   }}
                 >
-                  <FaSearch size={12} />
-                  <span className="text-xs whitespace-nowrap text-neutral-400">
-                    Search for any token or w..
+                  <FaSearch size={11} />
+                  <span className="text-xs whitespace-nowrap text-neutral-500">
+                    Search
                   </span>
-                  <span className="ml-auto rounded border border-neutral-700/70 bg-neutral-800/80 px-1 py-0.5 text-[10px] leading-none text-neutral-200">
+                  <span className="ml-2 rounded border border-neutral-700/60 bg-neutral-800/60 px-1.5 py-0.5 text-[10px] leading-none text-neutral-400">
                     /
                   </span>
                 </button>
 
-                {/* Medium search button (for tablets) - shows icon + text without Tab keycap */}
+                {/* Compact icon-only trigger on mobile/tablet */}
                 <button
                   onClick={() => openSearch()}
-                  className="hidden h-8 min-w-[180px] items-center gap-1.5 rounded-md border px-2.5 transition-all duration-300 ease-out lg:flex xl:hidden"
+                  className="flex h-8 w-8 cursor-pointer flex-shrink-0 items-center justify-center rounded-md border transition-all duration-200 ease-out lg:hidden"
                   style={{
-                    backgroundColor: AX.surface,
+                    backgroundColor: "rgba(13, 16, 21, 0.8)",
                     borderColor: AX.border,
                     color: AX.muted,
                   }}
                   onMouseEnter={(e) => {
-                    e.currentTarget.style.backgroundColor =
-                      "rgba(24, 196, 140, 0.08)";
-                    e.currentTarget.style.borderColor = "#18c48c";
+                    e.currentTarget.style.backgroundColor = "rgba(255, 255, 255, 0.06)";
                   }}
                   onMouseLeave={(e) => {
-                    e.currentTarget.style.backgroundColor = AX.surface;
-                    e.currentTarget.style.borderColor = AX.border;
+                    e.currentTarget.style.backgroundColor = "rgba(13, 16, 21, 0.8)";
                   }}
                 >
                   <FaSearch size={12} />
-                  <span className="text-[11px] whitespace-nowrap text-neutral-400">
-                    Search
-                  </span>
                 </button>
 
-                {/* Compact icon-only trigger on small screens */}
-                <button
-                  onClick={() => openSearch()}
-                  className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-md border transition-all duration-300 ease-out lg:hidden"
-                  style={{
-                    backgroundColor: AX.surface,
-                    borderColor: AX.border,
-                    color: AX.muted,
-                  }}
-                >
-                  <FaSearch size={14} />
-                </button>
-
-                {/* Clipboard token button - large desktop */}
+                {/* Clipboard token button - responsive */}
                 {clipboardToken && clipboardToken.imageUrl && (
                   <button
                     onClick={handlePasteCA}
-                    className="relative hidden h-8 items-center gap-2 rounded-md border pr-2.5 pl-2 transition-all duration-300 ease-out xl:flex"
+                    className="relative flex h-8 cursor-pointer flex-shrink-0 items-center gap-1 rounded-md border px-1.5 transition-all duration-200 ease-out sm:gap-1.5 sm:px-2"
                     style={{
-                      backgroundColor: AX.surface,
-                      borderColor: AX.border,
-                      color: AX.muted,
-                    }}
-                    onMouseEnter={(e) => {
-                      e.currentTarget.style.backgroundColor =
-                        "rgba(24, 196, 140, 0.08)";
-                      e.currentTarget.style.borderColor = "#18c48c";
-                      e.currentTarget.style.boxShadow =
-                        "0 0 8px rgba(24, 196, 140, 0.3), 0 0 16px rgba(24, 196, 140, 0.15)";
-                      e.currentTarget.style.transform = "scale(1.01)";
-                    }}
-                    onMouseLeave={(e) => {
-                      e.currentTarget.style.backgroundColor = AX.surface;
-                      e.currentTarget.style.borderColor = AX.border;
-                      e.currentTarget.style.boxShadow = "none";
-                      e.currentTarget.style.transform = "scale(1)";
-                    }}
-                  >
-                    <div className="flex min-w-0 items-center gap-2">
-                      <img
-                        src={clipboardToken.imageUrl}
-                        alt="Token"
-                        className="h-7 w-7 flex-shrink-0 rounded-md object-cover"
-                        onError={() => setClipboardToken(null)}
-                      />
-                      <span className="max-w-[90px] truncate text-sm font-medium text-[#f0f5f5]">
-                        {clipboardToken.name}
-                      </span>
-                    </div>
-                    <div className="group/shield relative ml-1">
-                      <IoShieldCheckmarkOutline
-                        size={14}
-                        style={{
-                          color: clipboardToken.isPumpToken
-                            ? "#31e3ac"
-                            : "#eab308",
-                        }}
-                      />
-                      {/* Tooltip */}
-                      <div
-                        className="pointer-events-none absolute bottom-full left-1/2 z-50 mb-2 -translate-x-1/2 transform rounded px-2 py-1 text-xs font-medium whitespace-nowrap opacity-0 transition-opacity duration-200 group-hover/shield:opacity-100"
-                        style={{
-                          backgroundColor: AX.surface,
-                          color: AX.text,
-                          border: `1px solid ${AX.border}`,
-                          boxShadow:
-                            "0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)",
-                        }}
-                      >
-                        audit
-                        {/* Tooltip arrow */}
-                        <div
-                          className="absolute top-full left-1/2 h-0 w-0 -translate-x-1/2 transform border-t-4 border-r-4 border-l-4 border-transparent"
-                          style={{ borderTopColor: AX.surface }}
-                        ></div>
-                      </div>
-                    </div>
-                  </button>
-                )}
-
-                {/* Clipboard token button - medium/tablet - compact version */}
-                {clipboardToken && clipboardToken.imageUrl && (
-                  <button
-                    onClick={handlePasteCA}
-                    className="relative hidden h-8 items-center gap-1.5 rounded-md border pr-2 pl-1.5 transition-all duration-300 ease-out lg:flex xl:hidden"
-                    style={{
-                      backgroundColor: AX.surface,
+                      backgroundColor: "rgba(13, 16, 21, 0.8)",
                       borderColor: AX.border,
                     }}
                     onMouseEnter={(e) => {
-                      e.currentTarget.style.backgroundColor =
-                        "rgba(24, 196, 140, 0.08)";
-                      e.currentTarget.style.borderColor = "#18c48c";
+                      e.currentTarget.style.backgroundColor = "rgba(255, 255, 255, 0.06)";
                     }}
                     onMouseLeave={(e) => {
-                      e.currentTarget.style.backgroundColor = AX.surface;
-                      e.currentTarget.style.borderColor = AX.border;
+                      e.currentTarget.style.backgroundColor = "rgba(13, 16, 21, 0.8)";
                     }}
                   >
                     <img
                       src={clipboardToken.imageUrl}
                       alt="Token"
-                      className="h-6 w-6 flex-shrink-0 rounded-md object-cover"
+                      className="h-5 w-5 flex-shrink-0 rounded object-cover sm:h-6 sm:w-6"
                       onError={() => setClipboardToken(null)}
                     />
-                    <span className="max-w-[60px] truncate text-[11px] font-medium text-white">
+                    <span className="hidden max-w-[60px] truncate text-[11px] font-medium text-white sm:inline">
                       {clipboardToken.name}
                     </span>
                     <IoShieldCheckmarkOutline
                       size={12}
                       style={{
-                        color: clipboardToken.isPumpToken
-                          ? "#31e3ac"
-                          : "#eab308",
-                      }}
-                    />
-                  </button>
-                )}
-
-                {/* Clipboard token button - mobile */}
-                {clipboardToken && clipboardToken.imageUrl && (
-                  <button
-                    onClick={handlePasteCA}
-                    className="relative flex h-8 flex-shrink-0 items-center gap-1.5 rounded-md border pr-2 pl-1.5 transition-all duration-300 ease-out lg:hidden"
-                    style={{
-                      backgroundColor: AX.surface,
-                      borderColor: AX.border,
-                    }}
-                  >
-                    <img
-                      src={clipboardToken.imageUrl}
-                      alt="Token"
-                      className="h-6 w-6 flex-shrink-0 rounded-md object-cover"
-                      onError={() => setClipboardToken(null)}
-                    />
-                    <span className="max-w-[50px] truncate text-[11px] font-medium text-white">
-                      {clipboardToken.name}
-                    </span>
-                    <IoShieldCheckmarkOutline
-                      size={11}
-                      style={{
-                        color: clipboardToken.isPumpToken
-                          ? "#31e3ac"
-                          : "#eab308",
+                        color: clipboardToken.isPumpToken ? "#31e3ac" : "#eab308",
                       }}
                     />
                   </button>
@@ -1660,42 +1455,25 @@ export default function Header({
               </div>
             )}
 
-            <button
-              onClick={() => setWatchlistOpen(true)}
-              className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-md transition-all duration-300 ease-out"
-              style={{
-                color: AX.muted,
-              }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.color = AX.mint;
-                e.currentTarget.style.boxShadow = "none";
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.color = AX.muted;
-                e.currentTarget.style.boxShadow = "none";
-              }}
-              title="Watchlist"
-            >
-              <CiStar size={24} />
-            </button>
-
             {/* Notifications Button */}
             <div ref={notificationsRef} className="relative">
               <button
                 onClick={() => setNotificationsOpen(!notificationsOpen)}
-                className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-md transition-all duration-300 ease-out"
+                className="flex h-8 w-8 cursor-pointer flex-shrink-0 items-center justify-center rounded-md border transition-all duration-200 ease-out"
                 style={{
                   color: AX.muted,
+                  borderColor: AX.border,
+                  backgroundColor: "rgba(13, 16, 21, 0.8)",
                 }}
                 onMouseEnter={(e) => {
-                  e.currentTarget.style.color = AX.mint;
+                  e.currentTarget.style.backgroundColor = "rgba(255, 255, 255, 0.06)";
                 }}
                 onMouseLeave={(e) => {
-                  e.currentTarget.style.color = AX.muted;
+                  e.currentTarget.style.backgroundColor = "rgba(13, 16, 21, 0.8)";
                 }}
                 title="Notifications"
               >
-                <CiBellOn size={24} />
+                <FaBell size={14} />
               </button>
 
               {/* Notifications Panel */}
@@ -1710,31 +1488,32 @@ export default function Header({
                 {/* Combined Balance + Username Button */}
                 <button
                   onClick={() => setProfileMenuOpen(!profileMenuOpen)}
-                  className="group/account flex h-10 cursor-pointer flex-row items-center justify-center rounded-3xl border px-1 transition-all duration-300 ease-out lg:gap-2"
+                  className="group/account flex h-8 cursor-pointer flex-row items-center justify-center gap-1.5 rounded-md border px-2 transition-all duration-200 ease-out sm:gap-2 sm:px-2.5"
                   style={{
                     borderColor: AX.border,
                     color: AX.text,
+                    backgroundColor: "rgba(13, 16, 21, 0.8)",
                   }}
                   onMouseEnter={(e) => {
-                    e.currentTarget.style.borderColor = AX.mint;
+                    e.currentTarget.style.backgroundColor = "rgba(255, 255, 255, 0.06)";
                   }}
                   onMouseLeave={(e) => {
-                    e.currentTarget.style.borderColor = AX.border;
+                    e.currentTarget.style.backgroundColor = "rgba(13, 16, 21, 0.8)";
                   }}
                   title="Click to view account & wallet"
                 >
-                  <div className="hidden h-8 w-8 items-center justify-center select-none sm:flex">
+                  <div className="hidden h-6 w-6 items-center justify-center select-none sm:flex">
                     <img
                       src={`/ranks/degen-${Math.max(1, Math.min(4, honorsLevel))}.png`}
                       alt={`Honors ${honorsLevel}`}
-                      className="w-8 h-8 object-contain"
+                      className="w-6 h-6 object-contain"
                     />
                   </div>
-                  <div className="items-left flex flex-col gap-0 text-left">
-                    <div className="flex items-center gap-1 text-sm text-white">
+                  <div className="flex items-center gap-1.5 text-left">
+                    <div className="flex items-center gap-1 text-xs font-medium text-white sm:text-sm">
                       {isPredictionsPage ? (
                         <>
-                          <SiPolygon size={12} className="text-[#8247E5]" />
+                          <SiPolygon size={10} className="text-[#8247E5]" />
                           <span>
                             {polygonBalanceLoading ? '...' :
                               `$${formatBalance(polygonBalance?.usdc ?? 0, 2)}`}
@@ -1746,38 +1525,17 @@ export default function Header({
                           {chainSymbols[currentChain] ?? "SOL"}
                         </span>
                       )}
-                      <button
-                        onClick={handleManualBalanceRefresh}
-                        className="p-0.5 rounded-full hover:bg-white/10 transition-colors"
-                        title="Refresh balance"
-                      >
-                        <FaSync
-                          size={10}
-                          className={`text-neutral-500 hover:text-white ${isRefreshingBalance || polygonBalanceLoading ? 'animate-spin' : ''}`}
-                        />
-                      </button>
-                    </div>
-                    <div className="text-xs text-neutral-500">
-                      {isPredictionsPage ? (
-                        <span className="text-[#8247E5]">Polygon</span>
-                      ) : (
-                        user.name
-                          ? user.name
-                          : user.publicKey
-                              .slice(0, 4)
-                              .concat(user.name.slice(-4))
-                      )}
                     </div>
                   </div>
                   <FiChevronDown
-                    className="text-neutral-500 hover:text-neutral-200"
-                    size={16}
+                    className="text-neutral-500"
+                    size={12}
                   />
                 </button>
                 {/* Combined Dropdown */}
                 {profileMenuOpen && (
                   <div
-                    className="absolute top-10 right-0 z-[1000001] rounded-xl border border-[#20232b] bg-[#0a0b10] shadow-2xl"
+                    className="absolute top-9 right-0 z-[1000001] rounded-lg border border-[#20232b] bg-[#0a0b10] shadow-2xl"
                     style={{
                       width: "280px",
                       minWidth: "280px",
@@ -2329,13 +2087,13 @@ export default function Header({
               </div>
             </div>
 
-            {/* Divider before watchlist tokens */}
-            {watchlist.length > 0 && (
+            {/* Divider before watchlist tokens - only show after hydration to prevent flicker */}
+            {isHydrated && watchlist.length > 0 && (
               <div className="h-4 border-r" style={{ borderColor: AX.border }} />
             )}
 
             {/* "All" dropdown for watchlist filter */}
-            {watchlist.length > 0 && (
+            {isHydrated && watchlist.length > 0 && (
               <div className="flex items-center">
                 <span className="text-xs font-medium" style={{ color: AX.text }}>
                   All
@@ -2345,7 +2103,7 @@ export default function Header({
             )}
 
             {/* Watchlist Tokens Ticker - Scrollable Container (uses full available panel width) */}
-            {enrichedWatchlist.length > 0 && (
+            {isHydrated && enrichedWatchlist.length > 0 && (
             <div
               className="flex-1 flex items-center gap-3 overflow-x-auto scrollbar-hide px-1"
               style={{
@@ -2841,86 +2599,6 @@ export default function Header({
           // User context will be refreshed by the modal
         }}
       />
-
-      {/* Arena Dropdown Menu - Fixed position with smooth animation */}
-      <div
-        ref={arenaDropdownRef}
-        className="fixed min-w-[200px] rounded-xl py-2 overflow-hidden"
-        style={{
-          top: arenaDropdownPos.top,
-          left: arenaDropdownPos.left,
-          background: "rgba(12, 12, 12, 0.95)",
-          backdropFilter: "blur(12px)",
-          border: "1px solid rgba(255, 255, 255, 0.06)",
-          zIndex: 99999,
-          opacity: arenaDropdownOpen ? 1 : 0,
-          transform: arenaDropdownOpen ? "translateY(0) scale(1)" : "translateY(-8px) scale(0.96)",
-          transformOrigin: "top center",
-          transition: "opacity 200ms ease-out, transform 200ms ease-out",
-          pointerEvents: arenaDropdownOpen ? "auto" : "none",
-          visibility: arenaDropdownOpen ? "visible" : "hidden",
-        }}
-      >
-        {arenaMenuItems.map((item) => {
-          const isActive = router.pathname === item.href ||
-            (item.href === "/arena" && router.pathname.startsWith("/arena"));
-          const isDisabled = (item as any).disabled;
-
-          // For disabled items, render a div instead of Link to prevent navigation
-          if (isDisabled) {
-            return (
-              <div
-                key={item.name}
-                className="flex items-center gap-3 mx-2 px-4 py-3 text-sm font-bold rounded-lg cursor-not-allowed"
-                style={{
-                  color: "#444",
-                  opacity: 0.5,
-                }}
-              >
-                <span style={{ opacity: 0.4 }}>
-                  {item.icon === "trophy" && <GiTrophy size={16} />}
-                  {item.icon === "grid" && <FiGrid size={16} />}
-                  {item.icon === "users" && <FiUsers size={16} />}
-                  {item.icon === "chart" && <FiBarChart size={16} />}
-                </span>
-                <span>{item.name}</span>
-              </div>
-            );
-          }
-
-          return (
-            <Link
-              key={item.name}
-              href={item.href}
-              onClick={() => setArenaDropdownOpen(false)}
-              className="flex items-center gap-3 mx-2 px-4 py-3 text-sm font-bold transition-all duration-150 rounded-lg cursor-pointer"
-              style={{
-                color: isActive ? "#FFD700" : "#777",
-              }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.backgroundColor = "rgba(255, 215, 0, 0.08)";
-                e.currentTarget.style.color = "#FFD700";
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.backgroundColor = "transparent";
-                if (!isActive) {
-                  e.currentTarget.style.color = "#777";
-                } else {
-                  e.currentTarget.style.color = "#FFD700";
-                }
-              }}
-            >
-              <span style={{ opacity: isActive ? 1 : 0.6 }}>
-                {item.icon === "trophy" && <GiTrophy size={16} />}
-                {item.icon === "grid" && <FiGrid size={16} />}
-                {item.icon === "users" && <FiUsers size={16} />}
-                {item.icon === "chart" && <FiBarChart size={16} />}
-              </span>
-              <span>{item.name}</span>
-            </Link>
-          );
-        })}
-      </div>
     </>
   );
 }

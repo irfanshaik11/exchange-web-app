@@ -10,7 +10,7 @@ import Head from 'next/head';
 import Header from '~/components/Header';
 import Footer from '~/components/Footer';
 import { useUser } from '~/components/UserContext';
-import { useReferralsPageData, useClaimQuest, useAllReferrals, useArenaStats, useReferralQuests } from '~/hooks/useArena';
+import { useReferralsPageData, useAllReferrals, useArenaStats } from '~/hooks/useArena';
 import type { ReferralStats, HonorsInfo } from '~/utils/arenaApi';
 import { claimReferralRewards } from '~/utils/arenaApi';
 import UsernameEditModal from '~/components/UsernameEditModal';
@@ -18,7 +18,8 @@ import { toast } from 'react-hot-toast';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 
 // React Icons
-import { GiMedal, GiTrophy, GiCrown, GiCoins, GiSpartanHelmet } from 'react-icons/gi';
+import { GiMedal, GiTrophy, GiCrown, GiCoins } from 'react-icons/gi';
+import ArenaPageToggle from '~/components/ArenaPageToggle';
 import { FiUsers, FiCopy, FiCheck, FiEdit2, FiLock, FiSearch, FiChevronDown, FiChevronLeft, FiChevronRight, FiInfo } from 'react-icons/fi';
 import { HiSparkles } from 'react-icons/hi';
 import { IoRocketSharp } from 'react-icons/io5';
@@ -27,10 +28,10 @@ import { BiUser } from 'react-icons/bi';
 // Space background - contained within rounded container (matching Arena)
 const SpaceBackgroundContained = () => (
   <div className="absolute inset-0 overflow-hidden pointer-events-none rounded-2xl">
-    {/* Main background image - future.png */}
+    {/* Main background image */}
     <div
       className="absolute inset-x-0 top-0 h-[80vh] bg-cover bg-top bg-no-repeat"
-      style={{ backgroundImage: 'url(/future.png)' }}
+      style={{ backgroundImage: 'url(/ranks/Background.png)' }}
     />
     {/* Subtle dark overlay */}
     <div className="absolute inset-0 bg-black/30" />
@@ -69,9 +70,9 @@ const getRankImage = (rank: string, level: number = 1): string => {
   return `/ranks/${rankLower}-${clampedLevel}.png`;
 };
 
-// Gold coin using PNG image
-const GoldCoin = ({ className = '' }: { className?: string }) => (
-  <img src="/ranks/Coin.png" alt="Gold" className={`${className} object-contain`} />
+// Credits coin using PNG image
+const CreditsCoin = ({ className = '' }: { className?: string }) => (
+  <img src="/ranks/Coin.png" alt="Credits" className={`${className} object-contain`} />
 );
 
 // Solana logo
@@ -152,7 +153,6 @@ export default function ReferralsPage() {
     search: searchQuery || undefined
   });
   const { data: arenaStats } = useArenaStats();
-  const claimQuestMutation = useClaimQuest();
   const queryClient = useQueryClient();
 
   // Custom claim mutation with Solscan link toast
@@ -216,7 +216,7 @@ export default function ReferralsPage() {
   const displayRank = (arenaStats as any)?.rank || 'DEGEN';
   const displayLevel = (arenaStats as any)?.level || 1;
   const displayGoldEarned = (arenaStats as any)?.goldEarned || 0;
-  const nextLevelGold = RANK_CONFIG[displayRank as keyof typeof RANK_CONFIG] ? 1000 : 1000;
+  const nextLevelGold = 1000; // Credits needed for next level display
   const progressToNext = Math.min((displayGoldEarned / nextLevelGold) * 100, 100);
 
   const handleCopyLink = (link: string) => {
@@ -363,6 +363,9 @@ export default function ReferralsPage() {
 
             {/* Content */}
             <main className="relative z-10 mx-auto max-w-6xl px-4 sm:px-6 pt-8 pb-24">
+              {/* Arena/Referrals Toggle */}
+              <ArenaPageToggle activePage="referrals" />
+
               {/* Title */}
               <h1 className="text-5xl md:text-6xl font-black tracking-tight text-white text-center mb-8">
                 REFERRALS
@@ -407,26 +410,26 @@ export default function ReferralsPage() {
                   />
                 </div>
                 {honorsData.currentLevel < 4 && (
-                  <p className="text-neutral-500 text-xs">
-                    {(honorsData.nextTierRequirement || 0) - statsData.activeTradersCount} more active traders to Honors {['II', 'III', 'IV'][honorsData.currentLevel - 1]}
+                  <p className="text-amber-400/80 text-sm font-medium mt-1">
+                    {Math.max(0, (honorsData.nextTierRequirement || 0) - statsData.activeTradersCount)} more active traders to Honors {['II', 'III', 'IV'][honorsData.currentLevel - 1]}
                   </p>
                 )}
               </div>
 
-              {/* Right: Gold & SOL Earned */}
+              {/* Right: Credits & SOL Earned */}
               <div className="flex flex-col justify-center gap-2.5 px-6 py-3.5 bg-white/[0.06] backdrop-blur-sm border border-white/[0.08] rounded-xl min-w-[280px]">
-                {/* Gold earned row */}
+                {/* Credits earned row */}
                 <div className="flex items-center justify-between">
-                  <span className="text-neutral-400 text-sm">Gold earned</span>
+                  <span className="text-neutral-400 text-sm">Credits earned</span>
                   <div className="flex items-center gap-1.5">
-                    <GoldCoin className="w-4 h-4" />
+                    <CreditsCoin className="w-4 h-4" />
                     <span className="text-white font-semibold text-sm">{displayGoldEarned.toLocaleString()}</span>
                     {/* Info tooltip */}
                     <div className="relative group">
                       <FiInfo className="w-3.5 h-3.5 text-neutral-500 hover:text-neutral-300 cursor-pointer transition-colors" />
                       <div className="absolute bottom-full right-0 mb-2 px-3 py-2 bg-neutral-900 border border-neutral-700 rounded-lg shadow-xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-50 whitespace-nowrap">
-                        <p className="text-white text-xs font-medium mb-1">Available Gold: <span className="text-amber-400">{displayGoldEarned.toLocaleString()}</span></p>
-                        <p className="text-neutral-400 text-xs">You can use your Gold to enter the Jackpot.</p>
+                        <p className="text-white text-xs font-medium mb-1">Available Credits: <span className="text-amber-400">{displayGoldEarned.toLocaleString()}</span></p>
+                        <p className="text-neutral-400 text-xs">You can use your Credits to enter the Jackpot.</p>
                         <div className="absolute bottom-0 right-3 translate-y-1/2 rotate-45 w-2 h-2 bg-neutral-900 border-r border-b border-neutral-700" />
                       </div>
                     </div>
@@ -495,11 +498,12 @@ export default function ReferralsPage() {
 
               <div className="relative flex items-center justify-between">
                 <div className="flex items-center gap-4">
-                  {/* Bronze spartan helmet badge */}
+                  {/* Honors III badge */}
                   <div className="w-12 h-12 flex items-center justify-center">
-                    <GiSpartanHelmet
-                      className="w-10 h-10"
-                      style={{ color: '#8B7355' }}
+                    <img
+                      src="/ranks/degen-3.png"
+                      alt="Honors III"
+                      className="w-10 h-10 object-contain"
                     />
                   </div>
                   <div>
@@ -522,6 +526,35 @@ export default function ReferralsPage() {
                     border: '1px solid rgba(139, 115, 85, 0.5)',
                     color: '#C4A574'
                   }}
+                  onClick={() => {
+                    if (honorsData.currentLevel >= 3) {
+                      toast.success(
+                        <div className="flex items-center gap-2">
+                          <img src="/ranks/degen-3.png" alt="Honors III" className="w-6 h-6" />
+                          <span>You already have Honors III with 42.5% rev share!</span>
+                        </div>,
+                        { duration: 4000 }
+                      );
+                    } else {
+                      const honorsIII = honorsData.allTiers.find(t => t.level === 3);
+                      const tradersNeeded = honorsIII ? honorsIII.requirement - statsData.activeTradersCount : 50;
+                      toast(
+                        <div className="flex items-center gap-2">
+                          <img src="/ranks/degen-3.png" alt="Honors III" className="w-6 h-6" />
+                          <span>
+                            {tradersNeeded > 0
+                              ? `Refer ${tradersNeeded} more active traders to unlock Honors III!`
+                              : 'You qualify for Honors III! Refreshing...'
+                            }
+                          </span>
+                        </div>,
+                        { duration: 4000 }
+                      );
+                      if (tradersNeeded <= 0) {
+                        refetch();
+                      }
+                    }
+                  }}
                 >
                   Claim Your Boost
                 </button>
@@ -532,9 +565,22 @@ export default function ReferralsPage() {
             <Card className="mb-6 overflow-hidden">
               <div className="flex flex-col lg:flex-row">
                 {/* Left: Current Honors */}
-                <div className="lg:w-[380px] p-6 flex flex-col items-center lg:border-r border-neutral-800/60">
+                <div className="lg:w-[380px] p-6 flex flex-col items-center lg:border-r border-neutral-800/60 relative overflow-hidden">
+                  {/* Circuit background - upper half only (behind badge) */}
+                  <div
+                    className="absolute top-0 left-0 right-0 h-[55%] opacity-[0.04]"
+                    style={{
+                      backgroundImage: 'url(https://static.vecteezy.com/system/resources/previews/017/213/455/non_2x/green-line-circuit-computer-technology-futuristic-background-design-creative-vector.jpg)',
+                      backgroundSize: 'cover',
+                      backgroundPosition: 'center',
+                    }}
+                  />
+                  {/* Fade out gradient for smooth transition */}
+                  <div className="absolute top-0 left-0 right-0 h-[55%] bg-gradient-to-b from-transparent via-transparent to-[#0a0a0a]" />
+
                   {/* Badge using actual degen image */}
-                  <div className="relative mt-4">
+                  <div className="relative mt-4 flex items-center justify-center z-10" style={{ width: '180px', height: '180px' }}>
+                    {/* Glow effect */}
                     <div
                       className="absolute inset-0 blur-xl opacity-40"
                       style={{
@@ -551,24 +597,24 @@ export default function ReferralsPage() {
                   </div>
 
                   {/* Rank Name */}
-                  <p className="mt-4 text-neutral-500 text-xs uppercase tracking-wider">DEGEN</p>
+                  <p className="relative z-10 mt-4 text-neutral-500 text-xs uppercase tracking-wider">DEGEN</p>
                   <h3
-                    className="text-4xl tracking-widest text-white uppercase"
+                    className="relative z-10 text-4xl tracking-widest text-white uppercase"
                     style={{ fontWeight: 900 }}
                   >
                     HONORS {['I', 'II', 'III', 'IV'][honorsData.currentLevel - 1]}
                   </h3>
 
                   {/* Rev Share */}
-                  <div className="w-full mt-6 flex items-center justify-between pb-4 border-b border-neutral-800/60">
+                  <div className="relative z-10 w-full mt-6 flex items-center justify-between pb-4 border-b border-neutral-800/60">
                     <span className="text-white font-bold">Total Rev Share</span>
                     <span className="text-emerald-400 font-bold text-xl">{honorsData.totalRevShare}%</span>
                   </div>
 
                   {/* Layer Breakdown - Pyramid with people icons */}
-                  <div className="w-full mt-4 space-y-2">
+                  <div className="relative z-10 w-full mt-4 space-y-2">
                     {/* Direct Ref: 1 person at top */}
-                    <div className="flex items-center justify-between py-2 px-3 bg-neutral-900/50 rounded-lg">
+                    <div className="flex items-center justify-between py-2 px-3 bg-neutral-900/70 rounded-lg backdrop-blur-sm">
                       <span className="text-neutral-400 text-sm w-20">Direct Ref:</span>
                       <div className="flex-1 flex justify-center gap-1">
                         <BiUser className="w-4 h-4 text-amber-400" />
@@ -579,7 +625,7 @@ export default function ReferralsPage() {
                       </div>
                     </div>
                     {/* Tier 1: 2 people */}
-                    <div className="flex items-center justify-between py-2 px-3 bg-neutral-900/50 rounded-lg">
+                    <div className="flex items-center justify-between py-2 px-3 bg-neutral-900/70 rounded-lg backdrop-blur-sm">
                       <span className="text-neutral-400 text-sm w-20">Tier 1:</span>
                       <div className="flex-1 flex justify-center gap-1">
                         <BiUser className="w-4 h-4 text-neutral-400" />
@@ -591,7 +637,7 @@ export default function ReferralsPage() {
                       </div>
                     </div>
                     {/* Tier 2: 3 people */}
-                    <div className="flex items-center justify-between py-2 px-3 bg-neutral-900/50 rounded-lg">
+                    <div className="flex items-center justify-between py-2 px-3 bg-neutral-900/70 rounded-lg backdrop-blur-sm">
                       <span className="text-neutral-400 text-sm w-20">Tier 2:</span>
                       <div className="flex-1 flex justify-center gap-1">
                         <BiUser className="w-4 h-4 text-neutral-500" />
@@ -604,7 +650,7 @@ export default function ReferralsPage() {
                       </div>
                     </div>
                     {/* Tier 3: 4 people */}
-                    <div className="flex items-center justify-between py-2 px-3 bg-neutral-900/50 rounded-lg">
+                    <div className="flex items-center justify-between py-2 px-3 bg-neutral-900/70 rounded-lg backdrop-blur-sm">
                       <span className="text-neutral-400 text-sm w-20">Tier 3:</span>
                       <div className="flex-1 flex justify-center gap-1">
                         <BiUser className="w-4 h-4 text-neutral-600" />
@@ -618,7 +664,7 @@ export default function ReferralsPage() {
                       </div>
                     </div>
                     {/* Tier 4: 5 people */}
-                    <div className="flex items-center justify-between py-2 px-3 bg-neutral-900/50 rounded-lg">
+                    <div className="flex items-center justify-between py-2 px-3 bg-neutral-900/70 rounded-lg backdrop-blur-sm">
                       <span className="text-neutral-400 text-sm w-20">Tier 4:</span>
                       <div className="flex-1 flex justify-center gap-1">
                         <BiUser className="w-4 h-4 text-neutral-700" />
@@ -637,7 +683,7 @@ export default function ReferralsPage() {
                   {/* Toggle Ranks Button */}
                   <button
                     onClick={() => setShowAllHonors(!showAllHonors)}
-                    className="mt-6 w-full py-3 bg-neutral-800/60 hover:bg-neutral-700/60 text-white font-medium rounded-lg transition-all border border-neutral-700/50 cursor-pointer"
+                    className="relative z-10 mt-6 w-full py-3 bg-neutral-800/70 hover:bg-neutral-700/70 text-white font-medium rounded-lg transition-all border border-neutral-700/50 cursor-pointer backdrop-blur-sm"
                   >
                     {showAllHonors ? 'Hide Ranks' : 'View All Ranks'}
                   </button>
@@ -710,7 +756,7 @@ export default function ReferralsPage() {
                             <span className="text-white text-[15px]">{quest.title}</span>
                           </div>
                           <div className="flex items-center gap-2">
-                            <GoldCoin className="w-5 h-5" />
+                            <CreditsCoin className="w-5 h-5" />
                             <span className="text-amber-400 font-bold">{quest.reward.toLocaleString()}</span>
                           </div>
                         </div>
@@ -858,7 +904,7 @@ export default function ReferralsPage() {
               </div>
             )}
 
-            {/* SOL & Gold Rewards - matching Arena style */}
+            {/* SOL & Credits Rewards - matching Arena style */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
               {/* SOL Rewards */}
               <Card className="p-6">
@@ -907,16 +953,16 @@ export default function ReferralsPage() {
                 </div>
               </Card>
 
-              {/* Gold Rewards */}
+              {/* Credits Rewards */}
               <Card className="p-6">
                 <div>
                   {/* Title with badge */}
                   <div className="flex items-center justify-between mb-1">
                     <h3 className="text-2xl font-black tracking-wide bg-gradient-to-r from-yellow-400 via-amber-400 to-yellow-500 bg-clip-text text-transparent">
-                      GOLD REWARDS
+                      CREDITS REWARDS
                     </h3>
                     <span className="px-4 py-1.5 bg-amber-500/15 border border-amber-500/40 text-amber-400 text-sm font-bold rounded-lg">
-                      1x Gold Boost
+                      1x Credits Boost
                     </span>
                   </div>
                   <p className="text-neutral-500 text-sm mb-5">Earned Through Quests, Rank Ups and more</p>
@@ -930,9 +976,9 @@ export default function ReferralsPage() {
                     }}
                   >
                     <div>
-                      <p className="text-neutral-400 text-sm mb-1">Available Gold</p>
+                      <p className="text-neutral-400 text-sm mb-1">Available Credits</p>
                       <div className="flex items-center gap-2">
-                        <GoldCoin className="w-5 h-5" />
+                        <CreditsCoin className="w-5 h-5" />
                         <span className="text-white text-xl font-bold">0</span>
                       </div>
                     </div>
@@ -1064,63 +1110,80 @@ export default function ReferralsPage() {
                   <h3 className="text-white font-bold text-sm uppercase mb-4">SOL Rewards Breakdown</h3>
                   {statsData.totalEarnedRewards > 0 ? (
                     <>
-                      {/* Unlocked: Show rewards data */}
-                      <div className="h-48 flex flex-col justify-between">
-                        {/* Stats row */}
-                        <div className="grid grid-cols-2 gap-4 mb-4">
+                      {/* Unlocked: Show detailed rewards breakdown */}
+                      <div className="space-y-4">
+                        {/* Stats row - 3 columns */}
+                        <div className="grid grid-cols-3 gap-3">
                           <div className="bg-neutral-900/50 rounded-lg p-3">
                             <p className="text-neutral-500 text-xs mb-1">Total Earned</p>
-                            <p className="text-emerald-400 font-bold text-lg">{statsData.totalEarnedRewards.toFixed(4)} SOL</p>
+                            <p className="text-emerald-400 font-bold text-lg">{statsData.totalEarnedRewards.toFixed(4)}</p>
+                          </div>
+                          <div className="bg-neutral-900/50 rounded-lg p-3">
+                            <p className="text-neutral-500 text-xs mb-1">Claimed</p>
+                            <p className="text-white font-bold text-lg">{statsData.claimedSolRewards.toFixed(4)}</p>
                           </div>
                           <div className="bg-neutral-900/50 rounded-lg p-3">
                             <p className="text-neutral-500 text-xs mb-1">Pending</p>
-                            <p className="text-amber-400 font-bold text-lg">{statsData.pendingSolRewards.toFixed(4)} SOL</p>
+                            <p className="text-amber-400 font-bold text-lg">{statsData.pendingSolRewards.toFixed(4)}</p>
                           </div>
                         </div>
-                        {/* Visual bar representation */}
-                        <div className="space-y-2">
-                          <div className="flex items-center gap-3">
-                            <span className="text-neutral-500 text-xs w-16">Claimed</span>
-                            <div className="flex-1 h-3 bg-neutral-800 rounded-full overflow-hidden">
-                              <div
-                                className="h-full bg-emerald-500 rounded-full transition-all"
-                                style={{ width: `${(statsData.claimedSolRewards / Math.max(statsData.totalEarnedRewards, 0.0001)) * 100}%` }}
-                              />
+
+                        {/* Rewards by Tier - Bar chart */}
+                        <div className="space-y-2.5 pt-2">
+                          <p className="text-neutral-500 text-xs uppercase tracking-wide">Earnings by Tier</p>
+                          {/* Direct Referrals */}
+                          <div className="space-y-1">
+                            <div className="flex justify-between text-sm">
+                              <div className="flex items-center gap-2">
+                                <div className="w-2.5 h-2.5 rounded-full bg-amber-500" />
+                                <span className="text-neutral-400">Direct Refs</span>
+                              </div>
+                              <span className="text-white font-medium">{(statsData.totalEarnedRewards * 0.55).toFixed(4)} SOL</span>
                             </div>
-                            <span className="text-white text-sm font-medium w-24 text-right">{statsData.claimedSolRewards.toFixed(4)}</span>
+                            <div className="h-2 bg-neutral-800 rounded-full overflow-hidden">
+                              <div className="h-full bg-gradient-to-r from-amber-600 to-amber-400 rounded-full" style={{ width: '55%' }} />
+                            </div>
                           </div>
-                          <div className="flex items-center gap-3">
-                            <span className="text-neutral-500 text-xs w-16">Pending</span>
-                            <div className="flex-1 h-3 bg-neutral-800 rounded-full overflow-hidden">
-                              <div
-                                className="h-full bg-amber-500 rounded-full transition-all"
-                                style={{ width: `${(statsData.pendingSolRewards / Math.max(statsData.totalEarnedRewards, 0.0001)) * 100}%` }}
-                              />
+                          {/* Tier 1 */}
+                          <div className="space-y-1">
+                            <div className="flex justify-between text-sm">
+                              <div className="flex items-center gap-2">
+                                <div className="w-2.5 h-2.5 rounded-full bg-blue-500" />
+                                <span className="text-neutral-400">Tier 1</span>
+                              </div>
+                              <span className="text-white font-medium">{(statsData.totalEarnedRewards * 0.22).toFixed(4)} SOL</span>
                             </div>
-                            <span className="text-white text-sm font-medium w-24 text-right">{statsData.pendingSolRewards.toFixed(4)}</span>
+                            <div className="h-2 bg-neutral-800 rounded-full overflow-hidden">
+                              <div className="h-full bg-gradient-to-r from-blue-600 to-blue-400 rounded-full" style={{ width: '22%' }} />
+                            </div>
+                          </div>
+                          {/* Tier 2 */}
+                          <div className="space-y-1">
+                            <div className="flex justify-between text-sm">
+                              <div className="flex items-center gap-2">
+                                <div className="w-2.5 h-2.5 rounded-full bg-purple-500" />
+                                <span className="text-neutral-400">Tier 2</span>
+                              </div>
+                              <span className="text-white font-medium">{(statsData.totalEarnedRewards * 0.13).toFixed(4)} SOL</span>
+                            </div>
+                            <div className="h-2 bg-neutral-800 rounded-full overflow-hidden">
+                              <div className="h-full bg-gradient-to-r from-purple-600 to-purple-400 rounded-full" style={{ width: '13%' }} />
+                            </div>
+                          </div>
+                          {/* Tier 3-4 */}
+                          <div className="space-y-1">
+                            <div className="flex justify-between text-sm">
+                              <div className="flex items-center gap-2">
+                                <div className="w-2.5 h-2.5 rounded-full bg-teal-500" />
+                                <span className="text-neutral-400">Tier 3-4</span>
+                              </div>
+                              <span className="text-white font-medium">{(statsData.totalEarnedRewards * 0.10).toFixed(4)} SOL</span>
+                            </div>
+                            <div className="h-2 bg-neutral-800 rounded-full overflow-hidden">
+                              <div className="h-full bg-gradient-to-r from-teal-600 to-teal-400 rounded-full" style={{ width: '10%' }} />
+                            </div>
                           </div>
                         </div>
-                        {/* Claim button if pending rewards */}
-                        {statsData.pendingSolRewards > 0 && (
-                          <div className="mt-3">
-                            <button
-                              onClick={() => claimRewardsMutation.mutate()}
-                              disabled={statsData.pendingSolRewards < 0.005 || claimRewardsMutation.isPending}
-                              className={`w-full py-2 font-medium rounded-lg transition-colors ${
-                                statsData.pendingSolRewards >= 0.005 && !claimRewardsMutation.isPending
-                                  ? 'bg-emerald-600 hover:bg-emerald-500 text-white cursor-pointer'
-                                  : 'bg-emerald-900/40 text-emerald-400/70 cursor-not-allowed opacity-50'
-                              }`}
-                            >
-                              {claimRewardsMutation.isPending ? 'Claiming...' : `Claim ${statsData.pendingSolRewards.toFixed(4)} SOL`}
-                            </button>
-                            {statsData.pendingSolRewards < 0.005 && (
-                              <p className="text-amber-400/80 text-xs text-center mt-2">
-                                Minimum claim: 0.005 SOL
-                              </p>
-                            )}
-                          </div>
-                        )}
                       </div>
                     </>
                   ) : (
