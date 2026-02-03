@@ -64,7 +64,7 @@ function BlockchainLogo({ logo, color, alt }: { logo: string; color: string; alt
   if (imageError) {
     return (
       <div
-        className="w-5 h-5 rounded-md flex-shrink-0"
+        className="w-4 h-4 rounded flex-shrink-0"
         style={{ backgroundColor: color }}
       />
     );
@@ -74,7 +74,7 @@ function BlockchainLogo({ logo, color, alt }: { logo: string; color: string; alt
     <img
       src={logo}
       alt={alt}
-      className="w-5 h-5 rounded-md object-cover flex-shrink-0"
+      className="w-4 h-4 rounded object-cover flex-shrink-0"
       onError={() => setImageError(true)}
       onLoad={() => setImageError(false)}
       loading="eager"
@@ -165,9 +165,19 @@ export default function BlockchainSwitcher() {
     <div className="relative" ref={dropdownRef}>
       <button
         onClick={() => !isOnTradePage && setIsOpen(!isOpen)}
-        className={`flex items-center gap-2 h-10 rounded-3xl px-3 w-40 transition-all duration-300 ease-out border border-neutral-700/70 ${isOnTradePage ? 'cursor-default opacity-75' : 'hover:bg-neutral-700/70'}`}
+        className={`flex items-center gap-1.5 h-8 rounded-md px-2.5 transition-all duration-200 ease-out border ${isOnTradePage ? 'cursor-default opacity-75' : 'cursor-pointer'}`}
         style={{
           color: AX.text,
+          borderColor: AX.border,
+          backgroundColor: "rgba(13, 16, 21, 0.8)",
+        }}
+        onMouseEnter={(e) => {
+          if (!isOnTradePage) {
+            e.currentTarget.style.backgroundColor = "rgba(255, 255, 255, 0.06)";
+          }
+        }}
+        onMouseLeave={(e) => {
+          e.currentTarget.style.backgroundColor = "rgba(13, 16, 21, 0.8)";
         }}
       >
         <BlockchainLogo
@@ -175,11 +185,11 @@ export default function BlockchainSwitcher() {
           color={selectedBlockchain.color}
           alt={selectedBlockchain.name}
         />
-        <span className="text-sm font-medium">{selectedBlockchain.name}</span>
+        <span className="text-xs font-medium">{selectedBlockchain.name}</span>
         {!isOnTradePage && (
           <FaChevronDown
-            size={10}
-            className={`transition-transform mr-0 ml-auto duration-200 ${isOpen ? 'rotate-180' : ''}`}
+            size={8}
+            className={`transition-transform ml-auto duration-200 ${isOpen ? 'rotate-180' : ''}`}
             style={{ color: AX.muted }}
           />
         )}
@@ -199,16 +209,16 @@ export default function BlockchainSwitcher() {
               <button
                 key={blockchain.id}
                 onClick={() => handleChainSelect(blockchain.id)}
-                className="w-full flex items-center gap-2 px-3 py-2 text-left transition-colors"
+                className="w-full flex items-center gap-2 px-3 py-2 text-left transition-colors cursor-pointer"
                 style={{
                   backgroundColor: isSelected
-                    ? 'rgba(24, 196, 140, 0.1)'
+                    ? 'rgba(255, 255, 255, 0.08)'
                     : 'transparent',
-                  color: isSelected ? AX.mint : AX.text,
+                  color: isSelected ? AX.text : AX.muted,
                 }}
                 onMouseEnter={(e) => {
                   if (!isSelected) {
-                    e.currentTarget.style.backgroundColor = 'rgba(24, 196, 140, 0.05)';
+                    e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.06)';
                   }
                 }}
                 onMouseLeave={(e) => {
@@ -224,7 +234,7 @@ export default function BlockchainSwitcher() {
                 />
                 <span className="text-xs font-medium">{blockchain.name}</span>
                 {isSelected && (
-                  <span className="ml-auto text-xs" style={{ color: AX.mint }}>
+                  <span className="ml-auto text-xs" style={{ color: AX.text }}>
                     ✓
                   </span>
                 )}

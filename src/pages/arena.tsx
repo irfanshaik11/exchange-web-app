@@ -21,7 +21,8 @@ import { useQueryClient } from '@tanstack/react-query';
 import { toast } from 'react-hot-toast';
 
 // React Icons
-import { GiTrophy, GiSwordman, GiSpartanHelmet, GiCrown, GiAngelWings, GiCoins, GiFireGem, GiLaurelsTrophy } from 'react-icons/gi';
+import { GiTrophy } from 'react-icons/gi';
+import ArenaPageToggle from '~/components/ArenaPageToggle';
 import { FiCheck, FiLock, FiChevronLeft, FiChevronRight, FiClock, FiExternalLink, FiPlus, FiMinus, FiAward, FiZap, FiInfo } from 'react-icons/fi';
 import { HiLightningBolt, HiSparkles, HiFire } from 'react-icons/hi';
 import { IoRocketSharp, IoFlameSharp } from 'react-icons/io5';
@@ -47,29 +48,24 @@ const RANK_CONFIG = {
   TITAN: { cashback: 35, multiplier: 4, color: '#FFD700', levels: [1000000, 2500000, 5000000, 10000000] },
 };
 
-// Generate all rank levels for the carousel
+// Generate all rank levels for the carousel (levels I-IV for each rank)
 const ALL_RANKS = [
-  { rank: 'DEGEN', level: 0, name: 'DEGEN', goldRequired: 0, isBase: true },
   { rank: 'DEGEN', level: 1, name: 'DEGEN I', goldRequired: 0 },
   { rank: 'DEGEN', level: 2, name: 'DEGEN II', goldRequired: 250 },
   { rank: 'DEGEN', level: 3, name: 'DEGEN III', goldRequired: 500 },
   { rank: 'DEGEN', level: 4, name: 'DEGEN IV', goldRequired: 1000 },
-  { rank: 'WARRIOR', level: 0, name: 'WARRIOR', goldRequired: 1000, isBase: true },
   { rank: 'WARRIOR', level: 1, name: 'WARRIOR I', goldRequired: 1000 },
   { rank: 'WARRIOR', level: 2, name: 'WARRIOR II', goldRequired: 2500 },
   { rank: 'WARRIOR', level: 3, name: 'WARRIOR III', goldRequired: 5000 },
   { rank: 'WARRIOR', level: 4, name: 'WARRIOR IV', goldRequired: 10000 },
-  { rank: 'GLADIATOR', level: 0, name: 'GLADIATOR', goldRequired: 10000, isBase: true },
   { rank: 'GLADIATOR', level: 1, name: 'GLADIATOR I', goldRequired: 10000 },
   { rank: 'GLADIATOR', level: 2, name: 'GLADIATOR II', goldRequired: 25000 },
   { rank: 'GLADIATOR', level: 3, name: 'GLADIATOR III', goldRequired: 50000 },
   { rank: 'GLADIATOR', level: 4, name: 'GLADIATOR IV', goldRequired: 100000 },
-  { rank: 'COMMANDER', level: 0, name: 'COMMANDER', goldRequired: 100000, isBase: true },
   { rank: 'COMMANDER', level: 1, name: 'COMMANDER I', goldRequired: 100000 },
   { rank: 'COMMANDER', level: 2, name: 'COMMANDER II', goldRequired: 250000 },
   { rank: 'COMMANDER', level: 3, name: 'COMMANDER III', goldRequired: 500000 },
   { rank: 'COMMANDER', level: 4, name: 'COMMANDER IV', goldRequired: 1000000 },
-  { rank: 'TITAN', level: 0, name: 'TITAN', goldRequired: 1000000, isBase: true },
   { rank: 'TITAN', level: 1, name: 'TITAN I', goldRequired: 1000000 },
   { rank: 'TITAN', level: 2, name: 'TITAN II', goldRequired: 2500000 },
   { rank: 'TITAN', level: 3, name: 'TITAN III', goldRequired: 5000000 },
@@ -79,10 +75,10 @@ const ALL_RANKS = [
 // Space background - contained within rounded container
 const SpaceBackgroundContained = () => (
   <div className="absolute inset-0 overflow-hidden pointer-events-none rounded-2xl">
-    {/* Main background image - future.png */}
+    {/* Main background image */}
     <div
       className="absolute inset-x-0 top-0 h-[80vh] bg-cover bg-top bg-no-repeat"
-      style={{ backgroundImage: 'url(/future.png)' }}
+      style={{ backgroundImage: 'url(/ranks/Background.png)' }}
     />
     {/* Subtle dark overlay */}
     <div className="absolute inset-0 bg-black/30" />
@@ -366,9 +362,9 @@ const Card = ({ children, className = '' }: {
   );
 };
 
-// Gold coin using PNG image
-const GoldCoin = ({ className = '' }: { className?: string; animate?: boolean }) => (
-  <img src="/ranks/Coin.png" alt="Gold" className={`${className} object-contain`} />
+// Credits coin using PNG image
+const CreditsCoin = ({ className = '' }: { className?: string; animate?: boolean }) => (
+  <img src="/ranks/Coin.png" alt="Credits" className={`${className} object-contain`} />
 );
 
 // Solana logo using official SVG
@@ -430,7 +426,7 @@ const QuestItem = ({ quest, index = 0 }: { quest: any; index?: number }) => {
           </div>
         </div>
         <div className="flex items-center gap-1.5 flex-shrink-0">
-          <GoldCoin className="w-4 h-4" />
+          <CreditsCoin className="w-4 h-4" />
           <span className={`font-bold text-sm ${isClaimed ? 'text-neutral-600' : isComplete ? 'text-emerald-400' : 'text-amber-400'}`}>
             {isClaimed ? '✓' : `+${quest.goldReward}`}
           </span>
@@ -444,6 +440,10 @@ const QuestItem = ({ quest, index = 0 }: { quest: any; index?: number }) => {
 const RankCarouselItem = ({ item, isUnlocked, isCurrent, userGold, isLast }: { item: typeof ALL_RANKS[0]; isUnlocked: boolean; isCurrent: boolean; userGold: number; isLast?: boolean }) => {
   const config = RANK_CONFIG[item.rank as keyof typeof RANK_CONFIG];
   const isLocked = !isUnlocked;
+  const isLevelOne = item.level === 1; // Only show perks on level I (when perks change)
+
+  // Get the RANK start threshold (level 1 of this rank) for display
+  const rankStartThreshold = config.levels[0];
 
   return (
     <div className="flex h-full">
@@ -474,25 +474,28 @@ const RankCarouselItem = ({ item, isUnlocked, isCurrent, userGold, isLast }: { i
           {item.name}
         </h4>
 
-        {/* Honors row */}
-        <div className={`mt-1.5 flex items-center gap-2 ${isLocked ? 'text-neutral-600' : 'text-neutral-400'}`}>
-          <FiCheck className={`w-4 h-4 ${isLocked ? 'text-neutral-600' : 'text-emerald-500'}`} />
-          <span className="text-sm">Honors I</span>
-        </div>
-
-        {/* Gold requirement or perks */}
-        {item.isBase ? (
-          <div className="mt-2 text-center space-y-0.5">
-            <p className={`text-sm ${isLocked ? 'text-neutral-600' : 'text-neutral-400'}`}>{config.cashback}% Cashback</p>
-            <p className={`text-sm ${isLocked ? 'text-neutral-600' : 'text-neutral-400'}`}>{config.multiplier}x Gold Boost</p>
+        {/* Rank info - Show perks on level I, show gold threshold on levels II-IV */}
+        {isLevelOne ? (
+          <div className="mt-3 text-center space-y-1">
+            {/* Rank threshold */}
+            <p className={`text-sm flex items-center justify-center gap-1.5 ${isLocked ? 'text-neutral-600' : 'text-neutral-400'}`}>
+              + {rankStartThreshold.toLocaleString()} <CreditsCoin className="w-4 h-4" />
+            </p>
+            {/* Cashback percentage */}
+            <p className={`text-sm font-medium ${isLocked ? 'text-neutral-600' : 'text-emerald-400'}`}>
+              {config.cashback}% Cashback
+            </p>
+            {/* Credits multiplier */}
+            <p className={`text-sm font-medium ${isLocked ? 'text-neutral-600' : 'text-amber-400'}`}>
+              {config.multiplier}x Credits Boost
+            </p>
           </div>
         ) : (
-          <div className="mt-2 text-center">
-            {item.goldRequired > 0 && (
-              <p className={`text-sm flex items-center justify-center gap-1.5 ${isLocked ? 'text-neutral-600' : 'text-neutral-400'}`}>
-                + {item.goldRequired.toLocaleString()} <GoldCoin className="w-4 h-4" />
-              </p>
-            )}
+          /* Levels II, III, IV - show gold threshold */
+          <div className="mt-3 text-center">
+            <p className={`text-sm flex items-center justify-center gap-1.5 ${isLocked ? 'text-neutral-600' : 'text-neutral-400'}`}>
+              + {item.goldRequired.toLocaleString()} <CreditsCoin className="w-4 h-4" />
+            </p>
           </div>
         )}
       </div>
@@ -552,7 +555,7 @@ export default function ArenaPage() {
   const { user } = useUser();
   const { data: stats } = useArenaStats();
   const { data: questsData } = useQuests();
-  const { data: cashback } = useCashbackSummary();
+  useCashbackSummary(); // Hook called for potential cache warming
   const claimCashbackMutation = useClaimCashback();
   const queryClient = useQueryClient();
   const [isClaimingCashback, setIsClaimingCashback] = useState(false);
@@ -574,13 +577,24 @@ export default function ArenaPage() {
   const cashbackPercent = (stats as any)?.cashbackPercent || RANK_CONFIG[displayRank as keyof typeof RANK_CONFIG]?.cashback || 10;
   const userName = (user as any)?.name || 'Trader';
   const progressToNext = (stats as any)?.progressToNextLevel || 0;
-  // Get the next level threshold - if not from API, calculate from rank config
+
+  // Calculate next RANK threshold (not level) for progress bar display
+  const rankOrder = ['DEGEN', 'WARRIOR', 'GLADIATOR', 'COMMANDER', 'TITAN'];
+  const displayRankIndex = rankOrder.indexOf(displayRank);
   const currentRankConfig = RANK_CONFIG[displayRank as keyof typeof RANK_CONFIG];
-  const nextLevelGold = (stats as any)?.nextLevelThreshold ||
-    (displayLevel < 4
-      ? currentRankConfig?.levels[displayLevel] // Next level within same rank
-      : currentRankConfig?.levels[3] // Max level, show current threshold
-    ) || 1000;
+
+  // Get next rank info
+  const nextRankName = displayRankIndex < rankOrder.length - 1
+    ? rankOrder[displayRankIndex + 1]
+    : null;
+  const nextRankThreshold = nextRankName
+    ? RANK_CONFIG[nextRankName as keyof typeof RANK_CONFIG]?.levels[0]
+    : null;
+
+  // Use API threshold if available, otherwise calculate from rank config
+  const nextLevelGold = (stats as any)?.nextLevelThreshold || nextRankThreshold || currentRankConfig?.levels[3] || 1000;
+  const isMaxRank = displayRank === 'TITAN';
+
   const solCashbackAvailable = (stats as any)?.solCashbackAvailable || 0;
   const solCashbackEarned = (stats as any)?.solCashbackEarned || 0;
   const currentStreak = (stats as any)?.currentStreak || 0;
@@ -595,7 +609,7 @@ export default function ArenaPage() {
   const handleClaimAllGold = async () => {
     const unclaimedQuests = allQuests.filter((q: any) => q.isCompleted && !q.isClaimed);
     if (unclaimedQuests.length === 0) {
-      toast('No gold to claim!', { icon: '💡' });
+      toast('No credits to claim!', { icon: '💡' });
       return;
     }
 
@@ -619,9 +633,9 @@ export default function ArenaPage() {
       queryClient.invalidateQueries({ queryKey: ['arena', 'quests'] });
 
       // Show ONE toast with total
-      toast.success(`🪙 Claimed ${totalClaimed.toLocaleString()} Gold!`, { duration: 4000 });
+      toast.success(`🪙 Claimed ${totalClaimed.toLocaleString()} Credits!`, { duration: 4000 });
     } catch (error: any) {
-      toast.error(error.message || 'Failed to claim gold');
+      toast.error(error.message || 'Failed to claim credits');
       // Still refresh in case some claims succeeded
       queryClient.invalidateQueries({ queryKey: ['arena', 'stats'] });
       queryClient.invalidateQueries({ queryKey: ['arena', 'quests'] });
@@ -639,8 +653,27 @@ export default function ArenaPage() {
     }
   };
 
-  const dailyQuests = (questsData as any)?.grouped?.daily?.slice(0, 4) || [];
-  const seasonalQuests = (questsData as any)?.grouped?.seasonal?.slice(0, 4) || [];
+  // Mock daily quests for when API returns empty (will show real data when available)
+  const MOCK_DAILY_QUESTS = [
+    { id: 1, questId: 'DAILY_TRADE_1', type: 'DAILY', title: 'First Trade', description: 'Make 1 trade today', currentValue: 0, targetValue: 1, goldReward: 100, isCompleted: false, isClaimed: false },
+    { id: 2, questId: 'DAILY_TRADE_2', type: 'DAILY', title: 'Keep Trading', description: 'Make 2 trades today', currentValue: 0, targetValue: 2, goldReward: 150, isCompleted: false, isClaimed: false },
+    { id: 3, questId: 'DAILY_VOLUME_10', type: 'DAILY', title: 'Volume Starter', description: 'Trade $10 volume today', currentValue: 0, targetValue: 10, goldReward: 100, isCompleted: false, isClaimed: false },
+    { id: 4, questId: 'DAILY_VOLUME_50', type: 'DAILY', title: 'Volume Builder', description: 'Trade $50 volume today', currentValue: 0, targetValue: 50, goldReward: 150, isCompleted: false, isClaimed: false },
+  ];
+
+  const MOCK_SEASONAL_QUESTS = [
+    { id: 5, questId: 'SEASONAL_TRADES_10', type: 'SEASONAL', title: 'Active Trader', description: 'Make 10 trades', currentValue: 0, targetValue: 10, goldReward: 500, isCompleted: false, isClaimed: false },
+    { id: 6, questId: 'SEASONAL_VOLUME_100', type: 'SEASONAL', title: 'Volume Achiever', description: 'Trade $100 volume', currentValue: 0, targetValue: 100, goldReward: 500, isCompleted: false, isClaimed: false },
+    { id: 7, questId: 'SEASONAL_TRADES_25', type: 'SEASONAL', title: 'Trading Veteran', description: 'Make 25 trades', currentValue: 0, targetValue: 25, goldReward: 1000, isCompleted: false, isClaimed: false },
+    { id: 8, questId: 'SEASONAL_VOLUME_500', type: 'SEASONAL', title: 'High Roller', description: 'Trade $500 volume', currentValue: 0, targetValue: 500, goldReward: 1500, isCompleted: false, isClaimed: false },
+  ];
+
+  // Use API data if available, otherwise show mock quests so users can see what's available
+  const apiDailyQuests = (questsData as any)?.grouped?.daily?.slice(0, 4) || [];
+  const apiSeasonalQuests = (questsData as any)?.grouped?.seasonal?.slice(0, 4) || [];
+
+  const dailyQuests = apiDailyQuests.length > 0 ? apiDailyQuests : MOCK_DAILY_QUESTS;
+  const seasonalQuests = apiSeasonalQuests.length > 0 ? apiSeasonalQuests : MOCK_SEASONAL_QUESTS;
 
   // Calculate pending gold from completed but unclaimed quests
   const allQuests = (questsData as any)?.quests || [];
@@ -652,7 +685,8 @@ export default function ArenaPage() {
   const getCurrentRankIndex = useCallback(() => {
     const rankOrder = ['DEGEN', 'WARRIOR', 'GLADIATOR', 'COMMANDER', 'TITAN'];
     const rankIdx = rankOrder.indexOf(displayRank);
-    return rankIdx * 5 + displayLevel;
+    // Each rank has 4 levels (I, II, III, IV), and displayLevel is 1-4
+    return rankIdx * 4 + (displayLevel - 1);
   }, [displayRank, displayLevel]);
 
   const currentRankIndex = getCurrentRankIndex();
@@ -660,7 +694,9 @@ export default function ArenaPage() {
   // Auto-scroll carousel to current rank on mount
   useEffect(() => {
     if (carouselRef.current && showRanks) {
-      const scrollPosition = currentRankIndex * 144 - (carouselRef.current.clientWidth / 2) + 72;
+      // Each carousel item is 240px wide + 1px divider = 241px
+      const itemWidth = 241;
+      const scrollPosition = currentRankIndex * itemWidth - (carouselRef.current.clientWidth / 2) + (itemWidth / 2);
       setTimeout(() => {
         carouselRef.current?.scrollTo({
           left: Math.max(0, scrollPosition),
@@ -673,7 +709,7 @@ export default function ArenaPage() {
   // Carousel scroll
   const scrollCarousel = (direction: 'left' | 'right') => {
     if (carouselRef.current) {
-      const scrollAmount = 288;
+      const scrollAmount = 241; // Item width
       carouselRef.current.scrollBy({
         left: direction === 'left' ? -scrollAmount : scrollAmount,
         behavior: 'smooth',
@@ -685,7 +721,7 @@ export default function ArenaPage() {
     <>
       <Head>
         <title>Arena | Interstate</title>
-        <meta name="description" content="Level up your trading with Interstate Arena - earn Gold, climb ranks, and compete for rewards." />
+        <meta name="description" content="Level up your trading with Interstate Arena - earn Credits, climb ranks, and compete for rewards." />
       </Head>
 
       <div className="min-h-screen bg-black">
@@ -701,6 +737,9 @@ export default function ArenaPage() {
 
             {/* Content */}
             <main className="relative z-10 mx-auto max-w-6xl px-4 sm:px-6 pt-8 pb-24">
+            {/* Arena/Referrals Toggle */}
+            <ArenaPageToggle activePage="arena" />
+
             {/* Epic Title Section */}
             <div className={`text-center mb-12 transition-all duration-700 ${mounted ? 'opacity-100 translate-y-0' : 'opacity-0 -translate-y-4'}`}>
               {/* Decorative top element */}
@@ -723,11 +762,11 @@ export default function ArenaPage() {
 
               {/* Subtitle with icons */}
               <div className="flex items-center justify-center gap-3 mt-4">
-                <IoFlameSharp className="w-4 h-4 text-orange-500/70" />
-                <p className="text-neutral-400 text-sm tracking-[0.3em] uppercase font-medium">
+                <IoFlameSharp className="w-5 h-5 text-orange-400" />
+                <p className="text-neutral-200 text-sm tracking-[0.3em] uppercase font-semibold">
                   Trade • Compete • Conquer
                 </p>
-                <IoFlameSharp className="w-4 h-4 text-orange-500/70" />
+                <IoFlameSharp className="w-5 h-5 text-orange-400" />
               </div>
 
               {/* Decorative bottom element */}
@@ -744,7 +783,7 @@ export default function ArenaPage() {
             <div className={`flex flex-col sm:flex-row items-stretch gap-3 mb-6 transition-all duration-700 delay-100 ${mounted ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'}`}>
               {/* Left: Username & Progress */}
               <div className="flex-1 flex flex-col gap-2 px-5 py-4 bg-white/[0.06] backdrop-blur-sm border border-white/[0.08] rounded-xl">
-                {/* Top row: Badge + Username + Gold count */}
+                {/* Top row: Badge + Username + Next rank info */}
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
                     {/* Current rank badge */}
@@ -756,14 +795,30 @@ export default function ArenaPage() {
                     <span className="text-white font-semibold text-sm">{userName}</span>
                   </div>
                   <div className="flex items-center gap-1.5">
-                    <GoldCoin className="w-4 h-4" />
-                    <span className="text-neutral-300 text-sm font-medium">{displayGoldEarned.toLocaleString()} / {nextLevelGold.toLocaleString()}</span>
+                    {isMaxRank ? (
+                      <span className="text-amber-400 text-sm font-semibold">Max Rank</span>
+                    ) : (
+                      <>
+                        <span className="text-neutral-300 text-xs font-medium">Next Rank:</span>
+                        <span className="text-amber-400 text-sm font-semibold">{nextRankName}</span>
+                      </>
+                    )}
                   </div>
                 </div>
-                {/* Progress bar - full width */}
-                <div className="h-2.5 bg-neutral-800 rounded-full overflow-hidden">
+                {/* Progress info row */}
+                <div className="flex items-center justify-between text-xs">
+                  <div className="flex items-center gap-1">
+                    <CreditsCoin className="w-3.5 h-3.5" />
+                    <span className="text-white font-medium">{displayGoldEarned.toLocaleString()}</span>
+                  </div>
+                  {!isMaxRank && (
+                    <span className="text-neutral-300 font-medium">{nextLevelGold.toLocaleString()}</span>
+                  )}
+                </div>
+                {/* Progress bar - full width with amber/gold gradient */}
+                <div className="h-3 bg-neutral-800/80 rounded-full overflow-hidden border border-neutral-700/50">
                   <div
-                    className="h-full bg-gradient-to-r from-neutral-500 to-neutral-400 rounded-full transition-all duration-700"
+                    className="h-full bg-gradient-to-r from-amber-600 via-amber-500 to-yellow-400 rounded-full transition-all duration-700"
                     style={{ width: `${Math.min(progressToNext, 100)}%` }}
                   />
                 </div>
@@ -771,18 +826,18 @@ export default function ArenaPage() {
 
               {/* Right: Gold & SOL Earned */}
               <div className="flex flex-col justify-center gap-2.5 px-6 py-3.5 bg-white/[0.06] backdrop-blur-sm border border-white/[0.08] rounded-xl min-w-[220px]">
-                {/* Gold earned row */}
+                {/* Credits earned row */}
                 <div className="flex items-center justify-between">
-                  <span className="text-neutral-400 text-sm">Gold earned</span>
+                  <span className="text-neutral-400 text-sm">Credits earned</span>
                   <div className="flex items-center gap-1.5">
-                    <GoldCoin className="w-4 h-4" />
+                    <CreditsCoin className="w-4 h-4" />
                     <span className="text-white font-semibold text-sm">{displayGoldEarned.toLocaleString()}</span>
                     {/* Info tooltip */}
                     <div className="relative group">
                       <FiInfo className="w-3.5 h-3.5 text-neutral-500 hover:text-neutral-300 cursor-pointer transition-colors" />
                       <div className="absolute bottom-full right-0 mb-2 px-3 py-2 bg-neutral-900 border border-neutral-700 rounded-lg shadow-xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-50 whitespace-nowrap">
-                        <p className="text-white text-xs font-medium mb-1">Available Gold: <span className="text-amber-400">{displayGoldEarned.toLocaleString()}</span></p>
-                        <p className="text-neutral-400 text-xs">You can use your Gold to enter the Jackpot.</p>
+                        <p className="text-white text-xs font-medium mb-1">Available Credits: <span className="text-amber-400">{displayGoldEarned.toLocaleString()}</span></p>
+                        <p className="text-neutral-400 text-xs">You can use your Credits to enter the Jackpot.</p>
                         <div className="absolute bottom-0 right-3 translate-y-1/2 rotate-45 w-2 h-2 bg-neutral-900 border-r border-b border-neutral-700" />
                       </div>
                     </div>
@@ -799,20 +854,16 @@ export default function ArenaPage() {
               </div>
             </div>
 
-            {/* Cashback Banner */}
+            {/* Cashback Banner - Commented out for now
             <div className={`relative mb-6 px-5 py-4 rounded-xl overflow-hidden transition-all duration-700 delay-200 ${mounted ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'}`}
               style={{ background: 'linear-gradient(90deg, #2a2310 0%, #1a1a0f 50%, #1f1a10 100%)' }}
             >
-              {/* Gold accent border on left */}
               <div className="absolute left-0 top-0 bottom-0 w-1 bg-gradient-to-b from-yellow-500 via-amber-500 to-yellow-600" />
-
-              {/* Coin image on right */}
               <div
                 className="absolute right-0 top-1/2 -translate-y-1/2 w-32 h-32 sm:w-40 sm:h-40 bg-contain bg-center bg-no-repeat opacity-60"
                 style={{ backgroundImage: 'url(https://images.unsplash.com/photo-1621778307596-ec0e0abc0e6e?w=200)' }}
               />
               <div className="absolute right-0 top-0 bottom-0 w-48 bg-gradient-to-r from-transparent via-[#1a1a0f]/80 to-[#1a1a0f]" />
-
               <div className="relative flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
                 <div>
                   <h3 className="text-xl sm:text-2xl font-black tracking-wide text-transparent bg-clip-text bg-gradient-to-r from-yellow-400 via-amber-400 to-yellow-500 mb-1">
@@ -832,56 +883,77 @@ export default function ArenaPage() {
                 </button>
               </div>
             </div>
+            */}
 
             {/* Main Content - Unified Box */}
             <Card className={`mb-6 overflow-hidden transition-all duration-700 delay-300 ${mounted ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'}`}>
               <div className="flex flex-col lg:flex-row">
                 {/* Left: Current Rank */}
-                <div className="lg:w-[380px] p-6 flex flex-col items-center lg:border-r border-neutral-800/60">
-                  {/* Rank Badge - Spinning on hover */}
-                  <div className="relative mt-4">
+                <div className="lg:w-[380px] p-6 flex flex-col items-center lg:border-r border-neutral-800/60 relative overflow-hidden">
+                  {/* Circuit background - upper half only (behind badge) */}
+                  <div
+                    className="absolute top-0 left-0 right-0 h-[55%] opacity-[0.04]"
+                    style={{
+                      backgroundImage: 'url(https://static.vecteezy.com/system/resources/previews/017/213/455/non_2x/green-line-circuit-computer-technology-futuristic-background-design-creative-vector.jpg)',
+                      backgroundSize: 'cover',
+                      backgroundPosition: 'center',
+                    }}
+                  />
+                  {/* Fade out gradient for smooth transition */}
+                  <div className="absolute top-0 left-0 right-0 h-[55%] bg-gradient-to-b from-transparent via-transparent to-[#0a0a0a]" />
+
+                  {/* Rank Badge */}
+                  <div className="relative mt-4 z-10">
                     <MainBadge rank={displayRank} level={displayLevel} />
                   </div>
 
                   {/* Rank Name - Large and bold */}
-                  <h3 className="mt-5 text-3xl font-black tracking-widest text-white uppercase">
+                  <h3 className="relative z-10 mt-5 text-3xl font-black tracking-widest text-white uppercase">
                     {displayRank} {['', 'I', 'II', 'III', 'IV'][displayLevel]}
                   </h3>
 
                   {/* Level Diamonds */}
-                  <LevelIndicator currentLevel={displayLevel} />
+                  <div className="relative z-10 w-full">
+                    <LevelIndicator currentLevel={displayLevel} />
+                  </div>
 
                   {/* Perks */}
-                  <div className="w-full mt-4 space-y-2">
+                  <div className="relative z-10 w-full mt-4 space-y-2">
                     {/* Cashback Perk */}
-                    <div className="flex items-center gap-3 px-4 py-3 bg-neutral-900/40 border border-neutral-800/60 rounded-lg">
+                    <div className="flex items-center gap-3 px-4 py-3 bg-neutral-900/70 border border-neutral-800/60 rounded-lg backdrop-blur-sm">
                       <FiCheck className="w-4 h-4 text-emerald-400 flex-shrink-0" />
                       <span className="text-white font-medium">{cashbackPercent}% Cashback</span>
                     </div>
 
-                    {/* Gold Boost Perk - with gold shine accent */}
-                    <div className="relative flex items-center justify-between gap-3 px-4 py-3 rounded-lg overflow-hidden"
+                    {/* Credits Boost Perk - with gold shine accent */}
+                    <div className="relative flex items-center justify-between gap-3 px-4 py-3 rounded-lg backdrop-blur-sm"
                       style={{
-                        background: 'linear-gradient(90deg, rgba(212, 175, 55, 0.15) 0%, rgba(30, 30, 25, 0.6) 100%)',
-                        border: '1px solid rgba(212, 175, 55, 0.25)'
+                        background: 'linear-gradient(90deg, rgba(212, 175, 55, 0.2) 0%, rgba(30, 30, 25, 0.7) 100%)',
+                        border: '1px solid rgba(212, 175, 55, 0.3)'
                       }}
                     >
                       {/* Gold accent bar on left */}
-                      <div className="absolute left-0 top-0 bottom-0 w-1 bg-gradient-to-b from-yellow-400 via-yellow-500 to-yellow-600" />
+                      <div className="absolute left-0 top-0 bottom-0 w-1 rounded-l-lg bg-gradient-to-b from-yellow-400 via-yellow-500 to-yellow-600" />
                       <div className="flex items-center gap-3 pl-2">
                         <FiCheck className="w-4 h-4 flex-shrink-0" style={{ color: '#D4AF37' }} />
-                        <span className="text-white font-medium">{displayMultiplier}x Gold Boost</span>
+                        <span className="text-white font-medium">{displayMultiplier}x Credits Boost</span>
                       </div>
-                      <button className="p-1 rounded hover:bg-white/5 transition-colors cursor-pointer">
-                        <FiExternalLink className="w-4 h-4 text-neutral-500" />
-                      </button>
+                      {/* Info tooltip */}
+                      <div className="relative group">
+                        <FiInfo className="w-4 h-4 text-neutral-500 hover:text-neutral-300 cursor-pointer transition-colors" />
+                        <div className="absolute bottom-full right-0 mb-2 px-3 py-2 bg-neutral-900 border border-neutral-700 rounded-lg shadow-xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-[100] whitespace-nowrap">
+                          <p className="text-white text-xs font-medium mb-1">Credits Multiplier: <span className="text-amber-400">{displayMultiplier}x</span></p>
+                          <p className="text-neutral-400 text-xs">All Credits earned are multiplied by this amount.</p>
+                          <div className="absolute bottom-0 right-3 translate-y-1/2 rotate-45 w-2 h-2 bg-neutral-900 border-r border-b border-neutral-700" />
+                        </div>
+                      </div>
                     </div>
                   </div>
 
                   {/* Toggle Ranks Button */}
                   <button
                     onClick={() => setShowRanks(!showRanks)}
-                    className="mt-4 w-full py-3 bg-neutral-800/60 hover:bg-neutral-700/60 text-white font-medium rounded-lg transition-all border border-neutral-700/50 cursor-pointer"
+                    className="relative z-10 mt-4 w-full py-3 bg-neutral-800/70 hover:bg-neutral-700/70 text-white font-medium rounded-lg transition-all border border-neutral-700/50 cursor-pointer backdrop-blur-sm"
                   >
                     {showRanks ? 'Hide Ranks' : 'View All Ranks'}
                   </button>
@@ -1029,13 +1101,13 @@ export default function ArenaPage() {
                   {/* Title with badge */}
                   <div className="flex items-center justify-between mb-1">
                     <h3 className="text-2xl font-black tracking-wide bg-gradient-to-r from-yellow-400 via-amber-400 to-yellow-500 bg-clip-text text-transparent">
-                      GOLD REWARDS
+                      CREDITS REWARDS
                     </h3>
                     <span className="px-4 py-1.5 bg-amber-500/15 border border-amber-500/40 text-amber-400 text-sm font-bold rounded-lg">
-                      {displayMultiplier}x Gold Boost
+                      {displayMultiplier}x Credits Boost
                     </span>
                   </div>
-                  <p className="text-neutral-500 text-sm mb-5">Earned Through Quests, Rank Ups and more</p>
+                  <p className="text-neutral-500 text-sm mb-5">Earned through Quests, Rank Ups and more</p>
 
                   {/* Balance box - gold tint */}
                   <div
@@ -1046,9 +1118,9 @@ export default function ArenaPage() {
                     }}
                   >
                     <div>
-                      <p className="text-neutral-400 text-sm mb-1">Claimable Gold</p>
+                      <p className="text-neutral-400 text-sm mb-1">Claimable Credits</p>
                       <div className="flex items-center gap-2">
-                        <GoldCoin className="w-5 h-5" />
+                        <CreditsCoin className="w-5 h-5" />
                         <span className="text-white text-xl font-bold">{pendingGoldFromQuests.toLocaleString()}</span>
                       </div>
                     </div>
@@ -1149,35 +1221,61 @@ export default function ArenaPage() {
                       </div>
                     </div>
                   ) : (
-                    /* Locked state - placeholder chart */
-                    <div className="relative h-44 rounded-xl overflow-hidden">
-                      <div className="absolute bottom-0 left-0 right-0 h-full">
-                        <svg className="w-full h-full" preserveAspectRatio="none">
-                          <defs>
-                            <linearGradient id="chartGradient" x1="0%" y1="0%" x2="100%" y2="0%">
-                              <stop offset="0%" stopColor="#8B5CF6" stopOpacity="0.3" />
-                              <stop offset="50%" stopColor="#10B981" stopOpacity="0.3" />
-                              <stop offset="100%" stopColor="#10B981" stopOpacity="0.5" />
-                            </linearGradient>
-                          </defs>
-                          <path
-                            d="M 0 140 Q 50 130, 100 120 T 200 100 T 300 80 T 400 60 T 500 30"
-                            fill="none"
-                            stroke="url(#chartGradient)"
-                            strokeWidth="2"
-                            className="opacity-50"
-                          />
-                          <path
-                            d="M 0 140 Q 50 130, 100 120 T 200 100 T 300 80 T 400 60 T 500 30 L 500 180 L 0 180 Z"
-                            fill="url(#chartGradient)"
-                            className="opacity-20"
-                          />
-                        </svg>
+                    /* Locked state - blurred preview of breakdown structure */
+                    <div className="relative rounded-xl overflow-hidden">
+                      {/* Blurred preview of what the breakdown will look like */}
+                      <div className="blur-[6px] opacity-40 pointer-events-none select-none">
+                        {/* Stats row preview */}
+                        <div className="grid grid-cols-3 gap-4 mb-4">
+                          <div className="bg-neutral-800/60 rounded-lg p-4">
+                            <div className="h-3 w-16 bg-neutral-700 rounded mb-2" />
+                            <div className="h-5 w-20 bg-neutral-600 rounded" />
+                          </div>
+                          <div className="bg-neutral-800/60 rounded-lg p-4">
+                            <div className="h-3 w-16 bg-neutral-700 rounded mb-2" />
+                            <div className="h-5 w-12 bg-emerald-700 rounded" />
+                          </div>
+                          <div className="bg-neutral-800/60 rounded-lg p-4">
+                            <div className="h-3 w-16 bg-neutral-700 rounded mb-2" />
+                            <div className="h-5 w-14 bg-neutral-600 rounded" />
+                          </div>
+                        </div>
+                        {/* Progress bars preview */}
+                        <div className="space-y-3">
+                          <div className="space-y-1.5">
+                            <div className="flex justify-between">
+                              <div className="h-3 w-24 bg-neutral-700 rounded" />
+                              <div className="h-3 w-16 bg-neutral-700 rounded" />
+                            </div>
+                            <div className="h-2 bg-neutral-800 rounded-full overflow-hidden">
+                              <div className="h-full w-3/4 bg-emerald-600/50 rounded-full" />
+                            </div>
+                          </div>
+                          <div className="space-y-1.5">
+                            <div className="flex justify-between">
+                              <div className="h-3 w-20 bg-neutral-700 rounded" />
+                              <div className="h-3 w-14 bg-neutral-700 rounded" />
+                            </div>
+                            <div className="h-2 bg-neutral-800 rounded-full overflow-hidden">
+                              <div className="h-full w-1/3 bg-purple-600/50 rounded-full" />
+                            </div>
+                          </div>
+                          <div className="space-y-1.5">
+                            <div className="flex justify-between">
+                              <div className="h-3 w-16 bg-neutral-700 rounded" />
+                              <div className="h-3 w-12 bg-neutral-700 rounded" />
+                            </div>
+                            <div className="h-2 bg-neutral-800 rounded-full overflow-hidden">
+                              <div className="h-full w-1/6 bg-orange-600/50 rounded-full" />
+                            </div>
+                          </div>
+                        </div>
                       </div>
-                      <div className="absolute inset-0 flex items-center justify-center bg-neutral-900/50 backdrop-blur-[1px]">
-                        <div className="flex items-center gap-3 px-4 py-2.5 bg-neutral-800/90 border border-neutral-700/50 rounded-xl">
-                          <FiLock className="w-4 h-4 text-neutral-500" />
-                          <span className="text-neutral-400 text-sm">Unlock Rewards Breakdown by Earning SOL</span>
+                      {/* Lock overlay */}
+                      <div className="absolute inset-0 flex items-center justify-center">
+                        <div className="flex items-center gap-3 px-5 py-3 bg-neutral-900/90 border border-neutral-700/50 rounded-xl shadow-xl">
+                          <FiLock className="w-4 h-4 text-neutral-400" />
+                          <span className="text-neutral-300 text-sm font-medium">Start trading to unlock breakdown</span>
                         </div>
                       </div>
                     </div>
@@ -1191,7 +1289,7 @@ export default function ArenaPage() {
                     onClick={() => setLeaderboardTab('gold')}
                     className={`text-base font-bold transition-colors cursor-pointer ${leaderboardTab === 'gold' ? 'text-white' : 'text-neutral-500 hover:text-neutral-300'}`}
                   >
-                    Gold Leaderboard
+                    Credits Leaderboard
                   </button>
                   <button
                     onClick={() => setLeaderboardTab('quest')}
@@ -1214,7 +1312,7 @@ export default function ArenaPage() {
                       <div className="flex items-center gap-1.5 w-20 justify-end">
                         {leaderboardTab === 'gold' ? (
                           <>
-                            <GoldCoin className="w-4 h-4" />
+                            <CreditsCoin className="w-4 h-4" />
                             <span className="text-white text-sm font-medium">10,378</span>
                           </>
                         ) : (
@@ -1239,59 +1337,14 @@ export default function ArenaPage() {
               </p>
               <Card className="overflow-hidden">
                 <div className="px-5">
-                  <FAQItem question="How does the Arena work?" answer="The Arena is our gamified rewards system. Trade to earn Gold, climb ranks, and unlock better rewards like higher cashback percentages and Gold multipliers." />
-                  <FAQItem question="How can I earn Gold?" answer="You earn Gold by trading, completing quests, maintaining trading streaks, and ranking up. All Gold earned is multiplied by your current rank's Gold Boost." />
-                  <FAQItem question="Do I have to claim my Gold?" answer="Gold from trading is automatically added to your balance. Quest rewards need to be manually claimed by clicking the Claim button." />
-                  <FAQItem question="What can I do with my Gold?" answer="Gold determines your position on the leaderboard. Top performers earn additional prizes. Future features will include more ways to use your Gold." />
+                  <FAQItem question="How does the Arena work?" answer="The Arena is our gamified rewards system. Trade to earn Credits, climb ranks, and unlock better rewards like higher cashback percentages and Credits multipliers." />
+                  <FAQItem question="How can I earn Credits?" answer="You earn Credits by trading, completing quests, maintaining trading streaks, and ranking up. All Credits earned is multiplied by your current rank's Credits Boost." />
+                  <FAQItem question="Do I have to claim my Credits?" answer="Credits from trading is automatically added to your balance. Quest rewards need to be manually claimed by clicking the Claim button." />
+                  <FAQItem question="What can I do with my Credits?" answer="Credits determines your position on the leaderboard. Top performers earn additional prizes. Future features will include more ways to use your Credits." />
                 </div>
               </Card>
             </div>
 
-            {/* Navigation Links */}
-            <div className={`grid grid-cols-1 md:grid-cols-3 gap-4 transition-all duration-700 delay-[800ms] ${mounted ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'}`}>
-              <Link href="/leaderboard" className="block group">
-                <Card className="p-5">
-                  <div className="flex items-center gap-4">
-                    <div className="w-12 h-12 bg-yellow-500/10 border border-yellow-500/20 rounded-xl flex items-center justify-center group-hover:scale-110 transition-transform">
-                      <GiTrophy className="w-6 h-6 text-yellow-500" />
-                    </div>
-                    <div>
-                      <h4 className="text-white font-bold">Leaderboard</h4>
-                      <p className="text-neutral-500 text-sm">Compete for rankings</p>
-                    </div>
-                    <FiChevronRight className="w-5 h-5 text-neutral-600 group-hover:text-yellow-500 group-hover:translate-x-1 transition-all ml-auto" />
-                  </div>
-                </Card>
-              </Link>
-              <Link href="/referrals" className="block group">
-                <Card className="p-5">
-                  <div className="flex items-center gap-4">
-                    <div className="w-12 h-12 bg-emerald-500/10 border border-emerald-500/20 rounded-xl flex items-center justify-center group-hover:scale-110 transition-transform">
-                      <GiCoins className="w-6 h-6 text-emerald-500" />
-                    </div>
-                    <div>
-                      <h4 className="text-white font-bold">Referrals</h4>
-                      <p className="text-neutral-500 text-sm">Build your network</p>
-                    </div>
-                    <FiChevronRight className="w-5 h-5 text-neutral-600 group-hover:text-emerald-500 group-hover:translate-x-1 transition-all ml-auto" />
-                  </div>
-                </Card>
-              </Link>
-              <Link href="/arena/rewards" className="block group">
-                <Card className="p-5">
-                  <div className="flex items-center gap-4">
-                    <div className="w-12 h-12 bg-purple-500/10 border border-purple-500/20 rounded-xl flex items-center justify-center group-hover:scale-110 transition-transform">
-                      <SolanaLogo className="w-6 h-6" />
-                    </div>
-                    <div>
-                      <h4 className="text-white font-bold">Rewards</h4>
-                      <p className="text-neutral-500 text-sm">Claim your earnings</p>
-                    </div>
-                    <FiChevronRight className="w-5 h-5 text-neutral-600 group-hover:text-purple-500 group-hover:translate-x-1 transition-all ml-auto" />
-                  </div>
-                </Card>
-              </Link>
-            </div>
             </main>
 
             {/* Footer inside the rounded container */}

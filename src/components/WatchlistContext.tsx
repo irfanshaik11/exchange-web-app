@@ -4,6 +4,7 @@ import { extractTokenImage } from '../utils/images';
 
 interface WatchlistContextType {
   watchlist: Token[];
+  isHydrated: boolean; // True after client-side hydration is complete
   addToWatchlist: (token: Token) => void;
   removeFromWatchlist: (tokenAddress: string) => void;
   isInWatchlist: (tokenAddress: string) => boolean;
@@ -18,36 +19,45 @@ const DEFAULTS_POPULATED_KEY = 'watchlist_defaults_populated';
 const DEFAULT_WATCHLIST_COUNT = 15;
 
 export function WatchlistProvider({ children }: { children: React.ReactNode }) {
-  // Initialize from localStorage to prevent empty state on first render
-  const [watchlist, setWatchlist] = useState<Token[]>(() => {
-    if (typeof window === 'undefined') return [];
-    try {
-      const savedWatchlist = localStorage.getItem('watchlist');
-      if (savedWatchlist) {
-        return JSON.parse(savedWatchlist);
-      }
-    } catch (e) {
-      console.error('Failed to parse watchlist from localStorage on init:', e);
-    }
-    return [];
-  });
+  // Start with empty array for SSR consistency - will hydrate from localStorage
+  const [watchlist, setWatchlist] = useState<Token[]>([]);
+
+  // Track hydration state to prevent flickering during SSR -> client transition
+  const [isHydrated, setIsHydrated] = useState(false);
 
   // Track if we've attempted to populate defaults
   const defaultsPopulatedRef = useRef(false);
 
-  // Save watchlist to localStorage whenever it changes (but not on initial mount)
+  // Hydrate from localStorage on mount (client-side only)
   useEffect(() => {
-    if (typeof window === 'undefined') return;
+    try {
+      const savedWatchlist = localStorage.getItem('watchlist');
+      if (savedWatchlist) {
+        const parsed = JSON.parse(savedWatchlist);
+        if (Array.isArray(parsed)) {
+          setWatchlist(parsed);
+        }
+      }
+    } catch (e) {
+      console.error('Failed to parse watchlist from localStorage:', e);
+    }
+    // Mark as hydrated after reading localStorage
+    setIsHydrated(true);
+  }, []);
+
+  // Save watchlist to localStorage whenever it changes (only after hydration)
+  useEffect(() => {
+    if (!isHydrated) return; // Don't save until hydrated to avoid overwriting with empty array
     try {
       localStorage.setItem('watchlist', JSON.stringify(watchlist));
     } catch (e) {
       console.error('Failed to save watchlist to localStorage:', e);
     }
-  }, [watchlist]);
+  }, [watchlist, isHydrated]);
 
   // Populate default watchlist with top tokens that have images (only on first visit)
   useEffect(() => {
-    if (typeof window === 'undefined') return;
+    if (!isHydrated) return; // Wait for hydration before checking defaults
     if (defaultsPopulatedRef.current) return;
 
     // Check if we've already populated defaults before (don't re-populate if user cleared watchlist)
@@ -66,6 +76,27 @@ export function WatchlistProvider({ children }: { children: React.ReactNode }) {
 
     defaultsPopulatedRef.current = true;
 
+    // Helper to validate if an image URL actually loads
+    const validateImageUrl = (url: string): Promise<boolean> => {
+      return new Promise((resolve) => {
+        const img = new Image();
+        const timeout = setTimeout(() => {
+          img.src = ''; // Cancel loading
+          resolve(false);
+        }, 3000); // 3 second timeout per image
+
+        img.onload = () => {
+          clearTimeout(timeout);
+          resolve(true);
+        };
+        img.onerror = () => {
+          clearTimeout(timeout);
+          resolve(false);
+        };
+        img.src = url;
+      });
+    };
+
     // Fetch top tokens from discover/pulse endpoint and filter for tokens with images
     const fetchDefaultTokens = async () => {
       try {
@@ -82,9 +113,9 @@ export function WatchlistProvider({ children }: { children: React.ReactNode }) {
         const data = await response.json();
         const tokens: Token[] = Array.isArray(data) ? data : (data?.tokens || data?.data || []);
 
-        // Filter tokens that have valid images and deduplicate by pair_address/mint
+        // Filter tokens that have image URLs and deduplicate by pair_address/mint
         const seenAddresses = new Set<string>();
-        const tokensWithImages = tokens.filter((token: any) => {
+        const tokensWithImageUrls = tokens.filter((token: any) => {
           const imageUrl = extractTokenImage(token);
           if (!imageUrl || !imageUrl.trim().length) return false;
 
@@ -96,8 +127,21 @@ export function WatchlistProvider({ children }: { children: React.ReactNode }) {
           return true;
         });
 
-        // Take the first N unique tokens with images
-        const defaultTokens = tokensWithImages.slice(0, DEFAULT_WATCHLIST_COUNT);
+        // Validate images actually load - process in batches for performance
+        const validatedTokens: Token[] = [];
+        for (const token of tokensWithImageUrls) {
+          if (validatedTokens.length >= DEFAULT_WATCHLIST_COUNT) break;
+
+          const imageUrl = extractTokenImage(token);
+          if (imageUrl) {
+            const isValid = await validateImageUrl(imageUrl);
+            if (isValid) {
+              validatedTokens.push(token);
+            }
+          }
+        }
+
+        const defaultTokens = validatedTokens;
 
         if (defaultTokens.length > 0) {
           setWatchlist(defaultTokens);
@@ -110,7 +154,7 @@ export function WatchlistProvider({ children }: { children: React.ReactNode }) {
     };
 
     fetchDefaultTokens();
-  }, [watchlist.length]);
+  }, [watchlist.length, isHydrated]);
 
   const addToWatchlist = (token: Token) => {
     setWatchlist(prev => {
@@ -191,7 +235,7 @@ export function WatchlistProvider({ children }: { children: React.ReactNode }) {
   };
 
   return (
-    <WatchlistContext.Provider value={{ watchlist, addToWatchlist, removeFromWatchlist, isInWatchlist, updateWatchlistToken, refreshWatchlistToken }}>
+    <WatchlistContext.Provider value={{ watchlist, isHydrated, addToWatchlist, removeFromWatchlist, isInWatchlist, updateWatchlistToken, refreshWatchlistToken }}>
       {children}
     </WatchlistContext.Provider>
   );

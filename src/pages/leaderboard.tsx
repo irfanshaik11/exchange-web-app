@@ -23,10 +23,10 @@ type LeaderboardPeriod = 'DAILY' | 'MONTHLY' | 'LIFETIME';
 // Space background - contained within rounded container (matching Arena)
 const SpaceBackgroundContained = () => (
   <div className="absolute inset-0 overflow-hidden pointer-events-none rounded-2xl">
-    {/* Main background image - future.png */}
+    {/* Main background image */}
     <div
       className="absolute inset-x-0 top-0 h-[80vh] bg-cover bg-top bg-no-repeat"
-      style={{ backgroundImage: 'url(/future.png)' }}
+      style={{ backgroundImage: 'url(/ranks/Background.png)' }}
     />
     {/* Subtle dark overlay */}
     <div className="absolute inset-0 bg-black/30" />
@@ -56,9 +56,9 @@ const Card = ({ children, className = '' }: { children: React.ReactNode; classNa
   </div>
 );
 
-// Gold coin using PNG image
-const GoldCoin = ({ className = '' }: { className?: string }) => (
-  <img src="/ranks/Coin.png" alt="Gold" className={`${className} object-contain`} />
+// Credits coin using PNG image
+const CreditsCoin = ({ className = '' }: { className?: string }) => (
+  <img src="/ranks/Coin.png" alt="Credits" className={`${className} object-contain`} />
 );
 
 // Solana logo
@@ -184,16 +184,16 @@ export default function LeaderboardPage() {
   };
 
   const faqs = [
-    { q: 'How Does The Leaderboard Work?', a: 'The leaderboard ranks users by Gold earned (Gold Leaderboard) or quests completed (Quest Leaderboard). Rankings reset daily at midnight UTC for daily boards and on the 1st of each month for monthly boards.' },
+    { q: 'How Does The Leaderboard Work?', a: 'The leaderboard ranks users by Credits earned (Credits Leaderboard) or quests completed (Quest Leaderboard). Rankings reset daily at midnight UTC for daily boards and on the 1st of each month for monthly boards.' },
     { q: 'Want to keep it stealth?', a: 'Enable anonymous mode in your Arena settings to hide your username on the leaderboard. Your stats will still count, but others will see ******* instead of your name.' },
-    { q: 'How Is The Gold Calculated?', a: 'Gold is earned through trading activity, quest completion, trading streaks, and rank-up bonuses. Your Gold multiplier increases with your Arena rank.' },
+    { q: 'How Are Credits Calculated?', a: 'Credits are earned through trading activity, quest completion, trading streaks, and rank-up bonuses. Your Credits multiplier increases with your Arena rank.' },
   ];
 
   return (
     <>
       <Head>
         <title>Leaderboard | Interstate Arena</title>
-        <meta name="description" content="Compete for Gold prizes on the Interstate Arena leaderboard." />
+        <meta name="description" content="Compete for Credits prizes on the Interstate Arena leaderboard." />
       </Head>
 
       <div className="min-h-screen bg-black">
@@ -214,10 +214,10 @@ export default function LeaderboardPage() {
                 LEADERBOARD
               </h1>
 
-            {/* Header Tabs - Three sections: Gold Toggle | Period Selector | Quest Toggle */}
+            {/* Header Tabs - Three sections: Credits Toggle | Period Selector | Quest Toggle */}
             <div className="flex items-center justify-center mb-6">
               <div className="inline-flex items-center bg-neutral-900/80 backdrop-blur-sm rounded-full border border-neutral-700/50 p-1 gap-1">
-                {/* Gold Leaderboard Toggle */}
+                {/* Credits Leaderboard Toggle */}
                 <button
                   onClick={() => setType('gold')}
                   className={`flex items-center gap-2 px-4 py-2 rounded-full transition-all ${
@@ -226,8 +226,8 @@ export default function LeaderboardPage() {
                       : 'text-neutral-400 hover:text-neutral-300'
                   }`}
                 >
-                  <GoldCoin className="w-5 h-5" />
-                  <span className="font-bold">Gold Leaderboard</span>
+                  <CreditsCoin className="w-5 h-5" />
+                  <span className="font-bold">Credits Leaderboard</span>
                 </button>
 
                 {/* Period Tabs - Always in center */}
@@ -275,7 +275,7 @@ export default function LeaderboardPage() {
                     <div className="flex items-center justify-between gap-4">
                       <div className="flex items-center gap-1">
                         {type === 'gold' ? (
-                          <GoldCoin className="w-4 h-4" />
+                          <CreditsCoin className="w-4 h-4" />
                         ) : (
                           <IoRocketSharp className="w-4 h-4 text-orange-400" />
                         )}
@@ -286,7 +286,7 @@ export default function LeaderboardPage() {
                         </span>
                       </div>
                       <span className="text-neutral-400">+{getPrize(2)}</span>
-                      <GoldCoin className="w-4 h-4" />
+                      <CreditsCoin className="w-4 h-4" />
                     </div>
                   </div>
                 </div>
@@ -303,7 +303,7 @@ export default function LeaderboardPage() {
                     <div className="flex items-center justify-between gap-4">
                       <div className="flex items-center gap-1">
                         {type === 'gold' ? (
-                          <GoldCoin className="w-4 h-4" />
+                          <CreditsCoin className="w-4 h-4" />
                         ) : (
                           <IoRocketSharp className="w-4 h-4 text-orange-400" />
                         )}
@@ -314,7 +314,7 @@ export default function LeaderboardPage() {
                         </span>
                       </div>
                       <span className="text-amber-300">+{getPrize(1).toLocaleString()}</span>
-                      <GoldCoin className="w-4 h-4" />
+                      <CreditsCoin className="w-4 h-4" />
                     </div>
                   </div>
                 </div>
@@ -331,7 +331,7 @@ export default function LeaderboardPage() {
                     <div className="flex items-center justify-between gap-4">
                       <div className="flex items-center gap-1">
                         {type === 'gold' ? (
-                          <GoldCoin className="w-4 h-4" />
+                          <CreditsCoin className="w-4 h-4" />
                         ) : (
                           <IoRocketSharp className="w-4 h-4 text-orange-400" />
                         )}
@@ -342,7 +342,7 @@ export default function LeaderboardPage() {
                         </span>
                       </div>
                       <span className="text-amber-500">+{getPrize(3)}</span>
-                      <GoldCoin className="w-4 h-4" />
+                      <CreditsCoin className="w-4 h-4" />
                     </div>
                   </div>
                 </div>
@@ -389,9 +389,9 @@ export default function LeaderboardPage() {
                       <span className="text-white text-sm font-medium">0 SOL</span>
                     </div>
 
-                    {/* Gold earned */}
+                    {/* Credits earned */}
                     <div className="flex items-center gap-1.5">
-                      <GoldCoin className="w-5 h-5" />
+                      <CreditsCoin className="w-5 h-5" />
                       <span className="text-white text-sm font-medium">
                         {type === 'gold' ? (position.data?.value?.toLocaleString() || '0') : '0'}
                       </span>
@@ -399,7 +399,7 @@ export default function LeaderboardPage() {
 
                     {/* Prize */}
                     <div className="flex items-center gap-1.5">
-                      <GoldCoin className="w-5 h-5" />
+                      <CreditsCoin className="w-5 h-5" />
                       <span className="text-amber-400 text-sm font-medium">+{position.data?.prize || 350}</span>
                     </div>
                   </div>
@@ -446,7 +446,7 @@ export default function LeaderboardPage() {
                   >
                     $2,574.56 DAILY JACKPOT NOW LIVE
                   </h3>
-                  <p className="text-neutral-400 text-sm mt-0.5">Turn Your Gold Into Huge Solana Rewards!</p>
+                  <p className="text-neutral-400 text-sm mt-0.5">Turn Your Credits Into Huge Solana Rewards!</p>
                 </div>
                 <button
                   className="px-6 py-2.5 text-sm font-semibold rounded-lg transition-all duration-200 cursor-pointer hover:brightness-110"
@@ -465,7 +465,7 @@ export default function LeaderboardPage() {
             <Card className="p-6 mb-6">
               <div className="flex items-center justify-between mb-4">
                 <h3 className={type === 'gold' ? 'text-amber-400 font-bold' : 'text-white font-bold'}>
-                  {type === 'gold' ? 'Gold Ranks' : 'Quest Ranks'}
+                  {type === 'gold' ? 'Credits Ranks' : 'Quest Ranks'}
                 </h3>
                 <div className="flex items-center gap-3">
                   <button className="px-4 py-2 bg-neutral-800 hover:bg-neutral-700 text-white text-sm font-medium rounded-lg transition-colors border border-neutral-700">
@@ -495,7 +495,7 @@ export default function LeaderboardPage() {
                       {type === 'gold' ? (
                         <>
                           <th className="text-left py-3 px-4 text-neutral-500 text-sm font-medium">SOL Earned</th>
-                          <th className="text-left py-3 px-4 text-neutral-500 text-sm font-medium">Gold Claimed</th>
+                          <th className="text-left py-3 px-4 text-neutral-500 text-sm font-medium">Credits Claimed</th>
                         </>
                       ) : (
                         <th className="text-left py-3 px-4 text-neutral-500 text-sm font-medium">Quests Completed</th>
@@ -531,7 +531,7 @@ export default function LeaderboardPage() {
                                 </td>
                                 <td className="py-3 px-4">
                                   <div className="flex items-center gap-1">
-                                    <GoldCoin className="w-4 h-4" />
+                                    <CreditsCoin className="w-4 h-4" />
                                     <span className="text-amber-400 font-bold">
                                       {entry.goldEarned >= 1000
                                         ? `${(entry.goldEarned / 1000).toFixed(1)}K`
@@ -552,7 +552,7 @@ export default function LeaderboardPage() {
                             )}
                             <td className="py-3 px-4">
                               <div className="flex items-center gap-1">
-                                <GoldCoin className="w-4 h-4" />
+                                <CreditsCoin className="w-4 h-4" />
                                 <span className="text-amber-400 font-bold">+{getPrize(pos).toLocaleString()}</span>
                               </div>
                             </td>
