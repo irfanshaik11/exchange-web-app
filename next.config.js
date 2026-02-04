@@ -114,6 +114,25 @@ const config = {
     defaultLocale: "en",
   },
 
+  async headers() {
+    return [
+      {
+        // All routes (HTML, API): no caching
+        source: '/:path*',
+        headers: [
+          { key: 'Cache-Control', value: 'no-store, must-revalidate' },
+        ],
+      },
+      {
+        // Content-hashed static assets: cache forever (hash changes on rebuild)
+        source: '/_next/static/:path*',
+        headers: [
+          { key: 'Cache-Control', value: 'public, max-age=31536000, immutable' },
+        ],
+      },
+    ];
+  },
+
   async redirects() {
     return [
       {

@@ -45,6 +45,10 @@ import { useReferralStats } from "~/hooks/useArena";
 import type { Timeframe } from "../pages/index";
 // import MorphingArenaNav from "./MorphingArenaNav"; // Commented out - Arena now in main nav
 
+// Module-level: persists across Header remounts during page navigation
+const _failedImages = new Set<string>();
+const _stableEnrichedWatchlist: Token[] = [];
+
 /* ---- style palette ---- */
 const AX = {
   bg: "#0a0b0d",
@@ -321,10 +325,11 @@ export default function Header({
   const WATCHLIST_TICKER_PAGE_SIZE = 8;
   const [watchlistTickerPage, setWatchlistTickerPage] = useState(0);
 
-  // Track tokens whose images failed to load — filtered out of the ticker display
-  const [failedImageTokens, setFailedImageTokens] = useState<Set<string>>(new Set());
+  // _failedImages (module-level Set) tracks broken images across remounts.
+  // No React state needed — we check it directly during render for instant fallback.
   // Stable ref prevents the ticker from flashing empty during transient re-renders
-  const stableEnrichedWatchlistRef = useRef<Token[]>([]);
+  // Initialized from module-level array for cross-mount persistence
+  const stableEnrichedWatchlistRef = useRef<Token[]>(_stableEnrichedWatchlist);
 
   // Enrich watchlist tokens with cached pulse token data when price is missing
   // Lazy-init from localStorage to avoid flicker on page navigation (no useEffect delay)
@@ -431,8 +436,7 @@ export default function Header({
   }, [watchlist, refreshWatchlistToken]);
 
   // Memoize enriched watchlist to avoid recalculating on every render
-  // Deduplicate by address AND name, filter tokens without images / broken images, stabilize display
-  const MIN_WATCHLIST_DISPLAY = 10;
+  // Deduplicate by address AND name — never filter by image status (show fallback icon instead)
   const enrichedWatchlist = useMemo(() => {
     const enriched = watchlist.map(enrichTokenWithCachedData);
     const seenIds = new Set<string>();
@@ -445,13 +449,6 @@ export default function Header({
       const displayName = (token.symbol || token.name || '').toLowerCase().trim();
       if (!displayName || seenNames.has(displayName)) return false;
 
-      // Only show tokens that have an image URL
-      const rawImg = (token as any).image_url || (token as any).image || (token as any).logo || (token as any).uri;
-      if (!rawImg) return false;
-
-      // Exclude tokens whose images failed to load
-      if (failedImageTokens.has(tokenId)) return false;
-
       seenIds.add(tokenId);
       seenNames.add(displayName);
       return true;
@@ -460,13 +457,16 @@ export default function Header({
     // Stability: keep last non-empty list to prevent flashing during page transitions
     if (watchlist.length === 0) {
       stableEnrichedWatchlistRef.current = [];
+      _stableEnrichedWatchlist.length = 0;
       return [];
     }
     if (filtered.length > 0) {
       stableEnrichedWatchlistRef.current = filtered;
+      _stableEnrichedWatchlist.length = 0;
+      _stableEnrichedWatchlist.push(...filtered);
     }
     return stableEnrichedWatchlistRef.current;
-  }, [watchlist, enrichTokenWithCachedData, failedImageTokens]);
+  }, [watchlist, enrichTokenWithCachedData]);
   
   const watchlistTickerTotalPages = Math.max(
     1,
@@ -2281,28 +2281,32 @@ export default function Header({
                     }
                   }}
                 >
-                  {/* Token Image */}
-                  {rawImg && (
+                  {/* Token Image — fallback to letter circle if image fails or missing */}
+                  {rawImg && !_failedImages.has(token.pair_address || (token as any).mint || '') ? (
                     <img
                       src={rawImg}
                       alt={token.symbol || ''}
                       className="w-4 h-4 rounded-full object-cover ring-1 ring-white/10"
-                      onError={() => {
-                        // Mark this token as having a broken image — filtered out immediately
+                      onError={(e) => {
                         const failId = token.pair_address || (token as any).mint || '';
-                        if (failId) {
-                          setFailedImageTokens(prev => {
-                            if (prev.has(failId)) return prev;
-                            const next = new Set(prev);
-                            next.add(failId);
-                            return next;
-                          });
-                          // Also remove from watchlist context so replenishment can kick in
-                          removeFromWatchlist(failId);
-                        }
+                        if (failId) _failedImages.add(failId);
+                        (e.target as HTMLImageElement).style.display = 'none';
+                        const sib = (e.target as HTMLElement).nextElementSibling;
+                        if (sib && (sib as HTMLElement).dataset.fallback) (sib as HTMLElement).style.display = 'flex';
                       }}
                     />
-                  )}
+                  ) : null}
+                  <div
+                    data-fallback="1"
+                    className="w-4 h-4 rounded-full ring-1 ring-white/10 items-center justify-center text-[8px] font-bold"
+                    style={{
+                      display: (rawImg && !_failedImages.has(token.pair_address || (token as any).mint || '')) ? 'none' : 'flex',
+                      backgroundColor: '#2a2d35',
+                      color: '#9CA3AF',
+                    }}
+                  >
+                    {(token.symbol || '?')[0]}
+                  </div>
                   
                   {/* Token Symbol */}
                   <span className="text-xs font-semibold" style={{ color: '#d1d5db' }}>
