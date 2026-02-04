@@ -35,7 +35,7 @@ import { useUser } from "../components/UserContext";
 import { useWalletTracker } from "../components/WalletTrackerContext";
 import AddTwitterHandleModal from "../components/AddTwitterHandleModal";
 import TwitterAccountRow from "../components/TwitterAccountRow";
-import { FiSettings, FiBell, FiShare2, FiRss } from "react-icons/fi";
+import { FiSettings, FiBell, FiShare2, FiRss, FiLock, FiEye, FiAtSign, FiMessageCircle } from "react-icons/fi";
 import { SiSolana } from "react-icons/si";
 import { RiExchangeDollarLine } from "react-icons/ri";
 import { useQuickBuy } from "~/components/QuickBuyContext";
@@ -1566,10 +1566,40 @@ export default function TrackersPage() {
       <Head>
         <title>Trackers | Interstate Memeboard</title>
       </Head>
-      <div className="mb-20">
+      <div>
         <div className="flex min-h-screen flex-col bg-[#050608] text-neutral-100">
-          <Header isSticky={false} />
-          <div className="mt-4 mb-2 flex flex-col gap-4 px-4 sm:my-6 sm:mb-4 sm:px-6 lg:flex-row lg:items-center lg:justify-between lg:gap-6 lg:px-8">
+          {/* Header stays outside the rounded container */}
+          <div className="relative z-10">
+            <Header isSticky={false} />
+          </div>
+
+          {/* Outer padding wrapper */}
+          <div className="p-1 sm:p-1.5">
+            {/* Rounded container with background */}
+            <div className="relative overflow-hidden rounded-2xl border border-white/[0.06] min-h-[calc(100vh-80px)]">
+              {/* Background image inside the container */}
+              <div className="pointer-events-none absolute inset-0 overflow-hidden rounded-2xl">
+                <div
+                  className="absolute inset-x-0 top-0 h-[80vh] bg-cover bg-top bg-no-repeat"
+                  style={{ backgroundImage: 'url(/ranks/Background2.png)' }}
+                />
+                <div className="absolute inset-0 bg-black/30" />
+                <div
+                  className="absolute inset-0"
+                  style={{
+                    background: 'linear-gradient(to bottom, transparent 0%, transparent 20%, rgba(0,0,0,0.1) 30%, rgba(0,0,0,0.3) 45%, rgba(0,0,0,0.6) 60%, rgba(0,0,0,0.85) 75%, black 90%)'
+                  }}
+                />
+                <div
+                  className="absolute inset-x-0 top-1/4 bottom-0"
+                  style={{
+                    background: 'linear-gradient(to bottom, transparent 0%, rgba(0,0,0,0.2) 25%, rgba(0,0,0,0.5) 50%, rgba(0,0,0,0.8) 75%, black 100%)'
+                  }}
+                />
+                <div className="absolute inset-0 bg-gradient-to-r from-black/20 via-transparent to-black/20" />
+              </div>
+
+          <div className="relative z-10 mt-4 mb-2 flex flex-col gap-4 px-4 sm:my-6 sm:mb-4 sm:px-6 lg:flex-row lg:items-center lg:justify-between lg:gap-6 lg:px-8">
             {/* Tabs Section - Scrollable on mobile */}
             <div className="scrollbar-hide -mx-4 flex items-center gap-3 overflow-x-auto px-4 pb-2 sm:-mx-6 sm:gap-4 sm:px-6 lg:mx-0 lg:gap-6 lg:px-0 lg:pb-0">
               <h1 className="text-xl font-medium text-white">
@@ -1577,11 +1607,11 @@ export default function TrackersPage() {
               </h1>
             </div>
           </div>
-          <div className="mb-4 flex min-h-0 w-full flex-1 flex-col px-2 sm:mb-8 sm:px-6">
+          <div className="relative z-10 mb-4 flex min-h-0 w-full flex-1 flex-col px-2 sm:mb-8 sm:px-6">
             {/* Main Content Area: Two Columns */}
             <div className="flex min-h-0 flex-1 flex-col gap-3 sm:gap-4 lg:flex-row">
               {isMobile && (
-                <div className="flex w-full rounded-xl border border-neutral-800/50 bg-[#0F0F0F] p-1 text-[10px] font-medium text-neutral-400 shadow-lg sm:p-1.5 sm:text-xs">
+                <div className="flex w-full rounded-xl border border-white/[0.06] bg-[#0f1014] p-1 text-[10px] font-medium text-neutral-400 shadow-lg sm:p-1.5 sm:text-xs">
                   <button
                     className={`flex-1 rounded-lg px-3 py-2 transition-all duration-300 sm:px-4 sm:py-2.5 ${
                       mobileMainTab === "wallets"
@@ -1608,10 +1638,10 @@ export default function TrackersPage() {
               {/* LEFT: WALLET SECTION */}
               {showWalletSection && (
                 <div
-                  className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-md border border-neutral-800/60 bg-[#0A0A0A] px-3 pb-4 shadow-2xl backdrop-blur-sm sm:px-5"
+                  className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-xl border border-white/[0.08] bg-white/[0.05] px-3 pb-4 backdrop-blur-xl sm:px-5"
                   style={{
                     boxShadow:
-                      "0 8px 32px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(127, 255, 201, 0.05)",
+                      "0 8px 32px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.06)",
                     maxHeight: isMobile
                       ? "calc(100vh - 200px)"
                       : "calc(100vh - 240px)",
@@ -1620,12 +1650,16 @@ export default function TrackersPage() {
                   {/* If user is not logged in, show GMGN-style empty state */}
                   {!user ? (
                     <div className="flex flex-1 items-center justify-center">
-                      <div className="text-center">
-                        <p className="mb-4 text-sm text-neutral-400">
-                          You are not logged in to Interstate
+                      <div className="flex flex-col items-center text-center">
+                        <FiLock className="mb-3 h-10 w-10 text-neutral-700" />
+                        <p className="text-sm font-medium text-neutral-300">
+                          Log in to start tracking
+                        </p>
+                        <p className="mt-1 text-xs text-neutral-500">
+                          Monitor wallets and catch trades in real-time
                         </p>
                         <button
-                          className="inline-flex items-center justify-center rounded-full border border-neutral-600 px-6 py-1.5 text-xs font-medium text-neutral-100 transition-colors duration-200 hover:border-neutral-400 hover:bg-neutral-800/60"
+                          className="mt-4 inline-flex cursor-pointer items-center justify-center rounded-lg bg-[#7FFFC9] px-6 py-2 text-xs font-semibold text-neutral-900 transition-all duration-200 hover:brightness-90"
                           onClick={() => {
                             const event = new CustomEvent("open-login-modal");
                             window.dispatchEvent(event);
@@ -1638,23 +1672,23 @@ export default function TrackersPage() {
                   ) : (
                     <>
                       {/* HEADER BAR – three zones like reference screenshot */}
-                      <div className="flex justify-between gap-3 border-b border-neutral-800/40 py-3 sm:items-center sm:gap-4 sm:py-4">
+                      <div className="flex justify-between gap-3 border-b border-white/[0.04] py-3 sm:items-center sm:gap-4 sm:py-4">
                         {/* Left: tabs + wallet count */}
                         <div className="flex flex-wrap items-center gap-2 sm:gap-2.5">
                           {TABS.map((tab, i) => (
                             <button
                               key={tab}
-                              className={`cursor-pointer border-b-2 px-3 py-2 text-[10px] whitespace-nowrap transition-all duration-300 sm:px-4 sm:py-2.5 sm:text-xs ${
+                              className={`cursor-pointer rounded-lg px-3 py-1.5 text-[10px] whitespace-nowrap transition-all duration-300 sm:px-4 sm:py-2 sm:text-xs ${
                                 activeTab === i
-                                  ? "border-[#7FFFC9] font-semibold text-neutral-100"
-                                  : "border-transparent font-medium text-neutral-400 hover:border-neutral-600 hover:text-neutral-200"
+                                  ? "border border-white/[0.08] bg-white/[0.07] font-semibold text-white"
+                                  : "border border-transparent font-medium text-neutral-400 hover:bg-white/[0.04] hover:text-neutral-200"
                               }`}
                               onClick={() => setActiveTab(i)}
                             >
                               {tab}
                             </button>
                           ))}
-                          <div className="flex items-center rounded-lg border border-neutral-800/50 bg-neutral-900/60 px-3 py-1 text-[10px] text-neutral-300 sm:px-3.5 sm:py-1.5 sm:text-[11px]">
+                          <div className="flex items-center rounded-lg border border-white/[0.06] bg-white/[0.04] px-3 py-1 text-[10px] text-neutral-300 sm:px-3.5 sm:py-1.5 sm:text-[11px]">
                             <span className="font-semibold text-[#7FFFC9]">
                               {watchedWallets.length}
                             </span>
@@ -1672,29 +1706,13 @@ export default function TrackersPage() {
                         <div className="flex flex-wrap items-center justify-end gap-2 sm:gap-2.5">
                           {activeTab === 0 && (
                             <button
-                              className="rounded-lg px-3 py-1.5 text-[9px] font-semibold whitespace-nowrap shadow-lg transition-all duration-300 sm:px-5 sm:py-2.5 sm:text-xs"
+                              className="cursor-pointer rounded-lg px-3 py-1.5 text-[9px] font-semibold whitespace-nowrap transition-all duration-200 hover:brightness-90 sm:px-5 sm:py-2.5 sm:text-xs"
                               style={{
                                 backgroundColor: "#7FFFC9",
                                 color: "#000000",
                                 border: "none",
                               }}
                               onClick={handleOpenAddWalletModal}
-                              onMouseEnter={(e) => {
-                                e.currentTarget.style.backgroundColor =
-                                  "#6EE8B8";
-                                e.currentTarget.style.boxShadow =
-                                  "0 0 16px rgba(127, 255, 201, 0.4), 0 4px 12px rgba(127, 255, 201, 0.2)";
-                                e.currentTarget.style.transform =
-                                  "translateY(-1px)";
-                              }}
-                              onMouseLeave={(e) => {
-                                e.currentTarget.style.backgroundColor =
-                                  "#7FFFC9";
-                                e.currentTarget.style.boxShadow =
-                                  "0 4px 12px rgba(0, 0, 0, 0.3)";
-                                e.currentTarget.style.transform =
-                                  "translateY(0)";
-                              }}
                             >
                               Add Wallet
                             </button>
@@ -1704,14 +1722,14 @@ export default function TrackersPage() {
 
                       {/* Search bar and action toolbar - below header, only for Wallet Manager tab */}
                       {activeTab === 0 && (
-                        <div className="border-b border-neutral-800/40 px-1 py-3 sm:px-2 sm:py-4">
+                        <div className="border-b border-white/[0.04] px-1 py-3 sm:px-2 sm:py-4">
                           <div className="flex flex-wrap items-center gap-2 sm:gap-3">
                             {/* Search input */}
                             <div className="min-w-[200px] flex-1">
                               <input
                                 type="text"
                                 placeholder="Search by address"
-                                className="w-full rounded-lg border border-neutral-800/60 bg-neutral-900/40 px-4 py-2 text-[10px] text-neutral-200 transition-all duration-300 placeholder:text-neutral-500 focus:border-[#7FFFC9]/60 focus:bg-neutral-900/60 focus:ring-2 focus:ring-[#7FFFC9]/20 focus:outline-none sm:px-5 sm:py-2.5 sm:text-xs"
+                                className="w-full rounded-lg border border-white/[0.06] bg-white/[0.03] px-4 py-2 text-[10px] text-neutral-200 transition-all duration-300 placeholder:text-neutral-600 focus:border-[#7FFFC9]/60 focus:bg-neutral-900/60 focus:ring-2 focus:ring-[#7FFFC9]/20 focus:outline-none sm:px-5 sm:py-2.5 sm:text-xs"
                                 disabled={false}
                                 value={searchTerm}
                                 onChange={(e) => setSearchTerm(e.target.value)}
@@ -1723,13 +1741,13 @@ export default function TrackersPage() {
                               {activeTab === 0 && (
                                 <>
                                   <button
-                                    className="rounded-lg border border-neutral-800/50 bg-neutral-900/60 px-2.5 py-1.5 text-[9px] font-semibold whitespace-nowrap text-neutral-200 transition-all duration-300 hover:border-neutral-700/70 hover:bg-neutral-800/80 hover:text-white sm:px-3 sm:py-1.5 sm:text-[10px]"
+                                    className="cursor-pointer rounded-lg border border-white/[0.06] bg-white/[0.03] px-2.5 py-1.5 text-[9px] font-semibold whitespace-nowrap text-neutral-200 transition-all duration-200 hover:border-white/[0.1] hover:bg-white/[0.07] hover:text-white sm:px-3 sm:py-1.5 sm:text-[10px]"
                                     onClick={() => setShowImportModal(true)}
                                   >
                                     Import
                                   </button>
                                   <button
-                                    className="rounded-lg border border-neutral-800/50 bg-neutral-900/60 px-2.5 py-1.5 text-[9px] font-semibold whitespace-nowrap text-neutral-200 transition-all duration-300 hover:border-neutral-700/70 hover:bg-neutral-800/80 hover:text-white sm:px-3 sm:py-1.5 sm:text-[10px]"
+                                    className="cursor-pointer rounded-lg border border-white/[0.06] bg-white/[0.03] px-2.5 py-1.5 text-[9px] font-semibold whitespace-nowrap text-neutral-200 transition-all duration-200 hover:border-white/[0.1] hover:bg-white/[0.07] hover:text-white sm:px-3 sm:py-1.5 sm:text-[10px]"
                                     onClick={handleExportAddresses}
                                   >
                                     Export
@@ -1737,7 +1755,7 @@ export default function TrackersPage() {
 
                                   {/* Icon buttons - hide some on mobile */}
                                   <button
-                                    className="flex h-7 w-7 items-center justify-center rounded-lg border border-neutral-800/50 bg-neutral-900/60 text-sm text-neutral-400 transition-all duration-300 hover:border-neutral-700/70 hover:bg-neutral-800/80 hover:text-white sm:h-9 sm:w-9"
+                                    className="flex h-7 w-7 cursor-pointer items-center justify-center rounded-lg border border-white/[0.06] bg-white/[0.03] text-sm text-neutral-400 transition-all duration-200 hover:border-white/[0.1] hover:bg-white/[0.07] hover:text-white sm:h-9 sm:w-9"
                                     type="button"
                                   >
                                     <FiSettings className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
@@ -1745,10 +1763,10 @@ export default function TrackersPage() {
                                   <button
                                     className={`flex h-8 w-8 items-center justify-center rounded-lg border transition-all duration-300 sm:h-9 sm:w-9 ${
                                       isTogglingAllNotifications
-                                        ? "cursor-not-allowed border-neutral-800/50 bg-neutral-900/60 opacity-50"
+                                        ? "cursor-not-allowed border-white/[0.06] bg-white/[0.03] opacity-50"
                                         : allNotificationsEnabled
                                           ? "cursor-pointer border-pink-500/50 bg-pink-500/20 hover:bg-pink-500/30"
-                                          : "cursor-pointer border-neutral-800/50 bg-neutral-900/60 hover:border-neutral-700/70 hover:bg-neutral-800/80"
+                                          : "cursor-pointer border-white/[0.06] bg-white/[0.03] hover:border-white/[0.1] hover:bg-white/[0.07]"
                                     }`}
                                     type="button"
                                     onClick={handleToggleAllNotifications}
@@ -1770,13 +1788,13 @@ export default function TrackersPage() {
                                     />
                                   </button>
                                   <button
-                                    className="flex h-7 w-7 items-center justify-center rounded-lg border border-neutral-800/50 bg-neutral-900/60 text-sm text-neutral-400 transition-all duration-300 hover:border-neutral-700/70 hover:bg-neutral-800/80 hover:text-white sm:h-9 sm:w-9"
+                                    className="flex h-7 w-7 cursor-pointer items-center justify-center rounded-lg border border-white/[0.06] bg-white/[0.03] text-sm text-neutral-400 transition-all duration-200 hover:border-white/[0.1] hover:bg-white/[0.07] hover:text-white sm:h-9 sm:w-9"
                                     type="button"
                                   >
                                     <FiShare2 className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
                                   </button>
                                   <button
-                                    className="flex h-7 w-7 items-center justify-center rounded-lg border border-neutral-800/50 bg-neutral-900/60 text-sm text-neutral-400 transition-all duration-300 hover:border-neutral-700/70 hover:bg-neutral-800/80 hover:text-white sm:h-9 sm:w-9"
+                                    className="flex h-7 w-7 cursor-pointer items-center justify-center rounded-lg border border-white/[0.06] bg-white/[0.03] text-sm text-neutral-400 transition-all duration-200 hover:border-white/[0.1] hover:bg-white/[0.07] hover:text-white sm:h-9 sm:w-9"
                                     type="button"
                                   >
                                     <FiRss className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
@@ -1791,8 +1809,8 @@ export default function TrackersPage() {
                       <div className="min-h-0 flex-1 overflow-y-auto">
                         {activeTab === 0 ? (
                           <>
-                            <div className="flex items-center border-b border-neutral-800/60 p-1.5 sm:p-2">
-                              <div className="flex w-full items-center gap-2 text-[10px] font-medium text-neutral-400 sm:gap-4 sm:text-xs">
+                            <div className="flex items-center border-b border-white/[0.04] p-1.5 sm:p-2">
+                              <div className="flex w-full items-center gap-2 text-[10px] font-medium text-neutral-500 sm:gap-4 sm:text-xs">
                                 <span className="flex w-16 justify-center sm:w-28">
                                   Created
                                 </span>
@@ -1813,8 +1831,12 @@ export default function TrackersPage() {
                             </div>
                             {wallets.length === 0 ? (
                               <div className="flex h-64 flex-col items-center justify-center">
-                                <span className="text-neutral-400">
-                                  No wallets added yet.
+                                <FiEye className="mb-3 h-10 w-10 text-neutral-700" />
+                                <span className="text-sm font-medium text-neutral-300">
+                                  No wallets tracked yet
+                                </span>
+                                <span className="mt-1 text-xs text-neutral-500">
+                                  Add a wallet address to monitor its trades
                                 </span>
                               </div>
                             ) : (
@@ -1870,22 +1892,22 @@ export default function TrackersPage() {
               {/* RESIZE HANDLE (desktop only) - Hide when wallet section is hidden (Monad chain) */}
               {!isMobile && (
                 <div
-                  className="group relative hidden h-full min-h-[530px] w-1 cursor-ew-resize items-center justify-center transition-colors hover:bg-emerald-400/10 lg:flex"
+                  className="group relative hidden h-full min-h-[530px] w-1 cursor-ew-resize items-center justify-center transition-colors hover:bg-[#7FFFC9]/5 lg:flex"
                   onMouseDown={() => setIsResizing(true)}
                 >
-                  <div className="absolute h-16 w-1 rounded-full bg-neutral-700 transition-colors group-hover:bg-emerald-400" />
+                  <div className="absolute h-16 w-1 rounded-full bg-neutral-400 transition-colors group-hover:bg-[#7FFFC9]" />
                 </div>
               )}
 
               {/* RIGHT: TWITTER SECTION */}
               {showTwitterSection && (
                 <div
-                  className="flex min-h-0 flex-shrink-0 flex-col overflow-hidden rounded-xl border border-neutral-800/60 bg-[#0A0A0A] px-3 shadow-2xl backdrop-blur-sm sm:px-4"
+                  className="flex min-h-0 flex-shrink-0 flex-col overflow-hidden rounded-xl border border-white/[0.08] bg-white/[0.05] px-3 backdrop-blur-xl sm:px-4"
                   style={
                     isMobile
                       ? {
                           boxShadow:
-                            "0 8px 32px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(127, 255, 201, 0.05)",
+                            "0 8px 32px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.06)",
                           maxHeight: "calc(100vh - 200px)",
                         }
                       : {
@@ -1894,20 +1916,20 @@ export default function TrackersPage() {
                           maxWidth: "800px",
                           maxHeight: "calc(100vh - 240px)",
                           boxShadow:
-                            "0 8px 32px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(127, 255, 201, 0.05)",
+                            "0 8px 32px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.06)",
                         }
                   }
                 >
                   {/* Twitter Tabs Header */}
-                  <div className="flex flex-wrap items-center justify-between gap-2 border-b border-neutral-800/40 pt-3 pb-2 sm:gap-3 sm:pt-4 sm:pb-3">
+                  <div className="flex flex-wrap items-center justify-between gap-2 border-b border-white/[0.04] pt-3 pb-2 sm:gap-3 sm:pt-4 sm:pb-3">
                     <div className="flex gap-2 sm:gap-2.5">
                       {TWITTER_TABS.map((tab, i) => (
                         <button
                           key={tab}
-                          className={`cursor-pointer border-b-2 px-3 py-2 text-[10px] whitespace-nowrap transition-all duration-300 sm:px-4 sm:py-2.5 sm:text-xs ${
+                          className={`cursor-pointer rounded-lg px-3 py-1.5 text-[10px] whitespace-nowrap transition-all duration-300 sm:px-4 sm:py-2 sm:text-xs ${
                             twitterTab === i
-                              ? "border-neutral-600 bg-neutral-900/30 font-semibold text-neutral-100"
-                              : "border-transparent font-medium text-neutral-400 hover:border-neutral-700 hover:text-neutral-200"
+                              ? "border border-white/[0.08] bg-white/[0.07] font-semibold text-white"
+                              : "border border-transparent font-medium text-neutral-400 hover:bg-white/[0.04] hover:text-neutral-200"
                           }`}
                           onClick={() => setTwitterTab(i)}
                         >
@@ -1917,24 +1939,12 @@ export default function TrackersPage() {
                     </div>
                     {twitterTab === 0 && (
                       <button
-                        className="cursor-pointer rounded-lg px-3 py-1.5 text-[9px] font-semibold whitespace-nowrap text-black shadow-lg transition-all duration-300 sm:px-5 sm:py-2.5 sm:text-xs"
+                        className="cursor-pointer rounded-lg px-3 py-1.5 text-[9px] font-semibold whitespace-nowrap text-black transition-all duration-200 hover:brightness-90 sm:px-5 sm:py-2.5 sm:text-xs"
                         style={{
                           backgroundColor: "#7FFFC9",
                           border: "none",
                         }}
                         onClick={() => setShowAddTwitterModal(true)}
-                        onMouseEnter={(e) => {
-                          e.currentTarget.style.backgroundColor = "#6EE8B8";
-                          e.currentTarget.style.boxShadow =
-                            "0 0 16px rgba(127, 255, 201, 0.4), 0 4px 12px rgba(127, 255, 201, 0.2)";
-                          e.currentTarget.style.transform = "translateY(-1px)";
-                        }}
-                        onMouseLeave={(e) => {
-                          e.currentTarget.style.backgroundColor = "#7FFFC9";
-                          e.currentTarget.style.boxShadow =
-                            "0 4px 12px rgba(0, 0, 0, 0.3)";
-                          e.currentTarget.style.transform = "translateY(0)";
-                        }}
                       >
                         Add Handle
                       </button>
@@ -1948,8 +1958,12 @@ export default function TrackersPage() {
                       <>
                         {twitterAccounts.length === 0 ? (
                           <div className="flex h-full flex-col items-center justify-center py-8 text-center">
-                            <span className="mb-4 text-neutral-400">
-                              No Twitter accounts tracked yet
+                            <FiAtSign className="mb-3 h-10 w-10 text-neutral-700" />
+                            <span className="text-sm font-medium text-neutral-300">
+                              No accounts tracked
+                            </span>
+                            <span className="mt-1 text-xs text-neutral-500">
+                              Track crypto Twitter accounts to catch alpha
                             </span>
                           </div>
                         ) : (
@@ -1974,14 +1988,23 @@ export default function TrackersPage() {
                       <>
                         {loadingTwitterFeed ? (
                           <div className="flex h-full flex-col items-center justify-center py-8 text-center">
-                            <span className="mb-4 text-neutral-400">
+                            <div className="mb-2 flex gap-1.5">
+                              <div className="h-1.5 w-1.5 animate-pulse rounded-full bg-neutral-500" />
+                              <div className="h-1.5 w-1.5 animate-pulse rounded-full bg-neutral-500 [animation-delay:150ms]" />
+                              <div className="h-1.5 w-1.5 animate-pulse rounded-full bg-neutral-500 [animation-delay:300ms]" />
+                            </div>
+                            <span className="text-xs text-neutral-500">
                               Loading feed...
                             </span>
                           </div>
                         ) : twitterFeed.length === 0 ? (
                           <div className="flex h-full flex-col items-center justify-center py-8 text-center">
-                            <span className="mb-4 text-neutral-400">
-                              No tweets found
+                            <FiMessageCircle className="mb-3 h-10 w-10 text-neutral-700" />
+                            <span className="text-sm font-medium text-neutral-300">
+                              No tweets yet
+                            </span>
+                            <span className="mt-1 text-xs text-neutral-500">
+                              Add accounts or check back later
                             </span>
                           </div>
                         ) : (
@@ -1989,23 +2012,23 @@ export default function TrackersPage() {
                             {twitterFeed.map((tweet) => (
                               <div
                                 key={tweet.id}
-                                className="rounded-lg border border-neutral-800/50 bg-neutral-900/30 p-3"
+                                className="rounded-xl border border-white/[0.06] bg-white/[0.02] p-3 transition-colors duration-200 hover:bg-white/[0.04]"
                               >
                                 <div className="mb-2 flex items-center gap-2">
                                   {tweet.authorProfileImage ? (
                                     <img
                                       src={tweet.authorProfileImage}
                                       alt={tweet.authorName}
-                                      className="h-8 w-8 rounded-full"
+                                      className="h-8 w-8 rounded-full ring-1 ring-white/10"
                                     />
                                   ) : (
-                                    <div className="flex h-8 w-8 items-center justify-center rounded-full bg-neutral-700 text-xs text-neutral-300">
+                                    <div className="flex h-8 w-8 items-center justify-center rounded-full bg-gradient-to-br from-neutral-700 to-neutral-800 text-xs text-neutral-300">
                                       {tweet.authorName.charAt(0).toUpperCase()}
                                     </div>
                                   )}
                                   <div className="min-w-0 flex-1">
                                     <div className="flex flex-wrap items-center gap-2">
-                                      <span className="font-medium text-neutral-200">
+                                      <span className="font-semibold text-neutral-100">
                                         {tweet.authorName}
                                       </span>
                                       <span className="text-xs text-neutral-400">
@@ -2029,7 +2052,7 @@ export default function TrackersPage() {
                                         key={idx}
                                         src={img}
                                         alt={`Tweet image ${idx + 1}`}
-                                        className="max-h-48 rounded-lg"
+                                        className="max-h-48 rounded-xl ring-1 ring-white/[0.06]"
                                       />
                                     ))}
                                   </div>
@@ -2062,6 +2085,8 @@ export default function TrackersPage() {
               )}
             </div>
           </div>
+            </div>{/* end rounded container */}
+          </div>{/* end outer padding wrapper */}
         </div>
       </div>
 

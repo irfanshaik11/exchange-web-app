@@ -71,7 +71,7 @@ const BalanceChart = ({
     if (active && payload && payload.length) {
       const data = payload[0].payload;
       return (
-        <div className="bg-[#1A1B23] border border-[#2A2B33] rounded-lg p-3 shadow-lg z-50 pointer-events-none" style={{
+        <div className="bg-black/90 backdrop-blur-xl border border-white/[0.06] rounded-lg p-3 shadow-lg z-50 pointer-events-none" style={{
           position: 'absolute',
           transform: 'translateY(-100%)',
           marginTop: '-10px'
@@ -125,20 +125,20 @@ const BalanceChart = ({
               <stop offset="95%" stopColor={strokeColor} stopOpacity={0} />
             </linearGradient>
           </defs>
-          <CartesianGrid strokeDasharray="3 3" stroke="#2A2B33" opacity={0.5} />
+          <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.06)" opacity={0.5} />
           <XAxis 
             dataKey="time" 
             stroke="#6B7280"
             fontSize={8}
             tick={{ fill: '#6B7280' }}
             interval={Math.floor(chartData.length / 5)}
-            tickLine={{ stroke: '#2A2B33' }}
+            tickLine={{ stroke: 'rgba(255,255,255,0.06)' }}
           />
           <YAxis 
             stroke="#6B7280"
             fontSize={8}
             tick={{ fill: '#6B7280' }}
-            tickLine={{ stroke: '#2A2B33' }}
+            tickLine={{ stroke: 'rgba(255,255,255,0.06)' }}
             domain={yDomain}
             allowDataOverflow={false}
             width={40}
@@ -163,7 +163,7 @@ const BalanceChart = ({
             activeDot={{ 
               r: 5, 
               fill: strokeColor,
-              stroke: '#1A1B23',
+              stroke: 'rgba(0,0,0,0.8)',
               strokeWidth: 2
             }}
             animationDuration={300}
@@ -2732,9 +2732,20 @@ export default function PortfolioPage() {
       <Head>
         <title>Portfolio | Interstate Memeboard</title>
       </Head>
-      <div className="min-h-screen bg-[#050608] text-[#E6E7EA]">
-        <Header />
-        <div className="px-3 sm:px-4 md:px-6 pt-4 sm:pt-6">
+      <div className="flex min-h-screen flex-col bg-[#050608] text-[#E6E7EA]">
+        <div className="relative z-10"><Header /></div>
+        <div className="p-1 sm:p-1.5">
+          <div className="relative overflow-hidden rounded-2xl border border-white/[0.06] min-h-[calc(100vh-80px)]">
+            {/* Background Image with multi-layer fade */}
+            <div className="pointer-events-none absolute inset-0 overflow-hidden rounded-2xl">
+              <div className="absolute inset-x-0 top-0 h-[80vh] bg-cover bg-top bg-no-repeat" style={{ backgroundImage: 'url(/ranks/Background2.png)' }} />
+              <div className="absolute inset-0 bg-black/30" />
+              <div className="absolute inset-0" style={{ background: 'linear-gradient(to bottom, transparent 0%, transparent 20%, rgba(0,0,0,0.1) 30%, rgba(0,0,0,0.3) 45%, rgba(0,0,0,0.6) 60%, rgba(0,0,0,0.85) 75%, black 90%)' }} />
+              <div className="absolute inset-x-0 top-1/4 bottom-0" style={{ background: 'linear-gradient(to bottom, transparent 0%, rgba(0,0,0,0.2) 25%, rgba(0,0,0,0.5) 50%, rgba(0,0,0,0.8) 75%, black 100%)' }} />
+              <div className="absolute inset-0 bg-gradient-to-r from-black/20 via-transparent to-black/20" />
+            </div>
+            {/* Content */}
+            <div className="relative z-10 px-3 sm:px-4 md:px-6 pt-4 sm:pt-6 pb-6">
 
           {/* Section Tabs */}
           <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-4 px-2 gap-3 sm:gap-0">
@@ -2886,7 +2897,7 @@ export default function PortfolioPage() {
               {/* Top Panels */}
               <div className={`grid gap-4 sm:gap-6 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 ${initialNativeBalanceRef.current !== null ? 'xl:grid-cols-4' : 'xl:grid-cols-3'}`}>
                 {/* Balance */}
-                <div className="bg-[#101114] rounded-lg p-4 sm:p-6">
+                <div className="rounded-xl border border-white/[0.08] bg-white/[0.05] p-4 sm:p-6 backdrop-blur-xl">
                   <div className="mb-3 sm:mb-4 text-[#f0f5f5] text-xs sm:text-sm font-medium cursor-pointer hover:text-[#70E0B0] transition-colors">
                     Balance
                   </div>
@@ -2935,7 +2946,7 @@ export default function PortfolioPage() {
                 </div>
 
                 {/* Total PNL - Commented out */}
-                {/* <div className="bg-[#101114] rounded-lg p-6">
+                {/* <div className="rounded-xl border border-white/[0.08] bg-white/[0.05] p-6 backdrop-blur-xl">
                   <div className="mb-4 text-[#f0f5f5] text-sm font-medium cursor-pointer hover:text-[#70E0B0] transition-colors">
                     Total PNL
                   </div>
@@ -2977,7 +2988,7 @@ export default function PortfolioPage() {
 
                 {/* Wallet Balance Change */}
                 {initialNativeBalanceRef.current !== null && (
-                  <div className="bg-[#101114] rounded-lg p-4 sm:p-6">
+                  <div className="rounded-xl border border-white/[0.08] bg-white/[0.05] p-4 sm:p-6 backdrop-blur-xl">
                     <div className="mb-3 sm:mb-4 text-[#f0f5f5] text-xs sm:text-sm font-medium cursor-pointer hover:text-[#70E0B0] transition-colors">
                       Wallet Balance Change ({currentChain === "monad" ? "MON" : "SOL"})
                     </div>
@@ -3038,7 +3049,7 @@ export default function PortfolioPage() {
                 )}
 
                 {/* Realized PNL */}
-                <div className="bg-[#101114] rounded-lg p-4 sm:p-6">
+                <div className="rounded-xl border border-white/[0.08] bg-white/[0.05] p-4 sm:p-6 backdrop-blur-xl">
                   <div className="mb-3 sm:mb-4 flex items-center justify-between">
                     <div className="text-[#f0f5f5] text-xs sm:text-sm font-medium cursor-pointer hover:text-[#70E0B0] transition-colors flex items-center gap-2">
                       Realized PNL
@@ -3097,7 +3108,7 @@ export default function PortfolioPage() {
                           y1="40"
                           x2="300"
                           y2="40"
-                          stroke="#2A2B33"
+                          stroke="rgba(255,255,255,0.06)"
                           strokeWidth="1"
                         />
 
@@ -3207,7 +3218,7 @@ export default function PortfolioPage() {
                 </div>
 
                 {/* Performance */}
-                <div className="bg-[#101114] rounded-lg p-4 sm:p-6">
+                <div className="rounded-xl border border-white/[0.08] bg-white/[0.05] p-4 sm:p-6 backdrop-blur-xl">
                   <div className="mb-3 sm:mb-4 flex items-center justify-between">
                     <div className="text-[#f0f5f5] text-xs sm:text-sm font-medium cursor-pointer hover:text-[#70E0B0] transition-colors">
                       Performance
@@ -3361,17 +3372,17 @@ export default function PortfolioPage() {
               </div>
 
               {/* Positions Table Section  */}
-              <div className="bg-[#101114] rounded-lg overflow-hidden">
+              <div className="rounded-xl border border-white/[0.08] bg-white/[0.05] overflow-hidden backdrop-blur-xl" style={{ boxShadow: '0 8px 32px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.06)' }}>
                 {/* Sub-navigation tabs with controls */}
-                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between border-b border-[#2A2B33] gap-3 sm:gap-0 p-3 sm:p-0">
+                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between border-b border-white/[0.06] gap-3 sm:gap-0 p-3 sm:p-0">
                   <div className="flex flex-wrap">
                     {spotTabs.map((tab, i) => (
                       <button
                         key={tab}
                         className={`px-2 sm:px-3 py-2 text-xs font-medium transition-colors cursor-pointer ${
                           activeSpotTab === i
-                            ? "text-[#f0f5f5] border-b-2 border-[#70E0B0]"
-                            : "text-[#9CA3AF] hover:text-[#f0f5f5]"
+                            ? "text-white font-semibold border border-white/[0.08] bg-white/[0.07] rounded-lg"
+                            : "text-neutral-400 font-medium border border-transparent hover:bg-white/[0.04] hover:text-neutral-200 rounded-lg"
                         }`}
                         onClick={() => setActiveSpotTab(i)}
                       >
@@ -3381,7 +3392,7 @@ export default function PortfolioPage() {
                   </div>
 
                   <div className="flex flex-wrap items-center gap-2 sm:gap-4 w-full sm:w-auto">
-                    <div className="flex items-center gap-2 px-2 sm:px-3 py-1.5 rounded-full bg-[#17191E] border border-[#2A2B33] hover:border-[#374151] transition-colors flex-1 sm:flex-initial min-w-[200px] sm:min-w-0">
+                    <div className="flex items-center gap-2 px-2 sm:px-3 py-1.5 rounded-full bg-white/[0.03] border border-white/[0.06] hover:border-white/[0.1] transition-colors flex-1 sm:flex-initial min-w-[200px] sm:min-w-0">
                       <FaSearch className="text-[#9CA3AF] text-xs flex-shrink-0" />
                       <input
                         type="text"
@@ -3418,8 +3429,8 @@ export default function PortfolioPage() {
                       onClick={() => setShowHidden(!showHidden)}
                       className={`flex items-center gap-1 px-2 py-1 rounded-lg transition-all duration-200 cursor-pointer text-xs whitespace-nowrap ${
                         !showHidden
-                          ? "bg-[#2A2B33] text-[#70E0B0]"
-                          : "bg-transparent hover:bg-[#2A2B33] text-[#9CA3AF] hover:text-[#f0f5f5]"
+                          ? "bg-white/[0.07] text-[#70E0B0]"
+                          : "bg-transparent hover:bg-white/[0.05] text-[#9CA3AF] hover:text-[#f0f5f5]"
                       }`}
                     >
                       <svg
@@ -3576,13 +3587,13 @@ export default function PortfolioPage() {
 
           {/* Wallet Section */}
           {activeSection === "wallet" && (
-            <div className="bg-[#101114] rounded-lg overflow-hidden">
+            <div className="rounded-xl border border-white/[0.08] bg-white/[0.05] overflow-hidden backdrop-blur-xl" style={{ boxShadow: '0 8px 32px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.06)' }}>
               {/* Header Row  */}
-              <div className="border-b border-[#2A2B33]">
+              <div className="border-b border-white/[0.06]">
                 {/* Left Panel Header */}
                 <div className="px-3 sm:px-4 py-3">
                   <div className="flex flex-col sm:flex-row justify-between gap-3 sm:gap-2">
-                    <div className="flex items-center px-2 sm:px-3 py-1 rounded-full bg-[#17191E] border border-[#2A2B33] w-full sm:w-48">
+                    <div className="flex items-center px-2 sm:px-3 py-1 rounded-full bg-white/[0.03] border border-white/[0.06] w-full sm:w-48">
                       <FaSearch className="text-[#9CA3AF] text-xs mr-2 flex-shrink-0" />
                       <input
                         type="text"
@@ -3636,7 +3647,7 @@ export default function PortfolioPage() {
                     {(currentChain === "sol" || currentChain === "monad") && (
                       <div className="flex flex-wrap gap-2">
                         <button
-                          className="px-2 sm:px-3 py-1 rounded-full bg-[#374151] text-xs text-[#f0f5f5] hover:bg-[#4B5563] transition-colors cursor-pointer whitespace-nowrap"
+                          className="px-2 sm:px-3 py-1 rounded-full border border-white/[0.06] bg-white/[0.03] text-xs text-neutral-200 hover:bg-white/[0.07] hover:border-white/[0.1] transition-colors cursor-pointer whitespace-nowrap"
                           onClick={() => {
                             if (currentChain === "sol") {
                               if (isAllSolSelected) clearSelectedWallets("sol");
@@ -3650,13 +3661,13 @@ export default function PortfolioPage() {
                           {(currentChain === "sol" ? isAllSolSelected : isAllMonSelected) ? "Unselect all" : "Select all"}
                         </button>
                         <button
-                          className="px-2 sm:px-3 py-1 rounded-full bg-[#374151] text-xs text-[#f0f5f5] hover:bg-[#4B5563] transition-colors cursor-pointer whitespace-nowrap"
+                          className="px-2 sm:px-3 py-1 rounded-full border border-white/[0.06] bg-white/[0.03] text-xs text-neutral-200 hover:bg-white/[0.07] hover:border-white/[0.1] transition-colors cursor-pointer whitespace-nowrap"
                           onClick={() => selectWalletsWithFunds(currentChain as "sol" | "monad")}
                         >
                           Select with funds
                         </button>
                         <button
-                          className="px-2 sm:px-3 py-1 rounded-full bg-[#374151] text-xs text-[#f0f5f5] hover:bg-[#4B5563] transition-colors cursor-pointer whitespace-nowrap flex items-center gap-1 disabled:opacity-60"
+                          className="px-2 sm:px-3 py-1 rounded-full border border-white/[0.06] bg-white/[0.03] text-xs text-neutral-200 hover:bg-white/[0.07] hover:border-white/[0.1] transition-colors cursor-pointer whitespace-nowrap flex items-center gap-1 disabled:opacity-60"
                           disabled={redistributing}
                           onClick={() => handleRedistributeFunds("consolidate")}
                           title="Move all selected funds to the primary wallet"
@@ -3666,7 +3677,7 @@ export default function PortfolioPage() {
                           <span className="sm:hidden">{redistributing ? "..." : "Consolidate"}</span>
                         </button>
                         <button
-                          className="px-2 sm:px-3 py-1 rounded-full bg-[#374151] text-xs text-[#f0f5f5] hover:bg-[#4B5563] transition-colors cursor-pointer whitespace-nowrap flex items-center gap-1 disabled:opacity-60"
+                          className="px-2 sm:px-3 py-1 rounded-full border border-white/[0.06] bg-white/[0.03] text-xs text-neutral-200 hover:bg-white/[0.07] hover:border-white/[0.1] transition-colors cursor-pointer whitespace-nowrap flex items-center gap-1 disabled:opacity-60"
                           disabled={redistributing}
                           onClick={() => handleRedistributeFunds("split")}
                           title="Split selected balance equally across wallets"
@@ -3680,7 +3691,7 @@ export default function PortfolioPage() {
                     <div className="relative">
                       <button
                         onClick={() => setShowImportDropdown(!showImportDropdown)}
-                        className="px-2 sm:px-3 py-1 rounded-full bg-[#374151] text-xs text-[#f0f5f5] hover:bg-[#4B5563] transition-colors cursor-pointer whitespace-nowrap"
+                        className="px-2 sm:px-3 py-1 rounded-full border border-white/[0.06] bg-white/[0.03] text-xs text-neutral-200 hover:bg-white/[0.07] hover:border-white/[0.1] transition-colors cursor-pointer whitespace-nowrap"
                       >
                         Import ▾
                       </button>
@@ -3690,13 +3701,13 @@ export default function PortfolioPage() {
                             className="fixed inset-0 z-10"
                             onClick={() => setShowImportDropdown(false)}
                           />
-                          <div className="absolute top-full mt-1 right-0 bg-[#1A1B23] border border-[#2A2B33] rounded-lg shadow-lg z-20 min-w-[200px]">
+                          <div className="absolute top-full mt-1 right-0 bg-black/90 backdrop-blur-xl border border-white/[0.06] rounded-lg shadow-lg z-20 min-w-[200px]">
                             <button
                               onClick={() => {
                                 setShowImportSolanaModal(true);
                                 setShowImportDropdown(false);
                               }}
-                              className="w-full px-4 py-2 text-left text-sm text-[#f0f5f5] hover:bg-[#2A2B33] transition-colors first:rounded-t-lg flex items-center gap-2"
+                              className="w-full px-4 py-2 text-left text-sm text-[#f0f5f5] hover:bg-white/[0.05] transition-colors first:rounded-t-lg flex items-center gap-2"
                             >
                               <SolanaIcon size={16} />
                               Import Solana Wallet
@@ -3706,7 +3717,7 @@ export default function PortfolioPage() {
                                 setShowImportEvmModal(true);
                                 setShowImportDropdown(false);
                               }}
-                              className="w-full px-4 py-2 text-left text-sm text-[#f0f5f5] hover:bg-[#2A2B33] transition-colors last:rounded-b-lg flex items-center gap-2"
+                              className="w-full px-4 py-2 text-left text-sm text-[#f0f5f5] hover:bg-white/[0.05] transition-colors last:rounded-b-lg flex items-center gap-2"
                             >
                               <img
                                 src="./monad_icon.png"
@@ -3725,7 +3736,7 @@ export default function PortfolioPage() {
                     disabled={creatingWallet || !user}
                     className={`px-2 sm:px-3 py-1 rounded-full text-xs whitespace-nowrap transition-colors cursor-pointer
                       ${creatingWallet || !user
-                        ? "bg-[#374151] text-[#9CA3AF] cursor-not-allowed" : "bg-[#70E0B0] text-[#1A1A1A] hover:bg-[#58B890]"
+                        ? "bg-white/[0.04] text-neutral-500 cursor-not-allowed" : "bg-[#70E0B0] text-[#1A1A1A] hover:brightness-90"
 }`}
           >
                   {creatingWallet ? "Creating..." : "Create Wallet"}
@@ -3735,13 +3746,13 @@ export default function PortfolioPage() {
                 </div>
 
                 {/* Right Panel Header */}
-                {/* <div className="px-2 py-4 border-l border-[#2A2B33]">
+                {/* <div className="px-2 py-4 border-l border-white/[0.06]">
                   <h3 className="text-[#f0f5f5] font-medium text-sm">Source wallets</h3>
                 </div> */}
               </div>
 
               {/* Table Headers Row - Spans Both Panels */}
-              <div className="border-b border-[#2A2B33]">
+              <div className="border-b border-white/[0.06]">
                 <div className="py-2 -mx-3 sm:-mx-4 px-3 sm:px-4">
                   <div className="hidden sm:grid grid-cols-[2fr_1fr_1fr_1.2fr] gap-2 text-xs text-[#9CA3AF]">
                     <div className="font-medium truncate">Wallet</div>
@@ -3750,7 +3761,7 @@ export default function PortfolioPage() {
                         Balance ({currentChain === "monad" ? "MON" : "SOL"})
                       </span>
                       <button
-                        className="flex items-center justify-center rounded-full border border-[#2A2B33] p-1 text-[10px] hover:border-[#4B5563] transition disabled:opacity-50"
+                        className="flex items-center justify-center rounded-full border border-white/[0.06] p-1 text-[10px] hover:border-white/[0.1] transition disabled:opacity-50"
                         title="Refresh balances"
                         onClick={() => refreshBalancesForCurrentChain()}
                         disabled={refreshingBalances}
@@ -3765,7 +3776,7 @@ export default function PortfolioPage() {
                     <div className="font-medium truncate text-center">Actions</div>
                   </div>
                 </div>
-                {/* <div className="px-4 py-2 border-l border-[#2A2B33]">
+                {/* <div className="px-4 py-2 border-l border-white/[0.06]">
                   <div className="grid grid-cols-4 gap-2 text-xs text-[#9CA3AF]">
                     <div className="font-medium truncate">Wallet</div>
                     <div className="font-medium truncate">
@@ -3820,7 +3831,7 @@ export default function PortfolioPage() {
                           return (
                             <div
                               key={wallet.id}
-                              className="group border-b border-[#2A2B33] hover:bg-[#17191E] transition-colors -mx-3 sm:-mx-4 px-3 sm:px-4"
+                              className="group border-b border-white/[0.06] hover:bg-white/[0.03] transition-colors -mx-3 sm:-mx-4 px-3 sm:px-4"
                               style={{ backgroundColor: rowBackground }}
                             >
                               <div className="flex flex-col sm:grid sm:grid-cols-[2fr_1fr_1fr_1.2fr] gap-3 sm:gap-2 items-start sm:items-center py-3">
@@ -3829,7 +3840,7 @@ export default function PortfolioPage() {
                                   <div
                                     className="relative flex-shrink-0 w-5 h-5 rounded border-2 flex items-center justify-center transition-all cursor-pointer"
                                     style={{
-                                      borderColor: wallet.isPrimary ? "#FF6B35" : isSelected ? "#2563EB" : "#2A2B33",
+                                      borderColor: wallet.isPrimary ? "#FF6B35" : isSelected ? "#2563EB" : "rgba(255,255,255,0.06)",
                                       boxShadow: isSelected ? "0 0 0 1px #2563EB" : "none",
                                       backgroundColor: wallet.isPrimary ? "#FF6B3522" : isSelected ? "#2563EB20" : "transparent",
                                     }}
@@ -3874,7 +3885,7 @@ export default function PortfolioPage() {
                                     {editingWalletId === wallet.id ? (
                                       <>
                                         <input
-                                          className="bg-[#0f1014] border border-[#2A2B33] rounded px-2 py-1 text-xs text-[#f0f5f5] focus:outline-none focus:ring-1 focus:ring-[#70E0B0]"
+                                          className="bg-white/[0.03] border border-white/[0.06] rounded px-2 py-1 text-xs text-[#f0f5f5] focus:outline-none focus:ring-1 focus:ring-[#70E0B0]"
                                           value={walletRenameValue}
                                           onChange={(e) => setWalletRenameValue(e.target.value)}
                                           onKeyDown={(e) => {
@@ -4040,7 +4051,7 @@ export default function PortfolioPage() {
                                     <FaTrash size={12} />
                                   </button>
                                   <button
-                                    className="px-2 sm:px-3 py-1 rounded-full bg-[#374151] text-xs text-[#f0f5f5] hover:bg-[#4B5563] transition-colors cursor-pointer whitespace-nowrap"
+                                    className="px-2 sm:px-3 py-1 rounded-full border border-white/[0.06] bg-white/[0.03] text-xs text-neutral-200 hover:bg-white/[0.07] hover:border-white/[0.1] transition-colors cursor-pointer whitespace-nowrap"
                                     onClick={(e) => {
                                       e.stopPropagation();
                                       handleExportWallet(wallet.id);
@@ -4062,7 +4073,7 @@ export default function PortfolioPage() {
                 </div>
 
                 {/* Right Panel Content - Source wallets and Destination sections commented out */}
-                {/* <div className="py-3 border-l border-[#2A2B33]">
+                {/* <div className="py-3 border-l border-white/[0.06]">
                   <div className="min-h-[150px] flex flex-col items-center justify-center">
                     <div className="flex flex-col items-center gap-3 text-[#9CA3AF]">
                       <svg
@@ -4080,13 +4091,13 @@ export default function PortfolioPage() {
                   </div>
 
                   Destination Section
-                  <div className="px-4 py-2 border-t border-[#2A2B33] flex items-center justify-between">
+                  <div className="px-4 py-2 border-t border-white/[0.06] flex items-center justify-between">
                     <h3 className="text-[#f0f5f5] font-medium text-sm">Destination</h3>
-                    <button className="px-3 py-1 rounded-full bg-[#70E0B0] text-xs text-[#1A1A1A] hover:bg-[#58B890] transition-colors cursor-pointer">
+                    <button className="px-3 py-1 rounded-full bg-[#70E0B0] text-xs text-[#1A1A1A] hover:brightness-90 transition-colors cursor-pointer">
                       Start Transfer
                     </button>
                   </div>
-                  <div className="border-b border-[#2A2B33]"></div>
+                  <div className="border-b border-white/[0.06]"></div>
                   <div className="grid grid-cols-4 gap-2 px-4 py-1 text-sm text-[#9CA3AF]">
                     <div className="font-medium truncate">Wallet</div>
                     <div className="font-medium truncate">Balance</div>
@@ -4115,7 +4126,7 @@ export default function PortfolioPage() {
                       key={period}
                       className={`px-3 py-1 text-sm transition-colors cursor-pointer ${
                         period === "Max"
-                          ? "text-[#70E0B0] bg-[#70E0B0]/10 rounded"
+                          ? "text-white font-semibold bg-white/[0.07] border border-white/[0.08] rounded-lg"
                           : "text-[#9CA3AF] hover:text-[#f0f5f5]"
                       }`}
                     >
@@ -4128,7 +4139,7 @@ export default function PortfolioPage() {
               {/* Performance Metrics and PNL Chart */}
               <div className="grid grid-cols-2 gap-6">
                 {/* Left Panel - Performance Metrics */}
-                <div className="bg-[#101114] rounded-lg p-6">
+                <div className="rounded-xl border border-white/[0.08] bg-white/[0.05] p-6 backdrop-blur-xl">
                   <h3 className="text-[#f0f5f5] font-medium text-lg mb-4">Performance</h3>
                   <div className="grid grid-cols-2 gap-4">
                     <div>
@@ -4156,11 +4167,11 @@ export default function PortfolioPage() {
                 </div>
 
                 {/* Right Panel - PNL Chart */}
-                <div className="bg-[#101114] rounded-lg p-6">
+                <div className="rounded-xl border border-white/[0.08] bg-white/[0.05] p-6 backdrop-blur-xl">
                   <h3 className="text-[#f0f5f5] font-medium text-lg mb-4">PNL</h3>
                   <div className="h-48 flex items-center justify-center relative">
                     {/* Simple chart representation */}
-                    <div className="w-full h-24 border-b border-[#2A2B33] relative">
+                    <div className="w-full h-24 border-b border-white/[0.06] relative">
                       <div className="absolute inset-0 flex items-center justify-center">
                         <div className="w-full h-px bg-[#70E0B0]"></div>
                       </div>
@@ -4174,14 +4185,14 @@ export default function PortfolioPage() {
               </div>
 
               {/* Positions Table */}
-              <div className="bg-[#101114] rounded-lg overflow-hidden">
+              <div className="rounded-xl border border-white/[0.08] bg-white/[0.05] overflow-hidden backdrop-blur-xl">
                 {/* Tabs */}
-                <div className="flex border-b border-[#2A2B33]">
+                <div className="flex border-b border-white/[0.06]">
                   <button
                     className={`px-3 py-2 text-xs font-medium transition-colors cursor-pointer ${
                       activePerpetualsTab === 0
-                        ? "text-[#f0f5f5] border-b-2 border-[#70E0B0]"
-                        : "text-[#9CA3AF] hover:text-[#f0f5f5]"
+                        ? "text-white font-semibold border border-white/[0.08] bg-white/[0.07] rounded-lg"
+                        : "text-neutral-400 font-medium border border-transparent hover:bg-white/[0.04] hover:text-neutral-200 rounded-lg"
                     }`}
                     onClick={() => setActivePerpetualsTab(0)}
                   >
@@ -4190,8 +4201,8 @@ export default function PortfolioPage() {
                   <button
                     className={`px-3 py-2 text-xs font-medium transition-colors cursor-pointer ${
                       activePerpetualsTab === 1
-                        ? "text-[#f0f5f5] border-b-2 border-[#70E0B0]"
-                        : "text-[#9CA3AF] hover:text-[#f0f5f5]"
+                        ? "text-white font-semibold border border-white/[0.08] bg-white/[0.07] rounded-lg"
+                        : "text-neutral-400 font-medium border border-transparent hover:bg-white/[0.04] hover:text-neutral-200 rounded-lg"
                     }`}
                     onClick={() => setActivePerpetualsTab(1)}
                   >
@@ -4200,7 +4211,7 @@ export default function PortfolioPage() {
                 </div>
 
                 {/* Table Headers */}
-                <div className="grid grid-cols-9 gap-4 px-6 py-1 text-xs text-[#9CA3AF] border-b border-[#2A2B33]">
+                <div className="grid grid-cols-9 gap-4 px-6 py-1 text-xs text-[#9CA3AF] border-b border-white/[0.06]">
                   <div className="font-medium flex items-center gap-1">
                     Token ↑
                   </div>
@@ -4237,6 +4248,8 @@ export default function PortfolioPage() {
               </div>
             </div>
           )}
+            </div>
+          </div>
         </div>
       </div>
       <Footer />
@@ -4277,7 +4290,7 @@ export default function PortfolioPage() {
       {/* Delete Wallet Confirmation */}
       {deleteModalOpen && deleteTarget && (
         <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/70 px-3 sm:px-4">
-          <div className="w-full max-w-md rounded-xl border border-[#2A2B33] bg-[#101114] p-4 sm:p-5 shadow-2xl mx-3 sm:mx-0">
+          <div className="w-full max-w-md rounded-xl border border-white/[0.08] bg-white/[0.05] backdrop-blur-xl p-4 sm:p-5 shadow-2xl mx-3 sm:mx-0">
             <div className="mb-3 flex items-center gap-2 text-[#f0f5f5]">
               <span className="text-lg">⚠️ Deletion Reminder</span>
             </div>
@@ -4302,7 +4315,7 @@ export default function PortfolioPage() {
                   setDeleteModalOpen(false);
                   setDeleteTarget(null);
                 }}
-                className="rounded-md border border-[#2A2B33] px-4 py-2 text-sm text-[#c7c9d1] hover:border-[#4B5563]"
+                className="rounded-md border border-white/[0.06] px-4 py-2 text-sm text-[#c7c9d1] hover:border-white/[0.1]"
               >
                 Cancel
               </button>

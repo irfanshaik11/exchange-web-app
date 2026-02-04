@@ -31,7 +31,7 @@ import toast from "react-hot-toast";
 import { executeSolanaMultiBuy, buildSolanaWalletAllocations } from "~/utils/solanaWalletAllocation";
 import { getPoolTypeFromToken } from "~/utils/poolTypeDetection";
 import { fetchVerifiedPairAddress } from "~/hooks/useSingleTokenPolling";
-import { useQueryNewPairs } from '../hooks/useQueryTokens';
+import { useQueryNewPairs, useQueryLaunchpadData } from '../hooks/useQueryTokens';
 
 const WRAPPED_SOL_MINT = SOL_MINT_ADDRESS;
 
@@ -185,9 +185,10 @@ export default function DiscoverPage() {
   const { presets, activePreset, setActivePreset } = useQuickBuy();
   const { user, solBalance, refreshBalance, walletList, walletBalances, selectedWalletIds } = useUser();
 
-  // Use same React Query hook as pulse page for independent new pairs data
+  // Use same React Query hooks as pulse page for independent new pairs data
   const isSolanaChain = currentChain === 'sol';
   const { data: reactQueryNewPairs = [] } = useQueryNewPairs(isSolanaChain);
+  const { data: launchpadData = { new: [], completing: [], completed: [] } } = useQueryLaunchpadData(isSolanaChain);
 
   // Load quickBuyAmount from localStorage with fallback
   const getInitialQuickBuyAmount = () => {
@@ -829,6 +830,28 @@ export default function DiscoverPage() {
     });
   }, [isSolanaChain, reactQueryNewPairs]);
 
+  // Merge launchpad "new" tokens into new pairs (same data source pulse page uses)
+  // This supplements the pulse-new endpoint with tokens from the launchpad endpoint
+  useEffect(() => {
+    if (!isSolanaChain) return;
+    const launchpadNew = launchpadData?.new;
+    if (!launchpadNew || launchpadNew.length === 0) return;
+
+    setNewPairsRawByChain((prev) => {
+      const existing = prev['sol'] || [];
+      // Merge launchpad tokens that aren't already in the list
+      const existingMints = new Set(existing.map((t: any) => (t.mint || '').toLowerCase()).filter(Boolean));
+      const newFromLaunchpad = launchpadNew.filter((t: any) => {
+        const mint = (t.mint || t.mint_address || '').toLowerCase();
+        return mint && !existingMints.has(mint);
+      }) as TokenWithDexPaid[];
+
+      if (newFromLaunchpad.length === 0) return prev;
+      console.log(`[Discover] Merging ${newFromLaunchpad.length} launchpad tokens into new pairs`);
+      return { ...prev, sol: [...existing, ...newFromLaunchpad] };
+    });
+  }, [isSolanaChain, launchpadData?.new]);
+
   useEffect(() => {
     let cancelled = false;
     let intervalId: ReturnType<typeof setInterval> | null = null;
@@ -1004,75 +1027,62 @@ export default function DiscoverPage() {
         const chainToUse = currentChain || (router.query.chain as string) || 'sol';
         let apiUrl: string;
         
+        // Fetch from multiple pulse endpoints in parallel to get more tokens
+        // pulse-new: brand new tokens, pulse-final-stretch: tokens nearing graduation, pulse-migrated: graduated tokens
+        const fetchUrls: string[] = [];
         if (chainToUse === 'monad') {
-          // Use Next.js API route which proxies to Monad service server-side (avoids CORS)
-          apiUrl = `/api/token-service/pulse-new-monad?limit=200&fresh=1`;
-          console.log('[Discover] Fetching Monad new pairs via API route:', apiUrl);
+          fetchUrls.push(`/api/token-service/pulse-new-monad?limit=500&fresh=1`);
+          console.log('[Discover] Fetching Monad new pairs via API route');
         } else {
-          // Use Next.js API route for Solana (which proxies to exchange-token-service)
-          apiUrl = `/api/token-service/pulse-new?limit=200&fresh=1`;
-          console.log('[Discover] Fetching Solana new pairs from:', apiUrl);
-        }
-        
-        const response = await fetch(apiUrl, {
-          headers: {
-            'Cache-Control': 'no-cache',
-            Pragma: 'no-cache',
-            'Accept': 'application/json',
-          },
-        });
-
-        if (!response.ok) {
-          const errorText = await response.text();
-          console.error(`[Discover] API error for ${currentChain} new pairs:`, {
-            status: response.status,
-            statusText: response.statusText,
-            error: errorText
-          });
-          throw new Error(`Request failed with status ${response.status}: ${errorText.substring(0, 100)}`);
+          fetchUrls.push(`/api/token-service/pulse-new?limit=500&fresh=1`);
+          fetchUrls.push(`/api/token-service/pulse-final-stretch?limit=100&fresh=1`);
+          fetchUrls.push(`/api/token-service/pulse-migrated?limit=100&fresh=1`);
+          console.log('[Discover] Fetching Solana new pairs from 3 pulse endpoints');
         }
 
-        const payload = await response.json();
-        
-        // Check if response is an error object
-        if (payload?.error) {
-          console.error(`[Discover] API returned error object for ${currentChain} new pairs:`, payload.error);
-          throw new Error(payload.error);
-        }
-        if (cancelled) {
-          return;
-        }
+        const fetchHeaders = {
+          'Cache-Control': 'no-cache',
+          Pragma: 'no-cache',
+          'Accept': 'application/json',
+        };
 
-        // Handle multiple response formats:
-        // 1. Direct array (Solana pulse-new)
-        // 2. Birdeye format: {data: {tokens: [...]}}
-        // 3. Monad format: {status, count, data: [...]} or just array
+        const responses = await Promise.allSettled(
+          fetchUrls.map(url => fetch(url, { headers: fetchHeaders }))
+        );
+
+        if (cancelled) return;
+
+        // Parse all successful responses and merge tokens
         let tokensArray: any[] = [];
-        if (Array.isArray(payload)) {
-          tokensArray = payload;
-        } else if (payload?.data) {
-          // Handle both Birdeye format and Monad format
-          if (Array.isArray(payload.data)) {
-            // Monad format: {status, count, data: [...]}
-            tokensArray = payload.data;
-          } else if (payload.data?.tokens && Array.isArray(payload.data.tokens)) {
-            // Birdeye format: {data: {tokens: [...]}}
-            tokensArray = payload.data.tokens;
+        for (const result of responses) {
+          if (result.status !== 'fulfilled' || !result.value.ok) continue;
+          try {
+            const payload = await result.value.json();
+            if (payload?.error) continue;
+            let arr: any[] = [];
+            if (Array.isArray(payload)) {
+              arr = payload;
+            } else if (payload?.data) {
+              if (Array.isArray(payload.data)) {
+                arr = payload.data;
+              } else if (payload.data?.tokens && Array.isArray(payload.data.tokens)) {
+                arr = payload.data.tokens;
+              }
+            }
+            tokensArray = tokensArray.concat(arr);
+          } catch {
+            // Skip malformed responses
           }
         }
         
-        // Log response for debugging
         if (!tokensArray || tokensArray.length === 0) {
           console.warn('[Discover] No tokens found in response:', {
             chain: currentChain,
-            payloadType: Array.isArray(payload) ? 'array' : typeof payload,
-            payloadKeys: Array.isArray(payload) ? 'N/A' : Object.keys(payload || {}),
-            hasData: !!(payload as any)?.data,
-            dataType: Array.isArray((payload as any)?.data) ? 'array' : typeof (payload as any)?.data,
-            dataKeys: (payload as any)?.data && !Array.isArray((payload as any)?.data) ? Object.keys((payload as any).data || {}) : 'N/A'
+            responseCount: responses.length,
+            fulfilledCount: responses.filter(r => r.status === 'fulfilled').length,
           });
         }
-        
+
         if (!tokensArray || tokensArray.length === 0) {
           // Don't clear existing data if refresh returns empty - preserve what we have
           console.log('[Discover] Empty tokens array in response, preserving existing data if available');
@@ -3154,7 +3164,7 @@ export default function DiscoverPage() {
             const bMc = Number((b as any).fully_diluted_value || (b as any).market_cap_usd || 0);
             return bMc - aMc;
           })
-          .slice(0, 10) // Take top 10 from new pairs
+          .slice(0, 50) // Take top 50 from new pairs to supplement trending
           .map((token: any) => {
             // Remove the sortVolume property we added
             const { sortVolume, ...rest } = token;
@@ -3167,7 +3177,7 @@ export default function DiscoverPage() {
           if (mint && !seenMints.has(mint)) {
             seenMints.add(mint);
             uniqueSafe.push(token);
-            if (uniqueSafe.length >= 20) break; // Cap at 20 total tokens
+            if (uniqueSafe.length >= 100) break; // Cap at 100 total tokens
           }
         }
         
@@ -3221,9 +3231,9 @@ export default function DiscoverPage() {
       
       setDisplayed(finalDisplayList);
     } else if (activeTab === "dex") {
-      // dex tab → show limited slice
+      // dex tab → show all filtered tokens
       const safe = filteredTokens.filter(t => t && t.mint && !isWrappedSol(t));
-      setDisplayed(safe.slice(0, 10));
+      setDisplayed(safe);
     } else {
       setDisplayed([]);
     }
@@ -3630,8 +3640,8 @@ export default function DiscoverPage() {
         />
       </Head>
 
-      <div className="relative min-h-screen bg-[#111214] text-[#E6E7EA]">
-        {/* Header */}
+      <div className="relative min-h-screen bg-[#050608] text-[#E6E7EA]">
+        {/* Header stays outside the rounded container */}
         <div className="relative z-[100]">
           <Header
             search={search}
@@ -3640,8 +3650,34 @@ export default function DiscoverPage() {
           />
         </div>
 
+        {/* Outer padding wrapper */}
+        <div className="p-1 sm:p-1.5">
+          {/* Rounded container with background */}
+          <div className="relative overflow-hidden rounded-2xl border border-white/[0.06] h-[calc(100vh-80px)] flex flex-col">
+            {/* Background image inside the container */}
+            <div className="pointer-events-none absolute inset-0 overflow-hidden rounded-2xl">
+              <div
+                className="absolute inset-x-0 top-0 h-[80vh] bg-cover bg-top bg-no-repeat"
+                style={{ backgroundImage: 'url(/ranks/Background2.png)' }}
+              />
+              <div className="absolute inset-0 bg-black/30" />
+              <div
+                className="absolute inset-0"
+                style={{
+                  background: 'linear-gradient(to bottom, transparent 0%, transparent 20%, rgba(0,0,0,0.1) 30%, rgba(0,0,0,0.3) 45%, rgba(0,0,0,0.6) 60%, rgba(0,0,0,0.85) 75%, black 90%)'
+                }}
+              />
+              <div
+                className="absolute inset-x-0 top-1/4 bottom-0"
+                style={{
+                  background: 'linear-gradient(to bottom, transparent 0%, rgba(0,0,0,0.2) 25%, rgba(0,0,0,0.5) 50%, rgba(0,0,0,0.8) 75%, black 100%)'
+                }}
+              />
+              <div className="absolute inset-0 bg-gradient-to-r from-black/20 via-transparent to-black/20" />
+            </div>
+
         {/* Tab Navigation */}
-        <div className="my-4 flex flex-col gap-4 px-4 sm:px-6 lg:flex-row lg:items-center lg:justify-between lg:gap-6 lg:px-8 mt-6 ">
+        <div className="relative z-10 mt-3 mb-4 flex flex-shrink-0 flex-col gap-4 px-4 sm:mt-4 sm:px-6 lg:flex-row lg:items-center lg:justify-between lg:gap-6 lg:px-8">
           {/* Tabs Section - Scrollable on mobile */}
           <div className="scrollbar-hide -mx-4 flex items-center gap-3 overflow-x-auto px-4 pb-2 sm:-mx-6 sm:gap-4 sm:px-6 lg:mx-0 lg:gap-4 lg:px-0 lg:pb-0">
             <button
@@ -3706,7 +3742,7 @@ export default function DiscoverPage() {
               activeTab !== "surge" &&
               // Show timeframes for Solana trending with WebSocket support
               (activeTab !== "trending" || currentChain === "sol") && (
-                <div className="relative hidden h-7 min-w-[100px] items-center justify-center gap-1 rounded-md border border-[#24252C] bg-[#272a2e] px-1.5 py-1 sm:flex">
+                <div className="relative hidden h-7 min-w-[100px] items-center justify-center gap-1 rounded-md border border-white/[0.08] bg-white/[0.05] backdrop-blur-xl px-1.5 py-1 sm:flex">
                   {/* For trending tab, only show 5m, 1h, 6h (WebSocket supported timeframes) */}
                   {((activeTab === "trending" ? ["5m", "1h", "6h"] : ["5m", "1h", "6h", "24h"]) as Timeframe[]).map(
                     (tf: Timeframe) => (
@@ -3715,7 +3751,7 @@ export default function DiscoverPage() {
                         className="relative flex items-center justify-center"
                       >
                         <button
-                          className={`flex cursor-pointer items-center justify-center rounded px-1 py-[2px] text-sm font-medium whitespace-nowrap transition-all duration-200 ${selectedTimeframe === tf ? "bg-[rgba(24,196,140,0.15)] text-[#f0f5f5]" : "bg-[rgba(22,23,28,0.6)]"}`}
+                          className={`flex cursor-pointer items-center justify-center rounded px-1 py-[2px] text-sm font-medium whitespace-nowrap transition-all duration-200 ${selectedTimeframe === tf ? "bg-[rgba(24,196,140,0.15)] text-[#f0f5f5]" : "bg-transparent"}`}
                           onClick={() => handleTimeframeClick(tf)}
                           onMouseEnter={(e) => {
                             if (selectedTimeframe !== tf) {
@@ -3738,7 +3774,7 @@ export default function DiscoverPage() {
 
             {/* Filter button - hidden when in Live Pump tab or Monad chain */}
             {currentChain !== "monad" && activeTab !== "live" && (
-              <div className="relative hidden h-7 w-[85px] min-w-[85px] items-center justify-center gap-1 rounded-md border border-[#24252C] bg-[#272a2e] px-1.5 py-1 sm:flex">
+              <div className="relative hidden h-7 w-[85px] min-w-[85px] items-center justify-center gap-1 rounded-md border border-white/[0.08] bg-white/[0.05] backdrop-blur-xl px-1.5 py-1 sm:flex">
                 <button
                   className="relative flex h-full w-full cursor-pointer items-center justify-between transition-all duration-200"
                   onClick={() => setIsFilterPopoutOpen(true)}
@@ -3780,7 +3816,7 @@ export default function DiscoverPage() {
 
             {/* Pump Live Sort Controls - Only show when live tab is active */}
             {activeTab === 'live' && (
-              <div className="hidden h-7 items-center gap-2 rounded-md border border-[#24252C] bg-[#272a2e] px-2 py-1 sm:flex">
+              <div className="hidden h-7 items-center gap-2 rounded-md border border-white/[0.08] bg-white/[0.05] backdrop-blur-xl px-2 py-1 sm:flex">
                 {/* MC Sort */}
                 <button
                   onClick={() => {
@@ -3823,7 +3859,7 @@ export default function DiscoverPage() {
             )}
 
             {/* Thunder Icon and Amount Entry - Separate Thin Box */}
-            <div className="hidden h-7 w-[85px] min-w-[85px] items-center justify-center gap-1 rounded-md border border-[#24252C] bg-[#272a2e] px-1.5 py-1 sm:flex">
+            <div className="hidden h-7 w-[85px] min-w-[85px] items-center justify-center gap-1 rounded-md border border-white/[0.08] bg-white/[0.05] backdrop-blur-xl px-1.5 py-1 sm:flex">
               <HiLightningBolt size={14} className="text-[#31e3ac]" />
               <input
                 type="text"
@@ -3865,7 +3901,7 @@ export default function DiscoverPage() {
             </div>
 
             {/* P1 P2 P3 Boxes - Separate Thin Box With Background Color */}
-            <div className="relative hidden h-7 w-[100px] min-w-[100px] items-center justify-center gap-1 rounded-md border border-[#24252C] bg-[#272a2e] px-1.5 py-1 sm:flex">
+            <div className="relative hidden h-7 w-[100px] min-w-[100px] items-center justify-center gap-1 rounded-md border border-white/[0.08] bg-white/[0.05] backdrop-blur-xl px-1.5 py-1 sm:flex">
               {["P1", "P2", "P3"].map((pill) => {
                 const presetIndex = parseInt(pill.replace("P", "")) - 1;
                 const preset = presets[presetIndex];
@@ -3877,7 +3913,7 @@ export default function DiscoverPage() {
                     className="relative flex items-center justify-center"
                   >
                     <button
-                      className={`flex cursor-pointer items-center justify-center rounded px-1 py-[2px] text-sm font-medium transition-all duration-200 ${selectedPill === pill ? "bg-[rgba(24,196,140,0.15)] text-[#f0f5f5]" : "bg-[rgba(22,23,28,0.6)]"}`}
+                      className={`flex cursor-pointer items-center justify-center rounded px-1 py-[2px] text-sm font-medium transition-all duration-200 ${selectedPill === pill ? "bg-[rgba(24,196,140,0.15)] text-[#f0f5f5]" : "bg-transparent"}`}
                       onClick={() => {
                         setSelectedPill(pill);
                         setActivePreset(presetIndex); // Also update global preset for consistency
@@ -3901,7 +3937,7 @@ export default function DiscoverPage() {
 
                     {/* Tooltip for each pill */}
                     {showPillTooltip === pill && settings && (
-                      <div className="bg-[rgba(15,16,18,0.95)] absolute top-full left-0 z-50 mt-1 w-28 rounded-lg border border-[#24252C] shadow-xl">
+                      <div className="absolute top-full left-0 z-50 mt-1 w-28 rounded-lg border border-white/[0.08] bg-black/90 backdrop-blur-xl shadow-xl">
                         <div className="space-y-1.5 p-2">
                           {/* Slippage - Running person icon */}
                           <div className="flex items-center gap-1.5">
@@ -3964,15 +4000,17 @@ export default function DiscoverPage() {
         </div>
 
         {/* Filter Popout */}
+        <div className="flex-shrink-0">
         {isFilterPopoutOpen && (
           <FilterPopout
             open={isFilterPopoutOpen}
             onClose={() => setIsFilterPopoutOpen(false)}
           />
         )}
+        </div>
 
         {/* Main Content */}
-        <main className="w-full">
+        <main className="relative z-10 w-full flex-1 overflow-y-auto min-h-0">
           {activeTab === 'live' ? (
             <section aria-label="Pump Live" className="pb-16">
               <PumpLiveGrid
@@ -3999,7 +4037,7 @@ export default function DiscoverPage() {
                   {Array.from({ length: 8 }).map((_, i) => (
                     <div
                       key={i}
-                      className="h-12 w-full animate-pulse rounded bg-[#1E1F26]"
+                      className="h-12 w-full animate-pulse rounded bg-white/[0.04]"
                     />
                   ))}
                 </div>
@@ -4034,7 +4072,7 @@ export default function DiscoverPage() {
                   {Array.from({ length: 10 }).map((_, i) => (
                     <div
                       key={i}
-                      className="h-12 w-full animate-pulse rounded bg-[#1E1F26]"
+                      className="h-12 w-full animate-pulse rounded bg-white/[0.04]"
                     />
                   ))}
                 </div>
@@ -4085,7 +4123,12 @@ export default function DiscoverPage() {
           )}
         </main>
 
-        <Footer />
+          </div>{/* end rounded container */}
+        </div>{/* end outer padding wrapper */}
+
+        <div className="relative z-10">
+          <Footer />
+        </div>
         <QuickBuySettingsModal
           open={settingsOpen}
           onClose={() => setSettingsOpen(false)}

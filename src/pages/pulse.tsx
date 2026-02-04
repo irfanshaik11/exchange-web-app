@@ -185,11 +185,11 @@ export default function PulsePage() {
     routerAsPath: router.asPath,
   });
   const chainButtonBase =
-    "relative inline-flex h-8 w-8 items-center justify-center rounded-full border border-[#20232b] bg-[#171920] text-neutral-300 shadow-sm transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/40 focus-visible:ring-offset-2 focus-visible:ring-offset-[#06070b]";
+    "relative inline-flex h-8 w-8 items-center justify-center rounded-full border border-white/[0.06] bg-white/[0.03] text-neutral-300 shadow-sm transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/40 focus-visible:ring-offset-2 focus-visible:ring-offset-black";
   const solanaButtonClasses = `${chainButtonBase} ${
     isSolanaRoute
-      ? "bg-[#222733] text-white shadow-lg shadow-emerald-500/20"
-      : "bg-[#141821] text-neutral-500 opacity-75 hover:opacity-100 hover:text-neutral-100"
+      ? "bg-white/[0.07] text-white border-white/[0.08]"
+      : "text-neutral-500 opacity-75 hover:opacity-100 hover:text-neutral-100"
   }`;
   // const bnbButtonClasses = `${chainButtonBase} ${
   //   isBnbRoute
@@ -198,8 +198,8 @@ export default function PulsePage() {
   // }`;
   const monadButtonClasses = `${chainButtonBase} ${
     isMonadRoute
-      ? "bg-[#222733] text-white shadow-lg shadow-purple-500/20"
-      : "bg-[#141821] text-neutral-500 opacity-75 hover:opacity-100 hover:text-neutral-100"
+      ? "bg-white/[0.07] text-white border-white/[0.08]"
+      : "text-neutral-500 opacity-75 hover:opacity-100 hover:text-neutral-100"
   }`;
   // const baseButtonClasses = `${chainButtonBase} ${
   //   isBaseRoute
@@ -1526,9 +1526,12 @@ export default function PulsePage() {
         <title>Trenches | Interstate Memeboard</title>
         <meta name="description" content="Token tracking dashboard" />
       </Head>
-      <div className="flex h-screen flex-col overflow-hidden bg-[#0a0b0d] text-neutral-100">
-        <Header />
-        <div className="flex min-h-0 w-full flex-1 flex-col overflow-hidden px-2 py-3 sm:px-3">
+      <div className="flex h-screen flex-col overflow-hidden bg-[#050608] text-neutral-100">
+        <div className="relative z-10"><Header /></div>
+        <div className="flex-1 min-h-0 p-1 pb-8 sm:p-1.5 sm:pb-8">
+          <div className="relative flex h-full flex-col overflow-hidden rounded-t-2xl rounded-b-lg border border-white/[0.06]" style={{ backgroundColor: '#0a0b0d' }}>
+            {/* Content */}
+            <div className="relative z-10 flex min-h-0 w-full flex-1 flex-col overflow-hidden px-1 pt-3 sm:px-1.5">
           <div className="mb-2">
             <div className="mb-1 flex flex-col gap-3 px-2 pt-2 sm:flex-row sm:items-center sm:justify-between">
               <div className="flex items-center gap-3">
@@ -1601,7 +1604,7 @@ export default function PulsePage() {
 
             {/* Tab Navigation - Mobile Only */}
             <div className="mt-3 mb-4 lg:hidden">
-              <div className="flex gap-1.5 rounded-lg border border-neutral-800/50 bg-neutral-900/60 p-1">
+              <div className="flex gap-1.5 rounded-lg border border-white/[0.06] bg-white/[0.03] backdrop-blur-xl p-1">
                 <button
                   onClick={() => setActiveTab("new")}
                   className={`relative flex-1 rounded-md px-3 py-2.5 text-xs font-semibold transition-all duration-200 ${
@@ -1757,7 +1760,7 @@ export default function PulsePage() {
                 </div>
               </div>
               {/* All tables horizontally - Desktop only */}
-              <div className="hidden min-h-0 w-full flex-1 flex-row overflow-hidden lg:flex">
+              <div className="hidden min-h-0 w-full flex-1 flex-row overflow-hidden lg:flex gap-3">
                 <MonadTable
                   title="New Pairs"
                   tokens={enrichedNewPairsToShow}
@@ -1785,7 +1788,7 @@ export default function PulsePage() {
             // IMPORTANT: Pass actual tokens even during loading!
             // PulseTable has internal cache from WebSocket/IndexedDB that will show
             // Passing tokens={[]} would override the cache and show blank screen
-            <div className="flex min-h-0 w-full flex-1 flex-row overflow-hidden rounded-lg border border-[#1e2028] bg-[#0d1015]">
+            <div className="flex min-h-0 w-full flex-1 flex-row overflow-hidden rounded-lg border border-white/[0.06] bg-white/[0.03] backdrop-blur-xl">
               <PulseTable
                 title="New Pairs"
                 tokens={enrichedNewPairsToShow as any}
@@ -1859,7 +1862,7 @@ export default function PulsePage() {
                 </div>
               </div>
               {/* Desktop: All tables horizontally */}
-              <div className="hidden min-h-0 w-full flex-1 flex-row overflow-hidden rounded-lg border border-[#1e2028] bg-[#0d1015] lg:flex">
+              <div className="hidden min-h-0 w-full flex-1 flex-row overflow-hidden lg:flex gap-3">
                 <PulseTable
                   title="New Pairs"
                   tokens={enrichedNewPairsToShow as any}
@@ -1884,8 +1887,10 @@ export default function PulsePage() {
               </div>
             </div>
           )}
+            </div>
+            <div className="relative z-10"><Footer /></div>
+          </div>
         </div>
-        <Footer />
       </div>
 
       {/* Updates Modal */}

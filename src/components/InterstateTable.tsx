@@ -84,7 +84,7 @@ interface HeaderConfig {
 
 // Constants
 const TABLE_HEADERS: HeaderConfig[] = [
-  { key: 'name', label: 'Pair Info', align: 'left', width: 'w-80' },
+  { key: 'name', label: 'Pair Info', align: 'left', width: 'w-64' },
   { key: 'fully_diluted_value', label: 'Market Cap', align: 'right', width: 'w-32' },
   { key: 'total_liquidity_usd', label: 'Liquidity', align: 'right', width: 'w-28' },
   { key: 'volume', label: 'Volume', align: 'right', width: 'w-28' },
@@ -1842,21 +1842,21 @@ const TableRow: React.FC<{
   // });
 
   // Calculate alternating row background color for discover page
-  const rowBgColor = isDiscoverPage 
-    ? (i % 2 === 0 ? '#111214' : '#15161a')
+  const rowBgColor = isDiscoverPage
+    ? (i % 2 === 0 ? 'transparent' : 'rgba(255, 255, 255, 0.02)')
     : 'transparent';
   
   return (
     <tr 
-      className={`cursor-pointer h-16 ${isDiscoverPage ? '' : 'border-b'}`}
+      className={`cursor-pointer h-16 border-b`}
       style={{
-        ...(isDiscoverPage ? {} : { borderColor: AX.border }),
+        borderColor: isDiscoverPage ? 'rgba(255, 255, 255, 0.03)' : AX.border,
         backgroundColor: rowBgColor,
         transition: 'none' // Disable all transitions for instant rendering
       }}
       onMouseEnter={(e) => {
         if (isDiscoverPage) {
-          e.currentTarget.style.backgroundColor = i % 2 === 0 ? '#1a1b1f' : '#1c1d22';
+          e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.05)';
         } else {
           e.currentTarget.style.backgroundColor = AX.surface2;
         }
@@ -1866,7 +1866,7 @@ const TableRow: React.FC<{
       }}
       onClick={onClick}
     >
-      <td className="w-80 px-4 py-4 align-middle">
+      <td className="w-64 px-4 py-4 align-middle">
         <TokenInfo token={token} i={i} sortedRows={sortedRows} isDiscoverPage={isDiscoverPage} chain={chain} />
       </td>
 
@@ -2086,18 +2086,18 @@ export default function InterstateTable({
   const isDiscoverPage = isDiscoverPageProp !== undefined ? isDiscoverPageProp : router.pathname === '/discover';
 
   return (
+    <div className={isDiscoverPage ? "mx-4 overflow-hidden rounded-xl" : ""} style={isDiscoverPage ? {
+      border: '1px solid rgba(255, 255, 255, 0.06)',
+      backgroundColor: 'rgba(255, 255, 255, 0.03)',
+      backdropFilter: 'blur(24px)',
+      WebkitBackdropFilter: 'blur(24px)',
+    } : {}}>
     <div className="overflow-x-auto shadow-lg w-full" style={{
-      backgroundColor: isDiscoverPage ? '#111214' : 'rgba(30, 31, 38, 0.3)',
-      ...(isDiscoverPage ? {
-        borderTop: `1px solid ${AX.border}`,
-        borderLeft: 'none',
-        borderRight: 'none',
-        borderBottom: 'none',
-        borderRadius: '0'
-      } : {
+      backgroundColor: isDiscoverPage ? 'transparent' : 'rgba(30, 31, 38, 0.3)',
+      ...(!isDiscoverPage ? {
         border: `1px solid ${AX.border}`,
         borderRadius: '0.5rem'
-      })
+      } : {})
     }}>
       <style jsx>{`
         .number-font {
@@ -2250,6 +2250,7 @@ export default function InterstateTable({
           )}
         </tbody>
       </table>
+    </div>
     </div>
   );
 }

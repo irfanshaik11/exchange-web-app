@@ -33,18 +33,18 @@ const TwitterAccountRow: React.FC<TwitterAccountRowProps> = ({
   };
 
   return (
-    <tr className="border-b border-neutral-800/50 transition-colors duration-300 hover:bg-neutral-800/30">
+    <tr className="border-b border-white/[0.03] transition-colors duration-300 hover:bg-white/[0.03]">
       <td className="px-2 py-3">
         <div className="flex items-center gap-2">
           {account.profileImageUrl ? (
             <img 
               src={account.profileImageUrl} 
               alt={account.name}
-              className="w-8 h-8 rounded-full cursor-pointer"
+              className="w-8 h-8 rounded-full ring-1 ring-white/10 cursor-pointer"
 							onClick={() => window.open(`https://twitter.com/${account.username}`, '_blank')}
             />
           ) : (
-            <div className="w-8 h-8 rounded-full bg-neutral-800 flex items-center justify-center text-neutral-300 text-xs font-bold cursor-pointer" onClick={() => window.open(`https://twitter.com/${account.username}`, '_blank')}>
+            <div className="w-8 h-8 rounded-full bg-gradient-to-br from-neutral-700 to-neutral-800 flex items-center justify-center text-neutral-300 text-xs font-bold cursor-pointer" onClick={() => window.open(`https://twitter.com/${account.username}`, '_blank')}>
               {account.name.charAt(0).toUpperCase()}
             </div>
           )}
@@ -68,7 +68,7 @@ const TwitterAccountRow: React.FC<TwitterAccountRowProps> = ({
         <div className="flex flex-col sm:flex-row gap-1 sm:gap-2 items-stretch sm:items-center justify-end">
           <button
             onClick={() => onViewProfile(account.username)}
-            className="px-2 py-1 text-[10px] sm:px-3 sm:py-1.5 sm:text-xs font-medium text-neutral-300 hover:text-neutral-100 transition-all duration-300 border border-neutral-700/50 hover:border-neutral-600 rounded-lg bg-neutral-900/40 hover:bg-neutral-800/60 whitespace-nowrap"
+            className="px-2 py-1 text-[10px] sm:px-3 sm:py-1.5 sm:text-xs font-medium text-neutral-300 hover:text-neutral-100 transition-all duration-300 border border-white/[0.06] hover:border-white/[0.1] rounded-lg bg-white/[0.03] hover:bg-white/[0.07] whitespace-nowrap"
           >
             View
           </button>

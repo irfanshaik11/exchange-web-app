@@ -8,7 +8,7 @@
 
 /* Prevent black screen flash */
 html, body {
-  background-color: #101114 !important;
+  background-color: #050608 !important;
   color: white !important;
   font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Inter", system-ui, sans-serif;
   font-weight: 400; /* Normal weight */
@@ -16,7 +16,7 @@ html, body {
 
 /* Instant page rendering */
 #__next {
-  background-color: #101114;
+  background-color: #050608;
   min-height: 100vh;
   font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Inter", system-ui, sans-serif;
 }
@@ -186,30 +186,12 @@ body {
   animation: wiggle 0.6s cubic-bezier(.36,.07,.19,.97) both;
 }
 
-/* Custom Scrollbar for PulseTable and other scrollable areas */
+/* Hidden scrollbar — still scrollable via trackpad/wheel/touch */
 .custom-scrollbar {
-  scrollbar-width: thin;
-  scrollbar-color: #14532d transparent; /* green thumb, transparent track */
+  scrollbar-width: none; /* Firefox */
 }
 .custom-scrollbar::-webkit-scrollbar {
-  width: 8px;
-  background: transparent; /* transparent track */
-  border-radius: 8px;
-}
-.custom-scrollbar::-webkit-scrollbar-thumb {
-  background: #14532d; /* dark green thumb */
-  border-radius: 8px;
-}
-.custom-scrollbar::-webkit-scrollbar-thumb:hover {
-  background: #166534; /* lighter green on hover */
-}
-.custom-scrollbar::-webkit-scrollbar-corner {
-  background: transparent;
-}
-
-/* Optional: Hide scrollbar buttons/arrows for a cleaner look */
-.custom-scrollbar::-webkit-scrollbar-button {
-  display: none;
+  display: none; /* Chrome, Safari, Edge */
 }
 
 /* Jupiter Terminal Styling */
@@ -389,11 +371,11 @@ input[type="number"] {
 
 /* Pulse Table Column Styling */
 .pulse-column {
-  background-color: #0d1015;
+  background-color: #13151b;
 }
 
 .pulse-column-header {
-  background-color: #0d1015;
+  background-color: #13151b;
   border-bottom: 1px solid #1e2028;
 }
 
