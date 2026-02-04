@@ -33,7 +33,6 @@ import { QuickBuyProvider } from '../components/QuickBuyContext';
 import { WatchlistProvider } from '../components/WatchlistContext';
 import { FilterProvider } from '../components/FilterContext';
 import { SolPriceProvider } from '../components/SolPriceContext';
-import { SolanaPositionWebSocketProvider } from '../contexts/SolanaPositionWebSocketContext';
 import { WalletTrackerProvider } from '../components/WalletTrackerContext';
 import { ReferralAccessGate } from '../components/ReferralAccessGate';
 import { ThemeProvider } from '../components/ThemeContext';
@@ -43,23 +42,8 @@ import 'react-datepicker/dist/react-datepicker.css';
 import { showEnhancedToast } from '../utils/enhancedToast';
 import { storeReferralCodeHint, getStoredReferralCodeHint, clearStoredReferralCodeHint } from '~/utils/referralStorage';
 import PagePreloader from '../components/PagePreloader';
-import { usePulseNavigationGuard } from '../hooks/usePulseNavigationGuard';
-import ErrorBoundary from '../components/ErrorBoundary';
-
-// Dynamically import PulseBackgroundLoader with no SSR
-// Rendered globally to maintain WebSocket connections across all pages
-// Now only updates React Query cache (not pulseStore) so it doesn't block navigation
-const PulseBackgroundLoader = dynamic(
-  () => import('../components/PulseBackgroundLoader').then(mod => ({ default: mod.PulseBackgroundLoader })),
-  { ssr: false, loading: () => null }
-);
-
-// Component that sets up the navigation guard for pulse store
-// RE-ENABLED: Required to pause store notifications during navigation
-function PulseNavigationGuard() {
-  usePulseNavigationGuard();
-  return null;
-}
+import { PulseBackgroundLoader } from '../components/PulseBackgroundLoader';
+import { SolanaPositionWebSocketProvider } from '../contexts/SolanaPositionWebSocketContext';
 
 // Suppress Next.js error overlay for caught errors in development
 if (typeof window !== 'undefined' && process.env.NODE_ENV === 'development') {
@@ -509,54 +493,29 @@ function GlobalLoginModalManager({ enforceLogin }: { enforceLogin: boolean }) {
   const { user, loading: userLoading } = useUser();
   const [loginOpen, setLoginOpen] = useState(false);
   const [isMounted, setIsMounted] = useState(false);
-  const [keepOpen, setKeepOpen] = useState(false);
-
+  
   // Only render on client side to prevent SSR issues with wagmi
   useEffect(() => {
     setIsMounted(true);
   }, []);
-
-  // Listen for custom events from LoginModal to prevent/allow auto-close
-  useEffect(() => {
-    const handleKeepOpen = () => {
-      console.log("[GlobalLoginModalManager] Received keep-open signal");
-      setKeepOpen(true);
-    };
-    const handleCanClose = () => {
-      console.log("[GlobalLoginModalManager] Received can-close signal");
-      setKeepOpen(false);
-    };
-
-    window.addEventListener('login-modal-keep-open', handleKeepOpen);
-    window.addEventListener('login-modal-can-close', handleCanClose);
-
-    return () => {
-      window.removeEventListener('login-modal-keep-open', handleKeepOpen);
-      window.removeEventListener('login-modal-can-close', handleCanClose);
-    };
-  }, []);
-
+  
   useEffect(() => {
     if (!isMounted) return;
     if (enforceLogin && !userLoading && !user) {
       setLoginOpen(true);
     }
-    // Only auto-close if user exists AND we're not in a "keep open" state (username step)
-    if (user && loginOpen && !keepOpen) {
+    if (user && loginOpen) {
       setLoginOpen(false);
     }
-  }, [user, userLoading, enforceLogin, loginOpen, isMounted, keepOpen]);
-
+  }, [user, userLoading, enforceLogin, loginOpen, isMounted]);
+  
   // Prevent closing if not logged in
   const handleLoginClose = () => {
-    if (user) {
-      setKeepOpen(false); // Reset the flag
-      setLoginOpen(false);
-    }
+    if (user) setLoginOpen(false);
   };
-
+  
   if (!enforceLogin || !isMounted) return null;
-
+  
   return (
     <LoginModal open={loginOpen} onClose={handleLoginClose} forceLogin={!user && !userLoading} />
   );
@@ -651,14 +610,14 @@ const MyApp: AppType = ({ Component, pageProps }) => {
   // Preload TradingView library script early for faster chart loading
   useEffect(() => {
     if (typeof window === 'undefined') return;
-
+    
     // Check if already loaded or loading
     if ((window as any).TradingView) return;
-
+    
     // Check if script tag already exists
     const existingScript = document.querySelector('script[src="/charting_library/charting_library/charting_library.standalone.js"]');
     if (existingScript) return;
-
+    
     // Preload the script in the background
     const script = document.createElement('script');
     script.src = '/charting_library/charting_library/charting_library.standalone.js';
@@ -666,28 +625,6 @@ const MyApp: AppType = ({ Component, pageProps }) => {
     script.defer = true;
     // Don't set onload - let AdvancedOHLCChart handle it
     document.head.appendChild(script);
-  }, []);
-
-  // Register Service Worker for image caching
-  // Images load instantly when returning to Pulse page after navigating away
-  useEffect(() => {
-    if (typeof window === 'undefined') return;
-    if (!('serviceWorker' in navigator)) return;
-
-    // Register the service worker
-    navigator.serviceWorker.register('/sw.js')
-      .then((registration) => {
-        console.log('[App] Service Worker registered for image caching');
-
-        // Check for updates periodically (every hour)
-        setInterval(() => {
-          registration.update();
-        }, 60 * 60 * 1000);
-      })
-      .catch((err) => {
-        // Non-fatal - app works fine without SW, just no image caching
-        console.warn('[App] Service Worker registration failed:', err);
-      });
   }, []);
 
   return (
@@ -712,30 +649,6 @@ const MyApp: AppType = ({ Component, pageProps }) => {
         <meta name="twitter:title" content="Interstate - The Fastest Exchange" />
         <meta name="twitter:description" content="Get ready to win on Interstate, the fastest exchange! Get free Solana for joining today, win daily Jackpots, level up and earn progressively higher rewards. Start trading today!" />
         <meta name="twitter:image" content="https://app.interstate.so/referral-share.png" />
-
-        {/* Preconnect to WebSocket server - starts TCP+TLS handshake before JS runs */}
-        {env.NEXT_PUBLIC_WEBSOCKET_URL && (
-          <>
-            <link
-              rel="preconnect"
-              href={env.NEXT_PUBLIC_WEBSOCKET_URL.replace(/^ws/, 'http')}
-              crossOrigin="anonymous"
-            />
-            <link
-              rel="dns-prefetch"
-              href={env.NEXT_PUBLIC_WEBSOCKET_URL.replace(/^ws/, 'http')}
-            />
-          </>
-        )}
-
-        {/* Preload worker script for faster WebSocket initialization */}
-        <link
-          rel="preload"
-          href="/workers/pulseWorker.js"
-          as="script"
-          crossOrigin="anonymous"
-        />
-
         {/* Preload TradingView library for faster chart loading */}
         <link
           rel="preload"
@@ -794,31 +707,28 @@ const MyApp: AppType = ({ Component, pageProps }) => {
         {/* MobileBlocker disabled - MOBILE VIEW DISABLED
         <MobileBlocker>
         */}
-        {/* PulseNavigationGuard removed - PulseBackgroundLoader handles navigation internally */}
         <TurnkeyRootProvider>
           {/* <MonadTradeBanner /> */}
           <WagmiProviderWrapper config={config} queryClient={queryClient}>
-            {/* PulseBackgroundLoader: Worker-based WebSocket - stays alive during navigation */}
-            <PulseBackgroundLoader />
             <UserProvider>
               <UserLimitProvider>
                 <TurnkeySessionBridge />
                 <TokenHandler />
                 <ReferralTracker />
                 <SolPriceProvider>
-                  <SolanaPositionWebSocketProvider>
                   <ThemeProvider>
                     <QuickBuyProvider>
                       <SearchProvider>
                         <WatchlistProvider>
                           <FilterProvider>
                             <WalletTrackerProvider>
-                              <ReferralAccessGate>
-                                <PagePreloader />
-                                <ErrorBoundary>
+                              <SolanaPositionWebSocketProvider>
+                                <ReferralAccessGate>
+                                  <PagePreloader />
+                                  <PulseBackgroundLoader />
                                   <Component {...pageProps} />
-                                </ErrorBoundary>
-                              </ReferralAccessGate>
+                                </ReferralAccessGate>
+                              </SolanaPositionWebSocketProvider>
                             </WalletTrackerProvider>
                           </FilterProvider>
                         </WatchlistProvider>
@@ -828,7 +738,6 @@ const MyApp: AppType = ({ Component, pageProps }) => {
                     <WalletExportGuard />
                     <UserLimitBlockerWrapper />
                   </ThemeProvider>
-                  </SolanaPositionWebSocketProvider>
                 </SolPriceProvider>
               </UserLimitProvider>
             </UserProvider>

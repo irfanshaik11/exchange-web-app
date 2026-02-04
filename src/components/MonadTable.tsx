@@ -3739,28 +3739,12 @@ function MonadTable({
   };
   return (
     <div
-      className={`num flex min-h-0 w-full flex-1 flex-col overflow-hidden lg:min-w-[300px] ${
-        isFirstOrLast === "first"
-          ? "rounded-tl-lg"
-          : isFirstOrLast === "last"
-            ? "rounded-tr-lg"
-            : isFirstOrLast === "only"
-              ? "rounded-lg"
-              : ""
-      }`}
-      style={{
-        backgroundColor: "#0d1015",
-        borderRight: isFirstOrLast !== "last" && isFirstOrLast !== "only" ? "1px solid #1e2028" : "none",
-        borderLeft: isFirstOrLast === "first" || isFirstOrLast === "only" ? "1px solid #1e2028" : "none",
-        borderTop: "1px solid #1e2028",
-        borderBottom: "1px solid #1e2028",
-      }}
+      className={`num flex min-h-0 w-full flex-1 flex-col overflow-hidden lg:min-w-[300px] gap-2`}
     >
       <div
-        className="group relative flex items-center justify-between border-b px-2.5 py-1 text-sm font-medium"
+        className="group relative flex items-center justify-between rounded-lg px-2.5 py-1 text-sm font-medium"
         style={{
-          backgroundColor: "#0d1015",
-          borderColor: "#1e2028",
+          backgroundColor: "#13151b",
           color: AX.text,
         }}
         onMouseEnter={() => setIsHeaderHovered(true)}
@@ -5890,13 +5874,13 @@ function MonadTable({
           </div>
         </div>
       </div>
-      <div className="custom-scrollbar min-h-0 flex-1 overflow-y-auto">
+      <div className="custom-scrollbar flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto">
         {(loading || isFetchingMonad) && monadTokens.length === 0 ? (
           Array.from({ length: skeletonRowCount }).map((_, idx) => (
             <div
               key={idx}
-              className="flex animate-pulse flex-row items-start border-b p-2 last:border-b-0"
-              style={{ borderColor: AX.border }}
+              className="flex shrink-0 animate-pulse flex-row items-start rounded-lg p-2"
+              style={{ backgroundColor: "#13151b", border: "1px solid #1e2028" }}
             >
               {/* Profile Picture & Address skeleton */}
               <div className="mr-2 flex w-20 flex-col items-center">
@@ -6035,9 +6019,11 @@ function MonadTable({
                 <Link
                   href={`/trade/monad/${pairAddress}?${queryParams}`}
                   key={pairAddress}
-                  className="token-row group relative flex w-full max-w-full cursor-pointer flex-row items-start gap-2 overflow-hidden px-2 py-1.5 text-sm"
+                  className="token-row group relative flex w-full max-w-full shrink-0 cursor-pointer flex-row items-start gap-2 overflow-hidden rounded-lg px-2 py-1.5 text-sm"
                   style={{
                     color: AX.text,
+                    backgroundColor: "#13151b",
+                    border: "1px solid #1e2028",
                   }}
                   onMouseEnter={(e) => {
                     // PHASE 3: Use CSS class instead of inline style (GPU-accelerated)

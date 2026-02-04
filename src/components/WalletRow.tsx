@@ -413,7 +413,7 @@ export default function WalletRow({
   return (
     <tr
       key={wallet.address}
-      className="group border-b border-neutral-800/30 transition-colors duration-150 hover:bg-neutral-800/30 active:bg-neutral-800/40"
+      className="group border-b border-white/[0.03] transition-colors duration-150 hover:border-white/[0.06] hover:bg-white/[0.03] active:bg-white/[0.05]"
       onClick={handleRowClick}
     >
       <td className="px-1 py-2.5 sm:px-2 sm:py-3">
@@ -437,7 +437,7 @@ export default function WalletRow({
           <div className="flex min-w-0 flex-1 items-start gap-1.5 sm:gap-2">
             <span className="text-base sm:text-lg">{wallet.emoji || "💼"}</span>
             <div className="flex min-w-0 flex-col">
-              <span className="truncate text-[10px] font-medium text-neutral-200 sm:text-xs">
+              <span className="truncate text-[10px] font-medium text-neutral-100 sm:text-xs">
                 {wallet.name || "N/A"}
               </span>
               <Tooltip label={copied ? "Copied!" : "Click to copy"}>
@@ -456,7 +456,7 @@ export default function WalletRow({
           <span className="w-20 text-[9px] text-neutral-300 sm:w-36 sm:text-xs">
             {balance !== undefined ? (
               <span
-                className={`flex items-center gap-0.5 font-mono sm:gap-1 ${watchedWallet?.chain === "monad" ? "text-[#7FFFC9]" : "text-green-400"}`}
+                className={`flex items-center gap-0.5 font-mono font-semibold sm:gap-1 ${watchedWallet?.chain === "monad" ? "text-[#7FFFC9]" : "text-green-400"}`}
               >
                 <ChainIcon chain={watchedWallet?.chain} size={10} />
                 <span className="text-[9px] sm:text-xs">
@@ -482,12 +482,12 @@ export default function WalletRow({
               }
             >
               <button
-                className={`rounded-md p-1 transition-all duration-200 sm:p-2 ${isTogglingNotification ? "cursor-not-allowed opacity-50" : "cursor-pointer hover:bg-neutral-800/50"}`}
+                className={`rounded-md p-1 transition-all duration-200 sm:p-2 ${isTogglingNotification ? "cursor-not-allowed opacity-50" : "cursor-pointer hover:bg-white/[0.05]"}`}
                 onClick={handleToggleNotifications}
                 disabled={isTogglingNotification}
               >
                 <FiBell
-                  className={`text-sm sm:text-base ${notificationsEnabled ? "text-pink-500" : "text-neutral-600"}`}
+                  className={`text-sm sm:text-base ${notificationsEnabled ? "text-pink-500" : "text-neutral-500"}`}
                 />
               </button>
             </Tooltip>
@@ -497,14 +497,14 @@ export default function WalletRow({
               label={analyticsEnabled ? "Analytics ON" : "Analytics OFF"}
             >
               <button
-                className="cursor-pointer rounded-md p-1 transition-all duration-200 hover:bg-neutral-800/50 sm:p-2"
+                className="cursor-pointer rounded-md p-1 transition-all duration-200 hover:bg-white/[0.05] sm:p-2"
                 onClick={(e) => {
                   e.stopPropagation();
                   setAnalyticsEnabled(!analyticsEnabled);
                 }}
               >
                 <TbChartBubble
-                  className={`text-sm sm:text-base ${analyticsEnabled ? "text-pink-500" : "text-neutral-600"}`}
+                  className={`text-sm sm:text-base ${analyticsEnabled ? "text-pink-500" : "text-neutral-500"}`}
                 />
               </button>
             </Tooltip>
@@ -512,14 +512,14 @@ export default function WalletRow({
             {/* RSS Icon - Toggle Button */}
             <Tooltip label={feedEnabled ? "Feed ON" : "Feed OFF"}>
               <button
-                className="cursor-pointer rounded-md p-1 transition-all duration-200 hover:bg-neutral-800/50 sm:p-2"
+                className="cursor-pointer rounded-md p-1 transition-all duration-200 hover:bg-white/[0.05] sm:p-2"
                 onClick={(e) => {
                   e.stopPropagation();
                   setFeedEnabled(!feedEnabled);
                 }}
               >
                 <IoLogoRss
-                  className={`text-sm sm:text-base ${feedEnabled ? "text-pink-500" : "text-neutral-600"}`}
+                  className={`text-sm sm:text-base ${feedEnabled ? "text-pink-500" : "text-neutral-500"}`}
                 />
               </button>
             </Tooltip>
@@ -527,13 +527,13 @@ export default function WalletRow({
             {/* Chart - Scan Address */}
             <Tooltip label="Scan Wallet">
               <button
-                className="cursor-pointer rounded-md p-1 transition-all duration-200 hover:bg-neutral-800/50 sm:p-2"
+                className="cursor-pointer rounded-md p-1 transition-all duration-200 hover:bg-white/[0.05] sm:p-2"
                 onClick={(e) => {
                   e.stopPropagation();
                   onClick && onClick(wallet);
                 }}
               >
-                <FiBarChart2 className="text-sm text-neutral-400 transition-colors hover:text-pink-500 sm:text-base" />
+                <FiBarChart2 className="text-sm text-neutral-500 transition-colors hover:text-pink-500 sm:text-base" />
               </button>
             </Tooltip>
 
@@ -547,7 +547,7 @@ export default function WalletRow({
                   ✓
                 </button>
                 <button
-                  className="cursor-pointer rounded-md bg-neutral-700 px-1.5 py-0.5 text-[10px] font-medium text-white transition-colors hover:bg-neutral-600 sm:px-2 sm:py-1 sm:text-xs"
+                  className="cursor-pointer rounded-md bg-neutral-800 px-1.5 py-0.5 text-[10px] font-medium text-white transition-colors hover:bg-neutral-700 sm:px-2 sm:py-1 sm:text-xs"
                   onClick={handleCancelDelete}
                 >
                   ✕
@@ -556,10 +556,10 @@ export default function WalletRow({
             ) : (
               <Tooltip label="Delete Wallet">
                 <button
-                  className="cursor-pointer rounded-md p-1 transition-all duration-200 hover:bg-neutral-800/50 sm:p-2"
+                  className="cursor-pointer rounded-md p-1 transition-all duration-200 hover:bg-white/[0.05] sm:p-2"
                   onClick={handleDeleteClick}
                 >
-                  <FiTrash2 className="text-sm text-neutral-400 transition-colors hover:text-pink-500 sm:text-base" />
+                  <FiTrash2 className="text-sm text-neutral-500 transition-colors hover:text-pink-500 sm:text-base" />
                 </button>
               </Tooltip>
             )}

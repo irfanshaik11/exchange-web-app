@@ -46,7 +46,7 @@ const AX = {
   bg: "#101114",
   surface: "#1E1F26",
   surface2: "#17191E",
-  border: "#2A2B33",
+  border: "rgba(255,255,255,0.06)",
   text: "#f0f5f5",
   muted: "#9CA3AF",
   mint: "#18c48c",

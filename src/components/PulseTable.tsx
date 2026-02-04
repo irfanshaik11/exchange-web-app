@@ -4869,28 +4869,12 @@ function PulseTable({
   };
   return (
     <div
-      className={`num flex min-h-0 w-full flex-1 flex-col overflow-hidden lg:min-w-[300px] ${
-        isFirstOrLast === "first"
-          ? "rounded-tl-lg"
-          : isFirstOrLast === "last"
-            ? "rounded-tr-lg"
-            : isFirstOrLast === "only"
-              ? "rounded-lg"
-              : ""
-      }`}
-      style={{
-        backgroundColor: "#0d1015",
-        borderRight: isFirstOrLast !== "last" && isFirstOrLast !== "only" ? "1px solid #1e2028" : "none",
-        borderLeft: isFirstOrLast === "first" || isFirstOrLast === "only" ? "1px solid #1e2028" : "none",
-        borderTop: "1px solid #1e2028",
-        borderBottom: "1px solid #1e2028",
-      }}
+      className={`num flex min-h-0 w-full flex-1 flex-col overflow-hidden lg:min-w-[300px] gap-2`}
     >
       <div
-        className="group relative flex items-center justify-between border-b px-2.5 py-1 text-sm font-medium"
+        className="group relative flex items-center justify-between rounded-lg px-2.5 py-1 text-sm font-medium"
         style={{
-          backgroundColor: "#0d1015",
-          borderColor: "#1e2028",
+          backgroundColor: "#13151b",
           color: AX.text,
         }}
         onMouseEnter={() => setIsHeaderHovered(true)}
@@ -7281,13 +7265,13 @@ function PulseTable({
           </div>
         </div>
       </div>
-      <div className="custom-scrollbar flex-1 overflow-x-hidden overflow-y-scroll">
+      <div className="custom-scrollbar flex flex-1 flex-col gap-2 overflow-x-hidden overflow-y-scroll">
         {loading && tokens.length === 0 ? (
           Array.from({ length: skeletonRowCount }).map((_, idx) => (
             <div
               key={idx}
-              className="flex animate-pulse flex-row items-start border-b p-2 last:border-b-0"
-              style={{ borderColor: AX.border }}
+              className="flex shrink-0 animate-pulse flex-row items-start rounded-lg p-2"
+              style={{ backgroundColor: "#13151b", border: "1px solid #1e2028" }}
             >
               {/* Profile Picture & Address skeleton */}
               <div className="mr-2 flex w-20 flex-col items-center">
@@ -7439,9 +7423,11 @@ function PulseTable({
                 <Link
                   href={`/trade/${tokenMint}?${queryParams}`}
                   key={tokenMint}
-                  className="token-row group relative flex w-full max-w-full cursor-pointer flex-row items-start gap-2 overflow-hidden px-2 py-1.5 text-sm"
+                  className="token-row group relative flex w-full max-w-full shrink-0 cursor-pointer flex-row items-start gap-2 overflow-visible rounded-lg px-2 py-1.5 text-sm"
                   style={{
                     color: AX.text,
+                    backgroundColor: "#13151b",
+                    border: "1px solid #1e2028",
                   }}
                   onMouseEnter={(e) => {
                     // PHASE 3: Use CSS class instead of inline style (GPU-accelerated)
@@ -7503,7 +7489,7 @@ function PulseTable({
                     }
                   }}
                 >
-                  <div className="flex w-full max-w-full flex-col gap-2 overflow-hidden">
+                  <div className="flex w-full max-w-full min-w-0 flex-col gap-2">
                     <div className="flex w-full max-w-full flex-row gap-2">
                       {/* Subtle wave animation for top 3 final stretch tokens */}
                       {/* PHASE 3: Only animate if few tokens need it (performance optimization) */}
@@ -7795,7 +7781,17 @@ function PulseTable({
 
                                 <div className="ml-1 flex flex-row gap-1.5 font-light">
                                   {/* Crown Icon - Dev Migration Stats */}
-                                  <div className="group/dev relative flex items-center gap-0.5 cursor-pointer">
+                                  <div
+                                    className="group/dev relative flex items-center gap-0.5 cursor-pointer"
+                                    onMouseEnter={(e) => {
+                                      const rect = e.currentTarget.getBoundingClientRect();
+                                      const tip = e.currentTarget.querySelector('[data-tooltip="dev"]') as HTMLElement;
+                                      if (tip) {
+                                        tip.style.left = `${rect.left}px`;
+                                        tip.style.top = `${rect.bottom + 6}px`;
+                                      }
+                                    }}
+                                  >
                                     <PiCrownSimpleLight
                                       size={12}
                                       style={{ color: "#dcc13c" }}
@@ -7803,9 +7799,10 @@ function PulseTable({
                                     <span className="text-[10px] text-white">
                                       {token.dev_tokens_migrated ?? 0}/{token.dev_tokens_created ?? 0}
                                     </span>
-                                    {/* Dev Migration Tooltip - PHASE 3: Unified AX styling */}
+                                    {/* Dev Migration Tooltip */}
                                     <div
-                                      className="pointer-events-none absolute left-0 top-full mt-2 min-w-[180px] rounded-lg opacity-0 group-hover/dev:opacity-100 group-hover/dev:pointer-events-auto z-[99999] overflow-hidden"
+                                      data-tooltip="dev"
+                                      className="pointer-events-none fixed z-[99999] min-w-[180px] rounded-lg opacity-0 transition-opacity duration-200 overflow-hidden group-hover/dev:opacity-100"
                                       style={{
                                         backgroundColor: AX.surface,
                                         border: `1px solid ${AX.border}`,
@@ -7829,42 +7826,55 @@ function PulseTable({
                                           </span>
                                         </div>
                                       </div>
-                                      <div className="px-3 py-2" style={{ borderTop: `1px solid ${AX.border}`, backgroundColor: AX.surface2 }}>
-                                        <span className="text-xs" style={{ color: AX.muted }}>Click to open Dev Tokens</span>
-                                      </div>
                                     </div>
                                   </div>
 
                                   {/* KOL Count - Trophy Icon */}
-                                  <div className="group/kol2 relative flex items-center gap-0.5 text-violet-200">
+                                  <div
+                                    className="group/kol relative flex items-center gap-0.5 text-violet-200"
+                                    onMouseEnter={(e) => {
+                                      const rect = e.currentTarget.getBoundingClientRect();
+                                      const tip = e.currentTarget.querySelector('[data-tooltip="kol"]') as HTMLElement;
+                                      if (tip) {
+                                        tip.style.left = `${rect.left}px`;
+                                        tip.style.top = `${rect.bottom + 6}px`;
+                                      }
+                                    }}
+                                  >
                                     <CiTrophy size={12} />
                                     <span className="text-[10px] text-white">
                                       {token.kol_count ?? 0}
                                     </span>
-                                    {/* Tooltip - PHASE 3: Unified AX styling */}
+                                    {/* KOL Count Tooltip */}
                                     <div
-                                      className="pointer-events-none absolute top-full left-0 z-[99999] mt-2 rounded-lg px-3 py-2 whitespace-nowrap opacity-0 group-hover/kol2:opacity-100"
+                                      data-tooltip="kol"
+                                      className="pointer-events-none fixed z-[99999] rounded-lg px-3 py-2 whitespace-nowrap opacity-0 transition-opacity duration-200 group-hover/kol:opacity-100"
                                       style={{
                                         backgroundColor: AX.surface,
                                         border: `1px solid ${AX.border}`,
                                       }}
                                     >
-                                      <span className="text-sm font-medium" style={{ color: AX.text }}>
-                                        KOL Count
-                                      </span>
-                                      <p className="mt-0.5 text-xs" style={{ color: AX.muted }}>
-                                        Key Opinion Leaders holding this token
-                                      </p>
+                                      <span className="text-sm font-medium" style={{ color: AX.text }}>KOL Count</span>
+                                      <p className="mt-0.5 text-xs" style={{ color: AX.muted }}>Key Opinion Leaders holding this token</p>
                                     </div>
                                   </div>
 
                                   {/* People Icon - Total Holders */}
-                                  <div className="group/holder2 relative flex items-center gap-0.5">
+                                  <div
+                                    className="group/holder relative flex items-center gap-0.5"
+                                    onMouseEnter={(e) => {
+                                      const rect = e.currentTarget.getBoundingClientRect();
+                                      const tip = e.currentTarget.querySelector('[data-tooltip="holder"]') as HTMLElement;
+                                      if (tip) {
+                                        tip.style.left = `${rect.left}px`;
+                                        tip.style.top = `${rect.bottom + 6}px`;
+                                      }
+                                    }}
+                                  >
                                     <GoPeople
                                       size={12}
                                       style={{ color: "#36d8ff" }}
                                     />
-                                    {/* PHASE 4 (C2): Replaced IIFE with helper function */}
                                     <span className="text-[10px] text-white">
                                       {formatHolderCount(
                                         token.holder_count ??
@@ -7873,20 +7883,17 @@ function PulseTable({
                                         0
                                       )}
                                     </span>
-                                    {/* Tooltip - PHASE 3: Unified AX styling */}
+                                    {/* Holder Count Tooltip */}
                                     <div
-                                      className="pointer-events-none absolute top-full left-0 z-[99999] mt-2 rounded-lg px-3 py-2 whitespace-nowrap opacity-0 group-hover/holder2:opacity-100"
+                                      data-tooltip="holder"
+                                      className="pointer-events-none fixed z-[99999] rounded-lg px-3 py-2 whitespace-nowrap opacity-0 transition-opacity duration-200 group-hover/holder:opacity-100"
                                       style={{
                                         backgroundColor: AX.surface,
                                         border: `1px solid ${AX.border}`,
                                       }}
                                     >
-                                      <span className="text-sm font-medium" style={{ color: AX.text }}>
-                                        Holder Count
-                                      </span>
-                                      <p className="mt-0.5 text-xs" style={{ color: AX.muted }}>
-                                        Total wallets holding this token
-                                      </p>
+                                      <span className="text-sm font-medium" style={{ color: AX.text }}>Holder Count</span>
+                                      <p className="mt-0.5 text-xs" style={{ color: AX.muted }}>Total wallets holding this token</p>
                                     </div>
                                   </div>
                                   {/* Robot icon - commented out for now
@@ -8492,6 +8499,7 @@ function PulseTable({
               style={{ borderTopColor: AX.surface }}
             ></div>
           </div>
+
         </>
       ))}
       {/* Snipe on Migration Modal */}

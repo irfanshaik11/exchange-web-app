@@ -366,10 +366,36 @@ export default function ReferralsPage() {
               {/* Arena/Referrals Toggle */}
               <ArenaPageToggle activePage="referrals" />
 
-              {/* Title */}
-              <h1 className="text-5xl md:text-6xl font-black tracking-tight text-white text-center mb-8">
-                REFERRALS
-              </h1>
+              {/* Epic Title Section */}
+              <div className={`text-center mb-12 transition-all duration-700 ${mounted ? 'opacity-100 translate-y-0' : 'opacity-0 -translate-y-4'}`}>
+                {/* Decorative top element */}
+                <div className="flex items-center justify-center gap-4 mb-4">
+                  <div className="h-px w-16 bg-gradient-to-r from-transparent via-amber-500/50 to-amber-500/20" />
+                  <GiMedal className="w-6 h-6 text-amber-500/70" />
+                  <div className="h-px w-16 bg-gradient-to-l from-transparent via-amber-500/50 to-amber-500/20" />
+                </div>
+
+                {/* Main title */}
+                <h1 className="text-5xl md:text-6xl font-black tracking-tight text-white text-center">
+                  REFERRALS
+                </h1>
+
+                {/* Subtitle */}
+                <div className="flex items-center justify-center gap-3 mt-4">
+                  <p className="text-neutral-200 text-sm tracking-[0.3em] uppercase font-semibold">
+                    Share • Earn • Grow
+                  </p>
+                </div>
+
+                {/* Decorative bottom element */}
+                <div className="flex items-center justify-center gap-2 mt-4">
+                  <div className="w-2 h-2 rounded-full bg-amber-500/30" />
+                  <div className="h-px w-24 bg-gradient-to-r from-amber-500/30 via-amber-500/10 to-transparent" />
+                  <div className="w-1.5 h-1.5 rounded-full bg-amber-500/20" />
+                  <div className="h-px w-24 bg-gradient-to-l from-amber-500/30 via-amber-500/10 to-transparent" />
+                  <div className="w-2 h-2 rounded-full bg-amber-500/30" />
+                </div>
+              </div>
 
             {/* User Stats Bar - Matte opaque design matching Arena */}
             <div className={`flex flex-col sm:flex-row items-stretch gap-3 mb-6 transition-all duration-700 ${mounted ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'}`}>

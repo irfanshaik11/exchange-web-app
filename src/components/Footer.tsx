@@ -119,11 +119,9 @@ const UtilityIconButton: React.FC<{
           <div
             className="pointer-events-none fixed rounded px-2 py-1 text-xs font-medium whitespace-nowrap"
             style={{
-              backgroundColor: AX.surface,
+              backgroundColor: "#111214",
               color: AX.text,
-              border: `1px solid ${AX.border}`,
-              boxShadow:
-                "0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)",
+              border: "1px solid rgba(255, 255, 255, 0.08)",
               zIndex: 99999,
               bottom: `${tooltipPosition.bottom}px`,
               left: `${tooltipPosition.left}px`,
@@ -134,7 +132,7 @@ const UtilityIconButton: React.FC<{
             {/* Tooltip arrow pointing down */}
             <div
               className="absolute top-full left-1/2 h-0 w-0 -translate-x-1/2 transform border-t-4 border-r-4 border-l-4 border-transparent"
-              style={{ borderTopColor: AX.surface }}
+              style={{ borderTopColor: "#111214" }}
             />
           </div>,
           document.body,
@@ -198,12 +196,12 @@ export const SolanaIcon = ({ size = 16 }: { size?: number }) => (
 
 /* ---- style palette ---- */
 const AX = {
-  bg: "#101114",
-  surface: "#1E1F26",
-  surface2: "#17191E",
-  border: "#2A2B33",
-  text: "#c7c9d1",
-  muted: "#c7c9d1",
+  bg: "#0a0b0d",
+  surface: "#141518",
+  surface2: "#111214",
+  border: "#1e2028",
+  text: "#d1d5db",
+  muted: "#6b7280",
   mint: "#70E0B0",
   mintHover: "#58B890",
   sell: "#FF4D7F",
@@ -475,33 +473,29 @@ export default function Footer() {
 
   return (
     <footer
-      className="fixed right-0 bottom-0 left-0 z-[100] border-t backdrop-blur"
+      className="fixed z-[100] bottom-1 left-1 right-1 sm:bottom-1.5 sm:left-1.5 sm:right-1.5 rounded-lg"
       style={{
         backgroundColor: AX.bg,
-        borderColor: AX.border,
+        borderColor: "rgba(255, 255, 255, 0.06)",
       }}
     >
-      <div className="flex h-9 items-center justify-between overflow-x-auto px-2 py-1 sm:px-2">
+      <div className="flex h-6 items-center justify-between overflow-x-auto px-2 sm:px-2">
         {/* Left Section - Preset Button and Wallet Display */}
         <div className="flex flex-shrink-0 items-center gap-2 sm:gap-3">
           {/* Preset Button - Show for all chains now (Monad shows only gas and slippage) */}
           <button
-            className="flex items-center gap-1 rounded-md px-2 py-1 text-[11px] font-medium transition-all duration-300 ease-out sm:gap-2 sm:text-xs"
+            className="flex items-center gap-1 rounded px-2 py-0.5 text-[11px] font-medium transition-all duration-200 ease-out sm:gap-2 sm:text-xs"
             style={{
-              backgroundColor: AX.mint,
-              color: "#000000",
-              border: `1px solid ${AX.mint}`,
+              backgroundColor: "rgba(112, 224, 176, 0.12)",
+              color: AX.mint,
               cursor: "pointer",
             }}
             onClick={() => setShowPresetModal(true)}
             onMouseEnter={(e) => {
-              e.currentTarget.style.backgroundColor = AX.mintHover;
-              e.currentTarget.style.boxShadow =
-                "0 0 8px rgba(112, 224, 176, 0.3)";
+              e.currentTarget.style.backgroundColor = "rgba(112, 224, 176, 0.2)";
             }}
             onMouseLeave={(e) => {
-              e.currentTarget.style.backgroundColor = AX.mint;
-              e.currentTarget.style.boxShadow = "none";
+              e.currentTarget.style.backgroundColor = "rgba(112, 224, 176, 0.12)";
             }}
           >
             <FaBars size={11} className="sm:h-3 sm:w-3" />
@@ -540,25 +534,22 @@ export default function Footer() {
             {/* New: Wallet button that opens popup */}
             <button
               onClick={() => setShowWalletDropdown(!showWalletDropdown)}
-              className="flex items-center gap-1 rounded-full border px-2 py-1 transition-all duration-300 ease-out sm:gap-2"
+              className="flex items-center gap-1 rounded px-2 py-0.5 transition-all duration-200 ease-out sm:gap-2"
               style={{
                 backgroundColor: showWalletDropdown
-                  ? `${AX.mint}20`
+                  ? `${AX.mint}15`
                   : "transparent",
-                borderColor: showWalletDropdown ? AX.mint : AX.border,
                 color: showWalletDropdown ? AX.mint : AX.text,
                 cursor: "pointer",
               }}
               onMouseEnter={(e) => {
                 if (!showWalletDropdown) {
-                  e.currentTarget.style.backgroundColor = AX.surface;
-                  e.currentTarget.style.borderColor = AX.mint;
+                  e.currentTarget.style.backgroundColor = "rgba(255,255,255,0.04)";
                 }
               }}
               onMouseLeave={(e) => {
                 if (!showWalletDropdown) {
                   e.currentTarget.style.backgroundColor = "transparent";
-                  e.currentTarget.style.borderColor = AX.border;
                 }
               }}
             >
@@ -600,14 +591,14 @@ export default function Footer() {
               <React.Fragment key={link.name}>
                 {index > 0 && (
                   <div
-                    className="mx-1 h-3 w-px sm:h-4"
-                    style={{ backgroundColor: AX.border }}
+                    className="mx-1 h-2.5 w-px sm:h-3"
+                    style={{ backgroundColor: "rgba(255, 255, 255, 0.08)" }}
                   />
                 )}
                 {link.name === "Wallet" ? (
                   <button
                     onClick={() => setShowWalletDropdown(!showWalletDropdown)}
-                    className="group relative flex items-center gap-1 rounded px-2 py-1 transition-all duration-300 ease-out sm:gap-2"
+                    className="group relative flex items-center gap-1 rounded px-2 py-0.5 transition-all duration-300 ease-out sm:gap-2"
                     style={{
                       color: isActive ? AX.mint : AX.muted,
                       backgroundColor: isActive
@@ -636,7 +627,7 @@ export default function Footer() {
                 ) : link.name === "Twitter" ? (
                   <button
                     onClick={() => setShowTwitterDropdown(!showTwitterDropdown)}
-                    className="group relative flex items-center gap-1 rounded px-2 py-1 transition-all duration-300 ease-out sm:gap-2"
+                    className="group relative flex items-center gap-1 rounded px-2 py-0.5 transition-all duration-300 ease-out sm:gap-2"
                     style={{
                       color: isActive ? AX.mint : AX.muted,
                       backgroundColor: isActive
@@ -667,7 +658,7 @@ export default function Footer() {
                     onClick={() =>
                       setShowDiscoverDropdown(!showDiscoverDropdown)
                     }
-                    className="group relative flex items-center gap-1 rounded px-2 py-1 transition-all duration-300 ease-out sm:gap-2"
+                    className="group relative flex items-center gap-1 rounded px-2 py-0.5 transition-all duration-300 ease-out sm:gap-2"
                     style={{
                       color: isActive ? AX.mint : AX.muted,
                       backgroundColor: isActive
@@ -696,7 +687,7 @@ export default function Footer() {
                 ) : link.name === "Pulse" ? (
                   <button
                     onClick={() => setShowPulseDropdown(!showPulseDropdown)}
-                    className="group relative flex items-center gap-1 rounded px-2 py-1 transition-all duration-300 ease-out sm:gap-2"
+                    className="group relative flex items-center gap-1 rounded px-2 py-0.5 transition-all duration-300 ease-out sm:gap-2"
                     style={{
                       color: isActive ? AX.mint : AX.muted,
                       backgroundColor: isActive
@@ -725,7 +716,7 @@ export default function Footer() {
                 ) : (
                   <Link
                     href={link.href}
-                    className="group relative flex items-center gap-1 rounded px-2 py-1 transition-all duration-300 ease-out sm:gap-2"
+                    className="group relative flex items-center gap-1 rounded px-2 py-0.5 transition-all duration-300 ease-out sm:gap-2"
                     style={{
                       color: isActive ? AX.mint : AX.muted,
                       backgroundColor: isActive
@@ -771,7 +762,7 @@ export default function Footer() {
           {/* PnL Link */}
           <button
             onClick={() => setShowPnLModal(!showPnLModal)}
-            className="group flex cursor-pointer items-center gap-1 rounded px-2 py-1 transition-all duration-300 ease-out sm:gap-2"
+            className="group flex cursor-pointer items-center gap-1 rounded px-2 py-0.5 transition-all duration-300 ease-out sm:gap-2"
             style={{
               color: showPnLModal ? AX.mint : AX.muted,
               backgroundColor: showPnLModal ? `${AX.mint}20` : "transparent",
@@ -796,15 +787,12 @@ export default function Footer() {
           </button>
 
           <div
-            className="h-3 w-px sm:h-4"
-            style={{ backgroundColor: AX.border }}
+            className="h-2.5 w-px sm:h-3"
+            style={{ backgroundColor: "rgba(255, 255, 255, 0.08)" }}
           />
 
           {/* Chain Price (Solana or Monad) */}
-          <div
-            className="flex items-center gap-1 rounded-full border px-2 py-1"
-            style={{ borderColor: AX.border }}
-          >
+          <div className="flex items-center gap-1 px-2 py-0.5">
             {currentChain === "monad" ? (
               <img
                 src={chainLogos.monad}
@@ -825,21 +813,27 @@ export default function Footer() {
           </div>
 
           <div
-            className="hidden h-3 w-px sm:block sm:h-4"
-            style={{ backgroundColor: AX.border }}
+            className="hidden h-2.5 w-px sm:block sm:h-3"
+            style={{ backgroundColor: "rgba(255, 255, 255, 0.08)" }}
           />
 
           {/* Connection Status Indicator */}
-          <div className="hidden items-center gap-2 rounded-none border border-[#0e2823] bg-[#0e2823] px-2 py-1 sm:flex">
-            <div className="h-2 w-2 rounded-full bg-[#13af7f]" />
-            <span className="text-[#13af7f] text-xs leading-none font-medium">
-              {isConnected ? "CONNECTION STABLE" : "CONNECTION UNSTABLE"}
+          <div className="hidden items-center gap-1.5 px-2 py-0.5 sm:flex">
+            <div
+              className="h-1.5 w-1.5 rounded-full"
+              style={{ backgroundColor: isConnected ? "#31e3ac" : "#ef4444" }}
+            />
+            <span
+              className="text-[11px] leading-none font-medium sm:text-xs"
+              style={{ color: isConnected ? "#31e3ac" : "#ef4444" }}
+            >
+              {isConnected ? "Connected" : "Disconnected"}
             </span>
           </div>
 
           <div
-            className="hidden h-3 w-px sm:block sm:h-4"
-            style={{ backgroundColor: AX.border }}
+            className="hidden h-2.5 w-px sm:block sm:h-3"
+            style={{ backgroundColor: "rgba(255, 255, 255, 0.08)" }}
           />
 
           {/* Global Dropdown */}
@@ -847,7 +841,7 @@ export default function Footer() {
             <button
               ref={globalButtonRef}
               onClick={() => setShowGlobalDropdown(!showGlobalDropdown)}
-              className="flex items-center gap-1 rounded px-2 py-1 transition-all duration-300 ease-out"
+              className="flex items-center gap-1 rounded px-2 py-0.5 transition-all duration-300 ease-out"
               style={{ color: AX.text }}
               onMouseEnter={(e) => {
                 e.currentTarget.style.backgroundColor = AX.surface;
@@ -975,8 +969,8 @@ export default function Footer() {
           </div>
 
           <div
-            className="hidden h-3 w-px sm:block sm:h-4"
-            style={{ backgroundColor: AX.border }}
+            className="hidden h-2.5 w-px sm:block sm:h-3"
+            style={{ backgroundColor: "rgba(255, 255, 255, 0.08)" }}
           />
 
           {/* Utility Icons */}
@@ -995,8 +989,8 @@ export default function Footer() {
           </div>
 
           <div
-            className="hidden h-3 w-px sm:block sm:h-4"
-            style={{ backgroundColor: AX.border }}
+            className="hidden h-2.5 w-px sm:block sm:h-3"
+            style={{ backgroundColor: "rgba(255, 255, 255, 0.08)" }}
           />
 
           {/* Social Links */}
@@ -1009,7 +1003,7 @@ export default function Footer() {
                   href={social.href}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="group flex cursor-pointer items-center gap-1 rounded px-2 py-1 transition-all duration-300 ease-out"
+                  className="group flex cursor-pointer items-center gap-1 rounded px-2 py-0.5 transition-all duration-300 ease-out"
                   style={{ color: AX.muted }}
                   onMouseEnter={(e) => {
                     e.currentTarget.style.color = AX.mint;
