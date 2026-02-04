@@ -3642,7 +3642,7 @@ export default function DiscoverPage() {
 
       <div className="relative min-h-screen bg-[#050608] text-[#E6E7EA]">
         {/* Header stays outside the rounded container */}
-        <div className="relative z-[100]">
+        <div className="relative z-[10000]">
           <Header
             search={search}
             setSearch={setSearch}

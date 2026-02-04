@@ -849,7 +849,7 @@ function TokenMetrics({
           {metrics.kols}
         </span>
         {/* Tooltip - appears below */}
-        <div className="pointer-events-none absolute top-full left-0 z-[99999] mt-2 rounded-lg border border-[#2a2b33] bg-[#1a1b1f] px-3 py-2 whitespace-nowrap opacity-0 shadow-xl transition-opacity duration-100 group-hover/kol:opacity-100">
+        <div className="pointer-events-none absolute top-full left-0 z-[9999] mt-2 rounded-lg border border-[#2a2b33] bg-[#1a1b1f] px-3 py-2 whitespace-nowrap opacity-0 shadow-xl transition-opacity duration-100 group-hover/kol:opacity-100">
           <span className="text-sm font-medium text-white">KOL Count</span>
           <p className="mt-0.5 text-xs text-gray-400">
             Key Opinion Leaders holding this token
@@ -875,7 +875,7 @@ function TokenMetrics({
           {metrics.holders}
         </span>
         {/* Tooltip - appears below */}
-        <div className="pointer-events-none absolute top-full left-0 z-[99999] mt-2 rounded-lg border border-[#2a2b33] bg-[#1a1b1f] px-3 py-2 whitespace-nowrap opacity-0 shadow-xl transition-opacity duration-100 group-hover/holder:opacity-100">
+        <div className="pointer-events-none absolute top-full left-0 z-[9999] mt-2 rounded-lg border border-[#2a2b33] bg-[#1a1b1f] px-3 py-2 whitespace-nowrap opacity-0 shadow-xl transition-opacity duration-100 group-hover/holder:opacity-100">
           <span className="text-sm font-medium text-white">Holder Count</span>
           <p className="mt-0.5 text-xs text-gray-400">
             Total wallets holding this token
@@ -1166,7 +1166,7 @@ function SocialIconsWithMetadata({
           {/* X Profile Preview Popup - PHASE 3: JS-based fixed positioning */}
           {showXPreview && (
           <div
-            className="fixed w-[280px] rounded-xl z-[99999] overflow-hidden"
+            className="fixed w-[280px] rounded-xl z-[9999] overflow-hidden"
             style={{
               left: `${previewPosition.left}px`,
               top: `${previewPosition.top}px`,
@@ -1342,7 +1342,7 @@ function SocialIconsWithMetadata({
           </button>
           {/* Website URL Tooltip - PHASE 3: Unified AX styling */}
           <div
-            className="pointer-events-none absolute top-full left-1/2 z-[99999] mt-2 -translate-x-1/2 rounded-lg px-3 py-2 whitespace-nowrap opacity-0 group-hover/website:opacity-100"
+            className="pointer-events-none absolute top-full left-1/2 z-[9999] mt-2 -translate-x-1/2 rounded-lg px-3 py-2 whitespace-nowrap opacity-0 group-hover/website:opacity-100"
             style={{
               backgroundColor: AX.surface,
               border: `1px solid ${AX.border}`,
@@ -1396,7 +1396,7 @@ function SocialIconsWithMetadata({
         {showSearchMenu && (
         <div
           ref={searchMenuRef}
-          className="fixed min-w-[220px] rounded-lg py-1 z-[99999] overflow-hidden"
+          className="fixed min-w-[220px] rounded-lg py-1 z-[9999] overflow-hidden"
           style={{
             left: `${searchMenuPosition.left}px`,
             top: `${searchMenuPosition.top}px`,
@@ -7516,7 +7516,7 @@ function PulseTable({
                           backgroundColor: AX.surface,
                           borderColor: AX.border,
                           color: AX.text,
-                          zIndex: 99999,
+                          zIndex: 9999,
                           borderRadius: "6px",
                           fontSize: "11px",
                           fontWeight: "500",
@@ -7802,7 +7802,7 @@ function PulseTable({
                                     {/* Dev Migration Tooltip */}
                                     <div
                                       data-tooltip="dev"
-                                      className="pointer-events-none fixed z-[99999] min-w-[180px] rounded-lg opacity-0 transition-opacity duration-200 overflow-hidden group-hover/dev:opacity-100"
+                                      className="pointer-events-none fixed z-[9999] min-w-[180px] rounded-lg opacity-0 transition-opacity duration-200 overflow-hidden group-hover/dev:opacity-100"
                                       style={{
                                         backgroundColor: AX.surface,
                                         border: `1px solid ${AX.border}`,
@@ -7848,7 +7848,7 @@ function PulseTable({
                                     {/* KOL Count Tooltip */}
                                     <div
                                       data-tooltip="kol"
-                                      className="pointer-events-none fixed z-[99999] rounded-lg px-3 py-2 whitespace-nowrap opacity-0 transition-opacity duration-200 group-hover/kol:opacity-100"
+                                      className="pointer-events-none fixed z-[9999] rounded-lg px-3 py-2 whitespace-nowrap opacity-0 transition-opacity duration-200 group-hover/kol:opacity-100"
                                       style={{
                                         backgroundColor: AX.surface,
                                         border: `1px solid ${AX.border}`,
@@ -7886,7 +7886,7 @@ function PulseTable({
                                     {/* Holder Count Tooltip */}
                                     <div
                                       data-tooltip="holder"
-                                      className="pointer-events-none fixed z-[99999] rounded-lg px-3 py-2 whitespace-nowrap opacity-0 transition-opacity duration-200 group-hover/holder:opacity-100"
+                                      className="pointer-events-none fixed z-[9999] rounded-lg px-3 py-2 whitespace-nowrap opacity-0 transition-opacity duration-200 group-hover/holder:opacity-100"
                                       style={{
                                         backgroundColor: AX.surface,
                                         border: `1px solid ${AX.border}`,
@@ -7912,7 +7912,7 @@ function PulseTable({
                                   <div
                                     className="pointer-events-none absolute bottom-full left-1/2 mb-2 -translate-x-1/2 transform rounded px-2 py-1 text-xs font-medium whitespace-nowrap opacity-0 transition-opacity duration-200"
                                     style={{
-                                      zIndex: 99999,
+                                      zIndex: 9999,
                                       backgroundColor: AX.surface,
                                       color: AX.text,
                                       border: `1px solid ${AX.border}`,
@@ -8442,7 +8442,7 @@ function PulseTable({
             id={`copy-tooltip-${idx}`}
             className="pointer-events-none fixed rounded px-2 py-1 text-xs font-medium whitespace-nowrap opacity-0 transition-opacity duration-200"
             style={{
-              zIndex: 99999,
+              zIndex: 9999,
               backgroundColor: AX.surface,
               color: AX.text,
               border: `1px solid ${AX.border}`,
@@ -8463,7 +8463,7 @@ function PulseTable({
             id={`search-tooltip-${idx}`}
             className="pointer-events-none fixed rounded px-2 py-1 text-xs font-medium whitespace-nowrap opacity-0 transition-opacity duration-200"
             style={{
-              zIndex: 99999,
+              zIndex: 9999,
               backgroundColor: AX.surface,
               color: AX.text,
               border: `1px solid ${AX.border}`,
@@ -8484,7 +8484,7 @@ function PulseTable({
             id={`profile-tooltip-${idx}`}
             className="pointer-events-none fixed rounded px-2 py-1 text-xs font-medium whitespace-nowrap opacity-0 transition-opacity duration-200"
             style={{
-              zIndex: 99999,
+              zIndex: 9999,
               backgroundColor: AX.surface,
               color: AX.text,
               border: `1px solid ${AX.border}`,

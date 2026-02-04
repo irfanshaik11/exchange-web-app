@@ -6126,7 +6126,7 @@ function MonadTable({
                           backgroundColor: AX.surface,
                           borderColor: AX.border,
                           color: AX.text,
-                          zIndex: 99999,
+                          zIndex: 9999,
                           borderRadius: "6px",
                           fontSize: "11px",
                           fontWeight: "500",

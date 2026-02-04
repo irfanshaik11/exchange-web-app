@@ -2733,7 +2733,7 @@ export default function PortfolioPage() {
         <title>Portfolio | Interstate Memeboard</title>
       </Head>
       <div className="flex min-h-screen flex-col bg-[#050608] text-[#E6E7EA]">
-        <div className="relative z-10"><Header /></div>
+        <div className="relative z-[10000]"><Header /></div>
         <div className="p-1 sm:p-1.5">
           <div className="relative overflow-hidden rounded-2xl border border-white/[0.06] min-h-[calc(100vh-80px)]">
             {/* Background Image with multi-layer fade */}
