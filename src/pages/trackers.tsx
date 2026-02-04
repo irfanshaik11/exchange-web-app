@@ -1569,7 +1569,7 @@ export default function TrackersPage() {
       <div>
         <div className="flex min-h-screen flex-col bg-[#050608] text-neutral-100">
           {/* Header stays outside the rounded container */}
-          <div className="relative z-10">
+          <div className="relative z-[10000]">
             <Header isSticky={false} />
           </div>
 
