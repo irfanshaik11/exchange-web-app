@@ -31,6 +31,7 @@ import toast from "react-hot-toast";
 import { executeSolanaMultiBuy, buildSolanaWalletAllocations } from "~/utils/solanaWalletAllocation";
 import { getPoolTypeFromToken } from "~/utils/poolTypeDetection";
 import { fetchVerifiedPairAddress } from "~/hooks/useSingleTokenPolling";
+import { useQueryNewPairs } from '../hooks/useQueryTokens';
 
 const WRAPPED_SOL_MINT = SOL_MINT_ADDRESS;
 
@@ -183,6 +184,10 @@ export default function DiscoverPage() {
 
   const { presets, activePreset, setActivePreset } = useQuickBuy();
   const { user, solBalance, refreshBalance, walletList, walletBalances, selectedWalletIds } = useUser();
+
+  // Use same React Query hook as pulse page for independent new pairs data
+  const isSolanaChain = currentChain === 'sol';
+  const { data: reactQueryNewPairs = [] } = useQueryNewPairs(isSolanaChain);
 
   // Load quickBuyAmount from localStorage with fallback
   const getInitialQuickBuyAmount = () => {
@@ -808,6 +813,22 @@ export default function DiscoverPage() {
     }
   }, [currentChain, setNewPairsRawForChain]);
 
+  // Merge React Query new pairs data (same source as pulse page)
+  // This runs independently and provides data even without visiting pulse first
+  useEffect(() => {
+    if (!isSolanaChain) return;
+    if (reactQueryNewPairs.length === 0) return;
+
+    setNewPairsRawByChain((prev) => {
+      const existing = prev['sol'] || [];
+      // If the existing 200-token fetch already loaded, don't overwrite with smaller dataset
+      if (existing.length >= reactQueryNewPairs.length) return prev;
+
+      // React Query data arrived first or existing is empty — use it
+      return { ...prev, sol: reactQueryNewPairs as TokenWithDexPaid[] };
+    });
+  }, [isSolanaChain, reactQueryNewPairs]);
+
   useEffect(() => {
     let cancelled = false;
     let intervalId: ReturnType<typeof setInterval> | null = null;
@@ -1430,26 +1451,21 @@ export default function DiscoverPage() {
             return token;
           });
 
-          // Match pulse.tsx filtering - only filter by zero liquidity and wrapped SOL
-          // This ensures we show the same tokens as pulse table
+          // Match pulse.tsx filtering - only filter by wrapped SOL
+          // Zero liquidity filtering disabled for new pairs (same as PulseTable)
           const filtered = transformedTokens.filter((token: any) => {
             // Filter out wrapped SOL
             if (isWrappedSol(token)) {
               return false;
             }
-            
-            // Filter out zero liquidity tokens (same as pulse.tsx)
-            if (isZeroLiquidityToken(token)) {
-              return false;
-            }
-            
+
             // For Monad, tokens use 'address' which we map to 'mint', but check both as fallback
             // For Solana, ensure we have a mint
             const tokenId = token.mint || (currentChain === 'monad' ? token.address : null);
             if (!token || !tokenId) {
               return false;
             }
-            
+
             return true;
           }) as TokenWithDexPaid[];
 
@@ -3221,16 +3237,11 @@ export default function DiscoverPage() {
 
     console.log(`[Discover] Processing ${newPairsRaw.length} new pairs for ${currentChain}`);
     
-    // Match pulse.tsx filtering logic - only filter by zero liquidity and wrapped SOL
-    // This ensures we show the same tokens as pulse table
+    // Match pulse.tsx filtering logic - only filter by wrapped SOL
+    // Zero liquidity filtering disabled for new pairs (same as PulseTable)
     const base = newPairsRaw.filter((token) => {
       // Filter out wrapped SOL
       if (isWrappedSol(token)) {
-        return false;
-      }
-      
-      // Filter out zero liquidity tokens (same as pulse.tsx)
-      if (isZeroLiquidityToken(token)) {
         return false;
       }
       

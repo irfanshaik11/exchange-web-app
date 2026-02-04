@@ -50,7 +50,7 @@ const AX = {
   bg: "#0a0b0d",
   surface: "#0d1015",
   surface2: "#12141a",
-  border: "#1e2028",
+  border: "rgba(255,255,255,0.06)",
   text: "#9ca3af",
   muted: "#6b7280",
   mint: "#18c48c",
@@ -95,7 +95,7 @@ const navLinks = [
   { name: "Portfolio", href: "/portfolio" },
   { name: "Trending", href: "/discover" },
   { name: "Trackers", href: "/trackers" },
-  { name: "Arena", href: "/arena" },
+  { name: "Rewards", href: "/arena" },
   // { name: "Predictions", href: "/predictions" },
   // { name: "Perpetuals", href: "/construction" },
   // { name: "Yield", href: "/construction" },
@@ -320,29 +320,34 @@ export default function Header({
   // Watchlist ticker paging (max 8 tokens visible)
   const WATCHLIST_TICKER_PAGE_SIZE = 8;
   const [watchlistTickerPage, setWatchlistTickerPage] = useState(0);
-  
-  // Enrich watchlist tokens with cached pulse token data when price is missing
-  const [cachedPulseTokens, setCachedPulseTokens] = useState<Token[]>([]);
-  const pendingQuickBuyToastRef = useRef<{ id: string; tokenImage: string | null; tokenName: string; fakeTime: string; startTime: number; timerInterval?: NodeJS.Timeout } | null>(null);
 
-  const isMonadToken = (token: any) =>
-    typeof token?.mint === "string" && token.mint.startsWith("0x");
-  
-  useEffect(() => {
-    // Load cached pulse tokens to enrich watchlist tokens
+  // Track tokens whose images failed to load — filtered out of the ticker display
+  const [failedImageTokens, setFailedImageTokens] = useState<Set<string>>(new Set());
+  // Stable ref prevents the ticker from flashing empty during transient re-renders
+  const stableEnrichedWatchlistRef = useRef<Token[]>([]);
+
+  // Enrich watchlist tokens with cached pulse token data when price is missing
+  // Lazy-init from localStorage to avoid flicker on page navigation (no useEffect delay)
+  const [cachedPulseTokens, setCachedPulseTokens] = useState<Token[]>(() => {
+    if (typeof window === 'undefined') return [];
     try {
       const cached = localStorage.getItem('cached_pulse_tokens');
       if (cached) {
         const parsed = JSON.parse(cached);
         const now = Date.now();
         if (now < parsed.expiresAt) {
-          setCachedPulseTokens(parsed.data || []);
+          return parsed.data || [];
         }
       }
     } catch (error) {
       // Ignore errors
     }
-  }, []);
+    return [];
+  });
+  const pendingQuickBuyToastRef = useRef<{ id: string; tokenImage: string | null; tokenName: string; fakeTime: string; startTime: number; timerInterval?: NodeJS.Timeout } | null>(null);
+
+  const isMonadToken = (token: any) =>
+    typeof token?.mint === "string" && token.mint.startsWith("0x");
 
   // Helper function to enrich a token with cached pulse data
   const enrichTokenWithCachedData = useCallback((token: Token): Token => {
@@ -426,17 +431,42 @@ export default function Header({
   }, [watchlist, refreshWatchlistToken]);
 
   // Memoize enriched watchlist to avoid recalculating on every render
-  // Also deduplicate by pair_address/mint to prevent showing duplicate tokens
+  // Deduplicate by address AND name, filter tokens without images / broken images, stabilize display
+  const MIN_WATCHLIST_DISPLAY = 10;
   const enrichedWatchlist = useMemo(() => {
     const enriched = watchlist.map(enrichTokenWithCachedData);
-    const seen = new Set<string>();
-    return enriched.filter((token) => {
+    const seenIds = new Set<string>();
+    const seenNames = new Set<string>();
+    const filtered = enriched.filter((token) => {
       const tokenId = token.pair_address || (token as any).mint || '';
-      if (!tokenId || seen.has(tokenId)) return false;
-      seen.add(tokenId);
+      if (!tokenId || seenIds.has(tokenId)) return false;
+
+      // Deduplicate by symbol/name — no two tokens with the same display name
+      const displayName = (token.symbol || token.name || '').toLowerCase().trim();
+      if (!displayName || seenNames.has(displayName)) return false;
+
+      // Only show tokens that have an image URL
+      const rawImg = (token as any).image_url || (token as any).image || (token as any).logo || (token as any).uri;
+      if (!rawImg) return false;
+
+      // Exclude tokens whose images failed to load
+      if (failedImageTokens.has(tokenId)) return false;
+
+      seenIds.add(tokenId);
+      seenNames.add(displayName);
       return true;
     });
-  }, [watchlist, enrichTokenWithCachedData]);
+
+    // Stability: keep last non-empty list to prevent flashing during page transitions
+    if (watchlist.length === 0) {
+      stableEnrichedWatchlistRef.current = [];
+      return [];
+    }
+    if (filtered.length > 0) {
+      stableEnrichedWatchlistRef.current = filtered;
+    }
+    return stableEnrichedWatchlistRef.current;
+  }, [watchlist, enrichTokenWithCachedData, failedImageTokens]);
   
   const watchlistTickerTotalPages = Math.max(
     1,
@@ -1252,12 +1282,11 @@ export default function Header({
   return (
     <>
       <header
-        className={`${isSticky ? "sticky top-0 z-20" : "relative z-10"} w-full border-b backdrop-blur-sm bg-[#0a0b0d]`}
-        style={{ borderColor: "#1e2028" }}
+        className={`${isSticky ? "sticky top-0 z-20" : "relative z-10"} w-full backdrop-blur-sm bg-[#0a0b0d]`}
       >
         <div
-          className="flex max-w-full items-center justify-between border-b px-3 py-2 md:px-4"
-          style={{ backgroundColor: "#0a0b0d", borderColor: "#1e2028" }}
+          className="flex max-w-full items-center justify-between px-3 py-2 md:px-4"
+          style={{ backgroundColor: "#0a0b0d" }}
         >
           <div className="flex min-w-0 flex-1 items-center gap-2 overflow-hidden md:gap-3">
             <Link
@@ -1307,7 +1336,7 @@ export default function Header({
                     router.pathname === link.href ||
                     (link.name === "Trenches" &&
                       router.pathname.startsWith("/trade/")) ||
-                    (link.name === "Arena" &&
+                    (link.name === "Rewards" &&
                       (router.pathname === "/arena" || router.pathname === "/referrals"));
                   return (
                     <Link
@@ -1978,7 +2007,8 @@ export default function Header({
           </div>
         </div>
         {headerBarVisible && (
-          <div className="flex items-center gap-2 bg-[#0C0C0F] px-3 py-0.5">
+          <div className="flex items-center gap-2 px-1 py-0.5 overflow-hidden" style={{ background: '#0a0b0e' }}>
+          <div className="flex items-center gap-2 flex-1 min-w-0 rounded-md px-3 py-1 overflow-hidden" style={{ background: '#13151b' }}>
             {/* extra toolbar section */}
             <div className="group relative">
               <button
@@ -2089,23 +2119,23 @@ export default function Header({
 
             {/* Divider before watchlist tokens - only show after hydration to prevent flicker */}
             {isHydrated && watchlist.length > 0 && (
-              <div className="h-4 border-r" style={{ borderColor: AX.border }} />
+              <div className="h-4 border-r" style={{ borderColor: '#262a35' }} />
             )}
 
             {/* "All" dropdown for watchlist filter */}
             {isHydrated && watchlist.length > 0 && (
               <div className="flex items-center">
-                <span className="text-xs font-medium" style={{ color: AX.text }}>
+                <span className="text-xs font-medium" style={{ color: '#c5cdd8' }}>
                   All
                 </span>
-                <FaChevronDown size={8} className="ml-1" style={{ color: AX.muted }} />
+                <FaChevronDown size={8} className="ml-1" style={{ color: '#8b94a5' }} />
               </div>
             )}
 
             {/* Watchlist Tokens Ticker - Scrollable Container (uses full available panel width) */}
             {isHydrated && enrichedWatchlist.length > 0 && (
             <div
-              className="flex-1 flex items-center gap-3 overflow-x-auto scrollbar-hide px-1"
+              className="flex-1 flex items-center gap-3 overflow-x-auto scrollbar-hide pl-1 pr-3"
               style={{
                 minWidth: 0, // Allow flex item to shrink below content size for proper scrolling
                 scrollbarWidth: 'none', // Firefox
@@ -2206,12 +2236,7 @@ export default function Header({
               return (
                 <div
                   key={tokenKey}
-                  className="flex items-center gap-1.5 cursor-pointer transition-all duration-200 shrink-0 px-2 py-1 rounded-md hover:bg-white/5"
-                  style={{
-                    borderRight: index < enrichedWatchlist.length - 1 ? `1px solid ${AX.border}` : 'none',
-                    paddingRight: index < enrichedWatchlist.length - 1 ? '12px' : '8px',
-                    marginRight: index < enrichedWatchlist.length - 1 ? '4px' : '0',
-                  }}
+                  className="flex items-center gap-1.5 cursor-pointer transition-all duration-200 shrink-0 px-2.5 py-1 rounded-lg hover:bg-white/[0.07]"
                   onMouseEnter={() => setHoveredWatchlistToken(tokenKey)}
                   onMouseLeave={() => setHoveredWatchlistToken(null)}
                   onClick={() => {
@@ -2261,20 +2286,31 @@ export default function Header({
                     <img
                       src={rawImg}
                       alt={token.symbol || ''}
-                      className="w-4 h-4 rounded-full object-cover"
-                      onError={(e) => {
-                        (e.target as HTMLImageElement).style.display = 'none';
+                      className="w-4 h-4 rounded-full object-cover ring-1 ring-white/10"
+                      onError={() => {
+                        // Mark this token as having a broken image — filtered out immediately
+                        const failId = token.pair_address || (token as any).mint || '';
+                        if (failId) {
+                          setFailedImageTokens(prev => {
+                            if (prev.has(failId)) return prev;
+                            const next = new Set(prev);
+                            next.add(failId);
+                            return next;
+                          });
+                          // Also remove from watchlist context so replenishment can kick in
+                          removeFromWatchlist(failId);
+                        }
                       }}
                     />
                   )}
                   
                   {/* Token Symbol */}
-                  <span className="text-xs font-medium" style={{ color: AX.text }}>
+                  <span className="text-xs font-semibold" style={{ color: '#d1d5db' }}>
                     {token.symbol}
                   </span>
-                  
+
                   {/* Price */}
-                  <span className="text-xs" style={{ color: AX.muted }}>
+                  <span className="text-xs font-medium" style={{ color: '#a3e635' }}>
                     ${price > 0 ? formatSmallPrice(price) : '0'}
                   </span>
                   
@@ -2282,12 +2318,12 @@ export default function Header({
                   {priceChange !== 0 && (
                     <span 
                       className="text-xs font-medium"
-                      style={{ color: priceChange >= 0 ? '#85d99f' : '#f26681' }}
+                      style={{ color: priceChange >= 0 ? '#8ee8a8' : '#f47a96' }}
                     >
                       {priceChange >= 0 ? '+' : ''}{formatSmartNumber(Math.abs(priceChange))}%
                     </span>
                   )}
-                  
+
                   {/* Volume (1h) - show as percentage of market cap */}
                   {(() => {
                     // Use same volume resolution logic as watchlist modal
@@ -2311,23 +2347,23 @@ export default function Header({
                       const sell = Number((token as any).total_sell_volume_1h) || Number((token as any).total_sell_volume_mon) || 0;
                       if (buy || sell) volume1h = buy + sell;
                     }
-                    
+
                     // Get market cap
-                    const marketCap = 
+                    const marketCap =
                       (token as any).market_cap_usd ??
                       (token as any).marketCapUSD ??
                       (token as any).fully_diluted_value ??
                       0;
-                    
+
                     // Calculate volume as percentage of market cap
                     // let volumePercent = 0;
                     // if (volume1h > 0 && marketCap > 0) {
                     //   volumePercent = (volume1h / marketCap) * 100;
                     // }
-                    
+
                     // Show USD volume amount
                     // Color based on price change direction: green for up, red for down
-                    const volumeColor = priceChange >= 0 ? '#85d99f' : '#f26681';
+                    const volumeColor = priceChange >= 0 ? '#8ee8a8' : '#f47a96';
                     
                     // if (volumePercent > 0) {
                     //   return (
@@ -2384,9 +2420,7 @@ export default function Header({
             </div>
             )}
 
-            <div className="h-4 border-r" style={{ borderColor: AX.border }}>
-              {" "}
-            </div>
+          </div>
           </div>
         )}
       </header>

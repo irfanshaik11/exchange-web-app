@@ -750,23 +750,15 @@ export default function ArenaPage() {
               </div>
 
               {/* Main title */}
-              <div className="relative inline-block">
-                <h1 className="text-6xl md:text-8xl font-black tracking-[0.2em] bg-gradient-to-b from-yellow-200 via-yellow-400 to-amber-500 bg-clip-text text-transparent relative z-10">
-                  ARENA
-                </h1>
-                {/* Glow effect behind text */}
-                <div className="absolute inset-0 text-6xl md:text-8xl font-black tracking-[0.2em] text-yellow-500/20 blur-xl z-0">
-                  ARENA
-                </div>
-              </div>
+              <h1 className="text-5xl md:text-6xl font-black tracking-tight text-white text-center mb-8">
+                ARENA
+              </h1>
 
-              {/* Subtitle with icons */}
+              {/* Subtitle */}
               <div className="flex items-center justify-center gap-3 mt-4">
-                <IoFlameSharp className="w-5 h-5 text-orange-400" />
                 <p className="text-neutral-200 text-sm tracking-[0.3em] uppercase font-semibold">
                   Trade • Compete • Conquer
                 </p>
-                <IoFlameSharp className="w-5 h-5 text-orange-400" />
               </div>
 
               {/* Decorative bottom element */}

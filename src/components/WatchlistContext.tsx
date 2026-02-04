@@ -113,8 +113,9 @@ export function WatchlistProvider({ children }: { children: React.ReactNode }) {
         const data = await response.json();
         const tokens: Token[] = Array.isArray(data) ? data : (data?.tokens || data?.data || []);
 
-        // Filter tokens that have image URLs and deduplicate by pair_address/mint
+        // Filter tokens that have image URLs, deduplicate by address AND by name/symbol
         const seenAddresses = new Set<string>();
+        const seenNames = new Set<string>();
         const tokensWithImageUrls = tokens.filter((token: any) => {
           const imageUrl = extractTokenImage(token);
           if (!imageUrl || !imageUrl.trim().length) return false;
@@ -122,7 +123,13 @@ export function WatchlistProvider({ children }: { children: React.ReactNode }) {
           // Deduplicate by pair_address or mint
           const tokenId = token.pair_address || token.mint || '';
           if (!tokenId || seenAddresses.has(tokenId)) return false;
+
+          // Deduplicate by name/symbol — no two tokens with the same display name
+          const displayName = (token.symbol || token.name || '').toLowerCase().trim();
+          if (!displayName || seenNames.has(displayName)) return false;
+
           seenAddresses.add(tokenId);
+          seenNames.add(displayName);
 
           return true;
         });
@@ -154,6 +161,94 @@ export function WatchlistProvider({ children }: { children: React.ReactNode }) {
     };
 
     fetchDefaultTokens();
+  }, [watchlist.length, isHydrated]);
+
+  // Replenishment: if watchlist drops below 10 valid tokens (e.g. broken images removed),
+  // fetch fresh tokens to fill back up to the default count
+  const replenishingRef = useRef(false);
+  useEffect(() => {
+    if (!isHydrated) return;
+    if (watchlist.length === 0) return; // Don't replenish if user cleared everything
+    if (watchlist.length >= DEFAULT_WATCHLIST_COUNT) return; // Already have enough
+    if (replenishingRef.current) return; // Already replenishing
+
+    // Only replenish if we've already done initial population
+    const alreadyPopulated = localStorage.getItem(DEFAULTS_POPULATED_KEY);
+    if (!alreadyPopulated) return;
+
+    // Count how many have valid images + unique names
+    const seenNames = new Set<string>();
+    const seenAddrs = new Set<string>();
+    let validCount = 0;
+    for (const token of watchlist) {
+      const addr = token.pair_address || (token as any).mint || '';
+      const name = (token.symbol || token.name || '').toLowerCase().trim();
+      const img = extractTokenImage(token);
+      if (addr && name && img && !seenAddrs.has(addr) && !seenNames.has(name)) {
+        seenAddrs.add(addr);
+        seenNames.add(name);
+        validCount++;
+      }
+    }
+
+    const MIN_DISPLAY = 10;
+    if (validCount >= MIN_DISPLAY) return;
+
+    replenishingRef.current = true;
+    const needed = DEFAULT_WATCHLIST_COUNT - watchlist.length;
+
+    // Fetch fresh tokens and add unique ones we don't already have
+    (async () => {
+      try {
+        const response = await fetch('/api/token-service/pulse-new?limit=100&fresh=1', {
+          headers: { 'Accept': 'application/json' },
+        });
+        if (!response.ok) return;
+        const data = await response.json();
+        const tokens: Token[] = Array.isArray(data) ? data : (data?.tokens || data?.data || []);
+
+        // Build sets from current watchlist
+        const existingAddrs = new Set(
+          watchlist.map(t => (t.pair_address || (t as any).mint || '').toLowerCase()).filter(Boolean)
+        );
+        const existingNames = new Set(
+          watchlist.map(t => (t.symbol || t.name || '').toLowerCase().trim()).filter(Boolean)
+        );
+
+        const validateImageUrl = (url: string): Promise<boolean> =>
+          new Promise((resolve) => {
+            const img = new Image();
+            const timeout = setTimeout(() => { img.src = ''; resolve(false); }, 3000);
+            img.onload = () => { clearTimeout(timeout); resolve(true); };
+            img.onerror = () => { clearTimeout(timeout); resolve(false); };
+            img.src = url;
+          });
+
+        const newTokens: Token[] = [];
+        for (const token of tokens) {
+          if (newTokens.length >= needed) break;
+          const addr = (token.pair_address || (token as any).mint || '').toLowerCase();
+          const name = ((token as any).symbol || (token as any).name || '').toLowerCase().trim();
+          const imgUrl = extractTokenImage(token);
+          if (!addr || !name || !imgUrl) continue;
+          if (existingAddrs.has(addr) || existingNames.has(name)) continue;
+          const valid = await validateImageUrl(imgUrl);
+          if (!valid) continue;
+          existingAddrs.add(addr);
+          existingNames.add(name);
+          newTokens.push(token);
+        }
+
+        if (newTokens.length > 0) {
+          setWatchlist(prev => [...prev, ...newTokens]);
+          console.log(`Replenished watchlist with ${newTokens.length} new tokens`);
+        }
+      } catch (error) {
+        console.warn('Error replenishing watchlist:', error);
+      } finally {
+        replenishingRef.current = false;
+      }
+    })();
   }, [watchlist.length, isHydrated]);
 
   const addToWatchlist = (token: Token) => {
