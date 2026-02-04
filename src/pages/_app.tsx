@@ -607,6 +607,23 @@ const MyApp: AppType = ({ Component, pageProps }) => {
     };
   }, []);
 
+  // Chunk load error recovery for SPA navigation
+  const routerForChunkRecovery = useRouter();
+  useEffect(() => {
+    const handleRouteError = (err: any, url: string) => {
+      if (
+        err?.name === 'ChunkLoadError' ||
+        /loading chunk [\d]+ failed/i.test(err?.message || '')
+      ) {
+        window.location.href = url;
+      }
+    };
+    routerForChunkRecovery.events.on('routeChangeError', handleRouteError);
+    return () => {
+      routerForChunkRecovery.events.off('routeChangeError', handleRouteError);
+    };
+  }, [routerForChunkRecovery.events]);
+
   // Preload TradingView library script early for faster chart loading
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -631,7 +648,6 @@ const MyApp: AppType = ({ Component, pageProps }) => {
     <>
       <Head>
         <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes" />
-
         <title>Interstate - The Fastest Exchange</title>
         <meta name="description" content="Get ready to win on Interstate, the fastest exchange! Get free Solana for joining today, win daily Jackpots, level up and earn progressively higher rewards. Start trading today!" />
 
