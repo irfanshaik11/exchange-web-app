@@ -1463,9 +1463,19 @@ export default function DiscoverPage() {
 
           // Match pulse.tsx filtering - only filter by wrapped SOL
           // Zero liquidity filtering disabled for new pairs (same as PulseTable)
+          // Blacklisted mint addresses to exclude from new pairs
+          const blacklistedMints = new Set([
+            'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v', // USDC
+          ]);
+
           const filtered = transformedTokens.filter((token: any) => {
             // Filter out wrapped SOL
             if (isWrappedSol(token)) {
+              return false;
+            }
+
+            // Filter out blacklisted mints
+            if (token.mint && blacklistedMints.has(token.mint)) {
               return false;
             }
 
@@ -3249,12 +3259,22 @@ export default function DiscoverPage() {
     
     // Match pulse.tsx filtering logic - only filter by wrapped SOL
     // Zero liquidity filtering disabled for new pairs (same as PulseTable)
+    // Blacklisted mint addresses to exclude from new pairs
+    const blacklistedMints = new Set([
+      'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v', // USDC
+    ]);
+
     const base = newPairsRaw.filter((token) => {
       // Filter out wrapped SOL
       if (isWrappedSol(token)) {
         return false;
       }
-      
+
+      // Filter out blacklisted mints
+      if (token.mint && blacklistedMints.has(token.mint)) {
+        return false;
+      }
+
       // For Monad, ensure we have a mint (from address transformation)
       // For Solana, ensure we have a mint
       const tokenId = token.mint || (currentChain === 'monad' ? (token as any).address : null);
@@ -3266,7 +3286,20 @@ export default function DiscoverPage() {
     });
     
     console.log(`[Discover] After filtering: ${base.length} tokens remain for ${currentChain}`);
-    const filtered = applyFilters(base);
+
+    // For New Pairs, only apply text search — NOT range filters (market cap, volume, liquidity, AMM).
+    // New tokens naturally have very low values for these metrics, so applying the same
+    // filter panel settings used for Trending/DEX would eliminate almost all results.
+    // This matches PulseTable behavior which also doesn't apply user filter ranges.
+    let filtered = [...base];
+    if (normalizedSearch) {
+      filtered = filtered.filter((token) => {
+        const tokenText = `${token.name || ""} ${token.symbol || ""}`.toLowerCase();
+        return tokenText.includes(normalizedSearch);
+      });
+    }
+    console.log(`[Discover] After search filter: ${filtered.length} new pairs (search: "${normalizedSearch || ''}")`);
+
     const sortedTokens = filtered.map((token) => JSON.parse(JSON.stringify(token)) as TokenWithDexPaid);
 
     // Pre-calculate max values for composite score normalization
@@ -3329,7 +3362,7 @@ export default function DiscoverPage() {
     }
 
     return unique;
-  }, [newPairsRaw, applyFilters, getVolumeForTimeframe, getTxnsForTimeframe, getCompositeScore, getNewPairTimestamp, isWrappedSol, isZeroLiquidityToken, currentChain, sortDirection, sortKey, selectedTimeframe]);
+  }, [newPairsRaw, normalizedSearch, getVolumeForTimeframe, getTxnsForTimeframe, getCompositeScore, getNewPairTimestamp, isWrappedSol, isZeroLiquidityToken, currentChain, sortDirection, sortKey, selectedTimeframe]);
 
   const newPairsRows = useMemo(
     () =>
