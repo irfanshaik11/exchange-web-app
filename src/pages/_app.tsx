@@ -576,21 +576,16 @@ const MyApp: AppType = ({ Component, pageProps }) => {
   useEffect(() => {
     if (typeof window !== 'undefined') {
       const saved = localStorage.getItem('toast-position');
-      
-      // Migrate from bottom-center to top-center (or if no value exists)
-      if (!saved || saved === 'bottom-center') {
+
+      // Migrate all positions to top-center for better visibility
+      // (toasts were appearing hidden or in awkward positions on right side)
+      if (!saved || saved !== 'top-center') {
         localStorage.setItem('toast-position', 'top-center');
         setToastPosition('top-center');
         return;
       }
-      
-      if (['top-left', 'top-center', 'top-right', 'bottom-left', 'bottom-center', 'bottom-right'].includes(saved)) {
-        setToastPosition(saved as any);
-      } else {
-        // Invalid value, migrate to top-center
-        localStorage.setItem('toast-position', 'top-center');
-        setToastPosition('top-center');
-      }
+
+      setToastPosition('top-center');
     }
   }, []);
   // Listen for toast position changes
@@ -758,37 +753,44 @@ const MyApp: AppType = ({ Component, pageProps }) => {
               </UserLimitProvider>
             </UserProvider>
           </WagmiProviderWrapper>
-          <Toaster 
-            position={toastPosition}
-            toastOptions={{
-              duration: 4000,
-              style: {
-                background: '#1E1F26',
-                color: '#E6E7EA',
-                border: '1px solid #4B5563',
-                borderRadius: '12px',
-                fontSize: '14px',
-                fontWeight: '500',
-                maxWidth: '480px',
-                padding: '16px',
-                zIndex: 9999,
-                boxShadow: '0 4px 12px rgba(0, 0, 0, 0.3)',
-              },
-              success: {
-                style: {
-                  border: '1px solid #70E0B0',
-                },
-              },
-              error: {
-                style: {
-                  border: '1px solid #ff6b6b',
-                },
-              },
-            }}
-          />
           </TurnkeyRootProvider>
         {/* </MobileBlocker> */}
       </div>
+      <Toaster
+        position={toastPosition}
+        containerStyle={{
+          top: 16,
+          left: 0,
+          right: 0,
+          zIndex: 99999,
+          position: 'fixed',
+        }}
+        toastOptions={{
+          duration: 4000,
+          style: {
+            background: '#1E1F26',
+            color: '#E6E7EA',
+            border: '1px solid #4B5563',
+            borderRadius: '12px',
+            fontSize: '14px',
+            fontWeight: '500',
+            maxWidth: '480px',
+            padding: '16px',
+            zIndex: 9999,
+            boxShadow: '0 4px 12px rgba(0, 0, 0, 0.3)',
+          },
+          success: {
+            style: {
+              border: '1px solid #70E0B0',
+            },
+          },
+          error: {
+            style: {
+              border: '1px solid #ff6b6b',
+            },
+          },
+        }}
+      />
     </>
   );
 };

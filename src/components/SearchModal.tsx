@@ -1487,7 +1487,7 @@ const SearchModalContent = React.memo(function SearchModalContent({
                           } as Token & { launchpad_protocol?: string };
                           handleSelectToken(token);
                         }}
-                        className="group flex cursor-pointer items-center gap-3 rounded-lg border border-transparent bg-[#080808] px-3 py-2.5 transition-all duration-200 hover:border-[#FFFFFF0F] hover:bg-[#1a1a1a] sm:px-4 sm:py-3"
+                        className="group relative flex cursor-pointer items-center gap-3 rounded-lg border border-transparent bg-[#080808] px-3 py-2.5 transition-all duration-200 hover:z-30 hover:border-[#FFFFFF0F] hover:bg-[#1a1a1a] sm:px-4 sm:py-3"
                       >
                         {/* Token Logo with Protocol Border */}
                         <div
@@ -2127,7 +2127,7 @@ const TokenListItem = React.memo(
     return (
       <>
         <li
-          className={`group relative block rounded-lg border bg-[#080808] px-3 py-3 text-sm transition-all duration-200 sm:px-4 sm:py-4 sm:text-base md:px-5 ${
+          className={`group relative block rounded-lg border bg-[#080808] px-3 py-3 text-sm transition-all duration-200 hover:z-30 sm:px-4 sm:py-4 sm:text-base md:px-5 ${
             isSelected
               ? "border-[#7FFFC940] bg-[#7FFFC908]"
               : "border-transparent hover:border-[#FFFFFF0F] hover:bg-[#1a1a1a]"
@@ -2217,7 +2217,7 @@ const TokenListItem = React.memo(
                     <button
                       type="button"
                       onClick={handleCopyAddress}
-                      className="relative z-10 flex-shrink-0 p-1 text-[#7FFFC9] transition-all duration-200 hover:text-[#5FE0A0] active:scale-95"
+                      className="relative z-20 flex-shrink-0 p-1 text-[#7FFFC9] transition-all duration-200 hover:text-[#5FE0A0] active:scale-95"
                       style={{ pointerEvents: "auto" }}
                     >
                       <LuCopy size={14} />
@@ -2225,7 +2225,7 @@ const TokenListItem = React.memo(
                     <button
                       type="button"
                       onClick={handleShareLink}
-                      className="relative z-10 flex-shrink-0 p-1 text-neutral-500 transition-all duration-200 hover:text-emerald-400 active:scale-95"
+                      className="relative z-20 flex-shrink-0 p-1 text-neutral-500 transition-all duration-200 hover:text-emerald-400 active:scale-95"
                       style={{ pointerEvents: "auto" }}
                     >
                       <IoShareSocialOutline size={16} />
@@ -2240,7 +2240,7 @@ const TokenListItem = React.memo(
                   e.stopPropagation();
                   onSelect(token);
                 }}
-                className="relative z-10 flex flex-shrink-0 cursor-pointer items-center justify-center gap-1 rounded-lg border border-[#7FFFC940] bg-gradient-to-r from-[#243E33] to-[#1a2e26] px-4 py-2 text-xs font-bold text-[#7FFFC9] transition-all duration-300 ease-out hover:border-[#7FFFC960] hover:from-[#2a4d3d] hover:to-[#1f3a2f]"
+                className="relative z-20 flex flex-shrink-0 cursor-pointer items-center justify-center gap-1 rounded-lg border border-[#7FFFC940] bg-gradient-to-r from-[#243E33] to-[#1a2e26] px-4 py-2 text-xs font-bold text-[#7FFFC9] transition-all duration-300 ease-out hover:border-[#7FFFC960] hover:from-[#2a4d3d] hover:to-[#1f3a2f]"
                 style={{ transformOrigin: "center", pointerEvents: "auto" }}
                 title="Select token"
               >
@@ -2257,7 +2257,7 @@ const TokenListItem = React.memo(
                 <button
                   type="button"
                   onClick={handleTwitterProfileClick}
-                  className="relative z-10 p-1 transition-all duration-200 hover:text-white active:scale-95"
+                  className="relative z-20 p-1 transition-all duration-200 hover:text-white active:scale-95"
                   style={{ pointerEvents: "auto" }}
                   title="View X profile"
                 >
@@ -2267,7 +2267,7 @@ const TokenListItem = React.memo(
                   <button
                     ref={searchButtonRef}
                     type="button"
-                    className="relative z-10 p-0.5 transition-all duration-200 hover:text-white hover:bg-white/10 rounded"
+                    className="relative z-20 p-0.5 transition-all duration-200 hover:text-white hover:bg-white/10 rounded"
                     style={{ pointerEvents: "auto" }}
                     title="Search options"
                     onMouseEnter={handleSearchMouseEnter}
@@ -2345,7 +2345,7 @@ const TokenListItem = React.memo(
                   <button
                     type="button"
                     onClick={handlePumpClick}
-                    className="relative z-10 p-1 transition-all duration-200 hover:text-white active:scale-95"
+                    className="relative z-20 p-1 transition-all duration-200 hover:text-white active:scale-95"
                     style={{ pointerEvents: "auto" }}
                     title="View on pump.fun"
                   >
@@ -2443,7 +2443,7 @@ const TokenListItem = React.memo(
                   <button
                     type="button"
                     onClick={handleCopyAddress}
-                    className="relative z-10 ml-1 flex-shrink-0 p-0.5 text-[#7FFFC9] transition-all duration-200 hover:scale-110 hover:text-[#5FE0A0] active:scale-95"
+                    className="relative z-20 ml-1 flex-shrink-0 p-0.5 text-[#7FFFC9] transition-all duration-200 hover:scale-110 hover:text-[#5FE0A0] active:scale-95"
                     style={{ pointerEvents: "auto" }}
                   >
                     <LuCopy size={13} />
@@ -2451,7 +2451,7 @@ const TokenListItem = React.memo(
                   <button
                     type="button"
                     onClick={handleShareLink}
-                    className="relative z-10 flex-shrink-0 p-0.5 text-neutral-500 transition-all duration-200 hover:scale-110 hover:text-emerald-400 active:scale-95"
+                    className="relative z-20 flex-shrink-0 p-0.5 text-neutral-500 transition-all duration-200 hover:scale-110 hover:text-emerald-400 active:scale-95"
                     style={{ pointerEvents: "auto" }}
                     title="Copy trade link"
                   >
@@ -2468,7 +2468,7 @@ const TokenListItem = React.memo(
                       onClick={handleTwitterProfileClick}
                       onMouseEnter={handleTwitterProfileMouseEnter}
                       onMouseLeave={handleTwitterProfileMouseLeave}
-                      className="relative z-10 p-0.5 transition-all duration-200 hover:text-white"
+                      className="relative z-20 p-0.5 transition-all duration-200 hover:text-white"
                       style={{ pointerEvents: "auto" }}
                       title="View X profile"
                     >
@@ -2671,21 +2671,21 @@ const TokenListItem = React.memo(
                     )}
                     {/* </div> */}
                     {/* <button
-                    className="relative z-10 transition-all duration-200 hover:text-white p-0.5"
+                    className="relative z-20 transition-all duration-200 hover:text-white p-0.5"
                     style={{ pointerEvents: "auto" }}
                     title="Telegram"
                   >
                     <PiTelegramLogo size={15} className="sm:w-3.5 sm:h-3.5" />
                   </button>
                   <button
-                    className="relative z-10 transition-all duration-200 hover:text-white p-0.5"
+                    className="relative z-20 transition-all duration-200 hover:text-white p-0.5"
                     style={{ pointerEvents: "auto" }}
                     title="Documentation"
                   >
                     <TiDocumentText size={15} className="sm:w-3.5 sm:h-3.5" />
                   </button>
                   <button
-                    className="relative z-10 transition-all duration-200 hover:text-white p-0.5"
+                    className="relative z-20 transition-all duration-200 hover:text-white p-0.5"
                     style={{ pointerEvents: "auto" }}
                     title="Website"
                   >
@@ -2695,7 +2695,7 @@ const TokenListItem = React.memo(
                       <button
                         type="button"
                         onClick={handlePumpClick}
-                        className="relative z-10 p-0.5 transition-all duration-200 hover:text-white"
+                        className="relative z-20 p-0.5 transition-all duration-200 hover:text-white"
                         style={{ pointerEvents: "auto" }}
                         title="View on pump.fun"
                       >
@@ -2705,7 +2705,7 @@ const TokenListItem = React.memo(
                     <div className="relative">
                       <button
                         type="button"
-                        className="relative z-10 p-0.5 transition-all duration-200 hover:text-white hover:bg-white/10 rounded"
+                        className="relative z-20 p-0.5 transition-all duration-200 hover:text-white hover:bg-white/10 rounded"
                         style={{ pointerEvents: "auto" }}
                         title="Search options"
                         onMouseEnter={handleSearchMouseEnter}
@@ -2804,7 +2804,7 @@ const TokenListItem = React.memo(
                 e.stopPropagation();
                 onSelect(token);
               }}
-              className="relative z-10 flex flex-shrink-0 cursor-pointer items-center justify-center gap-1 rounded-lg border border-[#7FFFC940] bg-gradient-to-r from-[#243E33] to-[#1a2e26] px-2.5 py-2 text-xs font-bold text-[#7FFFC9] transition-all duration-300 ease-out hover:border-[#7FFFC960] hover:from-[#2a4d3d] hover:to-[#1f3a2f] sm:px-3"
+              className="relative z-20 flex flex-shrink-0 cursor-pointer items-center justify-center gap-1 rounded-lg border border-[#7FFFC940] bg-gradient-to-r from-[#243E33] to-[#1a2e26] px-2.5 py-2 text-xs font-bold text-[#7FFFC9] transition-all duration-300 ease-out hover:border-[#7FFFC960] hover:from-[#2a4d3d] hover:to-[#1f3a2f] sm:px-3"
               style={{ transformOrigin: "center", pointerEvents: "auto" }}
               title="Select token"
             >
