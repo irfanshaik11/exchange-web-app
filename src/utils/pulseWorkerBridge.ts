@@ -506,6 +506,12 @@ async function doInit(): Promise<void> {
         hiddenAt = 0;
       }
     });
+    window.addEventListener('online', () => {
+      console.log('[PulseWorkerBridge] Network back online, forcing WebSocket reconnection');
+      if (worker && isLeader) {
+        worker.postMessage({ type: 'FORCE_RECONNECT' });
+      }
+    });
   } catch (err) {
     console.warn('[PulseWorkerBridge] Failed to add event listeners:', err);
   }
@@ -901,7 +907,7 @@ function addToken(key: 'newTokens' | 'finalStretchTokens' | 'migratedTokens', to
   const arr = currentData[key];
   const existing = arr.find(t => t.mint === token.mint);
   const filtered = existing ? arr.filter(t => t.mint !== token.mint) : arr;
-  const maxSize = key === 'newTokens' ? 200 : 50;
+  const maxSize = key === 'finalStretchTokens' ? 50 : 200;
 
   // Preserve original timestamps so TokenAge timer doesn't reset on WS updates
   let finalToken = token;

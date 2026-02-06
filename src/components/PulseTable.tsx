@@ -2554,6 +2554,7 @@ function PulseTable({
   const [filteredTokens, setFilteredTokens] = useState<Token[]>([]);
   const [isFetchingFiltered, setIsFetchingFiltered] = useState(false);
   const isNewPairs = title.toLowerCase().includes("new");
+  const isMigrated = title.toLowerCase().includes("migrated");
 
   // Helper to normalize HTTP token data for consistent filtering
   // Ensures all filter-relevant fields have default values with both field name variants
@@ -2673,8 +2674,8 @@ function PulseTable({
         typeof parsed.timestamp === "number" &&
         Date.now() - parsed.timestamp <= WS_CACHE_TTL_MS
       ) {
-        // Skip liquidity filtering for New Pairs - show all tokens instantly
-        if (isNewPairs) {
+        // Skip liquidity filtering for New Pairs and Migrated - show all tokens instantly
+        if (isNewPairs || isMigrated) {
           return parsed.data as Token[];
         }
         return filterNonZeroLiquidity(parsed.data as Token[]);
@@ -2743,8 +2744,8 @@ function PulseTable({
         typeof parsed.timestamp === "number" &&
         Date.now() - parsed.timestamp <= WS_CACHE_TTL_MS
       ) {
-        // Skip liquidity filtering for New Pairs - show all tokens instantly
-        if (isNewPairs) {
+        // Skip liquidity filtering for New Pairs and Migrated - show all tokens instantly
+        if (isNewPairs || isMigrated) {
           setWsTokens(parsed.data as Token[]);
         } else {
           setWsTokens(filterNonZeroLiquidity(parsed.data as Token[]));
@@ -2756,7 +2757,7 @@ function PulseTable({
         error,
       );
     }
-  }, [wsCacheStorageKey, isNewPairs]);
+  }, [wsCacheStorageKey, isNewPairs, isMigrated]);
 
   // Pending filters for Apply button functionality
   const [pendingFilters, setPendingFilters] = useState(filters);
@@ -2855,8 +2856,8 @@ function PulseTable({
           const rawTokens = Array.isArray(data) ? data : [];
           // Normalize HTTP tokens for consistent filtering (same as WebSocket tokens)
           const normalizedTokens = rawTokens.map(normalizeHttpToken);
-          // Skip liquidity filtering for New Pairs
-          if (isNewPairs) {
+          // Skip liquidity filtering for New Pairs and Migrated
+          if (isNewPairs || isMigrated) {
             setFilteredTokens(normalizedTokens);
           } else {
             setFilteredTokens(filterNonZeroLiquidity(normalizedTokens));
@@ -3703,7 +3704,7 @@ function PulseTable({
       }
 
       // Apply filters and limits
-      if (isNewPairs) {
+      if (isNewPairs || isMigrated) {
         return merged.slice(0, 100);
       } else {
         return filterNonZeroLiquidity(merged).slice(0, 100);
@@ -3799,8 +3800,9 @@ function PulseTable({
       wsSource.forEach((token) => mergedMap.set(token.mint, token));
     }
 
-    // Filter zero liquidity tokens - DISABLED for new pairs to maximize speed
-    if (isNewPairs) {
+    // Filter zero liquidity tokens - DISABLED for new pairs and migrated to maximize speed
+    // Migrated tokens may arrive with liquidity_usd=0 before backend populates it
+    if (isNewPairs || title.toLowerCase().includes("migrated")) {
       // SPEED FIX: Zero liquidity filtering disabled for new pairs
       // This was causing lag - every WebSocket update triggered O(n) filtering
       // filtered = allTokens.filter((token) => !hasZeroLiquidity(token));

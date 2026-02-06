@@ -14,21 +14,16 @@ let migratedTokens = [];
 let wsConnections = {};
 let wsBaseUrl = '';
 
-// Track last message time per channel for health monitoring
-let lastMessageTime = {
-  new: 0,
-  final_stretch: 0,
-  migrated: 0,
-};
-
-// Health check interval - reconnect if no messages for 60 seconds
-const HEALTH_CHECK_INTERVAL = 30000; // Check every 30 seconds
-const STALE_THRESHOLD = 60000; // Consider stale if no message for 60 seconds
+// Application-level heartbeat — end-to-end connection verification
+const HEARTBEAT_INTERVAL = 30000; // Send ping every 30s
+const HEARTBEAT_TIMEOUT = 10000;  // Expect pong within 10s
+let heartbeatIntervals = {};
+let heartbeatTimeouts = {};
 
 // Max tokens per category
 const MAX_NEW = 200;
 const MAX_FINAL = 50;
-const MAX_MIGRATED = 50;
+const MAX_MIGRATED = 200;
 
 // Delta update system - sends only changed tokens for maximum speed
 // Full DATA updates are only used for GET_DATA requests (new tabs connecting)
@@ -96,6 +91,12 @@ self.onmessage = function(e) {
       disconnectAll();
       break;
 
+    case 'FORCE_RECONNECT':
+      console.log('[PulseWorker] FORCE_RECONNECT - reconnecting all channels');
+      disconnectAll();
+      connectAll();
+      break;
+
     case 'RECONNECT':
       // Tab became visible after being hidden
       // DON'T clear data - the worker has FRESH data from WebSocket
@@ -117,8 +118,6 @@ self.onmessage = function(e) {
   }
 };
 
-let healthCheckInterval = null;
-
 function connectAll() {
   if (!wsBaseUrl) {
     console.log('[PulseWorker] No wsBaseUrl provided');
@@ -128,43 +127,42 @@ function connectAll() {
   connectChannel('new');
   connectChannel('final_stretch');
   connectChannel('migrated');
-
-  // Start health check to detect silent disconnections
-  if (!healthCheckInterval) {
-    healthCheckInterval = setInterval(checkConnectionHealth, HEALTH_CHECK_INTERVAL);
-  }
 }
 
-// Check if connections are healthy (receiving data)
-function checkConnectionHealth() {
-  const now = Date.now();
-  const channels = ['new', 'final_stretch', 'migrated'];
-
-  for (const channel of channels) {
-    const lastMsg = lastMessageTime[channel];
-    const timeSinceLastMsg = now - lastMsg;
-
-    // If we have a connection but haven't received data in a while, reconnect
-    if (wsConnections[channel] && lastMsg > 0 && timeSinceLastMsg > STALE_THRESHOLD) {
-      console.log(`[PulseWorker] Channel ${channel} appears stale (${timeSinceLastMsg}ms since last message), reconnecting...`);
-
-      // Force close and reconnect
+function startHeartbeat(channel) {
+  stopHeartbeat(channel);
+  heartbeatIntervals[channel] = setInterval(() => {
+    const ws = wsConnections[channel];
+    if (ws && ws.readyState === WebSocket.OPEN) {
       try {
-        wsConnections[channel].close();
+        ws.send(JSON.stringify({ type: 'ping' }));
       } catch (e) {
-        // Ignore close errors
+        return; // Send failed — onclose will handle reconnect
       }
-      wsConnections[channel] = null;
-      connectChannel(channel);
+      heartbeatTimeouts[channel] = setTimeout(() => {
+        console.log(`[PulseWorker] No heartbeat pong from ${channel}, reconnecting...`);
+        try { ws.close(); } catch (e) {}
+        // onclose handler will reconnect
+      }, HEARTBEAT_TIMEOUT);
     }
+  }, HEARTBEAT_INTERVAL);
+}
+
+function stopHeartbeat(channel) {
+  if (heartbeatIntervals[channel]) {
+    clearInterval(heartbeatIntervals[channel]);
+    delete heartbeatIntervals[channel];
+  }
+  if (heartbeatTimeouts[channel]) {
+    clearTimeout(heartbeatTimeouts[channel]);
+    delete heartbeatTimeouts[channel];
   }
 }
 
 function disconnectAll() {
-  // Clear health check interval
-  if (healthCheckInterval) {
-    clearInterval(healthCheckInterval);
-    healthCheckInterval = null;
+  // Stop all heartbeats
+  for (const channel of ['new', 'final_stretch', 'migrated']) {
+    stopHeartbeat(channel);
   }
 
   Object.values(wsConnections).forEach(ws => {
@@ -188,13 +186,18 @@ function connectChannel(channel) {
     ws.onopen = () => {
       console.log(`[PulseWorker] Connected: ${channel}`);
       self.postMessage({ type: 'CONNECTION_STATUS', payload: { channel, connected: true } });
+      startHeartbeat(channel);
     };
 
     ws.onclose = () => {
       console.log(`[PulseWorker] Disconnected: ${channel}`);
+      stopHeartbeat(channel);
       self.postMessage({ type: 'CONNECTION_STATUS', payload: { channel, connected: false } });
-      wsConnections[channel] = null;
-      setTimeout(() => connectChannel(channel), 3000);
+      // Only null out and reconnect if this WS is still the tracked connection.
+      if (wsConnections[channel] === ws) {
+        wsConnections[channel] = null;
+        setTimeout(() => connectChannel(channel), 3000);
+      }
     };
 
     ws.onerror = (err) => {
@@ -202,9 +205,6 @@ function connectChannel(channel) {
     };
 
     ws.onmessage = (event) => {
-      // Track last message time for health monitoring
-      lastMessageTime[channel] = Date.now();
-
       try {
         const messages = event.data.split('\n').filter(msg => msg.trim());
         for (const msgStr of messages) {
@@ -304,6 +304,14 @@ function handleMessage(channel, data) {
     case 'token_info':
     case 'info':
       handleTokenInfoUpdate(data.data || data);
+      break;
+
+    case 'pong':
+      // Heartbeat pong received — clear the timeout to prevent reconnect
+      if (heartbeatTimeouts[channel]) {
+        clearTimeout(heartbeatTimeouts[channel]);
+        delete heartbeatTimeouts[channel];
+      }
       break;
 
     case 'batch':
