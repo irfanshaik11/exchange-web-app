@@ -11,7 +11,7 @@ export default function Document() {
           dangerouslySetInnerHTML={{
             __html: `
 (function(){
-  var KEY='__chunk_retry',MAX=2,DELAYS=[1000,2000],handled=false,recovering=false,count=0;
+  var KEY='__chunk_retry',MAX=2,DELAYS=[1500,3000],handled=false,recovering=false,count=0;
   try{count=parseInt(sessionStorage.getItem(KEY)||'0',10)}catch(e){}
 
   // Once the app has rendered, disable this script entirely.
@@ -22,10 +22,15 @@ export default function Document() {
       handled=true;
     }
     // Only clear counter on SUCCESSFUL load (no recovery was triggered this page load).
-    // If recovering is true, doRecovery already wrote a new count — don't delete it,
-    // otherwise the counter resets to 0 and creates an infinite reload loop.
     if(!recovering&&count>0)try{sessionStorage.removeItem(KEY)}catch(e){}
   });
+
+  function clearAllCaches(cb){
+    var done=0,total=2;
+    function check(){if(++done>=total&&cb)cb();}
+    if(navigator.serviceWorker){navigator.serviceWorker.getRegistrations().then(function(r){r.forEach(function(s){s.unregister()});check()}).catch(check);}else{check();}
+    if(typeof caches!=='undefined'){caches.keys().then(function(k){Promise.all(k.map(function(n){return caches.delete(n)})).then(check).catch(check)}).catch(check);}else{check();}
+  }
 
   function showFallback(){
     try{sessionStorage.removeItem(KEY)}catch(e){}
@@ -37,30 +42,34 @@ export default function Document() {
     d.body.appendChild(c);
     d.getElementById('__cr_btn').onclick=function(){
       try{sessionStorage.removeItem(KEY)}catch(e){}
-      if(navigator.serviceWorker){navigator.serviceWorker.getRegistrations().then(function(r){r.forEach(function(s){s.unregister()})}).catch(function(){});}
-      if(typeof caches!=='undefined'){caches.keys().then(function(k){k.forEach(function(n){caches.delete(n)})}).catch(function(){});}
-      window.location.reload();
+      clearAllCaches(function(){window.location.reload();});
     };
   }
 
-  function doRecovery(source){
+  function doRecovery(){
     if(handled)return;
     handled=true;
     recovering=true;
     if(count<MAX){
       try{sessionStorage.setItem(KEY,String(count+1))}catch(e){}
-      if(navigator.serviceWorker){navigator.serviceWorker.getRegistrations().then(function(r){r.forEach(function(s){s.unregister()})}).catch(function(){});}
-      setTimeout(function(){window.location.reload()},DELAYS[count]||2000);
+      // Clear caches FIRST, then reload — ensures fresh resources on next load
+      clearAllCaches(function(){
+        setTimeout(function(){window.location.reload()},DELAYS[count]||3000);
+      });
     }else{
       showFallback();
     }
   }
 
-  // Catch resource load errors (script/link 404s) during initial page load only
+  // Only recover from Next.js chunk errors (/_next/ URLs).
+  // Ignore third-party script/link failures — they are not fatal.
   window.addEventListener('error',function(e){
     var t=e.target;
     if(t&&(t.tagName==='SCRIPT'||t.tagName==='LINK')){
-      doRecovery('resource-error');
+      var url=t.src||t.href||'';
+      if(url.indexOf('/_next/')!==-1){
+        doRecovery();
+      }
     }
   },true);
 })();
