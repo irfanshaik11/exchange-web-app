@@ -899,14 +899,25 @@ function normalizeToken(rawToken: any): PulseToken | null {
 
 function addToken(key: 'newTokens' | 'finalStretchTokens' | 'migratedTokens', token: PulseToken) {
   const arr = currentData[key];
-  const filtered = arr.filter(t => t.mint !== token.mint);
+  const existing = arr.find(t => t.mint === token.mint);
+  const filtered = existing ? arr.filter(t => t.mint !== token.mint) : arr;
   const maxSize = key === 'newTokens' ? 200 : 50;
+
+  // Preserve original timestamps so TokenAge timer doesn't reset on WS updates
+  let finalToken = token;
+  if (existing) {
+    finalToken = {
+      ...token,
+      created_at: existing.created_at || token.created_at,
+      launch_time: existing.launch_time || token.launch_time,
+    };
+  }
 
   // CRITICAL: Create a NEW currentData object so useSyncExternalStore detects the change
   // Object.is() compares references - same reference = no re-render
   currentData = {
     ...currentData,
-    [key]: [token, ...filtered].slice(0, maxSize),
+    [key]: [finalToken, ...filtered].slice(0, maxSize),
   };
 }
 
@@ -939,9 +950,15 @@ function applyTokenDelta(deltaType: string, token: PulseToken) {
           const arr = currentData[key];
           const idx = arr.findIndex(t => t.mint === token.mint);
           if (idx !== -1) {
-            // Create new array with updated token
+            // Create new array with updated token, preserving original timestamps
+            const existing = arr[idx];
             const newArr = [...arr];
-            newArr[idx] = { ...arr[idx], ...token };
+            newArr[idx] = {
+              ...existing,
+              ...token,
+              created_at: existing.created_at || token.created_at,
+              launch_time: existing.launch_time || token.launch_time,
+            };
             newData[key] = newArr;
             updated = true;
           }
@@ -1212,35 +1229,41 @@ export function terminateWorker(): void {
   }
 }
 
-// PHASE 2 FIX #4: RAF-batched listener notifications
-// Coalesces 500+ WebSocket messages/sec into max 60 notifications/sec
-// 16ms max delay is imperceptible, but dramatically reduces CPU usage
-let pendingNotifyRAF: number | null = null;
-let lastListenerCountLog = 0;
+// Leading-edge throttled listener notifications.
+// Fires immediately on the first call (so initial data load has zero delay),
+// then throttles subsequent calls to max 2/sec (500ms interval).
+// This frees the main thread for the TokenAge rAF clock to tick smoothly.
+let notifyTimer: ReturnType<typeof setTimeout> | null = null;
+let lastNotifyTime = 0;
+const NOTIFY_INTERVAL_MS = 500;
 
 function notifyDataListeners() {
-  // Skip if already scheduled - RAF will pick up latest data
-  if (pendingNotifyRAF !== null) return;
+  const now = Date.now();
+  const elapsed = now - lastNotifyTime;
 
-  pendingNotifyRAF = requestAnimationFrame(() => {
-    pendingNotifyRAF = null;
-
-    // Log listener count every 60 seconds to detect leaks (reduced frequency)
-    const now = Date.now();
-    if (now - lastListenerCountLog > 60000) {
-      lastListenerCountLog = now;
-      // Removed console.log to reduce CPU
+  // Leading edge: enough time has passed — fire immediately
+  if (elapsed >= NOTIFY_INTERVAL_MS) {
+    lastNotifyTime = now;
+    if (notifyTimer !== null) {
+      clearTimeout(notifyTimer);
+      notifyTimer = null;
     }
-
-    // Notify all listeners with latest data
     dataListeners.forEach(fn => {
-      try {
-        fn(currentData);
-      } catch (err) {
-        // Silent fail - don't block other listeners
-      }
+      try { fn(currentData); } catch (err) { /* silent */ }
     });
-  });
+    return;
+  }
+
+  // Trailing edge: schedule a flush for the remaining time (if not already scheduled)
+  if (notifyTimer !== null) return;
+
+  notifyTimer = setTimeout(() => {
+    notifyTimer = null;
+    lastNotifyTime = Date.now();
+    dataListeners.forEach(fn => {
+      try { fn(currentData); } catch (err) { /* silent */ }
+    });
+  }, NOTIFY_INTERVAL_MS - elapsed);
 }
 
 function notifyConnectionListeners() {

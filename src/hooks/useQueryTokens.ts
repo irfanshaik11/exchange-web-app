@@ -163,7 +163,7 @@ export function useQueryNewPairs(enabled: boolean = true): UseQueryResult<Token[
     queryKey: tokenKeys.trenches.newPairs(),
     queryFn: fetchNewPairs,
     enabled,                        // Conditionally enable/disable the query
-    staleTime: Infinity,           // Never mark as stale - WebSocket provides updates
+    staleTime: 30 * 1000,          // Consider fresh for 30s, then refetch (matches Final Stretch / Migrated)
     gcTime: 10 * 60 * 1000,        // Keep in cache for 10 min for instant display
     refetchOnWindowFocus: false,   // Don't refetch on focus (WebSocket handles updates)
     refetchOnReconnect: true,      // Refetch on reconnect to catch missed updates
