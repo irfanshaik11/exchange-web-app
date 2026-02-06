@@ -9,6 +9,7 @@ import {
   FaBell,
   FaChevronDown,
   FaSync,
+  FaSortAmountDown,
 } from "react-icons/fa";
 import { HiLightningBolt } from "react-icons/hi";
 import { IoShieldCheckmarkOutline } from "react-icons/io5";
@@ -300,8 +301,23 @@ export default function Header({
   } = useUser();
 
   // Get referral stats for Honors badge display
+  // Cache honorsLevel in localStorage to prevent badge flicker on page load
   const { data: referralStats } = useReferralStats();
-  const honorsLevel = referralStats?.honorsLevel || 1;
+  const honorsLevel = useMemo(() => {
+    const live = referralStats?.honorsLevel;
+    if (live) {
+      try { localStorage.setItem('__honors_lvl', String(live)); } catch {}
+      return live;
+    }
+    // Use cached value while API is loading to avoid flicker (default 1 → real level)
+    if (typeof window !== 'undefined') {
+      try {
+        const cached = localStorage.getItem('__honors_lvl');
+        if (cached) return Number(cached);
+      } catch {}
+    }
+    return 1;
+  }, [referralStats?.honorsLevel]);
 
   // Get chain from URL first, then localStorage, then default to solana
   const currentChain = (() => {
@@ -1531,13 +1547,12 @@ export default function Header({
                   }}
                   title="Click to view account & wallet"
                 >
-                  <div className="hidden h-6 w-6 items-center justify-center select-none sm:flex">
-                    <img
-                      src={`/ranks/degen-${Math.max(1, Math.min(4, honorsLevel))}.png`}
-                      alt={`Honors ${honorsLevel}`}
-                      className="w-6 h-6 object-contain"
-                    />
-                  </div>
+                  <div
+                    className="hidden h-6 w-6 select-none sm:flex bg-contain bg-center bg-no-repeat"
+                    style={{ backgroundImage: `url(/ranks/degen-${Math.max(1, Math.min(4, honorsLevel))}.png)` }}
+                    role="img"
+                    aria-label={`Honors ${honorsLevel}`}
+                  />
                   <div className="flex items-center gap-1.5 text-left">
                     <div className="flex items-center gap-1 text-xs font-medium text-white sm:text-sm">
                       {isPredictionsPage ? (
@@ -1577,13 +1592,12 @@ export default function Header({
                         className="mb-3 flex items-center gap-2 border-b pb-3"
                         style={{ borderColor: "#20232b" }}
                       >
-                        <div className="flex h-6 w-6 items-center justify-center select-none">
-                          <img
-                            src={`/ranks/degen-${Math.max(1, Math.min(4, honorsLevel))}.png`}
-                            alt={`Honors ${honorsLevel}`}
-                            className="w-6 h-6 object-contain"
-                          />
-                        </div>
+                        <div
+                          className="flex h-6 w-6 select-none bg-contain bg-center bg-no-repeat"
+                          style={{ backgroundImage: `url(/ranks/degen-${Math.max(1, Math.min(4, honorsLevel))}.png)` }}
+                          role="img"
+                          aria-label={`Honors ${honorsLevel}`}
+                        />
                         <div className="min-w-0 flex-1">
                           <div className="truncate text-sm font-semibold text-[#f0f5f5]">
                             {user.name}
@@ -2009,7 +2023,7 @@ export default function Header({
         {headerBarVisible && (
           <div className="flex items-center gap-2 px-1 py-0.5 overflow-hidden" style={{ background: '#0a0b0e' }}>
           <div className="flex items-center gap-2 flex-1 min-w-0 rounded-md px-3 py-1 overflow-hidden" style={{ background: '#13151b' }}>
-            {/* extra toolbar section */}
+            {/* COMMENTED OUT: Active Positions icon — may re-enable later
             <div className="group relative">
               <button
                 className="cursor-pointer rounded p-0.5 transition-all duration-300 ease-out"
@@ -2043,7 +2057,6 @@ export default function Header({
                   <path d="M18.7 8l-5.1 5.2-2.8-2.7L7 14.3" />
                 </svg>
               </button>
-              {/* Custom tooltip for Active Positions */}
               <div
                 className="pointer-events-none absolute top-1/2 left-full z-50 ml-2 -translate-y-1/2 transform rounded px-2 py-1 text-sm font-medium whitespace-nowrap opacity-0 transition-opacity duration-200 group-hover:opacity-100"
                 style={{
@@ -2055,15 +2068,31 @@ export default function Header({
                 }}
               >
                 Active Positions
-                {/* Tooltip arrow pointing left */}
                 <div
                   className="absolute top-1/2 right-full h-0 w-0 -translate-y-1/2 transform border-t-4 border-r-4 border-b-4 border-transparent"
                   style={{ borderRightColor: AX.surface }}
                 ></div>
               </div>
             </div>
+            END COMMENTED OUT: Active Positions icon */}
 
-            {/* Watchlist Icon */}
+            {/* Watchlist label button — opens watchlist modal */}
+            <button
+              className="flex items-center gap-1.5 cursor-pointer rounded-md px-2.5 py-1 shrink-0"
+              style={{ color: '#c5cdd8' }}
+              onClick={() => setWatchlistOpen(true)}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.06)';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.backgroundColor = 'transparent';
+              }}
+            >
+              <span className="text-xs font-medium">Watchlist</span>
+              <FaSortAmountDown size={10} style={{ color: '#8b94a5' }} />
+            </button>
+
+            {/* COMMENTED OUT: Watchlist Star icon — replaced with text label above
             <div className="group relative">
               <button
                 className="relative cursor-pointer rounded p-0.5 transition-all duration-300 ease-out"
@@ -2097,7 +2126,6 @@ export default function Header({
                   <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
                 </svg>
               </button>
-              {/* Custom tooltip for Watchlist */}
               <div
                 className="pointer-events-none absolute top-1/2 left-full z-50 ml-2 -translate-y-1/2 transform rounded px-2 py-1 text-sm font-medium whitespace-nowrap opacity-0 transition-opacity duration-200 group-hover:opacity-100"
                 style={{
@@ -2109,20 +2137,20 @@ export default function Header({
                 }}
               >
                 Watchlist
-                {/* Tooltip arrow pointing left */}
                 <div
                   className="absolute top-1/2 right-full h-0 w-0 -translate-y-1/2 transform border-t-4 border-r-4 border-b-4 border-transparent"
                   style={{ borderRightColor: AX.surface }}
                 ></div>
               </div>
             </div>
+            END COMMENTED OUT: Watchlist Star icon */}
 
             {/* Divider before watchlist tokens - only show after hydration to prevent flicker */}
             {isHydrated && watchlist.length > 0 && (
               <div className="h-4 border-r" style={{ borderColor: '#262a35' }} />
             )}
 
-            {/* "All" dropdown for watchlist filter */}
+            {/* COMMENTED OUT: "All" dropdown — replaced by "Watchlist" label above
             {isHydrated && watchlist.length > 0 && (
               <div className="flex items-center">
                 <span className="text-xs font-medium" style={{ color: '#c5cdd8' }}>
@@ -2131,6 +2159,7 @@ export default function Header({
                 <FaChevronDown size={8} className="ml-1" style={{ color: '#8b94a5' }} />
               </div>
             )}
+            END COMMENTED OUT: "All" dropdown */}
 
             {/* Watchlist Tokens Ticker - Scrollable Container (uses full available panel width) */}
             {isHydrated && enrichedWatchlist.length > 0 && (
@@ -2386,7 +2415,7 @@ export default function Header({
                     return null;
                   })()}
                   
-                  {/* Quick Buy Button - shown on hover */}
+                  {/* COMMENTED OUT: Quick Buy + Unstar buttons — may re-enable later
                   {isHovered && (
                     <>
                       <button
@@ -2403,8 +2432,7 @@ export default function Header({
                         <HiLightningBolt size={10} />
                         <span>{quickBuyAmount} {currentChain === 'monad' ? 'MON' : 'SOL'}</span>
                       </button>
-                      
-                      {/* Star icon to remove from watchlist */}
+
                       <button
                         className="p-0.5 transition-colors duration-150"
                         style={{ color: '#f2c367' }}
@@ -2418,6 +2446,7 @@ export default function Header({
                       </button>
                     </>
                   )}
+                  END COMMENTED OUT: Quick Buy + Unstar buttons */}
                 </div>
               );
             })}

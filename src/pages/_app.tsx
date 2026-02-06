@@ -577,15 +577,21 @@ const MyApp: AppType = ({ Component, pageProps }) => {
     if (typeof window !== 'undefined') {
       const saved = localStorage.getItem('toast-position');
 
-      // Migrate all positions to top-center for better visibility
-      // (toasts were appearing hidden or in awkward positions on right side)
-      if (!saved || saved !== 'top-center') {
+      // Migrate from bottom-center to top-center (old default that caused visibility issues)
+      if (!saved || saved === 'bottom-center') {
         localStorage.setItem('toast-position', 'top-center');
         setToastPosition('top-center');
         return;
       }
 
-      setToastPosition('top-center');
+      // Use user's saved preference
+      if (['top-left', 'top-center', 'top-right', 'bottom-left', 'bottom-center', 'bottom-right'].includes(saved)) {
+        setToastPosition(saved as typeof toastPosition);
+      } else {
+        // Invalid value, default to top-center
+        localStorage.setItem('toast-position', 'top-center');
+        setToastPosition('top-center');
+      }
     }
   }, []);
   // Listen for toast position changes
@@ -660,6 +666,15 @@ const MyApp: AppType = ({ Component, pageProps }) => {
         <meta name="twitter:title" content="Interstate - The Fastest Exchange" />
         <meta name="twitter:description" content="Get ready to win on Interstate, the fastest exchange! Get free Solana for joining today, win daily Jackpots, level up and earn progressively higher rewards. Start trading today!" />
         <meta name="twitter:image" content="https://app.interstate.so/referral-share.png" />
+        {/* Preload rank backgrounds, textures + badge images to prevent flicker on navigation */}
+        <link rel="preload" href="/ranks/Background.png" as="image" />
+        <link rel="preload" href="/ranks/Background2.png" as="image" />
+        <link rel="preload" href="/future.png" as="image" />
+        <link rel="preload" href="/ranks/Coin.png" as="image" />
+        <link rel="preload" href="/ranks/degen-1.png" as="image" />
+        <link rel="preload" href="/ranks/degen-2.png" as="image" />
+        <link rel="preload" href="/ranks/degen-3.png" as="image" />
+        <link rel="preload" href="/ranks/degen-4.png" as="image" />
         {/* Preload TradingView library for faster chart loading */}
         <link
           rel="preload"
@@ -759,11 +774,7 @@ const MyApp: AppType = ({ Component, pageProps }) => {
       <Toaster
         position={toastPosition}
         containerStyle={{
-          top: 16,
-          left: 0,
-          right: 0,
           zIndex: 99999,
-          position: 'fixed',
         }}
         toastOptions={{
           duration: 4000,
