@@ -656,11 +656,11 @@ const TokenInfo: React.FC<{
   // Calculate actual token age for discover page
   const getTokenAge = useCallback(() => {
     if (!isDiscoverPage) return timeLabel;
-    
+
     try {
       const createdAt = (token as any).created_at || (token as any).launch_time;
       if (!createdAt) return '-';
-      
+
       let timestamp: number | null = null;
       if (typeof createdAt === 'string') {
         const parsed = Date.parse(createdAt);
@@ -670,12 +670,12 @@ const TokenInfo: React.FC<{
         if (createdAt > 1e12) timestamp = createdAt;
         else if (createdAt > 1e9) timestamp = createdAt * 1000;
       }
-      
+
       if (!timestamp) return '-';
-      
+
       const ageMs = Date.now() - timestamp;
       const ageHours = ageMs / (1000 * 60 * 60);
-      
+
       if (ageHours < 1) {
         const ageMins = Math.floor(ageMs / (1000 * 60));
         return ageMins < 1 ? '<1m' : `${ageMins}m`;
@@ -688,17 +688,17 @@ const TokenInfo: React.FC<{
       return '-';
     }
   }, [token, isDiscoverPage, timeLabel]);
-  
+
   const tokenAge = getTokenAge();
-  
+
   // Calculate age color for discover page
   const getAgeColor = useCallback(() => {
     if (!isDiscoverPage) return '#85d99f';
-    
+
     try {
       const createdAt = (token as any).created_at || (token as any).launch_time;
       if (!createdAt) return '#85d99f';
-      
+
       let timestamp: number | null = null;
       if (typeof createdAt === 'string') {
         const parsed = Date.parse(createdAt);
@@ -707,18 +707,18 @@ const TokenInfo: React.FC<{
         if (createdAt > 1e12) timestamp = createdAt;
         else if (createdAt > 1e9) timestamp = createdAt * 1000;
       }
-      
+
       if (!timestamp) return '#85d99f';
-      
+
       const ageMs = Date.now() - timestamp;
       const ageHours = ageMs / (1000 * 60 * 60);
-      
+
       return ageHours < 1 ? '#f2c367' : '#f26681';
     } catch {
       return '#85d99f';
     }
   }, [token, isDiscoverPage]);
-  
+
   const ageColor = getAgeColor();
 
   // const similarTokens = useMemo(() => 

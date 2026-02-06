@@ -1571,6 +1571,12 @@ export default function Header({
                       )}
                     </div>
                   </div>
+                  <FaSync
+                    size={9}
+                    className={`cursor-pointer ${isRefreshingBalance ? 'animate-spin text-[#18c48c]' : 'text-neutral-500 hover:text-neutral-300'}`}
+                    onClick={(e) => { e.stopPropagation(); handleManualBalanceRefresh(e); }}
+                    title="Refresh balance"
+                  />
                   <FiChevronDown
                     className="text-neutral-500"
                     size={12}

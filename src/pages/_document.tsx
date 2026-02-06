@@ -4,14 +4,14 @@ export default function Document() {
   return (
     <Html lang="en">
       <Head>
-        {/* Chunk load error recovery — ONLY active during initial page load.
-             Once the app renders successfully, this script disables itself.
+        {/* Chunk load error recovery — production only.
+             In dev mode, Turbopack handles its own HMR error recovery.
              SPA navigation errors are handled by _app.tsx routeChangeError instead. */}
-        <script
+        {process.env.NODE_ENV === 'production' && <script
           dangerouslySetInnerHTML={{
             __html: `
 (function(){
-  var KEY='__chunk_retry',MAX=2,DELAYS=[1000,2000],handled=false,count=0;
+  var KEY='__chunk_retry',MAX=2,DELAYS=[1000,2000],handled=false,recovering=false,count=0;
   try{count=parseInt(sessionStorage.getItem(KEY)||'0',10)}catch(e){}
 
   // Once the app has rendered, disable this script entirely.
@@ -21,7 +21,10 @@ export default function Document() {
     if(root&&root.children.length>0){
       handled=true;
     }
-    if(count>0)try{sessionStorage.removeItem(KEY)}catch(e){}
+    // Only clear counter on SUCCESSFUL load (no recovery was triggered this page load).
+    // If recovering is true, doRecovery already wrote a new count — don't delete it,
+    // otherwise the counter resets to 0 and creates an infinite reload loop.
+    if(!recovering&&count>0)try{sessionStorage.removeItem(KEY)}catch(e){}
   });
 
   function showFallback(){
@@ -43,6 +46,7 @@ export default function Document() {
   function doRecovery(source){
     if(handled)return;
     handled=true;
+    recovering=true;
     if(count<MAX){
       try{sessionStorage.setItem(KEY,String(count+1))}catch(e){}
       if(navigator.serviceWorker){navigator.serviceWorker.getRegistrations().then(function(r){r.forEach(function(s){s.unregister()})}).catch(function(){});}
@@ -62,7 +66,7 @@ export default function Document() {
 })();
             `,
           }}
-        />
+        />}
       </Head>
       <body>
         <Main />

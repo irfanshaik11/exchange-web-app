@@ -549,43 +549,64 @@ function normalizeToken(rawToken) {
 function addNewToken(token) {
   if (!token) return;
   const existingIndex = newTokens.findIndex(t => t.mint === token.mint);
+  let finalToken = token;
   if (existingIndex !== -1) {
+    const existing = newTokens[existingIndex];
+    finalToken = {
+      ...token,
+      created_at: existing.created_at || token.created_at,
+      launch_time: existing.launch_time || token.launch_time,
+    };
     newTokens.splice(existingIndex, 1);
   }
-  newTokens.unshift(token);
+  newTokens.unshift(finalToken);
   if (newTokens.length > MAX_NEW) {
     newTokens.pop();
   }
   // Send delta immediately - only this one token
-  sendTokenDelta('new', token);
+  sendTokenDelta('new', finalToken);
 }
 
 function addFinalStretchToken(token) {
   if (!token) return;
   const existingIndex = finalStretchTokens.findIndex(t => t.mint === token.mint);
+  let finalToken = token;
   if (existingIndex !== -1) {
+    const existing = finalStretchTokens[existingIndex];
+    finalToken = {
+      ...token,
+      created_at: existing.created_at || token.created_at,
+      launch_time: existing.launch_time || token.launch_time,
+    };
     finalStretchTokens.splice(existingIndex, 1);
   }
-  finalStretchTokens.unshift(token);
+  finalStretchTokens.unshift(finalToken);
   if (finalStretchTokens.length > MAX_FINAL) {
     finalStretchTokens.pop();
   }
   // Send delta immediately
-  sendTokenDelta('final_stretch', token);
+  sendTokenDelta('final_stretch', finalToken);
 }
 
 function addMigratedToken(token) {
   if (!token) return;
   const existingIndex = migratedTokens.findIndex(t => t.mint === token.mint);
+  let finalToken = token;
   if (existingIndex !== -1) {
+    const existing = migratedTokens[existingIndex];
+    finalToken = {
+      ...token,
+      created_at: existing.created_at || token.created_at,
+      launch_time: existing.launch_time || token.launch_time,
+    };
     migratedTokens.splice(existingIndex, 1);
   }
-  migratedTokens.unshift(token);
+  migratedTokens.unshift(finalToken);
   if (migratedTokens.length > MAX_MIGRATED) {
     migratedTokens.pop();
   }
   // Send delta immediately
-  sendTokenDelta('migrated', token);
+  sendTokenDelta('migrated', finalToken);
 }
 
 function handlePriceUpdate(updates) {

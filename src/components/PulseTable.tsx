@@ -7680,7 +7680,12 @@ function PulseTable({
                                 className="flex items-center gap-1 text-[10px] lg:gap-1"
                                 style={{ color: "#31e3ac" }}
                               >
-                                {getAgeLabel(token)}
+                                <TokenAge
+                                  createdAt={
+                                    (token as any).launch_time ||
+                                    (token as any).created_at
+                                  }
+                                />
                               </span>
                               {/* Socials */}
                               <div className="relative flex items-center gap-1 text-neutral-400 lg:gap-1.5">
