@@ -257,8 +257,8 @@ export function useReferralStats() {
     queryKey: ['referrals', 'stats', user?.id],
     queryFn: () => getReferralStats(user!.bearerToken),
     enabled: !!user?.bearerToken,
-    staleTime: 10 * 1000, // 10 seconds
-    refetchInterval: 30 * 1000, // Refetch every 30 seconds for more responsive updates
+    staleTime: 5 * 60 * 1000, // 5 minutes — honors level rarely changes, prevents badge flicker on navigation
+    refetchInterval: 60 * 1000, // Refetch every 60 seconds in background
   });
 }
 

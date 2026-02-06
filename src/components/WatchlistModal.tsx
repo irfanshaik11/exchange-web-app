@@ -829,7 +829,7 @@ export default function WatchlistModal({ open, onClose }: WatchlistModalProps) {
   };
 
   return (
-    <InterstatePopout open={open} onClose={onClose} align="center" zIndex={9999} className="bg-[#111214] rounded-xl shadow-2xl w-full max-w-5xl p-6 relative text-neutral-100">
+    <InterstatePopout open={open} onClose={onClose} align="center" zIndex={9999} className="bg-[#111214] rounded-xl shadow-2xl w-full max-w-4xl max-h-[80vh] flex flex-col p-6 relative text-neutral-100">
       <InterstateButton variant="icon" size="sm" onClick={onClose} className="absolute top-3 right-3 text-xl"><span>×</span></InterstateButton>
       <div className="flex items-center justify-between mb-4 pr-12">
         <div className="text-lg font-bold">Watchlist</div>
@@ -889,17 +889,17 @@ export default function WatchlistModal({ open, onClose }: WatchlistModalProps) {
           />
         </div>
       </div>
-      <div className="w-[calc(100%+48px)] overflow-x-auto -mx-6">
+      <div className="w-[calc(100%+48px)] overflow-x-auto overflow-y-auto flex-1 min-h-0 -mx-6">
         <table className="min-w-full">
-          <thead>
-            <tr style={{ backgroundColor: 'transparent', borderBottom: `1px solid ${AX.border}` }}>
+          <thead className="sticky top-0 z-10">
+            <tr style={{ backgroundColor: '#111214', borderBottom: `1px solid ${AX.border}` }}>
               <th className="w-72 px-4 py-3 text-left text-xs font-medium tracking-wide uppercase" style={{ color: '#787a8d', fontWeight: '300' }}>Token</th>
               <th className="w-28 px-4 py-3 text-right text-xs font-medium tracking-wide uppercase" style={{ color: '#787a8d', fontWeight: '300' }}>Vol</th>
               {/* <th className="w-20 px-4 py-3 text-right text-xs font-medium tracking-wide uppercase" style={{ color: '#787a8d', fontWeight: '300' }}>1h%</th> */}
               <th className="w-28 px-4 py-3 text-right text-xs font-medium tracking-wide uppercase" style={{ color: '#787a8d', fontWeight: '300' }}>MKT Cap</th>
               <th className="w-28 px-4 py-3 text-right text-xs font-medium tracking-wide uppercase" style={{ color: '#787a8d', fontWeight: '300' }}>Liq</th>
               <th className="w-28 px-4 py-3 text-right text-xs font-medium tracking-wide uppercase" style={{ color: '#787a8d', fontWeight: '300' }}>Price</th>
-              <th className="w-28 px-4 py-3 text-center text-xs font-medium tracking-wide uppercase" style={{ color: '#787a8d', fontWeight: '300' }}>Action</th>
+              <th className="px-4 py-3 text-center text-xs font-medium tracking-wide uppercase" style={{ color: '#787a8d', fontWeight: '300' }}>Action</th>
             </tr>
           </thead>
           <tbody>
@@ -964,7 +964,7 @@ export default function WatchlistModal({ open, onClose }: WatchlistModalProps) {
                           />
                         </div>
                         {/* Chain logo bubble - Monad or Solana */}
-                        <div className="absolute bottom-0 right-0 bg-white rounded-full flex items-center justify-center transform translate-x-1/2 translate-y-1/2 z-10"
+                        <div className="absolute -bottom-0.5 -right-0.5 bg-white rounded-full flex items-center justify-center"
                              style={{ width: 14, height: 14, padding: '1px' }}>
                           {isMonadToken(token) ? (
                             <MonadIcon size={12} />
@@ -1067,10 +1067,10 @@ export default function WatchlistModal({ open, onClose }: WatchlistModalProps) {
                   </td>
                   
                   {/* Action Column */}
-                  <td className="w-28 px-4 py-3 align-middle text-center">
+                  <td className="px-4 py-3 align-middle text-center">
                     <button
                       onClick={(e) => handleQuickBuy(token, e)}
-                      className="flex items-center justify-center gap-1.5 text-xs font-medium transition-all duration-200 cursor-pointer mx-auto"
+                      className="flex items-center justify-center gap-1.5 text-xs font-medium transition-all duration-200 cursor-pointer mx-auto whitespace-nowrap"
                       style={{
                         backgroundColor: '#272a2e',
                         color: '#85d99f',
