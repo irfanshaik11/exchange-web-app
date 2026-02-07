@@ -308,7 +308,15 @@ const SellPopup: React.FC<SellPopupProps> = ({ isOpen, onClose, position, tokenM
 
         if (error.code === 'NO_HOLDINGS') {
           errorMessage = `❌ No ${tokenMetadata?.symbol || 'tokens'} to sell`;
-          toast.error(`No ${tokenMetadata?.symbol || 'tokens'} to sell`, { duration: 4000 });
+          toast.error(`No ${tokenMetadata?.symbol || 'tokens'} to sell. Position removed.`, { duration: 4000 });
+          // Backend already cleaned up DB position — refresh positions to remove from UI
+          if (onSellSuccess) onSellSuccess();
+          onClose();
+        } else if (error.code === 'NO_LIQUIDITY' || error.message?.includes('no liquidity across all')) {
+          errorMessage = `❌ No liquidity available. Position removed.`;
+          toast.error('No liquidity available. Position removed.', { duration: 4000 });
+          if (onSellSuccess) onSellSuccess();
+          onClose();
         } else if (error.code === 'POOL_GRADUATED') {
           errorMessage = `⚠️ Pool has graduated to another DEX`;
           toast.error('Pool has migrated. Refresh the page.', { duration: 4000 });

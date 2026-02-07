@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import { createPortal } from 'react-dom';
 import { FaTimes, FaExternalLinkAlt, FaSortAmountDown, FaClock, FaRegCopy } from 'react-icons/fa';
 import { formatSmartNumber, formatMarketCap, type Token } from '~/utils/db';
 import type { PositionRow, TradeRow } from '~/utils/functions';
@@ -805,23 +806,27 @@ export default function PositionDetailModal({
     }
   };
 
-  return (
+  // Portal to document.body to escape backdrop-filter containing blocks
+  // (backdrop-blur-xl on ancestor divs makes position:fixed relative to them, not viewport)
+  if (typeof document === 'undefined') return null;
+
+  return createPortal(
     <>
       {/* Backdrop */}
       <div
         className={`fixed inset-0 bg-black/60 backdrop-blur-sm transition-opacity duration-300 ${
           isVisible ? 'opacity-100' : 'opacity-0'
         }`}
-        style={{ zIndex: 140 }}
+        style={{ zIndex: 10001 }}
         onClick={onClose}
       />
 
-      {/* Slide-in Panel */}
+      {/* Slide-in Panel — z-index must be above Header wrapper (z-[10000] on portfolio/pulse pages) */}
       <div
-        className={`fixed top-0 right-0 h-full w-full max-w-[520px] bg-[#0A0B0D] shadow-2xl transition-transform duration-300 ease-out overflow-y-auto ${
+        className={`fixed top-0 right-0 bottom-0 w-full max-w-[520px] bg-[#0A0B0D] shadow-2xl transition-transform duration-300 ease-out overflow-y-auto ${
           isVisible ? 'translate-x-0' : 'translate-x-full'
         }`}
-        style={{ zIndex: 141 }}
+        style={{ zIndex: 10002, height: '100dvh' }}
       >
         {/* Header */}
         <div className="sticky top-0 bg-[#0A0B0D] px-4 pt-4 pb-3 z-10">
@@ -1276,7 +1281,10 @@ export default function PositionDetailModal({
             </div>
           )}
         </div>
+        {/* Bottom safe area spacing */}
+        <div className="h-8 flex-shrink-0" />
       </div>
-    </>
+    </>,
+    document.body
   );
 }

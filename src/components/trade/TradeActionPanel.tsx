@@ -2700,6 +2700,12 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
               bought: 0, boughtUsdValue: 0, sold: 0, soldUsdValue: 0,
               remaining: 0, remainingUsdValue: 0, pnl: 0, pnlPercentage: 0,
             });
+          } else if (errorCode === 'NO_LIQUIDITY' || rawMessage?.includes('no liquidity across all')) {
+            errorMessage = 'No liquidity available. Position removed.';
+            setPositionData({
+              bought: 0, boughtUsdValue: 0, sold: 0, soldUsdValue: 0,
+              remaining: 0, remainingUsdValue: 0, pnl: 0, pnlPercentage: 0,
+            });
           } else {
             errorMessage = rawMessage || 'Sell failed. Please try again.';
           }
