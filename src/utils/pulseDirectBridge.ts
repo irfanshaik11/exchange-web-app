@@ -479,14 +479,16 @@ function handlePriceUpdate(updates: any[]) {
       const idx = arr.findIndex(t => t.mint === mint);
       if (idx !== -1) {
         const newArr = [...arr];
+        const existing = arr[idx];
+        const keepIfPositive = (newVal: any, ex: any) => newVal > 0 ? newVal : ex;
         newArr[idx] = {
-          ...arr[idx],
-          price_usd: update.price_usd ?? update.price ?? arr[idx].price_usd,
-          market_cap_usd: update.market_cap_usd ?? update.marketCap ?? arr[idx].market_cap_usd,
-          volume_24h: update.volume_24h ?? update.volume ?? arr[idx].volume_24h,
-          liquidity_usd: update.liquidity_usd ?? update.liquidity ?? arr[idx].liquidity_usd,
-          holder_count: update.holder_count ?? update.holders ?? arr[idx].holder_count,
-          price_change_5m: update.price_change_5m ?? update.priceChange5m ?? arr[idx].price_change_5m,
+          ...existing,
+          price_usd: update.price_usd ?? update.price ?? existing.price_usd,
+          market_cap_usd: keepIfPositive(update.market_cap_usd ?? update.marketCap, existing.market_cap_usd),
+          volume_24h: keepIfPositive(update.volume_24h ?? update.volume, existing.volume_24h),
+          liquidity_usd: keepIfPositive(update.liquidity_usd ?? update.liquidity, existing.liquidity_usd),
+          holder_count: keepIfPositive(update.holder_count ?? update.holders, existing.holder_count),
+          price_change_5m: update.price_change_5m ?? update.priceChange5m ?? existing.price_change_5m,
         };
         newData[key] = newArr;
         anyUpdated = true;

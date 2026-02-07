@@ -156,10 +156,10 @@ export function useDirectPulseWebSocket(
               if (mint) {
                 updateToken(mint, {
                   price_usd: update.price_usd ?? update.price,
-                  market_cap_usd: update.market_cap_usd ?? update.marketCap,
-                  volume_24h: update.volume_24h ?? update.volume,
-                  liquidity_usd: update.liquidity_usd ?? update.liquidity,
-                  holder_count: update.holder_count ?? update.holders,
+                  ...((update.market_cap_usd ?? update.marketCap) > 0 && { market_cap_usd: update.market_cap_usd ?? update.marketCap }),
+                  ...((update.volume_24h ?? update.volume) > 0 && { volume_24h: update.volume_24h ?? update.volume }),
+                  ...((update.liquidity_usd ?? update.liquidity) > 0 && { liquidity_usd: update.liquidity_usd ?? update.liquidity }),
+                  ...((update.holder_count ?? update.holders) > 0 && { holder_count: update.holder_count ?? update.holders }),
                   price_change_5m: update.price_change_5m ?? update.priceChange5m,
                   price_change_24h: update.price_change_24h,
                 });

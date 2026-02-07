@@ -660,16 +660,19 @@ function updateTokenInArray(arr, mint, update) {
   // Helper: get numeric value, parsing strings if needed
   const getNum = (val) => val !== undefined && val !== null ? (typeof val === 'string' ? parseFloat(val) : val) : undefined;
 
+  // Helper: for non-negative metrics, never overwrite a non-zero value with 0
+  const keepIfPositive = (newVal, existing) => newVal > 0 ? newVal : existing;
+
   // Compute updated values - only update if update has the field, otherwise keep token's value
   // Parse strings to numbers since backend may send string values
   const priceValue = getNum(update.price_usd) ?? getNum(update.price) ?? getNum(update.usd_price) ?? token.price;
-  const marketCapValue = getNum(update.market_cap_usd) ?? getNum(update.marketCap) ?? getNum(update.fully_diluted_value) ?? token.market_cap_usd;
-  const liquidityValue = getNum(update.liquidity_usd) ?? getNum(update.liquidity) ?? getNum(update.total_liquidity_usd) ?? token.liquidity_usd;
-  const volumeValue = getNum(update.volume_24h) ?? getNum(update.volume) ?? token.volume_24h;
+  const marketCapValue = keepIfPositive(getNum(update.market_cap_usd) ?? getNum(update.marketCap) ?? getNum(update.fully_diluted_value), token.market_cap_usd);
+  const liquidityValue = keepIfPositive(getNum(update.liquidity_usd) ?? getNum(update.liquidity) ?? getNum(update.total_liquidity_usd), token.liquidity_usd);
+  const volumeValue = keepIfPositive(getNum(update.volume_24h) ?? getNum(update.volume), token.volume_24h);
 
   // These are NOT sent by price updates, so keep existing values
-  const bondingValue = getNum(update.bonding_pct) ?? getNum(update.bonding_curve_progress) ?? token.bonding_pct;
-  const holderValue = update.holders ?? update.holder_count ?? update.total_holders ?? token.holders;
+  const bondingValue = keepIfPositive(getNum(update.bonding_pct) ?? getNum(update.bonding_curve_progress), token.bonding_pct);
+  const holderValue = keepIfPositive(update.holders ?? update.holder_count ?? update.total_holders, token.holders);
 
   // Price changes - not sent by price_update, keep existing
   const priceChange5mValue = getNum(update.price_percent_change_5m) ?? getNum(update.price_change_5m) ?? token.price_change_5m;
@@ -714,56 +717,56 @@ function updateTokenInArray(arr, mint, update) {
     total_holders: holderValue,
 
     // Unique wallets (price_update sends 5m)
-    unique_wallets_5m: update.unique_wallets_5m ?? token.unique_wallets_5m,
-    unique_wallets_1h: update.unique_wallets_1h ?? token.unique_wallets_1h,
-    unique_wallets_6h: update.unique_wallets_6h ?? token.unique_wallets_6h,
-    unique_wallets_24h: update.unique_wallets_24h ?? token.unique_wallets_24h,
+    unique_wallets_5m: keepIfPositive(update.unique_wallets_5m, token.unique_wallets_5m),
+    unique_wallets_1h: keepIfPositive(update.unique_wallets_1h, token.unique_wallets_1h),
+    unique_wallets_6h: keepIfPositive(update.unique_wallets_6h, token.unique_wallets_6h),
+    unique_wallets_24h: keepIfPositive(update.unique_wallets_24h, token.unique_wallets_24h),
 
     // Transaction counts - BUYS
-    total_buys_5m: update.total_buys_5m ?? token.total_buys_5m,
-    total_buys_1h: update.total_buys_1h ?? token.total_buys_1h,
-    total_buys_6h: update.total_buys_6h ?? token.total_buys_6h,
-    total_buys_24h: update.total_buys_24h ?? token.total_buys_24h,
+    total_buys_5m: keepIfPositive(update.total_buys_5m, token.total_buys_5m),
+    total_buys_1h: keepIfPositive(update.total_buys_1h, token.total_buys_1h),
+    total_buys_6h: keepIfPositive(update.total_buys_6h, token.total_buys_6h),
+    total_buys_24h: keepIfPositive(update.total_buys_24h, token.total_buys_24h),
 
     // Transaction counts - SELLS
-    total_sells_5m: update.total_sells_5m ?? token.total_sells_5m,
-    total_sells_1h: update.total_sells_1h ?? token.total_sells_1h,
-    total_sells_6h: update.total_sells_6h ?? token.total_sells_6h,
-    total_sells_24h: update.total_sells_24h ?? token.total_sells_24h,
+    total_sells_5m: keepIfPositive(update.total_sells_5m, token.total_sells_5m),
+    total_sells_1h: keepIfPositive(update.total_sells_1h, token.total_sells_1h),
+    total_sells_6h: keepIfPositive(update.total_sells_6h, token.total_sells_6h),
+    total_sells_24h: keepIfPositive(update.total_sells_24h, token.total_sells_24h),
 
     // Buyer/Seller counts (price_update sends 5m)
-    total_buyers_5m: update.total_buyers_5m ?? token.total_buyers_5m,
-    total_buyers_1h: update.total_buyers_1h ?? token.total_buyers_1h,
-    total_buyers_6h: update.total_buyers_6h ?? token.total_buyers_6h,
-    total_buyers_24h: update.total_buyers_24h ?? token.total_buyers_24h,
-    total_sellers_5m: update.total_sellers_5m ?? token.total_sellers_5m,
-    total_sellers_1h: update.total_sellers_1h ?? token.total_sellers_1h,
-    total_sellers_6h: update.total_sellers_6h ?? token.total_sellers_6h,
-    total_sellers_24h: update.total_sellers_24h ?? token.total_sellers_24h,
+    total_buyers_5m: keepIfPositive(update.total_buyers_5m, token.total_buyers_5m),
+    total_buyers_1h: keepIfPositive(update.total_buyers_1h, token.total_buyers_1h),
+    total_buyers_6h: keepIfPositive(update.total_buyers_6h, token.total_buyers_6h),
+    total_buyers_24h: keepIfPositive(update.total_buyers_24h, token.total_buyers_24h),
+    total_sellers_5m: keepIfPositive(update.total_sellers_5m, token.total_sellers_5m),
+    total_sellers_1h: keepIfPositive(update.total_sellers_1h, token.total_sellers_1h),
+    total_sellers_6h: keepIfPositive(update.total_sellers_6h, token.total_sellers_6h),
+    total_sellers_24h: keepIfPositive(update.total_sellers_24h, token.total_sellers_24h),
 
-    txns: update.txns ?? token.txns,
+    txns: keepIfPositive(update.txns, token.txns),
 
     // Volume per timeframe (price_update sends 5m, parse strings)
-    total_buy_volume_5m: getNum(update.total_buy_volume_5m) ?? token.total_buy_volume_5m,
-    total_sell_volume_5m: getNum(update.total_sell_volume_5m) ?? token.total_sell_volume_5m,
-    total_buy_volume_1h: getNum(update.total_buy_volume_1h) ?? token.total_buy_volume_1h,
-    total_sell_volume_1h: getNum(update.total_sell_volume_1h) ?? token.total_sell_volume_1h,
-    total_buy_volume_6h: getNum(update.total_buy_volume_6h) ?? token.total_buy_volume_6h,
-    total_sell_volume_6h: getNum(update.total_sell_volume_6h) ?? token.total_sell_volume_6h,
-    total_buy_volume_24h: getNum(update.total_buy_volume_24h) ?? token.total_buy_volume_24h,
-    total_sell_volume_24h: getNum(update.total_sell_volume_24h) ?? token.total_sell_volume_24h,
+    total_buy_volume_5m: keepIfPositive(getNum(update.total_buy_volume_5m), token.total_buy_volume_5m),
+    total_sell_volume_5m: keepIfPositive(getNum(update.total_sell_volume_5m), token.total_sell_volume_5m),
+    total_buy_volume_1h: keepIfPositive(getNum(update.total_buy_volume_1h), token.total_buy_volume_1h),
+    total_sell_volume_1h: keepIfPositive(getNum(update.total_sell_volume_1h), token.total_sell_volume_1h),
+    total_buy_volume_6h: keepIfPositive(getNum(update.total_buy_volume_6h), token.total_buy_volume_6h),
+    total_sell_volume_6h: keepIfPositive(getNum(update.total_sell_volume_6h), token.total_sell_volume_6h),
+    total_buy_volume_24h: keepIfPositive(getNum(update.total_buy_volume_24h), token.total_buy_volume_24h),
+    total_sell_volume_24h: keepIfPositive(getNum(update.total_sell_volume_24h), token.total_sell_volume_24h),
 
     // Percentages (NOT sent by price_update, keep existing)
-    dev_percent: update.dev_percent ?? update.dev_held_percentage ?? token.dev_percent,
-    dev_held_percentage: update.dev_held_percentage ?? update.dev_percent ?? token.dev_held_percentage,
-    sniper_percent: update.sniper_percent ?? update.sniper_held_percentage ?? token.sniper_percent,
-    sniper_held_percentage: update.sniper_held_percentage ?? update.sniper_percent ?? token.sniper_held_percentage,
-    total_snipers: update.total_snipers ?? token.total_snipers,
-    insider_percent: update.insider_percent ?? update.insider_held_percentage ?? token.insider_percent,
-    insider_held_percentage: update.insider_held_percentage ?? update.insider_percent ?? token.insider_held_percentage,
-    bundle_percent: update.bundle_percent ?? update.bundled_percentage ?? token.bundle_percent,
-    bundled_percentage: update.bundled_percentage ?? update.bundle_percent ?? token.bundled_percentage,
-    bundler_held_percentage: update.bundler_held_percentage ?? token.bundler_held_percentage,
+    dev_percent: keepIfPositive(update.dev_percent ?? update.dev_held_percentage, token.dev_percent),
+    dev_held_percentage: keepIfPositive(update.dev_held_percentage ?? update.dev_percent, token.dev_held_percentage),
+    sniper_percent: keepIfPositive(update.sniper_percent ?? update.sniper_held_percentage, token.sniper_percent),
+    sniper_held_percentage: keepIfPositive(update.sniper_held_percentage ?? update.sniper_percent, token.sniper_held_percentage),
+    total_snipers: keepIfPositive(update.total_snipers, token.total_snipers),
+    insider_percent: keepIfPositive(update.insider_percent ?? update.insider_held_percentage, token.insider_percent),
+    insider_held_percentage: keepIfPositive(update.insider_held_percentage ?? update.insider_percent, token.insider_held_percentage),
+    bundle_percent: keepIfPositive(update.bundle_percent ?? update.bundled_percentage, token.bundle_percent),
+    bundled_percentage: keepIfPositive(update.bundled_percentage ?? update.bundle_percent, token.bundled_percentage),
+    bundler_held_percentage: keepIfPositive(update.bundler_held_percentage, token.bundler_held_percentage),
 
     // Bonding curve (NOT sent by price_update, keep existing)
     bondingCurveProgress: bondingValue,
@@ -771,16 +774,16 @@ function updateTokenInArray(arr, mint, update) {
     bonding_pct: bondingValue,
 
     // KOL
-    kol_count: update.kol_count ?? token.kol_count,
+    kol_count: keepIfPositive(update.kol_count, token.kol_count),
 
     // Pro traders
-    pro_traders_count: update.pro_traders_count ?? token.pro_traders_count,
-    smart_money_count: update.smart_money_count ?? token.smart_money_count,
+    pro_traders_count: keepIfPositive(update.pro_traders_count, token.pro_traders_count),
+    smart_money_count: keepIfPositive(update.smart_money_count, token.smart_money_count),
 
     // Gas / Fees
-    total_fees_lamports: update.total_fees_lamports ?? token.total_fees_lamports,
-    global_fees_paid: update.global_fees_paid ?? update.globalFeesPaid ?? token.global_fees_paid,
-    globalFeesPaid: update.globalFeesPaid ?? update.global_fees_paid ?? token.globalFeesPaid,
+    total_fees_lamports: keepIfPositive(update.total_fees_lamports, token.total_fees_lamports),
+    global_fees_paid: keepIfPositive(update.global_fees_paid ?? update.globalFeesPaid, token.global_fees_paid),
+    globalFeesPaid: keepIfPositive(update.globalFeesPaid ?? update.global_fees_paid, token.globalFeesPaid),
 
     // Image (price_update sends this)
     image: update.image ?? token.image,
