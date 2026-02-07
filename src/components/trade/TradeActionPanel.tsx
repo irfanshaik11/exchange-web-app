@@ -14,7 +14,7 @@ import {
   showCenteredErrorToast,
 } from "~/utils/toast";
 import { executeEnhancedTrade } from "~/utils/enhancedTradeHandler";
-import { showEnhancedToast, updateEnhancedToast } from "~/utils/enhancedToast";
+import { showEnhancedToast } from "~/utils/enhancedToast";
 import { useUser } from "~/components/UserContext";
 import { executeSolanaMultiBuy, formatSolanaTxSummary, buildSolanaWalletAllocations } from "~/utils/solanaWalletAllocation";
 import useSolanaPositionWebSocket from "~/hooks/useSolanaPositionWebSocket";
@@ -234,7 +234,7 @@ const AddressDisplay: React.FC<{
 };
 
 // Token Info Dropdown Component
-const TokenInfoDropdown: React.FC<{ token: any }> = ({ token }) => {
+const TokenInfoDropdown: React.FC<{ token: any; liveMarketCapUsd?: number | null }> = ({ token, liveMarketCapUsd }) => {
   const [isOpen, setIsOpen] = useState(true);
 
   // Get token metrics (using Codex fields if available, fallback to token-analytics)
@@ -583,8 +583,120 @@ const formatCompactNumber = (n: number): string => {
   return Math.round(n).toString();
 };
 
+/* ── Toast helpers ── */
+const SOLANA_LOGO_URL = 'https://avatars.githubusercontent.com/u/92743431?s=200&v=4';
+
+const ORDER_TOAST_STYLE: React.CSSProperties = {
+  background: '#1a1a1a',
+  border: '1px solid #333',
+  borderRadius: '8px',
+  padding: '12px',
+};
+
+/**
+ * Simple order-setup toast — token image + label + checkmark.
+ * Used when an order is *created* (no on-chain tx yet).
+ */
+function showOrderSetupToast(opts: {
+  label: string;
+  tokenImage?: string | null;
+  tokenName: string;
+}): string {
+  const id = `setup-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+  toast(
+    (_t) => (
+      <div className="flex items-center gap-3">
+        {opts.tokenImage && (
+          <img
+            src={opts.tokenImage}
+            alt={opts.tokenName}
+            className="w-6 h-6 rounded-full flex-shrink-0"
+            onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+          />
+        )}
+        <span className="text-sm text-neutral-200 truncate">{opts.label}</span>
+        <span className="text-green-400 flex-shrink-0">✓</span>
+      </div>
+    ),
+    { id, duration: 4000, style: ORDER_TOAST_STYLE },
+  );
+  return id;
+}
+
+/**
+ * Animated execution toast — token image + label + timer + explorer link.
+ * Used when an order actually *executes* an on-chain transaction (same style as market buy/sell).
+ */
+function showExecutionToast(opts: {
+  label: string;
+  tokenImage?: string | null;
+  tokenName: string;
+  txHash?: string | null;
+}): string {
+  const id = `exec-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+  const startTime = Date.now();
+  const timerCap = 0.40 + Math.random() * 0.20;
+  let timerFinished = false;
+  let handle: number | null = null;
+
+  const explorerUrl = opts.txHash ? `https://solscan.io/tx/${opts.txHash}` : null;
+
+  toast(
+    (_t) => (
+      <div className="flex items-center gap-3">
+        {opts.tokenImage && (
+          <img
+            src={opts.tokenImage}
+            alt={opts.tokenName}
+            className="w-6 h-6 rounded-full flex-shrink-0"
+            onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+          />
+        )}
+        <div className="flex items-center gap-2 flex-1 min-w-0">
+          <span className="text-sm text-neutral-200 truncate">{opts.label}</span>
+          <span id={`timer-${id}`} className="text-xs text-neutral-400 flex-shrink-0">(0.00s)</span>
+          <span id={`check-${id}`} className="text-green-400 flex-shrink-0" style={{ display: 'none' }}>✓</span>
+          <span className="flex-shrink-0" style={{ display: 'inline-flex' }}>
+            {explorerUrl ? (
+              <a href={explorerUrl} target="_blank" rel="noopener noreferrer" className="hover:opacity-80 transition-opacity">
+                <img src={SOLANA_LOGO_URL} alt="Solana" className="w-4 h-4 rounded-full" style={{ cursor: 'pointer' }} />
+              </a>
+            ) : (
+              <img src={SOLANA_LOGO_URL} alt="Solana" className="w-4 h-4 rounded-full opacity-70" style={{ cursor: 'default' }} />
+            )}
+          </span>
+        </div>
+      </div>
+    ),
+    { id, duration: Infinity, style: ORDER_TOAST_STYLE },
+  );
+
+  const tick = () => {
+    const elapsed = (Date.now() - startTime) / 1000;
+    const timerEl = document.getElementById(`timer-${id}`);
+    if (timerEl) timerEl.textContent = `(${Math.min(elapsed, timerCap).toFixed(2)}s)`;
+    if (!timerFinished && elapsed >= timerCap) {
+      timerFinished = true;
+      const checkEl = document.getElementById(`check-${id}`);
+      if (checkEl) checkEl.style.display = 'block';
+      handle = null;
+      return;
+    }
+    handle = requestAnimationFrame(tick);
+  };
+  handle = requestAnimationFrame(tick);
+
+  // Auto-dismiss after 10s
+  setTimeout(() => {
+    if (handle) cancelAnimationFrame(handle);
+    toast.dismiss(id);
+  }, 10_000);
+
+  return id;
+}
+
 // Pool Info Section Component
-const PoolInfoSection: React.FC<{ token: any }> = ({ token }) => {
+const PoolInfoSection: React.FC<{ token: any; liveMarketCapUsd?: number | null }> = ({ token, liveMarketCapUsd }) => {
   const [isOpen, setIsOpen] = useState(true);
 
   const copyToClipboard = (text: string) => {
@@ -675,7 +787,7 @@ const PoolInfoSection: React.FC<{ token: any }> = ({ token }) => {
               <div className="flex items-center justify-between">
                 <span className="text-[10px] text-[#9CA3AF]">Value</span>
                 <span className="text-[11px] text-[#E6E7EA] font-semibold">
-                  ${formatSmartNumber(token?.market_cap_usd || 0)}
+                  ${formatSmartNumber(liveMarketCapUsd || token?.market_cap_usd || 0)}
                 </span>
               </div>
             </div>
@@ -772,7 +884,7 @@ const PoolInfoSection: React.FC<{ token: any }> = ({ token }) => {
             <div className="flex items-center justify-between">
               <span className="text-[10px] text-[#9CA3AF] uppercase tracking-wide">Market cap</span>
               <span className="text-[11px] text-[#E6E7EA] font-semibold">
-                ${formatSmartNumber(token?.market_cap_usd || 0)}
+                ${formatSmartNumber(liveMarketCapUsd || token?.market_cap_usd || 0)}
               </span>
             </div>
 
@@ -915,6 +1027,7 @@ interface TradeActionPanelProps {
   quickBuySide?: "buy" | "sell";
   initialStats?: TokenStats | null; // Initial stats from REST API
   wsVolume?: SolanaTokenVolume | null; // Volume data from unified WebSocket
+  liveMarketCapUsd?: number | null; // Real-time MC from chart/WebSocket (same source as header)
 }
 
 const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
@@ -924,7 +1037,8 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
   quickBuySettings: externalQuickBuySettings,
   quickBuySide: externalQuickBuySide,
   initialStats,
-  wsVolume
+  wsVolume,
+  liveMarketCapUsd,
 }) => {
   // Only show skeleton if we have absolutely no token data (not even optimistic)
   // Allow tokens with just mint address (for tokens without metadata from search)
@@ -1340,6 +1454,11 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
   );
 
   const baseMarketCap: number = useMemo(() => {
+    // Priority: live chart/WS data > token service > token prop
+    if (typeof liveMarketCapUsd === "number" && Number.isFinite(liveMarketCapUsd) && liveMarketCapUsd > 0) {
+      return liveMarketCapUsd;
+    }
+
     if (tokenServiceMarketCap !== null && Number.isFinite(tokenServiceMarketCap) && tokenServiceMarketCap > 0) {
       return tokenServiceMarketCap;
     }
@@ -1356,7 +1475,7 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
           0
       ) || 0
     );
-  }, [tokenServiceMarketCap, token]);
+  }, [liveMarketCapUsd, tokenServiceMarketCap, token]);
 
   const sliderBaseMarketCap = useMemo(() => {
     if (baseMarketCap > 0) {
@@ -1395,14 +1514,16 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
     if (tab !== "limit") return;
     if (!baseMarketCap || baseMarketCap <= 0) return;
     if (manualTargetOverrideRef.current) return;
-    if (sliderPct !== 0) return;
 
-    const roundedBase = Math.round(baseMarketCap);
+    // Recompute targetMC from current sliderPct whenever baseMarketCap changes.
+    // This ensures the target stays consistent with the user's percentage intent
+    // even when the live market cap updates after initial load.
+    const newTarget = Math.round(baseMarketCap * (1 + sliderPct / 100));
     const currentTarget = Number(targetMC);
+    lastSliderBaseRef.current = baseMarketCap;
 
-    if (!Number.isFinite(currentTarget) || currentTarget !== roundedBase) {
-      lastSliderBaseRef.current = baseMarketCap;
-      setTargetMC(String(roundedBase));
+    if (!Number.isFinite(currentTarget) || currentTarget !== Math.max(0, newTarget)) {
+      setTargetMC(String(Math.max(0, newTarget)));
     }
   }, [baseMarketCap, tab, sliderPct, targetMC]);
 
@@ -1716,7 +1837,6 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
   const monitorLimitOrderExecution = useCallback(
     async ({
       orderId,
-      initiatingToastId,
       orderType,
       targetMarketCap,
       submittedSolAmount,
@@ -1725,7 +1845,6 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
       bondingTarget,
     }: {
       orderId: string;
-      initiatingToastId?: string | null;
       orderType: "Buy" | "Sell";
       targetMarketCap?: number;
       submittedSolAmount?: number;
@@ -1796,21 +1915,14 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
 
             const description = descriptionParts.join(" • ");
 
-            if (initiatingToastId) {
-              updateEnhancedToast(initiatingToastId, "success", `${symbolLabel} limit order executed`, {
-                title: "Limit Order Executed",
-                description,
-                showExplorerLink: Boolean(txHash),
-                txHash,
-              });
-            } else {
-              showEnhancedToast("success", `${symbolLabel} limit order executed`, {
-                title: "Limit Order Executed",
-                description,
-                showExplorerLink: Boolean(txHash),
-                txHash,
-              });
-            }
+            // Show animated execution toast (same as market buy/sell)
+            const actionVerb = orderType === "Buy" ? "Bought" : "Sold";
+            showExecutionToast({
+              label: `${actionVerb} ${symbolLabel}`,
+              tokenImage: getResolvedTokenImage(token),
+              tokenName: symbolLabel,
+              txHash,
+            });
 
             if (typeof window !== "undefined") {
               window.dispatchEvent(
@@ -1835,17 +1947,7 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
               result?.message ||
               "Limit order failed to execute.";
 
-            if (initiatingToastId) {
-              updateEnhancedToast(initiatingToastId, "error", "Limit order failed", {
-                title: "Limit Order Failed",
-                description: failureReason,
-              });
-            } else {
-              showEnhancedToast("error", "Limit order failed", {
-                title: "Limit Order Failed",
-                description: failureReason,
-              });
-            }
+            toast.error(failureReason, { duration: 6000, style: ORDER_TOAST_STYLE });
 
             if (typeof window !== "undefined") {
               window.dispatchEvent(
@@ -1933,10 +2035,7 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
       ? `${numericAmount.toLocaleString(undefined, { maximumFractionDigits: 6 })} SOL`
       : `${numericAmount.toLocaleString(undefined, { maximumFractionDigits: 2 })}%`;
 
-    const initiatingToastId = showEnhancedToast("loading", "Arming sniper…", {
-      title: "Arming Sniper",
-      description: `${formattedAmount} • Bonding Target ${targetBonding.toFixed(2)}%`,
-    });
+    const tokenName = token.symbol || token.name || "Token";
 
     setSniperSubmitting(true);
     try {
@@ -1968,16 +2067,16 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
         user.bearerToken
       );
 
-      updateEnhancedToast(initiatingToastId, "success", `${token.symbol} sniper armed`, {
-        title: "Sniper Armed",
-        description: `${formattedAmount} • Bonding Target ${targetBonding.toFixed(2)}%`,
+      showOrderSetupToast({
+        label: `${tokenName} sniper armed`,
+        tokenImage: getResolvedTokenImage(token),
+        tokenName,
       });
 
       if (response?.order?.id) {
         const normalizedOrderId = String(response.order.id);
         void monitorLimitOrderExecution({
           orderId: normalizedOrderId,
-          initiatingToastId,
           orderType: mode === "buy" ? "Buy" : "Sell",
           triggerType: "bonding",
           bondingTarget: targetBonding,
@@ -1993,10 +2092,7 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
         error?.message?.length > 80
           ? `${error.message.substring(0, 77)}…`
           : error?.message || "Failed to arm sniper";
-      updateEnhancedToast(initiatingToastId, "error", "Unable to arm sniper", {
-        title: "Sniper Failed",
-        description: errorMsg,
-      });
+      toast.error(errorMsg, { duration: 6000, style: ORDER_TOAST_STYLE });
     } finally {
       setSniperSubmitting(false);
     }
@@ -2087,10 +2183,7 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
       ? `${creatorAddress.slice(0, 4)}...${creatorAddress.slice(-4)}`
       : creatorAddress;
 
-    const initiatingToastId = showEnhancedToast("loading", "Arming dev mirror…", {
-      title: actionLabel,
-      description: `${formattedAmount} • Dev Wallet ${shortDev}`,
-    });
+    const devTokenName = token.symbol || token.name || "Token";
 
     setDevSubmitting(true);
     try {
@@ -2123,16 +2216,16 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
         user.bearerToken
       );
 
-      updateEnhancedToast(initiatingToastId, "success", `${token.symbol} dev mirror armed`, {
-        title: `${actionLabel} Armed`,
-        description: `${formattedAmount} • Dev Wallet ${shortDev}`,
+      showOrderSetupToast({
+        label: `${devTokenName} dev mirror armed`,
+        tokenImage: getResolvedTokenImage(token),
+        tokenName: devTokenName,
       });
 
       if (response?.order?.id) {
         const normalizedOrderId = String(response.order.id);
         void monitorLimitOrderExecution({
           orderId: normalizedOrderId,
-          initiatingToastId,
           orderType: response.order.type,
           triggerType: "devSell",
           targetMarketCap: Number(response.order.targetMC ?? latestMarketCap ?? 0),
@@ -2145,10 +2238,7 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
     } catch (error: any) {
       const message =
         error?.message?.length > 80 ? `${error.message.substring(0, 77)}…` : error?.message || "Failed to arm dev mirror";
-      updateEnhancedToast(initiatingToastId, "error", "Unable to arm dev mirror", {
-        title: "Dev Mirror Failed",
-        description: message,
-      });
+      toast.error(message, { duration: 6000, style: ORDER_TOAST_STYLE });
     } finally {
       setDevSubmitting(false);
     }
@@ -2290,7 +2380,6 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
           setIsLoading(false);
           return;
         }
-        let initiatingToastId: string | null = null;
         try {
           const orderIntentLabel = `${mode === "buy" ? "Buy" : "Sell"} Limit Order`;
           const numericAmount = Number(amount);
@@ -2315,10 +2404,7 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
             Number.isFinite(numericTargetMc)
               ? `$${Math.round(numericTargetMc).toLocaleString()}`
               : `${targetMC}`;
-          initiatingToastId = showEnhancedToast("loading", "Submitting limit order…", {
-            title: orderIntentLabel,
-            description: `${formattedAmount} • Target ${formattedTarget}`,
-          });
+          const limitTokenName = token.symbol || token.name || "Token";
 
           const sanitizeNumber = (value: unknown, fallback: number): number => {
             const numeric = typeof value === "string" ? Number(value) : (value as number);
@@ -2356,15 +2442,7 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
             Math.abs((effectiveLiveMc || 0) - numericTargetMc) <= Math.max(1, Math.abs(effectiveLiveMc || 0) * 0.00001);
 
           if (isZeroDelta) {
-            updateEnhancedToast(
-              initiatingToastId,
-              "error",
-              "Invalid trigger",
-              {
-                title: "Trigger price matches live price",
-                description: "Set a target above or below the live market cap before placing a limit order.",
-              }
-            );
+            toast.error("Target matches current price — adjust target above or below live MC.", { duration: 6000, style: ORDER_TOAST_STYLE });
             setIsLoading(false);
             setPendingTradeOptions(null);
             return;
@@ -2404,20 +2482,15 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
             setPendingTradeOptions({ ...(options || {}), skipLiquidity: true });
             setShowLiquidityWarning(true);
           }
-          updateEnhancedToast(
-            initiatingToastId,
-            "success",
-            `${token.symbol} limit order created`,
-            {
-              title: "Limit Order Submitted",
-              description: `${formattedAmount} • Target ${formattedTarget}`,
-            }
-          );
+          showOrderSetupToast({
+            label: `${limitTokenName} limit order set`,
+            tokenImage: getResolvedTokenImage(token),
+            tokenName: limitTokenName,
+          });
           if (limitOrderResponse?.order?.id) {
             const normalizedOrderId = String(limitOrderResponse.order.id);
             void monitorLimitOrderExecution({
               orderId: normalizedOrderId,
-              initiatingToastId,
               orderType: limitOrderResponse.order.type,
               triggerType: limitOrderResponse.order.triggerType as "marketCap" | "bonding" | "devSell" | undefined,
               bondingTarget: Number(limitOrderResponse.order.bondingTarget ?? NaN),
@@ -2432,17 +2505,7 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
         } catch (error: any) {
           const errorMsg =
             error?.message?.length > 60 ? `${error.message.substring(0, 57)}...` : error?.message || "Failed to create limit order";
-          if (initiatingToastId) {
-            updateEnhancedToast(initiatingToastId, "error", "Limit order failed", {
-              title: "Unable to Create Limit Order",
-              description: errorMsg,
-            });
-          } else {
-            showEnhancedToast("error", "Limit order failed", {
-              title: "Unable to Create Limit Order",
-              description: errorMsg,
-            });
-          }
+          toast.error(errorMsg, { duration: 6000, style: ORDER_TOAST_STYLE });
           setSuccessMessage(null);
         } finally {
           setIsLoading(false);
@@ -3904,10 +3967,10 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
       </div>
 
       {/* ===== Token Info ===== */}
-      <TokenInfoDropdown token={token} />
+      <TokenInfoDropdown token={token} liveMarketCapUsd={liveMarketCapUsd} />
 
       {/* ===== Pool Info Section ===== */}
-      <PoolInfoSection token={token} />
+      <PoolInfoSection token={token} liveMarketCapUsd={liveMarketCapUsd} />
 
       {/* High Slippage Warning Dialog */}
       <HighSlippageWarningDialog

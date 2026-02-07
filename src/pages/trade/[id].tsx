@@ -723,6 +723,16 @@ export default function TradePage() {
   // -------- Position Lines for Chart (avg entry/exit prices) --------
   const [positionLinesApi, setPositionLinesApi] = useState<{ avgBuyPriceUsd: number | null; avgSellPriceUsd: number | null } | null>(null);
   const [chartMetrics, setChartMetrics] = useState<{ lastPriceUsd?: number; lastMarketCapUsd?: number; maxMarketCapUsd?: number }>({});
+
+  // Coalesced live market cap for TradeActionPanel (same priority as chart header)
+  const liveMarketCapForPanel = React.useMemo(() => {
+    const chart = chartMetrics.lastMarketCapUsd;
+    if (typeof chart === "number" && Number.isFinite(chart) && chart > 0) return chart;
+    const ws = wsTokenInfo?.market_cap_usd;
+    if (typeof ws === "number" && Number.isFinite(ws) && ws > 0) return ws;
+    return null;
+  }, [chartMetrics.lastMarketCapUsd, wsTokenInfo?.market_cap_usd]);
+
   const fetchPositionLinesRef = React.useRef<Promise<void> | null>(null);
 
   // Fetch avg entry/exit lines from backend (user-scoped)
@@ -1114,6 +1124,7 @@ export default function TradePage() {
                   quickBuySide={quickBuySide}
                   initialStats={initialTradeData?.stats}
                   wsVolume={wsVolume}
+                  liveMarketCapUsd={liveMarketCapForPanel}
                 />
               </div>
 
@@ -1180,6 +1191,7 @@ export default function TradePage() {
                 quickBuySettings={quickBuySettings}
                 quickBuySide={quickBuySide}
                 wsVolume={wsVolume}
+                liveMarketCapUsd={liveMarketCapForPanel}
               />
             </div>
           </div>
