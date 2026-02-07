@@ -677,6 +677,11 @@ const Positions: React.FC<PositionsProps> = ({
           setPositions((prev) => prev.filter((p) => getPositionKey(p) !== tokenKey));
           // Immediately refresh to get accurate data
           refreshPositions();
+        } else if (errorCode === 'NO_LIQUIDITY' || errorMessage?.includes('no liquidity across all')) {
+          // Dead token — no liquidity anywhere. Backend already cleaned up DB position.
+          message = 'No liquidity available. Position removed.';
+          setPositions((prev) => prev.filter((p) => getPositionKey(p) !== tokenKey));
+          refreshPositions();
         } else if (isMonad) {
           message = formatMonadError(errorMessage);
         } else {
