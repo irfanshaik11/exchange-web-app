@@ -92,10 +92,10 @@ function applyPriceUpdates(updates) {
           ...token,
           ...(update.price_usd !== undefined && { price_usd: update.price_usd }),
           ...(update.market_cap_usd !== undefined && update.market_cap_usd > 0 && { market_cap_usd: update.market_cap_usd }),
-          ...(update.volume_24h !== undefined && { volume_24h: update.volume_24h }),
-          ...(update.bonding_pct !== undefined && { bonding_pct: update.bonding_pct }),
-          ...(update.graduation_percent !== undefined && { graduation_percent: update.graduation_percent }),
-          ...(update.liquidity_usd !== undefined && { liquidity_usd: update.liquidity_usd }),
+          ...(update.volume_24h !== undefined && Number(update.volume_24h) > 0 && { volume_24h: update.volume_24h }),
+          ...(update.bonding_pct !== undefined && Number(update.bonding_pct) > 0 && { bonding_pct: update.bonding_pct }),
+          ...(update.graduation_percent !== undefined && Number(update.graduation_percent) > 0 && { graduation_percent: update.graduation_percent }),
+          ...(update.liquidity_usd !== undefined && Number(update.liquidity_usd) > 0 && { liquidity_usd: update.liquidity_usd }),
           ...(update.updated_at && { updated_at: update.updated_at }),
         });
       }

@@ -79,14 +79,14 @@ export function applyPriceUpdate<T extends { mint: string }>(token: T, update: P
     // Basic price fields
     ...(update.price_usd !== undefined && { price_usd: update.price_usd }),
     ...(update.market_cap_usd !== undefined && update.market_cap_usd > 0 && { market_cap_usd: update.market_cap_usd }),
-    ...(update.volume_24h !== undefined && { volume_24h: update.volume_24h }),
-    ...(update.bonding_pct !== undefined && update.bonding_pct >= 0 && {
+    ...(update.volume_24h !== undefined && Number(update.volume_24h) > 0 && { volume_24h: update.volume_24h }),
+    ...(update.bonding_pct !== undefined && Number(update.bonding_pct) > 0 && {
       bonding_pct: update.bonding_pct,
       bonding_curve_progress: update.bonding_pct / 100
     }),
-    ...(update.graduation_percent !== undefined && update.graduation_percent >= 0 && { graduation_percent: update.graduation_percent }),
-    ...(update.bonding_curve_progress !== undefined && update.bonding_curve_progress >= 0 && { bonding_curve_progress: update.bonding_curve_progress }),
-    ...(update.liquidity_usd !== undefined && update.liquidity_usd >= 0 && {
+    ...(update.graduation_percent !== undefined && Number(update.graduation_percent) > 0 && { graduation_percent: update.graduation_percent }),
+    ...(update.bonding_curve_progress !== undefined && Number(update.bonding_curve_progress) > 0 && { bonding_curve_progress: update.bonding_curve_progress }),
+    ...(update.liquidity_usd !== undefined && Number(update.liquidity_usd) > 0 && {
       liquidity_usd: update.liquidity_usd,
       total_liquidity_usd: update.liquidity_usd
     }),
@@ -96,106 +96,80 @@ export function applyPriceUpdate<T extends { mint: string }>(token: T, update: P
     ...(update.token_amount !== undefined && { last_token_amount: update.token_amount }),
     ...(update.status !== undefined && { status: update.status }),
 
-    // Buy/sell volumes 5m - only update if non-zero to preserve valid data
-    ...(update.total_buy_volume_5m !== undefined &&
-        (Number(update.total_buy_volume_5m) !== 0 || !(token as any).total_buy_volume_5m) &&
+    // Buy/sell volumes 5m - only update if > 0 to preserve valid data
+    ...(update.total_buy_volume_5m !== undefined && Number(update.total_buy_volume_5m) > 0 &&
         { total_buy_volume_5m: update.total_buy_volume_5m }),
-    ...(update.total_sell_volume_5m !== undefined &&
-        (Number(update.total_sell_volume_5m) !== 0 || !(token as any).total_sell_volume_5m) &&
+    ...(update.total_sell_volume_5m !== undefined && Number(update.total_sell_volume_5m) > 0 &&
         { total_sell_volume_5m: update.total_sell_volume_5m }),
-    ...(update.total_buys_5m !== undefined &&
-        (Number(update.total_buys_5m) !== 0 || !(token as any).total_buys_5m) &&
+    ...(update.total_buys_5m !== undefined && Number(update.total_buys_5m) > 0 &&
         { total_buys_5m: update.total_buys_5m }),
-    ...(update.total_sells_5m !== undefined &&
-        (Number(update.total_sells_5m) !== 0 || !(token as any).total_sells_5m) &&
+    ...(update.total_sells_5m !== undefined && Number(update.total_sells_5m) > 0 &&
         { total_sells_5m: update.total_sells_5m }),
 
     // Buy/sell volumes 1h
-    ...(update.total_buy_volume_1h !== undefined &&
-        (Number(update.total_buy_volume_1h) !== 0 || !(token as any).total_buy_volume_1h) &&
+    ...(update.total_buy_volume_1h !== undefined && Number(update.total_buy_volume_1h) > 0 &&
         { total_buy_volume_1h: update.total_buy_volume_1h }),
-    ...(update.total_sell_volume_1h !== undefined &&
-        (Number(update.total_sell_volume_1h) !== 0 || !(token as any).total_sell_volume_1h) &&
+    ...(update.total_sell_volume_1h !== undefined && Number(update.total_sell_volume_1h) > 0 &&
         { total_sell_volume_1h: update.total_sell_volume_1h }),
-    ...(update.total_buys_1h !== undefined &&
-        (Number(update.total_buys_1h) !== 0 || !(token as any).total_buys_1h) &&
+    ...(update.total_buys_1h !== undefined && Number(update.total_buys_1h) > 0 &&
         { total_buys_1h: update.total_buys_1h }),
-    ...(update.total_sells_1h !== undefined &&
-        (Number(update.total_sells_1h) !== 0 || !(token as any).total_sells_1h) &&
+    ...(update.total_sells_1h !== undefined && Number(update.total_sells_1h) > 0 &&
         { total_sells_1h: update.total_sells_1h }),
 
     // Buy/sell volumes 6h
-    ...(update.total_buy_volume_6h !== undefined &&
-        (Number(update.total_buy_volume_6h) !== 0 || !(token as any).total_buy_volume_6h) &&
+    ...(update.total_buy_volume_6h !== undefined && Number(update.total_buy_volume_6h) > 0 &&
         { total_buy_volume_6h: update.total_buy_volume_6h }),
-    ...(update.total_sell_volume_6h !== undefined &&
-        (Number(update.total_sell_volume_6h) !== 0 || !(token as any).total_sell_volume_6h) &&
+    ...(update.total_sell_volume_6h !== undefined && Number(update.total_sell_volume_6h) > 0 &&
         { total_sell_volume_6h: update.total_sell_volume_6h }),
-    ...(update.total_buys_6h !== undefined &&
-        (Number(update.total_buys_6h) !== 0 || !(token as any).total_buys_6h) &&
+    ...(update.total_buys_6h !== undefined && Number(update.total_buys_6h) > 0 &&
         { total_buys_6h: update.total_buys_6h }),
-    ...(update.total_sells_6h !== undefined &&
-        (Number(update.total_sells_6h) !== 0 || !(token as any).total_sells_6h) &&
+    ...(update.total_sells_6h !== undefined && Number(update.total_sells_6h) > 0 &&
         { total_sells_6h: update.total_sells_6h }),
 
     // Buy/sell volumes 24h
-    ...(update.total_buy_volume_24h !== undefined &&
-        (Number(update.total_buy_volume_24h) !== 0 || !(token as any).total_buy_volume_24h) &&
+    ...(update.total_buy_volume_24h !== undefined && Number(update.total_buy_volume_24h) > 0 &&
         { total_buy_volume_24h: update.total_buy_volume_24h }),
-    ...(update.total_sell_volume_24h !== undefined &&
-        (Number(update.total_sell_volume_24h) !== 0 || !(token as any).total_sell_volume_24h) &&
+    ...(update.total_sell_volume_24h !== undefined && Number(update.total_sell_volume_24h) > 0 &&
         { total_sell_volume_24h: update.total_sell_volume_24h }),
-    ...(update.total_buys_24h !== undefined &&
-        (Number(update.total_buys_24h) !== 0 || !(token as any).total_buys_24h) &&
+    ...(update.total_buys_24h !== undefined && Number(update.total_buys_24h) > 0 &&
         { total_buys_24h: update.total_buys_24h }),
-    ...(update.total_sells_24h !== undefined &&
-        (Number(update.total_sells_24h) !== 0 || !(token as any).total_sells_24h) &&
+    ...(update.total_sells_24h !== undefined && Number(update.total_sells_24h) > 0 &&
         { total_sells_24h: update.total_sells_24h }),
 
-    // Holder percentages - preserve non-zero values
-    ...(update.insider_percent !== undefined &&
-        (update.insider_percent !== 0 || !(token as any).insider_percent) &&
+    // Holder percentages - only update with positive values
+    ...(update.insider_percent !== undefined && Number(update.insider_percent) > 0 &&
         { insider_percent: update.insider_percent }),
-    ...(update.sniper_percent !== undefined &&
-        (update.sniper_percent !== 0 || !(token as any).sniper_percent) &&
+    ...(update.sniper_percent !== undefined && Number(update.sniper_percent) > 0 &&
         { sniper_percent: update.sniper_percent }),
-    ...(update.dev_percent !== undefined &&
-        (update.dev_percent !== 0 || !(token as any).dev_percent) &&
+    ...(update.dev_percent !== undefined && Number(update.dev_percent) > 0 &&
         { dev_percent: update.dev_percent }),
-    ...(update.top10_holders_pct !== undefined &&
-        (update.top10_holders_pct !== 0 || !(token as any).top10_holders_pct) &&
+    ...(update.top10_holders_pct !== undefined && Number(update.top10_holders_pct) > 0 &&
         { top10_holders_pct: update.top10_holders_pct }),
 
     // Bundler data with aliases
-    ...(update.bundle_percent !== undefined &&
-        (update.bundle_percent !== 0 || !(token as any).bundle_percent) &&
+    ...(update.bundle_percent !== undefined && Number(update.bundle_percent) > 0 &&
         { bundle_percent: update.bundle_percent, bundler_held_percentage: update.bundle_percent }),
-    ...(update.bundle_wallet_count !== undefined &&
-        (update.bundle_wallet_count !== 0 || !(token as any).bundle_wallet_count) &&
+    ...(update.bundle_wallet_count !== undefined && Number(update.bundle_wallet_count) > 0 &&
         { bundle_wallet_count: update.bundle_wallet_count, bundler_count: update.bundle_wallet_count }),
 
     // Fees
-    ...(update.total_fees_lamports !== undefined &&
-        (update.total_fees_lamports !== 0 || !(token as any).total_fees_lamports) &&
+    ...(update.total_fees_lamports !== undefined && Number(update.total_fees_lamports) > 0 &&
         { total_fees_lamports: update.total_fees_lamports }),
 
     // Holder/KOL counts (also come in price_update messages)
-    ...(update.holder_count !== undefined &&
-        (update.holder_count !== 0 || !(token as any).holder_count) &&
+    ...(update.holder_count !== undefined && Number(update.holder_count) > 0 &&
         { holder_count: update.holder_count, holders: update.holder_count }),
-    ...(update.kol_count !== undefined &&
-        (update.kol_count !== 0 || !(token as any).kol_count) &&
+    ...(update.kol_count !== undefined && Number(update.kol_count) > 0 &&
         { kol_count: update.kol_count }),
 
     // Dev stats
-    ...(update.dev_tokens_created !== undefined &&
+    ...(update.dev_tokens_created !== undefined && Number(update.dev_tokens_created) > 0 &&
         { dev_tokens_created: update.dev_tokens_created }),
-    ...(update.dev_tokens_migrated !== undefined &&
+    ...(update.dev_tokens_migrated !== undefined && Number(update.dev_tokens_migrated) > 0 &&
         { dev_tokens_migrated: update.dev_tokens_migrated }),
 
     // Smart money
-    ...(update.smart_money_count !== undefined &&
-        (update.smart_money_count !== 0 || !(token as any).smart_money_count) &&
+    ...(update.smart_money_count !== undefined && Number(update.smart_money_count) > 0 &&
         { smart_money_count: update.smart_money_count }),
 
     // Timestamp
