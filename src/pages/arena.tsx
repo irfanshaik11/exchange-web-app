@@ -653,27 +653,9 @@ export default function ArenaPage() {
     }
   };
 
-  // Mock daily quests for when API returns empty (will show real data when available)
-  const MOCK_DAILY_QUESTS = [
-    { id: 1, questId: 'DAILY_TRADE_1', type: 'DAILY', title: 'First Trade', description: 'Make 1 trade today', currentValue: 0, targetValue: 1, goldReward: 100, isCompleted: false, isClaimed: false },
-    { id: 2, questId: 'DAILY_TRADE_2', type: 'DAILY', title: 'Keep Trading', description: 'Make 2 trades today', currentValue: 0, targetValue: 2, goldReward: 150, isCompleted: false, isClaimed: false },
-    { id: 3, questId: 'DAILY_VOLUME_10', type: 'DAILY', title: 'Volume Starter', description: 'Trade $10 volume today', currentValue: 0, targetValue: 10, goldReward: 100, isCompleted: false, isClaimed: false },
-    { id: 4, questId: 'DAILY_VOLUME_50', type: 'DAILY', title: 'Volume Builder', description: 'Trade $50 volume today', currentValue: 0, targetValue: 50, goldReward: 150, isCompleted: false, isClaimed: false },
-  ];
-
-  const MOCK_SEASONAL_QUESTS = [
-    { id: 5, questId: 'SEASONAL_TRADES_10', type: 'SEASONAL', title: 'Active Trader', description: 'Make 10 trades', currentValue: 0, targetValue: 10, goldReward: 500, isCompleted: false, isClaimed: false },
-    { id: 6, questId: 'SEASONAL_VOLUME_100', type: 'SEASONAL', title: 'Volume Achiever', description: 'Trade $100 volume', currentValue: 0, targetValue: 100, goldReward: 500, isCompleted: false, isClaimed: false },
-    { id: 7, questId: 'SEASONAL_TRADES_25', type: 'SEASONAL', title: 'Trading Veteran', description: 'Make 25 trades', currentValue: 0, targetValue: 25, goldReward: 1000, isCompleted: false, isClaimed: false },
-    { id: 8, questId: 'SEASONAL_VOLUME_500', type: 'SEASONAL', title: 'High Roller', description: 'Trade $500 volume', currentValue: 0, targetValue: 500, goldReward: 1500, isCompleted: false, isClaimed: false },
-  ];
-
-  // Use API data if available, otherwise show mock quests so users can see what's available
-  const apiDailyQuests = (questsData as any)?.grouped?.daily?.slice(0, 4) || [];
-  const apiSeasonalQuests = (questsData as any)?.grouped?.seasonal?.slice(0, 4) || [];
-
-  const dailyQuests = apiDailyQuests.length > 0 ? apiDailyQuests : MOCK_DAILY_QUESTS;
-  const seasonalQuests = apiSeasonalQuests.length > 0 ? apiSeasonalQuests : MOCK_SEASONAL_QUESTS;
+  // Use real API data only — no mocks so empty state messages show when quests haven't been earned yet
+  const dailyQuests = (questsData as any)?.grouped?.daily || [];
+  const seasonalQuests = (questsData as any)?.grouped?.seasonal || [];
 
   // Calculate pending gold from completed but unclaimed quests
   const allQuests = (questsData as any)?.quests || [];
