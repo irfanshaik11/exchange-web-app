@@ -61,12 +61,13 @@ export function useSolanaPositionWebSocket(
   const wsRef = useRef<WebSocket | null>(null);
   const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const reconnectAttemptsRef = useRef(0);
+  const heartbeatRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const mountedRef = useRef(true);
   const onUpdateRef = useRef(onUpdate);
   const onTxHashRef = useRef(onTxHash);
-  // Reduced max attempts and use exponential backoff to reduce pressure on backend during 429 errors
-  const maxReconnectAttempts = 5;
+  // Always reconnect with capped exponential backoff (no max attempts)
   const baseReconnectInterval = 3000;
+  const maxBackoffInterval = 120000; // 2 min cap
 
   // Store config in refs to avoid re-creating connect/disconnect
   const configRef = useRef({
@@ -153,11 +154,6 @@ export function useSolanaPositionWebSocket(
       return;
     }
 
-    if (reconnectAttemptsRef.current >= maxReconnectAttempts) {
-      setError('Max reconnection attempts reached');
-      return;
-    }
-
     try {
       const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL;
       if (!backendUrl) {
@@ -176,6 +172,14 @@ export function useSolanaPositionWebSocket(
         setConnected(true);
         setError(null);
         reconnectAttemptsRef.current = 0;
+
+        // Start client-side heartbeat: send application-level ping every 30s
+        if (heartbeatRef.current) clearInterval(heartbeatRef.current);
+        heartbeatRef.current = setInterval(() => {
+          if (ws.readyState === WebSocket.OPEN) {
+            ws.send(JSON.stringify({ type: 'ping' }));
+          }
+        }, 30000);
       };
 
       ws.onmessage = (event) => {
@@ -185,7 +189,9 @@ export function useSolanaPositionWebSocket(
         try {
           const message = JSON.parse(event.data);
 
-          if (message.type === 'connected') {
+          if (message.type === 'pong') {
+            // Server acknowledged our heartbeat ping — connection is alive
+          } else if (message.type === 'connected') {
             console.log('[useSolanaPositionWebSocket] Connection confirmed:', message);
           } else if (message.type === 'tx_hash' && message.data) {
             // INSTANT txHash push from backend - fires immediately after signing
@@ -217,17 +223,22 @@ export function useSolanaPositionWebSocket(
         setConnected(false);
         wsRef.current = null;
 
-        // Attempt to reconnect with exponential backoff
-        // This reduces pressure on backend when it's hitting Solana RPC rate limits (429 errors)
+        // Clear heartbeat on close
+        if (heartbeatRef.current) {
+          clearInterval(heartbeatRef.current);
+          heartbeatRef.current = null;
+        }
+
+        // Always reconnect with capped exponential backoff (no max attempts)
         const { enabled: stillEnabled } = configRef.current;
-        if (stillEnabled && reconnectAttemptsRef.current < maxReconnectAttempts) {
+        if (stillEnabled) {
           reconnectAttemptsRef.current += 1;
-          // Exponential backoff: 3s, 6s, 12s, 24s, 48s (max 60s)
+          // Exponential backoff: 3s, 6s, 12s, 24s, ... capped at 120s
           const backoffDelay = Math.min(
             baseReconnectInterval * Math.pow(2, reconnectAttemptsRef.current - 1),
-            60000
+            maxBackoffInterval
           );
-          console.log(`[useSolanaPositionWebSocket] Reconnecting in ${backoffDelay}ms (attempt ${reconnectAttemptsRef.current}/${maxReconnectAttempts})`);
+          console.log(`[useSolanaPositionWebSocket] Reconnecting in ${backoffDelay / 1000}s (attempt ${reconnectAttemptsRef.current})`);
           reconnectTimeoutRef.current = setTimeout(() => {
             if (mountedRef.current) {
               connect();
@@ -276,6 +287,10 @@ export function useSolanaPositionWebSocket(
 
     return () => {
       mountedRef.current = false;
+      if (heartbeatRef.current) {
+        clearInterval(heartbeatRef.current);
+        heartbeatRef.current = null;
+      }
       if (reconnectTimeoutRef.current) {
         clearTimeout(reconnectTimeoutRef.current);
         reconnectTimeoutRef.current = null;

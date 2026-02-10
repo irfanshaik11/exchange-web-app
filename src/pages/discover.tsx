@@ -30,6 +30,7 @@ import { broadcastMonadQuickTrade } from "~/utils/monadTradeEvents";
 import toast from "react-hot-toast";
 import { executeSolanaMultiBuy, buildSolanaWalletAllocations } from "~/utils/solanaWalletAllocation";
 import { getPoolTypeFromToken } from "~/utils/poolTypeDetection";
+import { mapTradeErrorMessage } from "~/utils/tradeErrorMessages";
 import { fetchVerifiedPairAddress } from "~/hooks/useSingleTokenPolling";
 import { useQueryNewPairs, useQueryLaunchpadData } from '../hooks/useQueryTokens';
 
@@ -2420,7 +2421,7 @@ export default function DiscoverPage() {
 
       // Show error toast
       console.error("❌ Discover Quick Buy failed:", error);
-      showEnhancedToast("error", error.message || "Buy failed", {
+      showEnhancedToast("error", mapTradeErrorMessage(error), {
         title: "Trade Failed",
       });
 
@@ -2659,7 +2660,7 @@ export default function DiscoverPage() {
 
       // Show error toast
       console.error("❌ PumpLive Quick Buy failed:", error);
-      showEnhancedToast("error", error.message || "Buy failed", {
+      showEnhancedToast("error", mapTradeErrorMessage(error), {
         title: "Trade Failed",
       });
 

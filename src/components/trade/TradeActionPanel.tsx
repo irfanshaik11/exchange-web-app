@@ -17,12 +17,13 @@ import { executeEnhancedTrade } from "~/utils/enhancedTradeHandler";
 import { showEnhancedToast } from "~/utils/enhancedToast";
 import { useUser } from "~/components/UserContext";
 import { executeSolanaMultiBuy, formatSolanaTxSummary, buildSolanaWalletAllocations } from "~/utils/solanaWalletAllocation";
-import useSolanaPositionWebSocket from "~/hooks/useSolanaPositionWebSocket";
+import { useTxHashCallback } from "~/contexts/SolanaPositionWebSocketContext";
 import type { SolanaTokenVolume } from "~/hooks/useSolanaTokenWebSocket";
 import { extractTokenImage, getResolvedTokenImage } from "~/utils/images";
 import { SiSolana } from "react-icons/si";
 import useTokenStatsWebSocket from "~/hooks/useTokenStatsWebSocket";
 import { getPoolTypeFromToken } from "~/utils/poolTypeDetection";
+import { mapTradeErrorMessage } from "~/utils/tradeErrorMessages";
 import HighSlippageWarningDialog from "../HighSlippageWarningDialog";
 import LowLiquidityWarningDialog from "../LowLiquidityWarningDialog";
 import { BsCoin, BsPersonGear } from "react-icons/bs";
@@ -1296,7 +1297,7 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
   // Callback for instant txHash update via WebSocket (fires before HTTP response)
   const handleSolanaWsTxHash = useCallback((data: { txHash: string; tokenAddress: string; tradeType: 'buy' | 'sell'; explorerUrl: string }) => {
     const pending = pendingSolanaToastRef.current;
-    if (!pending || pending.tokenName !== token?.symbol) return;
+    if (!pending || data.tokenAddress.toLowerCase() !== tokenAddress.toLowerCase()) return;
 
     console.log('[TradeActionPanel] 🚀 INSTANT Solana txHash via WebSocket:', data.txHash);
 
@@ -1316,16 +1317,10 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
         pendingSolanaToastRef.current = null;
       }
     }, 10000);
-  }, [token?.symbol]);
+  }, [tokenAddress]);
 
-  const { position: wsPosition, loading: positionLoading, connected: positionConnected, refreshPosition } = useSolanaPositionWebSocket({
-    tokenAddress,
-    enabled: !!user?.id,
-    onUpdate: (pos) => {
-      console.log('[TradeActionPanel] Solana Position updated via WebSocket:', pos);
-    },
-    onTxHash: handleSolanaWsTxHash, // INSTANT txHash callback
-  });
+  // Use the shared single WebSocket connection from context (no duplicate connection)
+  useTxHashCallback('trade-action-panel', handleSolanaWsTxHash);
 
   // Calculate position data from trade activity (like Activity tab does)
   useEffect(() => {
@@ -2637,6 +2632,17 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
         };
         let timerHandle = requestAnimationFrame(tick) as any;
 
+        // Store pending toast info for WebSocket instant update (same as buy)
+        pendingSolanaToastRef.current = {
+          id: uniqueToastId,
+          tokenImage,
+          tokenName,
+          fakeTime: timerCap.toFixed(2),
+          startTime,
+          timerHandle,
+          totalSelectedWallets: 1
+        };
+
         try {
           const sellResult = await tradeSellPercentage(
             {
@@ -2672,6 +2678,9 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
             }
 
             setSuccessMessage(`✅ Sold ${sellPercentage}% of ${tokenName}`);
+
+            // Clear pending ref (WS may have already updated, or HTTP response just did)
+            pendingSolanaToastRef.current = null;
 
             // Auto-dismiss after 10s
             setTimeout(() => toast.dismiss(uniqueToastId), 10000);
@@ -2736,6 +2745,7 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
             return { success: true, txHash: sellResult.hash };
           } else {
             // Sell returned but no hash
+            pendingSolanaToastRef.current = null;
             toast.error(sellResult?.message || 'Sell failed', { id: uniqueToastId, duration: 6000 });
             setSuccessMessage(null);
             setIsLoading(false);
@@ -2746,31 +2756,24 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
           if (timerHandle) {
             cancelAnimationFrame(timerHandle);
           }
+          // Clear pending ref on error
+          pendingSolanaToastRef.current = null;
 
-          // Check for POOL_GRADUATED error (bonding curve completed, liquidity migrated)
+          const errorMessage = mapTradeErrorMessage(error);
+
+          // Side effects for specific codes (clear stale position data)
           const errorCode = error?.code || error?.response?.data?.code;
-          const rawMessage = error?.message || error?.error || error?.response?.data?.error;
-
-          let errorMessage: string;
-          if (errorCode === 'POOL_GRADUATED') {
-            errorMessage = 'Pool graduated - liquidity migrated. Refresh and try again.';
-          } else if (rawMessage?.includes('graduated') || rawMessage?.includes('Virtual pool is completed')) {
-            errorMessage = 'Pool graduated - liquidity migrated. Refresh and try again.';
-          } else if (errorCode === 'NO_HOLDINGS' || rawMessage?.includes('Insufficient token')) {
-            errorMessage = 'Token already sold or transferred.';
-            // Clear position data since token is no longer held
+          const rawMessage = error?.message || '';
+          if (errorCode === 'NO_HOLDINGS' || rawMessage.includes('Insufficient token')) {
             setPositionData({
               bought: 0, boughtUsdValue: 0, sold: 0, soldUsdValue: 0,
               remaining: 0, remainingUsdValue: 0, pnl: 0, pnlPercentage: 0,
             });
-          } else if (errorCode === 'NO_LIQUIDITY' || rawMessage?.includes('no liquidity across all')) {
-            errorMessage = 'No liquidity available. Position removed.';
+          } else if (errorCode === 'NO_LIQUIDITY' || rawMessage.includes('no liquidity across all')) {
             setPositionData({
               bought: 0, boughtUsdValue: 0, sold: 0, soldUsdValue: 0,
               remaining: 0, remainingUsdValue: 0, pnl: 0, pnlPercentage: 0,
             });
-          } else {
-            errorMessage = rawMessage || 'Sell failed. Please try again.';
           }
 
           toast.error(errorMessage, { id: uniqueToastId, duration: 6000 });
@@ -3038,7 +3041,7 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
 
         // Show error toast
         console.error("❌ Solana buy failed:", error);
-        showEnhancedToast("error", error.message || "Buy failed", {
+        showEnhancedToast("error", mapTradeErrorMessage(error), {
           title: "Trade Failed",
         });
 

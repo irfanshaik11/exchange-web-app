@@ -85,7 +85,7 @@ export function getPoolTypeFromToken(token: Token): PoolType {
   if (protocolLower.includes("launchlab")) {
     return "launchLab";
   }
-  if (protocolLower.includes("bonk")) {
+  if (protocolLower === "bonkswap" || protocolLower === "bonk_swap" || protocolLower === "bonk swap") {
     return "bonk";
   }
   if (protocolLower.includes("bags")) {

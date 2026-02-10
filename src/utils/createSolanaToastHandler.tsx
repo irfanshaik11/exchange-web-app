@@ -4,6 +4,7 @@ import { buildSolanaWalletAllocations, executeSolanaMultiBuy } from "./solanaWal
 import { showEnhancedToast } from "./enhancedToast";
 import { SOL_MINT_ADDRESS } from "./api";
 import { getPoolTypeFromToken } from "./poolTypeDetection";
+import { mapTradeErrorMessage } from "./tradeErrorMessages";
 import type { Token } from "./db";
 import type { QuickBuySettings } from "~/components/QuickBuyContext";
 import { fetchVerifiedPairAddress } from "~/hooks/useSingleTokenPolling";
@@ -293,7 +294,7 @@ export async function executeSolanaBuyWithToast({
 
     // Show error toast
     console.error("❌ Solana buy failed:", error);
-    showEnhancedToast("error", error.message || "Buy failed", {
+    showEnhancedToast("error", mapTradeErrorMessage(error), {
       title: "Trade Failed",
     });
 
