@@ -100,6 +100,7 @@ import {
   ApiError,
 } from "~/utils/api";
 import { getPoolTypeFromToken } from "~/utils/poolTypeDetection";
+import { mapTradeErrorMessage } from "~/utils/tradeErrorMessages";
 import { TokenAge } from "./TokenAge";
 import { prefetchTradeData } from "~/utils/tokenCache";
 import {
@@ -3359,7 +3360,7 @@ function PulseTable({
 
       // Show error toast
       console.error("❌ Quick Buy failed:", error);
-      showEnhancedToast("error", error.message || "Buy failed", {
+      showEnhancedToast("error", mapTradeErrorMessage(error), {
         title: "Trade Failed",
       });
 
