@@ -142,7 +142,9 @@ export interface PulseToken {
   launchpad_protocol?: string;
   pair_address?: string;
   image?: string;
+  image_url?: string;
   logo?: string; // Token type uses 'logo'
+  uri?: string;
   updated_at?: string;
 
   // Migrated pool (Token type field)

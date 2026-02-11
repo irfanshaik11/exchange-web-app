@@ -606,6 +606,28 @@ export default function TradePage() {
   // Destructure for local use in this component
   const { holderSummary, topTraders: wsTopTraders, trades: wsHistoricalTrades, tokenInfo: wsTokenInfo, volume: wsVolume } = wsData;
 
+  // Clear trades loading spinner once WS snapshot arrives (before REST completes)
+  useEffect(() => {
+    if (wsHistoricalTrades && wsHistoricalTrades.length > 0) {
+      setTradesDataLoading(false);
+    }
+  }, [wsHistoricalTrades]);
+
+  // Throttle holderSummary and wsTopTraders updates to avoid re-rendering TradeActionPanel on every WS message
+  const [throttledHolderSummary, setThrottledHolderSummary] = React.useState(holderSummary);
+  const [throttledWsTopTraders, setThrottledWsTopTraders] = React.useState(wsTopTraders);
+  const holderThrottleRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  React.useEffect(() => {
+    if (!holderThrottleRef.current) {
+      setThrottledHolderSummary(holderSummary);
+      setThrottledWsTopTraders(wsTopTraders);
+      holderThrottleRef.current = setTimeout(() => {
+        holderThrottleRef.current = null;
+      }, 5000);
+    }
+  }, [holderSummary, wsTopTraders]);
+
   // Enhance displayToken with holderSummary data for TradeActionPanel
   const enhancedDisplayToken = React.useMemo(() => {
     if (!displayToken) return displayToken;
@@ -614,20 +636,20 @@ export default function TradePage() {
     return {
       ...displayToken,
       // Map holder_summary fields to token fields expected by TokenInfoDropdown
-      dev_wallet: holderSummary?.dev_wallet ?? displayToken.dev_wallet,
-      dev_held_percentage: holderSummary?.dev_held_percent ?? displayToken.dev_held_percentage,
-      sniper_held_percentage: holderSummary?.sniper_held_percent ?? displayToken.sniper_held_percentage,
-      sniper_count: holderSummary?.sniper_count ?? displayToken.sniper_count,
-      bundler_held_percentage: holderSummary?.bundler_held_percent ?? displayToken.bundler_held_percentage,
-      bundler_count: holderSummary?.bundler_count ?? displayToken.bundler_count,
-      insider_held_percentage: holderSummary?.insider_held_percent ?? displayToken.insider_held_percentage,
-      insider_count: holderSummary?.insider_count ?? displayToken.insider_count,
-      top10_holding_percentage: holderSummary?.top10_held_percent ?? displayToken.top10_holding_percentage,
-      total_holders: holderSummary?.total_holders ?? displayToken.total_holders,
+      dev_wallet: throttledHolderSummary?.dev_wallet ?? displayToken.dev_wallet,
+      dev_held_percentage: throttledHolderSummary?.dev_held_percent ?? displayToken.dev_held_percentage,
+      sniper_held_percentage: throttledHolderSummary?.sniper_held_percent ?? displayToken.sniper_held_percentage,
+      sniper_count: throttledHolderSummary?.sniper_count ?? displayToken.sniper_count,
+      bundler_held_percentage: throttledHolderSummary?.bundler_held_percent ?? displayToken.bundler_held_percentage,
+      bundler_count: throttledHolderSummary?.bundler_count ?? displayToken.bundler_count,
+      insider_held_percentage: throttledHolderSummary?.insider_held_percent ?? displayToken.insider_held_percentage,
+      insider_count: throttledHolderSummary?.insider_count ?? displayToken.insider_count,
+      top10_holding_percentage: throttledHolderSummary?.top10_held_percent ?? displayToken.top10_holding_percentage,
+      total_holders: throttledHolderSummary?.total_holders ?? displayToken.total_holders,
       // Pro traders = count of top traders from WebSocket
-      pro_traders: wsTopTraders?.length ?? displayToken.pro_traders,
+      pro_traders: throttledWsTopTraders?.length ?? displayToken.pro_traders,
     };
-  }, [displayToken, holderSummary, wsTopTraders]);
+  }, [displayToken, throttledHolderSummary, throttledWsTopTraders]);
 
   // Also use dev_wallet from WebSocket holderSummary for chart dev markers
   useEffect(() => {
@@ -657,54 +679,47 @@ export default function TradePage() {
   }, [currentPairAddress]);
 
   // Use cached trades if available, otherwise use initial trade data
+  // Priority: 1) tab-switch cache, 2) REST data, 3) WS snapshot, 4) empty
   const initialTradesForComponent = React.useMemo(() => {
-    return cachedTrades || initialTradeData?.trades || [];
-  }, [cachedTrades, initialTradeData?.trades]);
+    if (cachedTrades && cachedTrades.length > 0) return cachedTrades;
+    if (initialTradeData?.trades && initialTradeData.trades.length > 0) return initialTradeData.trades;
+    if (wsHistoricalTrades && wsHistoricalTrades.length > 0) return wsHistoricalTrades;
+    return [];
+  }, [cachedTrades, initialTradeData?.trades, wsHistoricalTrades]);
 
+  // Disabled: /v1/ws/trade-events backend endpoint not implemented. Unified WS provides trade data.
   const { trades: realTimeTradesForChart } = useOptimizedTradeEventsWebSocket({
     pairAddress: displayToken?.pair_address || resolvedPairAddress || undefined,
-    enabled: !!displayToken?.pair_address || !!resolvedPairAddress,
+    enabled: false,
     tokenDecimals: displayToken?.decimals || 9,
     maxTrades: 200,
     enableDeduplication: true,
   });
 
-  // Combine real-time trades with historical trades from unified WebSocket for dev markers
-  // Historical trades have wallet_address, real-time trades have maker - chart handles both
+  // Trade data for chart dev markers — sourced from unified WebSocket only
+  // (trade-events WS is disabled; unified WS provides the same data via wsHistoricalTrades)
   const tradeDataForChart = React.useMemo(() => {
+    if (!wsHistoricalTrades || wsHistoricalTrades.length === 0) return [];
+
     const combined: any[] = [];
     const seen = new Set<string>();
 
-    // Add real-time trades first (most recent)
-    if (realTimeTradesForChart && realTimeTradesForChart.length > 0) {
-      for (const trade of realTimeTradesForChart) {
-        const key = trade.transactionHash || `${trade.timestamp}-${trade.maker}`;
-        if (!seen.has(key)) {
-          seen.add(key);
-          combined.push(trade);
-        }
-      }
-    }
-
-    // Add historical trades from unified WebSocket (for dev markers)
-    if (wsHistoricalTrades && wsHistoricalTrades.length > 0) {
-      for (const trade of wsHistoricalTrades) {
-        const key = trade.signature || trade.transaction_hash || `${trade.timestamp}-${trade.wallet_address}`;
-        if (!seen.has(key)) {
-          seen.add(key);
-          // Map historical trade fields to match chart expectations
-          combined.push({
-            ...trade,
-            maker: trade.wallet_address, // Chart looks for maker field
-            side: trade.type?.toLowerCase(), // BUY/SELL -> buy/sell
-            eventDisplayType: trade.type, // Keep original for fallback
-          });
-        }
+    for (const trade of wsHistoricalTrades) {
+      const key = trade.signature || trade.transaction_hash || `${trade.timestamp}-${trade.wallet_address}`;
+      if (!seen.has(key)) {
+        seen.add(key);
+        // Map historical trade fields to match chart expectations
+        combined.push({
+          ...trade,
+          maker: trade.wallet_address, // Chart looks for maker field
+          side: trade.type?.toLowerCase(), // BUY/SELL -> buy/sell
+          eventDisplayType: trade.type, // Keep original for fallback
+        });
       }
     }
 
     return combined;
-  }, [realTimeTradesForChart, wsHistoricalTrades]);
+  }, [wsHistoricalTrades]);
 
   useEffect(() => {
     if (tradeDataForChart && tradeDataForChart.length > 0) {
@@ -847,8 +862,15 @@ export default function TradePage() {
         if (!abort) setSimilarLoading(false);
       }
     }
-    loadSimilar();
-    return () => { abort = true; };
+    // Defer right-panel fetch until after chart + critical content renders
+    const id = typeof requestIdleCallback !== 'undefined'
+      ? requestIdleCallback(() => { if (!abort) loadSimilar(); })
+      : setTimeout(() => { if (!abort) loadSimilar(); }, 2000);
+    return () => {
+      abort = true;
+      if (typeof cancelIdleCallback !== 'undefined' && typeof id === 'number') cancelIdleCallback(id);
+      else clearTimeout(id as unknown as NodeJS.Timeout);
+    };
   }, [displayToken?.mint]);
 
   // Right Panel Visibility Toggle
@@ -883,8 +905,15 @@ export default function TradePage() {
         if (!abort) setReusedLoading(false);
       }
     }
-    loadReused();
-    return () => { abort = true; };
+    // Defer right-panel fetch until after chart + critical content renders
+    const id = typeof requestIdleCallback !== 'undefined'
+      ? requestIdleCallback(() => { if (!abort) loadReused(); })
+      : setTimeout(() => { if (!abort) loadReused(); }, 2000);
+    return () => {
+      abort = true;
+      if (typeof cancelIdleCallback !== 'undefined' && typeof id === 'number') cancelIdleCallback(id);
+      else clearTimeout(id as unknown as NodeJS.Timeout);
+    };
   }, [displayToken?.mint]);
 
   return (
@@ -979,6 +1008,7 @@ export default function TradePage() {
                     network={network}
                     priceLines={priceLineValues}
                     onChartMetrics={handleChartMetrics}
+                    preloadedData={backgroundOHLCData || undefined}
                   />
                   // <BackendOHLCChart
                   //   key={`chart-${resolvedPairAddress || _mint}`}

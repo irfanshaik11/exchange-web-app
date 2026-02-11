@@ -417,9 +417,9 @@ function normalizeToken(rawToken) {
     // === Basic info ===
     name: rawToken.name || rawToken.token_name || 'Unknown',
     symbol: rawToken.symbol || rawToken.token_symbol || '???',
-    image: rawToken.image || rawToken.image_uri || rawToken.imageUrl || rawToken.logo || rawToken.uri || null,
-    logo: rawToken.logo || rawToken.image || rawToken.image_uri || null,
-    uri: rawToken.uri || rawToken.image || null,
+    image: rawToken.image || rawToken.image_url || rawToken.image_uri || rawToken.imageUrl || rawToken.logo || null,
+    logo: rawToken.logo || rawToken.image || rawToken.image_url || rawToken.image_uri || null,
+    uri: rawToken.uri || null,
     status: rawToken.status || 'active',
     launchpad_protocol: rawToken.launchpad_protocol || rawToken.protocol || rawToken.LaunchpadProtocol || 'pumpfun',
     pair_address: rawToken.pair_address || rawToken.PairAddress || null,

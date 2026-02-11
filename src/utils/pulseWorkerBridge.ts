@@ -10,6 +10,7 @@
  */
 
 import { loadPulseCache, savePulseCache, type PulseToken } from './pulseCache';
+import { extractImageUrls, preloadImage } from './imagePreloader';
 
 type ConnectionStatus = {
   new: boolean;
@@ -752,8 +753,10 @@ function normalizeToken(rawToken: any): PulseToken | null {
     // === Basic info ===
     name: rawToken.name || rawToken.token_name || 'Unknown',
     symbol: rawToken.symbol || rawToken.token_symbol || '???',
-    image: rawToken.image || rawToken.image_uri || rawToken.imageUrl || rawToken.logo || undefined,
-    logo: rawToken.logo || rawToken.image || rawToken.image_uri || undefined, // Token type uses 'logo'
+    image: rawToken.image || rawToken.image_url || rawToken.image_uri || rawToken.imageUrl || rawToken.logo || undefined,
+    image_url: rawToken.image_url || undefined,
+    logo: rawToken.logo || rawToken.image || rawToken.image_url || rawToken.image_uri || undefined,
+    uri: rawToken.uri || undefined,
     status: rawToken.status || 'active',
     launchpad_protocol: rawToken.launchpad_protocol || rawToken.protocol || 'pumpfun',
     pair_address: rawToken.pair_address || undefined,
@@ -1238,6 +1241,37 @@ export function terminateWorker(): void {
   }
 }
 
+/**
+ * Background image pre-warming
+ * Preloads top token images from each list even while on trade pages.
+ * Throttled to 5-second intervals to avoid bandwidth contention.
+ */
+let lastPreloadTime = 0;
+const PRELOAD_INTERVAL_MS = 5000;
+const PRELOAD_PER_LIST = 30;
+
+function backgroundPreloadImages() {
+  if (typeof window === 'undefined') return;
+  const now = Date.now();
+  if (now - lastPreloadTime < PRELOAD_INTERVAL_MS) return;
+  lastPreloadTime = now;
+
+  // Collect top tokens from each list
+  const topTokens = [
+    ...currentData.newTokens.slice(0, PRELOAD_PER_LIST),
+    ...currentData.finalStretchTokens.slice(0, PRELOAD_PER_LIST),
+    ...currentData.migratedTokens.slice(0, PRELOAD_PER_LIST),
+  ];
+
+  if (topTokens.length === 0) return;
+
+  const urls = extractImageUrls(topTokens);
+  // Fire-and-forget; preloadImage already dedupes via preloadedImages Set
+  for (const url of urls) {
+    preloadImage(url);
+  }
+}
+
 // Leading-edge throttled listener notifications.
 // Fires immediately on the first call (so initial data load has zero delay),
 // then throttles subsequent calls to max 2/sec (500ms interval).
@@ -1260,6 +1294,7 @@ function notifyDataListeners() {
     dataListeners.forEach(fn => {
       try { fn(currentData); } catch (err) { /* silent */ }
     });
+    backgroundPreloadImages();
     return;
   }
 
@@ -1272,6 +1307,7 @@ function notifyDataListeners() {
     dataListeners.forEach(fn => {
       try { fn(currentData); } catch (err) { /* silent */ }
     });
+    backgroundPreloadImages();
   }, NOTIFY_INTERVAL_MS - elapsed);
 }
 

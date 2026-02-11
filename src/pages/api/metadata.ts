@@ -1,32 +1,5 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 
-const ALLOWED_METADATA_HOSTS = [
-  'metadata.rapidlaunch.io',
-  'rapidlaunch.io',
-  'metadata.uxento.io',
-  'uxento.io',
-  'metadata.j7tracker.com',
-  'j7tracker.com',
-  'cloudflare-ipfs.com',
-  'ipfs.io',
-  'gateway.pinata.cloud',
-  'nftstorage.link',
-  'gateway.ipfs.io',
-  'cf-ipfs.com',
-  'mypinata.cloud',
-  'arweave.net',
-  'arweave.dev',
-  'ar-io.net',
-  'ipfs.storacha.link',
-  'storacha.link',
-  'raw.githubusercontent.com',
-  'githubusercontent.com',
-];
-
-function isAllowedHost(host: string): boolean {
-  return ALLOWED_METADATA_HOSTS.some((d) => host === d || host.endsWith('.' + d));
-}
-
 function setHeaders(res: NextApiResponse) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');

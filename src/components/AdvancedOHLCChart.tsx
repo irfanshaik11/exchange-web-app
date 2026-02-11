@@ -77,6 +77,7 @@ const VALID_INTERVALS: BackendInterval[] = [
   "7d",
 ];
 const MARKET_CAP_MULTIPLIER = 1_000_000_000; // 1B supply for Monad
+const CHART_DEBUG = false; // Set to true only when debugging chart issues
 
 // Map our intervals to TradingView resolution format
 const INTERVAL_TO_RESOLUTION: Record<BackendInterval, string> = {
@@ -453,18 +454,16 @@ const AdvancedOHLCChart: React.FC<AdvancedOHLCChartProps> = ({
   );
 
   const computeMaxMarketCapUsd = useCallback((): number | null => {
-    console.log("📊 [MAX_MC_COMPUTE] Starting max MC computation...");
+    if (CHART_DEBUG) console.log("📊 [MAX_MC_COMPUTE] Starting max MC computation...");
     const currentNetwork = latestParamsRef.current.network;
-    console.log("📊 [MAX_MC_COMPUTE] Network:", currentNetwork);
+    if (CHART_DEBUG) console.log("📊 [MAX_MC_COMPUTE] Network:", currentNetwork);
 
     // Both Monad and Solana support max MC calculation (1B token supply)
     const data = lastGoodCandlesRef.current || [];
-    console.log("📊 [MAX_MC_COMPUTE] Candles available:", data.length);
+    if (CHART_DEBUG) console.log("📊 [MAX_MC_COMPUTE] Candles available:", data.length);
 
     if (!data.length) {
-      console.log(
-        "⚠️ [MAX_MC_COMPUTE] No candle data available, returning null",
-      );
+      if (CHART_DEBUG) console.log("⚠️ [MAX_MC_COMPUTE] No candle data available, returning null");
       return null;
     }
 
@@ -477,7 +476,7 @@ const AdvancedOHLCChart: React.FC<AdvancedOHLCChartProps> = ({
       }
     }
 
-    console.log("📊 [MAX_MC_COMPUTE] Max high found:", {
+    if (CHART_DEBUG) console.log("📊 [MAX_MC_COMPUTE] Max high found:", {
       maxHigh,
       maxHighUSD: maxHigh,
       candleTime: maxHighCandle
@@ -488,12 +487,12 @@ const AdvancedOHLCChart: React.FC<AdvancedOHLCChartProps> = ({
     });
 
     if (!Number.isFinite(maxHigh) || maxHigh <= 0) {
-      console.log("⚠️ [MAX_MC_COMPUTE] Invalid maxHigh, returning null");
+      if (CHART_DEBUG) console.log("⚠️ [MAX_MC_COMPUTE] Invalid maxHigh, returning null");
       return null;
     }
 
     const result = maxHigh * MARKET_CAP_MULTIPLIER;
-    console.log("✅ [MAX_MC_COMPUTE] Final max MC (USD):", {
+    if (CHART_DEBUG) console.log("✅ [MAX_MC_COMPUTE] Final max MC (USD):", {
       maxHighPriceUSD: maxHigh,
       MARKET_CAP_MULTIPLIER,
       resultMaxMcUSD: result,
@@ -506,29 +505,21 @@ const AdvancedOHLCChart: React.FC<AdvancedOHLCChartProps> = ({
   // Price line management - always clears and redraws to ensure consistency
   const syncPriceLines = useCallback(
     (maxMarketCapUsdOverride?: number | null) => {
-      console.log("🎯 [SYNC_PRICE_LINES] ============= START =============");
-      console.log(
-        "🎯 [SYNC_PRICE_LINES] Called with maxMarketCapUsdOverride:",
-        maxMarketCapUsdOverride,
-      );
+      if (CHART_DEBUG) console.log("🎯 [SYNC_PRICE_LINES] ============= START =============");
+      if (CHART_DEBUG) console.log("🎯 [SYNC_PRICE_LINES] Called with maxMarketCapUsdOverride:", maxMarketCapUsdOverride);
 
       if (syncLinesInFlightRef.current) {
-        console.log("⚠️ [SYNC_PRICE_LINES] Already in flight, skipping");
+        if (CHART_DEBUG) console.log("⚠️ [SYNC_PRICE_LINES] Already in flight, skipping");
         return;
       }
 
       syncLinesInFlightRef.current = true;
-      console.log("🎯 [SYNC_PRICE_LINES] Set in-flight flag to true");
 
       const currentNetwork = latestParamsRef.current.network;
       const widget = widgetRef.current;
-      console.log("🎯 [SYNC_PRICE_LINES] Initial checks:", {
-        network: currentNetwork,
-        hasWidget: !!widget,
-      });
 
       if (!widget) {
-        console.log("❌ [SYNC_PRICE_LINES] Early exit - no widget");
+        if (CHART_DEBUG) console.log("❌ [SYNC_PRICE_LINES] Early exit - no widget");
         syncLinesInFlightRef.current = false;
         return;
       }
@@ -536,33 +527,20 @@ const AdvancedOHLCChart: React.FC<AdvancedOHLCChartProps> = ({
       let chart: any = null;
       try {
         chart = widget.activeChart?.() || widget.chart?.();
-        console.log("🎯 [SYNC_PRICE_LINES] Chart obtained:", {
-          hasChart: !!chart,
-          hasCreateShape: chart
-            ? typeof chart.createShape === "function"
-            : false,
-        });
       } catch (err) {
-        console.log("❌ [SYNC_PRICE_LINES] Failed to get chart:", err);
+        if (CHART_DEBUG) console.log("❌ [SYNC_PRICE_LINES] Failed to get chart:", err);
         syncLinesInFlightRef.current = false;
         return;
       }
 
       if (!chart || typeof chart.createShape !== "function") {
-        console.log(
-          "❌ [SYNC_PRICE_LINES] Invalid chart or missing createShape",
-        );
+        if (CHART_DEBUG) console.log("❌ [SYNC_PRICE_LINES] Invalid chart or missing createShape");
         syncLinesInFlightRef.current = false;
         return;
       }
 
       const mode = displayModeRef.current;
       const axisIsMarketCap = mode === "MC";
-      console.log("🎯 [SYNC_PRICE_LINES] Display mode:", {
-        mode,
-        axisIsMarketCap,
-        displayModeRef: displayModeRef.current,
-      });
 
       // Priority: 1) Override from caller, 2) API ref (from MAX_MC_FETCH), 3) Compute from candles
       // This ensures Max MC shows immediately whether from API fetch or candle data
@@ -571,109 +549,47 @@ const AdvancedOHLCChart: React.FC<AdvancedOHLCChartProps> = ({
           ? maxMarketCapUsdOverride
           : (maxMarketCapFromApiRef.current ?? computeMaxMarketCapUsd());
 
-      console.log("🎯 [SYNC_PRICE_LINES] Max MC determination:", {
+      if (CHART_DEBUG) console.log("🎯 [SYNC_PRICE_LINES] Max MC determination:", {
         hasOverride: typeof maxMarketCapUsdOverride === "number",
         overrideValue: maxMarketCapUsdOverride,
         apiRefValue: maxMarketCapFromApiRef.current,
-        computedValue:
-          typeof maxMarketCapUsdOverride !== "number" &&
-          !maxMarketCapFromApiRef.current
-            ? computeMaxMarketCapUsd()
-            : "(not needed)",
         finalMaxMarketCapUsd: maxMarketCapUsd,
       });
 
       const currentPrices = priceLinesRef.current;
-      console.log("🎯 [SYNC_PRICE_LINES] Current price line props:", {
-        currentPrices,
-        avgEntryPriceUsd: currentPrices?.avgEntryPriceUsd,
-        avgExitPriceUsd: currentPrices?.avgExitPriceUsd,
-      });
 
       const normalizeUsd = (value: unknown): number | null => {
         const numeric =
           typeof value === "string" ? parseFloat(value) : (value as number);
         const result =
           !Number.isFinite(numeric) || numeric <= 0 ? null : numeric;
-        console.log("🔢 [NORMALIZE_USD]", {
-          input: value,
-          numeric,
-          isFinite: Number.isFinite(numeric),
-          isPositive: numeric > 0,
-          result,
-        });
+        if (CHART_DEBUG) console.log("🔢 [NORMALIZE_USD]", { input: value, result });
         return result;
       };
 
       const avgEntryUsd = normalizeUsd(currentPrices?.avgEntryPriceUsd ?? null);
       const avgExitUsd = normalizeUsd(currentPrices?.avgExitPriceUsd ?? null);
 
-      console.log("🎯 [SYNC_PRICE_LINES] Normalized USD values:", {
-        avgEntryUsd,
-        avgExitUsd,
-      });
-
       const toAxisPrice = (usdPrice?: number | null): number | null => {
-        if (usdPrice === null || usdPrice === undefined) {
-          console.log("🔢 [TO_AXIS_PRICE] Input is null/undefined:", usdPrice);
-          return null;
-        }
+        if (usdPrice === null || usdPrice === undefined) return null;
         const result = axisIsMarketCap
           ? usdPrice * MARKET_CAP_MULTIPLIER
           : usdPrice;
-        console.log("🔢 [TO_AXIS_PRICE] Conversion:", {
-          input_USD: usdPrice,
-          axisIsMarketCap,
-          MARKET_CAP_MULTIPLIER,
-          output_AxisPrice: result,
-          formatted: axisIsMarketCap
-            ? `$${(result / 1_000_000_000).toFixed(2)}B`
-            : `$${result.toFixed(6)}`,
-        });
+        if (CHART_DEBUG) console.log("🔢 [TO_AXIS_PRICE] Conversion:", { input_USD: usdPrice, output_AxisPrice: result });
         return result;
       };
 
-      console.log(
-        "🎯 [SYNC_PRICE_LINES] Converting prices to axis coordinates...",
-      );
       const entryPrice = toAxisPrice(avgEntryUsd);
       const exitPrice = toAxisPrice(avgExitUsd);
 
-      console.log("🎯 [SYNC_PRICE_LINES] Max MC axis price calculation...");
-      console.log(
-        "🎯 [SYNC_PRICE_LINES] maxMarketCapUsd before division:",
-        maxMarketCapUsd,
-      );
       const maxMcPriceInput = maxMarketCapUsd
         ? maxMarketCapUsd / MARKET_CAP_MULTIPLIER
         : null;
-      console.log(
-        "🎯 [SYNC_PRICE_LINES] Max MC after dividing by multiplier:",
-        {
-          maxMarketCapUsd,
-          MARKET_CAP_MULTIPLIER,
-          divided: maxMcPriceInput,
-          willBeNull: !maxMarketCapUsd,
-        },
-      );
       const maxMcPrice = toAxisPrice(maxMcPriceInput);
 
-      console.log("🎯 [SYNC_PRICE_LINES] Final axis prices:", {
-        entryPrice,
-        exitPrice,
-        maxMcPrice,
-      });
+      if (CHART_DEBUG) console.log("🎯 [SYNC_PRICE_LINES] Final axis prices:", { entryPrice, exitPrice, maxMcPrice });
 
       const lastApplied = lastAppliedLinesRef.current;
-      console.log("🎯 [SYNC_PRICE_LINES] Checking if lines already applied:", {
-        lastApplied,
-        entryPrice,
-        exitPrice,
-        maxMcPrice,
-        entryMatch: lastApplied?.entry === entryPrice,
-        exitMatch: lastApplied?.exit === exitPrice,
-        maxMcMatch: lastApplied?.maxMc === maxMcPrice,
-      });
 
       if (
         lastApplied &&
@@ -681,53 +597,32 @@ const AdvancedOHLCChart: React.FC<AdvancedOHLCChartProps> = ({
         lastApplied.exit === exitPrice &&
         lastApplied.maxMc === maxMcPrice
       ) {
-        console.log(
-          "⚠️ [SYNC_PRICE_LINES] Lines already applied with same values, skipping",
-        );
+        if (CHART_DEBUG) console.log("⚠️ [SYNC_PRICE_LINES] Lines already applied with same values, skipping");
         syncLinesInFlightRef.current = false;
         return;
       }
 
-      console.log("🎯 [SYNC_PRICE_LINES] Lines need update, proceeding...");
+      if (CHART_DEBUG) console.log("🎯 [SYNC_PRICE_LINES] Lines need update, proceeding...");
 
-      // STEP 1: Always remove ALL existing shapes first
-      console.log("🗑️ [SYNC_PRICE_LINES] STEP 1: Removing existing shapes...");
+      // STEP 1: Remove existing tracked shapes by ID
       try {
-        const existingShapes = Object.keys(priceLineShapesRef.current);
-        console.log(
-          "🗑️ [SYNC_PRICE_LINES] Tracked shapes to remove:",
-          existingShapes,
-        );
-
         // Remove tracked shapes by ID
         Object.values(priceLineShapesRef.current).forEach((line: any) => {
           try {
             if (line?.id && typeof line.id === "string") {
-              console.log("🗑️ [SYNC_PRICE_LINES] Removing shape:", line.id);
+              if (CHART_DEBUG) console.log("🗑️ [SYNC_PRICE_LINES] Removing shape:", line.id);
               chart.removeEntity(line.id);
             }
           } catch (e) {
-            console.log(
-              "⚠️ [SYNC_PRICE_LINES] Failed to remove shape:",
-              line?.id,
-              e,
-            );
+            if (CHART_DEBUG) console.log("⚠️ [SYNC_PRICE_LINES] Failed to remove shape:", line?.id, e);
           }
         });
         priceLineShapesRef.current = {};
-        console.log("🗑️ [SYNC_PRICE_LINES] Cleared priceLineShapesRef");
-
-        // Also remove all shapes from chart as backup
-        if (typeof chart.removeAllShapes === "function") {
-          chart.removeAllShapes();
-          console.log("🗑️ [SYNC_PRICE_LINES] Called chart.removeAllShapes()");
-        }
       } catch (e) {
-        console.log("⚠️ [SYNC_PRICE_LINES] Error during shape removal:", e);
+        console.warn("⚠️ [SYNC_PRICE_LINES] Error during shape removal:", e);
       }
 
       // STEP 2: Create fresh lines using createShape
-      console.log("✨ [SYNC_PRICE_LINES] STEP 2: Creating fresh lines...");
       // textOverride allows showing market cap value even in USD mode (for Max MC line)
       const createLine = async (
         key: string,
@@ -736,27 +631,11 @@ const AdvancedOHLCChart: React.FC<AdvancedOHLCChartProps> = ({
         color: string,
         textOverride?: string,
       ) => {
-        console.log(`✨ [CREATE_LINE] Creating line "${key}":`, {
-          key,
-          price,
-          label,
-          color,
-          textOverride,
-          priceIsNull: price === null,
-          priceIsNaN: price !== null && Number.isNaN(price),
-          priceIsFinite: price !== null && Number.isFinite(price),
-          currentMode: mode,
-        });
+        if (CHART_DEBUG) console.log(`✨ [CREATE_LINE] Creating line "${key}":`, { price, label, color });
 
         // Validate price is a valid finite number
         if (price === null || !Number.isFinite(price) || price <= 0) {
-          console.log(`⚠️ [CREATE_LINE] Skipping "${key}" - invalid price:`, {
-            price,
-            isNull: price === null,
-            isNaN: price !== null && Number.isNaN(price),
-            isFinite: price !== null && Number.isFinite(price),
-            isPositive: price !== null && price > 0,
-          });
+          if (CHART_DEBUG) console.log(`⚠️ [CREATE_LINE] Skipping "${key}" - invalid price:`, price);
           return;
         }
 
@@ -764,12 +643,6 @@ const AdvancedOHLCChart: React.FC<AdvancedOHLCChartProps> = ({
           const formattedPrice = formatAxisLabel(price, axisIsMarketCap);
           // Use textOverride if provided (e.g., for Max MC to always show market cap regardless of mode)
           const lineText = textOverride ?? `${label}: ${formattedPrice}`;
-          console.log(`✨ [CREATE_LINE] "${key}" formatted:`, {
-            price,
-            axisIsMarketCap,
-            formattedPrice,
-            lineText,
-          });
 
           const result = chart.createShape(
             { price },
@@ -789,90 +662,23 @@ const AdvancedOHLCChart: React.FC<AdvancedOHLCChartProps> = ({
             },
           );
 
-          console.log(
-            `✨ [CREATE_LINE] "${key}" createShape called, result type:`,
-            {
-              resultType: typeof result,
-              isPromise: result instanceof Promise,
-              hasThenable: result && typeof result.then === "function",
-              result,
-            },
-          );
-
           // Handle both Promise and direct ID returns
           // Use thenable check instead of instanceof Promise (handles cross-realm Promises from iframes)
           const isThenable = (obj: any): obj is Promise<any> =>
             obj && typeof obj.then === "function";
 
           let shapeId = isThenable(result) ? await result : result;
-          console.log(`✨ [CREATE_LINE] "${key}" after first await:`, {
-            shapeId,
-            type: typeof shapeId,
-            isPromise: shapeId instanceof Promise,
-            hasThenable: isThenable(shapeId),
-          });
 
           // Check if we got a nested Promise/thenable and await again if needed
           if (isThenable(shapeId)) {
-            console.log(
-              `✨ [CREATE_LINE] "${key}" detected nested thenable, awaiting again...`,
-            );
             shapeId = await shapeId;
-            console.log(`✨ [CREATE_LINE] "${key}" after second await:`, {
-              shapeId,
-              type: typeof shapeId,
-            });
           }
-
-          console.log(`✨ [CREATE_LINE] "${key}" final shape ID:`, {
-            shapeId,
-            isString: typeof shapeId === "string",
-          });
 
           if (shapeId && typeof shapeId === "string") {
             priceLineShapesRef.current[key] = { id: shapeId };
-            console.log(
-              `✅ [CREATE_LINE] "${key}" successfully created and tracked with ID:`,
-              shapeId,
-            );
-
-            // Log chart's visible price range to debug visibility issues
-            try {
-              const priceScale = chart
-                .getPanes?.()?.[0]
-                ?.getRightPriceScales?.()?.[0];
-              if (priceScale) {
-                const visibleRange = priceScale.getVisiblePriceRange?.();
-                console.log(
-                  `📊 [CREATE_LINE] "${key}" chart visible price range:`,
-                  {
-                    linePrice: price,
-                    visibleMin: visibleRange?.minValue,
-                    visibleMax: visibleRange?.maxValue,
-                    isLineVisible:
-                      price >= visibleRange?.minValue &&
-                      price <= visibleRange?.maxValue,
-                    lineIsAboveChart: price > visibleRange?.maxValue,
-                    lineIsBelowChart: price < visibleRange?.minValue,
-                  },
-                );
-              }
-            } catch (e) {
-              console.log(
-                `⚠️ [CREATE_LINE] "${key}" could not get visible range:`,
-                e,
-              );
-            }
+            if (CHART_DEBUG) console.log(`✅ [CREATE_LINE] "${key}" created with ID:`, shapeId);
           } else {
-            console.log(
-              `⚠️ [CREATE_LINE] "${key}" received invalid shape ID:`,
-              {
-                shapeId,
-                type: typeof shapeId,
-                isNull: shapeId === null,
-                isUndefined: shapeId === undefined,
-              },
-            );
+            if (CHART_DEBUG) console.log(`⚠️ [CREATE_LINE] "${key}" received invalid shape ID:`, shapeId);
           }
         } catch (err) {
           console.error(
@@ -884,7 +690,6 @@ const AdvancedOHLCChart: React.FC<AdvancedOHLCChartProps> = ({
 
       // Create the lines
       (async () => {
-        console.log("✨ [SYNC_PRICE_LINES] Starting async line creation...");
         await createLine("avgEntry", entryPrice, "Avg Entry", "#f2c94c");
         await createLine("avgExit", exitPrice, "Avg Exit", "#4aa3ff");
 
@@ -914,38 +719,24 @@ const AdvancedOHLCChart: React.FC<AdvancedOHLCChartProps> = ({
           exit: exitPrice,
           maxMc: maxMcPrice,
         };
-        console.log(
-          "✅ [SYNC_PRICE_LINES] All lines created, updated lastAppliedLinesRef:",
-          lastAppliedLinesRef.current,
-        );
-        console.log(
-          "✅ [SYNC_PRICE_LINES] Tracked shapes:",
-          Object.keys(priceLineShapesRef.current),
-        );
+        if (CHART_DEBUG) console.log("✅ [SYNC_PRICE_LINES] All lines created:", Object.keys(priceLineShapesRef.current));
 
         syncLinesInFlightRef.current = false;
-        console.log(
-          "🎯 [SYNC_PRICE_LINES] ============= COMPLETE =============",
-        );
+        if (CHART_DEBUG) console.log("🎯 [SYNC_PRICE_LINES] ============= COMPLETE =============");
       })().catch((err) => {
         console.error("❌ [SYNC_PRICE_LINES] Async line creation failed:", err);
         syncLinesInFlightRef.current = false;
-        console.log("🎯 [SYNC_PRICE_LINES] ============= FAILED =============");
       });
     },
     [computeMaxMarketCapUsd],
   );
 
   const updateChartMetrics = useCallback(() => {
-    console.log("📈 [UPDATE_METRICS] ============= START =============");
+    if (CHART_DEBUG) console.log("📈 [UPDATE_METRICS] ============= START =============");
     const candles = lastGoodCandlesRef.current;
-    console.log("📈 [UPDATE_METRICS] Candles:", {
-      count: candles?.length || 0,
-      hasCandles: !!(candles && candles.length > 0),
-    });
 
     if (!candles || candles.length === 0) {
-      console.log("⚠️ [UPDATE_METRICS] No candles available, exiting");
+      if (CHART_DEBUG) console.log("⚠️ [UPDATE_METRICS] No candles available, exiting");
       return;
     }
 
@@ -953,18 +744,8 @@ const AdvancedOHLCChart: React.FC<AdvancedOHLCChartProps> = ({
     const latest = sorted[sorted.length - 1];
     const lastPriceUsd = Number(latest?.c || latest?.o || 0);
 
-    console.log("📈 [UPDATE_METRICS] Latest candle:", {
-      unix_time: latest?.unix_time,
-      timestamp: new Date(latest?.unix_time * 1000).toISOString(),
-      close: latest?.c,
-      open: latest?.o,
-      lastPriceUsd,
-      isFinite: Number.isFinite(lastPriceUsd),
-      isPositive: lastPriceUsd > 0,
-    });
-
     if (!Number.isFinite(lastPriceUsd) || lastPriceUsd <= 0) {
-      console.log("⚠️ [UPDATE_METRICS] Invalid last price, exiting");
+      if (CHART_DEBUG) console.log("⚠️ [UPDATE_METRICS] Invalid last price, exiting");
       return;
     }
 
@@ -972,25 +753,10 @@ const AdvancedOHLCChart: React.FC<AdvancedOHLCChartProps> = ({
     const isMonad = currentNetwork === "monad";
     // Both Monad and Solana pump.fun tokens have 1B supply, so MC calculations apply to both
     const supportsMcMode = true;
-    console.log("📈 [UPDATE_METRICS] Network:", {
-      isMonad,
-      network: currentNetwork,
-      supportsMcMode,
-    });
 
     const maxMarketCapUsd = supportsMcMode
       ? (maxMarketCapFromApiRef.current ?? computeMaxMarketCapUsd())
       : null;
-
-    console.log("📈 [UPDATE_METRICS] Max MC determination:", {
-      supportsMcMode,
-      maxMarketCapFromApi: maxMarketCapFromApiRef.current,
-      computedMaxMc:
-        maxMarketCapFromApiRef.current === null
-          ? "computed"
-          : "using API value",
-      finalMaxMarketCapUsd: maxMarketCapUsd,
-    });
 
     const metrics = {
       lastPriceUsd,
@@ -1002,18 +768,13 @@ const AdvancedOHLCChart: React.FC<AdvancedOHLCChartProps> = ({
         : undefined,
     };
 
-    console.log("📈 [UPDATE_METRICS] Computed metrics:", {
+    if (CHART_DEBUG) console.log("📈 [UPDATE_METRICS] Computed metrics:", {
       lastPriceUsd,
       lastMarketCapUsd: metrics.lastMarketCapUsd,
       maxMarketCapUsd: metrics.maxMarketCapUsd,
-      MARKET_CAP_MULTIPLIER,
     });
 
     lastMetricsRef.current = metrics;
-    console.log(
-      "📈 [UPDATE_METRICS] Updated lastMetricsRef.current:",
-      lastMetricsRef.current,
-    );
 
     // CRITICAL FIX: Wrap syncPriceLines in onChartReady to ensure chart is ready before creating shapes
     // This is why Monad works (uses requestPriceLineSync which wraps in onChartReady) but Solana failed
@@ -1021,31 +782,18 @@ const AdvancedOHLCChart: React.FC<AdvancedOHLCChartProps> = ({
     const widget = widgetRef.current;
     const maxMc = metrics.maxMarketCapUsd ?? null;
 
-    console.log(
-      "📈 [UPDATE_METRICS] Queueing syncPriceLines via onChartReady:",
-      { maxMc, hasWidget: !!widget },
-    );
-
     if (widget?.onChartReady) {
       widget.onChartReady(() => {
-        console.log(
-          "📈 [UPDATE_METRICS] onChartReady fired -> calling syncPriceLines with maxMc:",
-          maxMc,
-        );
         syncPriceLines(maxMc);
       });
     } else {
       // Fallback if widget not available yet (should be rare)
-      console.log(
-        "📈 [UPDATE_METRICS] No widget.onChartReady, calling syncPriceLines directly",
-      );
       syncPriceLines(maxMc);
     }
 
-    console.log("📈 [UPDATE_METRICS] Calling onChartMetrics callback");
     onChartMetrics?.(metrics);
 
-    console.log("📈 [UPDATE_METRICS] ============= COMPLETE =============");
+    if (CHART_DEBUG) console.log("📈 [UPDATE_METRICS] ============= COMPLETE =============");
   }, [computeMaxMarketCapUsd, onChartMetrics, syncPriceLines]);
 
   useEffect(() => {
@@ -1410,6 +1158,9 @@ const AdvancedOHLCChart: React.FC<AdvancedOHLCChartProps> = ({
   const historyCallbackRef = useRef<((bars: any[], meta: any) => void) | null>(
     null,
   ); // Store current history callback for fast refresh
+  // Throttle refs for updateChartMetrics from WS handlers (max once per second)
+  const metricsThrottleRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const metricsUpdatePendingRef = useRef(false);
   const latestTradeDataRef = useRef<any[]>(tradeData || []);
   const latestCreatorAddressRef = useRef<string | null>(creatorAddress || null);
   const latestTokenSymbolRef = useRef<string | null>(tokenSymbol || null);
@@ -1465,6 +1216,8 @@ const AdvancedOHLCChart: React.FC<AdvancedOHLCChartProps> = ({
   const currentAggregatedCandleRef = useRef<BackendOHLCData | null>(null);
   const oneSecondCandlesRef = useRef<BackendOHLCData[]>([]);
   const currentAggregatingIntervalRef = useRef<string | null>(null);
+  // Track whether we've bridged the gap between REST/snapshot data and first real-time WS candle
+  const wsGapBridgedRef = useRef(false);
   // Track if initial right-alignment has been done to prevent overriding user's zoom/pan
   const hasRightAlignedRef = useRef(false);
 
@@ -2357,29 +2110,27 @@ const AdvancedOHLCChart: React.FC<AdvancedOHLCChartProps> = ({
               "[AdvancedOHLCChart] ⚠️ No historical candles received from WebSocket",
             );
 
-            // For Monad: Create a placeholder candle at 0 when no data
+            // Create a placeholder candle at 0 when no data (any network)
             const currentNetwork = latestParamsRef.current.network;
-            if (currentNetwork === "monad") {
-              const now = Math.floor(Date.now() / 1000);
-              const placeholderCandle: BackendOHLCData = {
-                unix_time: now,
-                o: 0,
-                h: 0,
-                l: 0,
-                c: 0,
-                v_usd: 0,
-              };
-              lastGoodCandlesRef.current = [placeholderCandle];
-              console.log(
-                "[AdvancedOHLCChart] 📊 Created placeholder candle at 0 for Monad (no WebSocket history)",
-              );
+            const now = Math.floor(Date.now() / 1000);
+            const placeholderCandle: BackendOHLCData = {
+              unix_time: now,
+              o: 0,
+              h: 0,
+              l: 0,
+              c: 0,
+              v_usd: 0,
+            };
+            lastGoodCandlesRef.current = [placeholderCandle];
+            console.log(
+              `[AdvancedOHLCChart] 📊 Created placeholder candle at 0 for ${currentNetwork} (no WebSocket history)`,
+            );
 
-              // Update state to trigger chart refresh
-              setCandles([placeholderCandle]);
-              setIsLoading(false);
-              hasInitializedRef.current = true;
-              firstLoadRef.current = false;
-            }
+            // Update state to trigger chart refresh
+            setCandles([placeholderCandle]);
+            setIsLoading(false);
+            hasInitializedRef.current = true;
+            firstLoadRef.current = false;
             return;
           }
 
@@ -2772,7 +2523,19 @@ const AdvancedOHLCChart: React.FC<AdvancedOHLCChartProps> = ({
               },
             );
           }
-          updateChartMetrics();
+          // Throttled updateChartMetrics (max once per second from WS)
+          if (!metricsThrottleRef.current) {
+            updateChartMetrics();
+            metricsThrottleRef.current = setTimeout(() => {
+              metricsThrottleRef.current = null;
+              if (metricsUpdatePendingRef.current) {
+                metricsUpdatePendingRef.current = false;
+                updateChartMetrics();
+              }
+            }, 1000);
+          } else {
+            metricsUpdatePendingRef.current = true;
+          }
 
           return; // Don't process as 1s candle
         }
@@ -2891,7 +2654,19 @@ const AdvancedOHLCChart: React.FC<AdvancedOHLCChartProps> = ({
           cachedData.push(newCandle);
           cachedData.sort((a, b) => a.unix_time - b.unix_time);
         }
-        updateChartMetrics();
+        // Throttled updateChartMetrics (max once per second from WS)
+        if (!metricsThrottleRef.current) {
+          updateChartMetrics();
+          metricsThrottleRef.current = setTimeout(() => {
+            metricsThrottleRef.current = null;
+            if (metricsUpdatePendingRef.current) {
+              metricsUpdatePendingRef.current = false;
+              updateChartMetrics();
+            }
+          }, 1000);
+        } else {
+          metricsUpdatePendingRef.current = true;
+        }
       } catch (e) {
         console.error(
           "[AdvancedOHLCChart] Error parsing WebSocket message:",
@@ -3099,20 +2874,126 @@ const AdvancedOHLCChart: React.FC<AdvancedOHLCChartProps> = ({
           return;
         }
 
-        // Handle initial snapshot - DON'T replace HTTP data
-        // HTTP is our source of truth for historical candles, WebSocket only for real-time
+        // Handle initial snapshot - merge candles newer than REST data to bridge the gap
+        // HTTP is our source of truth for historical candles; snapshot fills the gap to real-time
         if (message.type === "snapshot") {
-          const candles = message.data as Array<any>;
+          const snapshotCandles = (message.data as Array<any>) || [];
+          const cachedData = lastGoodCandlesRef.current;
+          wsGapBridgedRef.current = false; // Reset for the upcoming real-time candles
+
           console.log(
             "[AdvancedOHLCChart] 📊 Solana WebSocket snapshot received:",
-            candles?.length || 0,
-            "candles",
+            snapshotCandles.length,
+            "candles, cached REST candles:",
+            cachedData.length,
           );
-          console.log(
-            "[AdvancedOHLCChart] 📊 Ignoring snapshot - HTTP already loaded",
-            lastGoodCandlesRef.current.length,
-            "candles",
-          );
+
+          if (cachedData.length > 0 && snapshotCandles.length > 0) {
+            const lastCachedTime = cachedData[cachedData.length - 1].unix_time;
+
+            // Filter & convert snapshot candles newer than REST data
+            const newerCandles: BackendOHLCData[] = snapshotCandles
+              .map((c: any) => ({
+                unix_time: c.unix_time || c.time,
+                o: c.o || c.open || 0,
+                h: c.h || c.high || 0,
+                l: c.l || c.low || 0,
+                c: c.c || c.close || 0,
+                v_usd: c.v_usd || c.v || c.volume || 0,
+              }))
+              .filter((c: BackendOHLCData) => c.unix_time > lastCachedTime)
+              .sort((a: BackendOHLCData, b: BackendOHLCData) => a.unix_time - b.unix_time);
+
+            if (newerCandles.length > 0) {
+              // Add to cache
+              cachedData.push(...newerCandles);
+              cachedData.sort((a, b) => a.unix_time - b.unix_time);
+
+              // Push to chart (handling aggregation and gap-fill)
+              const currentDisplayMode = displayModeRef.current;
+              const currentSelectedInterval = latestParamsRef.current.interval;
+              const resolution = INTERVAL_TO_RESOLUTION[currentSelectedInterval];
+              const resolutionMs = parseResolutionToMs(resolution);
+              const resolutionSec = resolutionMs / 1000;
+              const localNeedsAggregation =
+                currentSelectedInterval !== "1s" &&
+                currentSelectedInterval !== "5s" &&
+                currentSelectedInterval !== "15s" &&
+                currentSelectedInterval !== "30s";
+
+              let lastPushedTime = localNeedsAggregation
+                ? getWindowStartTime(lastCachedTime, currentSelectedInterval)
+                : lastCachedTime;
+              let lastClose =
+                cachedData.find((c) => c.unix_time === lastCachedTime)?.c || 0;
+
+              for (const candle of newerCandles) {
+                const candleDisplayTime = localNeedsAggregation
+                  ? getWindowStartTime(candle.unix_time, currentSelectedInterval)
+                  : candle.unix_time;
+
+                // Fill gap between last pushed and this candle with carry-forward bars
+                const gapSec = candleDisplayTime - lastPushedTime;
+                const missedCandles = Math.floor(gapSec / resolutionSec) - 1;
+                if (
+                  missedCandles > 0 &&
+                  missedCandles <= 300 &&
+                  subscribedCallbackRef.current
+                ) {
+                  for (let j = 1; j <= missedCandles; j++) {
+                    const fillBar = transformBar(
+                      {
+                        time: (lastPushedTime + j * resolutionSec) * 1000,
+                        open: lastClose,
+                        high: lastClose,
+                        low: lastClose,
+                        close: lastClose,
+                        volume: 0,
+                      },
+                      currentDisplayMode,
+                      true,
+                    );
+                    subscribedCallbackRef.current(fillBar);
+                  }
+                }
+
+                // Push actual candle
+                if (
+                  subscribedCallbackRef.current &&
+                  candleDisplayTime > lastPushedTime
+                ) {
+                  const bar = transformBar(
+                    {
+                      time: candleDisplayTime * 1000,
+                      open: candle.o,
+                      high: candle.h,
+                      low: candle.l,
+                      close: candle.c,
+                      volume: candle.v_usd,
+                    },
+                    currentDisplayMode,
+                    true,
+                  );
+                  subscribedCallbackRef.current(bar);
+                  lastPushedTime = candleDisplayTime;
+                  lastClose = candle.c;
+                }
+              }
+
+              console.log(
+                `[AdvancedOHLCChart] 📊 Merged ${newerCandles.length} snapshot candles newer than REST data`,
+              );
+            } else {
+              console.log(
+                "[AdvancedOHLCChart] 📊 Snapshot has no candles newer than REST data",
+              );
+            }
+          } else {
+            console.log(
+              "[AdvancedOHLCChart] 📊 Snapshot ignored - no cached data or empty snapshot",
+            );
+          }
+
           console.log(
             "[AdvancedOHLCChart] 📊 WebSocket ready for real-time candle updates",
           );
@@ -3138,6 +3019,51 @@ const AdvancedOHLCChart: React.FC<AdvancedOHLCChartProps> = ({
           };
 
           const currentSelectedInterval = latestParamsRef.current.interval;
+
+          // Bridge gap between REST/snapshot end and first real-time WS candle (one-time)
+          if (!wsGapBridgedRef.current) {
+            wsGapBridgedRef.current = true;
+            const cachedData = lastGoodCandlesRef.current;
+            if (cachedData.length > 0 && subscribedCallbackRef.current) {
+              const lastCached = cachedData[cachedData.length - 1];
+              const resolution = INTERVAL_TO_RESOLUTION[currentSelectedInterval];
+              const resolutionMs = parseResolutionToMs(resolution);
+              const resolutionSec = resolutionMs / 1000;
+
+              const lastCachedDisplayTime = needsAggregation
+                ? getWindowStartTime(lastCached.unix_time, currentSelectedInterval)
+                : lastCached.unix_time;
+              const newCandleDisplayTime = needsAggregation
+                ? getWindowStartTime(oneSecCandle.unix_time, currentSelectedInterval)
+                : oneSecCandle.unix_time;
+
+              const gapSec = newCandleDisplayTime - lastCachedDisplayTime;
+              const missedCandles = Math.floor(gapSec / resolutionSec) - 1;
+
+              if (missedCandles > 0 && missedCandles <= 300) {
+                const lastClose = lastCached.c;
+                const currentDisplayMode = displayModeRef.current;
+                for (let j = 1; j <= missedCandles; j++) {
+                  const fillBar = transformBar(
+                    {
+                      time: (lastCachedDisplayTime + j * resolutionSec) * 1000,
+                      open: lastClose,
+                      high: lastClose,
+                      low: lastClose,
+                      close: lastClose,
+                      volume: 0,
+                    },
+                    currentDisplayMode,
+                    true,
+                  );
+                  subscribedCallbackRef.current(fillBar);
+                }
+                console.log(
+                  `[AdvancedOHLCChart] 🔗 Bridged ${missedCandles} gap candles (${resolutionSec}s each)`,
+                );
+              }
+            }
+          }
 
           // Aggregate if viewing a longer timeframe
           if (needsAggregation) {
@@ -3254,7 +3180,19 @@ const AdvancedOHLCChart: React.FC<AdvancedOHLCChartProps> = ({
             }
           }
 
-          updateChartMetrics();
+          // Throttled updateChartMetrics (max once per second from WS)
+          if (!metricsThrottleRef.current) {
+            updateChartMetrics();
+            metricsThrottleRef.current = setTimeout(() => {
+              metricsThrottleRef.current = null;
+              if (metricsUpdatePendingRef.current) {
+                metricsUpdatePendingRef.current = false;
+                updateChartMetrics();
+              }
+            }, 1000);
+          } else {
+            metricsUpdatePendingRef.current = true;
+          }
         }
       } catch (e) {
         console.error(
@@ -3513,6 +3451,72 @@ const AdvancedOHLCChart: React.FC<AdvancedOHLCChartProps> = ({
       }
     };
   }, [network, mint, pairAddress, selectedInterval, solanaHttpReady]); // Re-connect when token or interval changes, or when HTTP data loads (solanaHttpReady triggers once after HTTP)
+
+  // Convert TradingView resolution string to milliseconds
+  // Used by gap-fill logic to calculate expected candle spacing
+  function parseResolutionToMs(res: string): number {
+    if (res.endsWith('S')) {
+      return parseInt(res) * 1000; // "1S" → 1000, "5S" → 5000
+    }
+    if (res.endsWith('D')) {
+      return (parseInt(res) || 1) * 86400000; // "1D" → 86400000
+    }
+    if (res.endsWith('W')) {
+      return (parseInt(res) || 1) * 604800000; // "1W" → 604800000
+    }
+    // Otherwise it's minutes: "1" → 60000, "5" → 300000, "60" → 3600000
+    return parseInt(res) * 60000;
+  }
+
+  // Gap-fill sparse candles with carry-forward flat candles for visual continuity.
+  // Standard financial charting behavior: no trade = price unchanged from last close.
+  function gapFillBars(
+    bars: { time: number; open: number; high: number; low: number; close: number; volume: number }[],
+    res: string,
+  ) {
+    const resolutionMs = parseResolutionToMs(res);
+    if (resolutionMs <= 0 || bars.length <= 1) return;
+
+    const MAX_FILLS_PER_GAP = 300; // Cap at 5 minutes of 1s candles to prevent memory bloat
+    const filledBars: typeof bars = [bars[0]];
+
+    for (let i = 1; i < bars.length; i++) {
+      const prev = filledBars[filledBars.length - 1];
+      const curr = bars[i];
+      const gapMs = curr.time - prev.time;
+      const missedCandles = Math.floor(gapMs / resolutionMs) - 1;
+
+      if (missedCandles > 0 && missedCandles <= MAX_FILLS_PER_GAP) {
+        // Insert flat carry-forward candles
+        for (let j = 1; j <= missedCandles; j++) {
+          filledBars.push({
+            time: prev.time + j * resolutionMs,
+            open: prev.close,
+            high: prev.close,
+            low: prev.close,
+            close: prev.close,
+            volume: 0,
+          });
+        }
+      } else if (missedCandles > MAX_FILLS_PER_GAP) {
+        // For huge gaps, insert just one bridge candle to show price level
+        filledBars.push({
+          time: curr.time - resolutionMs,
+          open: prev.close,
+          high: prev.close,
+          low: prev.close,
+          close: prev.close,
+          volume: 0,
+        });
+      }
+
+      filledBars.push(curr);
+    }
+
+    // Replace bars in-place with filled version
+    bars.length = 0;
+    bars.push(...filledBars);
+  }
 
   // Create custom datafeed that uses our fetched candles
   const createDatafeed = useCallback(() => {
@@ -4036,8 +4040,11 @@ const AdvancedOHLCChart: React.FC<AdvancedOHLCChartProps> = ({
             .filter((bar) => bar.time > 0 && isFinite(bar.time));
           allBars.sort((a, b) => a.time - b.time);
 
-          // For Monad: Ensure candles connect properly by making close of one = open of next
-          if (isMonad && allBars.length > 1) {
+          // Gap-fill: Insert carry-forward candles for missing time periods
+          gapFillBars(allBars, resolution);
+
+          // Ensure candles connect properly by making close of one = open of next
+          if (allBars.length > 1) {
             for (let i = 0; i < allBars.length - 1; i++) {
               const currentBar = allBars[i];
               const nextBar = allBars[i + 1];
@@ -4219,6 +4226,9 @@ const AdvancedOHLCChart: React.FC<AdvancedOHLCChartProps> = ({
                 .filter((bar) => bar.time > 0 && isFinite(bar.time));
               allBars.sort((a, b) => a.time - b.time);
 
+              // Gap-fill: Insert carry-forward candles for missing time periods
+              gapFillBars(allBars, resolution);
+
               if (typeof onHistoryCallback === "function") {
                 onHistoryCallback(allBars, { noData: false });
               }
@@ -4351,8 +4361,8 @@ const AdvancedOHLCChart: React.FC<AdvancedOHLCChartProps> = ({
               return;
             }
 
-            // For Monad: Return a placeholder candle at 0 on initial load
-            if (isMonad && periodParams.firstDataRequest) {
+            // Return a placeholder candle at 0 on initial load (any network)
+            if (periodParams.firstDataRequest) {
               const now = Math.floor(Date.now() / 1000); // Current time in seconds
               const placeholderCandle = {
                 time: now * 1000, // Convert to milliseconds
@@ -4363,7 +4373,7 @@ const AdvancedOHLCChart: React.FC<AdvancedOHLCChartProps> = ({
                 volume: 0,
               };
               console.log(
-                "[AdvancedOHLCChart] 📊 Returning placeholder candle at 0 for Monad:",
+                "[AdvancedOHLCChart] 📊 Returning placeholder candle at 0 (no cached data):",
                 placeholderCandle,
               );
               if (typeof onHistoryCallback === "function") {
@@ -4452,9 +4462,13 @@ const AdvancedOHLCChart: React.FC<AdvancedOHLCChartProps> = ({
           // Sort by time (ascending - oldest first)
           allBars.sort((a, b) => a.time - b.time);
 
-          // For Monad: Ensure candles connect properly by making close of one = open of next
+          // Gap-fill: Insert carry-forward candles for missing time periods
+          // Creates visual continuity (standard in financial charting)
+          gapFillBars(allBars, resolution);
+
+          // Ensure candles connect properly by making close of one = open of next
           // This creates visual continuity even when candles are flat (o=h=l=c)
-          if (isMonad && allBars.length > 1) {
+          if (allBars.length > 1) {
             for (let i = 0; i < allBars.length - 1; i++) {
               const currentBar = allBars[i];
               const nextBar = allBars[i + 1];
@@ -4483,19 +4497,6 @@ const AdvancedOHLCChart: React.FC<AdvancedOHLCChartProps> = ({
                   if (nextBar.low > nextBar.open) nextBar.low = nextBar.open;
                 }
 
-                console.log(
-                  "[AdvancedOHLCChart] 🔗 Connected candle",
-                  i + 1,
-                  "to previous:",
-                  {
-                    previousClose: currentBar.close,
-                    newOpen: nextBar.open,
-                    wasFlat:
-                      previousOpen === nextBar.high &&
-                      previousOpen === nextBar.low &&
-                      previousOpen === nextBar.close,
-                  },
-                );
               }
             }
           }
@@ -4663,8 +4664,8 @@ const AdvancedOHLCChart: React.FC<AdvancedOHLCChartProps> = ({
               return;
             }
 
-            // For Monad: Return a placeholder candle at 0 on initial load
-            if (isMonad && periodParams.firstDataRequest) {
+            // Return a placeholder candle at 0 on initial load (any network)
+            if (periodParams.firstDataRequest) {
               const now = Math.floor(Date.now() / 1000); // Current time in seconds
               const placeholderCandle = {
                 time: now * 1000, // Convert to milliseconds
@@ -4675,7 +4676,7 @@ const AdvancedOHLCChart: React.FC<AdvancedOHLCChartProps> = ({
                 volume: 0,
               };
               console.log(
-                "[AdvancedOHLCChart] 📊 Returning placeholder candle at 0 for Monad (no bars after filtering):",
+                "[AdvancedOHLCChart] 📊 Returning placeholder candle at 0 (no bars after filtering):",
                 placeholderCandle,
               );
               if (typeof onHistoryCallback === "function") {
@@ -4776,8 +4777,11 @@ const AdvancedOHLCChart: React.FC<AdvancedOHLCChartProps> = ({
               .filter((bar) => bar.time > 0); // Filter out invalid bars
             allBars.sort((a, b) => a.time - b.time);
 
-            // For Monad: Ensure candles connect properly in error fallback
-            if (isMonad && allBars.length > 1) {
+            // Gap-fill: Insert carry-forward candles for missing time periods
+            gapFillBars(allBars, resolution);
+
+            // Ensure candles connect properly in error fallback
+            if (allBars.length > 1) {
               for (let i = 0; i < allBars.length - 1; i++) {
                 const currentBar = allBars[i];
                 const nextBar = allBars[i + 1];
@@ -4810,8 +4814,8 @@ const AdvancedOHLCChart: React.FC<AdvancedOHLCChartProps> = ({
             if (bars.length === 0) {
               console.log("[AdvancedOHLCChart] Cached data is empty");
 
-              // For Monad: Return a placeholder candle at 0 on initial load
-              if (isMonad && periodParams?.firstDataRequest) {
+              // Return a placeholder candle at 0 on initial load (any network)
+              if (periodParams?.firstDataRequest) {
                 const now = Math.floor(Date.now() / 1000); // Current time in seconds
                 const placeholderCandle = {
                   time: now * 1000, // Convert to milliseconds
@@ -4822,7 +4826,7 @@ const AdvancedOHLCChart: React.FC<AdvancedOHLCChartProps> = ({
                   volume: 0,
                 };
                 console.log(
-                  "[AdvancedOHLCChart] 📊 Returning placeholder candle at 0 for Monad (error case, empty cache):",
+                  "[AdvancedOHLCChart] 📊 Returning placeholder candle at 0 (error case, empty cache):",
                   placeholderCandle,
                 );
                 if (typeof onHistoryCallback === "function") {
