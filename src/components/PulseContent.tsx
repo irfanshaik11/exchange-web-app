@@ -710,7 +710,8 @@ export default function PulseContent({ forceMobileView = false }: PulseContentPr
       });
     }
     
-    return withTs.length > 0 ? withTs.concat(withoutTs) : withoutTs;
+    const result = withTs.length > 0 ? withTs.concat(withoutTs) : withoutTs;
+    return result.slice(0, 35);
   };
 
   const buildFinalStretch = (): any[] => {
@@ -751,7 +752,8 @@ export default function PulseContent({ forceMobileView = false }: PulseContentPr
       });
     }
     
-    return withTs.length > 0 ? withTs.concat(withoutTs) : withoutTs;
+    const result = withTs.length > 0 ? withTs.concat(withoutTs) : withoutTs;
+    return result.slice(0, 35);
   };
 
   // Use the processed data from build functions
@@ -857,7 +859,7 @@ export default function PulseContent({ forceMobileView = false }: PulseContentPr
 
     const fetchInitialMigratedTokens = async () => {
       try {
-        const endpoint = `/api/token-service/pulse-migrated?limit=70`;
+        const endpoint = `/api/token-service/pulse-migrated?limit=50`;
         const response = await fetch(endpoint, {
           cache: 'no-store',
           headers: {

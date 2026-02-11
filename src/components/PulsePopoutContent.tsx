@@ -778,7 +778,8 @@ export default function PulsePopoutContent({ forceMobileView = false }: PulsePop
       });
     }
 
-    return withTs.length > 0 ? withTs.concat(withoutTs) : withoutTs;
+    const result = withTs.length > 0 ? withTs.concat(withoutTs) : withoutTs;
+    return result.slice(0, 35);
   };
 
   const buildFinalStretch = (): any[] => {
@@ -819,7 +820,8 @@ export default function PulsePopoutContent({ forceMobileView = false }: PulsePop
       });
     }
 
-    return withTs.length > 0 ? withTs.concat(withoutTs) : withoutTs;
+    const result = withTs.length > 0 ? withTs.concat(withoutTs) : withoutTs;
+    return result.slice(0, 35);
   };
 
   // Use the processed data from build functions
