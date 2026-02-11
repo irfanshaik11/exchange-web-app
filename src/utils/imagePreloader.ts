@@ -3,10 +3,37 @@
  * Preloads images for instant display in tables
  */
 
-import { normalizeImageUrl, isMetadataUrl } from "./images";
+import { normalizeImageUrl, isMetadataUrl, resolveMetadataImage } from "./images";
 
 // Track preloaded images to avoid duplicate requests
 const preloadedImages = new Set<string>();
+
+/**
+ * Image Object Retention Cache
+ * Holds live references to loaded HTMLImageElement objects at module scope.
+ * This prevents the browser from GC'ing decoded bitmaps when React unmounts <img> tags.
+ * LRU eviction: delete + re-insert moves entry to end; oldest is first key.
+ */
+const MAX_RETAINED_IMAGES = 500;
+const imageObjectCache = new Map<string, HTMLImageElement>();
+
+export function retainImageObject(url: string, img: HTMLImageElement): void {
+  // LRU touch: delete then re-insert moves to end of iteration order
+  if (imageObjectCache.has(url)) {
+    imageObjectCache.delete(url);
+  }
+  imageObjectCache.set(url, img);
+
+  // Evict oldest (first entry) if over limit
+  if (imageObjectCache.size > MAX_RETAINED_IMAGES) {
+    const oldest = imageObjectCache.keys().next().value;
+    if (oldest) imageObjectCache.delete(oldest);
+  }
+}
+
+export function isImageRetained(url: string): boolean {
+  return imageObjectCache.has(url);
+}
 
 /**
  * Preload a single image
@@ -29,13 +56,13 @@ export function preloadImage(src: string): Promise<void> {
     
     img.onload = () => {
       preloadedImages.add(src);
+      retainImageObject(src, img);
       resolve();
     };
     
     img.onerror = () => {
       // Don't reject - just resolve silently (image might fail to load)
-      // Still mark as attempted to avoid retrying failed images
-      preloadedImages.add(src);
+      // DON'T mark as preloaded — allow retry on next preload cycle
       resolve();
     };
     
@@ -187,4 +214,48 @@ export async function preloadTokenImages(
   }
   
   await preloadImages(imageUrls, restOptions);
+}
+
+/**
+ * Preload images for tokens whose URLs point to metadata JSON (irys.xyz, arweave, IPFS, etc.)
+ * Resolves metadata → extracts actual image URL → preloads through proxy
+ */
+export async function preloadMetadataImages(
+  tokens: any[],
+  options: { limit?: number; maxConcurrent?: number } = {}
+): Promise<void> {
+  const { limit = 20, maxConcurrent = 5 } = options;
+
+  const metadataTokens = tokens
+    .filter(token => {
+      const raw = token?.image || token?.image_url || token?.imageUrl || token?.logo
+        || token?.uri || token?.icon || null;
+      return raw && typeof raw === 'string' && isMetadataUrl(raw);
+    })
+    .slice(0, limit);
+
+  if (metadataTokens.length === 0) return;
+
+  for (let i = 0; i < metadataTokens.length; i += maxConcurrent) {
+    const batch = metadataTokens.slice(i, i + maxConcurrent);
+    await Promise.allSettled(
+      batch.map(async (token) => {
+        const raw = token?.image || token?.image_url || token?.imageUrl || token?.logo
+          || token?.uri || token?.icon || null;
+        if (!raw) return;
+
+        const resolved = await resolveMetadataImage(raw);
+        if (!resolved || preloadedImages.has(resolved)) return;
+
+        const proxyUrl = resolved.startsWith('http')
+          ? `/api/image?url=${encodeURIComponent(resolved)}`
+          : resolved;
+
+        preloadedImages.add(proxyUrl);
+        const img = new Image();
+        img.src = proxyUrl;
+        retainImageObject(proxyUrl, img);
+      })
+    );
+  }
 }

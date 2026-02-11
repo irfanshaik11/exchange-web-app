@@ -216,6 +216,10 @@ export function WalletTrackerProvider({
 
     let connection: WalletTrackerWebSocket | null = null;
     let reconnectTimeout: NodeJS.Timeout | null = null;
+    let reconnectAttempts = 0;
+    const MAX_RECONNECT_ATTEMPTS = 5;
+    const BASE_RECONNECT_DELAY = 3000;   // 3s initial
+    const MAX_RECONNECT_DELAY = 60000;   // 60s cap
 
     const handleTradeEvent = async (event: TradeEvent) => {
       const normalizedEvent = normalizeTradeForState(event);
@@ -546,6 +550,7 @@ export function WalletTrackerProvider({
     };
 
     const handleConnect = () => {
+      reconnectAttempts = 0; // Reset on successful connection
       setWsConnected(true);
 
       // Subscribe to all tracked wallets after connection is established
@@ -563,10 +568,21 @@ export function WalletTrackerProvider({
     const handleDisconnect = () => {
       setWsConnected(false);
 
-      // Attempt to reconnect after 3 seconds
+      if (reconnectAttempts >= MAX_RECONNECT_ATTEMPTS) {
+        console.warn('[WalletTracker] Max reconnect attempts reached, stopping.');
+        return;
+      }
+
+      const delay = Math.min(
+        BASE_RECONNECT_DELAY * Math.pow(2, reconnectAttempts),
+        MAX_RECONNECT_DELAY
+      );
+      reconnectAttempts++;
+      console.log(`[WalletTracker] Reconnecting in ${delay}ms (attempt ${reconnectAttempts}/${MAX_RECONNECT_ATTEMPTS})`);
+
       reconnectTimeout = setTimeout(() => {
         initializeWebSocket();
-      }, 3000);
+      }, delay);
     };
 
     const initializeWebSocket = () => {
@@ -587,11 +603,12 @@ export function WalletTrackerProvider({
 
     // Cleanup on unmount or when user changes
     return () => {
+      reconnectAttempts = 0;
       if (reconnectTimeout) {
         clearTimeout(reconnectTimeout);
       }
       if (connection) {
-        console.log("🔌 Closing WebSocket connection (cleanup)...");
+        console.log("Closing WebSocket connection (cleanup)...");
         connection.close();
       }
       subscribedWalletsRef.current = [];

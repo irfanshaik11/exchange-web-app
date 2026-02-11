@@ -645,6 +645,21 @@ const MyApp: AppType = ({ Component, pageProps }) => {
     document.head.appendChild(script);
   }, []);
 
+  // Register image caching service worker (production only)
+  useEffect(() => {
+    if (typeof window === 'undefined' || !('serviceWorker' in navigator)) return;
+    if (process.env.NODE_ENV !== 'production') return;
+
+    navigator.serviceWorker
+      .register('/sw.js', { scope: '/' })
+      .then((reg) => {
+        console.log('[SW] Image cache registered, scope:', reg.scope);
+      })
+      .catch((err) => {
+        console.warn('[SW] Registration failed:', err);
+      });
+  }, []);
+
   return (
     <>
       <Head>

@@ -88,11 +88,11 @@ import { useQuickBuy } from "~/components/QuickBuyContext";
 import {
   extractTokenImage,
   getResolvedTokenImage,
-  isMetadataUrl,
+  getCachedResolvedImage,
   resolveMetadataImage,
 } from "~/utils/images";
 import { useSolPrice } from "~/components/SolPriceContext";
-import { preloadTokenImages } from "~/utils/imagePreloader";
+import { preloadTokenImages, preloadMetadataImages } from "~/utils/imagePreloader";
 import {
   tradeBuy,
   createLimitOrder,
@@ -103,6 +103,8 @@ import { getPoolTypeFromToken } from "~/utils/poolTypeDetection";
 import { mapTradeErrorMessage } from "~/utils/tradeErrorMessages";
 import { TokenAge } from "./TokenAge";
 import { prefetchTradeData } from "~/utils/tokenCache";
+import { prefetchOHLC } from "~/hooks/useBackgroundOHLCPreload";
+import { prefetchTokenTrades } from "~/utils/rollingTradeCache";
 import {
   showCenteredErrorToast,
   showCenteredSuccessToast,
@@ -1514,34 +1516,34 @@ function TokenImage({
   const [showPreview, setShowPreview] = useState(false);
   const [previewPosition, setPreviewPosition] = useState({ top: 0, left: 0 });
   const imageContainerRef = useRef<HTMLDivElement>(null);
-  const [resolvedImageUrl, setResolvedImageUrl] = useState<string | null>(null);
 
   // Extract image URL from token data, checking multiple possible field names
   // Priority: image_url, image, logo, uri (updated for API compatibility)
   const rawImageUrl = extractTokenImage(token as any) || null;
-  const metadataCandidate = isMetadataUrl(rawImageUrl || "")
-    ? rawImageUrl
-    : isMetadataUrl((token as any)?.uri)
-      ? (token as any).uri
-      : null;
+  // uri is a metadata URI by definition — only use when no direct image available
+  const tokenUri = (token as any)?.uri || null;
+  const metadataCandidate = !rawImageUrl ? tokenUri : null;
+
+  // Sync-initialize from metadata cache to eliminate skeleton flash on re-mount
+  const [resolvedImageUrl, setResolvedImageUrl] = useState<string | null>(() => {
+    if (metadataCandidate) {
+      // force=true: uri IS metadata by definition, skip isMetadataUrl check
+      const cached = getCachedResolvedImage(metadataCandidate, true);
+      if (cached) return cached;
+      return null; // will resolve async in effect
+    }
+    return rawImageUrl; // non-metadata URL, use immediately
+  });
 
   // If the image URL is a JSON metadata URL, resolve it asynchronously
   useEffect(() => {
     let cancelled = false;
 
     if (metadataCandidate) {
-      // Resolve metadata JSON to get actual image URL
-      resolveMetadataImage(metadataCandidate).then((resolved) => {
+      // force=true: resolve any URI regardless of host whitelist
+      resolveMetadataImage(metadataCandidate, true).then((resolved) => {
         if (!cancelled) {
-          if (resolved) {
-            setResolvedImageUrl(resolved);
-          } else {
-            // Metadata resolution failed - only use rawImageUrl if it's not a metadata URL
-            // Never fallback to metadataCandidate (JSON URL) as that would try to load JSON as image
-            setResolvedImageUrl(
-              rawImageUrl && !isMetadataUrl(rawImageUrl) ? rawImageUrl : null,
-            );
-          }
+          setResolvedImageUrl(resolved || null);
         }
       });
     } else {
@@ -2494,9 +2496,12 @@ function PulseTable({
         limit: 20,
         priority: "high",
         maxConcurrent: 10,
-      }).catch(() => {
-        // Silently fail - don't log to avoid console spam
-      });
+      }).catch(() => {});
+      // Also resolve and preload metadata images (irys.xyz, arweave, IPFS, etc.)
+      preloadMetadataImages(tokens, {
+        limit: 20,
+        maxConcurrent: 5,
+      }).catch(() => {});
     }
   }, [tokens]);
 
@@ -7477,6 +7482,12 @@ function PulseTable({
                         } catch {
                           // Silently fail - non-critical operation
                         }
+
+                        // Prefetch OHLC data so chart loads instantly on click
+                        prefetchOHLC(tokenMint);
+
+                        // Prefetch trade data so trades tab loads instantly on click
+                        prefetchTokenTrades(token);
                       }, { timeout: 500 });
                     }
                   }}

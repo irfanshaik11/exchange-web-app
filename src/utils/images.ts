@@ -112,9 +112,9 @@ export function isMetadataUrl(url: string | null | undefined): boolean {
   try {
     const { hostname, pathname } = new URL(lower);
     const isMetadataHost =
-      hostname.includes('metadata.j7tracker.com') ||
-      hostname.includes('metadata.rapidlaunch.io') ||
-      hostname.includes('metadata.uxento.io');
+      hostname.endsWith('.j7tracker.com') || hostname === 'j7tracker.com' ||
+      hostname.endsWith('.rapidlaunch.io') || hostname === 'rapidlaunch.io' ||
+      hostname.endsWith('.uxento.io') || hostname === 'uxento.io';
     if (isMetadataHost) {
       return (
         pathname.endsWith('.json') ||
@@ -132,6 +132,13 @@ export function isMetadataUrl(url: string | null | undefined): boolean {
 
     // Arweave URLs without extensions are often JSON metadata
     if (hostname.includes('arweave')) return true;
+
+    // Irys (formerly Bundlr) gateway — serves Arweave metadata JSON
+    if (hostname.includes('irys.xyz')) return true;
+
+    // Generic: if last path segment is a long hash/CID (>30 chars, no extension), likely metadata
+    const lastSegment = pathname.split('/').filter(Boolean).pop() || '';
+    if (lastSegment.length > 30 && !/\.\w{2,5}$/.test(lastSegment)) return true;
   } catch {
     // If URL parse fails, fall through
   }
@@ -148,13 +155,18 @@ const SUCCESS_TTL_MS = 30 * 60 * 1000;
 // Failure cache: 30 seconds (allows quick retry for IPFS propagation)
 const FAILURE_TTL_MS = 30 * 1000;
 
+// In-flight promise deduplication: prevents multiple concurrent fetches for the same URL
+// (3 call sites fire simultaneously per metadata URL — PulseTable preload, row effect, FastImage)
+const pendingResolves = new Map<string, Promise<string | null>>();
+
 /**
  * Resolve a metadata JSON URL to get the actual image URL
  * Returns null if resolution fails or URL is not a metadata URL
  * Uses TTL-based caching: success cached for 30min, failure cached for 30sec
+ * Deduplicates in-flight requests: concurrent calls for the same URL share one fetch
  */
-export async function resolveMetadataImage(url: string): Promise<string | null> {
-  if (!url || !isMetadataUrl(url)) return null;
+export async function resolveMetadataImage(url: string, force = false): Promise<string | null> {
+  if (!url || (!force && !isMetadataUrl(url))) return null;
 
   // Check cache with TTL
   const cached = metadataImageCache.get(url);
@@ -168,28 +180,52 @@ export async function resolveMetadataImage(url: string): Promise<string | null> 
     metadataImageCache.delete(url);
   }
 
-  try {
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 5000);
+  // Deduplicate: piggyback on existing in-flight fetch
+  const pending = pendingResolves.get(url);
+  if (pending) return pending;
 
+  const promise = _doResolveMetadataImage(url);
+  pendingResolves.set(url, promise);
+  promise.finally(() => pendingResolves.delete(url));
+  return promise;
+}
+
+/**
+ * Internal: performs the actual metadata fetch with separate AbortControllers
+ * for primary and fallback fetches (so fallback gets a full timeout window)
+ */
+async function _doResolveMetadataImage(url: string): Promise<string | null> {
+  try {
     const metadataUrl = url.startsWith('/api/metadata')
       ? url
       : `/api/metadata?url=${encodeURIComponent(url)}`;
 
-    let response = await fetch(metadataUrl, {
-      signal: controller.signal,
-      headers: { 'Accept': 'application/json' },
-    });
-    // Fallback: try direct fetch if proxy fails (e.g., unsupported host)
-    if (!response.ok && metadataUrl !== url) {
-      response = await fetch(url, {
-        signal: controller.signal,
+    // Primary fetch with its own timeout
+    let response: Response | null = null;
+    try {
+      const ctrl = new AbortController();
+      const t = setTimeout(() => ctrl.abort(), 5000);
+      response = await fetch(metadataUrl, {
+        signal: ctrl.signal,
         headers: { 'Accept': 'application/json' },
       });
-    }
-    clearTimeout(timeoutId);
+      clearTimeout(t);
+    } catch {}
 
-    if (!response.ok) {
+    // Fallback: direct fetch with separate timeout if proxy failed
+    if ((!response || !response.ok) && metadataUrl !== url) {
+      try {
+        const ctrl = new AbortController();
+        const t = setTimeout(() => ctrl.abort(), 5000);
+        response = await fetch(url, {
+          signal: ctrl.signal,
+          headers: { 'Accept': 'application/json' },
+        });
+        clearTimeout(t);
+      } catch {}
+    }
+
+    if (!response || !response.ok) {
       metadataImageCache.set(url, { image: null, timestamp: Date.now() });
       return null;
     }
@@ -220,6 +256,17 @@ export async function resolveMetadataImage(url: string): Promise<string | null> 
  */
 export function clearMetadataImageCache(): void {
   metadataImageCache.clear();
+}
+
+/**
+ * Clear only a specific failure entry from the metadata cache
+ * Used by FastImage retry logic to allow a fresh resolve attempt
+ */
+export function clearMetadataFailureCache(url: string): void {
+  const cached = metadataImageCache.get(url);
+  if (cached && cached.image === null) {
+    metadataImageCache.delete(url);
+  }
 }
 
 // Expose cache clear to window for debugging
@@ -259,8 +306,8 @@ export function extractMetaImage(meta: any): string | null {
  * Returns the resolved image if cached, null otherwise
  * Use this when you need to check the cache without async resolution
  */
-export function getCachedResolvedImage(url: string | null): string | null {
-  if (!url || !isMetadataUrl(url)) return null;
+export function getCachedResolvedImage(url: string | null, force = false): string | null {
+  if (!url || (!force && !isMetadataUrl(url))) return null;
 
   const cached = metadataImageCache.get(url);
   if (cached) {

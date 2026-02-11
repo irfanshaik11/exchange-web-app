@@ -10,7 +10,7 @@
 /* eslint-disable no-restricted-globals */
 
 const CACHE_NAME = 'pulse-image-cache-v1';
-const MAX_CACHE_SIZE = 150; // Max images to cache
+const MAX_CACHE_SIZE = 500; // Max images to cache (covers all 450 possible tokens)
 
 /**
  * Check if a request is for an image

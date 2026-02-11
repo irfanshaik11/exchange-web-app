@@ -31,7 +31,6 @@ interface InitialTradeDataResponse {
   trades: TradeData[];
   stats: TokenStats | null;
   recentTrades?: any[];
-  ohlcData?: any; // OHLC data for charts
 }
 
 interface UseInitialTradeDataResult {
@@ -226,39 +225,12 @@ export default function useInitialTradeData(
         );
       }
 
-      // OHLC data (if we have token address)
-      if (token) {
-        let ohlcUrl: URL;
-        if (chain === 'monad') {
-          // Monad uses old endpoint format
-          ohlcUrl = new URL(`${env.NEXT_PUBLIC_MONAD_TOKEN_SERVICE_URL}/v1/trade/ohlc-data`);
-          ohlcUrl.searchParams.set('mint', token);
-          ohlcUrl.searchParams.set('interval', '1h');
-          ohlcUrl.searchParams.set('timeframe', '7d');
-        } else {
-          // Solana uses new /v1/ohlcv/{tokenAddress} endpoint with 1s candles
-          ohlcUrl = new URL(`${baseUrl}/v1/ohlcv/${token}`);
-          ohlcUrl.searchParams.set('timeframe', '1s');
-          ohlcUrl.searchParams.set('limit', '500');
-        }
-
-        requests.push(
-          fetch(ohlcUrl.toString(), {
-            headers: {
-              'accept': 'application/json',
-              'X-API-Key': env.NEXT_PUBLIC_BACKEND_API_KEY || 'test-key',
-            },
-            signal: controller.signal,
-          })
-        );
-      }
-
       // Execute all requests in parallel
       const responses = await Promise.all(requests);
       clearTimeout(timeoutId);
-      
+
       // Parse responses
-      const [tradesResponse, statsResponse, ohlcResponse] = responses;
+      const [tradesResponse, statsResponse] = responses;
       
       // Handle 404 gracefully - new tokens may not have trade data yet
       if (!tradesResponse.ok) {
@@ -276,7 +248,6 @@ export default function useInitialTradeData(
 
       const tradesData = await tradesResponse.json();
       let statsData = null;
-      let ohlcData = null;
 
       // Parse stats data if available
       if (statsResponse && statsResponse.ok) {
@@ -284,33 +255,6 @@ export default function useInitialTradeData(
           statsData = await statsResponse.json();
         } catch (err) {
           console.warn('[useInitialTradeData] Failed to parse stats:', err);
-        }
-      }
-
-      // Parse OHLC data if available
-      if (ohlcResponse && ohlcResponse.ok) {
-        try {
-          const rawOhlc = await ohlcResponse.json();
-          // Handle different response formats: Solana uses candles[], Monad uses data.items[]
-          if (chain === 'sol' && rawOhlc?.candles) {
-            ohlcData = {
-              data: {
-                items: rawOhlc.candles.map((c: any) => ({
-                  unix_time: c.time || c.unix_time,
-                  o: c.open ?? c.o,
-                  h: c.high ?? c.h,
-                  l: c.low ?? c.l,
-                  c: c.close ?? c.c,
-                  v_usd: c.volume ?? c.volume_usd ?? c.v_usd ?? 0,
-                }))
-              }
-            };
-          } else {
-            ohlcData = rawOhlc;
-          }
-          console.log(`[useInitialTradeData] Fetched ${ohlcData?.data?.items?.length || 0} OHLC candles`);
-        } catch (err) {
-          console.warn('[useInitialTradeData] Failed to parse OHLC data:', err);
         }
       }
 
@@ -329,7 +273,6 @@ export default function useInitialTradeData(
         trades,
         stats: formattedStats,
         recentTrades: tradesData.recentTrades,
-        ohlcData: ohlcData?.data?.items || null,
       };
 
       console.log(`[useInitialTradeData] Fetched ${trades.length} trades`);

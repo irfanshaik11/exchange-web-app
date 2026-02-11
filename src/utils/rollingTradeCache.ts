@@ -325,6 +325,16 @@ class RollingTradeCacheManager {
   }
 
   /**
+   * Prefetch trade data for a single token on hover.
+   * Called from PulseTable onMouseEnter for instant trade loading on click.
+   */
+  async prefetchToken(token: Token): Promise<void> {
+    if (this.isCached(token.mint)) return;
+    if (!token.pair_address) return;
+    await this.preloadSingleToken(token);
+  }
+
+  /**
    * Get cached trade data for a token
    */
   getCachedTradeData(mintAddress: string): CachedTradeData | null {
@@ -490,6 +500,11 @@ class RollingTradeCacheManager {
 
 // Export singleton instance
 export const rollingTradeCache = RollingTradeCacheManager.getInstance();
+
+// Hover prefetch helper — fire-and-forget from PulseTable onMouseEnter
+export const prefetchTokenTrades = (token: any) => {
+  rollingTradeCache.prefetchToken(token as Token).catch(() => {});
+};
 
 // React hook for easy integration
 export function useRollingTradeCache() {

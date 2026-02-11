@@ -26,10 +26,12 @@ export default function Document() {
   });
 
   function clearAllCaches(cb){
-    var done=0,total=2;
+    var done=0,total=1;
     function check(){if(++done>=total&&cb)cb();}
-    if(navigator.serviceWorker){navigator.serviceWorker.getRegistrations().then(function(r){r.forEach(function(s){s.unregister()});check()}).catch(check);}else{check();}
-    if(typeof caches!=='undefined'){caches.keys().then(function(k){Promise.all(k.map(function(n){return caches.delete(n)})).then(check).catch(check)}).catch(check);}else{check();}
+    if(typeof caches!=='undefined'){caches.keys().then(function(k){
+      var toDelete=k.filter(function(n){return n.indexOf('pulse-image-cache')===-1;});
+      return Promise.all(toDelete.map(function(n){return caches.delete(n)}));
+    }).then(check).catch(check);}else{check();}
   }
 
   function showFallback(){

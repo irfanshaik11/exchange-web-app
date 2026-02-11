@@ -1,75 +1,5 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 
-const ALLOWED = [
-  'cloudflare-ipfs.com',
-  'ipfs.io',
-  'gateway.pinata.cloud',
-  'nftstorage.link',
-  'gateway.ipfs.io',
-  'cf-ipfs.com',
-  'mypinata.cloud',
-  'arweave.net',
-  'arweave.dev',
-  'shdw-drive.genesysgo.net',
-  'shdw.link',
-  'cdn.moonshot.com',
-  'meta.huma.finance',
-  'cdn.kamino.finance',
-  'file.dexlab.space',
-  'gateway.irys.xyz',
-  'static-create.jup.ag',
-  'pump.fun',
-  'cdn.pump.fun',
-  'moonitcdn.io',
-  'metadata.pumployer.fun',
-  'metadata.rapidlaunch.io',
-  'rapidlaunch.io',
-  'image.solanatracker.io',
-  'solanatracker.io',
-  'wormhole.com',
-  'raw.githubusercontent.com',
-  'githubusercontent.com',
-  'cdn.discordapp.com',
-  'token-media.defined.fi',
-  // Common CDN/hosts seen in token logos
-  'digitaloceanspaces.com',
-  'amazonaws.com',
-  'cloudfront.net',
-  'twimg.com',
-  'pbs.twimg.com',
-  'googleusercontent.com',
-  'googleapis.com',
-  'assets.coingecko.com',
-  'coingecko.com',
-  'solscan.io',
-  'raydium.io',
-  'tokens.debridge.finance',
-  'debridge.finance',
-  'launchonsoar.com',
-  'media.launchonsoar.com',
-  'image.solanatracker.io',
-  'ipfs-forward.solanatracker.io',
-  // Allow all subdomains of common CDNs that serve PNGs
-  's3.amazonaws.com',
-  's3.us-east-1.amazonaws.com',
-  's3.us-west-2.amazonaws.com',
-  // Narrative/Trade domains
-  'narrative.trade',
-  'token.narrative.trade',
-  // Filebase IPFS hosting
-  'myfilebase.com',
-  // Monad token image storage
-  'storage.nadapp.net',
-  'nadapp.net',
-  'edge.uxento.io',
-  'uxento.io',
-  'cdninstagram.com',
-  'instagram.com',
-  'ipfs.storacha.link',
-  'storacha.link',
-  'content.coinwave.gg',
-];
-
 // Allowed image MIME types - only image types are permitted
 // NOTE: SVG is allowed but guarded later to block obvious script tags
 const ALLOWED_IMAGE_TYPES = [
@@ -85,10 +15,6 @@ const ALLOWED_IMAGE_TYPES = [
   'image/vnd.microsoft.icon',
   'image/ico',
 ];
-
-function isAllowedHost(host: string) {
-  return ALLOWED.some(d => host === d || host.endsWith('.' + d));
-}
 
 function isValidImageMimeType(contentType: string | null): boolean {
   if (!contentType) return false;
@@ -362,11 +288,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const promises = candidates.map(async (tryUrl) => {
       try {
         const controller = new AbortController();
-        const t = setTimeout(() => controller.abort(), 7000);
+        const t = setTimeout(() => controller.abort(), 12000);
         const fetchOptions: RequestInit = {
           headers: { 'Accept': 'image/*,*/*;q=0.8', 'User-Agent': 'Interstate-ImageProxy/1.0' },
           signal: controller.signal,
           cache: 'force-cache',
+          redirect: 'follow',
         };
         // Allow self-signed HTTP hosts (common on IPFS gateways or custom hosts)
         // Note: Node fetch ignores agent unless provided; here we just retry HTTP as-is
@@ -395,7 +322,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         const ct = lastNonOk.resp.headers.get('content-type') || 'application/octet-stream';
         setSecurityHeaders(res);
         res.setHeader('Content-Type', ct);
-        res.setHeader('Cache-Control', 'public, max-age=86400, s-maxage=86400, stale-while-revalidate=86400');
+        res.setHeader('Cache-Control', 'public, max-age=60, s-maxage=60');
         return res.status(lastNonOk.resp.status).send(buf);
       }
       console.error('[image proxy] error:', lastErr?.message || lastErr);
@@ -408,11 +335,54 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     // Get content type from header and normalize
     const headerContentType = upstream.headers.get('content-type');
     let contentType = headerContentType?.split(';')[0].trim().toLowerCase() || '';
+
+    // AUTO-RESOLVE: If upstream returned JSON metadata, extract the actual image URL and fetch it
+    const isJsonResponse = contentType === 'application/json' || contentType === 'text/json';
+    if (isJsonResponse && body.length < 50000) {
+      try {
+        const meta = JSON.parse(body.toString('utf-8'));
+        const imageField = meta?.image || meta?.image_url || meta?.logo || meta?.icon
+          || meta?.imageUri || meta?.img || meta?.thumbnail
+          || meta?.properties?.image || meta?.properties?.image_url;
+        const filesImage = Array.isArray(meta?.properties?.files) && meta.properties.files.length > 0
+          ? (typeof meta.properties.files[0] === 'string' ? meta.properties.files[0] : meta.properties.files[0]?.uri)
+          : null;
+        const resolvedImageUrl = imageField || filesImage;
+
+        if (resolvedImageUrl && typeof resolvedImageUrl === 'string' && resolvedImageUrl.startsWith('http')) {
+          console.log(`[image proxy] JSON metadata detected, resolving to: ${resolvedImageUrl.substring(0, 80)}`);
+          const imgController = new AbortController();
+          const imgTimeout = setTimeout(() => imgController.abort(), 12000);
+          const imgResponse = await fetch(resolvedImageUrl, {
+            headers: { 'Accept': 'image/*,*/*;q=0.8', 'User-Agent': 'Interstate-ImageProxy/1.0' },
+            signal: imgController.signal,
+            redirect: 'follow',
+          });
+          clearTimeout(imgTimeout);
+
+          if (imgResponse.ok) {
+            const imgBody = Buffer.from(await imgResponse.arrayBuffer());
+            const imgContentType = imgResponse.headers.get('content-type')?.split(';')[0].trim().toLowerCase() || '';
+            let finalType = imgContentType;
+            if (!isValidImageMimeType(finalType)) {
+              finalType = inferImageMimeType(imgBody) || 'application/octet-stream';
+            }
+            setSecurityHeaders(res);
+            res.setHeader('Content-Type', finalType);
+            res.setHeader('Cache-Control', 'public, max-age=604800, s-maxage=604800, stale-while-revalidate=86400');
+            return res.status(200).send(imgBody);
+          }
+        }
+      } catch (e) {
+        console.log('[image proxy] JSON auto-resolve failed, serving original:', (e as any)?.message);
+      }
+    }
+
     const headerSaysImage =
       contentType.startsWith('image/') ||
       contentType.startsWith('video/') ||
       contentType.startsWith('audio/');
-    
+
     // If Content-Type is missing or invalid, try to infer from image content
     if (!isValidImageMimeType(contentType)) {
       const inferredType = inferImageMimeType(body);
@@ -433,8 +403,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     
     // Set response headers
     res.setHeader('Content-Type', baseContentType);
-    res.setHeader('Cache-Control', 'public, max-age=86400, s-maxage=86400, stale-while-revalidate=86400');
-    
+    res.setHeader('Cache-Control', 'public, max-age=604800, s-maxage=604800, stale-while-revalidate=86400');
+
     // Send validated image content
     res.status(200).send(body);
   } catch (err: any) {
