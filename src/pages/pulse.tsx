@@ -1316,7 +1316,7 @@ export default function PulsePage() {
       try {
         console.log(`[Pulse] 🔄 Fetching initial migrated tokens...`);
         // Use Next.js proxy to avoid CORS issues
-        const endpoint = `/api/token-service/pulse-migrated?limit=70`;
+        const endpoint = `/api/token-service/pulse-migrated?limit=50`;
         console.log(`[Pulse] 🔄 URL:`, endpoint);
         console.log(`[Pulse] 🔄 Chain: Solana`);
         const response = await fetch(endpoint, {

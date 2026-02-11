@@ -183,7 +183,7 @@ export function useCachedMigratedTokens() {
 
     try {
       // Use Next.js API route which proxies to the backend
-      const apiUrl = `/api/token-service/pulse-migrated?limit=70&t=${Date.now()}`;
+      const apiUrl = `/api/token-service/pulse-migrated?limit=50&t=${Date.now()}`;
 
       console.log('[Migrated] Fetching from:', apiUrl);
       const response = await fetch(apiUrl);

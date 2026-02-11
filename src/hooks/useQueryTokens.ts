@@ -87,7 +87,7 @@ const CACHE_KEYS = {
 
 async function fetchNewPairs(): Promise<Token[]> {
   // Use Next.js API proxy to ensure proper field mapping (mint_address, etc.)
-  const apiUrl = `/api/token-service/pulse-new?limit=500&fresh=1&t=${Date.now()}`;
+  const apiUrl = `/api/token-service/pulse-new?limit=50&fresh=1&t=${Date.now()}`;
   const response = await fetch(apiUrl, {
     cache: 'no-store',
     headers: {
@@ -106,7 +106,7 @@ async function fetchNewPairs(): Promise<Token[]> {
 }
 
 async function fetchFinalStretch(): Promise<Token[]> {
-  const apiUrl = `/api/token-service/pulse-final-stretch?limit=100&t=${Date.now()}`;
+  const apiUrl = `/api/token-service/pulse-final-stretch?limit=50&t=${Date.now()}`;
   const response = await fetch(apiUrl);
   if (!response.ok) throw new Error(`Failed to fetch: ${response.status}`);
   const data = await response.json();
@@ -119,7 +119,7 @@ async function fetchFinalStretch(): Promise<Token[]> {
 }
 
 async function fetchMigrated(): Promise<Token[]> {
-  const apiUrl = `/api/token-service/pulse-migrated?limit=30&t=${Date.now()}`;
+  const apiUrl = `/api/token-service/pulse-migrated?limit=50&t=${Date.now()}`;
   const response = await fetch(apiUrl);
   if (!response.ok) throw new Error(`Failed to fetch: ${response.status}`);
   const data = await response.json();
