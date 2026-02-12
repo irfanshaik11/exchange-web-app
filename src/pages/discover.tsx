@@ -911,9 +911,10 @@ export default function DiscoverPage() {
     const CACHE_TTL = 30 * 1000; // Trigger background refresh after 30s
     const STALE_THRESHOLD = 5 * 60 * 1000; // Treat cache as stale after 5 minutes (but still usable)
 
-    // Check if we already have valid cached data in state for current chain - if so, skip fetching
-    // This prevents re-fetching when navigating back to the page
-    // Use ref to get current value (updated via useEffect above)
+    // If we already have valid cached data in state for the current chain,
+    // skip the initial fetch to avoid a loading flash — but still fall through
+    // to the main 60s interval so live updates keep flowing.
+    let skipInitialFetch = false;
     const currentChainData = newPairsRawByChainRef.current[currentChain] || [];
     if (currentChainData.length > 0) {
       try {
@@ -921,72 +922,13 @@ export default function DiscoverPage() {
         if (cached) {
           const parsed = JSON.parse(cached);
           const age = Date.now() - parsed.timestamp;
-          // If we have data in state and cache is still valid, skip fetching
           if (age < STALE_THRESHOLD && parsed.data && parsed.data.length > 0) {
-            console.log('[Discover] Already have cached data in state, skipping re-fetch on navigation');
-            // Just set up the refresh interval for stale cache updates
-            intervalId = setInterval(() => {
-              if (cancelled) return;
-              const cachedData = localStorage.getItem(CACHE_KEY);
-              if (cachedData) {
-                const parsed = JSON.parse(cachedData);
-                const age = Date.now() - parsed.timestamp;
-                // Only refresh if cache is stale (will be handled by fetchNewPairs below)
-                if (age > CACHE_TTL) {
-                  // Trigger a silent background refresh
-                  // Use appropriate endpoint based on chain
-                  const chainToUse = currentChain || (router.query.chain as string) || 'sol';
-                  const apiUrl = chainToUse === 'monad'
-                    ? `/api/token-service/pulse-new-monad?limit=200`
-                    : `/api/token-service/pulse-new?limit=200`;
-                  fetch(apiUrl, {
-                    headers: { 
-                      'Cache-Control': 'no-cache', 
-                      Pragma: 'no-cache',
-                      'Accept': 'application/json'
-                    },
-                  })
-                    .then(res => res.ok ? res.json() : null)
-                    .then(data => {
-                      if (!cancelled && data) {
-                        // Handle multiple formats:
-                        // 1. Direct array
-                        // 2. Monad format: {status, count, data: [...]}
-                        // 3. Birdeye format: {data: {tokens: [...]}}
-                        let tokensArray: any[] = [];
-                        if (Array.isArray(data)) {
-                          tokensArray = data;
-                        } else if (data?.data) {
-                          if (Array.isArray(data.data)) {
-                            tokensArray = data.data;
-                          } else if (data.data?.tokens && Array.isArray(data.data.tokens)) {
-                            tokensArray = data.data.tokens;
-                          }
-                        }
-                        if (tokensArray.length > 0) {
-                          // Process and save to cache (simplified - just update cache)
-                          localStorage.setItem(CACHE_KEY, JSON.stringify({
-                            data: tokensArray,
-                            timestamp: Date.now(),
-                          }));
-                        }
-                      }
-                    })
-                    .catch(err => console.error('[Discover] Background refresh failed:', err));
-                }
-              }
-            }, 60_000);
-            
-            return () => {
-              cancelled = true;
-              if (intervalId) {
-                clearInterval(intervalId);
-              }
-            };
+            console.log('[Discover] Already have cached data in state, skipping initial fetch');
+            skipInitialFetch = true;
           }
         }
       } catch {
-        // Continue with normal flow if check fails
+        // Continue with normal flow
       }
     }
 
@@ -1631,20 +1573,23 @@ export default function DiscoverPage() {
       }
     };
 
-    // Check if we already have data from initial state (cached) for current chain
-    // Use ref to get current value
-    const hasInitialData = (newPairsRawByChainRef.current[currentChain] || []).length > 0;
-    
-    if (hasInitialData) {
-      // We have cached data from initial state, don't show loading, just refresh in background silently
-      // Ensure loading is false since we have cached data
-      setNewPairsLoading(false);
-      fetchNewPairs(false, false).catch(err => {
-        console.error('[Discover] Background fetch failed:', err);
-      });
+    if (!skipInitialFetch) {
+      // Check if we already have data from initial state (cached) for current chain
+      const hasInitialData = (newPairsRawByChainRef.current[currentChain] || []).length > 0;
+
+      if (hasInitialData) {
+        // We have cached data from initial state, don't show loading, just refresh in background silently
+        setNewPairsLoading(false);
+        fetchNewPairs(false, false).catch(err => {
+          console.error('[Discover] Background fetch failed:', err);
+        });
+      } else {
+        // No cache, fetch with loading state only on first load
+        fetchNewPairs(true, true);
+      }
     } else {
-      // No cache, fetch with loading state only on first load
-      fetchNewPairs(true, true);
+      // skipInitialFetch: we have fresh cached data, just ensure loading is off
+      setNewPairsLoading(false);
     }
     
     // Refresh every 60 seconds (silently, no loading state)

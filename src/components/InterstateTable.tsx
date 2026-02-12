@@ -771,40 +771,25 @@ const TokenInfo: React.FC<{
   // );
 
   const tooltipContent = (
-    <div className="p-3 min-w-[240px]">
-      <div className="mb-3 flex justify-center">
-        <TokenAvatar token={token} meta={meta} loading={loading} showInitial={showInitial} chain={chain} />
-      </div>
-      <div className="mb-3 text-center">
-        <div className="text-lg font-bold mb-1" style={{ color: AX.text }}>{token.name}</div>
-        <div className="text-sm font-medium mb-2" style={{ color: AX.muted }}>({token.symbol})</div>
-        <p className="text-base font-semibold" style={{ color: AX.text }}>
-          $<SubscriptNumber value={token.usd_price} />{' '}
-          <span className={`text-sm ${isDiscoverPage ? '' : (token.price_percent_change_1h >= 0 ? 'text-emerald-400' : 'text-red-400')}`} style={isDiscoverPage ? { color: token.price_percent_change_1h >= 0 ? '#85d99f' : '#f26681' } : {}}>
-            {formatPercentChange(token.price_percent_change_1h)}%
-          </span>
-        </p>
-      </div>
-      {/* {similarTokens.length > 0 && (
-        <div className="border-t border-neutral-700 pt-2">
-          <p className="mb-2 text-xs font-semibold text-neutral-300">Similar Tokens:</p>
-          <div className="space-y-1">
-            {similarTokens.map((similarTokenRow, idx) => (
-              <div key={idx} className="flex items-center gap-2 text-xs">
-                <div className="w-6 h-6 rounded bg-neutral-700 flex-shrink-0"></div>
-                <span className="text-neutral-300 truncate flex-1">
-                  {similarTokenRow.token.name}
-                </span>
-                <span className="text-neutral-500 text-[10px]">
-                  {similarTokenRow.token.created_at 
-                    ? `${Math.floor((Date.now() - new Date(similarTokenRow.token.created_at).getTime()) / (1000 * 60 * 60 * 24))}d` 
-                    : '-'}
-                </span>
-              </div>
-            ))}
+    <div style={{ width: 180 }}>
+      <div className="overflow-hidden rounded-lg" style={{ width: 180, height: 180 }}>
+        {tokenImage ? (
+          <img
+            src={`/api/image?url=${encodeURIComponent(tokenImage)}`}
+            alt={token.name || token.symbol || ''}
+            className="w-full h-full object-cover"
+          />
+        ) : (
+          <div className="w-full h-full flex items-center justify-center" style={{ backgroundColor: AX.surface2 }}>
+            <span className="text-5xl font-bold" style={{ color: AX.text }}>
+              {token.name?.charAt(0)?.toUpperCase() || '?'}
+            </span>
           </div>
-        </div>
-      )} */}
+        )}
+      </div>
+      <div className="mt-1.5 text-center truncate text-sm font-semibold" style={{ color: AX.text }}>
+        {token.name}
+      </div>
     </div>
   );
 
@@ -832,6 +817,7 @@ const TokenInfo: React.FC<{
         xOffset="ml-0"
         label={tooltipContent}
         className="bg-neutral-900/100"
+        noPadding
       >
         <TokenAvatar token={token} meta={meta} loading={loading} showInitial={showInitial} chain={chain} />
       </InterstateTooltip>

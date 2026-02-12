@@ -10,9 +10,10 @@ type InterstateTooltipProps = {
   height?: number; // New: direct height in pixels
   isDiv?: boolean
   className?: string
+  noPadding?: boolean
 };
 
-const InterstateTooltip: React.FC<InterstateTooltipProps> = ({ label, children, widthClass = 'max-w-md', xOffset = '-translate-x-1/2', width, height, className }) => {
+const InterstateTooltip: React.FC<InterstateTooltipProps> = ({ label, children, widthClass = 'max-w-md', xOffset = '-translate-x-1/2', width, height, className, noPadding }) => {
   const [show, setShow] = React.useState(false);
   const [position, setPosition] = React.useState({ top: 0, left: 0 });
   const triggerRef = React.useRef<HTMLSpanElement>(null);
@@ -41,7 +42,7 @@ const InterstateTooltip: React.FC<InterstateTooltipProps> = ({ label, children, 
 
   const tooltip = show ? (
     <span
-      className={`fixed z-[999999] rounded-lg bg-[#17191E] border border-[#2A2B33] shadow-lg shadow-black/30 px-3 py-2 text-xs whitespace-pre-line text-[#9CA3AF] -translate-y-1/2 ${widthClass} ${className}`}
+      className={`fixed z-[999999] rounded-lg bg-[#17191E] border border-[#2A2B33] shadow-lg shadow-black/30 ${noPadding ? 'p-1' : 'px-3 py-2'} text-xs whitespace-pre-line text-[#9CA3AF] -translate-y-1/2 ${widthClass} ${className}`}
       style={tooltipStyle}
     >
       {typeof label === 'string' ? label : label}
