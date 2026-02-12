@@ -106,10 +106,8 @@ const Positions: React.FC<PositionsProps> = ({
     return `positions_cache_${userId}_${chainSuffix}`;
   }, [userId, blockchain]);
 
-  // Cache TTL: 30 seconds (short to prevent stale data, but long enough for instant display)
-  const POSITIONS_CACHE_TTL_MS = 30 * 1000;
-
   // Initialize positions from localStorage cache for instant display
+  // No TTL gating — background fetch always runs on mount and replaces cached data within seconds
   const [positions, setPositions] = useState<PositionRow[]>(() => {
     if (skipFetch || !userId || typeof window === 'undefined') return [];
     try {
@@ -120,12 +118,7 @@ const Positions: React.FC<PositionsProps> = ({
       const cached = window.localStorage.getItem(cacheKey);
       if (cached) {
         const parsed = JSON.parse(cached);
-        if (
-          parsed &&
-          Array.isArray(parsed.data) &&
-          typeof parsed.timestamp === 'number' &&
-          Date.now() - parsed.timestamp <= POSITIONS_CACHE_TTL_MS
-        ) {
+        if (parsed && Array.isArray(parsed.data) && parsed.data.length > 0) {
           console.log(`[Positions] ✅ Restored ${parsed.data.length} positions from cache for instant display`);
           return parsed.data as PositionRow[];
         }
@@ -147,7 +140,7 @@ const Positions: React.FC<PositionsProps> = ({
       const cached = window.localStorage.getItem(cacheKey);
       if (cached) {
         const parsed = JSON.parse(cached);
-        if (parsed?.data?.length > 0 && Date.now() - parsed.timestamp <= 30000) {
+        if (parsed?.data?.length > 0) {
           return false; // Have valid cache, don't show loading
         }
       }
@@ -167,7 +160,7 @@ const Positions: React.FC<PositionsProps> = ({
       const cached = window.localStorage.getItem(cacheKey);
       if (cached) {
         const parsed = JSON.parse(cached);
-        if (parsed?.data?.length > 0 && Date.now() - parsed.timestamp <= 30000) {
+        if (parsed?.data?.length > 0) {
           return parsed.data as PositionRow[];
         }
       }
@@ -1055,12 +1048,7 @@ const Positions: React.FC<PositionsProps> = ({
       const cached = window.localStorage.getItem(positionsCacheKey);
       if (cached) {
         const parsed = JSON.parse(cached);
-        if (
-          parsed &&
-          Array.isArray(parsed.data) &&
-          typeof parsed.timestamp === 'number' &&
-          Date.now() - parsed.timestamp <= POSITIONS_CACHE_TTL_MS
-        ) {
+        if (parsed && Array.isArray(parsed.data) && parsed.data.length > 0) {
           console.log(`[Positions] ✅ Loaded ${parsed.data.length} positions from cache (cache key changed)`);
           setPositions(parsed.data as PositionRow[]);
           setLoading(false);
@@ -1069,7 +1057,7 @@ const Positions: React.FC<PositionsProps> = ({
     } catch (error) {
       console.warn(`[Positions] Failed to load cache:`, error);
     }
-  }, [positionsCacheKey, skipFetch, userId, POSITIONS_CACHE_TTL_MS]);
+  }, [positionsCacheKey, skipFetch, userId]);
 
   // If preloaded positions are provided, use them
   useEffect(() => {
@@ -1106,13 +1094,7 @@ const Positions: React.FC<PositionsProps> = ({
           const cached = window.localStorage.getItem(positionsCacheKey);
           if (cached) {
             const parsed = JSON.parse(cached);
-            if (
-              parsed &&
-              Array.isArray(parsed.data) &&
-              parsed.data.length > 0 &&
-              typeof parsed.timestamp === 'number' &&
-              Date.now() - parsed.timestamp <= POSITIONS_CACHE_TTL_MS
-            ) {
+            if (parsed && Array.isArray(parsed.data) && parsed.data.length > 0) {
               hasValidCache = true;
             }
           }
@@ -1221,7 +1203,7 @@ const Positions: React.FC<PositionsProps> = ({
       clearInterval(intervalId);
       window.removeEventListener('solanaQuickTrade', handleQuickTradeEvent);
     };
-  }, [userId, onPositionsChange, skipFetch, blockchain, requestMetadataForTokens, positionsCacheKey, POSITIONS_CACHE_TTL_MS]);
+  }, [userId, onPositionsChange, skipFetch, blockchain, requestMetadataForTokens, positionsCacheKey]);
 
   // Fetch Pump.fun images for positions with missing images
   useEffect(() => {

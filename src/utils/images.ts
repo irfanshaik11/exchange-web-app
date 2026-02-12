@@ -238,6 +238,13 @@ async function _doResolveMetadataImage(url: string): Promise<string | null> {
       return metadataUrl;
     }
 
+    // Only parse as JSON if Content-Type indicates JSON — avoids SyntaxError on
+    // binary responses (JPEG, etc.) from misconfigured upstreams
+    if (!contentType.includes('json')) {
+      metadataImageCache.set(url, { image: null, timestamp: Date.now() });
+      return null;
+    }
+
     const data = await response.json();
 
     // Extract image from metadata JSON

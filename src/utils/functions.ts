@@ -53,6 +53,7 @@ export interface TradeRow {
   createdAt: string;
   tokenName?: string; // Token name from API
   tokenSymbol?: string; // Token symbol from API
+  imageUrl?: string | null; // Token image URL saved during trade
 }
 
 // New: Wallet Interface

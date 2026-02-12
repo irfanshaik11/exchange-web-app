@@ -235,7 +235,7 @@ const ChainIcon = ({ chain = 'sol', size = 'small' }: { chain?: string; size?: '
 // SOL icon component for inline use (kept for backward compatibility)
 const SolIcon = () => <ChainIcon chain="sol" />;
 
-const spotTabs = ["Active Positions", /* "History", */ "Top 100", "Activity", "Predictions"];
+const spotTabs = ["Active Positions", /* "History", */ "Top 100", "Activity", /* "Predictions" */];
 
 // Token metadata cache interface
 interface TokenMetadataCache extends UnifiedTokenMetadata {
@@ -340,9 +340,6 @@ export default function PortfolioPage() {
   })();
   const monBalance = chainBalances?.monad || 0;
   const [walletChecked, setWalletChecked] = useState(false);
-  // Cache TTL: 30 seconds (short to prevent stale data, but long enough for instant display)
-  const TRADE_CACHE_TTL_MS = 30 * 1000;
-
   // Cache keys for trade history and activity (user-specific and chain-specific)
   const tradeHistoryCacheKey = useMemo(() => {
     return `trade_history_cache_${user?.id || 'anonymous'}_${currentChain}`;
@@ -353,20 +350,15 @@ export default function PortfolioPage() {
   }, [user?.id, currentChain]);
 
   // Initialize trade history from localStorage cache for instant display
+  // No TTL gating — background fetch always runs on mount and replaces cached data within seconds
   const [tradeHistory, setTradeHistory] = useState<TradeRow[]>(() => {
     if (!user?.id || typeof window === 'undefined') return [];
     try {
-      // Compute cache key inline for initializer (before useMemo runs)
       const cacheKey = `trade_history_cache_${user.id}_${currentChain}`;
       const cached = window.localStorage.getItem(cacheKey);
       if (cached) {
         const parsed = JSON.parse(cached);
-        if (
-          parsed &&
-          Array.isArray(parsed.data) &&
-          typeof parsed.timestamp === 'number' &&
-          Date.now() - parsed.timestamp <= TRADE_CACHE_TTL_MS
-        ) {
+        if (parsed && Array.isArray(parsed.data) && parsed.data.length > 0) {
           console.log(`[Trade History] ✅ Restored ${parsed.data.length} trades from cache for instant display`);
           return parsed.data as TradeRow[];
         }
@@ -376,23 +368,29 @@ export default function PortfolioPage() {
     }
     return [];
   });
-  const [loadingTradeHistory, setLoadingTradeHistory] = useState(true); // Start with loading, will be set based on cache in useEffect
+  const [loadingTradeHistory, setLoadingTradeHistory] = useState(() => {
+    if (!user?.id || typeof window === 'undefined') return true;
+    try {
+      const cacheKey = `trade_history_cache_${user.id}_${currentChain}`;
+      const cached = window.localStorage.getItem(cacheKey);
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        if (parsed?.data?.length > 0) return false;
+      }
+    } catch { /* ignore */ }
+    return true;
+  });
   
   // Initialize trade activity from localStorage cache for instant display
+  // No TTL gating — background fetch always runs on mount and replaces cached data within seconds
   const [tradeActivity, setTradeActivity] = useState<TradeRow[]>(() => {
     if (!user?.id || typeof window === 'undefined') return [];
     try {
-      // Compute cache key inline for initializer (before useMemo runs)
       const cacheKey = `trade_activity_cache_${user.id}_${currentChain}`;
       const cached = window.localStorage.getItem(cacheKey);
       if (cached) {
         const parsed = JSON.parse(cached);
-        if (
-          parsed &&
-          Array.isArray(parsed.data) &&
-          typeof parsed.timestamp === 'number' &&
-          Date.now() - parsed.timestamp <= TRADE_CACHE_TTL_MS
-        ) {
+        if (parsed && Array.isArray(parsed.data) && parsed.data.length > 0) {
           console.log(`[Trade Activity] ✅ Restored ${parsed.data.length} trades from cache for instant display`);
           return parsed.data as TradeRow[];
         }
@@ -402,7 +400,18 @@ export default function PortfolioPage() {
     }
     return [];
   });
-  const [loadingTradeActivity, setLoadingTradeActivity] = useState(true); // Start with loading, will be set based on cache in useEffect
+  const [loadingTradeActivity, setLoadingTradeActivity] = useState(() => {
+    if (!user?.id || typeof window === 'undefined') return true;
+    try {
+      const cacheKey = `trade_activity_cache_${user.id}_${currentChain}`;
+      const cached = window.localStorage.getItem(cacheKey);
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        if (parsed?.data?.length > 0) return false;
+      }
+    } catch { /* ignore */ }
+    return true;
+  });
   
   // Load from cache when cache keys change (e.g., user or chain changes)
   useEffect(() => {
@@ -413,12 +422,7 @@ export default function PortfolioPage() {
       const cached = window.localStorage.getItem(tradeHistoryCacheKey);
       if (cached) {
         const parsed = JSON.parse(cached);
-        if (
-          parsed &&
-          Array.isArray(parsed.data) &&
-          typeof parsed.timestamp === 'number' &&
-          Date.now() - parsed.timestamp <= TRADE_CACHE_TTL_MS
-        ) {
+        if (parsed && Array.isArray(parsed.data) && parsed.data.length > 0) {
           console.log(`[Trade History] ✅ Loaded ${parsed.data.length} trades from cache (cache key changed)`);
           setTradeHistory(parsed.data as TradeRow[]);
           setLoadingTradeHistory(false);
@@ -427,18 +431,13 @@ export default function PortfolioPage() {
     } catch (error) {
       console.warn(`[Trade History] Failed to load cache:`, error);
     }
-    
+
     // Load trade activity from cache
     try {
       const cached = window.localStorage.getItem(tradeActivityCacheKey);
       if (cached) {
         const parsed = JSON.parse(cached);
-        if (
-          parsed &&
-          Array.isArray(parsed.data) &&
-          typeof parsed.timestamp === 'number' &&
-          Date.now() - parsed.timestamp <= TRADE_CACHE_TTL_MS
-        ) {
+        if (parsed && Array.isArray(parsed.data) && parsed.data.length > 0) {
           console.log(`[Trade Activity] ✅ Loaded ${parsed.data.length} trades from cache (cache key changed)`);
           setTradeActivity(parsed.data as TradeRow[]);
           setLoadingTradeActivity(false);
@@ -447,7 +446,7 @@ export default function PortfolioPage() {
     } catch (error) {
       console.warn(`[Trade Activity] Failed to load cache:`, error);
     }
-  }, [tradeHistoryCacheKey, tradeActivityCacheKey, user?.id, TRADE_CACHE_TTL_MS]);
+  }, [tradeHistoryCacheKey, tradeActivityCacheKey, user?.id]);
   const [unrealizedPnl, setUnrealizedPnl] = useState(0);
   const [unrealizedPnlPercentage, setUnrealizedPnlPercentage] = useState(0);
   const [totalPnl, setTotalPnl] = useState(0);
@@ -758,13 +757,7 @@ export default function PortfolioPage() {
             const cached = window.localStorage.getItem(tradeHistoryCacheKey);
             if (cached) {
               const parsed = JSON.parse(cached);
-              if (
-                parsed &&
-                Array.isArray(parsed.data) &&
-                parsed.data.length > 0 &&
-                typeof parsed.timestamp === 'number' &&
-                Date.now() - parsed.timestamp <= TRADE_CACHE_TTL_MS
-              ) {
+              if (parsed && Array.isArray(parsed.data) && parsed.data.length > 0) {
                 hasValidCache = true;
               }
             }
@@ -813,7 +806,7 @@ export default function PortfolioPage() {
     };
 
     fetchTradeHistory();
-  }, [user?.id, currentChain, isTradeOnCurrentChain, tradeHistoryCacheKey, TRADE_CACHE_TTL_MS]);
+  }, [user?.id, currentChain, isTradeOnCurrentChain, tradeHistoryCacheKey]);
 
   // Fetch trade activity only when on Activity tab (index 2 after History commented out)
   useEffect(() => {
@@ -828,13 +821,7 @@ export default function PortfolioPage() {
             const cached = window.localStorage.getItem(tradeActivityCacheKey);
             if (cached) {
               const parsed = JSON.parse(cached);
-              if (
-                parsed &&
-                Array.isArray(parsed.data) &&
-                parsed.data.length > 0 &&
-                typeof parsed.timestamp === 'number' &&
-                Date.now() - parsed.timestamp <= TRADE_CACHE_TTL_MS
-              ) {
+              if (parsed && Array.isArray(parsed.data) && parsed.data.length > 0) {
                 hasValidCache = true;
               }
             }
@@ -894,7 +881,7 @@ export default function PortfolioPage() {
 
       return () => clearInterval(intervalId);
     }
-  }, [user?.id, activeSpotTab, currentChain, isTradeOnCurrentChain, tradeActivityCacheKey, TRADE_CACHE_TTL_MS]);
+  }, [user?.id, activeSpotTab, currentChain, isTradeOnCurrentChain, tradeActivityCacheKey]);
 
   // Note: Initial balance is set once when first detected and persists
   // It does NOT auto-reset to prevent wallet balance change from going to 0
@@ -3574,14 +3561,12 @@ export default function PortfolioPage() {
                         />
                       </div>
                     ))}
+                  {/* Predictions tab - hidden while feature is disabled
                   {activeSpotTab === 3 && (
                     <div className="w-full space-y-4 pb-16">
                       {user?.bearerToken ? (
                         <>
-                          {/* Compact wallet balance at top - shows balance + quick convert */}
                           <PolygonWalletCard variant="compact" />
-
-                          {/* Full portfolio with gamified stats */}
                           <UnifiedPortfolio
                             authToken={user.bearerToken}
                             walletAddress={primaryWalletAddresses?.ethereum}
@@ -3596,6 +3581,7 @@ export default function PortfolioPage() {
                       )}
                     </div>
                   )}
+                  */}
                 </div>
               </div>
             </div>
