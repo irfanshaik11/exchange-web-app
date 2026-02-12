@@ -1195,12 +1195,15 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
   } | null>(null);
 
   // Check if this is a high bonding Meteora token that should show migration UI
+  // Excludes tokens that have already completed migration (status contains 'migrated' or migrated_time is set)
   const isMigratingToken = useMemo(() => {
     const launchpadProtocol = token.launchpad_protocol?.toLowerCase() || '';
     const isMeteora = launchpadProtocol.includes('meteora');
     const bondingPct = token.bonding_pct ?? 0;
-    return isMeteora && bondingPct > 98.6;
-  }, [token.launchpad_protocol, token.bonding_pct]);
+    const status = (token.status || '').toLowerCase();
+    const hasMigrated = status.includes('migrated') || !!token.migrated_time;
+    return isMeteora && bondingPct > 98.6 && !hasMigrated;
+  }, [token.launchpad_protocol, token.bonding_pct, token.status, token.migrated_time]);
 
   // Convert initialStats to TokenStatsData format if available
   const convertedInitialStats = useMemo(() => {

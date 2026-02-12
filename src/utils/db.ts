@@ -105,6 +105,9 @@ export type Token = {
   // Dev token tracking
   dev_tokens_created?: number;
   dev_tokens_migrated?: number;
+  // Migration status from Go backend
+  status?: string;
+  migrated_time?: string;
 };
 
 /**

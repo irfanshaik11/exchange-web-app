@@ -74,7 +74,7 @@ type ReusedTokenLite = {
 
 export default function TradePage() {
   const router = useRouter();
-  const { id, _name, _symbol, _price, _mcap, _image, _mint, _launchpad_protocol, _liquidity, _created_at } = router.query;
+  const { id, _name, _symbol, _price, _mcap, _image, _mint, _launchpad_protocol, _liquidity, _created_at, _migrated } = router.query;
 
   // Wait for router to be ready before using query params
   // This prevents hydration issues where id is undefined briefly
@@ -103,10 +103,12 @@ export default function TradePage() {
         // Created at / launch_time passed from PulseTable for instant age display
         launch_time: (_created_at as string) || undefined,
         created_at: (_created_at as string) || undefined,
+        // Migrated flag from PulseTable column context — hides B. Curve in TradeHeader
+        is_migrated: _migrated === "1" ? true : undefined,
       };
     }
     return null;
-  }, [_name, _symbol, _price, _mcap, _image, _mint, _launchpad_protocol, _liquidity, _created_at]);
+  }, [_name, _symbol, _price, _mcap, _image, _mint, _launchpad_protocol, _liquidity, _created_at, _migrated]);
 
   if (process.env.NODE_ENV === "development") {
     console.log("TradePage Debug:", {

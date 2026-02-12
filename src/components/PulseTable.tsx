@@ -7370,6 +7370,7 @@ function PulseTable({
                   (token as any)?.created_at ||
                   "",
                 chain: currentChain, // Preserve chain selection
+                _migrated: title.toLowerCase().includes("migrated") ? "1" : "",
               }).toString();
 
               return (
