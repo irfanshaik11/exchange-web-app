@@ -140,6 +140,11 @@ const config = {
         destination: "/pulse",
         permanent: false,
       },
+      {
+        source: "/arena",
+        destination: "/outpost",
+        permanent: true,
+      },
     ];
   },
 };

@@ -10,7 +10,7 @@ import { IoClose } from "react-icons/io5";
 
 // Menu items configuration
 const arenaMenuItems = [
-  { name: "Arena", href: "/arena", icon: "trophy", disabled: false },
+  { name: "Outpost", href: "/outpost", icon: "trophy", disabled: false },
   { name: "Referrals", href: "/referrals", icon: "users", disabled: false },
   { name: "Leaderboard", href: "/leaderboard", icon: "chart", disabled: true },
   { name: "Jackpot", href: "/jackpot", icon: "grid", disabled: true },
@@ -54,14 +54,14 @@ export default function MorphingArenaNav() {
   const currentArenaPage = arenaMenuItems.find(
     (item) =>
       router.pathname === item.href ||
-      (item.href === "/arena" &&
-        router.pathname.startsWith("/arena") &&
-        !arenaMenuItems.some((i) => i.href !== "/arena" && router.pathname === i.href))
+      (item.href === "/outpost" &&
+        router.pathname.startsWith("/outpost") &&
+        !arenaMenuItems.some((i) => i.href !== "/outpost" && router.pathname === i.href))
   ) || arenaMenuItems[0];
 
   const isOnArenaPage = arenaMenuItems.some(
     (item) => router.pathname === item.href ||
-    (item.href === "/arena" && router.pathname.startsWith("/arena"))
+    (item.href === "/outpost" && router.pathname.startsWith("/outpost"))
   );
 
   // Click outside detection
@@ -139,7 +139,7 @@ export default function MorphingArenaNav() {
                 letterSpacing: "0.01em",
               }}
             >
-              {isOnArenaPage ? currentArenaPage?.name?.toUpperCase() : "ARENA"}
+              {isOnArenaPage ? currentArenaPage?.name?.toUpperCase() : "OUTPOST"}
             </span>
           </motion.button>
         ) : (
@@ -155,7 +155,7 @@ export default function MorphingArenaNav() {
             {arenaMenuItems.map((item, index) => {
               const isActive =
                 router.pathname === item.href ||
-                (item.href === "/arena" && router.pathname.startsWith("/arena"));
+                (item.href === "/outpost" && router.pathname.startsWith("/outpost"));
               const isDisabled = item.disabled;
 
               if (isDisabled) {

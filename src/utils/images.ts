@@ -345,6 +345,26 @@ export function getResolvedTokenImage(token: any): string | null {
 }
 
 /**
+ * Async version of getResolvedTokenImage — resolves metadata URIs on-demand.
+ * Direct image URL → returns immediately.
+ * Metadata URI (cached) → returns cached resolved image.
+ * Metadata URI (not cached) → fetches JSON, extracts image, caches, returns direct URL.
+ * Fetch fails → returns null (backend fetchTokenMetadata + recovery handle it).
+ */
+export async function resolveTokenImage(token: any): Promise<string | null> {
+  const rawImageUrl = extractTokenImage(token);
+  if (!rawImageUrl) return null;
+
+  if (isMetadataUrl(rawImageUrl)) {
+    const cached = getCachedResolvedImage(rawImageUrl);
+    if (cached) return cached;
+    return resolveMetadataImage(rawImageUrl);
+  }
+
+  return rawImageUrl;
+}
+
+/**
  * Extract image URL from token data, checking multiple possible field names
  * This ensures we catch image fields from stream data, HTTP data, and various API formats
  * Priority order: image_url (API), image, logo, uri (WebSocket stream fallback), then others

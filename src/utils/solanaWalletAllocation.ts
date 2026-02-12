@@ -325,6 +325,7 @@ type MultiBuyParams = {
   rpc?: string;
   tokenName?: string;
   tokenSymbol?: string;
+  imageUrl?: string;
   authToken: string;
   walletList?: WalletListItem[];
   walletBalances?: Record<string, number>;
@@ -373,6 +374,7 @@ export async function executeSolanaMultiBuy({
   rpc,
   tokenName,
   tokenSymbol,
+  imageUrl,
   authToken,
   walletList = [],
   walletBalances = {},
@@ -429,6 +431,7 @@ export async function executeSolanaMultiBuy({
           rpc,
           tokenName,
           tokenSymbol,
+          imageUrl,
           walletIds: selectedWalletIds, // NEW: Send array of wallet IDs
           useMultipleWallets: true,     // NEW: Enable multi-wallet mode
         },
@@ -473,6 +476,7 @@ export async function executeSolanaMultiBuy({
             results.push({ allocation, result: { hash: trade.txHash } });
           } else {
             const err = new Error(trade.error || "Trade failed");
+            if (trade.code) (err as any).code = trade.code;
             onWalletError?.({
               allocation,
               index: i,
@@ -505,7 +509,7 @@ export async function executeSolanaMultiBuy({
 
   // Validate balance ONLY for sequential mode (single wallet or fallback)
   if (allocations.length === 0) {
-    throw new Error('No selected wallets have sufficient balance for this trade amount and fees');
+    throw new Error('Insufficient balance — no selected wallets have enough SOL for this trade amount and fees');
   }
 
   const allocationsToUse =
@@ -554,6 +558,7 @@ export async function executeSolanaMultiBuy({
           rpc,
           tokenName,
           tokenSymbol,
+          imageUrl,
         },
         authToken
       );
@@ -624,6 +629,8 @@ export async function executeSolanaMultiBuy({
         }
 
         const err = new Error((result as any)?.error || "Solana buy failed");
+        const resultCode = (result as any)?.code;
+        if (resultCode) (err as any).code = resultCode;
         onWalletError?.({
           allocation,
           index: i,

@@ -1286,6 +1286,7 @@ export default function TradePage() {
         isOpen={isInstantTradeOpen}
         onClose={() => setIsInstantTradeOpen(false)}
         token={validatedCorrectTokenData || displayToken}
+        liveLiquidityUsd={wsTokenInfo?.liquidity_usd}
       />
     </>
   );

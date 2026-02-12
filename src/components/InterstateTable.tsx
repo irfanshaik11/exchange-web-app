@@ -72,7 +72,8 @@ interface InterstateTableProps {
   skeletonRowCount?: number;
   isDiscoverPage?: boolean;
   chain?: string; // 'sol' | 'monad' - chain identifier
-  tableType?: 'trending' | 'newPairs' | 'xStocks'; // Section type for different column displays
+  tableType?: 'trending' | 'newPairs' | 'xStocks' | 'dexscreener'; // Section type for different column displays
+  solPrice?: number; // SOL/USD price for converting pulse volume (SOL) to USD
 }
 
 interface HeaderConfig {
@@ -203,6 +204,23 @@ const getVolume = (token: Token, timeframe: string): number => {
   return volume;
 };
 
+// PulseTable-style volume for new pairs: try all timeframes (24h→6h→1h→5m),
+// sum buy+sell volumes, multiply by solPrice to convert SOL→USD
+const getNewPairVolume = (token: Token, solPrice: number): number => {
+  for (const tf of ['24h', '6h', '1h', '5m']) {
+    const bv = getNumber(token as any, `total_buy_volume_${tf}`);
+    const sv = getNumber(token as any, `total_sell_volume_${tf}`);
+    const sum = bv + sv;
+    if (sum > 0) return sum * solPrice;
+  }
+  // Fallback: try pre-computed volume fields
+  for (const tf of ['24h', '6h', '1h', '5m']) {
+    const vol = getNumber(token as any, `volume_${tf}`);
+    if (vol > 0) return vol;
+  }
+  return 0;
+};
+
 const getTxns = (token: Token, timeframe: string): { total: number; buys: number; sells: number } => {
   // Try the specific timeframe first
   let buys = getNumber(token as any, `total_buys_${timeframe}`);
@@ -278,6 +296,17 @@ const getSortableValue = (token: Token, key: string, selectedTimeframe?: string)
     return buys + sells;
   }
   
+  // Handle timestamp sorting for New Pairs (newest first)
+  if (key === 'timestamp') {
+    const v = (token as any).created_at ?? (token as any).launch_time ??
+              (token as any).firstSeen ?? (token as any).pair_created_at ??
+              (token as any).timestamp ?? (token as any).ts;
+    if (!v) return 0;
+    const n = typeof v === 'number' ? v : typeof v === 'string' ? (Number(v) || Date.parse(v) || 0) : 0;
+    // Normalize: if seconds (< 1e12), convert to ms
+    return n > 1e12 ? n : n > 1e9 ? n * 1000 : 0;
+  }
+
   // Handle Market Cap sorting - use fully_diluted_value if available, otherwise fallback to usd_price
   if (key === 'fully_diluted_value') {
     let val = (token as any).fully_diluted_value;
@@ -415,18 +444,22 @@ const TableHeader: React.FC<{
   sortDirection?: 'asc' | 'desc';
   onSort?: (key: string) => void;
   isDiscoverPage?: boolean;
-  tableType?: 'trending' | 'newPairs' | 'xStocks';
+  tableType?: 'trending' | 'newPairs' | 'xStocks' | 'dexscreener';
 }> = ({ sortKey, sortDirection, onSort, isDiscoverPage = false, tableType = 'trending' }) => (
   <thead>
     <tr style={{ backgroundColor: 'transparent', borderBottom: `1px solid ${AX.border}` }}>
       {TABLE_HEADERS.map((header, idx) => {
-        // For newPairs, show "Holders" instead of "Token Info"
         let label = header.label;
-        if (header.label === 'Token Info' && tableType === 'newPairs') {
-          label = 'Holders';
+        // Hide the 24h chart column for newPairs and dexscreener
+        if (header.label === '24h' && (tableType === 'newPairs' || tableType === 'dexscreener')) {
+          return null;
         }
-        // Hide the 24h chart column for newPairs
-        if (header.label === '24h' && tableType === 'newPairs') {
+        // Hide Token Info / Holders column for newPairs and dexscreener
+        if (header.label === 'Token Info' && (tableType === 'newPairs' || tableType === 'dexscreener')) {
+          return null;
+        }
+        // Hide Volume column for newPairs (WS volume data not yet wired to display)
+        if (header.label === 'Volume' && tableType === 'newPairs') {
           return null;
         }
         return (
@@ -659,7 +692,7 @@ const TokenInfo: React.FC<{
 
     try {
       const createdAt = (token as any).created_at || (token as any).launch_time;
-      if (!createdAt) return '-';
+      if (!createdAt) return '';
 
       let timestamp: number | null = null;
       if (typeof createdAt === 'string') {
@@ -671,21 +704,25 @@ const TokenInfo: React.FC<{
         else if (createdAt > 1e9) timestamp = createdAt * 1000;
       }
 
-      if (!timestamp) return '-';
+      if (!timestamp) return '';
 
       const ageMs = Date.now() - timestamp;
       const ageHours = ageMs / (1000 * 60 * 60);
 
       if (ageHours < 1) {
         const ageMins = Math.floor(ageMs / (1000 * 60));
-        return ageMins < 1 ? '<1m' : `${ageMins}m`;
+        if (ageMins < 1) {
+          const ageSecs = Math.floor(ageMs / 1000);
+          return `${ageSecs}s`;
+        }
+        return `${ageMins}m`;
       } else if (ageHours < 24) {
         return `${Math.floor(ageHours)}h`;
       } else {
         return `${Math.floor(ageHours / 24)}d`;
       }
     } catch {
-      return '-';
+      return '';
     }
   }, [token, isDiscoverPage, timeLabel]);
 
@@ -829,9 +866,11 @@ const TokenInfo: React.FC<{
         </div>
         
         <div className="flex items-center gap-2">
-          <span className={`text-xs ${isDiscoverPage ? 'number-font' : 'text-emerald-400'}`} style={{ color: isDiscoverPage ? ageColor : undefined, fontWeight: isDiscoverPage ? 700 : 400, ...(isDiscoverPage ? {} : { fontFamily: 'ui-monospace, SFMono-Regular, "SF Mono", Consolas, "Liberation Mono", Menlo, monospace' }) }}>
-            {tokenAge}
-          </span>
+          {tokenAge && (
+            <span className={`text-xs ${isDiscoverPage ? 'number-font' : 'text-emerald-400'}`} style={{ color: isDiscoverPage ? ageColor : undefined, fontWeight: isDiscoverPage ? 700 : 400, ...(isDiscoverPage ? {} : { fontFamily: 'ui-monospace, SFMono-Regular, "SF Mono", Consolas, "Liberation Mono", Menlo, monospace' }) }}>
+              {tokenAge}
+            </span>
+          )}
           <div className="flex items-center gap-1 text-sky-400">
             {/* X/Twitter Icon - only show if twitter URL exists in metadata */}
             {hasTwitter && (
@@ -1698,7 +1737,7 @@ const formatPercent = (val: number | undefined): string => {
 const TokenInfoCell: React.FC<{
   token: Token;
   isDiscoverPage?: boolean;
-  tableType?: 'trending' | 'newPairs' | 'xStocks';
+  tableType?: 'trending' | 'newPairs' | 'xStocks' | 'dexscreener';
 }> = ({ token, isDiscoverPage = false, tableType = 'trending' }) => {
   const holderCount = (token as any).holder_count;
   const top10Percent = (token as any).top10_holders_percent;
@@ -1804,7 +1843,8 @@ const TableRow: React.FC<{
   onClick: () => void;
   isDiscoverPage?: boolean;
   chain?: string; // 'sol' | 'monad' - chain identifier
-  tableType?: 'trending' | 'newPairs' | 'xStocks';
+  tableType?: 'trending' | 'newPairs' | 'xStocks' | 'dexscreener';
+  solPrice?: number;
 }> = React.memo(({
   token,
   i,
@@ -1816,7 +1856,8 @@ const TableRow: React.FC<{
   onClick,
   isDiscoverPage = false,
   chain = 'sol',
-  tableType = 'trending'
+  tableType = 'trending',
+  solPrice = 0
 }) => {
   const handleQuickBuy = useCallback((e: React.MouseEvent) => {
     e.stopPropagation();
@@ -1827,8 +1868,11 @@ const TableRow: React.FC<{
     }
   }, [onQuickBuy, token, onClick]);
 
-  const volume = getVolume(token, selectedTimeframe);
-  
+  // For newPairs, use PulseTable-style volume: try all timeframes, sum buy+sell, convert SOL→USD
+  const volume = tableType === 'newPairs' && solPrice > 0
+    ? getNewPairVolume(token, solPrice)
+    : getVolume(token, selectedTimeframe);
+
   // Debug volume calculation
   // console.log('Volume calculation debug:', {
   //   tokenName: token.name,
@@ -1910,6 +1954,8 @@ const TableRow: React.FC<{
         })()}
       </td>
 
+      {/* Volume column - hidden for newPairs */}
+      {tableType !== 'newPairs' && (
       <td className="w-28 px-4 py-4 align-middle text-right">
         <div className={`text-sm font-medium ${isDiscoverPage ? 'number-font' : ''}`} style={{
           color: AX.text,
@@ -1922,13 +1968,14 @@ const TableRow: React.FC<{
           {volume === 0 ? (isDiscoverPage ? "$0" : "-") : `$${formatSmartNumber(volume)}`}
         </div>
       </td>
+      )}
 
       <td className="w-28 px-4 py-4 align-middle">
         <TxnsCell token={token} selectedTimeframe={selectedTimeframe} isDiscoverPage={isDiscoverPage} />
       </td>
 
-      {/* 24h Mini Chart column - hidden for newPairs */}
-      {tableType !== 'newPairs' && (
+      {/* 24h Mini Chart column - hidden for newPairs and dexscreener */}
+      {tableType !== 'newPairs' && tableType !== 'dexscreener' && (
         <td className="w-24 px-2 py-4 align-middle">
           <MiniSparkline token={token} width={80} height={40} />
         </td>
@@ -1948,10 +1995,12 @@ const TableRow: React.FC<{
       </td>
       */}
 
-      {/* Token Info column - displays holder metrics from trending WebSocket */}
-      <td className="w-40 px-2 py-4 align-middle">
-        <TokenInfoCell token={token} isDiscoverPage={isDiscoverPage} tableType={tableType} />
-      </td>
+      {/* Token Info column - displays holder metrics from trending WebSocket (hidden for newPairs and dexscreener) */}
+      {tableType !== 'dexscreener' && tableType !== 'newPairs' && (
+        <td className="w-40 px-2 py-4 align-middle">
+          <TokenInfoCell token={token} isDiscoverPage={isDiscoverPage} tableType={tableType} />
+        </td>
+      )}
 
       <td className="w-32 px-4 py-4 align-middle text-center">
         {isDiscoverPage ? (
@@ -2006,7 +2055,8 @@ export default function InterstateTable({
   skeletonRowCount = 6,
   isDiscoverPage: isDiscoverPageProp,
   chain = 'sol',
-  tableType = 'trending'
+  tableType = 'trending',
+  solPrice = 0
 }: InterstateTableProps) {
   const router = useRouter();
   const { filter } = useFilter();
@@ -2244,6 +2294,7 @@ export default function InterstateTable({
                   isDiscoverPage={isDiscoverPage}
                   chain={chain}
                   tableType={tableType}
+                  solPrice={solPrice}
                 />
               );
             })

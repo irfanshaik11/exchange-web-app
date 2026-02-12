@@ -1179,18 +1179,22 @@ export default function PortfolioPage() {
     return positions.filter((pos) => {
       const tokenAddr = pos.tokenAddress?.toLowerCase() || "";
       const pairAddr = pos.pairAddress?.toLowerCase() || "";
-      
-      // Check token name from tokenNames mapping
+      const posName = pos.tokenName?.toLowerCase() || "";
+      const posSymbol = pos.tokenSymbol?.toLowerCase() || "";
+
+      // Check token name from tokenNames mapping (async fallback)
       const tokenName = tokenNames[pos.tokenAddress]?.toLowerCase() || "";
-      
-      // Check token metadata (name and symbol) from cache
+
+      // Check token metadata (name and symbol) from cache (async fallback)
       const metadata = tokenMetadataCache[pos.tokenAddress];
       const metadataName = metadata?.name?.toLowerCase() || "";
       const metadataSymbol = metadata?.symbol?.toLowerCase() || "";
-      
+
       return (
         tokenAddr.includes(query) ||
         pairAddr.includes(query) ||
+        posName.includes(query) ||
+        posSymbol.includes(query) ||
         tokenName.includes(query) ||
         metadataName.includes(query) ||
         metadataSymbol.includes(query)
@@ -1207,18 +1211,22 @@ export default function PortfolioPage() {
     return top100Positions.filter((pos) => {
       const tokenAddr = pos.tokenAddress?.toLowerCase() || "";
       const pairAddr = pos.pairAddress?.toLowerCase() || "";
-      
-      // Check token name from tokenNames mapping
+      const posName = pos.tokenName?.toLowerCase() || "";
+      const posSymbol = pos.tokenSymbol?.toLowerCase() || "";
+
+      // Check token name from tokenNames mapping (async fallback)
       const tokenName = tokenNames[pos.tokenAddress]?.toLowerCase() || "";
-      
-      // Check token metadata (name and symbol) from cache
+
+      // Check token metadata (name and symbol) from cache (async fallback)
       const metadata = tokenMetadataCache[pos.tokenAddress];
       const metadataName = metadata?.name?.toLowerCase() || "";
       const metadataSymbol = metadata?.symbol?.toLowerCase() || "";
-      
+
       return (
         tokenAddr.includes(query) ||
         pairAddr.includes(query) ||
+        posName.includes(query) ||
+        posSymbol.includes(query) ||
         tokenName.includes(query) ||
         metadataName.includes(query) ||
         metadataSymbol.includes(query)
@@ -1234,18 +1242,22 @@ export default function PortfolioPage() {
     return tradeHistory.filter((trade) => {
       const tokenAddr = trade.tokenAddress?.toLowerCase() || "";
       const txHash = trade.transactionHash?.toLowerCase() || "";
-      
-      // Check token name from tokenNames mapping
+      const tradeName = trade.tokenName?.toLowerCase() || "";
+      const tradeSymbol = trade.tokenSymbol?.toLowerCase() || "";
+
+      // Check token name from tokenNames mapping (async fallback)
       const tokenName = tokenNames[trade.tokenAddress]?.toLowerCase() || "";
-      
-      // Check token metadata (name and symbol) from cache
+
+      // Check token metadata (name and symbol) from cache (async fallback)
       const metadata = tokenMetadataCache[trade.tokenAddress];
       const metadataName = metadata?.name?.toLowerCase() || "";
       const metadataSymbol = metadata?.symbol?.toLowerCase() || "";
-      
+
       return (
         tokenAddr.includes(query) ||
         txHash.includes(query) ||
+        tradeName.includes(query) ||
+        tradeSymbol.includes(query) ||
         tokenName.includes(query) ||
         metadataName.includes(query) ||
         metadataSymbol.includes(query)
@@ -1261,18 +1273,22 @@ export default function PortfolioPage() {
     return tradeActivity.filter((trade) => {
       const tokenAddr = trade.tokenAddress?.toLowerCase() || "";
       const txHash = trade.transactionHash?.toLowerCase() || "";
-      
-      // Check token name from tokenNames mapping
+      const tradeName = trade.tokenName?.toLowerCase() || "";
+      const tradeSymbol = trade.tokenSymbol?.toLowerCase() || "";
+
+      // Check token name from tokenNames mapping (async fallback)
       const tokenName = tokenNames[trade.tokenAddress]?.toLowerCase() || "";
-      
-      // Check token metadata (name and symbol) from cache
+
+      // Check token metadata (name and symbol) from cache (async fallback)
       const metadata = tokenMetadataCache[trade.tokenAddress];
       const metadataName = metadata?.name?.toLowerCase() || "";
       const metadataSymbol = metadata?.symbol?.toLowerCase() || "";
-      
+
       return (
         tokenAddr.includes(query) ||
         txHash.includes(query) ||
+        tradeName.includes(query) ||
+        tradeSymbol.includes(query) ||
         tokenName.includes(query) ||
         metadataName.includes(query) ||
         metadataSymbol.includes(query)

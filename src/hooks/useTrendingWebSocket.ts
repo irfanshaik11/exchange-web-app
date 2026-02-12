@@ -12,6 +12,7 @@ const TRENDING_CACHE_VERSION = 'v2'; // Bumped to invalidate old cache with USDT
 const BLACKLISTED_TOKENS = new Set([
   'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v', // USDC
   'Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB', // USDT
+  'tTLsJR5f2QYx6XDrQBcGJ25UaCGaJNTt33q5UYunt1J', // Blacklisted
 ]);
 
 // Helper to save trending data to localStorage
@@ -66,6 +67,7 @@ export interface NormalizedTrendingToken {
   volume_1h: number;
   volume_5m: number;
   volume_6h: number;
+  volume_24h: number;
   holder_count: number;
   rank: number;
   status: string;
@@ -87,9 +89,14 @@ export interface NormalizedTrendingToken {
   total_sells_1h?: number;
   total_buys_6h?: number;
   total_sells_6h?: number;
+  total_buys_24h?: number;
+  total_sells_24h?: number;
   // Protocol/launchpad info for trade routing (critical for quick buy!)
   launchpad_protocol?: string;
   protocol?: string;
+  // Pool/pair address for direct trade routing (used by DexScreener tokens)
+  pair_address?: string;
+  migrated_pool_address?: string;
 }
 
 interface TrendingWebSocketState {
@@ -119,6 +126,7 @@ function normalizeToken(raw: any): NormalizedTrendingToken {
     volume_1h: raw.volume_usd || raw.volume_1h || 0,
     volume_5m: raw.volume_5m || raw.volume_usd || 0,
     volume_6h: raw.volume_6h || raw.volume_usd || 0,
+    volume_24h: raw.volume_24h || raw.volume_usd || 0,
     holder_count: raw.holder_count || raw.holderCount || 0,
     rank: raw.rank || 0,
     status: raw.status || 'ACTIVE',
@@ -140,6 +148,8 @@ function normalizeToken(raw: any): NormalizedTrendingToken {
     total_sells_1h: raw.total_sells_1h || 0,
     total_buys_6h: raw.total_buys_6h || 0,
     total_sells_6h: raw.total_sells_6h || 0,
+    total_buys_24h: raw.total_buys_24h || 0,
+    total_sells_24h: raw.total_sells_24h || 0,
     // CRITICAL: Preserve launchpad_protocol for pool type detection in quick buy
     // Without this, backend has to do expensive pool discovery (~6 seconds)
     launchpad_protocol: raw.launchpad_protocol || raw.launchpadProtocol || raw.protocol || '',
@@ -289,6 +299,9 @@ function connectGlobal() {
                   total_sells_1h: update.total_sells_1h ?? existing.total_sells_1h,
                   total_buys_6h: update.total_buys_6h ?? existing.total_buys_6h,
                   total_sells_6h: update.total_sells_6h ?? existing.total_sells_6h,
+                  total_buys_24h: update.total_buys_24h ?? existing.total_buys_24h,
+                  total_sells_24h: update.total_sells_24h ?? existing.total_sells_24h,
+                  volume_24h: update.volume_24h ?? existing.volume_24h,
                 };
                 globalTokenMaps[topic].set(mint, updated);
                 hasChanges = true;

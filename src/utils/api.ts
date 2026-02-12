@@ -653,6 +653,7 @@ export type BuyParams = {
   // Optional debugging metadata
   tokenName?: string;
   tokenSymbol?: string;
+  imageUrl?: string;
 };
 
 export const tradeBuy = (params: BuyParams, authToken: string) => {

@@ -19,7 +19,7 @@ import { useUser } from "~/components/UserContext";
 import { executeSolanaMultiBuy, formatSolanaTxSummary, buildSolanaWalletAllocations } from "~/utils/solanaWalletAllocation";
 import { useTxHashCallback } from "~/contexts/SolanaPositionWebSocketContext";
 import type { SolanaTokenVolume } from "~/hooks/useSolanaTokenWebSocket";
-import { extractTokenImage, getResolvedTokenImage } from "~/utils/images";
+import { extractTokenImage, getResolvedTokenImage, resolveTokenImage } from "~/utils/images";
 import { SiSolana } from "react-icons/si";
 import useTokenStatsWebSocket from "~/hooks/useTokenStatsWebSocket";
 import { getPoolTypeFromToken } from "~/utils/poolTypeDetection";
@@ -2933,6 +2933,7 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
           rpc: settings.rpc,
           tokenName: token.name,
           tokenSymbol: token.symbol,
+          imageUrl: await resolveTokenImage(token) || undefined,
           authToken: user.bearerToken,
           walletList,
           walletBalances,

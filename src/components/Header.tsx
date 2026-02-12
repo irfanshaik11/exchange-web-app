@@ -100,7 +100,7 @@ const navLinks = [
   { name: "Portfolio", href: "/portfolio" },
   { name: "Trending", href: "/discover" },
   { name: "Trackers", href: "/trackers" },
-  { name: "Rewards", href: "/arena" },
+  { name: "Rewards", href: "/outpost" },
   // { name: "Predictions", href: "/predictions" },
   // { name: "Perpetuals", href: "/construction" },
   // { name: "Yield", href: "/construction" },
@@ -1353,7 +1353,7 @@ export default function Header({
                     (link.name === "Trenches" &&
                       router.pathname.startsWith("/trade/")) ||
                     (link.name === "Rewards" &&
-                      (router.pathname === "/arena" || router.pathname === "/referrals"));
+                      (router.pathname === "/outpost" || router.pathname === "/referrals"));
                   return (
                     <Link
                       key={link.name}

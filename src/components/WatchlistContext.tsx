@@ -17,94 +17,129 @@ const WatchlistContext = createContext<WatchlistContextType | undefined>(undefin
 // Key to track if we've already populated defaults (so we don't re-populate after user clears watchlist)
 const DEFAULTS_POPULATED_KEY = 'watchlist_defaults_populated';
 const DEFAULT_WATCHLIST_COUNT = 10;
-const MIN_WATCHLIST_COUNT = 5;
 
-// Multiple token sources in priority order — trending first (most established), then migrated, final stretch, new
-const TOKEN_SOURCES = [
-  '/api/token-service/pulse-trending?timeframe=24h&limit=50&fresh=1',
-  '/api/token-service/pulse-migrated?limit=50&fresh=1',
-  '/api/token-service/pulse-final-stretch?limit=50&fresh=1',
-  '/api/token-service/pulse-new?limit=100&fresh=1',
-];
+// Dismissed tokens — mints the user manually removed (never re-added by auto-refresh)
+const WATCHLIST_DISMISSED_KEY = 'watchlist_dismissed';
+
+// 3-hour auto-refresh
+const WATCHLIST_LAST_REFRESH_KEY = 'watchlist_last_refresh';
+const WATCHLIST_REFRESH_INTERVAL = 3 * 60 * 60 * 1000; // 3 hours
+
+// --- Dismissed set helpers ---
+
+function getDismissedMints(): Set<string> {
+  try {
+    const raw = localStorage.getItem(WATCHLIST_DISMISSED_KEY);
+    if (!raw) return new Set();
+    const parsed = JSON.parse(raw);
+    return new Set(Array.isArray(parsed) ? parsed : []);
+  } catch {
+    return new Set();
+  }
+}
+
+function saveDismissedMints(mints: Set<string>): void {
+  try {
+    localStorage.setItem(WATCHLIST_DISMISSED_KEY, JSON.stringify([...mints]));
+  } catch {}
+}
+
+// --- DexScreener trending → Token conversion ---
+
+/** Map a DexScreener trending token to the Token shape the watchlist expects */
+function dexScreenerTokenToWatchlistToken(raw: any): Token {
+  // Map dex_id to launchpad_protocol (same logic as useDexScreenerTrending)
+  let protocol = '';
+  switch (raw.dex_id) {
+    case 'pumpfun': protocol = 'pump'; break;
+    case 'pumpswap': protocol = 'pumpamm'; break;
+    case 'raydium': protocol = 'raydium'; break;
+    case 'meteora': protocol = 'meteora'; break;
+    case 'orca': protocol = 'orca'; break;
+    default: protocol = raw.dex_id || ''; break;
+  }
+
+  return {
+    mint: raw.mint || '',
+    name: raw.name || raw.symbol || 'Unknown',
+    symbol: raw.symbol || '',
+    usd_price: raw.price_usd || 0,
+    price_usd: raw.price_usd || 0,
+    fully_diluted_value: raw.fdv || raw.market_cap_usd || 0,
+    market_cap_usd: raw.market_cap_usd || raw.fdv || 0,
+    total_liquidity_usd: raw.liquidity_usd || 0,
+    logo: raw.image_url || '',
+    image_url: raw.image_url || '',
+    pair_address: raw.pair_address || '',
+    launchpad_protocol: protocol,
+    protocol: protocol,
+    volume_5m: raw.volume_5m || 0,
+    volume_1h: raw.volume_1h || 0,
+    volume_6h: raw.volume_6h || 0,
+    volume_24h: raw.volume_24h || 0,
+    total_buys_5m: raw.total_buys_5m || 0,
+    total_sells_5m: raw.total_sells_5m || 0,
+    total_buys_1h: raw.total_buys_1h || 0,
+    total_sells_1h: raw.total_sells_1h || 0,
+    total_buys_6h: raw.total_buys_6h || 0,
+    total_sells_6h: raw.total_sells_6h || 0,
+    total_buys_24h: raw.total_buys_24h || 0,
+    total_sells_24h: raw.total_sells_24h || 0,
+  } as any as Token;
+}
 
 /**
- * Fetch tokens from a single endpoint, normalizing various response formats.
+ * Fetch top trending tokens from DexScreener endpoint (same source as Discover "Trending 2" tab).
+ * Returns up to `limit` tokens, excluding dismissed mints and those without images.
  */
-async function fetchTokensFromEndpoint(url: string): Promise<Token[]> {
+async function fetchDexScreenerTrending(dismissedMints: Set<string>, limit = DEFAULT_WATCHLIST_COUNT): Promise<Token[]> {
   try {
+    const baseUrl = process.env.NEXT_PUBLIC_GO_SERVICE_URL || 'http://localhost:8085';
+    const url = `${baseUrl}/v1/trending/dexscreener`;
     const response = await fetch(url, {
       headers: { 'Accept': 'application/json' },
-      signal: AbortSignal.timeout(8000), // 8s timeout per endpoint
+      signal: AbortSignal.timeout(10000),
     });
     if (!response.ok) return [];
     const data = await response.json();
-    // Handle various response shapes
-    if (Array.isArray(data)) return data;
-    if (Array.isArray(data?.tokens)) return data.tokens;
-    if (Array.isArray(data?.data)) return data.data;
-    if (Array.isArray(data?.data?.tokens)) return data.data.tokens;
+    if (!Array.isArray(data)) return [];
+
+    const result: Token[] = [];
+    const seenAddrs = new Set<string>();
+    const seenNames = new Set<string>();
+
+    for (const raw of data) {
+      if (result.length >= limit) break;
+
+      const mint = (raw.mint || '').toLowerCase();
+      if (!mint) continue;
+
+      // Skip dismissed tokens
+      if (dismissedMints.has(raw.mint || '')) continue;
+
+      // Convert to Token shape
+      const token = dexScreenerTokenToWatchlistToken(raw);
+
+      // Must have image
+      const imageUrl = extractTokenImage(token);
+      if (!imageUrl || !imageUrl.trim()) continue;
+
+      // Dedup by address and name
+      const addr = (token.pair_address || (token as any).mint || '').toLowerCase();
+      const name = ((token as any).symbol || token.name || '').toLowerCase().trim();
+      if (!addr || !name) continue;
+      if (seenAddrs.has(addr) || seenNames.has(name)) continue;
+
+      seenAddrs.add(addr);
+      seenNames.add(name);
+      result.push(token);
+    }
+
+    return result;
+  } catch (err) {
+    console.warn('Failed to fetch DexScreener trending for watchlist:', err);
     return [];
-  } catch {
-    return [];
   }
-}
-
-/**
- * Deduplicate and filter tokens: must have an address, a name/symbol, and an image URL.
- * No expensive image load validation — just check the URL string exists.
- */
-function filterUniqueTokensWithImages(
-  tokens: Token[],
-  existingAddrs: Set<string>,
-  existingNames: Set<string>,
-  limit: number,
-): Token[] {
-  const result: Token[] = [];
-  for (const token of tokens) {
-    if (result.length >= limit) break;
-
-    const addr = (token.pair_address || (token as any).mint || '').toLowerCase();
-    const name = ((token as any).symbol || (token as any).name || '').toLowerCase().trim();
-    const imageUrl = extractTokenImage(token);
-
-    // Must have address, name, and image
-    if (!addr || !name || !imageUrl || !imageUrl.trim()) continue;
-
-    // Skip duplicates
-    if (existingAddrs.has(addr) || existingNames.has(name)) continue;
-
-    existingAddrs.add(addr);
-    existingNames.add(name);
-    result.push(token);
-  }
-  return result;
-}
-
-/**
- * Fetch tokens from multiple endpoints until we have enough.
- * Tries each source in order, collecting unique tokens until the target count is reached.
- */
-async function fetchTokensFromMultipleSources(
-  needed: number,
-  existingAddrs: Set<string>,
-  existingNames: Set<string>,
-): Promise<Token[]> {
-  const collected: Token[] = [];
-
-  for (const url of TOKEN_SOURCES) {
-    if (collected.length >= needed) break;
-
-    const tokens = await fetchTokensFromEndpoint(url);
-    const filtered = filterUniqueTokensWithImages(
-      tokens,
-      existingAddrs,
-      existingNames,
-      needed - collected.length,
-    );
-    collected.push(...filtered);
-  }
-
-  return collected;
 }
 
 export function WatchlistProvider({ children }: { children: React.ReactNode }) {
@@ -144,7 +179,7 @@ export function WatchlistProvider({ children }: { children: React.ReactNode }) {
     }
   }, [watchlist, isHydrated]);
 
-  // Populate default watchlist from multiple token sources (only on first visit)
+  // Populate default watchlist from DexScreener trending (only on first visit)
   useEffect(() => {
     if (!isHydrated) return;
     if (defaultsPopulatedRef.current) return;
@@ -166,77 +201,82 @@ export function WatchlistProvider({ children }: { children: React.ReactNode }) {
     defaultsPopulatedRef.current = true;
 
     (async () => {
-      const tokens = await fetchTokensFromMultipleSources(
-        DEFAULT_WATCHLIST_COUNT,
-        new Set<string>(),
-        new Set<string>(),
-      );
+      const dismissed = getDismissedMints();
+      const tokens = await fetchDexScreenerTrending(dismissed);
 
       if (tokens.length > 0) {
         setWatchlist(tokens);
         localStorage.setItem(DEFAULTS_POPULATED_KEY, 'true');
-        console.log(`Populated watchlist with ${tokens.length} default tokens from multiple sources`);
+        localStorage.setItem(WATCHLIST_LAST_REFRESH_KEY, String(Date.now()));
+        console.log(`Populated watchlist with ${tokens.length} tokens from DexScreener trending`);
       }
     })();
   }, [watchlist.length, isHydrated]);
 
-  // Replenishment: if watchlist drops below MIN_WATCHLIST_COUNT,
-  // fetch fresh tokens to fill back up to DEFAULT_WATCHLIST_COUNT.
-  // Cooldown prevents rapid re-fetching if tokens keep getting removed.
-  const replenishingRef = useRef(false);
-  const lastReplenishTimeRef = useRef(0);
-  const REPLENISH_COOLDOWN_MS = 30000; // 30 seconds between replenishments
+  // 3-hour auto-refresh: replace entire watchlist with fresh DexScreener trending data
+  const refreshingRef = useRef(false);
 
   useEffect(() => {
     if (!isHydrated) return;
-    if (watchlist.length >= MIN_WATCHLIST_COUNT) return;
-    if (watchlist.length === 0) return; // Don't replenish if user cleared everything
-    if (replenishingRef.current) return;
 
-    // Only replenish if we've already done initial population
-    const alreadyPopulated = localStorage.getItem(DEFAULTS_POPULATED_KEY);
-    if (!alreadyPopulated) return;
-
-    // Cooldown: don't replenish more than once per 30s
-    const now = Date.now();
-    if (now - lastReplenishTimeRef.current < REPLENISH_COOLDOWN_MS) return;
-
-    replenishingRef.current = true;
-    lastReplenishTimeRef.current = now;
-    const needed = DEFAULT_WATCHLIST_COUNT - watchlist.length;
-
-    // Build sets from current watchlist to avoid duplicates
-    const existingAddrs = new Set(
-      watchlist.map(t => (t.pair_address || (t as any).mint || '').toLowerCase()).filter(Boolean)
-    );
-    const existingNames = new Set(
-      watchlist.map(t => ((t as any).symbol || t.name || '').toLowerCase().trim()).filter(Boolean)
-    );
-
-    (async () => {
+    async function doRefresh() {
+      if (refreshingRef.current) return;
+      refreshingRef.current = true;
       try {
-        const newTokens = await fetchTokensFromMultipleSources(needed, existingAddrs, existingNames);
-
-        if (newTokens.length > 0) {
-          setWatchlist(prev => [...prev, ...newTokens]);
-          console.log(`Replenished watchlist with ${newTokens.length} tokens`);
+        const dismissed = getDismissedMints();
+        const tokens = await fetchDexScreenerTrending(dismissed);
+        if (tokens.length > 0) {
+          setWatchlist(tokens);
+          console.log(`Auto-refreshed watchlist with ${tokens.length} tokens from DexScreener trending`);
         }
-      } catch (error) {
-        console.warn('Error replenishing watchlist:', error);
+        localStorage.setItem(WATCHLIST_LAST_REFRESH_KEY, String(Date.now()));
+      } catch (err) {
+        console.warn('Watchlist auto-refresh failed:', err);
       } finally {
-        replenishingRef.current = false;
+        refreshingRef.current = false;
       }
-    })();
-  }, [watchlist.length, isHydrated]);
+    }
+
+    // Check if an immediate refresh is needed (>3h since last refresh)
+    const lastRefreshStr = localStorage.getItem(WATCHLIST_LAST_REFRESH_KEY);
+    const lastRefresh = lastRefreshStr ? Number(lastRefreshStr) : 0;
+    if (Date.now() - lastRefresh > WATCHLIST_REFRESH_INTERVAL) {
+      // Only auto-refresh if we've done initial population before
+      const alreadyPopulated = localStorage.getItem(DEFAULTS_POPULATED_KEY);
+      if (alreadyPopulated) {
+        doRefresh();
+      }
+    }
+
+    // Set interval for future refreshes
+    const intervalId = setInterval(() => {
+      const alreadyPopulated = localStorage.getItem(DEFAULTS_POPULATED_KEY);
+      if (alreadyPopulated) {
+        doRefresh();
+      }
+    }, WATCHLIST_REFRESH_INTERVAL);
+
+    return () => clearInterval(intervalId);
+  }, [isHydrated]);
 
   const addToWatchlist = useCallback((token: Token) => {
+    // Remove from dismissed set — user is explicitly adding it back
+    const mintAddr = (token as any).mint || '';
+    if (mintAddr) {
+      const dismissed = getDismissedMints();
+      if (dismissed.has(mintAddr)) {
+        dismissed.delete(mintAddr);
+        saveDismissedMints(dismissed);
+      }
+    }
+
     setWatchlist(prev => {
       const tokenPairAddr = token.pair_address || (token as any).mint || '';
       const tokenMintAddr = (token as any).mint || '';
       const isDuplicate = prev.some(t => {
         const pairAddr = t.pair_address || (t as any).mint || '';
-        const mintAddr = (t as any).mint || '';
-        return (pairAddr && pairAddr === tokenPairAddr) || (mintAddr && mintAddr === tokenMintAddr);
+        const tMintAddr = (t as any).mint || '';
+        return (pairAddr && pairAddr === tokenPairAddr) || (tMintAddr && tMintAddr === tokenMintAddr);
       });
       if (!isDuplicate) {
         return [...prev, token];
@@ -246,11 +286,30 @@ export function WatchlistProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const removeFromWatchlist = useCallback((tokenAddress: string) => {
-    setWatchlist(prev => prev.filter(token => {
-      const pairAddr = token.pair_address || (token as any).mint || '';
-      const mintAddr = (token as any).mint || '';
-      return pairAddr !== tokenAddress && mintAddr !== tokenAddress;
-    }));
+    // Find the token being removed so we can dismiss its mint
+    setWatchlist(prev => {
+      const removed = prev.find(token => {
+        const pairAddr = token.pair_address || (token as any).mint || '';
+        const mintAddr = (token as any).mint || '';
+        return pairAddr === tokenAddress || mintAddr === tokenAddress;
+      });
+
+      // Add mint to dismissed set so auto-refresh won't re-add it
+      if (removed) {
+        const mint = (removed as any).mint || '';
+        if (mint) {
+          const dismissed = getDismissedMints();
+          dismissed.add(mint);
+          saveDismissedMints(dismissed);
+        }
+      }
+
+      return prev.filter(token => {
+        const pairAddr = token.pair_address || (token as any).mint || '';
+        const mintAddr = (token as any).mint || '';
+        return pairAddr !== tokenAddress && mintAddr !== tokenAddress;
+      });
+    });
   }, []);
 
   const isInWatchlist = useCallback((tokenAddress: string) => {

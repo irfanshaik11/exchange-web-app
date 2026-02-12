@@ -315,7 +315,7 @@ export default function ReferralsPage() {
   if (!user) {
     return (
       <>
-        <Head><title>Referrals | Interstate Arena</title></Head>
+        <Head><title>Referrals | Interstate Outpost</title></Head>
         <div className="min-h-screen bg-black">
           <Header />
           {/* Outer padding wrapper - uniform padding on all sides */}
@@ -346,7 +346,7 @@ export default function ReferralsPage() {
   return (
     <>
       <Head>
-        <title>Referrals | Interstate Arena</title>
+        <title>Referrals | Interstate Outpost</title>
         <meta name="description" content="Build your trading network and earn SOL from 5 layers of referrals." />
       </Head>
 
@@ -823,7 +823,7 @@ export default function ReferralsPage() {
                   {allHonorsTiers.map((tier, idx) => {
                     const isCurrent = tier.level === honorsData.currentLevel;
                     const isLocked = !tier.isUnlocked && !isCurrent;
-                    const isLast = idx === allHonorsTiers.length - 1 && false; // Not last because Spartan follows
+                    const isLast = idx === allHonorsTiers.length - 1 && false; // Not last because Emperor follows
 
                     return (
                       <div key={idx} className="snap-center flex h-full">
@@ -877,7 +877,7 @@ export default function ReferralsPage() {
                     );
                   })}
 
-                  {/* Spartan Partner - Special gold accent card */}
+                  {/* Emperor Partner - Special gold accent card */}
                   <div className="snap-center flex h-full">
                     <div className="flex-shrink-0 w-[240px] flex flex-col items-center justify-center px-6 py-5">
                       {/* Status badge */}
@@ -887,7 +887,7 @@ export default function ReferralsPage() {
                         </span>
                       </div>
 
-                      {/* Spartan Badge */}
+                      {/* Emperor Badge */}
                       <div className="relative w-32 h-32 flex items-center justify-center">
                         <div
                           className="absolute inset-0 blur-xl opacity-50"
@@ -897,8 +897,8 @@ export default function ReferralsPage() {
                           }}
                         />
                         <img
-                          src="https://cdn.trojan.com/arena/ranks/big/spartan.webp"
-                          alt="Spartan Partner"
+                          src="https://sakuraiarmory.com/cdn/shop/products/il_fullxfull.2784229031_7zbm_22c7f54d-63f3-4311-857d-6da491a3882e_1200x1200.jpg?v=1642006521"
+                          alt="Emperor Partner"
                           className="w-28 h-28 object-contain relative z-10"
                         />
                       </div>
@@ -908,7 +908,7 @@ export default function ReferralsPage() {
                         className="mt-3 text-3xl tracking-wide text-white"
                         style={{ fontWeight: 900 }}
                       >
-                        SPARTAN
+                        EMPEROR
                       </h4>
 
                       {/* Partner badge */}
@@ -1360,7 +1360,7 @@ export default function ReferralsPage() {
               <div className="mb-4">
                 <h2 className="text-white font-bold text-lg">Referral FAQs</h2>
                 <p className="text-neutral-500 text-sm">
-                  More Questions? <a href="#" className="text-white underline hover:no-underline">Chat with Support</a> or <a href="/arena" className="text-white underline hover:no-underline">View Arena Intro</a>
+                  More Questions? <a href="#" className="text-white underline hover:no-underline">Chat with Support</a> or <a href="/outpost" className="text-white underline hover:no-underline">View Outpost Intro</a>
                 </p>
               </div>
 
