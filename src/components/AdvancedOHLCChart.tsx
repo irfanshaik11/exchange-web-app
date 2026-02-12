@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState, useCallback } from "react";
+import { KOL_ADDRESS_MAP } from "../utils/kolLookup";
 
 // Re-export types from BackendOHLCChart for consistency
 export type BackendInterval =
@@ -1337,10 +1338,8 @@ const AdvancedOHLCChart: React.FC<AdvancedOHLCChartProps> = ({
       return;
     }
 
-    if (!creatorAddress || tradeCount === 0) {
-      if (tradeCount === 0) {
-        marksInitializedRef.current = false;
-      }
+    if (tradeCount === 0) {
+      marksInitializedRef.current = false;
       prevTradeDataLengthRef.current = tradeCount;
       prevCreatorAddressRef.current = creatorAddress || null;
       return;
@@ -5128,109 +5127,55 @@ const AdvancedOHLCChart: React.FC<AdvancedOHLCChartProps> = ({
         );
 
         try {
-          if (
-            !currentTradeData ||
-            !currentCreatorAddress ||
-            currentTradeData.length === 0
-          ) {
+          if (!currentTradeData || currentTradeData.length === 0) {
             console.log(
-              "[AdvancedOHLCChart] No trade data or creator address for marks",
+              "[AdvancedOHLCChart] No trade data for marks",
             );
             onDataCallback([]);
             return;
           }
 
-          // Filter for dev trades within the requested time range
+          // Filter for dev OR KOL trades within the requested time range
           console.log(
             "[AdvancedOHLCChart] Starting to filter trades. Total trades:",
             currentTradeData.length,
           );
-          console.log(
-            "[AdvancedOHLCChart] Looking for creator address:",
-            currentCreatorAddress,
-          );
 
-          const devTrades = currentTradeData.filter(
-            (trade: any, index: number) => {
-              // Handle different trade data structures
-              // For processed WebSocket data: trade.maker
-              // For mock data: trade.maker, trade.user, trade.wallet_address
-              const maker = trade.maker || trade.user || trade.wallet_address;
+          const matchedTrades = currentTradeData.filter(
+            (trade: any) => {
+              const maker = (trade.maker || trade.user || trade.wallet_address || "").toLowerCase();
+              if (!maker) return false;
 
-              // Debug first few trades to understand structure
-              if (index < 5) {
-                console.log(`[AdvancedOHLCChart] Trade ${index}:`, {
-                  maker: maker,
-                  creatorAddress: currentCreatorAddress,
-                  matches:
-                    maker &&
-                    currentCreatorAddress &&
-                    maker.toLowerCase() === currentCreatorAddress.toLowerCase(),
-                  timestamp: trade.timestamp,
-                  side: trade.side,
-                  eventDisplayType: trade.eventDisplayType,
-                  originalEvent: trade.originalEvent,
-                  fullTrade: trade,
-                });
-              }
+              const isDev = currentCreatorAddress && maker === currentCreatorAddress.toLowerCase();
+              const kolInfo = KOL_ADDRESS_MAP.get(maker);
 
-              if (
-                !maker ||
-                !currentCreatorAddress ||
-                maker.toLowerCase() !== currentCreatorAddress.toLowerCase()
-              ) {
-                return false;
-              }
+              if (!isDev && !kolInfo) return false;
 
               // Handle different timestamp formats
-              // Processed WebSocket data uses ISO string timestamps
               let timestamp =
                 trade.timestamp || trade.created_at || trade.unix_time;
               if (!timestamp) return false;
 
-              // Convert timestamp to seconds
               let timeSeconds: number;
               if (typeof timestamp === "string") {
-                // ISO string format (processed WebSocket data)
                 timeSeconds = Math.floor(new Date(timestamp).getTime() / 1000);
               } else if (timestamp > 10000000000) {
-                // Milliseconds
                 timeSeconds = Math.floor(timestamp / 1000);
               } else {
-                // Already in seconds
                 timeSeconds = timestamp;
               }
 
-              // Check if within requested range
-              const inRange = timeSeconds >= from && timeSeconds <= to;
-
-              if (
-                currentCreatorAddress &&
-                maker.toLowerCase() === currentCreatorAddress.toLowerCase()
-              ) {
-                console.log("[AdvancedOHLCChart] Found matching maker trade:", {
-                  maker,
-                  timeSeconds,
-                  from,
-                  to,
-                  inRange,
-                  timestamp: new Date(timeSeconds * 1000).toISOString(),
-                  side: trade.side,
-                  eventDisplayType: trade.eventDisplayType,
-                });
-              }
-
-              return inRange;
+              return timeSeconds >= from && timeSeconds <= to;
             },
           );
 
           console.log(
-            "[AdvancedOHLCChart] Found dev trades for marks:",
-            devTrades.length,
+            "[AdvancedOHLCChart] Found dev/KOL trades for marks:",
+            matchedTrades.length,
           );
 
           // Convert to TradingView marks format
-          const marks = devTrades.map((trade: any) => {
+          const marks = matchedTrades.map((trade: any) => {
             // Handle different timestamp formats
             let timestamp =
               trade.timestamp || trade.created_at || trade.unix_time;
@@ -5306,24 +5251,6 @@ const AdvancedOHLCChart: React.FC<AdvancedOHLCChartProps> = ({
               isBuy = true;
             }
 
-            // CRITICAL: getMarks does NOT support hex colors - only named colors!
-            // Use simple named colors: "green" for buys, "red" for sells
-            // getTimescaleMarks supports hex, but getMarks does not
-            const currentNetwork = latestParamsRef.current.network;
-
-            console.log(
-              "[AdvancedOHLCChart] Color assignment (getMarks - using named colors):",
-              {
-                isBuy,
-                is_buy: trade.is_buy,
-                side: trade.side,
-                type: trade.type,
-                eventDisplayType: trade.eventDisplayType,
-                willUseColor: isBuy ? "green" : "red",
-                currentNetwork,
-              },
-            );
-
             // Format the timestamp to match the requested format
             const formattedDate = new Date(timeSeconds * 1000)
               .toISOString()
@@ -5331,9 +5258,6 @@ const AdvancedOHLCChart: React.FC<AdvancedOHLCChartProps> = ({
               .slice(0, 19);
 
             const {
-              price,
-              parsedAmount,
-              parsedTotalUsd,
               formattedAmount,
               formattedPrice,
               formattedTotalUsd,
@@ -5341,47 +5265,50 @@ const AdvancedOHLCChart: React.FC<AdvancedOHLCChartProps> = ({
               walletAddress,
             } = computeTradeDisplayValues(trade);
 
-            // Debug trade analysis with resolved values
-            console.log("[AdvancedOHLCChart] Trade analysis:", {
-              tradeId: trade.id || trade.transactionHash,
-              is_buy: trade.is_buy,
-              side: trade.side,
-              type: trade.type,
-              eventDisplayType: trade.eventDisplayType,
-              calculatedIsBuy: isBuy,
-              expectedColor: isBuy ? "GREEN" : "RED",
-              expectedText: isBuy ? "Dev Buy" : "Dev Sell",
-              maker: trade.maker,
-              timestamp: timestamp,
-              price,
-              parsedAmount,
-              parsedTotalUsd,
-              displaySymbol,
-            });
+            // Determine if this is a dev trade or KOL trade
+            const maker = (trade.maker || trade.user || trade.wallet_address || "").toLowerCase();
+            const isDev = currentCreatorAddress && maker === currentCreatorAddress.toLowerCase();
+            const kolInfo = !isDev ? KOL_ADDRESS_MAP.get(maker) : null;
 
-            // Create dynamic paragraph text for the marker
-            const markerText = `${isBuy ? "Dev Buy" : "Dev Sell"} • ${displaySymbol}
+            let label: string;
+            let markColor: string;
+            let markerText: string;
+
+            if (isDev) {
+              // Dev marker: green/red, DB/DS label
+              label = isBuy ? "DB" : "DS";
+              markColor = isBuy ? "green" : "red";
+              markerText = `${isBuy ? "Dev Buy" : "Dev Sell"} • ${displaySymbol}
 ${formattedDate} UTC
 
 Price: ${formattedPrice}
 Amount: ${formattedAmount} ${displaySymbol}
 Total: ${formattedTotalUsd}
 Maker: ${walletAddress}`;
+            } else if (kolInfo) {
+              // KOL marker: unique color per KOL, 2-char label
+              label = kolInfo.label;
+              markColor = kolInfo.namedColor;
+              const kolDisplayName = kolInfo.name || kolInfo.twitterUsername;
+              markerText = `KOL ${isBuy ? "Buy" : "Sell"}: ${kolDisplayName} • ${displaySymbol}
+${formattedDate} UTC
 
-            // CRITICAL: getMarks only supports named colors, NOT hex colors!
-            // Use simple named colors: "green" for buys, "red" for sells
-            const label = isBuy ? "DB" : "DS";
+Price: ${formattedPrice}
+Amount: ${formattedAmount} ${displaySymbol}
+Total: ${formattedTotalUsd}
+Maker: ${walletAddress}`;
+            } else {
+              // Should not reach here due to filter, but fallback
+              label = "??";
+              markColor = "gray";
+              markerText = "";
+            }
 
-            // Use named colors - getMarks does NOT support hex (#86d99f, #941839, etc.)
-            // Named colors that work: "red", "green", "blue", "yellow", "orange", etc.
-            const markColor = isBuy ? "green" : "red";
-
-            // getMarks structure - use named colors (NOT hex like timescale marks)
-            // CRITICAL: getMarks does NOT support hex colors, only named colors like "green", "red"
+            // getMarks only supports named colors (NOT hex)
             const markData: any = {
-              id: `dev_trade_${timeSeconds}_${Math.random()}`,
+              id: `${isDev ? "dev" : "kol"}_trade_${timeSeconds}_${Math.random()}`,
               time: timeSeconds,
-              color: markColor, // Named color: "green" or "red" (getMarks doesn't support hex)
+              color: markColor,
               label: label,
               position: "inBar",
               text: markerText,
@@ -5390,32 +5317,6 @@ Maker: ${walletAddress}`;
               size: 1,
               shape: "circle",
             };
-
-            // markColor is already set to "green" or "red" (named colors)
-            // No override needed - getMarks only supports named colors, not hex
-
-            // DEBUG: Log the exact color being sent to TradingView
-            console.log(
-              "[AdvancedOHLCChart] Mark color assignment (getMarks - named colors):",
-              {
-                isBuy,
-                label,
-                markColor: markData.color,
-                note: "getMarks only supports named colors (green/red), not hex values",
-              },
-            );
-
-            console.log("[AdvancedOHLCChart] Creating mark:", {
-              isBuy,
-              is_buy: trade.is_buy,
-              side: trade.side,
-              type: trade.type,
-              eventDisplayType: trade.eventDisplayType,
-              label: isBuy ? "DB" : "DS",
-              expectedText: `${isBuy ? "Dev Buy" : "Dev Sell"} @ ${formattedDate}`,
-              markColor: markData.color,
-              markData,
-            });
 
             return markData;
           });
@@ -5452,14 +5353,13 @@ Maker: ${walletAddress}`;
 
           if (
             !currentTradeData ||
-            !currentCreatorAddress ||
             currentTradeData.length === 0
           ) {
             onDataCallback([]);
             return;
           }
 
-          // Filter for dev trades within the requested time range
+          // Filter for dev trades within the requested time range (timescale = dev only)
           const devTrades = currentTradeData.filter((trade: any) => {
             const maker = trade.maker || trade.user || trade.wallet_address;
             if (
