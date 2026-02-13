@@ -8,7 +8,17 @@ export function mapTradeErrorMessage(error: any): string {
   const raw = rawMessage.toLowerCase();
 
   // Insufficient funds
-  if (errorCode === 'INSUFFICIENT_BALANCE' || raw.includes('insufficient balance') || raw.includes('insufficient sol') || raw.includes('insufficient funds') || raw.includes('insufficient lamports') || raw.includes('account rent'))
+  if (
+    errorCode === 'INSUFFICIENT_BALANCE' ||
+    raw.includes('insufficient balance') ||
+    raw.includes('insufficient sol') ||
+    raw.includes('insufficient funds') ||
+    raw.includes('insufficient lamports') ||
+    raw.includes('account rent') ||
+    raw.includes('sufficient balance') ||
+    raw.includes('not enough sol') ||
+    (raw.includes('custom') && raw.includes('6000'))
+  )
     return 'Insufficient SOL balance for this trade.';
 
   // Slippage / low liquidity

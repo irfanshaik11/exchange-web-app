@@ -21,7 +21,7 @@ import type { QuickBuySettings } from '~/components/QuickBuyContext';
 import { getPoolTypeFromToken } from './poolTypeDetection';
 import { Connection, PublicKey } from '@solana/web3.js';
 import toast from 'react-hot-toast';
-import { getResolvedTokenImage } from './images';
+import { getResolvedTokenImage, resolveTokenImage } from './images';
 import { fetchVerifiedPairAddress } from '~/hooks/useSingleTokenPolling';
 
 // Helper function to get first valid string from multiple candidates
@@ -560,6 +560,7 @@ export async function executeEnhancedTrade(params: EnhancedTradeParams): Promise
       rpc: settings.rpc,
       tokenName: token.name,
       tokenSymbol: token.symbol,
+      imageUrl: await resolveTokenImage(token) || undefined,
     };
 
     const allocationsToUse: WalletAllocation[] =

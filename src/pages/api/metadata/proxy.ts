@@ -115,9 +115,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     if (!['https:'].includes(parsed.protocol)) {
       return sendError(res, 400, 'Only HTTPS URLs are allowed');
     }
-    if (!isAllowedHost(parsed.hostname)) {
-      return sendError(res, 403, 'Host not allowed');
-    }
 
     // Normalize and attempt multiple IPFS gateways if applicable
     const ipfsMatch = parsed.pathname.match(/\/ipfs\/([^/?#]+)/i);

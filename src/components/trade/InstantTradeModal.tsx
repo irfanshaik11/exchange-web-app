@@ -21,17 +21,25 @@ import LowLiquidityWarningDialog from '../LowLiquidityWarningDialog';
 import type { Token } from '~/utils/db';
 import toast from 'react-hot-toast';
 import useMonadPositionWebSocket from '~/hooks/useMonadPositionWebSocket';
+import { executeSolanaMultiBuy, buildSolanaWalletAllocations } from '~/utils/solanaWalletAllocation';
+import { SOL_MINT_ADDRESS } from '~/utils/api';
+import { getPoolTypeFromToken } from '~/utils/poolTypeDetection';
+import { mapTradeErrorMessage } from '~/utils/tradeErrorMessages';
+import { showEnhancedToast } from '~/utils/enhancedToast';
+import { fetchVerifiedPairAddress } from '~/hooks/useSingleTokenPolling';
+import { useTxHashCallback } from '~/contexts/SolanaPositionWebSocketContext';
 
 interface InstantTradeModalProps {
   isOpen: boolean;
   onClose: () => void;
   token: Token | null;
+  liveLiquidityUsd?: number;
 }
 
 const LOW_LIQUIDITY_WARNING_THRESHOLD = 1_000; // USD
 const HIGH_SLIPPAGE_WARNING_THRESHOLD = 50; // Percent
 
-const InstantTradeModal: React.FC<InstantTradeModalProps> = ({ isOpen, onClose, token }) => {
+const InstantTradeModal: React.FC<InstantTradeModalProps> = ({ isOpen, onClose, token, liveLiquidityUsd }) => {
   const router = useRouter();
   const { user, solBalance, refreshBalance, chainBalances, walletList, walletBalances, selectedWalletIds } = useUser();
   const { presets, activePreset, setActivePreset } = useQuickBuy();
@@ -80,6 +88,51 @@ const InstantTradeModal: React.FC<InstantTradeModalProps> = ({ isOpen, onClose, 
     enabled: isMonad && !!user?.id, // Don't require tokenAddress - we want to receive any txHash
     onTxHash: handleWsTxHash,
   });
+
+  // Pending toast ref for Solana quick buys (for WebSocket instant tx updates)
+  const pendingSolanaQuickBuyToastRef = useRef<{
+    id: string;
+    tokenImage: string | null;
+    tokenName: string;
+    fakeTime: string;
+    tokenAddress: string;
+    startTime: number;
+    timerHandle?: number;
+    totalSelectedWallets: number;
+  } | null>(null);
+
+  // Callback for instant Solana txHash update via WebSocket (fires before HTTP response)
+  const handleSolanaQuickBuyWsTxHash = useCallback((data: {
+    txHash: string;
+    tokenAddress: string;
+    tradeType: 'buy' | 'sell';
+    explorerUrl: string;
+  }) => {
+    const pending = pendingSolanaQuickBuyToastRef.current;
+    if (!pending || pending.tokenAddress.toLowerCase() !== data.tokenAddress.toLowerCase()) return;
+
+    console.log('[InstantTradeModal] INSTANT Solana txHash via WebSocket:', data.txHash);
+
+    // For single wallet: update the link element with clickable Solana logo
+    if (pending.totalSelectedWallets === 1) {
+      const linkEl = document.getElementById(`link-${pending.id}`);
+      if (linkEl) {
+        linkEl.innerHTML = `<a href="${data.explorerUrl}" target="_blank" rel="noopener noreferrer" class="hover:opacity-80 transition-opacity"><img src="https://avatars.githubusercontent.com/u/92743431?s=200&v=4" alt="Solana" class="w-4 h-4 rounded-full" style="cursor: pointer;" /></a>`;
+      }
+    }
+
+    // Auto-dismiss after 10s
+    setTimeout(() => {
+      if (pendingSolanaQuickBuyToastRef.current?.id === pending.id) {
+        toast.dismiss(pending.id);
+        pendingSolanaQuickBuyToastRef.current = null;
+      }
+    }, 10000);
+  }, []);
+
+  // Register Solana WS callback for instant txHash notifications
+  useTxHashCallback('instant-trade-modal', handleSolanaQuickBuyWsTxHash);
+
   // Load position from localStorage
   const getInitialPosition = (): { x: number; y: number } => {
     if (typeof window === 'undefined') return { x: 0, y: 0 };
@@ -516,7 +569,7 @@ const InstantTradeModal: React.FC<InstantTradeModalProps> = ({ isOpen, onClose, 
   }, []);
 
   // Get liquidity for warning checks
-  const liquidityUsd = token?.total_liquidity_usd || (token as any)?.liquidityUsd || (token as any)?.total_liquidityUsd || 0;
+  const liquidityUsd = liveLiquidityUsd || token?.total_liquidity_usd || (token as any)?.liquidityUsd || (token as any)?.total_liquidityUsd || 0;
 
   // Get settings based on buy/sell
   const settings = presets[activePreset].quickBuySettings;
@@ -658,6 +711,249 @@ const InstantTradeModal: React.FC<InstantTradeModalProps> = ({ isOpen, onClose, 
       pendingToastRef.current = null;
       const errorMessage = formatMonadError(error?.message || error?.error || "Trade failed. Please try again.");
       toast.error(errorMessage, { id: toastId, duration: 6000 });
+      return { success: false, error };
+    }
+  };
+
+  // Solana quick buy with PulseTable-style animated toast
+  const runSolanaQuickBuyWithToast = async ({
+    amount,
+    toastPrefix = 'solana-quickbuy',
+  }: {
+    amount: number;
+    toastPrefix?: string;
+  }) => {
+    if (!token || !user) return { success: false };
+
+    const tokenImage = token ? getResolvedTokenImage(token as any) : null;
+    const tokenName = token?.name || token?.symbol || 'Token';
+    const poolType = getPoolTypeFromToken(token);
+
+    // Build wallet allocations to know wallet count
+    const { allocations } = buildSolanaWalletAllocations({
+      amount,
+      walletList,
+      walletBalances,
+      selectedWalletIds: selectedWalletIds?.sol || [],
+      priorityFee: settings.priority,
+      bribe: settings.bribe,
+    });
+    const walletsWithBalance = allocations.length;
+    const total = (selectedWalletIds?.sol || []).length || 1;
+    const isMultiWallet = walletsWithBalance > 1;
+
+    // Create PulseTable-style toast
+    const uniqueToastId = `${toastPrefix}-${Date.now()}`;
+    const startTime = Date.now();
+    const timerCap = 0.40 + Math.random() * 0.20;
+    let timerFinished = false;
+
+    toast(
+      (t) => (
+        <div className="flex items-center gap-3">
+          {tokenImage && (
+            <img
+              src={tokenImage}
+              alt={tokenName}
+              className="h-6 w-6 flex-shrink-0 rounded-full"
+              onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+            />
+          )}
+          <div className="flex min-w-0 flex-1 items-center gap-2">
+            <span className="truncate text-sm text-neutral-200">
+              Buying {tokenName}
+            </span>
+            <span
+              id={`timer-${uniqueToastId}`}
+              className="flex-shrink-0 text-xs text-neutral-400"
+            >
+              (0.00s)
+            </span>
+            <span
+              id={`check-${uniqueToastId}`}
+              className="flex-shrink-0 text-green-400"
+              style={{ display: 'none' }}
+            >
+              ✓
+            </span>
+            <span
+              id={`link-${uniqueToastId}`}
+              className="flex-shrink-0"
+              style={{ display: 'inline-flex' }}
+            >
+              <img
+                src="https://avatars.githubusercontent.com/u/92743431?s=200&v=4"
+                alt="Solana"
+                className="h-4 w-4 rounded-full opacity-70"
+                style={{ cursor: 'default' }}
+              />
+            </span>
+          </div>
+        </div>
+      ),
+      {
+        id: uniqueToastId,
+        duration: Infinity,
+        style: {
+          background: '#1a1a1a',
+          border: '1px solid #333',
+          borderRadius: '8px',
+          padding: '12px',
+        },
+      },
+    );
+
+    // Timer animation (requestAnimationFrame for smooth updates)
+    const tick = () => {
+      const elapsed = (Date.now() - startTime) / 1000;
+      const displayTime = Math.min(elapsed, timerCap).toFixed(2);
+      const timerEl = document.getElementById(`timer-${uniqueToastId}`);
+      if (timerEl) {
+        timerEl.textContent = `(${displayTime}s)`;
+      }
+
+      if (!timerFinished && elapsed >= timerCap) {
+        timerFinished = true;
+        const checkEl = document.getElementById(`check-${uniqueToastId}`);
+        if (checkEl) {
+          checkEl.style.display = 'block';
+        }
+        const linkEl = document.getElementById(`link-${uniqueToastId}`);
+        if (linkEl) {
+          if (isMultiWallet) {
+            linkEl.textContent = `${walletsWithBalance}/${total}`;
+            linkEl.className = 'text-xs text-blue-400 font-medium flex-shrink-0';
+          } else {
+            linkEl.innerHTML = `<img src="https://avatars.githubusercontent.com/u/92743431?s=200&v=4" alt="Solana" class="w-4 h-4 rounded-full opacity-70" style="cursor: default;" />`;
+            linkEl.className = 'flex-shrink-0';
+          }
+        }
+        timerHandle = null as any;
+        return;
+      }
+      timerHandle = requestAnimationFrame(tick) as any;
+    };
+    let timerHandle = requestAnimationFrame(tick) as any;
+
+    // Store pending toast info for WebSocket instant update
+    pendingSolanaQuickBuyToastRef.current = {
+      id: uniqueToastId,
+      tokenImage,
+      tokenName,
+      fakeTime: timerCap.toFixed(2),
+      tokenAddress: token.mint || '',
+      startTime,
+      timerHandle,
+      totalSelectedWallets: walletsWithBalance,
+    };
+
+    try {
+      // Verify pool address from token service
+      let poolAddress = (token as any).migrated_pool_address || token.pair_address || '';
+      if (token.mint) {
+        const verifiedPairAddress = await fetchVerifiedPairAddress(token.mint);
+        if (verifiedPairAddress) {
+          poolAddress = verifiedPairAddress;
+        }
+      }
+      const baseMint = token.mint || '';
+      const quoteMint = SOL_MINT_ADDRESS;
+
+      const multiResult = await executeSolanaMultiBuy({
+        poolAddress,
+        baseMint,
+        quoteMint,
+        amountSOL: amount,
+        poolType,
+        originalPairAddress: token.pair_address,
+        slippage: getEffectiveSlippage(settings.maxSlippage, true),
+        priorityFee: settings.priority,
+        bribe: settings.bribe,
+        mevMode: settings.mevMode,
+        autoFee: settings.autoFee,
+        maxFee: settings.maxFee,
+        rpc: settings.rpc,
+        tokenName: token.name,
+        tokenSymbol: token.symbol,
+        authToken: user.bearerToken,
+        walletList,
+        walletBalances,
+        selectedWalletIds: selectedWalletIds?.sol || [],
+        onTxHash: ({ txHash }) => {
+          if (pendingSolanaQuickBuyToastRef.current?.id === uniqueToastId && txHash) {
+            const linkEl = document.getElementById(`link-${uniqueToastId}`);
+            if (linkEl) {
+              const explorerUrl = `https://solscan.io/tx/${txHash}`;
+              linkEl.innerHTML = `<a href="${explorerUrl}" target="_blank" rel="noopener noreferrer" class="hover:opacity-80 transition-opacity"><img src="https://avatars.githubusercontent.com/u/92743431?s=200&v=4" alt="Solana" class="w-4 h-4 rounded-full" style="cursor: pointer;" /></a>`;
+              linkEl.className = '';
+            }
+          }
+        },
+      });
+
+      // Extract first tx hash for post-success link update
+      const firstTxHash =
+        multiResult?.results?.find(
+          (r: any) => (r.result as any)?.hash || (r.result as any)?.txid,
+        )?.result?.hash ||
+        multiResult?.results?.find(
+          (r: any) => (r.result as any)?.hash || (r.result as any)?.txid,
+        )?.result?.txid;
+
+      if (firstTxHash && !isMultiWallet) {
+        const linkEl = document.getElementById(`link-${uniqueToastId}`);
+        if (linkEl) {
+          const explorerUrl = `https://solscan.io/tx/${firstTxHash}`;
+          linkEl.innerHTML = `<a href="${explorerUrl}" target="_blank" rel="noopener noreferrer" class="hover:opacity-80 transition-opacity"><img src="https://avatars.githubusercontent.com/u/92743431?s=200&v=4" alt="Solana" class="w-4 h-4 rounded-full" style="cursor: pointer;" /></a>`;
+          linkEl.className = '';
+        }
+        if (timerHandle) {
+          cancelAnimationFrame(timerHandle);
+        }
+        setTimeout(() => toast.dismiss(uniqueToastId), 10000);
+      }
+
+      // Dispatch event to refresh chart price lines
+      if (typeof window !== 'undefined' && token.mint) {
+        window.dispatchEvent(new CustomEvent('solanaQuickTrade', { detail: { tokenAddress: token.mint } }));
+      }
+
+      // Refresh token balance after 2s
+      setTimeout(async () => {
+        try {
+          const trades = await getTradeActivityByUser(user.id.toString());
+          const tokenTrades = trades.filter(
+            (trade: any) => trade.tokenAddress?.toLowerCase() === (token.mint || '').toLowerCase()
+          );
+          if (tokenTrades.length > 0) {
+            let bought = 0;
+            let sold = 0;
+            tokenTrades.forEach((trade: any) => {
+              if (trade.type === 'Buy') bought += Number(trade.tokenAmount) || 0;
+              else if (trade.type === 'Sell') sold += Number(trade.tokenAmount) || 0;
+            });
+            setTokenBalance(Math.max(0, bought - sold));
+          } else {
+            setTokenBalance(0);
+          }
+        } catch (error) {
+          console.error('Error refreshing token balance:', error);
+        }
+      }, 2000);
+
+      return { success: true };
+    } catch (error: any) {
+      if (timerHandle) {
+        cancelAnimationFrame(timerHandle);
+      }
+      if (pendingSolanaQuickBuyToastRef.current) {
+        toast.dismiss(pendingSolanaQuickBuyToastRef.current.id);
+        pendingSolanaQuickBuyToastRef.current = null;
+      }
+      console.error('❌ Solana Quick Buy failed:', error);
+      showEnhancedToast('error', mapTradeErrorMessage(error), {
+        title: 'Trade Failed',
+      });
       return { success: false, error };
     }
   };
@@ -809,70 +1105,10 @@ const InstantTradeModal: React.FC<InstantTradeModalProps> = ({ isOpen, onClose, 
         setIsLoading(false);
         return;
       } else {
-
-        // Use Solana enhanced trade handler for Solana tokens
-    const effectiveSettings = {
-      ...settings,
-      maxSlippage: getEffectiveSlippage(settings.maxSlippage, true),
-    };
-    
-    const result = await executeEnhancedTrade({
-      token,
-      amount: requested,
-      side: 'buy',
-      settings: effectiveSettings,
-      user: { bearerToken: user.bearerToken, id: user.id },
-      solBalance: Number(solBalance),
-      solPriceUsd: 150,
-      walletContext,
-      refreshBalance,
-      onSuccess: async (txHash, stats) => {
-        console.log("✅ Enhanced Trade successful:", { txHash, stats });
-        // Refresh token balance after trade
-        setTimeout(async () => {
-          try {
-            const trades = await getTradeActivityByUser(user.id.toString());
-            const tokenTrades = trades.filter(
-              (trade: any) => trade.tokenAddress?.toLowerCase() === (token.mint || "").toLowerCase()
-            );
-
-            if (tokenTrades.length > 0) {
-              let bought = 0;
-              let sold = 0;
-
-              tokenTrades.forEach((trade: any) => {
-                if (trade.type === "Buy") {
-                  bought += Number(trade.tokenAmount) || 0;
-                } else if (trade.type === "Sell") {
-                  sold += Number(trade.tokenAmount) || 0;
-                }
-              });
-
-              const remaining = bought - sold;
-              setTokenBalance(Math.max(0, remaining));
-            } else {
-              setTokenBalance(0);
-            }
-
-            // Dispatch event to refresh chart price lines
-            if (typeof window !== "undefined" && token.mint) {
-              window.dispatchEvent(new CustomEvent("solanaQuickTrade", { detail: { tokenAddress: token.mint } }));
-            }
-          } catch (error) {
-            console.error('Error refreshing token balance:', error);
-          }
-        }, 2000);
-      },
-      onError: (error) => {
-        console.error("❌ Enhanced Trade failed:", error);
-      },
-      onWarning: (warnings) => {
-        console.warn("⚠️ Pre-transaction warnings:", warnings);
-      },
-    });
-
-    setIsLoading(false);
-    return result;
+        // Use Solana quick buy with PulseTable-style toast
+        const buyResult = await runSolanaQuickBuyWithToast({ amount: requested });
+        setIsLoading(false);
+        return buyResult;
       }
     } catch (error: any) {
       console.error("Trade error:", error);
@@ -1267,70 +1503,61 @@ const InstantTradeModal: React.FC<InstantTradeModalProps> = ({ isOpen, onClose, 
           }
         }
       } else {
-        // Use Solana enhanced trade handler for Solana tokens
-        const currentSettings = side === 'buy' 
-          ? presets[activePreset].quickBuySettings 
-          : presets[activePreset].quickSellSettings;
-        
-    const effectiveCurrentSettings = {
-      ...currentSettings,
-      maxSlippage: getEffectiveSlippage(currentSettings.maxSlippage, side === 'buy'),
-    };
-    
-        await executeEnhancedTrade({
-      token,
-      amount: amount,
-      side: side,
-      settings: effectiveCurrentSettings,
-          user: { bearerToken: user.bearerToken, id: user.id },
-      solBalance: Number(solBalance),
-      solPriceUsd: 150,
-      walletContext,
-      refreshBalance,
-      onSuccess: async (txHash, stats) => {
-        console.log("✅ Enhanced Trade successful:", { txHash, stats });
-        // Refresh token balance after trade
-        setTimeout(async () => {
-          try {
-                const trades = await getTradeActivityByUser(user.id.toString());
-            const tokenTrades = trades.filter(
-              (trade: any) => trade.tokenAddress?.toLowerCase() === (token.mint || "").toLowerCase()
-            );
-
-            if (tokenTrades.length > 0) {
-              let bought = 0;
-              let sold = 0;
-
-              tokenTrades.forEach((trade: any) => {
-                if (trade.type === "Buy") {
-                  bought += Number(trade.tokenAmount) || 0;
-                } else if (trade.type === "Sell") {
-                  sold += Number(trade.tokenAmount) || 0;
+        if (side === 'buy') {
+          // Use Solana quick buy with PulseTable-style toast
+          await runSolanaQuickBuyWithToast({ amount, toastPrefix: 'solana-slippage' });
+        } else {
+          // Keep executeEnhancedTrade for sell
+          const currentSettings = presets[activePreset].quickSellSettings;
+          const effectiveCurrentSettings = {
+            ...currentSettings,
+            maxSlippage: getEffectiveSlippage(currentSettings.maxSlippage, false),
+          };
+          await executeEnhancedTrade({
+            token,
+            amount: amount,
+            side: 'sell',
+            settings: effectiveCurrentSettings,
+            user: { bearerToken: user.bearerToken, id: user.id },
+            solBalance: Number(solBalance),
+            solPriceUsd: 150,
+            walletContext,
+            refreshBalance,
+            onSuccess: async (txHash, stats) => {
+              console.log("✅ Enhanced Trade successful:", { txHash, stats });
+              setTimeout(async () => {
+                try {
+                  const trades = await getTradeActivityByUser(user.id.toString());
+                  const tokenTrades = trades.filter(
+                    (trade: any) => trade.tokenAddress?.toLowerCase() === (token.mint || "").toLowerCase()
+                  );
+                  if (tokenTrades.length > 0) {
+                    let bought = 0;
+                    let sold = 0;
+                    tokenTrades.forEach((trade: any) => {
+                      if (trade.type === "Buy") bought += Number(trade.tokenAmount) || 0;
+                      else if (trade.type === "Sell") sold += Number(trade.tokenAmount) || 0;
+                    });
+                    setTokenBalance(Math.max(0, bought - sold));
+                  } else {
+                    setTokenBalance(0);
+                  }
+                  if (typeof window !== "undefined" && token.mint) {
+                    window.dispatchEvent(new CustomEvent("solanaQuickTrade", { detail: { tokenAddress: token.mint } }));
+                  }
+                } catch (error) {
+                  console.error('Error refreshing token balance:', error);
                 }
-              });
-
-              const remaining = bought - sold;
-              setTokenBalance(Math.max(0, remaining));
-            } else {
-              setTokenBalance(0);
-            }
-
-            // Dispatch event to refresh chart price lines
-            if (typeof window !== "undefined" && token.mint) {
-              window.dispatchEvent(new CustomEvent("solanaQuickTrade", { detail: { tokenAddress: token.mint } }));
-            }
-          } catch (error) {
-            console.error('Error refreshing token balance:', error);
-          }
-        }, 2000);
-      },
-      onError: (error) => {
-        console.error("❌ Enhanced Trade failed:", error);
-      },
-      onWarning: (warnings) => {
-        console.warn("⚠️ Pre-transaction warnings:", warnings);
-      },
-        });
+              }, 2000);
+            },
+            onError: (error) => {
+              console.error("❌ Enhanced Trade failed:", error);
+            },
+            onWarning: (warnings) => {
+              console.warn("⚠️ Pre-transaction warnings:", warnings);
+            },
+          });
+        }
       }
     } catch (error) {
       console.error("Trade error:", error);
@@ -1418,66 +1645,8 @@ const InstantTradeModal: React.FC<InstantTradeModalProps> = ({ isOpen, onClose, 
           broadcastMonadQuickTrade(tokenAddress, 'buy');
         }
       } else {
-        // Use Solana enhanced trade handler for Solana tokens
-    const effectiveCurrentSettings = {
-      ...currentSettings,
-      maxSlippage: getEffectiveSlippage(currentSettings.maxSlippage, true),
-    };
-    
-        await executeEnhancedTrade({
-      token,
-      amount: amount,
-      side: 'buy',
-      settings: effectiveCurrentSettings,
-          user: { bearerToken: user.bearerToken, id: user.id },
-      solBalance: Number(solBalance),
-      solPriceUsd: 150,
-      walletContext,
-      refreshBalance,
-      onSuccess: async (txHash, stats) => {
-        console.log("✅ Enhanced Trade successful:", { txHash, stats });
-        // Refresh token balance after trade
-        setTimeout(async () => {
-          try {
-                const trades = await getTradeActivityByUser(user.id.toString());
-            const tokenTrades = trades.filter(
-              (trade: any) => trade.tokenAddress?.toLowerCase() === (token.mint || "").toLowerCase()
-            );
-
-            if (tokenTrades.length > 0) {
-              let bought = 0;
-              let sold = 0;
-
-              tokenTrades.forEach((trade: any) => {
-                if (trade.type === "Buy") {
-                  bought += Number(trade.tokenAmount) || 0;
-                } else if (trade.type === "Sell") {
-                  sold += Number(trade.tokenAmount) || 0;
-                }
-              });
-
-              const remaining = bought - sold;
-              setTokenBalance(Math.max(0, remaining));
-            } else {
-              setTokenBalance(0);
-            }
-
-            // Dispatch event to refresh chart price lines
-            if (typeof window !== "undefined" && token.mint) {
-              window.dispatchEvent(new CustomEvent("solanaQuickTrade", { detail: { tokenAddress: token.mint } }));
-            }
-          } catch (error) {
-            console.error('Error refreshing token balance:', error);
-          }
-        }, 2000);
-      },
-      onError: (error) => {
-        console.error("❌ Enhanced Trade failed:", error);
-      },
-      onWarning: (warnings) => {
-        console.warn("⚠️ Pre-transaction warnings:", warnings);
-      },
-        });
+        // Use Solana quick buy with PulseTable-style toast
+        await runSolanaQuickBuyWithToast({ amount, toastPrefix: 'solana-liquidity' });
       }
     } catch (error) {
       console.error("Trade error:", error);
@@ -1505,7 +1674,7 @@ const InstantTradeModal: React.FC<InstantTradeModalProps> = ({ isOpen, onClose, 
   const solPrice = typeof token?.sol_price === 'number' ? token.sol_price : 0;
   const tokenValueUsd = tokensToSell * tokenPriceUsd;
   const solValue = tokensToSell * solPrice;
-  const SOL_LOGO_URL = "https://axiom.trade/images/sol-fill.svg";
+  const SOL_LOGO_URL = "https://cryptologos.cc/logos/solana-sol-logo.svg?v=040";
   const MONAD_LOGO_URL = "https://i0.wp.com/www.gizmotimes.com/wp-content/uploads/2023/10/Monad-Logo.png?fit=1920%2C1080&ssl=1";
   const LOGO_URL = isMonad ? MONAD_LOGO_URL : SOL_LOGO_URL;
   const LOGO_ALT = isMonad ? "Monad" : "Solana";

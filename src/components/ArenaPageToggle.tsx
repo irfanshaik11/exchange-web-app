@@ -17,7 +17,7 @@ export default function ArenaPageToggle({ activePage }: ArenaPageToggleProps) {
   return (
     <div className="flex items-center justify-center mb-6">
       <div className="flex items-center rounded-full bg-[#1a1b1f] p-1">
-        <Link href="/arena">
+        <Link href="/outpost">
           <button
             className={`flex items-center gap-2 px-4 py-2 rounded-full transition-all cursor-pointer ${
               activePage === 'arena'
@@ -26,7 +26,7 @@ export default function ArenaPageToggle({ activePage }: ArenaPageToggleProps) {
             }`}
           >
             <GiTrophy size={16} />
-            Arena
+            Outpost
           </button>
         </Link>
         <Link href="/referrals">

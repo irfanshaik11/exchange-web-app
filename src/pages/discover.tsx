@@ -8,8 +8,10 @@ import Header from '../components/Header';
 import Footer from '../components/Footer';
 import usePaginatedTokensWithFallback from '../hooks/usePaginatedTokensWithFallback';
 import useTrendingWebSocket, { type TrendingTimeframe, type NormalizedTrendingToken } from '../hooks/useTrendingWebSocket';
+import { useDexScreenerTrending } from '../hooks/useDexScreenerTrending';
 import { usePumpPortalWebSocket } from '../hooks/usePumpPortalWebSocket';
 import { useQuickBuy } from "~/components/QuickBuyContext";
+import { useSolPrice } from "~/components/SolPriceContext";
 import QuickBuySettingsModal from '../components/QuickBuySettingsModal';
 import { useFilter } from '../components/FilterContext';
 import FilterPopout from '../components/FilterPopout';
@@ -25,7 +27,7 @@ import { FaRunning, FaGasPump, FaCoins, FaBan, FaCheckCircle } from "react-icons
 import { HiLightningBolt } from "react-icons/hi";
 import { BsSliders2 } from "react-icons/bs";
 import { prefetchTradeData } from "~/utils/tokenCache";
-import { extractTokenImage, getResolvedTokenImage } from "~/utils/images";
+import { extractTokenImage, getResolvedTokenImage, resolveTokenImage, isMetadataUrl } from "~/utils/images";
 import { broadcastMonadQuickTrade } from "~/utils/monadTradeEvents";
 import toast from "react-hot-toast";
 import { executeSolanaMultiBuy, buildSolanaWalletAllocations } from "~/utils/solanaWalletAllocation";
@@ -33,6 +35,7 @@ import { getPoolTypeFromToken } from "~/utils/poolTypeDetection";
 import { mapTradeErrorMessage } from "~/utils/tradeErrorMessages";
 import { fetchVerifiedPairAddress } from "~/hooks/useSingleTokenPolling";
 import { useQueryNewPairs, useQueryLaunchpadData } from '../hooks/useQueryTokens';
+import { usePulseFromQueryCache } from '~/hooks/usePulseFromQueryCache';
 
 const WRAPPED_SOL_MINT = SOL_MINT_ADDRESS;
 
@@ -105,12 +108,12 @@ export default function DiscoverPage() {
   // For Monad, only allow 'trending' and 'newPairs' tabs
   // Initialize activeTab from localStorage to persist across navigation
   // Default is 'trending' - changed key to reset user preferences
-  const [activeTab, setActiveTab] = useState<'trending' | 'newPairs' | 'xStocks' | 'surge' | 'dex' | 'live'>(() => {
+  const [activeTab, setActiveTab] = useState<'trending' | 'trending2' | 'newPairs' | 'xStocks' | 'surge' | 'dex' | 'live'>(() => {
     if (typeof window !== 'undefined') {
       try {
-        const saved = localStorage.getItem('discover_tab_v2');
-        if (saved && ['trending', 'newPairs', 'xStocks', 'surge', 'dex', 'live'].includes(saved)) {
-          const savedTab = saved as 'trending' | 'newPairs' | 'xStocks' | 'surge' | 'dex' | 'live';
+        const saved = localStorage.getItem('discover_tab_v3');
+        if (saved && ['trending', 'trending2', 'newPairs', 'xStocks', 'surge', 'dex', 'live'].includes(saved)) {
+          const savedTab = saved as 'trending' | 'trending2' | 'newPairs' | 'xStocks' | 'surge' | 'dex' | 'live';
           // Check if we're on monad chain - if so, only allow trending or newPairs
           const urlParams = new URLSearchParams(window.location.search);
           const initialChain = urlParams.get('chain') || 'sol';
@@ -123,14 +126,14 @@ export default function DiscoverPage() {
         // Ignore localStorage errors
       }
     }
-    return 'trending'; // Default to trending
+    return 'trending'; // Default to trending tab
   });
 
   // Save activeTab to localStorage whenever it changes
   useEffect(() => {
     if (typeof window !== 'undefined') {
       try {
-        localStorage.setItem('discover_tab_v2', activeTab);
+        localStorage.setItem('discover_tab_v3', activeTab);
       } catch {
         // Ignore localStorage errors
       }
@@ -148,6 +151,8 @@ export default function DiscoverPage() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [isFilterPopoutOpen, setIsFilterPopoutOpen] = useState(false);
   const { filter } = useFilter();
+  const { solPrice } = useSolPrice();
+  const { newTokens: wsNewTokens } = usePulseFromQueryCache({ channel: 'new' });
 
   // Pump Live sorting state
   const [pumpLiveSortField, setPumpLiveSortField] = useState<PumpLiveSortField>('time');
@@ -211,7 +216,7 @@ export default function DiscoverPage() {
   const tokenMapRef = useRef<Map<string, TokenWithDexPaid>>(new Map());
   const [filteredTokens, setFilteredTokens] = useState<TokenWithDexPaid[]>([]);
   const [displayed, setDisplayed] = useState<TokenWithDexPaid[]>([]);
-  const [sortKey, setSortKey] = useState<"market_cap_total" | "liquidity" | "volume" | "txns" | "name" | "total_liquidity_usd" | "fully_diluted_value" | "score">("score"); // Default to composite score - balances MC, liquidity, volume, and transactions
+  const [sortKey, setSortKey] = useState<"market_cap_total" | "liquidity" | "volume" | "txns" | "name" | "total_liquidity_usd" | "fully_diluted_value" | "score" | "timestamp">("score"); // Default to composite score - balances MC, liquidity, volume, and transactions
   const [sortDirection, setSortDirection] = useState<"asc" | "desc">("desc");
   // Store new pairs data per chain to preserve data when switching chains
   const [newPairsRawByChain, setNewPairsRawByChain] = useState<Record<string, TokenWithDexPaid[]>>(() => {
@@ -239,7 +244,44 @@ export default function DiscoverPage() {
   
   // Get current chain's data
   const newPairsRaw = newPairsRawByChain[currentChain] || [];
-  
+
+  // Merge real-time WebSocket volume into HTTP-fetched new pairs.
+  // The HTTP endpoint returns volume=0 for new tokens (PostgreSQL not yet populated),
+  // but the WebSocket worker has live volume from Redis (updated on every trade).
+  const volumeEnrichedNewPairs = useMemo(() => {
+    if (!newPairsRaw || newPairsRaw.length === 0) return newPairsRaw;
+    if (!wsNewTokens || wsNewTokens.length === 0) return newPairsRaw;
+
+    // Build lookup: mint → WebSocket token (has real-time volume from Redis)
+    const wsMap = new Map<string, any>();
+    for (const wt of wsNewTokens) {
+      const mint = (wt as any).mint_address || (wt as any).mint || (wt as any).address;
+      if (mint) wsMap.set(mint, wt);
+    }
+
+    return newPairsRaw.map(token => {
+      const mint = (token as any).mint_address || (token as any).mint;
+      const ws = mint ? wsMap.get(mint) : null;
+      if (!ws) return token;
+
+      const toNum = (v: any) => (typeof v === 'number' ? v : parseFloat(v) || 0);
+      const merged = { ...token } as any;
+
+      // Merge volume fields from WebSocket (SOL amounts — InterstateTable converts to USD)
+      for (const tf of ['5m', '1h', '6h', '24h']) {
+        const bv = toNum(ws[`total_buy_volume_${tf}`]);
+        const sv = toNum(ws[`total_sell_volume_${tf}`]);
+        if (bv > 0 || sv > 0) {
+          merged[`total_buy_volume_${tf}`] = bv;
+          merged[`total_sell_volume_${tf}`] = sv;
+          merged[`volume_${tf}`] = bv + sv;
+        }
+      }
+
+      return merged;
+    });
+  }, [newPairsRaw, wsNewTokens]);
+
   // Ref to track current state for use in callbacks/intervals
   const newPairsRawByChainRef = useRef(newPairsRawByChain);
   useEffect(() => {
@@ -531,6 +573,10 @@ export default function DiscoverPage() {
     // Only enable for Solana chain on trending tab
     enabled: currentChain === 'sol' && activeTab === 'trending',
   });
+
+  // DexScreener trending (Trending 2 tab)
+  const { tokens: dexScreenerTokens, loading: dsLoading, isConnected: dsConnected, error: dsError } =
+    useDexScreenerTrending(currentChain === 'sol' && activeTab === 'trending2');
 
   // Merge data sources: WebSocket for Solana trending, fallback for everything else
   const allTokens = useMemo(() => {
@@ -863,9 +909,10 @@ export default function DiscoverPage() {
     const CACHE_TTL = 30 * 1000; // Trigger background refresh after 30s
     const STALE_THRESHOLD = 5 * 60 * 1000; // Treat cache as stale after 5 minutes (but still usable)
 
-    // Check if we already have valid cached data in state for current chain - if so, skip fetching
-    // This prevents re-fetching when navigating back to the page
-    // Use ref to get current value (updated via useEffect above)
+    // If we already have valid cached data in state for the current chain,
+    // skip the initial fetch to avoid a loading flash — but still fall through
+    // to the main 60s interval so live updates keep flowing.
+    let skipInitialFetch = false;
     const currentChainData = newPairsRawByChainRef.current[currentChain] || [];
     if (currentChainData.length > 0) {
       try {
@@ -873,72 +920,13 @@ export default function DiscoverPage() {
         if (cached) {
           const parsed = JSON.parse(cached);
           const age = Date.now() - parsed.timestamp;
-          // If we have data in state and cache is still valid, skip fetching
           if (age < STALE_THRESHOLD && parsed.data && parsed.data.length > 0) {
-            console.log('[Discover] Already have cached data in state, skipping re-fetch on navigation');
-            // Just set up the refresh interval for stale cache updates
-            intervalId = setInterval(() => {
-              if (cancelled) return;
-              const cachedData = localStorage.getItem(CACHE_KEY);
-              if (cachedData) {
-                const parsed = JSON.parse(cachedData);
-                const age = Date.now() - parsed.timestamp;
-                // Only refresh if cache is stale (will be handled by fetchNewPairs below)
-                if (age > CACHE_TTL) {
-                  // Trigger a silent background refresh
-                  // Use appropriate endpoint based on chain
-                  const chainToUse = currentChain || (router.query.chain as string) || 'sol';
-                  const apiUrl = chainToUse === 'monad'
-                    ? `/api/token-service/pulse-new-monad?limit=200`
-                    : `/api/token-service/pulse-new?limit=200`;
-                  fetch(apiUrl, {
-                    headers: { 
-                      'Cache-Control': 'no-cache', 
-                      Pragma: 'no-cache',
-                      'Accept': 'application/json'
-                    },
-                  })
-                    .then(res => res.ok ? res.json() : null)
-                    .then(data => {
-                      if (!cancelled && data) {
-                        // Handle multiple formats:
-                        // 1. Direct array
-                        // 2. Monad format: {status, count, data: [...]}
-                        // 3. Birdeye format: {data: {tokens: [...]}}
-                        let tokensArray: any[] = [];
-                        if (Array.isArray(data)) {
-                          tokensArray = data;
-                        } else if (data?.data) {
-                          if (Array.isArray(data.data)) {
-                            tokensArray = data.data;
-                          } else if (data.data?.tokens && Array.isArray(data.data.tokens)) {
-                            tokensArray = data.data.tokens;
-                          }
-                        }
-                        if (tokensArray.length > 0) {
-                          // Process and save to cache (simplified - just update cache)
-                          localStorage.setItem(CACHE_KEY, JSON.stringify({
-                            data: tokensArray,
-                            timestamp: Date.now(),
-                          }));
-                        }
-                      }
-                    })
-                    .catch(err => console.error('[Discover] Background refresh failed:', err));
-                }
-              }
-            }, 60_000);
-            
-            return () => {
-              cancelled = true;
-              if (intervalId) {
-                clearInterval(intervalId);
-              }
-            };
+            console.log('[Discover] Already have cached data in state, skipping initial fetch');
+            skipInitialFetch = true;
           }
         }
       } catch {
-        // Continue with normal flow if check fails
+        // Continue with normal flow
       }
     }
 
@@ -1036,9 +1024,7 @@ export default function DiscoverPage() {
           console.log('[Discover] Fetching Monad new pairs via API route');
         } else {
           fetchUrls.push(`/api/token-service/pulse-new?limit=500&fresh=1`);
-          fetchUrls.push(`/api/token-service/pulse-final-stretch?limit=100&fresh=1`);
-          fetchUrls.push(`/api/token-service/pulse-migrated?limit=100&fresh=1`);
-          console.log('[Discover] Fetching Solana new pairs from 3 pulse endpoints');
+          console.log('[Discover] Fetching Solana new pairs from pulse-new endpoint');
         }
 
         const fetchHeaders = {
@@ -1585,20 +1571,23 @@ export default function DiscoverPage() {
       }
     };
 
-    // Check if we already have data from initial state (cached) for current chain
-    // Use ref to get current value
-    const hasInitialData = (newPairsRawByChainRef.current[currentChain] || []).length > 0;
-    
-    if (hasInitialData) {
-      // We have cached data from initial state, don't show loading, just refresh in background silently
-      // Ensure loading is false since we have cached data
-      setNewPairsLoading(false);
-      fetchNewPairs(false, false).catch(err => {
-        console.error('[Discover] Background fetch failed:', err);
-      });
+    if (!skipInitialFetch) {
+      // Check if we already have data from initial state (cached) for current chain
+      const hasInitialData = (newPairsRawByChainRef.current[currentChain] || []).length > 0;
+
+      if (hasInitialData) {
+        // We have cached data from initial state, don't show loading, just refresh in background silently
+        setNewPairsLoading(false);
+        fetchNewPairs(false, false).catch(err => {
+          console.error('[Discover] Background fetch failed:', err);
+        });
+      } else {
+        // No cache, fetch with loading state only on first load
+        fetchNewPairs(true, true);
+      }
     } else {
-      // No cache, fetch with loading state only on first load
-      fetchNewPairs(true, true);
+      // skipInitialFetch: we have fresh cached data, just ensure loading is off
+      setNewPairsLoading(false);
     }
     
     // Refresh every 60 seconds (silently, no loading state)
@@ -2360,6 +2349,7 @@ export default function DiscoverPage() {
         rpc: settings.rpc,
         tokenName: token.name,
         tokenSymbol: token.symbol,
+        imageUrl: await resolveTokenImage(token as any) || undefined,
         authToken: user.bearerToken,
         walletList: walletList || [],
         walletBalances: walletBalances || {},
@@ -2599,6 +2589,7 @@ export default function DiscoverPage() {
         rpc: settings.rpc,
         tokenName: token.name,
         tokenSymbol: token.symbol,
+        imageUrl: await resolveTokenImage(token as any) || undefined,
         authToken: user.bearerToken,
         walletList: walletList || [],
         walletBalances: walletBalances || {},
@@ -3089,7 +3080,7 @@ export default function DiscoverPage() {
       
       // Ensure every token has some kind of image to display (fallback to initials if missing)
       const normalizedTokens = tokensToDisplay.map((t: any) => {
-        const hasImage = t?.uri || t?.logo || t?.image || t?.imageUrl;
+        const hasImage = t?.logo || t?.image || t?.imageUrl || (t?.uri && !isMetadataUrl(t.uri));
         if (hasImage && hasImage !== '' && hasImage !== 'null' && hasImage !== null) {
           return t;
         }
@@ -3100,7 +3091,7 @@ export default function DiscoverPage() {
           ...t,
           image: fallbackImage,
           logo: fallbackImage,
-          uri: fallbackImage,
+          // uri intentionally NOT overwritten — preserved for metadata resolution
         };
       });
       
@@ -3251,13 +3242,13 @@ export default function DiscoverPage() {
   }, [activeTab, filteredTokens, sortKey, sortDirection, selectedTimeframe, applyFilters, getVolumeForTimeframe, isWrappedSol, filter, activeFilterCount, newPairsRaw, currentChain, isZeroLiquidityToken, featuredTokens, wsTokens]); // Ensure filters are reapplied when they change; wsTokens added to fix tab switch flicker
 
   const processedNewPairs = useMemo(() => {
-    if (!newPairsRaw || newPairsRaw.length === 0) {
-      console.log('[Discover] processedNewPairs: newPairsRaw is empty', { currentChain });
+    if (!volumeEnrichedNewPairs || volumeEnrichedNewPairs.length === 0) {
+      console.log('[Discover] processedNewPairs: volumeEnrichedNewPairs is empty', { currentChain });
       return [] as TokenWithDexPaid[];
     }
 
-    console.log(`[Discover] Processing ${newPairsRaw.length} new pairs for ${currentChain}`);
-    
+    console.log(`[Discover] Processing ${volumeEnrichedNewPairs.length} new pairs for ${currentChain}`);
+
     // Match pulse.tsx filtering logic - only filter by wrapped SOL
     // Zero liquidity filtering disabled for new pairs (same as PulseTable)
     // Blacklisted mint addresses to exclude from new pairs
@@ -3265,7 +3256,7 @@ export default function DiscoverPage() {
       'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v', // USDC
     ]);
 
-    const base = newPairsRaw.filter((token) => {
+    const base = volumeEnrichedNewPairs.filter((token) => {
       // Filter out wrapped SOL
       if (isWrappedSol(token)) {
         return false;
@@ -3316,7 +3307,10 @@ export default function DiscoverPage() {
       let aVal = 0;
       let bVal = 0;
 
-      if (sortKey === 'score') {
+      if (sortKey === 'timestamp') {
+        aVal = getNewPairTimestamp(a);
+        bVal = getNewPairTimestamp(b);
+      } else if (sortKey === 'score') {
         aVal = getCompositeScore(a, selectedTimeframe, maxValuesNewPairs);
         bVal = getCompositeScore(b, selectedTimeframe, maxValuesNewPairs);
       } else if (sortKey === 'txns') {
@@ -3363,7 +3357,7 @@ export default function DiscoverPage() {
     }
 
     return unique;
-  }, [newPairsRaw, normalizedSearch, getVolumeForTimeframe, getTxnsForTimeframe, getCompositeScore, getNewPairTimestamp, isWrappedSol, isZeroLiquidityToken, currentChain, sortDirection, sortKey, selectedTimeframe]);
+  }, [volumeEnrichedNewPairs, normalizedSearch, getVolumeForTimeframe, getTxnsForTimeframe, getCompositeScore, getNewPairTimestamp, isWrappedSol, isZeroLiquidityToken, currentChain, sortDirection, sortKey, selectedTimeframe]);
 
   const newPairsRows = useMemo(
     () =>
@@ -3473,6 +3467,7 @@ export default function DiscoverPage() {
             selectedTimeframe={selectedTimeframe}
             quickBuyAmount={Number(quickBuyAmount) || 0}
             chain={currentChain}
+            isDiscoverPage={true}
           />
         </section>
       );
@@ -3493,6 +3488,7 @@ export default function DiscoverPage() {
             selectedTimeframe={selectedTimeframe}
             quickBuyAmount={Number(quickBuyAmount) || 0}
             chain={currentChain}
+            isDiscoverPage={true}
           />
         </section>
       );
@@ -3716,13 +3712,19 @@ export default function DiscoverPage() {
           <div className="scrollbar-hide -mx-4 flex items-center gap-3 overflow-x-auto px-4 pb-2 sm:-mx-6 sm:gap-4 sm:px-6 lg:mx-0 lg:gap-4 lg:px-0 lg:pb-0">
             <button
               className={`text-sm whitespace-nowrap transition-colors sm:text-base lg:text-xl font-medium ${activeTab === "trending" ? "text-white" : "text-[#6B7280] hover:text-white"} cursor-pointer`}
-              onClick={() => setActiveTab("trending")}
+              onClick={() => { setActiveTab("trending"); if (sortKey === "timestamp") { setSortKey("score"); setSortDirection("desc"); } }}
             >
               Trending
             </button>
+            {/* <button
+              className={`text-sm whitespace-nowrap transition-colors sm:text-base lg:text-xl font-medium ${activeTab === "trending2" ? "text-white" : "text-[#6B7280] hover:text-white"} cursor-pointer`}
+              onClick={() => { setActiveTab("trending2"); if (sortKey === "timestamp") { setSortKey("score"); setSortDirection("desc"); } }}
+            >
+              Trending 2
+            </button> */}
             <button
               className={`text-sm whitespace-nowrap transition-colors sm:text-base lg:text-xl font-medium ${activeTab === "newPairs" ? "text-white" : "text-[#6B7280] hover:text-white"} cursor-pointer`}
-              onClick={() => setActiveTab("newPairs")}
+              onClick={() => { setActiveTab("newPairs"); setSortKey("timestamp"); setSortDirection("desc"); }}
             >
               New Pairs
             </button>
@@ -3745,7 +3747,7 @@ export default function DiscoverPage() {
                 </button> */}
                 <button
                   className={`text-sm whitespace-nowrap transition-colors sm:text-base lg:text-xl font-medium ${activeTab === "live" ? "text-white" : "text-[#6B7280] hover:text-white"} cursor-pointer`}
-                  onClick={() => setActiveTab("live")}
+                  onClick={() => { setActiveTab("live"); if (sortKey === "timestamp") { setSortKey("score"); setSortDirection("desc"); } }}
                 >
                   Pump Live
                 </button>
@@ -3806,8 +3808,8 @@ export default function DiscoverPage() {
                 </div>
               )}
 
-            {/* Filter button - hidden when in Live Pump tab or Monad chain */}
-            {currentChain !== "monad" && activeTab !== "live" && (
+            {/* Filter button - disabled for now */}
+            {false && currentChain !== "monad" && activeTab !== "live" && (
               <div className="relative hidden h-7 w-[85px] min-w-[85px] items-center justify-center gap-1 rounded-md border border-white/[0.08] bg-white/[0.05] backdrop-blur-xl px-1.5 py-1 sm:flex">
                 <button
                   className="relative flex h-full w-full cursor-pointer items-center justify-between transition-all duration-200"
@@ -4045,25 +4047,14 @@ export default function DiscoverPage() {
 
         {/* Main Content */}
         <main className="relative z-10 w-full flex-1 overflow-y-auto min-h-0">
-          {activeTab === 'live' ? (
-            <section aria-label="Pump Live" className="pb-16">
-              <PumpLiveGrid
-                quickBuyAmount={Number(quickBuyAmount) || 0}
-                sortField={pumpLiveSortField}
-                sortDirection={pumpLiveSortDirection}
-                onQuickBuy={handlePumpLiveQuickBuy}
-              />
-            </section>
-          ) : activeTab === "newPairs" ? (
-            <section aria-label="New Pairs" className="pb-16">
-              {/* <div className="mb-4 flex items-center justify-between">
-                {newPairsLoading && (
-                  <span className="text-xs font-medium text-[#9CA3AF]">
-                    Updating…
-                  </span>
-                )}
-              </div> */}
+          {/* Always-mounted: Trending — hidden via CSS when not active */}
+          <div style={{ display: activeTab === 'trending' ? undefined : 'none' }}>
+            {renderPrimaryTable()}
+          </div>
 
+          {/* Always-mounted: New Pairs — hidden via CSS when not active */}
+          <div style={{ display: activeTab === 'newPairs' ? undefined : 'none' }}>
+            <section aria-label="New Pairs" className="pb-16">
               {newPairsLoading &&
               processedNewPairs.length === 0 &&
               newPairsRaw.length === 0 ? (
@@ -4090,6 +4081,8 @@ export default function DiscoverPage() {
                   quickBuyAmount={Number(quickBuyAmount) || 0}
                   chain={currentChain}
                   tableType="newPairs"
+                  solPrice={solPrice}
+                  isDiscoverPage={true}
                 />
               ) : (
                 <div className="py-10 text-center text-[#9CA3AF]">
@@ -4097,7 +4090,48 @@ export default function DiscoverPage() {
                 </div>
               )}
             </section>
-          ) : activeTab === "xStocks" ? (
+          </div>
+
+          {/* Conditionally rendered tabs — unmount when not active */}
+          {activeTab === 'live' && (
+            <section aria-label="Pump Live" className="pb-16">
+              <PumpLiveGrid
+                quickBuyAmount={Number(quickBuyAmount) || 0}
+                sortField={pumpLiveSortField}
+                sortDirection={pumpLiveSortDirection}
+                onQuickBuy={handlePumpLiveQuickBuy}
+              />
+            </section>
+          )}
+
+          {activeTab === 'trending2' && (
+            <section aria-label="DexScreener Trending" className="pb-16">
+              {dsLoading && dexScreenerTokens.length === 0 ? (
+                <div className="space-y-4">
+                  {Array.from({ length: 10 }).map((_, i) => (
+                    <div key={i} className="h-12 w-full animate-pulse rounded bg-white/[0.04]" />
+                  ))}
+                </div>
+              ) : dsError ? (
+                <div className="py-10 text-center text-[#f26681]">{dsError}</div>
+              ) : (
+                <InterstateTable
+                  rows={dexScreenerTokens.map((token, i) => ({ token: token as unknown as Token, i }))}
+                  onQuickBuy={handleQuickBuy}
+                  sortKey={sortKey}
+                  sortDirection={sortDirection}
+                  setSort={handleSort}
+                  selectedTimeframe={selectedTimeframe}
+                  quickBuyAmount={Number(quickBuyAmount) || 0}
+                  chain={currentChain}
+                  tableType="dexscreener"
+                  isDiscoverPage={true}
+                />
+              )}
+            </section>
+          )}
+
+          {activeTab === 'xStocks' && (
             <section aria-label="xStocks" className="pb-8">
               {xStocksLoading &&
               processedXStocks.length === 0 &&
@@ -4130,30 +4164,6 @@ export default function DiscoverPage() {
                 </div>
               )}
             </section>
-          ) : (
-            /* activeTab === 'surge' ? (
-            <section aria-label="Surge">
-              <div className="mb-4 flex items-center justify-between">
-                <h2 className="text-xl font-semibold text-[#f0f5f5]">Surge</h2>
-              </div>
-              
-              Placeholder for Surge data - replace with actual data source
-              <div className="py-10 text-center text-[#9CA3AF]">
-                Surge data coming soon. Connect your data source here.
-              </div>
-              
-              When you have Surge data, use InterstateTable like this:
-              <InterstateTable
-                rows={surgeRows}
-                onQuickBuy={handleQuickBuy}
-                sortKey={sortKey}
-                sortDirection={sortDirection}
-                setSort={handleSort}
-                selectedTimeframe={selectedTimeframe}
-                quickBuyAmount={Number(quickBuyAmount) || 0}
-              />
-            </section>
-          ) : */ renderPrimaryTable()
           )}
         </main>
 

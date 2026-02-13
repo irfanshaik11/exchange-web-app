@@ -1,4 +1,5 @@
 import React from 'react';
+import ReactDOM from 'react-dom';
 
 type InterstateTooltipProps = {
   label: string | React.ReactNode;
@@ -9,9 +10,10 @@ type InterstateTooltipProps = {
   height?: number; // New: direct height in pixels
   isDiv?: boolean
   className?: string
+  noPadding?: boolean
 };
 
-const InterstateTooltip: React.FC<InterstateTooltipProps> = ({ label, children, widthClass = 'max-w-md', xOffset = '-translate-x-1/2', width, height, className }) => {
+const InterstateTooltip: React.FC<InterstateTooltipProps> = ({ label, children, widthClass = 'max-w-md', xOffset = '-translate-x-1/2', width, height, className, noPadding }) => {
   const [show, setShow] = React.useState(false);
   const [position, setPosition] = React.useState({ top: 0, left: 0 });
   const triggerRef = React.useRef<HTMLSpanElement>(null);
@@ -27,8 +29,8 @@ const InterstateTooltip: React.FC<InterstateTooltipProps> = ({ label, children, 
     if (triggerRef.current) {
       const rect = triggerRef.current.getBoundingClientRect();
       setPosition({
-        top: rect.bottom + window.scrollY + 8,
-        left: rect.left + window.scrollX,
+        top: rect.top + rect.height / 2,
+        left: rect.right + 8,
       });
     }
   };
@@ -37,6 +39,15 @@ const InterstateTooltip: React.FC<InterstateTooltipProps> = ({ label, children, 
     updatePosition();
     setShow(true);
   };
+
+  const tooltip = show ? (
+    <span
+      className={`fixed z-[999999] rounded-lg bg-[#17191E] border border-[#2A2B33] shadow-lg shadow-black/30 ${noPadding ? 'p-1' : 'px-3 py-2'} text-xs whitespace-pre-line text-[#9CA3AF] -translate-y-1/2 ${widthClass} ${className}`}
+      style={tooltipStyle}
+    >
+      {typeof label === 'string' ? label : label}
+    </span>
+  ) : null;
 
   return (
     <span
@@ -49,16 +60,9 @@ const InterstateTooltip: React.FC<InterstateTooltipProps> = ({ label, children, 
       tabIndex={0}
     >
       {children}
-      {show && (
-        <span
-          className={`fixed z-[999999] rounded-lg bg-[#17191E] border border-[#2A2B33] shadow-lg shadow-black/30 px-3 py-2 text-xs whitespace-pre-line text-[#9CA3AF] ${widthClass} ${className}`}
-          style={tooltipStyle}
-        >
-          {typeof label === 'string' ? label : label}
-        </span>
-      )}
+      {typeof document !== 'undefined' && tooltip && ReactDOM.createPortal(tooltip, document.body)}
     </span>
   );
 };
 
-export default InterstateTooltip; 
+export default InterstateTooltip;

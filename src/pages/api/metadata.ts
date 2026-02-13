@@ -111,7 +111,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       return res.status(502).send('Failed to fetch metadata');
     }
 
-    const contentType = upstream.headers.get('content-type') || '';
+    let contentType = upstream.headers.get('content-type') || '';
     const buffer = Buffer.from(await upstream.arrayBuffer());
 
     setHeaders(res);
@@ -123,7 +123,16 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         const data = JSON.parse(buffer.toString('utf-8'));
         return res.status(200).json(data);
       } catch {
-        // fall through to passthrough
+        // Upstream lied about Content-Type — detect actual type from magic bytes
+        // JPEG: FF D8 FF, PNG: 89 50 4E 47, GIF: 47 49 46 38
+        if (buffer.length >= 3 && buffer[0] === 0xFF && buffer[1] === 0xD8 && buffer[2] === 0xFF) {
+          contentType = 'image/jpeg';
+        } else if (buffer.length >= 4 && buffer[0] === 0x89 && buffer[1] === 0x50 && buffer[2] === 0x4E && buffer[3] === 0x47) {
+          contentType = 'image/png';
+        } else if (buffer.length >= 4 && buffer[0] === 0x47 && buffer[1] === 0x49 && buffer[2] === 0x46 && buffer[3] === 0x38) {
+          contentType = 'image/gif';
+        }
+        // fall through to passthrough with corrected content type
       }
     }
 

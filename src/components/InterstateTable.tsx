@@ -25,6 +25,7 @@ import type { Token as BaseToken } from "~/utils/db";
 import { formatSmartNumber, formatMarketCap, formatLamportsToSol } from '~/utils/db';
 import SkeletonRow from './InterstateTable/SkeletonRow';
 import { fetchTokenMetadata } from '~/utils/functions';
+import { prefetchTradeData } from '~/utils/tokenCache';
 import { withImageFallback, extractMetaImage, isMetadataUrl } from '~/utils/images';
 import AvatarImage from '~/components/AvatarImage';
 import { useFilter } from "./FilterContext";
@@ -72,7 +73,8 @@ interface InterstateTableProps {
   skeletonRowCount?: number;
   isDiscoverPage?: boolean;
   chain?: string; // 'sol' | 'monad' - chain identifier
-  tableType?: 'trending' | 'newPairs' | 'xStocks'; // Section type for different column displays
+  tableType?: 'trending' | 'newPairs' | 'xStocks' | 'dexscreener'; // Section type for different column displays
+  solPrice?: number; // SOL/USD price for converting pulse volume (SOL) to USD
 }
 
 interface HeaderConfig {
@@ -203,6 +205,23 @@ const getVolume = (token: Token, timeframe: string): number => {
   return volume;
 };
 
+// PulseTable-style volume for new pairs: try all timeframes (24h→6h→1h→5m),
+// sum buy+sell volumes, multiply by solPrice to convert SOL→USD
+const getNewPairVolume = (token: Token, solPrice: number): number => {
+  for (const tf of ['24h', '6h', '1h', '5m']) {
+    const bv = getNumber(token as any, `total_buy_volume_${tf}`);
+    const sv = getNumber(token as any, `total_sell_volume_${tf}`);
+    const sum = bv + sv;
+    if (sum > 0) return sum * solPrice;
+  }
+  // Fallback: try pre-computed volume fields
+  for (const tf of ['24h', '6h', '1h', '5m']) {
+    const vol = getNumber(token as any, `volume_${tf}`);
+    if (vol > 0) return vol;
+  }
+  return 0;
+};
+
 const getTxns = (token: Token, timeframe: string): { total: number; buys: number; sells: number } => {
   // Try the specific timeframe first
   let buys = getNumber(token as any, `total_buys_${timeframe}`);
@@ -278,6 +297,17 @@ const getSortableValue = (token: Token, key: string, selectedTimeframe?: string)
     return buys + sells;
   }
   
+  // Handle timestamp sorting for New Pairs (newest first)
+  if (key === 'timestamp') {
+    const v = (token as any).created_at ?? (token as any).launch_time ??
+              (token as any).firstSeen ?? (token as any).pair_created_at ??
+              (token as any).timestamp ?? (token as any).ts;
+    if (!v) return 0;
+    const n = typeof v === 'number' ? v : typeof v === 'string' ? (Number(v) || Date.parse(v) || 0) : 0;
+    // Normalize: if seconds (< 1e12), convert to ms
+    return n > 1e12 ? n : n > 1e9 ? n * 1000 : 0;
+  }
+
   // Handle Market Cap sorting - use fully_diluted_value if available, otherwise fallback to usd_price
   if (key === 'fully_diluted_value') {
     let val = (token as any).fully_diluted_value;
@@ -303,8 +333,8 @@ const getSortableValue = (token: Token, key: string, selectedTimeframe?: string)
 const tokenMetadataCache: Record<string, any> = {};
 
 function useTokenMetadata(uri?: string) {
-  const [meta, setMeta] = useState<any | null>(null);
-  const [loading, setLoading] = useState(!!uri);
+  const [meta, setMeta] = useState<any | null>(() => uri ? (tokenMetadataCache[uri] || null) : null);
+  const [loading, setLoading] = useState(() => uri ? !tokenMetadataCache[uri] : false);
   const [showInitial, setShowInitial] = useState(false);
 
   useEffect(() => {
@@ -415,18 +445,26 @@ const TableHeader: React.FC<{
   sortDirection?: 'asc' | 'desc';
   onSort?: (key: string) => void;
   isDiscoverPage?: boolean;
-  tableType?: 'trending' | 'newPairs' | 'xStocks';
+  tableType?: 'trending' | 'newPairs' | 'xStocks' | 'dexscreener';
 }> = ({ sortKey, sortDirection, onSort, isDiscoverPage = false, tableType = 'trending' }) => (
   <thead>
     <tr style={{ backgroundColor: 'transparent', borderBottom: `1px solid ${AX.border}` }}>
       {TABLE_HEADERS.map((header, idx) => {
-        // For newPairs, show "Holders" instead of "Token Info"
         let label = header.label;
-        if (header.label === 'Token Info' && tableType === 'newPairs') {
-          label = 'Holders';
+        // Hide the 24h chart column for newPairs and dexscreener
+        if (header.label === '24h' && (tableType === 'newPairs' || tableType === 'dexscreener')) {
+          return null;
         }
-        // Hide the 24h chart column for newPairs
-        if (header.label === '24h' && tableType === 'newPairs') {
+        // Hide Token Info / Holders column for newPairs and dexscreener
+        if (header.label === 'Token Info' && (tableType === 'newPairs' || tableType === 'dexscreener')) {
+          return null;
+        }
+        // Hide Volume column for newPairs (WS volume data not yet wired to display)
+        if (header.label === 'Volume' && tableType === 'newPairs') {
+          return null;
+        }
+        // Show TXNS column only for newPairs
+        if (header.label === 'TXNS' && tableType !== 'newPairs') {
           return null;
         }
         return (
@@ -461,6 +499,9 @@ const MonadIcon = ({ size = 16 }: { size?: number }) => (
   />
 );
 
+// Module-level cache: mint → resolved proxy image URL (survives unmount/remount)
+const resolvedImageCache: Record<string, string> = {};
+
 // Token Avatar Component
 const TokenAvatar: React.FC<{
   token: Token;
@@ -470,72 +511,107 @@ const TokenAvatar: React.FC<{
   chain?: string; // 'sol' | 'monad' - chain identifier
 }> = ({ token, meta, loading, showInitial, chain = 'sol' }) => {
   const initial = token.name?.charAt(0)?.toUpperCase() || '?';
+  const [imgError, setImgError] = useState(false);
   
-  // Protocol color mapping - matches PulseTable
-  const protocolColorMap: Record<string, string> = {
-    'pump': '#22c55e',
-    'pump.fun': '#22c55e',
-    'bonk': '#ff6b35',
-    'bags': '#22c55e',
-    'moonshot': '#eab308',
-    'moonshoot': '#eab308',
-    'moonit': '#eab308',
-    'heaven': '#8b5cf6',
-    'daos.fun': '#06b6d4',
-    'candle': '#f59e0b',
-    'sugar': '#ec4899',
-    'believe': '#10b981',
-    'jupiter': '#8b5cf6',
-    'boop': '#134577',
-    'boopfun': '#134577',
-    'launchlab': '#3b82f6',
-    'dynamic': '#526fff',
-    'raydium': '#5c51f7',
-    'raydiumlaunchpad': '#5c51f7',
-    'meteora': '#ff4662',
-    'meteora_v2': '#ff4662',
-    'pump_amm': '#e9ba14',
-    'orca': '#0ea5e9'
-  };
-
-  // Get protocol color based on launchpad_protocol field
+  // Get protocol color - matches PulseTable/SearchModal for consistency
   const getProtocolColor = (token: Token): string => {
-    const launchpadProtocol = (token as any).launchpad_protocol?.toLowerCase();
-    
-    if (!launchpadProtocol) return '#22c55e';
-    
-    if (protocolColorMap[launchpadProtocol]) return protocolColorMap[launchpadProtocol];
-    if (launchpadProtocol.includes('pump')) return '#22c55e';
-    if (launchpadProtocol.includes('meteora')) return '#ff4662';
-    if (launchpadProtocol.includes('raydium')) return '#5c51f7';
-    if (launchpadProtocol.includes('moonit') || launchpadProtocol.includes('moonshot')) return '#eab308';
+    const launchpadProtocol = (token as any).launchpad_protocol?.toLowerCase() || '';
+    const mintAddress = (token.mint || (token as any).mint_address || '').toLowerCase();
+
+    // Monad chain → purple
+    if (chain === 'monad') return '#c084fc';
+    // bags mint override → green
+    if (mintAddress.includes('bags')) return '#31e3ac';
+    if (!launchpadProtocol) return '#31e3ac';
+
+    if (launchpadProtocol.includes('meteora')) return '#d11f3a';
+    if (launchpadProtocol.includes('pump')) return '#31e3ac';
+    if (launchpadProtocol.includes('launch')) return '#3b82f6';
+    if (launchpadProtocol.includes('raydium')) return '#31e3ac';
+    if (launchpadProtocol.includes('moonit') || launchpadProtocol.includes('moonshot') || launchpadProtocol.includes('moonshoot')) return '#eab308';
     if (launchpadProtocol.includes('boop')) return '#134577';
-    if (launchpadProtocol.includes('bonk')) return '#ff6b35';
-    if (launchpadProtocol.includes('bags')) return '#22c55e';
-    
-    return '#22c55e';
+    if (launchpadProtocol.includes('bonk') || mintAddress.endsWith('bonk')) return '#ff6b35';
+    if (launchpadProtocol.includes('bags')) return '#31e3ac';
+
+    return '#31e3ac';
   };
 
-  // Get icon based on token data
+  // Get protocol icon - matches PulseTable/SearchModal for consistency
   const getTokenIcon = (token: Token): string => {
-    const launchpadProtocol = (token as any).launchpad_protocol?.toLowerCase();
-    
-    if (!launchpadProtocol) return 'https://logos-world.net/wp-content/uploads/2024/10/Pump-Fun-Logo.png';
-    if (launchpadProtocol.includes('pump')) return 'https://logos-world.net/wp-content/uploads/2024/10/Pump-Fun-Logo.png';
+    const launchpadProtocol = (token as any).launchpad_protocol?.toLowerCase() || '';
+    const mintAddress = (token.mint || (token as any).mint_address || '').toLowerCase();
+
+    // Monad chain → protocol-specific Monad icons
+    if (chain === 'monad') {
+      if (launchpadProtocol.includes('nad.fun') || launchpadProtocol === 'nadfun') return 'https://avatars.githubusercontent.com/u/173274001?s=200&v=4';
+      if (launchpadProtocol.includes('flap.sh') || launchpadProtocol.includes('flapsh')) return 'https://media.licdn.com/dms/image/v2/D4D0BAQFG5I0EDOrmJQ/company-logo_200_200/company-logo_200_200/0/1714693191952/flap_sh_logo?e=2147483647&v=beta&t=2kcdij2YPOFjLdPYzAhQxKgbGcuyh7Cdyp0AkGR8V6A';
+      if (launchpadProtocol.includes('kuru')) return 'https://pbs.twimg.com/profile_images/1950962142917619714/R7Cj_qk7_400x400.jpg';
+      return 'https://avatars.githubusercontent.com/u/173274001?s=200&v=4';
+    }
+
+    // bags mint override
+    if (mintAddress.includes('bags')) return 'https://bags.fm/assets/images/bags-icon.png';
+    if (!launchpadProtocol) return 'https://pump.fun/pump-logomark.svg';
+
+    if (launchpadProtocol.includes('pump')) return 'https://pump.fun/pump-logomark.svg';
     if (launchpadProtocol.includes('meteora')) return 'https://s1.coincarp.com/logo/1/meteora.png?style=72&v=1759911013';
     if (launchpadProtocol.includes('raydium')) return 'https://s2.coinmarketcap.com/static/img/coins/64x64/8526.png';
     if (launchpadProtocol.includes('boop')) return 'https://api.phantom.app/image-proxy/?image=https%3A%2F%2Fdhc7eusqrdwa0.cloudfront.net%2Fassets%2FBOOP_logo_icon_dark_bg.png&anim=true';
-    if (launchpadProtocol.includes('moonit') || launchpadProtocol.includes('moonshot')) return 'https://avatars.githubusercontent.com/u/174132191?s=280&v=4';
-    if (launchpadProtocol.includes('bonk')) return 'https://s3.coinmarketcap.com/static-gravity/image/a28128d9ff7c49c9ad33ee2f626fda40.png';
+    if (launchpadProtocol.includes('moonit') || launchpadProtocol.includes('moonshot') || launchpadProtocol.includes('moonshoot')) return 'https://avatars.githubusercontent.com/u/174132191?s=280&v=4';
+    if (launchpadProtocol.includes('bonk') || launchpadProtocol.includes('launchlab') || mintAddress.endsWith('bonk')) return 'https://s3.coinmarketcap.com/static-gravity/image/a28128d9ff7c49c9ad33ee2f626fda40.png';
     if (launchpadProtocol.includes('bags')) return 'https://play-lh.googleusercontent.com/7AxVcu1pumxavcGTb16WBJQU88CDZd0v8q0WzFwfin7zbBvItYMuNQ0Xkqq4srTw4A=w240-h480-rw';
-    
-    return 'https://logos-world.net/wp-content/uploads/2024/10/Pump-Fun-Logo.png';
+
+    return 'https://pump.fun/pump-logomark.svg';
   };
 
   // API returns image_url, fallback to image, logo, then uri (only if uri is not a metadata JSON URL)
   const rawUri = (token as any).uri;
   const safeUri = rawUri && !isMetadataUrl(rawUri) ? rawUri : null;
   const imageUrl = (token as any).image_url || (token as any).image || token.logo || safeUri;
+
+  // Resolve final proxy URL, using per-mint cache to avoid re-computation
+  const mintKey = token.mint || (token as any).mint_address || '';
+  const imgSrc = useMemo(() => {
+    // 1. Metadata image takes top priority (already resolved by useTokenMetadata)
+    const metaImg = extractMetaImage(meta);
+    if (metaImg) {
+      const proxyUrl = `/api/image?url=${encodeURIComponent(metaImg)}`;
+      if (mintKey) resolvedImageCache[mintKey] = proxyUrl;
+      return proxyUrl;
+    }
+    // 2. Check resolved cache (populated by previous renders)
+    if (mintKey && resolvedImageCache[mintKey]) return resolvedImageCache[mintKey];
+    // 3. Use metadata URI via proxy auto-resolve (proxy fetches JSON → extracts image → serves it)
+    //    Don't cache this — let extractMetaImage supersede it once useTokenMetadata resolves
+    if (rawUri && isMetadataUrl(rawUri)) {
+      return `/api/image?url=${encodeURIComponent(rawUri)}`;
+    }
+    // 4. Direct image URL or ui-avatars fallback
+    const raw = imageUrl || token.logo || '';
+    if (!raw) return '';
+    const proxyUrl = `/api/image?url=${encodeURIComponent(raw)}`;
+    if (mintKey) resolvedImageCache[mintKey] = proxyUrl;
+    return proxyUrl;
+  }, [meta, imageUrl, token.logo, mintKey, rawUri]);
+
+  // Reset imgError when image source changes
+  useEffect(() => {
+    setImgError(false);
+  }, [imgSrc]);
+
+  const showFallbackLetter = imgError || (!loading && !imgSrc);
+
+  // Compute protocol badge values
+  const protocolColor = getProtocolColor(token);
+  const tokenIcon = getTokenIcon(token);
+  const _proto = (token as any).launchpad_protocol?.toLowerCase() || '';
+  const _mint = (token.mint || (token as any).mint_address || '').toLowerCase();
+  const fillBadge = (
+    (_proto.includes('meteora') && !_mint.includes('bags')) ||
+    _proto.includes('bonk') || _proto.includes('launchlab') || _mint.endsWith('bonk') ||
+    _proto.includes('bags') || _mint.includes('bags') ||
+    _proto.includes('moonit') || _proto.includes('moonshot') || _proto.includes('moonshoot')
+  );
 
   return (
     <div className="relative h-12 w-12 flex items-center justify-center">
@@ -545,47 +621,45 @@ const TokenAvatar: React.FC<{
           <div className="w-full h-full flex items-center justify-center rounded-full" style={{ backgroundColor: AX.surface2 }}>
             <div className="w-6 h-6 border-2 border-t-2 border-b-2 border-yellow-400 rounded-full animate-spin"></div>
           </div>
-        ) : meta || imageUrl ? (
+        ) : showFallbackLetter ? (
+          <div className="w-full h-full flex items-center justify-center rounded-full" style={{ backgroundColor: AX.surface2, width: '48px', height: '48px' }}>
+            <span className="text-sm font-bold" style={{ color: AX.text }}>{initial}</span>
+          </div>
+        ) : (
           <img
-            src={(() => {
-              const imgSrc = extractMetaImage(meta) || imageUrl || token.logo || '';
-              if (!imgSrc) return '';
-              return `/api/image?url=${encodeURIComponent(imgSrc)}`;
-            })()}
+            src={imgSrc}
             alt={token.name || token.symbol || ''}
             width={48}
             height={48}
             className="h-full w-full object-cover rounded-full transition-all duration-300"
-            onError={(e) => {
-              e.currentTarget.style.display = 'none';
-            }}
+            onError={() => setImgError(true)}
           />
-        ) : (
-          <div className="w-full h-full flex items-center justify-center rounded-full" style={{ backgroundColor: AX.surface2, width: '48px', height: '48px' }}>
-            <span className="text-sm font-bold" style={{ color: AX.text }}>{initial}</span>
-          </div>
         )}
       </div>
       
-      {/* Chain logo bubble - positioned at bottom right (Solana or Monad) */}
-      {chain === 'monad' ? (
-        <div className="absolute bottom-0 right-0 flex items-center justify-center transform translate-x-1/2 translate-y-1/2 z-10"
-             style={{ 
-               width: 20, 
-               height: 20
-             }}>
-          <MonadIcon size={20} />
-        </div>
-      ) : (
-        <div className="absolute bottom-0 right-0 bg-white rounded-full flex items-center justify-center transform translate-x-1/2 translate-y-1/2 z-10"
-             style={{ 
-               width: 14, 
-               height: 14,
-               padding: '1px'
-             }}>
-          <SolanaIcon size={12} />
-        </div>
-      )}
+      {/* Protocol logo badge - bottom right */}
+      <div
+        className="pointer-events-none absolute right-0 bottom-0 z-10 flex translate-x-1/5 translate-y-1/4 transform items-center justify-center rounded-full"
+        style={{
+          width: 16,
+          height: 16,
+          backgroundColor: '#080808',
+          border: `1px solid ${protocolColor}`,
+          boxShadow: `0 0 4px ${protocolColor}60`,
+        }}
+      >
+        <img
+          src={tokenIcon}
+          alt="Protocol"
+          className={`${fillBadge ? 'h-full w-full object-cover' : 'h-3/4 w-3/4 object-contain'} rounded-full`}
+          style={{
+            filter: protocolColor === '#eab308'
+              ? 'sepia(1) saturate(3) hue-rotate(-10deg) brightness(1.1)'
+              : 'none',
+          }}
+          onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+        />
+      </div>
     </div>
   );
 };
@@ -659,7 +733,7 @@ const TokenInfo: React.FC<{
 
     try {
       const createdAt = (token as any).created_at || (token as any).launch_time;
-      if (!createdAt) return '-';
+      if (!createdAt) return '';
 
       let timestamp: number | null = null;
       if (typeof createdAt === 'string') {
@@ -671,21 +745,25 @@ const TokenInfo: React.FC<{
         else if (createdAt > 1e9) timestamp = createdAt * 1000;
       }
 
-      if (!timestamp) return '-';
+      if (!timestamp) return '';
 
       const ageMs = Date.now() - timestamp;
       const ageHours = ageMs / (1000 * 60 * 60);
 
       if (ageHours < 1) {
         const ageMins = Math.floor(ageMs / (1000 * 60));
-        return ageMins < 1 ? '<1m' : `${ageMins}m`;
+        if (ageMins < 1) {
+          const ageSecs = Math.floor(ageMs / 1000);
+          return `${ageSecs}s`;
+        }
+        return `${ageMins}m`;
       } else if (ageHours < 24) {
         return `${Math.floor(ageHours)}h`;
       } else {
         return `${Math.floor(ageHours / 24)}d`;
       }
     } catch {
-      return '-';
+      return '';
     }
   }, [token, isDiscoverPage, timeLabel]);
 
@@ -734,40 +812,25 @@ const TokenInfo: React.FC<{
   // );
 
   const tooltipContent = (
-    <div className="p-3 min-w-[240px]">
-      <div className="mb-3 flex justify-center">
-        <TokenAvatar token={token} meta={meta} loading={loading} showInitial={showInitial} chain={chain} />
-      </div>
-      <div className="mb-3 text-center">
-        <div className="text-lg font-bold mb-1" style={{ color: AX.text }}>{token.name}</div>
-        <div className="text-sm font-medium mb-2" style={{ color: AX.muted }}>({token.symbol})</div>
-        <p className="text-base font-semibold" style={{ color: AX.text }}>
-          $<SubscriptNumber value={token.usd_price} />{' '}
-          <span className={`text-sm ${isDiscoverPage ? '' : (token.price_percent_change_1h >= 0 ? 'text-emerald-400' : 'text-red-400')}`} style={isDiscoverPage ? { color: token.price_percent_change_1h >= 0 ? '#85d99f' : '#f26681' } : {}}>
-            {formatPercentChange(token.price_percent_change_1h)}%
-          </span>
-        </p>
-      </div>
-      {/* {similarTokens.length > 0 && (
-        <div className="border-t border-neutral-700 pt-2">
-          <p className="mb-2 text-xs font-semibold text-neutral-300">Similar Tokens:</p>
-          <div className="space-y-1">
-            {similarTokens.map((similarTokenRow, idx) => (
-              <div key={idx} className="flex items-center gap-2 text-xs">
-                <div className="w-6 h-6 rounded bg-neutral-700 flex-shrink-0"></div>
-                <span className="text-neutral-300 truncate flex-1">
-                  {similarTokenRow.token.name}
-                </span>
-                <span className="text-neutral-500 text-[10px]">
-                  {similarTokenRow.token.created_at 
-                    ? `${Math.floor((Date.now() - new Date(similarTokenRow.token.created_at).getTime()) / (1000 * 60 * 60 * 24))}d` 
-                    : '-'}
-                </span>
-              </div>
-            ))}
+    <div style={{ width: 180 }}>
+      <div className="overflow-hidden rounded-lg" style={{ width: 180, height: 180 }}>
+        {tokenImage ? (
+          <img
+            src={`/api/image?url=${encodeURIComponent(tokenImage)}`}
+            alt={token.name || token.symbol || ''}
+            className="w-full h-full object-cover"
+          />
+        ) : (
+          <div className="w-full h-full flex items-center justify-center" style={{ backgroundColor: AX.surface2 }}>
+            <span className="text-5xl font-bold" style={{ color: AX.text }}>
+              {token.name?.charAt(0)?.toUpperCase() || '?'}
+            </span>
           </div>
-        </div>
-      )} */}
+        )}
+      </div>
+      <div className="mt-1.5 text-center truncate text-sm font-semibold" style={{ color: AX.text }}>
+        {token.name}
+      </div>
     </div>
   );
 
@@ -795,6 +858,7 @@ const TokenInfo: React.FC<{
         xOffset="ml-0"
         label={tooltipContent}
         className="bg-neutral-900/100"
+        noPadding
       >
         <TokenAvatar token={token} meta={meta} loading={loading} showInitial={showInitial} chain={chain} />
       </InterstateTooltip>
@@ -829,9 +893,11 @@ const TokenInfo: React.FC<{
         </div>
         
         <div className="flex items-center gap-2">
-          <span className={`text-xs ${isDiscoverPage ? 'number-font' : 'text-emerald-400'}`} style={{ color: isDiscoverPage ? ageColor : undefined, fontWeight: isDiscoverPage ? 700 : 400, ...(isDiscoverPage ? {} : { fontFamily: 'ui-monospace, SFMono-Regular, "SF Mono", Consolas, "Liberation Mono", Menlo, monospace' }) }}>
-            {tokenAge}
-          </span>
+          {tokenAge && (
+            <span className={`text-xs ${isDiscoverPage ? 'number-font' : 'text-emerald-400'}`} style={{ color: isDiscoverPage ? ageColor : undefined, fontWeight: isDiscoverPage ? 700 : 400, ...(isDiscoverPage ? {} : { fontFamily: 'ui-monospace, SFMono-Regular, "SF Mono", Consolas, "Liberation Mono", Menlo, monospace' }) }}>
+              {tokenAge}
+            </span>
+          )}
           <div className="flex items-center gap-1 text-sky-400">
             {/* X/Twitter Icon - only show if twitter URL exists in metadata */}
             {hasTwitter && (
@@ -1698,7 +1764,7 @@ const formatPercent = (val: number | undefined): string => {
 const TokenInfoCell: React.FC<{
   token: Token;
   isDiscoverPage?: boolean;
-  tableType?: 'trending' | 'newPairs' | 'xStocks';
+  tableType?: 'trending' | 'newPairs' | 'xStocks' | 'dexscreener';
 }> = ({ token, isDiscoverPage = false, tableType = 'trending' }) => {
   const holderCount = (token as any).holder_count;
   const top10Percent = (token as any).top10_holders_percent;
@@ -1802,9 +1868,11 @@ const TableRow: React.FC<{
   animationState: Record<string, 'up' | 'down' | null>;
   sortedRows: InterstateTableRow[];
   onClick: () => void;
+  onHover?: () => void;
   isDiscoverPage?: boolean;
   chain?: string; // 'sol' | 'monad' - chain identifier
-  tableType?: 'trending' | 'newPairs' | 'xStocks';
+  tableType?: 'trending' | 'newPairs' | 'xStocks' | 'dexscreener';
+  solPrice?: number;
 }> = React.memo(({
   token,
   i,
@@ -1814,9 +1882,11 @@ const TableRow: React.FC<{
   animationState,
   sortedRows,
   onClick,
+  onHover,
   isDiscoverPage = false,
   chain = 'sol',
-  tableType = 'trending'
+  tableType = 'trending',
+  solPrice = 0
 }) => {
   const handleQuickBuy = useCallback((e: React.MouseEvent) => {
     e.stopPropagation();
@@ -1827,8 +1897,11 @@ const TableRow: React.FC<{
     }
   }, [onQuickBuy, token, onClick]);
 
-  const volume = getVolume(token, selectedTimeframe);
-  
+  // For newPairs, use PulseTable-style volume: try all timeframes, sum buy+sell, convert SOL→USD
+  const volume = tableType === 'newPairs' && solPrice > 0
+    ? getNewPairVolume(token, solPrice)
+    : getVolume(token, selectedTimeframe);
+
   // Debug volume calculation
   // console.log('Volume calculation debug:', {
   //   tokenName: token.name,
@@ -1860,6 +1933,7 @@ const TableRow: React.FC<{
         } else {
           e.currentTarget.style.backgroundColor = AX.surface2;
         }
+        onHover?.();
       }}
       onMouseLeave={(e) => {
         e.currentTarget.style.backgroundColor = rowBgColor;
@@ -1910,6 +1984,8 @@ const TableRow: React.FC<{
         })()}
       </td>
 
+      {/* Volume column - hidden for newPairs */}
+      {tableType !== 'newPairs' && (
       <td className="w-28 px-4 py-4 align-middle text-right">
         <div className={`text-sm font-medium ${isDiscoverPage ? 'number-font' : ''}`} style={{
           color: AX.text,
@@ -1922,13 +1998,16 @@ const TableRow: React.FC<{
           {volume === 0 ? (isDiscoverPage ? "$0" : "-") : `$${formatSmartNumber(volume)}`}
         </div>
       </td>
+      )}
 
-      <td className="w-28 px-4 py-4 align-middle">
-        <TxnsCell token={token} selectedTimeframe={selectedTimeframe} isDiscoverPage={isDiscoverPage} />
-      </td>
+      {tableType === 'newPairs' && (
+        <td className="w-24 px-4 py-4 align-middle">
+          <TxnsCell token={token} selectedTimeframe={selectedTimeframe} isDiscoverPage={isDiscoverPage} />
+        </td>
+      )}
 
-      {/* 24h Mini Chart column - hidden for newPairs */}
-      {tableType !== 'newPairs' && (
+      {/* 24h Mini Chart column - hidden for newPairs and dexscreener */}
+      {tableType !== 'newPairs' && tableType !== 'dexscreener' && (
         <td className="w-24 px-2 py-4 align-middle">
           <MiniSparkline token={token} width={80} height={40} />
         </td>
@@ -1948,10 +2027,12 @@ const TableRow: React.FC<{
       </td>
       */}
 
-      {/* Token Info column - displays holder metrics from trending WebSocket */}
-      <td className="w-40 px-2 py-4 align-middle">
-        <TokenInfoCell token={token} isDiscoverPage={isDiscoverPage} tableType={tableType} />
-      </td>
+      {/* Token Info column - displays holder metrics from trending WebSocket (hidden for newPairs and dexscreener) */}
+      {tableType !== 'dexscreener' && tableType !== 'newPairs' && (
+        <td className="w-40 px-2 py-4 align-middle">
+          <TokenInfoCell token={token} isDiscoverPage={isDiscoverPage} tableType={tableType} />
+        </td>
+      )}
 
       <td className="w-32 px-4 py-4 align-middle text-center">
         {isDiscoverPage ? (
@@ -2006,7 +2087,8 @@ export default function InterstateTable({
   skeletonRowCount = 6,
   isDiscoverPage: isDiscoverPageProp,
   chain = 'sol',
-  tableType = 'trending'
+  tableType = 'trending',
+  solPrice = 0
 }: InterstateTableProps) {
   const router = useRouter();
   const { filter } = useFilter();
@@ -2158,78 +2240,80 @@ export default function InterstateTable({
             ))
           ) : (
             sortedRows.map(({ token, i }) => {
-              const handleTokenClick = async () => {
-                // First, backfill the token to the database (same as search functionality)
-                try {
-                  console.log('🔄 Backfilling token from discover page:', token);
-                  
-                  const backfillResponse = await fetch('/api/token-service/backfill-token', {
-                    method: 'POST',
-                    headers: {
-                      'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify({
-                      mint: token.mint,
-                      name: token.name,
-                      symbol: token.symbol,
-                      uri: token.uri,
-                      market_cap_usd: token.fully_diluted_value,
-                      liquidity_usd: token.total_liquidity_usd,
-                      pair_address: token.pair_address
-                    })
-                  });
-
-                  if (backfillResponse.ok) {
-                    console.log('✅ Token backfilled successfully');
-                  } else {
-                    console.warn('⚠️ Token backfill failed, but continuing with navigation');
-                  }
-                } catch (error) {
-                  console.error('❌ Error backfilling token:', error);
-                  // Continue with navigation even if backfill fails
-                }
-
-                // Navigate with proper format based on chain
+              const handleTokenClick = () => {
+                // Navigate immediately — don't block on backfill
                 const address = token.pair_address || token.mint;
-                if (address) {
-                  // Check if this is a Monad token
-                  const isMonad = chain === 'monad';
-                  
-                  if (isMonad) {
-                    // Build Monad trade URL with query parameters
-                    const queryParams = new URLSearchParams();
-                    if (token.name) queryParams.set('_name', token.name);
-                    if (token.symbol) queryParams.set('_symbol', token.symbol);
-                    if (token.fully_diluted_value) queryParams.set('_mcap', token.fully_diluted_value.toString());
-                    if (token.total_liquidity_usd || (token as any)?.liquidity_usd || (token as any)?.liquidity) {
-                      const liq = token.total_liquidity_usd || (token as any)?.liquidity_usd || (token as any)?.liquidity;
-                      if (typeof liq === 'number' && Number.isFinite(liq)) {
-                        queryParams.set('_liq', liq.toString());
-                      }
-                    }
-                    if (token.uri || token.logo) queryParams.set('_image', token.uri || token.logo || '');
-                    queryParams.set('_mint', address);
-                    if ((token as any).launchpad_protocol) queryParams.set('_launchpad_protocol', (token as any).launchpad_protocol);
-                    queryParams.set('chain', 'monad');
+                if (!address) return;
 
-                    const url = `/trade/monad/${address}?${queryParams.toString()}`;
-                    router.push(url);
-                  } else {
-                    // For Solana, include chain=sol parameter
-                    const solQueryParams = new URLSearchParams();
-                    if (token.name) solQueryParams.set('_name', token.name);
-                    if (token.symbol) solQueryParams.set('_symbol', token.symbol);
-                    if ((token as any).price_usd) solQueryParams.set('_price', (token as any).price_usd.toString());
-                    if (token.market_cap_usd) solQueryParams.set('_mcap', token.market_cap_usd.toString());
-                    if (token.uri || token.logo || (token as any).image) solQueryParams.set('_image', token.uri || token.logo || (token as any).image || '');
-                    solQueryParams.set('_mint', address);
-                    if ((token as any).launchpad_protocol) solQueryParams.set('_launchpad_protocol', (token as any).launchpad_protocol);
-                    solQueryParams.set('chain', 'sol');
-                    router.push(`/trade/${address}?${solQueryParams.toString()}`);
+                // Check if this is a Monad token
+                const isMonad = chain === 'monad';
+
+                if (isMonad) {
+                  // Build Monad trade URL with query parameters
+                  const queryParams = new URLSearchParams();
+                  if (token.name) queryParams.set('_name', token.name);
+                  if (token.symbol) queryParams.set('_symbol', token.symbol);
+                  if (token.fully_diluted_value) queryParams.set('_mcap', token.fully_diluted_value.toString());
+                  if (token.total_liquidity_usd || (token as any)?.liquidity_usd || (token as any)?.liquidity) {
+                    const liq = token.total_liquidity_usd || (token as any)?.liquidity_usd || (token as any)?.liquidity;
+                    if (typeof liq === 'number' && Number.isFinite(liq)) {
+                      queryParams.set('_liq', liq.toString());
+                    }
                   }
+                  if (token.uri || token.logo) queryParams.set('_image', token.uri || token.logo || '');
+                  queryParams.set('_mint', address);
+                  if ((token as any).launchpad_protocol) queryParams.set('_launchpad_protocol', (token as any).launchpad_protocol);
+                  queryParams.set('chain', 'monad');
+
+                  const url = `/trade/monad/${address}?${queryParams.toString()}`;
+                  router.push(url);
+                } else {
+                  // For Solana, include chain=sol parameter
+                  const solQueryParams = new URLSearchParams();
+                  if (token.name) solQueryParams.set('_name', token.name);
+                  if (token.symbol) solQueryParams.set('_symbol', token.symbol);
+                  if ((token as any).price_usd) solQueryParams.set('_price', (token as any).price_usd.toString());
+                  if (token.market_cap_usd) solQueryParams.set('_mcap', token.market_cap_usd.toString());
+                  if (token.uri || token.logo || (token as any).image) solQueryParams.set('_image', token.uri || token.logo || (token as any).image || '');
+                  solQueryParams.set('_mint', address);
+                  if ((token as any).launchpad_protocol) solQueryParams.set('_launchpad_protocol', (token as any).launchpad_protocol);
+                  solQueryParams.set('chain', 'sol');
+                  router.push(`/trade/${address}?${solQueryParams.toString()}`);
                 }
+
+                // Fire-and-forget: backfill token in background
+                fetch('/api/token-service/backfill-token', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({
+                    mint: token.mint,
+                    name: token.name,
+                    symbol: token.symbol,
+                    uri: token.uri,
+                    market_cap_usd: token.fully_diluted_value,
+                    liquidity_usd: token.total_liquidity_usd,
+                    pair_address: token.pair_address
+                  })
+                })
+                  .then(res => { if (res.ok) console.log('✅ Token backfilled successfully'); })
+                  .catch(err => console.error('❌ Error backfilling token:', err));
               };
-              
+
+              let hoverFired = false;
+              const handleTokenHover = () => {
+                if (hoverFired) return;
+                hoverFired = true;
+                const address = token.pair_address || token.mint;
+                if (!address) return;
+                const rIC = typeof requestIdleCallback === 'function' ? requestIdleCallback : (cb: () => void) => setTimeout(cb, 0);
+                rIC(() => {
+                  const isMonad = chain === 'monad';
+                  const url = isMonad ? `/trade/monad/${address}` : `/trade/${address}`;
+                  router.prefetch(url);
+                  prefetchTradeData(address, token.pair_address).catch(() => {});
+                });
+              };
+
               return (
                 <TableRow
                   key={token.pair_address || token.mint}
@@ -2241,9 +2325,11 @@ export default function InterstateTable({
                   animationState={animationState}
                   sortedRows={sortedRows}
                   onClick={handleTokenClick}
+                  onHover={handleTokenHover}
                   isDiscoverPage={isDiscoverPage}
                   chain={chain}
                   tableType={tableType}
+                  solPrice={solPrice}
                 />
               );
             })

@@ -90,6 +90,7 @@ import {
   getResolvedTokenImage,
   getCachedResolvedImage,
   resolveMetadataImage,
+  resolveTokenImage,
 } from "~/utils/images";
 import { useSolPrice } from "~/components/SolPriceContext";
 import { preloadTokenImages, preloadMetadataImages } from "~/utils/imagePreloader";
@@ -2814,7 +2815,7 @@ function PulseTable({
       case "Meteora AMM V2":
         return ["meteora"]; // V2 also uses "meteora" as the backend value
       case "Bonk":
-        return ["bonk", "bonk.fun", "launchlab"];
+        return ["bonk", "bonk.fun", "bonkfun", "launchlab", "raydiumlaunchpad"];
       case "Bags":
         return ["bags"];
       case "Moonit":
@@ -2822,7 +2823,7 @@ function PulseTable({
       case "Boop":
         return ["boop", "boopfun"];
       case "LaunchLab":
-        return ["launchlab", "bonk", "bonk.fun"];
+        return ["launchlab", "bonk", "bonk.fun", "bonkfun", "raydiumlaunchpad"];
       case "All":
         return ["all"];
       default:
@@ -3298,6 +3299,7 @@ function PulseTable({
         rpc: settings.rpc,
         tokenName: token.name,
         tokenSymbol: token.symbol,
+        imageUrl: await resolveTokenImage(token) || undefined,
         authToken: user.bearerToken,
         walletList,
         walletBalances,
@@ -3761,6 +3763,9 @@ function PulseTable({
         if (selectedFilter === tokenCategory) return true;
         // Meteora AMM V2 filter should also match Meteora AMM tokens
         if (selectedFilter === "Meteora AMM V2" && tokenCategory === "Meteora AMM") return true;
+        // LaunchLab and Bonk are the same ecosystem — selecting either should show both
+        if (selectedFilter === "LaunchLab" && tokenCategory === "Bonk") return true;
+        if (selectedFilter === "Bonk" && tokenCategory === "LaunchLab") return true;
         return false;
       });
     };
@@ -5246,67 +5251,7 @@ function PulseTable({
                   >
                     <button
                       className="mr-2 cursor-pointer rounded p-2 transition-colors hover:bg-gray-700"
-                      onClick={() => {
-                        // Reset all filters
-                        setFilters({
-                          protocols: [],
-                          quoteTokens: [],
-                          searchKeywords: "",
-                          excludeKeywords: "",
-                          dexPaid: false,
-                          caEndsInPump: false,
-                          minAge: "",
-                          maxAge: "",
-                          ageUnit: "m",
-                          top10HoldersPercent: "",
-                          devHoldingPercentMin: "",
-                          devHoldingPercentMax: "",
-                          snipersPercentMin: "",
-                          snipersPercentMax: "",
-                          insidersPercentMin: "",
-                          insidersPercentMax: "",
-                          bundlePercentMin: "",
-                          bundlePercentMax: "",
-                          holdersMin: "",
-                          holdersMax: "",
-                          proTradersMin: "",
-                          proTradersMax: "",
-                          devMigrationsMin: "",
-                          devMigrationsMax: "",
-                          devPairsCreatedMin: "",
-                          devPairsCreatedMax: "",
-                          kolCountMin: "",
-                          kolCountMax: "",
-                          minMarketCap: "",
-                          maxMarketCap: "",
-                          minVolume: "",
-                          maxVolume: "",
-                          minLiquidity: "",
-                          maxLiquidity: "",
-                          bCurvePercentMin: "",
-                          bCurvePercentMax: "",
-                          globalFeesPaidMin: "",
-                          globalFeesPaidMax: "",
-                          txnsMin: "",
-                          txnsMax: "",
-                          numBuysMin: "",
-                          numBuysMax: "",
-                          numSellsMin: "",
-                          numSellsMax: "",
-                          twitterReusesMin: "",
-                          twitterReusesMax: "",
-                          tweetAgeMin: "",
-                          tweetAgeMax: "",
-                          tweetAgeUnit: "m",
-                          hasTwitter: false,
-                          hasWebsite: false,
-                          hasTelegram: false,
-                          atLeastOneSocial: false,
-                          onlyPumpLive: false,
-                          sortBy: isNewPairs ? "timestamp" : "marketCap",
-                          sortOrder: "desc",
-                        });
-                      }}
+                      onClick={handleResetFilters}
                     >
                       <BiRefresh
                         className="h-4 w-4"
@@ -7425,6 +7370,7 @@ function PulseTable({
                   (token as any)?.created_at ||
                   "",
                 chain: currentChain, // Preserve chain selection
+                _migrated: title.toLowerCase().includes("migrated") ? "1" : "",
               }).toString();
 
               return (

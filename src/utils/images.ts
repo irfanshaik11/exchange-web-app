@@ -238,6 +238,13 @@ async function _doResolveMetadataImage(url: string): Promise<string | null> {
       return metadataUrl;
     }
 
+    // Only parse as JSON if Content-Type indicates JSON — avoids SyntaxError on
+    // binary responses (JPEG, etc.) from misconfigured upstreams
+    if (!contentType.includes('json')) {
+      metadataImageCache.set(url, { image: null, timestamp: Date.now() });
+      return null;
+    }
+
     const data = await response.json();
 
     // Extract image from metadata JSON
@@ -341,6 +348,26 @@ export function getResolvedTokenImage(token: any): string | null {
   }
 
   // Not a metadata URL, return the normalized image URL directly
+  return rawImageUrl;
+}
+
+/**
+ * Async version of getResolvedTokenImage — resolves metadata URIs on-demand.
+ * Direct image URL → returns immediately.
+ * Metadata URI (cached) → returns cached resolved image.
+ * Metadata URI (not cached) → fetches JSON, extracts image, caches, returns direct URL.
+ * Fetch fails → returns null (backend fetchTokenMetadata + recovery handle it).
+ */
+export async function resolveTokenImage(token: any): Promise<string | null> {
+  const rawImageUrl = extractTokenImage(token);
+  if (!rawImageUrl) return null;
+
+  if (isMetadataUrl(rawImageUrl)) {
+    const cached = getCachedResolvedImage(rawImageUrl);
+    if (cached) return cached;
+    return resolveMetadataImage(rawImageUrl);
+  }
+
   return rawImageUrl;
 }
 

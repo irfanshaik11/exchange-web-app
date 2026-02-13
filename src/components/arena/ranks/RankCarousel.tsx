@@ -39,7 +39,7 @@ export default function RankCarousel({
 
   return (
     <div className={`relative ${className}`}>
-      <h2 className="text-xl font-bold text-white mb-4">Arena Ranks</h2>
+      <h2 className="text-xl font-bold text-white mb-4">Outpost Ranks</h2>
 
       {/* Scroll buttons */}
       <button

@@ -24,6 +24,7 @@ import { toast } from 'react-hot-toast';
 import { GiTrophy } from 'react-icons/gi';
 import ArenaPageToggle from '~/components/ArenaPageToggle';
 import { FiCheck, FiLock, FiChevronLeft, FiChevronRight, FiClock, FiExternalLink, FiPlus, FiMinus, FiAward, FiZap, FiInfo } from 'react-icons/fi';
+import InterstateTooltip from '~/components/InterstateTooltip';
 import { HiLightningBolt, HiSparkles, HiFire } from 'react-icons/hi';
 import { IoRocketSharp, IoFlameSharp } from 'react-icons/io5';
 import { BiDiamond, BiTargetLock } from 'react-icons/bi';
@@ -414,8 +415,15 @@ const QuestItem = ({ quest, index = 0 }: { quest: any; index?: number }) => {
             {isComplete && <FiCheck className="w-3 h-3 text-black" />}
           </div>
           <div className="flex-1 min-w-0">
-            <span className={`text-[14px] transition-colors block truncate ${isClaimed ? 'text-neutral-600 line-through' : 'text-white'}`}>
-              {quest.title}
+            <span className="flex items-center gap-1.5">
+              <span className={`text-[14px] transition-colors truncate ${isClaimed ? 'text-neutral-600 line-through' : 'text-white'}`}>
+                {quest.title}
+              </span>
+              {quest.description && (
+                <InterstateTooltip label={quest.description}>
+                  <FiInfo className={`w-3.5 h-3.5 flex-shrink-0 cursor-help ${isClaimed ? 'text-neutral-600' : 'text-neutral-500 hover:text-neutral-300'}`} />
+                </InterstateTooltip>
+              )}
             </span>
             {/* Progress text for incomplete quests */}
             {!isComplete && !isClaimed && (
@@ -702,8 +710,8 @@ export default function ArenaPage() {
   return (
     <>
       <Head>
-        <title>Arena | Interstate</title>
-        <meta name="description" content="Level up your trading with Interstate Arena - earn Credits, climb ranks, and compete for rewards." />
+        <title>Outpost | Interstate</title>
+        <meta name="description" content="Level up your trading with Interstate Outpost - earn Credits, climb ranks, and compete for rewards." />
       </Head>
 
       <div className="min-h-screen bg-black">
@@ -732,8 +740,8 @@ export default function ArenaPage() {
               </div>
 
               {/* Main title */}
-              <h1 className="text-5xl md:text-6xl font-black tracking-tight text-white text-center mb-8">
-                ARENA
+              <h1 className="text-5xl md:text-6xl font-black tracking-tight text-white text-center">
+                OUTPOST
               </h1>
 
               {/* Subtitle */}
@@ -1307,11 +1315,11 @@ export default function ArenaPage() {
             <div className={`mb-10 transition-all duration-700 delay-700 ${mounted ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'}`}>
               <h2 className="text-white font-bold text-lg mb-2 tracking-wide">FAQs</h2>
               <p className="text-neutral-500 text-sm mb-4">
-                More Questions? <span className="text-neutral-300 hover:text-white underline cursor-pointer transition-colors">Chat with Support</span> or <span className="text-neutral-300 hover:text-white underline cursor-pointer transition-colors">View Arena Intro</span>
+                More Questions? <span className="text-neutral-300 hover:text-white underline cursor-pointer transition-colors">Chat with Support</span> or <span className="text-neutral-300 hover:text-white underline cursor-pointer transition-colors">View Outpost Intro</span>
               </p>
               <Card className="overflow-hidden">
                 <div className="px-5">
-                  <FAQItem question="How does the Arena work?" answer="The Arena is our gamified rewards system. Trade to earn Credits, climb ranks, and unlock better rewards like higher cashback percentages and Credits multipliers." />
+                  <FAQItem question="How does the Outpost work?" answer="The Outpost is our gamified rewards system. Trade to earn Credits, climb ranks, and unlock better rewards like higher cashback percentages and Credits multipliers." />
                   <FAQItem question="How can I earn Credits?" answer="You earn Credits by trading, completing quests, maintaining trading streaks, and ranking up. All Credits earned is multiplied by your current rank's Credits Boost." />
                   <FAQItem question="Do I have to claim my Credits?" answer="Credits from trading is automatically added to your balance. Quest rewards need to be manually claimed by clicking the Claim button." />
                   <FAQItem question="What can I do with my Credits?" answer="Credits determines your position on the leaderboard. Top performers earn additional prizes. Future features will include more ways to use your Credits." />

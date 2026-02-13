@@ -7,7 +7,7 @@ import FastImage from '../FastImage';
 import { FaExternalLinkAlt } from 'react-icons/fa';
 import Image from 'next/image';
 import { useSolPrice } from '~/components/SolPriceContext';
-import { fetchChainTokenMetadata, toNumber, type UnifiedTokenMetadata } from '~/utils/tokenMetadata';
+import { fetchChainTokenMetadata, fetchPumpfunImage, isPumpfunToken, toNumber, type UnifiedTokenMetadata } from '~/utils/tokenMetadata';
 import { getProtocolBranding } from '~/utils/protocolBranding';
 
 const DEFAULT_MON_PRICE = 0.1;
@@ -128,6 +128,7 @@ const Activity: React.FC<ActivityProps> = ({
   isCacheValid
 }) => {
   const [tokenMetadata, setTokenMetadata] = useState<Record<string, TokenMetadata>>({});
+  const [pumpfunImages, setPumpfunImages] = useState<Record<string, string>>({});
   const [currentTime, setCurrentTime] = useState(Date.now());
   const [monPriceUsd, setMonPriceUsd] = useState(0);
   const router = useRouter();
@@ -237,6 +238,7 @@ const Activity: React.FC<ActivityProps> = ({
               launchpad: metadata.launchpad || metadata.protocol || trade.launchpad || "",
               marketCapUsd: metadata.marketCapUsd, // Preserve market cap from metadata
               priceUsd: metadata.priceUsd, // Preserve price from metadata
+              imageUrl: trade.imageUrl || metadata.imageUrl, // Prefer DB-saved direct URL over metadata JSON URI
             };
             
             console.log(`📊 [Activity] Metadata for ${normalizedAddress}:`, {
@@ -264,7 +266,7 @@ const Activity: React.FC<ActivityProps> = ({
           } catch (error) {
             console.warn(`Failed to fetch metadata for ${tokenAddress}:`, error);
             const fallback: TokenMetadata = {
-              imageUrl: "",
+              imageUrl: trade.imageUrl || "",
               protocol: trade.launchpad || "",
               launchpad: trade.launchpad || "",
               name: trade.tokenName || shortAddr(tokenAddress),
@@ -295,6 +297,46 @@ const Activity: React.FC<ActivityProps> = ({
     if (!trades || trades.length === 0) return;
     requestMetadataForTrades(trades);
   }, [trades, requestMetadataForTrades]);
+
+  // Fetch Pump.fun images as fallback for tokens with missing images
+  useEffect(() => {
+    const fetchMissingPumpfunImages = async () => {
+      const tokensNeedingImages = trades
+        .map((t) => t.tokenAddress)
+        .filter((addr, i, arr) => arr.indexOf(addr) === i) // unique
+        .filter((addr) => isPumpfunToken(addr))
+        .filter((addr) => {
+          const metadata = tokenMetadata[addr];
+          const trade = trades.find((t) => t.tokenAddress === addr);
+          const hasImage = metadata?.imageUrl || trade?.imageUrl || pumpfunImages[addr];
+          return !hasImage;
+        });
+
+      if (tokensNeedingImages.length === 0) return;
+
+      const results = await Promise.allSettled(
+        tokensNeedingImages.map(async (tokenAddress) => {
+          const result = await fetchPumpfunImage(tokenAddress);
+          return { tokenAddress, imageUrl: result?.imageUrl };
+        })
+      );
+
+      const newImages: Record<string, string> = {};
+      for (const result of results) {
+        if (result.status === 'fulfilled' && result.value.imageUrl) {
+          newImages[result.value.tokenAddress] = result.value.imageUrl;
+        }
+      }
+
+      if (Object.keys(newImages).length > 0) {
+        setPumpfunImages((prev) => ({ ...prev, ...newImages }));
+      }
+    };
+
+    if (Object.keys(tokenMetadata).length > 0 || trades.length > 0) {
+      fetchMissingPumpfunImages();
+    }
+  }, [trades, tokenMetadata, pumpfunImages]);
 
   return (
     <div className="w-full">
@@ -674,7 +716,7 @@ const Activity: React.FC<ActivityProps> = ({
                           >
                             <div className="relative rounded-lg overflow-hidden w-10 h-10">
                               <FastImage
-                                src={metadata?.imageUrl || ''}
+                                src={metadata?.imageUrl || trade.imageUrl || pumpfunImages[trade.tokenAddress] || ''}
                                 alt={metadata?.name || metadata?.symbol || "Token"}
                                 symbol={metadata?.symbol}
                                 name={metadata?.name}

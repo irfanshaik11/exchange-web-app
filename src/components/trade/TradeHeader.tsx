@@ -397,7 +397,9 @@ function getColumnType(token: Token): "new" | "final-stretch" | "migrated" {
 		(token as any).is_migrated ||
 		(token as any).migrated ||
 		(token as any).graduated ||
-		(token as any).is_graduated;
+		(token as any).is_graduated ||
+		((token.status || '').toLowerCase().includes('migrated')) ||
+		!!token.migrated_time;
 	if (migrated) return "migrated";
 
 	const pct =
@@ -416,6 +418,7 @@ function getColumnType(token: Token): "new" | "final-stretch" | "migrated" {
 	else if (marketCap > 0)
 		progress = Math.min((marketCap / 69000000) * 100, 100);
 
+	if (progress >= 100) return "migrated";
 	return progress >= 60 ? "final-stretch" : "new";
 }
 
@@ -844,7 +847,7 @@ const TradeHeader: React.FC<TradeHeaderProps> = ({ token, livePriceUsd, liveMark
 	const isLiquidityLoading = isSolanaToken
 		? !hasWsLiquidity && !hasTokenLiquidity
 		: !hasWsLiquidity && !hasTokenLiquidity && !wsLiquidityFromMarketData;
-	const supply = (token as any).total_supply ?? (token as any).supply ?? 0;
+	const supply = (token as any).total_supply ?? (token as any).supply ?? 1_000_000_000;
 	const formattedMarketCap = useMemo(() => formatMarketCap(mcap), [mcap]);
 	const isLowLiquidity = Number(liq) < 1000;
 
@@ -1865,17 +1868,19 @@ const TradeHeader: React.FC<TradeHeaderProps> = ({ token, livePriceUsd, liveMark
             )}
           </StatInline>
           */}
-						<StatInline label="B. Curve">
-							<div className="flex flex-row items-center gap-1 sm:gap-2">
-								{Number.isFinite(Number(curvePct))
-									? `${Number(curvePct).toFixed(1)}%`
-									: "—"}
-								<ColorFillBar
-									value={curvePct * 100}
-									color={isMonadContext ? MONAD_RED : undefined}
-								/>
-							</div>
-						</StatInline>
+						{columnType !== "migrated" && (
+							<StatInline label="B. Curve">
+								<div className="flex flex-row items-center gap-1 sm:gap-2">
+									{Number.isFinite(Number(curvePct))
+										? `${Number(curvePct).toFixed(1)}%`
+										: "—"}
+									<ColorFillBar
+										value={curvePct * 100}
+										color={isMonadContext ? MONAD_RED : undefined}
+									/>
+								</div>
+							</StatInline>
+						)}
 					</div>
 				</div>
 
