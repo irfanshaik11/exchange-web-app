@@ -25,6 +25,7 @@ import type { Token as BaseToken } from "~/utils/db";
 import { formatSmartNumber, formatMarketCap, formatLamportsToSol } from '~/utils/db';
 import SkeletonRow from './InterstateTable/SkeletonRow';
 import { fetchTokenMetadata } from '~/utils/functions';
+import { prefetchTradeData } from '~/utils/tokenCache';
 import { withImageFallback, extractMetaImage, isMetadataUrl } from '~/utils/images';
 import AvatarImage from '~/components/AvatarImage';
 import { useFilter } from "./FilterContext";
@@ -332,8 +333,8 @@ const getSortableValue = (token: Token, key: string, selectedTimeframe?: string)
 const tokenMetadataCache: Record<string, any> = {};
 
 function useTokenMetadata(uri?: string) {
-  const [meta, setMeta] = useState<any | null>(null);
-  const [loading, setLoading] = useState(!!uri);
+  const [meta, setMeta] = useState<any | null>(() => uri ? (tokenMetadataCache[uri] || null) : null);
+  const [loading, setLoading] = useState(() => uri ? !tokenMetadataCache[uri] : false);
   const [showInitial, setShowInitial] = useState(false);
 
   useEffect(() => {
@@ -462,6 +463,10 @@ const TableHeader: React.FC<{
         if (header.label === 'Volume' && tableType === 'newPairs') {
           return null;
         }
+        // Show TXNS column only for newPairs
+        if (header.label === 'TXNS' && tableType !== 'newPairs') {
+          return null;
+        }
         return (
           <th
             key={idx}
@@ -494,6 +499,9 @@ const MonadIcon = ({ size = 16 }: { size?: number }) => (
   />
 );
 
+// Module-level cache: mint → resolved proxy image URL (survives unmount/remount)
+const resolvedImageCache: Record<string, string> = {};
+
 // Token Avatar Component
 const TokenAvatar: React.FC<{
   token: Token;
@@ -503,72 +511,107 @@ const TokenAvatar: React.FC<{
   chain?: string; // 'sol' | 'monad' - chain identifier
 }> = ({ token, meta, loading, showInitial, chain = 'sol' }) => {
   const initial = token.name?.charAt(0)?.toUpperCase() || '?';
+  const [imgError, setImgError] = useState(false);
   
-  // Protocol color mapping - matches PulseTable
-  const protocolColorMap: Record<string, string> = {
-    'pump': '#22c55e',
-    'pump.fun': '#22c55e',
-    'bonk': '#ff6b35',
-    'bags': '#22c55e',
-    'moonshot': '#eab308',
-    'moonshoot': '#eab308',
-    'moonit': '#eab308',
-    'heaven': '#8b5cf6',
-    'daos.fun': '#06b6d4',
-    'candle': '#f59e0b',
-    'sugar': '#ec4899',
-    'believe': '#10b981',
-    'jupiter': '#8b5cf6',
-    'boop': '#134577',
-    'boopfun': '#134577',
-    'launchlab': '#3b82f6',
-    'dynamic': '#526fff',
-    'raydium': '#5c51f7',
-    'raydiumlaunchpad': '#5c51f7',
-    'meteora': '#ff4662',
-    'meteora_v2': '#ff4662',
-    'pump_amm': '#e9ba14',
-    'orca': '#0ea5e9'
-  };
-
-  // Get protocol color based on launchpad_protocol field
+  // Get protocol color - matches PulseTable/SearchModal for consistency
   const getProtocolColor = (token: Token): string => {
-    const launchpadProtocol = (token as any).launchpad_protocol?.toLowerCase();
-    
-    if (!launchpadProtocol) return '#22c55e';
-    
-    if (protocolColorMap[launchpadProtocol]) return protocolColorMap[launchpadProtocol];
-    if (launchpadProtocol.includes('pump')) return '#22c55e';
-    if (launchpadProtocol.includes('meteora')) return '#ff4662';
-    if (launchpadProtocol.includes('raydium')) return '#5c51f7';
-    if (launchpadProtocol.includes('moonit') || launchpadProtocol.includes('moonshot')) return '#eab308';
+    const launchpadProtocol = (token as any).launchpad_protocol?.toLowerCase() || '';
+    const mintAddress = (token.mint || (token as any).mint_address || '').toLowerCase();
+
+    // Monad chain → purple
+    if (chain === 'monad') return '#c084fc';
+    // bags mint override → green
+    if (mintAddress.includes('bags')) return '#31e3ac';
+    if (!launchpadProtocol) return '#31e3ac';
+
+    if (launchpadProtocol.includes('meteora')) return '#d11f3a';
+    if (launchpadProtocol.includes('pump')) return '#31e3ac';
+    if (launchpadProtocol.includes('launch')) return '#3b82f6';
+    if (launchpadProtocol.includes('raydium')) return '#31e3ac';
+    if (launchpadProtocol.includes('moonit') || launchpadProtocol.includes('moonshot') || launchpadProtocol.includes('moonshoot')) return '#eab308';
     if (launchpadProtocol.includes('boop')) return '#134577';
-    if (launchpadProtocol.includes('bonk')) return '#ff6b35';
-    if (launchpadProtocol.includes('bags')) return '#22c55e';
-    
-    return '#22c55e';
+    if (launchpadProtocol.includes('bonk') || mintAddress.endsWith('bonk')) return '#ff6b35';
+    if (launchpadProtocol.includes('bags')) return '#31e3ac';
+
+    return '#31e3ac';
   };
 
-  // Get icon based on token data
+  // Get protocol icon - matches PulseTable/SearchModal for consistency
   const getTokenIcon = (token: Token): string => {
-    const launchpadProtocol = (token as any).launchpad_protocol?.toLowerCase();
-    
-    if (!launchpadProtocol) return 'https://logos-world.net/wp-content/uploads/2024/10/Pump-Fun-Logo.png';
-    if (launchpadProtocol.includes('pump')) return 'https://logos-world.net/wp-content/uploads/2024/10/Pump-Fun-Logo.png';
+    const launchpadProtocol = (token as any).launchpad_protocol?.toLowerCase() || '';
+    const mintAddress = (token.mint || (token as any).mint_address || '').toLowerCase();
+
+    // Monad chain → protocol-specific Monad icons
+    if (chain === 'monad') {
+      if (launchpadProtocol.includes('nad.fun') || launchpadProtocol === 'nadfun') return 'https://avatars.githubusercontent.com/u/173274001?s=200&v=4';
+      if (launchpadProtocol.includes('flap.sh') || launchpadProtocol.includes('flapsh')) return 'https://media.licdn.com/dms/image/v2/D4D0BAQFG5I0EDOrmJQ/company-logo_200_200/company-logo_200_200/0/1714693191952/flap_sh_logo?e=2147483647&v=beta&t=2kcdij2YPOFjLdPYzAhQxKgbGcuyh7Cdyp0AkGR8V6A';
+      if (launchpadProtocol.includes('kuru')) return 'https://pbs.twimg.com/profile_images/1950962142917619714/R7Cj_qk7_400x400.jpg';
+      return 'https://avatars.githubusercontent.com/u/173274001?s=200&v=4';
+    }
+
+    // bags mint override
+    if (mintAddress.includes('bags')) return 'https://bags.fm/assets/images/bags-icon.png';
+    if (!launchpadProtocol) return 'https://pump.fun/pump-logomark.svg';
+
+    if (launchpadProtocol.includes('pump')) return 'https://pump.fun/pump-logomark.svg';
     if (launchpadProtocol.includes('meteora')) return 'https://s1.coincarp.com/logo/1/meteora.png?style=72&v=1759911013';
     if (launchpadProtocol.includes('raydium')) return 'https://s2.coinmarketcap.com/static/img/coins/64x64/8526.png';
     if (launchpadProtocol.includes('boop')) return 'https://api.phantom.app/image-proxy/?image=https%3A%2F%2Fdhc7eusqrdwa0.cloudfront.net%2Fassets%2FBOOP_logo_icon_dark_bg.png&anim=true';
-    if (launchpadProtocol.includes('moonit') || launchpadProtocol.includes('moonshot')) return 'https://avatars.githubusercontent.com/u/174132191?s=280&v=4';
-    if (launchpadProtocol.includes('bonk')) return 'https://s3.coinmarketcap.com/static-gravity/image/a28128d9ff7c49c9ad33ee2f626fda40.png';
+    if (launchpadProtocol.includes('moonit') || launchpadProtocol.includes('moonshot') || launchpadProtocol.includes('moonshoot')) return 'https://avatars.githubusercontent.com/u/174132191?s=280&v=4';
+    if (launchpadProtocol.includes('bonk') || launchpadProtocol.includes('launchlab') || mintAddress.endsWith('bonk')) return 'https://s3.coinmarketcap.com/static-gravity/image/a28128d9ff7c49c9ad33ee2f626fda40.png';
     if (launchpadProtocol.includes('bags')) return 'https://play-lh.googleusercontent.com/7AxVcu1pumxavcGTb16WBJQU88CDZd0v8q0WzFwfin7zbBvItYMuNQ0Xkqq4srTw4A=w240-h480-rw';
-    
-    return 'https://logos-world.net/wp-content/uploads/2024/10/Pump-Fun-Logo.png';
+
+    return 'https://pump.fun/pump-logomark.svg';
   };
 
   // API returns image_url, fallback to image, logo, then uri (only if uri is not a metadata JSON URL)
   const rawUri = (token as any).uri;
   const safeUri = rawUri && !isMetadataUrl(rawUri) ? rawUri : null;
   const imageUrl = (token as any).image_url || (token as any).image || token.logo || safeUri;
+
+  // Resolve final proxy URL, using per-mint cache to avoid re-computation
+  const mintKey = token.mint || (token as any).mint_address || '';
+  const imgSrc = useMemo(() => {
+    // 1. Metadata image takes top priority (already resolved by useTokenMetadata)
+    const metaImg = extractMetaImage(meta);
+    if (metaImg) {
+      const proxyUrl = `/api/image?url=${encodeURIComponent(metaImg)}`;
+      if (mintKey) resolvedImageCache[mintKey] = proxyUrl;
+      return proxyUrl;
+    }
+    // 2. Check resolved cache (populated by previous renders)
+    if (mintKey && resolvedImageCache[mintKey]) return resolvedImageCache[mintKey];
+    // 3. Use metadata URI via proxy auto-resolve (proxy fetches JSON → extracts image → serves it)
+    //    Don't cache this — let extractMetaImage supersede it once useTokenMetadata resolves
+    if (rawUri && isMetadataUrl(rawUri)) {
+      return `/api/image?url=${encodeURIComponent(rawUri)}`;
+    }
+    // 4. Direct image URL or ui-avatars fallback
+    const raw = imageUrl || token.logo || '';
+    if (!raw) return '';
+    const proxyUrl = `/api/image?url=${encodeURIComponent(raw)}`;
+    if (mintKey) resolvedImageCache[mintKey] = proxyUrl;
+    return proxyUrl;
+  }, [meta, imageUrl, token.logo, mintKey, rawUri]);
+
+  // Reset imgError when image source changes
+  useEffect(() => {
+    setImgError(false);
+  }, [imgSrc]);
+
+  const showFallbackLetter = imgError || (!loading && !imgSrc);
+
+  // Compute protocol badge values
+  const protocolColor = getProtocolColor(token);
+  const tokenIcon = getTokenIcon(token);
+  const _proto = (token as any).launchpad_protocol?.toLowerCase() || '';
+  const _mint = (token.mint || (token as any).mint_address || '').toLowerCase();
+  const fillBadge = (
+    (_proto.includes('meteora') && !_mint.includes('bags')) ||
+    _proto.includes('bonk') || _proto.includes('launchlab') || _mint.endsWith('bonk') ||
+    _proto.includes('bags') || _mint.includes('bags') ||
+    _proto.includes('moonit') || _proto.includes('moonshot') || _proto.includes('moonshoot')
+  );
 
   return (
     <div className="relative h-12 w-12 flex items-center justify-center">
@@ -578,47 +621,45 @@ const TokenAvatar: React.FC<{
           <div className="w-full h-full flex items-center justify-center rounded-full" style={{ backgroundColor: AX.surface2 }}>
             <div className="w-6 h-6 border-2 border-t-2 border-b-2 border-yellow-400 rounded-full animate-spin"></div>
           </div>
-        ) : meta || imageUrl ? (
+        ) : showFallbackLetter ? (
+          <div className="w-full h-full flex items-center justify-center rounded-full" style={{ backgroundColor: AX.surface2, width: '48px', height: '48px' }}>
+            <span className="text-sm font-bold" style={{ color: AX.text }}>{initial}</span>
+          </div>
+        ) : (
           <img
-            src={(() => {
-              const imgSrc = extractMetaImage(meta) || imageUrl || token.logo || '';
-              if (!imgSrc) return '';
-              return `/api/image?url=${encodeURIComponent(imgSrc)}`;
-            })()}
+            src={imgSrc}
             alt={token.name || token.symbol || ''}
             width={48}
             height={48}
             className="h-full w-full object-cover rounded-full transition-all duration-300"
-            onError={(e) => {
-              e.currentTarget.style.display = 'none';
-            }}
+            onError={() => setImgError(true)}
           />
-        ) : (
-          <div className="w-full h-full flex items-center justify-center rounded-full" style={{ backgroundColor: AX.surface2, width: '48px', height: '48px' }}>
-            <span className="text-sm font-bold" style={{ color: AX.text }}>{initial}</span>
-          </div>
         )}
       </div>
       
-      {/* Chain logo bubble - positioned at bottom right (Solana or Monad) */}
-      {chain === 'monad' ? (
-        <div className="absolute bottom-0 right-0 flex items-center justify-center transform translate-x-1/2 translate-y-1/2 z-10"
-             style={{ 
-               width: 20, 
-               height: 20
-             }}>
-          <MonadIcon size={20} />
-        </div>
-      ) : (
-        <div className="absolute bottom-0 right-0 bg-white rounded-full flex items-center justify-center transform translate-x-1/2 translate-y-1/2 z-10"
-             style={{ 
-               width: 14, 
-               height: 14,
-               padding: '1px'
-             }}>
-          <SolanaIcon size={12} />
-        </div>
-      )}
+      {/* Protocol logo badge - bottom right */}
+      <div
+        className="pointer-events-none absolute right-0 bottom-0 z-10 flex translate-x-1/5 translate-y-1/4 transform items-center justify-center rounded-full"
+        style={{
+          width: 16,
+          height: 16,
+          backgroundColor: '#080808',
+          border: `1px solid ${protocolColor}`,
+          boxShadow: `0 0 4px ${protocolColor}60`,
+        }}
+      >
+        <img
+          src={tokenIcon}
+          alt="Protocol"
+          className={`${fillBadge ? 'h-full w-full object-cover' : 'h-3/4 w-3/4 object-contain'} rounded-full`}
+          style={{
+            filter: protocolColor === '#eab308'
+              ? 'sepia(1) saturate(3) hue-rotate(-10deg) brightness(1.1)'
+              : 'none',
+          }}
+          onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+        />
+      </div>
     </div>
   );
 };
@@ -1827,6 +1868,7 @@ const TableRow: React.FC<{
   animationState: Record<string, 'up' | 'down' | null>;
   sortedRows: InterstateTableRow[];
   onClick: () => void;
+  onHover?: () => void;
   isDiscoverPage?: boolean;
   chain?: string; // 'sol' | 'monad' - chain identifier
   tableType?: 'trending' | 'newPairs' | 'xStocks' | 'dexscreener';
@@ -1840,6 +1882,7 @@ const TableRow: React.FC<{
   animationState,
   sortedRows,
   onClick,
+  onHover,
   isDiscoverPage = false,
   chain = 'sol',
   tableType = 'trending',
@@ -1890,6 +1933,7 @@ const TableRow: React.FC<{
         } else {
           e.currentTarget.style.backgroundColor = AX.surface2;
         }
+        onHover?.();
       }}
       onMouseLeave={(e) => {
         e.currentTarget.style.backgroundColor = rowBgColor;
@@ -1956,9 +2000,11 @@ const TableRow: React.FC<{
       </td>
       )}
 
-      <td className="w-28 px-4 py-4 align-middle">
-        <TxnsCell token={token} selectedTimeframe={selectedTimeframe} isDiscoverPage={isDiscoverPage} />
-      </td>
+      {tableType === 'newPairs' && (
+        <td className="w-24 px-4 py-4 align-middle">
+          <TxnsCell token={token} selectedTimeframe={selectedTimeframe} isDiscoverPage={isDiscoverPage} />
+        </td>
+      )}
 
       {/* 24h Mini Chart column - hidden for newPairs and dexscreener */}
       {tableType !== 'newPairs' && tableType !== 'dexscreener' && (
@@ -2194,78 +2240,80 @@ export default function InterstateTable({
             ))
           ) : (
             sortedRows.map(({ token, i }) => {
-              const handleTokenClick = async () => {
-                // First, backfill the token to the database (same as search functionality)
-                try {
-                  console.log('🔄 Backfilling token from discover page:', token);
-                  
-                  const backfillResponse = await fetch('/api/token-service/backfill-token', {
-                    method: 'POST',
-                    headers: {
-                      'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify({
-                      mint: token.mint,
-                      name: token.name,
-                      symbol: token.symbol,
-                      uri: token.uri,
-                      market_cap_usd: token.fully_diluted_value,
-                      liquidity_usd: token.total_liquidity_usd,
-                      pair_address: token.pair_address
-                    })
-                  });
-
-                  if (backfillResponse.ok) {
-                    console.log('✅ Token backfilled successfully');
-                  } else {
-                    console.warn('⚠️ Token backfill failed, but continuing with navigation');
-                  }
-                } catch (error) {
-                  console.error('❌ Error backfilling token:', error);
-                  // Continue with navigation even if backfill fails
-                }
-
-                // Navigate with proper format based on chain
+              const handleTokenClick = () => {
+                // Navigate immediately — don't block on backfill
                 const address = token.pair_address || token.mint;
-                if (address) {
-                  // Check if this is a Monad token
-                  const isMonad = chain === 'monad';
-                  
-                  if (isMonad) {
-                    // Build Monad trade URL with query parameters
-                    const queryParams = new URLSearchParams();
-                    if (token.name) queryParams.set('_name', token.name);
-                    if (token.symbol) queryParams.set('_symbol', token.symbol);
-                    if (token.fully_diluted_value) queryParams.set('_mcap', token.fully_diluted_value.toString());
-                    if (token.total_liquidity_usd || (token as any)?.liquidity_usd || (token as any)?.liquidity) {
-                      const liq = token.total_liquidity_usd || (token as any)?.liquidity_usd || (token as any)?.liquidity;
-                      if (typeof liq === 'number' && Number.isFinite(liq)) {
-                        queryParams.set('_liq', liq.toString());
-                      }
-                    }
-                    if (token.uri || token.logo) queryParams.set('_image', token.uri || token.logo || '');
-                    queryParams.set('_mint', address);
-                    if ((token as any).launchpad_protocol) queryParams.set('_launchpad_protocol', (token as any).launchpad_protocol);
-                    queryParams.set('chain', 'monad');
+                if (!address) return;
 
-                    const url = `/trade/monad/${address}?${queryParams.toString()}`;
-                    router.push(url);
-                  } else {
-                    // For Solana, include chain=sol parameter
-                    const solQueryParams = new URLSearchParams();
-                    if (token.name) solQueryParams.set('_name', token.name);
-                    if (token.symbol) solQueryParams.set('_symbol', token.symbol);
-                    if ((token as any).price_usd) solQueryParams.set('_price', (token as any).price_usd.toString());
-                    if (token.market_cap_usd) solQueryParams.set('_mcap', token.market_cap_usd.toString());
-                    if (token.uri || token.logo || (token as any).image) solQueryParams.set('_image', token.uri || token.logo || (token as any).image || '');
-                    solQueryParams.set('_mint', address);
-                    if ((token as any).launchpad_protocol) solQueryParams.set('_launchpad_protocol', (token as any).launchpad_protocol);
-                    solQueryParams.set('chain', 'sol');
-                    router.push(`/trade/${address}?${solQueryParams.toString()}`);
+                // Check if this is a Monad token
+                const isMonad = chain === 'monad';
+
+                if (isMonad) {
+                  // Build Monad trade URL with query parameters
+                  const queryParams = new URLSearchParams();
+                  if (token.name) queryParams.set('_name', token.name);
+                  if (token.symbol) queryParams.set('_symbol', token.symbol);
+                  if (token.fully_diluted_value) queryParams.set('_mcap', token.fully_diluted_value.toString());
+                  if (token.total_liquidity_usd || (token as any)?.liquidity_usd || (token as any)?.liquidity) {
+                    const liq = token.total_liquidity_usd || (token as any)?.liquidity_usd || (token as any)?.liquidity;
+                    if (typeof liq === 'number' && Number.isFinite(liq)) {
+                      queryParams.set('_liq', liq.toString());
+                    }
                   }
+                  if (token.uri || token.logo) queryParams.set('_image', token.uri || token.logo || '');
+                  queryParams.set('_mint', address);
+                  if ((token as any).launchpad_protocol) queryParams.set('_launchpad_protocol', (token as any).launchpad_protocol);
+                  queryParams.set('chain', 'monad');
+
+                  const url = `/trade/monad/${address}?${queryParams.toString()}`;
+                  router.push(url);
+                } else {
+                  // For Solana, include chain=sol parameter
+                  const solQueryParams = new URLSearchParams();
+                  if (token.name) solQueryParams.set('_name', token.name);
+                  if (token.symbol) solQueryParams.set('_symbol', token.symbol);
+                  if ((token as any).price_usd) solQueryParams.set('_price', (token as any).price_usd.toString());
+                  if (token.market_cap_usd) solQueryParams.set('_mcap', token.market_cap_usd.toString());
+                  if (token.uri || token.logo || (token as any).image) solQueryParams.set('_image', token.uri || token.logo || (token as any).image || '');
+                  solQueryParams.set('_mint', address);
+                  if ((token as any).launchpad_protocol) solQueryParams.set('_launchpad_protocol', (token as any).launchpad_protocol);
+                  solQueryParams.set('chain', 'sol');
+                  router.push(`/trade/${address}?${solQueryParams.toString()}`);
                 }
+
+                // Fire-and-forget: backfill token in background
+                fetch('/api/token-service/backfill-token', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({
+                    mint: token.mint,
+                    name: token.name,
+                    symbol: token.symbol,
+                    uri: token.uri,
+                    market_cap_usd: token.fully_diluted_value,
+                    liquidity_usd: token.total_liquidity_usd,
+                    pair_address: token.pair_address
+                  })
+                })
+                  .then(res => { if (res.ok) console.log('✅ Token backfilled successfully'); })
+                  .catch(err => console.error('❌ Error backfilling token:', err));
               };
-              
+
+              let hoverFired = false;
+              const handleTokenHover = () => {
+                if (hoverFired) return;
+                hoverFired = true;
+                const address = token.pair_address || token.mint;
+                if (!address) return;
+                const rIC = typeof requestIdleCallback === 'function' ? requestIdleCallback : (cb: () => void) => setTimeout(cb, 0);
+                rIC(() => {
+                  const isMonad = chain === 'monad';
+                  const url = isMonad ? `/trade/monad/${address}` : `/trade/${address}`;
+                  router.prefetch(url);
+                  prefetchTradeData(address, token.pair_address).catch(() => {});
+                });
+              };
+
               return (
                 <TableRow
                   key={token.pair_address || token.mint}
@@ -2277,6 +2325,7 @@ export default function InterstateTable({
                   animationState={animationState}
                   sortedRows={sortedRows}
                   onClick={handleTokenClick}
+                  onHover={handleTokenHover}
                   isDiscoverPage={isDiscoverPage}
                   chain={chain}
                   tableType={tableType}

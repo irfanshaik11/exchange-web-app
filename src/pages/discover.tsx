@@ -27,7 +27,7 @@ import { FaRunning, FaGasPump, FaCoins, FaBan, FaCheckCircle } from "react-icons
 import { HiLightningBolt } from "react-icons/hi";
 import { BsSliders2 } from "react-icons/bs";
 import { prefetchTradeData } from "~/utils/tokenCache";
-import { extractTokenImage, getResolvedTokenImage, resolveTokenImage } from "~/utils/images";
+import { extractTokenImage, getResolvedTokenImage, resolveTokenImage, isMetadataUrl } from "~/utils/images";
 import { broadcastMonadQuickTrade } from "~/utils/monadTradeEvents";
 import toast from "react-hot-toast";
 import { executeSolanaMultiBuy, buildSolanaWalletAllocations } from "~/utils/solanaWalletAllocation";
@@ -114,13 +114,11 @@ export default function DiscoverPage() {
         const saved = localStorage.getItem('discover_tab_v3');
         if (saved && ['trending', 'trending2', 'newPairs', 'xStocks', 'surge', 'dex', 'live'].includes(saved)) {
           const savedTab = saved as 'trending' | 'trending2' | 'newPairs' | 'xStocks' | 'surge' | 'dex' | 'live';
-          // Map old 'trending' to 'trending2' (old tab was removed)
-          if (savedTab === 'trending') return 'trending2';
-          // Check if we're on monad chain - if so, only allow trending2 or newPairs
+          // Check if we're on monad chain - if so, only allow trending or newPairs
           const urlParams = new URLSearchParams(window.location.search);
           const initialChain = urlParams.get('chain') || 'sol';
-          if (initialChain === 'monad' && savedTab !== 'trending2' && savedTab !== 'newPairs') {
-            return 'trending2';
+          if (initialChain === 'monad' && savedTab !== 'trending' && savedTab !== 'newPairs') {
+            return 'trending';
           }
           return savedTab;
         }
@@ -128,7 +126,7 @@ export default function DiscoverPage() {
         // Ignore localStorage errors
       }
     }
-    return 'trending2'; // Default to trending (DexScreener-based)
+    return 'trending'; // Default to trending tab
   });
 
   // Save activeTab to localStorage whenever it changes
@@ -144,8 +142,8 @@ export default function DiscoverPage() {
   
   // When chain changes to monad, switch to trending if current tab is not allowed
   useEffect(() => {
-    if (currentChain === 'monad' && activeTab !== 'trending2' && activeTab !== 'newPairs') {
-      setActiveTab('trending2');
+    if (currentChain === 'monad' && activeTab !== 'trending' && activeTab !== 'newPairs') {
+      setActiveTab('trending');
     }
   }, [currentChain, activeTab]);
   const [selectedTimeframe, setSelectedTimeframe] = useState<Timeframe>("1h");
@@ -3082,7 +3080,7 @@ export default function DiscoverPage() {
       
       // Ensure every token has some kind of image to display (fallback to initials if missing)
       const normalizedTokens = tokensToDisplay.map((t: any) => {
-        const hasImage = t?.uri || t?.logo || t?.image || t?.imageUrl;
+        const hasImage = t?.logo || t?.image || t?.imageUrl || (t?.uri && !isMetadataUrl(t.uri));
         if (hasImage && hasImage !== '' && hasImage !== 'null' && hasImage !== null) {
           return t;
         }
@@ -3093,7 +3091,7 @@ export default function DiscoverPage() {
           ...t,
           image: fallbackImage,
           logo: fallbackImage,
-          uri: fallbackImage,
+          // uri intentionally NOT overwritten — preserved for metadata resolution
         };
       });
       
@@ -3469,6 +3467,7 @@ export default function DiscoverPage() {
             selectedTimeframe={selectedTimeframe}
             quickBuyAmount={Number(quickBuyAmount) || 0}
             chain={currentChain}
+            isDiscoverPage={true}
           />
         </section>
       );
@@ -3489,6 +3488,7 @@ export default function DiscoverPage() {
             selectedTimeframe={selectedTimeframe}
             quickBuyAmount={Number(quickBuyAmount) || 0}
             chain={currentChain}
+            isDiscoverPage={true}
           />
         </section>
       );
@@ -3710,20 +3710,18 @@ export default function DiscoverPage() {
         <div className="relative z-10 mt-3 mb-4 flex flex-shrink-0 flex-col gap-4 px-4 sm:mt-4 sm:px-6 lg:flex-row lg:items-center lg:justify-between lg:gap-6 lg:px-8">
           {/* Tabs Section - Scrollable on mobile */}
           <div className="scrollbar-hide -mx-4 flex items-center gap-3 overflow-x-auto px-4 pb-2 sm:-mx-6 sm:gap-4 sm:px-6 lg:mx-0 lg:gap-4 lg:px-0 lg:pb-0">
-            {/* Old Trending tab (Birdeye-based) — replaced by DexScreener trending below
             <button
               className={`text-sm whitespace-nowrap transition-colors sm:text-base lg:text-xl font-medium ${activeTab === "trending" ? "text-white" : "text-[#6B7280] hover:text-white"} cursor-pointer`}
               onClick={() => { setActiveTab("trending"); if (sortKey === "timestamp") { setSortKey("score"); setSortDirection("desc"); } }}
             >
               Trending
             </button>
-            */}
-            <button
+            {/* <button
               className={`text-sm whitespace-nowrap transition-colors sm:text-base lg:text-xl font-medium ${activeTab === "trending2" ? "text-white" : "text-[#6B7280] hover:text-white"} cursor-pointer`}
               onClick={() => { setActiveTab("trending2"); if (sortKey === "timestamp") { setSortKey("score"); setSortDirection("desc"); } }}
             >
-              Trending
-            </button>
+              Trending 2
+            </button> */}
             <button
               className={`text-sm whitespace-nowrap transition-colors sm:text-base lg:text-xl font-medium ${activeTab === "newPairs" ? "text-white" : "text-[#6B7280] hover:text-white"} cursor-pointer`}
               onClick={() => { setActiveTab("newPairs"); setSortKey("timestamp"); setSortDirection("desc"); }}
@@ -4079,6 +4077,7 @@ export default function DiscoverPage() {
                   quickBuyAmount={Number(quickBuyAmount) || 0}
                   chain={currentChain}
                   tableType="dexscreener"
+                  isDiscoverPage={true}
                 />
               )}
             </section>
@@ -4119,6 +4118,7 @@ export default function DiscoverPage() {
                   chain={currentChain}
                   tableType="newPairs"
                   solPrice={solPrice}
+                  isDiscoverPage={true}
                 />
               ) : (
                 <div className="py-10 text-center text-[#9CA3AF]">

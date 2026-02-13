@@ -1324,36 +1324,31 @@ export default function DiscoverContent() {
             <PumpLive
               leftItems={liveLeftItems}
               rightItems={liveRightItems}
-              onAction={async (id, rawToken) => {
-                if (rawToken) {
-                  try {
-                    const backfillResponse = await fetch('/api/token-service/backfill-token', {
-                      method: 'POST',
-                      headers: { 'Content-Type': 'application/json' },
-                      body: JSON.stringify({
-                        mint: rawToken.mint,
-                        name: rawToken.name,
-                        symbol: rawToken.symbol,
-                        uri: rawToken.uri,
-                        market_cap_usd: rawToken.market_cap_usd || rawToken.marketCapSol ? (rawToken.marketCapSol * 170) : undefined,
-                        liquidity_usd: undefined,
-                        pair_address: rawToken.pair_address || rawToken.bondingCurveKey
-                      })
-                    });
-                    if (backfillResponse.ok) {
-                      console.log('[Discover] Token backfilled successfully');
-                    }
-                  } catch (err) {
-                    console.error('[Discover] Error backfilling token:', err);
-                  }
-                }
-                try {
-                  await prefetchTradeData(id);
-                } catch (err) {
-                  console.error('[Discover] Prefetch failed:', err);
-                }
-                // For Solana tokens, include chain=sol parameter
+              onAction={(id, rawToken) => {
+                // Navigate immediately — don't block on backfill or prefetch
                 router.push(`/trade/${id}?chain=sol`);
+
+                // Fire-and-forget: backfill token in background
+                if (rawToken) {
+                  fetch('/api/token-service/backfill-token', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                      mint: rawToken.mint,
+                      name: rawToken.name,
+                      symbol: rawToken.symbol,
+                      uri: rawToken.uri,
+                      market_cap_usd: rawToken.market_cap_usd || rawToken.marketCapSol ? (rawToken.marketCapSol * 170) : undefined,
+                      liquidity_usd: undefined,
+                      pair_address: rawToken.pair_address || rawToken.bondingCurveKey
+                    })
+                  })
+                    .then(res => { if (res.ok) console.log('[Discover] Token backfilled successfully'); })
+                    .catch(err => console.error('[Discover] Error backfilling token:', err));
+                }
+
+                // Fire-and-forget: prefetch trade data in background
+                prefetchTradeData(id).catch(err => console.error('[Discover] Prefetch failed:', err));
               }}
               quickBuyAmount={Number(quickBuyAmount) || 0}
               onQuickBuy={handleQuickBuy}

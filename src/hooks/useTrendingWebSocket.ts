@@ -97,6 +97,7 @@ export interface NormalizedTrendingToken {
   // Pool/pair address for direct trade routing (used by DexScreener tokens)
   pair_address?: string;
   migrated_pool_address?: string;
+  created_at?: string;
 }
 
 interface TrendingWebSocketState {
@@ -154,6 +155,7 @@ function normalizeToken(raw: any): NormalizedTrendingToken {
     // Without this, backend has to do expensive pool discovery (~6 seconds)
     launchpad_protocol: raw.launchpad_protocol || raw.launchpadProtocol || raw.protocol || '',
     protocol: raw.protocol || raw.launchpad_protocol || raw.launchpadProtocol || '',
+    created_at: raw.created_at || raw.createdAt || '',
   };
 }
 
