@@ -152,7 +152,7 @@ export default function DiscoverPage() {
   const [isFilterPopoutOpen, setIsFilterPopoutOpen] = useState(false);
   const { filter } = useFilter();
   const { solPrice } = useSolPrice();
-  const { newTokens: wsNewTokens } = usePulseFromQueryCache({ channel: 'new' });
+  const { newTokens: wsNewTokens, connected: wsNewConnected } = usePulseFromQueryCache({ channel: 'new' });
 
   // Pump Live sorting state
   const [pumpLiveSortField, setPumpLiveSortField] = useState<PumpLiveSortField>('time');
@@ -245,42 +245,17 @@ export default function DiscoverPage() {
   // Get current chain's data
   const newPairsRaw = newPairsRawByChain[currentChain] || [];
 
-  // Merge real-time WebSocket volume into HTTP-fetched new pairs.
-  // The HTTP endpoint returns volume=0 for new tokens (PostgreSQL not yet populated),
-  // but the WebSocket worker has live volume from Redis (updated on every trade).
+  // WS-primary data source for New Pairs (Solana).
+  // PulseTable uses wsNewTokens directly — Discover should too for consistency.
+  // Monad has no WebSocket, so it still uses HTTP (newPairsRaw).
   const volumeEnrichedNewPairs = useMemo(() => {
-    if (!newPairsRaw || newPairsRaw.length === 0) return newPairsRaw;
-    if (!wsNewTokens || wsNewTokens.length === 0) return newPairsRaw;
-
-    // Build lookup: mint → WebSocket token (has real-time volume from Redis)
-    const wsMap = new Map<string, any>();
-    for (const wt of wsNewTokens) {
-      const mint = (wt as any).mint_address || (wt as any).mint || (wt as any).address;
-      if (mint) wsMap.set(mint, wt);
+    if (currentChain === 'sol' && wsNewTokens && wsNewTokens.length > 0) {
+      // Solana: use WebSocket data directly (same source as PulseTable)
+      return wsNewTokens as unknown as TokenWithDexPaid[];
     }
-
-    return newPairsRaw.map(token => {
-      const mint = (token as any).mint_address || (token as any).mint;
-      const ws = mint ? wsMap.get(mint) : null;
-      if (!ws) return token;
-
-      const toNum = (v: any) => (typeof v === 'number' ? v : parseFloat(v) || 0);
-      const merged = { ...token } as any;
-
-      // Merge volume fields from WebSocket (SOL amounts — InterstateTable converts to USD)
-      for (const tf of ['5m', '1h', '6h', '24h']) {
-        const bv = toNum(ws[`total_buy_volume_${tf}`]);
-        const sv = toNum(ws[`total_sell_volume_${tf}`]);
-        if (bv > 0 || sv > 0) {
-          merged[`total_buy_volume_${tf}`] = bv;
-          merged[`total_sell_volume_${tf}`] = sv;
-          merged[`volume_${tf}`] = bv + sv;
-        }
-      }
-
-      return merged;
-    });
-  }, [newPairsRaw, wsNewTokens]);
+    // Monad or WS empty: fall back to HTTP data
+    return newPairsRaw;
+  }, [currentChain, newPairsRaw, wsNewTokens]);
 
   // Ref to track current state for use in callbacks/intervals
   const newPairsRawByChainRef = useRef(newPairsRawByChain);
@@ -900,6 +875,13 @@ export default function DiscoverPage() {
   }, [isSolanaChain, launchpadData?.new]);
 
   useEffect(() => {
+    // Solana: skip HTTP polling entirely when WebSocket is connected and has data.
+    // The WS feed (same as PulseTable) is the primary data source for Solana new pairs.
+    if (currentChain === 'sol' && wsNewConnected && wsNewTokens.length > 0) {
+      setNewPairsLoading(false);
+      return;
+    }
+
     let cancelled = false;
     let intervalId: ReturnType<typeof setInterval> | null = null;
 
@@ -1605,7 +1587,7 @@ export default function DiscoverPage() {
         clearInterval(intervalId);
       }
     };
-  }, [currentChain, activeTab, setNewPairsRawForChain]); // Re-run when chain or tab changes
+  }, [currentChain, activeTab, setNewPairsRawForChain, wsNewConnected, wsNewTokens.length]); // Re-run when chain, tab, or WS state changes
 
   // Fetch xStocks data
   useEffect(() => {
@@ -3122,11 +3104,14 @@ export default function DiscoverPage() {
       }
       
       // If we have fewer than 10 trending tokens, supplement with top tokens from new pairs
-      if (uniqueSafe.length < 10 && newPairsRaw && newPairsRaw.length > 0) {
+      const newPairsSource = (currentChain === 'sol' && wsNewTokens.length > 0)
+        ? wsNewTokens as unknown as TokenWithDexPaid[]
+        : newPairsRaw;
+      if (uniqueSafe.length < 10 && newPairsSource && newPairsSource.length > 0) {
         console.log(`[Trending] Only ${uniqueSafe.length} trending tokens, supplementing with top tokens from new pairs`);
-        
+
         // Get top tokens from new pairs, sorted by volume (for selected timeframe)
-        const topNewPairs = newPairsRaw
+        const topNewPairs = newPairsSource
           .filter((token: any) => {
             // Skip if already in trending list
             const tokenMint = (token.mint || token.address || '').toLowerCase();
@@ -3239,7 +3224,7 @@ export default function DiscoverPage() {
     } else {
       setDisplayed([]);
     }
-  }, [activeTab, filteredTokens, sortKey, sortDirection, selectedTimeframe, applyFilters, getVolumeForTimeframe, isWrappedSol, filter, activeFilterCount, newPairsRaw, currentChain, isZeroLiquidityToken, featuredTokens, wsTokens]); // Ensure filters are reapplied when they change; wsTokens added to fix tab switch flicker
+  }, [activeTab, filteredTokens, sortKey, sortDirection, selectedTimeframe, applyFilters, getVolumeForTimeframe, isWrappedSol, filter, activeFilterCount, newPairsRaw, currentChain, isZeroLiquidityToken, featuredTokens, wsTokens, wsNewTokens]); // Ensure filters are reapplied when they change; wsTokens/wsNewTokens for real-time data
 
   const processedNewPairs = useMemo(() => {
     if (!volumeEnrichedNewPairs || volumeEnrichedNewPairs.length === 0) {
@@ -4055,9 +4040,10 @@ export default function DiscoverPage() {
           {/* Always-mounted: New Pairs — hidden via CSS when not active */}
           <div style={{ display: activeTab === 'newPairs' ? undefined : 'none' }}>
             <section aria-label="New Pairs" className="pb-16">
-              {newPairsLoading &&
+              {!wsNewConnected &&
               processedNewPairs.length === 0 &&
-              newPairsRaw.length === 0 ? (
+              newPairsRaw.length === 0 &&
+              wsNewTokens.length === 0 ? (
                 <div className="space-y-4">
                   {Array.from({ length: 8 }).map((_, i) => (
                     <div
@@ -4066,7 +4052,7 @@ export default function DiscoverPage() {
                     />
                   ))}
                 </div>
-              ) : newPairsError ? (
+              ) : newPairsError && wsNewTokens.length === 0 ? (
                 <div className="py-10 text-center text-[#f26681]">
                   {newPairsError}
                 </div>
