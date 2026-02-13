@@ -4047,50 +4047,14 @@ export default function DiscoverPage() {
 
         {/* Main Content */}
         <main className="relative z-10 w-full flex-1 overflow-y-auto min-h-0">
-          {activeTab === 'live' ? (
-            <section aria-label="Pump Live" className="pb-16">
-              <PumpLiveGrid
-                quickBuyAmount={Number(quickBuyAmount) || 0}
-                sortField={pumpLiveSortField}
-                sortDirection={pumpLiveSortDirection}
-                onQuickBuy={handlePumpLiveQuickBuy}
-              />
-            </section>
-          ) : activeTab === "trending2" ? (
-            <section aria-label="DexScreener Trending" className="pb-16">
-              {dsLoading && dexScreenerTokens.length === 0 ? (
-                <div className="space-y-4">
-                  {Array.from({ length: 10 }).map((_, i) => (
-                    <div key={i} className="h-12 w-full animate-pulse rounded bg-white/[0.04]" />
-                  ))}
-                </div>
-              ) : dsError ? (
-                <div className="py-10 text-center text-[#f26681]">{dsError}</div>
-              ) : (
-                <InterstateTable
-                  rows={dexScreenerTokens.map((token, i) => ({ token: token as unknown as Token, i }))}
-                  onQuickBuy={handleQuickBuy}
-                  sortKey={sortKey}
-                  sortDirection={sortDirection}
-                  setSort={handleSort}
-                  selectedTimeframe={selectedTimeframe}
-                  quickBuyAmount={Number(quickBuyAmount) || 0}
-                  chain={currentChain}
-                  tableType="dexscreener"
-                  isDiscoverPage={true}
-                />
-              )}
-            </section>
-          ) : activeTab === "newPairs" ? (
-            <section aria-label="New Pairs" className="pb-16">
-              {/* <div className="mb-4 flex items-center justify-between">
-                {newPairsLoading && (
-                  <span className="text-xs font-medium text-[#9CA3AF]">
-                    Updating…
-                  </span>
-                )}
-              </div> */}
+          {/* Always-mounted: Trending — hidden via CSS when not active */}
+          <div style={{ display: activeTab === 'trending' ? undefined : 'none' }}>
+            {renderPrimaryTable()}
+          </div>
 
+          {/* Always-mounted: New Pairs — hidden via CSS when not active */}
+          <div style={{ display: activeTab === 'newPairs' ? undefined : 'none' }}>
+            <section aria-label="New Pairs" className="pb-16">
               {newPairsLoading &&
               processedNewPairs.length === 0 &&
               newPairsRaw.length === 0 ? (
@@ -4126,7 +4090,48 @@ export default function DiscoverPage() {
                 </div>
               )}
             </section>
-          ) : activeTab === "xStocks" ? (
+          </div>
+
+          {/* Conditionally rendered tabs — unmount when not active */}
+          {activeTab === 'live' && (
+            <section aria-label="Pump Live" className="pb-16">
+              <PumpLiveGrid
+                quickBuyAmount={Number(quickBuyAmount) || 0}
+                sortField={pumpLiveSortField}
+                sortDirection={pumpLiveSortDirection}
+                onQuickBuy={handlePumpLiveQuickBuy}
+              />
+            </section>
+          )}
+
+          {activeTab === 'trending2' && (
+            <section aria-label="DexScreener Trending" className="pb-16">
+              {dsLoading && dexScreenerTokens.length === 0 ? (
+                <div className="space-y-4">
+                  {Array.from({ length: 10 }).map((_, i) => (
+                    <div key={i} className="h-12 w-full animate-pulse rounded bg-white/[0.04]" />
+                  ))}
+                </div>
+              ) : dsError ? (
+                <div className="py-10 text-center text-[#f26681]">{dsError}</div>
+              ) : (
+                <InterstateTable
+                  rows={dexScreenerTokens.map((token, i) => ({ token: token as unknown as Token, i }))}
+                  onQuickBuy={handleQuickBuy}
+                  sortKey={sortKey}
+                  sortDirection={sortDirection}
+                  setSort={handleSort}
+                  selectedTimeframe={selectedTimeframe}
+                  quickBuyAmount={Number(quickBuyAmount) || 0}
+                  chain={currentChain}
+                  tableType="dexscreener"
+                  isDiscoverPage={true}
+                />
+              )}
+            </section>
+          )}
+
+          {activeTab === 'xStocks' && (
             <section aria-label="xStocks" className="pb-8">
               {xStocksLoading &&
               processedXStocks.length === 0 &&
@@ -4159,30 +4164,6 @@ export default function DiscoverPage() {
                 </div>
               )}
             </section>
-          ) : (
-            /* activeTab === 'surge' ? (
-            <section aria-label="Surge">
-              <div className="mb-4 flex items-center justify-between">
-                <h2 className="text-xl font-semibold text-[#f0f5f5]">Surge</h2>
-              </div>
-              
-              Placeholder for Surge data - replace with actual data source
-              <div className="py-10 text-center text-[#9CA3AF]">
-                Surge data coming soon. Connect your data source here.
-              </div>
-              
-              When you have Surge data, use InterstateTable like this:
-              <InterstateTable
-                rows={surgeRows}
-                onQuickBuy={handleQuickBuy}
-                sortKey={sortKey}
-                sortDirection={sortDirection}
-                setSort={handleSort}
-                selectedTimeframe={selectedTimeframe}
-                quickBuyAmount={Number(quickBuyAmount) || 0}
-              />
-            </section>
-          ) : */ renderPrimaryTable()
           )}
         </main>
 
