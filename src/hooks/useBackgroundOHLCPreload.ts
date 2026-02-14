@@ -1,5 +1,6 @@
 import { useEffect, useState, useRef } from 'react';
 import { useRouter } from 'next/router';
+import { getCachedData as getWsPrefetchData } from '~/utils/ohlcPrefetchManager';
 
 interface OHLCData {
   unix_time: number;
@@ -17,7 +18,8 @@ interface UseBackgroundOHLCPreloadResult {
 }
 
 // Global cache to persist OHLC data across page loads
-const globalOHLCCache = new Map<string, { data: OHLCData[]; timestamp: number; mint: string }>();
+// Exported so ohlcPrefetchManager can write WS snapshot data into it
+export const globalOHLCCache = new Map<string, { data: OHLCData[]; timestamp: number; mint: string }>();
 const CACHE_DURATION = 300000; // 5 minutes — real-time WS updates candles once loaded
 
 // Clean up stale cache entries periodically
@@ -95,6 +97,17 @@ export default function useBackgroundOHLCPreload(interval: string = '1h', timefr
           console.log('[Background OHLC] Cached data is for different mint, clearing cache');
           globalOHLCCache.delete(cacheKey);
         }
+      }
+
+      // Check WS prefetch manager as additional cache source
+      // (WS snapshot may have arrived but globalOHLCCache write was missed due to timing)
+      const wsPrefetchCandles = getWsPrefetchData(mintAddress);
+      if (wsPrefetchCandles && wsPrefetchCandles.length > 0) {
+        console.log('[Background OHLC] Using WS prefetch data for', mintAddress, 'with', wsPrefetchCandles.length, 'candles');
+        globalOHLCCache.set(cacheKey, { data: wsPrefetchCandles, timestamp: Date.now(), mint: mintAddress });
+        setBackgroundData(wsPrefetchCandles);
+        setPreloadComplete(true);
+        return;
       }
 
       // Start background fetch

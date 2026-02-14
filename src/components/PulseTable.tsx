@@ -105,6 +105,7 @@ import { mapTradeErrorMessage } from "~/utils/tradeErrorMessages";
 import { TokenAge } from "./TokenAge";
 import { prefetchTradeData } from "~/utils/tokenCache";
 import { prefetchOHLC } from "~/hooks/useBackgroundOHLCPreload";
+import { prefetchViaWS } from "~/utils/ohlcPrefetchManager";
 import { prefetchTokenTrades } from "~/utils/rollingTradeCache";
 import {
   showCenteredErrorToast,
@@ -7394,6 +7395,9 @@ function PulseTable({
                     if (popup) {
                       popup.classList.add('popup-visible');
                     }
+
+                    // Start WS prefetch immediately (has internal 150ms debounce)
+                    prefetchViaWS(tokenMint);
 
                     // PHASE 3: Defer expensive operations to idle time
                     if (typeof requestIdleCallback !== 'undefined') {

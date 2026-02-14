@@ -4,6 +4,7 @@
  */
 
 import { normalizeImageUrl, isMetadataUrl, resolveMetadataImage } from "./images";
+import { computeHashImageUrl } from "./imageHash";
 
 // Track preloaded images to avoid duplicate requests
 const preloadedImages = new Set<string>();
@@ -33,6 +34,42 @@ export function retainImageObject(url: string, img: HTMLImageElement): void {
 
 export function isImageRetained(url: string): boolean {
   return imageObjectCache.has(url);
+}
+
+export function getRetainedImage(url: string): HTMLImageElement | undefined {
+  return imageObjectCache.get(url);
+}
+
+/**
+ * Prefetch images from sessionStorage URLs at module init time.
+ * Starts Image loads from disk cache before React mounts, so bitmaps
+ * are decoded by the time FastImage's useState probe runs.
+ */
+export function prefetchFromSessionStorage(urls: string[]): void {
+  if (urls.length === 0) return;
+  const BATCH = 20;
+  let offset = 0;
+
+  function processBatch() {
+    const end = Math.min(offset + BATCH, urls.length);
+    for (let i = offset; i < end; i++) {
+      const url = urls[i];
+      if (!url || imageObjectCache.has(url)) continue;
+      const img = new Image();
+      img.src = url;
+      retainImageObject(url, img);
+    }
+    offset = end;
+    if (offset < urls.length) {
+      if (typeof requestIdleCallback === 'function') {
+        requestIdleCallback(processBatch);
+      } else {
+        requestAnimationFrame(processBatch);
+      }
+    }
+  }
+  // First batch runs synchronously — maximizes head start for most-recently-used images
+  processBatch();
 }
 
 /**
@@ -128,36 +165,8 @@ export async function preloadImages(
  * Extract image URLs from token array
  */
 export function extractImageUrls(tokens: any[]): string[] {
-  const needsProxy = (url: string): boolean => {
-    return (
-      url.includes('token-media.defined.fi') ||
-      url.includes('ipfs.io') ||
-      url.includes('cloudflare-ipfs.com') ||
-      url.includes('gateway.pinata.cloud') ||
-      url.includes('ipfs/') ||
-      url.startsWith('ipfs://') ||
-      url.includes('tokens.debridge.finance') ||
-      url.includes('debridge.finance') ||
-      url.includes('launchonsoar.com') ||
-      url.includes('metadata.rapidlaunch.io') ||
-      url.includes('rapidlaunch.io') ||
-      url.includes('metadata.j7tracker.com') ||
-      url.includes('j7tracker.com') ||
-      url.includes('edge.uxento.io') ||
-      url.includes('uxento.io') ||
-      url.includes('image.solanatracker.io') ||
-      url.includes('ipfs-forward.solanatracker.io') ||
-      url.includes('instagram.com') ||
-      url.includes('cdninstagram.com') ||
-      url.includes('ipfs.storacha.link') ||
-      url.includes('storacha.link') ||
-      url.includes('content.coinwave.gg')
-    );
-  };
-
   return tokens
     .map(token => {
-      // Check multiple possible image fields
       const raw =
         token?.image ||
         token?.image_url ||
@@ -178,11 +187,9 @@ export function extractImageUrls(tokens: any[]): string[] {
       const normalized = normalizeImageUrl(raw) || raw;
       if (!normalized) return null;
 
-      if (normalized.startsWith('/api/image')) return normalized;
+      if (normalized.startsWith('/api/')) return normalized;
 
-      return needsProxy(normalized)
-        ? `/api/image?url=${encodeURIComponent(normalized)}`
-        : normalized;
+      return computeHashImageUrl(normalized) || normalized;
     })
     .filter((url): url is string => Boolean(url && typeof url === 'string'));
 }
@@ -247,9 +254,7 @@ export async function preloadMetadataImages(
         const resolved = await resolveMetadataImage(raw);
         if (!resolved || preloadedImages.has(resolved)) return;
 
-        const proxyUrl = resolved.startsWith('http')
-          ? `/api/image?url=${encodeURIComponent(resolved)}`
-          : resolved;
+        const proxyUrl = computeHashImageUrl(resolved) || resolved;
 
         preloadedImages.add(proxyUrl);
         const img = new Image();
