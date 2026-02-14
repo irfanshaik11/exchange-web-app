@@ -5962,16 +5962,16 @@ Maker: ${walletAddress}`;
             "mainSeriesProperties.visible": true,
           },
           studies_overrides: {
-            // Volume bar colors - 0 = up candles (green), 1 = down candles (red)
+            // Volume bar colors - 0 = down candles (red), 1 = up candles (green)
             // Unified colors (Monad green/red) for both Solana and Monad
-            "volume.volume.color.0": "#86d99f", // Green bars for up candles
-            "volume.volume.color.1": "#f26682", // Red bars for down candles
+            "volume.volume.color.0": "#f26682", // Red bars for down candles
+            "volume.volume.color.1": "#86d99f", // Green bars for up candles
             // Volume text/label colors
             "volume.volume.colorup": "#86d99f",
             "volume.volume.colordown": "#f26682",
             // Alternative property names that some TradingView versions use
-            "volume.volume.plot.color.0": "#86d99f",
-            "volume.volume.plot.color.1": "#f26682",
+            "volume.volume.plot.color.0": "#f26682",
+            "volume.volume.plot.color.1": "#86d99f",
           },
           // Custom price formatter - dynamically switches between MC mode (K/M/B suffixes) and USD mode
           // CRITICAL: The mode check MUST be inside the format function, not in the factory
@@ -6126,10 +6126,10 @@ Maker: ${walletAddress}`;
                     study.name &&
                     study.name.toLowerCase().includes("volume")
                   ) {
-                    // Set volume colors for up (green) and down (red) candles
+                    // Set volume colors: 0 = down (red), 1 = up (green)
                     study.applyOverrides({
-                      "volume.volume.color.0": isMonad ? "#86d99f" : "#26a69a", // Green for up candles
-                      "volume.volume.color.1": isMonad ? "#f26682" : "#ef5350", // Red for down candles
+                      "volume.volume.color.0": isMonad ? "#f26682" : "#ef5350", // Red for down candles
+                      "volume.volume.color.1": isMonad ? "#86d99f" : "#26a69a", // Green for up candles
                     });
                     console.log(
                       "[AdvancedOHLCChart] Volume colors set programmatically",

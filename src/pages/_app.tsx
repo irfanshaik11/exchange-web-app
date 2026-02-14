@@ -44,6 +44,7 @@ import { storeReferralCodeHint, getStoredReferralCodeHint, clearStoredReferralCo
 import PagePreloader from '../components/PagePreloader';
 import { PulseBackgroundLoader } from '../components/PulseBackgroundLoader';
 import { SolanaPositionWebSocketProvider } from '../contexts/SolanaPositionWebSocketContext';
+import ErrorBoundary from '../components/ErrorBoundary';
 
 // Suppress Next.js error overlay for caught errors in development
 if (typeof window !== 'undefined' && process.env.NODE_ENV === 'development') {
@@ -767,7 +768,9 @@ const MyApp: AppType = ({ Component, pageProps }) => {
                                 <ReferralAccessGate>
                                   <PagePreloader />
                                   <PulseBackgroundLoader />
-                                  <Component {...pageProps} />
+                                  <ErrorBoundary>
+                                    <Component {...pageProps} />
+                                  </ErrorBoundary>
                                 </ReferralAccessGate>
                               </SolanaPositionWebSocketProvider>
                             </WalletTrackerProvider>

@@ -3,6 +3,9 @@
  *
  * Catches JavaScript errors in child components and displays a fallback UI
  * instead of crashing the entire application.
+ *
+ * Special handling for ChunkLoadError: automatically clears caches and reloads
+ * once per session to recover from stale chunks after deployments.
  */
 
 import React, { Component } from 'react';
@@ -18,6 +21,14 @@ interface State {
   hasError: boolean;
   error: Error | null;
   errorInfo: ErrorInfo | null;
+}
+
+function isChunkLoadError(error: Error): boolean {
+  return (
+    error.name === 'ChunkLoadError' ||
+    /loading chunk [\d]+ failed/i.test(error.message || '') ||
+    /loading css chunk/i.test(error.message || '')
+  );
 }
 
 class ErrorBoundary extends Component<Props, State> {
@@ -42,6 +53,36 @@ class ErrorBoundary extends Component<Props, State> {
 
     // Call optional error handler
     this.props.onError?.(error, errorInfo);
+
+    // Auto-recover from ChunkLoadError (stale chunks after deployment)
+    if (isChunkLoadError(error)) {
+      const EB_KEY = '__eb_chunk_retry';
+      try {
+        const already = sessionStorage.getItem(EB_KEY);
+        if (!already) {
+          sessionStorage.setItem(EB_KEY, '1');
+          console.log('[ErrorBoundary] ChunkLoadError detected — clearing caches and reloading');
+          // Clear non-image caches, then reload
+          if (typeof caches !== 'undefined') {
+            caches.keys().then((keys) => {
+              const toDelete = keys.filter((k) => !k.includes('pulse-image-cache'));
+              return Promise.all(toDelete.map((k) => caches.delete(k)));
+            }).then(() => {
+              window.location.reload();
+            }).catch(() => {
+              window.location.reload();
+            });
+          } else {
+            window.location.reload();
+          }
+          return;
+        }
+        // Already tried auto-recovery — fall through to show fallback UI
+        console.log('[ErrorBoundary] ChunkLoadError persists after auto-recovery — showing fallback');
+      } catch (e) {
+        // sessionStorage unavailable — fall through to fallback UI
+      }
+    }
   }
 
   handleRetry = (): void => {
@@ -53,6 +94,8 @@ class ErrorBoundary extends Component<Props, State> {
   };
 
   handleReload = (): void => {
+    // Clear the auto-recovery flag so a fresh reload gets a clean slate
+    try { sessionStorage.removeItem('__eb_chunk_retry'); } catch (e) {}
     window.location.reload();
   };
 
