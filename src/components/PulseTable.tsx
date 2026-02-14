@@ -3996,7 +3996,7 @@ function PulseTable({
     if (filters.minVolume) {
       const minVol = parseFloat(filters.minVolume);
       filtered = filtered.filter((token) => {
-        const volume = (token as any).volume_24h ?? 0;
+        const volume = calculateVolumeUsd(token, solPrice);
         return volume >= minVol;
       });
     }
@@ -4004,7 +4004,7 @@ function PulseTable({
     if (filters.maxVolume) {
       const maxVol = parseFloat(filters.maxVolume);
       filtered = filtered.filter((token) => {
-        const volume = (token as any).volume_24h ?? 0;
+        const volume = calculateVolumeUsd(token, solPrice);
         return volume <= maxVol;
       });
     }
@@ -4013,7 +4013,7 @@ function PulseTable({
     if (filters.minLiquidity) {
       const minLiq = parseFloat(filters.minLiquidity);
       filtered = filtered.filter((token) => {
-        const liquidity = (token as any).total_liquidity_usd ?? 0;
+        const liquidity = (token as any).total_liquidity_usd ?? (token as any).liquidity_usd ?? 0;
         return liquidity >= minLiq;
       });
     }
@@ -4021,7 +4021,7 @@ function PulseTable({
     if (filters.maxLiquidity) {
       const maxLiq = parseFloat(filters.maxLiquidity);
       filtered = filtered.filter((token) => {
-        const liquidity = (token as any).total_liquidity_usd ?? 0;
+        const liquidity = (token as any).total_liquidity_usd ?? (token as any).liquidity_usd ?? 0;
         return liquidity <= maxLiq;
       });
     }
@@ -4242,7 +4242,11 @@ function PulseTable({
     if (filters.globalFeesPaidMin) {
       const minFees = parseFloat(filters.globalFeesPaidMin);
       filtered = filtered.filter((token) => {
-        const feesPaid = (token as any).global_fees_paid ?? (token as any).globalFeesPaid ?? 0;
+        let feesPaid = (token as any).global_fees_paid ?? (token as any).globalFeesPaid ?? 0;
+        if (feesPaid === 0) {
+          const lamports = (token as any).total_fees_lamports ?? 0;
+          if (lamports > 0) feesPaid = lamports / 1_000_000_000;
+        }
         return feesPaid >= minFees;
       });
     }
@@ -4250,7 +4254,11 @@ function PulseTable({
     if (filters.globalFeesPaidMax) {
       const maxFees = parseFloat(filters.globalFeesPaidMax);
       filtered = filtered.filter((token) => {
-        const feesPaid = (token as any).global_fees_paid ?? (token as any).globalFeesPaid ?? 0;
+        let feesPaid = (token as any).global_fees_paid ?? (token as any).globalFeesPaid ?? 0;
+        if (feesPaid === 0) {
+          const lamports = (token as any).total_fees_lamports ?? 0;
+          if (lamports > 0) feesPaid = lamports / 1_000_000_000;
+        }
         return feesPaid <= maxFees;
       });
     }
@@ -4460,8 +4468,8 @@ function PulseTable({
           bValue = getTokenMarketCap(b);
           break;
         case "volume":
-          aValue = (a as any).volume_24h ?? 0;
-          bValue = (b as any).volume_24h ?? 0;
+          aValue = calculateVolumeUsd(a, solPrice);
+          bValue = calculateVolumeUsd(b, solPrice);
           break;
         case "symbol":
           aValue = a.symbol?.toLowerCase() ?? "";
@@ -4564,6 +4572,7 @@ function PulseTable({
     filters.sortBy,
     filters.sortOrder,
     channel, // Used to select direct token source (new/final_stretch/migrated)
+    solPrice, // Needed for volume filter/sort via calculateVolumeUsd()
   ]);
 
   // REMOVED redundant useMemo - filteredAndSortedTokens is already memoized

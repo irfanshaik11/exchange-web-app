@@ -395,6 +395,9 @@ function normalizeToken(raw: any): PulseToken | null {
   const mint = raw.mint || raw.address || raw.mint_address || raw.token_address;
   if (!mint) return null;
 
+  const liquidityVal = raw.liquidity_usd || raw.liquidity || 0;
+  const mcapVal = raw.market_cap_usd || raw.marketCap || raw.market_cap || 0;
+
   return {
     mint,
     mint_address: mint,
@@ -405,9 +408,11 @@ function normalizeToken(raw: any): PulseToken | null {
     price_usd: raw.price_usd || raw.price || 0,
     price_change_5m: raw.price_change_5m || raw.priceChange5m || 0,
     price_change_24h: raw.price_change_24h || 0,
-    market_cap_usd: raw.market_cap_usd || raw.marketCap || raw.market_cap || 0,
+    market_cap_usd: mcapVal,
+    fully_diluted_value: raw.fully_diluted_value || mcapVal,
     volume_24h: raw.volume_24h || raw.volume || 0,
-    liquidity_usd: raw.liquidity_usd || raw.liquidity || 0,
+    liquidity_usd: liquidityVal,
+    total_liquidity_usd: raw.total_liquidity_usd || liquidityVal,
     holder_count: raw.holder_count ?? raw.holders ?? 0,
     holders: raw.holder_count ?? raw.holders ?? 0,
     bonding_pct: raw.bonding_pct || raw.bondingCurveProgress || 0,
@@ -419,6 +424,31 @@ function normalizeToken(raw: any): PulseToken | null {
     sniper_percent: raw.sniper_percent ?? raw.sniper_held_percentage ?? 0,
     insider_percent: raw.insider_percent ?? raw.insider_held_percentage ?? 0,
     bundle_percent: raw.bundle_percent ?? raw.bundled_percentage ?? 0,
+    // Filter-relevant fields previously dropped from WS data
+    top10_holders_pct: raw.top10_holders_pct ?? raw.top10HoldersPct ?? 0,
+    dev_tokens_created: raw.dev_tokens_created ?? raw.devTokensCreated ?? 0,
+    dev_tokens_migrated: raw.dev_tokens_migrated ?? raw.devTokensMigrated ?? 0,
+    global_fees_paid: raw.global_fees_paid ?? raw.globalFeesPaid ?? 0,
+    total_fees_lamports: raw.total_fees_lamports ?? raw.totalFeesLamports ?? 0,
+    twitter_reuses: raw.twitter_reuses ?? raw.twitter_reuse_count ?? 0,
+    tweet_created_at: raw.tweet_created_at || raw.twitter_created_at || null,
+    twitter_created_at: raw.twitter_created_at || raw.tweet_created_at || null,
+    website: raw.website || raw.website_url || null,
+    twitter: raw.twitter || raw.twitter_url || raw.x || raw.x_url || null,
+    telegram: raw.telegram || raw.telegram_url || null,
+    is_live: raw.is_live ?? null,
+    bundled_percentage: raw.bundled_percentage ?? raw.bundle_percent ?? 0,
+    bundler_held_percentage: raw.bundler_held_percentage ?? 0,
+    dex_paid: raw.dex_paid ?? raw.dexPaid ?? false,
+    // Volume breakdown fields for calculateVolumeUsd()
+    total_buy_volume_5m: raw.total_buy_volume_5m ?? 0,
+    total_sell_volume_5m: raw.total_sell_volume_5m ?? 0,
+    total_buy_volume_1h: raw.total_buy_volume_1h ?? 0,
+    total_sell_volume_1h: raw.total_sell_volume_1h ?? 0,
+    total_buy_volume_6h: raw.total_buy_volume_6h ?? 0,
+    total_sell_volume_6h: raw.total_sell_volume_6h ?? 0,
+    total_buy_volume_24h: raw.total_buy_volume_24h ?? 0,
+    total_sell_volume_24h: raw.total_sell_volume_24h ?? 0,
   } as PulseToken;
 }
 
@@ -481,14 +511,40 @@ function handlePriceUpdate(updates: any[]) {
         const newArr = [...arr];
         const existing = arr[idx];
         const keepIfPositive = (newVal: any, ex: any) => newVal > 0 ? newVal : ex;
+        const updatedLiquidity = keepIfPositive(update.liquidity_usd ?? update.liquidity, existing.liquidity_usd);
+        const updatedMcap = keepIfPositive(update.market_cap_usd ?? update.marketCap, existing.market_cap_usd);
         newArr[idx] = {
           ...existing,
           price_usd: update.price_usd ?? update.price ?? existing.price_usd,
-          market_cap_usd: keepIfPositive(update.market_cap_usd ?? update.marketCap, existing.market_cap_usd),
+          market_cap_usd: updatedMcap,
+          fully_diluted_value: updatedMcap,
           volume_24h: keepIfPositive(update.volume_24h ?? update.volume, existing.volume_24h),
-          liquidity_usd: keepIfPositive(update.liquidity_usd ?? update.liquidity, existing.liquidity_usd),
+          liquidity_usd: updatedLiquidity,
+          total_liquidity_usd: updatedLiquidity,
           holder_count: keepIfPositive(update.holder_count ?? update.holders, existing.holder_count),
+          holders: keepIfPositive(update.holder_count ?? update.holders, existing.holders),
           price_change_5m: update.price_change_5m ?? update.priceChange5m ?? existing.price_change_5m,
+          // Merge metric fields when present in the update
+          ...(update.total_buys_24h != null && { total_buys_24h: update.total_buys_24h }),
+          ...(update.total_sells_24h != null && { total_sells_24h: update.total_sells_24h }),
+          ...(update.bonding_pct != null && { bonding_pct: update.bonding_pct }),
+          ...(update.kol_count != null && { kol_count: update.kol_count }),
+          ...(update.dev_percent != null && { dev_percent: update.dev_percent }),
+          ...(update.sniper_percent != null && { sniper_percent: update.sniper_percent }),
+          ...(update.insider_percent != null && { insider_percent: update.insider_percent }),
+          ...(update.bundle_percent != null && { bundle_percent: update.bundle_percent }),
+          ...(update.top10_holders_pct != null && { top10_holders_pct: update.top10_holders_pct }),
+          ...(update.total_fees_lamports != null && { total_fees_lamports: update.total_fees_lamports }),
+          ...(update.global_fees_paid != null && { global_fees_paid: update.global_fees_paid }),
+          // Volume breakdown fields
+          ...(update.total_buy_volume_5m != null && { total_buy_volume_5m: update.total_buy_volume_5m }),
+          ...(update.total_sell_volume_5m != null && { total_sell_volume_5m: update.total_sell_volume_5m }),
+          ...(update.total_buy_volume_1h != null && { total_buy_volume_1h: update.total_buy_volume_1h }),
+          ...(update.total_sell_volume_1h != null && { total_sell_volume_1h: update.total_sell_volume_1h }),
+          ...(update.total_buy_volume_6h != null && { total_buy_volume_6h: update.total_buy_volume_6h }),
+          ...(update.total_sell_volume_6h != null && { total_sell_volume_6h: update.total_sell_volume_6h }),
+          ...(update.total_buy_volume_24h != null && { total_buy_volume_24h: update.total_buy_volume_24h }),
+          ...(update.total_sell_volume_24h != null && { total_sell_volume_24h: update.total_sell_volume_24h }),
         };
         newData[key] = newArr;
         anyUpdated = true;
@@ -523,6 +579,20 @@ function handleTokenInfoUpdate(update: any) {
         holder_count: update.holder_count ?? arr[idx].holder_count,
         holders: update.holder_count ?? arr[idx].holders,
         kol_count: update.kol_count ?? arr[idx].kol_count,
+        // Merge additional info fields when present
+        ...(update.dev_percent != null && { dev_percent: update.dev_percent }),
+        ...(update.sniper_percent != null && { sniper_percent: update.sniper_percent }),
+        ...(update.insider_percent != null && { insider_percent: update.insider_percent }),
+        ...(update.bundle_percent != null && { bundle_percent: update.bundle_percent }),
+        ...(update.top10_holders_pct != null && { top10_holders_pct: update.top10_holders_pct }),
+        ...(update.dev_tokens_created != null && { dev_tokens_created: update.dev_tokens_created }),
+        ...(update.dev_tokens_migrated != null && { dev_tokens_migrated: update.dev_tokens_migrated }),
+        ...(update.twitter_reuses != null && { twitter_reuses: update.twitter_reuses }),
+        ...(update.twitter_reuse_count != null && { twitter_reuses: update.twitter_reuse_count }),
+        ...(update.website != null && { website: update.website }),
+        ...(update.twitter != null && { twitter: update.twitter }),
+        ...(update.telegram != null && { telegram: update.telegram }),
+        ...(update.is_live != null && { is_live: update.is_live }),
       };
       newData[key] = newArr;
       anyUpdated = true;
