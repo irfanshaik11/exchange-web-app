@@ -1201,9 +1201,15 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
     const isMeteora = launchpadProtocol.includes('meteora');
     const bondingPct = token.bonding_pct ?? 0;
     const status = (token.status || '').toLowerCase();
-    const hasMigrated = status.includes('migrated') || !!token.migrated_time;
+    const hasMigrated =
+      (token as any).is_migrated ||
+      (token as any).migrated ||
+      (token as any).graduated ||
+      (token as any).is_graduated ||
+      status.includes('migrated') ||
+      !!token.migrated_time;
     return isMeteora && bondingPct > 98.6 && !hasMigrated;
-  }, [token.launchpad_protocol, token.bonding_pct, token.status, token.migrated_time]);
+  }, [token.launchpad_protocol, token.bonding_pct, token.status, token.migrated_time, (token as any).is_migrated, (token as any).migrated, (token as any).graduated, (token as any).is_graduated]);
 
   // Convert initialStats to TokenStatsData format if available
   const convertedInitialStats = useMemo(() => {

@@ -1,197 +1,15 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
-
-// Allowed image MIME types - only image types are permitted
-// NOTE: SVG is allowed but guarded later to block obvious script tags
-const ALLOWED_IMAGE_TYPES = [
-  'image/jpeg',
-  'image/jpg',
-  'image/png',
-  'image/gif',
-  'image/webp',
-  'image/svg+xml',
-  'image/avif',
-  'image/bmp',
-  'image/x-icon',
-  'image/vnd.microsoft.icon',
-  'image/ico',
-];
-
-function isValidImageMimeType(contentType: string | null): boolean {
-  if (!contentType) return false;
-  // Remove charset and other parameters (e.g., "image/jpeg; charset=utf-8" -> "image/jpeg")
-  const baseType = contentType.split(';')[0].trim().toLowerCase();
-  // Allow any declared image/audio/video/application/octet-stream types
-  if (
-    baseType.startsWith('image/') ||
-    baseType.startsWith('video/') ||
-    baseType.startsWith('audio/') ||
-    baseType === 'application/octet-stream'
-  ) {
-    return true;
-  }
-  return ALLOWED_IMAGE_TYPES.includes(baseType);
-}
-
-// Infer MIME type from image content (magic bytes)
-function inferImageMimeType(buffer: Buffer): string | null {
-  if (buffer.length < 4) return null;
-  
-  const bytes = buffer.slice(0, 12);
-  
-  // PNG: 89 50 4E 47
-  if (bytes[0] === 0x89 && bytes[1] === 0x50 && bytes[2] === 0x4e && bytes[3] === 0x47) {
-    return 'image/png';
-  }
-  
-  // JPEG: FF D8 FF
-  if (bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff) {
-    return 'image/jpeg';
-  }
-  
-  // GIF: 47 49 46 38
-  if (bytes[0] === 0x47 && bytes[1] === 0x49 && bytes[2] === 0x46 && bytes[3] === 0x38) {
-    return 'image/gif';
-  }
-  
-  // WebP: RIFF...WEBP
-  if (bytes[0] === 0x52 && bytes[1] === 0x49 && bytes[2] === 0x46 && bytes[3] === 0x46 &&
-      bytes[8] === 0x57 && bytes[9] === 0x45 && bytes[10] === 0x42 && bytes[11] === 0x50) {
-    return 'image/webp';
-  }
-  
-  // SVG detection
-  // (handled separately to allow passthrough with basic safety checks)
-  
-  // BMP: 42 4D
-  if (bytes[0] === 0x42 && bytes[1] === 0x4d) {
-    return 'image/bmp';
-  }
-
-  // SVG: XML-based vector images
-  const textStart = buffer.slice(0, 256).toString('utf-8').trim().toLowerCase();
-  if (textStart.startsWith('<svg') || textStart.startsWith('<?xml')) {
-    return 'image/svg+xml';
-  }
-  
-  return null;
-}
-
-function isValidImageContent(buffer: Buffer): boolean {
-  // Minimum size check
-  if (buffer.length < 4) return false;
-
-  // Check magic bytes for various image formats
-  const bytes = buffer.slice(0, 12);
-
-  // JPEG: FF D8 FF
-  if (bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff) {
-    return true;
-  }
-
-  // PNG: 89 50 4E 47 0D 0A 1A 0A
-  if (
-    bytes[0] === 0x89 &&
-    bytes[1] === 0x50 &&
-    bytes[2] === 0x4e &&
-    bytes[3] === 0x47 &&
-    bytes[4] === 0x0d &&
-    bytes[5] === 0x0a &&
-    bytes[6] === 0x1a &&
-    bytes[7] === 0x0a
-  ) {
-    return true;
-  }
-
-  // GIF: 47 49 46 38 (GIF8)
-  if (
-    bytes[0] === 0x47 &&
-    bytes[1] === 0x49 &&
-    bytes[2] === 0x46 &&
-    bytes[3] === 0x38
-  ) {
-    return true;
-  }
-
-  // WebP: RIFF...WEBP
-  if (
-    bytes[0] === 0x52 &&
-    bytes[1] === 0x49 &&
-    bytes[2] === 0x46 &&
-    bytes[3] === 0x46 &&
-    bytes[8] === 0x57 &&
-    bytes[9] === 0x45 &&
-    bytes[10] === 0x42 &&
-    bytes[11] === 0x50
-  ) {
-    return true;
-  }
-
-  // AVIF: ftyp box with 'avif' brand
-  if (
-    bytes[4] === 0x66 &&
-    bytes[5] === 0x74 &&
-    bytes[6] === 0x79 &&
-    bytes[7] === 0x70
-  ) {
-    // Check for avif brand (typically at offset 8)
-    const ftypContent = buffer.slice(8, 20).toString('ascii');
-    if (ftypContent.includes('avif')) {
-      return true;
-    }
-  }
-
-  // BMP: 42 4D
-  if (bytes[0] === 0x42 && bytes[1] === 0x4d) {
-    return true;
-  }
-
-  // ICO: 00 00 01 00 or 00 00 02 00
-  if (
-    bytes[0] === 0x00 &&
-    bytes[1] === 0x00 &&
-    bytes[2] === 0x01 &&
-    bytes[3] === 0x00
-  ) {
-    return true;
-  }
-  if (
-    bytes[0] === 0x00 &&
-    bytes[1] === 0x00 &&
-    bytes[2] === 0x02 &&
-    bytes[3] === 0x00
-  ) {
-    return true;
-  }
-
-  // SVG detection with a minimal safety check
-  if (buffer.length >= 20) {
-    const textSample = buffer.slice(0, Math.min(buffer.length, 2048)).toString('utf-8').toLowerCase();
-    if (textSample.includes('<svg')) {
-      // Basic guard: block if script tags are present in the sampled content
-      if (textSample.includes('<script')) {
-        return false;
-      }
-      return true;
-    }
-  }
-
-  return false;
-}
-
-function setSecurityHeaders(res: NextApiResponse) {
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
-  res.setHeader('X-Content-Type-Options', 'nosniff');
-  res.setHeader('X-Frame-Options', 'DENY');
-  res.setHeader('Referrer-Policy', 'no-referrer');
-}
-
-function sendError(res: NextApiResponse, status: number, message: string) {
-  setSecurityHeaders(res);
-  res.setHeader('Content-Type', 'text/plain; charset=utf-8');
-  res.status(status).send(message);
-}
+import {
+  isValidImageMimeType,
+  inferImageMimeType,
+  setSecurityHeaders,
+  sendError,
+  normalizeProxyUrl,
+  buildFetchCandidates,
+  fetchImageFromCandidates,
+  resolveJsonMetadataImage,
+  resolveFinalContentType,
+} from '~/utils/imageProxyHelpers';
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   try {
@@ -204,209 +22,49 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     if (!url) {
       return sendError(res, 400, 'Missing url parameter');
     }
+
     let parsed: URL;
     try {
-      parsed = new URL(url);
+      parsed = normalizeProxyUrl(url);
     } catch {
       return sendError(res, 400, 'Invalid URL format');
     }
 
-    // Unwrap nested proxy links (e.g., .../api/image-proxy?url=<actual>)
-    const nestedProxyTarget = parsed.searchParams.get('url');
-    const isKnownProxyHost =
-      parsed.hostname.includes('image-proxy') ||
-      parsed.hostname.includes('uxento.io') ||
-      parsed.hostname.includes('solanatracker.io');
-    if (nestedProxyTarget && (parsed.pathname.includes('image-proxy') || isKnownProxyHost)) {
-      try {
-        parsed = new URL(nestedProxyTarget);
-      } catch {
-        // keep original if nested target is invalid
-      }
-    }
+    const candidates = buildFetchCandidates(parsed);
 
-    // Fix double-slash IPFS paths (e.g., /ipfs//<...>)
-    if (parsed.pathname.startsWith('/ipfs//')) {
-      try {
-        parsed = new URL(parsed.toString().replace('/ipfs//', '/ipfs/'));
-      } catch {
-        // ignore if replacement creates invalid URL
-      }
-    }
-
-    // If HTTP, try HTTPS first but keep HTTP as fallback
-    const isHttp = parsed.protocol === 'http:';
-    // Check if this is an IPFS URL path (even if hostname doesn't include 'ipfs')
-    const hasIpfsPath = parsed.pathname.includes('/ipfs/');
-    
-    // Check if host is allowed, but be more lenient for image files and IPFS URLs
-    // If URL ends with common image extensions, allow more hosts
-    const isImageFile = /\.(png|jpg|jpeg|gif|webp|avif|bmp|ico|svg)$/i.test(parsed.pathname);
-    
-    // IPFS multi-gateway fallback if /ipfs/<cid>
-    const ipfsMatch = parsed.pathname.match(/\/ipfs\/([^/?#]+)/i);
-    const candidates: string[] = [];
-    if (ipfsMatch && ipfsMatch[1]) {
-      const cid = ipfsMatch[1];
-      // Try https, then original, then other gateways
-      const original = parsed.toString();
-      const httpsVersion =
-        parsed.protocol === 'http:' ? original.replace(/^http:/i, 'https:') : original;
-      const httpVersion =
-        parsed.protocol === 'https:' ? original.replace(/^https:/i, 'http:') : original;
-      if (httpsVersion && !candidates.includes(httpsVersion)) candidates.push(httpsVersion);
-      if (!candidates.includes(original)) candidates.push(original);
-      if (httpVersion && !candidates.includes(httpVersion)) candidates.push(httpVersion);
-      // Then try common IPFS gateways as fallbacks
-      const gateways = [
-        'https://cloudflare-ipfs.com/ipfs/',
-        'https://ipfs.io/ipfs/',
-        'https://gateway.pinata.cloud/ipfs/',
-        'https://nftstorage.link/ipfs/',
-        'https://gateway.ipfs.io/ipfs/',
-      ];
-      for (const g of gateways) {
-        const urlTry = g + cid;
-        if (!candidates.includes(urlTry)) candidates.push(urlTry);
-      }
-    } else {
-      const original = parsed.toString();
-      const httpsVersion =
-        parsed.protocol === 'http:' ? original.replace(/^http:/i, 'https:') : original;
-      const httpVersion =
-        parsed.protocol === 'https:' ? original.replace(/^https:/i, 'http:') : original;
-      if (httpsVersion && !candidates.includes(httpsVersion)) candidates.push(httpsVersion);
-      if (!candidates.includes(original)) candidates.push(original);
-      if (httpVersion && !candidates.includes(httpVersion)) candidates.push(httpVersion);
-    }
-
-    let upstream: Response | null = null;
-    let lastErr: any = null;
-    let lastNonOk: { resp: Response; url: string } | null = null;
-    
-    // Try all candidates in parallel with shorter timeouts for faster response
-    const promises = candidates.map(async (tryUrl) => {
-      try {
-        const controller = new AbortController();
-        const t = setTimeout(() => controller.abort(), 12000);
-        const fetchOptions: RequestInit = {
-          headers: { 'Accept': 'image/*,*/*;q=0.8', 'User-Agent': 'Interstate-ImageProxy/1.0' },
-          signal: controller.signal,
-          cache: 'force-cache',
-          redirect: 'follow',
-        };
-        // Allow self-signed HTTP hosts (common on IPFS gateways or custom hosts)
-        // Note: Node fetch ignores agent unless provided; here we just retry HTTP as-is
-        const response = await fetch(tryUrl, fetchOptions);
-        clearTimeout(t);
-        if (response.ok) {
-          return response;
-        }
-        lastNonOk = { resp: response, url: tryUrl };
-        throw new Error(`HTTP ${response.status} ${response.statusText}`);
-      } catch (e: any) {
-        throw e;
-      }
-    });
-
-    // Wait for the first successful response
+    let result: { body: Buffer; contentType: string; status: number };
     try {
-      upstream = await Promise.any(promises);
+      result = await fetchImageFromCandidates(candidates);
     } catch (e: any) {
-      lastErr = e;
-    }
-
-    if (!upstream) {
-      if (lastNonOk) {
-        const buf = Buffer.from(await lastNonOk.resp.arrayBuffer());
-        const ct = lastNonOk.resp.headers.get('content-type') || 'application/octet-stream';
-        setSecurityHeaders(res);
-        res.setHeader('Content-Type', ct);
-        res.setHeader('Cache-Control', 'public, max-age=60, s-maxage=60');
-        return res.status(lastNonOk.resp.status).send(buf);
-      }
-      console.error('[image proxy] error:', lastErr?.message || lastErr);
+      console.error('[image proxy] error:', e?.message || e);
       return sendError(res, 502, 'Failed to fetch image');
     }
 
-    // Get response body first
-    const body = Buffer.from(await upstream.arrayBuffer());
-    
-    // Get content type from header and normalize
-    const headerContentType = upstream.headers.get('content-type');
-    let contentType = headerContentType?.split(';')[0].trim().toLowerCase() || '';
-
-    // AUTO-RESOLVE: If upstream returned JSON metadata, extract the actual image URL and fetch it
-    const isJsonResponse = contentType === 'application/json' || contentType === 'text/json';
-    if (isJsonResponse && body.length < 50000) {
-      try {
-        const meta = JSON.parse(body.toString('utf-8'));
-        const imageField = meta?.image || meta?.image_url || meta?.logo || meta?.icon
-          || meta?.imageUri || meta?.img || meta?.thumbnail
-          || meta?.properties?.image || meta?.properties?.image_url;
-        const filesImage = Array.isArray(meta?.properties?.files) && meta.properties.files.length > 0
-          ? (typeof meta.properties.files[0] === 'string' ? meta.properties.files[0] : meta.properties.files[0]?.uri)
-          : null;
-        const resolvedImageUrl = imageField || filesImage;
-
-        if (resolvedImageUrl && typeof resolvedImageUrl === 'string' && resolvedImageUrl.startsWith('http')) {
-          console.log(`[image proxy] JSON metadata detected, resolving to: ${resolvedImageUrl.substring(0, 80)}`);
-          const imgController = new AbortController();
-          const imgTimeout = setTimeout(() => imgController.abort(), 12000);
-          const imgResponse = await fetch(resolvedImageUrl, {
-            headers: { 'Accept': 'image/*,*/*;q=0.8', 'User-Agent': 'Interstate-ImageProxy/1.0' },
-            signal: imgController.signal,
-            redirect: 'follow',
-          });
-          clearTimeout(imgTimeout);
-
-          if (imgResponse.ok) {
-            const imgBody = Buffer.from(await imgResponse.arrayBuffer());
-            const imgContentType = imgResponse.headers.get('content-type')?.split(';')[0].trim().toLowerCase() || '';
-            let finalType = imgContentType;
-            if (!isValidImageMimeType(finalType)) {
-              finalType = inferImageMimeType(imgBody) || 'application/octet-stream';
-            }
-            setSecurityHeaders(res);
-            res.setHeader('Content-Type', finalType);
-            res.setHeader('Cache-Control', 'public, max-age=604800, s-maxage=604800, stale-while-revalidate=86400');
-            return res.status(200).send(imgBody);
-          }
-        }
-      } catch (e) {
-        console.log('[image proxy] JSON auto-resolve failed, serving original:', (e as any)?.message);
-      }
+    // Non-OK upstream: forward the error
+    if (result.status !== 200) {
+      setSecurityHeaders(res);
+      res.setHeader('Content-Type', result.contentType);
+      res.setHeader('Cache-Control', 'public, max-age=60, s-maxage=60');
+      return res.status(result.status).send(result.body);
     }
 
-    const headerSaysImage =
-      contentType.startsWith('image/') ||
-      contentType.startsWith('video/') ||
-      contentType.startsWith('audio/');
-
-    // If Content-Type is missing or invalid, try to infer from image content
-    if (!isValidImageMimeType(contentType)) {
-      const inferredType = inferImageMimeType(body);
-      if (inferredType) {
-        console.log(`[image proxy] Content-Type missing/invalid (${contentType || 'missing'}), inferred ${inferredType} from content`);
-        contentType = inferredType;
-      } else {
-        // Fall back to declared type or a generic binary type; do not block
-        contentType = contentType || 'application/octet-stream';
-      }
+    // Check if response is JSON metadata pointing to an actual image
+    const headerContentType = result.contentType.split(';')[0].trim().toLowerCase();
+    const metadataResult = await resolveJsonMetadataImage(result.body, headerContentType);
+    if (metadataResult) {
+      setSecurityHeaders(res);
+      res.setHeader('Content-Type', metadataResult.contentType);
+      res.setHeader('Cache-Control', 'public, max-age=604800, s-maxage=604800, stale-while-revalidate=86400');
+      return res.status(200).send(metadataResult.body);
     }
 
-    // Extract base content type (remove charset parameters)
-    const baseContentType = contentType?.split(';')[0].trim() || 'application/octet-stream';
+    // Resolve final content type (header + magic bytes)
+    const finalContentType = resolveFinalContentType(result.contentType, result.body);
 
-    // Set security headers
     setSecurityHeaders(res);
-    
-    // Set response headers
-    res.setHeader('Content-Type', baseContentType);
+    res.setHeader('Content-Type', finalContentType);
     res.setHeader('Cache-Control', 'public, max-age=604800, s-maxage=604800, stale-while-revalidate=86400');
-
-    // Send validated image content
-    res.status(200).send(body);
+    res.status(200).send(result.body);
   } catch (err: any) {
     if (err?.name === 'AbortError') {
       return sendError(res, 408, 'Request timeout');

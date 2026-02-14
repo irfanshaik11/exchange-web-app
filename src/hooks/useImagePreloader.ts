@@ -1,4 +1,5 @@
 import { useEffect, useRef } from 'react';
+import { computeHashImageUrl } from '~/utils/imageHash';
 
 interface PreloadImageOptions {
   priority?: boolean;
@@ -11,35 +12,7 @@ export function useImagePreloader() {
   const preloadImage = async (src: string | null, options: PreloadImageOptions = {}): Promise<boolean> => {
     if (!src) return false;
 
-    // Use proxy for IPFS URLs, defined.fi, debridge, and other CORS-prone domains
-    const needsProxy = !src.startsWith('/api/image') && (
-      src.includes('token-media.defined.fi') ||
-      src.includes('ipfs.io') ||
-      src.includes('cloudflare-ipfs.com') ||
-      src.includes('gateway.pinata.cloud') ||
-      src.includes('ipfs/') ||
-      src.startsWith('ipfs://') ||
-      src.includes('tokens.debridge.finance') ||
-      src.includes('debridge.finance') ||
-      src.includes('launchonsoar.com') ||
-      src.includes('metadata.rapidlaunch.io') ||
-      src.includes('rapidlaunch.io') ||
-      src.includes('metadata.j7tracker.com') ||
-      src.includes('j7tracker.com') ||
-      src.includes('edge.uxento.io') ||
-      src.includes('uxento.io') ||
-      src.includes('image.solanatracker.io') ||
-      src.includes('ipfs-forward.solanatracker.io') ||
-      src.includes('instagram.com') ||
-      src.includes('cdninstagram.com') ||
-      src.includes('ipfs.storacha.link') ||
-      src.includes('storacha.link') ||
-      src.includes('content.coinwave.gg')
-    );
-
-    const imageUrl = needsProxy 
-      ? `/api/image?url=${encodeURIComponent(src)}`
-      : src;
+    const imageUrl = computeHashImageUrl(src) || src;
 
     // Check if already preloaded
     if (preloadedImages.current.has(imageUrl)) {
@@ -75,7 +48,7 @@ export function useImagePreloader() {
       };
 
       // Set crossOrigin for CORS (only needed for direct URLs)
-      if (!imageUrl.startsWith('/api/image')) {
+      if (!imageUrl.startsWith('/api/')) {
         img.crossOrigin = 'anonymous';
       }
       img.loading = options.priority ? 'eager' : 'lazy';

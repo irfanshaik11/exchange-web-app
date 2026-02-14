@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useRef, memo } from 'react';
 import ImageBubble from './ImageBubble';
 import { isMetadataUrl, resolveMetadataImage, clearMetadataFailureCache } from '~/utils/images';
-import { retainImageObject, isImageRetained } from '~/utils/imagePreloader';
+import { retainImageObject, isImageRetained, getRetainedImage, prefetchFromSessionStorage } from '~/utils/imagePreloader';
+import { computeHashImageUrl } from '~/utils/imageHash';
 
 /**
  * Global tracker for loaded image URLs with LRU eviction
@@ -26,6 +27,16 @@ if (typeof window !== 'undefined') {
       }
     }
   } catch {}
+
+  // Prefetch: start Image loads from disk cache NOW (200-600ms before React mounts).
+  // By the time FastImage's useState probe runs, most bitmaps will be decoded.
+  if (globalLoadedImages.size > 0) {
+    prefetchFromSessionStorage(
+      Array.from(globalLoadedImages.entries())
+        .sort((a, b) => b[1] - a[1]) // most-recently-used first
+        .map(([url]) => url)
+    );
+  }
 }
 
 function schedulePersist() {
@@ -75,10 +86,7 @@ function isImageTracked(url: string): boolean {
  * Used for synchronous initialization
  */
 function computeImageUrl(src: string | null): string | null {
-  if (!src) return null;
-  const alreadyProxied = src.startsWith('/api/') || src.startsWith('data:');
-  const needsProxy = !alreadyProxied && src.startsWith('http');
-  return needsProxy ? `/api/image?url=${encodeURIComponent(src)}` : src;
+  return computeHashImageUrl(src);
 }
 
 interface FastImageProps {
@@ -141,7 +149,13 @@ function FastImageInner({
     if (!initialUrl) return false;
 
     if (isImageTracked(initialUrl)) {
-      // Probe: check if the decoded bitmap is actually in browser memory
+      // Check prefetched image first (started at module init, may already be decoded)
+      const retained = getRetainedImage(initialUrl);
+      if (retained && retained.complete && retained.naturalHeight > 0) {
+        wasCachedAtMount.current = true;
+        return true; // Already decoded — instant display
+      }
+      // Fallback: new probe (current behavior)
       const probe = new Image();
       probe.src = initialUrl;
       if (probe.complete && probe.naturalHeight > 0) {
@@ -398,7 +412,7 @@ function FastImageInner({
         onLoad={handleLoad}
         onError={handleError}
         loading={(priority || wasCachedAtMount.current || isKnownUrl) ? 'eager' : 'lazy'}
-        decoding={wasCachedAtMount.current ? 'sync' : 'async'}
+        decoding={(wasCachedAtMount.current || isKnownUrl) ? 'sync' : 'async'}
         fetchPriority={priority ? 'high' : 'auto'}
         style={{
           width: '100%',

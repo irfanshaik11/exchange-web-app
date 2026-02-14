@@ -27,6 +27,7 @@ import SkeletonRow from './InterstateTable/SkeletonRow';
 import { fetchTokenMetadata } from '~/utils/functions';
 import { prefetchTradeData } from '~/utils/tokenCache';
 import { withImageFallback, extractMetaImage, isMetadataUrl } from '~/utils/images';
+import { computeHashImageUrl } from '~/utils/imageHash';
 import AvatarImage from '~/components/AvatarImage';
 import { useFilter } from "./FilterContext";
 import { getAmm } from "~/utils/amms";
@@ -575,7 +576,7 @@ const TokenAvatar: React.FC<{
     // 1. Metadata image takes top priority (already resolved by useTokenMetadata)
     const metaImg = extractMetaImage(meta);
     if (metaImg) {
-      const proxyUrl = `/api/image?url=${encodeURIComponent(metaImg)}`;
+      const proxyUrl = computeHashImageUrl(metaImg) || '';
       if (mintKey) resolvedImageCache[mintKey] = proxyUrl;
       return proxyUrl;
     }
@@ -584,12 +585,12 @@ const TokenAvatar: React.FC<{
     // 3. Use metadata URI via proxy auto-resolve (proxy fetches JSON → extracts image → serves it)
     //    Don't cache this — let extractMetaImage supersede it once useTokenMetadata resolves
     if (rawUri && isMetadataUrl(rawUri)) {
-      return `/api/image?url=${encodeURIComponent(rawUri)}`;
+      return computeHashImageUrl(rawUri) || '';
     }
     // 4. Direct image URL or ui-avatars fallback
     const raw = imageUrl || token.logo || '';
     if (!raw) return '';
-    const proxyUrl = `/api/image?url=${encodeURIComponent(raw)}`;
+    const proxyUrl = computeHashImageUrl(raw) || '';
     if (mintKey) resolvedImageCache[mintKey] = proxyUrl;
     return proxyUrl;
   }, [meta, imageUrl, token.logo, mintKey, rawUri]);
@@ -816,7 +817,7 @@ const TokenInfo: React.FC<{
       <div className="overflow-hidden rounded-lg" style={{ width: 180, height: 180 }}>
         {tokenImage ? (
           <img
-            src={`/api/image?url=${encodeURIComponent(tokenImage)}`}
+            src={computeHashImageUrl(tokenImage) || ''}
             alt={token.name || token.symbol || ''}
             className="w-full h-full object-cover"
           />
@@ -1145,7 +1146,7 @@ const TokenInfo: React.FC<{
                 >
                   <img
                     src={tokenImage
-                      ? `/api/image?url=${encodeURIComponent(tokenImage)}`
+                      ? (computeHashImageUrl(tokenImage) || '')
                       : `https://ui-avatars.com/api/?name=${token.symbol || 'Token'}&size=48&background=1a1a1a&color=ffffff&bold=true`
                     }
                     alt={`${token.symbol} profile`}

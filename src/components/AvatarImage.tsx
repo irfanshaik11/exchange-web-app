@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { withImageFallback } from '~/utils/images';
+import { computeHashImageUrl } from '~/utils/imageHash';
 import ImageBubble from './ImageBubble';
 
 interface AvatarImageProps {
@@ -36,8 +37,7 @@ export default function AvatarImage({
   const initial = (symbol?.charAt(0) || name?.charAt(0) || '?').toUpperCase();
 
   if (showImage && finalSrc) {
-    const directSchemes = finalSrc.startsWith('data:') || finalSrc.startsWith('blob:');
-    const srcUrl = directSchemes ? finalSrc : `/api/image?url=${encodeURIComponent(finalSrc)}`;
+    const srcUrl = computeHashImageUrl(finalSrc) || finalSrc;
     return (
       <div className="relative border border-green-400 rounded-lg p-0.5">
         <img

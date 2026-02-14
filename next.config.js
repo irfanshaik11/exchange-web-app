@@ -130,6 +130,20 @@ const config = {
           { key: 'Cache-Control', value: 'public, max-age=31536000, immutable' },
         ],
       },
+      {
+        // Hash-based image proxy: deterministic URLs, cache forever
+        source: '/api/img/:hash*',
+        headers: [
+          { key: 'Cache-Control', value: 'public, max-age=31536000, immutable' },
+        ],
+      },
+      {
+        // TradingView charting library — 25MB of static JS, never changes between deploys
+        source: '/charting_library/:path*',
+        headers: [
+          { key: 'Cache-Control', value: 'public, max-age=31536000, immutable' },
+        ],
+      },
     ];
   },
 

@@ -19,6 +19,7 @@ export function middleware(request: NextRequest) {
   if (
     pathname.startsWith('/_next/static/') ||
     pathname.startsWith('/static/') ||
+    pathname.startsWith('/api/img/') ||
     pathname.match(/\.(js|css|png|jpg|jpeg|gif|webp|svg|ico|woff|woff2|ttf|eot)$/)
   ) {
     return response;
