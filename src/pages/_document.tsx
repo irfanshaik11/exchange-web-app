@@ -11,8 +11,16 @@ export default function Document() {
           dangerouslySetInnerHTML={{
             __html: `
 (function(){
-  var KEY='__chunk_retry',MAX=2,DELAYS=[1500,3000],handled=false,recovering=false,count=0;
-  try{count=parseInt(sessionStorage.getItem(KEY)||'0',10)}catch(e){}
+  var KEY='__chunk_retry',MAX=3,DELAYS=[500,2000,5000],handled=false,recovering=false,count=0;
+  var STALE_MS=30000;
+  try{
+    var raw=sessionStorage.getItem(KEY)||'';
+    var parts=raw.split('|');
+    count=parseInt(parts[0]||'0',10);
+    var ts=parseInt(parts[1]||'0',10);
+    // Reset stale counter (>30s old) — prevents previous session's retries from eating into budget
+    if(ts&&(Date.now()-ts>STALE_MS)){count=0;}
+  }catch(e){}
 
   // Once the app has rendered, disable this script entirely.
   // SPA navigation chunk errors are handled by _app.tsx routeChangeError.
@@ -23,6 +31,9 @@ export default function Document() {
     }
     // Only clear counter on SUCCESSFUL load (no recovery was triggered this page load).
     if(!recovering&&count>0)try{sessionStorage.removeItem(KEY)}catch(e){}
+    // Remove recovery indicator if present
+    var bar=document.getElementById('__cr_bar');
+    if(bar)bar.parentNode.removeChild(bar);
   });
 
   function clearAllCaches(cb){
@@ -32,6 +43,17 @@ export default function Document() {
       var toDelete=k.filter(function(n){return n.indexOf('pulse-image-cache')===-1;});
       return Promise.all(toDelete.map(function(n){return caches.delete(n)}));
     }).then(check).catch(check);}else{check();}
+  }
+
+  function showRecoveryBar(){
+    if(document.getElementById('__cr_bar'))return;
+    var bar=document.createElement('div');
+    bar.id='__cr_bar';
+    bar.style.cssText='position:fixed;top:0;left:0;right:0;height:3px;background:linear-gradient(90deg,#3B82F6,#60A5FA,#3B82F6);background-size:200% 100%;animation:__cr_slide 1.5s ease-in-out infinite;z-index:100000';
+    var style=document.createElement('style');
+    style.textContent='@keyframes __cr_slide{0%{background-position:200% 0}100%{background-position:-200% 0}}';
+    document.head.appendChild(style);
+    document.body.appendChild(bar);
   }
 
   function showFallback(){
@@ -53,7 +75,8 @@ export default function Document() {
     handled=true;
     recovering=true;
     if(count<MAX){
-      try{sessionStorage.setItem(KEY,String(count+1))}catch(e){}
+      try{sessionStorage.setItem(KEY,(count+1)+'|'+Date.now())}catch(e){}
+      showRecoveryBar();
       // Clear caches FIRST, then reload — ensures fresh resources on next load
       clearAllCaches(function(){
         setTimeout(function(){window.location.reload()},DELAYS[count]||3000);
