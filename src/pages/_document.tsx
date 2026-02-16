@@ -99,12 +99,6 @@ export default function Document() {
     d.getElementById('__cr_btn').onclick=function(){window.location.href=buildCacheBustUrl();};
   }
 
-  function probeChunk(url,cb){
-    try{
-      fetch(url,{cache:'no-store'}).then(function(r){cb(r.status);}).catch(function(){cb(0);});
-    }catch(e){cb(0);}
-  }
-
   function doRecovery(chunkUrl){
     if(handled)return;
     handled=true;
@@ -115,17 +109,10 @@ export default function Document() {
     if(!navigator.onLine){showOffline();return;}
 
     if(count<MAX){
-      probeChunk(chunkUrl,function(status){
-        if(status===404){
-          console.error('[ChunkRecovery] Chunk confirmed 404 — showing fallback immediately');
-          showFallback();
-          return;
-        }
-        try{sessionStorage.setItem(KEY,(count+1)+'|'+Date.now())}catch(e){}
-        showRecoveryBar();
-        clearAllCaches(function(){
-          setTimeout(function(){window.location.href=buildCacheBustUrl();},DELAYS[count]||3000);
-        });
+      try{sessionStorage.setItem(KEY,(count+1)+'|'+Date.now())}catch(e){}
+      showRecoveryBar();
+      clearAllCaches(function(){
+        setTimeout(function(){window.location.href=buildCacheBustUrl();},DELAYS[count]||3000);
       });
     }else{
       showFallback();

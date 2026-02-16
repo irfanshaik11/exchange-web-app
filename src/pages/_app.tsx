@@ -619,7 +619,16 @@ const MyApp: AppType = ({ Component, pageProps }) => {
       ) {
         const parsed = new URL(url, window.location.origin);
         parsed.searchParams.set('_cr', String(Date.now()));
-        window.location.href = parsed.pathname + parsed.search + parsed.hash;
+        const dest = parsed.pathname + parsed.search + parsed.hash;
+        if (typeof caches !== 'undefined') {
+          caches.keys().then(keys => {
+            const toDelete = keys.filter(n => !n.includes('pulse-image-cache'));
+            return Promise.all(toDelete.map(n => caches.delete(n)));
+          }).then(() => { window.location.href = dest; })
+            .catch(() => { window.location.href = dest; });
+        } else {
+          window.location.href = dest;
+        }
       }
     };
     routerForChunkRecovery.events.on('routeChangeError', handleRouteError);
