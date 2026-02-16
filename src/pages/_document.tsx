@@ -13,14 +13,32 @@ export default function Document() {
 (function(){
   var KEY='__chunk_retry',MAX=3,DELAYS=[500,2000,5000],handled=false,recovering=false,count=0;
   var STALE_MS=30000;
+  var failedUrl='';
   try{
     var raw=sessionStorage.getItem(KEY)||'';
     var parts=raw.split('|');
     count=parseInt(parts[0]||'0',10);
     var ts=parseInt(parts[1]||'0',10);
-    // Reset stale counter (>30s old) — prevents previous session's retries from eating into budget
     if(ts&&(Date.now()-ts>STALE_MS)){count=0;}
   }catch(e){}
+
+  function buildCacheBustUrl(){
+    var u=new URL(window.location.href);
+    u.searchParams.delete('_cr');
+    u.searchParams.set('_cr',String(Date.now()));
+    return u.pathname+u.search+u.hash;
+  }
+
+  function stripCacheBustParam(){
+    try{
+      var u=new URL(window.location.href);
+      if(u.searchParams.has('_cr')){
+        u.searchParams.delete('_cr');
+        var clean=u.pathname+(u.search||'')+u.hash;
+        window.history.replaceState({},'',clean);
+      }
+    }catch(e){}
+  }
 
   // Once the app has rendered, disable this script entirely.
   // SPA navigation chunk errors are handled by _app.tsx routeChangeError.
@@ -28,10 +46,9 @@ export default function Document() {
     var root=document.getElementById('__next');
     if(root&&root.children.length>0){
       handled=true;
+      stripCacheBustParam();
     }
-    // Only clear counter on SUCCESSFUL load (no recovery was triggered this page load).
     if(!recovering&&count>0)try{sessionStorage.removeItem(KEY)}catch(e){}
-    // Remove recovery indicator if present
     var bar=document.getElementById('__cr_bar');
     if(bar)bar.parentNode.removeChild(bar);
   });
@@ -62,24 +79,53 @@ export default function Document() {
     d.body.innerHTML='';
     var c=d.createElement('div');
     c.style.cssText='position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:#101114;color:#E6E7EA;font-family:-apple-system,BlinkMacSystemFont,system-ui,sans-serif;z-index:99999';
-    c.innerHTML='<div style="text-align:center;max-width:420px;padding:32px"><h2 style="font-size:20px;font-weight:600;margin:0 0 12px;color:#fff">Something went wrong</h2><p style="font-size:14px;color:#9CA3AF;margin:0 0 24px;line-height:1.5">A new version may have been deployed. Please refresh to load the latest version.</p><button id="__cr_btn" style="background:#3B82F6;color:#fff;border:none;border-radius:8px;padding:12px 32px;font-size:14px;font-weight:500;cursor:pointer">Refresh</button></div>';
+    var urlInfo=failedUrl?'<p style="font-size:11px;color:#6B7280;margin:16px 0 0;font-family:monospace;word-break:break-all;max-width:360px">'+failedUrl+'</p>':'';
+    c.innerHTML='<div style="text-align:center;max-width:420px;padding:32px"><h2 style="font-size:20px;font-weight:600;margin:0 0 12px;color:#fff">Something went wrong</h2><p style="font-size:14px;color:#9CA3AF;margin:0 0 24px;line-height:1.5">A new version may have been deployed. Please refresh to load the latest version.</p><button id="__cr_btn" style="background:#3B82F6;color:#fff;border:none;border-radius:8px;padding:12px 32px;font-size:14px;font-weight:500;cursor:pointer">Refresh</button>'+urlInfo+'</div>';
     d.body.appendChild(c);
     d.getElementById('__cr_btn').onclick=function(){
       try{sessionStorage.removeItem(KEY)}catch(e){}
-      clearAllCaches(function(){window.location.reload();});
+      clearAllCaches(function(){window.location.href=buildCacheBustUrl();});
     };
   }
 
-  function doRecovery(){
+  function showOffline(){
+    handled=true;
+    var d=document;
+    d.body.innerHTML='';
+    var c=d.createElement('div');
+    c.style.cssText='position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:#101114;color:#E6E7EA;font-family:-apple-system,BlinkMacSystemFont,system-ui,sans-serif;z-index:99999';
+    c.innerHTML='<div style="text-align:center;max-width:420px;padding:32px"><h2 style="font-size:20px;font-weight:600;margin:0 0 12px;color:#fff">No internet connection</h2><p style="font-size:14px;color:#9CA3AF;margin:0 0 24px;line-height:1.5">Please check your connection and try again.</p><button id="__cr_btn" style="background:#3B82F6;color:#fff;border:none;border-radius:8px;padding:12px 32px;font-size:14px;font-weight:500;cursor:pointer">Retry</button></div>';
+    d.body.appendChild(c);
+    d.getElementById('__cr_btn').onclick=function(){window.location.href=buildCacheBustUrl();};
+  }
+
+  function probeChunk(url,cb){
+    try{
+      fetch(url,{cache:'no-store'}).then(function(r){cb(r.status);}).catch(function(){cb(0);});
+    }catch(e){cb(0);}
+  }
+
+  function doRecovery(chunkUrl){
     if(handled)return;
     handled=true;
     recovering=true;
+    failedUrl=chunkUrl||'';
+    console.error('[ChunkRecovery] Chunk load failed:',chunkUrl,'attempt:',(count+1)+'/'+MAX);
+
+    if(!navigator.onLine){showOffline();return;}
+
     if(count<MAX){
-      try{sessionStorage.setItem(KEY,(count+1)+'|'+Date.now())}catch(e){}
-      showRecoveryBar();
-      // Clear caches FIRST, then reload — ensures fresh resources on next load
-      clearAllCaches(function(){
-        setTimeout(function(){window.location.reload()},DELAYS[count]||3000);
+      probeChunk(chunkUrl,function(status){
+        if(status===404){
+          console.error('[ChunkRecovery] Chunk confirmed 404 — showing fallback immediately');
+          showFallback();
+          return;
+        }
+        try{sessionStorage.setItem(KEY,(count+1)+'|'+Date.now())}catch(e){}
+        showRecoveryBar();
+        clearAllCaches(function(){
+          setTimeout(function(){window.location.href=buildCacheBustUrl();},DELAYS[count]||3000);
+        });
       });
     }else{
       showFallback();
@@ -93,7 +139,7 @@ export default function Document() {
     if(t&&(t.tagName==='SCRIPT'||t.tagName==='LINK')){
       var url=t.src||t.href||'';
       if(url.indexOf('/_next/')!==-1){
-        doRecovery();
+        doRecovery(url);
       }
     }
   },true);

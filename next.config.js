@@ -25,7 +25,7 @@ const config = {
   },
   // Disable page transitions and loading indicators
   compiler: {
-    removeConsole: process.env.NODE_ENV === 'production',
+    removeConsole: process.env.NODE_ENV === 'production' ? { exclude: ['error', 'warn'] } : false,
   },
   // Turbopack configuration - explicitly set root to fix workspace detection
   turbopack: {
@@ -151,7 +151,7 @@ const config = {
     return [
       {
         source: "/",
-        destination: "/pulse",
+        destination: "/pulse?chain=sol",
         permanent: false,
       },
       {

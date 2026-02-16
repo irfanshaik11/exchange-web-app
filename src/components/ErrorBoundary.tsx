@@ -41,6 +41,13 @@ class ErrorBoundary extends Component<Props, State> {
     };
   }
 
+  private static buildCacheBustUrl(): string {
+    const u = new URL(window.location.href);
+    u.searchParams.delete('_cr');
+    u.searchParams.set('_cr', String(Date.now()));
+    return u.pathname + u.search + u.hash;
+  }
+
   static getDerivedStateFromError(error: Error): Partial<State> {
     return { hasError: true, error };
   }
@@ -68,12 +75,12 @@ class ErrorBoundary extends Component<Props, State> {
               const toDelete = keys.filter((k) => !k.includes('pulse-image-cache'));
               return Promise.all(toDelete.map((k) => caches.delete(k)));
             }).then(() => {
-              window.location.reload();
+              window.location.href = ErrorBoundary.buildCacheBustUrl();
             }).catch(() => {
-              window.location.reload();
+              window.location.href = ErrorBoundary.buildCacheBustUrl();
             });
           } else {
-            window.location.reload();
+            window.location.href = ErrorBoundary.buildCacheBustUrl();
           }
           return;
         }
@@ -96,7 +103,7 @@ class ErrorBoundary extends Component<Props, State> {
   handleReload = (): void => {
     // Clear the auto-recovery flag so a fresh reload gets a clean slate
     try { sessionStorage.removeItem('__eb_chunk_retry'); } catch (e) {}
-    window.location.reload();
+    window.location.href = ErrorBoundary.buildCacheBustUrl();
   };
 
   render(): ReactNode {

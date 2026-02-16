@@ -617,7 +617,9 @@ const MyApp: AppType = ({ Component, pageProps }) => {
         err?.name === 'ChunkLoadError' ||
         /loading chunk [\d]+ failed/i.test(err?.message || '')
       ) {
-        window.location.href = url;
+        const parsed = new URL(url, window.location.origin);
+        parsed.searchParams.set('_cr', String(Date.now()));
+        window.location.href = parsed.pathname + parsed.search + parsed.hash;
       }
     };
     routerForChunkRecovery.events.on('routeChangeError', handleRouteError);
