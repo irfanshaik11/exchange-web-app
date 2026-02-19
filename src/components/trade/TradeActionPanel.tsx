@@ -1194,22 +1194,22 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
     pnlPercentage: number;
   } | null>(null);
 
-  // Check if this is a high bonding Meteora token that should show migration UI
-  // Excludes tokens that have already completed migration (status contains 'migrated' or migrated_time is set)
+  // COMMENTED OUT: Migration UI disabled — always returns false
   const isMigratingToken = useMemo(() => {
-    const launchpadProtocol = token.launchpad_protocol?.toLowerCase() || '';
-    const isMeteora = launchpadProtocol.includes('meteora');
-    const bondingPct = token.bonding_pct ?? 0;
-    const status = (token.status || '').toLowerCase();
-    const hasMigrated =
-      (token as any).is_migrated ||
-      (token as any).migrated ||
-      (token as any).graduated ||
-      (token as any).is_graduated ||
-      status.includes('migrated') ||
-      !!token.migrated_time;
-    return isMeteora && bondingPct > 98.6 && !hasMigrated;
-  }, [token.launchpad_protocol, token.bonding_pct, token.status, token.migrated_time, (token as any).is_migrated, (token as any).migrated, (token as any).graduated, (token as any).is_graduated]);
+    return false;
+    // const launchpadProtocol = token.launchpad_protocol?.toLowerCase() || '';
+    // const isMeteora = launchpadProtocol.includes('meteora');
+    // const bondingPct = token.bonding_pct ?? 0;
+    // const status = (token.status || '').toLowerCase();
+    // const hasMigrated =
+    //   (token as any).is_migrated ||
+    //   (token as any).migrated ||
+    //   (token as any).graduated ||
+    //   (token as any).is_graduated ||
+    //   status.includes('migrated') ||
+    //   !!token.migrated_time;
+    // return isMeteora && bondingPct > 98.6 && !hasMigrated;
+  }, []);
 
   // Convert initialStats to TokenStatsData format if available
   const convertedInitialStats = useMemo(() => {

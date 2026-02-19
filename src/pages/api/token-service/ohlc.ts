@@ -45,7 +45,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     // Build URL with query parameters
     const params = new URLSearchParams({
       timeframe: mappedTimeframe,
-      limit: (limit as string) || '500',
+      ...(limit ? { limit: limit as string } : {}),
     });
 
     if (from) params.append('from', from as string);
