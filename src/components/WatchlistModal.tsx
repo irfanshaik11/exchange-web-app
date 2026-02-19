@@ -171,23 +171,6 @@ function resolveProtocolIcon(token: Token): string {
   return DEFAULT_PROTOCOL_ICON;
 }
 
-function normalizeAssetUrl(raw?: string): string | null {
-  if (!raw) return null;
-  const s = String(raw).trim();
-  if (s.startsWith("data:")) return s;
-  if (s.startsWith("ipfs://")) {
-    const cid = s.replace("ipfs://", "").replace(/^ipfs\//, "");
-    return `https://cloudflare-ipfs.com/ipfs/${cid}`;
-  }
-  if (/^ipfs[/:]/i.test(s)) {
-    const cid = s.replace(/^ipfs[/:]/i, "");
-    return `https://cloudflare-ipfs.com/ipfs/${cid}`;
-  }
-  if (/^[a-z0-9_-]{40,}$/i.test(s) && !/^https?:\/\//i.test(s)) return `https://arweave.net/${s}`;
-  if (s.startsWith("http://")) return s.replace(/^http:\/\//i, "https://");
-  if (s.startsWith("https://")) return s;
-  return null;
-}
 
 function resolveWatchlistVolume1h(token: Token): number {
   const usdVolumeFields = [
@@ -908,8 +891,7 @@ export default function WatchlistModal({ open, onClose }: WatchlistModalProps) {
               const protocolColor = resolveProtocolColor(token);
               const tokenIcon = resolveProtocolIcon(token);
               const fillProtocolBadge = shouldFillProtocolBadge(token);
-              const rawImg = (token as any).image_url || (token as any).image || (token as any).logo || (token as any).uri;
-              const imgSrc = normalizeAssetUrl(rawImg);
+              const imgSrc = extractTokenImage(token as any);
               const fallbackAvatar = `https://ui-avatars.com/api/?name=${encodeURIComponent(
                 token.symbol || token.name || "T"
               )}&background=0f1012&color=E6E7EA&size=48`;
