@@ -155,6 +155,42 @@ const SUCCESS_TTL_MS = 30 * 60 * 1000;
 // Failure cache: 30 seconds (allows quick retry for IPFS propagation)
 const FAILURE_TTL_MS = 30 * 1000;
 
+const META_PERSIST_KEY = '__meta_img';
+let metaPersistTimer: ReturnType<typeof setTimeout> | null = null;
+
+// Hydrate metadata cache from sessionStorage at module init
+if (typeof window !== 'undefined') {
+  try {
+    const raw = sessionStorage.getItem(META_PERSIST_KEY);
+    if (raw) {
+      const entries: [string, string][] = JSON.parse(raw);
+      const now = Date.now();
+      for (const [metaUrl, imageUrl] of entries) {
+        if (typeof metaUrl === 'string' && typeof imageUrl === 'string') {
+          metadataImageCache.set(metaUrl, { image: imageUrl, timestamp: now });
+        }
+      }
+    }
+  } catch {}
+}
+
+function scheduleMetadataPersist() {
+  if (typeof window === 'undefined' || metaPersistTimer) return;
+  metaPersistTimer = setTimeout(() => {
+    metaPersistTimer = null;
+    try {
+      const entries: [string, string][] = [];
+      for (const [url, cached] of metadataImageCache) {
+        if (cached.image && (Date.now() - cached.timestamp) < SUCCESS_TTL_MS) {
+          entries.push([url, cached.image]);
+        }
+      }
+      // Keep latest 200 entries
+      sessionStorage.setItem(META_PERSIST_KEY, JSON.stringify(entries.slice(-200)));
+    } catch {}
+  }, 2000);
+}
+
 // In-flight promise deduplication: prevents multiple concurrent fetches for the same URL
 // (3 call sites fire simultaneously per metadata URL — PulseTable preload, row effect, FastImage)
 const pendingResolves = new Map<string, Promise<string | null>>();
@@ -235,6 +271,7 @@ async function _doResolveMetadataImage(url: string): Promise<string | null> {
     if (contentType.startsWith('image/')) {
       // The /api/metadata endpoint proxied the actual image - use the proxy URL directly
       metadataImageCache.set(url, { image: metadataUrl, timestamp: Date.now() });
+      scheduleMetadataPersist();
       return metadataUrl;
     }
 
@@ -250,6 +287,7 @@ async function _doResolveMetadataImage(url: string): Promise<string | null> {
     // Extract image from metadata JSON
     const imageUrl = extractMetaImage(data);
     metadataImageCache.set(url, { image: imageUrl, timestamp: Date.now() });
+    if (imageUrl) scheduleMetadataPersist();
     return imageUrl;
   } catch (error) {
     // Cache failure with short TTL to allow retry
@@ -274,6 +312,19 @@ export function clearMetadataFailureCache(url: string): void {
   if (cached && cached.image === null) {
     metadataImageCache.delete(url);
   }
+}
+
+/**
+ * Synchronous read of the metadata image cache.
+ * Returns the resolved image URL if cached and within success TTL, else null.
+ * Used by FastImage's useState initializer to avoid async gaps on remount.
+ */
+export function getCachedMetadataImage(url: string): string | null {
+  const cached = metadataImageCache.get(url);
+  if (!cached || !cached.image) return null;
+  const age = Date.now() - cached.timestamp;
+  if (age >= SUCCESS_TTL_MS) return null;
+  return cached.image;
 }
 
 // Expose cache clear to window for debugging

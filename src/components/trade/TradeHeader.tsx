@@ -589,57 +589,58 @@ const TradeHeader: React.FC<TradeHeaderProps> = ({ token, livePriceUsd, liveMark
 	const lastValidAgeRef = useRef<string | null>(null);
 	const lastValidTokenMintRef = useRef<string | null>(null);
 
+	// Reset fetched age when token changes so stale data doesn't bleed across navigations
+	const tokenIdentity = token?.mint || token?.pair_address || (token as any)?.address;
+	useEffect(() => {
+		setFetchedCreatedAt(null);
+		fetchingAgeRef.current = false;
+		lastValidAgeRef.current = null;
+		lastValidTokenMintRef.current = null;
+	}, [tokenIdentity]);
+
 	// Check if we have age data (include launch_time which backend often uses instead of created_at)
+	// Use normalizeTimestampMs to reject zero-value timestamps like "0001-01-01T00:00:00Z"
 	const hasAge =
-		(token as any).created_at ||
-		(token as any).createdAt ||
-		(token as any).CreatedAt ||
-		(token as any).launch_time ||
+		normalizeTimestampMs((token as any).created_at) ||
+		normalizeTimestampMs((token as any).createdAt) ||
+		normalizeTimestampMs((token as any).CreatedAt) ||
+		normalizeTimestampMs((token as any).launch_time) ||
 		fetchedCreatedAt;
 
-	// Fetch age from search endpoint if missing (for Monad tokens only)
+	// Fetch age from search endpoint if missing (for both Solana and Monad tokens)
 	useEffect(() => {
-		// Only fetch if:
-		// 1. We don't have age data
-		// 2. It's a Monad token (uses component-level isMonadContext)
-		// 3. We have a token address to search
-		// 4. We're not already fetching
 		if (hasAge || fetchingAgeRef.current) return;
-
-		// Only fetch for Monad tokens - Solana uses /v1/trade/view endpoint only
-		if (!isMonadContext) return;
 
 		const tokenAddress =
 			token.mint || token.pair_address || (token as any).address;
 		if (!tokenAddress) return;
 
 		fetchingAgeRef.current = true;
-		const monadServiceUrl =
-			process.env.NEXT_PUBLIC_MONAD_TOKEN_SERVICE_URL ||
-			"https://monad-token-service.narrative.trade";
-		const searchUrl = `${monadServiceUrl}/v1/search?q=${encodeURIComponent(tokenAddress)}`;
+
+		// Use the appropriate search endpoint based on chain
+		const searchUrl = isMonadContext
+			? `${process.env.NEXT_PUBLIC_MONAD_TOKEN_SERVICE_URL || "https://monad-token-service.narrative.trade"}/v1/search?q=${encodeURIComponent(tokenAddress)}`
+			: `${process.env.NEXT_PUBLIC_GO_SERVICE_URL}/v1/search?phrase=${encodeURIComponent(tokenAddress)}&limit=1`;
 
 		fetch(searchUrl, {
 			headers: { Accept: "application/json" },
 		})
-			.then((res) => {
-				if (!res.ok) return null;
-				return res.json();
-			})
+			.then((res) => (res.ok ? res.json() : null))
 			.then((data) => {
-				if (data?.data && Array.isArray(data.data) && data.data.length > 0) {
-					const searchResult = data.data[0];
-					const createdAt = searchResult?.created_at || searchResult?.createdAt;
-					if (createdAt) {
-						setFetchedCreatedAt(createdAt);
-					}
+				// Monad: data.data[0].created_at
+				// Solana: data.tokens[0].created_at
+				let createdAt = null;
+				if (isMonadContext && data?.data?.[0]) {
+					createdAt = data.data[0].created_at || data.data[0].createdAt;
+				} else if (data?.tokens?.[0]) {
+					createdAt = data.tokens[0].created_at || data.tokens[0].pair_created_at;
+				}
+				if (createdAt) {
+					setFetchedCreatedAt(createdAt);
 				}
 			})
 			.catch((err) => {
-				console.debug(
-					"[TradeHeader] Failed to fetch age from search endpoint:",
-					err,
-				);
+				console.debug("[TradeHeader] Failed to fetch age:", err);
 			})
 			.finally(() => {
 				fetchingAgeRef.current = false;
@@ -658,15 +659,8 @@ const TradeHeader: React.FC<TradeHeaderProps> = ({ token, livePriceUsd, liveMark
 	const tokenAgeLabel = useMemo(() => {
 		const currentMint = token?.mint || (token as any)?.address || "";
 
-		// AGE: For Solana, only use /v1/trade/view endpoint data (token prop)
-		// For Monad, can also use fetchedCreatedAt from search endpoint
-		const createdAt = isSolanaToken
-			? // Solana: Only use token data from /v1/trade/view endpoint
-			(token as any).created_at ||
-			(token as any).createdAt ||
-			(token as any).CreatedAt ||
-			(token as any).launch_time
-			: // Monad: Can also use fetched data
+		// AGE: Use token data from /v1/trade/view, falling back to fetchedCreatedAt from search endpoint
+		const createdAt =
 			(token as any).created_at ||
 			(token as any).createdAt ||
 			(token as any).CreatedAt ||
@@ -674,13 +668,7 @@ const TradeHeader: React.FC<TradeHeaderProps> = ({ token, livePriceUsd, liveMark
 			fetchedCreatedAt;
 
 		// Check if we have any age data defined (vs still loading)
-		const hasAnyAgeField = isSolanaToken
-			? // Solana: Only check token fields
-			(token as any).created_at !== undefined ||
-			(token as any).createdAt !== undefined ||
-			(token as any).CreatedAt !== undefined ||
-			(token as any).launch_time !== undefined
-			: // Monad: Also check fetched data
+		const hasAnyAgeField =
 			(token as any).created_at !== undefined ||
 			(token as any).createdAt !== undefined ||
 			(token as any).CreatedAt !== undefined ||

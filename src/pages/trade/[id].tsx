@@ -203,7 +203,7 @@ export default function TradePage() {
   useEffect(() => {
     const fetchCorrectTokenData = async () => {
       if (!token?.mint) return;
-      if (correctTokenData?.mint === token.mint || token.created_at) return;
+      if (correctTokenData?.mint === token.mint || normalizeTimestampMs(token.created_at)) return;
 
       setIsLoadingCorrectData(true);
       try {
