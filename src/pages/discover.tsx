@@ -216,7 +216,15 @@ export default function DiscoverPage() {
   const tokenMapRef = useRef<Map<string, TokenWithDexPaid>>(new Map());
   const [filteredTokens, setFilteredTokens] = useState<TokenWithDexPaid[]>([]);
   const [displayed, setDisplayed] = useState<TokenWithDexPaid[]>([]);
-  const [sortKey, setSortKey] = useState<"market_cap_total" | "liquidity" | "volume" | "txns" | "name" | "total_liquidity_usd" | "fully_diluted_value" | "score" | "timestamp">("score"); // Default to composite score - balances MC, liquidity, volume, and transactions
+  const [sortKey, setSortKey] = useState<"market_cap_total" | "liquidity" | "volume" | "txns" | "name" | "total_liquidity_usd" | "fully_diluted_value" | "score" | "timestamp">(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const savedTab = localStorage.getItem('discover_tab_v3');
+        if (savedTab === 'newPairs') return 'timestamp';
+      } catch {}
+    }
+    return 'score';
+  });
   const [sortDirection, setSortDirection] = useState<"asc" | "desc">("desc");
   // Store new pairs data per chain to preserve data when switching chains
   const [newPairsRawByChain, setNewPairsRawByChain] = useState<Record<string, TokenWithDexPaid[]>>(() => {
@@ -369,16 +377,16 @@ export default function DiscoverPage() {
     if (!token) return 0;
 
     let v: any =
-      token?.migrated_time ??
-      token?.migratedTime ??
-      token?.launch_time ??
-      token?.launchTime ??
       token?.created_at ??
       token?.createdAt ??
+      token?.launch_time ??
+      token?.launchTime ??
       token?.firstSeen ??
       token?.first_seen ??
       token?.pair_created_at ??
       token?.pairCreatedAt ??
+      token?.migrated_time ??
+      token?.migratedTime ??
       token?.timestamp ??
       token?.ts ??
       null;
