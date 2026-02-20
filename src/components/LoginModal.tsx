@@ -692,7 +692,17 @@ async function handleGoogleSuccess(resp: CredentialResponse) {
         throw new Error("Backend URL is not configured");
       }
 
-      const ethereum = (window as any).ethereum;
+      const rawProvider = (window as any).ethereum;
+      let ethereum = null;
+
+      if (rawProvider?.providers && Array.isArray(rawProvider.providers)) {
+        // Multiple wallets installed — find MetaMask specifically
+        ethereum = rawProvider.providers.find((p: any) => p.isMetaMask === true);
+      } else if (rawProvider?.isMetaMask === true) {
+        // Single provider that is MetaMask
+        ethereum = rawProvider;
+      }
+
       if (!ethereum) {
         setWalletError('MetaMask wallet not found. Please install MetaMask extension.');
         return;
