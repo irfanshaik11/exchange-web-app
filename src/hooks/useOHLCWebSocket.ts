@@ -57,7 +57,7 @@ export default function useOHLCWebSocket({
   mint,
   timeframe = '1m',
   enabled = true,
-  maxCandles = 500,
+  maxCandles = Infinity,
   onCandle,
 }: UseOHLCWebSocketOptions): UseOHLCWebSocketReturn {
   const [isConnected, setIsConnected] = useState(false);

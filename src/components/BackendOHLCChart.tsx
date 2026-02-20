@@ -88,6 +88,44 @@ const SEC_PER_BAR: Record<BackendInterval, number> = {
   "7d": 604800,
 };
 
+/**
+ * Collapse time gaps in OHLCV candle data.
+ * When there's a gap > maxGapMultiple × intervalSeconds between consecutive candles,
+ * shift all subsequent timestamps backward so candles appear adjacent.
+ * Returns [collapsed data, adjusted→real time map].
+ */
+function collapseTimeGaps(
+  data: { time: UTCTimestamp; open: number; high: number; low: number; close: number }[],
+  intervalSeconds: number,
+  maxGapMultiple: number = 2,
+): [typeof data, Map<number, number>] {
+  const timeMap = new Map<number, number>();
+  if (data.length === 0) return [data, timeMap];
+
+  let cumulativeShift = 0;
+  const result = [data[0]];
+  const adjustedTime0 = data[0].time as number;
+  timeMap.set(adjustedTime0, adjustedTime0);
+
+  for (let i = 1; i < data.length; i++) {
+    const realTime = data[i].time as number;
+    const prevRealTime = data[i - 1].time as number;
+    const gap = realTime - prevRealTime;
+    const maxGap = intervalSeconds * maxGapMultiple;
+
+    if (gap > maxGap) {
+      // Collapse: keep only 1 interval worth of spacing
+      cumulativeShift += gap - intervalSeconds;
+    }
+
+    const adjusted = (realTime - cumulativeShift) as UTCTimestamp;
+    timeMap.set(adjusted as number, realTime);
+    result.push({ ...data[i], time: adjusted });
+  }
+
+  return [result, timeMap];
+}
+
 function waitForVisibleContainer(el: HTMLElement): Promise<void> {
   return new Promise((resolve) => {
     const tick = () => {
@@ -154,6 +192,7 @@ const BackendOHLCChart: React.FC<BackendOHLCChartProps> = ({
   const containerRef = useRef<HTMLDivElement>(null);
   const markersRef = useRef<any[]>([]);
   const markersApiRef = useRef<any>(null);
+  const timeMapRef = useRef<Map<number, number>>(new Map());
 
   const lastGoodCandlesRef = useRef<BackendOHLCData[]>(preloadedData || []);
   const inFlightRef = useRef<string | null>(null);
@@ -343,6 +382,11 @@ const BackendOHLCChart: React.FC<BackendOHLCChartProps> = ({
           minBarSpacing: 2,
           fixLeftEdge: false,
           fixRightEdge: false,
+          tickMarkFormatter: (time: UTCTimestamp) => {
+            const real = timeMapRef.current.get(time as number) ?? (time as number);
+            const d = new Date(real * 1000);
+            return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+          },
         },
         handleScroll: { mouseWheel: true, pressedMouseMove: true },
         handleScale: {
@@ -351,7 +395,10 @@ const BackendOHLCChart: React.FC<BackendOHLCChartProps> = ({
           pinch: true,
         },
         localization: {
-          timeFormatter: (t: any) => new Date(t * 1000).toLocaleString(),
+          timeFormatter: (t: any) => {
+            const real = timeMapRef.current.get(t) ?? t;
+            return new Date(real * 1000).toLocaleString();
+          },
           priceFormatter: (price: number) => {
             const abs = Math.abs(price);
 
@@ -381,8 +428,8 @@ const BackendOHLCChart: React.FC<BackendOHLCChartProps> = ({
         wickDownColor: "#ef5350",
         wickUpColor: "#26a69a",
         priceFormat: { type: "price", precision: precision, minMove: 1e-8 },
-        lastValueVisible: true,
-        priceLineVisible: true,
+        lastValueVisible: false,
+        priceLineVisible: false,
       });
 
       chartRef.current = chart;
@@ -536,7 +583,7 @@ const BackendOHLCChart: React.FC<BackendOHLCChartProps> = ({
 
       await waitForVisibleContainer(containerRef.current);
 
-      const data = src
+      const rawData = src
         .map((c) => ({
           time: c.unix_time as UTCTimestamp,
           open: c.o,
@@ -545,6 +592,10 @@ const BackendOHLCChart: React.FC<BackendOHLCChartProps> = ({
           close: c.c,
         }))
         .sort((a, b) => (a.time as number) - (b.time as number));
+
+      // Collapse time gaps so candles appear adjacent (no flat lines across missing data)
+      const [data, timeMap] = collapseTimeGaps(rawData, SEC_PER_BAR[selectedInterval]);
+      timeMapRef.current = timeMap;
 
       seriesRef.current.setData(data);
 
@@ -558,7 +609,7 @@ const BackendOHLCChart: React.FC<BackendOHLCChartProps> = ({
       }
       // thereafter, user zoom/pan is preserved
     })();
-  }, [candles, setDefaultLogicalRange]);
+  }, [candles, setDefaultLogicalRange, selectedInterval]);
 
   // Helper function to build markers from trade events
   const buildMarkersFromEvents = useCallback(

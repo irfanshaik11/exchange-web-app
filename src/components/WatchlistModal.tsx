@@ -171,23 +171,6 @@ function resolveProtocolIcon(token: Token): string {
   return DEFAULT_PROTOCOL_ICON;
 }
 
-function normalizeAssetUrl(raw?: string): string | null {
-  if (!raw) return null;
-  const s = String(raw).trim();
-  if (s.startsWith("data:")) return s;
-  if (s.startsWith("ipfs://")) {
-    const cid = s.replace("ipfs://", "").replace(/^ipfs\//, "");
-    return `https://cloudflare-ipfs.com/ipfs/${cid}`;
-  }
-  if (/^ipfs[/:]/i.test(s)) {
-    const cid = s.replace(/^ipfs[/:]/i, "");
-    return `https://cloudflare-ipfs.com/ipfs/${cid}`;
-  }
-  if (/^[a-z0-9_-]{40,}$/i.test(s) && !/^https?:\/\//i.test(s)) return `https://arweave.net/${s}`;
-  if (s.startsWith("http://")) return s.replace(/^http:\/\//i, "https://");
-  if (s.startsWith("https://")) return s;
-  return null;
-}
 
 function resolveWatchlistVolume1h(token: Token): number {
   const usdVolumeFields = [
@@ -423,9 +406,22 @@ export default function WatchlistModal({ open, onClose }: WatchlistModalProps) {
 
   if (!open && !show) return null;
 
-  const handleTokenClick = (tokenAddress: string) => {
+  const handleTokenClick = (token: Token) => {
+    const tokenAddress = token.pair_address || (token as any).mint || '';
     if (!tokenAddress) return;
-    router.push(`/trade/${tokenAddress}`);
+    const queryParams = new URLSearchParams();
+    queryParams.set('chain', 'sol');
+    if (token.name) queryParams.set('_name', token.name);
+    if (token.symbol) queryParams.set('_symbol', token.symbol);
+    if ((token as any).price_usd) queryParams.set('_price', String((token as any).price_usd));
+    if (token.market_cap_usd) queryParams.set('_mcap', String(token.market_cap_usd));
+    const img = extractTokenImage(token as any);
+    if (img) queryParams.set('_image', img);
+    queryParams.set('_mint', tokenAddress);
+    if ((token as any).launchpad_protocol) queryParams.set('_launchpad_protocol', (token as any).launchpad_protocol);
+    const createdAt = (token as any).created_at || (token as any).launch_time || (token as any).pair_created_at;
+    if (createdAt) queryParams.set('_created_at', String(createdAt));
+    router.push(`/trade/${tokenAddress}?${queryParams.toString()}`);
     onClose();
   };
 
@@ -908,8 +904,7 @@ export default function WatchlistModal({ open, onClose }: WatchlistModalProps) {
               const protocolColor = resolveProtocolColor(token);
               const tokenIcon = resolveProtocolIcon(token);
               const fillProtocolBadge = shouldFillProtocolBadge(token);
-              const rawImg = (token as any).image_url || (token as any).image || (token as any).logo || (token as any).uri;
-              const imgSrc = normalizeAssetUrl(rawImg);
+              const imgSrc = extractTokenImage(token as any);
               const fallbackAvatar = `https://ui-avatars.com/api/?name=${encodeURIComponent(
                 token.symbol || token.name || "T"
               )}&background=0f1012&color=E6E7EA&size=48`;
@@ -930,7 +925,7 @@ export default function WatchlistModal({ open, onClose }: WatchlistModalProps) {
                   onMouseLeave={(e) => { 
                     e.currentTarget.style.backgroundColor = idx % 2 === 0 ? '#111214' : '#15161a';
                   }}
-                  onClick={() => handleTokenClick(tokenAddress)}
+                  onClick={() => handleTokenClick(token)}
                 >
                   {/* Token Column */}
                   <td className="w-72 px-4 py-3 align-middle">

@@ -1,6 +1,9 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { env } from '~/env';
 
+// Gate verbose logging behind dev-only check — eliminated in production builds by dead-code removal
+const isDev = process.env.NODE_ENV !== 'production';
+
 // Trade data from the unified WebSocket
 export interface SolanaTokenTrade {
   id: number;
@@ -180,7 +183,7 @@ function formatTradeForUI(trade: SolanaTokenTrade): SolanaTokenTrade {
   const age = getAge(trade.timestamp);
 
   // Debug log for new trades to verify timestamp is correct
-  if (age === '0s' || age === '1s' || age === '2s') {
+  if (isDev && (age === '0s' || age === '1s' || age === '2s')) {
     console.log('[formatTradeForUI] Fresh trade:', {
       signature: trade.signature?.slice(0, 8),
       timestamp: trade.timestamp,
@@ -215,7 +218,7 @@ function getAge(timestamp: string): string {
 
     // If parsing failed, return 0s
     if (isNaN(tradeTime)) {
-      console.warn('[getAge] Failed to parse timestamp:', timestamp);
+      if (isDev) console.warn('[getAge] Failed to parse timestamp:', timestamp);
       return '0s';
     }
   } else if (typeof timestamp === 'number') {
@@ -369,12 +372,12 @@ export function useSolanaTokenWebSocket(
       // Use the unified token WebSocket endpoint
       const wsUrl = `${baseUrl.replace(/^http/, 'ws')}/v1/ws/token/${mintAddress}`;
 
-      console.log('[useSolanaTokenWebSocket] Connecting to:', wsUrl);
+      if (isDev) console.log('[useSolanaTokenWebSocket] Connecting to:', wsUrl);
       const ws = new WebSocket(wsUrl);
 
       ws.onopen = () => {
         if (!mountedRef.current) return;
-        console.log('[useSolanaTokenWebSocket] Connected');
+        if (isDev) console.log('[useSolanaTokenWebSocket] Connected');
         setConnected(true);
         setError(null);
         reconnectAttemptsRef.current = 0;
@@ -392,20 +395,20 @@ export function useSolanaTokenWebSocket(
 
         try {
           const message: WebSocketMessage = JSON.parse(event.data);
-          console.log('[useSolanaTokenWebSocket] Message type:', message.type);
+          if (isDev) console.log('[useSolanaTokenWebSocket] Message type:', message.type);
 
           if (message.type === 'snapshot') {
             // Initial snapshot with trades, holders, and top_traders
             if (message.data.trades) {
               const formattedTrades = message.data.trades.map(formatTradeForUI);
-              console.log('[useSolanaTokenWebSocket] Received trades:', formattedTrades.length);
+              if (isDev) console.log('[useSolanaTokenWebSocket] Received trades:', formattedTrades.length);
               setTrades(formattedTrades);
             } else {
               setTrades([]);
             }
 
             if (message.data.holders) {
-              console.log('[useSolanaTokenWebSocket] Received holders:', message.data.holders.length);
+              if (isDev) console.log('[useSolanaTokenWebSocket] Received holders:', message.data.holders.length);
               setHolders(message.data.holders);
               onHoldersUpdateRef.current?.(message.data.holders);
             } else {
@@ -413,7 +416,7 @@ export function useSolanaTokenWebSocket(
             }
 
             if (message.data.top_traders) {
-              console.log('[useSolanaTokenWebSocket] Received top_traders:', message.data.top_traders.length);
+              if (isDev) console.log('[useSolanaTokenWebSocket] Received top_traders:', message.data.top_traders.length);
               setTopTraders(message.data.top_traders);
               onTopTradersUpdateRef.current?.(message.data.top_traders);
             } else {
@@ -421,7 +424,7 @@ export function useSolanaTokenWebSocket(
             }
 
             if (message.data.dev_tokens) {
-              console.log('[useSolanaTokenWebSocket] Received dev_tokens:', message.data.dev_tokens.length);
+              if (isDev) console.log('[useSolanaTokenWebSocket] Received dev_tokens:', message.data.dev_tokens.length);
               setDevTokens(message.data.dev_tokens);
               onDevTokensUpdateRef.current?.(message.data.dev_tokens);
             } else {
@@ -430,7 +433,7 @@ export function useSolanaTokenWebSocket(
 
             // Capture holder_summary from snapshot
             if (message.data.holder_summary) {
-              console.log('[useSolanaTokenWebSocket] Received holder_summary:', message.data.holder_summary);
+              if (isDev) console.log('[useSolanaTokenWebSocket] Received holder_summary:', message.data.holder_summary);
               setHolderSummary(message.data.holder_summary);
             } else {
               setHolderSummary(null);
@@ -438,13 +441,13 @@ export function useSolanaTokenWebSocket(
 
             // Capture token info from snapshot (price, mcap, liquidity, uri)
             if (message.data.token) {
-              console.log('[useSolanaTokenWebSocket] Received token info:', message.data.token);
+              if (isDev) console.log('[useSolanaTokenWebSocket] Received token info:', message.data.token);
               const rawToken = message.data.token;
 
               // CRITICAL: Validate that received token matches requested mint
               // This prevents showing wrong token data if WebSocket returns stale/wrong data
               if (rawToken.mint && mintAddress && rawToken.mint !== mintAddress) {
-                console.warn('[useSolanaTokenWebSocket] Token mint mismatch! Ignoring wrong token data.', {
+                if (isDev) console.warn('[useSolanaTokenWebSocket] Token mint mismatch! Ignoring wrong token data.', {
                   expectedMint: mintAddress,
                   actualMint: rawToken.mint,
                   actualName: rawToken.name || rawToken.symbol,
@@ -476,7 +479,7 @@ export function useSolanaTokenWebSocket(
 
             // Capture volume data from snapshot
             if (message.data.volume) {
-              console.log('[useSolanaTokenWebSocket] Received volume data:', message.data.volume);
+              if (isDev) console.log('[useSolanaTokenWebSocket] Received volume data:', message.data.volume);
               setVolume(message.data.volume);
             } else {
               setVolume(null);
@@ -487,7 +490,7 @@ export function useSolanaTokenWebSocket(
             // Real-time trade update - process ALL trades in the array
             if (message.data.trades && message.data.trades.length > 0) {
               const newTrades = message.data.trades.map(formatTradeForUI);
-              console.log('[useSolanaTokenWebSocket] Processing', newTrades.length, 'trade updates');
+              if (isDev) console.log('[useSolanaTokenWebSocket] Processing', newTrades.length, 'trade updates');
 
               // Notify callback for each new trade
               newTrades.forEach((trade) => {
@@ -546,13 +549,13 @@ export function useSolanaTokenWebSocket(
 
                 if (existingIndex >= 0) {
                   // Update existing holder in place
-                  console.log('[useSolanaTokenWebSocket] Holder UPDATED:', updatedHolder.wallet_address.slice(0, 8), 'remaining:', updatedHolder.remaining_tokens, 'type:', updatedHolder.holder_type);
+                  if (isDev) console.log('[useSolanaTokenWebSocket] Holder UPDATED:', updatedHolder.wallet_address.slice(0, 8), 'remaining:', updatedHolder.remaining_tokens, 'type:', updatedHolder.holder_type);
                   const updated = [...prev];
                   updated[existingIndex] = updatedHolder;
                   return updated;
                 } else {
                   // Add new holder and re-sort by remaining tokens
-                  console.log('[useSolanaTokenWebSocket] Holder ADDED:', updatedHolder.wallet_address.slice(0, 8), 'remaining:', updatedHolder.remaining_tokens, 'type:', updatedHolder.holder_type);
+                  if (isDev) console.log('[useSolanaTokenWebSocket] Holder ADDED:', updatedHolder.wallet_address.slice(0, 8), 'remaining:', updatedHolder.remaining_tokens, 'type:', updatedHolder.holder_type);
                   return [...prev, updatedHolder].sort(
                     (a, b) => (b.remaining_tokens || 0) - (a.remaining_tokens || 0)
                   );
@@ -562,7 +565,7 @@ export function useSolanaTokenWebSocket(
               onHoldersUpdateRef.current?.([holderData]);
             } else if (message.data.holders) {
               // Legacy: full array replacement (if backend ever sends this format)
-              console.log('[useSolanaTokenWebSocket] Holders REPLACED (legacy):', message.data.holders.length);
+              if (isDev) console.log('[useSolanaTokenWebSocket] Holders REPLACED (legacy):', message.data.holders.length);
               setHolders(message.data.holders);
               onHoldersUpdateRef.current?.(message.data.holders);
             }
@@ -570,7 +573,7 @@ export function useSolanaTokenWebSocket(
             // Real-time top trader update - merge with existing data
             if (message.data.top_traders && message.data.top_traders.length > 0) {
               const newTopTraders = message.data.top_traders;
-              console.log('[useSolanaTokenWebSocket] Top traders update:', newTopTraders.length);
+              if (isDev) console.log('[useSolanaTokenWebSocket] Top traders update:', newTopTraders.length);
 
               setTopTraders((prev) => {
                 // Create a map of existing traders by wallet address
@@ -588,7 +591,7 @@ export function useSolanaTokenWebSocket(
                   (a, b) => (b.realized_pnl || 0) - (a.realized_pnl || 0)
                 );
 
-                console.log('[useSolanaTokenWebSocket] Top traders merged:', merged.length);
+                if (isDev) console.log('[useSolanaTokenWebSocket] Top traders merged:', merged.length);
                 return merged;
               });
 
@@ -598,7 +601,7 @@ export function useSolanaTokenWebSocket(
             // Real-time dev token update - merge with existing data
             if (message.data.dev_tokens && message.data.dev_tokens.length > 0) {
               const newDevTokens = message.data.dev_tokens;
-              console.log('[useSolanaTokenWebSocket] Dev tokens update:', newDevTokens.length);
+              if (isDev) console.log('[useSolanaTokenWebSocket] Dev tokens update:', newDevTokens.length);
 
               setDevTokens((prev) => {
                 // Create a map of existing dev tokens by mint
@@ -616,7 +619,7 @@ export function useSolanaTokenWebSocket(
                   (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
                 );
 
-                console.log('[useSolanaTokenWebSocket] Dev tokens merged:', merged.length);
+                if (isDev) console.log('[useSolanaTokenWebSocket] Dev tokens merged:', merged.length);
                 return merged;
               });
 
@@ -625,12 +628,12 @@ export function useSolanaTokenWebSocket(
           } else if (message.type === 'token_update') {
             // Real-time token info update (price, mcap, liquidity)
             if (message.data.token) {
-              console.log('[useSolanaTokenWebSocket] Token info update:', message.data.token);
+              if (isDev) console.log('[useSolanaTokenWebSocket] Token info update:', message.data.token);
               const rawToken = message.data.token;
 
               // CRITICAL: Validate that received token matches requested mint
               if (rawToken.mint && mintAddress && rawToken.mint !== mintAddress) {
-                console.warn('[useSolanaTokenWebSocket] Token update mint mismatch! Ignoring.', {
+                if (isDev) console.warn('[useSolanaTokenWebSocket] Token update mint mismatch! Ignoring.', {
                   expectedMint: mintAddress,
                   actualMint: rawToken.mint,
                 });
@@ -659,7 +662,7 @@ export function useSolanaTokenWebSocket(
 
       ws.onclose = (event) => {
         if (!mountedRef.current) return;
-        console.log('[useSolanaTokenWebSocket] Disconnected:', event.code, event.reason);
+        if (isDev) console.log('[useSolanaTokenWebSocket] Disconnected:', event.code, event.reason);
         setConnected(false);
 
         // Clear ping interval
@@ -671,7 +674,7 @@ export function useSolanaTokenWebSocket(
         // Attempt to reconnect
         if (enabled && reconnectAttemptsRef.current < maxReconnectAttempts) {
           reconnectAttemptsRef.current += 1;
-          console.log(
+          if (isDev) console.log(
             `[useSolanaTokenWebSocket] Reconnecting in ${reconnectInterval}ms (attempt ${reconnectAttemptsRef.current}/${maxReconnectAttempts})`
           );
           reconnectTimeoutRef.current = setTimeout(() => {

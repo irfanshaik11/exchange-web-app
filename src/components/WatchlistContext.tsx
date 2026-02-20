@@ -1,6 +1,7 @@
-import React, { createContext, useContext, useState, useEffect, useRef, useCallback } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import type { Token } from '../utils/db';
 import { extractTokenImage } from '../utils/images';
+import useTrendingWebSocket from '../hooks/useTrendingWebSocket';
 
 interface WatchlistContextType {
   watchlist: Token[];
@@ -14,16 +15,10 @@ interface WatchlistContextType {
 
 const WatchlistContext = createContext<WatchlistContextType | undefined>(undefined);
 
-// Key to track if we've already populated defaults (so we don't re-populate after user clears watchlist)
-const DEFAULTS_POPULATED_KEY = 'watchlist_defaults_populated';
 const DEFAULT_WATCHLIST_COUNT = 10;
 
 // Dismissed tokens — mints the user manually removed (never re-added by auto-refresh)
 const WATCHLIST_DISMISSED_KEY = 'watchlist_dismissed';
-
-// 3-hour auto-refresh
-const WATCHLIST_LAST_REFRESH_KEY = 'watchlist_last_refresh';
-const WATCHLIST_REFRESH_INTERVAL = 3 * 60 * 60 * 1000; // 3 hours
 
 // --- Dismissed set helpers ---
 
@@ -44,113 +39,12 @@ function saveDismissedMints(mints: Set<string>): void {
   } catch {}
 }
 
-// --- DexScreener trending → Token conversion ---
-
-/** Map a DexScreener trending token to the Token shape the watchlist expects */
-function dexScreenerTokenToWatchlistToken(raw: any): Token {
-  // Map dex_id to launchpad_protocol (same logic as useDexScreenerTrending)
-  let protocol = '';
-  switch (raw.dex_id) {
-    case 'pumpfun': protocol = 'pump'; break;
-    case 'pumpswap': protocol = 'pumpamm'; break;
-    case 'raydium': protocol = 'raydium'; break;
-    case 'meteora': protocol = 'meteora'; break;
-    case 'orca': protocol = 'orca'; break;
-    default: protocol = raw.dex_id || ''; break;
-  }
-
-  return {
-    mint: raw.mint || '',
-    name: raw.name || raw.symbol || 'Unknown',
-    symbol: raw.symbol || '',
-    usd_price: raw.price_usd || 0,
-    price_usd: raw.price_usd || 0,
-    fully_diluted_value: raw.fdv || raw.market_cap_usd || 0,
-    market_cap_usd: raw.market_cap_usd || raw.fdv || 0,
-    total_liquidity_usd: raw.liquidity_usd || 0,
-    logo: raw.image_url || '',
-    image_url: raw.image_url || '',
-    pair_address: raw.pair_address || '',
-    launchpad_protocol: protocol,
-    protocol: protocol,
-    volume_5m: raw.volume_5m || 0,
-    volume_1h: raw.volume_1h || 0,
-    volume_6h: raw.volume_6h || 0,
-    volume_24h: raw.volume_24h || 0,
-    total_buys_5m: raw.total_buys_5m || 0,
-    total_sells_5m: raw.total_sells_5m || 0,
-    total_buys_1h: raw.total_buys_1h || 0,
-    total_sells_1h: raw.total_sells_1h || 0,
-    total_buys_6h: raw.total_buys_6h || 0,
-    total_sells_6h: raw.total_sells_6h || 0,
-    total_buys_24h: raw.total_buys_24h || 0,
-    total_sells_24h: raw.total_sells_24h || 0,
-  } as any as Token;
-}
-
-/**
- * Fetch top trending tokens from DexScreener endpoint (same source as Discover "Trending 2" tab).
- * Returns up to `limit` tokens, excluding dismissed mints and those without images.
- */
-async function fetchDexScreenerTrending(dismissedMints: Set<string>, limit = DEFAULT_WATCHLIST_COUNT): Promise<Token[]> {
-  try {
-    const baseUrl = process.env.NEXT_PUBLIC_GO_SERVICE_URL || 'http://localhost:8085';
-    const url = `${baseUrl}/v1/trending/dexscreener`;
-    const response = await fetch(url, {
-      headers: { 'Accept': 'application/json' },
-      signal: AbortSignal.timeout(10000),
-    });
-    if (!response.ok) return [];
-    const data = await response.json();
-    if (!Array.isArray(data)) return [];
-
-    const result: Token[] = [];
-    const seenAddrs = new Set<string>();
-    const seenNames = new Set<string>();
-
-    for (const raw of data) {
-      if (result.length >= limit) break;
-
-      const mint = (raw.mint || '').toLowerCase();
-      if (!mint) continue;
-
-      // Skip dismissed tokens
-      if (dismissedMints.has(raw.mint || '')) continue;
-
-      // Convert to Token shape
-      const token = dexScreenerTokenToWatchlistToken(raw);
-
-      // Must have image
-      const imageUrl = extractTokenImage(token);
-      if (!imageUrl || !imageUrl.trim()) continue;
-
-      // Dedup by address and name
-      const addr = (token.pair_address || (token as any).mint || '').toLowerCase();
-      const name = ((token as any).symbol || token.name || '').toLowerCase().trim();
-      if (!addr || !name) continue;
-      if (seenAddrs.has(addr) || seenNames.has(name)) continue;
-
-      seenAddrs.add(addr);
-      seenNames.add(name);
-      result.push(token);
-    }
-
-    return result;
-  } catch (err) {
-    console.warn('Failed to fetch DexScreener trending for watchlist:', err);
-    return [];
-  }
-}
-
 export function WatchlistProvider({ children }: { children: React.ReactNode }) {
   // Start with empty array for SSR consistency - will hydrate from localStorage
   const [watchlist, setWatchlist] = useState<Token[]>([]);
 
   // Track hydration state to prevent flickering during SSR -> client transition
   const [isHydrated, setIsHydrated] = useState(false);
-
-  // Track if we've attempted to populate defaults
-  const defaultsPopulatedRef = useRef(false);
 
   // Hydrate from localStorage on mount (client-side only)
   useEffect(() => {
@@ -179,85 +73,32 @@ export function WatchlistProvider({ children }: { children: React.ReactNode }) {
     }
   }, [watchlist, isHydrated]);
 
-  // Populate default watchlist from DexScreener trending (only on first visit)
+  // Live sync from trending WebSocket — singleton hook, no extra WS connection
+  const { tokens: wsTokens } = useTrendingWebSocket({ timeframe: '1h', enabled: true });
+
+  // Rebuild watchlist whenever WS tokens update
   useEffect(() => {
     if (!isHydrated) return;
-    if (defaultsPopulatedRef.current) return;
+    if (wsTokens.length === 0) return;
 
-    // Check if we've already populated defaults before (don't re-populate if user cleared watchlist)
-    const alreadyPopulated = localStorage.getItem(DEFAULTS_POPULATED_KEY);
-    if (alreadyPopulated) {
-      defaultsPopulatedRef.current = true;
-      return;
+    const dismissed = getDismissedMints();
+    const result: Token[] = [];
+    const seenMints = new Set<string>();
+
+    for (const t of wsTokens) {
+      if (result.length >= DEFAULT_WATCHLIST_COUNT) break;
+      const mint = (t as any).mint || '';
+      if (!mint || dismissed.has(mint) || seenMints.has(mint.toLowerCase())) continue;
+      const img = extractTokenImage(t as any);
+      if (!img || !img.trim()) continue;
+      seenMints.add(mint.toLowerCase());
+      result.push(t as any as Token);
     }
 
-    // Only populate if watchlist is empty
-    if (watchlist.length > 0) {
-      defaultsPopulatedRef.current = true;
-      localStorage.setItem(DEFAULTS_POPULATED_KEY, 'true');
-      return;
+    if (result.length > 0) {
+      setWatchlist(result);
     }
-
-    defaultsPopulatedRef.current = true;
-
-    (async () => {
-      const dismissed = getDismissedMints();
-      const tokens = await fetchDexScreenerTrending(dismissed);
-
-      if (tokens.length > 0) {
-        setWatchlist(tokens);
-        localStorage.setItem(DEFAULTS_POPULATED_KEY, 'true');
-        localStorage.setItem(WATCHLIST_LAST_REFRESH_KEY, String(Date.now()));
-        console.log(`Populated watchlist with ${tokens.length} tokens from DexScreener trending`);
-      }
-    })();
-  }, [watchlist.length, isHydrated]);
-
-  // 3-hour auto-refresh: replace entire watchlist with fresh DexScreener trending data
-  const refreshingRef = useRef(false);
-
-  useEffect(() => {
-    if (!isHydrated) return;
-
-    async function doRefresh() {
-      if (refreshingRef.current) return;
-      refreshingRef.current = true;
-      try {
-        const dismissed = getDismissedMints();
-        const tokens = await fetchDexScreenerTrending(dismissed);
-        if (tokens.length > 0) {
-          setWatchlist(tokens);
-          console.log(`Auto-refreshed watchlist with ${tokens.length} tokens from DexScreener trending`);
-        }
-        localStorage.setItem(WATCHLIST_LAST_REFRESH_KEY, String(Date.now()));
-      } catch (err) {
-        console.warn('Watchlist auto-refresh failed:', err);
-      } finally {
-        refreshingRef.current = false;
-      }
-    }
-
-    // Check if an immediate refresh is needed (>3h since last refresh)
-    const lastRefreshStr = localStorage.getItem(WATCHLIST_LAST_REFRESH_KEY);
-    const lastRefresh = lastRefreshStr ? Number(lastRefreshStr) : 0;
-    if (Date.now() - lastRefresh > WATCHLIST_REFRESH_INTERVAL) {
-      // Only auto-refresh if we've done initial population before
-      const alreadyPopulated = localStorage.getItem(DEFAULTS_POPULATED_KEY);
-      if (alreadyPopulated) {
-        doRefresh();
-      }
-    }
-
-    // Set interval for future refreshes
-    const intervalId = setInterval(() => {
-      const alreadyPopulated = localStorage.getItem(DEFAULTS_POPULATED_KEY);
-      if (alreadyPopulated) {
-        doRefresh();
-      }
-    }, WATCHLIST_REFRESH_INTERVAL);
-
-    return () => clearInterval(intervalId);
-  }, [isHydrated]);
+  }, [wsTokens, isHydrated]);
 
   const addToWatchlist = useCallback((token: Token) => {
     // Remove from dismissed set — user is explicitly adding it back

@@ -83,6 +83,7 @@ export default function PumpLiveGrid({
     if (token.image_uri) queryParams.set('_image', token.image_uri);
     queryParams.set('_mint', token.mint);
     queryParams.set('_launchpad_protocol', 'pump');
+    if (token.created_timestamp) queryParams.set('_created_at', new Date(token.created_timestamp * 1000).toISOString());
 
     // Navigate to trade page with prefill data
     router.push(`/trade/${token.mint}?${queryParams.toString()}`);

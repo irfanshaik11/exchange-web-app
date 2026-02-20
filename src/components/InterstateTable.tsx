@@ -2264,6 +2264,8 @@ export default function InterstateTable({
                   if (token.uri || token.logo) queryParams.set('_image', token.uri || token.logo || '');
                   queryParams.set('_mint', address);
                   if ((token as any).launchpad_protocol) queryParams.set('_launchpad_protocol', (token as any).launchpad_protocol);
+                  const createdAt = (token as any).created_at || (token as any).launch_time || (token as any).pair_created_at;
+                  if (createdAt) queryParams.set('_created_at', String(createdAt));
                   queryParams.set('chain', 'monad');
 
                   const url = `/trade/monad/${address}?${queryParams.toString()}`;
@@ -2278,6 +2280,8 @@ export default function InterstateTable({
                   if (token.uri || token.logo || (token as any).image) solQueryParams.set('_image', token.uri || token.logo || (token as any).image || '');
                   solQueryParams.set('_mint', address);
                   if ((token as any).launchpad_protocol) solQueryParams.set('_launchpad_protocol', (token as any).launchpad_protocol);
+                  const createdAt = (token as any).created_at || (token as any).launch_time || (token as any).pair_created_at;
+                  if (createdAt) solQueryParams.set('_created_at', String(createdAt));
                   solQueryParams.set('chain', 'sol');
                   router.push(`/trade/${address}?${solQueryParams.toString()}`);
                 }

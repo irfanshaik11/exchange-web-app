@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, memo } from 'react';
 import ImageBubble from './ImageBubble';
-import { isMetadataUrl, resolveMetadataImage, clearMetadataFailureCache } from '~/utils/images';
+import { isMetadataUrl, resolveMetadataImage, clearMetadataFailureCache, getCachedMetadataImage } from '~/utils/images';
 import { retainImageObject, isImageRetained, getRetainedImage, prefetchFromSessionStorage } from '~/utils/imagePreloader';
 import { computeHashImageUrl } from '~/utils/imageHash';
 
@@ -131,10 +131,10 @@ function FastImageInner({
   // Only use null for metadata URLs (which need async resolution)
   // This prevents the flicker caused by: null → effect sets value → re-render
   const [resolvedSrc, setResolvedSrc] = useState<string | null>(() => {
-    if (inputSrc && !isMetadataUrl(inputSrc)) {
-      return inputSrc; // Regular URL - use immediately!
-    }
-    return null; // Metadata URL - will resolve in effect
+    if (!inputSrc) return null;
+    if (!isMetadataUrl(inputSrc)) return inputSrc; // Regular URL - use immediately!
+    // Synchronous cache hit — avoids the null→effect→setState render cycle
+    return getCachedMetadataImage(inputSrc);
   });
 
   // Track whether the image was already cached at mount time (set synchronously, never re-renders)
@@ -144,7 +144,7 @@ function FastImageInner({
   // Only return true if the browser's decoded bitmap cache actually has the image.
   // This prevents "disappear" bugs where imageLoaded=true but bitmap was evicted.
   const [imageLoaded, setImageLoaded] = useState(() => {
-    const initialSrc = inputSrc && !isMetadataUrl(inputSrc) ? inputSrc : null;
+    const initialSrc = resolvedSrc; // Already resolved (sync cache hit or direct URL)
     const initialUrl = computeImageUrl(initialSrc);
     if (!initialUrl) return false;
 

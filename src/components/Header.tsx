@@ -39,6 +39,7 @@ import { FiBarChart, FiChevronDown, FiStar, FiUsers, FiGrid } from "react-icons/
 import { GiTrophy } from "react-icons/gi";
 import SearchModal from "./SearchModal";
 import BlockchainSwitcher from "./BlockchainSwitcher";
+import FastImage from "./FastImage";
 import UpdatesModal from "./UpdatesModal";
 import UsernameEditModal from "./UsernameEditModal";
 import NotificationDropdown from "./NotificationDropdown";
@@ -47,7 +48,6 @@ import type { Timeframe } from "../pages/index";
 // import MorphingArenaNav from "./MorphingArenaNav"; // Commented out - Arena now in main nav
 
 // Module-level: persists across Header remounts during page navigation
-const _failedImages = new Set<string>();
 const _stableEnrichedWatchlist: Token[] = [];
 
 /* ---- style palette ---- */
@@ -341,8 +341,6 @@ export default function Header({
   const WATCHLIST_TICKER_PAGE_SIZE = 8;
   const [watchlistTickerPage, setWatchlistTickerPage] = useState(0);
 
-  // _failedImages (module-level Set) tracks broken images across remounts.
-  // No React state needed — we check it directly during render for instant fallback.
   // Stable ref prevents the ticker from flashing empty during transient re-renders
   // Initialized from module-level array for cross-mount persistence
   const stableEnrichedWatchlistRef = useRef<Token[]>(_stableEnrichedWatchlist);
@@ -2266,7 +2264,7 @@ export default function Header({
               }
               
               const isHovered = hoveredWatchlistToken === tokenKey;
-              const rawImg = (token as any).image_url || (token as any).image || (token as any).logo || (token as any).uri;
+              const rawImg = extractTokenImage(token as any);
               
               return (
                 <div
@@ -2288,7 +2286,7 @@ export default function Header({
                         if (token.market_cap_usd || (token as any).fully_diluted_value) {
                           queryParams.set('_mcap', ((token.market_cap_usd || (token as any).fully_diluted_value || 0)).toString());
                         }
-                        const imageUrl = (token as any).image_url || (token as any).image || (token as any).logo || (token as any).uri || '';
+                        const imageUrl = extractTokenImage(token as any) || '';
                         if (imageUrl) queryParams.set('_image', imageUrl);
                         queryParams.set('_mint', tokenAddress);
                         if ((token as any).launchpad_protocol) queryParams.set('_launchpad_protocol', (token as any).launchpad_protocol);
@@ -2305,7 +2303,7 @@ export default function Header({
                         if (token.market_cap_usd || (token as any).fully_diluted_value) {
                           queryParams.set('_mcap', ((token.market_cap_usd || (token as any).fully_diluted_value || 0)).toString());
                         }
-                        const imageUrl = (token as any).image_url || (token as any).image || (token as any).logo || (token as any).uri || '';
+                        const imageUrl = extractTokenImage(token as any) || '';
                         if (imageUrl) queryParams.set('_image', imageUrl);
                         queryParams.set('_mint', tokenAddress);
                         if ((token as any).launchpad_protocol) queryParams.set('_launchpad_protocol', (token as any).launchpad_protocol);
@@ -2316,32 +2314,17 @@ export default function Header({
                     }
                   }}
                 >
-                  {/* Token Image — fallback to letter circle if image fails or missing */}
-                  {rawImg && !_failedImages.has(token.pair_address || (token as any).mint || '') ? (
-                    <img
-                      src={rawImg}
-                      alt={token.symbol || ''}
-                      className="w-4 h-4 rounded-full object-cover ring-1 ring-white/10"
-                      onError={(e) => {
-                        const failId = token.pair_address || (token as any).mint || '';
-                        if (failId) _failedImages.add(failId);
-                        (e.target as HTMLImageElement).style.display = 'none';
-                        const sib = (e.target as HTMLElement).nextElementSibling;
-                        if (sib && (sib as HTMLElement).dataset.fallback) (sib as HTMLElement).style.display = 'flex';
-                      }}
-                    />
-                  ) : null}
-                  <div
-                    data-fallback="1"
-                    className="w-4 h-4 rounded-full ring-1 ring-white/10 items-center justify-center text-[8px] font-bold"
-                    style={{
-                      display: (rawImg && !_failedImages.has(token.pair_address || (token as any).mint || '')) ? 'none' : 'flex',
-                      backgroundColor: '#2a2d35',
-                      color: '#9CA3AF',
-                    }}
-                  >
-                    {(token.symbol || '?')[0]}
-                  </div>
+                  {/* Token Image */}
+                  <FastImage
+                    src={rawImg ?? undefined}
+                    alt={token.symbol || ''}
+                    width={16}
+                    height={16}
+                    className="rounded-full ring-1 ring-white/10"
+                    symbol={token.symbol}
+                    name={token.name}
+                    showBubble={false}
+                  />
                   
                   {/* Token Symbol */}
                   <span className="text-xs font-semibold" style={{ color: '#d1d5db' }}>
