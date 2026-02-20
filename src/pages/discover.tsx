@@ -253,16 +253,27 @@ export default function DiscoverPage() {
   // Get current chain's data
   const newPairsRaw = newPairsRawByChain[currentChain] || [];
 
-  // WS-primary data source for New Pairs (Solana).
-  // PulseTable uses wsNewTokens directly — Discover should too for consistency.
-  // Monad has no WebSocket, so it still uses HTTP (newPairsRaw).
+  // Merge WS + HTTP data for New Pairs (Solana).
+  // HTTP provides the base snapshot (~50 tokens), WS overlays real-time tokens as they arrive.
+  // WS tokens override HTTP tokens for the same mint (fresher data).
+  // Monad has no WebSocket, so it still uses HTTP only.
   const volumeEnrichedNewPairs = useMemo(() => {
-    if (currentChain === 'sol' && wsNewTokens && wsNewTokens.length > 0) {
-      // Solana: use WebSocket data directly (same source as PulseTable)
-      return wsNewTokens as unknown as TokenWithDexPaid[];
+    if (currentChain !== 'sol') {
+      return newPairsRaw;
     }
-    // Monad or WS empty: fall back to HTTP data
-    return newPairsRaw;
+    // Merge: HTTP first (base layer), then WS overrides (real-time layer)
+    const merged = new Map<string, TokenWithDexPaid>();
+    for (const token of newPairsRaw) {
+      const key = ((token as any).mint || (token as any).address || '').toLowerCase();
+      if (key) merged.set(key, token);
+    }
+    if (wsNewTokens && wsNewTokens.length > 0) {
+      for (const token of wsNewTokens) {
+        const key = ((token as any).mint || (token as any).address || '').toLowerCase();
+        if (key) merged.set(key, token as unknown as TokenWithDexPaid);
+      }
+    }
+    return Array.from(merged.values());
   }, [currentChain, newPairsRaw, wsNewTokens]);
 
   // Ref to track current state for use in callbacks/intervals
@@ -883,13 +894,6 @@ export default function DiscoverPage() {
   }, [isSolanaChain, launchpadData?.new]);
 
   useEffect(() => {
-    // Solana: skip HTTP polling entirely when WebSocket is connected and has data.
-    // The WS feed (same as PulseTable) is the primary data source for Solana new pairs.
-    if (currentChain === 'sol' && wsNewConnected && wsNewTokens.length > 0) {
-      setNewPairsLoading(false);
-      return;
-    }
-
     let cancelled = false;
     let intervalId: ReturnType<typeof setInterval> | null = null;
 
@@ -1010,10 +1014,10 @@ export default function DiscoverPage() {
         // pulse-new: brand new tokens, pulse-final-stretch: tokens nearing graduation, pulse-migrated: graduated tokens
         const fetchUrls: string[] = [];
         if (chainToUse === 'monad') {
-          fetchUrls.push(`/api/token-service/pulse-new-monad?limit=500&fresh=1`);
+          fetchUrls.push(`/api/token-service/pulse-new-monad?limit=50&fresh=1`);
           console.log('[Discover] Fetching Monad new pairs via API route');
         } else {
-          fetchUrls.push(`/api/token-service/pulse-new?limit=500&fresh=1`);
+          fetchUrls.push(`/api/token-service/pulse-new?limit=50&fresh=1`);
           console.log('[Discover] Fetching Solana new pairs from pulse-new endpoint');
         }
 
@@ -1580,14 +1584,15 @@ export default function DiscoverPage() {
       setNewPairsLoading(false);
     }
     
-    // Refresh every 60 seconds (silently, no loading state)
-    // Use functional setState to preserve existing data if refresh fails or returns empty
+    // When WS is connected (Solana): poll every 5 minutes as a supplemental refresh.
+    // Without WS (Monad, or WS not yet connected): poll every 60 seconds as primary source.
+    const pollInterval = (currentChain === 'sol' && wsNewConnected) ? 300_000 : 60_000;
     intervalId = setInterval(() => {
       fetchNewPairs(true, false).catch(err => {
         console.error('[Discover] Background refresh failed:', err);
         // Don't clear data on error - preserve what we have
       });
-    }, 60_000);
+    }, pollInterval);
 
     return () => {
       cancelled = true;
@@ -1595,7 +1600,7 @@ export default function DiscoverPage() {
         clearInterval(intervalId);
       }
     };
-  }, [currentChain, activeTab, setNewPairsRawForChain, wsNewConnected, wsNewTokens.length]); // Re-run when chain, tab, or WS state changes
+  }, [currentChain, activeTab, setNewPairsRawForChain, wsNewConnected]); // Re-run when chain, tab, or WS connection state changes
 
   // Fetch xStocks data
   useEffect(() => {
@@ -3125,9 +3130,7 @@ export default function DiscoverPage() {
       }
       
       // If we have fewer than 10 trending tokens, supplement with top tokens from new pairs
-      const newPairsSource = (currentChain === 'sol' && wsNewTokens.length > 0)
-        ? wsNewTokens as unknown as TokenWithDexPaid[]
-        : newPairsRaw;
+      const newPairsSource = volumeEnrichedNewPairs;
       if (uniqueSafe.length < 10 && newPairsSource && newPairsSource.length > 0) {
         console.log(`[Trending] Only ${uniqueSafe.length} trending tokens, supplementing with top tokens from new pairs`);
 
