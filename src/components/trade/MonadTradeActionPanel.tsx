@@ -716,6 +716,7 @@ const MonadTradeActionPanel: React.FC<MonadTradeActionPanelProps> = ({ token }) 
     // Random cap time between 0.40 and 0.60 seconds
     const timerCap = 0.40 + Math.random() * 0.20;
     let timerFinished = false;
+    let tradeErrored = false;
 
     // Determine if this is a multi-wallet trade
     const isMultiWallet = (selectedWalletIds?.monad || []).length > 1;
@@ -745,17 +746,19 @@ const MonadTradeActionPanel: React.FC<MonadTradeActionPanelProps> = ({ token }) 
       // When timer reaches cap, show checkmark and logo/count
       if (!timerFinished && elapsed >= timerCap) {
         timerFinished = true;
-        const checkEl = document.getElementById(`check-${uniqueToastId}`);
-        if (checkEl) {
-          checkEl.style.display = 'block';
-        }
-        const linkEl = document.getElementById(`link-${uniqueToastId}`);
-        if (linkEl) {
-          if (isMultiWallet) {
-            // Show actual wallets with balance vs total selected
-            linkEl.innerHTML = `<span style="color: #31e3ac; font-size: 11px; font-weight: 600;">${walletsWithBalance}/${totalSelectedWallets}</span>`;
+        if (!tradeErrored) {
+          const checkEl = document.getElementById(`check-${uniqueToastId}`);
+          if (checkEl) {
+            checkEl.style.display = 'block';
           }
-          linkEl.style.display = 'inline-flex';
+          const linkEl = document.getElementById(`link-${uniqueToastId}`);
+          if (linkEl) {
+            if (isMultiWallet) {
+              // Show actual wallets with balance vs total selected
+              linkEl.innerHTML = `<span style="color: #31e3ac; font-size: 11px; font-weight: 600;">${walletsWithBalance}/${totalSelectedWallets}</span>`;
+            }
+            linkEl.style.display = 'inline-flex';
+          }
         }
       }
     }, 50);
@@ -814,6 +817,7 @@ const MonadTradeActionPanel: React.FC<MonadTradeActionPanelProps> = ({ token }) 
           // Keep the amount value in the input field for easy re-trading
           setIsLoading(false);
         } else {
+          tradeErrored = true;
           clearInterval(timerInterval);
           pendingToastRef.current = null;
           toast.error('Trade failed', { id: uniqueToastId, duration: 6000 });
@@ -892,6 +896,7 @@ const MonadTradeActionPanel: React.FC<MonadTradeActionPanelProps> = ({ token }) 
           // Keep the amount value in the input field for easy re-trading
           setIsLoading(false);
         } else {
+          tradeErrored = true;
           clearInterval(timerInterval);
           pendingToastRef.current = null;
           toast.error(formatMonadError((result as any).error), { id: uniqueToastId, duration: 6000 });
@@ -899,6 +904,7 @@ const MonadTradeActionPanel: React.FC<MonadTradeActionPanelProps> = ({ token }) 
         }
       }
     } catch (error: any) {
+      tradeErrored = true;
       console.error("Trade error:", error);
       clearInterval(timerInterval);
       pendingToastRef.current = null;

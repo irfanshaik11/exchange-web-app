@@ -2684,6 +2684,7 @@ function MonadTable({
     // Random cap time between 0.40 and 0.60 seconds
     const timerCap = 0.4 + Math.random() * 0.2;
     let timerFinished = false;
+    let tradeErrored = false;
 
     // Pre-calculate which wallets will actually be used (have sufficient balance)
     const { allocations, total } = buildMonadWalletAllocations({
@@ -2758,17 +2759,19 @@ function MonadTable({
       // When timer reaches cap, show checkmark and logo/count
       if (!timerFinished && elapsed >= timerCap) {
         timerFinished = true;
-        const checkEl = document.getElementById(`check-${uniqueToastId}`);
-        if (checkEl) {
-          checkEl.style.display = "block";
-        }
-        const linkEl = document.getElementById(`link-${uniqueToastId}`);
-        if (linkEl) {
-          if (isMultiWallet) {
-            // Show actual wallets with balance vs total selected
-            linkEl.innerHTML = `<span style="color: #31e3ac; font-size: 11px; font-weight: 600;">${walletsWithBalance}/${totalSelectedWallets}</span>`;
+        if (!tradeErrored) {
+          const checkEl = document.getElementById(`check-${uniqueToastId}`);
+          if (checkEl) {
+            checkEl.style.display = "block";
           }
-          linkEl.style.display = "inline-flex";
+          const linkEl = document.getElementById(`link-${uniqueToastId}`);
+          if (linkEl) {
+            if (isMultiWallet) {
+              // Show actual wallets with balance vs total selected
+              linkEl.innerHTML = `<span style="color: #31e3ac; font-size: 11px; font-weight: 600;">${walletsWithBalance}/${totalSelectedWallets}</span>`;
+            }
+            linkEl.style.display = "inline-flex";
+          }
         }
       }
     }, 50);
@@ -2831,6 +2834,7 @@ function MonadTable({
         console.log("✅ Monad Quick Buy successful:", txHashes);
         return { success: true, txHash: txHashes[0] };
       } else {
+        tradeErrored = true;
         clearInterval(timerInterval);
         pendingQuickBuyToastRef.current = null;
         const errorMsg = "Trade failed";
@@ -2838,6 +2842,7 @@ function MonadTable({
         return { success: false, error: errorMsg };
       }
     } catch (error: any) {
+      tradeErrored = true;
       console.error("❌ Monad Quick Buy failed:", error);
       clearInterval(timerInterval);
       pendingQuickBuyToastRef.current = null;

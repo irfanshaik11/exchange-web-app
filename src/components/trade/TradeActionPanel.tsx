@@ -2557,6 +2557,7 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
         const uniqueToastId = `solana-sell-${Date.now()}-${Math.random()}`;
         const startTime = Date.now();
         let timerFinished = false;
+        let tradeErrored = false;
 
         // Extract token image
         const tokenImage = getResolvedTokenImage(token);
@@ -2630,9 +2631,11 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
 
           if (!timerFinished && elapsed >= timerCap) {
             timerFinished = true;
-            const checkEl = document.getElementById(`check-${uniqueToastId}`);
-            if (checkEl) {
-              checkEl.style.display = 'block';
+            if (!tradeErrored) {
+              const checkEl = document.getElementById(`check-${uniqueToastId}`);
+              if (checkEl) {
+                checkEl.style.display = 'block';
+              }
             }
             timerHandle = null as any;
             return;
@@ -2761,6 +2764,7 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
             return { success: false };
           }
         } catch (error: any) {
+          tradeErrored = true;
           // Stop timer on error
           if (timerHandle) {
             cancelAnimationFrame(timerHandle);
@@ -2815,6 +2819,7 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
       const uniqueToastId = `solana-buy-${Date.now()}-${Math.random()}`;
       const startTime = Date.now();
       let timerFinished = false;
+      let tradeErrored = false;
 
       // Extract token image
       const tokenImage = getResolvedTokenImage(token);
@@ -2889,9 +2894,11 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
         // When timer reaches cap, show checkmark and wallet count (or placeholder for logo)
         if (!timerFinished && elapsed >= timerCap) {
           timerFinished = true;
-          const checkEl = document.getElementById(`check-${uniqueToastId}`);
-          if (checkEl) {
-            checkEl.style.display = 'block';
+          if (!tradeErrored) {
+            const checkEl = document.getElementById(`check-${uniqueToastId}`);
+            if (checkEl) {
+              checkEl.style.display = 'block';
+            }
           }
           const linkEl = document.getElementById(`link-${uniqueToastId}`);
           if (linkEl) {
@@ -3038,6 +3045,7 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
         setIsLoading(false);
         return { success: true };
       } catch (error: any) {
+        tradeErrored = true;
         // Stop timer on error
         if (timerHandle) {
           cancelAnimationFrame(timerHandle);

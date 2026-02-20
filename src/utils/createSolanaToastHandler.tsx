@@ -43,12 +43,13 @@ export function createSolanaTradeToast(
   total: number,
   isMultiWallet: boolean,
   pendingRef: PendingSolanaToastRef
-): { toastId: string; timerHandle: number; timerCap: number } {
+): { toastId: string; timerHandle: number; timerCap: number; setTradeErrored: (v: boolean) => void } {
   // Generate random timer cap (0.40-0.60s)
   const timerCap = 0.40 + Math.random() * 0.20;
   const uniqueToastId = `solana-buy-${Date.now()}-${Math.random()}`;
   const startTime = Date.now();
   let timerFinished = false;
+  let tradeErrored = false;
 
   // Extract token image
   // Use resolved version to get cached metadata images
@@ -123,17 +124,19 @@ export function createSolanaTradeToast(
 
     if (!timerFinished && elapsed >= timerCap) {
       timerFinished = true;
-      const checkEl = document.getElementById(`check-${uniqueToastId}`);
-      if (checkEl) {
-        checkEl.style.display = 'block';
-      }
-      const linkEl = document.getElementById(`link-${uniqueToastId}`);
-      if (linkEl) {
-        if (isMultiWallet) {
-          linkEl.textContent = `${walletsWithBalance}/${total}`;
-          linkEl.className = 'text-xs text-blue-400 font-medium flex-shrink-0';
-        } else {
-          linkEl.className = 'flex-shrink-0';
+      if (!tradeErrored) {
+        const checkEl = document.getElementById(`check-${uniqueToastId}`);
+        if (checkEl) {
+          checkEl.style.display = 'block';
+        }
+        const linkEl = document.getElementById(`link-${uniqueToastId}`);
+        if (linkEl) {
+          if (isMultiWallet) {
+            linkEl.textContent = `${walletsWithBalance}/${total}`;
+            linkEl.className = 'text-xs text-blue-400 font-medium flex-shrink-0';
+          } else {
+            linkEl.className = 'flex-shrink-0';
+          }
         }
       }
       timerHandle = null as any;
@@ -156,7 +159,7 @@ export function createSolanaTradeToast(
     totalSelectedWallets: walletsWithBalance
   };
 
-  return { toastId: uniqueToastId, timerHandle, timerCap };
+  return { toastId: uniqueToastId, timerHandle, timerCap, setTradeErrored: (v: boolean) => { tradeErrored = v; } };
 }
 
 /**
@@ -203,7 +206,7 @@ export async function executeSolanaBuyWithToast({
   const isMultiWallet = walletsWithBalance > 1;
 
   // Create the toast
-  const { toastId, timerHandle } = createSolanaTradeToast(
+  const { toastId, timerHandle, setTradeErrored } = createSolanaTradeToast(
     token,
     walletsWithBalance,
     total,
@@ -281,6 +284,7 @@ export async function executeSolanaBuyWithToast({
 
     return { success: true };
   } catch (error: any) {
+    setTradeErrored(true);
     // Stop timer on error
     if (timerHandle) {
       cancelAnimationFrame(timerHandle);

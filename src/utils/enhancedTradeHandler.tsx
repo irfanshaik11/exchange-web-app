@@ -321,6 +321,7 @@ export async function executeEnhancedTrade(params: EnhancedTradeParams): Promise
 
   // Declare timerInterval outside try block so it's accessible in catch/finally
   let timerInterval: NodeJS.Timeout | null = null;
+  let tradeErrored = false;
 
   try {
     // Step 1: Pre-transaction validation (NO TOAST YET - show only after backend confirms trade)
@@ -512,17 +513,19 @@ export async function executeEnhancedTrade(params: EnhancedTradeParams): Promise
 
       if (!timerFinished && elapsed >= timerCap) {
         timerFinished = true;
-        const checkEl = document.getElementById(`check-${uniqueToastId}`);
-        if (checkEl) {
-          checkEl.style.display = 'block';
-        }
-        const linkEl = document.getElementById(`link-${uniqueToastId}`);
-        if (linkEl) {
-          if (isMultiWallet) {
-            linkEl.textContent = `${walletsWithBalance}/${totalWallets}`;
-            linkEl.className = 'text-xs text-blue-400 font-medium flex-shrink-0';
-          } else {
-            linkEl.className = 'flex-shrink-0';
+        if (!tradeErrored) {
+          const checkEl = document.getElementById(`check-${uniqueToastId}`);
+          if (checkEl) {
+            checkEl.style.display = 'block';
+          }
+          const linkEl = document.getElementById(`link-${uniqueToastId}`);
+          if (linkEl) {
+            if (isMultiWallet) {
+              linkEl.textContent = `${walletsWithBalance}/${totalWallets}`;
+              linkEl.className = 'text-xs text-blue-400 font-medium flex-shrink-0';
+            } else {
+              linkEl.className = 'flex-shrink-0';
+            }
           }
         }
         timerInterval = null;
@@ -659,6 +662,7 @@ export async function executeEnhancedTrade(params: EnhancedTradeParams): Promise
     });
 
     if (failedResult) {
+      tradeErrored = true;
       const errorMessage =
         (failedResult.result as any)?.error || "Transaction failed";
       console.error(
@@ -844,6 +848,7 @@ export async function executeEnhancedTrade(params: EnhancedTradeParams): Promise
     }
 
   } catch (error: any) {
+    tradeErrored = true;
     console.error('Enhanced trade error:', error);
 
     // Stop timer

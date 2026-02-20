@@ -3152,6 +3152,7 @@ function PulseTable({
     const uniqueToastId = `solana-quickbuy-${Date.now()}-${Math.random()}`;
     const startTime = Date.now();
     let timerFinished = false;
+    let tradeErrored = false;
 
     // Extract token image - use resolved version to get cached metadata images
     const tokenImage = getResolvedTokenImage(token);
@@ -3226,23 +3227,25 @@ function PulseTable({
       // When timer reaches cap, show checkmark and wallet count (or placeholder for logo)
       if (!timerFinished && elapsed >= timerCap) {
         timerFinished = true;
-        const checkEl = document.getElementById(`check-${uniqueToastId}`);
-        if (checkEl) {
-          checkEl.style.display = "block";
-        }
-        const linkEl = document.getElementById(`link-${uniqueToastId}`);
-        if (linkEl) {
-          if (isMultiWallet) {
-            // Show wallet count immediately for multi-wallet
-            linkEl.textContent = `${walletsWithBalance}/${total}`;
-            linkEl.className =
-              "text-xs text-blue-400 font-medium flex-shrink-0";
-          } else {
-            // Single wallet: show Solana icon immediately (clickable once tx hash arrives)
-            linkEl.innerHTML = `<img src="https://avatars.githubusercontent.com/u/92743431?s=200&v=4" alt="Solana" class="w-4 h-4 rounded-full opacity-70" style="cursor: default;" />`;
-            linkEl.className = "flex-shrink-0";
+        if (!tradeErrored) {
+          const checkEl = document.getElementById(`check-${uniqueToastId}`);
+          if (checkEl) {
+            checkEl.style.display = "block";
           }
-          // For single wallet, leave empty - will be filled by WebSocket with logo
+          const linkEl = document.getElementById(`link-${uniqueToastId}`);
+          if (linkEl) {
+            if (isMultiWallet) {
+              // Show wallet count immediately for multi-wallet
+              linkEl.textContent = `${walletsWithBalance}/${total}`;
+              linkEl.className =
+                "text-xs text-blue-400 font-medium flex-shrink-0";
+            } else {
+              // Single wallet: show Solana icon immediately (clickable once tx hash arrives)
+              linkEl.innerHTML = `<img src="https://avatars.githubusercontent.com/u/92743431?s=200&v=4" alt="Solana" class="w-4 h-4 rounded-full opacity-70" style="cursor: default;" />`;
+              linkEl.className = "flex-shrink-0";
+            }
+            // For single wallet, leave empty - will be filled by WebSocket with logo
+          }
         }
         // Stop timer after reaching cap to avoid jitter
         timerHandle = null as any;
@@ -3355,6 +3358,7 @@ function PulseTable({
 
       return { success: true };
     } catch (error: any) {
+      tradeErrored = true;
       // Stop timer on error
       if (timerHandle) {
         cancelAnimationFrame(timerHandle);
