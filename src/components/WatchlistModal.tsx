@@ -502,6 +502,7 @@ export default function WatchlistModal({ open, onClose }: WatchlistModalProps) {
       const startTime = Date.now();
       const timerCap = 0.40 + Math.random() * 0.20;
       let timerFinished = false;
+      let tradeErrored = false;
 
       // Determine if this is a multi-wallet trade
       const totalSelectedWallets = selectedMonadWalletIds.length || 1;
@@ -546,21 +547,23 @@ export default function WatchlistModal({ open, onClose }: WatchlistModalProps) {
 
         if (!timerFinished && elapsed >= timerCap) {
           timerFinished = true;
-          const checkEl = document.getElementById(`check-${uniqueToastId}`);
-          if (checkEl) {
-            checkEl.style.display = 'block';
-          }
-          const linkEl = document.getElementById(`link-${uniqueToastId}`);
-          if (linkEl) {
-            if (isMultiWallet) {
-              // Show actual wallets with balance vs total selected
-              linkEl.innerHTML = `<span style="color: #31e3ac; font-size: 11px; font-weight: 600;">${walletsWithBalance}/${totalSelectedWallets}</span>`;
+          if (!tradeErrored) {
+            const checkEl = document.getElementById(`check-${uniqueToastId}`);
+            if (checkEl) {
+              checkEl.style.display = 'block';
             }
-            linkEl.style.display = 'inline-flex';
+            const linkEl = document.getElementById(`link-${uniqueToastId}`);
+            if (linkEl) {
+              if (isMultiWallet) {
+                // Show actual wallets with balance vs total selected
+                linkEl.innerHTML = `<span style="color: #31e3ac; font-size: 11px; font-weight: 600;">${walletsWithBalance}/${totalSelectedWallets}</span>`;
+              }
+              linkEl.style.display = 'inline-flex';
+            }
           }
         }
       }, 50);
-      
+
       try {
         const { results, totalConsidered } = await executeMonadMultiBuy({
           tokenAddress,
@@ -602,10 +605,12 @@ export default function WatchlistModal({ open, onClose }: WatchlistModalProps) {
           broadcastMonadQuickTrade(tokenAddress, 'buy');
           console.log('✅ Watchlist Monad Quick Buy successful:', txHashes);
         } else {
+          tradeErrored = true;
           const errorMsg = 'Trade failed';
           toast.error(errorMsg, { id: uniqueToastId, duration: 6000 });
         }
       } catch (error: any) {
+        tradeErrored = true;
         clearInterval(timerInterval);
         const errorMessage = formatMonadError(error?.message || error?.error);
         toast.error(errorMessage, { id: uniqueToastId, duration: 6000 });
@@ -633,6 +638,7 @@ export default function WatchlistModal({ open, onClose }: WatchlistModalProps) {
       const uniqueToastId = `watchlist-quickbuy-${Date.now()}-${Math.random()}`;
       const startTime = Date.now();
       let timerFinished = false;
+      let tradeErrored = false;
 
       // Extract token image
       const tokenImage = getResolvedTokenImage(token as any) || null;
@@ -706,15 +712,17 @@ export default function WatchlistModal({ open, onClose }: WatchlistModalProps) {
 
         if (!timerFinished && elapsed >= timerCap) {
           timerFinished = true;
-          const checkEl = document.getElementById(`check-${uniqueToastId}`);
-          if (checkEl) {
-            checkEl.style.display = "block";
-          }
-          const linkEl = document.getElementById(`link-${uniqueToastId}`);
-          if (linkEl) {
-            if (isMultiWallet) {
-              linkEl.textContent = `${walletsWithBalance}/${total}`;
-              linkEl.className = "text-xs text-blue-400 font-medium flex-shrink-0";
+          if (!tradeErrored) {
+            const checkEl = document.getElementById(`check-${uniqueToastId}`);
+            if (checkEl) {
+              checkEl.style.display = "block";
+            }
+            const linkEl = document.getElementById(`link-${uniqueToastId}`);
+            if (linkEl) {
+              if (isMultiWallet) {
+                linkEl.textContent = `${walletsWithBalance}/${total}`;
+                linkEl.className = "text-xs text-blue-400 font-medium flex-shrink-0";
+              }
             }
           }
           timerHandle = null;
@@ -806,6 +814,7 @@ export default function WatchlistModal({ open, onClose }: WatchlistModalProps) {
           );
         }
       } catch (error: any) {
+        tradeErrored = true;
         // Stop timer on error
         if (timerHandle) {
           cancelAnimationFrame(timerHandle);

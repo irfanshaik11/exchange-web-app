@@ -628,6 +628,7 @@ const InstantTradeModal: React.FC<InstantTradeModalProps> = ({ isOpen, onClose, 
     const startTime = Date.now();
     const timerCap = 0.40 + Math.random() * 0.20;
     let timerFinished = false;
+    let tradeErrored = false;
 
     toast.custom(
       () => (
@@ -656,13 +657,15 @@ const InstantTradeModal: React.FC<InstantTradeModalProps> = ({ isOpen, onClose, 
 
       if (!timerFinished && elapsed >= timerCap) {
         timerFinished = true;
-        const checkEl = document.getElementById(`check-${toastId}`);
-        if (checkEl) {
-          checkEl.style.display = 'block';
-        }
-        const linkEl = document.getElementById(`link-${toastId}`);
-        if (linkEl) {
-          linkEl.style.display = 'inline-flex';
+        if (!tradeErrored) {
+          const checkEl = document.getElementById(`check-${toastId}`);
+          if (checkEl) {
+            checkEl.style.display = 'block';
+          }
+          const linkEl = document.getElementById(`link-${toastId}`);
+          if (linkEl) {
+            linkEl.style.display = 'inline-flex';
+          }
         }
       }
     }, 50);
@@ -702,11 +705,13 @@ const InstantTradeModal: React.FC<InstantTradeModalProps> = ({ isOpen, onClose, 
         return { success: true, summary, txHashes, totalConsidered };
       }
 
+      tradeErrored = true;
       clearInterval(timerInterval);
       pendingToastRef.current = null;
       toast.error('Trade failed', { id: toastId, duration: 6000 });
       return { success: false };
     } catch (error: any) {
+      tradeErrored = true;
       clearInterval(timerInterval);
       pendingToastRef.current = null;
       const errorMessage = formatMonadError(error?.message || error?.error || "Trade failed. Please try again.");
@@ -747,6 +752,7 @@ const InstantTradeModal: React.FC<InstantTradeModalProps> = ({ isOpen, onClose, 
     const startTime = Date.now();
     const timerCap = 0.40 + Math.random() * 0.20;
     let timerFinished = false;
+    let tradeErrored = false;
 
     toast(
       (t) => (
@@ -814,18 +820,20 @@ const InstantTradeModal: React.FC<InstantTradeModalProps> = ({ isOpen, onClose, 
 
       if (!timerFinished && elapsed >= timerCap) {
         timerFinished = true;
-        const checkEl = document.getElementById(`check-${uniqueToastId}`);
-        if (checkEl) {
-          checkEl.style.display = 'block';
-        }
-        const linkEl = document.getElementById(`link-${uniqueToastId}`);
-        if (linkEl) {
-          if (isMultiWallet) {
-            linkEl.textContent = `${walletsWithBalance}/${total}`;
-            linkEl.className = 'text-xs text-blue-400 font-medium flex-shrink-0';
-          } else {
-            linkEl.innerHTML = `<img src="https://avatars.githubusercontent.com/u/92743431?s=200&v=4" alt="Solana" class="w-4 h-4 rounded-full opacity-70" style="cursor: default;" />`;
-            linkEl.className = 'flex-shrink-0';
+        if (!tradeErrored) {
+          const checkEl = document.getElementById(`check-${uniqueToastId}`);
+          if (checkEl) {
+            checkEl.style.display = 'block';
+          }
+          const linkEl = document.getElementById(`link-${uniqueToastId}`);
+          if (linkEl) {
+            if (isMultiWallet) {
+              linkEl.textContent = `${walletsWithBalance}/${total}`;
+              linkEl.className = 'text-xs text-blue-400 font-medium flex-shrink-0';
+            } else {
+              linkEl.innerHTML = `<img src="https://avatars.githubusercontent.com/u/92743431?s=200&v=4" alt="Solana" class="w-4 h-4 rounded-full opacity-70" style="cursor: default;" />`;
+              linkEl.className = 'flex-shrink-0';
+            }
           }
         }
         timerHandle = null as any;
@@ -943,6 +951,7 @@ const InstantTradeModal: React.FC<InstantTradeModalProps> = ({ isOpen, onClose, 
 
       return { success: true };
     } catch (error: any) {
+      tradeErrored = true;
       if (timerHandle) {
         cancelAnimationFrame(timerHandle);
       }

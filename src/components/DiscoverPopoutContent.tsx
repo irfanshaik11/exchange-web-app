@@ -1619,6 +1619,7 @@ export default function DiscoverPopoutContent() {
       // Random cap time between 0.40 and 0.60 seconds
       const timerCap = 0.40 + Math.random() * 0.20;
       let timerFinished = false;
+      let tradeErrored = false;
       let firstSuccessShown = false;
       
       // Show initial loading toast with timer - checkmark hidden until timer finishes, link icon grayed out
@@ -1651,13 +1652,15 @@ export default function DiscoverPopoutContent() {
         // When timer reaches cap, show checkmark and Monad logo
         if (!timerFinished && elapsed >= timerCap) {
           timerFinished = true;
-          const checkEl = document.getElementById(`check-${uniqueToastId}`);
-          if (checkEl) {
-            checkEl.style.display = 'block';
-          }
-          const linkEl = document.getElementById(`link-${uniqueToastId}`);
-          if (linkEl) {
-            linkEl.style.display = 'inline-flex';
+          if (!tradeErrored) {
+            const checkEl = document.getElementById(`check-${uniqueToastId}`);
+            if (checkEl) {
+              checkEl.style.display = 'block';
+            }
+            const linkEl = document.getElementById(`link-${uniqueToastId}`);
+            if (linkEl) {
+              linkEl.style.display = 'inline-flex';
+            }
           }
         }
       }, 50);
@@ -1732,6 +1735,7 @@ export default function DiscoverPopoutContent() {
           toast.success(summary.message, { duration: 4000 });
           return { success: true, txHash: txHashes[0] };
         } else {
+          tradeErrored = true;
           clearInterval(timerInterval);
           pendingQuickBuyToastRef.current = null;
           const errorMsg = 'Trade failed';
@@ -1739,6 +1743,7 @@ export default function DiscoverPopoutContent() {
           return { success: false, error: errorMsg };
         }
       } catch (error: any) {
+        tradeErrored = true;
         console.error("❌ Monad Quick Buy failed:", error);
         clearInterval(timerInterval);
         pendingQuickBuyToastRef.current = null;

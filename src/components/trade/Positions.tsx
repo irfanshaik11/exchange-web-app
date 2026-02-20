@@ -328,6 +328,7 @@ const Positions: React.FC<PositionsProps> = ({
     const startTime = Date.now();
     const timerCap = 0.40 + Math.random() * 0.20;
     let timerFinished = false;
+    let tradeErrored = false;
     let timerInterval: NodeJS.Timeout | null = null;
     const defaultLogo = chain === 'monad' ? MONAD_LOGO : SOLANA_LOGO;
 
@@ -366,13 +367,15 @@ const Positions: React.FC<PositionsProps> = ({
 
       if (!timerFinished && elapsed >= timerCap) {
         timerFinished = true;
-        const checkEl = document.getElementById(`check-${toastId}`);
-        if (checkEl) {
-          checkEl.style.display = 'block';
-        }
-        const linkEl = document.getElementById(`link-${toastId}`);
-        if (linkEl) {
-          linkEl.style.display = 'inline-flex';
+        if (!tradeErrored) {
+          const checkEl = document.getElementById(`check-${toastId}`);
+          if (checkEl) {
+            checkEl.style.display = 'block';
+          }
+          const linkEl = document.getElementById(`link-${toastId}`);
+          if (linkEl) {
+            linkEl.style.display = 'inline-flex';
+          }
         }
       }
     }, 50);
@@ -404,6 +407,7 @@ const Positions: React.FC<PositionsProps> = ({
     };
 
     const fail = (message: string) => {
+      tradeErrored = true;
       cleanup();
       toast.error(message, { id: toastId, duration: 6000 });
     };
