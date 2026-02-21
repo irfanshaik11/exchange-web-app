@@ -1861,8 +1861,15 @@ export default function TrackersPage() {
                                           }
                                           onRemove={handleRemoveWallet}
                                           onClick={(wallet) => {
-                                            // Open wallet transactions page in a new tab
-                                            const url = `/wallet/${wallet.address}`;
+                                            const chain =
+                                              watched?.chain ??
+                                              (wallet.address.startsWith("0x")
+                                                ? "monad"
+                                                : "sol");
+                                            const url =
+                                              chain === "sol"
+                                                ? `https://solscan.io/account/${wallet.address}`
+                                                : `https://monadvision.com/address/${wallet.address}`;
                                             window.open(url, "_blank");
                                           }}
                                           onNotificationToggle={async (
