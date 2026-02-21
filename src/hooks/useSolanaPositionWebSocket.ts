@@ -196,7 +196,11 @@ export function useSolanaPositionWebSocket(
           } else if (message.type === 'tx_hash' && message.data) {
             // INSTANT txHash push from backend - fires immediately after signing
             console.log('[useSolanaPositionWebSocket] 🚀 INSTANT txHash received:', message.data.txHash);
+            window.dispatchEvent(new CustomEvent('solanaTradeSuccess', { detail: message.data }));
             onTxHashRef.current?.(message.data as TxHashMessage);
+          } else if (message.type === 'trade_error' && message.data) {
+            console.log('[useSolanaPositionWebSocket] ⚠️ Trade error via WS:', message.data.errorMessage);
+            window.dispatchEvent(new CustomEvent('solanaTradeError', { detail: message.data }));
           } else if (message.type === 'position_update' && message.data) {
             const positionData: SolanaPosition = message.data;
 

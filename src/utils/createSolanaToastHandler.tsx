@@ -43,7 +43,7 @@ export function createSolanaTradeToast(
   total: number,
   isMultiWallet: boolean,
   pendingRef: PendingSolanaToastRef
-): { toastId: string; timerHandle: number; timerCap: number; setTradeErrored: (v: boolean) => void } {
+): { toastId: string; timerHandle: number; timerCap: number; setTradeErrored: (v: boolean) => void; cleanupTradeListener: () => void } {
   // Generate random timer cap (0.40-0.60s)
   const timerCap = 0.40 + Math.random() * 0.20;
   const uniqueToastId = `solana-buy-${Date.now()}-${Math.random()}`;
@@ -81,7 +81,7 @@ export function createSolanaTradeToast(
           <span
             id={`check-${uniqueToastId}`}
             className="text-green-400 flex-shrink-0"
-            style={{ display: 'none' }}
+            style={{ display: timerFinished && !tradeErrored ? 'inline' : 'none' }}
           >
             ✓
           </span>
@@ -159,7 +159,15 @@ export function createSolanaTradeToast(
     totalSelectedWallets: walletsWithBalance
   };
 
-  return { toastId: uniqueToastId, timerHandle, timerCap, setTradeErrored: (v: boolean) => { tradeErrored = v; } };
+  // Auto-wire WS trade error/success listener for this toast
+  const cleanupTradeListener = listenForTradeEvents(
+    token.mint || '',
+    uniqueToastId,
+    (v: boolean) => { tradeErrored = v; },
+    'solana'
+  );
+
+  return { toastId: uniqueToastId, timerHandle, timerCap, setTradeErrored: (v: boolean) => { tradeErrored = v; }, cleanupTradeListener };
 }
 
 /**
@@ -206,7 +214,7 @@ export async function executeSolanaBuyWithToast({
   const isMultiWallet = walletsWithBalance > 1;
 
   // Create the toast
-  const { toastId, timerHandle, setTradeErrored } = createSolanaTradeToast(
+  const { toastId, timerHandle, setTradeErrored, cleanupTradeListener } = createSolanaTradeToast(
     token,
     walletsWithBalance,
     total,
@@ -285,6 +293,7 @@ export async function executeSolanaBuyWithToast({
     return { success: true };
   } catch (error: any) {
     setTradeErrored(true);
+    cleanupTradeListener();
     // Stop timer on error
     if (timerHandle) {
       cancelAnimationFrame(timerHandle);
@@ -310,6 +319,46 @@ export async function executeSolanaBuyWithToast({
  * Creates a WebSocket callback handler for instant tx hash updates
  * Should be used with useSolanaPositionWebSocket's onTxHash callback
  */
+/**
+ * Listens for WS trade error/success events and updates toast checkmark state.
+ * Call immediately after creating a trade toast. Returns cleanup function.
+ */
+export function listenForTradeEvents(
+  tokenAddress: string,
+  toastId: string,
+  setTradeErrored: (v: boolean) => void,
+  chain: 'solana' | 'monad' = 'solana'
+): () => void {
+  const errorEvent = chain === 'solana' ? 'solanaTradeError' : 'monadTradeError';
+  const successEvent = chain === 'solana' ? 'solanaTradeSuccess' : 'monadTradeSuccess';
+  const normalizedToken = tokenAddress.toLowerCase();
+
+  const onError = (e: Event) => {
+    const detail = (e as CustomEvent).detail;
+    if (detail.tokenAddress?.toLowerCase() === normalizedToken) {
+      setTradeErrored(true);
+      const checkEl = document.getElementById(`check-${toastId}`);
+      if (checkEl) checkEl.style.display = 'none';
+    }
+  };
+
+  const onSuccess = (e: Event) => {
+    const detail = (e as CustomEvent).detail;
+    if (detail.tokenAddress?.toLowerCase() === normalizedToken) {
+      setTradeErrored(false);
+      const checkEl = document.getElementById(`check-${toastId}`);
+      if (checkEl) checkEl.style.display = 'block';
+    }
+  };
+
+  window.addEventListener(errorEvent, onError);
+  window.addEventListener(successEvent, onSuccess);
+  return () => {
+    window.removeEventListener(errorEvent, onError);
+    window.removeEventListener(successEvent, onSuccess);
+  };
+}
+
 export function createSolanaWsHandler(pendingRef: PendingSolanaToastRef) {
   return (data: { txHash: string; tokenAddress: string; tradeType: 'buy' | 'sell'; explorerUrl: string }) => {
     const pending = pendingRef.current;

@@ -19,6 +19,7 @@ import { SOL_MINT_ADDRESS } from "~/utils/api";
 import { executeMonadMultiBuy, formatMonadTxSummary } from "~/utils/monadWalletAllocation";
 import { formatMonadError } from "~/utils/monadError";
 import { showEnhancedToast, updateEnhancedToast } from "~/utils/enhancedToast";
+import { listenForTradeEvents } from "~/utils/createSolanaToastHandler";
 import { useUser } from "~/components/UserContext";
 import PumpLive, { type PumpItem, demoLeft as demoLeftPump, demoRight as demoRightPump } from '../components/PumpLive';
 import PumpLiveGrid, { type PumpLiveSortField, type PumpLiveSortDirection } from '../components/PumpLiveGrid';
@@ -2096,7 +2097,7 @@ export default function DiscoverPage() {
       toast.custom(
         (t) => (
           <div className="flex items-center gap-2 bg-[#1a1b1e] text-white border border-white/10 rounded-lg px-4 py-3">
-            <FaCheckCircle id={`check-${uniqueToastId}`} className="flex-shrink-0" size={16} style={{ color: '#31e3ac', display: 'none' }} />
+            <FaCheckCircle id={`check-${uniqueToastId}`} className="flex-shrink-0" size={16} style={{ color: '#31e3ac', display: timerFinished && !tradeErrored ? 'block' : 'none' }} />
             {tokenImage && (
               <img src={tokenImage} alt={tokenName} className="w-5 h-5 rounded-full object-cover flex-shrink-0" style={{ border: '1px solid rgba(255, 255, 255, 0.1)' }} onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
             )}
@@ -2134,6 +2135,8 @@ export default function DiscoverPage() {
           }
         }
       }, 50);
+
+      const cleanupTradeListener = listenForTradeEvents(tokenAddress, uniqueToastId, (v) => { tradeErrored = v; }, 'monad');
 
       try {
         // Try with the detected/default launchpad first
@@ -2189,6 +2192,7 @@ export default function DiscoverPage() {
           return { success: true, txHash: txHashes[0] };
         } else {
           tradeErrored = true;
+          cleanupTradeListener();
           clearInterval(timerInterval);
           const errorMsg = formatMonadError((result as any)?.error);
           toast.error(errorMsg, { id: uniqueToastId, duration: 6000 });
@@ -2196,6 +2200,7 @@ export default function DiscoverPage() {
         }
       } catch (error: any) {
         tradeErrored = true;
+        cleanupTradeListener();
         console.error('❌ Monad Quick Buy failed:', error);
         clearInterval(timerInterval);
         const errorMessage = formatMonadError(error?.message || error?.error);
@@ -2220,6 +2225,19 @@ export default function DiscoverPage() {
     });
     const walletsWithBalance = allocations.length;
     const isMultiWallet = walletsWithBalance > 1;
+
+    // Verify the pair address before toast to avoid checkmark-before-error UX
+    let poolAddress = token.migrated_pool_address || token.pair_address || "";
+    if (token.mint) {
+      console.log(`[Discover] Verifying pair address for quick buy: ${token.mint}`);
+      const verifiedPairAddress = await fetchVerifiedPairAddress(token.mint);
+      if (verifiedPairAddress) {
+        if (verifiedPairAddress !== poolAddress) {
+          console.log(`[Discover] Pair address mismatch! Local: ${poolAddress}, Verified: ${verifiedPairAddress}`);
+        }
+        poolAddress = verifiedPairAddress;
+      }
+    }
 
     // Generate random timer cap (0.40-0.60s)
     const timerCap = 0.4 + Math.random() * 0.2;
@@ -2257,7 +2275,7 @@ export default function DiscoverPage() {
             <span
               id={`check-${uniqueToastId}`}
               className="flex-shrink-0 text-green-400"
-              style={{ display: "none" }}
+              style={{ display: timerFinished && !tradeErrored ? "inline" : "none" }}
             >
               ✓
             </span>
@@ -2320,19 +2338,9 @@ export default function DiscoverPage() {
     };
     timerHandle = requestAnimationFrame(tick);
 
+    const cleanupSolanaTradeListener = listenForTradeEvents(token.mint || '', uniqueToastId, (v) => { tradeErrored = v; }, 'solana');
+
     try {
-      // Verify the pair address from the token service before executing trade
-      let poolAddress = token.migrated_pool_address || token.pair_address || "";
-      if (token.mint) {
-        console.log(`[Discover] Verifying pair address for quick buy: ${token.mint}`);
-        const verifiedPairAddress = await fetchVerifiedPairAddress(token.mint);
-        if (verifiedPairAddress) {
-          if (verifiedPairAddress !== poolAddress) {
-            console.log(`[Discover] Pair address mismatch! Local: ${poolAddress}, Verified: ${verifiedPairAddress}`);
-          }
-          poolAddress = verifiedPairAddress;
-        }
-      }
       const baseMint = token.mint || "";
       const quoteMint = SOL_MINT_ADDRESS;
 
@@ -2405,6 +2413,7 @@ export default function DiscoverPage() {
       return { success: true };
     } catch (error: any) {
       tradeErrored = true;
+      cleanupSolanaTradeListener();
       // Stop timer on error
       if (timerHandle) {
         cancelAnimationFrame(timerHandle);
@@ -2511,7 +2520,7 @@ export default function DiscoverPage() {
             <span
               id={`check-${uniqueToastId}`}
               className="flex-shrink-0 text-green-400"
-              style={{ display: "none" }}
+              style={{ display: timerFinished && !tradeErrored ? "inline" : "none" }}
             >
               ✓
             </span>
@@ -2573,6 +2582,8 @@ export default function DiscoverPage() {
       timerHandle = requestAnimationFrame(tick);
     };
     timerHandle = requestAnimationFrame(tick);
+
+    const cleanupPumpLiveTradeListener = listenForTradeEvents(token.mint || '', uniqueToastId, (v) => { tradeErrored = v; }, 'solana');
 
     try {
       // For PumpLive tokens, use the bonding_curve as the pool address
@@ -2649,6 +2660,7 @@ export default function DiscoverPage() {
       return { success: true };
     } catch (error: any) {
       tradeErrored = true;
+      cleanupPumpLiveTradeListener();
       // Stop timer on error
       if (timerHandle) {
         cancelAnimationFrame(timerHandle);

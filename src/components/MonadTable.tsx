@@ -112,6 +112,7 @@ import {
   computeMonadBalanceForValidation,
 } from "~/utils/tradeBalanceValidation";
 import { formatMonadError } from "~/utils/monadError";
+import { listenForTradeEvents } from "~/utils/createSolanaToastHandler";
 import { TradeSocialIcons } from "./TradeSocialIcons";
 
 /* ---- Enhanced Monad Green Palette (matching PulseTable) ---- */
@@ -2708,7 +2709,7 @@ function MonadTable({
             id={`check-${uniqueToastId}`}
             className="flex-shrink-0"
             size={16}
-            style={{ color: "#31e3ac", display: "none" }}
+            style={{ color: "#31e3ac", display: timerFinished && !tradeErrored ? "block" : "none" }}
           />
           {tokenImage && (
             <img
@@ -2776,6 +2777,8 @@ function MonadTable({
       }
     }, 50);
 
+    const cleanupTradeListener = listenForTradeEvents(tokenAddress, uniqueToastId, (v) => { tradeErrored = v; }, 'monad');
+
     // Store pending toast info for WebSocket instant update (including timer)
     pendingQuickBuyToastRef.current = {
       id: uniqueToastId,
@@ -2835,6 +2838,7 @@ function MonadTable({
         return { success: true, txHash: txHashes[0] };
       } else {
         tradeErrored = true;
+        cleanupTradeListener();
         clearInterval(timerInterval);
         pendingQuickBuyToastRef.current = null;
         const errorMsg = "Trade failed";
@@ -2843,6 +2847,7 @@ function MonadTable({
       }
     } catch (error: any) {
       tradeErrored = true;
+      cleanupTradeListener();
       console.error("❌ Monad Quick Buy failed:", error);
       clearInterval(timerInterval);
       pendingQuickBuyToastRef.current = null;

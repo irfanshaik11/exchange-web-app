@@ -23,6 +23,7 @@ import useMonadPositionWebSocket from "~/hooks/useMonadPositionWebSocket";
 import { useSolPrice } from "~/components/SolPriceContext";
 import { broadcastMonadQuickTrade, consumePendingMonadPositionRefresh } from "~/utils/monadTradeEvents";
 import { formatMonadError } from "~/utils/monadError";
+import { listenForTradeEvents } from "~/utils/createSolanaToastHandler";
 
 type TimeRange = "5m" | "1h" | "12h" | "24h";
 
@@ -699,7 +700,7 @@ const MonadTradeActionPanel: React.FC<MonadTradeActionPanelProps> = ({ token }) 
     toast.custom(
       (t) => (
         <div className="flex items-center gap-2 bg-[#1a1b1e] text-white border border-white/10 rounded-lg px-4 py-3">
-          <FaCheckCircle id={`check-${uniqueToastId}`} className="flex-shrink-0" size={16} style={{ color: '#31e3ac', display: 'none' }} />
+          <FaCheckCircle id={`check-${uniqueToastId}`} className="flex-shrink-0" size={16} style={{ color: '#31e3ac', display: timerFinished && !tradeErrored ? 'block' : 'none' }} />
           {tokenImage && (
             <img src={tokenImage} alt={tokenName} className="w-5 h-5 rounded-full object-cover flex-shrink-0" style={{ border: '1px solid rgba(255, 255, 255, 0.1)' }} onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
           )}
@@ -762,7 +763,8 @@ const MonadTradeActionPanel: React.FC<MonadTradeActionPanelProps> = ({ token }) 
         }
       }
     }, 50);
-    
+    const cleanupTradeListener = listenForTradeEvents(tokenAddress, uniqueToastId, (v) => { tradeErrored = v; }, 'monad');
+
     // Store pending toast info for WebSocket instant update (including timer)
     pendingToastRef.current = { id: uniqueToastId, tokenImage, tokenName, fakeTime: timerCap.toFixed(2), startTime, timerInterval, totalSelectedWallets };
     
@@ -818,6 +820,7 @@ const MonadTradeActionPanel: React.FC<MonadTradeActionPanelProps> = ({ token }) 
           setIsLoading(false);
         } else {
           tradeErrored = true;
+          cleanupTradeListener();
           clearInterval(timerInterval);
           pendingToastRef.current = null;
           toast.error('Trade failed', { id: uniqueToastId, duration: 6000 });
@@ -897,6 +900,7 @@ const MonadTradeActionPanel: React.FC<MonadTradeActionPanelProps> = ({ token }) 
           setIsLoading(false);
         } else {
           tradeErrored = true;
+          cleanupTradeListener();
           clearInterval(timerInterval);
           pendingToastRef.current = null;
           toast.error(formatMonadError((result as any).error), { id: uniqueToastId, duration: 6000 });
@@ -905,6 +909,7 @@ const MonadTradeActionPanel: React.FC<MonadTradeActionPanelProps> = ({ token }) 
       }
     } catch (error: any) {
       tradeErrored = true;
+      cleanupTradeListener();
       console.error("Trade error:", error);
       clearInterval(timerInterval);
       pendingToastRef.current = null;
