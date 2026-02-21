@@ -34,6 +34,9 @@ import FilterPopout from '../components/FilterPopout';
 import throttle from 'lodash.throttle';
 import usePaginatedTokensWithFallback from '../hooks/usePaginatedTokensWithFallback';
 import { executeEnhancedTrade } from "~/utils/enhancedTradeHandler";
+import { validateSolanaBuy, showTradeValidationError } from "~/utils/preTradeValidation";
+import { buildSolanaWalletAllocations } from "~/utils/solanaWalletAllocation";
+import { getResolvedTokenImage } from "~/utils/images";
 import { env } from "../env";
 
 const navLinks = [
@@ -312,7 +315,25 @@ export default function Home() {
     }
     
     const settings = presets[activePreset].quickBuySettings;
-    
+
+    // Pre-validate balance before showing animated toast
+    const { allocations } = buildSolanaWalletAllocations({
+      amount: quickBuyAmount,
+      walletList: walletList || [],
+      walletBalances: walletBalances || {},
+      selectedWalletIds: selectedWalletIds?.sol || [],
+      priorityFee: settings.priority || 0.0001,
+      bribe: settings.bribe || 0,
+    });
+    const buyValidation = validateSolanaBuy(
+      quickBuyAmount, allocations, walletBalances || {}, walletList || [],
+      selectedWalletIds?.sol || [], settings.priority, settings.bribe
+    );
+    if (!buyValidation.valid) {
+      showTradeValidationError(buyValidation.error, getResolvedTokenImage(token), token.symbol || token.name || 'Token');
+      return;
+    }
+
     // Use enhanced trade handler for consistent behavior with rest of application
     await executeEnhancedTrade({
       token,

@@ -20,10 +20,11 @@ import { executeMonadMultiBuy, formatMonadTxSummary, buildMonadWalletAllocations
 import { executeSolanaMultiBuy, buildSolanaWalletAllocations } from '~/utils/solanaWalletAllocation';
 import { getPoolTypeFromToken } from '~/utils/poolTypeDetection';
 import { fetchVerifiedPairAddress } from '~/hooks/useSingleTokenPolling';
-import { validateMonadBalance, computeMonadBalanceForValidation } from '~/utils/tradeBalanceValidation';
+import { validateSolanaBuy, validateMonadBuy, showTradeValidationError } from '~/utils/preTradeValidation';
 import { formatMonadError } from '~/utils/monadError';
 import { broadcastMonadQuickTrade } from '~/utils/monadTradeEvents';
-import { listenForTradeEvents } from '~/utils/createSolanaToastHandler';
+import { listenForTradeEvents, transformToastToError } from '~/utils/createSolanaToastHandler';
+import { mapTradeErrorMessage } from '~/utils/tradeErrorMessages';
 import { extractTokenImage, getResolvedTokenImage } from '~/utils/images';
 import { FaCheckCircle } from 'react-icons/fa';
 
@@ -471,29 +472,13 @@ export default function WatchlistModal({ open, onClose }: WatchlistModalProps) {
       const selectedMonadWalletIds = selectedWalletIds?.monad || [];
       const isMultiWallet = selectedMonadWalletIds.length > 1;
 
-      // Pre-validation: Check balance BEFORE showing any toast
-      const monadBalance = computeMonadBalanceForValidation({
-        selectedWalletIds: selectedMonadWalletIds,
-        walletList,
-        walletBalances,
-        fallbackBalance: chainBalances?.['monad'] ?? 0,
-      });
-      if (!isMultiWallet) {
-        const clientValidation = validateMonadBalance({
-          balance: monadBalance,
-          tradeAmount: buyAmount,
-          gasPrice: gasPrice,
-        });
-        
-        if (!clientValidation.isValid) {
-          toast.error(clientValidation.errorMessage || 'Insufficient MON balance', {
-            duration: 5000,
-            style: { background: "#1E1F26", color: "#E6E7EA", border: "1px solid #ff6b6b" },
-          });
-          return;
-        }
+      // Pre-validation: Check balance BEFORE showing any toast (handles multi-wallet)
+      const monadValidation = validateMonadBuy(buyAmount, walletBalances, walletList, selectedMonadWalletIds, gasPrice);
+      if (!monadValidation.valid) {
+        showTradeValidationError(monadValidation.error, getResolvedTokenImage(token as any), token.symbol || token.name || 'Token');
+        return;
       }
-      
+
       // Get token image and name
       const tokenImage = getResolvedTokenImage(token as any) || null;
       const tokenName = token?.name || token?.symbol || '';
@@ -611,14 +596,14 @@ export default function WatchlistModal({ open, onClose }: WatchlistModalProps) {
           tradeErrored = true;
           cleanupMonadTradeListener();
           const errorMsg = 'Trade failed';
-          toast.error(errorMsg, { id: uniqueToastId, duration: 6000 });
+          transformToastToError(uniqueToastId, errorMsg, tokenImage, tokenName);
         }
       } catch (error: any) {
         tradeErrored = true;
         cleanupMonadTradeListener();
         clearInterval(timerInterval);
         const errorMessage = formatMonadError(error?.message || error?.error);
-        toast.error(errorMessage, { id: uniqueToastId, duration: 6000 });
+        transformToastToError(uniqueToastId, errorMessage, tokenImage, tokenName);
         console.error('❌ Watchlist Monad Quick Buy failed:', error);
       }
     } else {
@@ -637,6 +622,13 @@ export default function WatchlistModal({ open, onClose }: WatchlistModalProps) {
       });
       const walletsWithBalance = allocations.length;
       const isMultiWallet = walletsWithBalance > 1;
+
+      // Pre-validate before showing toast
+      const solValidation = validateSolanaBuy(quickBuyAmount, allocations, walletBalances || {}, walletList || [], selectedWalletIds?.sol || [], settings.priority, settings.bribe);
+      if (!solValidation.valid) {
+        showTradeValidationError(solValidation.error, getResolvedTokenImage(token as any), token.symbol || token.name || 'Token');
+        return;
+      }
 
       // Verify the pair address before toast to avoid checkmark-before-error UX
       let poolAddress = (token as any).migrated_pool_address || token.pair_address || "";
@@ -829,15 +821,9 @@ export default function WatchlistModal({ open, onClose }: WatchlistModalProps) {
           cancelAnimationFrame(timerHandle);
         }
 
-        // Dismiss pending toast
-        toast.dismiss(uniqueToastId);
-
-        // Show error toast
+        // Transform pending toast to error in-place
         console.error("❌ Watchlist Quick Buy failed:", error);
-        toast.error(error.message || "Buy failed", {
-          duration: 5000,
-          style: { background: "#1E1F26", color: "#E6E7EA", border: "1px solid #ff6b6b" },
-        });
+        transformToastToError(uniqueToastId, mapTradeErrorMessage(error), tokenImage, tokenName);
       }
     }
   };

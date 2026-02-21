@@ -15,12 +15,13 @@ import { getProtocolBranding } from '~/utils/protocolBranding';
 import { usePositionPrices } from '~/hooks/usePositionPrices';
 import PositionDetailModal from './PositionDetailModal';
 import toast from 'react-hot-toast';
+import { validateSolanaSell, showTradeValidationError } from '~/utils/preTradeValidation';
 import { useQuickBuy, type QuickBuySettings } from '~/components/QuickBuyContext';
 import { SOL_MINT_ADDRESS, tradeMonadSell, tradeSellPercentage, resolvePool } from '~/utils/api';
 import { getPoolTypeFromToken } from '~/utils/poolTypeDetection';
 import { normalizeMonadAddress } from '~/utils/normalizeMonadAddress';
 import { broadcastMonadQuickTrade } from '~/utils/monadTradeEvents';
-import { listenForTradeEvents } from '~/utils/createSolanaToastHandler';
+import { listenForTradeEvents, transformToastToError } from '~/utils/createSolanaToastHandler';
 import { formatMonadError } from '~/utils/monadError';
 import { useUser } from '../UserContext';
 import { fetchVerifiedPairAddress } from '~/hooks/useSingleTokenPolling';
@@ -415,7 +416,7 @@ const Positions: React.FC<PositionsProps> = ({
     const fail = (message: string) => {
       tradeErrored = true;
       cleanup();
-      toast.error(message, { id: toastId, duration: 6000 });
+      transformToastToError(toastId, message, tokenImage, tokenName);
     };
 
     return { toastId, markSuccess, fail, cleanup };
@@ -492,6 +493,15 @@ const Positions: React.FC<PositionsProps> = ({
       const tokenImage = tokenMeta?.imageUrl || position.imageUrl || null;
       const tokenName = tokenMeta?.name || tokenMeta?.symbol || shortAddr(position.tokenAddress);
       const isMonad = isMonadPosition(position);
+
+      // Pre-validate sell before showing toast
+      const sellValidation = validateSolanaSell(percent, position.remaining);
+      if (!sellValidation.valid) {
+        showTradeValidationError(sellValidation.error, tokenImage, tokenName);
+        setSellingForToken(tokenKey, false);
+        return;
+      }
+
       const toastControls = createQuickTradeToast(tokenImage, tokenName, isMonad ? 'monad' : 'solana', position.tokenAddress);
 
       try {

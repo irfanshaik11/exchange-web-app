@@ -573,6 +573,10 @@ export function UserProvider({ children }: { children: ReactNode }) {
         // Cache the balance for this specific address
         addressBalanceCacheRef.current[checkKey] = newBalance;
 
+        // Also populate walletBalances so pre-trade validation works
+        // without requiring refreshAllBalances() (only called from Portfolio)
+        setWalletBalances((prev) => ({ ...prev, [targetAddress]: newBalance }));
+
         // Update chainBalances for the primary wallet OR if explicitly requested
         // This allows Portfolio to force update chainBalances when setting a new primary wallet
         // even before primaryWalletAddresses is updated in UserContext

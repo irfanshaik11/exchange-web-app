@@ -23,7 +23,8 @@ import toast from "react-hot-toast";
 import { extractTokenImage, getResolvedTokenImage } from "~/utils/images";
 import { broadcastMonadQuickTrade } from "~/utils/monadTradeEvents";
 import { formatMonadError } from "~/utils/monadError";
-import { listenForTradeEvents } from "~/utils/createSolanaToastHandler";
+import { validateMonadBuy, showTradeValidationError } from "~/utils/preTradeValidation";
+import { listenForTradeEvents, transformToastToError } from "~/utils/createSolanaToastHandler";
 
 const WRAPPED_SOL_MINT = SOL_MINT_ADDRESS;
 
@@ -1601,6 +1602,13 @@ export default function DiscoverPopoutContent() {
       // Get gas price from preset (optional, undefined if not set)
       const gasPrice = settings?.gasPrice !== undefined && settings.gasPrice > 0 ? settings.gasPrice : undefined;
 
+      // Pre-validate before showing toast (handles multi-wallet)
+      const monadValidation = validateMonadBuy(buyAmount, walletBalances, walletList, selectedWalletIds?.monad || [], gasPrice);
+      if (!monadValidation.valid) {
+        showTradeValidationError(monadValidation.error, getResolvedTokenImage(token as any), token.symbol || token.name || 'Token');
+        return;
+      }
+
       console.log("📤 Monad Quick Buy params:", {
         tokenAddress,
         amountMON: buyAmount,
@@ -1742,7 +1750,7 @@ export default function DiscoverPopoutContent() {
           clearInterval(timerInterval);
           pendingQuickBuyToastRef.current = null;
           const errorMsg = 'Trade failed';
-          toast.error(errorMsg, { id: uniqueToastId, duration: 6000 });
+          transformToastToError(uniqueToastId, errorMsg, tokenImage, tokenName);
           return { success: false, error: errorMsg };
         }
       } catch (error: any) {
@@ -1752,7 +1760,7 @@ export default function DiscoverPopoutContent() {
         clearInterval(timerInterval);
         pendingQuickBuyToastRef.current = null;
         const errorMessage = formatMonadError(error?.message || error?.error);
-        toast.error(errorMessage, { id: uniqueToastId, duration: 6000 });
+        transformToastToError(uniqueToastId, errorMessage, tokenImage, tokenName);
         return { success: false, error: errorMessage };
       }
     }

@@ -22,11 +22,12 @@ import type { Token } from '~/utils/db';
 import toast from 'react-hot-toast';
 import useMonadPositionWebSocket from '~/hooks/useMonadPositionWebSocket';
 import { executeSolanaMultiBuy, buildSolanaWalletAllocations } from '~/utils/solanaWalletAllocation';
+import { validateSolanaBuy } from '~/utils/preTradeValidation';
 import { SOL_MINT_ADDRESS } from '~/utils/api';
 import { getPoolTypeFromToken } from '~/utils/poolTypeDetection';
 import { mapTradeErrorMessage } from '~/utils/tradeErrorMessages';
 import { showEnhancedToast } from '~/utils/enhancedToast';
-import { listenForTradeEvents } from '~/utils/createSolanaToastHandler';
+import { listenForTradeEvents, transformToastToError } from '~/utils/createSolanaToastHandler';
 import { fetchVerifiedPairAddress } from '~/hooks/useSingleTokenPolling';
 import { useTxHashCallback } from '~/contexts/SolanaPositionWebSocketContext';
 
@@ -752,6 +753,13 @@ const InstantTradeModal: React.FC<InstantTradeModalProps> = ({ isOpen, onClose, 
     const total = (selectedWalletIds?.sol || []).length || 1;
     const isMultiWallet = walletsWithBalance > 1;
 
+    // Pre-validate before showing toast
+    const validation = validateSolanaBuy(amount, allocations, walletBalances, walletList, selectedWalletIds?.sol || [], settings.priority, settings.bribe);
+    if (!validation.valid) {
+      toast.error(validation.error || 'Insufficient balance', { duration: 5000 });
+      return { success: false };
+    }
+
     // Create PulseTable-style toast
     const uniqueToastId = `${toastPrefix}-${Date.now()}`;
     const startTime = Date.now();
@@ -963,14 +971,11 @@ const InstantTradeModal: React.FC<InstantTradeModalProps> = ({ isOpen, onClose, 
       if (timerHandle) {
         cancelAnimationFrame(timerHandle);
       }
+      console.error('❌ Solana Quick Buy failed:', error);
       if (pendingSolanaQuickBuyToastRef.current) {
-        toast.dismiss(pendingSolanaQuickBuyToastRef.current.id);
+        transformToastToError(pendingSolanaQuickBuyToastRef.current.id, mapTradeErrorMessage(error), tokenImage, tokenName);
         pendingSolanaQuickBuyToastRef.current = null;
       }
-      console.error('❌ Solana Quick Buy failed:', error);
-      showEnhancedToast('error', mapTradeErrorMessage(error), {
-        title: 'Trade Failed',
-      });
       return { success: false, error };
     }
   };
@@ -1013,7 +1018,7 @@ const InstantTradeModal: React.FC<InstantTradeModalProps> = ({ isOpen, onClose, 
         });
 
         if (!clientValidation.isValid) {
-          toast.error(clientValidation.errorMessage || 'Insufficient balance', { duration: 5000 });
+          toast.error('Insufficient balance', { duration: 5000 });
           return;
         }
       }
@@ -1030,7 +1035,7 @@ const InstantTradeModal: React.FC<InstantTradeModalProps> = ({ isOpen, onClose, 
       });
 
       if (!clientValidation.isValid) {
-        toast.error(clientValidation.errorMessage || 'Insufficient balance', { duration: 5000 });
+        toast.error('Insufficient balance', { duration: 5000 });
         return;
       }
     }

@@ -19,7 +19,7 @@ import { SOL_MINT_ADDRESS } from "~/utils/api";
 import { executeMonadMultiBuy, formatMonadTxSummary } from "~/utils/monadWalletAllocation";
 import { formatMonadError } from "~/utils/monadError";
 import { showEnhancedToast, updateEnhancedToast } from "~/utils/enhancedToast";
-import { listenForTradeEvents } from "~/utils/createSolanaToastHandler";
+import { listenForTradeEvents, transformToastToError } from "~/utils/createSolanaToastHandler";
 import { useUser } from "~/components/UserContext";
 import PumpLive, { type PumpItem, demoLeft as demoLeftPump, demoRight as demoRightPump } from '../components/PumpLive';
 import PumpLiveGrid, { type PumpLiveSortField, type PumpLiveSortDirection } from '../components/PumpLiveGrid';
@@ -32,6 +32,7 @@ import { extractTokenImage, getResolvedTokenImage, resolveTokenImage, isMetadata
 import { broadcastMonadQuickTrade } from "~/utils/monadTradeEvents";
 import toast from "react-hot-toast";
 import { executeSolanaMultiBuy, buildSolanaWalletAllocations } from "~/utils/solanaWalletAllocation";
+import { validateSolanaBuy, validateMonadBuy, showTradeValidationError } from "~/utils/preTradeValidation";
 import { getPoolTypeFromToken } from "~/utils/poolTypeDetection";
 import { mapTradeErrorMessage } from "~/utils/tradeErrorMessages";
 import { fetchVerifiedPairAddress } from "~/hooks/useSingleTokenPolling";
@@ -2021,6 +2022,13 @@ export default function DiscoverPage() {
       const slippage = settings?.maxSlippage ? settings.maxSlippage * 100 : 15;
       const gasPrice = settings?.gasPrice !== undefined && settings.gasPrice > 0 ? settings.gasPrice : undefined;
 
+      // Pre-validate before showing toast (handles multi-wallet)
+      const monadValidation = validateMonadBuy(buyAmount, walletBalances, walletList, selectedWalletIds?.monad || [], gasPrice);
+      if (!monadValidation.valid) {
+        showTradeValidationError(monadValidation.error, getResolvedTokenImage(token), token.symbol || token.name || 'Token');
+        return { success: false };
+      }
+
       console.log("📤 Monad Quick Buy params:", {
         tokenAddress,
         amountMON: buyAmount,
@@ -2226,6 +2234,13 @@ export default function DiscoverPage() {
     const walletsWithBalance = allocations.length;
     const isMultiWallet = walletsWithBalance > 1;
 
+    // Pre-validate before showing toast
+    const validation = validateSolanaBuy(buyAmount, allocations, walletBalances || {}, walletList || [], selectedWalletIds?.sol || [], settings.priority, settings.bribe);
+    if (!validation.valid) {
+      showTradeValidationError(validation.error, getResolvedTokenImage(token), token.symbol || token.name || 'Token');
+      return { success: false };
+    }
+
     // Verify the pair address before toast to avoid checkmark-before-error UX
     let poolAddress = token.migrated_pool_address || token.pair_address || "";
     if (token.mint) {
@@ -2419,14 +2434,9 @@ export default function DiscoverPage() {
         cancelAnimationFrame(timerHandle);
       }
 
-      // Dismiss pending toast
-      toast.dismiss(uniqueToastId);
-
-      // Show error toast
+      // Transform pending toast to error in-place
       console.error("❌ Discover Quick Buy failed:", error);
-      showEnhancedToast("error", mapTradeErrorMessage(error), {
-        title: "Trade Failed",
-      });
+      transformToastToError(uniqueToastId, mapTradeErrorMessage(error), tokenImage, tokenName);
 
       return { success: false, error };
     }
@@ -2483,6 +2493,13 @@ export default function DiscoverPage() {
     });
     const walletsWithBalance = allocations.length;
     const isMultiWallet = walletsWithBalance > 1;
+
+    // Pre-validate before showing toast
+    const pumpValidation = validateSolanaBuy(buyAmount, allocations, walletBalances || {}, walletList || [], selectedWalletIds?.sol || [], settings.priority, settings.bribe);
+    if (!pumpValidation.valid) {
+      showTradeValidationError(pumpValidation.error, getResolvedTokenImage(token), token.symbol || token.name || 'Token');
+      return { success: false };
+    }
 
     // Generate random timer cap (0.40-0.60s)
     const timerCap = 0.4 + Math.random() * 0.2;
@@ -2666,14 +2683,9 @@ export default function DiscoverPage() {
         cancelAnimationFrame(timerHandle);
       }
 
-      // Dismiss pending toast
-      toast.dismiss(uniqueToastId);
-
-      // Show error toast
+      // Transform pending toast to error in-place
       console.error("❌ PumpLive Quick Buy failed:", error);
-      showEnhancedToast("error", mapTradeErrorMessage(error), {
-        title: "Trade Failed",
-      });
+      transformToastToError(uniqueToastId, mapTradeErrorMessage(error), tokenImage, tokenName);
 
       return { success: false, error };
     }
