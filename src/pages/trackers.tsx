@@ -687,37 +687,35 @@ export default function TrackersPage() {
           console.log(
             `[Trackers] Got balance for ${wallet.address.slice(0, 8)}...: ${balance} (chain: ${walletChain})`,
           );
-          if (balance !== null && !isNaN(balance)) {
-            setTrackedWalletBalances((prev) => {
-              const updated = { ...prev, [wallet.address]: balance };
+          // Use 0 when fetch fails or returns null so the row shows a value instead of staying on "Loading..."
+          const value = balance !== null && !isNaN(balance) ? balance : 0;
+          setTrackedWalletBalances((prev) => {
+            const updated = { ...prev, [wallet.address]: value };
 
-              // Update balance in cache
-              if (typeof window !== "undefined") {
-                const cacheKey = `walletTracker:wallets:${user.id}`;
-                const cached = localStorage.getItem(cacheKey);
-                if (cached) {
-                  try {
-                    const cacheData = JSON.parse(cached);
-                    cacheData.balances = updated;
-                    localStorage.setItem(cacheKey, JSON.stringify(cacheData));
-                  } catch (error) {
-                    // Silent fail
-                  }
+            // Update balance in cache
+            if (typeof window !== "undefined") {
+              const cacheKey = `walletTracker:wallets:${user.id}`;
+              const cached = localStorage.getItem(cacheKey);
+              if (cached) {
+                try {
+                  const cacheData = JSON.parse(cached);
+                  cacheData.balances = updated;
+                  localStorage.setItem(cacheKey, JSON.stringify(cacheData));
+                } catch (error) {
+                  // Silent fail
                 }
               }
+            }
 
-              return updated;
-            });
-          } else {
-            console.warn(
-              `[Trackers] Balance is null or NaN for wallet ${wallet.address.slice(0, 8)}... (chain: ${walletChain})`,
-            );
-          }
+            return updated;
+          });
         } catch (error) {
           console.error(
             `[Trackers] Error fetching balance for wallet ${wallet.address.slice(0, 8)}... (chain: ${walletChain}):`,
             error,
           );
+          // Set balance to 0 so UI shows a value instead of infinite "Loading..."
+          setTrackedWalletBalances((prev) => ({ ...prev, [wallet.address]: 0 }));
         }
       });
     } catch (error) {
