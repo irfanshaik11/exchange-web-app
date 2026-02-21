@@ -23,6 +23,7 @@ import { fetchVerifiedPairAddress } from '~/hooks/useSingleTokenPolling';
 import { validateMonadBalance, computeMonadBalanceForValidation } from '~/utils/tradeBalanceValidation';
 import { formatMonadError } from '~/utils/monadError';
 import { broadcastMonadQuickTrade } from '~/utils/monadTradeEvents';
+import { listenForTradeEvents } from '~/utils/createSolanaToastHandler';
 import { extractTokenImage, getResolvedTokenImage } from '~/utils/images';
 import { FaCheckCircle } from 'react-icons/fa';
 
@@ -522,7 +523,7 @@ export default function WatchlistModal({ open, onClose }: WatchlistModalProps) {
       toast.custom(
         (t) => (
           <div className="flex items-center gap-2 bg-[#1a1b1e] text-white border border-white/10 rounded-lg px-4 py-3">
-            <FaCheckCircle id={`check-${uniqueToastId}`} className="flex-shrink-0" size={16} style={{ color: '#31e3ac', display: 'none' }} />
+            <FaCheckCircle id={`check-${uniqueToastId}`} className="flex-shrink-0" size={16} style={{ color: '#31e3ac', display: timerFinished && !tradeErrored ? 'block' : 'none' }} />
             {tokenImage && (
               <img src={tokenImage} alt={tokenName} className="w-5 h-5 rounded-full object-cover flex-shrink-0" style={{ border: '1px solid rgba(255, 255, 255, 0.1)' }} onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
             )}
@@ -563,6 +564,8 @@ export default function WatchlistModal({ open, onClose }: WatchlistModalProps) {
           }
         }
       }, 50);
+
+      const cleanupMonadTradeListener = listenForTradeEvents(tokenAddress, uniqueToastId, (v) => { tradeErrored = v; }, 'monad');
 
       try {
         const { results, totalConsidered } = await executeMonadMultiBuy({
@@ -606,11 +609,13 @@ export default function WatchlistModal({ open, onClose }: WatchlistModalProps) {
           console.log('✅ Watchlist Monad Quick Buy successful:', txHashes);
         } else {
           tradeErrored = true;
+          cleanupMonadTradeListener();
           const errorMsg = 'Trade failed';
           toast.error(errorMsg, { id: uniqueToastId, duration: 6000 });
         }
       } catch (error: any) {
         tradeErrored = true;
+        cleanupMonadTradeListener();
         clearInterval(timerInterval);
         const errorMessage = formatMonadError(error?.message || error?.error);
         toast.error(errorMessage, { id: uniqueToastId, duration: 6000 });
@@ -632,6 +637,20 @@ export default function WatchlistModal({ open, onClose }: WatchlistModalProps) {
       });
       const walletsWithBalance = allocations.length;
       const isMultiWallet = walletsWithBalance > 1;
+
+      // Verify the pair address before toast to avoid checkmark-before-error UX
+      let poolAddress = (token as any).migrated_pool_address || token.pair_address || "";
+      const tokenMint = (token as any).mint || '';
+      if (tokenMint) {
+        console.log(`[Watchlist] Verifying pair address for quick buy: ${tokenMint}`);
+        const verifiedPairAddress = await fetchVerifiedPairAddress(tokenMint);
+        if (verifiedPairAddress) {
+          if (verifiedPairAddress !== poolAddress) {
+            console.log(`[Watchlist] Pair address mismatch! Local: ${poolAddress}, Verified: ${verifiedPairAddress}`);
+          }
+          poolAddress = verifiedPairAddress;
+        }
+      }
 
       // Generate random timer cap (0.40-0.60s)
       const timerCap = 0.4 + Math.random() * 0.2;
@@ -669,7 +688,7 @@ export default function WatchlistModal({ open, onClose }: WatchlistModalProps) {
               <span
                 id={`check-${uniqueToastId}`}
                 className="flex-shrink-0 text-green-400"
-                style={{ display: "none" }}
+                style={{ display: timerFinished && !tradeErrored ? "inline" : "none" }}
               >
                 ✓
               </span>
@@ -732,20 +751,9 @@ export default function WatchlistModal({ open, onClose }: WatchlistModalProps) {
       };
       timerHandle = requestAnimationFrame(tick);
 
+      const cleanupSolanaTradeListener = listenForTradeEvents((token as any).mint || '', uniqueToastId, (v) => { tradeErrored = v; }, 'solana');
+
       try {
-        // Verify the pair address from the token service before executing trade
-        let poolAddress = (token as any).migrated_pool_address || token.pair_address || "";
-        const tokenMint = (token as any).mint || '';
-        if (tokenMint) {
-          console.log(`[Watchlist] Verifying pair address for quick buy: ${tokenMint}`);
-          const verifiedPairAddress = await fetchVerifiedPairAddress(tokenMint);
-          if (verifiedPairAddress) {
-            if (verifiedPairAddress !== poolAddress) {
-              console.log(`[Watchlist] Pair address mismatch! Local: ${poolAddress}, Verified: ${verifiedPairAddress}`);
-            }
-            poolAddress = verifiedPairAddress;
-          }
-        }
         const baseMint = tokenMint;
         const quoteMint = SOL_MINT_ADDRESS;
 
@@ -815,6 +823,7 @@ export default function WatchlistModal({ open, onClose }: WatchlistModalProps) {
         }
       } catch (error: any) {
         tradeErrored = true;
+        cleanupSolanaTradeListener();
         // Stop timer on error
         if (timerHandle) {
           cancelAnimationFrame(timerHandle);

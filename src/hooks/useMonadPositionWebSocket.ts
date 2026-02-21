@@ -189,7 +189,11 @@ export function useMonadPositionWebSocket(
           } else if (message.type === 'tx_hash' && message.data) {
             // INSTANT txHash push from backend - fires immediately after signing
             console.log('[useMonadPositionWebSocket] 🚀 INSTANT txHash received:', message.data.txHash);
+            window.dispatchEvent(new CustomEvent('monadTradeSuccess', { detail: message.data }));
             onTxHashRef.current?.(message.data as TxHashMessage);
+          } else if (message.type === 'trade_error' && message.data) {
+            console.log('[useMonadPositionWebSocket] ⚠️ Trade error via WS:', message.data.errorMessage);
+            window.dispatchEvent(new CustomEvent('monadTradeError', { detail: message.data }));
           } else if (message.type === 'position_update' && message.data) {
             const positionData: MonadPosition = message.data;
             

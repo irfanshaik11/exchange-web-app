@@ -24,6 +24,7 @@ import { SiSolana } from "react-icons/si";
 import useTokenStatsWebSocket from "~/hooks/useTokenStatsWebSocket";
 import { getPoolTypeFromToken } from "~/utils/poolTypeDetection";
 import { mapTradeErrorMessage } from "~/utils/tradeErrorMessages";
+import { listenForTradeEvents } from "~/utils/createSolanaToastHandler";
 import HighSlippageWarningDialog from "../HighSlippageWarningDialog";
 import LowLiquidityWarningDialog from "../LowLiquidityWarningDialog";
 import { BsCoin, BsPersonGear } from "react-icons/bs";
@@ -656,7 +657,7 @@ function showExecutionToast(opts: {
         <div className="flex items-center gap-2 flex-1 min-w-0">
           <span className="text-sm text-neutral-200 truncate">{opts.label}</span>
           <span id={`timer-${id}`} className="text-xs text-neutral-400 flex-shrink-0">(0.00s)</span>
-          <span id={`check-${id}`} className="text-green-400 flex-shrink-0" style={{ display: 'none' }}>✓</span>
+          <span id={`check-${id}`} className="text-green-400 flex-shrink-0" style={{ display: timerFinished ? 'inline' : 'none' }}>✓</span>
           <span className="flex-shrink-0" style={{ display: 'inline-flex' }}>
             {explorerUrl ? (
               <a href={explorerUrl} target="_blank" rel="noopener noreferrer" className="hover:opacity-80 transition-opacity">
@@ -697,7 +698,7 @@ function showExecutionToast(opts: {
 }
 
 // Pool Info Section Component
-const PoolInfoSection: React.FC<{ token: any; liveMarketCapUsd?: number | null }> = ({ token, liveMarketCapUsd }) => {
+const PoolInfoSection: React.FC<{ token: any; liveMarketCapUsd?: number | null; liveLiquidityUsd?: number | null }> = ({ token, liveMarketCapUsd, liveLiquidityUsd }) => {
   const [isOpen, setIsOpen] = useState(true);
 
   const copyToClipboard = (text: string) => {
@@ -758,10 +759,10 @@ const PoolInfoSection: React.FC<{ token: any; liveMarketCapUsd?: number | null }
               <span className="text-[10px] text-[#9CA3AF] uppercase tracking-wide">Total liq</span>
               <div className="flex items-center gap-1">
                 <span className="text-[11px] text-[#E6E7EA] font-semibold">
-                  ${formatSmartNumber(token?.liquidity_usd || token?.total_liquidity_usd || 0)}
+                  ${formatSmartNumber(liveLiquidityUsd || token?.liquidity_usd || token?.total_liquidity_usd || 0)}
                 </span>
                 <span className="text-[10px] text-[#9CA3AF]">
-                  ({formatSmartNumber((token?.liquidity_usd || token?.total_liquidity_usd || 0) / 200)} SOL)
+                  ({formatSmartNumber((liveLiquidityUsd || token?.liquidity_usd || token?.total_liquidity_usd || 0) / 200)} SOL)
                 </span>
               </div>
             </div>
@@ -799,13 +800,13 @@ const PoolInfoSection: React.FC<{ token: any; liveMarketCapUsd?: number | null }
               <div className="flex items-center justify-between">
                 <span className="text-[10px] text-[#9CA3AF]">Liq</span>
                 <span className="text-[11px] text-[#E6E7EA] font-semibold">
-                  {formatSmartNumber((token?.liquidity_usd || 0) / 200)} SOL
+                  {formatSmartNumber((liveLiquidityUsd || token?.liquidity_usd || 0) / 200)} SOL
                 </span>
               </div>
               <div className="flex items-center justify-between">
                 <span className="text-[10px] text-[#9CA3AF]">Value</span>
                 <span className="text-[11px] text-[#E6E7EA] font-semibold">
-                  ${formatSmartNumber(token?.liquidity_usd || 0)}
+                  ${formatSmartNumber(liveLiquidityUsd || token?.liquidity_usd || 0)}
                 </span>
               </div>
             </div>
@@ -1029,6 +1030,7 @@ interface TradeActionPanelProps {
   initialStats?: TokenStats | null; // Initial stats from REST API
   wsVolume?: SolanaTokenVolume | null; // Volume data from unified WebSocket
   liveMarketCapUsd?: number | null; // Real-time MC from chart/WebSocket (same source as header)
+  liveLiquidityUsd?: number | null; // Real-time liquidity from WebSocket (same source as header)
 }
 
 const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
@@ -1040,6 +1042,7 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
   initialStats,
   wsVolume,
   liveMarketCapUsd,
+  liveLiquidityUsd,
 }) => {
   // Only show skeleton if we have absolutely no token data (not even optimistic)
   // Allow tokens with just mint address (for tokens without metadata from search)
@@ -1620,6 +1623,11 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
   const { buys, sells, volume, buyVolume, sellVolume, netVolume, buyPercentage, sellPercentage } = realTimeStats;
 
   const liquidityUsd = useMemo(() => {
+    // Priority 1: Real-time WS data (same source as trade header)
+    if (typeof liveLiquidityUsd === "number" && Number.isFinite(liveLiquidityUsd) && liveLiquidityUsd > 0) {
+      return liveLiquidityUsd;
+    }
+    // Priority 2: Token service REST fetch
     if (tokenServiceLiquidity !== null && Number.isFinite(tokenServiceLiquidity) && tokenServiceLiquidity > 0) {
       return tokenServiceLiquidity;
     }
@@ -1638,7 +1646,7 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
     }
     // Fall back to zero if we have no positive readings
     return Number(token.total_liquidity_usd) || 0;
-  }, [token, tokenServiceLiquidity]);
+  }, [liveLiquidityUsd, token, tokenServiceLiquidity]);
 
   // Fetch creator address from token-service
   useEffect(() => {
@@ -2589,7 +2597,7 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
                 <span
                   id={`check-${uniqueToastId}`}
                   className="text-green-400 flex-shrink-0"
-                  style={{ display: 'none' }}
+                  style={{ display: timerFinished && !tradeErrored ? 'inline' : 'none' }}
                 >
                   ✓
                 </span>
@@ -2654,6 +2662,8 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
           timerHandle,
           totalSelectedWallets: 1
         };
+
+        const cleanupTradeListener = listenForTradeEvents(token.mint || '', uniqueToastId, (v) => { tradeErrored = v; }, 'solana');
 
         try {
           const sellResult = await tradeSellPercentage(
@@ -2765,6 +2775,7 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
           }
         } catch (error: any) {
           tradeErrored = true;
+          cleanupTradeListener();
           // Stop timer on error
           if (timerHandle) {
             cancelAnimationFrame(timerHandle);
@@ -2850,7 +2861,7 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
             <span
               id={`check-${uniqueToastId}`}
               className="text-green-400 flex-shrink-0"
-              style={{ display: 'none' }}
+              style={{ display: timerFinished && !tradeErrored ? 'inline' : 'none' }}
             >
               ✓
             </span>
@@ -2927,6 +2938,8 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
         timerHandle,
         totalSelectedWallets: walletsWithBalance
       };
+
+      const cleanupTradeListener = listenForTradeEvents(token.mint || '', uniqueToastId, (v) => { tradeErrored = v; }, 'solana');
 
       try {
         const poolAddress = resolvedPoolAddress;
@@ -3046,6 +3059,7 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
         return { success: true };
       } catch (error: any) {
         tradeErrored = true;
+        cleanupTradeListener();
         // Stop timer on error
         if (timerHandle) {
           cancelAnimationFrame(timerHandle);
@@ -3991,7 +4005,7 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
       <TokenInfoDropdown token={token} liveMarketCapUsd={liveMarketCapUsd} />
 
       {/* ===== Pool Info Section ===== */}
-      <PoolInfoSection token={token} liveMarketCapUsd={liveMarketCapUsd} />
+      <PoolInfoSection token={token} liveMarketCapUsd={liveMarketCapUsd} liveLiquidityUsd={liveLiquidityUsd} />
 
       {/* High Slippage Warning Dialog */}
       <HighSlippageWarningDialog

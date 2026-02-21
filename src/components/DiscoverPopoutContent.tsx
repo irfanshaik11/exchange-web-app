@@ -23,6 +23,7 @@ import toast from "react-hot-toast";
 import { extractTokenImage, getResolvedTokenImage } from "~/utils/images";
 import { broadcastMonadQuickTrade } from "~/utils/monadTradeEvents";
 import { formatMonadError } from "~/utils/monadError";
+import { listenForTradeEvents } from "~/utils/createSolanaToastHandler";
 
 const WRAPPED_SOL_MINT = SOL_MINT_ADDRESS;
 
@@ -1626,7 +1627,7 @@ export default function DiscoverPopoutContent() {
       toast.custom(
         (t) => (
           <div className="flex items-center gap-2 bg-[#1a1b1e] text-white border border-white/10 rounded-lg px-4 py-3">
-            <FaCheckCircle id={`check-${uniqueToastId}`} className="flex-shrink-0" size={16} style={{ color: '#31e3ac', display: 'none' }} />
+            <FaCheckCircle id={`check-${uniqueToastId}`} className="flex-shrink-0" size={16} style={{ color: '#31e3ac', display: timerFinished && !tradeErrored ? 'block' : 'none' }} />
             {tokenImage && (
               <img src={tokenImage} alt={tokenName} className="w-5 h-5 rounded-full object-cover flex-shrink-0" style={{ border: '1px solid rgba(255, 255, 255, 0.1)' }} onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
             )}
@@ -1664,7 +1665,8 @@ export default function DiscoverPopoutContent() {
           }
         }
       }, 50);
-      
+      const cleanupTradeListener = listenForTradeEvents(tokenAddress, uniqueToastId, (v) => { tradeErrored = v; }, 'monad');
+
       // Store pending toast info for WebSocket instant update (including timer)
       pendingQuickBuyToastRef.current = { id: uniqueToastId, tokenImage, tokenName, fakeTime: timerCap.toFixed(2), tokenAddress, startTime, timerInterval };
 
@@ -1736,6 +1738,7 @@ export default function DiscoverPopoutContent() {
           return { success: true, txHash: txHashes[0] };
         } else {
           tradeErrored = true;
+          cleanupTradeListener();
           clearInterval(timerInterval);
           pendingQuickBuyToastRef.current = null;
           const errorMsg = 'Trade failed';
@@ -1744,6 +1747,7 @@ export default function DiscoverPopoutContent() {
         }
       } catch (error: any) {
         tradeErrored = true;
+        cleanupTradeListener();
         console.error("❌ Monad Quick Buy failed:", error);
         clearInterval(timerInterval);
         pendingQuickBuyToastRef.current = null;

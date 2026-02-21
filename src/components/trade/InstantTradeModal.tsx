@@ -26,6 +26,7 @@ import { SOL_MINT_ADDRESS } from '~/utils/api';
 import { getPoolTypeFromToken } from '~/utils/poolTypeDetection';
 import { mapTradeErrorMessage } from '~/utils/tradeErrorMessages';
 import { showEnhancedToast } from '~/utils/enhancedToast';
+import { listenForTradeEvents } from '~/utils/createSolanaToastHandler';
 import { fetchVerifiedPairAddress } from '~/hooks/useSingleTokenPolling';
 import { useTxHashCallback } from '~/contexts/SolanaPositionWebSocketContext';
 
@@ -633,7 +634,7 @@ const InstantTradeModal: React.FC<InstantTradeModalProps> = ({ isOpen, onClose, 
     toast.custom(
       () => (
         <div className="flex items-center gap-2 bg-[#1a1b1e] text-white border border-white/10 rounded-lg px-4 py-3">
-          <FaCheckCircle id={`check-${toastId}`} className="flex-shrink-0" size={16} style={{ color: '#31e3ac', display: 'none' }} />
+          <FaCheckCircle id={`check-${toastId}`} className="flex-shrink-0" size={16} style={{ color: '#31e3ac', display: timerFinished && !tradeErrored ? 'block' : 'none' }} />
           {tokenImage && (
             <img src={tokenImage} alt={tokenName} className="w-5 h-5 rounded-full object-cover flex-shrink-0" style={{ border: '1px solid rgba(255, 255, 255, 0.1)' }} onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
           )}
@@ -669,6 +670,8 @@ const InstantTradeModal: React.FC<InstantTradeModalProps> = ({ isOpen, onClose, 
         }
       }
     }, 50);
+
+    const cleanupMonadTradeListener = listenForTradeEvents(tokenAddress, toastId, (v) => { tradeErrored = v; }, 'monad');
 
     pendingToastRef.current = { id: toastId, tokenImage, tokenName, fakeTime: timerCap.toFixed(2), startTime, timerInterval };
 
@@ -706,12 +709,14 @@ const InstantTradeModal: React.FC<InstantTradeModalProps> = ({ isOpen, onClose, 
       }
 
       tradeErrored = true;
+      cleanupMonadTradeListener();
       clearInterval(timerInterval);
       pendingToastRef.current = null;
       toast.error('Trade failed', { id: toastId, duration: 6000 });
       return { success: false };
     } catch (error: any) {
       tradeErrored = true;
+      cleanupMonadTradeListener();
       clearInterval(timerInterval);
       pendingToastRef.current = null;
       const errorMessage = formatMonadError(error?.message || error?.error || "Trade failed. Please try again.");
@@ -778,7 +783,7 @@ const InstantTradeModal: React.FC<InstantTradeModalProps> = ({ isOpen, onClose, 
             <span
               id={`check-${uniqueToastId}`}
               className="flex-shrink-0 text-green-400"
-              style={{ display: 'none' }}
+              style={{ display: timerFinished && !tradeErrored ? 'inline' : 'none' }}
             >
               ✓
             </span>
@@ -854,6 +859,8 @@ const InstantTradeModal: React.FC<InstantTradeModalProps> = ({ isOpen, onClose, 
       timerHandle,
       totalSelectedWallets: walletsWithBalance,
     };
+
+    const cleanupSolanaTradeListener = listenForTradeEvents(token.mint || '', uniqueToastId, (v) => { tradeErrored = v; }, 'solana');
 
     try {
       // Verify pool address from token service
@@ -952,6 +959,7 @@ const InstantTradeModal: React.FC<InstantTradeModalProps> = ({ isOpen, onClose, 
       return { success: true };
     } catch (error: any) {
       tradeErrored = true;
+      cleanupSolanaTradeListener();
       if (timerHandle) {
         cancelAnimationFrame(timerHandle);
       }
@@ -1183,12 +1191,13 @@ const InstantTradeModal: React.FC<InstantTradeModalProps> = ({ isOpen, onClose, 
         // Random cap time between 0.40 and 0.60 seconds
         const sellTimerCap = 0.40 + Math.random() * 0.20;
         let sellTimerFinished = false;
-        
+        let tradeErrored = false;
+
         // Show initial loading toast with timer - checkmark hidden until timer finishes, link icon grayed out
         toast.custom(
           (t) => (
             <div className="flex items-center gap-2 bg-[#1a1b1e] text-white border border-white/10 rounded-lg px-4 py-3">
-              <FaCheckCircle id={`check-${uniqueSellToastId}`} className="flex-shrink-0" size={16} style={{ color: '#31e3ac', display: 'none' }} />
+              <FaCheckCircle id={`check-${uniqueSellToastId}`} className="flex-shrink-0" size={16} style={{ color: '#31e3ac', display: sellTimerFinished && !tradeErrored ? 'block' : 'none' }} />
               {tokenImage && (
                 <img src={tokenImage} alt={tokenName} className="w-5 h-5 rounded-full object-cover flex-shrink-0" style={{ border: '1px solid rgba(255, 255, 255, 0.1)' }} onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
               )}
@@ -1224,7 +1233,9 @@ const InstantTradeModal: React.FC<InstantTradeModalProps> = ({ isOpen, onClose, 
             }
           }
         }, 50);
-        
+
+        const cleanupSellTradeListener = listenForTradeEvents(tokenAddress, uniqueSellToastId, (v) => { tradeErrored = v; }, 'monad');
+
         // Store pending toast info for WebSocket instant update (including timer)
         pendingToastRef.current = { id: uniqueSellToastId, tokenImage, tokenName, fakeTime: sellTimerCap.toFixed(2), startTime: sellStartTime, timerInterval: sellTimerInterval };
 
@@ -1303,10 +1314,12 @@ const InstantTradeModal: React.FC<InstantTradeModalProps> = ({ isOpen, onClose, 
           }, 2000);
           broadcastMonadQuickTrade(tokenAddress, 'sell');
         } else {
+          tradeErrored = true;
+          cleanupSellTradeListener();
           toast.error(formatMonadError((result as any).error), { id: uniqueSellToastId, duration: 6000 });
           setIsLoading(false);
         }
-        
+
         setIsLoading(false);
         return result;
       } else {

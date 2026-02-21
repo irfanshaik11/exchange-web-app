@@ -102,6 +102,7 @@ import {
 } from "~/utils/api";
 import { getPoolTypeFromToken } from "~/utils/poolTypeDetection";
 import { mapTradeErrorMessage } from "~/utils/tradeErrorMessages";
+import { listenForTradeEvents } from "~/utils/createSolanaToastHandler";
 import { TokenAge } from "./TokenAge";
 import { prefetchTradeData } from "~/utils/tokenCache";
 import { prefetchOHLC } from "~/hooks/useBackgroundOHLCPreload";
@@ -3147,6 +3148,23 @@ function PulseTable({
     const walletsWithBalance = allocations.length;
     const isMultiWallet = walletsWithBalance > 1;
 
+    // CRITICAL: Verify the pair address before toast to avoid checkmark-before-error UX
+    let poolAddress = token.migrated_pool_address || token.pair_address || "";
+    if (token.mint) {
+      console.log(
+        `[PulseTable] Verifying pair address for quick buy: ${token.mint}`,
+      );
+      const verifiedPairAddress = await fetchVerifiedPairAddress(token.mint);
+      if (verifiedPairAddress) {
+        if (verifiedPairAddress !== poolAddress) {
+          console.log(
+            `[PulseTable] Pair address mismatch! Local: ${poolAddress}, Verified: ${verifiedPairAddress}`,
+          );
+        }
+        poolAddress = verifiedPairAddress;
+      }
+    }
+
     // Generate random timer cap (0.40-0.60s)
     const timerCap = 0.4 + Math.random() * 0.2;
     const uniqueToastId = `solana-quickbuy-${Date.now()}-${Math.random()}`;
@@ -3183,7 +3201,7 @@ function PulseTable({
             <span
               id={`check-${uniqueToastId}`}
               className="flex-shrink-0 text-green-400"
-              style={{ display: "none" }}
+              style={{ display: timerFinished && !tradeErrored ? "inline" : "none" }}
             >
               ✓
             </span>
@@ -3267,23 +3285,9 @@ function PulseTable({
       totalSelectedWallets: walletsWithBalance,
     };
 
+    const cleanupTradeListener = listenForTradeEvents(token.mint || '', uniqueToastId, (v) => { tradeErrored = v; }, 'solana');
+
     try {
-      // CRITICAL: Verify the pair address from the token service before executing trade
-      let poolAddress = token.migrated_pool_address || token.pair_address || "";
-      if (token.mint) {
-        console.log(
-          `[PulseTable] Verifying pair address for quick buy: ${token.mint}`,
-        );
-        const verifiedPairAddress = await fetchVerifiedPairAddress(token.mint);
-        if (verifiedPairAddress) {
-          if (verifiedPairAddress !== poolAddress) {
-            console.log(
-              `[PulseTable] Pair address mismatch! Local: ${poolAddress}, Verified: ${verifiedPairAddress}`,
-            );
-          }
-          poolAddress = verifiedPairAddress;
-        }
-      }
       const baseMint = token.mint || "";
       const quoteMint = SOL_MINT_ADDRESS;
 
@@ -3359,6 +3363,7 @@ function PulseTable({
       return { success: true };
     } catch (error: any) {
       tradeErrored = true;
+      cleanupTradeListener();
       // Stop timer on error
       if (timerHandle) {
         cancelAnimationFrame(timerHandle);

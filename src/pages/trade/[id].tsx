@@ -1157,6 +1157,7 @@ export default function TradePage() {
                   initialStats={initialTradeData?.stats}
                   wsVolume={wsVolume}
                   liveMarketCapUsd={liveMarketCapForPanel}
+                  liveLiquidityUsd={wsTokenInfo?.liquidity_usd}
                 />
               </div>
 
@@ -1224,6 +1225,7 @@ export default function TradePage() {
                 quickBuySide={quickBuySide}
                 wsVolume={wsVolume}
                 liveMarketCapUsd={liveMarketCapForPanel}
+                liveLiquidityUsd={wsTokenInfo?.liquidity_usd}
               />
             </div>
           </div>

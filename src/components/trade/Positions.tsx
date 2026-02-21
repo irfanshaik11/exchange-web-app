@@ -20,6 +20,7 @@ import { SOL_MINT_ADDRESS, tradeMonadSell, tradeSellPercentage, resolvePool } fr
 import { getPoolTypeFromToken } from '~/utils/poolTypeDetection';
 import { normalizeMonadAddress } from '~/utils/normalizeMonadAddress';
 import { broadcastMonadQuickTrade } from '~/utils/monadTradeEvents';
+import { listenForTradeEvents } from '~/utils/createSolanaToastHandler';
 import { formatMonadError } from '~/utils/monadError';
 import { useUser } from '../UserContext';
 import { fetchVerifiedPairAddress } from '~/hooks/useSingleTokenPolling';
@@ -323,7 +324,7 @@ const Positions: React.FC<PositionsProps> = ({
   const SOLANA_LOGO = 'https://avatars.githubusercontent.com/u/92743431?s=200&v=4';
   const MONAD_LOGO = 'https://pbs.twimg.com/profile_images/1749618187489206272/rDaFjEhN_400x400.jpg';
 
-  const createQuickTradeToast = useCallback((tokenImage?: string | null, tokenName?: string, chain: 'solana' | 'monad' = 'solana') => {
+  const createQuickTradeToast = useCallback((tokenImage?: string | null, tokenName?: string, chain: 'solana' | 'monad' = 'solana', tokenAddress?: string) => {
     const toastId = `quick-trade-${Date.now()}`;
     const startTime = Date.now();
     const timerCap = 0.40 + Math.random() * 0.20;
@@ -335,7 +336,7 @@ const Positions: React.FC<PositionsProps> = ({
     toast.custom(
       () => (
         <div className="flex items-center gap-2 bg-[#1a1b1e] text-white border border-white/10 rounded-lg px-4 py-3">
-          <FaCheckCircle id={`check-${toastId}`} className="flex-shrink-0" size={16} style={{ color: '#31e3ac', display: 'none' }} />
+          <FaCheckCircle id={`check-${toastId}`} className="flex-shrink-0" size={16} style={{ color: '#31e3ac', display: timerFinished && !tradeErrored ? 'block' : 'none' }} />
           {tokenImage && (
             <img
               src={tokenImage}
@@ -380,11 +381,16 @@ const Positions: React.FC<PositionsProps> = ({
       }
     }, 50);
 
+    const cleanupTradeListener = tokenAddress
+      ? listenForTradeEvents(tokenAddress, toastId, (v) => { tradeErrored = v; }, chain)
+      : () => {};
+
     const cleanup = () => {
       if (timerInterval) {
         clearInterval(timerInterval);
         timerInterval = null;
       }
+      cleanupTradeListener();
     };
 
     const markSuccess = (explorerUrl?: string, iconUrl?: string) => {
@@ -486,7 +492,7 @@ const Positions: React.FC<PositionsProps> = ({
       const tokenImage = tokenMeta?.imageUrl || position.imageUrl || null;
       const tokenName = tokenMeta?.name || tokenMeta?.symbol || shortAddr(position.tokenAddress);
       const isMonad = isMonadPosition(position);
-      const toastControls = createQuickTradeToast(tokenImage, tokenName, isMonad ? 'monad' : 'solana');
+      const toastControls = createQuickTradeToast(tokenImage, tokenName, isMonad ? 'monad' : 'solana', position.tokenAddress);
 
       try {
         if (isMonad) {

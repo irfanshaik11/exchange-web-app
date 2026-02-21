@@ -23,6 +23,7 @@ import { Connection, PublicKey } from '@solana/web3.js';
 import toast from 'react-hot-toast';
 import { getResolvedTokenImage, resolveTokenImage } from './images';
 import { fetchVerifiedPairAddress } from '~/hooks/useSingleTokenPolling';
+import { listenForTradeEvents } from '~/utils/createSolanaToastHandler';
 
 // Helper function to get first valid string from multiple candidates
 function getFirstString(...values: Array<unknown>): string | undefined {
@@ -322,6 +323,7 @@ export async function executeEnhancedTrade(params: EnhancedTradeParams): Promise
   // Declare timerInterval outside try block so it's accessible in catch/finally
   let timerInterval: NodeJS.Timeout | null = null;
   let tradeErrored = false;
+  let cleanupTradeListener: (() => void) | null = null;
 
   try {
     // Step 1: Pre-transaction validation (NO TOAST YET - show only after backend confirms trade)
@@ -474,7 +476,7 @@ export async function executeEnhancedTrade(params: EnhancedTradeParams): Promise
             <span
               id={`check-${uniqueToastId}`}
               className="text-green-400 flex-shrink-0"
-              style={{ display: 'none' }}
+              style={{ display: timerFinished && !tradeErrored ? 'inline' : 'none' }}
             >
               ✓
             </span>
@@ -535,6 +537,7 @@ export async function executeEnhancedTrade(params: EnhancedTradeParams): Promise
       timerInterval = requestAnimationFrame(tick) as any;
     };
     timerInterval = requestAnimationFrame(tick) as any;
+    cleanupTradeListener = listenForTradeEvents(token.mint || '', uniqueToastId, (v) => { tradeErrored = v; }, 'solana');
 
     // Create progress tracker (but don't use artificial delays - update based on actual progress)
     progressTracker = new TransactionProgressTracker((stage) => {
@@ -663,6 +666,7 @@ export async function executeEnhancedTrade(params: EnhancedTradeParams): Promise
 
     if (failedResult) {
       tradeErrored = true;
+      cleanupTradeListener?.();
       const errorMessage =
         (failedResult.result as any)?.error || "Transaction failed";
       console.error(
@@ -849,6 +853,7 @@ export async function executeEnhancedTrade(params: EnhancedTradeParams): Promise
 
   } catch (error: any) {
     tradeErrored = true;
+    cleanupTradeListener?.();
     console.error('Enhanced trade error:', error);
 
     // Stop timer

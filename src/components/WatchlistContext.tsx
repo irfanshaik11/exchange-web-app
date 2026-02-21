@@ -20,6 +20,9 @@ const DEFAULT_WATCHLIST_COUNT = 10;
 // Dismissed tokens — mints the user manually removed (never re-added by auto-refresh)
 const WATCHLIST_DISMISSED_KEY = 'watchlist_dismissed';
 
+// User-added tokens — mints the user explicitly starred (preserved across WS updates)
+const WATCHLIST_USER_ADDED_KEY = 'watchlist_user_added';
+
 // --- Dismissed set helpers ---
 
 function getDismissedMints(): Set<string> {
@@ -36,6 +39,23 @@ function getDismissedMints(): Set<string> {
 function saveDismissedMints(mints: Set<string>): void {
   try {
     localStorage.setItem(WATCHLIST_DISMISSED_KEY, JSON.stringify([...mints]));
+  } catch {}
+}
+
+// --- User-added set helpers ---
+
+function getUserAddedMints(): Set<string> {
+  try {
+    const raw = localStorage.getItem(WATCHLIST_USER_ADDED_KEY);
+    if (!raw) return new Set();
+    const parsed = JSON.parse(raw);
+    return new Set(Array.isArray(parsed) ? parsed : []);
+  } catch { return new Set(); }
+}
+
+function saveUserAddedMints(mints: Set<string>): void {
+  try {
+    localStorage.setItem(WATCHLIST_USER_ADDED_KEY, JSON.stringify([...mints]));
   } catch {}
 }
 
@@ -76,28 +96,77 @@ export function WatchlistProvider({ children }: { children: React.ReactNode }) {
   // Live sync from trending WebSocket — singleton hook, no extra WS connection
   const { tokens: wsTokens } = useTrendingWebSocket({ timeframe: '1h', enabled: true });
 
-  // Rebuild watchlist whenever WS tokens update
+  // Merge WS trending tokens into watchlist — preserve user-added tokens
   useEffect(() => {
     if (!isHydrated) return;
     if (wsTokens.length === 0) return;
 
     const dismissed = getDismissedMints();
-    const result: Token[] = [];
-    const seenMints = new Set<string>();
+    const userAdded = getUserAddedMints();
 
+    // Build a lookup of WS tokens by mint for quick fresher-data access
+    const wsByMint = new Map<string, Token>();
     for (const t of wsTokens) {
-      if (result.length >= DEFAULT_WATCHLIST_COUNT) break;
       const mint = (t as any).mint || '';
-      if (!mint || dismissed.has(mint) || seenMints.has(mint.toLowerCase())) continue;
-      const img = extractTokenImage(t as any);
-      if (!img || !img.trim()) continue;
-      seenMints.add(mint.toLowerCase());
-      result.push(t as any as Token);
+      if (mint) wsByMint.set(mint.toLowerCase(), t as any as Token);
     }
 
-    if (result.length > 0) {
-      setWatchlist(result);
-    }
+    setWatchlist(prev => {
+      const result: Token[] = [];
+      const seenMints = new Set<string>();
+
+      // Phase 1: Preserve all user-added tokens
+      for (const mint of userAdded) {
+        if (dismissed.has(mint)) continue;
+        const lowerMint = mint.toLowerCase();
+        if (seenMints.has(lowerMint)) continue;
+
+        // Prefer WS data (fresher prices), else keep existing entry from state
+        const wsEntry = wsByMint.get(lowerMint);
+        if (wsEntry) {
+          seenMints.add(lowerMint);
+          result.push(wsEntry);
+        } else {
+          // Keep the existing entry from current watchlist state
+          const existing = prev.find(t => ((t as any).mint || '').toLowerCase() === lowerMint);
+          if (existing) {
+            seenMints.add(lowerMint);
+            result.push(existing);
+          }
+        }
+      }
+
+      // Phase 2: Fill remaining slots with trending tokens (up to DEFAULT_WATCHLIST_COUNT)
+      for (const t of wsTokens) {
+        if (result.length >= DEFAULT_WATCHLIST_COUNT) break;
+        const mint = (t as any).mint || '';
+        if (!mint || dismissed.has(mint) || seenMints.has(mint.toLowerCase())) continue;
+        const img = extractTokenImage(t as any);
+        if (!img || !img.trim()) continue;
+        seenMints.add(mint.toLowerCase());
+        result.push(t as any as Token);
+      }
+
+      if (result.length === 0) return prev;
+
+      // Shallow change detection: skip update if same tokens in same order with same prices
+      if (prev.length === result.length) {
+        let same = true;
+        for (let i = 0; i < result.length; i++) {
+          const pMint = ((prev[i] as any).mint || '').toLowerCase();
+          const rMint = ((result[i] as any).mint || '').toLowerCase();
+          const pPrice = (prev[i] as any).price_usd ?? (prev[i] as any).usd_price ?? 0;
+          const rPrice = (result[i] as any).price_usd ?? (result[i] as any).usd_price ?? 0;
+          if (pMint !== rMint || pPrice !== rPrice) {
+            same = false;
+            break;
+          }
+        }
+        if (same) return prev;
+      }
+
+      return result;
+    });
   }, [wsTokens, isHydrated]);
 
   const addToWatchlist = useCallback((token: Token) => {
@@ -109,6 +178,11 @@ export function WatchlistProvider({ children }: { children: React.ReactNode }) {
         dismissed.delete(mintAddr);
         saveDismissedMints(dismissed);
       }
+
+      // Persist as user-added so WS sync preserves it
+      const userAdded = getUserAddedMints();
+      userAdded.add(mintAddr);
+      saveUserAddedMints(userAdded);
     }
 
     setWatchlist(prev => {
@@ -142,6 +216,13 @@ export function WatchlistProvider({ children }: { children: React.ReactNode }) {
           const dismissed = getDismissedMints();
           dismissed.add(mint);
           saveDismissedMints(dismissed);
+
+          // Also remove from user-added set
+          const userAdded = getUserAddedMints();
+          if (userAdded.has(mint)) {
+            userAdded.delete(mint);
+            saveUserAddedMints(userAdded);
+          }
         }
       }
 
