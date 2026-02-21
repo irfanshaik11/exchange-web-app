@@ -17,6 +17,7 @@ import { executeEnhancedTrade } from "~/utils/enhancedTradeHandler";
 import { showEnhancedToast } from "~/utils/enhancedToast";
 import { useUser } from "~/components/UserContext";
 import { executeSolanaMultiBuy, formatSolanaTxSummary, buildSolanaWalletAllocations } from "~/utils/solanaWalletAllocation";
+import { validateSolanaBuy, validateSolanaSell, showTradeValidationError } from "~/utils/preTradeValidation";
 import { useTxHashCallback } from "~/contexts/SolanaPositionWebSocketContext";
 import type { SolanaTokenVolume } from "~/hooks/useSolanaTokenWebSocket";
 import { extractTokenImage, getResolvedTokenImage, resolveTokenImage } from "~/utils/images";
@@ -24,7 +25,7 @@ import { SiSolana } from "react-icons/si";
 import useTokenStatsWebSocket from "~/hooks/useTokenStatsWebSocket";
 import { getPoolTypeFromToken } from "~/utils/poolTypeDetection";
 import { mapTradeErrorMessage } from "~/utils/tradeErrorMessages";
-import { listenForTradeEvents } from "~/utils/createSolanaToastHandler";
+import { listenForTradeEvents, transformToastToError } from "~/utils/createSolanaToastHandler";
 import HighSlippageWarningDialog from "../HighSlippageWarningDialog";
 import LowLiquidityWarningDialog from "../LowLiquidityWarningDialog";
 import { BsCoin, BsPersonGear } from "react-icons/bs";
@@ -2560,6 +2561,14 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
         const sellPercentage = Number(amount);
         const poolType = getPoolTypeFromToken(token);
 
+        // Pre-validate sell before showing toast
+        const sellValidation = validateSolanaSell(sellPercentage, positionData?.remaining);
+        if (!sellValidation.valid) {
+          showTradeValidationError(sellValidation.error, getResolvedTokenImage(token), token.symbol || token.name || 'Token');
+          setIsLoading(false);
+          return { success: false };
+        }
+
         // Generate random timer cap (0.40-0.60s)
         const timerCap = 0.40 + Math.random() * 0.20;
         const uniqueToastId = `solana-sell-${Date.now()}-${Math.random()}`;
@@ -2768,7 +2777,7 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
           } else {
             // Sell returned but no hash
             pendingSolanaToastRef.current = null;
-            toast.error(sellResult?.message || 'Sell failed', { id: uniqueToastId, duration: 6000 });
+            transformToastToError(uniqueToastId, sellResult?.message || 'Sell failed', tokenImage, tokenName);
             setSuccessMessage(null);
             setIsLoading(false);
             return { success: false };
@@ -2800,7 +2809,7 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
             });
           }
 
-          toast.error(errorMessage, { id: uniqueToastId, duration: 6000 });
+          transformToastToError(uniqueToastId, errorMessage, tokenImage, tokenName);
           console.error("❌ Sell failed:", error);
           setSuccessMessage(null);
           setIsLoading(false);
@@ -2824,6 +2833,14 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
       const walletsWithBalance = allocations.length;
       const totalSelectedWallets = (selectedWalletIds?.sol || []).length || 1;
       const isMultiWallet = walletsWithBalance > 1;
+
+      // Pre-validate before showing toast
+      const buyValidation = validateSolanaBuy(buyAmount, allocations, walletBalances, walletList, selectedWalletIds?.sol || [], settings.priority, settings.bribe);
+      if (!buyValidation.valid) {
+        showTradeValidationError(buyValidation.error, getResolvedTokenImage(token), token.symbol || token.name || 'Token');
+        setIsLoading(false);
+        return { success: false };
+      }
 
       // Generate random timer cap (0.40-0.60s)
       const timerCap = 0.40 + Math.random() * 0.20;
@@ -3065,17 +3082,12 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
           cancelAnimationFrame(timerHandle);
         }
 
-        // Dismiss pending toast
+        // Transform pending toast to error in-place
+        console.error("❌ Solana buy failed:", error);
         if (pendingSolanaToastRef.current) {
-          toast.dismiss(pendingSolanaToastRef.current.id);
+          transformToastToError(pendingSolanaToastRef.current.id, mapTradeErrorMessage(error), tokenImage, tokenName);
           pendingSolanaToastRef.current = null;
         }
-
-        // Show error toast
-        console.error("❌ Solana buy failed:", error);
-        showEnhancedToast("error", mapTradeErrorMessage(error), {
-          title: "Trade Failed",
-        });
 
         setSuccessMessage(null);
         setIsLoading(false);

@@ -34,7 +34,7 @@ export function mapTradeErrorMessage(error: any): string {
     return 'Trading pool unavailable. Try refreshing the page.';
 
   // Pool graduated
-  if (errorCode === 'POOL_GRADUATED' || raw.includes('graduated') || raw.includes('virtual pool is completed'))
+  if (errorCode === 'POOL_GRADUATED' || errorCode === 'BONDING_CURVE_COMPLETE' || raw.includes('graduated') || raw.includes('bonding curve complete') || raw.includes('virtual pool is completed'))
     return 'Pool graduated — liquidity migrated. Refresh and try again.';
 
   // Amount too small

@@ -1,6 +1,7 @@
 import toast from "react-hot-toast";
 import { getResolvedTokenImage } from "./images";
 import { buildSolanaWalletAllocations, executeSolanaMultiBuy } from "./solanaWalletAllocation";
+import { validateSolanaBuy, showTradeValidationError } from "./preTradeValidation";
 import { showEnhancedToast } from "./enhancedToast";
 import { SOL_MINT_ADDRESS } from "./api";
 import { getPoolTypeFromToken } from "./poolTypeDetection";
@@ -213,6 +214,15 @@ export async function executeSolanaBuyWithToast({
   const walletsWithBalance = allocations.length;
   const isMultiWallet = walletsWithBalance > 1;
 
+  // Pre-validate before showing toast
+  const validation = validateSolanaBuy(amount, allocations, walletBalances, walletList, selectedWalletIds || [], settings.priority, settings.bribe);
+  if (!validation.valid) {
+    const tokenImage = getResolvedTokenImage(token);
+    const tokenName = token.symbol || token.name || 'Token';
+    showTradeValidationError(validation.error, tokenImage, tokenName);
+    return { success: false };
+  }
+
   // Create the toast
   const { toastId, timerHandle, setTradeErrored, cleanupTradeListener } = createSolanaTradeToast(
     token,
@@ -299,17 +309,12 @@ export async function executeSolanaBuyWithToast({
       cancelAnimationFrame(timerHandle);
     }
 
-    // Dismiss pending toast
-    if (pendingRef.current) {
-      toast.dismiss(pendingRef.current.id);
-      pendingRef.current = null;
-    }
-
-    // Show error toast
+    // Transform pending toast to error in-place
     console.error("❌ Solana buy failed:", error);
-    showEnhancedToast("error", mapTradeErrorMessage(error), {
-      title: "Trade Failed",
-    });
+    const errorTokenImage = pendingRef.current ? getResolvedTokenImage(token) : null;
+    const errorTokenName = token.symbol || token.name || 'Token';
+    transformToastToError(toastId, mapTradeErrorMessage(error), errorTokenImage, errorTokenName);
+    pendingRef.current = null;
 
     return { success: false, error };
   }
@@ -357,6 +362,43 @@ export function listenForTradeEvents(
     window.removeEventListener(errorEvent, onError);
     window.removeEventListener(successEvent, onSuccess);
   };
+}
+
+/**
+ * Hot-replaces an existing pending trade toast with an error state in-place.
+ * Uses the same toast ID so react-hot-toast swaps content without dismiss/re-appear animation.
+ */
+export function transformToastToError(
+  toastId: string,
+  errorMsg: string,
+  tokenImage?: string | null,
+  tokenName?: string,
+) {
+  toast(
+    () => (
+      <div className="flex items-center gap-3">
+        {tokenImage && (
+          <img
+            src={tokenImage}
+            alt={tokenName || 'Token'}
+            className="h-6 w-6 flex-shrink-0 rounded-full"
+            onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+          />
+        )}
+        <span className="truncate text-sm text-red-400">{errorMsg}</span>
+      </div>
+    ),
+    {
+      id: toastId,
+      duration: 5000,
+      style: {
+        background: '#1a1a1a',
+        border: '1px solid #ef4444',
+        borderRadius: '8px',
+        padding: '12px',
+      },
+    },
+  );
 }
 
 export function createSolanaWsHandler(pendingRef: PendingSolanaToastRef) {

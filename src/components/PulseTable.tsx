@@ -102,7 +102,7 @@ import {
 } from "~/utils/api";
 import { getPoolTypeFromToken } from "~/utils/poolTypeDetection";
 import { mapTradeErrorMessage } from "~/utils/tradeErrorMessages";
-import { listenForTradeEvents } from "~/utils/createSolanaToastHandler";
+import { listenForTradeEvents, transformToastToError } from "~/utils/createSolanaToastHandler";
 import { TokenAge } from "./TokenAge";
 import { prefetchTradeData } from "~/utils/tokenCache";
 import { prefetchOHLC } from "~/hooks/useBackgroundOHLCPreload";
@@ -121,6 +121,7 @@ import {
   executeSolanaMultiBuy,
   buildSolanaWalletAllocations,
 } from "~/utils/solanaWalletAllocation";
+import { validateSolanaBuy, showTradeValidationError } from "~/utils/preTradeValidation";
 import { useTxHashCallback } from "~/contexts/SolanaPositionWebSocketContext";
 import { fetchVerifiedPairAddress } from "~/hooks/useSingleTokenPolling";
 import toast from "react-hot-toast";
@@ -3148,6 +3149,13 @@ function PulseTable({
     const walletsWithBalance = allocations.length;
     const isMultiWallet = walletsWithBalance > 1;
 
+    // Pre-validate before showing toast
+    const validation = validateSolanaBuy(buyAmount, allocations, walletBalances, walletList, selectedWalletIds?.sol || [], settings.priority, settings.bribe);
+    if (!validation.valid) {
+      showTradeValidationError(validation.error, getResolvedTokenImage(token), token.symbol || token.name || 'Token');
+      return;
+    }
+
     // CRITICAL: Verify the pair address before toast to avoid checkmark-before-error UX
     let poolAddress = token.migrated_pool_address || token.pair_address || "";
     if (token.mint) {
@@ -3369,17 +3377,12 @@ function PulseTable({
         cancelAnimationFrame(timerHandle);
       }
 
-      // Dismiss pending toast
+      // Transform pending toast to error in-place
+      console.error("❌ Quick Buy failed:", error);
       if (pendingSolanaQuickBuyToastRef.current) {
-        toast.dismiss(pendingSolanaQuickBuyToastRef.current.id);
+        transformToastToError(pendingSolanaQuickBuyToastRef.current.id, mapTradeErrorMessage(error), tokenImage, tokenName);
         pendingSolanaQuickBuyToastRef.current = null;
       }
-
-      // Show error toast
-      console.error("❌ Quick Buy failed:", error);
-      showEnhancedToast("error", mapTradeErrorMessage(error), {
-        title: "Trade Failed",
-      });
 
       return { success: false, error };
     }
