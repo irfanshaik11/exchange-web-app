@@ -108,6 +108,9 @@ export type Token = {
   // Migration status from Go backend
   status?: string;
   migrated_time?: string;
+  // Dev/creator wallet for blacklist
+  dev_wallet?: string;
+  creator_wallet?: string;
 };
 
 /**

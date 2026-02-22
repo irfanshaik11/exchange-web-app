@@ -147,6 +147,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
             dev_tokens_migrated: r.dev_tokens_migrated ?? 0,
             // Social links
             links: r.links || null,
+            // Dev wallet for blacklist feature
+            dev_wallet: r.dev_wallet || r.creator_wallet || null,
+            creator_wallet: r.creator_wallet || r.dev_wallet || null,
           };
         });
         return res.json(mapped);

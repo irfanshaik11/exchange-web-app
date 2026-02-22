@@ -1222,21 +1222,31 @@ const TradeHeader: React.FC<TradeHeaderProps> = ({ token, livePriceUsd, liveMark
 										<DropdownMenuItem
 											className="dark:focus:bg-accent focus:bg-accent dark:text-popover-foreground"
 											onClick={async () => {
-												await navigator.clipboard.writeText(token.name);
-												showToast(`${token.name} copied`);
+												await navigator.clipboard.writeText(token.pair_address);
+												showToast(`Pair address copied`);
 											}}
 										>
-											Copy {token.name}
+											Copy Pair Address
 										</DropdownMenuItem>
 
 										<DropdownMenuItem
 											className="dark:focus:bg-accent focus:bg-accent dark:text-popover-foreground"
 											onClick={async () => {
-												await navigator.clipboard.writeText(token.pair_address);
-												showToast(`Pair address copied`);
+												await navigator.clipboard.writeText(token.mint);
+												showToast(`Contract address copied`);
 											}}
 										>
-											Copy {shortenAddress(token.pair_address)}
+											Copy Contract Address
+										</DropdownMenuItem>
+
+										<DropdownMenuItem
+											className="dark:focus:bg-accent focus:bg-accent dark:text-popover-foreground"
+											onClick={async () => {
+												await navigator.clipboard.writeText(token.name);
+												showToast(`${token.name} copied`);
+											}}
+										>
+											Copy {token.name}
 										</DropdownMenuItem>
 
 										<DropdownMenuItem
