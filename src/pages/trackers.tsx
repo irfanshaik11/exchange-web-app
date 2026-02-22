@@ -225,7 +225,8 @@ export default function TrackersPage() {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [showImportModal, setShowImportModal] = useState(false);
   const [toast, setToast] = useState("");
-  const [showExportSuccessTooltip, setShowExportSuccessTooltip] = useState(false);
+  const [showExportSuccessTooltip, setShowExportSuccessTooltip] =
+    useState(false);
   const [scannedWallet, setScannedWallet] = useState<Wallet | null>(null);
   const [isTogglingAllNotifications, setIsTogglingAllNotifications] =
     useState(false);
@@ -1810,19 +1811,19 @@ export default function TrackersPage() {
                                   {activeTab === 0 && (
                                     <>
                                       <button
-                                        className="cursor-pointer rounded-lg border border-white/[0.06] bg-white/[0.03] px-2.5 py-1.5 text-[9px] font-semibold whitespace-nowrap text-neutral-200 transition-all duration-200 hover:border-white/[0.1] hover:bg-white/[0.07] hover:text-white sm:px-3 sm:py-1.5 sm:text-[10px]"
+                                        className="cursor-pointer rounded-lg border border-white/[0.06] bg-white/[0.03] px-2.5 py-1.5 text-[9px] font-semibold whitespace-nowrap text-neutral-200 transition-all duration-200 hover:border-white/[0.1] hover:bg-white/[0.07] hover:text-white sm:px-3 sm:py-2.5 sm:text-[10px]"
                                         onClick={() => setShowImportModal(true)}
                                       >
                                         Import
                                       </button>
                                       <div className="relative">
                                         {showExportSuccessTooltip && (
-                                          <div className="absolute bottom-full left-1/2 z-50 mb-1.5 -translate-x-1/2 rounded-md bg-neutral-800 px-2.5 py-1.5 text-xs font-medium text-white shadow-lg whitespace-nowrap">
+                                          <div className="absolute bottom-full left-1/2 z-50 mb-1.5 -translate-x-1/2 rounded-md bg-neutral-800 px-2.5 py-1.5 text-xs font-medium whitespace-nowrap text-white shadow-lg">
                                             Export Successful
                                           </div>
                                         )}
                                         <button
-                                          className="cursor-pointer rounded-lg border border-white/[0.06] bg-white/[0.03] px-2.5 py-1.5 text-[9px] font-semibold whitespace-nowrap text-neutral-200 transition-all duration-200 hover:border-white/[0.1] hover:bg-white/[0.07] hover:text-white sm:px-3 sm:py-1.5 sm:text-[10px]"
+                                          className="cursor-pointer rounded-lg border border-white/[0.06] bg-white/[0.03] px-2.5 py-1.5 text-[9px] font-semibold whitespace-nowrap text-neutral-200 transition-all duration-200 hover:border-white/[0.1] hover:bg-white/[0.07] hover:text-white sm:px-3 sm:py-2.5 sm:text-[10px]"
                                           onClick={handleExportAddresses}
                                         >
                                           Export
@@ -1830,12 +1831,12 @@ export default function TrackersPage() {
                                       </div>
 
                                       {/* Icon buttons - hide some on mobile */}
-                                      <button
+                                      {/* <button
                                         className="flex h-7 w-7 cursor-pointer items-center justify-center rounded-lg border border-white/[0.06] bg-white/[0.03] text-sm text-neutral-400 transition-all duration-200 hover:border-white/[0.1] hover:bg-white/[0.07] hover:text-white sm:h-9 sm:w-9"
                                         type="button"
                                       >
                                         <FiSettings className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
-                                      </button>
+                                      </button> */}
                                       <button
                                         className={`flex h-8 w-8 items-center justify-center rounded-lg border transition-all duration-300 sm:h-9 sm:w-9 ${
                                           isTogglingAllNotifications
@@ -1863,18 +1864,18 @@ export default function TrackersPage() {
                                           }`}
                                         />
                                       </button>
-                                      <button
+                                      {/* <button
                                         className="flex h-7 w-7 cursor-pointer items-center justify-center rounded-lg border border-white/[0.06] bg-white/[0.03] text-sm text-neutral-400 transition-all duration-200 hover:border-white/[0.1] hover:bg-white/[0.07] hover:text-white sm:h-9 sm:w-9"
                                         type="button"
                                       >
                                         <FiShare2 className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
-                                      </button>
-                                      <button
+                                      </button> */}
+                                      {/* <button
                                         className="flex h-7 w-7 cursor-pointer items-center justify-center rounded-lg border border-white/[0.06] bg-white/[0.03] text-sm text-neutral-400 transition-all duration-200 hover:border-white/[0.1] hover:bg-white/[0.07] hover:text-white sm:h-9 sm:w-9"
                                         type="button"
                                       >
                                         <FiRss className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
-                                      </button>
+                                      </button> */}
                                     </>
                                   )}
                                 </div>
