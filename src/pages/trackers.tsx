@@ -225,6 +225,7 @@ export default function TrackersPage() {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [showImportModal, setShowImportModal] = useState(false);
   const [toast, setToast] = useState("");
+  const [showExportSuccessTooltip, setShowExportSuccessTooltip] = useState(false);
   const [scannedWallet, setScannedWallet] = useState<Wallet | null>(null);
   const [isTogglingAllNotifications, setIsTogglingAllNotifications] =
     useState(false);
@@ -1498,8 +1499,8 @@ export default function TrackersPage() {
     }));
     const jsonString = JSON.stringify(walletsData, null, 2);
     navigator.clipboard.writeText(jsonString);
-    setToast("Wallets copied to clipboard");
-    setTimeout(() => setToast(""), 2000);
+    setShowExportSuccessTooltip(true);
+    setTimeout(() => setShowExportSuccessTooltip(false), 2000);
   };
 
   // Import wallets from JSON file
@@ -1814,12 +1815,19 @@ export default function TrackersPage() {
                                       >
                                         Import
                                       </button>
-                                      <button
-                                        className="cursor-pointer rounded-lg border border-white/[0.06] bg-white/[0.03] px-2.5 py-1.5 text-[9px] font-semibold whitespace-nowrap text-neutral-200 transition-all duration-200 hover:border-white/[0.1] hover:bg-white/[0.07] hover:text-white sm:px-3 sm:py-1.5 sm:text-[10px]"
-                                        onClick={handleExportAddresses}
-                                      >
-                                        Export
-                                      </button>
+                                      <div className="relative">
+                                        {showExportSuccessTooltip && (
+                                          <div className="absolute bottom-full left-1/2 z-50 mb-1.5 -translate-x-1/2 rounded-md bg-neutral-800 px-2.5 py-1.5 text-xs font-medium text-white shadow-lg whitespace-nowrap">
+                                            Export Successful
+                                          </div>
+                                        )}
+                                        <button
+                                          className="cursor-pointer rounded-lg border border-white/[0.06] bg-white/[0.03] px-2.5 py-1.5 text-[9px] font-semibold whitespace-nowrap text-neutral-200 transition-all duration-200 hover:border-white/[0.1] hover:bg-white/[0.07] hover:text-white sm:px-3 sm:py-1.5 sm:text-[10px]"
+                                          onClick={handleExportAddresses}
+                                        >
+                                          Export
+                                        </button>
+                                      </div>
 
                                       {/* Icon buttons - hide some on mobile */}
                                       <button
