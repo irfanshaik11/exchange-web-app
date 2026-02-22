@@ -28,6 +28,7 @@ import {
   getTrackedTwitterAccounts,
   getTwitterFeed,
   getUserTweets,
+  getApprovedTwitterHandles,
   type TwitterAccount,
   type Tweet,
 } from "~/utils/twitterTracking";
@@ -35,13 +36,26 @@ import { useUser } from "../components/UserContext";
 import { useWalletTracker } from "../components/WalletTrackerContext";
 import AddTwitterHandleModal from "../components/AddTwitterHandleModal";
 import TwitterAccountRow from "../components/TwitterAccountRow";
-import { FiSettings, FiBell, FiShare2, FiRss, FiLock, FiEye, FiAtSign, FiMessageCircle } from "react-icons/fi";
+import {
+  FiSettings,
+  FiBell,
+  FiShare2,
+  FiRss,
+  FiLock,
+  FiEye,
+  FiAtSign,
+  FiMessageCircle,
+  FiPlus,
+} from "react-icons/fi";
 import { SiSolana } from "react-icons/si";
 import { RiExchangeDollarLine } from "react-icons/ri";
 import { useQuickBuy } from "~/components/QuickBuyContext";
 import { executeEnhancedTrade } from "~/utils/enhancedTradeHandler";
 import { showEnhancedToast } from "~/utils/enhancedToast";
-import { validateSolanaBuy, showTradeValidationError } from "~/utils/preTradeValidation";
+import {
+  validateSolanaBuy,
+  showTradeValidationError,
+} from "~/utils/preTradeValidation";
 import { checkAtaExists } from "~/utils/ataCheck";
 import { buildSolanaWalletAllocations } from "~/utils/solanaWalletAllocation";
 import { getResolvedTokenImage } from "~/utils/images";
@@ -52,7 +66,7 @@ import { useFilter } from "../components/FilterContext";
 import FilterPopout from "../components/FilterPopout";
 
 const TABS = ["Wallet Manager"];
-const TWITTER_TABS = ["Tracked Accounts", "X Feed"];
+const TWITTER_TABS = ["Tracked Accounts", "X Feed", "Recommended Wallets"];
 const LIVE_TRADES_CACHE_PREFIX = "walletTracker:liveTrades";
 const getLiveTradesCacheKey = (userId?: string) =>
   userId
@@ -486,6 +500,10 @@ export default function TrackersPage() {
   const [selectedTwitterUser, setSelectedTwitterUser] = useState<string | null>(
     null,
   );
+  const [approvedHandles, setApprovedHandles] = useState<string[]>([]);
+  const [approvedHandlesSearch, setApprovedHandlesSearch] = useState("");
+  const [loadingApprovedHandles, setLoadingApprovedHandles] = useState(false);
+  const [addingHandle, setAddingHandle] = useState<string | null>(null);
   const isAtWalletLimit = watchedWallets.length >= MAX_WALLETS;
   // Hide wallet section when chain is Monad
   const showWalletSection = !isMobile || mobileMainTab === "wallets";
@@ -566,6 +584,15 @@ export default function TrackersPage() {
       loadTwitterFeed();
     }
   }, [twitterTab, twitterAccounts]);
+
+  // Load approved handles for Recommended Wallets tab
+  useEffect(() => {
+    if (approvedHandles.length > 0) return;
+    setLoadingApprovedHandles(true);
+    getApprovedTwitterHandles()
+      .then(setApprovedHandles)
+      .finally(() => setLoadingApprovedHandles(false));
+  }, []);
 
   // Hydrate cached live trades so the Live Trades tab renders instantly on reload
   useEffect(() => {
@@ -719,7 +746,10 @@ export default function TrackersPage() {
             error,
           );
           // Set balance to 0 so UI shows a value instead of infinite "Loading..."
-          setTrackedWalletBalances((prev) => ({ ...prev, [wallet.address]: 0 }));
+          setTrackedWalletBalances((prev) => ({
+            ...prev,
+            [wallet.address]: 0,
+          }));
         }
       });
     } catch (error) {
@@ -1294,14 +1324,26 @@ export default function TrackersPage() {
       priorityFee: settings.priority || 0.0001,
       bribe: settings.bribe || 0,
     });
-    const ataExists = await checkAtaExists(trade.mint, user?.publicKey).catch(() => null);
+    const ataExists = await checkAtaExists(trade.mint, user?.publicKey).catch(
+      () => null,
+    );
     const buyValidation = validateSolanaBuy(
-      buyAmount, allocations, walletBalances || {}, walletList || [],
-      selectedWalletIds?.sol || [], settings.priority, settings.bribe, ataExists
+      buyAmount,
+      allocations,
+      walletBalances || {},
+      walletList || [],
+      selectedWalletIds?.sol || [],
+      settings.priority,
+      settings.bribe,
+      ataExists,
     );
     if (!buyValidation.valid) {
       const token = tokenMetadata.get(trade.mint);
-      showTradeValidationError(buyValidation.error, getResolvedTokenImage(token as any), trade.symbol || token?.symbol || 'Token');
+      showTradeValidationError(
+        buyValidation.error,
+        getResolvedTokenImage(token as any),
+        trade.symbol || token?.symbol || "Token",
+      );
       return;
     }
 
@@ -1598,524 +1640,634 @@ export default function TrackersPage() {
           {/* Outer padding wrapper */}
           <div className="p-1 sm:p-1.5">
             {/* Rounded container with background */}
-            <div className="relative overflow-hidden rounded-2xl border border-white/[0.06] min-h-[calc(100vh-80px)]">
+            <div className="relative min-h-[calc(100vh-80px)] overflow-hidden rounded-2xl border border-white/[0.06]">
               {/* Background image inside the container */}
               <div className="pointer-events-none absolute inset-0 overflow-hidden rounded-2xl">
                 <div
                   className="absolute inset-x-0 top-0 h-[80vh] bg-cover bg-top bg-no-repeat"
-                  style={{ backgroundImage: 'url(/ranks/Background2.png)' }}
+                  style={{ backgroundImage: "url(/ranks/Background2.png)" }}
                 />
                 <div className="absolute inset-0 bg-black/30" />
                 <div
                   className="absolute inset-0"
                   style={{
-                    background: 'linear-gradient(to bottom, transparent 0%, transparent 20%, rgba(0,0,0,0.1) 30%, rgba(0,0,0,0.3) 45%, rgba(0,0,0,0.6) 60%, rgba(0,0,0,0.85) 75%, black 90%)'
+                    background:
+                      "linear-gradient(to bottom, transparent 0%, transparent 20%, rgba(0,0,0,0.1) 30%, rgba(0,0,0,0.3) 45%, rgba(0,0,0,0.6) 60%, rgba(0,0,0,0.85) 75%, black 90%)",
                   }}
                 />
                 <div
                   className="absolute inset-x-0 top-1/4 bottom-0"
                   style={{
-                    background: 'linear-gradient(to bottom, transparent 0%, rgba(0,0,0,0.2) 25%, rgba(0,0,0,0.5) 50%, rgba(0,0,0,0.8) 75%, black 100%)'
+                    background:
+                      "linear-gradient(to bottom, transparent 0%, rgba(0,0,0,0.2) 25%, rgba(0,0,0,0.5) 50%, rgba(0,0,0,0.8) 75%, black 100%)",
                   }}
                 />
                 <div className="absolute inset-0 bg-gradient-to-r from-black/20 via-transparent to-black/20" />
               </div>
 
-          <div className="relative z-10 mt-4 mb-2 flex flex-col gap-4 px-4 sm:my-6 sm:mb-4 sm:px-6 lg:flex-row lg:items-center lg:justify-between lg:gap-6 lg:px-8">
-            {/* Tabs Section - Scrollable on mobile */}
-            <div className="scrollbar-hide -mx-4 flex items-center gap-3 overflow-x-auto px-4 pb-2 sm:-mx-6 sm:gap-4 sm:px-6 lg:mx-0 lg:gap-6 lg:px-0 lg:pb-0">
-              <h1 className="text-xl font-medium text-white">
-                Trackers
-              </h1>
-            </div>
-          </div>
-          <div className="relative z-10 mb-4 flex min-h-0 w-full flex-1 flex-col px-2 sm:mb-8 sm:px-6">
-            {/* Main Content Area: Two Columns */}
-            <div className="flex min-h-0 flex-1 flex-col gap-3 sm:gap-4 lg:flex-row">
-              {isMobile && (
-                <div className="flex w-full rounded-xl border border-white/[0.06] bg-[#0f1014] p-1 text-[10px] font-medium text-neutral-400 shadow-lg sm:p-1.5 sm:text-xs">
-                  <button
-                    className={`flex-1 rounded-lg px-3 py-2 transition-all duration-300 sm:px-4 sm:py-2.5 ${
-                      mobileMainTab === "wallets"
-                        ? "bg-[#7FFFC9] font-semibold text-neutral-900 shadow-[0_0_12px_rgba(127,255,201,0.3)]"
-                        : "text-neutral-300 hover:bg-neutral-800/30 hover:text-neutral-200"
-                    }`}
-                    onClick={() => setMobileMainTab("wallets")}
-                  >
-                    Wallet Tracker
-                  </button>
-                  <button
-                    className={`flex-1 rounded-lg px-3 py-2 transition-all duration-300 sm:px-4 sm:py-2.5 ${
-                      mobileMainTab === "twitter"
-                        ? "bg-[#7FFFC9] font-semibold text-neutral-900 shadow-[0_0_12px_rgba(127,255,201,0.3)]"
-                        : "text-neutral-300 hover:bg-neutral-800/30 hover:text-neutral-200"
-                    }`}
-                    onClick={() => setMobileMainTab("twitter")}
-                  >
-                    X Tracker
-                  </button>
+              <div className="relative z-10 mt-4 mb-2 flex flex-col gap-4 px-4 sm:my-6 sm:mb-4 sm:px-6 lg:flex-row lg:items-center lg:justify-between lg:gap-6 lg:px-8">
+                {/* Tabs Section - Scrollable on mobile */}
+                <div className="scrollbar-hide -mx-4 flex items-center gap-3 overflow-x-auto px-4 pb-2 sm:-mx-6 sm:gap-4 sm:px-6 lg:mx-0 lg:gap-6 lg:px-0 lg:pb-0">
+                  <h1 className="text-xl font-medium text-white">Trackers</h1>
                 </div>
-              )}
-
-              {/* LEFT: WALLET SECTION */}
-              {showWalletSection && (
-                <div
-                  className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-xl border border-white/[0.08] bg-white/[0.05] px-3 pb-4 backdrop-blur-xl sm:px-5"
-                  style={{
-                    boxShadow:
-                      "0 8px 32px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.06)",
-                    maxHeight: isMobile
-                      ? "calc(100vh - 200px)"
-                      : "calc(100vh - 240px)",
-                  }}
-                >
-                  {/* If user is not logged in, show GMGN-style empty state */}
-                  {!user ? (
-                    <div className="flex flex-1 items-center justify-center">
-                      <div className="flex flex-col items-center text-center">
-                        <FiLock className="mb-3 h-10 w-10 text-neutral-700" />
-                        <p className="text-sm font-medium text-neutral-300">
-                          Log in to start tracking
-                        </p>
-                        <p className="mt-1 text-xs text-neutral-500">
-                          Monitor wallets and catch trades in real-time
-                        </p>
-                        <button
-                          className="mt-4 inline-flex cursor-pointer items-center justify-center rounded-lg bg-[#7FFFC9] px-6 py-2 text-xs font-semibold text-neutral-900 transition-all duration-200 hover:brightness-90"
-                          onClick={() => {
-                            const event = new CustomEvent("open-login-modal");
-                            window.dispatchEvent(event);
-                          }}
-                        >
-                          Log in
-                        </button>
-                      </div>
+              </div>
+              <div className="relative z-10 mb-4 flex min-h-0 w-full flex-1 flex-col px-2 sm:mb-8 sm:px-6">
+                {/* Main Content Area: Two Columns */}
+                <div className="flex min-h-0 flex-1 flex-col gap-2 lg:flex-row">
+                  {isMobile && (
+                    <div className="flex w-full rounded-xl border border-white/[0.06] bg-[#0f1014] p-1 text-[10px] font-medium text-neutral-400 shadow-lg sm:p-1.5 sm:text-xs">
+                      <button
+                        className={`flex-1 rounded-lg px-3 py-2 transition-all duration-300 sm:px-4 sm:py-2.5 ${
+                          mobileMainTab === "wallets"
+                            ? "bg-[#7FFFC9] font-semibold text-neutral-900 shadow-[0_0_12px_rgba(127,255,201,0.3)]"
+                            : "text-neutral-300 hover:bg-neutral-800/30 hover:text-neutral-200"
+                        }`}
+                        onClick={() => setMobileMainTab("wallets")}
+                      >
+                        Wallet Tracker
+                      </button>
+                      <button
+                        className={`flex-1 rounded-lg px-3 py-2 transition-all duration-300 sm:px-4 sm:py-2.5 ${
+                          mobileMainTab === "twitter"
+                            ? "bg-[#7FFFC9] font-semibold text-neutral-900 shadow-[0_0_12px_rgba(127,255,201,0.3)]"
+                            : "text-neutral-300 hover:bg-neutral-800/30 hover:text-neutral-200"
+                        }`}
+                        onClick={() => setMobileMainTab("twitter")}
+                      >
+                        X Tracker
+                      </button>
                     </div>
-                  ) : (
-                    <>
-                      {/* HEADER BAR – three zones like reference screenshot */}
-                      <div className="flex justify-between gap-3 border-b border-white/[0.04] py-3 sm:items-center sm:gap-4 sm:py-4">
-                        {/* Left: tabs + wallet count */}
-                        <div className="flex flex-wrap items-center gap-2 sm:gap-2.5">
-                          {TABS.map((tab, i) => (
+                  )}
+
+                  {/* LEFT: WALLET SECTION */}
+                  {showWalletSection && (
+                    <div
+                      className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-xl border border-white/[0.08] bg-white/[0.05] px-3 pb-4 backdrop-blur-xl sm:px-5"
+                      style={{
+                        boxShadow:
+                          "0 8px 32px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.06)",
+                        maxHeight: isMobile
+                          ? "calc(100vh - 200px)"
+                          : "calc(100vh - 240px)",
+                      }}
+                    >
+                      {/* If user is not logged in, show GMGN-style empty state */}
+                      {!user ? (
+                        <div className="flex flex-1 items-center justify-center">
+                          <div className="flex flex-col items-center text-center">
+                            <FiLock className="mb-3 h-10 w-10 text-neutral-700" />
+                            <p className="text-sm font-medium text-neutral-300">
+                              Log in to start tracking
+                            </p>
+                            <p className="mt-1 text-xs text-neutral-500">
+                              Monitor wallets and catch trades in real-time
+                            </p>
+                            <button
+                              className="mt-4 inline-flex cursor-pointer items-center justify-center rounded-lg bg-[#7FFFC9] px-6 py-2 text-xs font-semibold text-neutral-900 transition-all duration-200 hover:brightness-90"
+                              onClick={() => {
+                                const event = new CustomEvent(
+                                  "open-login-modal",
+                                );
+                                window.dispatchEvent(event);
+                              }}
+                            >
+                              Log in
+                            </button>
+                          </div>
+                        </div>
+                      ) : (
+                        <>
+                          {/* HEADER BAR – three zones like reference screenshot */}
+                          <div className="flex justify-between gap-3 border-b border-white/[0.04] py-3 sm:items-center sm:gap-4 sm:py-4">
+                            {/* Left: tabs + wallet count */}
+                            <div className="flex flex-wrap items-center gap-2 sm:gap-2.5">
+                              {TABS.map((tab, i) => (
+                                <button
+                                  key={tab}
+                                  className={`cursor-pointer rounded-lg px-3 py-1.5 text-[10px] whitespace-nowrap transition-all duration-300 sm:px-4 sm:py-2 sm:text-xs ${
+                                    activeTab === i
+                                      ? "border border-white/[0.08] bg-white/[0.07] font-semibold text-white"
+                                      : "border border-transparent font-medium text-neutral-400 hover:bg-white/[0.04] hover:text-neutral-200"
+                                  }`}
+                                  onClick={() => setActiveTab(i)}
+                                >
+                                  {tab}
+                                </button>
+                              ))}
+                              <div className="flex items-center rounded-lg border border-white/[0.06] bg-white/[0.04] px-3 py-1 text-[10px] text-neutral-300 sm:px-3.5 sm:py-1.5 sm:text-[11px]">
+                                <span className="font-semibold text-[#7FFFC9]">
+                                  {watchedWallets.length}
+                                </span>
+                                <span className="ml-1 hidden text-neutral-500 sm:ml-1.5 sm:inline">
+                                  /{MAX_WALLETS} wallet
+                                  {watchedWallets.length === 1 ? "" : "s"}
+                                </span>
+                                <span className="ml-1 text-neutral-500 sm:ml-1.5 sm:hidden">
+                                  /{MAX_WALLETS}
+                                </span>
+                              </div>
+                            </div>
+
+                            {/* Middle: search bar (center, max width) */}
+                            <div className="flex flex-wrap items-center justify-end gap-2 sm:gap-2.5">
+                              {activeTab === 0 && (
+                                <button
+                                  className="cursor-pointer rounded-lg px-3 py-1.5 text-[9px] font-semibold whitespace-nowrap transition-all duration-200 hover:brightness-90 sm:px-5 sm:py-2.5 sm:text-xs"
+                                  style={{
+                                    backgroundColor: "#7FFFC9",
+                                    color: "#000000",
+                                    border: "none",
+                                  }}
+                                  onClick={handleOpenAddWalletModal}
+                                >
+                                  Add Wallet
+                                </button>
+                              )}
+                            </div>
+                          </div>
+
+                          {/* Search bar and action toolbar - below header, only for Wallet Manager tab */}
+                          {activeTab === 0 && (
+                            <div className="border-b border-white/[0.04] px-1 py-3 sm:px-2 sm:py-4">
+                              <div className="flex flex-wrap items-center gap-2 sm:gap-3">
+                                {/* Search input */}
+                                <div className="min-w-[200px] flex-1">
+                                  <input
+                                    type="text"
+                                    placeholder="Search by address"
+                                    className="w-full rounded-lg border border-white/[0.06] bg-white/[0.03] px-4 py-2 text-[10px] text-neutral-200 transition-all duration-300 placeholder:text-neutral-600 focus:border-[#7FFFC9]/60 focus:bg-neutral-900/60 focus:ring-2 focus:ring-[#7FFFC9]/20 focus:outline-none sm:px-5 sm:py-2.5 sm:text-xs"
+                                    disabled={false}
+                                    value={searchTerm}
+                                    onChange={(e) =>
+                                      setSearchTerm(e.target.value)
+                                    }
+                                  />
+                                </div>
+
+                                {/* Right: actions (Import / Export / icons / Add Wallet) */}
+                                <div className="flex flex-wrap items-center gap-1 sm:gap-2">
+                                  {activeTab === 0 && (
+                                    <>
+                                      <button
+                                        className="cursor-pointer rounded-lg border border-white/[0.06] bg-white/[0.03] px-2.5 py-1.5 text-[9px] font-semibold whitespace-nowrap text-neutral-200 transition-all duration-200 hover:border-white/[0.1] hover:bg-white/[0.07] hover:text-white sm:px-3 sm:py-1.5 sm:text-[10px]"
+                                        onClick={() => setShowImportModal(true)}
+                                      >
+                                        Import
+                                      </button>
+                                      <button
+                                        className="cursor-pointer rounded-lg border border-white/[0.06] bg-white/[0.03] px-2.5 py-1.5 text-[9px] font-semibold whitespace-nowrap text-neutral-200 transition-all duration-200 hover:border-white/[0.1] hover:bg-white/[0.07] hover:text-white sm:px-3 sm:py-1.5 sm:text-[10px]"
+                                        onClick={handleExportAddresses}
+                                      >
+                                        Export
+                                      </button>
+
+                                      {/* Icon buttons - hide some on mobile */}
+                                      <button
+                                        className="flex h-7 w-7 cursor-pointer items-center justify-center rounded-lg border border-white/[0.06] bg-white/[0.03] text-sm text-neutral-400 transition-all duration-200 hover:border-white/[0.1] hover:bg-white/[0.07] hover:text-white sm:h-9 sm:w-9"
+                                        type="button"
+                                      >
+                                        <FiSettings className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+                                      </button>
+                                      <button
+                                        className={`flex h-8 w-8 items-center justify-center rounded-lg border transition-all duration-300 sm:h-9 sm:w-9 ${
+                                          isTogglingAllNotifications
+                                            ? "cursor-not-allowed border-white/[0.06] bg-white/[0.03] opacity-50"
+                                            : allNotificationsEnabled
+                                              ? "cursor-pointer border-pink-500/50 bg-pink-500/20 hover:bg-pink-500/30"
+                                              : "cursor-pointer border-white/[0.06] bg-white/[0.03] hover:border-white/[0.1] hover:bg-white/[0.07]"
+                                        }`}
+                                        type="button"
+                                        onClick={handleToggleAllNotifications}
+                                        disabled={isTogglingAllNotifications}
+                                        title={
+                                          isTogglingAllNotifications
+                                            ? "Toggling..."
+                                            : allNotificationsEnabled
+                                              ? "Disable all notifications"
+                                              : "Enable all notifications"
+                                        }
+                                      >
+                                        <FiBell
+                                          className={`h-4 w-4 ${
+                                            allNotificationsEnabled
+                                              ? "fill-pink-400 text-pink-400"
+                                              : "text-neutral-500"
+                                          }`}
+                                        />
+                                      </button>
+                                      <button
+                                        className="flex h-7 w-7 cursor-pointer items-center justify-center rounded-lg border border-white/[0.06] bg-white/[0.03] text-sm text-neutral-400 transition-all duration-200 hover:border-white/[0.1] hover:bg-white/[0.07] hover:text-white sm:h-9 sm:w-9"
+                                        type="button"
+                                      >
+                                        <FiShare2 className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+                                      </button>
+                                      <button
+                                        className="flex h-7 w-7 cursor-pointer items-center justify-center rounded-lg border border-white/[0.06] bg-white/[0.03] text-sm text-neutral-400 transition-all duration-200 hover:border-white/[0.1] hover:bg-white/[0.07] hover:text-white sm:h-9 sm:w-9"
+                                        type="button"
+                                      >
+                                        <FiRss className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+                                      </button>
+                                    </>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+                          )}
+
+                          <div className="min-h-0 flex-1 overflow-y-auto">
+                            {activeTab === 0 ? (
+                              <>
+                                <div className="flex items-center border-b border-white/[0.04] p-1.5 sm:p-2">
+                                  <div className="flex w-full items-center gap-2 text-[10px] font-medium text-neutral-500 sm:gap-4 sm:text-xs">
+                                    <span className="flex w-16 justify-center sm:w-28">
+                                      Created
+                                    </span>
+                                    <span className="min-w-0 flex-1">Name</span>
+                                    <span className="w-20 sm:w-36">
+                                      Balance
+                                    </span>
+                                    <span className="hidden w-16 justify-center sm:flex sm:w-28">
+                                      Last Active
+                                    </span>
+                                    <div className="flex flex-1 items-center justify-end">
+                                      <button
+                                        className="text-[10px] font-semibold whitespace-nowrap text-red-400 transition-colors duration-300 hover:text-red-300 sm:text-xs"
+                                        onClick={() =>
+                                          handleRemoveWallet("all")
+                                        }
+                                      >
+                                        Remove All
+                                      </button>
+                                    </div>
+                                  </div>
+                                </div>
+                                {wallets.length === 0 ? (
+                                  <div className="flex h-64 flex-col items-center justify-center">
+                                    <FiEye className="mb-3 h-10 w-10 text-neutral-700" />
+                                    <span className="text-sm font-medium text-neutral-300">
+                                      No wallets tracked yet
+                                    </span>
+                                    <span className="mt-1 text-xs text-neutral-500">
+                                      Add a wallet address to monitor its trades
+                                    </span>
+                                  </div>
+                                ) : (
+                                  <div className="scrollbar-hide overflow-x-auto">
+                                    <table className="w-full min-w-[500px] text-[10px] sm:min-w-[640px] sm:text-xs">
+                                      <tbody>
+                                        {filteredWallets.map((wallet) => {
+                                          const watched = watchedWallets.find(
+                                            (ww) =>
+                                              ww.address === wallet.address,
+                                          );
+                                          const events =
+                                            walletEvents[wallet.address] || [];
+                                          const balance =
+                                            trackedWalletBalances[
+                                              wallet.address
+                                            ];
+                                          return (
+                                            <WalletRow
+                                              key={wallet.address}
+                                              wallet={wallet}
+                                              watchedWallet={watched}
+                                              events={events}
+                                              balance={balance}
+                                              lastActive={
+                                                lastActiveMap[wallet.address]
+                                              }
+                                              onRemove={handleRemoveWallet}
+                                              onClick={(wallet) => {
+                                                const chain =
+                                                  watched?.chain ??
+                                                  (wallet.address.startsWith(
+                                                    "0x",
+                                                  )
+                                                    ? "monad"
+                                                    : "sol");
+                                                const url =
+                                                  chain === "sol"
+                                                    ? `https://solscan.io/account/${wallet.address}`
+                                                    : `https://monadvision.com/address/${wallet.address}`;
+                                                window.open(url, "_blank");
+                                              }}
+                                              onNotificationToggle={async (
+                                                address,
+                                                enabled,
+                                              ) => {
+                                                // Refresh the global watched wallets to sync the state
+                                                await refreshWatchedWallets();
+                                              }}
+                                            />
+                                          );
+                                        })}
+                                      </tbody>
+                                    </table>
+                                  </div>
+                                )}
+                              </>
+                            ) : null}
+                          </div>
+                        </>
+                      )}
+                    </div>
+                  )}
+
+                  {/* RESIZE HANDLE (desktop only) - Hide when wallet section is hidden (Monad chain) */}
+                  {!isMobile && (
+                    <div
+                      className="group relative hidden h-full min-h-[530px] w-1 cursor-ew-resize items-center justify-center transition-colors hover:bg-[#7FFFC9]/5 lg:flex"
+                      onMouseDown={() => setIsResizing(true)}
+                    >
+                      <div className="absolute h-16 w-1 rounded-full bg-neutral-400 transition-colors group-hover:bg-[#7FFFC9]" />
+                    </div>
+                  )}
+
+                  {/* RIGHT: TWITTER SECTION */}
+                  {showTwitterSection && (
+                    <div
+                      className="flex min-h-0 flex-shrink-0 flex-col overflow-hidden rounded-xl border border-white/[0.08] bg-white/[0.05] px-3 backdrop-blur-xl sm:px-4"
+                      style={
+                        isMobile
+                          ? {
+                              boxShadow:
+                                "0 8px 32px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.06)",
+                              maxHeight: "calc(100vh - 200px)",
+                            }
+                          : {
+                              width: `${sidebarWidth}px`,
+                              minWidth: "560px",
+                              maxWidth: "800px",
+                              maxHeight: "calc(100vh - 240px)",
+                              boxShadow:
+                                "0 8px 32px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.06)",
+                            }
+                      }
+                    >
+                      {/* Twitter Tabs Header */}
+                      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-white/[0.04] pt-3 pb-2 sm:gap-3 sm:pt-4 sm:pb-3">
+                        <div className="flex gap-2 sm:gap-2.5">
+                          {TWITTER_TABS.map((tab, i) => (
                             <button
                               key={tab}
                               className={`cursor-pointer rounded-lg px-3 py-1.5 text-[10px] whitespace-nowrap transition-all duration-300 sm:px-4 sm:py-2 sm:text-xs ${
-                                activeTab === i
+                                twitterTab === i
                                   ? "border border-white/[0.08] bg-white/[0.07] font-semibold text-white"
                                   : "border border-transparent font-medium text-neutral-400 hover:bg-white/[0.04] hover:text-neutral-200"
                               }`}
-                              onClick={() => setActiveTab(i)}
+                              onClick={() => setTwitterTab(i)}
                             >
                               {tab}
                             </button>
                           ))}
-                          <div className="flex items-center rounded-lg border border-white/[0.06] bg-white/[0.04] px-3 py-1 text-[10px] text-neutral-300 sm:px-3.5 sm:py-1.5 sm:text-[11px]">
-                            <span className="font-semibold text-[#7FFFC9]">
-                              {watchedWallets.length}
-                            </span>
-                            <span className="ml-1 hidden text-neutral-500 sm:ml-1.5 sm:inline">
-                              /{MAX_WALLETS} wallet
-                              {watchedWallets.length === 1 ? "" : "s"}
-                            </span>
-                            <span className="ml-1 text-neutral-500 sm:ml-1.5 sm:hidden">
-                              /{MAX_WALLETS}
-                            </span>
-                          </div>
                         </div>
-
-                        {/* Middle: search bar (center, max width) */}
-                        <div className="flex flex-wrap items-center justify-end gap-2 sm:gap-2.5">
-                          {activeTab === 0 && (
-                            <button
-                              className="cursor-pointer rounded-lg px-3 py-1.5 text-[9px] font-semibold whitespace-nowrap transition-all duration-200 hover:brightness-90 sm:px-5 sm:py-2.5 sm:text-xs"
-                              style={{
-                                backgroundColor: "#7FFFC9",
-                                color: "#000000",
-                                border: "none",
-                              }}
-                              onClick={handleOpenAddWalletModal}
-                            >
-                              Add Wallet
-                            </button>
-                          )}
-                        </div>
+                        {twitterTab === 0 && (
+                          <button
+                            className="cursor-pointer rounded-lg px-3 py-1.5 text-[9px] font-semibold whitespace-nowrap text-black transition-all duration-200 hover:brightness-90 sm:px-5 sm:py-2.5 sm:text-xs"
+                            style={{
+                              backgroundColor: "#7FFFC9",
+                              border: "none",
+                            }}
+                            onClick={() => setShowAddTwitterModal(true)}
+                          >
+                            Add Handle
+                          </button>
+                        )}
                       </div>
 
-                      {/* Search bar and action toolbar - below header, only for Wallet Manager tab */}
-                      {activeTab === 0 && (
-                        <div className="border-b border-white/[0.04] px-1 py-3 sm:px-2 sm:py-4">
-                          <div className="flex flex-wrap items-center gap-2 sm:gap-3">
-                            {/* Search input */}
-                            <div className="min-w-[200px] flex-1">
-                              <input
-                                type="text"
-                                placeholder="Search by address"
-                                className="w-full rounded-lg border border-white/[0.06] bg-white/[0.03] px-4 py-2 text-[10px] text-neutral-200 transition-all duration-300 placeholder:text-neutral-600 focus:border-[#7FFFC9]/60 focus:bg-neutral-900/60 focus:ring-2 focus:ring-[#7FFFC9]/20 focus:outline-none sm:px-5 sm:py-2.5 sm:text-xs"
-                                disabled={false}
-                                value={searchTerm}
-                                onChange={(e) => setSearchTerm(e.target.value)}
-                              />
-                            </div>
-
-                            {/* Right: actions (Import / Export / icons / Add Wallet) */}
-                            <div className="flex flex-wrap items-center gap-1 sm:gap-2">
-                              {activeTab === 0 && (
-                                <>
-                                  <button
-                                    className="cursor-pointer rounded-lg border border-white/[0.06] bg-white/[0.03] px-2.5 py-1.5 text-[9px] font-semibold whitespace-nowrap text-neutral-200 transition-all duration-200 hover:border-white/[0.1] hover:bg-white/[0.07] hover:text-white sm:px-3 sm:py-1.5 sm:text-[10px]"
-                                    onClick={() => setShowImportModal(true)}
-                                  >
-                                    Import
-                                  </button>
-                                  <button
-                                    className="cursor-pointer rounded-lg border border-white/[0.06] bg-white/[0.03] px-2.5 py-1.5 text-[9px] font-semibold whitespace-nowrap text-neutral-200 transition-all duration-200 hover:border-white/[0.1] hover:bg-white/[0.07] hover:text-white sm:px-3 sm:py-1.5 sm:text-[10px]"
-                                    onClick={handleExportAddresses}
-                                  >
-                                    Export
-                                  </button>
-
-                                  {/* Icon buttons - hide some on mobile */}
-                                  <button
-                                    className="flex h-7 w-7 cursor-pointer items-center justify-center rounded-lg border border-white/[0.06] bg-white/[0.03] text-sm text-neutral-400 transition-all duration-200 hover:border-white/[0.1] hover:bg-white/[0.07] hover:text-white sm:h-9 sm:w-9"
-                                    type="button"
-                                  >
-                                    <FiSettings className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
-                                  </button>
-                                  <button
-                                    className={`flex h-8 w-8 items-center justify-center rounded-lg border transition-all duration-300 sm:h-9 sm:w-9 ${
-                                      isTogglingAllNotifications
-                                        ? "cursor-not-allowed border-white/[0.06] bg-white/[0.03] opacity-50"
-                                        : allNotificationsEnabled
-                                          ? "cursor-pointer border-pink-500/50 bg-pink-500/20 hover:bg-pink-500/30"
-                                          : "cursor-pointer border-white/[0.06] bg-white/[0.03] hover:border-white/[0.1] hover:bg-white/[0.07]"
-                                    }`}
-                                    type="button"
-                                    onClick={handleToggleAllNotifications}
-                                    disabled={isTogglingAllNotifications}
-                                    title={
-                                      isTogglingAllNotifications
-                                        ? "Toggling..."
-                                        : allNotificationsEnabled
-                                          ? "Disable all notifications"
-                                          : "Enable all notifications"
-                                    }
-                                  >
-                                    <FiBell
-                                      className={`h-4 w-4 ${
-                                        allNotificationsEnabled
-                                          ? "fill-pink-400 text-pink-400"
-                                          : "text-neutral-500"
-                                      }`}
-                                    />
-                                  </button>
-                                  <button
-                                    className="flex h-7 w-7 cursor-pointer items-center justify-center rounded-lg border border-white/[0.06] bg-white/[0.03] text-sm text-neutral-400 transition-all duration-200 hover:border-white/[0.1] hover:bg-white/[0.07] hover:text-white sm:h-9 sm:w-9"
-                                    type="button"
-                                  >
-                                    <FiShare2 className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
-                                  </button>
-                                  <button
-                                    className="flex h-7 w-7 cursor-pointer items-center justify-center rounded-lg border border-white/[0.06] bg-white/[0.03] text-sm text-neutral-400 transition-all duration-200 hover:border-white/[0.1] hover:bg-white/[0.07] hover:text-white sm:h-9 sm:w-9"
-                                    type="button"
-                                  >
-                                    <FiRss className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
-                                  </button>
-                                </>
-                              )}
-                            </div>
-                          </div>
-                        </div>
-                      )}
-
-                      <div className="min-h-0 flex-1 overflow-y-auto">
-                        {activeTab === 0 ? (
+                      {/* Twitter Content */}
+                      <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+                        {twitterTab === 0 ? (
+                          // Tracked Accounts Tab
                           <>
-                            <div className="flex items-center border-b border-white/[0.04] p-1.5 sm:p-2">
-                              <div className="flex w-full items-center gap-2 text-[10px] font-medium text-neutral-500 sm:gap-4 sm:text-xs">
-                                <span className="flex w-16 justify-center sm:w-28">
-                                  Created
-                                </span>
-                                <span className="min-w-0 flex-1">Name</span>
-                                <span className="w-20 sm:w-36">Balance</span>
-                                <span className="hidden w-16 justify-center sm:flex sm:w-28">
-                                  Last Active
-                                </span>
-                                <div className="flex flex-1 items-center justify-end">
-                                  <button
-                                    className="text-[10px] font-semibold whitespace-nowrap text-red-400 transition-colors duration-300 hover:text-red-300 sm:text-xs"
-                                    onClick={() => handleRemoveWallet("all")}
-                                  >
-                                    Remove All
-                                  </button>
-                                </div>
-                              </div>
-                            </div>
-                            {wallets.length === 0 ? (
-                              <div className="flex h-64 flex-col items-center justify-center">
-                                <FiEye className="mb-3 h-10 w-10 text-neutral-700" />
+                            {twitterAccounts.length === 0 ? (
+                              <div className="flex h-full flex-col items-center justify-center py-8 text-center">
+                                <FiAtSign className="mb-3 h-10 w-10 text-neutral-700" />
                                 <span className="text-sm font-medium text-neutral-300">
-                                  No wallets tracked yet
+                                  No accounts tracked
                                 </span>
                                 <span className="mt-1 text-xs text-neutral-500">
-                                  Add a wallet address to monitor its trades
+                                  Track crypto Twitter accounts to catch alpha
                                 </span>
                               </div>
                             ) : (
-                              <div className="scrollbar-hide overflow-x-auto">
+                              <div className="scrollbar-hide flex-1 overflow-auto">
                                 <table className="w-full min-w-[500px] text-[10px] sm:min-w-[640px] sm:text-xs">
                                   <tbody>
-                                    {filteredWallets.map((wallet) => {
-                                      const watched = watchedWallets.find(
-                                        (ww) => ww.address === wallet.address,
-                                      );
-                                      const events =
-                                        walletEvents[wallet.address] || [];
-                                      const balance =
-                                        trackedWalletBalances[wallet.address];
-                                      return (
-                                        <WalletRow
-                                          key={wallet.address}
-                                          wallet={wallet}
-                                          watchedWallet={watched}
-                                          events={events}
-                                          balance={balance}
-                                          lastActive={
-                                            lastActiveMap[wallet.address]
-                                          }
-                                          onRemove={handleRemoveWallet}
-                                          onClick={(wallet) => {
-                                            const chain =
-                                              watched?.chain ??
-                                              (wallet.address.startsWith("0x")
-                                                ? "monad"
-                                                : "sol");
-                                            const url =
-                                              chain === "sol"
-                                                ? `https://solscan.io/account/${wallet.address}`
-                                                : `https://monadvision.com/address/${wallet.address}`;
-                                            window.open(url, "_blank");
-                                          }}
-                                          onNotificationToggle={async (
-                                            address,
-                                            enabled,
-                                          ) => {
-                                            // Refresh the global watched wallets to sync the state
-                                            await refreshWatchedWallets();
-                                          }}
-                                        />
-                                      );
-                                    })}
+                                    {twitterAccounts.map((account) => (
+                                      <TwitterAccountRow
+                                        key={account.username}
+                                        account={account}
+                                        onRemove={handleRemoveTwitterAccount}
+                                        onViewProfile={handleViewTwitterProfile}
+                                      />
+                                    ))}
                                   </tbody>
                                 </table>
                               </div>
                             )}
                           </>
-                        ) : null}
+                        ) : twitterTab === 1 ? (
+                          // X Feed Tab
+                          <>
+                            {loadingTwitterFeed ? (
+                              <div className="flex h-full flex-col items-center justify-center py-8 text-center">
+                                <div className="mb-2 flex gap-1.5">
+                                  <div className="h-1.5 w-1.5 animate-pulse rounded-full bg-neutral-500" />
+                                  <div className="h-1.5 w-1.5 animate-pulse rounded-full bg-neutral-500 [animation-delay:150ms]" />
+                                  <div className="h-1.5 w-1.5 animate-pulse rounded-full bg-neutral-500 [animation-delay:300ms]" />
+                                </div>
+                                <span className="text-xs text-neutral-500">
+                                  Loading feed...
+                                </span>
+                              </div>
+                            ) : twitterFeed.length === 0 ? (
+                              <div className="flex h-full flex-col items-center justify-center py-8 text-center">
+                                <FiMessageCircle className="mb-3 h-10 w-10 text-neutral-700" />
+                                <span className="text-sm font-medium text-neutral-300">
+                                  No tweets yet
+                                </span>
+                                <span className="mt-1 text-xs text-neutral-500">
+                                  Add accounts or check back later
+                                </span>
+                              </div>
+                            ) : (
+                              <div className="space-y-2 p-2">
+                                {twitterFeed.map((tweet) => (
+                                  <div
+                                    key={tweet.id}
+                                    className="rounded-xl border border-white/[0.06] bg-white/[0.02] p-3 transition-colors duration-200 hover:bg-white/[0.04]"
+                                  >
+                                    <div className="mb-2 flex items-center gap-2">
+                                      {tweet.authorProfileImage ? (
+                                        <img
+                                          src={tweet.authorProfileImage}
+                                          alt={tweet.authorName}
+                                          className="h-8 w-8 rounded-full ring-1 ring-white/10"
+                                        />
+                                      ) : (
+                                        <div className="flex h-8 w-8 items-center justify-center rounded-full bg-gradient-to-br from-neutral-700 to-neutral-800 text-xs text-neutral-300">
+                                          {tweet.authorName
+                                            .charAt(0)
+                                            .toUpperCase()}
+                                        </div>
+                                      )}
+                                      <div className="min-w-0 flex-1">
+                                        <div className="flex flex-wrap items-center gap-2">
+                                          <span className="font-semibold text-neutral-100">
+                                            {tweet.authorName}
+                                          </span>
+                                          <span className="text-xs text-neutral-400">
+                                            @{tweet.authorUsername}
+                                          </span>
+                                          <span className="text-xs text-neutral-500">
+                                            {new Date(
+                                              tweet.createdAt,
+                                            ).toLocaleString()}
+                                          </span>
+                                        </div>
+                                      </div>
+                                    </div>
+                                    <p className="mb-2 text-sm text-neutral-300">
+                                      {tweet.text}
+                                    </p>
+                                    {tweet.images &&
+                                      tweet.images.length > 0 && (
+                                        <div className="mb-2 flex gap-2">
+                                          {tweet.images.map((img, idx) => (
+                                            <img
+                                              key={idx}
+                                              src={img}
+                                              alt={`Tweet image ${idx + 1}`}
+                                              className="max-h-48 rounded-xl ring-1 ring-white/[0.06]"
+                                            />
+                                          ))}
+                                        </div>
+                                      )}
+
+                                    {/* Tweet Stats */}
+                                    <div className="flex items-center gap-4 text-xs text-neutral-500">
+                                      <span>❤️ {tweet.likeCount || 0}</span>
+                                      <span>🔄 {tweet.retweetCount || 0}</span>
+                                      <span>💬 {tweet.replyCount || 0}</span>
+                                      {tweet.url && (
+                                        <a
+                                          href={tweet.url}
+                                          target="_blank"
+                                          rel="noopener noreferrer"
+                                          className="text-[#70E0B0] hover:underline"
+                                        >
+                                          View on X →
+                                        </a>
+                                      )}
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                          </>
+                        ) : (
+                          // Recommended Wallets Tab
+                          <>
+                            <div className="my-2 flex items-center gap-2 border-b border-white/[0.04] pb-2">
+                              <input
+                                type="text"
+                                placeholder="@ Search handle"
+                                value={approvedHandlesSearch}
+                                onChange={(e) =>
+                                  setApprovedHandlesSearch(e.target.value)
+                                }
+                                className="max-w-[180px] flex-1 rounded border border-white/[0.06] bg-white/[0.03] px-2 py-1 text-[10px] text-neutral-200 placeholder:text-neutral-600 focus:border-[#7FFFC9]/50 focus:outline-none sm:text-xs"
+                              />
+                            </div>
+                            {loadingApprovedHandles ? (
+                              <div className="flex items-center justify-center py-8">
+                                <span className="text-xs text-neutral-500">
+                                  Loading list...
+                                </span>
+                              </div>
+                            ) : (
+                              <div className="scrollbar-hide max-h-[400px] overflow-y-auto">
+                                {(approvedHandlesSearch.trim()
+                                  ? approvedHandles.filter((h) =>
+                                      h
+                                        .toLowerCase()
+                                        .includes(
+                                          approvedHandlesSearch
+                                            .trim()
+                                            .toLowerCase(),
+                                        ),
+                                    )
+                                  : approvedHandles
+                                ).map((handle, idx) => {
+                                  const isTracked = twitterAccounts.some(
+                                    (a) =>
+                                      a.username.toLowerCase() ===
+                                      handle.toLowerCase(),
+                                  );
+                                  const isAdding = addingHandle === handle;
+                                  return (
+                                    <div
+                                      key={handle}
+                                      className="flex items-center justify-between gap-2 border-b border-white/[0.04] py-1.5 text-[10px] sm:text-xs"
+                                    >
+                                      <div className="flex items-center">
+                                        <span className="w-8 shrink-0 text-neutral-500">
+                                          {idx + 1}
+                                        </span>
+                                        <a
+                                          href={`https://x.com/${handle}`}
+                                          target="_blank"
+                                          rel="noopener noreferrer"
+                                          className="min-w-0 truncate text-neutral-200 hover:underline"
+                                        >
+                                          {handle}
+                                        </a>
+                                      </div>
+                                      <button
+                                        type="button"
+                                        onClick={async () => {
+                                          if (isTracked || isAdding) return;
+                                          setAddingHandle(handle);
+                                          try {
+                                            await handleAddTwitterAccount(
+                                              handle,
+                                            );
+                                          } finally {
+                                            setAddingHandle(null);
+                                          }
+                                        }}
+                                        disabled={isTracked || isAdding}
+                                        className="flex h-6 w-6 shrink-0 items-center justify-center rounded border border-white/[0.08] bg-white/[0.04] text-neutral-400 transition-colors hover:border-[#7FFFC9]/50 hover:bg-[#7FFFC9]/10 hover:text-[#7FFFC9] disabled:opacity-50 disabled:hover:border-white/[0.08] disabled:hover:bg-white/[0.04] disabled:hover:text-neutral-400"
+                                        title={
+                                          isTracked
+                                            ? "Already tracked"
+                                            : "Add to tracked accounts"
+                                        }
+                                        aria-label={`Add @${handle}`}
+                                      >
+                                        {isAdding ? (
+                                          <span className="h-3 w-3 animate-spin rounded-full border-2 border-current border-t-transparent" />
+                                        ) : (
+                                          <FiPlus className="h-3.5 w-3.5 text-white" />
+                                        )}
+                                      </button>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            )}
+                          </>
+                        )}
                       </div>
-                    </>
+                    </div>
                   )}
                 </div>
-              )}
-
-              {/* RESIZE HANDLE (desktop only) - Hide when wallet section is hidden (Monad chain) */}
-              {!isMobile && (
-                <div
-                  className="group relative hidden h-full min-h-[530px] w-1 cursor-ew-resize items-center justify-center transition-colors hover:bg-[#7FFFC9]/5 lg:flex"
-                  onMouseDown={() => setIsResizing(true)}
-                >
-                  <div className="absolute h-16 w-1 rounded-full bg-neutral-400 transition-colors group-hover:bg-[#7FFFC9]" />
-                </div>
-              )}
-
-              {/* RIGHT: TWITTER SECTION */}
-              {showTwitterSection && (
-                <div
-                  className="flex min-h-0 flex-shrink-0 flex-col overflow-hidden rounded-xl border border-white/[0.08] bg-white/[0.05] px-3 backdrop-blur-xl sm:px-4"
-                  style={
-                    isMobile
-                      ? {
-                          boxShadow:
-                            "0 8px 32px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.06)",
-                          maxHeight: "calc(100vh - 200px)",
-                        }
-                      : {
-                          width: `${sidebarWidth}px`,
-                          minWidth: "372px",
-                          maxWidth: "800px",
-                          maxHeight: "calc(100vh - 240px)",
-                          boxShadow:
-                            "0 8px 32px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.06)",
-                        }
-                  }
-                >
-                  {/* Twitter Tabs Header */}
-                  <div className="flex flex-wrap items-center justify-between gap-2 border-b border-white/[0.04] pt-3 pb-2 sm:gap-3 sm:pt-4 sm:pb-3">
-                    <div className="flex gap-2 sm:gap-2.5">
-                      {TWITTER_TABS.map((tab, i) => (
-                        <button
-                          key={tab}
-                          className={`cursor-pointer rounded-lg px-3 py-1.5 text-[10px] whitespace-nowrap transition-all duration-300 sm:px-4 sm:py-2 sm:text-xs ${
-                            twitterTab === i
-                              ? "border border-white/[0.08] bg-white/[0.07] font-semibold text-white"
-                              : "border border-transparent font-medium text-neutral-400 hover:bg-white/[0.04] hover:text-neutral-200"
-                          }`}
-                          onClick={() => setTwitterTab(i)}
-                        >
-                          {tab}
-                        </button>
-                      ))}
-                    </div>
-                    {twitterTab === 0 && (
-                      <button
-                        className="cursor-pointer rounded-lg px-3 py-1.5 text-[9px] font-semibold whitespace-nowrap text-black transition-all duration-200 hover:brightness-90 sm:px-5 sm:py-2.5 sm:text-xs"
-                        style={{
-                          backgroundColor: "#7FFFC9",
-                          border: "none",
-                        }}
-                        onClick={() => setShowAddTwitterModal(true)}
-                      >
-                        Add Handle
-                      </button>
-                    )}
-                  </div>
-
-                  {/* Twitter Content */}
-                  <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-                    {twitterTab === 0 ? (
-                      // Tracked Accounts Tab
-                      <>
-                        {twitterAccounts.length === 0 ? (
-                          <div className="flex h-full flex-col items-center justify-center py-8 text-center">
-                            <FiAtSign className="mb-3 h-10 w-10 text-neutral-700" />
-                            <span className="text-sm font-medium text-neutral-300">
-                              No accounts tracked
-                            </span>
-                            <span className="mt-1 text-xs text-neutral-500">
-                              Track crypto Twitter accounts to catch alpha
-                            </span>
-                          </div>
-                        ) : (
-                          <div className="scrollbar-hide flex-1 overflow-auto">
-                            <table className="w-full min-w-[500px] text-[10px] sm:min-w-[640px] sm:text-xs">
-                              <tbody>
-                                {twitterAccounts.map((account) => (
-                                  <TwitterAccountRow
-                                    key={account.username}
-                                    account={account}
-                                    onRemove={handleRemoveTwitterAccount}
-                                    onViewProfile={handleViewTwitterProfile}
-                                  />
-                                ))}
-                              </tbody>
-                            </table>
-                          </div>
-                        )}
-                      </>
-                    ) : (
-                      // X Feed Tab
-                      <>
-                        {loadingTwitterFeed ? (
-                          <div className="flex h-full flex-col items-center justify-center py-8 text-center">
-                            <div className="mb-2 flex gap-1.5">
-                              <div className="h-1.5 w-1.5 animate-pulse rounded-full bg-neutral-500" />
-                              <div className="h-1.5 w-1.5 animate-pulse rounded-full bg-neutral-500 [animation-delay:150ms]" />
-                              <div className="h-1.5 w-1.5 animate-pulse rounded-full bg-neutral-500 [animation-delay:300ms]" />
-                            </div>
-                            <span className="text-xs text-neutral-500">
-                              Loading feed...
-                            </span>
-                          </div>
-                        ) : twitterFeed.length === 0 ? (
-                          <div className="flex h-full flex-col items-center justify-center py-8 text-center">
-                            <FiMessageCircle className="mb-3 h-10 w-10 text-neutral-700" />
-                            <span className="text-sm font-medium text-neutral-300">
-                              No tweets yet
-                            </span>
-                            <span className="mt-1 text-xs text-neutral-500">
-                              Add accounts or check back later
-                            </span>
-                          </div>
-                        ) : (
-                          <div className="space-y-2 p-2">
-                            {twitterFeed.map((tweet) => (
-                              <div
-                                key={tweet.id}
-                                className="rounded-xl border border-white/[0.06] bg-white/[0.02] p-3 transition-colors duration-200 hover:bg-white/[0.04]"
-                              >
-                                <div className="mb-2 flex items-center gap-2">
-                                  {tweet.authorProfileImage ? (
-                                    <img
-                                      src={tweet.authorProfileImage}
-                                      alt={tweet.authorName}
-                                      className="h-8 w-8 rounded-full ring-1 ring-white/10"
-                                    />
-                                  ) : (
-                                    <div className="flex h-8 w-8 items-center justify-center rounded-full bg-gradient-to-br from-neutral-700 to-neutral-800 text-xs text-neutral-300">
-                                      {tweet.authorName.charAt(0).toUpperCase()}
-                                    </div>
-                                  )}
-                                  <div className="min-w-0 flex-1">
-                                    <div className="flex flex-wrap items-center gap-2">
-                                      <span className="font-semibold text-neutral-100">
-                                        {tweet.authorName}
-                                      </span>
-                                      <span className="text-xs text-neutral-400">
-                                        @{tweet.authorUsername}
-                                      </span>
-                                      <span className="text-xs text-neutral-500">
-                                        {new Date(
-                                          tweet.createdAt,
-                                        ).toLocaleString()}
-                                      </span>
-                                    </div>
-                                  </div>
-                                </div>
-                                <p className="mb-2 text-sm text-neutral-300">
-                                  {tweet.text}
-                                </p>
-                                {tweet.images && tweet.images.length > 0 && (
-                                  <div className="mb-2 flex gap-2">
-                                    {tweet.images.map((img, idx) => (
-                                      <img
-                                        key={idx}
-                                        src={img}
-                                        alt={`Tweet image ${idx + 1}`}
-                                        className="max-h-48 rounded-xl ring-1 ring-white/[0.06]"
-                                      />
-                                    ))}
-                                  </div>
-                                )}
-
-                                {/* Tweet Stats */}
-                                <div className="flex items-center gap-4 text-xs text-neutral-500">
-                                  <span>❤️ {tweet.likeCount || 0}</span>
-                                  <span>🔄 {tweet.retweetCount || 0}</span>
-                                  <span>💬 {tweet.replyCount || 0}</span>
-                                  {tweet.url && (
-                                    <a
-                                      href={tweet.url}
-                                      target="_blank"
-                                      rel="noopener noreferrer"
-                                      className="text-[#70E0B0] hover:underline"
-                                    >
-                                      View on X →
-                                    </a>
-                                  )}
-                                </div>
-                              </div>
-                            ))}
-                          </div>
-                        )}
-                      </>
-                    )}
-                  </div>
-                </div>
-              )}
+              </div>
             </div>
+            {/* end rounded container */}
           </div>
-            </div>{/* end rounded container */}
-          </div>{/* end outer padding wrapper */}
+          {/* end outer padding wrapper */}
         </div>
       </div>
 

@@ -131,6 +131,26 @@ export async function removeTrackedTwitterAccount(
  * Get all tracked Twitter accounts (from database)
  * SECURITY FIX: Now requires authentication token - ownerId parameter is ignored by backend
  */
+/**
+ * Fetch the list of approved (trackable) Twitter handles.
+ * Uses same-origin API route to avoid CORS; the route proxies to the wallet tracker backend.
+ */
+export async function getApprovedTwitterHandles(): Promise<string[]> {
+  try {
+    const url =
+      typeof window !== "undefined"
+        ? "/api/twitter/approved-handles"
+        : `${WALLET_TRACKER_API_URL}/api/twitter/approved-handles`;
+    const response = await fetch(url);
+    if (!response.ok) return [];
+    const data = await response.json();
+    return Array.isArray(data?.handles) ? data.handles : [];
+  } catch (error) {
+    console.error("Error fetching approved Twitter handles:", error);
+    return [];
+  }
+}
+
 export async function getTrackedTwitterAccountsDb(
   authToken: string,
 ): Promise<TwitterAccountDb[]> {
