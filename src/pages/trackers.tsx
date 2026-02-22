@@ -42,6 +42,7 @@ import { useQuickBuy } from "~/components/QuickBuyContext";
 import { executeEnhancedTrade } from "~/utils/enhancedTradeHandler";
 import { showEnhancedToast } from "~/utils/enhancedToast";
 import { validateSolanaBuy, showTradeValidationError } from "~/utils/preTradeValidation";
+import { checkAtaExists } from "~/utils/ataCheck";
 import { buildSolanaWalletAllocations } from "~/utils/solanaWalletAllocation";
 import { getResolvedTokenImage } from "~/utils/images";
 import type { Token } from "~/utils/db";
@@ -1293,9 +1294,10 @@ export default function TrackersPage() {
       priorityFee: settings.priority || 0.0001,
       bribe: settings.bribe || 0,
     });
+    const ataExists = await checkAtaExists(trade.mint, user?.publicKey).catch(() => null);
     const buyValidation = validateSolanaBuy(
       buyAmount, allocations, walletBalances || {}, walletList || [],
-      selectedWalletIds?.sol || [], settings.priority, settings.bribe
+      selectedWalletIds?.sol || [], settings.priority, settings.bribe, ataExists
     );
     if (!buyValidation.valid) {
       const token = tokenMetadata.get(trade.mint);

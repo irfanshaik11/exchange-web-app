@@ -21,6 +21,7 @@ import { executeSolanaMultiBuy, buildSolanaWalletAllocations } from '~/utils/sol
 import { getPoolTypeFromToken } from '~/utils/poolTypeDetection';
 import { fetchVerifiedPairAddress } from '~/hooks/useSingleTokenPolling';
 import { validateSolanaBuy, validateMonadBuy, showTradeValidationError } from '~/utils/preTradeValidation';
+import { checkAtaExists } from '~/utils/ataCheck';
 import { formatMonadError } from '~/utils/monadError';
 import { broadcastMonadQuickTrade } from '~/utils/monadTradeEvents';
 import { listenForTradeEvents, transformToastToError } from '~/utils/createSolanaToastHandler';
@@ -624,7 +625,8 @@ export default function WatchlistModal({ open, onClose }: WatchlistModalProps) {
       const isMultiWallet = walletsWithBalance > 1;
 
       // Pre-validate before showing toast
-      const solValidation = validateSolanaBuy(quickBuyAmount, allocations, walletBalances || {}, walletList || [], selectedWalletIds?.sol || [], settings.priority, settings.bribe);
+      const ataExists = await checkAtaExists((token as any).mint, user?.publicKey).catch(() => null);
+      const solValidation = validateSolanaBuy(quickBuyAmount, allocations, walletBalances || {}, walletList || [], selectedWalletIds?.sol || [], settings.priority, settings.bribe, ataExists);
       if (!solValidation.valid) {
         showTradeValidationError(solValidation.error, getResolvedTokenImage(token as any), token.symbol || token.name || 'Token');
         return;

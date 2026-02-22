@@ -12,7 +12,8 @@ import toast from "react-hot-toast";
 
 // ── Constants (aligned with backend validation.ts, but slightly lower to avoid false rejections) ──
 
-const FE_SOL_SAFETY_BUFFER = 0.0003; // ATA rent — below backend's 0.0005
+const FE_SOL_SAFETY_BUFFER = 0.0003; // Base buffer — below backend's 0.0005
+const FE_SOL_ATA_RENT = 0.002; // Real ATA creation cost (~2,039,280 lamports)
 const FE_SOL_NETWORK_FEE = 0.00001; // Base Solana signature fee
 const MIN_TRADE_AMOUNT = 0.0001; // Backend minimum
 const MAX_TRADE_AMOUNT = 1000; // Backend maximum
@@ -82,6 +83,7 @@ export function validateSolanaBuy(
   selectedWalletIds?: string[],
   priorityFee?: number,
   bribe?: number,
+  ataExists?: boolean | null, // null = unknown, true = exists, false = needs creation
 ): ValidationResult {
   if (!Number.isFinite(amount) || amount < MIN_TRADE_AMOUNT) {
     return { valid: false, error: `Minimum trade amount is ${MIN_TRADE_AMOUNT} SOL` };
@@ -92,17 +94,18 @@ export function validateSolanaBuy(
   if (allocations.length === 0) {
     return {
       valid: false,
-      error: "Insufficient SOL balance for this trade amount and fees",
+      error: "Insufficient balance available!",
     };
   }
 
   // Direct balance check via sumWalletBalances (same pattern as validateMonadBuy)
   const { total, foundCount } = sumWalletBalances(walletBalances, walletList, selectedWalletIds, "solana");
   if (foundCount > 0) {
-    const fees = (priorityFee || 0) + (bribe || 0) + FE_SOL_NETWORK_FEE + FE_SOL_SAFETY_BUFFER;
+    const ataBuffer = ataExists === false ? FE_SOL_ATA_RENT : FE_SOL_SAFETY_BUFFER;
+    const fees = (priorityFee || 0) + (bribe || 0) + FE_SOL_NETWORK_FEE + ataBuffer;
     const totalRequired = amount + fees;
     if (total < totalRequired) {
-      return { valid: false, error: "Insufficient SOL balance for this trade amount and fees" };
+      return { valid: false, error: "Insufficient balance available!" };
     }
   }
   // If foundCount === 0: no cached balance data — skip check, let backend validate

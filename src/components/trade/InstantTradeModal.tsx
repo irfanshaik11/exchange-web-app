@@ -23,6 +23,7 @@ import toast from 'react-hot-toast';
 import useMonadPositionWebSocket from '~/hooks/useMonadPositionWebSocket';
 import { executeSolanaMultiBuy, buildSolanaWalletAllocations } from '~/utils/solanaWalletAllocation';
 import { validateSolanaBuy } from '~/utils/preTradeValidation';
+import { checkAtaExists } from '~/utils/ataCheck';
 import { SOL_MINT_ADDRESS } from '~/utils/api';
 import { getPoolTypeFromToken } from '~/utils/poolTypeDetection';
 import { mapTradeErrorMessage } from '~/utils/tradeErrorMessages';
@@ -754,7 +755,8 @@ const InstantTradeModal: React.FC<InstantTradeModalProps> = ({ isOpen, onClose, 
     const isMultiWallet = walletsWithBalance > 1;
 
     // Pre-validate before showing toast
-    const validation = validateSolanaBuy(amount, allocations, walletBalances, walletList, selectedWalletIds?.sol || [], settings.priority, settings.bribe);
+    const ataExists = await checkAtaExists(token.mint, user?.publicKey).catch(() => null);
+    const validation = validateSolanaBuy(amount, allocations, walletBalances, walletList, selectedWalletIds?.sol || [], settings.priority, settings.bribe, ataExists);
     if (!validation.valid) {
       toast.error(validation.error || 'Insufficient balance', { duration: 5000 });
       return { success: false };
