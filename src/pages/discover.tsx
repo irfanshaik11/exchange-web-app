@@ -33,6 +33,7 @@ import { broadcastMonadQuickTrade } from "~/utils/monadTradeEvents";
 import toast from "react-hot-toast";
 import { executeSolanaMultiBuy, buildSolanaWalletAllocations } from "~/utils/solanaWalletAllocation";
 import { validateSolanaBuy, validateMonadBuy, showTradeValidationError } from "~/utils/preTradeValidation";
+import { checkAtaExists } from "~/utils/ataCheck";
 import { getPoolTypeFromToken } from "~/utils/poolTypeDetection";
 import { mapTradeErrorMessage } from "~/utils/tradeErrorMessages";
 import { fetchVerifiedPairAddress } from "~/hooks/useSingleTokenPolling";
@@ -2235,7 +2236,8 @@ export default function DiscoverPage() {
     const isMultiWallet = walletsWithBalance > 1;
 
     // Pre-validate before showing toast
-    const validation = validateSolanaBuy(buyAmount, allocations, walletBalances || {}, walletList || [], selectedWalletIds?.sol || [], settings.priority, settings.bribe);
+    const ataExists = await checkAtaExists(token.mint, user?.publicKey).catch(() => null);
+    const validation = validateSolanaBuy(buyAmount, allocations, walletBalances || {}, walletList || [], selectedWalletIds?.sol || [], settings.priority, settings.bribe, ataExists);
     if (!validation.valid) {
       showTradeValidationError(validation.error, getResolvedTokenImage(token), token.symbol || token.name || 'Token');
       return { success: false };
@@ -2495,7 +2497,8 @@ export default function DiscoverPage() {
     const isMultiWallet = walletsWithBalance > 1;
 
     // Pre-validate before showing toast
-    const pumpValidation = validateSolanaBuy(buyAmount, allocations, walletBalances || {}, walletList || [], selectedWalletIds?.sol || [], settings.priority, settings.bribe);
+    const ataExists = await checkAtaExists(token.mint, user?.publicKey).catch(() => null);
+    const pumpValidation = validateSolanaBuy(buyAmount, allocations, walletBalances || {}, walletList || [], selectedWalletIds?.sol || [], settings.priority, settings.bribe, ataExists);
     if (!pumpValidation.valid) {
       showTradeValidationError(pumpValidation.error, getResolvedTokenImage(token), token.symbol || token.name || 'Token');
       return { success: false };

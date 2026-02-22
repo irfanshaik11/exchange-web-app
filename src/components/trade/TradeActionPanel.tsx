@@ -18,6 +18,7 @@ import { showEnhancedToast } from "~/utils/enhancedToast";
 import { useUser } from "~/components/UserContext";
 import { executeSolanaMultiBuy, formatSolanaTxSummary, buildSolanaWalletAllocations } from "~/utils/solanaWalletAllocation";
 import { validateSolanaBuy, validateSolanaSell, showTradeValidationError } from "~/utils/preTradeValidation";
+import { checkAtaExists, prefetchAtaCheck } from "~/utils/ataCheck";
 import { useTxHashCallback } from "~/contexts/SolanaPositionWebSocketContext";
 import type { SolanaTokenVolume } from "~/hooks/useSolanaTokenWebSocket";
 import { extractTokenImage, getResolvedTokenImage, resolveTokenImage } from "~/utils/images";
@@ -1292,6 +1293,13 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
 
   const { presets: qbPresets, activePreset } = useQuickBuy();
   const { user, solBalance, refreshBalance, walletList, walletBalances, selectedWalletIds } = useUser();
+
+  // Prefetch ATA existence so buy validation is instant (cache warms on mount)
+  useEffect(() => {
+    if (token?.mint && user?.publicKey) {
+      prefetchAtaCheck(token.mint, user.publicKey);
+    }
+  }, [token?.mint, user?.publicKey]);
 
   // Pending toast ref for Solana trades (for WebSocket instant tx updates)
   const pendingSolanaToastRef = useRef<{
@@ -2835,7 +2843,8 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
       const isMultiWallet = walletsWithBalance > 1;
 
       // Pre-validate before showing toast
-      const buyValidation = validateSolanaBuy(buyAmount, allocations, walletBalances, walletList, selectedWalletIds?.sol || [], settings.priority, settings.bribe);
+      const ataExists = await checkAtaExists(token.mint, user?.publicKey).catch(() => null);
+      const buyValidation = validateSolanaBuy(buyAmount, allocations, walletBalances, walletList, selectedWalletIds?.sol || [], settings.priority, settings.bribe, ataExists);
       if (!buyValidation.valid) {
         showTradeValidationError(buyValidation.error, getResolvedTokenImage(token), token.symbol || token.name || 'Token');
         setIsLoading(false);

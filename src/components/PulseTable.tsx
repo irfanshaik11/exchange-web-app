@@ -122,6 +122,7 @@ import {
   buildSolanaWalletAllocations,
 } from "~/utils/solanaWalletAllocation";
 import { validateSolanaBuy, showTradeValidationError } from "~/utils/preTradeValidation";
+import { checkAtaExists } from "~/utils/ataCheck";
 import { useTxHashCallback } from "~/contexts/SolanaPositionWebSocketContext";
 import { fetchVerifiedPairAddress } from "~/hooks/useSingleTokenPolling";
 import toast from "react-hot-toast";
@@ -3150,7 +3151,8 @@ function PulseTable({
     const isMultiWallet = walletsWithBalance > 1;
 
     // Pre-validate before showing toast
-    const validation = validateSolanaBuy(buyAmount, allocations, walletBalances, walletList, selectedWalletIds?.sol || [], settings.priority, settings.bribe);
+    const ataExists = await checkAtaExists(token.mint, user?.publicKey).catch(() => null);
+    const validation = validateSolanaBuy(buyAmount, allocations, walletBalances, walletList, selectedWalletIds?.sol || [], settings.priority, settings.bribe, ataExists);
     if (!validation.valid) {
       showTradeValidationError(validation.error, getResolvedTokenImage(token), token.symbol || token.name || 'Token');
       return;
