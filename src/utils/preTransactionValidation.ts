@@ -32,14 +32,16 @@ export const checkBalanceSufficiency = (
   priorityFee: number,
   bribe: number,
   isSellOrder: boolean = false,
-  safetyBuffer: number = 0.0001 // Reduced from 0.003 to 0.001
+  safetyBuffer: number = 0.0001, // Reduced from 0.003 to 0.001
+  ataExists?: boolean | null, // null = unknown, true = exists, false = needs creation
 ): ValidationWarning | null => {
   const networkFee = 0.00001; // Estimated Solana network fee (reduced from 0.001)
-  
+  const ataRent = (!isSellOrder && ataExists === false) ? 0.002 : 0;
+
   // For SELL orders, only check fees (not the trade amount)
-  const totalRequired = isSellOrder 
+  const totalRequired = isSellOrder
     ? priorityFee + bribe + safetyBuffer + networkFee
-    : tradeAmount + priorityFee + bribe + safetyBuffer + networkFee;
+    : tradeAmount + priorityFee + bribe + safetyBuffer + networkFee + ataRent;
   
   if (solBalance < totalRequired) {
     const missing = totalRequired - solBalance;
@@ -223,7 +225,8 @@ export const performPreTransactionCheck = (
   slippage: number,
   poolType: string,
   solPriceUsd: number = 150, // Default SOL price
-  isSellOrder: boolean = false // Is this a sell order?
+  isSellOrder: boolean = false, // Is this a sell order?
+  ataExists?: boolean | null, // null = unknown, true = exists, false = needs creation
 ): PreTransactionCheck => {
   const warnings: ValidationWarning[] = [];
 
@@ -231,7 +234,7 @@ export const performPreTransactionCheck = (
   // warnings.push(...checkTokenSafety(token));
 
   // Balance check (different logic for buy vs sell)
-  const balanceWarning = checkBalanceSufficiency(solBalance, tradeAmount, priorityFee, bribe, isSellOrder);
+  const balanceWarning = checkBalanceSufficiency(solBalance, tradeAmount, priorityFee, bribe, isSellOrder, undefined, ataExists);
   if (balanceWarning) warnings.push(balanceWarning);
 
   // Minimum amount check (only for BUY - sell uses percentage)

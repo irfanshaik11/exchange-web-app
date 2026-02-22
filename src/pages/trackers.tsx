@@ -41,6 +41,10 @@ import { RiExchangeDollarLine } from "react-icons/ri";
 import { useQuickBuy } from "~/components/QuickBuyContext";
 import { executeEnhancedTrade } from "~/utils/enhancedTradeHandler";
 import { showEnhancedToast } from "~/utils/enhancedToast";
+import { validateSolanaBuy, showTradeValidationError } from "~/utils/preTradeValidation";
+import { checkAtaExists } from "~/utils/ataCheck";
+import { buildSolanaWalletAllocations } from "~/utils/solanaWalletAllocation";
+import { getResolvedTokenImage } from "~/utils/images";
 import type { Token } from "~/utils/db";
 import { FaRunning, FaGasPump, FaCoins, FaBan } from "react-icons/fa";
 import { HiLightningBolt } from "react-icons/hi";
@@ -1280,6 +1284,26 @@ export default function TrackersPage() {
     }
 
     const settings = preset.quickBuySettings;
+
+    // Pre-validate balance before showing animated toast
+    const { allocations } = buildSolanaWalletAllocations({
+      amount: buyAmount,
+      walletList: walletList || [],
+      walletBalances: walletBalances || {},
+      selectedWalletIds: selectedWalletIds?.sol || [],
+      priorityFee: settings.priority || 0.0001,
+      bribe: settings.bribe || 0,
+    });
+    const ataExists = await checkAtaExists(trade.mint, user?.publicKey).catch(() => null);
+    const buyValidation = validateSolanaBuy(
+      buyAmount, allocations, walletBalances || {}, walletList || [],
+      selectedWalletIds?.sol || [], settings.priority, settings.bribe, ataExists
+    );
+    if (!buyValidation.valid) {
+      const token = tokenMetadata.get(trade.mint);
+      showTradeValidationError(buyValidation.error, getResolvedTokenImage(token as any), trade.symbol || token?.symbol || 'Token');
+      return;
+    }
 
     // Get token metadata from the tokenMetadata map
     const metadata = tokenMetadata.get(trade.mint);

@@ -19,6 +19,7 @@ import {
 import { enhanceError, type EnhancedError } from './enhancedErrors';
 import type { QuickBuySettings } from '~/components/QuickBuyContext';
 import { getPoolTypeFromToken } from './poolTypeDetection';
+import { checkAtaExists } from './ataCheck';
 import { Connection, PublicKey } from '@solana/web3.js';
 import toast from 'react-hot-toast';
 import { getResolvedTokenImage, resolveTokenImage } from './images';
@@ -182,6 +183,14 @@ export async function executeEnhancedTrade(params: EnhancedTradeParams): Promise
     isUserOverride: settings.priority !== undefined && settings.priority > 0.0001,
   });
 
+  // Check ATA existence for dynamic fee calculation (buy only, Solana only)
+  let ataExists: boolean | null = null;
+  if (side === 'buy' && chain === 'sol' && token.mint) {
+    const primaryAddr = params.walletContext?.walletList?.find(w => w.isPrimary)?.solanaAddress
+      || params.walletContext?.walletList?.[0]?.solanaAddress;
+    ataExists = await checkAtaExists(token.mint, primaryAddr).catch(() => null);
+  }
+
   // Build wallet allocations for Solana trades (equal split across selected wallets)
   let walletAllocations: WalletAllocation[] = [];
   let walletsConsidered = 0;
@@ -248,7 +257,8 @@ export async function executeEnhancedTrade(params: EnhancedTradeParams): Promise
               dynamicPriorityFee,
               settings.bribe || 0,
               false,
-              0.0001
+              0.0001,
+              ataExists
             );
 
             if (balanceWarning && !balanceWarning.canProceed) {
@@ -390,7 +400,8 @@ export async function executeEnhancedTrade(params: EnhancedTradeParams): Promise
       (settings.maxSlippage || 0.4) * 100,
       poolType,
       solPriceUsd,
-      side === 'sell' // Pass whether this is a sell order
+      side === 'sell', // Pass whether this is a sell order
+      ataExists
     );
 
     console.log('[EnhancedTradeHandler] Validation result:', {

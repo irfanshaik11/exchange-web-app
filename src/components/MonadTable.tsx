@@ -106,13 +106,9 @@ import { executeEnhancedTrade } from "~/utils/enhancedTradeHandler";
 import { showEnhancedToast, updateEnhancedToast } from "~/utils/enhancedToast";
 import toast from "react-hot-toast";
 import useMonadPositionWebSocket from "~/hooks/useMonadPositionWebSocket";
-import {
-  validateMonadBalance,
-  validateSolanaBalance,
-  computeMonadBalanceForValidation,
-} from "~/utils/tradeBalanceValidation";
+import { validateMonadBuy, showTradeValidationError } from "~/utils/preTradeValidation";
 import { formatMonadError } from "~/utils/monadError";
-import { listenForTradeEvents } from "~/utils/createSolanaToastHandler";
+import { listenForTradeEvents, transformToastToError } from "~/utils/createSolanaToastHandler";
 import { TradeSocialIcons } from "./TradeSocialIcons";
 
 /* ---- Enhanced Monad Green Palette (matching PulseTable) ---- */
@@ -2630,39 +2626,12 @@ function MonadTable({
     const isMultiWallet = selectedMonadWalletIds.length > 1;
     const totalSelectedWallets = selectedMonadWalletIds.length || 1;
 
-    // ============================================
-    // PRE-VALIDATION: Check balance BEFORE showing any toast
-    // This prevents the misleading "Trade placed!" toast when balance is insufficient
-    // ============================================
-    const monadBalance = computeMonadBalanceForValidation({
-      selectedWalletIds: selectedMonadWalletIds,
-      walletList,
-      walletBalances,
-      fallbackBalance: chainBalances["monad"] ?? 0,
-    });
-
-    if (!isMultiWallet) {
-      const clientValidation = validateMonadBalance({
-        balance: monadBalance,
-        tradeAmount: buyAmount,
-        gasPrice: gasPrice,
-      });
-
-      if (!clientValidation.isValid) {
-        showEnhancedToast(
-          "error",
-          clientValidation.errorMessage || "Insufficient MON balance",
-          {
-            title: "Insufficient Balance",
-            duration: 5000,
-          },
-        );
-        return;
-      }
+    // Pre-validate before showing toast (handles multi-wallet)
+    const monadValidation = validateMonadBuy(buyAmount, walletBalances, walletList, selectedMonadWalletIds, gasPrice);
+    if (!monadValidation.valid) {
+      showTradeValidationError(monadValidation.error, getResolvedTokenImage(token as any), token.symbol || token.name || 'Token');
+      return;
     }
-    // ============================================
-    // END PRE-VALIDATION
-    // ============================================
 
     console.log("📤 Monad Quick Buy params:", {
       tokenAddress,
@@ -2842,7 +2811,7 @@ function MonadTable({
         clearInterval(timerInterval);
         pendingQuickBuyToastRef.current = null;
         const errorMsg = "Trade failed";
-        toast.error(errorMsg, { id: uniqueToastId, duration: 6000 });
+        transformToastToError(uniqueToastId, errorMsg, tokenImage, tokenName);
         return { success: false, error: errorMsg };
       }
     } catch (error: any) {
@@ -2852,7 +2821,7 @@ function MonadTable({
       clearInterval(timerInterval);
       pendingQuickBuyToastRef.current = null;
       const errorMessage = formatMonadError(error?.message || error?.error);
-      toast.error(errorMessage, { id: uniqueToastId, duration: 6000 });
+      transformToastToError(uniqueToastId, errorMessage, tokenImage, tokenName);
       return { success: false, error: errorMessage };
     }
   };
