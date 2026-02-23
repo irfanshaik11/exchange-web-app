@@ -65,8 +65,16 @@ import { HiLightningBolt } from "react-icons/hi";
 import { useFilter } from "../components/FilterContext";
 import FilterPopout from "../components/FilterPopout";
 
+type DefaultWalletEntry = {
+  chain: string;
+  address: string;
+  symbol?: string;
+  name: string;
+  isAlertEnabled?: boolean;
+};
+
 const TABS = ["Wallet Manager"];
-const TWITTER_TABS = ["Tracked Accounts", "X Feed", "Recommended Wallets"];
+const TWITTER_TABS = ["Tracked Accounts", "X Feed", "Add X Accounts"];
 const LIVE_TRADES_CACHE_PREFIX = "walletTracker:liveTrades";
 const getLiveTradesCacheKey = (userId?: string) =>
   userId
@@ -227,6 +235,7 @@ export default function TrackersPage() {
   const [toast, setToast] = useState("");
   const [showExportSuccessTooltip, setShowExportSuccessTooltip] =
     useState(false);
+  const [isAddingDefaultWallets, setIsAddingDefaultWallets] = useState(false);
   const [scannedWallet, setScannedWallet] = useState<Wallet | null>(null);
   const [isTogglingAllNotifications, setIsTogglingAllNotifications] =
     useState(false);
@@ -506,7 +515,7 @@ export default function TrackersPage() {
   const [approvedHandlesSearch, setApprovedHandlesSearch] = useState("");
   const [loadingApprovedHandles, setLoadingApprovedHandles] = useState(false);
   const [addingHandle, setAddingHandle] = useState<string | null>(null);
-  const isAtWalletLimit = watchedWallets.length >= MAX_WALLETS;
+  const isAtWalletLimit = wallets.length >= MAX_WALLETS;
   // Hide wallet section when chain is Monad
   const showWalletSection = !isMobile || mobileMainTab === "wallets";
   const showTwitterSection = !isMobile || mobileMainTab === "twitter";
@@ -1126,6 +1135,80 @@ export default function TrackersPage() {
     setShowAddWalletModal(true);
   };
 
+  const handleAddDefault150Wallets = async () => {
+    if (isAtWalletLimit) {
+      showWalletLimitToast();
+      return;
+    }
+    if (!user?.id) {
+      showToastMessage("Please log in to add wallets.");
+      return;
+    }
+    setIsAddingDefaultWallets(true);
+    try {
+      const res = await fetch("/default_wallets_to_track.json");
+      if (!res.ok) throw new Error("Failed to load default wallets list.");
+      const raw = (await res.json()) as DefaultWalletEntry[];
+      const chainMatch =
+        selectedChain === "monad" ? "monad" : "solana";
+      const defaultList = (raw || []).filter(
+        (w) => (w.chain || "solana").toLowerCase() === chainMatch,
+      );
+      const existingNormalized = new Set(
+        wallets.map((w) => normalizeAddress(w.address)).filter(Boolean),
+      );
+      const toAdd = defaultList.filter((w) => {
+        const norm = normalizeAddress(w.address);
+        return norm && !existingNormalized.has(norm);
+      });
+      const availableSlots = MAX_WALLETS - wallets.length;
+      const capped = toAdd.slice(0, Math.min(availableSlots, 150));
+      if (capped.length === 0) {
+        showToastMessage(
+          existingNormalized.size > 0 && toAdd.length === 0
+            ? "All 150 default wallets are already added for this chain."
+            : selectedChain === "monad"
+              ? "No default wallets for Monad. Use Solana to add the default 150."
+              : "No slots left or no default wallets to add.",
+        );
+        return;
+      }
+      const bulkPayload = capped.map((w) => ({
+        wallet: w.address,
+        walletName: w.name || w.address.slice(0, 8),
+        emoji: w.symbol || getRandomEmoji(),
+      }));
+      await addTrackedWalletsBulk(
+        bulkPayload,
+        user.id,
+        selectedChain,
+        user?.bearerToken,
+      );
+      await ensureNotificationsEnabled(
+        capped.map((w) => ({ address: w.address })),
+      );
+      if (typeof window !== "undefined") {
+        capped.forEach((w) => {
+          localStorage.setItem(
+            `wallet_notifications_${w.address}`,
+            JSON.stringify(true),
+          );
+        });
+      }
+      await loadWalletsFromBackend();
+      showEnhancedToast(
+        "success",
+        `Added ${capped.length} default wallet${capped.length === 1 ? "" : "s"}.`,
+        { duration: 4000 },
+      );
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Failed to add default wallets.";
+      showToastMessage(msg);
+    } finally {
+      setIsAddingDefaultWallets(false);
+    }
+  };
+
   const handleRemoveWallet = async (addressToRemove: string) => {
     try {
       if (addressToRemove === "all") {
@@ -1563,7 +1646,7 @@ export default function TrackersPage() {
             },
           );
 
-          const availableSlots = MAX_WALLETS - watchedWallets.length;
+          const availableSlots = MAX_WALLETS - wallets.length;
           if (walletsToAdd.length > availableSlots) {
             showToastMessage(
               availableSlots > 0
@@ -1758,11 +1841,11 @@ export default function TrackersPage() {
                               ))}
                               <div className="flex items-center rounded-lg border border-white/[0.06] bg-white/[0.04] px-3 py-1 text-[10px] text-neutral-300 sm:px-3.5 sm:py-1.5 sm:text-[11px]">
                                 <span className="font-semibold text-[#7FFFC9]">
-                                  {watchedWallets.length}
+                                  {wallets.length}
                                 </span>
                                 <span className="ml-1 hidden text-neutral-500 sm:ml-1.5 sm:inline">
                                   /{MAX_WALLETS} wallet
-                                  {watchedWallets.length === 1 ? "" : "s"}
+                                  {wallets.length === 1 ? "" : "s"}
                                 </span>
                                 <span className="ml-1 text-neutral-500 sm:ml-1.5 sm:hidden">
                                   /{MAX_WALLETS}
@@ -1773,17 +1856,31 @@ export default function TrackersPage() {
                             {/* Middle: search bar (center, max width) */}
                             <div className="flex flex-wrap items-center justify-end gap-2 sm:gap-2.5">
                               {activeTab === 0 && (
-                                <button
-                                  className="cursor-pointer rounded-lg px-3 py-1.5 text-[9px] font-semibold whitespace-nowrap transition-all duration-200 hover:brightness-90 sm:px-5 sm:py-2.5 sm:text-xs"
-                                  style={{
-                                    backgroundColor: "#7FFFC9",
-                                    color: "#000000",
-                                    border: "none",
-                                  }}
-                                  onClick={handleOpenAddWalletModal}
-                                >
-                                  Add Wallet
-                                </button>
+                                <>
+                                  {selectedChain === "sol" && (
+                                    <button
+                                      className="cursor-pointer rounded-lg border border-white/[0.08] bg-white/[0.06] px-3 py-1.5 text-[9px] font-semibold whitespace-nowrap text-neutral-200 transition-all duration-200 hover:border-white/[0.12] hover:bg-white/[0.08] hover:text-white disabled:cursor-not-allowed disabled:opacity-50 sm:px-4 sm:py-2 sm:text-xs"
+                                      onClick={handleAddDefault150Wallets}
+                                      disabled={isAtWalletLimit || isAddingDefaultWallets}
+                                      title="Add 150 default wallets for Solana"
+                                    >
+                                      {isAddingDefaultWallets
+                                        ? "Adding..."
+                                        : "Import top 150 wallets"}
+                                    </button>
+                                  )}
+                                  <button
+                                    className="cursor-pointer rounded-lg px-3 py-1.5 text-[9px] font-semibold whitespace-nowrap transition-all duration-200 hover:brightness-90 sm:px-5 sm:py-2.5 sm:text-xs"
+                                    style={{
+                                      backgroundColor: "#7FFFC9",
+                                      color: "#000000",
+                                      border: "none",
+                                    }}
+                                    onClick={handleOpenAddWalletModal}
+                                  >
+                                    Add Wallet
+                                  </button>
+                                </>
                               )}
                             </div>
                           </div>
@@ -1811,7 +1908,7 @@ export default function TrackersPage() {
                                   {activeTab === 0 && (
                                     <>
                                       <button
-                                        className="cursor-pointer rounded-lg border border-white/[0.06] bg-white/[0.03] px-2.5 py-1.5 text-[9px] font-semibold whitespace-nowrap text-neutral-200 transition-all duration-200 hover:border-white/[0.1] hover:bg-white/[0.07] hover:text-white sm:px-3 sm:py-2.5 sm:text-[10px]"
+                                        className="cursor-pointer rounded-lg border border-white/[0.06] bg-white/[0.03] px-2.5 text-[9px] font-semibold whitespace-nowrap text-neutral-200 transition-all duration-200 hover:border-white/[0.1] hover:bg-white/[0.07] hover:text-white sm:px-3 py-2.5 sm:text-[10px]"
                                         onClick={() => setShowImportModal(true)}
                                       >
                                         Import
@@ -1823,7 +1920,7 @@ export default function TrackersPage() {
                                           </div>
                                         )}
                                         <button
-                                          className="cursor-pointer rounded-lg border border-white/[0.06] bg-white/[0.03] px-2.5 py-1.5 text-[9px] font-semibold whitespace-nowrap text-neutral-200 transition-all duration-200 hover:border-white/[0.1] hover:bg-white/[0.07] hover:text-white sm:px-3 sm:py-2.5 sm:text-[10px]"
+                                          className="cursor-pointer rounded-lg border border-white/[0.06] bg-white/[0.03] px-2.5 text-[9px] font-semibold whitespace-nowrap text-neutral-200 transition-all duration-200 hover:border-white/[0.1] hover:bg-white/[0.07] hover:text-white sm:px-3 py-2.5 sm:text-[10px]"
                                           onClick={handleExportAddresses}
                                         >
                                           Export
@@ -2356,7 +2453,7 @@ export default function TrackersPage() {
               walletsToAdd.push(transformedWallet);
             });
 
-            const availableSlots = MAX_WALLETS - watchedWallets.length;
+            const availableSlots = MAX_WALLETS - wallets.length;
             if (walletsToAdd.length > availableSlots) {
               showToastMessage(
                 availableSlots > 0
