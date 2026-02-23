@@ -275,9 +275,21 @@ async function _doResolveMetadataImage(url: string): Promise<string | null> {
       return metadataUrl;
     }
 
-    // Only parse as JSON if Content-Type indicates JSON — avoids SyntaxError on
-    // binary responses (JPEG, etc.) from misconfigured upstreams
+    // Try JSON parse even for non-JSON content types — arweave and other
+    // decentralized storage often serve JSON with text/plain or octet-stream.
+    // Only skip binary responses (images detected by content-type).
     if (!contentType.includes('json')) {
+      // text/plain, application/octet-stream, etc. — try JSON parse as fallback
+      try {
+        const text = await response.text();
+        if (text.trimStart().startsWith('{') || text.trimStart().startsWith('[')) {
+          const parsed = JSON.parse(text);
+          const imageUrl = extractMetaImage(parsed);
+          metadataImageCache.set(url, { image: imageUrl, timestamp: Date.now() });
+          if (imageUrl) scheduleMetadataPersist();
+          return imageUrl;
+        }
+      } catch {}
       metadataImageCache.set(url, { image: null, timestamp: Date.now() });
       return null;
     }

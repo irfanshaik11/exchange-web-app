@@ -33,6 +33,10 @@ import { useUser } from "./UserContext";
 // import { PiTelegramLogo } from "react-icons/pi";
 // import { TiDocumentText } from "react-icons/ti";
 
+// Cache of mint → resolved direct image URL, populated by TokenListItem components.
+// Persists for the lifetime of this module (across modal open/close).
+const resolvedImageByMint = new Map<string, string>();
+
 // Token type
 export interface Token {
   id: number;
@@ -873,7 +877,7 @@ const SearchModalContent = React.memo(function SearchModalContent({
             mint: tokenAddress,
             name: token.name || "",
             symbol: token.symbol || "",
-            logo: token.logo || token.image || token.image_url || token.uri,
+            logo: token.uri || token.logo || token.image || token.image_url,
             fully_diluted_value:
               token.market_cap_usd ||
               token.marketCapUSD ||
@@ -960,6 +964,7 @@ const SearchModalContent = React.memo(function SearchModalContent({
         uri: token.uri || token.logo || undefined,
         launchpad_protocol: (token as any).launchpad_protocol,
         chain: chain,
+        resolvedImageUrl: resolvedImageByMint.get(token.mint) || undefined,
       };
       addToHistory(historyItem, user?.id);
       console.log("💾 Saved to search history:", { userId: user?.id, token: historyItem.symbol });
@@ -1451,7 +1456,7 @@ const SearchModalContent = React.memo(function SearchModalContent({
                     const mc = formatMarketCap(mcRaw);
                     const mcColor = getMarketCapColor(mcRaw);
                     const liq = formatSmartNumber(item.total_liquidity_usd || 0);
-                    const normalizedLogo = normalizeAssetUrl(item.logo || item.uri || null);
+                    const normalizedLogo = normalizeAssetUrl(item.resolvedImageUrl || item.logo || item.uri || null);
                     const fallbackAvatar = `https://ui-avatars.com/api/?name=${encodeURIComponent(item.symbol || item.name || "T")}&background=0f1012&color=E6E7EA&size=56`;
 
                     // Get protocol color and icon for the history item
@@ -1772,8 +1777,8 @@ const TokenListItem = React.memo(
     const tokenIsNew = isNewToken(token.created_at);
     const tokenIsTrending = isTrendingToken(token);
     const [logoUrl, setLogoUrl] = useState<string | null>(
-      // Prioritize logo (direct image URL) over uri (often metadata JSON)
-      token.logo || token.uri || null,
+      // Prioritize uri (metadata JSON with image) over logo (often empty)
+      token.uri || token.logo || null,
     );
     const [showXPreview, setShowXPreview] = useState(false);
     const [xPreviewPosition, setXPreviewPosition] = useState({ x: 0, y: 0 });
@@ -1811,8 +1816,8 @@ const TokenListItem = React.memo(
     useEffect(() => {
       if (resolvedForMintRef.current !== token.mint) {
         // New token - reset and start fresh
-        // Prioritize logo (direct image URL) over uri (often metadata JSON)
-        const initialUrl = token.logo || token.uri || null;
+        // Prioritize uri (metadata JSON with image) over logo (often empty)
+        const initialUrl = token.uri || token.logo || null;
         setLogoUrl(initialUrl);
         resolvedImageRef.current = null;
         resolvedForMintRef.current = token.mint;
@@ -1834,6 +1839,7 @@ const TokenListItem = React.memo(
           const img = extractMetaImage(data);
           if (img) {
             resolvedImageRef.current = img;
+            resolvedImageByMint.set(token.mint, img);
             setLogoUrl(img);
           } else if (rawUri) {
             // If metadata fetch didn't return an image, use the raw URI
@@ -1874,8 +1880,8 @@ const TokenListItem = React.memo(
       [token],
     );
     const normalizedLogo = useMemo(
-      () => normalizeAssetUrl(logoUrl || token.logo || token.uri),
-      [logoUrl, token.logo, token.uri],
+      () => normalizeAssetUrl(logoUrl || token.uri || token.logo),
+      [logoUrl, token.uri, token.logo],
     );
     const fallbackAvatar = useMemo(
       () =>

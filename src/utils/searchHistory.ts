@@ -10,6 +10,7 @@ export type SearchHistoryItem = Pick<Token, "mint" | "symbol" | "name" | "logo" 
   uri?: string;
   launchpad_protocol?: string;
   chain?: string;
+  resolvedImageUrl?: string;
 };
 
 /**

@@ -133,8 +133,10 @@ function FastImageInner({
   const [resolvedSrc, setResolvedSrc] = useState<string | null>(() => {
     if (!inputSrc) return null;
     if (!isMetadataUrl(inputSrc)) return inputSrc; // Regular URL - use immediately!
-    // Synchronous cache hit — avoids the null→effect→setState render cycle
-    return getCachedMetadataImage(inputSrc);
+    // Use cached resolved image if available; otherwise use inputSrc directly.
+    // computeImageUrl routes through /api/img/{hash} which handles both
+    // direct images and JSON metadata (via resolveJsonMetadataImage).
+    return getCachedMetadataImage(inputSrc) || inputSrc;
   });
 
   // Track whether the image was already cached at mount time (set synchronously, never re-renders)
