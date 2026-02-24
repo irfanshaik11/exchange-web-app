@@ -7,7 +7,7 @@ export interface WatchWallet {
   address: string;
   walletName: string | null;
   emoji: string | null;
-  chain: 'sol' | 'monad';
+  chain: "sol" | "monad";
   notificationsEnabled: boolean;
   createdAt: string;
 }
@@ -18,7 +18,7 @@ export interface WalletEvent {
   wallet: string;
   mint: string;
   amount: string;
-  side: 'buy' | 'sell';
+  side: "buy" | "sell";
   solSpent: string | null;
   usdcSpent: string | null;
   txSig: string;
@@ -38,13 +38,13 @@ export interface WalletBalance {
 
 // ===== WebSocket Event Types =====
 export interface TradeEvent {
-  type: 'trade';
+  type: "trade";
   wallet: string;
   mint: string;
   pair_address?: string; // Optional: preferred for navigation
   symbol: string | null;
   name: string | null;
-  side: 'buy' | 'sell';
+  side: "buy" | "sell";
   amount: number;
   sol_spent: number | null;
   price_usd: number | null;
@@ -55,10 +55,10 @@ export interface TradeEvent {
 }
 
 export interface WalletLastActiveResult {
-	wallet: string;
-	lastActive: number | null;
-	ok: boolean;
-	error?: string;
+  wallet: string;
+  lastActive: number | null;
+  ok: boolean;
+  error?: string;
 }
 
 // ===== Frontend Display Types =====
@@ -73,11 +73,11 @@ export interface TrackedWallet {
 // Normalize API URL: if it's https to a raw IP, downgrade to http to avoid TLS issues in browsers
 const resolveApiUrl = () => {
   const envUrl = process.env.NEXT_PUBLIC_WALLET_TRACKER_URL;
-  if (!envUrl) return ''; // Optional: return empty string if not configured
+  if (!envUrl) return ""; // Optional: return empty string if not configured
   try {
     const u = new URL(envUrl);
     const isIp = /^\d{1,3}(\.\d{1,3}){3}$/.test(u.hostname);
-    if (u.protocol === 'https:' && isIp) {
+    if (u.protocol === "https:" && isIp) {
       return `http://${u.host}`;
     }
     return envUrl;
@@ -91,9 +91,10 @@ export const WALLET_TRACKER_API_URL = resolveApiUrl();
 // Normalize WS URL: allow users to provide http(s) and convert to ws(s) automatically
 const resolveWsUrl = () => {
   const envWs = process.env.NEXT_PUBLIC_WALLET_TRACKER_WS_URL;
-  if (!envWs) return ''; // Optional: return empty string if not configured
-  if (envWs.startsWith('http://')) return envWs.replace(/^http:\/\//, 'ws://');
-  if (envWs.startsWith('https://')) return envWs.replace(/^https:\/\//, 'wss://');
+  if (!envWs) return ""; // Optional: return empty string if not configured
+  if (envWs.startsWith("http://")) return envWs.replace(/^http:\/\//, "ws://");
+  if (envWs.startsWith("https://"))
+    return envWs.replace(/^https:\/\//, "wss://");
   return envWs;
 };
 
@@ -102,106 +103,137 @@ const WALLET_TRACKER_WS_URL = resolveWsUrl();
 // ===== API Functions =====
 
 // Get all tracked wallets
-export async function getTrackedWallets(authToken?: string, userId?: string, chain?: 'sol' | 'monad'): Promise<WatchWallet[]> {
+export async function getTrackedWallets(
+  authToken?: string,
+  userId?: string,
+  chain?: "sol" | "monad",
+): Promise<WatchWallet[]> {
   try {
     const params = new URLSearchParams();
     if (userId) {
-      params.append('userId', userId);
+      params.append("userId", userId);
     }
     if (chain) {
-      params.append('chain', chain);
+      params.append("chain", chain);
     }
-    
-    const url = `${WALLET_TRACKER_API_URL}/api/watch${params.toString() ? `?${params.toString()}` : ''}`;
-    
+
+    const url = `${WALLET_TRACKER_API_URL}/api/watch${params.toString() ? `?${params.toString()}` : ""}`;
+
     // Add 10 second timeout
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 10000);
-    
+
     try {
       const headers: HeadersInit = {};
       if (authToken) {
-        headers['Authorization'] = `Bearer ${authToken}`;
+        headers["Authorization"] = `Bearer ${authToken}`;
       }
-      
-      const response = await fetch(url, { 
+
+      const response = await fetch(url, {
         signal: controller.signal,
-        headers
+        headers,
       });
       clearTimeout(timeoutId);
-      
+
       if (!response.ok) {
-        const ct = response.headers.get('content-type') || '';
-        const body = ct.includes('application/json') ? await response.json().catch(() => ({})) : await response.text().catch(() => '');
-        const msg = typeof body === 'object' && body && (body as any).error ? (body as any).error : (typeof body === 'string' && body.trim().startsWith('<') ? `HTTP ${response.status} ${response.statusText}` : (typeof body === 'string' ? body : 'Failed to fetch wallets'));
-        throw new Error(msg || 'Failed to fetch wallets');
+        const ct = response.headers.get("content-type") || "";
+        const body = ct.includes("application/json")
+          ? await response.json().catch(() => ({}))
+          : await response.text().catch(() => "");
+        const msg =
+          typeof body === "object" && body && (body as any).error
+            ? (body as any).error
+            : typeof body === "string" && body.trim().startsWith("<")
+              ? `HTTP ${response.status} ${response.statusText}`
+              : typeof body === "string"
+                ? body
+                : "Failed to fetch wallets";
+        throw new Error(msg || "Failed to fetch wallets");
       }
-      
+
       return await response.json();
     } catch (fetchError: any) {
       clearTimeout(timeoutId);
-      if (fetchError.name === 'AbortError') {
-        throw new Error('Request timed out after 10 seconds');
+      if (fetchError.name === "AbortError") {
+        throw new Error("Request timed out after 10 seconds");
       }
       throw fetchError;
     }
   } catch (error: any) {
     // During logout / missing service we don't want to surface a runtime error
-    const message = error?.message || 'Failed to fetch wallets';
-    console.warn('Error fetching tracked wallets:', message);
+    const message = error?.message || "Failed to fetch wallets";
+    console.warn("Error fetching tracked wallets:", message);
     return [];
   }
 }
 
 // Add a wallet to tracking
 export async function addTrackedWallet(
-  address: string, 
-  name?: string, 
-  userId?: string, 
-  emoji?: string, 
+  address: string,
+  name?: string,
+  userId?: string,
+  emoji?: string,
   notificationsEnabled: boolean = true,
-  chain: 'sol' | 'monad' = 'sol',
-  authToken?: string
+  chain: "sol" | "monad" = "sol",
+  authToken?: string,
 ): Promise<void> {
   try {
-    const headers: HeadersInit = { 
-      'Content-Type': 'application/json',
+    const headers: HeadersInit = {
+      "Content-Type": "application/json",
     };
     if (authToken) {
-      headers['Authorization'] = `Bearer ${authToken}`;
+      headers["Authorization"] = `Bearer ${authToken}`;
     }
-    
+
     const response = await fetch(`${WALLET_TRACKER_API_URL}/api/watch`, {
-      method: 'POST',
+      method: "POST",
       headers,
-      body: JSON.stringify({ 
-        wallet: address, 
+      body: JSON.stringify({
+        wallet: address,
         walletName: name || undefined,
         userId: userId || undefined,
         emoji: emoji || undefined,
-        chain: chain || 'sol'
+        chain: chain || "sol",
         // Note: notificationsEnabled is set via a separate API call below
       }),
     });
-    
+
     if (!response.ok) {
-      const ct = response.headers.get('content-type') || '';
-      const body = ct.includes('application/json') ? await response.json().catch(() => ({})) : await response.text().catch(() => '');
-      const msg = typeof body === 'object' && body && (body as any).error ? (body as any).error : (typeof body === 'string' && body.trim().startsWith('<') ? `HTTP ${response.status} ${response.statusText}` : (typeof body === 'string' ? body : 'Failed to add wallet'));
-      throw new Error(msg || 'Failed to add wallet');
+      const ct = response.headers.get("content-type") || "";
+      const body = ct.includes("application/json")
+        ? await response.json().catch(() => ({}))
+        : await response.text().catch(() => "");
+      const msg =
+        typeof body === "object" && body && (body as any).error
+          ? (body as any).error
+          : typeof body === "string" && body.trim().startsWith("<")
+            ? `HTTP ${response.status} ${response.statusText}`
+            : typeof body === "string"
+              ? body
+              : "Failed to add wallet";
+      throw new Error(msg || "Failed to add wallet");
     }
-    
+
     // Enable notifications if requested (separate API call)
     if (notificationsEnabled) {
       try {
-        await toggleWalletNotifications(address, true, userId, chain, authToken);
+        await toggleWalletNotifications(
+          address,
+          true,
+          userId,
+          chain,
+          authToken,
+        );
       } catch (notifError) {
-        console.warn('Failed to enable notifications for wallet, but wallet was added successfully:', notifError);
+        console.warn(
+          "Failed to enable notifications for wallet, but wallet was added successfully:",
+          notifError,
+        );
         // Don't throw - wallet was added successfully, notification toggle can be done manually
       }
     }
   } catch (error) {
-    console.error('Error adding wallet:', error);
+    console.error("Error adding wallet:", error);
     throw error;
   }
 }
@@ -226,8 +258,8 @@ type BulkWalletEntry = {
 export async function addTrackedWalletsBulk(
   wallets: BulkWalletEntry[],
   userId?: string | number,
-  chain?: 'sol' | 'monad',
-  authToken?: string
+  chain?: "sol" | "monad",
+  authToken?: string,
 ): Promise<BulkWalletInsertResponse> {
   if (!wallets || wallets.length === 0) {
     return {
@@ -242,131 +274,155 @@ export async function addTrackedWalletsBulk(
   }
 
   try {
-    const headers: HeadersInit = { 
-      'Content-Type': 'application/json',
+    const headers: HeadersInit = {
+      "Content-Type": "application/json",
     };
     if (authToken) {
-      headers['Authorization'] = `Bearer ${authToken}`;
+      headers["Authorization"] = `Bearer ${authToken}`;
     }
-    
+
     const response = await fetch(`${WALLET_TRACKER_API_URL}/api/watch/bulk`, {
-      method: 'POST',
+      method: "POST",
       headers,
       body: JSON.stringify({
         wallets,
         ...(userId ? { userId } : {}),
-        ...(chain ? { chain } : { chain: 'sol' }),
+        ...(chain ? { chain } : { chain: "sol" }),
       }),
     });
 
     const payload = await response.json().catch(() => ({}));
     if (!response.ok || payload?.ok === false) {
-      throw new Error(payload?.error || 'Failed to add wallets in bulk');
+      throw new Error(payload?.error || "Failed to add wallets in bulk");
     }
 
     return payload as BulkWalletInsertResponse;
   } catch (error) {
-    console.error('Error adding wallets in bulk:', error);
+    console.error("Error adding wallets in bulk:", error);
     throw error;
   }
 }
 
-export async function getWalletsLastActive(wallets: string[], chain: 'sol' | 'monad' = 'sol'): Promise<WalletLastActiveResult[]> {
-	try {
-		if (!Array.isArray(wallets) || wallets.length === 0) {
-			return [];
-		}
+export async function getWalletsLastActive(
+  wallets: string[],
+  chain: "sol" | "monad" = "sol",
+): Promise<WalletLastActiveResult[]> {
+  try {
+    if (!Array.isArray(wallets) || wallets.length === 0) {
+      return [];
+    }
 
-		const response = await fetch(`${WALLET_TRACKER_API_URL}/api/wallets/last-active`, {
-			method: 'POST',
-			headers: { 'Content-Type': 'application/json' },
-			body: JSON.stringify({ wallets, chain }),
-		});
+    const response = await fetch(
+      `${WALLET_TRACKER_API_URL}/api/wallets/last-active`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ wallets, chain }),
+      },
+    );
 
-		const payload = await response.json().catch(() => null);
+    const payload = await response.json().catch(() => null);
 
-		if (!response.ok) {
-			const message =
-				payload?.error ||
-				(response.statusText ? `HTTP ${response.status} ${response.statusText}` : 'Failed to fetch last active wallets');
-			throw new Error(message);
-		}
+    if (!response.ok) {
+      const message =
+        payload?.error ||
+        (response.statusText
+          ? `HTTP ${response.status} ${response.statusText}`
+          : "Failed to fetch last active wallets");
+      throw new Error(message);
+    }
 
-		if (!payload || typeof payload !== 'object' || payload.ok !== true || !Array.isArray(payload.data)) {
-			throw new Error('Unexpected response while fetching last active wallets');
-		}
+    if (
+      !payload ||
+      typeof payload !== "object" ||
+      payload.ok !== true ||
+      !Array.isArray(payload.data)
+    ) {
+      throw new Error("Unexpected response while fetching last active wallets");
+    }
 
-		return payload.data as WalletLastActiveResult[];
-	} catch (error) {
-		console.error('Error fetching wallets last active timestamp:', error);
-		throw error;
-	}
+    return payload.data as WalletLastActiveResult[];
+  } catch (error) {
+    console.error("Error fetching wallets last active timestamp:", error);
+    throw error;
+  }
 }
 
 // Remove a wallet from tracking
-export async function removeTrackedWallet(address: string, userId?: string, chain?: 'sol' | 'monad', authToken?: string): Promise<void> {
+export async function removeTrackedWallet(
+  address: string,
+  userId?: string,
+  chain?: "sol" | "monad",
+  authToken?: string,
+): Promise<void> {
   try {
     const params = new URLSearchParams();
     if (userId) {
-      params.append('userId', userId);
+      params.append("userId", userId);
     }
     if (chain) {
-      params.append('chain', chain);
+      params.append("chain", chain);
     }
-    
-    const url = `${WALLET_TRACKER_API_URL}/api/watch/${encodeURIComponent(address)}${params.toString() ? `?${params.toString()}` : ''}`;
+
+    const url = `${WALLET_TRACKER_API_URL}/api/watch/${encodeURIComponent(address)}${params.toString() ? `?${params.toString()}` : ""}`;
     const headers: HeadersInit = {};
     if (authToken) {
-      headers['Authorization'] = `Bearer ${authToken}`;
+      headers["Authorization"] = `Bearer ${authToken}`;
     }
     const response = await fetch(url, {
-      method: 'DELETE',
-      headers
+      method: "DELETE",
+      headers,
     });
-    
+
     const body = await response.json().catch(() => ({}));
-    
+
     if (!response.ok) {
-      const msg = typeof body === 'object' && body && (body as any).error 
-        ? (body as any).error 
-        : `HTTP ${response.status} ${response.statusText}`;
-      throw new Error(msg || 'Failed to remove wallet');
+      const msg =
+        typeof body === "object" && body && (body as any).error
+          ? (body as any).error
+          : `HTTP ${response.status} ${response.statusText}`;
+      throw new Error(msg || "Failed to remove wallet");
     }
-    
+
     // Verify that a wallet was actually deleted
     if (body.deleted === 0 || (body.ok && body.deleted === 0)) {
-      throw new Error('Wallet not found in watchlist');
+      throw new Error("Wallet not found in watchlist");
     }
   } catch (error) {
-    console.error('Error removing wallet:', error);
+    console.error("Error removing wallet:", error);
     throw error;
   }
 }
 
 // Get wallet event history
-export async function getWalletHistory(address: string, limit: number = 50): Promise<WalletEvent[]> {
+export async function getWalletHistory(
+  address: string,
+  limit: number = 50,
+): Promise<WalletEvent[]> {
   try {
     const response = await fetch(
-      `${WALLET_TRACKER_API_URL}/api/history?wallet=${encodeURIComponent(address)}&limit=${limit}`
+      `${WALLET_TRACKER_API_URL}/api/history?wallet=${encodeURIComponent(address)}&limit=${limit}`,
     );
-    if (!response.ok) throw new Error('Failed to fetch wallet history');
+    if (!response.ok) throw new Error("Failed to fetch wallet history");
     return await response.json();
   } catch (error) {
-    console.error('Error fetching wallet history:', error);
+    console.error("Error fetching wallet history:", error);
     return [];
   }
 }
 
 // Get wallet balance snapshots
-export async function getWalletSnapshots(address: string): Promise<WalletBalance[]> {
+export async function getWalletSnapshots(
+  address: string,
+): Promise<WalletBalance[]> {
   try {
     const response = await fetch(
-      `${WALLET_TRACKER_API_URL}/api/snapshot?wallet=${encodeURIComponent(address)}`
+      `${WALLET_TRACKER_API_URL}/api/snapshot?wallet=${encodeURIComponent(address)}`,
     );
-    if (!response.ok) throw new Error('Failed to fetch wallet snapshots');
+    if (!response.ok) throw new Error("Failed to fetch wallet snapshots");
     return await response.json();
   } catch (error) {
-    console.error('Error fetching wallet snapshots:', error);
+    console.error("Error fetching wallet snapshots:", error);
     return [];
   }
 }
@@ -374,78 +430,137 @@ export async function getWalletSnapshots(address: string): Promise<WalletBalance
 // Toggle notifications for a wallet
 // SECURITY FIX: Now requires authentication token - userId parameter is ignored by backend
 export async function toggleWalletNotifications(
-  address: string, 
-  enabled: boolean, 
+  address: string,
+  enabled: boolean,
   userId?: string,
-  chain?: 'sol' | 'monad',
-  authToken?: string
+  chain?: "sol" | "monad",
+  authToken?: string,
 ): Promise<void> {
   try {
     const params = new URLSearchParams();
     if (userId) {
-      params.append('userId', userId);
+      params.append("userId", userId);
     }
     if (chain) {
-      params.append('chain', chain);
+      params.append("chain", chain);
     }
-    
-    const url = `${WALLET_TRACKER_API_URL}/api/watch/${encodeURIComponent(address)}/notifications${params.toString() ? `?${params.toString()}` : ''}`;
-    
+
+    const url = `${WALLET_TRACKER_API_URL}/api/watch/${encodeURIComponent(address)}/notifications${params.toString() ? `?${params.toString()}` : ""}`;
+
     const headers: HeadersInit = {
-      'Content-Type': 'application/json',
+      "Content-Type": "application/json",
     };
     if (authToken) {
-      headers['Authorization'] = `Bearer ${authToken}`;
+      headers["Authorization"] = `Bearer ${authToken}`;
     }
-    
+
     const response = await fetch(url, {
-      method: 'PATCH',
+      method: "PATCH",
       headers,
       body: JSON.stringify({ enabled }),
     });
-    
+
     if (!response.ok) {
       const error = await response.json();
-      throw new Error(error.error || 'Failed to toggle notifications');
+      throw new Error(error.error || "Failed to toggle notifications");
     }
   } catch (error) {
-    console.error('Error toggling notifications:', error);
+    console.error("Error toggling notifications:", error);
     throw error;
   }
 }
 
+// Normalize balance from various API response shapes (wallet tracker or local get-sol-bal)
+function parseBalanceFromResponse(data: any): number | null {
+  if (data == null) return null;
+  let raw: number | null = null;
+  if (typeof data.balance === "number") raw = data.balance;
+  else if (data.data != null && typeof data.data.balance === "number")
+    raw = data.data.balance;
+  else if (typeof data.balance === "string") raw = Number(data.balance);
+  else if (data.data?.balance != null) raw = Number(data.data.balance);
+  if (raw !== null && Number.isFinite(raw)) return raw;
+  return null;
+}
+
 // Get balance for a wallet (supports both SOL and MONAD via backend to keep RPC key secure)
-export async function getWalletBalance(address: string, chain: 'sol' | 'monad' = 'sol'): Promise<number | null> {
+export async function getWalletBalance(
+  address: string,
+  chain: "sol" | "monad" = "sol",
+): Promise<number | null> {
   try {
-    const url = `${WALLET_TRACKER_API_URL}/api/wallet-balance/${encodeURIComponent(address)}?chain=${chain}`;
-    console.log(`[getWalletBalance] Fetching ${chain} balance for ${address.slice(0, 8)}... from ${url}`);
-    const response = await fetch(url);
-    
-    if (!response.ok) {
-      const errorData = await response.json().catch(() => ({}));
-      console.error(`[getWalletBalance] API error for ${chain} wallet ${address.slice(0, 8)}...:`, response.status, errorData);
-      throw new Error(errorData.error || 'Failed to fetch wallet balance');
+    if (WALLET_TRACKER_API_URL) {
+      const url = `${WALLET_TRACKER_API_URL}/api/wallet-balance/${encodeURIComponent(address)}?chain=${chain}`;
+      console.log(
+        `[getWalletBalance] Fetching ${chain} balance for ${address.slice(0, 8)}... from ${url}`,
+      );
+      const response = await fetch(url);
+
+      if (response.ok) {
+        const data = await response.json();
+        console.log(
+          `[getWalletBalance] Response for ${chain} wallet ${address.slice(0, 8)}...:`,
+          data,
+        );
+        const balance = parseBalanceFromResponse(data);
+        if (balance !== null) {
+          console.log(
+            `[getWalletBalance] Successfully got ${chain} balance: ${balance}`,
+          );
+          return balance;
+        }
+      } else {
+        const errorData = await response.json().catch(() => ({}));
+        console.warn(
+          `[getWalletBalance] API error for ${chain} wallet ${address.slice(0, 8)}...:`,
+          response.status,
+          errorData,
+        );
+      }
     }
-    
-    const data = await response.json();
-    console.log(`[getWalletBalance] Response for ${chain} wallet ${address.slice(0, 8)}...:`, data);
-    
-    if (data.ok && typeof data.balance === 'number') {
-      console.log(`[getWalletBalance] Successfully got ${chain} balance: ${data.balance}`);
-      return data.balance;
+
+    // Fallback for Solana: use app's own API (RPC) when wallet tracker is missing or failed
+    if (chain === "sol") {
+      try {
+        const base =
+          typeof window !== "undefined"
+            ? ""
+            : process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
+        const fallbackUrl = `${base}/api/get-sol-bal?address=${encodeURIComponent(address)}&chain=sol`;
+        const fallbackRes = await fetch(fallbackUrl);
+        if (fallbackRes.ok) {
+          const data = await fallbackRes.json();
+          const balance = parseBalanceFromResponse(data);
+          if (balance !== null) {
+            console.log(
+              `[getWalletBalance] Got SOL balance via fallback: ${balance}`,
+            );
+            return balance;
+          }
+        }
+      } catch (fallbackError) {
+        console.warn(
+          `[getWalletBalance] Solana fallback failed for ${address.slice(0, 8)}...:`,
+          fallbackError,
+        );
+      }
     }
-    
-    console.warn(`[getWalletBalance] Invalid response format for ${chain} wallet ${address.slice(0, 8)}...:`, data);
+
     return null;
   } catch (error) {
-    console.error(`[getWalletBalance] Error fetching ${chain} balance for ${address.slice(0, 8)}...:`, error);
+    console.error(
+      `[getWalletBalance] Error fetching ${chain} balance for ${address.slice(0, 8)}...:`,
+      error,
+    );
     return null;
   }
 }
 
 // Legacy function name for backward compatibility
-export async function getWalletSolBalance(address: string): Promise<number | null> {
-  return getWalletBalance(address, 'sol');
+export async function getWalletSolBalance(
+  address: string,
+): Promise<number | null> {
+  return getWalletBalance(address, "sol");
 }
 
 // Transaction interface for wallet activity
@@ -458,25 +573,28 @@ export interface WalletTransaction {
 }
 
 // Get recent transactions for a wallet (via backend using Helius)
-export async function getWalletTransactions(address: string, limit: number = 10): Promise<WalletTransaction[]> {
+export async function getWalletTransactions(
+  address: string,
+  limit: number = 10,
+): Promise<WalletTransaction[]> {
   try {
     const response = await fetch(
-      `${WALLET_TRACKER_API_URL}/api/wallet-transactions/${encodeURIComponent(address)}?limit=${limit}`
+      `${WALLET_TRACKER_API_URL}/api/wallet-transactions/${encodeURIComponent(address)}?limit=${limit}`,
     );
-    
+
     if (!response.ok) {
-      throw new Error('Failed to fetch wallet transactions');
+      throw new Error("Failed to fetch wallet transactions");
     }
-    
+
     const data = await response.json();
-    
+
     if (data.ok && Array.isArray(data.transactions)) {
       return data.transactions;
     }
-    
+
     return [];
   } catch (error) {
-    console.error('Error fetching wallet transactions:', error);
+    console.error("Error fetching wallet transactions:", error);
     return [];
   }
 }
@@ -484,10 +602,10 @@ export async function getWalletTransactions(address: string, limit: number = 10)
 // ===== Trade History Helpers =====
 
 const parseNumeric = (value: unknown): number | null => {
-  if (typeof value === 'number') {
+  if (typeof value === "number") {
     return Number.isFinite(value) ? value : null;
   }
-  if (typeof value === 'string') {
+  if (typeof value === "string") {
     const trimmed = value.trim();
     if (!trimmed) return null;
     const parsed = Number(trimmed);
@@ -497,7 +615,7 @@ const parseNumeric = (value: unknown): number | null => {
 };
 
 const normalizeTradeHistoryRecord = (record: any): TradeEvent | null => {
-  if (!record || typeof record !== 'object') return null;
+  if (!record || typeof record !== "object") return null;
 
   const wallet = record.wallet ?? record.owner ?? record.address;
   const mint = record.mint ?? record.token ?? record.mint_address;
@@ -509,23 +627,38 @@ const normalizeTradeHistoryRecord = (record: any): TradeEvent | null => {
     record.transaction_id ??
     record.id;
 
-  if (typeof wallet !== 'string' || typeof mint !== 'string' || typeof tx !== 'string') {
+  if (
+    typeof wallet !== "string" ||
+    typeof mint !== "string" ||
+    typeof tx !== "string"
+  ) {
     return null;
   }
 
-  const sideValue = (record.side ?? record.action ?? '').toString().toLowerCase();
-  const side: 'buy' | 'sell' = sideValue === 'sell' ? 'sell' : 'buy';
+  const sideValue = (record.side ?? record.action ?? "")
+    .toString()
+    .toLowerCase();
+  const side: "buy" | "sell" = sideValue === "sell" ? "sell" : "buy";
 
   const amount =
-    parseNumeric(record.amount ?? record.size ?? record.quantity ?? record.tokenAmount) ?? 0;
+    parseNumeric(
+      record.amount ?? record.size ?? record.quantity ?? record.tokenAmount,
+    ) ?? 0;
   const solSpent = parseNumeric(record.sol_spent ?? record.solSpent);
   const priceUsd = parseNumeric(record.price_usd ?? record.priceUsd);
-  const marketCapUsd = parseNumeric(record.market_cap_usd ?? record.marketCapUsd);
+  const marketCapUsd = parseNumeric(
+    record.market_cap_usd ?? record.marketCapUsd,
+  );
 
   const rawTimestamp =
-    record.at ?? record.ts ?? record.timestamp ?? record.blockTime ?? record.time ?? null;
+    record.at ??
+    record.ts ??
+    record.timestamp ??
+    record.blockTime ??
+    record.time ??
+    null;
   let timestamp = parseNumeric(rawTimestamp);
-  if (timestamp === null && typeof rawTimestamp === 'string') {
+  if (timestamp === null && typeof rawTimestamp === "string") {
     const parsed = Date.parse(rawTimestamp);
     timestamp = Number.isFinite(parsed) ? parsed : null;
   }
@@ -534,13 +667,15 @@ const normalizeTradeHistoryRecord = (record: any): TradeEvent | null => {
     return null;
   }
 
-  const timestampMs = timestamp < 1_000_000_000_000 ? timestamp * 1000 : timestamp;
+  const timestampMs =
+    timestamp < 1_000_000_000_000 ? timestamp * 1000 : timestamp;
 
   return {
-    type: 'trade',
+    type: "trade",
     wallet,
     mint,
-    pair_address: record.pair_address ?? record.pairAddress ?? record.poolId ?? undefined,
+    pair_address:
+      record.pair_address ?? record.pairAddress ?? record.poolId ?? undefined,
     symbol: record.symbol ?? record.tokenSymbol ?? record.ticker ?? null,
     name: record.name ?? record.tokenName ?? record.project ?? null,
     side,
@@ -562,7 +697,7 @@ interface TradeHistoryOptions {
 
 export async function getWalletTradeHistory(
   wallets: string[],
-  options: TradeHistoryOptions = {}
+  options: TradeHistoryOptions = {},
 ): Promise<TradeEvent[]> {
   if (!Array.isArray(wallets) || wallets.length === 0) {
     return [];
@@ -571,26 +706,27 @@ export async function getWalletTradeHistory(
   try {
     const params = new URLSearchParams();
     const validWallets = wallets.filter(
-      (wallet): wallet is string => typeof wallet === 'string' && wallet.trim().length > 0
+      (wallet): wallet is string =>
+        typeof wallet === "string" && wallet.trim().length > 0,
     );
 
     validWallets.forEach((wallet) => {
-      params.append('wallets', wallet);
+      params.append("wallets", wallet);
     });
 
     validWallets.forEach((wallet) => {
-      params.append('wallet', wallet);
+      params.append("wallet", wallet);
     });
 
     if (options.limit !== undefined) {
-      params.set('limit', String(options.limit));
+      params.set("limit", String(options.limit));
     }
     if (options.windowMs !== undefined) {
-      params.set('windowMs', String(options.windowMs));
+      params.set("windowMs", String(options.windowMs));
     }
 
     const url = `${WALLET_TRACKER_API_URL}/api/history?${params.toString()}`;
-    console.debug('Fetching wallet trade history', {
+    console.debug("Fetching wallet trade history", {
       url,
       wallets: [...validWallets],
       limit: options.limit,
@@ -605,7 +741,7 @@ export async function getWalletTradeHistory(
       } catch {
         payload = await response.text().catch(() => null);
       }
-      console.error('Failed to fetch trade history:', {
+      console.error("Failed to fetch trade history:", {
         status: response.status,
         statusText: response.statusText,
         body: payload,
@@ -617,10 +753,10 @@ export async function getWalletTradeHistory(
     const records: any[] = Array.isArray(payload)
       ? payload
       : Array.isArray(payload?.trades)
-      ? payload.trades
-      : Array.isArray(payload?.data)
-      ? payload.data
-      : [];
+        ? payload.trades
+        : Array.isArray(payload?.data)
+          ? payload.data
+          : [];
 
     const history = records
       .map((record) => normalizeTradeHistoryRecord(record))
@@ -628,7 +764,7 @@ export async function getWalletTradeHistory(
 
     return history;
   } catch (error) {
-    console.error('Error fetching wallet trade history:', error);
+    console.error("Error fetching wallet trade history:", error);
     return [];
   }
 }
@@ -645,7 +781,7 @@ export interface WalletTrackerWebSocket {
 export function createWalletTrackerWebSocket(
   onTradeEvent: (event: TradeEvent) => void,
   onConnect?: () => void,
-  onDisconnect?: () => void
+  onDisconnect?: () => void,
 ): WalletTrackerWebSocket {
   const wsUrl = `${WALLET_TRACKER_WS_URL}/ws`;
   const ws = new WebSocket(wsUrl);
@@ -661,21 +797,21 @@ export function createWalletTrackerWebSocket(
   ws.onmessage = (event) => {
     try {
       const data = JSON.parse(event.data);
-      
+
       // Handle ping/pong
-      if (data.method === 'ping') {
+      if (data.method === "ping") {
         isAlive = true;
-        ws.send(JSON.stringify({ method: 'pong' }));
+        ws.send(JSON.stringify({ method: "pong" }));
         return;
       }
-      
+
       // Handle subscription confirmation
-      if (data.type === 'subscribed') {
+      if (data.type === "subscribed") {
         return;
       }
-      
+
       // Handle trade events
-      if (data.type === 'trade') {
+      if (data.type === "trade") {
         onTradeEvent(data as TradeEvent);
       }
     } catch (error) {
@@ -685,7 +821,10 @@ export function createWalletTrackerWebSocket(
 
   ws.onerror = (error) => {
     if (!connectionEstablished) {
-      console.error('WebSocket connection error - check NEXT_PUBLIC_WALLET_TRACKER_WS_URL:', wsUrl);
+      console.error(
+        "WebSocket connection error - check NEXT_PUBLIC_WALLET_TRACKER_WS_URL:",
+        wsUrl,
+      );
     }
   };
 
@@ -696,14 +835,14 @@ export function createWalletTrackerWebSocket(
 
   const subscribe = (wallets: string[]) => {
     if (ws.readyState === WebSocket.OPEN) {
-      const message = { method: 'subscribe', wallets };
+      const message = { method: "subscribe", wallets };
       ws.send(JSON.stringify(message));
     }
   };
 
   const unsubscribe = (wallets: string[]) => {
     if (ws.readyState === WebSocket.OPEN) {
-      ws.send(JSON.stringify({ method: 'unsubscribe', wallets }));
+      ws.send(JSON.stringify({ method: "unsubscribe", wallets }));
     }
   };
 
