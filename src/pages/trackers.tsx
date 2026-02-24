@@ -16,7 +16,7 @@ import {
   removeTrackedWallet,
   getTrackedWallets,
   getWalletHistory,
-  getWalletBalance,
+  getWalletsLastActive,
   toggleWalletNotifications,
   type WatchWallet,
   type WalletEvent,
@@ -64,6 +64,7 @@ import { FaRunning, FaGasPump, FaCoins, FaBan } from "react-icons/fa";
 import { HiLightningBolt } from "react-icons/hi";
 import { useFilter } from "../components/FilterContext";
 import FilterPopout from "../components/FilterPopout";
+import LiveTradesPanel from "../components/LiveTradesPanel";
 
 type DefaultWalletEntry = {
   chain: string;
@@ -73,7 +74,7 @@ type DefaultWalletEntry = {
   isAlertEnabled?: boolean;
 };
 
-const TABS = ["Wallet Manager"];
+const TABS = ["Wallet Manager", "Live Trades"];
 const TWITTER_TABS = ["Tracked Accounts", "X Feed", "Add X Accounts"];
 const LIVE_TRADES_CACHE_PREFIX = "walletTracker:liveTrades";
 const getLiveTradesCacheKey = (userId?: string) =>
@@ -223,6 +224,8 @@ export default function TrackersPage() {
     latestTrades,
     watchedWallets: globalWatchedWallets,
     refreshWatchedWallets,
+    isLoadingHistory,
+    walletBalances: contextWalletBalances,
   } = useWalletTracker();
   const [activeTab, setActiveTab] = useState(0);
   const [positions, setPositions] = useState<PositionRow[]>([]);
@@ -254,7 +257,13 @@ export default function TrackersPage() {
   >({});
   const [lastActiveMap, setLastActiveMap] = useState<
     Record<string, number | null | undefined>
-  >({});
+  >(() => {
+    if (typeof window === "undefined") return {};
+    try {
+      const raw = sessionStorage.getItem("trackers:lastActiveMap");
+      return raw ? JSON.parse(raw) : {};
+    } catch { return {}; }
+  });
   // Get chain from router query first, then localStorage, then default to solana
   const currentChain = (() => {
     if (router.query.chain) {
@@ -589,12 +598,12 @@ export default function TrackersPage() {
     loadTwitterAccounts();
   }, [user?.id]);
 
-  // Load Twitter feed when accounts change or tab changes
+  // Load Twitter feed when tab, accounts, or selected user changes
   useEffect(() => {
     if (twitterTab === 1 && twitterAccounts.length > 0) {
       loadTwitterFeed();
     }
-  }, [twitterTab, twitterAccounts]);
+  }, [twitterTab, twitterAccounts, selectedTwitterUser]);
 
   // Load approved handles for Recommended Wallets tab
   useEffect(() => {
@@ -707,62 +716,9 @@ export default function TrackersPage() {
         }
       }
 
-      // Fetch real balances for tracked wallets (both Solana and Monad)
-      console.log(
-        `[Trackers] Fetching balances for ${allWallets.length} wallets:`,
-        allWallets.map((w) => ({
-          address: w.address.slice(0, 8) + "...",
-          chain: w.chain,
-        })),
-      );
-      allWallets.forEach(async (wallet) => {
-        // Use wallet.chain from backend, fallback to selectedChain if not available
-        const walletChain =
-          wallet.chain === "monad" || wallet.chain === "sol"
-            ? wallet.chain
-            : selectedChain;
-        console.log(
-          `[Trackers] Fetching balance for wallet ${wallet.address.slice(0, 8)}... (chain from wallet: ${wallet.chain}, using: ${walletChain})`,
-        );
-        try {
-          const balance = await getWalletBalance(wallet.address, walletChain);
-          console.log(
-            `[Trackers] Got balance for ${wallet.address.slice(0, 8)}...: ${balance} (chain: ${walletChain})`,
-          );
-          // Use 0 when fetch fails or returns null so the row shows a value instead of staying on "Loading..."
-          const value = balance !== null && !isNaN(balance) ? balance : 0;
-          setTrackedWalletBalances((prev) => {
-            const updated = { ...prev, [wallet.address]: value };
-
-            // Update balance in cache
-            if (typeof window !== "undefined") {
-              const cacheKey = `walletTracker:wallets:${user.id}`;
-              const cached = localStorage.getItem(cacheKey);
-              if (cached) {
-                try {
-                  const cacheData = JSON.parse(cached);
-                  cacheData.balances = updated;
-                  localStorage.setItem(cacheKey, JSON.stringify(cacheData));
-                } catch (error) {
-                  // Silent fail
-                }
-              }
-            }
-
-            return updated;
-          });
-        } catch (error) {
-          console.error(
-            `[Trackers] Error fetching balance for wallet ${wallet.address.slice(0, 8)}... (chain: ${walletChain}):`,
-            error,
-          );
-          // Set balance to 0 so UI shows a value instead of infinite "Loading..."
-          setTrackedWalletBalances((prev) => ({
-            ...prev,
-            [wallet.address]: 0,
-          }));
-        }
-      });
+      // Balances are fetched via WalletTrackerContext batch system (fetchBatchBalances)
+      // and synced into trackedWalletBalances via the useEffect at line ~785.
+      // No per-wallet balance calls here — that would fire 150+ individual RPCs and cause 429s.
     } catch (error) {
       console.error("Failed to load wallets:", error);
       // Don't clear state on error - keep showing cached data
@@ -777,21 +733,46 @@ export default function TrackersPage() {
   useEffect(() => {
     setWatchedWallets(globalWatchedWallets);
   }, [globalWatchedWallets]);
+
+  // Sync context batch balances into local trackedWalletBalances
+  useEffect(() => {
+    if (Object.keys(contextWalletBalances).length > 0) {
+      setTrackedWalletBalances((prev) => ({ ...prev, ...contextWalletBalances }));
+    }
+  }, [contextWalletBalances]);
+  // Track which addresses we last fetched last-active for to avoid re-fetching
+  // on every watchedWallets reference change (context sync creates new arrays)
+  const lastActiveFetchedKeyRef = useRef<string>("");
+  const hadWalletsRef = useRef(false);
   useEffect(() => {
     if (watchedWallets.length === 0) {
-      setLastActiveMap({});
+      // Only clear cache if we previously had wallets (user removed them all).
+      // Skip clearing when watchedWallets is [] because context hasn't loaded yet —
+      // this preserves the sessionStorage cache so we don't flash "Loading..." on return.
+      if (hadWalletsRef.current) {
+        setLastActiveMap({});
+        lastActiveFetchedKeyRef.current = "";
+        try { sessionStorage.removeItem("trackers:lastActiveMap"); } catch {}
+      }
       return;
     }
+    hadWalletsRef.current = true;
 
-    let cancelled = false;
+    // Only re-fetch if the actual addresses changed, not just the array reference
+    const key = watchedWallets.map((w) => w.address).sort().join(",");
+    if (key === lastActiveFetchedKeyRef.current) return;
+    lastActiveFetchedKeyRef.current = key;
+
+    // Snapshot the wallets for this closure
+    const currentWallets = [...watchedWallets];
 
     const fetchLastActive = async () => {
       try {
         // Group wallets by chain
-        const monadWallets = watchedWallets
+        const monadWallets = currentWallets
           .filter((w) => w.chain === "monad")
           .map((w) => w.address);
-        const solWallets = watchedWallets
+        const solWallets = currentWallets
           .filter((w) => w.chain !== "monad")
           .map((w) => w.address);
 
@@ -928,13 +909,11 @@ export default function TrackersPage() {
           }
         }
 
-        // Fetch Solana wallets using backend API
+        // Fetch Solana wallets using backend API (static import, not dynamic)
         if (solWallets.length > 0) {
           try {
-            const { getWalletsLastActive } = await import(
-              "~/utils/walletTracking"
-            );
             const solResults = await getWalletsLastActive(solWallets, "sol");
+            console.log("[trackers:lastActive] sol API returned", solResults.length, "results");
 
             for (const result of solResults) {
               map[result.wallet] = result.lastActive;
@@ -953,28 +932,32 @@ export default function TrackersPage() {
           }
         }
 
-        if (!cancelled) {
-          setLastActiveMap(map);
-        }
+        // Always apply results via merge — never discard completed fetches.
+        // Merge ensures data from concurrent fetches accumulates instead of being lost.
+        console.log("[trackers:lastActive] applying results:", Object.keys(map).length, "wallets");
+        setLastActiveMap((prev) => ({ ...prev, ...map }));
       } catch (error) {
         console.error("Failed to fetch last active timestamps:", error);
-        if (!cancelled) {
-          // Initialize with null values on error
-          const errorMap: Record<string, number | null> = {};
-          watchedWallets.forEach((wallet) => {
-            errorMap[wallet.address] = null;
-          });
-          setLastActiveMap(errorMap);
-        }
+        // Initialize with null values on error (merge so we don't erase good data)
+        const errorMap: Record<string, number | null> = {};
+        currentWallets.forEach((wallet) => {
+          errorMap[wallet.address] = null;
+        });
+        setLastActiveMap((prev) => ({ ...prev, ...errorMap }));
       }
     };
 
     fetchLastActive();
-
-    return () => {
-      cancelled = true;
-    };
   }, [watchedWallets]);
+
+  // Persist lastActiveMap to sessionStorage so navigating away and back shows cached values
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (Object.keys(lastActiveMap).length === 0) return;
+    try {
+      sessionStorage.setItem("trackers:lastActiveMap", JSON.stringify(lastActiveMap));
+    } catch {}
+  }, [lastActiveMap]);
 
   // Fetch token metadata for live trades using API routes (like trade page does)
   // This provides the most complete data: image, protocol, market cap
@@ -1517,11 +1500,13 @@ export default function TrackersPage() {
     try {
       await addTrackedTwitterAccount(username, user?.bearerToken || "");
       await loadTwitterAccounts();
-      setToast(`Added @${username}`);
-      setTimeout(() => setToast(""), 3000);
+      showEnhancedToast("success", `@${username} added to tracked accounts`, {
+        duration: 3000,
+      });
     } catch (error: any) {
-      setToast(error.message || "Failed to add Twitter account");
-      setTimeout(() => setToast(""), 3000);
+      showEnhancedToast("error", error.message || "Failed to add Twitter account", {
+        duration: 4000,
+      });
       throw error;
     }
   };
@@ -1530,11 +1515,13 @@ export default function TrackersPage() {
     try {
       await removeTrackedTwitterAccount(username, user?.bearerToken || "");
       await loadTwitterAccounts();
-      setToast(`Removed @${username}`);
-      setTimeout(() => setToast(""), 3000);
+      showEnhancedToast("success", `@${username} removed from tracked accounts`, {
+        duration: 3000,
+      });
     } catch (error: any) {
-      setToast(error.message || "Failed to remove Twitter account");
-      setTimeout(() => setToast(""), 3000);
+      showEnhancedToast("error", error.message || "Failed to remove Twitter account", {
+        duration: 4000,
+      });
     }
   };
 
@@ -1567,12 +1554,6 @@ export default function TrackersPage() {
     setTwitterTab(1); // Switch to X Feed tab
   };
 
-  // Reload Twitter feed when selected user changes
-  useEffect(() => {
-    if (twitterTab === 1) {
-      loadTwitterFeed();
-    }
-  }, [selectedTwitterUser]);
 
   // Export: copy wallet data (name, emoji, and address) to clipboard as JSON
   const handleExportAddresses = () => {
@@ -1771,6 +1752,7 @@ export default function TrackersPage() {
                       >
                         Wallet Tracker
                       </button>
+                      {/* X Tracker tab hidden — X API per-resource pricing too expensive (~$11,700+/mo for 1,500 accounts)
                       <button
                         className={`flex-1 rounded-lg px-3 py-2 transition-all duration-300 sm:px-4 sm:py-2.5 ${
                           mobileMainTab === "twitter"
@@ -1781,6 +1763,7 @@ export default function TrackersPage() {
                       >
                         X Tracker
                       </button>
+                      */}
                     </div>
                   )}
 
@@ -1980,7 +1963,7 @@ export default function TrackersPage() {
                             </div>
                           )}
 
-                          <div className="min-h-0 flex-1 overflow-y-auto">
+                          <div className="-mx-3 min-h-0 flex-1 overflow-y-auto px-3 sm:-mx-5 sm:px-5">
                             {activeTab === 0 ? (
                               <>
                                 <div className="flex items-center border-b border-white/[0.04] p-1.5 sm:p-2">
@@ -2072,6 +2055,15 @@ export default function TrackersPage() {
                                   </div>
                                 )}
                               </>
+                            ) : activeTab === 1 ? (
+                              <LiveTradesPanel
+                                trades={liveTradesToRender}
+                                wallets={wallets}
+                                wsConnected={wsConnected}
+                                quickBuyAmount={quickBuyAmount}
+                                onQuickBuy={handleQuickBuy}
+                                isLoading={isLoadingHistory}
+                              />
                             ) : null}
                           </div>
                         </>
@@ -2079,8 +2071,8 @@ export default function TrackersPage() {
                     </div>
                   )}
 
-                  {/* RESIZE HANDLE (desktop only) - Hide when wallet section is hidden (Monad chain) */}
-                  {!isMobile && (
+                  {/* RESIZE HANDLE hidden — no Twitter panel to resize against */}
+                  {false && !isMobile && (
                     <div
                       className="group relative hidden h-full min-h-[530px] w-1 cursor-ew-resize items-center justify-center transition-colors hover:bg-[#7FFFC9]/5 lg:flex"
                       onMouseDown={() => setIsResizing(true)}
@@ -2089,8 +2081,8 @@ export default function TrackersPage() {
                     </div>
                   )}
 
-                  {/* RIGHT: TWITTER SECTION */}
-                  {showTwitterSection && (
+                  {/* RIGHT: TWITTER SECTION — hidden until cost-effective X API architecture is in place */}
+                  {false && showTwitterSection && (
                     <div
                       className="flex min-h-0 flex-shrink-0 flex-col overflow-hidden rounded-xl border border-white/[0.08] bg-white/[0.05] px-3 backdrop-blur-xl sm:px-4"
                       style={

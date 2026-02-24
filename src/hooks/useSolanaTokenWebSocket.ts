@@ -178,8 +178,6 @@ interface UseSolanaTokenWebSocketReturn {
 
 // Helper to format trade for UI
 function formatTradeForUI(trade: SolanaTokenTrade): SolanaTokenTrade {
-  const solPrice = 200; // Approximate SOL price, should be fetched dynamically
-  const totalUsd = trade.sol_amount * solPrice;
   const age = getAge(trade.timestamp);
 
   // Debug log for new trades to verify timestamp is correct
@@ -197,8 +195,7 @@ function formatTradeForUI(trade: SolanaTokenTrade): SolanaTokenTrade {
     trader_short: trade.wallet_address
       ? `${trade.wallet_address.slice(0, 4)}...${trade.wallet_address.slice(-4)}`
       : '',
-    total_usd: totalUsd,
-    total_usd_formatted: `$${totalUsd.toFixed(2)}`,
+    // total_usd intentionally omitted — computed downstream in normalizeTrade() with live chainPrice
     transaction_hash: trade.signature,
     age,
   };

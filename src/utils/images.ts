@@ -150,27 +150,34 @@ export function isMetadataUrl(url: string | null | undefined): boolean {
 // Structure: { image: string | null, timestamp: number }
 const metadataImageCache = new Map<string, { image: string | null; timestamp: number }>();
 
-// Success cache: 30 minutes (images don't change)
+// Success cache: 30 minutes in-memory (images don't change)
 const SUCCESS_TTL_MS = 30 * 60 * 1000;
 // Failure cache: 30 seconds (allows quick retry for IPFS propagation)
 const FAILURE_TTL_MS = 30 * 1000;
+// localStorage: 7 days (token images are immutable on arweave/IPFS)
+const PERSIST_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 
 const META_PERSIST_KEY = '__meta_img';
 let metaPersistTimer: ReturnType<typeof setTimeout> | null = null;
 
-// Hydrate metadata cache from sessionStorage at module init
+// Hydrate metadata cache from localStorage at module init (persists across sessions)
 if (typeof window !== 'undefined') {
   try {
-    const raw = sessionStorage.getItem(META_PERSIST_KEY);
+    const raw = localStorage.getItem(META_PERSIST_KEY);
     if (raw) {
-      const entries: [string, string][] = JSON.parse(raw);
+      const entries: [string, string, number?][] = JSON.parse(raw);
       const now = Date.now();
-      for (const [metaUrl, imageUrl] of entries) {
+      for (const [metaUrl, imageUrl, ts] of entries) {
         if (typeof metaUrl === 'string' && typeof imageUrl === 'string') {
-          metadataImageCache.set(metaUrl, { image: imageUrl, timestamp: now });
+          const entryTime = typeof ts === 'number' ? ts : now;
+          // Skip entries older than 7 days
+          if (now - entryTime > PERSIST_TTL_MS) continue;
+          metadataImageCache.set(metaUrl, { image: imageUrl, timestamp: entryTime });
         }
       }
     }
+    // Migrate: clear old sessionStorage key if present
+    sessionStorage.removeItem(META_PERSIST_KEY);
   } catch {}
 }
 
@@ -179,14 +186,15 @@ function scheduleMetadataPersist() {
   metaPersistTimer = setTimeout(() => {
     metaPersistTimer = null;
     try {
-      const entries: [string, string][] = [];
+      const entries: [string, string, number][] = [];
+      const now = Date.now();
       for (const [url, cached] of metadataImageCache) {
-        if (cached.image && (Date.now() - cached.timestamp) < SUCCESS_TTL_MS) {
-          entries.push([url, cached.image]);
+        if (cached.image && (now - cached.timestamp) < PERSIST_TTL_MS) {
+          entries.push([url, cached.image, cached.timestamp]);
         }
       }
-      // Keep latest 200 entries
-      sessionStorage.setItem(META_PERSIST_KEY, JSON.stringify(entries.slice(-200)));
+      // Keep latest 500 entries
+      localStorage.setItem(META_PERSIST_KEY, JSON.stringify(entries.slice(-500)));
     } catch {}
   }, 2000);
 }

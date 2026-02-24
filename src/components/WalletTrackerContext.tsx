@@ -9,20 +9,23 @@ import {
   createWalletTrackerWebSocket,
   type WalletTrackerWebSocket,
   type TradeEvent,
+  type BalanceEvent,
   getTrackedWallets,
   getWalletTradeHistory,
+  fetchBatchBalances,
   type WatchWallet,
 } from "~/utils/walletTracking";
+import toast from "react-hot-toast";
 import { useUser } from "./UserContext";
-import { showEnhancedToast } from "~/utils/enhancedToast";
-import { normalizeImageUrl } from "~/utils/images";
+import { normalizeImageUrl, extractTokenImage, resolveTokenImage } from "~/utils/images";
+import FastImage from "~/components/FastImage";
 
-const HISTORY_LIMIT = 50;
+const HISTORY_LIMIT = 100;
 // Use 7 days window to ensure backfilled transactions are included
 const HISTORY_WINDOW_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
 
 const LIVE_TRADES_CACHE_PREFIX = "walletTracker:liveTrades";
-const LIVE_TRADES_CACHE_MAX_ITEMS = HISTORY_LIMIT;
+const LIVE_TRADES_CACHE_MAX_ITEMS = 100;
 const LIVE_TRADES_CACHE_MAX_AGE_MS = HISTORY_WINDOW_MS;
 
 const getCacheKey = (userId?: string) =>
@@ -78,6 +81,8 @@ interface WalletTrackerContextValue {
   watchedWallets: WatchWallet[];
   refreshWatchedWallets: () => Promise<void>;
   clearNotifications: () => void;
+  isLoadingHistory: boolean;
+  walletBalances: Record<string, number>;
 }
 
 const WalletTrackerContext = createContext<
@@ -126,11 +131,14 @@ export function WalletTrackerProvider({
   const [tokenMetadata, setTokenMetadata] = useState<Map<string, any>>(
     new Map(),
   );
+  const [isLoadingHistory, setIsLoadingHistory] = useState(false);
+  const [walletBalances, setWalletBalances] = useState<Record<string, number>>({});
 
   const watchedWalletsRef = useRef<WatchWallet[]>([]);
   const subscribedWalletsRef = useRef<string[]>([]);
   const hydrationRef = useRef(false);
   const initialHistoryFetchedRef = useRef(false);
+  const shownToastTxsRef = useRef<Set<string>>(new Set());
 
   // Keep ref in sync with state
   useEffect(() => {
@@ -200,7 +208,46 @@ export function WalletTrackerProvider({
     }
   }, [latestTrades]);
 
-  // Note: Removed initial history fetch from database - now only using live WebSocket notifications
+  // Adaptive initial history fetch: 1h window first, expand to 24h if sparse
+  useEffect(() => {
+    if (!user?.id || watchedWallets.length === 0) return;
+    if (initialHistoryFetchedRef.current) return;
+    initialHistoryFetchedRef.current = true;
+
+    const fetchHistory = async () => {
+      setIsLoadingHistory(true);
+      try {
+        const addresses = watchedWallets.map((w) => w.address);
+
+        // Step 1: Fetch last 1 hour
+        let trades = await getWalletTradeHistory(addresses, {
+          windowMs: 3_600_000,
+          limit: HISTORY_LIMIT,
+        });
+
+        // Step 2: If < 5 trades, widen to 24 hours
+        if (trades.length < 5) {
+          const wider = await getWalletTradeHistory(addresses, {
+            windowMs: 86_400_000,
+            limit: HISTORY_LIMIT,
+          });
+          if (wider.length > trades.length) {
+            trades = wider;
+          }
+        }
+
+        if (trades.length > 0) {
+          setLatestTrades((prev) => mergeTrades(prev, trades));
+        }
+      } catch (error) {
+        console.error("[WalletTracker] Failed to fetch initial history:", error);
+      } finally {
+        setIsLoadingHistory(false);
+      }
+    };
+
+    fetchHistory();
+  }, [user?.id, watchedWallets]);
 
   // WebSocket connection for real-time wallet updates
   useEffect(() => {
@@ -217,7 +264,6 @@ export function WalletTrackerProvider({
     let connection: WalletTrackerWebSocket | null = null;
     let reconnectTimeout: NodeJS.Timeout | null = null;
     let reconnectAttempts = 0;
-    const MAX_RECONNECT_ATTEMPTS = 5;
     const BASE_RECONNECT_DELAY = 3000;   // 3s initial
     const MAX_RECONNECT_DELAY = 60000;   // 60s cap
 
@@ -227,6 +273,7 @@ export function WalletTrackerProvider({
       // Get token name/symbol FIRST and enrich the event before showing
       let tokenName = normalizedEvent.symbol || normalizedEvent.name;
       let tokenMetadataResolved = false;
+      let resolvedImage: string | null = null;
 
       // Try to get from existing metadata cache
       if (!tokenName) {
@@ -247,19 +294,21 @@ export function WalletTrackerProvider({
           const goServiceUrl = process.env.NEXT_PUBLIC_GO_SERVICE_URL;
           let tokenData = null;
 
-          // Try search endpoint first
+          // Fetch token by mint address
           try {
             const searchResponse = await fetch(
-              `${goServiceUrl}/v1/token/search?mint=${normalizedEvent.mint}&limit=1`,
+              `${goServiceUrl}/v1/token/${normalizedEvent.mint}`,
               {
                 signal: AbortSignal.timeout(3000),
               },
             );
             if (searchResponse.ok) {
-              const searchData = await searchResponse.json();
-              tokenData = Array.isArray(searchData)
-                ? searchData[0]
-                : searchData.tokens?.[0] || null;
+              const responseData = await searchResponse.json();
+              tokenData = responseData?.token || null;
+              // Merge marketData fields onto tokenData (market_cap lives in marketData)
+              if (tokenData && responseData?.marketData) {
+                tokenData.market_cap_usd = responseData.marketData.market_cap_usd || tokenData.market_cap_usd;
+              }
             }
           } catch (searchError) {
             // Silent fail
@@ -279,19 +328,39 @@ export function WalletTrackerProvider({
                 tokenData.pair_address || tokenData.poolId;
             }
 
-            // Cache the metadata
+            // Resolve metadata URI → actual image URL BEFORE caching
+            // Ensures toast at line ~548 has resolved image
+            let resolvedImageUrl: string | null = null;
+            try {
+              resolvedImageUrl = await resolveTokenImage({
+                image_url: tokenData.image_url || null,
+                image: tokenData.image || null,
+                logo: tokenData.logo || null,
+                uri: tokenData.uri || null,
+              });
+            } catch {
+              // Resolution failed
+            }
+            resolvedImage = resolvedImageUrl || extractTokenImage(tokenData);
+
+            // Cache the metadata (store all image fields for extractTokenImage)
             setTokenMetadata((prev) => {
               const updated = new Map(prev);
               updated.set(normalizedEvent.mint, {
                 symbol: tokenData.symbol,
                 name: tokenData.name,
-                image: tokenData.uri || tokenData.image || tokenData.logo,
+                image_url: resolvedImageUrl || tokenData.image_url || null,
+                image: tokenData.image || null,
+                logo: tokenData.logo || null,
+                uri: tokenData.uri || null,
                 launchpad_protocol:
                   tokenData.launchpad_protocol || tokenData.protocol,
                 market_cap_usd:
                   tokenData.market_cap_usd ||
                   tokenData.marketCapUsd ||
                   tokenData.fully_diluted_value,
+                createdAt:
+                  tokenData.created_at || tokenData.createdAt || tokenData.CreatedAt || null,
               });
               return updated;
             });
@@ -312,6 +381,18 @@ export function WalletTrackerProvider({
                 // Update the event object
                 normalizedEvent.symbol = meta.symbol || normalizedEvent.symbol;
                 normalizedEvent.name = meta.name || normalizedEvent.name;
+                // Resolve metadata image before caching
+                let resolvedFallbackUrl: string | null = null;
+                try {
+                  resolvedFallbackUrl = await resolveTokenImage(meta);
+                } catch {
+                  // Resolution failed
+                }
+                if (resolvedFallbackUrl) {
+                  meta.imageUrl = resolvedFallbackUrl;
+                }
+                resolvedImage = resolvedFallbackUrl || extractTokenImage(meta);
+
                 // Update metadata state
                 setTokenMetadata((prev) => {
                   const updated = new Map(prev);
@@ -374,6 +455,15 @@ export function WalletTrackerProvider({
       // Add to latest trades list (keep last hour, max 50)
       setLatestTrades((prev) => mergeTrades(prev, [normalizedEvent]));
 
+      // Deduplicate toasts — skip if we already showed a toast for this tx
+      if (shownToastTxsRef.current.has(normalizedEvent.tx)) return;
+      shownToastTxsRef.current.add(normalizedEvent.tx);
+      // Cap the set size to prevent unbounded growth
+      if (shownToastTxsRef.current.size > 200) {
+        const entries = Array.from(shownToastTxsRef.current);
+        shownToastTxsRef.current = new Set(entries.slice(-100));
+      }
+
       // Find wallet info for better notification
       const wallet = watchedWalletsRef.current.find(
         (w) => w.address === normalizedEvent.wallet,
@@ -420,59 +510,42 @@ export function WalletTrackerProvider({
         }
       })();
 
-      // Play notification sound if enabled
+      // Play notification sound if enabled — 3-note ascending major chord (C5→E5→G5)
       if (transactionSoundsEnabled && typeof window !== "undefined") {
         try {
-          // Create a pleasant notification sound using Web Audio API
-          const audioContext = new (window.AudioContext ||
+          const ac = new (window.AudioContext ||
             (window as any).webkitAudioContext)();
-          const oscillator = audioContext.createOscillator();
-          const gainNode = audioContext.createGain();
+          const notes = [523.25, 659.25, 783.99]; // C5, E5, G5
+          const noteDuration = 0.12;
 
-          oscillator.connect(gainNode);
-          gainNode.connect(audioContext.destination);
+          notes.forEach((freq, i) => {
+            const osc = ac.createOscillator();
+            const gain = ac.createGain();
+            osc.type = "sine";
+            osc.frequency.value = freq;
+            osc.connect(gain);
+            gain.connect(ac.destination);
 
-          // Set frequency for a pleasant chime (two-tone)
-          oscillator.frequency.setValueAtTime(800, audioContext.currentTime);
-          oscillator.frequency.setValueAtTime(
-            1000,
-            audioContext.currentTime + 0.1,
-          );
+            const startTime = ac.currentTime + i * noteDuration;
+            gain.gain.setValueAtTime(0, startTime);
+            gain.gain.linearRampToValueAtTime(0.2, startTime + 0.01);
+            gain.gain.exponentialRampToValueAtTime(0.01, startTime + noteDuration);
 
-          // Set volume envelope
-          gainNode.gain.setValueAtTime(0, audioContext.currentTime);
-          gainNode.gain.linearRampToValueAtTime(
-            0.3,
-            audioContext.currentTime + 0.01,
-          );
-          gainNode.gain.exponentialRampToValueAtTime(
-            0.01,
-            audioContext.currentTime + 0.2,
-          );
-
-          oscillator.start(audioContext.currentTime);
-          oscillator.stop(audioContext.currentTime + 0.2);
+            osc.start(startTime);
+            osc.stop(startTime + noteDuration);
+          });
         } catch (error) {
           // Silent fail if audio context fails (e.g., user hasn't interacted with page)
-          console.log("Audio playback failed:", error);
         }
       }
 
       // Show toast notification using enhanced toast only if enabled
       if (displayNotificationsEnabled) {
-        // Get token image from metadata
-        const tokenImage = (() => {
+        // Get token image from metadata using extractTokenImage (handles all field names + normalization)
+        const tokenImage = resolvedImage || (() => {
           const cachedMetadata = tokenMetadata.get(normalizedEvent.mint);
-          if (
-            cachedMetadata?.image ||
-            cachedMetadata?.uri ||
-            cachedMetadata?.logo
-          ) {
-            return normalizeImageUrl(
-              cachedMetadata.image || cachedMetadata.uri || cachedMetadata.logo,
-            );
-          }
-          return null;
+          if (!cachedMetadata) return null;
+          return extractTokenImage(cachedMetadata);
         })();
 
         const isBuy = normalizedEvent.side === "buy";
@@ -480,34 +553,40 @@ export function WalletTrackerProvider({
         const sideText = isBuy ? "BOUGHT" : "SOLD";
         const sideIcon = isBuy ? "↑" : "↓";
 
-        // Create custom content for live trades toast
+        // Navigate to trade page on toast click (with query params like PulseTable)
+        const cachedMeta = tokenMetadata.get(normalizedEvent.mint);
+        const queryParams = new URLSearchParams({
+          _name: tokenName || "",
+          _symbol: normalizedEvent.symbol || cachedMeta?.symbol || "",
+          _mcap: String(cachedMeta?.market_cap_usd || ""),
+          _image: tokenImage || "",
+          _mint: normalizedEvent.mint,
+          _launchpad_protocol: cachedMeta?.launchpad_protocol || "",
+          _created_at: cachedMeta?.createdAt || "",
+          chain: "sol",
+        }).toString();
+        const tradeUrl = `/trade/${normalizedEvent.pair_address || normalizedEvent.mint}?${queryParams}`;
+
+        // Create clickable custom content for live trades toast
         const customContent = (
-          <div className="flex items-center gap-3 py-1">
+          <div
+            className="flex cursor-pointer items-center gap-3 py-1"
+            style={{ borderLeft: `3px solid ${sideColor}`, paddingLeft: "10px" }}
+            onClick={() => { window.location.href = tradeUrl; }}
+          >
             {/* Token Image */}
-            {tokenImage ? (
-              <img
+            <div style={{ border: `2px solid ${sideColor}40`, borderRadius: '0.75rem' }}>
+              <FastImage
                 src={tokenImage}
-                alt={tokenName}
+                alt={tokenName || "token"}
+                width={48}
+                height={48}
                 className="h-12 w-12 shrink-0 rounded-xl object-cover"
-                style={{
-                  border: `2px solid ${sideColor}40`,
-                }}
-                onError={(e) => {
-                  (e.target as HTMLImageElement).style.display = "none";
-                }}
+                symbol={normalizedEvent.symbol}
+                name={tokenName}
+                showBubble={false}
               />
-            ) : (
-              <div
-                className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl text-[18px] font-semibold text-white"
-                style={{
-                  background:
-                    "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
-                  border: `2px solid ${sideColor}40`,
-                }}
-              >
-                {tokenName?.charAt(0)?.toUpperCase() || "?"}
-              </div>
-            )}
+            </div>
 
             {/* Content */}
             <div className="min-w-0 flex-1">
@@ -542,10 +621,17 @@ export function WalletTrackerProvider({
           </div>
         );
 
-        showEnhancedToast("success", "", {
-          duration: 5000,
-          customContent,
-        });
+        toast.custom(
+          (t) => (
+            <div
+              onClick={() => toast.dismiss(t.id)}
+              className="cursor-pointer rounded-xl border border-white/[0.06] bg-[#1a1b1f] px-4 py-3 shadow-lg"
+            >
+              {customContent}
+            </div>
+          ),
+          { duration: 5000 }
+        );
       }
     };
 
@@ -568,21 +654,25 @@ export function WalletTrackerProvider({
     const handleDisconnect = () => {
       setWsConnected(false);
 
-      if (reconnectAttempts >= MAX_RECONNECT_ATTEMPTS) {
-        console.warn('[WalletTracker] Max reconnect attempts reached, stopping.');
-        return;
-      }
-
       const delay = Math.min(
         BASE_RECONNECT_DELAY * Math.pow(2, reconnectAttempts),
         MAX_RECONNECT_DELAY
       );
       reconnectAttempts++;
-      console.log(`[WalletTracker] Reconnecting in ${delay}ms (attempt ${reconnectAttempts}/${MAX_RECONNECT_ATTEMPTS})`);
+      console.log(`[WalletTracker] Reconnecting in ${delay}ms (attempt ${reconnectAttempts})`);
 
       reconnectTimeout = setTimeout(() => {
         initializeWebSocket();
       }, delay);
+    };
+
+    const handleBalanceEvent = (event: BalanceEvent) => {
+      // Update walletBalances from WS balance events — zero extra RPC calls
+      if (event.wallet && event.at) {
+        // The backend sends SOL balance via the balance snapshot;
+        // for now, just mark that this wallet was refreshed (actual SOL balance
+        // comes from the batch endpoint; token balances come here)
+      }
     };
 
     const initializeWebSocket = () => {
@@ -591,6 +681,7 @@ export function WalletTrackerProvider({
           handleTradeEvent,
           handleConnect,
           handleDisconnect,
+          handleBalanceEvent,
         );
         setWsConnection(connection);
       } catch (error) {
@@ -637,6 +728,72 @@ export function WalletTrackerProvider({
 
     subscribedWalletsRef.current = addresses;
   }, [watchedWallets, wsConnected, wsConnection]);
+
+  // Batch fetch wallet balances — runs on mount AND when new wallets are added
+  // Tracks which addresses have been fetched to avoid redundant RPC calls
+  const fetchedAddressesRef = useRef<Set<string>>(new Set());
+  useEffect(() => {
+    if (!user?.id || watchedWallets.length === 0) return;
+
+    // Find wallets whose balance we haven't fetched yet
+    const unfetched = watchedWallets.filter(
+      (w) => !fetchedAddressesRef.current.has(w.address),
+    );
+    if (unfetched.length === 0) return;
+
+    // Mark as fetched immediately to prevent duplicate calls on re-render
+    unfetched.forEach((w) => fetchedAddressesRef.current.add(w.address));
+
+    const doFetch = async () => {
+      const solWallets = unfetched
+        .filter((w) => w.chain !== "monad")
+        .map((w) => w.address);
+      const monadWallets = unfetched
+        .filter((w) => w.chain === "monad")
+        .map((w) => w.address);
+
+      const results: Record<string, number> = {};
+
+      if (solWallets.length > 0) {
+        const solBalances = await fetchBatchBalances(solWallets, "sol");
+        Object.assign(results, solBalances);
+      }
+      if (monadWallets.length > 0) {
+        const monadBalances = await fetchBatchBalances(monadWallets, "monad");
+        Object.assign(results, monadBalances);
+      }
+
+      if (Object.keys(results).length > 0) {
+        setWalletBalances((prev) => ({ ...prev, ...results }));
+      }
+    };
+
+    doFetch();
+  }, [user?.id, watchedWallets]);
+
+  // Reset fetched addresses when user changes
+  useEffect(() => {
+    fetchedAddressesRef.current = new Set();
+  }, [user?.id]);
+
+  // Safety net: re-fetch batch every 3 minutes ONLY if WebSocket is disconnected
+  useEffect(() => {
+    if (wsConnected || !user?.id || watchedWallets.length === 0) return;
+
+    const interval = setInterval(async () => {
+      const solWallets = watchedWallets
+        .filter((w) => w.chain !== "monad")
+        .map((w) => w.address);
+      if (solWallets.length > 0) {
+        const solBalances = await fetchBatchBalances(solWallets, "sol");
+        if (Object.keys(solBalances).length > 0) {
+          setWalletBalances((prev) => ({ ...prev, ...solBalances }));
+        }
+      }
+    }, 180_000); // 3 minutes
+
+    return () => clearInterval(interval);
+  }, [wsConnected, user?.id, watchedWallets]);
 
   // Hydrate cached trades from localStorage (user specific with global fallback)
   useEffect(() => {
@@ -741,6 +898,8 @@ export function WalletTrackerProvider({
     watchedWallets,
     refreshWatchedWallets,
     clearNotifications,
+    isLoadingHistory,
+    walletBalances,
   };
 
   return (

@@ -1076,7 +1076,7 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
   const [timeRange, setTimeRange] = useState<TimeRange>(externalTradeParams?.timeRange as TimeRange || "5m");
   const [amount, setAmount] = useState(externalTradeParams?.amount || "");
   const [targetMC, setTargetMC] = useState(externalTradeParams?.targetMC || "");
-  const [sliderPct, setSliderPct] = useState(externalTradeParams?.sliderPct || 0);
+  const [sliderPct, setSliderPct] = useState<number | string>(externalTradeParams?.sliderPct || 0);
   const [isLoading, setIsLoading] = useState(false);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [sniperAmount, setSniperAmount] = useState("");
@@ -1534,7 +1534,7 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
     // Recompute targetMC from current sliderPct whenever baseMarketCap changes.
     // This ensures the target stays consistent with the user's percentage intent
     // even when the live market cap updates after initial load.
-    const newTarget = Math.round(baseMarketCap * (1 + sliderPct / 100));
+    const newTarget = Math.round(baseMarketCap * (1 + Number(sliderPct) / 100));
     const currentTarget = Number(targetMC);
     lastSliderBaseRef.current = baseMarketCap;
 
@@ -2292,16 +2292,16 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
         return;
       }
 
-      const liquidityValue = Number(liquidityUsd) || 0;
-      const isLowLiquidity = liquidityValue <= 0 || liquidityValue < LOW_LIQUIDITY_WARNING_THRESHOLD;
-      const shouldCheckLiquidity =
-        mode === "buy" && isLowLiquidity && !options.skipLiquidity;
-
-      if (shouldCheckLiquidity) {
-        setPendingTradeOptions({ ...options, skipLiquidity: true });
-        setShowLiquidityWarning(true);
-        return;
-      }
+      // --- Low liquidity warning temporarily disabled ---
+      // const liquidityValue = Number(liquidityUsd) || 0;
+      // const isLowLiquidity = liquidityValue <= 0 || liquidityValue < LOW_LIQUIDITY_WARNING_THRESHOLD;
+      // const shouldCheckLiquidity =
+      //   mode === "buy" && isLowLiquidity && !options.skipLiquidity;
+      // if (shouldCheckLiquidity) {
+      //   setPendingTradeOptions({ ...options, skipLiquidity: true });
+      //   setShowLiquidityWarning(true);
+      //   return;
+      // }
 
       const shouldCheckSlippage = tab === "market" && !options.skipSlippage;
 
@@ -2499,10 +2499,11 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
             },
             user.bearerToken
           );
-          if (!options.skipLiquidity && liquidityUsd && liquidityUsd < LOW_LIQUIDITY_WARNING_THRESHOLD) {
-            setPendingTradeOptions({ ...(options || {}), skipLiquidity: true });
-            setShowLiquidityWarning(true);
-          }
+          // --- Low liquidity warning temporarily disabled ---
+          // if (!options.skipLiquidity && liquidityUsd && liquidityUsd < LOW_LIQUIDITY_WARNING_THRESHOLD) {
+          //   setPendingTradeOptions({ ...(options || {}), skipLiquidity: true });
+          //   setShowLiquidityWarning(true);
+          // }
           showOrderSetupToast({
             label: `${limitTokenName} limit order set`,
             tokenImage: getResolvedTokenImage(token),
@@ -2570,7 +2571,7 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
         const poolType = getPoolTypeFromToken(token);
 
         // Pre-validate sell before showing toast
-        const sellValidation = validateSolanaSell(sellPercentage, positionData?.remaining);
+        const sellValidation = validateSolanaSell(sellPercentage);
         if (!sellValidation.valid) {
           showTradeValidationError(sellValidation.error, getResolvedTokenImage(token), token.symbol || token.name || 'Token');
           setIsLoading(false);
@@ -3583,7 +3584,7 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
                     min={-100}
                     max={100}
                     step={1}
-                    value={sliderPct}
+                    value={Number(sliderPct) || 0}
                     onChange={(e) => {
                       const p = clamp(Number(e.target.value), -100, 100);
                       setSliderPct(p);
@@ -3598,9 +3599,9 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
                     className="w-full h-0.5 appearance-none cursor-pointer slider relative z-10 bg-transparent"
                     style={{
                       background: `linear-gradient(to right, 
-                        ${sliderPct >= 0 
-                          ? `#2A2B33 0%, #2A2B33 50%, #526fff 50%, #526fff ${50 + (sliderPct / 2)}%, #2A2B33 ${50 + (sliderPct / 2)}%, #2A2B33 100%`
-                          : `#2A2B33 0%, #2A2B33 ${50 + (sliderPct / 2)}%, #FF4D7F ${50 + (sliderPct / 2)}%, #FF4D7F 50%, #2A2B33 50%, #2A2B33 100%`
+                        ${Number(sliderPct) >= 0
+                          ? `#2A2B33 0%, #2A2B33 50%, #526fff 50%, #526fff ${50 + (Number(sliderPct) / 2)}%, #2A2B33 ${50 + (Number(sliderPct) / 2)}%, #2A2B33 100%`
+                          : `#2A2B33 0%, #2A2B33 ${50 + (Number(sliderPct) / 2)}%, #FF4D7F ${50 + (Number(sliderPct) / 2)}%, #FF4D7F 50%, #2A2B33 50%, #2A2B33 100%`
                         }`
                     }}
                   />
@@ -3654,7 +3655,13 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
                     step={1}
                     value={sliderPct}
                     onChange={(e) => {
-                      const p = clamp(Number(e.target.value || 0), -100, 100);
+                      const raw = e.target.value;
+                      if (raw === "") {
+                        setSliderPct("");
+                        return;
+                      }
+                      const p = clamp(Number(raw), -100, 100);
+                      if (Number.isNaN(p)) return;
                       setSliderPct(p);
                       const baseForSlider = (sliderBaseMarketCap ?? Number(targetMC)) || 0;
                       if (baseForSlider > 0) {
@@ -4035,6 +4042,7 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
         onContinue={handleSlippageWarningContinue}
         onCancel={handleSlippageWarningCancel}
       />
+      {/* --- Low liquidity warning temporarily disabled ---
       <LowLiquidityWarningDialog
         isOpen={showLiquidityWarning}
         liquidityUsd={Number(liquidityUsd) || 0}
@@ -4042,6 +4050,7 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
         onContinue={handleLiquidityWarningContinue}
         onCancel={handleLiquidityWarningCancel}
       />
+      */}
     </div>
   );
 };
