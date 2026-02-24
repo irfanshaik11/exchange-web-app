@@ -312,9 +312,9 @@ export async function getWalletsLastActive(
       return [];
     }
 
-    // 60s timeout — backend processes 151 wallets in batches of 3 with delays
+    // 120s timeout — backend processes 151 wallets in batches with delays + 429 retries
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 60_000);
+    const timeout = setTimeout(() => controller.abort(), 120_000);
     const response = await fetch(
       `${WALLET_TRACKER_API_URL}/api/wallets/last-active`,
       {

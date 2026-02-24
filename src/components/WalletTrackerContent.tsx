@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect } from "react";
 import { useRouter } from "next/router";
 import { useUser } from "./UserContext";
 import { useWalletTracker } from "./WalletTrackerContext";
@@ -10,7 +10,6 @@ import WalletRow from "./WalletRow";
 import ImportExportWalletModal from "./ImportExportWalletModal";
 import {
   getTrackedWallets,
-  getWalletSolBalance,
   addTrackedWallet,
   type WatchWallet,
   type WalletEvent,
@@ -55,6 +54,7 @@ export default function WalletTrackerContent() {
     latestTrades,
     watchedWallets: globalWatchedWallets,
     refreshWatchedWallets,
+    walletBalances: trackerWalletBalances,
   } = useWalletTracker();
   const { presets, activePreset } = useQuickBuy();
 
@@ -89,9 +89,6 @@ export default function WalletTrackerContent() {
   const [walletEvents, setWalletEvents] = useState<
     Record<string, WalletEvent[]>
   >({});
-  const [trackedWalletBalances, setTrackedWalletBalances] = useState<
-    Record<string, number>
-  >({});
   const [lastActiveMap, setLastActiveMap] = useState<
     Record<string, number | null>
   >({});
@@ -120,21 +117,7 @@ export default function WalletTrackerContent() {
           : Date.now(),
       }));
       setWallets(walletList);
-
-      // Load balances
-      const addresses = walletList.map((w) => w.address);
-      const balancePromises = addresses.map(async (address) => {
-        try {
-          const balance = await getWalletSolBalance(address);
-          return { address, balance };
-        } catch {
-          return { address, balance: 0 };
-        }
-      });
-      const balances = await Promise.all(balancePromises);
-      balances.forEach(({ address, balance }) => {
-        setTrackedWalletBalances((prev) => ({ ...prev, [address]: balance }));
-      });
+      // Balances are handled by WalletTrackerContext's fetchBatchBalances()
     } catch (error) {
       console.error("Failed to load wallets:", error);
     }
@@ -296,29 +279,68 @@ export default function WalletTrackerContent() {
           }
         }
 
-        // Fetch Solana wallets using backend API
+        // Fetch Solana wallets using backend API — chunked for progressive loading
         if (solWallets.length > 0) {
-          try {
-            const { getWalletsLastActive } = await import(
-              "~/utils/walletTracking"
-            );
-            const solResults = await getWalletsLastActive(solWallets, "sol");
+          const CHUNK_SIZE = 30;
+          const { getWalletsLastActive } = await import(
+            "~/utils/walletTracking"
+          );
 
-            for (const result of solResults) {
-              map[result.wallet] = result.lastActive;
-            }
-
-            // Set null for any Solana wallets not in results
-            solWallets.forEach((addr) => {
-              if (!(addr in map)) map[addr] = null;
-            });
-          } catch (error) {
-            console.error(
-              "[walletTracker:lastActive] Failed to fetch Solana last active:",
-              error,
-            );
-            solWallets.forEach((addr) => (map[addr] = null));
+          // Split into chunks and fire all concurrently
+          const chunks: string[][] = [];
+          for (let i = 0; i < solWallets.length; i += CHUNK_SIZE) {
+            chunks.push(solWallets.slice(i, i + CHUNK_SIZE));
           }
+
+          console.log(
+            `[walletTracker:lastActive] fetching ${solWallets.length} Solana wallets in ${chunks.length} chunks of ${CHUNK_SIZE}`,
+          );
+
+          // Merge Monad results (already in map) immediately so they show up
+          if (!cancelled && Object.keys(map).length > 0) {
+            setLastActiveMap((prev) => ({ ...prev, ...map }));
+          }
+
+          // Process 2 chunks at a time to avoid overwhelming Helius (2×10 = 20 concurrent RPC calls)
+          const CHUNK_CONCURRENCY = 2;
+          for (let i = 0; i < chunks.length; i += CHUNK_CONCURRENCY) {
+            if (cancelled) break;
+            const pair = chunks.slice(i, i + CHUNK_CONCURRENCY);
+            await Promise.allSettled(
+              pair.map(async (chunk, pairIdx) => {
+                const idx = i + pairIdx;
+                try {
+                  const results = await getWalletsLastActive(chunk, "sol");
+                  if (cancelled) return;
+
+                  const chunkMap: Record<string, number | null> = {};
+                  for (const result of results) {
+                    chunkMap[result.wallet] = result.lastActive;
+                  }
+                  // Set null for wallets not in results
+                  chunk.forEach((addr) => {
+                    if (!(addr in chunkMap)) chunkMap[addr] = null;
+                  });
+
+                  // Progressively merge this chunk into state
+                  setLastActiveMap((prev) => ({ ...prev, ...chunkMap }));
+                } catch (error) {
+                  console.error(
+                    `[walletTracker:lastActive] Solana chunk ${idx + 1}/${chunks.length} failed:`,
+                    error,
+                  );
+                  if (!cancelled) {
+                    const errorMap: Record<string, number | null> = {};
+                    chunk.forEach((addr) => (errorMap[addr] = null));
+                    setLastActiveMap((prev) => ({ ...prev, ...errorMap }));
+                  }
+                }
+              }),
+            );
+          }
+
+          // Done — no need for final setLastActiveMap since chunks merged progressively
+          return;
         }
 
         if (!cancelled) {
@@ -779,7 +801,7 @@ export default function WalletTrackerContent() {
                         (ww) => ww.address === wallet.address,
                       );
                       const events = walletEvents[wallet.address] || [];
-                      const balance = trackedWalletBalances[wallet.address];
+                      const balance = trackerWalletBalances[wallet.address];
                       return (
                         <WalletRow
                           key={wallet.address}
