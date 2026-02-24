@@ -43,7 +43,7 @@ import {
   PiTarget,
   PiTelegramLogo,
 } from "react-icons/pi";
-import { FaDice, FaXTwitter } from "react-icons/fa6";
+import { FaDice, FaXTwitter, FaRegEyeSlash } from "react-icons/fa6";
 import {
   BsPersonGear,
   BsCoin,
@@ -53,7 +53,7 @@ import {
   BsArrowUp,
   BsSliders2,
 } from "react-icons/bs";
-import { LuChefHat, LuCrown } from "react-icons/lu";
+import { LuAtSign, LuChefHat, LuCrown } from "react-icons/lu";
 import { RiGhostLine, RiFlaskLine, RiRobot2Line } from "react-icons/ri";
 import { BiCandles, BiRefresh } from "react-icons/bi";
 import {
@@ -79,7 +79,7 @@ import { useRouter } from "next/router";
 import { fetchTokenMetadata } from "~/utils/functions";
 import { LuPill, LuSearch } from "react-icons/lu";
 import Link from "next/link";
-import { CiSearch, CiTrophy } from "react-icons/ci";
+import { CiCamera, CiSearch, CiTrophy } from "react-icons/ci";
 import FastImage from "./FastImage";
 import SniperHoldingsDisplay from "./SniperHoldingsDisplay";
 // import SolanaTokenAnalytics from "./SolanaTokenAnalytics";
@@ -129,6 +129,7 @@ import toast from "react-hot-toast";
 import { FiGlobe } from "react-icons/fi";
 import BottomCardInfoHolder from "./BottomCardInfoHolder";
 import InterstateTooltip from "./InterstateTooltip";
+import { useBlacklist } from "~/hooks/useBlacklist";
 
 /* ---- Enhanced Monad Green Palette (matching MonadTable) ---- */
 const AX = {
@@ -171,6 +172,10 @@ interface PulseTableProps {
   showBubbleMetrics?: boolean; // Feature flag for bubble metrics (Buyers, Sellers, Wallets, 24h TX, Vol 24h)
   currentChain?: string; // Chain from parent to avoid router.query timing issues
 }
+
+// Module-level cache: mint → twitter handle (populated by TokenImage from metadata)
+// Used by the blacklist filter to match handles found only in token metadata URIs
+const twitterHandleCache = new Map<string, string>();
 
 // PHASE 4 (M1): LRU Cache to prevent unbounded memory growth
 // Sized for 3 columns × 100 tokens + buffer = 1000 entries max
@@ -1009,16 +1014,18 @@ function TwitterHandleDisplay({ token }: { token: Token }) {
   if (!handle) return null;
 
   return (
-    <a
-      href={socialLinks.twitter}
-      target="_blank"
-      rel="noopener noreferrer"
-      onClick={(e) => e.stopPropagation()}
-      className="text-[10px] font-medium hover:underline whitespace-nowrap"
+    <span
+      role="link"
+      onClick={(e) => {
+        e.stopPropagation();
+        e.preventDefault();
+        window.open(socialLinks.twitter, "_blank");
+      }}
+      className="text-[10px] font-medium hover:underline whitespace-nowrap cursor-pointer"
       style={{ color: "#1DA1F2" }}
     >
       @{handle}
-    </a>
+    </span>
   );
 }
 
@@ -1512,13 +1519,20 @@ function TokenImage({
   priority = false,
   isNewPairs = false,
   columnType = "new",
+  onBlacklistCA,
+  onBlacklistTwitter,
+  onBlacklistDev,
 }: {
   token: Token;
   priority?: boolean;
   isNewPairs?: boolean;
   columnType?: "new" | "final-stretch" | "migrated";
+  onBlacklistCA?: (mint: string) => void;
+  onBlacklistTwitter?: (handle: string) => void;
+  onBlacklistDev?: (wallet: string) => void;
 }) {
   const [showPreview, setShowPreview] = useState(false);
+  const [showImagePreview, setShowImagePreview] = useState(false);
   const [previewPosition, setPreviewPosition] = useState({ top: 0, left: 0 });
   const imageContainerRef = useRef<HTMLDivElement>(null);
 
@@ -1562,6 +1576,15 @@ function TokenImage({
 
   // Use resolved URL or fall back to raw URL
   const imageUrl = resolvedImageUrl;
+
+  // Blacklist: extract twitter handle and dev wallet for action buttons
+  const { meta: blMeta } = useTokenMetadata(token.uri);
+  const blSocialLinks = extractSocialLinks(token, blMeta);
+  const blTwitterHandle = blSocialLinks.twitter ? extractTwitterHandle(blSocialLinks.twitter) : null;
+  if (blTwitterHandle && token.mint) {
+    twitterHandleCache.set(token.mint.toLowerCase(), blTwitterHandle.toLowerCase());
+  }
+  const blDevWallet = token.dev_wallet || token.creator_wallet || null;
 
   // Calculate migration progress for border color (only for New Pairs, NOT for migrated)
   const getMigrationProgress = (token: Token): number => {
@@ -1850,29 +1873,43 @@ function TokenImage({
   // Smooth animation for progress bar - uses requestAnimationFrame for buttery transitions
   const scaledProgress = useSmoothProgress(rawScaledProgress, 400);
 
-  const handleMouseEnter = (e: React.MouseEvent<HTMLDivElement>) => {
+  const handleMouseEnter = () => {
     setShowPreview(true);
-    const target = e.currentTarget as HTMLDivElement;
-    // Minimal hover effect - no glow
-    target.style.boxShadow = "0 4px 12px rgba(0, 0, 0, 0.2)";
-    target.style.transform = "scale(1.08)";
+  };
 
-    // Calculate preview window position
+  const handleMouseLeave = () => {
+    setShowPreview(false);
+    setShowImagePreview(false);
+    const inner = imageContainerRef.current?.firstElementChild as HTMLDivElement | null;
+    if (inner) {
+      inner.style.boxShadow = "none";
+      inner.style.transform = "scale(1)";
+    }
+  };
+
+  const handleImageEnter = () => {
+    setShowImagePreview(true);
+    const inner = imageContainerRef.current?.firstElementChild as HTMLDivElement | null;
+    if (inner) {
+      inner.style.boxShadow = "0 4px 12px rgba(0, 0, 0, 0.2)";
+      inner.style.transform = "scale(1.08)";
+    }
     if (imageContainerRef.current) {
       const rect = imageContainerRef.current.getBoundingClientRect();
       setPreviewPosition({
-        top: rect.top,
+        top: rect.top + 60,
         left: rect.right + 20,
       });
     }
   };
 
-  const handleMouseLeave = (e: React.MouseEvent<HTMLDivElement>) => {
-    setShowPreview(false);
-    const target = e.currentTarget as HTMLDivElement;
-    // Don't change border color since we're using SVG border now
-    target.style.boxShadow = "none";
-    target.style.transform = "scale(1)";
+  const handleImageLeave = () => {
+    setShowImagePreview(false);
+    const inner = imageContainerRef.current?.firstElementChild as HTMLDivElement | null;
+    if (inner) {
+      inner.style.boxShadow = "none";
+      inner.style.transform = "scale(1)";
+    }
   };
 
   // Check if this is a high bonding Meteora token (only for Final Stretch, NOT for migrated)
@@ -1886,6 +1923,8 @@ function TokenImage({
       <div
         ref={imageContainerRef}
         className="relative flex items-center justify-center"
+        onMouseEnter={handleMouseEnter}
+        onMouseLeave={handleMouseLeave}
         style={{
           width: "68px",
           height: "68px",
@@ -1898,9 +1937,7 @@ function TokenImage({
       >
         {/* Outer border container */}
         <div
-          className="relative rounded-lg transition-all duration-200 ease-out"
-          onMouseEnter={handleMouseEnter}
-          onMouseLeave={handleMouseLeave}
+          className="relative rounded-lg transition-all duration-75 ease-out"
           style={{
             border: "none",
             padding: "0",
@@ -1944,6 +1981,8 @@ function TokenImage({
             {/* Image container */}
             <div
               className="relative overflow-hidden rounded-md"
+              onMouseEnter={handleImageEnter}
+              onMouseLeave={handleImageLeave}
               style={{
                 width: "60px",
                 height: "60px",
@@ -1964,6 +2003,18 @@ function TokenImage({
                 priority={priority}
                 showBubble={false}
               />
+              {/* Dark dim overlay on hover */}
+              <div
+                className="pointer-events-none absolute inset-0 rounded-md bg-black/60"
+                style={{ opacity: showImagePreview ? 1 : 0, transition: "opacity 150ms" }}
+              />
+              {/* Camera icon overlay on hover */}
+              <div
+                className="pointer-events-none absolute inset-0 flex items-center justify-center"
+                style={{ opacity: showImagePreview ? 1 : 0, transition: "opacity 150ms" }}
+              >
+                <CiCamera size={20} style={{ color: "rgba(255,255,255,0.8)" }} />
+              </div>
             </div>
           </div>
         </div>
@@ -2024,25 +2075,77 @@ function TokenImage({
             }}
           />
         </div>
-        {/* Camera icon overlay - minimal grey - only shows on image hover */}
+        {/* Blacklist action buttons — top-left, outside image */}
         <div
-          className="pointer-events-none absolute inset-0 flex items-center justify-center rounded-lg bg-black/60 opacity-0"
-          style={{ opacity: showPreview ? 1 : 0, transition: "opacity 150ms ease-out" }}
+          className="pointer-events-none absolute z-20 flex flex-col gap-[3px]"
+          style={{
+            top: -4,
+            left: -4,
+            opacity: showPreview ? 1 : 0,
+          }}
         >
-          <div
-            className="flex items-center justify-center rounded-full p-1.5"
-            style={{
-              backgroundColor: "rgba(107, 114, 128, 0.3)",
-            }}
+          {/* Hide Token (by CA) */}
+          <button
+            className="flex h-6 w-6 items-center justify-center rounded-sm transition-colors hover:bg-white/30"
+            style={{ backgroundColor: "rgba(31, 41, 55, 0.9)", pointerEvents: "auto", cursor: "pointer" }}
+            onClick={(e) => { e.stopPropagation(); e.preventDefault(); onBlacklistCA?.(token.mint); }}
+            onMouseEnter={(e) => { const tip = (e.currentTarget.nextElementSibling as HTMLElement); if (tip) { const r = e.currentTarget.getBoundingClientRect(); tip.style.left = `${r.right + 6}px`; tip.style.top = `${r.top + r.height / 2}px`; tip.style.transform = "translateY(-50%)"; tip.style.opacity = "1"; } }}
+            onMouseLeave={(e) => { const tip = (e.currentTarget.nextElementSibling as HTMLElement); if (tip) tip.style.opacity = "0"; }}
           >
-            <FaCamera size={12} style={{ color: "#9ca3af" }} />
+            <FaRegEyeSlash size={13} style={{ color: "#e5e7eb" }} />
+          </button>
+          <div
+            className="pointer-events-none fixed z-[9999] rounded px-2 py-1 text-[10px] font-medium whitespace-nowrap"
+            style={{ backgroundColor: "rgba(31, 41, 55, 0.95)", color: "#e5e7eb", border: "1px solid rgba(107, 114, 128, 0.3)", opacity: 0, transition: "opacity 150ms" }}
+          >
+            Hide Token
           </div>
+          {/* Blacklist Twitter Handle */}
+          {blTwitterHandle && (
+            <>
+              <button
+                className="flex h-6 w-6 items-center justify-center rounded-sm transition-colors hover:bg-white/30"
+                style={{ backgroundColor: "rgba(31, 41, 55, 0.9)", pointerEvents: "auto", cursor: "pointer" }}
+                onClick={(e) => { e.stopPropagation(); e.preventDefault(); onBlacklistTwitter?.(blTwitterHandle); }}
+                onMouseEnter={(e) => { const tip = (e.currentTarget.nextElementSibling as HTMLElement); if (tip) { const r = e.currentTarget.getBoundingClientRect(); tip.style.left = `${r.right + 6}px`; tip.style.top = `${r.top + r.height / 2}px`; tip.style.transform = "translateY(-50%)"; tip.style.opacity = "1"; } }}
+                onMouseLeave={(e) => { const tip = (e.currentTarget.nextElementSibling as HTMLElement); if (tip) tip.style.opacity = "0"; }}
+              >
+                <LuAtSign size={13} style={{ color: "#e5e7eb" }} />
+              </button>
+              <div
+                className="pointer-events-none fixed z-[9999] rounded px-2 py-1 text-[10px] font-medium whitespace-nowrap"
+                style={{ backgroundColor: "rgba(31, 41, 55, 0.95)", color: "#e5e7eb", border: "1px solid rgba(107, 114, 128, 0.3)", opacity: 0, transition: "opacity 150ms" }}
+              >
+                Blacklist @{blTwitterHandle}
+              </div>
+            </>
+          )}
+          {/* Blacklist Dev Wallet */}
+          {blDevWallet && (
+            <>
+              <button
+                className="flex h-6 w-6 items-center justify-center rounded-sm transition-colors hover:bg-white/30"
+                style={{ backgroundColor: "rgba(31, 41, 55, 0.9)", pointerEvents: "auto", cursor: "pointer" }}
+                onClick={(e) => { e.stopPropagation(); e.preventDefault(); onBlacklistDev?.(blDevWallet); }}
+                onMouseEnter={(e) => { const tip = (e.currentTarget.nextElementSibling as HTMLElement); if (tip) { const r = e.currentTarget.getBoundingClientRect(); tip.style.left = `${r.right + 6}px`; tip.style.top = `${r.top + r.height / 2}px`; tip.style.transform = "translateY(-50%)"; tip.style.opacity = "1"; } }}
+                onMouseLeave={(e) => { const tip = (e.currentTarget.nextElementSibling as HTMLElement); if (tip) tip.style.opacity = "0"; }}
+              >
+                <LuChefHat size={13} style={{ color: "#e5e7eb" }} />
+              </button>
+              <div
+                className="pointer-events-none fixed z-[9999] rounded px-2 py-1 text-[10px] font-medium whitespace-nowrap"
+                style={{ backgroundColor: "rgba(31, 41, 55, 0.95)", color: "#e5e7eb", border: "1px solid rgba(107, 114, 128, 0.3)", opacity: 0, transition: "opacity 150ms" }}
+              >
+                Blacklist Dev
+              </div>
+            </>
+          )}
         </div>
 
         {/* Minimal border - only shows on image hover */}
         <div
-          className="pointer-events-none absolute inset-0 opacity-0 transition-all duration-300"
-          style={{ opacity: showPreview ? 1 : 0 }}
+          className="pointer-events-none absolute inset-0 opacity-0 transition-all duration-75"
+          style={{ opacity: showImagePreview ? 1 : 0 }}
         >
           <div
             className="absolute inset-0 rounded-lg"
@@ -2054,7 +2157,7 @@ function TokenImage({
         </div>
       </div>
       {/* Image Preview Window */}
-      {showPreview && (
+      {showImagePreview && (
         <div
           className="pointer-events-none fixed z-[9999]"
           style={{
@@ -2095,7 +2198,7 @@ function TokenImage({
                   color: "#31e3ac",
                   border: "1px solid #31e3ac20",
                   backdropFilter: "blur(4px)",
-                  opacity: showPreview ? 1 : 0,
+                  opacity: showImagePreview ? 1 : 0,
                   transition: "opacity 0.2s ease-out",
                 }}
               >
@@ -2509,6 +2612,21 @@ function PulseTable({
       }).catch(() => {});
     }
   }, [tokens]);
+
+  // Blacklist hook + modal state
+  const {
+    blacklist,
+    addItem: addBlacklistItem,
+    removeItem: removeBlacklistItem,
+    clearCategory: clearBlacklistCategory,
+    exportBlacklist,
+    importBlacklist,
+    totalCount: blacklistTotalCount,
+    categoryCounts: blacklistCategoryCounts,
+    caSet: blacklistCASet,
+    devSet: blacklistDevSet,
+    twitterSet: blacklistTwitterSet,
+  } = useBlacklist();
 
   const [hoveredIdx, setHoveredIdx] = useState<number | null>(null);
   const [showToast, setShowToast] = useState(false);
@@ -3726,6 +3844,38 @@ function PulseTable({
         }
       }
 
+      // Blacklist filter (O(1) Set lookups) — fast path
+      if (blacklistCASet.size > 0 || blacklistDevSet.size > 0 || blacklistTwitterSet.size > 0) {
+        const beforeLen = merged.length;
+        const filtered = merged.filter(token => {
+          if (blacklistCASet.has(token.mint?.toLowerCase())) return false;
+          const dw = token.dev_wallet || token.creator_wallet;
+          if (dw && blacklistDevSet.has(dw.toLowerCase())) return false;
+          let tw = (token as any).twitter || (token as any).twitter_url || (token as any).x || '';
+          if (!tw && token.links) {
+            try { const p = typeof token.links === 'string' ? JSON.parse(token.links) : token.links; tw = (p as any)?.twitter || ''; } catch {}
+          }
+          if (tw && blacklistTwitterSet.size > 0) {
+            const h = extractTwitterHandle(tw);
+            if (h && blacklistTwitterSet.has(h.toLowerCase())) return false;
+          }
+          // Fallback: check metadata-derived handle cache (populated by TokenImage)
+          if (blacklistTwitterSet.size > 0) {
+            const cachedHandle = twitterHandleCache.get(token.mint?.toLowerCase());
+            if (cachedHandle && blacklistTwitterSet.has(cachedHandle)) return false;
+          }
+          return true;
+        });
+        if (filtered.length !== beforeLen) {
+          // Apply filters and limits with blacklisted tokens removed
+          if (isNewPairs || isMigrated) {
+            return filtered.slice(0, 100);
+          } else {
+            return filterNonZeroLiquidity(filtered).slice(0, 100);
+          }
+        }
+      }
+
       // Apply filters and limits
       if (isNewPairs || isMigrated) {
         return merged.slice(0, 100);
@@ -3837,6 +3987,24 @@ function PulseTable({
       filtered = filterNonZeroLiquidity(
         Array.from(mergedMap.values()) as Token[],
       );
+    }
+
+    // Blacklist filter (O(1) Set lookups) — full filter path
+    if (blacklistCASet.size > 0 || blacklistDevSet.size > 0 || blacklistTwitterSet.size > 0) {
+      filtered = filtered.filter(token => {
+        if (blacklistCASet.has(token.mint?.toLowerCase())) return false;
+        const dw = token.dev_wallet || token.creator_wallet;
+        if (dw && blacklistDevSet.has(dw.toLowerCase())) return false;
+        let tw = (token as any).twitter || (token as any).twitter_url || (token as any).x || '';
+        if (!tw && token.links) {
+          try { const p = typeof token.links === 'string' ? JSON.parse(token.links) : token.links; tw = (p as any)?.twitter || ''; } catch {}
+        }
+        if (tw && blacklistTwitterSet.size > 0) {
+          const h = extractTwitterHandle(tw);
+          if (h && blacklistTwitterSet.has(h.toLowerCase())) return false;
+        }
+        return true;
+      });
     }
 
     // NOTE: migrated_pool_address filter REMOVED
@@ -4587,6 +4755,9 @@ function PulseTable({
     filters.sortOrder,
     channel, // Used to select direct token source (new/final_stretch/migrated)
     solPrice, // Needed for volume filter/sort via calculateVolumeUsd()
+    blacklistCASet, // Blacklist: contract addresses
+    blacklistDevSet, // Blacklist: dev wallets
+    blacklistTwitterSet, // Blacklist: twitter handles
   ]);
 
   // REMOVED redundant useMemo - filteredAndSortedTokens is already memoized
@@ -5160,6 +5331,7 @@ function PulseTable({
               </div>
             ))}
           </div>
+
 
           {/* Filter Controls */}
           <div className="filter-dropdown relative flex-shrink-0">
@@ -7532,6 +7704,9 @@ function PulseTable({
                                 ? "final-stretch"
                                 : "new"
                           }
+                          onBlacklistCA={(mint) => { addBlacklistItem('ca', mint); showEnhancedToast('info', `Hidden ${token.symbol}`); }}
+                          onBlacklistTwitter={(handle) => { addBlacklistItem('twitterHandle', handle); showEnhancedToast('info', `Blacklisted @${handle}`); }}
+                          onBlacklistDev={(wallet) => { addBlacklistItem('dev', wallet); showEnhancedToast('info', `Blacklisted dev`); }}
                         />
                         {/* Token Metrics */}
                         {/* <div className="absolute bottom-16 -right-49">
@@ -8687,6 +8862,7 @@ function PulseTable({
           </div>
         </InterstatePopout>
       )}
+
     </div>
   );
 }

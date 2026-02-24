@@ -253,8 +253,12 @@ export async function resolveJsonMetadataImage(
   body: Buffer,
   contentType: string
 ): Promise<{ body: Buffer; contentType: string } | null> {
-  const isJsonResponse = contentType === 'application/json' || contentType === 'text/json';
-  if (!isJsonResponse || body.length >= 50000) return null;
+  // Skip if body is too large or is clearly a binary image
+  if (body.length >= 50000) return null;
+  const isDefinitelyImage = contentType.startsWith('image/');
+  if (isDefinitelyImage) return null;
+  // Try JSON parse for any non-image content type (JSON metadata can arrive
+  // as application/json, text/plain, application/octet-stream, etc.)
 
   try {
     const meta = JSON.parse(body.toString('utf-8'));

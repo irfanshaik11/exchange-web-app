@@ -38,30 +38,12 @@ const ALLOWED = [
   'j7tracker.com',
 ];
 
-// Allowed content types - only JSON is permitted for metadata
-const ALLOWED_CONTENT_TYPES = [
-  'application/json',
-  'application/json; charset=utf-8',
-  'application/json;charset=utf-8',
-  'application/json; charset=UTF-8',
-  'application/json;charset=UTF-8',
-];
 
 // Maximum metadata size (5MB) - prevent DoS attacks
 const MAX_METADATA_SIZE = 5 * 1024 * 1024; // 5MB
 
 function isAllowedHost(host: string) {
   return ALLOWED.some(d => host === d || host.endsWith('.' + d));
-}
-
-function isValidContentType(contentType: string | null): boolean {
-  if (!contentType) return false;
-  // Remove charset and other parameters, normalize
-  const baseType = contentType.split(';')[0].trim().toLowerCase();
-  return ALLOWED_CONTENT_TYPES.some(allowed => {
-    const allowedBase = allowed.split(';')[0].trim().toLowerCase();
-    return baseType === allowedBase;
-  });
 }
 
 function containsMaliciousContent(jsonString: string): boolean {
@@ -157,29 +139,21 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       return sendError(res, 502, 'Failed to fetch metadata');
     }
 
-    // Validate Content-Type before processing
-    const contentType = upstream.headers.get('content-type');
-    if (!isValidContentType(contentType)) {
-      console.error('[metadata/proxy] invalid content type:', contentType);
-      return sendError(res, 415, 'Unsupported media type');
-    }
-
-    // Read content with size limit
+    // Read content and try to parse as JSON regardless of Content-Type.
+    // Arweave and other decentralized storage often serve JSON metadata with
+    // application/octet-stream or text/plain instead of application/json.
     const text = await upstream.text();
-    
-    // Validate content size
+
     if (text.length > MAX_METADATA_SIZE) {
       console.error('[metadata/proxy] content too large:', text.length);
       return sendError(res, 413, 'Content too large');
     }
 
-    // Parse and validate JSON - reject if not valid JSON
     let json;
     try {
       json = JSON.parse(text);
-    } catch (parseError) {
-      console.error('[metadata/proxy] invalid JSON:', parseError);
-      return sendError(res, 415, 'Invalid JSON content');
+    } catch {
+      return sendError(res, 415, 'Response is not valid JSON metadata');
     }
 
     // Validate JSON structure - must be an object or array (not primitive)

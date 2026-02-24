@@ -18,6 +18,9 @@ import {
 } from "../hooks/useQueryTokens";
 import { env } from "~/env";
 import { extractTokenImage } from "../utils/images";
+import { useBlacklist } from "~/hooks/useBlacklist";
+import BlacklistModal from "./BlacklistModal";
+import { FaRegEyeSlash } from "react-icons/fa6";
 
 interface LaunchpadToken {
   mint: string;
@@ -50,6 +53,19 @@ interface PulseContentProps {
 export default function PulseContent({ forceMobileView = false }: PulseContentProps = {}) {
   const { user } = useUser();
   const router = useRouter();
+
+  // Blacklist hook + modal state (global, shared across all PulseTable columns)
+  const {
+    blacklist,
+    addItem: addBlacklistItem,
+    removeItem: removeBlacklistItem,
+    clearCategory: clearBlacklistCategory,
+    exportBlacklist,
+    importBlacklist,
+    totalCount: blacklistTotalCount,
+    categoryCounts: blacklistCategoryCounts,
+  } = useBlacklist();
+  const [showBlacklistModal, setShowBlacklistModal] = useState(false);
   
   // CRITICAL: Initialize chain from URL immediately to avoid race conditions
   const [currentChain, setCurrentChain] = useState<string>(() => {
@@ -913,6 +929,7 @@ export default function PulseContent({ forceMobileView = false }: PulseContentPr
   }, []);
 
   return (
+    <>
     <div className="flex h-full flex-col text-neutral-100 overflow-hidden" style={{ backgroundColor: '#06070b' }}>
         <div className="w-full px-6 pt-4 flex-1 flex flex-col min-h-0 overflow-hidden">
           <div className="mb-1">
@@ -944,6 +961,28 @@ export default function PulseContent({ forceMobileView = false }: PulseContentPr
                 </button> */}
               </div>
             </div>
+            {/* Blacklist Button — global, one for all columns */}
+            <button
+              className="relative flex h-7 w-7 flex-shrink-0 cursor-pointer items-center justify-center rounded-md transition-all duration-300 ease-out"
+              style={{
+                backgroundColor: "transparent",
+                color: showBlacklistModal ? "#526fff" : "#9CA3AF",
+              }}
+              onMouseEnter={(e) => { if (!showBlacklistModal) e.currentTarget.style.color = "#E6E7EA"; }}
+              onMouseLeave={(e) => { if (!showBlacklistModal) e.currentTarget.style.color = "#9CA3AF"; }}
+              onClick={() => setShowBlacklistModal(true)}
+              title="Blacklist"
+            >
+              <FaRegEyeSlash size={14} />
+              {blacklistTotalCount > 0 && (
+                <span
+                  className="absolute -top-1 -right-1 flex h-3.5 min-w-[14px] items-center justify-center rounded-full px-0.5 text-[8px] font-bold"
+                  style={{ backgroundColor: "#ed3a7a", color: "#fff" }}
+                >
+                  {blacklistTotalCount > 99 ? "99+" : blacklistTotalCount}
+                </span>
+              )}
+            </button>
           </div>
         </div>
 
@@ -1037,5 +1076,22 @@ export default function PulseContent({ forceMobileView = false }: PulseContentPr
         )}
         </div>
       </div>
+
+      {/* Blacklist Management Modal */}
+      {showBlacklistModal && (
+        <BlacklistModal
+          isOpen
+          onClose={() => setShowBlacklistModal(false)}
+          blacklist={blacklist}
+          categoryCounts={blacklistCategoryCounts}
+          totalCount={blacklistTotalCount}
+          onAdd={addBlacklistItem}
+          onRemove={removeBlacklistItem}
+          onClearCategory={clearBlacklistCategory}
+          onImport={importBlacklist}
+          onExport={exportBlacklist}
+        />
+      )}
+    </>
   );
 }
