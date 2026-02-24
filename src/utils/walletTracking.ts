@@ -312,14 +312,19 @@ export async function getWalletsLastActive(
       return [];
     }
 
+    // 60s timeout — backend processes 151 wallets in batches of 3 with delays
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 60_000);
     const response = await fetch(
       `${WALLET_TRACKER_API_URL}/api/wallets/last-active`,
       {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ wallets, chain }),
+        signal: controller.signal,
       },
     );
+    clearTimeout(timeout);
 
     const payload = await response.json().catch(() => null);
 
@@ -704,35 +709,46 @@ export async function getWalletTradeHistory(
   }
 
   try {
-    const params = new URLSearchParams();
     const validWallets = wallets.filter(
       (wallet): wallet is string =>
         typeof wallet === "string" && wallet.trim().length > 0,
     );
 
-    validWallets.forEach((wallet) => {
-      params.append("wallets", wallet);
-    });
-
-    validWallets.forEach((wallet) => {
-      params.append("wallet", wallet);
-    });
-
-    if (options.limit !== undefined) {
-      params.set("limit", String(options.limit));
-    }
-    if (options.windowMs !== undefined) {
-      params.set("windowMs", String(options.windowMs));
-    }
-
-    const url = `${WALLET_TRACKER_API_URL}/api/history?${params.toString()}`;
     console.debug("Fetching wallet trade history", {
-      url,
-      wallets: [...validWallets],
+      walletCount: validWallets.length,
       limit: options.limit,
       windowMs: options.windowMs,
     });
-    const response = await fetch(url, { signal: options.signal });
+
+    let response: Response;
+
+    if (validWallets.length > 20) {
+      // POST to avoid URL length limits with many wallets
+      const body: Record<string, unknown> = { wallets: validWallets };
+      if (options.limit !== undefined) body.limit = options.limit;
+      if (options.windowMs !== undefined) body.windowMs = options.windowMs;
+
+      response = await fetch(`${WALLET_TRACKER_API_URL}/api/history`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+        signal: options.signal,
+      });
+    } else {
+      // GET for small wallet counts (backward compat)
+      const params = new URLSearchParams();
+      validWallets.forEach((wallet) => {
+        params.append("wallets", wallet);
+      });
+      if (options.limit !== undefined) {
+        params.set("limit", String(options.limit));
+      }
+      if (options.windowMs !== undefined) {
+        params.set("windowMs", String(options.windowMs));
+      }
+      const url = `${WALLET_TRACKER_API_URL}/api/history?${params.toString()}`;
+      response = await fetch(url, { signal: options.signal });
+    }
     let payload: any = null;
 
     if (!response.ok) {
@@ -778,20 +794,39 @@ export interface WalletTrackerWebSocket {
   close: () => void;
 }
 
+export interface BalanceEvent {
+  type: "balance";
+  wallet: string;
+  items: Array<{ mint: string; amount: number }>;
+  at: number;
+}
+
 export function createWalletTrackerWebSocket(
   onTradeEvent: (event: TradeEvent) => void,
   onConnect?: () => void,
   onDisconnect?: () => void,
+  onBalanceEvent?: (event: BalanceEvent) => void,
 ): WalletTrackerWebSocket {
   const wsUrl = `${WALLET_TRACKER_WS_URL}/ws`;
   const ws = new WebSocket(wsUrl);
   let isAlive = true;
   let connectionEstablished = false;
+  let lastPingAt = Date.now();
+  let heartbeatInterval: ReturnType<typeof setInterval> | null = null;
 
   ws.onopen = () => {
     isAlive = true;
     connectionEstablished = true;
+    lastPingAt = Date.now();
     onConnect?.();
+
+    // Start heartbeat checker: if no server ping in 45s, force reconnect
+    heartbeatInterval = setInterval(() => {
+      if (Date.now() - lastPingAt > 45_000) {
+        console.warn("[WalletTracker WS] Heartbeat stale (>45s), forcing reconnect");
+        ws.close();
+      }
+    }, 15_000);
   };
 
   ws.onmessage = (event) => {
@@ -801,6 +836,7 @@ export function createWalletTrackerWebSocket(
       // Handle ping/pong
       if (data.method === "ping") {
         isAlive = true;
+        lastPingAt = Date.now();
         ws.send(JSON.stringify({ method: "pong" }));
         return;
       }
@@ -813,6 +849,11 @@ export function createWalletTrackerWebSocket(
       // Handle trade events
       if (data.type === "trade") {
         onTradeEvent(data as TradeEvent);
+      }
+
+      // Handle balance events (published by backend refresher)
+      if (data.type === "balance") {
+        onBalanceEvent?.(data as BalanceEvent);
       }
     } catch (error) {
       // Silent fail
@@ -830,6 +871,10 @@ export function createWalletTrackerWebSocket(
 
   ws.onclose = (event) => {
     isAlive = false;
+    if (heartbeatInterval) {
+      clearInterval(heartbeatInterval);
+      heartbeatInterval = null;
+    }
     onDisconnect?.();
   };
 
@@ -847,8 +892,43 @@ export function createWalletTrackerWebSocket(
   };
 
   const close = () => {
+    if (heartbeatInterval) {
+      clearInterval(heartbeatInterval);
+      heartbeatInterval = null;
+    }
     ws.close();
   };
 
   return { ws, subscribe, unsubscribe, close };
+}
+
+// ===== Batch Balance Fetch =====
+
+export async function fetchBatchBalances(
+  wallets: string[],
+  chain: "sol" | "monad" = "sol",
+): Promise<Record<string, number>> {
+  if (!WALLET_TRACKER_API_URL || wallets.length === 0) return {};
+
+  try {
+    const response = await fetch(`${WALLET_TRACKER_API_URL}/api/wallet-balance/batch`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ wallets, chain }),
+    });
+
+    if (!response.ok) {
+      console.error("[fetchBatchBalances] HTTP error:", response.status);
+      return {};
+    }
+
+    const data = await response.json();
+    if (data.ok && data.balances) {
+      return data.balances as Record<string, number>;
+    }
+    return {};
+  } catch (error) {
+    console.error("[fetchBatchBalances] Error:", error);
+    return {};
+  }
 }

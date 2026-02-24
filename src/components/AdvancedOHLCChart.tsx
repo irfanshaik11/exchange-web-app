@@ -398,6 +398,26 @@ function realToAdjusted(realMs: number, shifts: GapShift[]): number {
   return realMs - shifts[lo].cumulativeShiftMs;
 }
 
+/** Give flat candles (O=H=L=C) a small visible body so they aren't invisible dashes.
+ *  Display-only: raw cache data is never mutated. Gap-fill (volume=0) candles are skipped. */
+function applyFlatCandleSpread(bar: {
+  time: number; open: number; high: number; low: number; close: number; volume: number;
+}): typeof bar {
+  if (bar.open !== bar.close || bar.high !== bar.low || bar.open !== bar.high) return bar;
+  if (bar.volume <= 0) return bar;
+  if (bar.close <= 0) return bar;
+
+  const price = bar.close;
+  const halfSpread = price * 0.003 / 2; // 0.3% total spread
+  return {
+    ...bar,
+    open: price - halfSpread,
+    high: price,
+    low: price - halfSpread,
+    close: price,
+  };
+}
+
 const AdvancedOHLCChart: React.FC<AdvancedOHLCChartProps> = ({
   mint,
   pairAddress,
@@ -2596,7 +2616,7 @@ const AdvancedOHLCChart: React.FC<AdvancedOHLCChartProps> = ({
           const currentNetwork = latestParamsRef.current.network;
           const isMonad = currentNetwork === "monad";
           const currentDisplayMode = displayModeRef.current; // Use ref for fast access
-          let bar = transformBar(baseBar, currentDisplayMode, true);
+          let bar = applyFlatCandleSpread(transformBar(baseBar, currentDisplayMode, true));
 
           // Update cache with aggregated 1m candle (store raw USD data)
           const cachedData = lastGoodCandlesRef.current;
@@ -2721,7 +2741,7 @@ const AdvancedOHLCChart: React.FC<AdvancedOHLCChartProps> = ({
 
         // Apply display mode transformation before sending to chart
         const currentDisplayMode = displayModeRef.current; // Use ref for fast access
-        let bar = transformBar(baseBar, currentDisplayMode, true);
+        let bar = applyFlatCandleSpread(transformBar(baseBar, currentDisplayMode, true));
 
         // Update the chart via callback if available
         if (subscribedCallbackRef.current && bar.time > 0) {
@@ -3257,7 +3277,7 @@ const AdvancedOHLCChart: React.FC<AdvancedOHLCChartProps> = ({
 
             // Apply display mode transformation (USD/MC toggle)
             const currentDisplayMode = displayModeRef.current;
-            const bar = transformBar(baseBar, currentDisplayMode, true);
+            const bar = applyFlatCandleSpread(transformBar(baseBar, currentDisplayMode, true));
 
             // Update cache (store raw USD data)
             const cachedData = lastGoodCandlesRef.current;
@@ -3308,7 +3328,7 @@ const AdvancedOHLCChart: React.FC<AdvancedOHLCChartProps> = ({
 
             // Apply display mode transformation (USD/MC toggle)
             const currentDisplayMode = displayModeRef.current;
-            const bar = transformBar(baseBar, currentDisplayMode, true);
+            const bar = applyFlatCandleSpread(transformBar(baseBar, currentDisplayMode, true));
 
             // Update cache (store raw USD data — with connectivity-adjusted open)
             const cachedCandle = { ...oneSecCandle, o: baseBar.open };
@@ -4371,7 +4391,7 @@ const AdvancedOHLCChart: React.FC<AdvancedOHLCChartProps> = ({
                 close: hasZeroValues ? MIN_PRICE : item.c,
                 volume: item.v_usd || 0,
               };
-              return transformBar(baseBar, currentDisplayMode, true);
+              return applyFlatCandleSpread(transformBar(baseBar, currentDisplayMode, true));
             })
             .filter((bar) => bar.time > 0 && isFinite(bar.time));
           allBars.sort((a, b) => a.time - b.time);
@@ -4409,6 +4429,11 @@ const AdvancedOHLCChart: React.FC<AdvancedOHLCChartProps> = ({
                 }
               }
             }
+          }
+
+          // Re-apply flat candle spread after connection loop (it can make candles flat)
+          for (let i = 0; i < allBars.length; i++) {
+            allBars[i] = applyFlatCandleSpread(allBars[i]);
           }
 
           if (CHART_DEBUG) {
@@ -4549,7 +4574,7 @@ const AdvancedOHLCChart: React.FC<AdvancedOHLCChartProps> = ({
                     close: hasZeroValues ? MIN_PRICE : item.c,
                     volume: item.v_usd || 0,
                   };
-                  return transformBar(baseBar, currentDisplayMode, true);
+                  return applyFlatCandleSpread(transformBar(baseBar, currentDisplayMode, true));
                 })
                 .filter((bar) => bar.time > 0 && isFinite(bar.time));
               allBars.sort((a, b) => a.time - b.time);
@@ -4694,7 +4719,7 @@ const AdvancedOHLCChart: React.FC<AdvancedOHLCChartProps> = ({
                     close: hasZeroValues ? MIN_PRICE : item.c,
                     volume: item.v_usd || 0,
                   };
-                  return transformBar(baseBar, currentDisplayMode, true);
+                  return applyFlatCandleSpread(transformBar(baseBar, currentDisplayMode, true));
                 })
                 .filter((bar) => bar.time > 0 && isFinite(bar.time));
               cachedBars.sort((a, b) => a.time - b.time);
@@ -4747,7 +4772,7 @@ const AdvancedOHLCChart: React.FC<AdvancedOHLCChartProps> = ({
                 volume: item.v_usd || 0,
               };
 
-              const bar = transformBar(baseBar, currentDisplayMode, true);
+              const bar = applyFlatCandleSpread(transformBar(baseBar, currentDisplayMode, true));
 
               if (hasZeroValues && CHART_DEBUG) {
                 console.log(
@@ -4827,6 +4852,11 @@ const AdvancedOHLCChart: React.FC<AdvancedOHLCChartProps> = ({
 
               }
             }
+          }
+
+          // Re-apply flat candle spread after connection loop (it can make candles flat)
+          for (let i = 0; i < allBars.length; i++) {
+            allBars[i] = applyFlatCandleSpread(allBars[i]);
           }
 
           // CRITICAL FIX: For first request, ignore from/to and return all candles
@@ -4973,7 +5003,7 @@ const AdvancedOHLCChart: React.FC<AdvancedOHLCChartProps> = ({
                     close: hasZeroValues ? MIN_PRICE : item.c,
                     volume: item.v_usd || 0,
                   };
-                  return transformBar(baseBar, currentDisplayMode, true);
+                  return applyFlatCandleSpread(transformBar(baseBar, currentDisplayMode, true));
                 })
                 .filter((bar) => bar.time > 0 && isFinite(bar.time));
               cachedBars.sort((a, b) => a.time - b.time);
@@ -5071,7 +5101,7 @@ const AdvancedOHLCChart: React.FC<AdvancedOHLCChartProps> = ({
                   close: hasZeroValues ? MIN_PRICE : item.c,
                   volume: item.v_usd || 0,
                 };
-                return transformBar(baseBar, currentDisplayMode, true);
+                return applyFlatCandleSpread(transformBar(baseBar, currentDisplayMode, true));
               })
               .filter((bar) => bar.time > 0); // Filter out invalid bars
             allBars.sort((a, b) => a.time - b.time);
@@ -5110,6 +5140,11 @@ const AdvancedOHLCChart: React.FC<AdvancedOHLCChartProps> = ({
                   }
                 }
               }
+            }
+
+            // Re-apply flat candle spread after connection loop (it can make candles flat)
+            for (let i = 0; i < allBars.length; i++) {
+              allBars[i] = applyFlatCandleSpread(allBars[i]);
             }
 
             // Don't filter cached data by time range in error case - just return what we have

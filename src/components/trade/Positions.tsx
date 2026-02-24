@@ -495,7 +495,7 @@ const Positions: React.FC<PositionsProps> = ({
       const isMonad = isMonadPosition(position);
 
       // Pre-validate sell before showing toast
-      const sellValidation = validateSolanaSell(percent, position.remaining);
+      const sellValidation = validateSolanaSell(percent);
       if (!sellValidation.valid) {
         showTradeValidationError(sellValidation.error, tokenImage, tokenName);
         setSellingForToken(tokenKey, false);

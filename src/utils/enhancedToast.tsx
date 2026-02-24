@@ -278,29 +278,9 @@ export const showEnhancedToast = (
     },
   };
 
-  // Create a temporary ID for the toast
-  let finalId: string = '';
-  
-  const content = (
-    <EnhancedToastContent
-      type={type}
-      title={options?.title}
-      description={options?.description}
-      message={message}
-      actions={options?.actions}
-      showExplorerLink={options?.showExplorerLink}
-      txHash={options?.txHash}
-      suggestions={options?.suggestions}
-      toastId={finalId}
-      customContent={options?.customContent}
-    />
-  );
+  // Generate a stable ID upfront so click-to-dismiss works with a single toast() call
+  const finalId = `enhanced-${type}-${Date.now()}`;
 
-  // Use base toast() for ALL types to prevent react-hot-toast from adding its own icons
-  // This gives us full control over icons (no duplicate checkmarks or spinners)
-  finalId = toast(content, toastOptions);
-  
-  // Update the toast with the correct ID so click-to-dismiss works
   toast(
     <EnhancedToastContent
       type={type}
@@ -316,7 +296,7 @@ export const showEnhancedToast = (
     />,
     { ...toastOptions, id: finalId }
   );
-  
+
   return finalId;
 };
 

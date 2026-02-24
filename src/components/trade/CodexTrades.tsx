@@ -12,6 +12,7 @@ import { HiOutlineCubeTransparent } from "react-icons/hi2";
 import React, { useState, useCallback, useMemo } from "react";
 import { formatSmartNumber, formatMarketCap } from "~/utils/db";
 import { useSolanaTokenWebSocketContext, type SolanaTokenHolder } from "../../contexts/SolanaTokenWebSocketContext";
+import { useSolPrice } from "../SolPriceContext";
 import { useMonadTradesWebSocket } from "../../hooks/useMonadTradesWebSocket";
 import type { Token } from "~/utils/db";
 import WalletHoverCard, { type WalletHoverCardData } from "./WalletHoverCard";
@@ -599,6 +600,7 @@ function formatUsdPrice(value: number | null | undefined): string {
 function normalizeTrade(
   trade: any,
   tokenDecimalsFallback = 9,
+  chainPrice = 0,
 ): {
   isBuy: boolean;
   color: "text-emerald-400" | "text-red-400" | "text-neutral-400";
@@ -696,9 +698,9 @@ function normalizeTrade(
     // Handle both price_usd (new format) and total_usd/price (old format)
     pricePerToken = Number(trade.price_usd || trade.price || 0);
     totalUSD = Number(trade.total_usd || 0);
-    // If no total_usd, estimate from SOL amount (approx $200/SOL)
-    if (!totalUSD && solAmount > 0) {
-      totalUSD = solAmount * 200; // Approximate
+    // Always prefer live chain price over pre-computed total_usd
+    if (solAmount > 0 && chainPrice > 0) {
+      totalUSD = solAmount * chainPrice;
     }
     if (!pricePerToken && tokenAmount > 0 && totalUSD > 0)
       pricePerToken = totalUSD / tokenAmount;
@@ -716,10 +718,11 @@ function normalizeTrade(
     // Monad uses MON instead of SOL
     solAmount = Number(trade.mon_amount || 0);
     pricePerToken = Number(trade.price_mon || 0);
-    // Estimate USD value from MON amount (approx price - this should be updated with real MON price)
+    // Convert MON amount to USD using live chain price
     totalUSD = Number(trade.total_usd || 0);
-    if (!totalUSD && solAmount > 0) {
-      totalUSD = solAmount * 1; // MON price estimate (update when we have real price)
+    // Always prefer live chain price over pre-computed total_usd
+    if (solAmount > 0 && chainPrice > 0) {
+      totalUSD = solAmount * chainPrice;
     }
     if (!pricePerToken && tokenAmount > 0 && totalUSD > 0)
       pricePerToken = totalUSD / tokenAmount;
@@ -822,6 +825,9 @@ const CodexTrades: React.FC<CodexTradesProps> = ({
   pairAddress,
   chain = "sol",
 }) => {
+  const { solPrice, monPrice } = useSolPrice();
+  const chainPrice = chain === "monad" ? monPrice : solPrice;
+
   const [showAge, setShowAge] = React.useState(true); // true = Age, false = Time
   const [totalMode, setTotalMode] = React.useState<"usd" | "sol">("usd");
   const [mcMode, setMcMode] = React.useState<"mc" | "price">("mc"); // MC vs Price toggle
@@ -1313,7 +1319,7 @@ const CodexTrades: React.FC<CodexTradesProps> = ({
   const normalized = React.useMemo(() => {
     const slice = (displayTrades || []).slice(0, 100);
     let result = slice.map((t, i) => {
-      const n = normalizeTrade(t, stableToken?.decimals ?? 9);
+      const n = normalizeTrade(t, stableToken?.decimals ?? 9, chainPrice);
       // Store the complete address from raw trade
       const completeAddress = getCompleteTraderAddress(t);
       const finalAddress = completeAddress || n.maker || "";
@@ -1469,6 +1475,7 @@ const CodexTrades: React.FC<CodexTradesProps> = ({
   }, [
     displayTrades,
     stableToken?.decimals,
+    chainPrice,
     getCompleteTraderAddress,
     filters,
     holderTypeMap,

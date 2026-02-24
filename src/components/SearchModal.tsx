@@ -28,8 +28,19 @@ import { BsLightningChargeFill, BsTwitterX } from "react-icons/bs";
 import { showEnhancedToast } from "~/utils/enhancedToast";
 import { getHistory, addToHistory, clearHistory, removeFromHistory, type SearchHistoryItem } from "~/utils/searchHistory";
 import { useUser } from "./UserContext";
+import { HiLightningBolt } from "react-icons/hi";
+import toast from "react-hot-toast";
+import { useQuickBuy } from "./QuickBuyContext";
+import { SOL_MINT_ADDRESS } from "~/utils/api";
+import { executeSolanaMultiBuy, buildSolanaWalletAllocations } from "~/utils/solanaWalletAllocation";
+import { getPoolTypeFromToken } from "~/utils/poolTypeDetection";
+import { validateSolanaBuy, showTradeValidationError } from "~/utils/preTradeValidation";
+import { checkAtaExists } from "~/utils/ataCheck";
+import { getResolvedTokenImage, resolveTokenImage } from "~/utils/images";
+import { fetchVerifiedPairAddress } from "~/hooks/useSingleTokenPolling";
+import { listenForTradeEvents, transformToastToError } from "~/utils/createSolanaToastHandler";
+import { mapTradeErrorMessage } from "~/utils/tradeErrorMessages";
 // TODO: SOCIAL LINKS NOT PRESENT FOR NOW
-// import { HiLightningBolt } from "react-icons/hi";
 // import { PiTelegramLogo } from "react-icons/pi";
 // import { TiDocumentText } from "react-icons/ti";
 
@@ -575,7 +586,16 @@ const SearchModalContent = React.memo(function SearchModalContent({
   chain = "sol",
 }: SearchModalProps) {
   const router = useRouter();
-  const { user } = useUser();
+  const { user, solBalance, walletList, walletBalances, selectedWalletIds } = useUser();
+  const { presets, activePreset, setActivePreset } = useQuickBuy();
+  const [quickBuyAmount, setQuickBuyAmount] = useState(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('quickBuyAmount');
+      if (saved) { const p = parseFloat(saved); if (!isNaN(p) && p >= 0) return p.toString(); }
+    }
+    return '0.05';
+  });
+  const [selectedPill, setSelectedPill] = useState('P1');
   const [query, setQuery] = useState("");
   const [sortBy, setSortBy] = useState<SortOption>("smart");
   const [filters, setFilters] = useState<SearchFilters>({
@@ -929,6 +949,257 @@ const SearchModalContent = React.memo(function SearchModalContent({
     },
     [chain],
   );
+
+  const handleQuickBuy = useCallback(async (token: Token) => {
+    // Guard: Solana only
+    if (chain !== 'sol') {
+      showEnhancedToast("warning", "Quick buy is only available for Solana tokens", {
+        title: "Solana Only",
+      });
+      return;
+    }
+
+    if (!user?.bearerToken || !user?.id) {
+      showEnhancedToast("warning", "Please connect your wallet to trade", {
+        title: "Authentication Required",
+      });
+      return;
+    }
+
+    const buyAmount = parseFloat(quickBuyAmount);
+    if (isNaN(buyAmount) || buyAmount <= 0) {
+      showEnhancedToast("warning", "Please enter a valid SOL amount (minimum 0.001 SOL)", {
+        title: "Invalid Amount",
+      });
+      return;
+    }
+
+    const presetIndex = parseInt(selectedPill.replace('P', '')) - 1;
+    const preset = presets[presetIndex];
+    if (!preset) {
+      showEnhancedToast("error", "Quick buy preset not configured", {
+        title: "Configuration Error",
+      });
+      return;
+    }
+
+    const settings = preset.quickBuySettings;
+    const poolType = getPoolTypeFromToken(token as any);
+
+    // Pre-calculate wallet allocations
+    const { allocations, total } = buildSolanaWalletAllocations({
+      amount: buyAmount,
+      walletList: walletList || [],
+      walletBalances: walletBalances || {},
+      selectedWalletIds: selectedWalletIds?.sol || [],
+      priorityFee: settings.priority || 0.0001,
+      bribe: settings.bribe || 0,
+    });
+    const walletsWithBalance = allocations.length;
+    const isMultiWallet = walletsWithBalance > 1;
+
+    // Pre-validate before showing toast
+    const ataExists = await checkAtaExists(token.mint, (user as any)?.publicKey).catch(() => null);
+    const validation = validateSolanaBuy(buyAmount, allocations, walletBalances || {}, walletList || [], selectedWalletIds?.sol || [], settings.priority, settings.bribe, ataExists);
+    if (!validation.valid) {
+      showTradeValidationError(validation.error, getResolvedTokenImage(token as any), token.symbol || token.name || 'Token');
+      return;
+    }
+
+    // Verify the pair address (CRITICAL - prevents stale pool routing)
+    let poolAddress = (token as any).migrated_pool_address || token.pair_address || "";
+    const tokenMint = token.mint || '';
+    if (tokenMint) {
+      console.log(`[SearchModal] Verifying pair address for quick buy: ${tokenMint}`);
+      const verifiedPairAddress = await fetchVerifiedPairAddress(tokenMint);
+      if (verifiedPairAddress) {
+        if (verifiedPairAddress !== poolAddress) {
+          console.log(`[SearchModal] Pair address mismatch! Local: ${poolAddress}, Verified: ${verifiedPairAddress}`);
+        }
+        poolAddress = verifiedPairAddress;
+      }
+    }
+
+    // Generate random timer cap (0.40-0.60s)
+    const timerCap = 0.4 + Math.random() * 0.2;
+    const uniqueToastId = `search-quickbuy-${Date.now()}-${Math.random()}`;
+    const startTime = Date.now();
+    let timerFinished = false;
+    let tradeErrored = false;
+
+    // Extract token image
+    const tokenImage = getResolvedTokenImage(token as any) || null;
+    const tokenName = token.symbol || token.name || "Token";
+
+    // Show animated toast with timer (matches PulseTable/WatchlistModal)
+    toast(
+      (t) => (
+        <div className="flex items-center gap-3">
+          {tokenImage && (
+            <img
+              src={tokenImage}
+              alt={tokenName}
+              className="h-6 w-6 flex-shrink-0 rounded-full"
+              onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+            />
+          )}
+          <div className="flex min-w-0 flex-1 items-center gap-2">
+            <span className="truncate text-sm text-neutral-200">
+              Buying {tokenName}
+            </span>
+            <span
+              id={`timer-${uniqueToastId}`}
+              className="flex-shrink-0 text-xs text-neutral-400"
+            >
+              (0.00s)
+            </span>
+            <span
+              id={`check-${uniqueToastId}`}
+              className="flex-shrink-0 text-green-400"
+              style={{ display: timerFinished && !tradeErrored ? "inline" : "none" }}
+            >
+              ✓
+            </span>
+            <span
+              id={`link-${uniqueToastId}`}
+              className="flex-shrink-0"
+              style={{ display: "inline-flex" }}
+            >
+              <img
+                src="https://avatars.githubusercontent.com/u/92743431?s=200&v=4"
+                alt="Solana"
+                className="h-4 w-4 rounded-full opacity-70"
+                style={{ cursor: "default" }}
+              />
+            </span>
+          </div>
+        </div>
+      ),
+      {
+        id: uniqueToastId,
+        duration: Infinity,
+        style: {
+          background: "#1a1a1a",
+          border: "1px solid #333",
+          borderRadius: "8px",
+          padding: "12px",
+        },
+      },
+    );
+
+    // Start timer animation
+    let timerHandle: number | null = null;
+    const tick = () => {
+      const elapsed = (Date.now() - startTime) / 1000;
+      const displayTime = Math.min(elapsed, timerCap).toFixed(2);
+      const timerEl = document.getElementById(`timer-${uniqueToastId}`);
+      if (timerEl) {
+        timerEl.textContent = `(${displayTime}s)`;
+      }
+
+      if (!timerFinished && elapsed >= timerCap) {
+        timerFinished = true;
+        if (!tradeErrored) {
+          const checkEl = document.getElementById(`check-${uniqueToastId}`);
+          if (checkEl) {
+            checkEl.style.display = "block";
+          }
+          const linkEl = document.getElementById(`link-${uniqueToastId}`);
+          if (linkEl) {
+            if (isMultiWallet) {
+              linkEl.textContent = `${walletsWithBalance}/${total}`;
+              linkEl.className = "text-xs text-blue-400 font-medium flex-shrink-0";
+            }
+          }
+        }
+        timerHandle = null;
+        return;
+      }
+      timerHandle = requestAnimationFrame(tick);
+    };
+    timerHandle = requestAnimationFrame(tick);
+
+    const cleanupTradeListener = listenForTradeEvents(tokenMint, uniqueToastId, (v) => { tradeErrored = v; }, 'solana');
+
+    try {
+      const baseMint = tokenMint;
+      const quoteMint = SOL_MINT_ADDRESS;
+
+      const multiResult = await executeSolanaMultiBuy({
+        poolAddress,
+        baseMint,
+        quoteMint,
+        amountSOL: buyAmount,
+        poolType,
+        originalPairAddress: token.pair_address,
+        slippage: settings.maxSlippage,
+        priorityFee: settings.priority,
+        bribe: settings.bribe,
+        mevMode: settings.mevMode,
+        autoFee: settings.autoFee,
+        maxFee: settings.maxFee,
+        rpc: settings.rpc,
+        tokenName: token.name,
+        tokenSymbol: token.symbol,
+        imageUrl: await resolveTokenImage(token as any) || undefined,
+        authToken: user.bearerToken,
+        walletList: walletList || [],
+        walletBalances: walletBalances || {},
+        selectedWalletIds: selectedWalletIds?.sol || [],
+        onTxHash: ({ txHash }) => {
+          if (txHash) {
+            const linkEl = document.getElementById(`link-${uniqueToastId}`);
+            if (linkEl) {
+              const explorerUrl = `https://solscan.io/tx/${txHash}`;
+              linkEl.innerHTML = `<a href="${explorerUrl}" target="_blank" rel="noopener noreferrer" class="hover:opacity-80 transition-opacity"><img src="https://avatars.githubusercontent.com/u/92743431?s=200&v=4" alt="Solana" class="w-4 h-4 rounded-full" style="cursor: pointer;" /></a>`;
+              linkEl.className = "";
+            }
+          }
+        },
+      });
+
+      // Get first tx hash for single wallet case
+      const firstTxHash =
+        multiResult?.results?.find(
+          (r: any) => (r.result as any)?.hash || (r.result as any)?.txid,
+        )?.result?.hash ||
+        multiResult?.results?.find(
+          (r: any) => (r.result as any)?.hash || (r.result as any)?.txid,
+        )?.result?.txid;
+
+      if (firstTxHash && !isMultiWallet) {
+        const linkEl = document.getElementById(`link-${uniqueToastId}`);
+        if (linkEl) {
+          const explorerUrl = `https://solscan.io/tx/${firstTxHash}`;
+          linkEl.innerHTML = `<a href="${explorerUrl}" target="_blank" rel="noopener noreferrer" class="hover:opacity-80 transition-opacity"><img src="https://avatars.githubusercontent.com/u/92743431?s=200&v=4" alt="Solana" class="w-4 h-4 rounded-full" style="cursor: pointer;" /></a>`;
+          linkEl.className = "";
+        }
+        if (timerHandle) {
+          cancelAnimationFrame(timerHandle);
+        }
+        setTimeout(() => toast.dismiss(uniqueToastId), 10000);
+      }
+
+      console.log("✅ SearchModal Quick Buy successful");
+
+      // Dispatch event to refresh chart price lines
+      if (typeof window !== "undefined" && tokenMint) {
+        window.dispatchEvent(
+          new CustomEvent("solanaQuickTrade", {
+            detail: { tokenAddress: tokenMint },
+          }),
+        );
+      }
+    } catch (error: any) {
+      tradeErrored = true;
+      cleanupTradeListener();
+      if (timerHandle) {
+        cancelAnimationFrame(timerHandle);
+      }
+      console.error("❌ SearchModal Quick Buy failed:", error);
+      transformToastToError(uniqueToastId, mapTradeErrorMessage(error), tokenImage, tokenName);
+    }
+  }, [chain, user, quickBuyAmount, selectedPill, presets, walletList, walletBalances, selectedWalletIds]);
 
   const handleSelectToken = useCallback(
     async (token: Token) => {
@@ -1322,6 +1593,65 @@ const SearchModalContent = React.memo(function SearchModalContent({
               );
             })}
           </div>
+
+          {/* Quick Buy Controls - Thunder input + P1/P2/P3 pills (desktop only) */}
+          <div className="hidden sm:flex items-center justify-center rounded-md px-1.5 gap-1 border"
+               style={{ borderColor: '#24252C', backgroundColor: '#272a2e', paddingTop: '4px', paddingBottom: '4px', minWidth: '85px', width: '85px', height: '28px' }}>
+            <HiLightningBolt size={14} style={{ color: '#31e3ac' }} />
+            <input
+              type="text"
+              value={quickBuyAmount}
+              inputMode="decimal"
+              onChange={(e) => {
+                const value = e.target.value;
+                if (value === '' || /^\d*\.?\d*$/.test(value)) {
+                  setQuickBuyAmount(value);
+                  const numValue = Number(value) || 0;
+                  if (typeof window !== 'undefined') {
+                    localStorage.setItem('quickBuyAmount', numValue.toString());
+                  }
+                }
+              }}
+              onKeyDown={(e) => {
+                const allowedKeys = ['Backspace', 'Delete', 'ArrowLeft', 'ArrowRight', 'Tab', 'Home', 'End'];
+                if (allowedKeys.includes(e.key)) return;
+                if (e.key === '.') return;
+                if (!/^[0-9]$/.test(e.key)) {
+                  e.preventDefault();
+                }
+              }}
+              className="bg-transparent border-none outline-none text-sm font-medium w-12 text-center"
+              style={{ color: '#f0f5f5' }}
+            />
+          </div>
+
+          {/* P1 P2 P3 Preset Boxes (desktop only) */}
+          <div className="hidden sm:flex items-center justify-center gap-1 rounded-md px-1.5 border"
+               style={{ borderColor: '#24252C', backgroundColor: '#272a2e', paddingTop: '4px', paddingBottom: '4px', minWidth: '100px', width: '100px', height: '28px' }}>
+            {(['P1', 'P2', 'P3'] as const).map((pill) => {
+              const presetIndex = parseInt(pill.replace('P', '')) - 1;
+              return (
+                <button
+                  key={pill}
+                  className="px-1 text-sm font-medium transition-all duration-200 cursor-pointer flex items-center justify-center rounded"
+                  style={{
+                    paddingTop: '2px',
+                    paddingBottom: '2px',
+                    backgroundColor: selectedPill === pill
+                      ? 'rgba(24, 196, 140, 0.15)'
+                      : 'rgba(22, 23, 28, 0.6)',
+                    color: selectedPill === pill ? '#f0f5f5' : '#666',
+                  }}
+                  onClick={() => {
+                    setSelectedPill(pill);
+                    setActivePreset(presetIndex);
+                  }}
+                >
+                  {pill}
+                </button>
+              );
+            })}
+          </div>
         </div>
       </div>
 
@@ -1703,6 +2033,8 @@ const SearchModalContent = React.memo(function SearchModalContent({
                   volIs24h={is24h}
                   liq={liq}
                   onSelect={handleSelectToken}
+                  onQuickBuy={handleQuickBuy}
+                  quickBuyAmount={quickBuyAmount}
                   chain={chain}
                   searchQuery={query}
                   index={index}
@@ -1756,6 +2088,8 @@ const TokenListItem = React.memo(
     volIs24h = false,
     liq,
     onSelect,
+    onQuickBuy,
+    quickBuyAmount,
     chain = "sol",
     searchQuery = "",
     index = 0,
@@ -1768,6 +2102,8 @@ const TokenListItem = React.memo(
     volIs24h?: boolean;
     liq: string;
     onSelect: (token: Token) => void;
+    onQuickBuy?: (token: Token) => void;
+    quickBuyAmount?: string;
     chain?: string;
     searchQuery?: string;
     index?: number;
@@ -2244,14 +2580,14 @@ const TokenListItem = React.memo(
                 onClick={(e) => {
                   e.preventDefault();
                   e.stopPropagation();
-                  onSelect(token);
+                  onQuickBuy ? onQuickBuy(token) : onSelect(token);
                 }}
                 className="relative z-20 flex flex-shrink-0 cursor-pointer items-center justify-center gap-1 rounded-lg border border-[#7FFFC940] bg-gradient-to-r from-[#243E33] to-[#1a2e26] px-4 py-2 text-xs font-bold text-[#7FFFC9] transition-all duration-300 ease-out hover:border-[#7FFFC960] hover:from-[#2a4d3d] hover:to-[#1f3a2f]"
                 style={{ transformOrigin: "center", pointerEvents: "auto" }}
-                title="Select token"
+                title={onQuickBuy ? "Quick buy token" : "Select token"}
               >
                 <BsLightningChargeFill className="h-3.5 w-3.5" />
-                Buy
+                {quickBuyAmount && parseFloat(quickBuyAmount) > 0 ? `Buy ${quickBuyAmount}` : 'Buy'}
               </button>
             </div>
             {/* Second Row: Age, Social Icons */}
@@ -2808,14 +3144,14 @@ const TokenListItem = React.memo(
               onClick={(e) => {
                 e.preventDefault();
                 e.stopPropagation();
-                onSelect(token);
+                onQuickBuy ? onQuickBuy(token) : onSelect(token);
               }}
               className="relative z-20 flex flex-shrink-0 cursor-pointer items-center justify-center gap-1 rounded-lg border border-[#7FFFC940] bg-gradient-to-r from-[#243E33] to-[#1a2e26] px-2.5 py-2 text-xs font-bold text-[#7FFFC9] transition-all duration-300 ease-out hover:border-[#7FFFC960] hover:from-[#2a4d3d] hover:to-[#1f3a2f] sm:px-3"
               style={{ transformOrigin: "center", pointerEvents: "auto" }}
-              title="Select token"
+              title={onQuickBuy ? "Quick buy token" : "Select token"}
             >
               <BsLightningChargeFill className="h-3 w-3" />
-              Buy
+              {quickBuyAmount && parseFloat(quickBuyAmount) > 0 ? `Buy ${quickBuyAmount}` : 'Buy'}
             </button>
           </div>
         </li>

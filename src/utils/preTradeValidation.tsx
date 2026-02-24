@@ -20,7 +20,6 @@ const MAX_TRADE_AMOUNT = 1000; // Backend maximum
 const MONAD_GAS_UNITS = 300_000; // Default gas estimate
 const MONAD_DEFAULT_GAS_GWEI = 50; // Default gas price in gwei
 const FE_MONAD_BUFFER = 0.05; // Below backend's 0.1 to avoid false rejections
-const DUST_THRESHOLD = 0.001; // Matches backend dust threshold for position cleanup
 
 // ── Types ──
 
@@ -117,16 +116,12 @@ export function validateSolanaBuy(
 
 export function validateSolanaSell(
   percentage: number,
-  positionRemaining?: number,
 ): ValidationResult {
   if (!Number.isFinite(percentage) || percentage <= 0) {
     return { valid: false, error: "Enter a valid sell percentage" };
   }
   if (percentage > 100) {
     return { valid: false, error: "Sell percentage cannot exceed 100%" };
-  }
-  if (positionRemaining !== undefined && positionRemaining <= DUST_THRESHOLD) {
-    return { valid: false, error: "No token holdings to sell" };
   }
   return { valid: true };
 }

@@ -17,11 +17,9 @@ import {
   type TradeEvent,
 } from "~/utils/walletTracking";
 import { FiSettings, FiBell, FiShare2, FiRss } from "react-icons/fi";
-import { HiLightningBolt } from "react-icons/hi";
-import { SiSolana } from "react-icons/si";
+import LiveTradesPanel from "./LiveTradesPanel";
 import { executeEnhancedTrade } from "~/utils/enhancedTradeHandler";
 import { showEnhancedToast } from "~/utils/enhancedToast";
-import { formatMarketCap } from "~/utils/db";
 import type { Wallet } from "~/utils/functions";
 
 const TABS = ["Wallet Manager", "Live Trades"];
@@ -48,74 +46,6 @@ const fetchWithTimeout = async (
     clearTimeout(t);
   }
 };
-
-// Normalize asset URLs (IPFS, Arweave, etc.)
-function normalizeAssetUrl(raw?: string | null): string | null {
-  if (!raw) return null;
-  const s = String(raw).trim();
-  if (s.startsWith("data:")) return s;
-  if (s.startsWith("ipfs://")) {
-    const cid = s.replace("ipfs://", "").replace(/^ipfs\//, "");
-    return `https://cloudflare-ipfs.com/ipfs/${cid}`;
-  }
-  if (/^ipfs[/:]/i.test(s)) {
-    const cid = s.replace(/^ipfs[/:]/i, "");
-    return `https://cloudflare-ipfs.com/ipfs/${cid}`;
-  }
-  if (/^[a-z0-9_-]{40,}$/i.test(s) && !/^https?:\/\//i.test(s))
-    return `https://arweave.net/${s}`;
-  if (s.startsWith("http://")) return s.replace(/^http:\/\//i, "https://");
-  if (s.startsWith("https://")) return s;
-  return null;
-}
-
-// Get protocol icon
-function getProtocolIcon(protocol: string): string {
-  if (!protocol)
-    return "https://logos-world.net/wp-content/uploads/2024/10/Pump-Fun-Logo.png";
-  if (protocol.includes("pump"))
-    return "https://logos-world.net/wp-content/uploads/2024/10/Pump-Fun-Logo.png";
-  if (protocol.includes("meteora"))
-    return "https://s1.coincarp.com/logo/1/meteora.png?style=72&v=1759911013";
-  if (protocol.includes("raydium"))
-    return "https://s2.coinmarketcap.com/static/img/coins/64x64/8526.png";
-  if (protocol.includes("boop"))
-    return "https://api.phantom.app/image-proxy/?image=https%3A%2F%2Fdhc7eusqrdwa0.cloudfront.net%2Fassets%2FBOOP_logo_icon_dark_bg.png&anim=true";
-  if (
-    protocol.includes("moonit") ||
-    protocol.includes("moonshot") ||
-    protocol.includes("moonshoot")
-  )
-    return "https://avatars.githubusercontent.com/u/174132191?s=280&v=4";
-  if (protocol.includes("bonk"))
-    return "https://s3.coinmarketcap.com/static-gravity/image/a28128d9ff7c49c9ad33ee2f626fda40.png";
-  if (protocol.includes("bags"))
-    return "https://play-lh.googleusercontent.com/7AxVcu1pumxavcGTb16WBJQU88CDZd0v8q0WzFwfin7zbBvItYMuNQ0Xkqq4srTw4A=w240-h480-rw";
-  if (protocol.includes("launch"))
-    return "https://s2.coinmarketcap.com/static/img/coins/64x64/8526.png";
-  return "https://logos-world.net/wp-content/uploads/2024/10/Pump-Fun-Logo.png";
-}
-
-// Get protocol color
-function getProtocolColor(protocol: string): string {
-  if (!protocol) return "#22c55e";
-  if (protocol.includes("pump")) return "#22c55e";
-  if (protocol.includes("meteora")) return "#ff4662";
-  if (protocol.includes("raydium")) return "#5c51f7";
-  if (
-    protocol.includes("moonit") ||
-    protocol.includes("moonshot") ||
-    protocol.includes("moonshoot")
-  )
-    return "#eab308";
-  if (protocol.includes("boop")) return "#134577";
-  if (protocol.includes("bonk")) return "#ff6b35";
-  if (protocol.includes("bags")) return "#22c55e";
-  if (protocol.includes("launch")) return "#3b82f6";
-  if (protocol.includes("orca")) return "#0ea5e9";
-  if (protocol.includes("jupiter")) return "#8b5cf6";
-  return "#22c55e";
-}
 
 export default function WalletTrackerContent() {
   const router = useRouter();
@@ -167,9 +97,6 @@ export default function WalletTrackerContent() {
   >({});
   const [isTogglingAllNotifications, setIsTogglingAllNotifications] =
     useState(false);
-  const [tokenMetadata, setTokenMetadata] = useState<Map<string, any>>(
-    new Map(),
-  );
 
   // Sync local watchedWallets state with global context
   useEffect(() => {
@@ -560,87 +487,7 @@ export default function WalletTrackerContent() {
     watchedWalletAddresses.has(trade.wallet),
   );
 
-  // Fetch token metadata for live trades - same flow as trackers page
-  const fetchedMintsRef = useRef<Set<string>>(new Set());
-
-  useEffect(() => {
-    if (filteredLatestTrades.length === 0) return;
-
-    // Only fetch metadata for trades we haven't fetched yet
-    const tradesToFetch = filteredLatestTrades.filter(
-      (trade) =>
-        !tokenMetadata.has(trade.mint) &&
-        !fetchedMintsRef.current.has(trade.mint),
-    );
-
-    if (tradesToFetch.length === 0) {
-      return;
-    }
-
-    // Mark these mints as being fetched to prevent duplicate requests
-    tradesToFetch.forEach((trade) => fetchedMintsRef.current.add(trade.mint));
-
-    // Fetch all tokens in parallel using Promise.allSettled for maximum speed
-    Promise.allSettled(
-      tradesToFetch.map(async (trade) => {
-        try {
-          // Try to use pair_address if available, otherwise use mint_address
-          const params = new URLSearchParams();
-          if (trade.pair_address) {
-            params.set("pair_address", trade.pair_address);
-          } else {
-            params.set("mint_address", trade.mint);
-          }
-
-          const controller = new AbortController();
-          const timeoutId = setTimeout(() => controller.abort(), 5000);
-
-          const response = await fetch(
-            `/api/token-service/trade-view?${params.toString()}`,
-            {
-              signal: controller.signal,
-            },
-          );
-          clearTimeout(timeoutId);
-
-          if (!response.ok) {
-            throw new Error(`HTTP ${response.status}`);
-          }
-
-          const data = await response.json();
-          const token = data?.token;
-
-          if (token) {
-            const metadata = {
-              symbol: token.symbol || trade.symbol || null,
-              name: token.name || trade.name || null,
-              image: token.uri || token.image || token.logo || null,
-              launchpad_protocol:
-                token.launchpad_protocol || token.protocol || null,
-              market_cap_usd:
-                token.market_cap_usd ||
-                token.marketCapUsd ||
-                token.fully_diluted_value ||
-                null,
-              createdAt:
-                token.created_at || token.createdAt || token.CreatedAt || null,
-            };
-
-            // Update state immediately for this token (progressive rendering)
-            setTokenMetadata((prev) => {
-              const updated = new Map(prev);
-              updated.set(trade.mint, metadata);
-              return updated;
-            });
-          }
-        } catch (error) {
-          // Silent fail - will use fallback UI
-        }
-      }),
-    );
-  }, [filteredLatestTrades]);
-
-  // Quick buy handler
+  // Quick buy handler (metadata is managed inside LiveTradesPanel)
   const handleQuickBuy = async (trade: TradeEvent) => {
     if (!user?.bearerToken || !user?.id) {
       showEnhancedToast("warning", "Please connect your wallet to trade", {
@@ -670,16 +517,15 @@ export default function WalletTrackerContent() {
     }
 
     const settings = preset.quickBuySettings;
-    const metadata = tokenMetadata.get(trade.mint);
 
     const token = {
       mint: trade.mint,
       pair_address: trade.pair_address || trade.mint,
-      symbol: trade.symbol || metadata?.symbol || "UNKNOWN",
-      name: trade.name || metadata?.name || "Unknown Token",
-      image: metadata?.image || null,
-      launchpad_protocol: metadata?.launchpad_protocol || null,
-      market_cap_usd: metadata?.market_cap_usd || null,
+      symbol: trade.symbol || "UNKNOWN",
+      name: trade.name || "Unknown Token",
+      image: null,
+      launchpad_protocol: null,
+      market_cap_usd: trade.market_cap_usd || null,
     } as any;
 
     await executeEnhancedTrade({
@@ -688,7 +534,7 @@ export default function WalletTrackerContent() {
       side: "buy",
       settings,
       user: { bearerToken: user.bearerToken, id: user.id },
-      solBalance: 0, // Will be fetched by executeEnhancedTrade
+      solBalance: 0,
       solPriceUsd: 150,
       walletContext: {
         selectedWalletIds: selectedWalletIds?.sol || [],
@@ -697,10 +543,10 @@ export default function WalletTrackerContent() {
         chain: selectedChain,
       },
       onSuccess: () => {
-        console.log("✅ Quick Buy successful");
+        console.log("Quick Buy successful");
       },
       onError: (error) => {
-        console.error("❌ Quick Buy failed:", error);
+        console.error("Quick Buy failed:", error);
       },
     });
   };
@@ -967,323 +813,13 @@ export default function WalletTrackerContent() {
             )}
           </>
         ) : (
-          <>
-            {filteredLatestTrades.length === 0 ? (
-              <div className="flex h-64 flex-col items-center justify-center">
-                <span className="text-neutral-400">
-                  {wsConnected
-                    ? "Listening for trades from tracked wallets..."
-                    : "No live trades yet. Add wallets to start tracking!"}
-                </span>
-                <span className="mt-2 text-xs text-neutral-500">
-                  {wsConnected
-                    ? "✅ Connected and ready"
-                    : "🔴 Disconnected - Check console for details"}
-                </span>
-              </div>
-            ) : (
-              <div className="scrollbar-hide flex-1 overflow-auto">
-                {/* SVG gradient for Solana icon */}
-                <svg className="pointer-events-none absolute h-0 w-0">
-                  <defs>
-                    <linearGradient
-                      id="solana-gradient-tracker"
-                      x1="0%"
-                      y1="0%"
-                      x2="100%"
-                      y2="100%"
-                    >
-                      <stop
-                        offset="0%"
-                        style={{ stopColor: "#00FFA3", stopOpacity: 1 }}
-                      />
-                      <stop
-                        offset="100%"
-                        style={{ stopColor: "#DC1FFF", stopOpacity: 1 }}
-                      />
-                    </linearGradient>
-                  </defs>
-                </svg>
-                <table className="mt-2 w-full min-w-[600px] text-[10px] sm:min-w-[720px] sm:text-xs">
-                  <thead className="sticky top-0 z-10 bg-[#050608]">
-                    <tr className="border-b border-neutral-800/60">
-                      <th className="w-16 px-1 py-1.5 text-left text-[10px] text-neutral-400 sm:w-20 sm:px-2 sm:py-2 sm:text-sm">
-                        Time
-                      </th>
-                      <th className="w-20 px-1 py-1.5 text-left text-[10px] text-neutral-400 sm:w-24 sm:px-2 sm:py-2 sm:text-sm">
-                        Wallet
-                      </th>
-                      <th className="w-10 px-1 py-1.5 text-left text-[10px] text-neutral-400 sm:w-12 sm:px-2 sm:py-2 sm:text-sm">
-                        Side
-                      </th>
-                      <th className="w-36 px-1 py-1.5 text-left text-[10px] text-neutral-400 sm:w-48 sm:px-2 sm:py-2 sm:text-sm">
-                        Token
-                      </th>
-                      <th className="w-20 px-1 py-1.5 text-left text-[10px] text-neutral-400 sm:w-24 sm:px-2 sm:py-2 sm:text-sm">
-                        Amount
-                      </th>
-                      <th className="w-16 px-1 py-1.5 text-left text-[10px] text-neutral-400 sm:w-24 sm:px-2 sm:py-2 sm:text-sm">
-                        MC
-                      </th>
-                      <th className="w-20 px-1 py-1.5 text-center text-[10px] text-neutral-400 sm:w-28 sm:px-2 sm:py-2 sm:text-sm">
-                        Quick Buy
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {filteredLatestTrades.map((trade, idx) => {
-                      const wallet = wallets.find(
-                        (w) => w.address === trade.wallet,
-                      );
-                      const timeAgo = new Date(
-                        trade.at * 1000,
-                      ).toLocaleTimeString();
-                      const metadata = tokenMetadata.get(trade.mint);
-                      const displaySymbol =
-                        trade.symbol ||
-                        metadata?.symbol ||
-                        trade.name ||
-                        metadata?.name ||
-                        trade.mint.slice(0, 8) + "...";
-                      const displayName = trade.name || metadata?.name;
-                      const rawImg = metadata?.image;
-                      const tokenImageUrl = normalizeAssetUrl(rawImg);
-                      const fallbackAvatar = `https://ui-avatars.com/api/?name=${encodeURIComponent(displaySymbol || "T")}&background=0f1012&color=E6E7EA&size=28`;
-                      const launchpadProtocol =
-                        metadata?.launchpad_protocol?.toLowerCase() || "";
-                      const protocolIcon = getProtocolIcon(launchpadProtocol);
-                      const protocolColor = getProtocolColor(launchpadProtocol);
-                      const isMeteora = launchpadProtocol.includes("meteora");
-                      const isBonk = launchpadProtocol.includes("bonk");
-                      const isBags = launchpadProtocol.includes("bags");
-                      const isMoonit =
-                        launchpadProtocol.includes("moonit") ||
-                        launchpadProtocol.includes("moonshot") ||
-                        launchpadProtocol.includes("moonshoot");
-                      const isFullCircleImage =
-                        isMeteora || isBonk || isBags || isMoonit;
-
-                      return (
-                        <tr
-                          key={`${trade.tx}-${idx}`}
-                          className="group border-b border-neutral-800/50 transition-all duration-300"
-                          style={{
-                            backgroundColor:
-                              trade.side === "buy"
-                                ? "rgba(34, 197, 94, 0.08)"
-                                : "rgba(239, 68, 68, 0.08)",
-                          }}
-                          onMouseEnter={(e) => {
-                            e.currentTarget.style.backgroundColor =
-                              trade.side === "buy"
-                                ? "rgba(34, 197, 94, 0.15)"
-                                : "rgba(239, 68, 68, 0.15)";
-                          }}
-                          onMouseLeave={(e) => {
-                            e.currentTarget.style.backgroundColor =
-                              trade.side === "buy"
-                                ? "rgba(34, 197, 94, 0.08)"
-                                : "rgba(239, 68, 68, 0.08)";
-                          }}
-                        >
-                          <td className="w-16 px-1 py-1.5 text-[9px] text-neutral-400 sm:w-20 sm:px-2 sm:py-2 sm:text-xs">
-                            {timeAgo}
-                          </td>
-                          <td className="w-20 px-1 py-1.5 font-mono text-[9px] sm:w-24 sm:px-2 sm:py-2 sm:text-xs">
-                            <span className="truncate" title={trade.wallet}>
-                              {wallet?.emoji || "💼"}{" "}
-                              {wallet?.name || trade.wallet.slice(0, 4) + "..."}
-                            </span>
-                          </td>
-                          <td className="w-10 px-1 py-1.5 sm:w-12 sm:px-2 sm:py-2">
-                            <span
-                              className={`rounded px-0.5 py-0.5 text-[9px] font-semibold sm:px-1 sm:text-[10px] ${
-                                trade.side === "buy"
-                                  ? "bg-green-500/20 text-green-400"
-                                  : "bg-red-500/20 text-red-400"
-                              }`}
-                            >
-                              {trade.side.toUpperCase()}
-                            </span>
-                          </td>
-                          <td className="w-36 px-1 py-1.5 sm:w-48 sm:px-2 sm:py-2">
-                            <button
-                              type="button"
-                              onClick={async (e) => {
-                                e.preventDefault();
-                                e.stopPropagation();
-                                let tokenAddress = trade.pair_address;
-                                if (!tokenAddress && trade.mint) {
-                                  try {
-                                    const searchResponse = await fetch(
-                                      `${process.env.NEXT_PUBLIC_GO_SERVICE_URL}/v1/search?phrase=${encodeURIComponent(trade.mint)}&limit=1`,
-                                    );
-                                    if (searchResponse.ok) {
-                                      const searchData =
-                                        await searchResponse.json();
-                                      if (
-                                        searchData.tokens &&
-                                        searchData.tokens.length > 0
-                                      ) {
-                                        tokenAddress =
-                                          searchData.tokens[0].pair_address ||
-                                          searchData.tokens[0].poolId;
-                                      }
-                                    }
-                                  } catch (error) {
-                                    console.warn(
-                                      "Failed to resolve pair_address:",
-                                      error,
-                                    );
-                                  }
-                                }
-                                if (!tokenAddress) tokenAddress = trade.mint;
-                                window.location.href = `/trade/${tokenAddress}`;
-                              }}
-                              className="flex cursor-pointer items-center gap-1 font-mono text-[9px] text-emerald-300 transition-colors hover:text-emerald-200 sm:gap-2 sm:text-xs"
-                              title={displayName || undefined}
-                            >
-                              {/* Token icon with protocol badge */}
-                              <div className="relative flex h-5 w-5 flex-shrink-0 items-center justify-center sm:h-7 sm:w-7">
-                                <div
-                                  className="relative rounded-sm"
-                                  style={{
-                                    border: `1px solid ${protocolColor}B3`,
-                                    padding: "2px",
-                                    backgroundColor: "#06070b",
-                                  }}
-                                >
-                                  <div className="relative h-4 w-4 overflow-hidden rounded-sm sm:h-[22px] sm:w-[22px]">
-                                    <img
-                                      src={tokenImageUrl || fallbackAvatar}
-                                      alt={displayName || displaySymbol}
-                                      className="h-full w-full object-cover"
-                                      onError={(e) => {
-                                        e.currentTarget.src = fallbackAvatar;
-                                      }}
-                                    />
-                                  </div>
-                                </div>
-                                {/* Protocol badge icon */}
-                                <div
-                                  className="absolute right-0 bottom-0 flex translate-x-1/4 translate-y-1/4 transform items-center justify-center rounded-full bg-white"
-                                  style={{
-                                    width: 10,
-                                    height: 10,
-                                    border: `1px solid ${protocolColor}`,
-                                    boxShadow: `0 0 2px ${protocolColor}60`,
-                                  }}
-                                >
-                                  <img
-                                    src={protocolIcon}
-                                    alt="Protocol"
-                                    className={`${isFullCircleImage ? "h-full w-full object-cover" : "h-3/4 w-3/4 object-contain"} rounded-full`}
-                                    style={{
-                                      filter:
-                                        protocolColor === "#eab308"
-                                          ? "sepia(1) saturate(3) hue-rotate(-10deg) brightness(1.1)"
-                                          : "none",
-                                    }}
-                                  />
-                                </div>
-                              </div>
-                              <div className="flex min-w-0 items-center gap-1 text-left leading-tight sm:gap-1.5">
-                                <span className="truncate text-xs font-medium text-neutral-100 sm:text-base">
-                                  {displaySymbol}
-                                </span>
-                              </div>
-                            </button>
-                          </td>
-                          <td className="w-20 px-1 py-1.5 text-[9px] text-neutral-200 sm:w-24 sm:px-2 sm:py-2 sm:text-xs">
-                            <div className="flex items-center gap-0.5 sm:gap-1">
-                              <SiSolana
-                                className="inline-block h-2.5 w-2.5 flex-shrink-0 sm:h-3 sm:w-3"
-                                aria-hidden="true"
-                                style={{
-                                  color: "unset",
-                                  fill: "url(#solana-gradient-tracker)",
-                                  filter: "none",
-                                }}
-                              />
-                              <span className="text-[9px] sm:text-xs">
-                                {(() => {
-                                  // Display SOL amount with 4 decimal places
-                                  if (
-                                    trade.sol_spent !== null &&
-                                    trade.sol_spent !== undefined
-                                  ) {
-                                    // Check if value is in lamports (very large numbers) and convert to SOL
-                                    let solAmount = Math.abs(trade.sol_spent);
-                                    if (solAmount > 1000) {
-                                      // Likely in lamports, convert to SOL (1 SOL = 1e9 lamports)
-                                      solAmount = solAmount / 1e9;
-                                    }
-                                    return solAmount.toFixed(4);
-                                  }
-                                  // Fallback to token amount if sol_spent is not available
-                                  return `${trade.amount.toFixed(4)} tokens`;
-                                })()}
-                              </span>
-                            </div>
-                          </td>
-                          <td className="w-16 px-1 py-1.5 text-[9px] text-neutral-300 sm:w-24 sm:px-2 sm:py-2 sm:text-xs">
-                            {(() => {
-                              const marketCap =
-                                metadata?.market_cap_usd ||
-                                trade.market_cap_usd;
-                              if (!marketCap || marketCap === 0)
-                                return (
-                                  <span className="text-neutral-500">-</span>
-                                );
-                              return `$${formatMarketCap(marketCap)}`;
-                            })()}
-                          </td>
-                          <td className="w-20 px-1 py-1.5 sm:w-28 sm:px-2 sm:py-2">
-                            <div className="flex items-center justify-center">
-                              <button
-                                type="button"
-                                onClick={(e) => {
-                                  e.preventDefault();
-                                  e.stopPropagation();
-                                  handleQuickBuy(trade);
-                                }}
-                                className="z-50 flex cursor-pointer items-center justify-center gap-1 rounded-full px-2 py-1 text-[9px] font-bold whitespace-nowrap shadow-sm transition-all duration-200 ease-out sm:gap-1.5 sm:px-3 sm:py-1.5 sm:text-sm"
-                                style={{
-                                  backgroundColor: "#18c48c",
-                                  color: "#000000",
-                                  border: "1px solid rgba(0,0,0,0.15)",
-                                }}
-                                onMouseEnter={(e) => {
-                                  e.currentTarget.style.backgroundColor =
-                                    "#12a877";
-                                  e.currentTarget.style.transform =
-                                    "translateY(-1px)";
-                                  e.currentTarget.style.boxShadow =
-                                    "0 4px 14px rgba(112, 224, 176, 0.25)";
-                                }}
-                                onMouseLeave={(e) => {
-                                  e.currentTarget.style.backgroundColor =
-                                    "#18c48c";
-                                  e.currentTarget.style.transform =
-                                    "translateY(0)";
-                                  e.currentTarget.style.boxShadow = "none";
-                                }}
-                              >
-                                <HiLightningBolt className="h-2.5 w-2.5 text-black sm:h-3.5 sm:w-3.5" />
-                                <span className="text-[9px] sm:text-xs">
-                                  {quickBuyAmount} SOL
-                                </span>
-                              </button>
-                            </div>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </>
+          <LiveTradesPanel
+            trades={filteredLatestTrades}
+            wallets={wallets}
+            wsConnected={wsConnected}
+            quickBuyAmount={quickBuyAmount}
+            onQuickBuy={handleQuickBuy}
+          />
         )}
       </div>
 

@@ -645,11 +645,8 @@ export default function PositionDetailModal({
 
     if (isMonad && position.tokenAddress) {
       router.push(`/trade/monad/${position.tokenAddress}?${queryString}`);
-    } else {
-      const navigateAddress = position.pairAddress || position.tokenAddress;
-      if (navigateAddress) {
-        router.push(`/trade/${navigateAddress}?${queryString}`);
-      }
+    } else if (position.tokenAddress) {
+      router.push(`/trade/${position.tokenAddress}?${queryString}`);
     }
     onClose();
   };

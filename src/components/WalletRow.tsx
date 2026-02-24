@@ -5,8 +5,8 @@ import { toggleWalletNotifications } from "~/utils/walletTracking";
 import { SolanaIcon } from "./Footer";
 import { useUser } from "./UserContext";
 import { FiBell, FiBarChart2, FiTrash2 } from "react-icons/fi";
-import { TbChartBubble } from "react-icons/tb";
-import { IoLogoRss } from "react-icons/io5";
+// import { TbChartBubble } from "react-icons/tb";  // TODO: Re-enable when analytics feature is built
+// import { IoLogoRss } from "react-icons/io5";      // TODO: Re-enable when feed feature is built
 import { showEnhancedToast, updateEnhancedToast } from "~/utils/enhancedToast";
 
 // Chain-aware icon component
@@ -87,8 +87,8 @@ export default function WalletRow({
   const { user } = useUser();
   const [showDeleteConfirm, setShowDeleteConfirm] = React.useState(false);
   const [copied, setCopied] = React.useState(false);
-  const [analyticsEnabled, setAnalyticsEnabled] = React.useState(false);
-  const [feedEnabled, setFeedEnabled] = React.useState(false);
+  // const [analyticsEnabled, setAnalyticsEnabled] = React.useState(false);  // TODO: Re-enable when analytics feature is built
+  // const [feedEnabled, setFeedEnabled] = React.useState(false);            // TODO: Re-enable when feed feature is built
 
   // Ref to track if we've loaded from localStorage (prevents backend from overriding)
   const hasLoadedFromStorageRef = React.useRef(false);
@@ -492,7 +492,7 @@ export default function WalletRow({
               </button>
             </Tooltip>
 
-            {/* Chart Bubble Icon - Toggle Button */}
+            {/* Chart Bubble Icon - Analytics Toggle (commented out until backend analytics feature is built)
             <Tooltip
               label={analyticsEnabled ? "Analytics ON" : "Analytics OFF"}
             >
@@ -508,8 +508,9 @@ export default function WalletRow({
                 />
               </button>
             </Tooltip>
+            */}
 
-            {/* RSS Icon - Toggle Button */}
+            {/* RSS Icon - Feed Toggle (commented out until backend feed feature is built)
             <Tooltip label={feedEnabled ? "Feed ON" : "Feed OFF"}>
               <button
                 className="cursor-pointer rounded-md p-1 transition-all duration-200 hover:bg-white/[0.05] sm:p-2"
@@ -523,6 +524,7 @@ export default function WalletRow({
                 />
               </button>
             </Tooltip>
+            */}
 
             {/* Chart - Scan Address */}
             <Tooltip label="Scan Wallet">
