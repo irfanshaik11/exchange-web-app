@@ -1756,10 +1756,10 @@ const TradeHeader: React.FC<TradeHeaderProps> = ({ token, livePriceUsd, liveMark
 														</p>
 													</div>
 												</div>
-												<div className="flex items-center gap-0.5 sm:gap-1 text-violet-200">
+												{/* <div className="flex items-center gap-0.5 sm:gap-1 text-violet-200">
 													<PiRobotLight size={14} className="sm:w-4 sm:h-4" />
 													<span className="text-xs sm:text-sm text-white">0</span>
-												</div>
+												</div> */}
 											</>
 										);
 									})()}

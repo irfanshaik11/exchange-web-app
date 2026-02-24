@@ -79,7 +79,7 @@ import { useRouter } from "next/router";
 import { fetchTokenMetadata } from "~/utils/functions";
 import { LuPill, LuSearch } from "react-icons/lu";
 import Link from "next/link";
-import { CiSearch, CiTrophy } from "react-icons/ci";
+import { CiCamera, CiSearch, CiTrophy } from "react-icons/ci";
 import FastImage from "./FastImage";
 import SniperHoldingsDisplay from "./SniperHoldingsDisplay";
 // import SolanaTokenAnalytics from "./SolanaTokenAnalytics";
@@ -2008,12 +2008,12 @@ function TokenImage({
                 className="pointer-events-none absolute inset-0 rounded-md bg-black/60"
                 style={{ opacity: showImagePreview ? 1 : 0, transition: "opacity 150ms" }}
               />
-              {/* Search icon overlay on hover */}
+              {/* Camera icon overlay on hover */}
               <div
                 className="pointer-events-none absolute inset-0 flex items-center justify-center"
                 style={{ opacity: showImagePreview ? 1 : 0, transition: "opacity 150ms" }}
               >
-                <LuSearch size={20} style={{ color: "rgba(255,255,255,0.8)" }} />
+                <CiCamera size={20} style={{ color: "rgba(255,255,255,0.8)" }} />
               </div>
             </div>
           </div>

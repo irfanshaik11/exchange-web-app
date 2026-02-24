@@ -136,9 +136,11 @@ export function WatchlistProvider({ children }: { children: React.ReactNode }) {
         }
       }
 
-      // Phase 2: Fill remaining slots with trending tokens (up to DEFAULT_WATCHLIST_COUNT)
+      // Phase 2: Fill remaining slots with trending tokens
+      // Each dismissed token reduces auto-fill capacity — user removals are respected
+      const autoFillTarget = Math.max(result.length, DEFAULT_WATCHLIST_COUNT - dismissed.size);
       for (const t of wsTokens) {
-        if (result.length >= DEFAULT_WATCHLIST_COUNT) break;
+        if (result.length >= autoFillTarget) break;
         const mint = (t as any).mint || '';
         if (!mint || dismissed.has(mint) || seenMints.has(mint.toLowerCase())) continue;
         const img = extractTokenImage(t as any);
