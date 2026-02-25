@@ -28,6 +28,7 @@ import { listenForTradeEvents, transformToastToError } from '~/utils/createSolan
 import { mapTradeErrorMessage } from '~/utils/tradeErrorMessages';
 import { dispatchBalanceRefresh } from '~/utils/balanceEvents';
 import { extractTokenImage, getResolvedTokenImage } from '~/utils/images';
+import { preloadTradeChart } from '~/utils/preloadTradeChart';
 import { FaCheckCircle } from 'react-icons/fa';
 
 interface WatchlistModalProps {
@@ -927,8 +928,25 @@ export default function WatchlistModal({ open, onClose }: WatchlistModalProps) {
                     borderBottom: `1px solid ${AX.border}`,
                     backgroundColor: idx % 2 === 0 ? '#111214' : '#15161a'
                   }}
-                  onMouseEnter={(e) => { 
+                  onMouseEnter={(e) => {
                     e.currentTarget.style.backgroundColor = idx % 2 === 0 ? '#1a1b1f' : '#1c1d22';
+                    const tokenMint = (token as any).mint || tokenAddress;
+                    if (tokenMint) {
+                      preloadTradeChart(
+                        {
+                          mint: tokenMint,
+                          pairAddress: token.pair_address,
+                          chain: isMonadToken(token) ? 'monad' : 'sol',
+                          name: token.name,
+                          symbol: token.symbol,
+                          priceUsd: (token as any).price_usd,
+                          marketCapUsd: token.market_cap_usd,
+                          image: imgSrc || '',
+                          launchpadProtocol: (token as any).launchpad_protocol,
+                        },
+                        { router }
+                      );
+                    }
                   }}
                   onMouseLeave={(e) => { 
                     e.currentTarget.style.backgroundColor = idx % 2 === 0 ? '#111214' : '#15161a';

@@ -9,6 +9,7 @@ import Image from 'next/image';
 import { useSolPrice } from '~/components/SolPriceContext';
 import { fetchChainTokenMetadata, fetchPumpfunImage, isPumpfunToken, toNumber, type UnifiedTokenMetadata } from '~/utils/tokenMetadata';
 import { getProtocolBranding } from '~/utils/protocolBranding';
+import { preloadTradeChart } from '~/utils/preloadTradeChart';
 
 const DEFAULT_MON_PRICE = 0.1;
 
@@ -373,22 +374,41 @@ const Activity: React.FC<ActivityProps> = ({
                 const bTime = new Date(b.createdAt).getTime();
                 return bTime - aTime; // Descending order (newest first)
               }).map((trade, idx) => {
+              const metadata = tokenMetadata[trade.tokenAddress];
+
               const handleRowClick = () => {
                 const navigateAddress = trade.originalPairAddress || trade.pairAddress || trade.tokenAddress;
                 const isMonadTrade =
                   (trade.blockchain || '').toLowerCase() === 'monad' || currentChain === 'monad';
 
+                const queryParams = new URLSearchParams();
+                queryParams.set('chain', isMonadTrade ? 'monad' : 'sol');
+
+                // Token metadata params (optimistic loading)
+                const name = metadata?.name || trade.tokenName;
+                const symbol = metadata?.symbol || trade.tokenSymbol;
+                const mcap = metadata?.marketCapUsd ?? trade.marketCap;
+                const image = metadata?.imageUrl || trade.imageUrl;
+                const launchpad = metadata?.launchpad || metadata?.protocol || trade.launchpad;
+                const createdAt = metadata?.createdAt;
+
+                if (name) queryParams.set('_name', String(name));
+                if (symbol) queryParams.set('_symbol', String(symbol));
+                if (mcap) queryParams.set('_mcap', String(mcap));
+                if (image) queryParams.set('_image', String(image));
+                if (trade.tokenAddress) queryParams.set('_mint', trade.tokenAddress);
+                if (launchpad) queryParams.set('_launchpad_protocol', String(launchpad));
+                if (createdAt) queryParams.set('_created_at', String(createdAt));
+
                 if (isMonadTrade && trade.tokenAddress) {
-                  router.push(`/trade/monad/${trade.tokenAddress}`);
+                  router.push(`/trade/monad/${trade.tokenAddress}?${queryParams.toString()}`);
                   return;
                 }
 
                 if (navigateAddress) {
-                  router.push(`/trade/${navigateAddress}`);
+                  router.push(`/trade/${navigateAddress}?${queryParams.toString()}`);
                 }
               };
-              
-              const metadata = tokenMetadata[trade.tokenAddress];
               const protocolSource = metadata?.protocol || metadata?.launchpad || trade.launchpad || '';
               const branding = getProtocolBranding(protocolSource);
               const protocolColor = branding.color;
@@ -678,10 +698,27 @@ const Activity: React.FC<ActivityProps> = ({
               const formattedTokenAmount = tokenAmountValue ? formatSmartNumber(tokenAmountValue) : 'N/A';
               
               return (
-                <div 
-                  key={trade.id || idx} 
+                <div
+                  key={trade.id || idx}
                   className="grid gap-4 px-6 py-3 border-b border-[#2A2B33] hover:bg-[#17191E] transition-colors cursor-pointer"
                   style={{ gridTemplateColumns: '0.8fr 2fr 1.2fr 1.2fr 0.8fr 1fr' }}
+                  onMouseEnter={() => {
+                    if (!trade.tokenAddress) return;
+                    const isMonadTrade = (trade.blockchain || '').toLowerCase() === 'monad' || currentChain === 'monad';
+                    preloadTradeChart(
+                      {
+                        mint: trade.tokenAddress,
+                        pairAddress: trade.originalPairAddress || trade.pairAddress,
+                        chain: isMonadTrade ? 'monad' : 'sol',
+                        name: metadata?.name || trade.tokenName,
+                        symbol: metadata?.symbol || trade.tokenSymbol,
+                        marketCapUsd: typeof trade.marketCap === 'number' ? trade.marketCap : Number(trade.marketCap) || 0,
+                        image: metadata?.imageUrl || trade.imageUrl,
+                        launchpadProtocol: trade.launchpad,
+                      },
+                      { router }
+                    );
+                  }}
                   onClick={handleRowClick}
                 >
                   <div className="flex items-center">

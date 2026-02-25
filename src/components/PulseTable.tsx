@@ -106,9 +106,7 @@ import { dispatchBalanceRefresh } from "~/utils/balanceEvents";
 import { listenForTradeEvents, transformToastToError } from "~/utils/createSolanaToastHandler";
 import { TokenAge } from "./TokenAge";
 import { prefetchTradeData } from "~/utils/tokenCache";
-import { prefetchOHLC } from "~/hooks/useBackgroundOHLCPreload";
-import { prefetchViaWS } from "~/utils/ohlcPrefetchManager";
-import { prefetchTokenTrades } from "~/utils/rollingTradeCache";
+import { preloadTradeChart } from "~/utils/preloadTradeChart";
 import {
   showCenteredErrorToast,
   showCenteredSuccessToast,
@@ -7607,50 +7605,20 @@ function PulseTable({
                       popup.classList.add('popup-visible');
                     }
 
-                    // Start WS prefetch immediately (has internal 150ms debounce)
-                    prefetchViaWS(tokenMint);
-
-                    // PHASE 3: Defer expensive operations to idle time
-                    if (typeof requestIdleCallback !== 'undefined') {
-                      requestIdleCallback(() => {
-                        // Prefetch trade page for instant navigation
-                        router.prefetch(`/trade/${tokenMint}?${queryParams}`);
-
-                        // Cache token metadata for instant display (keyed by mint now)
-                        try {
-                          const tokenMetadata = {
-                            name: (token as any)?.name || "",
-                            symbol: (token as any)?.symbol || "",
-                            price_usd:
-                              (token as any)?.price_usd ||
-                              (token as any)?.priceUsd ||
-                              0,
-                            market_cap_usd:
-                              (token as any)?.market_cap_usd ||
-                              (token as any)?.marketCapUSD ||
-                              0,
-                            image: extractTokenImage(token as any) || "",
-                            mint: tokenMint,
-                            pair_address: pairAddress,
-                            launchpad_protocol:
-                              (token as any)?.launchpad_protocol || "",
-                            timestamp: Date.now(),
-                          };
-                          localStorage.setItem(
-                            `token_metadata_${tokenMint}`,
-                            JSON.stringify(tokenMetadata),
-                          );
-                        } catch {
-                          // Silently fail - non-critical operation
-                        }
-
-                        // Prefetch OHLC data so chart loads instantly on click
-                        prefetchOHLC(tokenMint);
-
-                        // Prefetch trade data so trades tab loads instantly on click
-                        prefetchTokenTrades(token);
-                      }, { timeout: 500 });
-                    }
+                    // Full preload pipeline: WS + route + metadata + OHLC + trades
+                    preloadTradeChart(
+                      {
+                        mint: tokenMint,
+                        pairAddress,
+                        name: (token as any)?.name,
+                        symbol: (token as any)?.symbol,
+                        priceUsd: (token as any)?.price_usd || (token as any)?.priceUsd,
+                        marketCapUsd: (token as any)?.market_cap_usd || (token as any)?.marketCapUSD,
+                        image: extractTokenImage(token as any) || "",
+                        launchpadProtocol: (token as any)?.launchpad_protocol,
+                      },
+                      { router, tradeUrl: `/trade/${tokenMint}?${queryParams}` }
+                    );
                   }}
                   onMouseLeave={(e) => {
                     // PHASE 3: Use CSS class instead of inline style

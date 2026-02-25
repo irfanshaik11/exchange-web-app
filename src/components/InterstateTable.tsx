@@ -26,6 +26,7 @@ import { formatSmartNumber, formatMarketCap, formatLamportsToSol } from '~/utils
 import SkeletonRow from './InterstateTable/SkeletonRow';
 import { fetchTokenMetadata } from '~/utils/functions';
 import { prefetchTradeData } from '~/utils/tokenCache';
+import { preloadTradeChart } from '~/utils/preloadTradeChart';
 import { withImageFallback, extractMetaImage, isMetadataUrl } from '~/utils/images';
 import { computeHashImageUrl } from '~/utils/imageHash';
 import AvatarImage from '~/components/AvatarImage';
@@ -2243,7 +2244,7 @@ export default function InterstateTable({
             sortedRows.map(({ token, i }) => {
               const handleTokenClick = () => {
                 // Navigate immediately — don't block on backfill
-                const address = token.pair_address || token.mint;
+                const address = token.mint || token.pair_address;
                 if (!address) return;
 
                 // Check if this is a Monad token
@@ -2308,15 +2309,21 @@ export default function InterstateTable({
               const handleTokenHover = () => {
                 if (hoverFired) return;
                 hoverFired = true;
-                const address = token.pair_address || token.mint;
-                if (!address) return;
-                const rIC = typeof requestIdleCallback === 'function' ? requestIdleCallback : (cb: () => void) => setTimeout(cb, 0);
-                rIC(() => {
-                  const isMonad = chain === 'monad';
-                  const url = isMonad ? `/trade/monad/${address}` : `/trade/${address}`;
-                  router.prefetch(url);
-                  prefetchTradeData(address, token.pair_address).catch(() => {});
-                });
+                if (!token.pair_address && !token.mint) return;
+                preloadTradeChart(
+                  {
+                    mint: token.mint,
+                    pairAddress: token.pair_address,
+                    chain: chain === 'monad' ? 'monad' : 'sol',
+                    name: token.name,
+                    symbol: token.symbol,
+                    marketCapUsd: token.fully_diluted_value,
+                    image: token.uri || token.logo || "",
+                    launchpadProtocol: token.launchpad_protocol,
+                    createdAt: token.created_at,
+                  },
+                  { router }
+                );
               };
 
               return (
