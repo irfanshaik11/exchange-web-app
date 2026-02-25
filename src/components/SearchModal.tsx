@@ -259,6 +259,7 @@ function resolveProtocolColor(
     token.launchpad_protocol ||
     token.launchpad_name ||
     token.protocol ||
+    token.amm ||
     ""
   ).toLowerCase();
   const mintAddress = (token.mint || "").toLowerCase();
@@ -297,9 +298,9 @@ function resolveProtocolColor(
     return "#3b82f6";
   }
 
-  // Raydium - green (matching PulseTable)
+  // Raydium - blue-purple (matching WatchlistModal, TradeHeader, LiveTradesPanel)
   if (launchpadProtocol.includes("raydium")) {
-    return DEFAULT_PROTOCOL_COLOR;
+    return "#5c51f7";
   }
 
   // Moonit/Moonshot - yellow
@@ -348,6 +349,7 @@ function resolveProtocolIcon(
     token.launchpad_protocol ||
     token.launchpad_name ||
     token.protocol ||
+    token.amm ||
     ""
   ).toLowerCase();
   const mintAddress = (token.mint || "").toLowerCase();
@@ -640,8 +642,8 @@ const SearchModalContent = React.memo(function SearchModalContent({
 
   /**
    * Calculate composite score for smart sorting
-   * Combines: relevance (query match), recency, and volume
-   * Higher scores = better ranking
+   * Combines: relevance (0-10K), recency (0-2K), liquidity (0-500), market cap (0-5K), volume (0-3K)
+   * Higher scores = better ranking (max ~20,500)
    */
   const calculateSmartScore = (token: Token, searchQuery: string): number => {
     const q = searchQuery.toLowerCase().trim();
@@ -692,21 +694,6 @@ const SearchModalContent = React.memo(function SearchModalContent({
       recencyScore = 100; // Older than 3 days
     }
 
-    // === VOLUME SCORE (0-1500) with ZERO PENALTY ===
-    // Use log scale since volume varies widely (from 0 to millions)
-    // IMPORTANT: 0 volume tokens get a significant penalty to push them down
-    const volume = token.volume_1h || 0;
-    let volumeScore = 0;
-    let zeroVolumePenalty = 0;
-    if (volume > 0) {
-      // log10(1000) = 3, log10(1000000) = 6
-      // Scale: $100 vol = ~300pts, $10k vol = ~600pts, $1M vol = ~900pts
-      volumeScore = Math.min(1500, Math.log10(volume + 1) * 250);
-    } else {
-      // Penalty for 0 volume - pushes these tokens below active ones
-      zeroVolumePenalty = 5000;
-    }
-
     // === LIQUIDITY BONUS (0-500) ===
     // Tokens with good liquidity are more tradeable
     const liquidity = token.total_liquidity_usd || 0;
@@ -719,7 +706,25 @@ const SearchModalContent = React.memo(function SearchModalContent({
       liquidityBonus = 100;
     }
 
-    return relevanceScore + recencyScore + volumeScore + liquidityBonus - zeroVolumePenalty;
+    // === MARKET CAP SCORE (0-5000) — continuous log scale ===
+    // log10 scaling: $10K→2800, $100K→3500, $1M→4200, $7.5M→4811, $10M→4900, $100M→5000(cap)
+    const marketCap = token.fully_diluted_value || 0;
+    let marketCapScore = 0;
+    if (marketCap > 0) {
+      marketCapScore = Math.min(5000, Math.log10(marketCap) * 700);
+    }
+
+    // === VOLUME SCORE (0-3000) — continuous log scale ===
+    // log10 scaling: $100/1h→1000, $1K→1500, $10K→2000, $100K→2500, $1M+→3000(cap)
+    // When only 24h volume available, divide by 24 to approximate 1h equivalent
+    const { volume: rawVolume, is24h } = resolveSearchVolume(token);
+    const effectiveVolume = is24h ? rawVolume / 24 : rawVolume;
+    let volumeScore = 0;
+    if (effectiveVolume > 0) {
+      volumeScore = Math.min(3000, Math.log10(effectiveVolume) * 500);
+    }
+
+    return relevanceScore + recencyScore + liquidityBonus + marketCapScore + volumeScore;
   };
 
   // Helper function to sort tokens on the frontend
@@ -821,8 +826,8 @@ const SearchModalContent = React.memo(function SearchModalContent({
         // Use different endpoint based on chain
         const isMonad = chain === "monad";
         const endpoint = isMonad
-          ? `/api/token-service/search-monad?q=${encodeURIComponent(searchQuery.trim())}&limit=50`
-          : `/api/token-service/search?phrase=${encodeURIComponent(searchQuery.trim())}&limit=50`;
+          ? `/api/token-service/search-monad?q=${encodeURIComponent(searchQuery.trim())}&limit=100`
+          : `/api/token-service/search?phrase=${encodeURIComponent(searchQuery.trim())}&limit=100`;
 
         const response = await fetch(endpoint, { signal: controller.signal });
 
