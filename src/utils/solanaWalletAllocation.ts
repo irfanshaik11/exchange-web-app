@@ -1,4 +1,5 @@
 import { tradeBuy } from "./api";
+import { broadcastTradeCompleted } from "./tradeEvents";
 
 type WalletListItem = {
   id: string;
@@ -672,6 +673,15 @@ export async function executeSolanaMultiBuy({
     const firstError = results[0]?.error || new Error("All wallet trades failed");
     throw firstError;
   }
+
+  // Broadcast trade completion for portfolio auto-refresh
+  const firstTxHash = successfulResults[0]?.result?.hash || successfulResults[0]?.result?.txid;
+  broadcastTradeCompleted({
+    tokenAddress: baseMint,
+    tradeType: 'buy',
+    chain: 'sol',
+    txHash: firstTxHash || undefined,
+  });
 
   return {
     allocations: allocationsToUse,

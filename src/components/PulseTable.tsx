@@ -102,6 +102,7 @@ import {
 } from "~/utils/api";
 import { getPoolTypeFromToken } from "~/utils/poolTypeDetection";
 import { mapTradeErrorMessage } from "~/utils/tradeErrorMessages";
+import { dispatchBalanceRefresh } from "~/utils/balanceEvents";
 import { listenForTradeEvents, transformToastToError } from "~/utils/createSolanaToastHandler";
 import { TokenAge } from "./TokenAge";
 import { prefetchTradeData } from "~/utils/tokenCache";
@@ -3487,6 +3488,7 @@ function PulseTable({
           }),
         );
       }
+      dispatchBalanceRefresh('sol');
 
       return { success: true };
     } catch (error: any) {
@@ -3869,6 +3871,13 @@ function PulseTable({
         if (filtered.length !== beforeLen) {
           // Apply filters and limits with blacklisted tokens removed
           if (isNewPairs || isMigrated) {
+            if (isMigrated) {
+              filtered.sort((a, b) => {
+                const aTs = getTokenTimestamp(a, MIGRATED_TIMESTAMP_FIELDS);
+                const bTs = getTokenTimestamp(b, MIGRATED_TIMESTAMP_FIELDS);
+                return bTs - aTs; // youngest first
+              });
+            }
             return filtered.slice(0, 100);
           } else {
             return filterNonZeroLiquidity(filtered).slice(0, 100);
@@ -3878,6 +3887,13 @@ function PulseTable({
 
       // Apply filters and limits
       if (isNewPairs || isMigrated) {
+        if (isMigrated) {
+          merged.sort((a, b) => {
+            const aTs = getTokenTimestamp(a, MIGRATED_TIMESTAMP_FIELDS);
+            const bTs = getTokenTimestamp(b, MIGRATED_TIMESTAMP_FIELDS);
+            return bTs - aTs; // youngest first
+          });
+        }
         return merged.slice(0, 100);
       } else {
         return filterNonZeroLiquidity(merged).slice(0, 100);

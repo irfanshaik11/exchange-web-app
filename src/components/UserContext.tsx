@@ -535,7 +535,8 @@ export function UserProvider({ children }: { children: ReactNode }) {
       }
 
       // Prevent multiple simultaneous balance checks for the same address
-      if (balanceCheckInProgressRef.current[checkKey]) {
+      // force: true bypasses the lock so init effects are never blocked by a competing non-forced fetch
+      if (balanceCheckInProgressRef.current[checkKey] && !options?.force) {
         console.log(`⏸️ Balance check already in progress for ${checkKey}`);
         return null;
       }
@@ -616,11 +617,6 @@ export function UserProvider({ children }: { children: ReactNode }) {
                 4
               )} to ${newBalance.toFixed(4)})`
             );
-            showEnhancedToast("success", `Deposit received`, {
-              title: "🎉 Balance Updated",
-              description: `+${depositAmount.toFixed(4)} SOL`,
-              duration: 5000,
-            });
             setLastNotifiedBalance((prev) => ({
               ...prev,
               [targetAddress]: newBalance,
@@ -818,24 +814,9 @@ export function UserProvider({ children }: { children: ReactNode }) {
     [primaryWalletAddresses.solana, primaryWalletAddresses.ethereum]
   );
 
-  useEffect(() => {
-    if (!user) return;
-
-    if (primaryWalletAddresses.solana) {
-      refreshBalance({ chain: "sol", address: primaryWalletAddresses.solana });
-    }
-    if (primaryWalletAddresses.ethereum) {
-      refreshBalance({
-        chain: "monad",
-        address: primaryWalletAddresses.ethereum,
-      });
-    }
-  }, [
-    primaryWalletAddresses.solana,
-    primaryWalletAddresses.ethereum,
-    user,
-    refreshBalance,
-  ]);
+  // Removed redundant balance-fetch effect that raced with initializeAndStartPolling below.
+  // That effect called refreshBalance without force:true, claimed balanceCheckInProgressRef,
+  // and blocked the init effect (which has the correct flags) from updating chainBalances.
 
   const refreshUser = useCallback(async () => {
     const token = Cookies.get("token");
@@ -1025,7 +1006,7 @@ export function UserProvider({ children }: { children: ReactNode }) {
           const address = primaryWalletAddresses.solana || user.publicKey;
           if (!address) return;
 
-          const res = await refreshBalance({ chain: "sol", address });
+          const res = await refreshBalance({ chain: "sol", address, force: true, updateChainBalance: true });
 
           if (!res) {
             console.warn("Failed to initialize Solana balance");
@@ -1054,6 +1035,12 @@ export function UserProvider({ children }: { children: ReactNode }) {
         } catch (error) {
           console.error("Failed to initialize balance:", error);
         }
+
+        // Also initialize Monad/Ethereum balance if available
+        const ethAddress = primaryWalletAddresses.ethereum;
+        if (ethAddress) {
+          await refreshBalance({ chain: "monad", address: ethAddress, force: true, updateChainBalance: true });
+        }
       };
 
       initializeAndStartPolling();
@@ -1077,7 +1064,28 @@ export function UserProvider({ children }: { children: ReactNode }) {
         }
       };
     }
-  }, [user?.publicKey, primaryWalletAddresses.solana, refreshBalance]);
+  }, [user?.publicKey, primaryWalletAddresses.solana, primaryWalletAddresses.ethereum, refreshBalance]);
+
+  // Listen for balance-refresh events dispatched from trade surfaces
+  useEffect(() => {
+    if (!user) return;
+    let debounceTimer: NodeJS.Timeout | null = null;
+    const handleBalanceRefresh = (event: Event) => {
+      const detail = (event as CustomEvent).detail;
+      const chain = detail?.chain || 'sol';
+      if (debounceTimer) clearTimeout(debounceTimer);
+      debounceTimer = setTimeout(() => {
+        refreshBalance({ chain, force: true, updateChainBalance: true }).catch((err) => {
+          console.warn('[UserContext] Failed to refresh balance from event:', err);
+        });
+      }, 500);
+    };
+    window.addEventListener('balance-refresh', handleBalanceRefresh);
+    return () => {
+      window.removeEventListener('balance-refresh', handleBalanceRefresh);
+      if (debounceTimer) clearTimeout(debounceTimer);
+    };
+  }, [user?.publicKey, refreshBalance]);
 
   return (
     <UserContext.Provider

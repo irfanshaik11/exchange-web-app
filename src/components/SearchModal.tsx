@@ -40,6 +40,7 @@ import { getResolvedTokenImage, resolveTokenImage } from "~/utils/images";
 import { fetchVerifiedPairAddress } from "~/hooks/useSingleTokenPolling";
 import { listenForTradeEvents, transformToastToError } from "~/utils/createSolanaToastHandler";
 import { mapTradeErrorMessage } from "~/utils/tradeErrorMessages";
+import { dispatchBalanceRefresh } from "~/utils/balanceEvents";
 // TODO: SOCIAL LINKS NOT PRESENT FOR NOW
 // import { PiTelegramLogo } from "react-icons/pi";
 // import { TiDocumentText } from "react-icons/ti";
@@ -1190,6 +1191,7 @@ const SearchModalContent = React.memo(function SearchModalContent({
           }),
         );
       }
+      dispatchBalanceRefresh('sol');
     } catch (error: any) {
       tradeErrored = true;
       cleanupTradeListener();

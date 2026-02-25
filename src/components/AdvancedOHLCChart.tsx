@@ -780,8 +780,8 @@ const AdvancedOHLCChart: React.FC<AdvancedOHLCChartProps> = ({
 
       // Create the lines
       (async () => {
-        await createLine("avgEntry", entryPrice, "Avg Entry", "#f2c94c");
-        await createLine("avgExit", exitPrice, "Avg Exit", "#4aa3ff");
+        // await createLine("avgEntry", entryPrice, "Avg Entry", "#f2c94c");
+        // await createLine("avgExit", exitPrice, "Avg Exit", "#4aa3ff");
 
         // For Max MC line, show the value in the format matching the current display mode
         // In MC mode: "Max MC: $5.00M" (market cap with M/B suffix)

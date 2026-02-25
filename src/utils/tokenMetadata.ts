@@ -17,6 +17,7 @@ interface FetchOptions {
 }
 
 const DEFAULT_MONAD_ENDPOINT = "/api/token-service/monad/token";
+const DEFAULT_TOKEN_BY_MINT_ENDPOINT = "/api/token-service/token";
 const DEFAULT_TRADE_VIEW_ENDPOINT = "/api/token-service/trade-view";
 
 // Standard ERC-20 ABI for name() and symbol()
@@ -342,56 +343,80 @@ async function fetchSolanaMetadata(
   address: string,
   options: FetchOptions,
 ): Promise<UnifiedTokenMetadata | null> {
-  const endpoints: string[] = [
-    `${DEFAULT_TRADE_VIEW_ENDPOINT}?mint_address=${encodeURIComponent(address)}`,
-  ];
-
-  if (options.pairAddress) {
-    endpoints.push(`${DEFAULT_TRADE_VIEW_ENDPOINT}?pair_address=${encodeURIComponent(options.pairAddress)}`);
-  }
-
   let lastError: unknown = null;
 
-  for (const endpoint of endpoints) {
+  // Primary: /v1/token/{mint} via proxy — works with just the mint address
+  try {
+    const response = await fetch(
+      `${DEFAULT_TOKEN_BY_MINT_ENDPOINT}/${encodeURIComponent(address)}`,
+      { signal: options.signal },
+    );
+
+    if (response.ok) {
+      const data = await response.json();
+      const token = data?.token || data?.data || data;
+      const market = data?.marketData || {};
+
+      if (token && typeof token === "object" && Object.keys(token).length > 0) {
+        return {
+          address: token.mint_address || token.address || address,
+          name: token.name || undefined,
+          symbol: token.symbol || undefined,
+          protocol: token.launchpad_protocol || token.protocol || undefined,
+          launchpad: token.launchpad_protocol || token.protocol || undefined,
+          imageUrl: token.image_url || token.image || token.logo || token.uri || undefined,
+          createdAt: token.created_timestamp || token.created_at,
+          priceUsd: toOptionalNumber(market.price_usd ?? token.usd_price ?? token.price_usd),
+          marketCapUsd: toOptionalNumber(market.market_cap_usd ?? token.market_cap_usd ?? token.market_cap),
+          migrated_pool_address: token.migrated_pool_address || token.pair_address || undefined,
+        };
+      }
+    } else {
+      lastError = new Error(`Token-by-mint service responded with ${response.status}`);
+    }
+  } catch (error) {
+    lastError = error;
+  }
+
+  // Fallback: trade-view with pair_address (only if pairAddress is available)
+  if (options.pairAddress) {
     try {
-      const response = await fetch(endpoint, { signal: options.signal });
-      if (!response.ok) {
-        lastError = new Error(`Token service responded with ${response.status}`);
-        continue;
+      const response = await fetch(
+        `${DEFAULT_TRADE_VIEW_ENDPOINT}?pair_address=${encodeURIComponent(options.pairAddress)}`,
+        { signal: options.signal },
+      );
+
+      if (response.ok) {
+        const payload = await response.json();
+        const token = payload?.token || payload?.data || payload;
+
+        if (token) {
+          return {
+            address: token.mint_address || token.mintAddress || token.address || address,
+            name: token.name || undefined,
+            symbol: token.symbol || undefined,
+            protocol:
+              token.launchpad_protocol ||
+              token.protocol ||
+              token.launchpadName ||
+              token.amm ||
+              undefined,
+            launchpad:
+              token.launchpad_protocol ||
+              token.protocol ||
+              token.launchpadName ||
+              token.amm ||
+              undefined,
+            imageUrl: token.uri || token.image || token.logo || undefined,
+            createdAt: token.created_timestamp || token.createdAt,
+            priceUsd: toOptionalNumber(token.price_usd ?? token.priceUsd),
+            marketCapUsd: toOptionalNumber(token.market_cap_usd ?? token.market_cap),
+            migrated_pool_address: token.migrated_pool_address || token.pair_address || undefined,
+          };
+        }
+      } else {
+        lastError = new Error(`Trade-view service responded with ${response.status}`);
       }
-
-      const payload = await response.json();
-      const token =
-        payload?.token ||
-        payload?.data ||
-        payload;
-
-      if (!token) {
-        continue;
-      }
-
-      return {
-        address: token.mint_address || token.mintAddress || token.address || address,
-        name: token.name || undefined,
-        symbol: token.symbol || undefined,
-        protocol:
-          token.launchpad_protocol ||
-          token.protocol ||
-          token.launchpadName ||
-          token.amm ||
-          undefined,
-        launchpad:
-          token.launchpad_protocol ||
-          token.protocol ||
-          token.launchpadName ||
-          token.amm ||
-          undefined,
-        imageUrl: token.uri || token.image || token.logo || undefined,
-        createdAt: token.created_timestamp || token.createdAt,
-        priceUsd: toOptionalNumber(token.price_usd ?? token.priceUsd),
-        marketCapUsd: toOptionalNumber(token.market_cap_usd ?? token.market_cap),
-        migrated_pool_address: token.migrated_pool_address || token.pair_address || undefined,
-      };
     } catch (error) {
       lastError = error;
     }

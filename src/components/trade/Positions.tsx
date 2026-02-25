@@ -12,7 +12,7 @@ import Image from 'next/image';
 import SellPopup from '../SellPopup';
 import { fetchChainTokenMetadata, fetchPumpfunImage, isPumpfunToken, type UnifiedTokenMetadata } from '~/utils/tokenMetadata';
 import { getProtocolBranding } from '~/utils/protocolBranding';
-import { usePositionPrices } from '~/hooks/usePositionPrices';
+
 import PositionDetailModal from './PositionDetailModal';
 import toast from 'react-hot-toast';
 import { validateSolanaSell, showTradeValidationError } from '~/utils/preTradeValidation';
@@ -22,9 +22,10 @@ import { getPoolTypeFromToken } from '~/utils/poolTypeDetection';
 import { normalizeMonadAddress } from '~/utils/normalizeMonadAddress';
 import { broadcastMonadQuickTrade } from '~/utils/monadTradeEvents';
 import { listenForTradeEvents, transformToastToError } from '~/utils/createSolanaToastHandler';
+import { broadcastTradeCompleted, TRADE_COMPLETED_EVENT, type TradeCompletedDetail } from '~/utils/tradeEvents';
 import { formatMonadError } from '~/utils/monadError';
 import { useUser } from '../UserContext';
-import { fetchVerifiedPairAddress } from '~/hooks/useSingleTokenPolling';
+import { dispatchBalanceRefresh } from '~/utils/balanceEvents';
 
 type TokenMetadata = UnifiedTokenMetadata & {
   timestamp?: number;
@@ -184,6 +185,10 @@ const Positions: React.FC<PositionsProps> = ({
   const fetchPositionsRef = useRef<(() => Promise<void>) | null>(null);
   // Ref to track if a fetch is currently in progress
   const isFetchingRef = useRef(false);
+  // Ref to track last trade timestamp (for empty-array guard)
+  const lastTradeTimestampRef = useRef<number>(0);
+  // Ref for debouncing position fetches
+  const debouncedFetchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Keep refs in sync with state
   useEffect(() => {
@@ -541,6 +546,8 @@ const Positions: React.FC<PositionsProps> = ({
             const explorerUrl = txHash ? `https://monadvision.com/tx/${txHash}` : undefined;
             toastControls.markSuccess(explorerUrl);
             broadcastMonadQuickTrade(tokenAddress, 'sell');
+            broadcastTradeCompleted({ tokenAddress, tradeType: 'sell', chain: 'monad', txHash: txHash || undefined });
+            dispatchBalanceRefresh('monad');
             refreshPositions();
           } else {
             const errorMessage = formatMonadError((result as any)?.error);
@@ -548,81 +555,26 @@ const Positions: React.FC<PositionsProps> = ({
             return;
           }
         } else {
-          // CRITICAL: Use CACHED pool resolution (Redis-backed) for fast, reliable pool lookups
-          // This handles graduated tokens and provides sub-10ms response for cache hits
-          let verifiedPoolAddress = position.pairAddress;
+          // Jupiter Ultra routes by token address — pool resolution is NOT needed for primary sell path.
+          // Use position's existing data directly. Backend SDK fallback has its own lazy pool discovery.
+          let verifiedPoolAddress = position.pairAddress || '';
           let poolSource = 'position';
-          let poolType = '';
 
+          // Derive poolType from position metadata (no async call needed)
+          const effectiveProtocol = tokenMeta?.protocol || position.launchpad || '';
+          const poolType = getPoolTypeFromToken({
+            mint: position.tokenAddress,
+            pair_address: verifiedPoolAddress,
+            launchpad_protocol: effectiveProtocol,
+          } as any);
+
+          // Fire-and-forget: warm the Redis pool cache for future lookups (non-blocking)
           if (position.tokenAddress) {
-            console.log(`[Positions] 🔍 Resolving pool for sell via cached API: ${position.tokenAddress}`);
-
-            // Use the cached pool resolution API - much faster than direct DexScreener calls
-            // Cache is shared across all users, so one resolution benefits everyone
-            try {
-              const resolvedPool = await resolvePool(
-                position.tokenAddress,
-                false, // Don't force refresh - use cache
-                position.launchpad || undefined // Optional hint
-              );
-
-              if (resolvedPool) {
-                console.log(`[Positions] ✅ Pool resolved: ${resolvedPool.poolAddress} (${resolvedPool.poolType}, ${resolvedPool.responseTimeMs}ms, ${resolvedPool.cacheHit ? 'CACHE HIT' : 'FRESH'})`);
-
-                // Check if token graduated (stored pool differs from resolved pool)
-                if (position.pairAddress && resolvedPool.poolAddress !== position.pairAddress) {
-                  console.log(`[Positions] 🎓 Token appears to have graduated!`);
-                  console.log(`   Old pool (stored): ${position.pairAddress}`);
-                  console.log(`   New pool (active): ${resolvedPool.poolAddress}`);
-                  if (resolvedPool.isGraduated) {
-                    console.log(`   ✅ Confirmed graduated token`);
-                  }
-                }
-
-                verifiedPoolAddress = resolvedPool.poolAddress;
-                poolType = resolvedPool.poolType;
-                poolSource = `cached-${resolvedPool.source}`;
-              } else {
-                console.log(`[Positions] ⚠️ Cached pool resolution returned null, falling back to token service...`);
-              }
-            } catch (cacheError: any) {
-              console.warn(`[Positions] Cached pool resolution failed:`, cacheError?.message || cacheError);
-            }
-
-            // Fallback to token service if cached resolution failed
-            if (!poolType || poolSource === 'position') {
-              console.log(`[Positions] Trying token service fallback...`);
-              const fetchedAddress = await fetchVerifiedPairAddress(position.tokenAddress);
-              if (fetchedAddress) {
-                verifiedPoolAddress = fetchedAddress;
-                poolSource = 'token-service';
-              }
-            }
+            resolvePool(position.tokenAddress, false, position.launchpad || undefined)
+              .catch(() => {});
           }
 
-          console.log(`[Positions] Using pool address: ${verifiedPoolAddress} (source: ${poolSource})`);
-
-          // Final validation - let backend discover if we still don't have a valid pool
-          const userWalletAddress = user?.publicKey || '';
-          if (!verifiedPoolAddress ||
-              verifiedPoolAddress === position.tokenAddress ||
-              verifiedPoolAddress === userWalletAddress) {
-            console.log(`[Positions] ⚠️ Pool address looks invalid (${verifiedPoolAddress}), letting backend discover pool`);
-            verifiedPoolAddress = position.pairAddress || '';
-            poolSource = 'backend-discovery';
-          }
-
-          // If poolType not set from cache, derive from token metadata
-          if (!poolType) {
-            const effectiveProtocol = tokenMeta?.protocol || position.launchpad || '';
-            poolType = getPoolTypeFromToken({
-              mint: position.tokenAddress,
-              pair_address: verifiedPoolAddress,
-              launchpad_protocol: effectiveProtocol,
-            } as any);
-          }
-
-          console.log(`[Positions] 🎯 Pool type for sell: "${poolType}"`);
+          console.log(`[Positions] 🎯 Sell: pool=${verifiedPoolAddress} type="${poolType}" (source: ${poolSource}, no pre-resolve wait)`);
 
           const sellResult = await tradeSellPercentage(
             {
@@ -669,10 +621,17 @@ const Positions: React.FC<PositionsProps> = ({
             }));
           }
 
-          // Delay refresh to allow backend to commit the transaction
-          setTimeout(() => {
-            refreshPositions();
-          }, 1500);
+          // Broadcast trade completion for portfolio auto-refresh
+          broadcastTradeCompleted({
+            tokenAddress: position.tokenAddress,
+            tradeType: 'sell',
+            chain: 'sol',
+            txHash: sellResult?.hash || undefined,
+            sellPercentage: percent,
+          });
+          dispatchBalanceRefresh('sol');
+          // Note: broadcastTradeCompleted above triggers TRADE_COMPLETED_EVENT listener
+          // which handles debounced refetch — no need for redundant refreshPositions() here
         }
       } catch (error: any) {
         // Check for POOL_GRADUATED error (bonding curve completed, liquidity migrated)
@@ -768,12 +727,16 @@ const Positions: React.FC<PositionsProps> = ({
     );
   }, [positions]);
 
-  // Fetch live prices for active positions (DISABLED - endpoint not implemented yet)
-  const { prices: livePrices } = usePositionPrices(activeTokenAddresses, {
-    enabled: false, // Disabled until /api/codex/market-data endpoint is implemented
-    refreshInterval: 2000, // Update every 2 seconds for faster updates
-    chain: currentChain,
-  });
+  // Build live prices from backend position data (currentPrice comes from Go token-service)
+  const livePrices = useMemo(() => {
+    const priceMap: Record<string, number> = {};
+    positions.forEach((pos) => {
+      if (pos.currentPrice && pos.currentPrice > 0) {
+        priceMap[pos.tokenAddress] = pos.currentPrice;
+      }
+    });
+    return priceMap;
+  }, [positions]);
 
   const mergeWithFallback = useCallback(
     (position: PositionRow): PositionRow => {
@@ -1148,19 +1111,17 @@ const Positions: React.FC<PositionsProps> = ({
         let shouldUpdate = true;
 
         if (reversedPositions.length === 0) {
-          // API returned empty - check if we should preserve existing
-          // Use ref to get current positions (avoids stale closure)
           const currentPositions = positionsRef.current;
           const hasEverLoaded = hasEverLoadedRef.current;
+          const hadRecentTrade = lastTradeTimestampRef.current > 0 &&
+            (Date.now() - lastTradeTimestampRef.current) < 15000;
 
-          // Preserve existing positions if:
-          // 1. We have positions currently displayed, OR
-          // 2. We've ever successfully loaded positions (prevents clearing after temporary API error)
-          if (currentPositions.length > 0 || hasEverLoaded) {
-            console.log(`[Positions] ⚠️ API returned empty - preserving (current: ${currentPositions.length}, hasEverLoaded: ${hasEverLoaded})`);
-            shouldUpdate = false; // Don't update state or cache
-          } else {
-            console.log(`[Positions] ℹ️ First load returned empty - accepting (user has no positions)`);
+          if (currentPositions.length === 0 || hadRecentTrade) {
+            // Trust API: user has no positions or just completed a trade
+            shouldUpdate = true;
+          } else if (currentPositions.length > 0 && hasEverLoaded) {
+            console.log(`[Positions] ⚠️ API returned empty during background poll — preserving existing`);
+            shouldUpdate = false;
           }
         }
 
@@ -1169,16 +1130,20 @@ const Positions: React.FC<PositionsProps> = ({
           onPositionsChange(positionsToUse);
 
           // Save to localStorage cache for instant loading when navigating back
-          if (!skipFetch && typeof window !== 'undefined' && positionsToUse.length > 0) {
+          if (!skipFetch && typeof window !== 'undefined') {
             try {
-              const payload = {
-                data: positionsToUse,
-                timestamp: Date.now(),
-              };
-              window.localStorage.setItem(positionsCacheKey, JSON.stringify(payload));
-              console.log(`[Positions] 💾 Cached ${positionsToUse.length} positions to localStorage`);
+              if (positionsToUse.length > 0) {
+                const payload = {
+                  data: positionsToUse,
+                  timestamp: Date.now(),
+                };
+                window.localStorage.setItem(positionsCacheKey, JSON.stringify(payload));
+                console.log(`[Positions] 💾 Cached ${positionsToUse.length} positions to localStorage`);
+              } else {
+                window.localStorage.removeItem(positionsCacheKey);
+              }
             } catch (error) {
-              console.warn(`[Positions] Failed to cache positions:`, error);
+              console.warn(`[Positions] Failed to update positions cache:`, error);
             }
           }
 
@@ -1199,6 +1164,15 @@ const Positions: React.FC<PositionsProps> = ({
     // Store function reference for retry logic
     fetchPositionsRef.current = fetchPositions;
 
+    // Debounced fetch to coalesce rapid-fire fetch requests (e.g. sell triggers 3 events)
+    const debouncedFetchPositions = (delayMs: number = 500) => {
+      if (debouncedFetchTimerRef.current) clearTimeout(debouncedFetchTimerRef.current);
+      debouncedFetchTimerRef.current = setTimeout(() => {
+        debouncedFetchTimerRef.current = null;
+        fetchPositions();
+      }, delayMs);
+    };
+
     fetchPositions();
 
     // Auto-refresh every 5 seconds to get latest positions
@@ -1207,21 +1181,52 @@ const Positions: React.FC<PositionsProps> = ({
     }, 5000);
 
     // Listen for trade events from other components (TradeActionPanel, InstantTradeModal)
-    // This ensures Positions refreshes when a sell happens elsewhere
     const handleQuickTradeEvent = (event: Event) => {
       const customEvent = event as CustomEvent<{ tokenAddress: string }>;
       console.log(`[Positions] 📡 Received solanaQuickTrade event for ${customEvent.detail?.tokenAddress}`);
-      // Delay slightly to let backend commit the transaction
-      setTimeout(() => {
-        fetchPositions();
-      }, 1500);
+      debouncedFetchPositions(500);
     };
 
     window.addEventListener('solanaQuickTrade', handleQuickTradeEvent);
 
+    // Also listen for unified trade-completed events (portfolio auto-refresh)
+    const handleTradeCompleted = (event: Event) => {
+      const detail = (event as CustomEvent<TradeCompletedDetail>).detail;
+      lastTradeTimestampRef.current = Date.now();
+      if (detail?.tradeType === 'sell' && detail.sellPercentage && detail.tokenAddress) {
+        setPositions((prev) =>
+          prev
+            .map((p) => {
+              if (p.tokenAddress === detail.tokenAddress) {
+                const soldFrac = detail.sellPercentage! / 100;
+                const newRemaining = p.remaining * (1 - soldFrac);
+                if (soldFrac >= 0.99 || newRemaining < 0.0001) {
+                  return { ...p, remaining: 0, _shouldRemove: true } as any;
+                }
+                return { ...p, remaining: newRemaining };
+              }
+              return p;
+            })
+            .filter((p) => !(p as any)._shouldRemove)
+        );
+      }
+      debouncedFetchPositions(500);
+    };
+    window.addEventListener(TRADE_COMPLETED_EVENT, handleTradeCompleted);
+
+    // Listen for WS-driven position change signals (cache already invalidated on backend)
+    const handlePositionsChanged = () => {
+      lastTradeTimestampRef.current = Date.now();
+      debouncedFetchPositions(200); // Short delay — cache is already invalidated
+    };
+    window.addEventListener('solanaPositionsChanged', handlePositionsChanged);
+
     return () => {
       clearInterval(intervalId);
+      if (debouncedFetchTimerRef.current) clearTimeout(debouncedFetchTimerRef.current);
       window.removeEventListener('solanaQuickTrade', handleQuickTradeEvent);
+      window.removeEventListener(TRADE_COMPLETED_EVENT, handleTradeCompleted);
+      window.removeEventListener('solanaPositionsChanged', handlePositionsChanged);
     };
   }, [userId, onPositionsChange, skipFetch, blockchain, requestMetadataForTokens, positionsCacheKey]);
 
@@ -1591,11 +1596,6 @@ const Positions: React.FC<PositionsProps> = ({
                     : `${displayPnl >= 0 ? '+' : ''}$${formatSmallPrice(Math.abs(displayPnl))}`
                   }
                   <span className="ml-1 text-xs">({formatSmallPrice(displayPnlPercentage)}%)</span>
-                  {currentPrice > 0 && (
-                    <span className="ml-1 text-[10px] text-neutral-500" title="Live price update">
-                      ●
-                    </span>
-                  )}
                 </td>
                 <td className="px-2 py-2">
                   <div className="flex items-center gap-2">

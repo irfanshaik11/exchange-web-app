@@ -579,37 +579,31 @@ const TradeHeader: React.FC<TradeHeaderProps> = ({ token, livePriceUsd, liveMark
 	const isOverSearchButton = useRef(false);
 	const searchMenuRef = useRef<HTMLDivElement>(null);
 
-	// State for fetched age from search endpoint
+	// State for fetched age from Monad search endpoint (Solana uses wsTokenInfo.created_at directly)
 	const [fetchedCreatedAt, setFetchedCreatedAt] = useState<
 		string | number | null
 	>(null);
 	const fetchingAgeRef = useRef(false);
-
-	// Track last valid age to prevent overwriting with invalid values
-	const lastValidAgeRef = useRef<string | null>(null);
-	const lastValidTokenMintRef = useRef<string | null>(null);
 
 	// Reset fetched age when token changes so stale data doesn't bleed across navigations
 	const tokenIdentity = token?.mint || token?.pair_address || (token as any)?.address;
 	useEffect(() => {
 		setFetchedCreatedAt(null);
 		fetchingAgeRef.current = false;
-		lastValidAgeRef.current = null;
-		lastValidTokenMintRef.current = null;
 	}, [tokenIdentity]);
 
-	// Check if we have age data (include launch_time which backend often uses instead of created_at)
-	// Use normalizeTimestampMs to reject zero-value timestamps like "0001-01-01T00:00:00Z"
-	const hasAge =
+	// For Monad tokens: check REST token prop fields as before
+	const monadHasAge = isMonadContext && (
 		normalizeTimestampMs((token as any).created_at) ||
 		normalizeTimestampMs((token as any).createdAt) ||
 		normalizeTimestampMs((token as any).CreatedAt) ||
 		normalizeTimestampMs((token as any).launch_time) ||
-		fetchedCreatedAt;
+		fetchedCreatedAt
+	);
 
-	// Fetch age from search endpoint if missing (for both Solana and Monad tokens)
+	// Fetch age from search endpoint — Monad only (Solana gets created_at from WebSocket snapshot)
 	useEffect(() => {
-		if (hasAge || fetchingAgeRef.current) return;
+		if (!isMonadContext || monadHasAge || fetchingAgeRef.current) return;
 
 		const tokenAddress =
 			token.mint || token.pair_address || (token as any).address;
@@ -617,35 +611,28 @@ const TradeHeader: React.FC<TradeHeaderProps> = ({ token, livePriceUsd, liveMark
 
 		fetchingAgeRef.current = true;
 
-		// Use the appropriate search endpoint based on chain
-		const searchUrl = isMonadContext
-			? `${process.env.NEXT_PUBLIC_MONAD_TOKEN_SERVICE_URL || "https://monad-token-service.narrative.trade"}/v1/search?q=${encodeURIComponent(tokenAddress)}`
-			: `${process.env.NEXT_PUBLIC_GO_SERVICE_URL}/v1/search?phrase=${encodeURIComponent(tokenAddress)}&limit=1`;
+		const searchUrl = `${process.env.NEXT_PUBLIC_MONAD_TOKEN_SERVICE_URL || "https://monad-token-service.narrative.trade"}/v1/search?q=${encodeURIComponent(tokenAddress)}`;
 
 		fetch(searchUrl, {
 			headers: { Accept: "application/json" },
 		})
 			.then((res) => (res.ok ? res.json() : null))
 			.then((data) => {
-				// Monad: data.data[0].created_at
-				// Solana: data.tokens[0].created_at
 				let createdAt = null;
-				if (isMonadContext && data?.data?.[0]) {
+				if (data?.data?.[0]) {
 					createdAt = data.data[0].created_at || data.data[0].createdAt;
-				} else if (data?.tokens?.[0]) {
-					createdAt = data.tokens[0].created_at || data.tokens[0].pair_created_at;
 				}
 				if (createdAt) {
 					setFetchedCreatedAt(createdAt);
 				}
 			})
 			.catch((err) => {
-				console.debug("[TradeHeader] Failed to fetch age:", err);
+				console.debug("[TradeHeader] Failed to fetch Monad age:", err);
 			})
 			.finally(() => {
 				fetchingAgeRef.current = false;
 			});
-	}, [hasAge, token, isMonadContext]);
+	}, [isMonadContext, monadHasAge, token]);
 
 	// Live ticker for age updates (every second for fresh tokens, every minute for older)
 	const [ageTick, setAgeTick] = useState(0);
@@ -657,65 +644,33 @@ const TradeHeader: React.FC<TradeHeaderProps> = ({ token, livePriceUsd, liveMark
 	}, []);
 
 	const tokenAgeLabel = useMemo(() => {
-		const currentMint = token?.mint || (token as any)?.address || "";
+		let createdAt: string | number | null | undefined;
 
-		// AGE: Use token data from /v1/trade/view, falling back to fetchedCreatedAt from search endpoint
-		const createdAt =
-			(token as any).created_at ||
-			(token as any).createdAt ||
-			(token as any).CreatedAt ||
-			(token as any).launch_time ||
-			fetchedCreatedAt;
-
-		// Check if we have any age data defined (vs still loading)
-		const hasAnyAgeField =
-			(token as any).created_at !== undefined ||
-			(token as any).createdAt !== undefined ||
-			(token as any).CreatedAt !== undefined ||
-			(token as any).launch_time !== undefined ||
-			fetchedCreatedAt !== null;
+		if (isSolanaToken) {
+			// Primary: REST token prop's created_at (maps to LaunchTime = correct on-chain time)
+			// Fallback: wsTokenInfo?.created_at (DB insertion time, less accurate but better than nothing)
+			createdAt = (token as any).created_at || wsTokenInfo?.created_at;
+			if (!createdAt) return wsTokenInfo ? "-" : "...";
+		} else {
+			// Monad: REST token prop fields + search endpoint fallback
+			createdAt =
+				(token as any).created_at ||
+				(token as any).createdAt ||
+				(token as any).CreatedAt ||
+				(token as any).launch_time ||
+				fetchedCreatedAt;
+		}
 
 		const age = getTokenAge(createdAt);
 
-		// Debug logging to trace the age calculation issue
-		if (process.env.NODE_ENV === "development" || (age.includes("d") && parseInt(age) > 365)) {
-			console.log("[TradeHeader] Age debug:", {
-				selectedCreatedAt: createdAt,
-				selectedType: typeof createdAt,
-				parsedTs: normalizeTimestampMs(createdAt),
-				calculatedAge: age,
-				tokenFields: {
-					created_at: (token as any).created_at,
-					createdAt: (token as any).createdAt,
-					CreatedAt: (token as any).CreatedAt,
-					launch_time: (token as any).launch_time,
-				},
-				tokenName: token?.name || token?.symbol,
-				tokenMint: currentMint,
-				lastValidAge: lastValidAgeRef.current,
-				lastValidMint: lastValidTokenMintRef.current,
-			});
-		}
-
-		// If age is unknown and we have no age fields defined, show loading indicator
-		// If age is unknown but we have fields (they're just empty), show "-"
 		if (age === "Unknown") {
-			// If we have a last valid age for the SAME token, keep showing it
-			// This prevents flashing to "-" when data temporarily becomes invalid
-			if (lastValidAgeRef.current && lastValidTokenMintRef.current === currentMint) {
-				console.log("[TradeHeader] Preserving last valid age:", lastValidAgeRef.current);
-				return lastValidAgeRef.current;
-			}
-			return hasAnyAgeField ? "-" : "...";
+			// Monad: still loading from search endpoint
+			return fetchedCreatedAt !== null ? "-" : "...";
 		}
-
-		// Store this valid age for the current token
-		lastValidAgeRef.current = age;
-		lastValidTokenMintRef.current = currentMint;
 
 		return age;
 		// eslint-disable-next-line react-hooks/exhaustive-deps
-	}, [token, fetchedCreatedAt, isSolanaToken, ageTick]);
+	}, [token, fetchedCreatedAt, isSolanaToken, wsTokenInfo?.created_at, ageTick]);
 	const [showXPreview, setShowXPreview] = useState<boolean>(false);
 	const [buttonPosition, setButtonPosition] = useState<{
 		left: number;

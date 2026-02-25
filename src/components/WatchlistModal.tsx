@@ -26,6 +26,7 @@ import { formatMonadError } from '~/utils/monadError';
 import { broadcastMonadQuickTrade } from '~/utils/monadTradeEvents';
 import { listenForTradeEvents, transformToastToError } from '~/utils/createSolanaToastHandler';
 import { mapTradeErrorMessage } from '~/utils/tradeErrorMessages';
+import { dispatchBalanceRefresh } from '~/utils/balanceEvents';
 import { extractTokenImage, getResolvedTokenImage } from '~/utils/images';
 import { FaCheckCircle } from 'react-icons/fa';
 
@@ -815,6 +816,7 @@ export default function WatchlistModal({ open, onClose }: WatchlistModalProps) {
             }),
           );
         }
+        dispatchBalanceRefresh('sol');
       } catch (error: any) {
         tradeErrored = true;
         cleanupSolanaTradeListener();

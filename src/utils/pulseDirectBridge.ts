@@ -440,6 +440,19 @@ function normalizeToken(raw: any): PulseToken | null {
     bundled_percentage: raw.bundled_percentage ?? raw.bundle_percent ?? 0,
     bundler_held_percentage: raw.bundler_held_percentage ?? 0,
     dex_paid: raw.dex_paid ?? raw.dexPaid ?? false,
+    // === CRITICAL: created_at for age display & sorting ===
+    // Mirrors pulseWorkerBridge.ts logic (lines 767-778)
+    created_at: (() => {
+      const val = raw.launch_time || raw.created_at || raw.createdAt;
+      if (!val) return Date.now();
+      if (typeof val === 'number') return val;
+      if (typeof val === 'string') {
+        const parsed = new Date(val).getTime();
+        return isNaN(parsed) ? Date.now() : parsed;
+      }
+      return Date.now();
+    })(),
+    launch_time: raw.launch_time || raw.created_at || raw.createdAt,
     // Volume breakdown fields for calculateVolumeUsd()
     total_buy_volume_5m: raw.total_buy_volume_5m ?? 0,
     total_sell_volume_5m: raw.total_sell_volume_5m ?? 0,

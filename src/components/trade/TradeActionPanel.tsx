@@ -27,6 +27,7 @@ import useTokenStatsWebSocket from "~/hooks/useTokenStatsWebSocket";
 import { getPoolTypeFromToken } from "~/utils/poolTypeDetection";
 import { mapTradeErrorMessage } from "~/utils/tradeErrorMessages";
 import { listenForTradeEvents, transformToastToError } from "~/utils/createSolanaToastHandler";
+import { broadcastTradeCompleted } from "~/utils/tradeEvents";
 import HighSlippageWarningDialog from "../HighSlippageWarningDialog";
 import LowLiquidityWarningDialog from "../LowLiquidityWarningDialog";
 import { BsCoin, BsPersonGear } from "react-icons/bs";
@@ -2318,66 +2319,64 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
       setIsLoading(true);
       setSuccessMessage(null);
 
-      // Resolve pool address with fallback to token service API
+      // Resolve pool address — only needed for BUY mode.
+      // For SELL: Jupiter Ultra routes by token address, pool is optional.
+      // Backend SDK fallback (if Jupiter Ultra fails) has its own lazy pool discovery.
       let resolvedPoolAddress = effectivePoolAddress;
-      if (!resolvedPoolAddress && token.mint) {
-        console.log(`[TradeActionPanel] Pool address empty, fetching from token service for ${token.mint}`);
-        const fetchedPairAddress = await fetchPairAddressFromTokenService(token.mint);
-        if (fetchedPairAddress) {
-          resolvedPoolAddress = fetchedPairAddress;
-          console.log(`[TradeActionPanel] Resolved pool address from token service: ${resolvedPoolAddress}`);
-        } else {
-          console.warn(`[TradeActionPanel] Failed to resolve pool address for ${token.mint}`);
-        }
-      }
-
-      // Validate pool address - check if it looks invalid (equals wallet or token address)
       const userWalletAddress = user?.publicKey || '';
-      const poolLooksInvalid = resolvedPoolAddress === userWalletAddress ||
-                               resolvedPoolAddress === token.mint ||
-                               !resolvedPoolAddress ||
-                               resolvedPoolAddress.length < 30;
 
-      // DexScreener fallback if pool address looks invalid
-      if (poolLooksInvalid && token.mint) {
-        console.log(`[TradeActionPanel] ⚠️ Pool address looks invalid (${resolvedPoolAddress}), trying DexScreener fallback...`);
-        try {
-          const controller = new AbortController();
-          const timeoutId = setTimeout(() => controller.abort(), 5000);
+      if (mode !== 'sell') {
+        if (!resolvedPoolAddress && token.mint) {
+          console.log(`[TradeActionPanel] Pool address empty, fetching from token service for ${token.mint}`);
+          const fetchedPairAddress = await fetchPairAddressFromTokenService(token.mint);
+          if (fetchedPairAddress) {
+            resolvedPoolAddress = fetchedPairAddress;
+            console.log(`[TradeActionPanel] Resolved pool address from token service: ${resolvedPoolAddress}`);
+          } else {
+            console.warn(`[TradeActionPanel] Failed to resolve pool address for ${token.mint}`);
+          }
+        }
 
-          const dexResponse = await fetch(
-            `https://api.dexscreener.com/latest/dex/tokens/${token.mint}`,
-            { signal: controller.signal }
-          );
-          clearTimeout(timeoutId);
+        // Validate pool address - check if it looks invalid (equals wallet or token address)
+        const poolLooksInvalid = resolvedPoolAddress === userWalletAddress ||
+                                 resolvedPoolAddress === token.mint ||
+                                 !resolvedPoolAddress ||
+                                 resolvedPoolAddress.length < 30;
 
-          if (dexResponse.ok) {
-            const dexData = await dexResponse.json();
-            if (dexData?.pairs && dexData.pairs.length > 0) {
-              // Filter for Solana pairs and sort by liquidity
-              const solanaPairs = dexData.pairs
-                .filter((pair: any) => pair.chainId === 'solana' && pair.pairAddress)
-                .sort((a: any, b: any) => (b.liquidity?.usd || 0) - (a.liquidity?.usd || 0));
+        // DexScreener fallback if pool address looks invalid
+        if (poolLooksInvalid && token.mint) {
+          console.log(`[TradeActionPanel] ⚠️ Pool address looks invalid (${resolvedPoolAddress}), trying DexScreener fallback...`);
+          try {
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 5000);
 
-              if (solanaPairs.length > 0) {
-                const bestPair = solanaPairs[0];
-                console.log(`[TradeActionPanel] ✅ DexScreener found pool: ${bestPair.pairAddress} (${bestPair.dexId}, $${bestPair.liquidity?.usd || 0} liq)`);
-                resolvedPoolAddress = bestPair.pairAddress;
+            const dexResponse = await fetch(
+              `https://api.dexscreener.com/latest/dex/tokens/${token.mint}`,
+              { signal: controller.signal }
+            );
+            clearTimeout(timeoutId);
+
+            if (dexResponse.ok) {
+              const dexData = await dexResponse.json();
+              if (dexData?.pairs && dexData.pairs.length > 0) {
+                // Filter for Solana pairs and sort by liquidity
+                const solanaPairs = dexData.pairs
+                  .filter((pair: any) => pair.chainId === 'solana' && pair.pairAddress)
+                  .sort((a: any, b: any) => (b.liquidity?.usd || 0) - (a.liquidity?.usd || 0));
+
+                if (solanaPairs.length > 0) {
+                  const bestPair = solanaPairs[0];
+                  console.log(`[TradeActionPanel] ✅ DexScreener found pool: ${bestPair.pairAddress} (${bestPair.dexId}, $${bestPair.liquidity?.usd || 0} liq)`);
+                  resolvedPoolAddress = bestPair.pairAddress;
+                }
               }
             }
+          } catch (dexError: any) {
+            console.warn(`[TradeActionPanel] DexScreener fallback failed:`, dexError?.message || dexError);
           }
-        } catch (dexError: any) {
-          console.warn(`[TradeActionPanel] DexScreener fallback failed:`, dexError?.message || dexError);
         }
-      }
-
-      // Final validation for sell mode - don't proceed if pool address is clearly invalid
-      if (mode === 'sell' && (!resolvedPoolAddress || resolvedPoolAddress === userWalletAddress || resolvedPoolAddress === token.mint)) {
-        setIsLoading(false);
-        showEnhancedToast("error", "Could not find valid pool address. The token may have graduated or migrated.", {
-          title: "Pool Address Invalid",
-        });
-        return;
+      } else {
+        console.log(`[TradeActionPanel] Sell mode: skipping pool resolution (Jupiter Ultra routes by token address)`);
       }
 
       if (tab === "limit") {
@@ -2725,7 +2724,21 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
             // Auto-dismiss after 10s
             setTimeout(() => toast.dismiss(uniqueToastId), 10000);
 
-            // Refresh position data after successful sell
+            // Broadcast trade completion immediately for portfolio auto-refresh
+            broadcastTradeCompleted({
+              tokenAddress: token.mint,
+              tradeType: 'sell',
+              chain: 'sol',
+              txHash: sellResult?.hash || undefined,
+              sellPercentage,
+            });
+
+            // Dispatch event to refresh chart price lines immediately
+            if (typeof window !== "undefined" && token.mint) {
+              window.dispatchEvent(new CustomEvent("solanaQuickTrade", { detail: { tokenAddress: token.mint } }));
+            }
+
+            // Refresh position data for the token detail page's position card
             setTimeout(async () => {
               try {
                 const trades = await getTradeActivityByUser(user.id.toString());
@@ -2767,14 +2780,9 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
                   });
                 }
 
-                // Dispatch event to refresh chart price lines
-                if (typeof window !== "undefined" && token.mint) {
-                  window.dispatchEvent(new CustomEvent("solanaQuickTrade", { detail: { tokenAddress: token.mint } }));
-                }
-
                 // Refresh balance
                 if (refreshBalance) {
-                  refreshBalance();
+                  refreshBalance({ force: true });
                 }
               } catch (error) {
                 console.error("Error refreshing position data:", error);
