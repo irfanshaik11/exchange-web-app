@@ -2,6 +2,7 @@ import React, { useMemo, useCallback } from 'react';
 import { useRouter } from 'next/router';
 import PumpLiveCard from './PumpLiveCard';
 import { usePumpLive, type PumpLiveToken } from '../hooks/usePumpLive';
+import { preloadTradeChart } from '~/utils/preloadTradeChart';
 
 export type PumpLiveSortField = 'time' | 'mc';
 export type PumpLiveSortDirection = 'asc' | 'desc';
@@ -89,6 +90,21 @@ export default function PumpLiveGrid({
     router.push(`/trade/${token.mint}?${queryParams.toString()}`);
   }, [router]);
 
+  const handleTokenHover = useCallback((token: PumpLiveToken) => {
+    preloadTradeChart(
+      {
+        mint: token.mint,
+        chain: 'sol',
+        name: token.name,
+        symbol: token.symbol,
+        marketCapUsd: token.usd_market_cap,
+        image: token.image_uri || '',
+        launchpadProtocol: 'pump',
+      },
+      { router }
+    );
+  }, [router]);
+
   const handleBuy = useCallback((token: PumpLiveToken) => {
     if (onQuickBuy && quickBuyAmount > 0) {
       onQuickBuy(token, quickBuyAmount);
@@ -135,6 +151,7 @@ export default function PumpLiveGrid({
               token={token}
               onClick={handleTokenClick}
               onBuy={handleBuy}
+              onHover={handleTokenHover}
             />
           ))
         ) : !error ? (

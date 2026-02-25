@@ -28,6 +28,7 @@ import type { Token } from "../utils/db";
 import { executeEnhancedTrade } from "~/utils/enhancedTradeHandler";
 import { executeMonadMultiBuy, formatMonadTxSummary } from "~/utils/monadWalletAllocation";
 import { formatMonadError } from "~/utils/monadError";
+import { preloadTradeChart } from "~/utils/preloadTradeChart";
 import { extractTokenImage } from "~/utils/images";
 import { broadcastMonadQuickTrade } from "~/utils/monadTradeEvents";
 import Cookies from "js-cookie";
@@ -2270,7 +2271,24 @@ export default function Header({
                 <div
                   key={tokenKey}
                   className="flex items-center gap-1.5 cursor-pointer transition-all duration-200 shrink-0 px-2.5 py-1 rounded-lg hover:bg-white/[0.07]"
-                  onMouseEnter={() => setHoveredWatchlistToken(tokenKey)}
+                  onMouseEnter={() => {
+                    setHoveredWatchlistToken(tokenKey);
+                    // Prefetch OHLC + route + metadata + trades on hover
+                    const isMonadToken = tokenAddress.startsWith('0x') || tokenAddress.startsWith('0X');
+                    preloadTradeChart(
+                      {
+                        mint: tokenAddress,
+                        chain: isMonadToken ? 'monad' : 'sol',
+                        name: token.name,
+                        symbol: token.symbol,
+                        priceUsd: price,
+                        marketCapUsd: token.market_cap_usd || (token as any).fully_diluted_value,
+                        image: rawImg || '',
+                        launchpadProtocol: (token as any).launchpad_protocol,
+                      },
+                      { router }
+                    );
+                  }}
                   onMouseLeave={() => setHoveredWatchlistToken(null)}
                   onClick={() => {
                     if (tokenAddress) {

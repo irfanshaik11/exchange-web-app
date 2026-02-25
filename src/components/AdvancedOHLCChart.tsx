@@ -5946,6 +5946,13 @@ Maker: ${walletAddress}`;
             willEnableSeconds: true, // Both chains support seconds
           },
         );
+        // Pre-populate candle data from preload to prevent getBars 2s wait loop.
+        // The useEffect that normally writes preloadedData → lastGoodCandlesRef may not
+        // have fired yet when TradingView synchronously calls getBars on onChartReady.
+        if (preloadedData && preloadedData.length > 0 && lastGoodCandlesRef.current.length === 0) {
+          lastGoodCandlesRef.current = preloadedData;
+        }
+
         // Include mode suffix in symbol to ensure TradingView refreshes data when mode changes
         // Initial mode is 'MC' (from useState default)
         const initialMode = displayModeRef.current; // Should be 'MC' at init

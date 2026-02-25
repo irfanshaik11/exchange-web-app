@@ -194,7 +194,7 @@ export function prefetchViaWS(mint: string): void {
       console.log('[OHLCPrefetch] Failed to create WS:', e);
       status = 'idle';
     }
-  }, 150);
+  }, 50);
 }
 
 /**

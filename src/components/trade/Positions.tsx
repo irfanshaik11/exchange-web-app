@@ -26,6 +26,7 @@ import { broadcastTradeCompleted, TRADE_COMPLETED_EVENT, type TradeCompletedDeta
 import { formatMonadError } from '~/utils/monadError';
 import { useUser } from '../UserContext';
 import { dispatchBalanceRefresh } from '~/utils/balanceEvents';
+import { preloadTradeChart } from '~/utils/preloadTradeChart';
 
 type TokenMetadata = UnifiedTokenMetadata & {
   timestamp?: number;
@@ -1485,11 +1486,26 @@ const Positions: React.FC<PositionsProps> = ({
               }
               
               return (
-              <tr 
-                key={pos.tokenAddress || idx} 
+              <tr
+                key={pos.tokenAddress || idx}
                 className={`border-b border-neutral-800 hover:bg-neutral-800/60 cursor-pointer transition-colors ${
                   isHidden ? 'opacity-40 bg-neutral-900/30' : ''
                 }`}
+                onMouseEnter={() => {
+                  if (!pos.tokenAddress) return;
+                  preloadTradeChart(
+                    {
+                      mint: pos.tokenAddress,
+                      pairAddress: sourcePosition.pairAddress,
+                      chain: currentChain === 'monad' ? 'monad' : 'sol',
+                      name: metadata?.name,
+                      symbol: metadata?.symbol,
+                      image: finalImageUrl,
+                      launchpadProtocol: protocolSource,
+                    },
+                    { router }
+                  );
+                }}
                 onClick={handleRowClick}
               >
                 <td className="px-2 py-2">

@@ -15,6 +15,7 @@ import InterstatePopout from "./InterstatePopout";
 import { LuChartNoAxesColumn, LuCopy } from "react-icons/lu";
 import { fetchTokenMetadata } from "~/utils/functions";
 import { extractMetaImage } from "~/utils/images";
+import { preloadTradeChart } from "~/utils/preloadTradeChart";
 import FastImage from "./FastImage";
 import { IoShareSocialOutline } from "react-icons/io5";
 import { LuPill, LuSearch } from "react-icons/lu";
@@ -2111,6 +2112,7 @@ const TokenListItem = React.memo(
     index?: number;
     isSelected?: boolean;
   }) => {
+    const searchRouter = useRouter();
     const mcColor = getMarketCapColor(mcRaw);
     const tokenIsNew = isNewToken(token.created_at);
     const tokenIsTrending = isTrendingToken(token);
@@ -2478,6 +2480,22 @@ const TokenListItem = React.memo(
           }`}
           style={{
             animation: `fadeSlideIn 0.3s ease-out ${index * 0.05}s both`,
+          }}
+          onMouseEnter={() => {
+            if (!token.mint) return;
+            preloadTradeChart(
+              {
+                mint: token.mint,
+                pairAddress: token.pair_address,
+                chain: chain === 'monad' ? 'monad' : 'sol',
+                name: token.name,
+                symbol: token.symbol,
+                marketCapUsd: token.fully_diluted_value,
+                image: token.uri || token.logo || "",
+                createdAt: token.created_at,
+              },
+              { router: searchRouter }
+            );
           }}
           onClick={(e) => {
             // Only trigger if click is not on a button or button child

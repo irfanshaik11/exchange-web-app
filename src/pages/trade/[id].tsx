@@ -25,6 +25,7 @@ import dynamic from "next/dynamic";
 import SimilarTokensPanel from "../../components/trade/SimilarTokensPanel";
 import ReusedImageTokensPanel from "../../components/trade/ReusedImageTokensPanel";
 import TokenLimitOrders from "../../components/trade/TokenLimitOrders";
+import { creatorAddressCache } from "../../utils/preloadTradeChart";
 // Eager load AdvancedOHLCChart on trade pages - always needed, so no point in lazy loading
 import AdvancedOHLCChart from "../../components/AdvancedOHLCChart";
 
@@ -172,7 +173,7 @@ export default function TradePage() {
   const { settings: quickBuySettings, side: quickBuySide } = useQuickBuyQueryParams();
   const { params: tradeParams, setParams: setTradeParams, isReady: tradeParamsReady } = useTradePageQueryParams();
 
-  const { token, isPolling, loading: pollingLoading, isHydrating, resolvedPairAddress } = useSingleTokenPolling(
+  const { token, isPolling, loading: pollingLoading, resolvedPairAddress } = useSingleTokenPolling(
     typeof id === "string" ? id : undefined,
     typeof _mint === "string" ? _mint : undefined // Pass mint from URL for pair address verification
   );
@@ -201,57 +202,48 @@ export default function TradePage() {
   }, [id]);
 
   useEffect(() => {
-    const fetchCorrectTokenData = async () => {
-      if (!token?.mint) return;
-      if (correctTokenData?.mint === token.mint || normalizeTimestampMs(token.created_at)) return;
+    if (!token?.mint) return;
+    let cancelled = false;
 
-      setIsLoadingCorrectData(true);
-      try {
-        const response = await fetch(`${process.env.NEXT_PUBLIC_GO_SERVICE_URL}/v1/search?phrase=${encodeURIComponent(token.mint)}&limit=1`);
-        if (response.ok) {
-          const data = await response.json();
-          if (data.tokens && data.tokens.length > 0) {
-            const fetchedToken = data.tokens[0];
-            // Debug: Log the created_at from search endpoint
-            console.log("[TradePage] correctTokenData from /v1/search:", {
-              created_at: fetchedToken.created_at,
-              createdAt: fetchedToken.createdAt,
-              launch_time: fetchedToken.launch_time,
-              name: fetchedToken.name || fetchedToken.symbol,
-            });
-            setCorrectTokenData(fetchedToken);
-          }
-        }
-      } catch (error) {
-        console.error("[Trade Page] Failed to fetch correct token data:", error);
-      } finally {
-        setIsLoadingCorrectData(false);
+    const fetchParallel = async () => {
+      const needsSearch = !(correctTokenData?.mint === token.mint || normalizeTimestampMs(token.created_at));
+
+      const searchPromise = needsSearch
+        ? fetch(`${process.env.NEXT_PUBLIC_GO_SERVICE_URL}/v1/search?phrase=${encodeURIComponent(token.mint)}&limit=1`)
+            .then(r => r.ok ? r.json() : null).catch(() => null)
+        : Promise.resolve(null);
+
+      const cachedCreator = creatorAddressCache.get(token.mint);
+      const devPromise = cachedCreator !== undefined
+        ? Promise.resolve(cachedCreator)
+        : fetch(`${process.env.NEXT_PUBLIC_GO_SERVICE_URL}/v1/tokens/dev?tokenAddress=${token.mint}&limit=1`)
+            .then(r => r.ok ? r.json() : null)
+            .then(data => data?.filterTokens?.results?.[0]?.token?.creatorAddress || null)
+            .catch(() => null);
+
+      const [searchData, devResult] = await Promise.all([searchPromise, devPromise]);
+      if (cancelled) return;
+
+      if (searchData?.tokens?.[0]) {
+        const fetchedToken = searchData.tokens[0];
+        console.log("[TradePage] correctTokenData from /v1/search:", {
+          created_at: fetchedToken.created_at,
+          createdAt: fetchedToken.createdAt,
+          launch_time: fetchedToken.launch_time,
+          name: fetchedToken.name || fetchedToken.symbol,
+        });
+        setCorrectTokenData(fetchedToken);
+      }
+      if (typeof devResult === 'string') {
+        setCreatorAddress(devResult);
+        creatorAddressCache.set(token.mint, devResult);
       }
     };
 
-    fetchCorrectTokenData();
+    setIsLoadingCorrectData(true);
+    fetchParallel().finally(() => { if (!cancelled) setIsLoadingCorrectData(false); });
+    return () => { cancelled = true; };
   }, [token?.mint, token?.created_at, correctTokenData?.mint]);
-
-  useEffect(() => {
-    const fetchCreatorAddress = async () => {
-      if (!token?.mint) return;
-      try {
-        const response = await fetch(
-          `${process.env.NEXT_PUBLIC_GO_SERVICE_URL}/v1/tokens/dev?tokenAddress=${token.mint}&limit=1`
-        );
-        if (response.ok) {
-          const data = await response.json();
-          if (data?.filterTokens?.results?.[0]?.token?.creatorAddress) {
-            setCreatorAddress(data.filterTokens.results[0].token.creatorAddress);
-          }
-        }
-      } catch (error) {
-        console.error("[TradePage] Failed to fetch creator address:", error);
-      }
-    };
-
-    fetchCreatorAddress();
-  }, [token?.mint]);
 
   const getOHLCParams = useComponentCache(
     "ohlc-params",
@@ -370,9 +362,9 @@ export default function TradePage() {
   }, [topPanePx, getResponsiveLimits]);
 
   useEffect(() => {
-    setTokenDataLoading(pollingLoading || isHydrating);
+    setTokenDataLoading(pollingLoading);
     setTradesDataLoading(initialDataLoading);
-  }, [pollingLoading, isHydrating, initialDataLoading]);
+  }, [pollingLoading, initialDataLoading]);
 
   useEffect(() => {
     if (showMobileTradeModal) document.body.classList.add("modal-open");
