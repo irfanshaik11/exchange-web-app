@@ -6,6 +6,7 @@ interface PumpLiveCardProps {
   token: PumpLiveToken;
   onBuy?: (token: PumpLiveToken) => void;
   onClick?: (token: PumpLiveToken) => void;
+  onHover?: (token: PumpLiveToken) => void;
 }
 
 // Social link icons
@@ -53,7 +54,7 @@ const ClockIcon = () => (
   </svg>
 );
 
-export default function PumpLiveCard({ token, onBuy, onClick }: PumpLiveCardProps) {
+export default function PumpLiveCard({ token, onBuy, onClick, onHover }: PumpLiveCardProps) {
   const [imageError, setImageError] = useState(false);
   const [imageLoading, setImageLoading] = useState(true);
 
@@ -88,6 +89,7 @@ export default function PumpLiveCard({ token, onBuy, onClick }: PumpLiveCardProp
   return (
     <div
       onClick={handleClick}
+      onMouseEnter={() => onHover?.(token)}
       className="group relative flex flex-col bg-[#1E1F26] rounded-xl overflow-hidden cursor-pointer
                  border border-transparent hover:border-[#2A2B33] transition-all duration-200
                  hover:shadow-lg hover:shadow-black/20"

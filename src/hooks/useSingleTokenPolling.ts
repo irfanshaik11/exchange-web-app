@@ -47,11 +47,9 @@ export default function useSingleTokenPolling(address: string | undefined, mintH
     error: null,
     loading: false, // Start with false for faster initial render
   });
-  const [isHydrating, setIsHydrating] = useState(false);
   const [resolvedPairAddress, setResolvedPairAddress] = useState<string | null>(null);
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
   const addressRef = useRef(address);
-  const hydrationTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   addressRef.current = address;
 
   const throttledSetToken = useCallback(
@@ -62,55 +60,11 @@ export default function useSingleTokenPolling(address: string | undefined, mintH
     []
   );
 
-  // Check if address is a mint address (needs resolution to pair_address)
-  const isMintAddress = useCallback((addr: string) => {
-    // Pair addresses are typically longer (44+ chars) and don't end with 'pump'
-    // Mint addresses are shorter and often end with 'pump'
-    // If it's already a pair_address format, skip resolution
-    return addr.length < 50 && addr.endsWith('pump');
-  }, []);
-
-  // Resolve address to pair address with timeout
+  // Resolve address — all navigation is through mint, no hydration needed.
+  // The backend /v1/trade/view and /v1/get-pair endpoints accept mint addresses directly.
   const resolveAddress = useCallback(async (addr: string) => {
-    // If it's already a pair address, return it
-    if (!isMintAddress(addr)) {
-      return addr;
-    }
-
-    // If it's a mint address, hydrate it with timeout
-    setIsHydrating(true);
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => {
-      controller.abort();
-      console.warn(`[useSingleTokenPolling] Hydration timeout for ${addr} after 5 seconds`);
-    }, 5000);
-
-    try {
-      const response = await fetch('/api/token-service/hydrate-pair', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ mint: addr }),
-        signal: controller.signal
-      });
-      
-      clearTimeout(timeoutId);
-      
-      if (response.ok) {
-        const data = await response.json();
-        return data.pair_address;
-      } else {
-        return null;
-      }
-    } catch (error) {
-      clearTimeout(timeoutId);
-      if (error.name === 'AbortError') {
-        return null;
-      }
-      return null;
-    } finally {
-      setIsHydrating(false);
-    }
-  }, [isMintAddress]);
+    return addr;
+  }, []);
 
   // Track if we've already verified the pair address for this token
   const pairAddressVerifiedRef = useRef<string | null>(null);
@@ -293,7 +247,6 @@ export default function useSingleTokenPolling(address: string | undefined, mintH
     isPolling: state.isPolling,
     loading: state.loading,
     error: state.error,
-    isHydrating,
     resolvedPairAddress,
     // Expose manual refresh function
     refresh: loadData,

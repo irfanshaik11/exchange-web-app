@@ -173,7 +173,7 @@ export default function TradePage() {
   const { settings: quickBuySettings, side: quickBuySide } = useQuickBuyQueryParams();
   const { params: tradeParams, setParams: setTradeParams, isReady: tradeParamsReady } = useTradePageQueryParams();
 
-  const { token, isPolling, loading: pollingLoading, isHydrating, resolvedPairAddress } = useSingleTokenPolling(
+  const { token, isPolling, loading: pollingLoading, resolvedPairAddress } = useSingleTokenPolling(
     typeof id === "string" ? id : undefined,
     typeof _mint === "string" ? _mint : undefined // Pass mint from URL for pair address verification
   );
@@ -362,9 +362,9 @@ export default function TradePage() {
   }, [topPanePx, getResponsiveLimits]);
 
   useEffect(() => {
-    setTokenDataLoading(pollingLoading || isHydrating);
+    setTokenDataLoading(pollingLoading);
     setTradesDataLoading(initialDataLoading);
-  }, [pollingLoading, isHydrating, initialDataLoading]);
+  }, [pollingLoading, initialDataLoading]);
 
   useEffect(() => {
     if (showMobileTradeModal) document.body.classList.add("modal-open");

@@ -26,7 +26,6 @@ export default function useSingleTokenWebSocket(address: string | undefined) {
   addressRef.current = address;
   const [count, setCount] = useState(0);
   const [resolvedPairAddress, setResolvedPairAddress] = useState<string | null>(null);
-  const [isResolving, setIsResolving] = useState(false);
 
   const throttledSetToken = useCallback(
     throttle((newData: any) => {
@@ -40,46 +39,11 @@ export default function useSingleTokenWebSocket(address: string | undefined) {
     []
   );
 
-  // Check if address is a mint address (needs resolution to pair_address)
-  const isMintAddress = useCallback((addr: string) => {
-    // Pair addresses are typically longer (44+ chars) and don't end with 'pump'
-    // Mint addresses are shorter and often end with 'pump'
-    // If it's already a pair_address format, skip resolution
-    return addr.length < 50 && addr.endsWith('pump');
-  }, []);
-
-  // Resolve address to pair address
+  // Resolve address — all navigation is through mint, no hydration needed.
+  // The backend /v1/trade/view and /v1/get-pair endpoints accept mint addresses directly.
   const resolveAddress = useCallback(async (addr: string) => {
-    // If it's already a pair address, return it
-    if (!isMintAddress(addr)) {
-      return addr;
-    }
-
-    // If it's a mint address, hydrate it
-    setIsResolving(true);
-    try {
-      console.log('Resolving mint address to pair address:', addr);
-      const response = await fetch('/api/token-service/hydrate-pair', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ mint: addr })
-      });
-      
-      if (response.ok) {
-        const data = await response.json();
-        console.log('Successfully resolved address:', data);
-        return data.pair_address;
-      } else {
-        console.error('Failed to resolve address:', response.status);
-        return null;
-      }
-    } catch (error) {
-      console.error('Error resolving address:', error);
-      return null;
-    } finally {
-      setIsResolving(false);
-    }
-  }, [isMintAddress]);
+    return addr;
+  }, []);
 
   // Load initial data
   const loadInitialData = useCallback(async () => {
@@ -334,5 +298,5 @@ export default function useSingleTokenWebSocket(address: string | undefined) {
     // The connection must be re-established if the resolved pair address changes
   }, [resolvedPairAddress, throttledSetToken, loadInitialData]);
 
-  return { ...state, token, trades, isResolving };
+  return { ...state, token, trades };
 } 
