@@ -348,7 +348,7 @@ const Activity: React.FC<ActivityProps> = ({
       ) : (
         <div className="relative">
           {/* Header Row - Fixed */}
-          <div className="grid gap-4 px-6 py-2 border-b border-[#2A2B33] text-xs text-[#9CA3AF] bg-[#1E1F26]" style={{ gridTemplateColumns: '0.8fr 2fr 1.2fr 1.2fr 0.8fr 1fr' }}>
+          <div className="grid gap-4 px-6 py-3 border-b border-white/[0.06] text-[10px] font-semibold uppercase tracking-[0.08em] text-white/30" style={{ gridTemplateColumns: '0.8fr 2fr 1.2fr 1.2fr 0.8fr 1fr', background: 'linear-gradient(180deg, rgba(255, 255, 255, 0.06) 0%, rgba(255, 255, 255, 0.02) 100%)', boxShadow: 'inset 0 1px 0 rgba(255, 255, 255, 0.08), inset 0 -1px 0 rgba(255, 255, 255, 0.02)', backdropFilter: 'blur(16px)', WebkitBackdropFilter: 'blur(16px)' }}>
             <div>Type</div>
             <div>Token</div>
             <div>Amount</div>
@@ -700,7 +700,7 @@ const Activity: React.FC<ActivityProps> = ({
               return (
                 <div
                   key={trade.id || idx}
-                  className="grid gap-4 px-6 py-3 border-b border-[#2A2B33] hover:bg-[#17191E] transition-colors cursor-pointer"
+                  className="grid gap-4 px-6 py-3 border-b border-white/[0.06] hover:bg-white/[0.04] transition-colors cursor-pointer"
                   style={{ gridTemplateColumns: '0.8fr 2fr 1.2fr 1.2fr 0.8fr 1fr' }}
                   onMouseEnter={() => {
                     if (!trade.tokenAddress) return;
