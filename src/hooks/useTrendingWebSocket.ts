@@ -13,6 +13,15 @@ const BLACKLISTED_TOKENS = new Set([
   'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v', // USDC
   'Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB', // USDT
   'tTLsJR5f2QYx6XDrQBcGJ25UaCGaJNTt33q5UYunt1J', // Blacklisted
+  '7GxATsNMnaC88vdwd2t3mwrFuQwwGvmYPrUQ4D6FotXk',
+  '98sMhvDwXj1RQi5c5Mndm3vPe9cBqPrbLaufMXFNMh5g',
+  '27G8MtK7VtTcCHkpASjSDdkWWYfoqT6ggEuKidVJidD4',
+  'JuprjznTrTSp2UFa3ZBUFgwdAmtZCq4MQCwysN55USD',  // Jupiter Perps USD
+  'DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263', // BONK
+  'SNS8DJbHc34nKySHVhLGMUUE72ho6igvJaxtq9T3cX3',  // SNS
+  'pumpCmXqMfrsAkQ5r49WcJnRayYRqmXz6ae8H7H9Dfn',  // Pump protocol
+  'METvsvVRapdj9cFLzq4Tr43xK4tAjQfwX76z3n6mWQL',  // Meteora (MET)
+  '4k3Dyjzvzp8eMZWUXbBCjEvwSkkk59S5iCNLY3QrkX6R',  // Raydium (RAY)
 ]);
 
 // Helper to save trending data to localStorage

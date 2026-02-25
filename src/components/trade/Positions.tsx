@@ -1277,14 +1277,14 @@ const Positions: React.FC<PositionsProps> = ({
   return (
     <div className="w-full overflow-y-scroll scrollbar-thin scrollbar-thumb-gray-600 scrollbar-track-gray-800" style={{ maxHeight: '500px' }}>
       <table className="w-full text-xs">
-        <thead className="sticky top-0 bg-[#1E1F26] z-20">
-          <tr className="text-neutral-400 border-b border-neutral-800">
-            <th className="px-2 py-2 text-left">Token</th>
-            <th className="px-2 py-2 text-left">Bought</th>
-            <th className="px-2 py-2 text-left">Sold</th>
-            <th className="px-2 py-2 text-left">Remaining</th>
-            <th className="px-2 py-2 text-left">PnL</th>
-            <th className="px-2 py-2 text-left">Actions</th>
+        <thead className="sticky top-0 z-20" style={{ backdropFilter: 'blur(16px)', WebkitBackdropFilter: 'blur(16px)' }}>
+          <tr className="text-[#9CA3AF] border-b border-white/[0.06]" style={{ background: 'rgba(30, 31, 38, 0.85)' }}>
+            <th className="px-3 py-3 text-left text-[10px] font-medium uppercase tracking-wider">Token</th>
+            <th className="px-3 py-3 text-left text-[10px] font-medium uppercase tracking-wider">Bought</th>
+            <th className="px-3 py-3 text-left text-[10px] font-medium uppercase tracking-wider">Sold</th>
+            <th className="px-3 py-3 text-left text-[10px] font-medium uppercase tracking-wider">Remaining</th>
+            <th className="px-3 py-3 text-left text-[10px] font-medium uppercase tracking-wider">PnL</th>
+            <th className="px-3 py-3 text-left text-[10px] font-medium uppercase tracking-wider">Actions</th>
           </tr>
         </thead>
         <tbody>
