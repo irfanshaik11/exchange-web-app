@@ -33,6 +33,7 @@ import { useWalletTokenBalances } from "~/hooks/useWalletTokenBalances";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Area, AreaChart } from 'recharts';
 import { normalizeMonadAddress } from "~/utils/normalizeMonadAddress";
 import { acknowledgeWalletExport } from "~/utils/api";
+import { TRADE_COMPLETED_EVENT, consumePendingTradeRefreshes, type TradeCompletedDetail } from "~/utils/tradeEvents";
 import { redistributeWalletFunds } from "~/utils/api";
 import { deleteUserWallet } from "~/utils/api";
 import { PredictionPositions, UnifiedPortfolio, PolygonWalletCard } from "~/components/predictions";
@@ -340,6 +341,8 @@ export default function PortfolioPage() {
   })();
   const monBalance = chainBalances?.monad || 0;
   const [walletChecked, setWalletChecked] = useState(false);
+  // Incremented when a trade-completed event fires, triggers re-fetch of history/activity
+  const [tradeRefreshCounter, setTradeRefreshCounter] = useState(0);
   // Cache keys for trade history and activity (user-specific and chain-specific)
   const tradeHistoryCacheKey = useMemo(() => {
     return `trade_history_cache_${user?.id || 'anonymous'}_${currentChain}`;
@@ -806,7 +809,7 @@ export default function PortfolioPage() {
     };
 
     fetchTradeHistory();
-  }, [user?.id, currentChain, isTradeOnCurrentChain, tradeHistoryCacheKey]);
+  }, [user?.id, currentChain, isTradeOnCurrentChain, tradeHistoryCacheKey, tradeRefreshCounter]);
 
   // Fetch trade activity only when on Activity tab (index 2 after History commented out)
   useEffect(() => {
@@ -881,7 +884,43 @@ export default function PortfolioPage() {
 
       return () => clearInterval(intervalId);
     }
-  }, [user?.id, activeSpotTab, currentChain, isTradeOnCurrentChain, tradeActivityCacheKey]);
+  }, [user?.id, activeSpotTab, currentChain, isTradeOnCurrentChain, tradeActivityCacheKey, tradeRefreshCounter]);
+
+  // Listen for trade-completed events and consume pending refreshes on mount
+  useEffect(() => {
+    // On mount: consume any pending trade refreshes from other pages (cross-navigation)
+    const pending = consumePendingTradeRefreshes();
+    const relevantPending = pending.filter((p) =>
+      (currentChain === 'monad' && p.chain === 'monad') ||
+      (currentChain !== 'monad' && p.chain === 'sol')
+    );
+    if (relevantPending.length > 0) {
+      console.log(`[Portfolio] Consuming ${relevantPending.length} pending trade refresh(es)`);
+      refreshBalance({ chain: currentChain === 'monad' ? 'monad' : 'sol', force: true }).catch(() => {});
+      setTradeRefreshCounter((c) => c + 1);
+    }
+
+    // Listen for live trade-completed events (same-page)
+    const handleTradeCompleted = (event: Event) => {
+      const detail = (event as CustomEvent<TradeCompletedDetail>).detail;
+      // Filter: only refresh if the trade's chain matches the currently viewed chain
+      const isRelevant =
+        (currentChain === 'monad' && detail?.chain === 'monad') ||
+        (currentChain !== 'monad' && detail?.chain === 'sol');
+      if (!isRelevant) return;
+
+      console.log(`[Portfolio] Trade completed: ${detail?.tradeType} on ${detail?.chain}`);
+      // Force balance refresh
+      refreshBalance({ chain: currentChain === 'monad' ? 'monad' : 'sol', force: true }).catch(() => {});
+      // Increment counter to trigger trade history/activity re-fetch
+      setTradeRefreshCounter((c) => c + 1);
+    };
+
+    window.addEventListener(TRADE_COMPLETED_EVENT, handleTradeCompleted);
+    return () => {
+      window.removeEventListener(TRADE_COMPLETED_EVENT, handleTradeCompleted);
+    };
+  }, [currentChain, refreshBalance]);
 
   // Note: Initial balance is set once when first detected and persists
   // It does NOT auto-reset to prevent wallet balance change from going to 0
@@ -1897,16 +1936,16 @@ export default function PortfolioPage() {
             const tradingBalanceChangeUsd = tradingBalanceChange * nativePrice;
             const storedInitialBalanceUsd = storedInitialBalance * nativePrice;
             
-            // Calculate percentage - only show if initial balance is reasonable (>= $0.10 to avoid huge percentages)
+            // Calculate percentage - only show if initial balance is reasonable (>= $1.00 to avoid huge percentages)
             let tradingBalanceChangePercentage = 0;
-            if (storedInitialBalanceUsd >= 0.10) {
+            if (storedInitialBalanceUsd >= 1.00) {
               tradingBalanceChangePercentage = (tradingBalanceChangeUsd / storedInitialBalanceUsd) * 100;
             } else {
               // If initial balance is too small, percentage will be unreliable - don't show it
               console.warn("⚠️ Initial balance too small for accurate percentage:", {
                 initialBalance: storedInitialBalance,
                 initialBalanceUsd: storedInitialBalanceUsd,
-                threshold: 0.10,
+                threshold: 1.00,
                 recommendation: "Reset initial balance or wait until you have more balance",
               });
               tradingBalanceChangePercentage = 0;
@@ -1916,13 +1955,13 @@ export default function PortfolioPage() {
             setActualBalanceChangePnlPercentage(tradingBalanceChangePercentage);
             setActualBalanceChangeNative(tradingBalanceChange); // Store native balance change (MON or SOL)
             
-            // Calculate native percentage change
+            // Calculate native percentage change - guard against near-zero initial balance
             let nativePercentageChange = 0;
-            if (storedInitialBalance > 0) {
+            if (storedInitialBalance > 0 && storedInitialBalanceUsd >= 1.00) {
               nativePercentageChange = (tradingBalanceChange / storedInitialBalance) * 100;
             }
             setActualBalanceChangeNativePercentage(nativePercentageChange);
-            
+
             // Update balance history for chart
             setBalanceHistory((prev) => {
               const newEntry = {
@@ -1946,12 +1985,12 @@ export default function PortfolioPage() {
               tradingBalanceChangeUsd,
               tradingBalanceChangePercentage: tradingBalanceChangePercentage !== 0 
                 ? `${tradingBalanceChangePercentage.toFixed(2)}%` 
-                : "N/A (initial balance < $0.10)",
+                : "N/A (initial balance < $1.00)",
               nativePrice,
               tradeBasedPnl: totalPnlForTimeframe,
               discrepancy: tradingBalanceChangeUsd - totalPnlForTimeframe,
               formula: "Trading PNL = Current - Initial - (Deposits - Withdrawals)",
-              validation: storedInitialBalanceUsd >= 0.10 ? "✅ Valid" : "⚠️ Initial balance too small",
+              validation: storedInitialBalanceUsd >= 1.00 ? "✅ Valid" : "⚠️ Initial balance too small",
             });
           })
           .catch((error) => {
@@ -1962,7 +2001,7 @@ export default function PortfolioPage() {
             const storedInitialBalanceUsd = storedInitialBalance * nativePrice;
             
             let balanceChangePercentage = 0;
-            if (storedInitialBalanceUsd >= 0.10) {
+            if (storedInitialBalanceUsd >= 1.00) {
               balanceChangePercentage = (balanceChangeUsd / storedInitialBalanceUsd) * 100;
             }
             
@@ -1970,13 +2009,13 @@ export default function PortfolioPage() {
             setActualBalanceChangePnlPercentage(balanceChangePercentage);
             setActualBalanceChangeNative(balanceChange); // Store native balance change (MON or SOL)
             
-            // Calculate native percentage change
+            // Calculate native percentage change - guard against near-zero initial balance
             let nativePercentageChange = 0;
-            if (storedInitialBalance > 0) {
+            if (storedInitialBalance > 0 && storedInitialBalanceUsd >= 1.00) {
               nativePercentageChange = (balanceChange / storedInitialBalance) * 100;
             }
             setActualBalanceChangeNativePercentage(nativePercentageChange);
-            
+
             // Update balance history for chart
             setBalanceHistory((prev) => {
               const newEntry = {
@@ -3021,22 +3060,36 @@ export default function PortfolioPage() {
                         {actualBalanceChangeNative >= 0 ? "+" : "-"}
                         {formatSmartNumber(Math.abs(actualBalanceChangeNative))} {currentChain === 'monad' ? 'MON' : 'SOL'}
                       </div>
-                      {/* Show native percentage change */}
-                      {actualBalanceChangeNativePercentage !== 0 && (
-                        <div 
-                          className="text-sm mb-2"
-                          style={{
-                            color: actualBalanceChangeNativePercentage >= 0 ? "#70E0B0" : "#FF4D7F",
-                          }}
-                        >
-                          {actualBalanceChangeNativePercentage >= 0 ? "+" : ""}{formatSmallPrice(actualBalanceChangeNativePercentage)}%
-                        </div>
-                      )}
-                      {actualBalanceChangePnlPercentage !== 0 && (
-                        <div className={`text-sm mb-3 ${actualBalanceChangePnlPercentage >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
-                          {actualBalanceChangePnlPercentage >= 0 ? "+" : ""}{formatSmallPrice(actualBalanceChangePnlPercentage)}% (USD)
-                        </div>
-                      )}
+                      {/* Show native percentage change (clamped to ±999.99%) */}
+                      {actualBalanceChangeNativePercentage !== 0 && (() => {
+                        const clampedNativePct = Math.max(-999.99, Math.min(999.99, actualBalanceChangeNativePercentage));
+                        const isNativeClamped = Math.abs(actualBalanceChangeNativePercentage) > 999.99;
+                        return (
+                          <div
+                            className="text-sm mb-2"
+                            style={{
+                              color: actualBalanceChangeNativePercentage >= 0 ? "#70E0B0" : "#FF4D7F",
+                            }}
+                          >
+                            {isNativeClamped
+                              ? (actualBalanceChangeNativePercentage > 0 ? ">+999.99%" : "<-999.99%")
+                              : `${clampedNativePct >= 0 ? "+" : ""}${formatSmallPrice(clampedNativePct)}%`
+                            }
+                          </div>
+                        );
+                      })()}
+                      {actualBalanceChangePnlPercentage !== 0 && (() => {
+                        const clampedUsdPct = Math.max(-999.99, Math.min(999.99, actualBalanceChangePnlPercentage));
+                        const isUsdClamped = Math.abs(actualBalanceChangePnlPercentage) > 999.99;
+                        return (
+                          <div className={`text-sm mb-3 ${actualBalanceChangePnlPercentage >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                            {isUsdClamped
+                              ? (actualBalanceChangePnlPercentage > 0 ? ">+999.99% (USD)" : "<-999.99% (USD)")
+                              : `${clampedUsdPct >= 0 ? "+" : ""}${formatSmallPrice(clampedUsdPct)}% (USD)`
+                            }
+                          </div>
+                        );
+                      })()}
                       {/* Interactive Chart */}
                       {balanceHistory.length > 0 && (
                         <div className="mt-2 h-32 sm:h-40 w-full">

@@ -22,9 +22,10 @@ import { getPoolTypeFromToken } from '~/utils/poolTypeDetection';
 import { normalizeMonadAddress } from '~/utils/normalizeMonadAddress';
 import { broadcastMonadQuickTrade } from '~/utils/monadTradeEvents';
 import { listenForTradeEvents, transformToastToError } from '~/utils/createSolanaToastHandler';
+import { broadcastTradeCompleted, TRADE_COMPLETED_EVENT, type TradeCompletedDetail } from '~/utils/tradeEvents';
 import { formatMonadError } from '~/utils/monadError';
 import { useUser } from '../UserContext';
-import { fetchVerifiedPairAddress } from '~/hooks/useSingleTokenPolling';
+import { dispatchBalanceRefresh } from '~/utils/balanceEvents';
 
 type TokenMetadata = UnifiedTokenMetadata & {
   timestamp?: number;
@@ -541,6 +542,8 @@ const Positions: React.FC<PositionsProps> = ({
             const explorerUrl = txHash ? `https://monadvision.com/tx/${txHash}` : undefined;
             toastControls.markSuccess(explorerUrl);
             broadcastMonadQuickTrade(tokenAddress, 'sell');
+            broadcastTradeCompleted({ tokenAddress, tradeType: 'sell', chain: 'monad', txHash: txHash || undefined });
+            dispatchBalanceRefresh('monad');
             refreshPositions();
           } else {
             const errorMessage = formatMonadError((result as any)?.error);
@@ -548,81 +551,26 @@ const Positions: React.FC<PositionsProps> = ({
             return;
           }
         } else {
-          // CRITICAL: Use CACHED pool resolution (Redis-backed) for fast, reliable pool lookups
-          // This handles graduated tokens and provides sub-10ms response for cache hits
-          let verifiedPoolAddress = position.pairAddress;
+          // Jupiter Ultra routes by token address — pool resolution is NOT needed for primary sell path.
+          // Use position's existing data directly. Backend SDK fallback has its own lazy pool discovery.
+          let verifiedPoolAddress = position.pairAddress || '';
           let poolSource = 'position';
-          let poolType = '';
 
+          // Derive poolType from position metadata (no async call needed)
+          const effectiveProtocol = tokenMeta?.protocol || position.launchpad || '';
+          const poolType = getPoolTypeFromToken({
+            mint: position.tokenAddress,
+            pair_address: verifiedPoolAddress,
+            launchpad_protocol: effectiveProtocol,
+          } as any);
+
+          // Fire-and-forget: warm the Redis pool cache for future lookups (non-blocking)
           if (position.tokenAddress) {
-            console.log(`[Positions] 🔍 Resolving pool for sell via cached API: ${position.tokenAddress}`);
-
-            // Use the cached pool resolution API - much faster than direct DexScreener calls
-            // Cache is shared across all users, so one resolution benefits everyone
-            try {
-              const resolvedPool = await resolvePool(
-                position.tokenAddress,
-                false, // Don't force refresh - use cache
-                position.launchpad || undefined // Optional hint
-              );
-
-              if (resolvedPool) {
-                console.log(`[Positions] ✅ Pool resolved: ${resolvedPool.poolAddress} (${resolvedPool.poolType}, ${resolvedPool.responseTimeMs}ms, ${resolvedPool.cacheHit ? 'CACHE HIT' : 'FRESH'})`);
-
-                // Check if token graduated (stored pool differs from resolved pool)
-                if (position.pairAddress && resolvedPool.poolAddress !== position.pairAddress) {
-                  console.log(`[Positions] 🎓 Token appears to have graduated!`);
-                  console.log(`   Old pool (stored): ${position.pairAddress}`);
-                  console.log(`   New pool (active): ${resolvedPool.poolAddress}`);
-                  if (resolvedPool.isGraduated) {
-                    console.log(`   ✅ Confirmed graduated token`);
-                  }
-                }
-
-                verifiedPoolAddress = resolvedPool.poolAddress;
-                poolType = resolvedPool.poolType;
-                poolSource = `cached-${resolvedPool.source}`;
-              } else {
-                console.log(`[Positions] ⚠️ Cached pool resolution returned null, falling back to token service...`);
-              }
-            } catch (cacheError: any) {
-              console.warn(`[Positions] Cached pool resolution failed:`, cacheError?.message || cacheError);
-            }
-
-            // Fallback to token service if cached resolution failed
-            if (!poolType || poolSource === 'position') {
-              console.log(`[Positions] Trying token service fallback...`);
-              const fetchedAddress = await fetchVerifiedPairAddress(position.tokenAddress);
-              if (fetchedAddress) {
-                verifiedPoolAddress = fetchedAddress;
-                poolSource = 'token-service';
-              }
-            }
+            resolvePool(position.tokenAddress, false, position.launchpad || undefined)
+              .catch(() => {});
           }
 
-          console.log(`[Positions] Using pool address: ${verifiedPoolAddress} (source: ${poolSource})`);
-
-          // Final validation - let backend discover if we still don't have a valid pool
-          const userWalletAddress = user?.publicKey || '';
-          if (!verifiedPoolAddress ||
-              verifiedPoolAddress === position.tokenAddress ||
-              verifiedPoolAddress === userWalletAddress) {
-            console.log(`[Positions] ⚠️ Pool address looks invalid (${verifiedPoolAddress}), letting backend discover pool`);
-            verifiedPoolAddress = position.pairAddress || '';
-            poolSource = 'backend-discovery';
-          }
-
-          // If poolType not set from cache, derive from token metadata
-          if (!poolType) {
-            const effectiveProtocol = tokenMeta?.protocol || position.launchpad || '';
-            poolType = getPoolTypeFromToken({
-              mint: position.tokenAddress,
-              pair_address: verifiedPoolAddress,
-              launchpad_protocol: effectiveProtocol,
-            } as any);
-          }
-
-          console.log(`[Positions] 🎯 Pool type for sell: "${poolType}"`);
+          console.log(`[Positions] 🎯 Sell: pool=${verifiedPoolAddress} type="${poolType}" (source: ${poolSource}, no pre-resolve wait)`);
 
           const sellResult = await tradeSellPercentage(
             {
@@ -669,10 +617,18 @@ const Positions: React.FC<PositionsProps> = ({
             }));
           }
 
-          // Delay refresh to allow backend to commit the transaction
-          setTimeout(() => {
-            refreshPositions();
-          }, 1500);
+          // Broadcast trade completion for portfolio auto-refresh
+          broadcastTradeCompleted({
+            tokenAddress: position.tokenAddress,
+            tradeType: 'sell',
+            chain: 'sol',
+            txHash: sellResult?.hash || undefined,
+            sellPercentage: percent,
+          });
+          dispatchBalanceRefresh('sol');
+
+          // Refresh immediately — backend already committed by the time HTTP response arrives
+          refreshPositions();
         }
       } catch (error: any) {
         // Check for POOL_GRADUATED error (bonding curve completed, liquidity migrated)
@@ -1211,17 +1167,39 @@ const Positions: React.FC<PositionsProps> = ({
     const handleQuickTradeEvent = (event: Event) => {
       const customEvent = event as CustomEvent<{ tokenAddress: string }>;
       console.log(`[Positions] 📡 Received solanaQuickTrade event for ${customEvent.detail?.tokenAddress}`);
-      // Delay slightly to let backend commit the transaction
-      setTimeout(() => {
-        fetchPositions();
-      }, 1500);
+      fetchPositions();
     };
 
     window.addEventListener('solanaQuickTrade', handleQuickTradeEvent);
 
+    // Also listen for unified trade-completed events (portfolio auto-refresh)
+    const handleTradeCompleted = (event: Event) => {
+      const detail = (event as CustomEvent<TradeCompletedDetail>).detail;
+      if (detail?.tradeType === 'sell' && detail.sellPercentage && detail.tokenAddress) {
+        setPositions((prev) =>
+          prev
+            .map((p) => {
+              if (p.tokenAddress === detail.tokenAddress) {
+                const soldFrac = detail.sellPercentage! / 100;
+                const newRemaining = p.remaining * (1 - soldFrac);
+                if (soldFrac >= 0.99 || newRemaining < 0.0001) {
+                  return { ...p, remaining: 0, _shouldRemove: true } as any;
+                }
+                return { ...p, remaining: newRemaining };
+              }
+              return p;
+            })
+            .filter((p) => !(p as any)._shouldRemove)
+        );
+      }
+      fetchPositions(); // immediate — backend already committed
+    };
+    window.addEventListener(TRADE_COMPLETED_EVENT, handleTradeCompleted);
+
     return () => {
       clearInterval(intervalId);
       window.removeEventListener('solanaQuickTrade', handleQuickTradeEvent);
+      window.removeEventListener(TRADE_COMPLETED_EVENT, handleTradeCompleted);
     };
   }, [userId, onPositionsChange, skipFetch, blockchain, requestMetadataForTokens, positionsCacheKey]);
 

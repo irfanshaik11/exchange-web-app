@@ -10,6 +10,7 @@ export function mapTradeErrorMessage(error: any): string {
   // Insufficient funds
   if (
     errorCode === 'INSUFFICIENT_BALANCE' ||
+    errorCode === 'INSUFFICIENT_SOL_FOR_FEES' ||
     raw.includes('insufficient balance') ||
     raw.includes('insufficient sol') ||
     raw.includes('insufficient funds') ||

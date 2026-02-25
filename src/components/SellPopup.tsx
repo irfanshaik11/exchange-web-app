@@ -8,10 +8,12 @@ import toast from "react-hot-toast";
 import { useUser } from "~/components/UserContext";
 import InterstateTooltip from "./InterstateTooltip";
 import { getPoolTypeFromToken } from "~/utils/poolTypeDetection";
+import { broadcastTradeCompleted } from "~/utils/tradeEvents";
 import type { PositionRow } from "~/utils/functions";
 import { useQuickBuy } from "~/components/QuickBuyContext";
 import HighSlippageWarningDialog from "./HighSlippageWarningDialog";
 import { fetchVerifiedPairAddress } from "~/hooks/useSingleTokenPolling";
+import { dispatchBalanceRefresh } from "~/utils/balanceEvents";
 
 interface SellPopupProps {
   isOpen: boolean;
@@ -284,11 +286,21 @@ const SellPopup: React.FC<SellPopupProps> = ({ isOpen, onClose, position, tokenM
         });
         toast.success(`Sold ${amount}% of ${tokenMetadata?.symbol || 'tokens'} successfully!`);
         
+        // Broadcast trade completion for portfolio auto-refresh
+        broadcastTradeCompleted({
+          tokenAddress: position.tokenAddress,
+          tradeType: 'sell',
+          chain: 'sol',
+          txHash: txHash || undefined,
+          sellPercentage: Number(amount),
+        });
+        dispatchBalanceRefresh('sol');
+
         // Call success callback to refresh positions
         if (onSellSuccess) {
           onSellSuccess();
         }
-        
+
         // Close popup after successful trade
         setTimeout(() => {
           onClose();
@@ -326,9 +338,9 @@ const SellPopup: React.FC<SellPopupProps> = ({ isOpen, onClose, position, tokenM
         } else if (error.code === 'TX_FAILED') {
           errorMessage = `❌ Trade failed. Try adjusting slippage.`;
           toast.error('Trade failed. Try adjusting slippage.', { duration: 4000 });
-        } else if (error.code === 'INSUFFICIENT_BALANCE') {
-          errorMessage = `⚠️ Insufficient balance`;
-          toast.error('Insufficient balance', { duration: 4000 });
+        } else if (error.code === 'INSUFFICIENT_BALANCE' || error.code === 'INSUFFICIENT_SOL_FOR_FEES') {
+          errorMessage = `⚠️ Low SOL balance — deposit SOL to sell`;
+          toast.error('Low SOL balance. Deposit SOL to cover fees.', { duration: 4000 });
         } else if (error.code === 'INVALID_POOL_TYPE') {
           errorMessage = `⚠️ Pool type not supported`;
           toast.error('Pool type not supported', { duration: 4000 });

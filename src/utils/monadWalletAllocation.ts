@@ -1,5 +1,6 @@
 import { tradeMonadBuy } from "./api";
 import { normalizeMonadAddress } from "./normalizeMonadAddress";
+import { broadcastTradeCompleted } from "./tradeEvents";
 
 type WalletListItem = {
   id: string;
@@ -410,6 +411,15 @@ export async function executeMonadMultiBuy({
       throw error;
     }
   }
+
+  // Broadcast trade completion for portfolio auto-refresh
+  const firstTxHash = results[0]?.result?.txHash || results[0]?.result?.hash;
+  broadcastTradeCompleted({
+    tokenAddress,
+    tradeType: 'buy',
+    chain: 'monad',
+    txHash: firstTxHash || undefined,
+  });
 
   return {
     allocations: allocationsToUse,

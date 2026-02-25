@@ -366,10 +366,8 @@ function TurnkeySessionBridge() {
             clearStoredReferralCodeHint();
 
             pendingRefreshRef.current = true;
-            if (user?.userEmail || user?.userName) {
-              await refreshUser();
-              pendingRefreshRef.current = false;
-            }
+            await refreshUser();
+            pendingRefreshRef.current = false;
 
             // Don't redirect if we're on the export page - let user stay there to export
             const isOnExportPage =

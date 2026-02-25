@@ -102,6 +102,7 @@ import {
 } from "~/utils/api";
 import { getPoolTypeFromToken } from "~/utils/poolTypeDetection";
 import { mapTradeErrorMessage } from "~/utils/tradeErrorMessages";
+import { dispatchBalanceRefresh } from "~/utils/balanceEvents";
 import { listenForTradeEvents, transformToastToError } from "~/utils/createSolanaToastHandler";
 import { TokenAge } from "./TokenAge";
 import { prefetchTradeData } from "~/utils/tokenCache";
@@ -3487,6 +3488,7 @@ function PulseTable({
           }),
         );
       }
+      dispatchBalanceRefresh('sol');
 
       return { success: true };
     } catch (error: any) {

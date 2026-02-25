@@ -25,6 +25,8 @@ import toast from 'react-hot-toast';
 import { getResolvedTokenImage, resolveTokenImage } from './images';
 import { fetchVerifiedPairAddress } from '~/hooks/useSingleTokenPolling';
 import { listenForTradeEvents } from '~/utils/createSolanaToastHandler';
+import { broadcastTradeCompleted } from './tradeEvents';
+import { dispatchBalanceRefresh } from './balanceEvents';
 
 // Helper function to get first valid string from multiple candidates
 function getFirstString(...values: Array<unknown>): string | undefined {
@@ -842,8 +844,20 @@ export async function executeEnhancedTrade(params: EnhancedTradeParams): Promise
         }, 500);
       }
       
+      // Dispatch balance-refresh event as fallback for callers that don't pass refreshBalance
+      dispatchBalanceRefresh(chain === 'monad' ? 'monad' : 'sol');
+
       if (onSuccess) onSuccess(txHash, stats);
-      
+
+      // Broadcast trade completion for portfolio auto-refresh
+      broadcastTradeCompleted({
+        tokenAddress: token.mint,
+        tradeType: side,
+        chain: 'sol',
+        txHash: txHash || undefined,
+        amount,
+      });
+
       if (isPending && txHash) {
         void monitorPendingConfirmation({
           txHash,
