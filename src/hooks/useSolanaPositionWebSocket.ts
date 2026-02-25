@@ -201,6 +201,9 @@ export function useSolanaPositionWebSocket(
           } else if (message.type === 'trade_error' && message.data) {
             console.log('[useSolanaPositionWebSocket] ⚠️ Trade error via WS:', message.data.errorMessage);
             window.dispatchEvent(new CustomEvent('solanaTradeError', { detail: message.data }));
+          } else if (message.type === 'positions_changed' && message.data) {
+            console.log('[useSolanaPositionWebSocket] 📡 Positions changed:', message.data);
+            window.dispatchEvent(new CustomEvent('solanaPositionsChanged', { detail: message.data }));
           } else if (message.type === 'position_update' && message.data) {
             const positionData: SolanaPosition = message.data;
 

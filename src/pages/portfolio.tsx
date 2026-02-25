@@ -28,9 +28,9 @@ import ImportSolanaWalletModal from "../components/ImportSolanaWalletModal";
 import ImportEvmWalletModal from "../components/ImportEvmWalletModal";
 import { SolanaIcon } from "../components/Footer";
 import ExportWalletModal from "../components/ExportWalletModal";
-import { usePositionPrices } from "~/hooks/usePositionPrices";
+
 import { useWalletTokenBalances } from "~/hooks/useWalletTokenBalances";
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Area, AreaChart } from 'recharts';
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Area, AreaChart, ComposedChart, Bar, ReferenceLine, Cell } from 'recharts';
 import { normalizeMonadAddress } from "~/utils/normalizeMonadAddress";
 import { acknowledgeWalletExport } from "~/utils/api";
 import { TRADE_COMPLETED_EVENT, consumePendingTradeRefreshes, type TradeCompletedDetail } from "~/utils/tradeEvents";
@@ -170,6 +170,151 @@ const BalanceChart = ({
             animationDuration={300}
           />
         </AreaChart>
+      </ResponsiveContainer>
+    </div>
+  );
+};
+
+// Interactive Realized PNL Chart Component
+interface PnlChartDataPoint {
+  time: string;
+  date: string;
+  cumulativePnl: number;
+  tradePnl: number;
+  tokenSymbol: string;
+  tokenName: string;
+  index: number;
+}
+
+const RealizedPnlChart = ({ data }: { data: PnlChartDataPoint[] }) => {
+  // Separate Y-axis domains so bars and line each fill their own scale
+  const cumulativeValues = data.map(d => d.cumulativePnl);
+  const tradeValues = data.filter(d => d.index !== 0).map(d => d.tradePnl);
+
+  const cumMin = Math.min(...cumulativeValues, 0);
+  const cumMax = Math.max(...cumulativeValues, 0);
+  const cumPad = Math.max(Math.abs(cumMin), Math.abs(cumMax)) * 0.15 || 0.01;
+  const lineDomain: [number, number] = [cumMin - cumPad, cumMax + cumPad];
+
+  const tradeMin = Math.min(...tradeValues, 0);
+  const tradeMax = Math.max(...tradeValues, 0);
+  const tradePad = Math.max(Math.abs(tradeMin), Math.abs(tradeMax)) * 0.15 || 0.01;
+  const barDomain: [number, number] = [tradeMin - tradePad, tradeMax + tradePad];
+
+  const CustomTooltip = ({ active, payload }: any) => {
+    if (active && payload && payload.length) {
+      const d = payload[0].payload as PnlChartDataPoint;
+      // Skip the synthetic origin point
+      if (d.index === 0) return null;
+      return (
+        <div className="bg-black/90 backdrop-blur-xl border border-white/[0.06] rounded-lg p-3 shadow-lg z-50 pointer-events-none" style={{
+          position: 'absolute',
+          transform: 'translateY(-100%)',
+          marginTop: '-10px'
+        }}>
+          <p className="text-[#6B7280] text-xs mb-2 font-medium">{d.date}</p>
+          <div className="space-y-1">
+            <p className="text-white text-xs font-medium">{d.tokenSymbol || d.tokenName}</p>
+            <p className="text-xs" style={{ color: d.tradePnl >= 0 ? "#70E0B0" : "#FF4D7F" }}>
+              This trade: {d.tradePnl >= 0 ? "+" : "-"}${formatSmallPrice(Math.abs(d.tradePnl))}
+            </p>
+            <p className="text-sm font-medium" style={{ color: d.cumulativePnl >= 0 ? "#70E0B0" : "#FF4D7F" }}>
+              Total: {d.cumulativePnl >= 0 ? "+" : "-"}${formatSmallPrice(Math.abs(d.cumulativePnl))}
+            </p>
+          </div>
+        </div>
+      );
+    }
+    return null;
+  };
+
+  return (
+    <div className="w-full h-full min-h-[160px] sm:min-h-[192px]">
+      <ResponsiveContainer width="100%" height="100%">
+        <ComposedChart
+          data={data}
+          margin={{ top: 5, right: 5, left: 0, bottom: 0 }}
+        >
+          <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.06)" opacity={0.5} />
+          <XAxis
+            dataKey="time"
+            stroke="#6B7280"
+            fontSize={8}
+            tick={{ fill: '#6B7280' }}
+            interval={Math.max(0, Math.floor(data.length / 5))}
+            tickLine={{ stroke: 'rgba(255,255,255,0.06)' }}
+          />
+          {/* Left Y-axis for cumulative PNL line */}
+          <YAxis
+            yAxisId="line"
+            stroke="#6B7280"
+            fontSize={8}
+            tick={{ fill: '#6B7280' }}
+            tickLine={{ stroke: 'rgba(255,255,255,0.06)' }}
+            domain={lineDomain}
+            allowDataOverflow={false}
+            width={40}
+            tickFormatter={(value) => {
+              if (Math.abs(value) >= 1) return `$${value.toFixed(2)}`;
+              if (Math.abs(value) >= 0.1) return `$${value.toFixed(3)}`;
+              return `$${value.toFixed(4)}`;
+            }}
+          />
+          {/* Right Y-axis for per-trade PNL bars (hidden — line axis provides context) */}
+          <YAxis
+            yAxisId="bar"
+            orientation="right"
+            domain={barDomain}
+            allowDataOverflow={false}
+            hide={true}
+          />
+          <Tooltip
+            content={<CustomTooltip />}
+            cursor={{ stroke: 'rgba(255,255,255,0.2)', strokeWidth: 1, strokeDasharray: '5 5' }}
+            position={{ y: -10 }}
+          />
+          <ReferenceLine
+            yAxisId="bar"
+            y={0}
+            stroke="rgba(255,255,255,0.3)"
+            strokeDasharray="3 3"
+          />
+          <ReferenceLine
+            yAxisId="line"
+            y={0}
+            stroke="rgba(255,255,255,0.15)"
+            strokeDasharray="2 4"
+          />
+          <Bar
+            yAxisId="bar"
+            dataKey="tradePnl"
+            animationDuration={300}
+            radius={[2, 2, 0, 0]}
+          >
+            {data.map((entry, idx) => (
+              <Cell
+                key={`cell-${idx}`}
+                fill={entry.index === 0 ? 'transparent' : entry.tradePnl >= 0 ? '#70E0B0' : '#FF4D7F'}
+                fillOpacity={entry.index === 0 ? 0 : 0.85}
+              />
+            ))}
+          </Bar>
+          <Line
+            yAxisId="line"
+            type="monotone"
+            dataKey="cumulativePnl"
+            stroke="#A0AEC0"
+            strokeWidth={1.5}
+            dot={false}
+            activeDot={{
+              r: 4,
+              fill: '#A0AEC0',
+              stroke: 'rgba(0,0,0,0.8)',
+              strokeWidth: 2
+            }}
+            animationDuration={300}
+          />
+        </ComposedChart>
       </ResponsiveContainer>
     </div>
   );
@@ -459,12 +604,10 @@ export default function PortfolioPage() {
   const [actualBalanceChangeNative, setActualBalanceChangeNative] = useState(0); // Native balance change (MON or SOL)
   const [actualBalanceChangeNativePercentage, setActualBalanceChangeNativePercentage] = useState(0); // Native percentage change
   const [balanceHistory, setBalanceHistory] = useState<Array<{ timestamp: number; balance: number; balanceChange: number }>>([]);
+  const [pnlChartData, setPnlChartData] = useState<PnlChartDataPoint[]>([]);
   const [totalValue, setTotalValue] = useState(0);
   // Track previous balances to detect sales - persist across page reloads
   const previousBalancesRef = useRef<Record<string, number>>({});
-  
-  // Track cumulative realized PNL history for chart
-  const realizedPnlHistoryRef = useRef<Array<{ timestamp: number; value: number }>>([]);
   
   // Track cumulative realized PNL (persists across reloads)
   const cumulativeRealizedPnlRef = useRef<number>(0);
@@ -478,7 +621,6 @@ export default function PortfolioPage() {
   // Helper to get localStorage keys (computed based on user and chain)
   const getStorageKeys = () => ({
     previousBalances: `previousBalances_${user?.id || 'anonymous'}_${currentChain}`,
-    realizedPnlHistory: `realizedPnlHistory_${user?.id || 'anonymous'}_${currentChain}`,
     cumulativeRealizedPnl: `cumulativeRealizedPnl_${user?.id || 'anonymous'}_${currentChain}`,
     initialNativeBalance: `initialNativeBalance_${user?.id || 'anonymous'}_${currentChain}`,
   });
@@ -917,8 +1059,17 @@ export default function PortfolioPage() {
     };
 
     window.addEventListener(TRADE_COMPLETED_EVENT, handleTradeCompleted);
+
+    // Listen for WS-driven position change signals
+    const handlePositionsChanged = () => {
+      refreshBalance({ chain: currentChain === 'monad' ? 'monad' : 'sol', force: true }).catch(() => {});
+      setTradeRefreshCounter((c) => c + 1);
+    };
+    window.addEventListener('solanaPositionsChanged', handlePositionsChanged);
+
     return () => {
       window.removeEventListener(TRADE_COMPLETED_EVENT, handleTradeCompleted);
+      window.removeEventListener('solanaPositionsChanged', handlePositionsChanged);
     };
   }, [currentChain, refreshBalance]);
 
@@ -945,12 +1096,16 @@ export default function PortfolioPage() {
     return primaryWalletAddresses?.solana || user?.publicKey || null;
   }, [currentChain, primaryWalletAddresses, user?.publicKey]);
 
-  // Fetch live prices for active positions (DISABLED - endpoint not implemented yet)
-  const { prices: livePrices } = usePositionPrices(activeTokenAddresses, {
-    enabled: false, // Disabled until /api/codex/market-data endpoint is implemented
-    refreshInterval: 2000, // Update every 2 seconds for faster updates
-    chain: currentChain,
-  });
+  // Build live prices from backend position data (currentPrice comes from Go token-service)
+  const livePrices = useMemo(() => {
+    const priceMap: Record<string, number> = {};
+    positions.forEach((pos) => {
+      if (pos.currentPrice && pos.currentPrice > 0) {
+        priceMap[pos.tokenAddress] = pos.currentPrice;
+      }
+    });
+    return priceMap;
+  }, [positions]);
 
   // Fetch actual token balances from wallet (real blockchain state)
   const { balances: actualBalances } = useWalletTokenBalances(
@@ -971,7 +1126,6 @@ export default function PortfolioPage() {
     initialNativeBalanceRef.current = null;
     setBalanceHistory([]);
     previousBalancesRef.current = {};
-    realizedPnlHistoryRef.current = [];
     cumulativeRealizedPnlRef.current = 0;
 
     const storageKeys = getStorageKeys();
@@ -982,13 +1136,6 @@ export default function PortfolioPage() {
       if (savedBalances) {
         previousBalancesRef.current = JSON.parse(savedBalances);
         console.log("📊 Loaded previous balances from localStorage:", previousBalancesRef.current);
-      }
-      
-      // Load realized PNL history
-      const savedHistory = localStorage.getItem(storageKeys.realizedPnlHistory);
-      if (savedHistory) {
-        realizedPnlHistoryRef.current = JSON.parse(savedHistory);
-        console.log("📊 Loaded realized PNL history from localStorage:", realizedPnlHistoryRef.current.length, "points");
       }
       
       // Load cumulative realized PNL
@@ -1367,6 +1514,9 @@ export default function PortfolioPage() {
         costBasis: number;
         realizedPnl: number;
         source: string;
+        timestamp: number;
+        tokenSymbol: string;
+        tokenName: string;
       }> = [];
       
       // 1. Calculate from TRADE HISTORY (most accurate - actual sell transactions)
@@ -1375,7 +1525,17 @@ export default function PortfolioPage() {
         if (!addr) return '';
         return addr.toLowerCase().trim();
       };
-      
+
+      // Parse trade timestamp safely — tradeTime is a time-only column ("14:30:00")
+      // which produces NaN from new Date(). Use createdAt (full datetime) as primary.
+      const parseTradeTimestamp = (trade: { tradeTime?: string; createdAt?: string }) => {
+        let t = new Date(trade.createdAt || '').getTime();
+        if (!isNaN(t)) return t;
+        t = new Date(trade.tradeTime || '').getTime();
+        if (!isNaN(t)) return t;
+        return Date.now();
+      };
+
       const sellTrades = tradeHistory.filter(t => {
         const type = t.type?.toLowerCase();
         return type === "sell" || type === "s";
@@ -1400,7 +1560,7 @@ export default function PortfolioPage() {
         
         const tokenAmount = typeof buy.tokenAmount === 'string' ? parseFloat(buy.tokenAmount) : (buy.tokenAmount || 0);
         const usdValue = typeof buy.usdValue === 'string' ? parseFloat(buy.usdValue) : (buy.usdValue || 0);
-        const timestamp = new Date(buy.tradeTime || buy.createdAt || Date.now()).getTime();
+        const timestamp = parseTradeTimestamp(buy);
         const tradeId = buy.transactionHash || `${buy.tokenAddress}_${timestamp}`;
         
         if (tokenAmount > 0 && usdValue > 0) {
@@ -1434,7 +1594,7 @@ export default function PortfolioPage() {
         const tokenAddress = normalizeAddress(sell.tokenAddress);
         if (!tokenAddress) return;
         
-        const tradeId = sell.transactionHash || `${sell.tokenAddress}_${new Date(sell.tradeTime || sell.createdAt || Date.now()).getTime()}`;
+        const tradeId = sell.transactionHash || `${sell.tokenAddress}_${parseTradeTimestamp(sell)}`;
         
         // Skip if already processed
         if (processedSellTrades.has(tradeId)) return;
@@ -1538,6 +1698,9 @@ export default function PortfolioPage() {
           costBasis: totalCostBasis,
           realizedPnl: saleRealizedPnl,
           source: storedRealizedPnl !== null ? 'trade_history_stored' : 'trade_history',
+          timestamp: parseTradeTimestamp(sell),
+          tokenSymbol: sell.tokenSymbol || '',
+          tokenName: sell.tokenName || '',
         });
       });
       
@@ -1599,8 +1762,8 @@ export default function PortfolioPage() {
               const recentSells = sellTrades
                 .filter(s => normalizeAddress(s.tokenAddress) === normalizedTokenAddress)
                 .sort((a, b) => {
-                  const aTime = new Date(a.tradeTime || a.createdAt || 0).getTime();
-                  const bTime = new Date(b.tradeTime || b.createdAt || 0).getTime();
+                  const aTime = parseTradeTimestamp(a);
+                  const bTime = parseTradeTimestamp(b);
                   return bTime - aTime; // Most recent first
                 });
               
@@ -1637,6 +1800,9 @@ export default function PortfolioPage() {
               costBasis: costBasisOfSold,
               realizedPnl: saleRealizedPnl,
               source: 'balance_change',
+              timestamp: Date.now(),
+              tokenSymbol: position?.tokenSymbol || tokenNames[originalTokenAddress] || '',
+              tokenName: position?.tokenName || '',
             });
             
             console.log("💰 BALANCE CHANGE SALE - Realized PNL:", {
@@ -1681,9 +1847,9 @@ export default function PortfolioPage() {
       positions.forEach((pos) => {
         if (pos.sold > 0 && pos.bought > 0 && pos.boughtUsdValue > 0) {
           // Check if already counted
-          const alreadyCounted = salesDetected.some(s => 
+          const alreadyCounted = salesDetected.some(s =>
             s.tokenAddress === pos.tokenAddress &&
-            (s.source === 'trade_history' || s.source === 'balance_change')
+            (s.source === 'trade_history' || s.source === 'trade_history_stored' || s.source === 'balance_change')
           );
           
           if (alreadyCounted) return;
@@ -1702,6 +1868,9 @@ export default function PortfolioPage() {
             costBasis: costBasisOfSold,
             realizedPnl: saleRealizedPnl,
             source: 'backend',
+            timestamp: Date.now(),
+            tokenSymbol: pos.tokenSymbol || '',
+            tokenName: pos.tokenName || '',
           });
           
           console.log("💰 BACKEND SALE - Realized PNL:", {
@@ -1713,37 +1882,46 @@ export default function PortfolioPage() {
           });
         }
       });
-      
+
+      // Build PNL chart data from salesDetected (same array that produced totalRealizedPnl)
+      const filteredSales = salesDetected.filter(s => s.timestamp >= cutoffTime);
+      if (filteredSales.length > 0) {
+        const sorted = [...filteredSales].sort((a, b) => a.timestamp - b.timestamp);
+        let cumulative = 0;
+        const chartPoints: PnlChartDataPoint[] = [];
+        const firstDate = new Date(sorted[0].timestamp);
+        chartPoints.push({
+          time: firstDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+          date: 'Start', cumulativePnl: 0, tradePnl: 0,
+          tokenSymbol: '', tokenName: '', index: 0,
+        });
+        sorted.forEach((sale, i) => {
+          const tradeDate = new Date(sale.timestamp);
+          const timeLabel = tradeDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+          const dateLabel = timeLabel + ', ' + tradeDate.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+          cumulative += sale.realizedPnl;
+          chartPoints.push({
+            time: timeLabel, date: dateLabel,
+            cumulativePnl: Math.round(cumulative * 1e6) / 1e6,
+            tradePnl: Math.round(sale.realizedPnl * 1e6) / 1e6,
+            tokenSymbol: sale.tokenSymbol, tokenName: sale.tokenName, index: i + 1,
+          });
+        });
+        setPnlChartData(chartPoints);
+      } else {
+        setPnlChartData([]);
+      }
+
       // Update cumulative realized PNL (persists across reloads)
       // Store the total calculated from all sources
       cumulativeRealizedPnlRef.current = totalRealizedPnl;
       
-      // Update realized PNL history for chart
-      const currentTimestamp = Date.now();
-      const lastHistoryPoint = realizedPnlHistoryRef.current[realizedPnlHistoryRef.current.length - 1];
-      
-      // Only add new point if value changed significantly or it's been 5+ seconds
-      if (!lastHistoryPoint || 
-          Math.abs(lastHistoryPoint.value - totalRealizedPnl) > 0.01 ||
-          (currentTimestamp - lastHistoryPoint.timestamp) > 5000) {
-        realizedPnlHistoryRef.current.push({
-          timestamp: currentTimestamp,
-          value: totalRealizedPnl,
-        });
-        
-        // Keep only last 100 data points
-        if (realizedPnlHistoryRef.current.length > 100) {
-          realizedPnlHistoryRef.current.shift();
-        }
-        
-        // Save to localStorage
-        try {
-          const storageKeys = getStorageKeys();
-          localStorage.setItem(storageKeys.realizedPnlHistory, JSON.stringify(realizedPnlHistoryRef.current));
-          localStorage.setItem(storageKeys.cumulativeRealizedPnl, totalRealizedPnl.toString());
-        } catch (error) {
-          console.error("Error saving realized PNL data:", error);
-        }
+      // Save cumulative realized PNL to localStorage
+      try {
+        const storageKeys = getStorageKeys();
+        localStorage.setItem(storageKeys.cumulativeRealizedPnl, totalRealizedPnl.toString());
+      } catch (error) {
+        console.error("Error saving realized PNL data:", error);
       }
 
       // Performance breakdown counters
@@ -2067,10 +2245,12 @@ export default function PortfolioPage() {
         between0AndMinus50,
         belowMinus50,
       });
+
     };
 
     calculateTimeframeMetrics();
   }, [selectedTimeframe, tradeHistory, positions, unrealizedPnl, actualBalances, livePrices, user?.id, user?.bearerToken, currentChain, chainBalances, solBalance, solPrice, monPrice]);
+
 
   // Export performance data as CSV
   const exportPerformanceData = () => {
@@ -3124,7 +3304,7 @@ export default function PortfolioPage() {
                       </svg>
                     </InterstateTooltip> */}
                   </div>
-                  <div className="flex flex-col h-28 sm:h-32">
+                  <div className="flex flex-col">
                     <div
                       className="text-xl sm:text-2xl font-light mb-2"
                       style={{
@@ -3151,125 +3331,16 @@ export default function PortfolioPage() {
                     <div className={`text-sm mb-2 ${timeframeMetrics.realizedPnlPercentage >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
                       {timeframeMetrics.realizedPnlPercentage >= 0 ? "+" : ""}{formatSmallPrice(timeframeMetrics.realizedPnlPercentage)}%
                     </div>
-                    {/* Dynamic PNL chart */}
-                    <div className="relative w-full flex-1">
-                      <svg
-                        className="w-full h-full"
-                        viewBox="0 0 300 80"
-                        preserveAspectRatio="none"
-                      >
-                        {/* Horizontal reference line (neutral/zero) */}
-                        <line
-                          x1="0"
-                          y1="40"
-                          x2="300"
-                          y2="40"
-                          stroke="rgba(255,255,255,0.06)"
-                          strokeWidth="1"
-                        />
-
-                        {/* Dashed reference lines for visual context */}
-                        <line
-                          x1="0"
-                          y1="20"
-                          x2="300"
-                          y2="20"
-                          stroke="#4A4B53"
-                          strokeWidth="1"
-                          strokeDasharray="4,3"
-                          opacity="0.7"
-                        />
-                        <line
-                          x1="0"
-                          y1="60"
-                          x2="300"
-                          y2="60"
-                          stroke="#4A4B53"
-                          strokeWidth="1"
-                          strokeDasharray="4,3"
-                          opacity="0.7"
-                        />
-
-                        {/* Dynamic PNL line - shows realized PNL over time */}
-                        <path
-                          d={(() => {
-                            const history = realizedPnlHistoryRef.current;
-                            const pnl = timeframeMetrics.realizedPnl;
-
-                            if (history.length === 0) {
-                              // No history yet, use current value
-                              // If PNL is non-zero, show a visible slope; if zero, flat line
-                              const normalizedPnl = pnl === 0 ? 0 : (pnl > 0 ? 0.7 : -0.7);
-                              const endY = 40 - normalizedPnl * 30;
-                              return `M 0 40 L 300 ${endY}`;
-                            }
-
-                            // Use history to create a line chart
-                            const points: string[] = [];
-                            const maxTime = Math.max(...history.map(h => h.timestamp));
-                            const minTime = Math.min(...history.map(h => h.timestamp));
-                            const timeRange = maxTime - minTime || 1;
-
-                            // Normalize PNL values for display - use actual range, not minimum of 100
-                            const allValues = [...history.map(h => h.value), pnl];
-                            const maxAbsValue = Math.max(...allValues.map(Math.abs), 0.001);
-
-                            history.forEach((point, index) => {
-                              const x = ((point.timestamp - minTime) / timeRange) * 300;
-                              const normalizedValue = maxAbsValue > 0 ? Math.max(-1, Math.min(1, point.value / maxAbsValue)) : 0;
-                              const y = 40 - normalizedValue * 30;
-                              if (index === 0) {
-                                points.push(`M ${x} ${y}`);
-                              } else {
-                                points.push(`L ${x} ${y}`);
-                              }
-                            });
-
-                            // Add current value
-                            const normalizedPnl = maxAbsValue > 0 ? Math.max(-1, Math.min(1, pnl / maxAbsValue)) : 0;
-                            const endY = 40 - normalizedPnl * 30;
-                            points.push(`L 300 ${endY}`);
-
-                            return points.join(' ');
-                          })()}
-                          stroke={
-                            timeframeMetrics.realizedPnl >= 0
-                              ? "#70E0B0"
-                              : "#FF4D7F"
-                          }
-                          strokeWidth="2.5"
-                          fill="none"
-                          style={{ transition: "all 0.3s ease" }}
-                        />
-
-                        {/* Start and end points for clarity */}
-                        <circle
-                          cx="0"
-                          cy="40"
-                          r="2"
-                          fill={
-                            timeframeMetrics.realizedPnl >= 0
-                              ? "#70E0B0"
-                              : "#FF4D7F"
-                          }
-                        />
-                        <circle
-                          cx="300"
-                          cy={(() => {
-                            const pnl = timeframeMetrics.realizedPnl;
-                            // Match the path scaling - show visible position for any non-zero value
-                            const normalizedPnl = pnl === 0 ? 0 : (pnl > 0 ? 0.7 : -0.7);
-                            return 40 - normalizedPnl * 30;
-                          })()}
-                          r="2"
-                          fill={
-                            timeframeMetrics.realizedPnl >= 0
-                              ? "#70E0B0"
-                              : "#FF4D7F"
-                          }
-                        />
-                      </svg>
-                    </div>
+                    {/* Interactive Realized PNL Chart */}
+                    {pnlChartData.length > 1 ? (
+                      <div className="h-40 sm:h-48 w-full">
+                        <RealizedPnlChart data={pnlChartData} />
+                      </div>
+                    ) : (
+                      <div className="h-40 sm:h-48 w-full flex items-center justify-center">
+                        <p className="text-[#6B7280] text-xs">No realized trades yet</p>
+                      </div>
+                    )}
                   </div>
                 </div>
 

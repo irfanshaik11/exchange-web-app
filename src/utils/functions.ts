@@ -18,6 +18,7 @@ export interface PositionRow {
   remainingUsdValue: number;
   pnl: number;
   pnlPercentage: number;
+  currentPrice?: number;
   actions: string;
 }
 

@@ -108,6 +108,8 @@ export interface SolanaTokenInfo {
   image_url?: string;     // Direct image URL (fetched from URI metadata)
   twitter?: string;       // Twitter URL (fetched from URI metadata)
   updated_at: string;
+  // Token creation timestamp (used for token age display)
+  created_at?: string;
   // Dev token tracking
   dev_tokens_created?: number;
   dev_tokens_migrated?: number;

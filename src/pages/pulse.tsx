@@ -300,6 +300,29 @@ export default function PulsePage() {
   // React Query client for manual cache updates from WebSocket
   const queryClient = useQueryClient();
 
+  // Stale tab detection: refetch Solana data when user returns after >30s
+  const hiddenAtRef = useRef<number>(0);
+  const STALE_TAB_THRESHOLD_MS = 30_000;
+
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'hidden') {
+        hiddenAtRef.current = Date.now();
+      } else if (document.visibilityState === 'visible') {
+        const away = hiddenAtRef.current > 0 ? Date.now() - hiddenAtRef.current : 0;
+        hiddenAtRef.current = 0;
+
+        if (away > STALE_TAB_THRESHOLD_MS && !isMonadRoute) {
+          console.log(`[Pulse] Tab hidden for ${Math.round(away / 1000)}s, refreshing Solana data...`);
+          queryClient.invalidateQueries({ queryKey: ['tokens'] });
+        }
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
+  }, [isMonadRoute, queryClient]);
+
   // React Query hooks - instant cache
   // CRITICAL: Only enable Solana data fetching when NOT on Monad route
   // This prevents Solana data from loading when on Monad chain

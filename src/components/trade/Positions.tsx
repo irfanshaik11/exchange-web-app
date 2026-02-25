@@ -12,7 +12,7 @@ import Image from 'next/image';
 import SellPopup from '../SellPopup';
 import { fetchChainTokenMetadata, fetchPumpfunImage, isPumpfunToken, type UnifiedTokenMetadata } from '~/utils/tokenMetadata';
 import { getProtocolBranding } from '~/utils/protocolBranding';
-import { usePositionPrices } from '~/hooks/usePositionPrices';
+
 import PositionDetailModal from './PositionDetailModal';
 import toast from 'react-hot-toast';
 import { validateSolanaSell, showTradeValidationError } from '~/utils/preTradeValidation';
@@ -185,6 +185,10 @@ const Positions: React.FC<PositionsProps> = ({
   const fetchPositionsRef = useRef<(() => Promise<void>) | null>(null);
   // Ref to track if a fetch is currently in progress
   const isFetchingRef = useRef(false);
+  // Ref to track last trade timestamp (for empty-array guard)
+  const lastTradeTimestampRef = useRef<number>(0);
+  // Ref for debouncing position fetches
+  const debouncedFetchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Keep refs in sync with state
   useEffect(() => {
@@ -626,9 +630,8 @@ const Positions: React.FC<PositionsProps> = ({
             sellPercentage: percent,
           });
           dispatchBalanceRefresh('sol');
-
-          // Refresh immediately — backend already committed by the time HTTP response arrives
-          refreshPositions();
+          // Note: broadcastTradeCompleted above triggers TRADE_COMPLETED_EVENT listener
+          // which handles debounced refetch — no need for redundant refreshPositions() here
         }
       } catch (error: any) {
         // Check for POOL_GRADUATED error (bonding curve completed, liquidity migrated)
@@ -724,12 +727,16 @@ const Positions: React.FC<PositionsProps> = ({
     );
   }, [positions]);
 
-  // Fetch live prices for active positions (DISABLED - endpoint not implemented yet)
-  const { prices: livePrices } = usePositionPrices(activeTokenAddresses, {
-    enabled: false, // Disabled until /api/codex/market-data endpoint is implemented
-    refreshInterval: 2000, // Update every 2 seconds for faster updates
-    chain: currentChain,
-  });
+  // Build live prices from backend position data (currentPrice comes from Go token-service)
+  const livePrices = useMemo(() => {
+    const priceMap: Record<string, number> = {};
+    positions.forEach((pos) => {
+      if (pos.currentPrice && pos.currentPrice > 0) {
+        priceMap[pos.tokenAddress] = pos.currentPrice;
+      }
+    });
+    return priceMap;
+  }, [positions]);
 
   const mergeWithFallback = useCallback(
     (position: PositionRow): PositionRow => {
@@ -1104,19 +1111,17 @@ const Positions: React.FC<PositionsProps> = ({
         let shouldUpdate = true;
 
         if (reversedPositions.length === 0) {
-          // API returned empty - check if we should preserve existing
-          // Use ref to get current positions (avoids stale closure)
           const currentPositions = positionsRef.current;
           const hasEverLoaded = hasEverLoadedRef.current;
+          const hadRecentTrade = lastTradeTimestampRef.current > 0 &&
+            (Date.now() - lastTradeTimestampRef.current) < 15000;
 
-          // Preserve existing positions if:
-          // 1. We have positions currently displayed, OR
-          // 2. We've ever successfully loaded positions (prevents clearing after temporary API error)
-          if (currentPositions.length > 0 || hasEverLoaded) {
-            console.log(`[Positions] ⚠️ API returned empty - preserving (current: ${currentPositions.length}, hasEverLoaded: ${hasEverLoaded})`);
-            shouldUpdate = false; // Don't update state or cache
-          } else {
-            console.log(`[Positions] ℹ️ First load returned empty - accepting (user has no positions)`);
+          if (currentPositions.length === 0 || hadRecentTrade) {
+            // Trust API: user has no positions or just completed a trade
+            shouldUpdate = true;
+          } else if (currentPositions.length > 0 && hasEverLoaded) {
+            console.log(`[Positions] ⚠️ API returned empty during background poll — preserving existing`);
+            shouldUpdate = false;
           }
         }
 
@@ -1125,16 +1130,20 @@ const Positions: React.FC<PositionsProps> = ({
           onPositionsChange(positionsToUse);
 
           // Save to localStorage cache for instant loading when navigating back
-          if (!skipFetch && typeof window !== 'undefined' && positionsToUse.length > 0) {
+          if (!skipFetch && typeof window !== 'undefined') {
             try {
-              const payload = {
-                data: positionsToUse,
-                timestamp: Date.now(),
-              };
-              window.localStorage.setItem(positionsCacheKey, JSON.stringify(payload));
-              console.log(`[Positions] 💾 Cached ${positionsToUse.length} positions to localStorage`);
+              if (positionsToUse.length > 0) {
+                const payload = {
+                  data: positionsToUse,
+                  timestamp: Date.now(),
+                };
+                window.localStorage.setItem(positionsCacheKey, JSON.stringify(payload));
+                console.log(`[Positions] 💾 Cached ${positionsToUse.length} positions to localStorage`);
+              } else {
+                window.localStorage.removeItem(positionsCacheKey);
+              }
             } catch (error) {
-              console.warn(`[Positions] Failed to cache positions:`, error);
+              console.warn(`[Positions] Failed to update positions cache:`, error);
             }
           }
 
@@ -1155,6 +1164,15 @@ const Positions: React.FC<PositionsProps> = ({
     // Store function reference for retry logic
     fetchPositionsRef.current = fetchPositions;
 
+    // Debounced fetch to coalesce rapid-fire fetch requests (e.g. sell triggers 3 events)
+    const debouncedFetchPositions = (delayMs: number = 500) => {
+      if (debouncedFetchTimerRef.current) clearTimeout(debouncedFetchTimerRef.current);
+      debouncedFetchTimerRef.current = setTimeout(() => {
+        debouncedFetchTimerRef.current = null;
+        fetchPositions();
+      }, delayMs);
+    };
+
     fetchPositions();
 
     // Auto-refresh every 5 seconds to get latest positions
@@ -1163,11 +1181,10 @@ const Positions: React.FC<PositionsProps> = ({
     }, 5000);
 
     // Listen for trade events from other components (TradeActionPanel, InstantTradeModal)
-    // This ensures Positions refreshes when a sell happens elsewhere
     const handleQuickTradeEvent = (event: Event) => {
       const customEvent = event as CustomEvent<{ tokenAddress: string }>;
       console.log(`[Positions] 📡 Received solanaQuickTrade event for ${customEvent.detail?.tokenAddress}`);
-      fetchPositions();
+      debouncedFetchPositions(500);
     };
 
     window.addEventListener('solanaQuickTrade', handleQuickTradeEvent);
@@ -1175,6 +1192,7 @@ const Positions: React.FC<PositionsProps> = ({
     // Also listen for unified trade-completed events (portfolio auto-refresh)
     const handleTradeCompleted = (event: Event) => {
       const detail = (event as CustomEvent<TradeCompletedDetail>).detail;
+      lastTradeTimestampRef.current = Date.now();
       if (detail?.tradeType === 'sell' && detail.sellPercentage && detail.tokenAddress) {
         setPositions((prev) =>
           prev
@@ -1192,14 +1210,23 @@ const Positions: React.FC<PositionsProps> = ({
             .filter((p) => !(p as any)._shouldRemove)
         );
       }
-      fetchPositions(); // immediate — backend already committed
+      debouncedFetchPositions(500);
     };
     window.addEventListener(TRADE_COMPLETED_EVENT, handleTradeCompleted);
 
+    // Listen for WS-driven position change signals (cache already invalidated on backend)
+    const handlePositionsChanged = () => {
+      lastTradeTimestampRef.current = Date.now();
+      debouncedFetchPositions(200); // Short delay — cache is already invalidated
+    };
+    window.addEventListener('solanaPositionsChanged', handlePositionsChanged);
+
     return () => {
       clearInterval(intervalId);
+      if (debouncedFetchTimerRef.current) clearTimeout(debouncedFetchTimerRef.current);
       window.removeEventListener('solanaQuickTrade', handleQuickTradeEvent);
       window.removeEventListener(TRADE_COMPLETED_EVENT, handleTradeCompleted);
+      window.removeEventListener('solanaPositionsChanged', handlePositionsChanged);
     };
   }, [userId, onPositionsChange, skipFetch, blockchain, requestMetadataForTokens, positionsCacheKey]);
 
@@ -1569,11 +1596,6 @@ const Positions: React.FC<PositionsProps> = ({
                     : `${displayPnl >= 0 ? '+' : ''}$${formatSmallPrice(Math.abs(displayPnl))}`
                   }
                   <span className="ml-1 text-xs">({formatSmallPrice(displayPnlPercentage)}%)</span>
-                  {currentPrice > 0 && (
-                    <span className="ml-1 text-[10px] text-neutral-500" title="Live price update">
-                      ●
-                    </span>
-                  )}
                 </td>
                 <td className="px-2 py-2">
                   <div className="flex items-center gap-2">
