@@ -3501,12 +3501,12 @@ export default function PortfolioPage() {
               {/* Positions Table Section  */}
               <div className="rounded-xl border border-white/[0.08] bg-white/[0.05] overflow-hidden backdrop-blur-xl" style={{ boxShadow: '0 8px 32px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.06)' }}>
                 {/* Sub-navigation tabs with controls */}
-                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between border-b border-white/[0.06] gap-3 sm:gap-0 p-3 sm:p-0">
-                  <div className="flex flex-wrap">
+                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between border-b border-white/[0.06] gap-3 sm:gap-0 p-3 sm:px-4 sm:py-3">
+                  <div className="flex flex-wrap gap-1.5">
                     {spotTabs.map((tab, i) => (
                       <button
                         key={tab}
-                        className={`px-2 sm:px-3 py-2 text-xs font-medium transition-colors cursor-pointer ${
+                        className={`px-3 sm:px-4 py-2 text-xs transition-colors cursor-pointer ${
                           activeSpotTab === i
                             ? "text-white font-semibold border border-white/[0.08] bg-white/[0.07] rounded-lg"
                             : "text-neutral-400 font-medium border border-transparent hover:bg-white/[0.04] hover:text-neutral-200 rounded-lg"
@@ -3518,8 +3518,8 @@ export default function PortfolioPage() {
                     ))}
                   </div>
 
-                  <div className="flex flex-wrap items-center gap-2 sm:gap-4 w-full sm:w-auto">
-                    <div className="flex items-center gap-2 px-2 sm:px-3 py-1.5 rounded-full bg-white/[0.03] border border-white/[0.06] hover:border-white/[0.1] transition-colors flex-1 sm:flex-initial min-w-[200px] sm:min-w-0">
+                  <div className="flex flex-wrap items-center gap-2 sm:gap-3 w-full sm:w-auto">
+                    <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/[0.03] border border-white/[0.06] hover:border-white/[0.1] transition-colors flex-1 sm:flex-initial min-w-[200px] sm:min-w-0">
                       <FaSearch className="text-[#9CA3AF] text-xs flex-shrink-0" />
                       <input
                         type="text"

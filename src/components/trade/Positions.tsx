@@ -1278,13 +1278,13 @@ const Positions: React.FC<PositionsProps> = ({
     <div className="w-full overflow-y-scroll scrollbar-thin scrollbar-thumb-gray-600 scrollbar-track-gray-800" style={{ maxHeight: '500px' }}>
       <table className="w-full text-xs">
         <thead className="sticky top-0 z-20" style={{ backdropFilter: 'blur(16px)', WebkitBackdropFilter: 'blur(16px)' }}>
-          <tr className="text-[#9CA3AF] border-b border-white/[0.06]" style={{ background: 'rgba(30, 31, 38, 0.85)' }}>
-            <th className="px-3 py-3 text-left text-[10px] font-medium uppercase tracking-wider">Token</th>
-            <th className="px-3 py-3 text-left text-[10px] font-medium uppercase tracking-wider">Bought</th>
-            <th className="px-3 py-3 text-left text-[10px] font-medium uppercase tracking-wider">Sold</th>
-            <th className="px-3 py-3 text-left text-[10px] font-medium uppercase tracking-wider">Remaining</th>
-            <th className="px-3 py-3 text-left text-[10px] font-medium uppercase tracking-wider">PnL</th>
-            <th className="px-3 py-3 text-left text-[10px] font-medium uppercase tracking-wider">Actions</th>
+          <tr className="border-b border-white/[0.06]" style={{ background: 'linear-gradient(180deg, rgba(255, 255, 255, 0.06) 0%, rgba(255, 255, 255, 0.02) 100%)', boxShadow: 'inset 0 1px 0 rgba(255, 255, 255, 0.08), inset 0 -1px 0 rgba(255, 255, 255, 0.02)' }}>
+            <th className="px-3 py-3 text-left text-[10px] font-semibold uppercase tracking-[0.08em] text-white/30" style={{ width: '20%' }}>Token</th>
+            <th className="px-3 py-3 text-left text-[10px] font-semibold uppercase tracking-[0.08em] text-white/30" style={{ width: '18%' }}>Bought</th>
+            <th className="px-3 py-3 text-left text-[10px] font-semibold uppercase tracking-[0.08em] text-white/30" style={{ width: '12%' }}>Sold</th>
+            <th className="px-3 py-3 text-left text-[10px] font-semibold uppercase tracking-[0.08em] text-white/30" style={{ width: '18%' }}>Remaining</th>
+            <th className="px-3 py-3 text-left text-[10px] font-semibold uppercase tracking-[0.08em] text-white/30" style={{ width: '15%' }}>PnL</th>
+            <th className="px-3 py-3 text-left text-[10px] font-semibold uppercase tracking-[0.08em] text-white/30" style={{ width: '17%' }}>Actions</th>
           </tr>
         </thead>
         <tbody>
@@ -1488,7 +1488,7 @@ const Positions: React.FC<PositionsProps> = ({
               return (
               <tr
                 key={pos.tokenAddress || idx}
-                className={`border-b border-neutral-800 hover:bg-neutral-800/60 cursor-pointer transition-colors ${
+                className={`border-b border-white/[0.06] hover:bg-white/[0.04] cursor-pointer transition-colors ${
                   isHidden ? 'opacity-40 bg-neutral-900/30' : ''
                 }`}
                 onMouseEnter={() => {
@@ -1508,9 +1508,9 @@ const Positions: React.FC<PositionsProps> = ({
                 }}
                 onClick={handleRowClick}
               >
-                <td className="px-2 py-2">
+                <td className="px-3 py-2.5">
                   <div className="flex items-center gap-3">
-                    <div 
+                    <div
                       className="relative h-12 w-12 flex items-center justify-center flex-shrink-0"
                     >
                       <div 
@@ -1573,7 +1573,7 @@ const Positions: React.FC<PositionsProps> = ({
                     </div>
                   </div>
                 </td>
-                <td className="px-2 py-2">
+                <td className="px-3 py-2.5">
                   <div className="flex items-baseline gap-1">
                     {renderTokenAmount(corrected.correctedBought)}
                     <span className="text-neutral-400">
@@ -1584,7 +1584,7 @@ const Positions: React.FC<PositionsProps> = ({
                     </span>
                   </div>
                 </td>
-                <td className="px-2 py-2">
+                <td className="px-3 py-2.5">
                   <div className="flex items-baseline gap-1">
                     {renderTokenAmount(corrected.correctedSold)}
                     <span className="text-neutral-400">
@@ -1595,7 +1595,7 @@ const Positions: React.FC<PositionsProps> = ({
                     </span>
                   </div>
                 </td>
-                <td className="px-2 py-2">
+                <td className="px-3 py-2.5">
                   <div className="flex items-baseline gap-1">
                     {renderTokenAmount(corrected.correctedRemaining)}
                     <span className="text-neutral-400">
@@ -1606,14 +1606,14 @@ const Positions: React.FC<PositionsProps> = ({
                     </span>
                   </div>
                 </td>
-                <td className={`px-2 py-2 font-semibold ${displayPnl >= 0 ? 'text-emerald-400' : 'text-red-400'}`}> 
+                <td className={`px-3 py-2.5 font-semibold ${displayPnl >= 0 ? 'text-emerald-400' : 'text-red-400'}`}> 
                   {showInSOL && solPrice > 0
                     ? <>{displayPnl >= 0 ? '+' : ''}<SolIcon />{formatSmartNumber(Math.abs(displayPnl) / solPrice)}</>
                     : `${displayPnl >= 0 ? '+' : ''}$${formatSmallPrice(Math.abs(displayPnl))}`
                   }
                   <span className="ml-1 text-xs">({formatSmallPrice(displayPnlPercentage)}%)</span>
                 </td>
-                <td className="px-2 py-2">
+                <td className="px-3 py-2.5">
                   <div className="flex items-center gap-2">
                     <InterstateTooltip label={isHidden ? "Show token" : "Hide token"}>
                       <button
@@ -1631,7 +1631,7 @@ const Positions: React.FC<PositionsProps> = ({
                       </button>
                     </InterstateTooltip>
                     <div
-                      className="flex items-center gap-1 px-2 py-1 rounded-lg bg-neutral-900/60 border border-neutral-800"
+                      className="flex items-center gap-1 px-2 py-1 rounded-lg bg-white/[0.04] border border-white/[0.08]"
                       onClick={(e) => e.stopPropagation()}
                     >
                       <input

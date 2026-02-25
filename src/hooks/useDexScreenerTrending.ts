@@ -32,6 +32,7 @@ const BLACKLISTED_TOKENS = new Set([
   'pumpCmXqMfrsAkQ5r49WcJnRayYRqmXz6ae8H7H9Dfn',  // Pump protocol
   'METvsvVRapdj9cFLzq4Tr43xK4tAjQfwX76z3n6mWQL',  // Meteora (MET)
   '4k3Dyjzvzp8eMZWUXbBCjEvwSkkk59S5iCNLY3QrkX6R',  // Raydium (RAY)
+  'JUPyiwrYJFskUPiHa7hkeR8VUtAeFoSYbKedZNsDvCN',  // Jupiter (JUP)
 ]);
 
 function saveDexScreenerCache(tokens: NormalizedTrendingToken[]) {
