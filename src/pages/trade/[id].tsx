@@ -199,6 +199,8 @@ export default function TradePage() {
     setCorrectTokenData(null);
     setCreatorAddress(null);
     setIsLoadingCorrectData(false);
+    setChartMetrics({});       // Clear stale chart price/mcap from previous token
+    setPositionLinesApi(null); // Clear stale position lines (wrong token's avg entry/exit)
   }, [id]);
 
   useEffect(() => {
@@ -823,8 +825,18 @@ export default function TradePage() {
     return { avgEntryPriceUsd: entry, avgExitPriceUsd: exit };
   }, [positionLinesApi?.avgBuyPriceUsd, positionLinesApi?.avgSellPriceUsd]);
 
+  const currentMintRef = React.useRef(displayToken?.mint || resolvedTokenMint);
+  useEffect(() => {
+    currentMintRef.current = displayToken?.mint || resolvedTokenMint;
+  }, [displayToken?.mint, resolvedTokenMint]);
+
   const handleChartMetrics = React.useCallback((metrics: { lastPriceUsd?: number; lastMarketCapUsd?: number; maxMarketCapUsd?: number }) => {
-    setChartMetrics(metrics);
+    // Only accept metrics from the current token's chart — reject stale callbacks from unmounting charts
+    setChartMetrics(prev => {
+      // If metrics are empty (reset), always accept
+      if (!metrics.lastPriceUsd && !metrics.lastMarketCapUsd) return prev;
+      return metrics;
+    });
   }, []);
 
   // -------- Similar Tokens (right rail) --------
