@@ -469,7 +469,7 @@ export default function PortfolioPage() {
   const [activeSpotTab, setActiveSpotTab] = useState(0);
   const [activePerpetualsTab, setActivePerpetualsTab] = useState(0);
   const { user, loading: userLoading, solBalance, usdcBalance, refreshBalance, refreshAllBalances, chainBalances, primaryWalletAddresses, walletBalances: contextWalletBalances, walletList: contextWalletList, walletListLoading, refreshWalletList, refreshUser, selectedWalletIds, selectAllWalletsForChain, selectWalletsWithFunds, clearSelectedWallets, setSelectedWalletsForChain } = useUser();
-  const { monPrice } = useSolPrice();
+  const { solPrice: contextSolPrice, monPrice } = useSolPrice();
   const router = useRouter();
   // Get chain from URL first, then localStorage, then default to solana
   const currentChain = (() => {
@@ -485,6 +485,8 @@ export default function PortfolioPage() {
     return 'sol';
   })();
   const monBalance = chainBalances?.monad || 0;
+  const chainBalance = chainBalances?.[currentChain] ?? (currentChain === "sol" ? solBalance : 0);
+  const chainPrice = currentChain === 'monad' ? (monPrice || 0) : (contextSolPrice || 0);
   const [walletChecked, setWalletChecked] = useState(false);
   // Incremented when a trade-completed event fires, triggers re-fetch of history/activity
   const [tradeRefreshCounter, setTradeRefreshCounter] = useState(0);
@@ -630,16 +632,26 @@ export default function PortfolioPage() {
   const [tokenNames, setTokenNames] = useState<Record<string, string>>({});
   const [showHidden, setShowHidden] = useState(false);
   const [sortByUSD, setSortByUSD] = useState(false);
-  const [solPrice, setSolPrice] = useState(0);
-  
   // Calculate native price for current chain
   const nativePriceForDisplay = useMemo(() => {
     if (currentChain === 'monad') {
       return monPrice || 0.025;
     } else {
-      return solPrice || 150; // Default SOL price fallback
+      return contextSolPrice || 150; // Default SOL price fallback
     }
-  }, [currentChain, monPrice, solPrice]);
+  }, [currentChain, monPrice, contextSolPrice]);
+
+  // Formatting functions matching Header.tsx for consistent display
+  const formatBalance = (value: number, digits = 3) => {
+    if (value === 0) return "0";
+    const fixed = value.toFixed(digits);
+    return fixed.replace(/\.0+$/, "").replace(/(\.\d*?)0+$/, "$1");
+  };
+  const formatCurrency = (value: number) =>
+    value.toLocaleString(undefined, {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    });
   const [wallets, setWallets] = useState<UserWallet[]>([]);
   const [creatingWallet, setCreatingWallet] = useState(false);
   const [editingWalletId, setEditingWalletId] = useState<string | null>(null);
@@ -836,39 +848,7 @@ export default function PortfolioPage() {
     return map;
   }, [tradeHistory]);
 
-  // Fetch SOL price using Pyth Network
-  useEffect(() => {
-    const fetchSolPrice = async () => {
-      try {
-        // Pyth Network price feed for SOL/USD
-        const SOL_USD_FEED =
-          "0xef0d8b6fda2ceba41da15d4095d1da392a0d2f8ed0c6c7bc0f4cfac8c280b56d";
-        const response = await fetch(
-          `https://hermes.pyth.network/v2/updates/price/latest?ids%5B%5D=${SOL_USD_FEED}`,
-          { signal: AbortSignal.timeout(5000) },
-        );
-
-        if (response.ok) {
-          const data = await response.json();
-          const priceData = data.parsed?.[0]?.price;
-          if (priceData?.price && priceData?.expo) {
-            const price = Number(priceData.price) * Math.pow(10, priceData.expo);
-            setSolPrice(price);
-            return;
-          }
-        }
-      } catch (error) {
-        console.error("Error fetching SOL price from Pyth:", error);
-      }
-
-      // Fallback to static price if Pyth fails
-      setSolPrice(150);
-    };
-
-    fetchSolPrice();
-    const interval = setInterval(fetchSolPrice, 60000);
-    return () => clearInterval(interval);
-  }, []);
+  // SOL price now comes from shared SolPriceContext (contextSolPrice) — no local fetch needed
   const [selectedTimeframe, setSelectedTimeframe] = useState("Max");
   const [timeframeMetrics, setTimeframeMetrics] = useState<{
     unrealizedPnl: number;
@@ -2024,7 +2004,7 @@ export default function PortfolioPage() {
         : (solBalance || 0);
       
       // Use correct price for the chain
-      const nativePrice = currentChain === 'monad' ? (monPrice || 0.025) : solPrice;
+      const nativePrice = currentChain === 'monad' ? (monPrice || 0.025) : contextSolPrice;
       
       // Initialize initial balance if not set (first time we see a balance) - per chain
       if (initialNativeBalanceRef.current === null && currentNativeBalance > 0) {
@@ -2249,7 +2229,7 @@ export default function PortfolioPage() {
     };
 
     calculateTimeframeMetrics();
-  }, [selectedTimeframe, tradeHistory, positions, unrealizedPnl, actualBalances, livePrices, user?.id, user?.bearerToken, currentChain, chainBalances, solBalance, solPrice, monPrice]);
+  }, [selectedTimeframe, tradeHistory, positions, unrealizedPnl, actualBalances, livePrices, user?.id, user?.bearerToken, currentChain, chainBalances, solBalance, contextSolPrice, monPrice]);
 
 
   // Export performance data as CSV
@@ -3052,9 +3032,7 @@ export default function PortfolioPage() {
                       </defs>
                     </svg>
                     <span className="text-sm text-[#9CA3AF]">
-                      {currentChain === 'monad'
-                        ? `${formatSmartNumber(monBalance)} MON`
-                        : `${formatSmartNumber(solBalance)} SOL`}
+                      {formatBalance(chainBalance)} {currentChain === "monad" ? "MON" : "SOL"}
                     </span>
                   </div>
                 </InterstateTooltip>
@@ -3129,11 +3107,7 @@ export default function PortfolioPage() {
                         Available Balance in $
                       </div>
                       <div className="text-xl sm:text-2xl font-light text-[#f0f5f5]">
-                        {currentChain === 'monad' ? (
-                          `$${formatSmartNumber((monBalance || 0) * (monPrice || 0.025))}`
-                        ) : (
-                          `$${formatSmartNumber((solBalance || 0) * (solPrice || 0))}`
-                        )}
+                        ${formatCurrency(chainBalance * chainPrice)}
                       </div>
                     </div>
                     {/* Unrealized PNL - Commented out */}
@@ -3159,9 +3133,7 @@ export default function PortfolioPage() {
                       </div>
                       <div className="text-xl sm:text-2xl font-light text-[#f0f5f5] flex items-center gap-1">
                         <ChainIcon chain={currentChain} size="medium" />
-                        {currentChain === "monad"
-                          ? `${formatSmartNumber(monBalance)} MON`
-                          : `${formatSmartNumber(solBalance)} SOL`}
+                        {formatBalance(chainBalance)} {currentChain === "monad" ? "MON" : "SOL"}
                       </div>
                     </div>
                   </div>
@@ -3179,10 +3151,10 @@ export default function PortfolioPage() {
                         color: totalPnl >= 0 ? "#70E0B0" : "#FF4D7F",
                       }}
                     >
-                      {sortByUSD && solPrice > 0 ? (
+                      {sortByUSD && contextSolPrice > 0 ? (
                         <>
                           <ChainIcon chain={currentChain} size="medium" />
-                          {formatSmartNumber(Math.abs(totalPnl) / solPrice)}
+                          {formatSmartNumber(Math.abs(totalPnl) / contextSolPrice)}
                         </>
                       ) : (
                         `${totalPnl >= 0 ? "+" : "-"}$${formatSmallPrice(Math.abs(totalPnl))}`
@@ -3312,11 +3284,11 @@ export default function PortfolioPage() {
                           timeframeMetrics.realizedPnl >= 0 ? "#70E0B0" : "#FF4D7F",
                       }}
                     >
-                      {sortByUSD && solPrice > 0 ? (
+                      {sortByUSD && contextSolPrice > 0 ? (
                         <>
                           <ChainIcon chain={currentChain} size="medium" />
                           {formatSmartNumber(
-                            Math.abs(timeframeMetrics.realizedPnl) / solPrice,
+                            Math.abs(timeframeMetrics.realizedPnl) / contextSolPrice,
                           )}
                         </>
                       ) : (
@@ -3365,11 +3337,11 @@ export default function PortfolioPage() {
                         {selectedTimeframe} Unrealized PNL
                       </span>
                       <span className="text-[#f0f5f5] font-light whitespace-nowrap">
-                        {sortByUSD && solPrice > 0 ? (
+                        {sortByUSD && contextSolPrice > 0 ? (
                           <>
                             <ChainIcon chain={currentChain} size="medium" />
                             {formatSmartNumber(
-                              timeframeMetrics.unrealizedPnl / solPrice,
+                              timeframeMetrics.unrealizedPnl / contextSolPrice,
                             )}
                           </>
                         ) : (
@@ -3382,11 +3354,11 @@ export default function PortfolioPage() {
                         {selectedTimeframe} Realized PNL
                       </span>
                       <span className="text-[#f0f5f5] font-light whitespace-nowrap">
-                        {sortByUSD && solPrice > 0 ? (
+                        {sortByUSD && contextSolPrice > 0 ? (
                           <>
                             <ChainIcon chain={currentChain} size="medium" />
                             {formatSmartNumber(
-                              timeframeMetrics.realizedPnl / solPrice,
+                              timeframeMetrics.realizedPnl / contextSolPrice,
                             )}
                           </>
                         ) : (
@@ -3408,10 +3380,10 @@ export default function PortfolioPage() {
                           color: totalPnl >= 0 ? "#70E0B0" : "#FF4D7F",
                         }}
                       >
-                        {sortByUSD && solPrice > 0 ? (
+                        {sortByUSD && contextSolPrice > 0 ? (
                           <>
                             <ChainIcon chain={currentChain} size="medium" />
-                            {formatSmartNumber(Math.abs(totalPnl) / solPrice)}
+                            {formatSmartNumber(Math.abs(totalPnl) / contextSolPrice)}
                           </>
                         ) : (
                           `${totalPnl >= 0 ? "+" : "-"}$${formatSmallPrice(Math.abs(totalPnl))}`
