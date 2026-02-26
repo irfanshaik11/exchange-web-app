@@ -1742,6 +1742,12 @@ export default function DiscoverPopoutContent() {
           }
           console.log("✅ Monad Quick Buy successful:", txHashes);
           broadcastMonadQuickTrade(tokenAddress, 'buy');
+          // Refresh header balance after successful buy
+          setTimeout(() => {
+            refreshBalance({ chain: "monad", force: true }).catch((err: any) => {
+              console.warn('Failed to refresh balance:', err);
+            });
+          }, 1000);
           toast.success(summary.message, { duration: 4000 });
           return { success: true, txHash: txHashes[0] };
         } else {

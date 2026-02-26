@@ -3038,7 +3038,7 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
         }
 
         // Success - refresh balance and position
-        await refreshBalance();
+        await refreshBalance({ force: true });
 
         setTimeout(async () => {
           try {

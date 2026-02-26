@@ -6,6 +6,7 @@ import { useUser } from "../UserContext";
 import { getMyLimitOrders, updateLimitOrder } from "~/utils/api";
 import { FaRunning, FaGasPump, FaCoins, FaBan } from "react-icons/fa";
 import { showEnhancedToast, updateEnhancedToast } from "~/utils/enhancedToast";
+import { dispatchBalanceRefresh } from "~/utils/balanceEvents";
 
 type LimitOrderStatus = "Active" | "Cancelled" | "Completed" | "Failed";
 
@@ -307,6 +308,7 @@ export default function TokenLimitOrders() {
                 showExplorerLink: Boolean(order.transactionHash),
                 txHash: order.transactionHash,
               });
+              dispatchBalanceRefresh('sol');
             } else if (
               (currentStatus === "Cancelled" || currentStatus === "Failed") &&
               previousStatus &&
