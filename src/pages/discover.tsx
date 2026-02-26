@@ -2427,6 +2427,13 @@ export default function DiscoverPage() {
         );
       }
 
+      // Refresh header balance after successful buy
+      setTimeout(() => {
+        refreshBalance({ chain: "sol", force: true }).catch((err: any) => {
+          console.warn('Failed to refresh balance:', err);
+        });
+      }, 1000);
+
       return { success: true };
     } catch (error: any) {
       tradeErrored = true;
@@ -2676,6 +2683,13 @@ export default function DiscoverPage() {
           }),
         );
       }
+
+      // Refresh header balance after successful buy
+      setTimeout(() => {
+        refreshBalance({ chain: "sol", force: true }).catch((err: any) => {
+          console.warn('Failed to refresh balance:', err);
+        });
+      }, 1000);
 
       return { success: true };
     } catch (error: any) {

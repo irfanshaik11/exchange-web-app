@@ -28,6 +28,7 @@ import { getPoolTypeFromToken } from "~/utils/poolTypeDetection";
 import { mapTradeErrorMessage } from "~/utils/tradeErrorMessages";
 import { listenForTradeEvents, transformToastToError } from "~/utils/createSolanaToastHandler";
 import { broadcastTradeCompleted } from "~/utils/tradeEvents";
+import { dispatchBalanceRefresh } from "~/utils/balanceEvents";
 import { useSolPrice } from "../SolPriceContext";
 import HighSlippageWarningDialog from "../HighSlippageWarningDialog";
 import LowLiquidityWarningDialog from "../LowLiquidityWarningDialog";
@@ -2742,6 +2743,9 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
               window.dispatchEvent(new CustomEvent("solanaQuickTrade", { detail: { tokenAddress: token.mint } }));
             }
 
+            // Refresh header + portfolio balance immediately
+            dispatchBalanceRefresh('sol');
+
             // Refresh position data for the token detail page's position card
             setTimeout(async () => {
               try {
@@ -3038,7 +3042,7 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
         }
 
         // Success - refresh balance and position
-        await refreshBalance();
+        await refreshBalance({ force: true });
 
         setTimeout(async () => {
           try {

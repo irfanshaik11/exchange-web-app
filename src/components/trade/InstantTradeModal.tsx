@@ -31,6 +31,7 @@ import { showEnhancedToast } from '~/utils/enhancedToast';
 import { listenForTradeEvents, transformToastToError } from '~/utils/createSolanaToastHandler';
 import { fetchVerifiedPairAddress } from '~/hooks/useSingleTokenPolling';
 import { useTxHashCallback } from '~/contexts/SolanaPositionWebSocketContext';
+import { dispatchBalanceRefresh } from '~/utils/balanceEvents';
 
 interface InstantTradeModalProps {
   isOpen: boolean;
@@ -943,6 +944,9 @@ const InstantTradeModal: React.FC<InstantTradeModalProps> = ({ isOpen, onClose, 
         window.dispatchEvent(new CustomEvent('solanaQuickTrade', { detail: { tokenAddress: token.mint } }));
       }
 
+      // Refresh header SOL balance
+      dispatchBalanceRefresh('sol');
+
       // Refresh token balance after 2s
       setTimeout(async () => {
         try {
@@ -1320,6 +1324,11 @@ const InstantTradeModal: React.FC<InstantTradeModalProps> = ({ isOpen, onClose, 
             }
           }, 2000);
           broadcastMonadQuickTrade(tokenAddress, 'sell');
+          setTimeout(() => {
+            refreshBalance({ chain: "monad", force: true }).catch((err: any) => {
+              console.warn('Failed to refresh balance:', err);
+            });
+          }, 1000);
         } else {
           tradeErrored = true;
           cleanupSellTradeListener();
@@ -1464,6 +1473,11 @@ const InstantTradeModal: React.FC<InstantTradeModalProps> = ({ isOpen, onClose, 
               }
             }, 2000);
             broadcastMonadQuickTrade(tokenAddress, 'buy');
+            setTimeout(() => {
+              refreshBalance({ chain: "monad", force: true }).catch((err: any) => {
+                console.warn('Failed to refresh balance:', err);
+              });
+            }, 1000);
           }
         } else {
           const selectedMonadWalletIds = selectedWalletIds?.monad || [];
@@ -1520,6 +1534,12 @@ const InstantTradeModal: React.FC<InstantTradeModalProps> = ({ isOpen, onClose, 
               }
             }, 2000);
             broadcastMonadQuickTrade(tokenAddress, 'sell');
+            // Refresh header balance after successful sell
+            setTimeout(() => {
+              refreshBalance({ chain: "monad", force: true }).catch((err: any) => {
+                console.warn('Failed to refresh balance:', err);
+              });
+            }, 1000);
           } else {
             toast.error('Sell failed. Please try again.', {
               duration: 5000,
@@ -1672,6 +1692,11 @@ const InstantTradeModal: React.FC<InstantTradeModalProps> = ({ isOpen, onClose, 
             }
           }, 2000);
           broadcastMonadQuickTrade(tokenAddress, 'buy');
+          setTimeout(() => {
+            refreshBalance({ chain: "monad", force: true }).catch((err: any) => {
+              console.warn('Failed to refresh balance:', err);
+            });
+          }, 1000);
         }
       } else {
         // Use Solana quick buy with PulseTable-style toast
