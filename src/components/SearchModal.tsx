@@ -914,7 +914,7 @@ const SearchModalContent = React.memo(function SearchModalContent({
             total_buy_volume_1h: token.total_buy_volume_1h || 0,
             total_sell_volume_1h: token.total_sell_volume_1h || 0,
             volume_1h:
-              token.volume_24h || token.volume24h || token.volume_24h_usd || 0,
+              token.volume_1h || token.volume_1h_usd || token.volume_usd || token.volume_24h || token.volume24h || token.volume_24h_usd || 0,
             created_at: createdAt,
             bonding_curve_progress: token.bonding_pct
               ? `${token.bonding_pct}%`

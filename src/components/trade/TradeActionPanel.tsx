@@ -28,6 +28,7 @@ import { getPoolTypeFromToken } from "~/utils/poolTypeDetection";
 import { mapTradeErrorMessage } from "~/utils/tradeErrorMessages";
 import { listenForTradeEvents, transformToastToError } from "~/utils/createSolanaToastHandler";
 import { broadcastTradeCompleted } from "~/utils/tradeEvents";
+import { useSolPrice } from "../SolPriceContext";
 import HighSlippageWarningDialog from "../HighSlippageWarningDialog";
 import LowLiquidityWarningDialog from "../LowLiquidityWarningDialog";
 import { BsCoin, BsPersonGear } from "react-icons/bs";
@@ -1047,6 +1048,9 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
   liveMarketCapUsd,
   liveLiquidityUsd,
 }) => {
+  // Live SOL price from Pyth Network (same source as footer)
+  const { solPrice: liveSolPrice } = useSolPrice();
+
   // Only show skeleton if we have absolutely no token data (not even optimistic)
   // Allow tokens with just mint address (for tokens without metadata from search)
   if (!token || (!token.name && !token.symbol && !token.mint)) {
@@ -1559,8 +1563,8 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
   // Real-time stats from WebSocket with fallback to static data
   // Priority: wsVolume (unified token WebSocket) > wsData (token-stats WebSocket) > static token data
   const realTimeStats = useMemo(() => {
-    // SOL price for converting volume from SOL to USD (approximate)
-    const SOL_PRICE_USD = 200;
+    // Live SOL price from Pyth Network (footer price), fallback to 200 if not yet loaded
+    const SOL_PRICE_USD = liveSolPrice > 0 ? liveSolPrice : 200;
 
     // First priority: Use wsVolume from unified token WebSocket (most reliable)
     if (wsVolume) {
@@ -1627,7 +1631,7 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
       buyPercentage: buyPct,
       sellPercentage: sellPct,
     };
-  }, [wsVolume, wsData, timeRange, getFormattedStats, token]);
+  }, [wsVolume, wsData, timeRange, getFormattedStats, token, liveSolPrice]);
 
   // Extract stats for easier access
   const { buys, sells, volume, buyVolume, sellVolume, netVolume, buyPercentage, sellPercentage } = realTimeStats;
