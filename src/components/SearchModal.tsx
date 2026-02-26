@@ -29,6 +29,7 @@ import { BsLightningChargeFill, BsTwitterX } from "react-icons/bs";
 import { showEnhancedToast } from "~/utils/enhancedToast";
 import { getHistory, addToHistory, clearHistory, removeFromHistory, type SearchHistoryItem } from "~/utils/searchHistory";
 import { useUser } from "./UserContext";
+import { useSolPrice } from "./SolPriceContext";
 import { HiLightningBolt } from "react-icons/hi";
 import toast from "react-hot-toast";
 import { useQuickBuy } from "./QuickBuyContext";
@@ -591,6 +592,7 @@ const SearchModalContent = React.memo(function SearchModalContent({
 }: SearchModalProps) {
   const router = useRouter();
   const { user, solBalance, walletList, walletBalances, selectedWalletIds } = useUser();
+  const { solPrice } = useSolPrice();
   const { presets, activePreset, setActivePreset } = useQuickBuy();
   const [quickBuyAmount, setQuickBuyAmount] = useState(() => {
     if (typeof window !== 'undefined') {
@@ -2028,7 +2030,7 @@ const SearchModalContent = React.memo(function SearchModalContent({
               const mcRaw = token.fully_diluted_value || 0;
               const mc = formatMarketCap(mcRaw);
               const { volume, is24h } = resolveSearchVolume(token);
-              const vol = formatSmartNumber(volume);
+              const vol = formatSmartNumber(volume * solPrice);
               const liq = formatSmartNumber(token.total_liquidity_usd || 0);
 
               return (
