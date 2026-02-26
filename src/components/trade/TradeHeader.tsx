@@ -9,6 +9,7 @@ import useMarketDataWebSocket from "~/hooks/useMarketDataWebSocket";
 import { useRouter } from "next/router";
 import { getProtocolBranding } from "~/utils/protocolBranding";
 import type { SolanaTokenInfo, SolanaTokenVolume, HolderSummary } from "~/hooks/useSolanaTokenWebSocket";
+import { useSolPrice } from "../SolPriceContext";
 
 import { IoShareSocialOutline } from "react-icons/io5";
 import {
@@ -496,6 +497,7 @@ const TradeHeader: React.FC<TradeHeaderProps> = ({ token, livePriceUsd, liveMark
 
 	const router = useRouter();
 	const { openSearch } = useSearch();
+	const { solPrice: liveSolPrice } = useSolPrice();
 	const {
 		addToWatchlist,
 		removeFromWatchlist,
@@ -1796,8 +1798,8 @@ const TradeHeader: React.FC<TradeHeaderProps> = ({ token, livePriceUsd, liveMark
 									protocol.includes("kuru"));
 							if (isMonad) return null;
 
-							// SOL price for converting volume from SOL to USD
-							const SOL_PRICE_USD = 200;
+							// Live SOL price from Pyth Network (footer price), fallback to 200 if not yet loaded
+							const SOL_PRICE_USD = liveSolPrice > 0 ? liveSolPrice : 200;
 							const vol24h = wsVolume?.volume_24h;
 							const buyVolSol = vol24h?.buy_volume_sol ?? 0;
 							const sellVolSol = vol24h?.sell_volume_sol ?? 0;
