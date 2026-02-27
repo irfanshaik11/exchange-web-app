@@ -11,13 +11,9 @@ type InterstateTooltipProps = {
   isDiv?: boolean
   className?: string
   noPadding?: boolean
-  /** Optional class for the trigger wrapper (e.g. for absolute positioning) */
-  triggerClassName?: string;
-  /** Optional style for the trigger wrapper (e.g. width/height when absolutely positioned) */
-  triggerStyle?: React.CSSProperties;
 };
 
-const InterstateTooltip: React.FC<InterstateTooltipProps> = ({ label, children, widthClass = 'max-w-md', xOffset = '-translate-x-1/2', width, height, className, noPadding, triggerClassName, triggerStyle }) => {
+const InterstateTooltip: React.FC<InterstateTooltipProps> = ({ label, children, widthClass = 'max-w-md', xOffset = '-translate-x-1/2', width, height, className, noPadding }) => {
   const [show, setShow] = React.useState(false);
   const [position, setPosition] = React.useState({ top: 0, left: 0 });
   const triggerRef = React.useRef<HTMLSpanElement>(null);
@@ -56,8 +52,7 @@ const InterstateTooltip: React.FC<InterstateTooltipProps> = ({ label, children, 
   return (
     <span
       ref={triggerRef}
-      className={triggerClassName ?? "relative inline-block"}
-      style={triggerStyle}
+      className="relative inline-block"
       onMouseEnter={handleMouseEnter}
       onMouseLeave={() => setShow(false)}
       onFocus={handleMouseEnter}
