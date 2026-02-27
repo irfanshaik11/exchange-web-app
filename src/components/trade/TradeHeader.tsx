@@ -4,10 +4,12 @@ import type { Token } from "~/utils/db";
 import { formatSmartNumber, formatLamportsToSol, normalizeTimestampMs } from "~/utils/db";
 import { useWatchlist } from "../WatchlistContext";
 import { SubscriptNumber } from "../InterstateTable";
+import InterstateTooltip from "../InterstateTooltip";
 import FastImage from "../FastImage";
 import useMarketDataWebSocket from "~/hooks/useMarketDataWebSocket";
 import { useRouter } from "next/router";
 import { getProtocolBranding } from "~/utils/protocolBranding";
+import { getPoolTypeFromToken, formatPoolTypeLabel } from "~/utils/poolTypeDetection";
 import type { SolanaTokenInfo, SolanaTokenVolume, HolderSummary } from "~/hooks/useSolanaTokenWebSocket";
 import { useSolPrice } from "../SolPriceContext";
 
@@ -843,6 +845,8 @@ const TradeHeader: React.FC<TradeHeaderProps> = ({ token, livePriceUsd, liveMark
 		fillProtocolBadge = shouldFillProtocolBadge(token);
 	}
 
+	const tokenTypeLabel = formatPoolTypeLabel(getPoolTypeFromToken(token));
+
 	// IMAGE: Priority: wsTokenInfo.image_url (from URI metadata) > token prop
 	// Unified WebSocket fetches image from URI metadata and provides it directly
 	// Check multiple field names since different sources use different naming
@@ -1113,20 +1117,22 @@ const TradeHeader: React.FC<TradeHeaderProps> = ({ token, livePriceUsd, liveMark
 							</div>
 						</div>
 
-						<div
-							className="absolute right-0 bottom-0 z-10 flex translate-x-1/5 translate-y-1/4 transform items-center justify-center rounded-full bg-white"
-							style={{
+						<InterstateTooltip
+							label={tokenTypeLabel}
+							noPadding
+							triggerClassName="absolute right-0 bottom-0 z-10 flex translate-x-1/5 translate-y-1/4 transform cursor-default items-center justify-center rounded-full"
+							triggerStyle={{
 								width: "clamp(10px, 2.5vw, 12px)",
 								height: "clamp(10px, 2.5vw, 12px)",
 								border: `1px solid ${protocolColor}`,
 								boxShadow: `0 0 2px ${protocolColor}60`,
+								backgroundColor: "white",
 							}}
-							title="Protocol"
 						>
 							<img
 								src={tokenIcon}
 								alt={`${(token as any).launchpad_protocol || (token as any).protocol || (token as any).launchpadName || "Protocol"} logo`}
-								className={`${fillProtocolBadge ? "h-full w-full object-cover" : "h-3/4 w-3/4 object-contain"} rounded-full`}
+								className={`${fillProtocolBadge ? "h-full w-full object-cover" : "h-3/4 w-3/4 object-contain"} rounded-full pointer-events-none`}
 								style={{
 									filter:
 										protocolColor === "#eab308"
@@ -1137,7 +1143,7 @@ const TradeHeader: React.FC<TradeHeaderProps> = ({ token, livePriceUsd, liveMark
 									(e.target as HTMLImageElement).style.display = "none";
 								}}
 							/>
-						</div>
+						</InterstateTooltip>
 
 						<div
 							className="pointer-events-none absolute inset-0 flex items-center justify-center bg-black/60 opacity-0 transition-all duration-300"

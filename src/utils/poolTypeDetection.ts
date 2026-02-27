@@ -116,3 +116,30 @@ export function getPoolTypeFromToken(token: Token): PoolType {
   return "";
 }
 
+/** Display labels for pool types (e.g. for tooltips on protocol badge hover) */
+const POOL_TYPE_LABELS: Record<Exclude<PoolType, "">, string> = {
+  "PumpAmm": "Pump AMM",
+  "Raydium": "Raydium",
+  "Raydium CPMM": "Raydium CPMM",
+  "Raydium CLMM": "Raydium CLMM",
+  "Raydium Launchpad": "Raydium Launchpad",
+  "Pumpfun": "Pumpfun",
+  "launchLab": "LaunchLab",
+  "bonk": "Bonk",
+  "meteora dbc": "Dynamic BC",
+  "meteora amm v1": "Meteora AMM v1",
+  "meteora amm v2": "Meteora AMM v2",
+  "Meteora": "Meteora",
+  "bags": "Bags",
+  "MoonShoot": "MoonShoot",
+  "Orca": "Orca",
+};
+
+/**
+ * Returns a human-readable label for a pool type (e.g. "meteora dbc" → "Dynamic BC").
+ * Use for tooltips when hovering the protocol badge.
+ */
+export function formatPoolTypeLabel(poolType: PoolType): string {
+  if (!poolType) return "Protocol";
+  return POOL_TYPE_LABELS[poolType as Exclude<PoolType, "">] ?? poolType;
+}

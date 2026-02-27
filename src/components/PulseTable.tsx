@@ -100,7 +100,7 @@ import {
   SOL_MINT_ADDRESS,
   ApiError,
 } from "~/utils/api";
-import { getPoolTypeFromToken } from "~/utils/poolTypeDetection";
+import { getPoolTypeFromToken, formatPoolTypeLabel } from "~/utils/poolTypeDetection";
 import { mapTradeErrorMessage } from "~/utils/tradeErrorMessages";
 import { dispatchBalanceRefresh } from "~/utils/balanceEvents";
 import { listenForTradeEvents, transformToastToError } from "~/utils/createSolanaToastHandler";
@@ -1802,6 +1802,7 @@ function TokenImage({
 
   const tokenIcon = getTokenIcon(token);
   const protocolColor = getProtocolColor(token);
+  const tokenTypeLabel = formatPoolTypeLabel(getPoolTypeFromToken(token));
   const migrationProgress = getMigrationProgress(token);
 
   // Check if token should have full circle image (no white space)
@@ -2051,10 +2052,12 @@ function TokenImage({
           </div>
         )}
 
-        {/* Dynamic protocol icon bubble - aligned to the outer border's bottom-right corner */}
-        <div
-          className="pointer-events-none absolute right-0 bottom-0 z-10 flex translate-x-1/5 translate-y-1/4 transform items-center justify-center rounded-full"
-          style={{
+        {/* Dynamic protocol icon bubble - aligned to the outer border's bottom-right corner. Hover shows token type immediately. */}
+        <InterstateTooltip
+          label={tokenTypeLabel}
+          noPadding
+          triggerClassName="absolute right-0 bottom-0 z-10 flex translate-x-1/5 translate-y-1/4 transform cursor-default items-center justify-center rounded-full"
+          triggerStyle={{
             width: 16,
             height: 16,
             backgroundColor: "#000000",
@@ -2065,7 +2068,7 @@ function TokenImage({
           <img
             src={tokenIcon}
             alt={`${(token as any).launchpad_protocol || (token as any).protocol || (token as any).launchpadName || "Protocol"} logo`}
-            className={`${isFullCircleImage ? "h-full w-full object-cover" : "h-3/4 w-3/4 object-contain"} rounded-full`}
+            className={`${isFullCircleImage ? "h-full w-full object-cover" : "h-3/4 w-3/4 object-contain"} rounded-full pointer-events-none`}
             style={{
               filter:
                 protocolColor === "#eab308"
@@ -2073,7 +2076,7 @@ function TokenImage({
                   : "none",
             }}
           />
-        </div>
+        </InterstateTooltip>
         {/* Blacklist action buttons — top-left, outside image */}
         <div
           className="pointer-events-none absolute z-20 flex flex-col gap-[3px]"
@@ -8314,7 +8317,7 @@ function PulseTable({
                       </div>
                       {/* Bottom Row */}
 
-                      <div className="absolute bottom-2 left-24 flex hidden flex-row items-center gap-1">
+                      <div className="absolute bottom-2 left-24 flex flex-row items-center gap-1">
                         {/* Buyers percentage - Green */}
                         <span
                           className="number-font flex items-center gap-1 rounded-full border px-2 py-1 text-xs transition-all duration-200"

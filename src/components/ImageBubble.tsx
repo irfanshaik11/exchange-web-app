@@ -1,10 +1,13 @@
 import React from 'react';
+import InterstateTooltip from '~/components/InterstateTooltip';
 
 interface ImageBubbleProps {
   src?: string;
   alt?: string;
   size?: number;
   className?: string;
+  /** Tooltip text on hover (e.g. token type like "Dynamic BC") */
+  title?: string;
   // Future AMM integration props
   ammType?: string;
   isActive?: boolean;
@@ -15,6 +18,7 @@ export default function ImageBubble({
   alt = "Pump logo",
   size = 20,
   className = "",
+  title,
   ammType,
   isActive = true
 }: ImageBubbleProps) {
@@ -32,16 +36,31 @@ export default function ImageBubble({
   
   if (!isActive) return null;
   
-  return (
-    <div 
-      className={`absolute bottom-0 right-0 bg-white rounded-full border border-green-400 flex items-center justify-center transform translate-x-1/2 translate-y-1/2 z-[99999] shadow-lg ${className}`}
+  const bubble = (
+    <div
+      className={`absolute bottom-0 right-0 bg-white rounded-full border border-green-400 flex items-center justify-center transform translate-x-1/2 translate-y-1/2 z-[99999] shadow-lg cursor-default ${className}`}
       style={{ width: size, height: size }}
     >
       <img
         src={bubbleSrc}
         alt={alt}
-        className="w-3/4 h-3/4 object-contain"
+        className="w-3/4 h-3/4 object-contain pointer-events-none"
       />
     </div>
   );
+
+  if (title) {
+    return (
+      <InterstateTooltip
+        label={title}
+        noPadding
+        triggerClassName="absolute bottom-0 right-0 flex transform translate-x-1/2 translate-y-1/2 z-[99999] cursor-default"
+        triggerStyle={{ width: size, height: size }}
+      >
+        {bubble}
+      </InterstateTooltip>
+    );
+  }
+
+  return bubble;
 }
