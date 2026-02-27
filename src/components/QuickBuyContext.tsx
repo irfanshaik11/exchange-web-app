@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useMemo } from 'react';
 import type { ReactNode } from 'react';
 
 export type MevMode = 'off' | 'reduced' | 'on';
@@ -154,17 +154,19 @@ export function QuickBuyProvider({ children }: { children: ReactNode }) {
     setPresets(validatedPresets);
   }, []);
 
+  const value = useMemo(() => ({
+    quickBuySettings,
+    setQuickBuySettings: setQuickBuySettingsValidated,
+    quickSellSettings,
+    setQuickSellSettings: setQuickSellSettingsValidated,
+    presets,
+    setPresets: setPresetsValidated,
+    activePreset,
+    setActivePreset,
+  }), [quickBuySettings, setQuickBuySettingsValidated, quickSellSettings, setQuickSellSettingsValidated, presets, setPresetsValidated, activePreset, setActivePreset]);
+
   return (
-    <QuickBuyContext.Provider value={{
-      quickBuySettings,
-      setQuickBuySettings: setQuickBuySettingsValidated,
-      quickSellSettings,
-      setQuickSellSettings: setQuickSellSettingsValidated,
-      presets,
-      setPresets: setPresetsValidated,
-      activePreset,
-      setActivePreset
-    }}>
+    <QuickBuyContext.Provider value={value}>
       {children}
     </QuickBuyContext.Provider>
   );

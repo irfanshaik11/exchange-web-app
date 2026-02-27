@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, useMemo } from 'react';
 import type { Token } from '../utils/db';
 import { extractTokenImage } from '../utils/images';
 import useTrendingWebSocket from '../hooks/useTrendingWebSocket';
@@ -290,7 +290,7 @@ export function WatchlistProvider({ children }: { children: React.ReactNode }) {
   }, [updateWatchlistToken]);
 
   return (
-    <WatchlistContext.Provider value={{ watchlist, isHydrated, addToWatchlist, removeFromWatchlist, isInWatchlist, updateWatchlistToken, refreshWatchlistToken }}>
+    <WatchlistContext.Provider value={useMemo(() => ({ watchlist, isHydrated, addToWatchlist, removeFromWatchlist, isInWatchlist, updateWatchlistToken, refreshWatchlistToken }), [watchlist, isHydrated, addToWatchlist, removeFromWatchlist, isInWatchlist, updateWatchlistToken, refreshWatchlistToken])}>
       {children}
     </WatchlistContext.Provider>
   );

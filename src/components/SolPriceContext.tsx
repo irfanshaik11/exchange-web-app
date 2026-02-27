@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useMemo } from 'react';
 
 interface SolPriceContextType {
   solPrice: number;
@@ -79,7 +79,7 @@ export function SolPriceProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   return (
-    <SolPriceContext.Provider value={{ solPrice, monPrice }}>
+    <SolPriceContext.Provider value={useMemo(() => ({ solPrice, monPrice }), [solPrice, monPrice])}>
       {children}
     </SolPriceContext.Provider>
   );

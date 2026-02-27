@@ -62,8 +62,9 @@ import { SiSolana } from "react-icons/si";
 import Image from "next/image";
 import InterstatePopout from "./InterstatePopout";
 import VerticalInput from "./VerticalInput";
+import { VirtualizedTokenList } from "./VirtualizedTokenList";
 import { usePulseWebSocket } from "~/hooks/usePulseWebSocket";
-import { flushSync } from "react-dom";
+// flushSync removed in Phase 1 perf fix — React 18 automatic batching handles this
 import { env } from "~/env";
 
 import { useRouter } from "next/router";
@@ -2099,19 +2100,15 @@ function MonadTable({
           // }
           // FAST PATH: New pairs bypass zero liquidity check for maximum speed
           // Zero liquidity tokens will be filtered during merge, but new pairs get instant priority
-          // Use flushSync to force immediate update, bypassing React 18's automatic batching
+          // React 18 automatic batching handles immediate updates without flushSync
           // Optimized with Map-based deduplication (O(1) instead of O(n))
-          // Skip filtering existing tokens - just prepend new token instantly
-          flushSync(() => {
-            setWsTokens((prev) => {
-              // Fast path: Just prepend new token, remove if duplicate
-              // Don't filter existing tokens here - let them through for speed
-              const normalizedToken = normalizeMonadToken(token);
-              const filtered = prev.filter(
-                (t) => t.mint !== normalizedToken.mint,
-              );
-              return [normalizedToken, ...filtered].slice(0, 50);
-            });
+          setWsTokens((prev) => {
+            // Fast path: Just prepend new token, remove if duplicate
+            const normalizedToken = normalizeMonadToken(token);
+            const filtered = prev.filter(
+              (t) => t.mint !== normalizedToken.mint,
+            );
+            return [normalizedToken, ...filtered].slice(0, 50);
           });
         }
       },
@@ -2123,24 +2120,21 @@ function MonadTable({
         // const liquidityUsd = token?.liquidity_usd;
         // const hasZeroLiquidityUsd = liquidityUsd === 0 || liquidityUsd === '0';
         if (channel === "final_stretch" && !hasZeroLiquidity(token)) {
-          // Use flushSync to force immediate update, bypassing React 18's automatic batching
-          // Optimized with Map-based deduplication (O(1) instead of O(n))
-          flushSync(() => {
-            setWsTokens((prev) => {
-              const normalizedToken = normalizeMonadToken(token);
-              const map = new Map<string, Token>();
-              map.set(normalizedToken.mint, normalizedToken);
-              for (const t of prev) {
-                if (
-                  t.mint !== normalizedToken.mint &&
-                  !hasZeroLiquidity(t) &&
-                  map.size < 50
-                ) {
-                  map.set(t.mint, t);
-                }
+          // React 18 automatic batching handles immediate updates without flushSync
+          setWsTokens((prev) => {
+            const normalizedToken = normalizeMonadToken(token);
+            const map = new Map<string, Token>();
+            map.set(normalizedToken.mint, normalizedToken);
+            for (const t of prev) {
+              if (
+                t.mint !== normalizedToken.mint &&
+                !hasZeroLiquidity(t) &&
+                map.size < 50
+              ) {
+                map.set(t.mint, t);
               }
-              return Array.from(map.values());
-            });
+            }
+            return Array.from(map.values());
           });
         }
       },
@@ -2152,24 +2146,21 @@ function MonadTable({
         // const liquidityUsd = token?.liquidity_usd;
         // const hasZeroLiquidityUsd = liquidityUsd === 0 || liquidityUsd === '0';
         if (channel === "migrated" && !hasZeroLiquidity(token)) {
-          // Use flushSync to force immediate update, bypassing React 18's automatic batching
-          // Optimized with Map-based deduplication (O(1) instead of O(n))
-          flushSync(() => {
-            setWsTokens((prev) => {
-              const normalizedToken = normalizeMonadToken(token);
-              const map = new Map<string, Token>();
-              map.set(normalizedToken.mint, normalizedToken);
-              for (const t of prev) {
-                if (
-                  t.mint !== normalizedToken.mint &&
-                  !hasZeroLiquidity(t) &&
-                  map.size < 50
-                ) {
-                  map.set(t.mint, t);
-                }
+          // React 18 automatic batching handles immediate updates without flushSync
+          setWsTokens((prev) => {
+            const normalizedToken = normalizeMonadToken(token);
+            const map = new Map<string, Token>();
+            map.set(normalizedToken.mint, normalizedToken);
+            for (const t of prev) {
+              if (
+                t.mint !== normalizedToken.mint &&
+                !hasZeroLiquidity(t) &&
+                map.size < 50
+              ) {
+                map.set(t.mint, t);
               }
-              return Array.from(map.values());
-            });
+            }
+            return Array.from(map.values());
           });
         }
       },
@@ -3446,6 +3437,22 @@ function MonadTable({
     );
     return filteredAndSortedTokens;
   }, [filteredAndSortedTokens, title]);
+
+  // Pre-filter tokens for virtualized rendering (moved out of render for perf)
+  const filteredTokensForDisplay = useMemo(
+    () =>
+      memoizedTokens.filter((token) => {
+        const pairAddress = (token as any)?.pair_address;
+        const mint = (token as any)?.mint;
+        return (
+          (pairAddress && pairAddress.trim() !== "") ||
+          (mint && mint.trim() !== "")
+        );
+      }),
+    [memoizedTokens],
+  );
+
+  const MONAD_ROW_HEIGHT = 104; // 100px content + 4px gap
 
   // Add wave animation for all Meteora tokens with bonding_pct > 98.6% in Final Stretch only
   useEffect(() => {
@@ -5853,9 +5860,9 @@ function MonadTable({
           </div>
         </div>
       </div>
-      <div className="custom-scrollbar flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto">
-        {(loading || isFetchingMonad) && monadTokens.length === 0 ? (
-          Array.from({ length: skeletonRowCount }).map((_, idx) => (
+      {(loading || isFetchingMonad) && monadTokens.length === 0 ? (
+        <div className="custom-scrollbar flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto">
+          {Array.from({ length: skeletonRowCount }).map((_, idx) => (
             <div
               key={idx}
               className="flex shrink-0 animate-pulse flex-row items-start rounded-lg p-2"
@@ -5949,26 +5956,22 @@ function MonadTable({
                 </div>
               </div>
             </div>
-          ))
-        ) : monadTokens.length === 0 &&
-          filteredTokens.length === 0 &&
-          !isFetchingMonad &&
-          !isFetchingFiltered ? (
+          ))}
+        </div>
+      ) : monadTokens.length === 0 &&
+        filteredTokens.length === 0 &&
+        !isFetchingMonad &&
+        !isFetchingFiltered ? (
+        <div className="custom-scrollbar flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto">
           <div className="py-8 text-center" style={{ color: AX.muted }}>
             No tokens found.
           </div>
-        ) : (
-          memoizedTokens
-            .filter((token) => {
-              // Show tokens that have either pair_address or mint (all tokens have mint)
-              const pairAddress = (token as any)?.pair_address;
-              const mint = (token as any)?.mint;
-              return (
-                (pairAddress && pairAddress.trim() !== "") ||
-                (mint && mint.trim() !== "")
-              );
-            })
-            .map((token, idx) => {
+        </div>
+      ) : (
+        <VirtualizedTokenList
+          items={filteredTokensForDisplay}
+          itemSize={MONAD_ROW_HEIGHT}
+          renderRow={(token: any, idx: number, style: React.CSSProperties) => {
               // Use pair_address if available, otherwise fallback to mint
               const pairAddress =
                 (token as any)?.pair_address || (token as any)?.mint;
@@ -5995,9 +5998,10 @@ function MonadTable({
               }).toString();
 
               return (
+                <div key={pairAddress} style={style}>
+                <div style={{ paddingBottom: '4px' }}>
                 <Link
                   href={`/trade/monad/${pairAddress}?${queryParams}`}
-                  key={pairAddress}
                   className="token-row group relative flex w-full max-w-full shrink-0 cursor-pointer flex-row items-start gap-2 overflow-hidden rounded-lg px-2 py-1.5 text-sm"
                   style={{
                     color: AX.text,
@@ -6250,7 +6254,7 @@ function MonadTable({
                                 e.currentTarget.style.color = AX.aiBlue;
                                 e.currentTarget.style.boxShadow = `0 0 6px ${AX.glowBlue}`;
                                 const tooltip = document.getElementById(
-                                  `copy-tooltip-${idx}`,
+                                  `shared-copy-tooltip`,
                                 ) as HTMLElement;
                                 if (tooltip) {
                                   const rect =
@@ -6264,7 +6268,7 @@ function MonadTable({
                                 e.currentTarget.style.color = AX.muted;
                                 e.currentTarget.style.boxShadow = "none";
                                 const tooltip = document.getElementById(
-                                  `copy-tooltip-${idx}`,
+                                  `shared-copy-tooltip`,
                                 ) as HTMLElement;
                                 if (tooltip) tooltip.style.opacity = "0";
                               }}
@@ -6377,7 +6381,7 @@ function MonadTable({
                               onMouseEnter={(e) => {
                                 e.currentTarget.style.color = AX.aiCyan;
                                 const tooltip = document.getElementById(
-                                  `search-tooltip-${idx}`,
+                                  `shared-search-tooltip`,
                                 ) as HTMLElement;
                                 if (tooltip) {
                                   const rect =
@@ -6390,7 +6394,7 @@ function MonadTable({
                               onMouseLeave={(e) => {
                                 e.currentTarget.style.color = AX.muted;
                                 const tooltip = document.getElementById(
-                                  `search-tooltip-${idx}`,
+                                  `shared-search-tooltip`,
                                 ) as HTMLElement;
                                 if (tooltip) tooltip.style.opacity = "0";
                               }}
@@ -6425,7 +6429,7 @@ function MonadTable({
                                   onMouseEnter={(e) => {
                                     e.currentTarget.style.color = "#36d8ff";
                                     const tooltip = document.getElementById(
-                                      `profile-tooltip-${idx}`,
+                                      `shared-profile-tooltip`,
                                     ) as HTMLElement;
                                     if (tooltip) {
                                       const rect =
@@ -6448,7 +6452,7 @@ function MonadTable({
                                   onMouseLeave={(e) => {
                                     e.currentTarget.style.color = "#36d8ff";
                                     const tooltip = document.getElementById(
-                                      `profile-tooltip-${idx}`,
+                                      `shared-profile-tooltip`,
                                     ) as HTMLElement;
                                     if (tooltip) tooltip.style.opacity = "0";
                                   }}
@@ -7381,77 +7385,67 @@ function MonadTable({
                     </div>
                   </div>
                 </Link>
+                </div>
+                </div>
               );
-            })
-        )}
+            }}
+        />
+      )}
+      {/* Shared singleton tooltips (only 3 divs instead of N*3) */}
+      <div
+        id="shared-copy-tooltip"
+        className="pointer-events-none fixed rounded px-2 py-1 text-xs font-medium whitespace-nowrap opacity-0 transition-opacity duration-200"
+        style={{
+          zIndex: 4000,
+          backgroundColor: AX.surface,
+          color: AX.text,
+          border: `1px solid ${AX.border}`,
+          boxShadow: `0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06), 0 0 8px ${AX.glowBlue}`,
+          transform: "translate(-50%, -100%)",
+        }}
+      >
+        Copy Contract
+        <div
+          className="absolute top-full left-1/2 h-0 w-0 -translate-x-1/2 transform border-t-4 border-r-4 border-l-4 border-transparent"
+          style={{ borderTopColor: AX.surface }}
+        ></div>
       </div>
-      {/* Fixed positioned tooltips */}
-      {memoizedTokens.map((token, idx) => (
-        <>
-          <div
-            key={`copy-tooltip-${idx}`}
-            id={`copy-tooltip-${idx}`}
-            className="pointer-events-none fixed rounded px-2 py-1 text-xs font-medium whitespace-nowrap opacity-0 transition-opacity duration-200"
-            style={{
-              zIndex: 4000,
-              backgroundColor: AX.surface,
-              color: AX.text,
-              border: `1px solid ${AX.border}`,
-              boxShadow: `0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06), 0 0 8px ${AX.glowBlue}`,
-              transform: "translate(-50%, -100%)",
-            }}
-          >
-            Copy Contract
-            {/* Tooltip arrow */}
-            <div
-              className="absolute top-full left-1/2 h-0 w-0 -translate-x-1/2 transform border-t-4 border-r-4 border-l-4 border-transparent"
-              style={{ borderTopColor: AX.surface }}
-            ></div>
-          </div>
-
-          <div
-            key={`search-tooltip-${idx}`}
-            id={`search-tooltip-${idx}`}
-            className="pointer-events-none fixed rounded px-2 py-1 text-xs font-medium whitespace-nowrap opacity-0 transition-opacity duration-200"
-            style={{
-              zIndex: 4000,
-              backgroundColor: AX.surface,
-              color: AX.text,
-              border: `1px solid ${AX.border}`,
-              boxShadow: `0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06), 0 0 8px ${AX.glowCyan}`,
-              transform: "translate(-50%, -100%)",
-            }}
-          >
-            Search on Twitter
-            {/* Tooltip arrow */}
-            <div
-              className="absolute top-full left-1/2 h-0 w-0 -translate-x-1/2 transform border-t-4 border-r-4 border-l-4 border-transparent"
-              style={{ borderTopColor: AX.surface }}
-            ></div>
-          </div>
-
-          <div
-            key={`profile-tooltip-${idx}`}
-            id={`profile-tooltip-${idx}`}
-            className="pointer-events-none fixed rounded px-2 py-1 text-xs font-medium whitespace-nowrap opacity-0 transition-opacity duration-200"
-            style={{
-              zIndex: 4000,
-              backgroundColor: AX.surface,
-              color: AX.text,
-              border: `1px solid ${AX.border}`,
-              boxShadow: `0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06), 0 0 8px ${AX.glowBlue}`,
-              transform: "translate(-50%, -100%)",
-            }}
-          >
-            View X Profile
-            {/* Tooltip arrow */}
-            <div
-              className="absolute top-full left-1/2 h-0 w-0 -translate-x-1/2 transform border-t-4 border-r-4 border-l-4 border-transparent"
-              style={{ borderTopColor: AX.surface }}
-            ></div>
-          </div>
-        </>
-      ))}
+      <div
+        id="shared-search-tooltip"
+        className="pointer-events-none fixed rounded px-2 py-1 text-xs font-medium whitespace-nowrap opacity-0 transition-opacity duration-200"
+        style={{
+          zIndex: 4000,
+          backgroundColor: AX.surface,
+          color: AX.text,
+          border: `1px solid ${AX.border}`,
+          boxShadow: `0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06), 0 0 8px ${AX.glowCyan}`,
+          transform: "translate(-50%, -100%)",
+        }}
+      >
+        Search on Twitter
+        <div
+          className="absolute top-full left-1/2 h-0 w-0 -translate-x-1/2 transform border-t-4 border-r-4 border-l-4 border-transparent"
+          style={{ borderTopColor: AX.surface }}
+        ></div>
+      </div>
+      <div
+        id="shared-profile-tooltip"
+        className="pointer-events-none fixed rounded px-2 py-1 text-xs font-medium whitespace-nowrap opacity-0 transition-opacity duration-200"
+        style={{
+          zIndex: 4000,
+          backgroundColor: AX.surface,
+          color: AX.text,
+          border: `1px solid ${AX.border}`,
+          boxShadow: `0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06), 0 0 8px ${AX.glowBlue}`,
+          transform: "translate(-50%, -100%)",
+        }}
+      >
+        View X Profile
+        <div
+          className="absolute top-full left-1/2 h-0 w-0 -translate-x-1/2 transform border-t-4 border-r-4 border-l-4 border-transparent"
+          style={{ borderTopColor: AX.surface }}
+        ></div>
+      </div>
       {/* Snipe on Migration Modal */}
       {showSnipeModal && selectedToken && (
         <InterstatePopout

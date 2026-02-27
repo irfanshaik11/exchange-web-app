@@ -5,6 +5,7 @@ import React, {
   useMemo,
   useCallback,
 } from "react";
+import { createPortal } from "react-dom";
 import { defaultPulseFilters, type PulseFilters } from "~/contexts/PulseFiltersContext";
 import type { Token } from "~/utils/db";
 import { formatSmartNumber, formatMarketCap } from "~/utils/db";
@@ -107,6 +108,7 @@ import { listenForTradeEvents, transformToastToError } from "~/utils/createSolan
 import { TokenAge } from "./TokenAge";
 import { prefetchTradeData } from "~/utils/tokenCache";
 import { preloadTradeChart } from "~/utils/preloadTradeChart";
+import { VirtualizedTokenList } from "./VirtualizedTokenList";
 import {
   showCenteredErrorToast,
   showCenteredSuccessToast,
@@ -172,13 +174,10 @@ interface PulseTableProps {
   currentChain?: string; // Chain from parent to avoid router.query timing issues
 }
 
-// Module-level cache: mint → twitter handle (populated by TokenImage from metadata)
-// Used by the blacklist filter to match handles found only in token metadata URIs
-const twitterHandleCache = new Map<string, string>();
-
 // PHASE 4 (M1): LRU Cache to prevent unbounded memory growth
 // Sized for 3 columns × 100 tokens + buffer = 1000 entries max
 const TOKEN_CACHE_MAX_SIZE = 1000;
+const TWITTER_CACHE_MAX_SIZE = 500;
 
 class LRUCache<K, V> {
   private cache = new Map<K, V>();
@@ -221,6 +220,11 @@ class LRUCache<K, V> {
 }
 
 const tokenMetadataCache = new LRUCache<string, any>(TOKEN_CACHE_MAX_SIZE);
+
+// Module-level cache: mint → twitter handle (populated by TokenImage from metadata)
+// Used by the blacklist filter to match handles found only in token metadata URIs
+// Capped via LRU to prevent unbounded memory growth
+const twitterHandleCache = new LRUCache<string, string>(TWITTER_CACHE_MAX_SIZE);
 
 // PHASE 4 (C2): Helper functions extracted from IIFEs to avoid recreation per render
 // Safe number parser - handles strings, NaN, Infinity
@@ -1129,6 +1133,7 @@ function SocialIconsWithMetadata({
   const isOverSearchButton = useRef(false);
   const isOverXPreview = useRef(false);
   const isOverXButton = useRef(false);
+  const websiteTipRef = useRef<HTMLDivElement>(null);
 
   const hasTwitter = !!socialLinks.twitter;
   const hasWebsite = !!socialLinks.website;
@@ -1178,7 +1183,7 @@ function SocialIconsWithMetadata({
           </button>
 
           {/* X Profile Preview Popup - PHASE 3: JS-based fixed positioning */}
-          {showXPreview && (
+          {showXPreview && createPortal(
           <div
             className="fixed w-[280px] rounded-xl z-[9999] overflow-hidden"
             style={{
@@ -1319,7 +1324,7 @@ function SocialIconsWithMetadata({
                   </button>
                 </div>
           </div>
-          )}
+          , document.body)}
         </div>
       )}
 
@@ -1343,7 +1348,7 @@ function SocialIconsWithMetadata({
 
       {/* Globe Icon - only show if website URL exists */}
       {hasWebsite && (
-        <div className="group/website relative">
+        <div className="relative">
           <button
             className="flex items-center justify-center rounded p-1 transition-colors duration-200 hover:bg-white/10"
             onClick={(e) => {
@@ -1351,22 +1356,41 @@ function SocialIconsWithMetadata({
               e.preventDefault();
               window.open(socialLinks.website, "_blank");
             }}
+            onMouseEnter={(e) => {
+              const tip = websiteTipRef.current;
+              if (tip) {
+                const rect = e.currentTarget.getBoundingClientRect();
+                tip.style.left = `${rect.left + rect.width / 2}px`;
+                tip.style.top = `${rect.bottom + 8}px`;
+                tip.style.opacity = "1";
+              }
+            }}
+            onMouseLeave={() => {
+              const tip = websiteTipRef.current;
+              if (tip) tip.style.opacity = "0";
+            }}
           >
             <FiGlobe size={12} className="text-neutral-400 hover:text-white" />
           </button>
-          {/* Website URL Tooltip - PHASE 3: Unified AX styling */}
-          <div
-            className="pointer-events-none absolute top-full left-1/2 z-[9999] mt-2 -translate-x-1/2 rounded-lg px-3 py-2 whitespace-nowrap opacity-0 group-hover/website:opacity-100"
-            style={{
-              backgroundColor: AX.surface,
-              border: `1px solid ${AX.border}`,
-            }}
-          >
-            <span className="text-xs" style={{ color: AX.muted }}>Website</span>
-            <p className="max-w-[200px] truncate text-sm font-medium" style={{ color: AX.text }}>
-              {socialLinks.website}
-            </p>
-          </div>
+          {/* Website URL Tooltip - portaled to body for correct positioning */}
+          {createPortal(
+            <div
+              ref={websiteTipRef}
+              className="pointer-events-none fixed z-[9999] -translate-x-1/2 rounded-lg px-3 py-2 whitespace-nowrap"
+              style={{
+                backgroundColor: AX.surface,
+                border: `1px solid ${AX.border}`,
+                opacity: 0,
+                transition: "opacity 150ms",
+              }}
+            >
+              <span className="text-xs" style={{ color: AX.muted }}>Website</span>
+              <p className="max-w-[200px] truncate text-sm font-medium" style={{ color: AX.text }}>
+                {socialLinks.website}
+              </p>
+            </div>,
+            document.body
+          )}
         </div>
       )}
 
@@ -1407,7 +1431,7 @@ function SocialIconsWithMetadata({
         </button>
 
         {/* Search Dropdown Menu - PHASE 3: JS-based fixed positioning */}
-        {showSearchMenu && (
+        {showSearchMenu && createPortal(
         <div
           ref={searchMenuRef}
           className="fixed min-w-[220px] rounded-lg py-1 z-[9999] overflow-hidden"
@@ -1507,7 +1531,7 @@ function SocialIconsWithMetadata({
             DexScreener
           </button>
         </div>
-        )}
+        , document.body)}
       </div>
     </div>
   );
@@ -1534,6 +1558,9 @@ function TokenImage({
   const [showImagePreview, setShowImagePreview] = useState(false);
   const [previewPosition, setPreviewPosition] = useState({ top: 0, left: 0 });
   const imageContainerRef = useRef<HTMLDivElement>(null);
+  const hideTokenTipRef = useRef<HTMLDivElement>(null);
+  const blacklistTwitterTipRef = useRef<HTMLDivElement>(null);
+  const blacklistDevTipRef = useRef<HTMLDivElement>(null);
 
   // Extract image URL from token data, checking multiple possible field names
   // Priority: image_url, image, logo, uri (updated for API compatibility)
@@ -2088,17 +2115,21 @@ function TokenImage({
             className="flex h-6 w-6 items-center justify-center rounded-sm transition-colors hover:bg-white/30"
             style={{ backgroundColor: "rgba(31, 41, 55, 0.9)", pointerEvents: "auto", cursor: "pointer" }}
             onClick={(e) => { e.stopPropagation(); e.preventDefault(); onBlacklistCA?.(token.mint); }}
-            onMouseEnter={(e) => { const tip = (e.currentTarget.nextElementSibling as HTMLElement); if (tip) { const r = e.currentTarget.getBoundingClientRect(); tip.style.left = `${r.right + 6}px`; tip.style.top = `${r.top + r.height / 2}px`; tip.style.transform = "translateY(-50%)"; tip.style.opacity = "1"; } }}
-            onMouseLeave={(e) => { const tip = (e.currentTarget.nextElementSibling as HTMLElement); if (tip) tip.style.opacity = "0"; }}
+            onMouseEnter={(e) => { const tip = hideTokenTipRef.current; if (tip) { const r = e.currentTarget.getBoundingClientRect(); tip.style.left = `${r.right + 6}px`; tip.style.top = `${r.top + r.height / 2}px`; tip.style.transform = "translateY(-50%)"; tip.style.opacity = "1"; } }}
+            onMouseLeave={() => { const tip = hideTokenTipRef.current; if (tip) tip.style.opacity = "0"; }}
           >
             <FaRegEyeSlash size={13} style={{ color: "#e5e7eb" }} />
           </button>
-          <div
-            className="pointer-events-none fixed z-[9999] rounded px-2 py-1 text-[10px] font-medium whitespace-nowrap"
-            style={{ backgroundColor: "rgba(31, 41, 55, 0.95)", color: "#e5e7eb", border: "1px solid rgba(107, 114, 128, 0.3)", opacity: 0, transition: "opacity 150ms" }}
-          >
-            Hide Token
-          </div>
+          {createPortal(
+            <div
+              ref={hideTokenTipRef}
+              className="pointer-events-none fixed z-[9999] rounded px-2 py-1 text-[10px] font-medium whitespace-nowrap"
+              style={{ backgroundColor: "rgba(31, 41, 55, 0.95)", color: "#e5e7eb", border: "1px solid rgba(107, 114, 128, 0.3)", opacity: 0, transition: "opacity 150ms" }}
+            >
+              Hide Token
+            </div>,
+            document.body
+          )}
           {/* Blacklist Twitter Handle */}
           {blTwitterHandle && (
             <>
@@ -2106,17 +2137,21 @@ function TokenImage({
                 className="flex h-6 w-6 items-center justify-center rounded-sm transition-colors hover:bg-white/30"
                 style={{ backgroundColor: "rgba(31, 41, 55, 0.9)", pointerEvents: "auto", cursor: "pointer" }}
                 onClick={(e) => { e.stopPropagation(); e.preventDefault(); onBlacklistTwitter?.(blTwitterHandle); }}
-                onMouseEnter={(e) => { const tip = (e.currentTarget.nextElementSibling as HTMLElement); if (tip) { const r = e.currentTarget.getBoundingClientRect(); tip.style.left = `${r.right + 6}px`; tip.style.top = `${r.top + r.height / 2}px`; tip.style.transform = "translateY(-50%)"; tip.style.opacity = "1"; } }}
-                onMouseLeave={(e) => { const tip = (e.currentTarget.nextElementSibling as HTMLElement); if (tip) tip.style.opacity = "0"; }}
+                onMouseEnter={(e) => { const tip = blacklistTwitterTipRef.current; if (tip) { const r = e.currentTarget.getBoundingClientRect(); tip.style.left = `${r.right + 6}px`; tip.style.top = `${r.top + r.height / 2}px`; tip.style.transform = "translateY(-50%)"; tip.style.opacity = "1"; } }}
+                onMouseLeave={() => { const tip = blacklistTwitterTipRef.current; if (tip) tip.style.opacity = "0"; }}
               >
                 <LuAtSign size={13} style={{ color: "#e5e7eb" }} />
               </button>
-              <div
-                className="pointer-events-none fixed z-[9999] rounded px-2 py-1 text-[10px] font-medium whitespace-nowrap"
-                style={{ backgroundColor: "rgba(31, 41, 55, 0.95)", color: "#e5e7eb", border: "1px solid rgba(107, 114, 128, 0.3)", opacity: 0, transition: "opacity 150ms" }}
-              >
-                Blacklist @{blTwitterHandle}
-              </div>
+              {createPortal(
+                <div
+                  ref={blacklistTwitterTipRef}
+                  className="pointer-events-none fixed z-[9999] rounded px-2 py-1 text-[10px] font-medium whitespace-nowrap"
+                  style={{ backgroundColor: "rgba(31, 41, 55, 0.95)", color: "#e5e7eb", border: "1px solid rgba(107, 114, 128, 0.3)", opacity: 0, transition: "opacity 150ms" }}
+                >
+                  Blacklist @{blTwitterHandle}
+                </div>,
+                document.body
+              )}
             </>
           )}
           {/* Blacklist Dev Wallet */}
@@ -2126,17 +2161,21 @@ function TokenImage({
                 className="flex h-6 w-6 items-center justify-center rounded-sm transition-colors hover:bg-white/30"
                 style={{ backgroundColor: "rgba(31, 41, 55, 0.9)", pointerEvents: "auto", cursor: "pointer" }}
                 onClick={(e) => { e.stopPropagation(); e.preventDefault(); onBlacklistDev?.(blDevWallet); }}
-                onMouseEnter={(e) => { const tip = (e.currentTarget.nextElementSibling as HTMLElement); if (tip) { const r = e.currentTarget.getBoundingClientRect(); tip.style.left = `${r.right + 6}px`; tip.style.top = `${r.top + r.height / 2}px`; tip.style.transform = "translateY(-50%)"; tip.style.opacity = "1"; } }}
-                onMouseLeave={(e) => { const tip = (e.currentTarget.nextElementSibling as HTMLElement); if (tip) tip.style.opacity = "0"; }}
+                onMouseEnter={(e) => { const tip = blacklistDevTipRef.current; if (tip) { const r = e.currentTarget.getBoundingClientRect(); tip.style.left = `${r.right + 6}px`; tip.style.top = `${r.top + r.height / 2}px`; tip.style.transform = "translateY(-50%)"; tip.style.opacity = "1"; } }}
+                onMouseLeave={() => { const tip = blacklistDevTipRef.current; if (tip) tip.style.opacity = "0"; }}
               >
                 <LuChefHat size={13} style={{ color: "#e5e7eb" }} />
               </button>
-              <div
-                className="pointer-events-none fixed z-[9999] rounded px-2 py-1 text-[10px] font-medium whitespace-nowrap"
-                style={{ backgroundColor: "rgba(31, 41, 55, 0.95)", color: "#e5e7eb", border: "1px solid rgba(107, 114, 128, 0.3)", opacity: 0, transition: "opacity 150ms" }}
-              >
-                Blacklist Dev
-              </div>
+              {createPortal(
+                <div
+                  ref={blacklistDevTipRef}
+                  className="pointer-events-none fixed z-[9999] rounded px-2 py-1 text-[10px] font-medium whitespace-nowrap"
+                  style={{ backgroundColor: "rgba(31, 41, 55, 0.95)", color: "#e5e7eb", border: "1px solid rgba(107, 114, 128, 0.3)", opacity: 0, transition: "opacity 150ms" }}
+                >
+                  Blacklist Dev
+                </div>,
+                document.body
+              )}
             </>
           )}
         </div>
@@ -2156,7 +2195,7 @@ function TokenImage({
         </div>
       </div>
       {/* Image Preview Window */}
-      {showImagePreview && (
+      {showImagePreview && createPortal(
         <div
           className="pointer-events-none fixed z-[9999]"
           style={{
@@ -2219,7 +2258,7 @@ function TokenImage({
             </div>
           </div>
         </div>
-      )}
+      , document.body)}
 
       {/* Global CSS to remove number input arrows */}
       <style
@@ -4777,6 +4816,22 @@ function PulseTable({
   // REMOVED redundant useMemo - filteredAndSortedTokens is already memoized
   // Using it directly saves one layer of memoization overhead
   const memoizedTokens = filteredAndSortedTokens;
+
+  // Pre-filter tokens for virtualized rendering (moved out of render for perf)
+  const filteredTokensForDisplay = useMemo(
+    () =>
+      memoizedTokens.filter((token) => {
+        const pairAddress = (token as any)?.pair_address;
+        const mint = (token as any)?.mint;
+        return (
+          (pairAddress && pairAddress.trim() !== "") ||
+          (mint && mint.trim() !== "")
+        );
+      }),
+    [memoizedTokens],
+  );
+
+  const PULSE_ROW_HEIGHT = 104; // 100px content + 4px gap
 
   // Add wave animation for Meteora tokens with bonding_pct > 98.6% in Final Stretch ONLY
   // PERFORMANCE: Skip this effect entirely for New Pairs and Migrated columns
@@ -7428,9 +7483,9 @@ function PulseTable({
           </div>
         </div>
       </div>
-      <div className="custom-scrollbar flex flex-1 flex-col gap-2 overflow-x-hidden overflow-y-scroll">
-        {loading && tokens.length === 0 ? (
-          Array.from({ length: skeletonRowCount }).map((_, idx) => (
+      {loading && tokens.length === 0 ? (
+        <div className="custom-scrollbar flex flex-1 flex-col gap-2 overflow-x-hidden overflow-y-scroll">
+          {Array.from({ length: skeletonRowCount }).map((_, idx) => (
             <div
               key={idx}
               className="flex shrink-0 animate-pulse flex-row items-start rounded-lg p-2"
@@ -7524,23 +7579,19 @@ function PulseTable({
                 </div>
               </div>
             </div>
-          ))
-        ) : tokens.length === 0 ? (
+          ))}
+        </div>
+      ) : tokens.length === 0 ? (
+        <div className="custom-scrollbar flex flex-1 flex-col gap-2 overflow-x-hidden overflow-y-scroll">
           <div className="py-8 text-center" style={{ color: AX.muted }}>
             No tokens found.
           </div>
-        ) : (
-          memoizedTokens
-            .filter((token) => {
-              // Show tokens that have either pair_address or mint (all tokens have mint)
-              const pairAddress = (token as any)?.pair_address;
-              const mint = (token as any)?.mint;
-              return (
-                (pairAddress && pairAddress.trim() !== "") ||
-                (mint && mint.trim() !== "")
-              );
-            })
-            .map((token, idx) => {
+        </div>
+      ) : (
+        <VirtualizedTokenList
+          items={filteredTokensForDisplay}
+          itemSize={PULSE_ROW_HEIGHT}
+          renderRow={(token: any, idx: number, style: React.CSSProperties) => {
               // Use mint directly in URL path for cleaner architecture
               // This allows WebSocket to connect immediately without pair_address resolution
               const tokenMint = (token as any)?.mint;
@@ -7584,9 +7635,10 @@ function PulseTable({
               }).toString();
 
               return (
+                <div key={tokenMint} style={style}>
+                <div style={{ paddingBottom: '4px' }}>
                 <Link
                   href={`/trade/${tokenMint}?${queryParams}`}
-                  key={tokenMint}
                   className="token-row group relative flex w-full max-w-full shrink-0 cursor-pointer flex-row items-start gap-2 overflow-visible rounded-lg px-2 py-1.5 text-sm"
                   style={{
                     color: AX.text,
@@ -7734,7 +7786,7 @@ function PulseTable({
                                     e.currentTarget.style.color = AX.aiBlue;
                                     e.currentTarget.style.boxShadow = `0 0 6px ${AX.glowBlue}`;
                                     const tooltip = document.getElementById(
-                                      `copy-tooltip-${idx}`,
+                                      `shared-copy-tooltip`,
                                     ) as HTMLElement;
                                     if (tooltip) {
                                       const rect =
@@ -7748,7 +7800,7 @@ function PulseTable({
                                     e.currentTarget.style.color = AX.muted;
                                     e.currentTarget.style.boxShadow = "none";
                                     const tooltip = document.getElementById(
-                                      `copy-tooltip-${idx}`,
+                                      `shared-copy-tooltip`,
                                     ) as HTMLElement;
                                     if (tooltip) tooltip.style.opacity = "0";
                                   }}
@@ -7878,7 +7930,7 @@ function PulseTable({
                                       className="flex items-center justify-center rounded transition-colors duration-200"
                                       onMouseEnter={(e) => {
                                         const tooltip = document.getElementById(
-                                          `profile-tooltip-${idx}`,
+                                          `shared-profile-tooltip`,
                                         ) as HTMLElement;
                                         if (tooltip) {
                                           const rect =
@@ -7901,7 +7953,7 @@ function PulseTable({
                                       }}
                                       onMouseLeave={(e) => {
                                         const tooltip = document.getElementById(
-                                          `profile-tooltip-${idx}`,
+                                          `shared-profile-tooltip`,
                                         ) as HTMLElement;
                                         if (tooltip)
                                           tooltip.style.opacity = "0";
@@ -7933,14 +7985,19 @@ function PulseTable({
                                 <div className="ml-1 flex flex-row gap-1.5 font-light">
                                   {/* Crown Icon - Dev Migration Stats */}
                                   <div
-                                    className="group/dev relative flex items-center gap-0.5 cursor-pointer"
+                                    className="relative flex items-center gap-0.5 cursor-pointer"
                                     onMouseEnter={(e) => {
                                       const rect = e.currentTarget.getBoundingClientRect();
-                                      const tip = e.currentTarget.querySelector('[data-tooltip="dev"]') as HTMLElement;
+                                      const tip = document.getElementById(`dev-tip-${token.mint}`);
                                       if (tip) {
                                         tip.style.left = `${rect.left}px`;
                                         tip.style.top = `${rect.bottom + 6}px`;
+                                        tip.style.opacity = "1";
                                       }
+                                    }}
+                                    onMouseLeave={() => {
+                                      const tip = document.getElementById(`dev-tip-${token.mint}`);
+                                      if (tip) tip.style.opacity = "0";
                                     }}
                                   >
                                     <PiCrownSimpleLight
@@ -7951,45 +8008,54 @@ function PulseTable({
                                       {token.dev_tokens_migrated ?? 0}/{token.dev_tokens_created ?? 0}
                                     </span>
                                     {/* Dev Migration Tooltip */}
-                                    <div
-                                      data-tooltip="dev"
-                                      className="pointer-events-none fixed z-[9999] min-w-[180px] rounded-lg opacity-0 transition-opacity duration-200 overflow-hidden group-hover/dev:opacity-100"
-                                      style={{
-                                        backgroundColor: AX.surface,
-                                        border: `1px solid ${AX.border}`,
-                                      }}
-                                    >
-                                      <div className="px-3 py-2 space-y-1.5">
-                                        <div className="flex justify-between items-center">
-                                          <span className="text-sm" style={{ color: AX.muted }}>Dev Migrated</span>
-                                          <span className="text-sm font-medium" style={{ color: AX.text }}>{token.dev_tokens_migrated ?? 0}</span>
+                                    {createPortal(
+                                      <div
+                                        id={`dev-tip-${token.mint}`}
+                                        data-tooltip="dev"
+                                        className="pointer-events-none fixed z-[9999] min-w-[180px] rounded-lg opacity-0 transition-opacity duration-200 overflow-hidden"
+                                        style={{
+                                          backgroundColor: AX.surface,
+                                          border: `1px solid ${AX.border}`,
+                                        }}
+                                      >
+                                        <div className="px-3 py-2 space-y-1.5">
+                                          <div className="flex justify-between items-center">
+                                            <span className="text-sm" style={{ color: AX.muted }}>Dev Migrated</span>
+                                            <span className="text-sm font-medium" style={{ color: AX.text }}>{token.dev_tokens_migrated ?? 0}</span>
+                                          </div>
+                                          <div className="flex justify-between items-center">
+                                            <span className="text-sm" style={{ color: AX.muted }}>Dev Launched</span>
+                                            <span className="text-sm font-medium" style={{ color: AX.text }}>{token.dev_tokens_created ?? 0}</span>
+                                          </div>
+                                          <div className="flex justify-between items-center">
+                                            <span className="text-sm" style={{ color: AX.muted }}>Migrated</span>
+                                            <span className="text-sm font-medium" style={{ color: AX.text }}>
+                                              {token.dev_tokens_created && token.dev_tokens_created > 0
+                                                ? `${Math.round((token.dev_tokens_migrated ?? 0) / token.dev_tokens_created * 100)}%`
+                                                : '0%'}
+                                            </span>
+                                          </div>
                                         </div>
-                                        <div className="flex justify-between items-center">
-                                          <span className="text-sm" style={{ color: AX.muted }}>Dev Launched</span>
-                                          <span className="text-sm font-medium" style={{ color: AX.text }}>{token.dev_tokens_created ?? 0}</span>
-                                        </div>
-                                        <div className="flex justify-between items-center">
-                                          <span className="text-sm" style={{ color: AX.muted }}>Migrated</span>
-                                          <span className="text-sm font-medium" style={{ color: AX.text }}>
-                                            {token.dev_tokens_created && token.dev_tokens_created > 0
-                                              ? `${Math.round((token.dev_tokens_migrated ?? 0) / token.dev_tokens_created * 100)}%`
-                                              : '0%'}
-                                          </span>
-                                        </div>
-                                      </div>
-                                    </div>
+                                      </div>,
+                                      document.body
+                                    )}
                                   </div>
 
                                   {/* KOL Count - Trophy Icon */}
                                   <div
-                                    className="group/kol relative flex items-center gap-0.5 text-violet-200"
+                                    className="relative flex items-center gap-0.5 text-violet-200"
                                     onMouseEnter={(e) => {
                                       const rect = e.currentTarget.getBoundingClientRect();
-                                      const tip = e.currentTarget.querySelector('[data-tooltip="kol"]') as HTMLElement;
+                                      const tip = document.getElementById(`kol-tip-${token.mint}`);
                                       if (tip) {
                                         tip.style.left = `${rect.left}px`;
                                         tip.style.top = `${rect.bottom + 6}px`;
+                                        tip.style.opacity = "1";
                                       }
+                                    }}
+                                    onMouseLeave={() => {
+                                      const tip = document.getElementById(`kol-tip-${token.mint}`);
+                                      if (tip) tip.style.opacity = "0";
                                     }}
                                   >
                                     <CiTrophy size={12} />
@@ -7997,29 +8063,38 @@ function PulseTable({
                                       {token.kol_count ?? 0}
                                     </span>
                                     {/* KOL Count Tooltip */}
-                                    <div
-                                      data-tooltip="kol"
-                                      className="pointer-events-none fixed z-[9999] rounded-lg px-3 py-2 whitespace-nowrap opacity-0 transition-opacity duration-200 group-hover/kol:opacity-100"
-                                      style={{
-                                        backgroundColor: AX.surface,
-                                        border: `1px solid ${AX.border}`,
-                                      }}
-                                    >
-                                      <span className="text-sm font-medium" style={{ color: AX.text }}>KOL Count</span>
-                                      <p className="mt-0.5 text-xs" style={{ color: AX.muted }}>Key Opinion Leaders holding this token</p>
-                                    </div>
+                                    {createPortal(
+                                      <div
+                                        id={`kol-tip-${token.mint}`}
+                                        data-tooltip="kol"
+                                        className="pointer-events-none fixed z-[9999] rounded-lg px-3 py-2 whitespace-nowrap opacity-0 transition-opacity duration-200"
+                                        style={{
+                                          backgroundColor: AX.surface,
+                                          border: `1px solid ${AX.border}`,
+                                        }}
+                                      >
+                                        <span className="text-sm font-medium" style={{ color: AX.text }}>KOL Count</span>
+                                        <p className="mt-0.5 text-xs" style={{ color: AX.muted }}>Key Opinion Leaders holding this token</p>
+                                      </div>,
+                                      document.body
+                                    )}
                                   </div>
 
                                   {/* People Icon - Total Holders */}
                                   <div
-                                    className="group/holder relative flex items-center gap-0.5"
+                                    className="relative flex items-center gap-0.5"
                                     onMouseEnter={(e) => {
                                       const rect = e.currentTarget.getBoundingClientRect();
-                                      const tip = e.currentTarget.querySelector('[data-tooltip="holder"]') as HTMLElement;
+                                      const tip = document.getElementById(`holder-tip-${token.mint}`);
                                       if (tip) {
                                         tip.style.left = `${rect.left}px`;
                                         tip.style.top = `${rect.bottom + 6}px`;
+                                        tip.style.opacity = "1";
                                       }
+                                    }}
+                                    onMouseLeave={() => {
+                                      const tip = document.getElementById(`holder-tip-${token.mint}`);
+                                      if (tip) tip.style.opacity = "0";
                                     }}
                                   >
                                     <GoPeople
@@ -8035,17 +8110,21 @@ function PulseTable({
                                       )}
                                     </span>
                                     {/* Holder Count Tooltip */}
-                                    <div
-                                      data-tooltip="holder"
-                                      className="pointer-events-none fixed z-[9999] rounded-lg px-3 py-2 whitespace-nowrap opacity-0 transition-opacity duration-200 group-hover/holder:opacity-100"
-                                      style={{
-                                        backgroundColor: AX.surface,
-                                        border: `1px solid ${AX.border}`,
-                                      }}
-                                    >
-                                      <span className="text-sm font-medium" style={{ color: AX.text }}>Holder Count</span>
-                                      <p className="mt-0.5 text-xs" style={{ color: AX.muted }}>Total wallets holding this token</p>
-                                    </div>
+                                    {createPortal(
+                                      <div
+                                        id={`holder-tip-${token.mint}`}
+                                        data-tooltip="holder"
+                                        className="pointer-events-none fixed z-[9999] rounded-lg px-3 py-2 whitespace-nowrap opacity-0 transition-opacity duration-200"
+                                        style={{
+                                          backgroundColor: AX.surface,
+                                          border: `1px solid ${AX.border}`,
+                                        }}
+                                      >
+                                        <span className="text-sm font-medium" style={{ color: AX.text }}>Holder Count</span>
+                                        <p className="mt-0.5 text-xs" style={{ color: AX.muted }}>Total wallets holding this token</p>
+                                      </div>,
+                                      document.body
+                                    )}
                                   </div>
                                   {/* Robot icon - commented out for now
                                   <div className="flex items-center gap-1 text-violet-200">
@@ -8581,78 +8660,67 @@ function PulseTable({
                     </div>
                   </div>
                 </Link>
+                </div>
+                </div>
               );
-            })
-        )}
+            }}
+        />
+      )}
+      {/* Shared singleton tooltips (only 3 divs instead of N*3) */}
+      <div
+        id="shared-copy-tooltip"
+        className="pointer-events-none fixed rounded px-2 py-1 text-xs font-medium whitespace-nowrap opacity-0 transition-opacity duration-200"
+        style={{
+          zIndex: 9999,
+          backgroundColor: AX.surface,
+          color: AX.text,
+          border: `1px solid ${AX.border}`,
+          boxShadow: `0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06), 0 0 8px ${AX.glowBlue}`,
+          transform: "translate(-50%, -100%)",
+        }}
+      >
+        Copy Contract
+        <div
+          className="absolute top-full left-1/2 h-0 w-0 -translate-x-1/2 transform border-t-4 border-r-4 border-l-4 border-transparent"
+          style={{ borderTopColor: AX.surface }}
+        ></div>
       </div>
-      {/* Fixed positioned tooltips */}
-      {memoizedTokens.map((token, idx) => (
-        <>
-          <div
-            key={`copy-tooltip-${idx}`}
-            id={`copy-tooltip-${idx}`}
-            className="pointer-events-none fixed rounded px-2 py-1 text-xs font-medium whitespace-nowrap opacity-0 transition-opacity duration-200"
-            style={{
-              zIndex: 9999,
-              backgroundColor: AX.surface,
-              color: AX.text,
-              border: `1px solid ${AX.border}`,
-              boxShadow: `0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06), 0 0 8px ${AX.glowBlue}`,
-              transform: "translate(-50%, -100%)",
-            }}
-          >
-            Copy Contract
-            {/* Tooltip arrow */}
-            <div
-              className="absolute top-full left-1/2 h-0 w-0 -translate-x-1/2 transform border-t-4 border-r-4 border-l-4 border-transparent"
-              style={{ borderTopColor: AX.surface }}
-            ></div>
-          </div>
-
-          <div
-            key={`search-tooltip-${idx}`}
-            id={`search-tooltip-${idx}`}
-            className="pointer-events-none fixed rounded px-2 py-1 text-xs font-medium whitespace-nowrap opacity-0 transition-opacity duration-200"
-            style={{
-              zIndex: 9999,
-              backgroundColor: AX.surface,
-              color: AX.text,
-              border: `1px solid ${AX.border}`,
-              boxShadow: `0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06), 0 0 8px ${AX.glowCyan}`,
-              transform: "translate(-50%, -100%)",
-            }}
-          >
-            Search on Twitter
-            {/* Tooltip arrow */}
-            <div
-              className="absolute top-full left-1/2 h-0 w-0 -translate-x-1/2 transform border-t-4 border-r-4 border-l-4 border-transparent"
-              style={{ borderTopColor: AX.surface }}
-            ></div>
-          </div>
-
-          <div
-            key={`profile-tooltip-${idx}`}
-            id={`profile-tooltip-${idx}`}
-            className="pointer-events-none fixed rounded px-2 py-1 text-xs font-medium whitespace-nowrap opacity-0 transition-opacity duration-200"
-            style={{
-              zIndex: 9999,
-              backgroundColor: AX.surface,
-              color: AX.text,
-              border: `1px solid ${AX.border}`,
-              boxShadow: `0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06), 0 0 8px ${AX.glowBlue}`,
-              transform: "translate(-50%, -100%)",
-            }}
-          >
-            View X Profile
-            {/* Tooltip arrow */}
-            <div
-              className="absolute top-full left-1/2 h-0 w-0 -translate-x-1/2 transform border-t-4 border-r-4 border-l-4 border-transparent"
-              style={{ borderTopColor: AX.surface }}
-            ></div>
-          </div>
-
-        </>
-      ))}
+      <div
+        id="shared-search-tooltip"
+        className="pointer-events-none fixed rounded px-2 py-1 text-xs font-medium whitespace-nowrap opacity-0 transition-opacity duration-200"
+        style={{
+          zIndex: 9999,
+          backgroundColor: AX.surface,
+          color: AX.text,
+          border: `1px solid ${AX.border}`,
+          boxShadow: `0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06), 0 0 8px ${AX.glowCyan}`,
+          transform: "translate(-50%, -100%)",
+        }}
+      >
+        Search on Twitter
+        <div
+          className="absolute top-full left-1/2 h-0 w-0 -translate-x-1/2 transform border-t-4 border-r-4 border-l-4 border-transparent"
+          style={{ borderTopColor: AX.surface }}
+        ></div>
+      </div>
+      <div
+        id="shared-profile-tooltip"
+        className="pointer-events-none fixed rounded px-2 py-1 text-xs font-medium whitespace-nowrap opacity-0 transition-opacity duration-200"
+        style={{
+          zIndex: 9999,
+          backgroundColor: AX.surface,
+          color: AX.text,
+          border: `1px solid ${AX.border}`,
+          boxShadow: `0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06), 0 0 8px ${AX.glowBlue}`,
+          transform: "translate(-50%, -100%)",
+        }}
+      >
+        View X Profile
+        <div
+          className="absolute top-full left-1/2 h-0 w-0 -translate-x-1/2 transform border-t-4 border-r-4 border-l-4 border-transparent"
+          style={{ borderTopColor: AX.surface }}
+        ></div>
+      </div>
       {/* Snipe on Migration Modal */}
       {showSnipeModal && selectedToken && (
         <InterstatePopout
