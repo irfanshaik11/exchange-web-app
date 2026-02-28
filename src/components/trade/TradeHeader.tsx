@@ -87,6 +87,7 @@ const normalizeKey = (s?: string) =>
 	(s || "").toLowerCase().replace(/\s+/g, "").replace(/_/g, "");
 
 const rawProtocolColorMap: Record<string, string> = {
+	pumpswap: "#eab308",
 	pump: DEFAULT_PROTOCOL_COLOR,
 	"pump.fun": DEFAULT_PROTOCOL_COLOR,
 	bonk: "#ff6b35",
@@ -183,6 +184,10 @@ function resolveProtocolColor(
 
 	if (raw.includes("meteora")) {
 		return columnType === "migrated" ? "#eab308" : "#ff4662";
+	}
+
+	if (raw.includes("pumpswap") || raw === "pump_amm" || raw === "pumpamm") {
+		return "#eab308";
 	}
 
 	if (raw.includes("pump")) {
@@ -687,7 +692,7 @@ const TradeHeader: React.FC<TradeHeaderProps> = ({ token, livePriceUsd, liveMark
 	} = useMarketDataWebSocket({
 		pairAddress: token.pair_address || "",
 		tokenAddress: token.mint || "",
-		enabled: true,
+		enabled: false, // Disabled: OHLC + unified token WS already provide price/mcap with higher priority
 	});
 
 	const marketData = getMarketData();

@@ -527,6 +527,7 @@ const TokenAvatar: React.FC<{
     if (!launchpadProtocol) return '#31e3ac';
 
     if (launchpadProtocol.includes('meteora')) return '#d11f3a';
+    if (launchpadProtocol.includes('pumpswap') || launchpadProtocol === 'pump_amm' || launchpadProtocol === 'pumpamm') return '#eab308';
     if (launchpadProtocol.includes('pump')) return '#31e3ac';
     if (launchpadProtocol.includes('launch')) return '#3b82f6';
     if (launchpadProtocol.includes('raydium')) return '#31e3ac';

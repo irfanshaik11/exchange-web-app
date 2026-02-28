@@ -58,6 +58,7 @@ export function getProtocolIcon(protocol: string): string {
 
 export function getProtocolColor(protocol: string): string {
   if (!protocol) return "#22c55e";
+  if (protocol.includes("pumpswap") || protocol === "pump_amm" || protocol === "pumpamm") return "#eab308";
   if (protocol.includes("pump")) return "#22c55e";
   if (protocol.includes("meteora")) return "#ff4662";
   if (protocol.includes("raydium")) return "#5c51f7";

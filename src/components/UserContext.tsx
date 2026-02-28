@@ -4,6 +4,7 @@ import React, {
   useEffect,
   useState,
   useCallback,
+  useMemo,
   useRef,
 } from "react";
 import type { ReactNode } from "react";
@@ -932,7 +933,7 @@ export function UserProvider({ children }: { children: ReactNode }) {
     }
   }, [setUser, turnkeyUser?.userEmail, turnkeyUser?.userName, session?.userId, normalizeUserPayload]);
 
-  const logout = () => {
+  const logout = useCallback(() => {
     const doLogout = async () => {
       if (typeof window !== "undefined") {
         (window as any).__turnkeyLoggingOut = true;
@@ -984,7 +985,7 @@ export function UserProvider({ children }: { children: ReactNode }) {
     };
 
     void doLogout();
-  };
+  }, [turnkey, setUser, router]);
 
   useEffect(() => {
     if (hasSyncedProfileRef.current) return;
@@ -1087,32 +1088,57 @@ export function UserProvider({ children }: { children: ReactNode }) {
     };
   }, [user?.publicKey, refreshBalance]);
 
+  const value = useMemo(
+    () => ({
+      user,
+      loading,
+      solBalance,
+      usdcBalance,
+      refreshUser,
+      refreshBalance,
+      refreshAllBalances,
+      setUser,
+      logout,
+      primaryWalletAddresses,
+      chainBalances,
+      walletBalances,
+      walletList,
+      walletListLoading,
+      refreshWalletList,
+      selectedWalletIds,
+      toggleWalletSelection,
+      setSelectedWalletsForChain,
+      selectAllWalletsForChain,
+      selectWalletsWithFunds,
+      clearSelectedWallets,
+    }),
+    [
+      user,
+      loading,
+      solBalance,
+      usdcBalance,
+      refreshUser,
+      refreshBalance,
+      refreshAllBalances,
+      setUser,
+      logout,
+      primaryWalletAddresses,
+      chainBalances,
+      walletBalances,
+      walletList,
+      walletListLoading,
+      refreshWalletList,
+      selectedWalletIds,
+      toggleWalletSelection,
+      setSelectedWalletsForChain,
+      selectAllWalletsForChain,
+      selectWalletsWithFunds,
+      clearSelectedWallets,
+    ]
+  );
+
   return (
-    <UserContext.Provider
-      value={{
-        user,
-        loading,
-        solBalance,
-        usdcBalance,
-        refreshUser,
-        refreshBalance,
-        refreshAllBalances,
-        setUser,
-        logout,
-        primaryWalletAddresses,
-        chainBalances,
-        walletBalances,
-        walletList,
-        walletListLoading,
-        refreshWalletList,
-        selectedWalletIds,
-        toggleWalletSelection,
-        setSelectedWalletsForChain,
-        selectAllWalletsForChain,
-        selectWalletsWithFunds,
-        clearSelectedWallets,
-      }}
-    >
+    <UserContext.Provider value={value}>
       {children}
     </UserContext.Provider>
   );

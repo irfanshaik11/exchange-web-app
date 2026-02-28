@@ -38,7 +38,8 @@ export default function usePaginatedTokensWebSocket({
   const reconnectAttemptRef = useRef(0);
   // Use v1 path consistently to match the new service
   const pathModeRef = useRef<'v1'>('v1');
-  // Track first-seen timestamps per token for 'new' stream
+  // Track first-seen timestamps per token for 'new' stream (capped to prevent memory leaks)
+  const FIRST_SEEN_MAX = 500;
   const firstSeenRef = useRef<Map<string, number>>(new Map());
 
   // Aggressive real-time for 'new' filter; light throttle for others
@@ -181,7 +182,7 @@ export default function usePaginatedTokensWebSocket({
       pollData();
       
       // Set up polling interval - faster for real-time updates
-      const interval = setInterval(pollData, filter === 'new' ? 1500 : 3000); // Poll every 1.5s for new tokens, 3s for others
+      const interval = setInterval(pollData, filter === 'new' ? 3000 : 5000); // Poll every 3s for new tokens, 5s for others
       
       return () => {
         clearInterval(interval);
@@ -224,6 +225,11 @@ export default function usePaginatedTokensWebSocket({
                     if (!a) continue;
                     if (!firstSeenRef.current.has(a)) {
                       firstSeenRef.current.set(a, Date.now());
+                      // Cap to prevent unbounded growth
+                      if (firstSeenRef.current.size > FIRST_SEEN_MAX) {
+                        const iter = firstSeenRef.current.keys();
+                        firstSeenRef.current.delete(iter.next().value!);
+                      }
                     }
                     if (!('firstSeen' in t) || !t.firstSeen) {
                       t.firstSeen = firstSeenRef.current.get(a);
@@ -330,6 +336,7 @@ export default function usePaginatedTokensWebSocket({
       }
       // Reset refs to avoid stale data across re-mounts with different params
       dataRef.current = [];
+      firstSeenRef.current.clear();
     };
     // The connection must be re-established if the filter parameters change
   }, [filter, order, offset, limit]);

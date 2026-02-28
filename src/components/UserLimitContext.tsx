@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState } from 'react';
+import React, { createContext, useContext, useState, useCallback, useMemo } from 'react';
 import type { ReactNode } from 'react';
 
 interface UserLimitContextType {
@@ -14,25 +14,25 @@ export const UserLimitProvider: React.FC<{ children: ReactNode }> = ({ children 
   const [showBlocker, setShowBlocker] = useState(false);
   const [blockerMessage, setBlockerMessage] = useState<string | null>(null);
 
-  const setUserLimitReached = (message?: string) => {
+  const setUserLimitReached = useCallback((message?: string) => {
     setBlockerMessage(message || null);
     setShowBlocker(true);
-  };
+  }, []);
 
-  const clearUserLimit = () => {
+  const clearUserLimit = useCallback(() => {
     setShowBlocker(false);
     setBlockerMessage(null);
-  };
+  }, []);
+
+  const value = useMemo(() => ({
+    showBlocker,
+    blockerMessage,
+    setUserLimitReached,
+    clearUserLimit,
+  }), [showBlocker, blockerMessage, setUserLimitReached, clearUserLimit]);
 
   return (
-    <UserLimitContext.Provider
-      value={{
-        showBlocker,
-        blockerMessage,
-        setUserLimitReached,
-        clearUserLimit,
-      }}
-    >
+    <UserLimitContext.Provider value={value}>
       {children}
     </UserLimitContext.Provider>
   );

@@ -15,9 +15,56 @@ export const tokenKeys = {
 };
 
 // ============================================================================
+// Timestamp Helpers - For youngest-token freshness comparison
+// ============================================================================
+
+/**
+ * Extract a creation timestamp (in ms) from a token object.
+ * Handles launch_time, created_at, createdAt, pair_created_at, timestamp —
+ * as numbers (seconds vs ms), ISO strings, or nested objects.
+ */
+function getTokenTimestamp(token: any): number {
+  if (!token) return 0;
+  const raw =
+    token.launch_time ??
+    token.created_at ??
+    token.createdAt ??
+    token.pair_created_at ??
+    token.timestamp;
+  if (raw == null) return 0;
+
+  // Nested object with a numeric/string value
+  const val = typeof raw === 'object' && raw !== null ? (raw.value ?? raw.seconds ?? raw) : raw;
+
+  if (typeof val === 'number') {
+    // Heuristic: timestamps < 1e12 are in seconds, otherwise milliseconds
+    return val < 1e12 ? val * 1000 : val;
+  }
+  if (typeof val === 'string') {
+    const parsed = Date.parse(val);
+    return Number.isNaN(parsed) ? 0 : parsed;
+  }
+  return 0;
+}
+
+/**
+ * Return the most recent (youngest) token timestamp from an array, or 0.
+ */
+function getYoungestTokenTimestamp(tokens: any[]): number {
+  if (!tokens || tokens.length === 0) return 0;
+  let max = 0;
+  for (const t of tokens) {
+    const ts = getTokenTimestamp(t);
+    if (ts > max) max = ts;
+  }
+  return max;
+}
+
+// ============================================================================
 // LocalStorage Cache Helpers - For instant data display on page return
 // ============================================================================
 const CACHE_TTL_MS = 10 * 60 * 1000; // 10 minutes - matches gcTime
+const NEW_PAIRS_TTL_MS = 5 * 60 * 1000; // 5 minutes - tighter TTL for fast-turning new pairs
 
 interface CachedData<T> {
   data: T;
@@ -27,14 +74,15 @@ interface CachedData<T> {
 
 /**
  * Save data to localStorage for instant display on page return
+ * @param ttlMs Optional TTL override (defaults to CACHE_TTL_MS)
  */
-function saveToLocalStorage<T>(key: string, data: T): void {
+function saveToLocalStorage<T>(key: string, data: T, ttlMs: number = CACHE_TTL_MS): void {
   if (typeof window === 'undefined') return;
   try {
     const cacheEntry: CachedData<T> = {
       data,
       timestamp: Date.now(),
-      expiresAt: Date.now() + CACHE_TTL_MS,
+      expiresAt: Date.now() + ttlMs,
     };
     localStorage.setItem(key, JSON.stringify(cacheEntry));
   } catch (error) {
@@ -99,8 +147,23 @@ async function fetchNewPairs(): Promise<Token[]> {
   const data = await response.json();
   const tokens = Array.isArray(data) ? data : (data.result || []);
 
-  // Save to localStorage for instant display on page return
-  saveToLocalStorage(CACHE_KEYS.newPairs, tokens);
+  // Freshness comparison: log youngest token in HTTP response vs localStorage cache
+  const now = Date.now();
+  const httpYoungest = getYoungestTokenTimestamp(tokens);
+  const cachedTokens = loadFromLocalStorage<Token[]>(CACHE_KEYS.newPairs);
+  const cacheYoungest = getYoungestTokenTimestamp(cachedTokens ?? []);
+
+  if (httpYoungest > 0 || cacheYoungest > 0) {
+    const httpAgo = httpYoungest > 0 ? ((now - httpYoungest) / 1000).toFixed(0) : '??';
+    const cacheAgo = cacheYoungest > 0 ? ((now - cacheYoungest) / 1000).toFixed(0) : '??';
+    const fresher = httpYoungest >= cacheYoungest ? 'HTTP is fresher' : 'CACHE was fresher';
+    console.log(
+      `[PulseFreshness] HTTP youngest: ${httpAgo}s ago, Cache youngest: ${cacheAgo}s ago → ${fresher} (${tokens.length} tokens)`
+    );
+  }
+
+  // Save to localStorage with tighter TTL for fast-turning new pairs
+  saveToLocalStorage(CACHE_KEYS.newPairs, tokens, NEW_PAIRS_TTL_MS);
 
   return tokens;
 }
@@ -163,9 +226,9 @@ export function useQueryNewPairs(enabled: boolean = true): UseQueryResult<Token[
     queryKey: tokenKeys.trenches.newPairs(),
     queryFn: fetchNewPairs,
     enabled,                        // Conditionally enable/disable the query
-    staleTime: 30 * 1000,          // Consider fresh for 30s, then refetch (matches Final Stretch / Migrated)
+    staleTime: 10 * 1000,          // Consider fresh for 10s — new pairs turn over fast
     gcTime: 10 * 60 * 1000,        // Keep in cache for 10 min for instant display
-    refetchOnWindowFocus: false,   // Don't refetch on focus (WebSocket handles updates)
+    refetchOnWindowFocus: true,    // ✅ Refetch on tab switch — WebSocket is currently disabled
     refetchOnReconnect: true,      // Refetch on reconnect to catch missed updates
     refetchOnMount: true,          // ✅ ALWAYS fetch on mount to ensure fresh data
     // ✅ Instant display: Show cached data immediately while fresh data loads

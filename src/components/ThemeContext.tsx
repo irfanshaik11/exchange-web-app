@@ -1,6 +1,6 @@
 "use client";
 
-import React, { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
+import React, { createContext, useContext, useEffect, useState, useCallback, useMemo, type ReactNode } from 'react';
 
 export type ThemePreset = 'dark' | 'light' | 'dusk' | 'astro' | 'neo' | 'crimson' | 'stealth-blue' | 'orange' | 'custom';
 
@@ -547,48 +547,47 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     }
   }, [customFont]);
 
-  const setTheme = (newTheme: ThemePreset) => {
+  const setTheme = useCallback((newTheme: ThemePreset) => {
     setThemeState(newTheme);
     if (newTheme !== 'custom') {
       setPrimaryColorState(themePresets[newTheme].primaryColor);
     }
-  };
+  }, []);
 
-  const setPrimaryColor = (color: string) => {
+  const setPrimaryColor = useCallback((color: string) => {
     if (/^#[0-9A-Fa-f]{6}$/.test(color)) {
       setPrimaryColorState(color);
     }
-  };
+  }, []);
 
-  const setCustomFont = (font: string) => {
+  const setCustomFont = useCallback((font: string) => {
     setCustomFontState(font);
-  };
+  }, []);
 
-  const resetToDefault = () => {
+  const resetToDefault = useCallback(() => {
     setThemeState('dark');
     setPrimaryColorState('#526FFF');
     setCustomFontState('');
-    // Clear localStorage
     if (typeof window !== 'undefined') {
       localStorage.removeItem('theme-preset');
       localStorage.removeItem('theme-primary-color');
       localStorage.removeItem('theme-custom-font');
     }
-  };
+  }, []);
+
+  const value = useMemo(() => ({
+    theme,
+    primaryColor,
+    customFont,
+    themeConfig,
+    setTheme,
+    setPrimaryColor,
+    setCustomFont,
+    resetToDefault,
+  }), [theme, primaryColor, customFont, themeConfig, setTheme, setPrimaryColor, setCustomFont, resetToDefault]);
 
   return (
-    <ThemeContext.Provider
-      value={{
-        theme,
-        primaryColor,
-        customFont,
-        themeConfig,
-        setTheme,
-        setPrimaryColor,
-        setCustomFont,
-        resetToDefault,
-      }}
-    >
+    <ThemeContext.Provider value={value}>
       {children}
     </ThemeContext.Provider>
   );

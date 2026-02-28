@@ -738,6 +738,34 @@ export function useSolanaTokenWebSocket(
     };
   }, [enabled, mintAddress, connect, disconnect]);
 
+  // Reconnect when tab becomes visible (browser freezes timers when hidden)
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (
+        document.visibilityState === 'visible' &&
+        enabled &&
+        mintAddress
+      ) {
+        if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) {
+          if (isDev) console.log('[useSolanaTokenWebSocket] Tab visible, WS not open — reconnecting');
+          reconnectAttemptsRef.current = 0;
+          connect();
+        } else {
+          try {
+            wsRef.current.send(JSON.stringify({ type: 'ping' }));
+          } catch {
+            if (isDev) console.log('[useSolanaTokenWebSocket] Ping failed on tab return — reconnecting');
+            reconnectAttemptsRef.current = 0;
+            connect();
+          }
+        }
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
+  }, [enabled, mintAddress, connect]);
+
   return {
     trades,
     holders,

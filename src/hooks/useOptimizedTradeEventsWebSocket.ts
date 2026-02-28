@@ -67,6 +67,7 @@ export default function useOptimizedTradeEventsWebSocket({
   const reconnectAttemptRef = useRef(0);
   const hasSetInitialDataRef = useRef(false);
   const seenTradesRef = useRef<Set<string>>(new Set());
+  const SEEN_TRADES_MAX = 2000;
   const lastProcessedTimestampRef = useRef<number>(0);
   const lastPairAddressRef = useRef<string | undefined>(pairAddress);
 
@@ -160,23 +161,20 @@ export default function useOptimizedTradeEventsWebSocket({
     return uniqueTrades;
   }, [enableDeduplication]);
 
-  // Memory management - limit trades and remove old ones
+  // Memory management - limit trades. New trades are prepended, so array is already
+  // in newest-first order. Skip the expensive sort; just truncate.
   const manageTradesMemory = useCallback((trades: any[]) => {
     if (trades.length <= maxTrades) return trades;
-    
-    // Sort by timestamp (newest first) and keep only the most recent
-    const sortedTrades = [...trades].sort((a, b) => 
-      new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
-    );
-    
-    return sortedTrades.slice(0, maxTrades);
+    return trades.slice(0, maxTrades);
   }, [maxTrades]);
 
-  // Reset hasSetInitialDataRef when pairAddress changes (new token)
+  // Reset state when pairAddress changes (new token)
   useEffect(() => {
     if (lastPairAddressRef.current !== pairAddress) {
       hasSetInitialDataRef.current = false;
       lastPairAddressRef.current = pairAddress;
+      // Clear dedup set on token change to prevent unbounded growth
+      seenTradesRef.current.clear();
     }
   }, [pairAddress]);
 
@@ -211,13 +209,22 @@ export default function useOptimizedTradeEventsWebSocket({
           finalTrades = manageTradesMemory(deduplicatedTrades);
         }
         
-        // Update seen trades set
+        // Update seen trades set (cap size to prevent memory leaks)
         finalTrades.forEach(trade => {
-          const key = trade.transactionHash && trade.timestamp 
+          const key = trade.transactionHash && trade.timestamp
             ? `${trade.transactionHash}-${trade.timestamp}`
             : `${trade.pair_address || ''}-${trade.timestamp || Date.now()}`;
           seenTradesRef.current.add(key);
         });
+        if (seenTradesRef.current.size > SEEN_TRADES_MAX) {
+          const excess = seenTradesRef.current.size - SEEN_TRADES_MAX;
+          const iter = seenTradesRef.current.values();
+          for (let i = 0; i < excess; i++) iter.next();
+          // Rebuild with only recent entries
+          const keep = new Set<string>();
+          for (const v of iter) keep.add(v);
+          seenTradesRef.current = keep;
+        }
         
         setState(prev => {
           // Only set initial trades if we don't have any trades yet
@@ -289,10 +296,18 @@ export default function useOptimizedTradeEventsWebSocket({
           });
 
         if (newTrades.length > 0) {
-          // Add to seen trades set
+          // Add to seen trades set (cap size to prevent memory leaks)
           newTrades.forEach(trade => {
             seenTradesRef.current.add(`${trade.transactionHash}-${trade.timestamp}`);
           });
+          if (seenTradesRef.current.size > SEEN_TRADES_MAX) {
+            const excess = seenTradesRef.current.size - SEEN_TRADES_MAX;
+            const iter = seenTradesRef.current.values();
+            for (let i = 0; i < excess; i++) iter.next();
+            const keep = new Set<string>();
+            for (const v of iter) keep.add(v);
+            seenTradesRef.current = keep;
+          }
 
           setState(prev => {
             let updatedTrades: any[];

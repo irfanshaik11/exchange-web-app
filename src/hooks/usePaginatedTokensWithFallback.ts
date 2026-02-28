@@ -1124,12 +1124,12 @@ export default function usePaginatedTokensWithFallback({
     // After data is received, the interval will be increased to 3s (done via throttledSetData check)
     pollIntervalRef.current = setInterval(() => {
       poll();
-      // If we have data, switch to longer interval to reduce server load
+      // If we have data, switch to longer interval to reduce server load and re-renders
       if (lastStableDataRef.current && lastStableDataRef.current.length > 0) {
         clearInterval(pollIntervalRef.current!);
-        pollIntervalRef.current = setInterval(poll, 3000);
+        pollIntervalRef.current = setInterval(poll, 5000);
       }
-    }, 1000); // Start with 1s for faster initial production load
+    }, 3000); // 3s initial; WS provides real-time data when connected
   }, [filter, order, offset, limit, timeframe, chain, throttledSetData]);
 
   // Clear polling

@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useCallback, type ReactNode } from 'react';
+import React, { createContext, useContext, useState, useCallback, useMemo, type ReactNode } from 'react';
 
 // Filter state interface matching PulseTable's filter structure
 export interface PulseFilters {
@@ -148,8 +148,8 @@ export function PulseFiltersProvider({ children }: PulseFiltersProviderProps) {
     setFilters(defaultPulseFilters);
   }, []);
 
-  // Check if any non-default filters are active
-  const hasActiveFilters =
+  // Check if any non-default filters are active (memoized to avoid recomputation)
+  const hasActiveFilters = useMemo(() =>
     (filters.protocols.length > 0 && !filters.protocols.includes("All")) ||
     filters.quoteTokens.length > 0 ||
     !!filters.searchKeywords.trim() ||
@@ -191,10 +191,13 @@ export function PulseFiltersProvider({ children }: PulseFiltersProviderProps) {
     filters.hasTwitter ||
     filters.hasTelegram ||
     filters.atLeastOneSocial ||
-    filters.onlyPumpLive;
+    filters.onlyPumpLive,
+  [filters]);
+
+  const value = useMemo(() => ({ filters, setFilters, resetFilters, hasActiveFilters }), [filters, setFilters, resetFilters, hasActiveFilters]);
 
   return (
-    <PulseFiltersContext.Provider value={{ filters, setFilters, resetFilters, hasActiveFilters }}>
+    <PulseFiltersContext.Provider value={value}>
       {children}
     </PulseFiltersContext.Provider>
   );

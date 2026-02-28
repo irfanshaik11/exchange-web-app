@@ -12,7 +12,7 @@
 const DB_NAME = 'pulse-websocket-cache';
 const DB_VERSION = 1;
 const STORE_NAME = 'tokens';
-const CACHE_TTL_MS = 30 * 60 * 1000; // 30 minutes - longer TTL for better persistence
+const CACHE_TTL_MS = 10 * 60 * 1000; // 10 minutes - reduced from 30m to limit stale data
 
 /**
  * PulseToken interface - MUST include BOTH PulseToken AND Token (db.ts) field names!

@@ -289,6 +289,11 @@ function resolveProtocolColor(
     return "#d11f3a"; // Red for Meteora
   }
 
+  // Pumpswap / Pump AMM - yellow (distinct from regular pump green)
+  if (launchpadProtocol.includes("pumpswap") || launchpadProtocol === "pump_amm" || launchpadProtocol === "pumpamm") {
+    return "#eab308";
+  }
+
   // Pump - green color
   if (launchpadProtocol.includes("pump")) {
     return DEFAULT_PROTOCOL_COLOR;

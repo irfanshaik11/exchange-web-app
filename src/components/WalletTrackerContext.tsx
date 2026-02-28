@@ -4,6 +4,8 @@ import React, {
   useEffect,
   useState,
   useRef,
+  useCallback,
+  useMemo,
 } from "react";
 import {
   createWalletTrackerWebSocket,
@@ -131,6 +133,8 @@ export function WalletTrackerProvider({
   const [tokenMetadata, setTokenMetadata] = useState<Map<string, any>>(
     new Map(),
   );
+  const TOKEN_METADATA_MAX = 500;
+  const SHOWN_TOAST_TXS_MAX = 500;
   const [isLoadingHistory, setIsLoadingHistory] = useState(false);
   const [walletBalances, setWalletBalances] = useState<Record<string, number>>({});
 
@@ -146,7 +150,7 @@ export function WalletTrackerProvider({
   }, [watchedWallets]);
 
   // Load watched wallets
-  const refreshWatchedWallets = async () => {
+  const refreshWatchedWallets = useCallback(async () => {
     if (!user?.bearerToken) return;
 
     try {
@@ -155,7 +159,7 @@ export function WalletTrackerProvider({
     } catch (error) {
       console.error("Failed to fetch watched wallets:", error);
     }
-  };
+  }, [user?.bearerToken]);
 
   // Clear tracker state when user logs out
   useEffect(() => {
@@ -362,6 +366,13 @@ export function WalletTrackerProvider({
                 createdAt:
                   tokenData.created_at || tokenData.createdAt || tokenData.CreatedAt || null,
               });
+              // Cap size to prevent unbounded growth
+              if (updated.size > TOKEN_METADATA_MAX) {
+                const iter = updated.keys();
+                while (updated.size > TOKEN_METADATA_MAX) {
+                  updated.delete(iter.next().value!);
+                }
+              }
               return updated;
             });
           }
@@ -393,10 +404,16 @@ export function WalletTrackerProvider({
                 }
                 resolvedImage = resolvedFallbackUrl || extractTokenImage(meta);
 
-                // Update metadata state
+                // Update metadata state (capped to prevent unbounded growth)
                 setTokenMetadata((prev) => {
                   const updated = new Map(prev);
                   updated.set(normalizedEvent.mint, meta);
+                  if (updated.size > TOKEN_METADATA_MAX) {
+                    const iter = updated.keys();
+                    while (updated.size > TOKEN_METADATA_MAX) {
+                      updated.delete(iter.next().value!);
+                    }
+                  }
                   return updated;
                 });
               }
@@ -459,9 +476,9 @@ export function WalletTrackerProvider({
       if (shownToastTxsRef.current.has(normalizedEvent.tx)) return;
       shownToastTxsRef.current.add(normalizedEvent.tx);
       // Cap the set size to prevent unbounded growth
-      if (shownToastTxsRef.current.size > 200) {
+      if (shownToastTxsRef.current.size > SHOWN_TOAST_TXS_MAX) {
         const entries = Array.from(shownToastTxsRef.current);
-        shownToastTxsRef.current = new Set(entries.slice(-100));
+        shownToastTxsRef.current = new Set(entries.slice(-Math.floor(SHOWN_TOAST_TXS_MAX / 2)));
       }
 
       // Find wallet info for better notification
@@ -877,7 +894,7 @@ export function WalletTrackerProvider({
     }
   }, [latestTrades, user?.id]);
 
-  const clearNotifications = () => {
+  const clearNotifications = useCallback(() => {
     setLatestTrades([]);
     // Also clear from localStorage
     if (typeof window !== "undefined") {
@@ -890,9 +907,9 @@ export function WalletTrackerProvider({
         );
       }
     }
-  };
+  }, []);
 
-  const value: WalletTrackerContextValue = {
+  const value = useMemo<WalletTrackerContextValue>(() => ({
     wsConnected,
     latestTrades,
     watchedWallets,
@@ -900,7 +917,7 @@ export function WalletTrackerProvider({
     clearNotifications,
     isLoadingHistory,
     walletBalances,
-  };
+  }), [wsConnected, latestTrades, watchedWallets, refreshWatchedWallets, clearNotifications, isLoadingHistory, walletBalances]);
 
   return (
     <WalletTrackerContext.Provider value={value}>

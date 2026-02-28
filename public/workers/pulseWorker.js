@@ -314,6 +314,29 @@ function handleMessage(channel, data) {
       }
       break;
 
+    case 'snapshot':
+      // Server sent a full snapshot on connect — replace entire channel array
+      if (Array.isArray(data.data)) {
+        const normalized = data.data.map(normalizeToken).filter(Boolean);
+        if (channel === 'new') {
+          newTokens = normalized;
+        } else if (channel === 'final_stretch') {
+          finalStretchTokens = normalized;
+        } else if (channel === 'migrated') {
+          migratedTokens = normalized;
+        }
+        self.postMessage({
+          type: 'DATA',
+          payload: {
+            newTokens: [...newTokens],
+            finalStretchTokens: [...finalStretchTokens],
+            migratedTokens: [...migratedTokens],
+          }
+        });
+        console.log(`[PulseWorker] Snapshot received for ${channel}: ${normalized.length} tokens`);
+      }
+      break;
+
     case 'batch':
     case 'bulk':
       if (Array.isArray(data.updates)) {

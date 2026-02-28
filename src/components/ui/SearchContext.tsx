@@ -1,6 +1,6 @@
 "use client";
 
-import React, { createContext, useContext, useState, useCallback } from "react";
+import React, { createContext, useContext, useState, useCallback, useMemo } from "react";
 
 interface SearchContextValue {
   isOpen: boolean;
@@ -35,7 +35,7 @@ export function SearchProvider({ children }: { children: React.ReactNode }) {
 
   return (
     <SearchContext.Provider
-      value={{ isOpen, query, openSearch, closeSearch, setSearchQuery }}
+      value={useMemo(() => ({ isOpen, query, openSearch, closeSearch, setSearchQuery }), [isOpen, query, openSearch, closeSearch, setSearchQuery])}
     >
       {children}
     </SearchContext.Provider>

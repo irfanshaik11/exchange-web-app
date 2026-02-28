@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, useMemo } from 'react';
 import { AmmList } from '~/utils/amms';
 
 export interface FilterState {
@@ -116,36 +116,41 @@ export function FilterProvider({ children }: { children: React.ReactNode }) {
     }
   }, [filter]);
 
-  const setFilter = (f: FilterState) => {
+  const setFilter = useCallback((f: FilterState) => {
     setFilterState(f);
     setPendingFilterState(f);
-  };
+  }, []);
 
-  const setPendingFilter = (f: FilterState) => {
+  const setPendingFilter = useCallback((f: FilterState) => {
     setPendingFilterState(f);
-  };
+  }, []);
 
-  const applyFilters = () => {
+  const applyFilters = useCallback(() => {
     setFilterState(pendingFilter);
-  };
+  }, [pendingFilter]);
 
-  const resetFilter = () => {
+  const resetFilter = useCallback(() => {
     setFilterState(defaultFilter);
     setPendingFilterState(defaultFilter);
-  };
+  }, []);
 
-  const hasPendingChanges = JSON.stringify(filter) !== JSON.stringify(pendingFilter);
+  const hasPendingChanges = useMemo(
+    () => JSON.stringify(filter) !== JSON.stringify(pendingFilter),
+    [filter, pendingFilter]
+  );
+
+  const value = useMemo(() => ({
+    filter,
+    pendingFilter,
+    setFilter,
+    setPendingFilter,
+    applyFilters,
+    resetFilter,
+    hasPendingChanges,
+  }), [filter, pendingFilter, setFilter, setPendingFilter, applyFilters, resetFilter, hasPendingChanges]);
 
   return (
-    <FilterContext.Provider value={{ 
-      filter, 
-      pendingFilter, 
-      setFilter, 
-      setPendingFilter, 
-      applyFilters, 
-      resetFilter, 
-      hasPendingChanges 
-    }}>
+    <FilterContext.Provider value={value}>
       {children}
     </FilterContext.Provider>
   );

@@ -314,6 +314,15 @@ export default function PulsePage() {
 
         if (away > STALE_TAB_THRESHOLD_MS && !isMonadRoute) {
           console.log(`[Pulse] Tab hidden for ${Math.round(away / 1000)}s, refreshing Solana data...`);
+
+          // Clear localStorage placeholder caches so stale data isn't shown during refetch
+          try {
+            localStorage.removeItem('pulse_solana_new_pairs_v1');
+            localStorage.removeItem('pulse_solana_final_stretch_v1');
+            localStorage.removeItem('pulse_solana_migrated_v1');
+            localStorage.removeItem('pulse_solana_launchpad_v1');
+          } catch {}
+
           queryClient.invalidateQueries({ queryKey: ['tokens'] });
         }
       }
@@ -372,64 +381,45 @@ export default function PulsePage() {
   const [httpFinalStretch, setHttpFinalStretch] = useState<any[]>([]);
   const [httpFinalStretchTick, setHttpFinalStretchTick] = useState(0);
 
-  // Monad-specific state for all three tabs (with localStorage caching)
-  const [monadNew, setMonadNew] = useState<any[]>(() => {
-    // Initialize with cached data immediately to prevent flash
-    try {
-      const cached = localStorage.getItem("cached_monad_new_tokens");
-      if (cached) {
-        const parsed = JSON.parse(cached);
-        const now = Date.now();
-        if (now < parsed.expiresAt) {
-          return parsed.data || [];
-        }
-      }
-    } catch (error) {
-      console.warn("Failed to load cached Monad new tokens on init:", error);
-    }
-    return [];
-  });
+  // Monad-specific state for all three tabs (hydrated from localStorage async)
+  const [monadNew, setMonadNew] = useState<any[]>([]);
   const [monadNewTick, setMonadNewTick] = useState(0);
-  const [monadFinalStretch, setMonadFinalStretch] = useState<any[]>(() => {
-    // Initialize with cached data immediately to prevent flash
-    try {
-      const cached = localStorage.getItem("cached_monad_final_stretch_tokens");
-      if (cached) {
-        const parsed = JSON.parse(cached);
-        const now = Date.now();
-        if (now < parsed.expiresAt) {
-          return parsed.data || [];
-        }
-      }
-    } catch (error) {
-      console.warn(
-        "Failed to load cached Monad final stretch tokens on init:",
-        error,
-      );
-    }
-    return [];
-  });
+  const [monadFinalStretch, setMonadFinalStretch] = useState<any[]>([]);
   const [monadFinalStretchTick, setMonadFinalStretchTick] = useState(0);
-  const [monadMigrated, setMonadMigrated] = useState<any[]>(() => {
-    // Initialize with cached data immediately to prevent flash
-    try {
-      const cached = localStorage.getItem("cached_monad_migrated_tokens");
-      if (cached) {
-        const parsed = JSON.parse(cached);
-        const now = Date.now();
-        if (now < parsed.expiresAt) {
-          return parsed.data || [];
+  const [monadMigrated, setMonadMigrated] = useState<any[]>([]);
+  const [monadMigratedTick, setMonadMigratedTick] = useState(0);
+
+  // Deferred localStorage hydration — avoids blocking main thread with 3x JSON.parse on mount
+  useEffect(() => {
+    const hydrate = () => {
+      const cacheKeys = [
+        { key: "cached_monad_new_tokens", setter: setMonadNew },
+        { key: "cached_monad_final_stretch_tokens", setter: setMonadFinalStretch },
+        { key: "cached_monad_migrated_tokens", setter: setMonadMigrated },
+      ];
+      for (const { key, setter } of cacheKeys) {
+        try {
+          const cached = localStorage.getItem(key);
+          if (cached) {
+            const parsed = JSON.parse(cached);
+            if (Date.now() < parsed.expiresAt) {
+              setter(parsed.data || []);
+            }
+          }
+        } catch (error) {
+          console.warn(`Failed to load ${key} on init:`, error);
         }
       }
-    } catch (error) {
-      console.warn(
-        "Failed to load cached Monad migrated tokens on init:",
-        error,
-      );
+    };
+    if (typeof requestIdleCallback !== "undefined") {
+      const id = requestIdleCallback(hydrate);
+      return () => cancelIdleCallback(id);
+    } else {
+      // Safari fallback
+      const id = setTimeout(hydrate, 0);
+      return () => clearTimeout(id);
     }
-    return [];
-  });
-  const [monadMigratedTick, setMonadMigratedTick] = useState(0);
+  }, []);
 
   // Function to fetch token image from backend
   const fetchTokenImage = useCallback(

@@ -317,11 +317,11 @@ input[type="number"] {
   background-color: transparent;
   border: none !important;
   border-radius: 8px;
-  margin-bottom: 4px;
+  margin-bottom: 0;
   transition: background-color 100ms ease-out !important;
   max-width: 100%;
   width: 100%;
-  overflow: hidden;
+  overflow: visible;
   box-sizing: border-box;
 }
 

@@ -79,6 +79,7 @@ function getProtocolColor(protocol: string) {
   if (protocol.includes("orca")) return "#0ea5e9";
   if (protocol.includes("jupiter")) return "#8b5cf6";
   if (protocol.includes("launch")) return "#3b82f6";
+  if (protocol.includes("pumpswap") || protocol === "pump_amm" || protocol === "pumpamm") return "#eab308";
   if (protocol.includes("pump")) return DEFAULT_PROTOCOL_COLOR;
   return DEFAULT_PROTOCOL_COLOR;
 }

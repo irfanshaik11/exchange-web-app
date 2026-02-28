@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useCallback, useState } from 'react';
+import React, { createContext, useContext, useCallback, useState, useMemo } from 'react';
 import { useSolanaPositionWebSocket, type SolanaPosition, type TxHashMessage } from '../hooks/useSolanaPositionWebSocket';
 import { useUser } from '../components/UserContext';
 
@@ -71,13 +71,13 @@ export function SolanaPositionWebSocketProvider({ children }: SolanaPositionWebS
     txHashCallbacks.delete(id);
   }, [txHashCallbacks]);
 
-  const value: SolanaPositionWebSocketContextValue = {
+  const value = useMemo<SolanaPositionWebSocketContextValue>(() => ({
     connected,
     error,
     loading,
     registerTxHashCallback,
     unregisterTxHashCallback,
-  };
+  }), [connected, error, loading, registerTxHashCallback, unregisterTxHashCallback]);
 
   return (
     <SolanaPositionWebSocketContext.Provider value={value}>
