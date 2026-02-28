@@ -418,6 +418,25 @@ function applyFlatCandleSpread(bar: {
   };
 }
 
+/** Clamp "launch candles" where open/low is orders of magnitude below close/high.
+ *  This happens on token launch when the first trade goes from bonding curve zero-price
+ *  to a real trading price, creating a single candle with ~1000x high/low ratio.
+ *  Mutates the array in place. Only checks the first few candles. */
+const LAUNCH_SPIKE_RATIO = 100;
+const MAX_LAUNCH_CANDLES_CHECK = 10;
+
+function clampLaunchCandles(candles: BackendOHLCData[]): void {
+  const limit = Math.min(candles.length, MAX_LAUNCH_CANDLES_CHECK);
+  for (let i = 0; i < limit; i++) {
+    const c = candles[i];
+    if (c.c <= 0) continue;                    // Need valid close to clamp to
+    if (c.l <= 0 || c.h / c.l > LAUNCH_SPIKE_RATIO) {
+      c.o = c.c;
+      c.l = Math.min(c.c, c.h > 0 ? c.h : c.c);
+    }
+  }
+}
+
 const AdvancedOHLCChart: React.FC<AdvancedOHLCChartProps> = ({
   mint,
   pairAddress,
@@ -632,12 +651,16 @@ const AdvancedOHLCChart: React.FC<AdvancedOHLCChartProps> = ({
       const mode = displayModeRef.current;
       const axisIsMarketCap = mode === "MC";
 
-      // Priority: 1) Override from caller, 2) API ref (from MAX_MC_FETCH), 3) Compute from candles
-      // This ensures Max MC shows immediately whether from API fetch or candle data
-      const maxMarketCapUsd =
-        typeof maxMarketCapUsdOverride === "number"
-          ? maxMarketCapUsdOverride
-          : (maxMarketCapFromApiRef.current ?? computeMaxMarketCapUsd());
+      // Priority: 1) Override from caller, 2) max of API ref and computed from candles
+      // Math.max ensures live candles that set new ATH update the line immediately
+      let maxMarketCapUsd: number | null;
+      if (typeof maxMarketCapUsdOverride === "number") {
+        maxMarketCapUsd = maxMarketCapUsdOverride;
+      } else {
+        const apiMaxMc = maxMarketCapFromApiRef.current ?? 0;
+        const computedMaxMc = computeMaxMarketCapUsd() ?? 0;
+        maxMarketCapUsd = Math.max(apiMaxMc, computedMaxMc) || null;
+      }
 
       if (CHART_DEBUG) console.log("🎯 [SYNC_PRICE_LINES] Max MC determination:", {
         hasOverride: typeof maxMarketCapUsdOverride === "number",
@@ -844,8 +867,10 @@ const AdvancedOHLCChart: React.FC<AdvancedOHLCChartProps> = ({
     // Both Monad and Solana pump.fun tokens have 1B supply, so MC calculations apply to both
     const supportsMcMode = true;
 
+    const apiMaxMc = maxMarketCapFromApiRef.current ?? 0;
+    const computedMaxMc = computeMaxMarketCapUsd() ?? 0;
     const maxMarketCapUsd = supportsMcMode
-      ? (maxMarketCapFromApiRef.current ?? computeMaxMarketCapUsd())
+      ? (Math.max(apiMaxMc, computedMaxMc) || null)
       : null;
 
     const metrics = {
@@ -1309,7 +1334,7 @@ const AdvancedOHLCChart: React.FC<AdvancedOHLCChartProps> = ({
   const tradeSignatureRef = useRef<string>(
     Array.isArray(tradeData)
       ? tradeData
-          .map((t: any) => t.transactionHash || t.tx_hash || t.id || "")
+          .map((t: any) => t.signature || t.transaction_hash || t.transactionHash || t.tx_hash || t.id || "")
           .join("|")
       : "",
   );
@@ -1472,7 +1497,8 @@ const AdvancedOHLCChart: React.FC<AdvancedOHLCChartProps> = ({
     if (
       !marksInitializedRef.current ||
       (previousCount === 0 && tradeCount > 0) ||
-      creatorAddressChanged
+      creatorAddressChanged ||
+      (tradeCount > 0 && previousCount !== tradeCount)
     ) {
       marksInitializedRef.current = true;
       widgetRef.current.onChartReady?.(() => {
@@ -1506,7 +1532,7 @@ const AdvancedOHLCChart: React.FC<AdvancedOHLCChartProps> = ({
   useEffect(() => {
     const signature = Array.isArray(tradeData)
       ? tradeData
-          .map((t: any) => t.transactionHash || t.tx_hash || t.id || "")
+          .map((t: any) => t.signature || t.transaction_hash || t.transactionHash || t.tx_hash || t.id || "")
           .join("|")
       : "";
 
@@ -1523,7 +1549,7 @@ const AdvancedOHLCChart: React.FC<AdvancedOHLCChartProps> = ({
             } catch {}
           });
         }
-      }, 2000);
+      }, 800);
     }
     return () => { if (refreshMarksTimeoutRef.current) clearTimeout(refreshMarksTimeoutRef.current); };
   }, [tradeData]);
@@ -1867,6 +1893,7 @@ const AdvancedOHLCChart: React.FC<AdvancedOHLCChartProps> = ({
       }
 
       lastGoodCandlesRef.current = items;
+      clampLaunchCandles(lastGoodCandlesRef.current);
 
       // ✅ Mark cache as belonging to the current interval + timeframe
       // This prevents unnecessary HTTP requests when toggling USD/MC
@@ -2052,6 +2079,7 @@ const AdvancedOHLCChart: React.FC<AdvancedOHLCChartProps> = ({
       // Set preloaded data as the primary source
       setCandles(preloadedData);
       lastGoodCandlesRef.current = preloadedData;
+      clampLaunchCandles(lastGoodCandlesRef.current);
       setLastUpdate(new Date());
       setIsLoading(false);
       hasInitializedRef.current = true;
@@ -2128,6 +2156,7 @@ const AdvancedOHLCChart: React.FC<AdvancedOHLCChartProps> = ({
         "candles",
       );
       lastGoodCandlesRef.current = preloadedData;
+      clampLaunchCandles(lastGoodCandlesRef.current);
       setCandles(lastGoodCandlesRef.current);
       setIsLoading(false);
       hasInitializedRef.current = true;
@@ -2272,6 +2301,7 @@ const AdvancedOHLCChart: React.FC<AdvancedOHLCChartProps> = ({
 
           // Sort cache by time
           lastGoodCandlesRef.current.sort((a, b) => a.unix_time - b.unix_time);
+          clampLaunchCandles(lastGoodCandlesRef.current);
 
           if (CHART_DEBUG) {
             console.log(
@@ -3050,6 +3080,7 @@ const AdvancedOHLCChart: React.FC<AdvancedOHLCChartProps> = ({
             if (newerCandles.length > 0) {
               cachedData.push(...newerCandles);
               cachedData.sort((a, b) => a.unix_time - b.unix_time);
+              clampLaunchCandles(cachedData);
               console.log(
                 `[AdvancedOHLCChart] 📊 Merged ${newerCandles.length} snapshot candles into cache`,
               );
@@ -3091,6 +3122,7 @@ const AdvancedOHLCChart: React.FC<AdvancedOHLCChartProps> = ({
             );
 
             lastGoodCandlesRef.current = converted;
+            clampLaunchCandles(lastGoodCandlesRef.current);
             cachedIntervalRef.current = latestParamsRef.current.interval;
             cachedTimeframeRef.current = latestParamsRef.current.timeframe;
             wsConnectedRef.current = true;
@@ -3153,6 +3185,11 @@ const AdvancedOHLCChart: React.FC<AdvancedOHLCChartProps> = ({
               c: ohlcData.c || ohlcData.close || 0,
               v_usd: ohlcData.v_usd || ohlcData.v || ohlcData.volume || 0,
             };
+            // Clamp launch-candle artifacts (l=0) before caching
+            if (oneSecCandle.c > 0 && oneSecCandle.l <= 0) {
+              oneSecCandle.o = oneSecCandle.c;
+              oneSecCandle.l = Math.min(oneSecCandle.c, oneSecCandle.h > 0 ? oneSecCandle.h : oneSecCandle.c);
+            }
             const cachedData = lastGoodCandlesRef.current;
             const existingIdx = cachedData.findIndex(c => c.unix_time === oneSecCandle.unix_time);
             if (existingIdx >= 0) {
@@ -3179,6 +3216,11 @@ const AdvancedOHLCChart: React.FC<AdvancedOHLCChartProps> = ({
             c: ohlcData.c || ohlcData.close || 0,
             v_usd: ohlcData.v_usd || ohlcData.v || ohlcData.volume || 0,
           };
+          // Clamp launch-candle artifacts (l=0) before chart update
+          if (oneSecCandle.c > 0 && oneSecCandle.l <= 0) {
+            oneSecCandle.o = oneSecCandle.c;
+            oneSecCandle.l = Math.min(oneSecCandle.c, oneSecCandle.h > 0 ? oneSecCandle.h : oneSecCandle.c);
+          }
 
           const currentSelectedInterval = latestParamsRef.current.interval;
 
@@ -4658,6 +4700,7 @@ const AdvancedOHLCChart: React.FC<AdvancedOHLCChartProps> = ({
           // Update cache
           if (items.length > 0) {
             lastGoodCandlesRef.current = items;
+            clampLaunchCandles(lastGoodCandlesRef.current);
             cachedIntervalRef.current = requestedInterval;
             cachedTimeframeRef.current = requestedTimeframe;
 
@@ -5472,7 +5515,7 @@ const AdvancedOHLCChart: React.FC<AdvancedOHLCChartProps> = ({
               }
 
               // Convert real time to collapsed time for TradingView's from/to range
-              const collapsedTimeSec = timeSeconds - (totalShiftRef.current / 1000);
+              const collapsedTimeSec = realToAdjusted(timeSeconds * 1000, gapShiftsRef.current) / 1000;
               return collapsedTimeSec >= from && collapsedTimeSec <= to;
             },
           );
@@ -5610,7 +5653,7 @@ Maker: ${walletAddress}`;
             // getMarks only supports named colors (NOT hex)
             const markData: any = {
               id: `${isDev ? "dev" : "kol"}_trade_${timeSeconds}_${trade.transactionHash || trade.tx_hash || trade.id || trade.maker || ''}`,
-              time: timeSeconds - (totalShiftRef.current / 1000),
+              time: realToAdjusted(timeSeconds * 1000, gapShiftsRef.current) / 1000,
               color: markColor,
               label: label,
               position: "inBar",
@@ -5675,12 +5718,16 @@ Maker: ${walletAddress}`;
               trade.timestamp || trade.created_at || trade.unix_time;
             if (!timestamp) return false;
 
-            const timeSeconds =
-              timestamp < 10000000000
-                ? timestamp
-                : Math.floor(timestamp / 1000);
+            let timeSeconds: number;
+            if (typeof timestamp === "string") {
+              timeSeconds = Math.floor(new Date(timestamp).getTime() / 1000);
+            } else if (timestamp > 10000000000) {
+              timeSeconds = Math.floor(timestamp / 1000);
+            } else {
+              timeSeconds = timestamp;
+            }
             // Convert real time to collapsed time for TradingView's from/to range
-            const collapsedTimeSec = timeSeconds - (totalShiftRef.current / 1000);
+            const collapsedTimeSec = realToAdjusted(timeSeconds * 1000, gapShiftsRef.current) / 1000;
             return collapsedTimeSec >= from && collapsedTimeSec <= to;
           });
 
@@ -5692,10 +5739,14 @@ Maker: ${walletAddress}`;
           const timescaleMarks = devTrades.map((trade: any) => {
             const timestamp =
               trade.timestamp || trade.created_at || trade.unix_time;
-            const timeSeconds =
-              timestamp < 10000000000
-                ? timestamp
-                : Math.floor(timestamp / 1000);
+            let timeSeconds: number;
+            if (typeof timestamp === "string") {
+              timeSeconds = Math.floor(new Date(timestamp).getTime() / 1000);
+            } else if (timestamp > 10000000000) {
+              timeSeconds = Math.floor(timestamp / 1000);
+            } else {
+              timeSeconds = timestamp;
+            }
             // Use same robust buy detection logic as getMarks
             // Normalized strings for side/type/eventDisplayType (check nested fields too)
             const rawSide = String(
@@ -5776,7 +5827,7 @@ Maker: ${walletAddress}`;
 
             return {
               id: `dev_timescale_${timeSeconds}_${trade.transactionHash || trade.tx_hash || trade.id || trade.maker || ''}`,
-              time: timeSeconds - (totalShiftRef.current / 1000),
+              time: realToAdjusted(timeSeconds * 1000, gapShiftsRef.current) / 1000,
               color: markColor.toLowerCase(), // Ensure lowercase for TradingView
               label: isBuy ? "DB" : "DS",
               tooltip: [
@@ -5951,6 +6002,7 @@ Maker: ${walletAddress}`;
         // have fired yet when TradingView synchronously calls getBars on onChartReady.
         if (preloadedData && preloadedData.length > 0 && lastGoodCandlesRef.current.length === 0) {
           lastGoodCandlesRef.current = preloadedData;
+          clampLaunchCandles(lastGoodCandlesRef.current);
         }
 
         // Include mode suffix in symbol to ensure TradingView refreshes data when mode changes
@@ -6546,6 +6598,7 @@ Maker: ${walletAddress}`;
 
     // Update the ref so datafeed can use it
     lastGoodCandlesRef.current = preloadedData;
+    clampLaunchCandles(lastGoodCandlesRef.current);
     setCandles(lastGoodCandlesRef.current);
     updateChartMetrics();
 

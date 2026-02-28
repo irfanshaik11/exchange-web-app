@@ -1,6 +1,6 @@
 import { useRouter } from "next/router";
 import React, { useEffect, useState, useCallback, useRef } from "react";
-import Head from "next/head";
+import { formatMarketCap } from "../../../utils/formatPrice";
 import { useWallet } from "../../../components/useWallet";
 import { useUser } from "../../../components/UserContext";
 import Header from "../../../components/Header";
@@ -678,9 +678,6 @@ export default function MonadTradePage() {
     (typeof contractAddress === "string" && contractAddress.slice(0, 8)) ||
     "";
 
-  const pageTitle = tokenNameForTitle
-    ? `${tokenNameForTitle} | Monad Trade`
-    : "Monad Trade";
 
   const displayTokenWithChartMetrics = React.useMemo(() => {
     if (!displayToken) return displayToken;
@@ -742,6 +739,27 @@ export default function MonadTradePage() {
     
     return result;
   }, [liveMetrics, wsMetrics, chartMetrics, displayToken, tokenData]);
+
+  // Live browser tab title: "TOKEN ↑ $264K" with direction arrow
+  const prevMcapRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    const mcap = priorityMarketCapUsd ?? displayToken?.market_cap_usd ?? null;
+    if (!tokenNameForTitle) return;
+
+    if (mcap && mcap > 0) {
+      const prev = prevMcapRef.current;
+      const arrow = prev === null ? '' : mcap >= prev ? ' ↑' : ' ↓';
+      prevMcapRef.current = mcap;
+      document.title = `${tokenNameForTitle}${arrow} ${formatMarketCap(mcap)}`;
+    } else {
+      document.title = `${tokenNameForTitle} | Monad Trade`;
+    }
+
+    return () => {
+      document.title = 'Interstate';
+    };
+  }, [tokenNameForTitle, priorityMarketCapUsd, displayToken?.market_cap_usd]);
 
   // OHLC params - Monad uses 1s (1-second) candles as default for all tokens
   // TimescaleDB supports: 1s, 1m, 5m, 15m, 30m, 1h, 4h, 1d, 1w
@@ -929,8 +947,6 @@ export default function MonadTradePage() {
 
   return (
     <>
-      <Head><title>{pageTitle}</title></Head>
-
       <div
         className="h-screen w-full flex flex-col overflow-hidden"
         style={{

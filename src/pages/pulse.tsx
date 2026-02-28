@@ -314,6 +314,15 @@ export default function PulsePage() {
 
         if (away > STALE_TAB_THRESHOLD_MS && !isMonadRoute) {
           console.log(`[Pulse] Tab hidden for ${Math.round(away / 1000)}s, refreshing Solana data...`);
+
+          // Clear localStorage placeholder caches so stale data isn't shown during refetch
+          try {
+            localStorage.removeItem('pulse_solana_new_pairs_v1');
+            localStorage.removeItem('pulse_solana_final_stretch_v1');
+            localStorage.removeItem('pulse_solana_migrated_v1');
+            localStorage.removeItem('pulse_solana_launchpad_v1');
+          } catch {}
+
           queryClient.invalidateQueries({ queryKey: ['tokens'] });
         }
       }

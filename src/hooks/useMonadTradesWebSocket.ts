@@ -343,6 +343,33 @@ export function useMonadTradesWebSocket(
     };
   }, [enabled, tokenAddress]); // Only reconnect when enabled or tokenAddress changes
 
+  // Reconnect when tab becomes visible (browser freezes timers when hidden)
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        const { enabled: isEnabled, tokenAddress: ta } = configRef.current;
+        if (!isEnabled || !ta) return;
+
+        if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) {
+          console.log('[useMonadTradesWebSocket] Tab visible, WS not open — reconnecting');
+          reconnectAttemptsRef.current = 0;
+          connect();
+        } else {
+          try {
+            wsRef.current.send(JSON.stringify({ type: 'ping' }));
+          } catch {
+            console.log('[useMonadTradesWebSocket] Ping failed on tab return — reconnecting');
+            reconnectAttemptsRef.current = 0;
+            connect();
+          }
+        }
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
+  }, [connect]);
+
   return {
     trades,
     connected,

@@ -1,6 +1,6 @@
 import { useRouter } from "next/router";
 import React, { useEffect, useState, useCallback, useRef } from "react";
-import Head from "next/head";
+import { formatMarketCap } from "../../utils/formatPrice";
 import { useWallet } from "../../components/useWallet";
 import { useUser } from "../../components/UserContext";
 import { normalizeTimestampMs, normalizeTimestampToISO } from "../../utils/db";
@@ -572,14 +572,11 @@ export default function TradePage() {
 
   // Use validated displayToken for title to prevent showing stale token name
   const tokenNameForTitle =
-    (typeof displayToken?.name === "string" && displayToken.name.trim()) ||
     (typeof displayToken?.symbol === "string" && displayToken.symbol.trim()) ||
+    (typeof displayToken?.name === "string" && displayToken.name.trim()) ||
     (typeof id === "string" && id.trim()) ||
     "";
 
-  const pageTitle = tokenNameForTitle
-    ? `${tokenNameForTitle} | Trade`
-    : "Trade";
 
   // URL structure: /trade/{mint}?_name=...&_symbol=...
   // id IS the mint address now (not pair_address), allowing immediate WebSocket connection
@@ -743,6 +740,27 @@ export default function TradePage() {
     if (typeof ws === "number" && Number.isFinite(ws) && ws > 0) return ws;
     return null;
   }, [chartMetrics.lastMarketCapUsd, wsTokenInfo?.market_cap_usd]);
+
+  // Live browser tab title: "TOKEN ↑ $264K" with direction arrow
+  const prevMcapRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    const mcap = liveMarketCapForPanel ?? displayToken?.market_cap_usd ?? null;
+    if (!tokenNameForTitle) return;
+
+    if (mcap && mcap > 0) {
+      const prev = prevMcapRef.current;
+      const arrow = prev === null ? '' : mcap >= prev ? ' ↑' : ' ↓';
+      prevMcapRef.current = mcap;
+      document.title = `${tokenNameForTitle}${arrow} ${formatMarketCap(mcap)}`;
+    } else {
+      document.title = `${tokenNameForTitle} | Trade`;
+    }
+
+    return () => {
+      document.title = 'Interstate';
+    };
+  }, [tokenNameForTitle, liveMarketCapForPanel, displayToken?.market_cap_usd]);
 
   const fetchPositionLinesRef = React.useRef<Promise<void> | null>(null);
 
@@ -924,8 +942,6 @@ export default function TradePage() {
 
   return (
     <>
-      <Head><title>{pageTitle}</title></Head>
-
       <div
         className="min-h-screen w-full flex flex-col overflow-y-auto"
         style={{

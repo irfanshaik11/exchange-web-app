@@ -136,6 +136,7 @@ function resolveProtocolColor(token: Token): string {
   const raw = extractProtocolRaw(token);
   if (!raw) return DEFAULT_PROTOCOL_COLOR;
   if (raw.includes("meteora")) return "#ff4662";
+  if (raw.includes("pumpswap") || raw === "pump_amm" || raw === "pumpamm") return "#eab308";
   if (raw.includes("pump")) return DEFAULT_PROTOCOL_COLOR;
   if (raw.includes("launch")) return "#3b82f6";
   const normalized = normalizeKey(raw);

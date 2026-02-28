@@ -1714,6 +1714,11 @@ function TokenImage({
       }
     }
 
+    // Pumpswap / Pump AMM - always yellow
+    if (launchpadProtocol.includes("pumpswap") || launchpadProtocol === "pump_amm" || launchpadProtocol === "pumpamm") {
+      return "#eab308";
+    }
+
     // Special handling for Pump - use column type to determine color
     if (launchpadProtocol.includes("pump")) {
       // Pump tokens: green in new pairs and final stretch, yellow in migrated
