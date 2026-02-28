@@ -1561,6 +1561,7 @@ function TokenImage({
   const hideTokenTipRef = useRef<HTMLDivElement>(null);
   const blacklistTwitterTipRef = useRef<HTMLDivElement>(null);
   const blacklistDevTipRef = useRef<HTMLDivElement>(null);
+  const ammBubbleTipRef = useRef<HTMLDivElement>(null);
 
   // Extract image URL from token data, checking multiple possible field names
   // Priority: image_url, image, logo, uri (updated for API compatibility)
@@ -1832,6 +1833,22 @@ function TokenImage({
     return "https://pump.fun/pump-logomark.svg";
   };
 
+  // AMM/protocol display name for bubble tooltip (matches getTokenFilterCategory logic)
+  const getAmmDisplayName = (t: Token): string => {
+    const protocol = ((t as any).launchpad_protocol || "").toLowerCase();
+    const mint = (t.mint || "").toLowerCase();
+    if (mint.includes("bags")) return "Bags";
+    if (!protocol) return "Pump";
+    if (protocol.includes("pump")) return protocol.includes("pump_amm") || protocol.includes("pumpamm") || protocol.includes("pumpswap") ? "Pump AMM" : "Pump";
+    if (protocol.includes("meteora")) return "Meteora AMM";
+    if (protocol.includes("raydium")) return "Raydium";
+    if (protocol.includes("boop")) return "Boop";
+    if (protocol.includes("moonit") || protocol.includes("moonshot") || protocol.includes("moonshoot")) return "Moonit";
+    if (protocol.includes("bonk") || protocol.includes("launchlab") || mint.endsWith("bonk")) return protocol.includes("launchlab") ? "LaunchLab" : "Bonk";
+    if (protocol.includes("bags")) return "Bags";
+    return "Pump";
+  };
+
   const tokenIcon = getTokenIcon(token);
   const protocolColor = getProtocolColor(token);
   const migrationProgress = getMigrationProgress(token);
@@ -2085,7 +2102,7 @@ function TokenImage({
 
         {/* Dynamic protocol icon bubble - aligned to the outer border's bottom-right corner */}
         <div
-          className="pointer-events-none absolute right-0 bottom-0 z-10 flex translate-x-1/5 translate-y-1/4 transform items-center justify-center rounded-full"
+          className="absolute right-0 bottom-0 z-10 flex translate-x-1/5 translate-y-1/4 transform items-center justify-center rounded-full pointer-events-auto"
           style={{
             width: 16,
             height: 16,
@@ -2093,11 +2110,25 @@ function TokenImage({
             border: `1px solid ${protocolColor}`,
             boxShadow: `0 0 4px ${protocolColor}60`,
           }}
+          onMouseEnter={(e) => {
+            const tip = ammBubbleTipRef.current;
+            if (tip) {
+              const r = e.currentTarget.getBoundingClientRect();
+              tip.style.left = `${r.left + r.width / 2}px`;
+              tip.style.top = `${r.top - 6}px`;
+              tip.style.transform = "translate(-50%, -100%)";
+              tip.style.opacity = "1";
+            }
+          }}
+          onMouseLeave={() => {
+            const tip = ammBubbleTipRef.current;
+            if (tip) tip.style.opacity = "0";
+          }}
         >
           <img
             src={tokenIcon}
             alt={`${(token as any).launchpad_protocol || (token as any).protocol || (token as any).launchpadName || "Protocol"} logo`}
-            className={`${isFullCircleImage ? "h-full w-full object-cover" : "h-3/4 w-3/4 object-contain"} rounded-full`}
+            className={`${isFullCircleImage ? "h-full w-full object-cover" : "h-3/4 w-3/4 object-contain"} rounded-full pointer-events-none`}
             style={{
               filter:
                 protocolColor === "#eab308"
@@ -2106,6 +2137,22 @@ function TokenImage({
             }}
           />
         </div>
+        {createPortal(
+          <div
+            ref={ammBubbleTipRef}
+            className="pointer-events-none fixed z-[999999] rounded px-2 py-1.5 text-[11px] font-medium whitespace-nowrap transition-opacity duration-150"
+            style={{
+              backgroundColor: "rgba(23, 25, 30, 0.97)",
+              color: "#e5e7eb",
+              border: "1px solid rgba(107, 114, 128, 0.4)",
+              boxShadow: "0 4px 12px rgba(0,0,0,0.3)",
+              opacity: 0,
+            }}
+          >
+            {getAmmDisplayName(token)}
+          </div>,
+          document.body
+        )}
         {/* Blacklist action buttons — top-left, outside image */}
         <div
           className="pointer-events-none absolute z-20 flex flex-col gap-[3px]"
