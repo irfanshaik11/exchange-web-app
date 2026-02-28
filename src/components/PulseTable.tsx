@@ -33,6 +33,7 @@ import {
   FaTelegram,
   FaRegUser,
   FaFire,
+	FaTimes,
 } from "react-icons/fa";
 import { GiSeatedMouse } from "react-icons/gi";
 import {
@@ -3727,7 +3728,9 @@ function PulseTable({
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       const target = event.target as HTMLElement;
-      if (!target.closest(".filter-dropdown")) {
+      const isInsideFilterButton = target.closest(".filter-dropdown");
+      const isInsideModal = target.closest(".filter-modal");
+      if (!isInsideFilterButton && !isInsideModal) {
         setShowFilters(false);
       }
     };
@@ -5408,9 +5411,9 @@ function PulseTable({
 
 
           {/* Filter Controls */}
-          <div className="filter-dropdown relative flex-shrink-0">
+          <div className="filter-dropdown relative flex-shrink-0  z-[9999]">
             <button
-              className="relative flex h-7 w-7 cursor-pointer items-center justify-center rounded-md transition-all duration-300 ease-out"
+              className="relative flex h-7 w-7 cursor-pointer items-center justify-center rounded-md transition-all duration-300 ease-out z-[9999]"
               style={{
                 backgroundColor: "transparent",
                 color: showFilters ? AX.aiBlue : AX.muted,
@@ -5453,26 +5456,30 @@ function PulseTable({
               )}
             </button>
 
-            {/* Comprehensive Filter Modal */}
-            {showFilters && (
-              <>
-                {/* Backdrop */}
-                <div
-                  className="fixed inset-0 z-40"
-                  style={{
-                    backgroundColor: "rgba(0, 0, 0, 0.3)",
-                  }}
-                  onClick={() => setShowFilters(false)}
-                />
-                {/* Modal */}
-                <div
-                  className="filter-modal fixed top-1/2 left-1/2 z-50 max-h-[90vh] w-[95vw] max-w-[600px] -translate-x-1/2 -translate-y-1/2 transform overflow-y-auto rounded-lg border shadow-xl"
-                  style={{
-                    backgroundColor: AX.surface,
-                    borderColor: AX.border,
-                    boxShadow: "0 8px 32px rgba(0, 0, 0, 0.3)",
-                  }}
-                >
+            {/* Comprehensive Filter Modal - portaled to body to escape stacking contexts */}
+            {showFilters &&
+              typeof document !== "undefined" &&
+              createPortal(
+                <>
+                  {/* Backdrop */}
+                  <div
+                    className="fixed inset-0"
+                    style={{
+                      backgroundColor: "rgba(0, 0, 0, 0.3)",
+                      zIndex: 10000000,
+                    }}
+                    onClick={() => setShowFilters(false)}
+                  />
+                  {/* Modal */}
+                  <div
+                    className="filter-modal fixed top-1/2 left-1/2 max-h-[90vh] w-[95vw] max-w-[600px] -translate-x-1/2 -translate-y-1/2 transform overflow-y-auto rounded-lg border shadow-xl"
+                    style={{
+                      backgroundColor: AX.surface,
+                      borderColor: AX.border,
+                      boxShadow: "0 8px 32px rgba(0, 0, 0, 0.3)",
+                      zIndex: 10000001,
+                    }}
+                  >
                   {/* Header */}
                   <div
                     className="flex items-center justify-between border-b p-4"
@@ -5492,7 +5499,7 @@ function PulseTable({
                       onClick={() => setShowFilters(false)}
                       className="cursor-pointer rounded p-1 transition-colors hover:bg-gray-700"
                     >
-                      <span className="text-sm">✕</span>
+                      <FaTimes size={16} className="font-normal" />
                     </button>
                   </div>
 
@@ -5516,11 +5523,11 @@ function PulseTable({
                 ))}
                 </div> */}
                   <div
-                    className="flex items-center justify-end border-b"
+                    className="flex items-center justify-end border-b p-1"
                     style={{ borderColor: AX.border }}
                   >
                     <button
-                      className="mr-2 cursor-pointer rounded p-2 transition-colors hover:bg-gray-700"
+                      className="mr-2 cursor-pointer rounded p-1 transition-colors hover:bg-gray-700"
                       onClick={handleResetFilters}
                     >
                       <BiRefresh
@@ -7483,7 +7490,8 @@ function PulseTable({
                     </button>
                   </div>
                 </div>
-              </>
+              </>,
+							document.body
             )}
           </div>
         </div>
