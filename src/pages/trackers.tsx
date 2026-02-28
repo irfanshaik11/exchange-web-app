@@ -2268,12 +2268,6 @@ export default function TrackersPage() {
                               <span className="mt-1 text-xs text-neutral-500">
                                 Add Telegram channels to catch alpha
                               </span>
-                              <button
-                                className="mt-4 rounded-lg bg-[#7FFFC9] px-4 py-2 text-xs font-semibold text-black hover:brightness-90"
-                                onClick={() => setShowAddTelegramModal(true)}
-                              >
-                                Add Channel
-                              </button>
                             </div>
                           ) : (
                             <div className="scrollbar-hide flex-1 overflow-auto">
