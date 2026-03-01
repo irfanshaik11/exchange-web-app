@@ -15,12 +15,15 @@ import {
   getTrackedWallets,
   getWalletTradeHistory,
   fetchBatchBalances,
+  toggleWalletNotifications,
   type WatchWallet,
 } from "~/utils/walletTracking";
 import toast from "react-hot-toast";
+import { BellOff, CheckCircle, X } from "lucide-react";
 import { useUser } from "./UserContext";
 import { normalizeImageUrl, extractTokenImage, resolveTokenImage } from "~/utils/images";
 import FastImage from "~/components/FastImage";
+import { FiBell } from 'react-icons/fi';
 
 const HISTORY_LIMIT = 100;
 // Use 7 days window to ensure backfilled transactions are included
@@ -99,6 +102,64 @@ export function useWalletTracker() {
     );
   }
   return context;
+}
+
+function NotificationToastWithMuteButton({
+  toastId,
+  customContent,
+  onMute,
+}: {
+  toastId: string;
+  customContent: React.ReactNode;
+  onMute: (toastId: string) => Promise<void>;
+}) {
+  const [isMuting, setIsMuting] = useState(false);
+  const handleClick = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setIsMuting(true);
+    try {
+      await onMute(toastId);
+    } finally {
+      setIsMuting(false);
+    }
+	};
+	
+  return (
+    <div
+      onClick={() => toast.remove(toastId)}
+      className="cursor-pointer rounded-xl border border-white/[0.06] bg-[#1a1b1f] shadow-lg min-w-[320px] max-w-[380px] px-4 py-2 flex items-center gap-2"
+    >
+      {customContent}
+      <button
+        type="button"
+        onClick={handleClick}
+        disabled={isMuting}
+        className="shrink-0 rounded-lg p-1.5 text-neutral-400 hover:text-neutral-200 hover:bg-neutral-800/80 transition-colors border border-transparent hover:border-neutral-700 disabled:opacity-70 disabled:pointer-events-none"
+        title="Mute notifications for this wallet"
+      >
+        {isMuting ? (
+          <span
+            className="h-4 w-4 block animate-spin rounded-full border-2 border-neutral-500 border-t-transparent"
+            aria-hidden
+          />
+        ) : (
+          <FiBell size={16} className="fill-pink-400 text-pink-400" />
+        )}
+      </button>
+      <button
+        type="button"
+        onClick={(e) => {
+          e.stopPropagation();
+          toast.remove(toastId);
+        }}
+        className="shrink-0 rounded-lg p-1.5 text-neutral-400 hover:text-neutral-200 hover:bg-neutral-800/80 transition-colors border border-transparent hover:border-neutral-700"
+        title="Close"
+        aria-label="Close notification"
+      >
+        <X size={16} strokeWidth={2} />
+      </button>
+    </div>
+  );
 }
 
 export function WalletTrackerProvider({
@@ -606,7 +667,7 @@ export function WalletTrackerProvider({
         // Create clickable custom content for live trades toast (wide, compact)
         const customContent = (
           <div
-            className="flex cursor-pointer items-center gap-3 py-0.5"
+            className="flex cursor-pointer items-center gap-3 py-0.5 flex-1 min-w-0"
             style={{ borderLeft: `3px solid ${sideColor}`, paddingLeft: "10px" }}
             onClick={() => { window.location.href = tradeUrl; }}
           >
@@ -654,14 +715,65 @@ export function WalletTrackerProvider({
           </div>
         );
 
+        const performMuteToast = async (toastId: string) => {
+          const storageKey = `wallet_notifications_${normalizedEvent.wallet}`;
+          try {
+            if (typeof window !== "undefined") {
+              localStorage.setItem(storageKey, JSON.stringify(false));
+            }
+            await toggleWalletNotifications(
+              normalizedEvent.wallet,
+              false,
+              wallet?.ownerId ?? undefined,
+              wallet?.chain ?? "sol",
+              user?.bearerToken,
+            );
+          } catch (_) {
+            // Mute still applied via localStorage
+          }
+          refreshWatchedWallets();
+          toast.dismiss(toastId);
+          // Show styled "Notifications Updated" popup matching design
+          const successColor = "#70E0B0";
+          toast.custom(
+            () => (
+              <div
+                className="rounded-2xl border shadow-lg flex items-start gap-3 px-4 py-3 min-w-[280px] max-w-[360px]"
+                style={{
+                  backgroundColor: "#1a1b1f",
+                  borderColor: successColor,
+                }}
+              >
+                <CheckCircle
+                  size={24}
+                  className="shrink-0"
+                  style={{ color: successColor }}
+                  strokeWidth={2}
+                />
+                <div className="flex flex-col gap-0.5 min-w-0">
+                  <span
+                    className="text-base font-bold"
+                    style={{ color: successColor }}
+                  >
+                    Notifications Updated
+                  </span>
+                  <span className="text-sm text-neutral-300">
+                    Notifications disabled for {walletName}
+                  </span>
+                </div>
+              </div>
+            ),
+            { duration: 4000 }
+          );
+        };
+
         toast.custom(
           (t) => (
-            <div
-              onClick={() => toast.dismiss(t.id)}
-              className="cursor-pointer rounded-xl border border-white/[0.06] bg-[#1a1b1f] shadow-lg min-w-[320px] max-w-[380px] px-4 py-2"
-            >
-              {customContent}
-            </div>
+            <NotificationToastWithMuteButton
+              toastId={t.id}
+              customContent={customContent}
+              onMute={performMuteToast}
+            />
           ),
           { duration: 5000 }
         );
