@@ -19,7 +19,7 @@ import {
   type WatchWallet,
 } from "~/utils/walletTracking";
 import toast from "react-hot-toast";
-import { BellOff, CheckCircle } from "lucide-react";
+import { BellOff, CheckCircle, X } from "lucide-react";
 import { useUser } from "./UserContext";
 import { normalizeImageUrl, extractTokenImage, resolveTokenImage } from "~/utils/images";
 import FastImage from "~/components/FastImage";
@@ -122,10 +122,11 @@ function NotificationToastWithMuteButton({
     } finally {
       setIsMuting(false);
     }
-  };
+	};
+	
   return (
     <div
-      onClick={() => toast.dismiss(toastId)}
+      onClick={() => toast.remove(toastId)}
       className="cursor-pointer rounded-xl border border-white/[0.06] bg-[#1a1b1f] shadow-lg min-w-[320px] max-w-[380px] px-4 py-2 flex items-center gap-2"
     >
       {customContent}
@@ -144,6 +145,18 @@ function NotificationToastWithMuteButton({
         ) : (
           <FiBell size={16} className="fill-pink-400 text-pink-400" />
         )}
+      </button>
+      <button
+        type="button"
+        onClick={(e) => {
+          e.stopPropagation();
+          toast.remove(toastId);
+        }}
+        className="shrink-0 rounded-lg p-1.5 text-neutral-400 hover:text-neutral-200 hover:bg-neutral-800/80 transition-colors border border-transparent hover:border-neutral-700"
+        title="Close"
+        aria-label="Close notification"
+      >
+        <X size={16} strokeWidth={2} />
       </button>
     </div>
   );
