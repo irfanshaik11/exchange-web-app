@@ -489,6 +489,25 @@ export function WalletTrackerProvider({
         wallet?.walletName || normalizedEvent.wallet.slice(0, 8) + "...";
       const side = normalizedEvent.side === "buy" ? "bought" : "sold";
 
+      // Per-wallet notifications: check if mute is enabled for this wallet
+      const walletNotificationsEnabled = (() => {
+        if (typeof window === "undefined") return true;
+        try {
+          const storageKey = `wallet_notifications_${normalizedEvent.wallet}`;
+          const saved = localStorage.getItem(storageKey);
+          if (saved !== null) {
+            const parsed = JSON.parse(saved);
+            return parsed === true;
+          }
+        } catch {
+          // Invalid JSON or no storage, fall through to backend
+        }
+        return wallet?.notificationsEnabled ?? true;
+      })();
+
+      // Skip toast and sound for this trade if this wallet has notifications muted
+      if (!walletNotificationsEnabled) return;
+
       // Format SOL amount
       let amountDisplay = "";
       if (
@@ -584,36 +603,35 @@ export function WalletTrackerProvider({
         }).toString();
         const tradeUrl = `/trade/${normalizedEvent.pair_address || normalizedEvent.mint}?${queryParams}`;
 
-        // Create clickable custom content for live trades toast
+        // Create clickable custom content for live trades toast (wide, compact)
         const customContent = (
           <div
-            className="flex cursor-pointer items-center gap-3 py-1"
+            className="flex cursor-pointer items-center gap-3 py-0.5"
             style={{ borderLeft: `3px solid ${sideColor}`, paddingLeft: "10px" }}
             onClick={() => { window.location.href = tradeUrl; }}
           >
             {/* Token Image */}
-            <div style={{ border: `2px solid ${sideColor}40`, borderRadius: '0.75rem' }}>
+            <div style={{ border: `2px solid ${sideColor}40`, borderRadius: "0.5rem" }}>
               <FastImage
                 src={tokenImage}
                 alt={tokenName || "token"}
-                width={48}
-                height={48}
-                className="h-12 w-12 shrink-0 rounded-xl object-cover"
+                width={36}
+                height={36}
+                className="h-9 w-9 shrink-0 rounded-lg object-cover"
                 symbol={normalizedEvent.symbol}
                 name={tokenName}
                 showBubble={false}
               />
             </div>
 
-            {/* Content */}
-            <div className="min-w-0 flex-1">
-              {/* Wallet name and side */}
-              <div className="mb-1 flex items-center gap-2">
-                <span className="text-[13px] font-medium text-[#9CA3AF]">
+            {/* Content — single row where possible */}
+            <div className="min-w-0 flex-1 flex flex-col gap-0.5">
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="text-[12px] font-medium text-[#9CA3AF]">
                   {walletName}
                 </span>
                 <span
-                  className="flex items-center gap-1 rounded px-[6px] py-[2px] text-[11px] font-bold"
+                  className="flex items-center gap-0.5 rounded px-1.5 py-px text-[10px] font-bold"
                   style={{
                     color: sideColor,
                     backgroundColor: `${sideColor}20`,
@@ -624,16 +642,14 @@ export function WalletTrackerProvider({
                   {sideText}
                 </span>
               </div>
-
-              {/* Token name */}
-              <div className="mb-[2px] text-[15px] font-semibold text-[#E6E7EA]">
-                {tokenName}
+              <div className="flex items-baseline gap-2 flex-wrap">
+                <span className="text-[14px] font-semibold text-[#E6E7EA]">
+                  {tokenName}
+                </span>
+                {amountDisplay && (
+                  <span className="text-[11px] text-[#9CA3AF]">{amountDisplay}</span>
+                )}
               </div>
-
-              {/* Amount */}
-              {amountDisplay && (
-                <div className="text-xs text-[#9CA3AF]">{amountDisplay}</div>
-              )}
             </div>
           </div>
         );
@@ -642,7 +658,7 @@ export function WalletTrackerProvider({
           (t) => (
             <div
               onClick={() => toast.dismiss(t.id)}
-              className="cursor-pointer rounded-xl border border-white/[0.06] bg-[#1a1b1f] px-4 py-3 shadow-lg"
+              className="cursor-pointer rounded-xl border border-white/[0.06] bg-[#1a1b1f] shadow-lg min-w-[320px] max-w-[380px] px-4 py-2"
             >
               {customContent}
             </div>
