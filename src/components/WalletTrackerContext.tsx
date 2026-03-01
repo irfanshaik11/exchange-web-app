@@ -489,6 +489,25 @@ export function WalletTrackerProvider({
         wallet?.walletName || normalizedEvent.wallet.slice(0, 8) + "...";
       const side = normalizedEvent.side === "buy" ? "bought" : "sold";
 
+      // Per-wallet notifications: check if mute is enabled for this wallet
+      const walletNotificationsEnabled = (() => {
+        if (typeof window === "undefined") return true;
+        try {
+          const storageKey = `wallet_notifications_${normalizedEvent.wallet}`;
+          const saved = localStorage.getItem(storageKey);
+          if (saved !== null) {
+            const parsed = JSON.parse(saved);
+            return parsed === true;
+          }
+        } catch {
+          // Invalid JSON or no storage, fall through to backend
+        }
+        return wallet?.notificationsEnabled ?? true;
+      })();
+
+      // Skip toast and sound for this trade if this wallet has notifications muted
+      if (!walletNotificationsEnabled) return;
+
       // Format SOL amount
       let amountDisplay = "";
       if (
@@ -587,7 +606,7 @@ export function WalletTrackerProvider({
         // Create clickable custom content for live trades toast
         const customContent = (
           <div
-            className="flex cursor-pointer items-center gap-3 py-1"
+            className="flex cursor-pointer items-center gap-3 py-1 w-[30%]"
             style={{ borderLeft: `3px solid ${sideColor}`, paddingLeft: "10px" }}
             onClick={() => { window.location.href = tradeUrl; }}
           >
