@@ -32,10 +32,23 @@ import {
   type TwitterAccount,
   type Tweet,
 } from "~/utils/twitterTracking";
+import {
+  getTrackedTelegramChannels,
+  addTrackedTelegramChannel,
+  removeTrackedTelegramChannel,
+  getApprovedTelegramChannels,
+  getTelegramChannelInfo,
+  getTelegramChannelFeed,
+  type TelegramChannelDb,
+  type TelegramChannelMessage,
+} from "~/utils/telegramTracking";
 import { useUser } from "../components/UserContext";
 import { useWalletTracker } from "../components/WalletTrackerContext";
 import AddTwitterHandleModal from "../components/AddTwitterHandleModal";
 import TwitterAccountRow from "../components/TwitterAccountRow";
+import AddTelegramChannelModal from "../components/AddTelegramChannelModal";
+import TelegramChannelRow from "../components/TelegramChannelRow";
+import { TelegramMessageBody } from "../components/TelegramMessageBody";
 import {
   FiSettings,
   FiBell,
@@ -76,6 +89,7 @@ type DefaultWalletEntry = {
 
 const TABS = ["Wallet Manager", "Live Trades"];
 const TWITTER_TABS = ["Tracked Accounts", "X Feed", "Add X Accounts"];
+const TELEGRAM_TABS = ["Channels", "Messages", "Add Channels"];
 const LIVE_TRADES_CACHE_PREFIX = "walletTracker:liveTrades";
 const getLiveTradesCacheKey = (userId?: string) =>
   userId
@@ -245,7 +259,7 @@ export default function TrackersPage() {
   const [sidebarWidth, setSidebarWidth] = useState(384); // 384px = w-96
   const [isResizing, setIsResizing] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
-  const [mobileMainTab, setMobileMainTab] = useState<"wallets" | "twitter">(
+  const [mobileMainTab, setMobileMainTab] = useState<"wallets" | "telegram">(
     "wallets",
   );
   const [watchedWallets, setWatchedWallets] = useState<WatchWallet[]>([]);
@@ -525,9 +539,22 @@ export default function TrackersPage() {
   const [loadingApprovedHandles, setLoadingApprovedHandles] = useState(false);
   const [addingHandle, setAddingHandle] = useState<string | null>(null);
   const isAtWalletLimit = wallets.length >= MAX_WALLETS;
+  // Telegram state
+  const [showAddTelegramModal, setShowAddTelegramModal] = useState(false);
+  const [telegramChannels, setTelegramChannels] = useState<TelegramChannelDb[]>([]);
+  const [approvedTelegramChannels, setApprovedTelegramChannels] = useState<string[]>([]);
+  const [loadingTelegramChannels, setLoadingTelegramChannels] = useState(false);
+  const [telegramChannelTitles, setTelegramChannelTitles] = useState<Record<string, string>>({});
+  const [telegramTab, setTelegramTab] = useState<0 | 1 | 2>(0); // 0 = Channels, 1 = Messages, 2 = Add Channels
+  const [telegramFeed, setTelegramFeed] = useState<TelegramChannelMessage[]>([]);
+  const [loadingTelegramFeed, setLoadingTelegramFeed] = useState(false);
+  const [telegramFeedHint, setTelegramFeedHint] = useState<string | null>(null);
+  const [approvedChannelsSearch, setApprovedChannelsSearch] = useState("");
+  const [addingTelegramChannel, setAddingTelegramChannel] = useState<string | null>(null);
   // Hide wallet section when chain is Monad
   const showWalletSection = !isMobile || mobileMainTab === "wallets";
-  const showTwitterSection = !isMobile || mobileMainTab === "twitter";
+  const showTwitterSection = false; // X Tracker hidden (API cost)
+  const showTelegramSection = !isMobile || mobileMainTab === "telegram";
 
   // Calculate if all notifications are enabled
   const allNotificationsEnabled =
@@ -597,6 +624,24 @@ export default function TrackersPage() {
   useEffect(() => {
     loadTwitterAccounts();
   }, [user?.id]);
+
+  // Load Telegram channels on mount
+  useEffect(() => {
+    if (user?.bearerToken) loadTelegramChannels();
+    else setTelegramChannels([]);
+  }, [user?.bearerToken]);
+
+  // Load approved Telegram channels once
+  useEffect(() => {
+    getApprovedTelegramChannels().then(setApprovedTelegramChannels);
+  }, []);
+
+  // Load Telegram messages feed when Messages tab is selected and user has channels
+  useEffect(() => {
+    if (telegramTab === 1 && user?.bearerToken && telegramChannels.length > 0) {
+      loadTelegramFeed();
+    }
+  }, [telegramTab, user?.bearerToken, telegramChannels.length]);
 
   // Load Twitter feed when tab, accounts, or selected user changes
   useEffect(() => {
@@ -1525,6 +1570,80 @@ export default function TrackersPage() {
     }
   };
 
+  // Telegram handlers
+  const loadTelegramChannels = async () => {
+    if (!user?.bearerToken) return;
+    setLoadingTelegramChannels(true);
+    try {
+      const list = await getTrackedTelegramChannels(user.bearerToken);
+      setTelegramChannels(list);
+      const titles: Record<string, string> = {};
+      await Promise.all(
+        list.map(async (ch) => {
+          const info = await getTelegramChannelInfo(ch.username);
+          if (info?.title) titles[ch.username] = info.title;
+        }),
+      );
+      setTelegramChannelTitles((prev) => ({ ...prev, ...titles }));
+    } catch (error) {
+      console.error("Failed to load Telegram channels:", error);
+      setTelegramChannels([]);
+    } finally {
+      setLoadingTelegramChannels(false);
+    }
+  };
+
+  const handleAddTelegramChannel = async (username: string) => {
+    try {
+      await addTrackedTelegramChannel(username, user?.bearerToken || "");
+      await loadTelegramChannels();
+      showEnhancedToast("success", `@${username} added to tracked channels`, {
+        duration: 3000,
+      });
+    } catch (error: any) {
+      showEnhancedToast("error", error.message || "Failed to add Telegram channel", {
+        duration: 4000,
+      });
+      throw error;
+    }
+  };
+
+  const handleRemoveTelegramChannel = async (username: string) => {
+    try {
+      await removeTrackedTelegramChannel(username, user?.bearerToken || "");
+      await loadTelegramChannels();
+      setTelegramChannelTitles((prev) => {
+        const next = { ...prev };
+        delete next[username];
+        return next;
+      });
+      showEnhancedToast("success", `@${username} removed from tracked channels`, {
+        duration: 3000,
+      });
+    } catch (error: any) {
+      showEnhancedToast("error", error.message || "Failed to remove Telegram channel", {
+        duration: 4000,
+      });
+    }
+  };
+
+  const loadTelegramFeed = async () => {
+    if (!user?.bearerToken) return;
+    setLoadingTelegramFeed(true);
+    setTelegramFeedHint(null);
+    try {
+      const { messages, hint } = await getTelegramChannelFeed(user.bearerToken, 10);
+      setTelegramFeed(messages);
+      setTelegramFeedHint(hint ?? null);
+    } catch (error) {
+      console.error("Failed to load Telegram feed:", error);
+      setTelegramFeed([]);
+      setTelegramFeedHint(null);
+    } finally {
+      setLoadingTelegramFeed(false);
+    }
+  };
+
   const loadTwitterFeed = async () => {
     setLoadingTwitterFeed(true);
     try {
@@ -1752,18 +1871,16 @@ export default function TrackersPage() {
                       >
                         Wallet Tracker
                       </button>
-                      {/* X Tracker tab hidden — X API per-resource pricing too expensive (~$11,700+/mo for 1,500 accounts)
                       <button
                         className={`flex-1 rounded-lg px-3 py-2 transition-all duration-300 sm:px-4 sm:py-2.5 ${
-                          mobileMainTab === "twitter"
+                          mobileMainTab === "telegram"
                             ? "bg-[#7FFFC9] font-semibold text-neutral-900 shadow-[0_0_12px_rgba(127,255,201,0.3)]"
                             : "text-neutral-300 hover:bg-neutral-800/30 hover:text-neutral-200"
                         }`}
-                        onClick={() => setMobileMainTab("twitter")}
+                        onClick={() => setMobileMainTab("telegram")}
                       >
-                        X Tracker
+                        Telegram
                       </button>
-                      */}
                     </div>
                   )}
 
@@ -2071,15 +2188,276 @@ export default function TrackersPage() {
                     </div>
                   )}
 
-                  {/* RESIZE HANDLE hidden — no Twitter panel to resize against */}
-                  {false && !isMobile && (
+                  {/* RESIZE HANDLE — between wallet and Telegram panels on desktop */}
+                  {/* {showTelegramSection && !isMobile && (
                     <div
                       className="group relative hidden h-full min-h-[530px] w-1 cursor-ew-resize items-center justify-center transition-colors hover:bg-[#7FFFC9]/5 lg:flex"
                       onMouseDown={() => setIsResizing(true)}
                     >
                       <div className="absolute h-16 w-1 rounded-full bg-neutral-400 transition-colors group-hover:bg-[#7FFFC9]" />
                     </div>
-                  )}
+                  )} */}
+
+                  {/* RIGHT: TELEGRAM CHANNELS SECTION */}
+                  {/* {showTelegramSection && (
+                    <div
+                      className="flex min-h-0 flex-shrink-0 flex-col overflow-hidden rounded-xl border border-white/[0.08] bg-white/[0.05] px-3 backdrop-blur-xl sm:px-4"
+                      style={
+                        isMobile
+                          ? {
+                              boxShadow:
+                                "0 8px 32px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.06)",
+                              maxHeight: "calc(100vh - 200px)",
+                            }
+                          : {
+                              width: `${sidebarWidth}px`,
+                              minWidth: "480px",
+                              maxWidth: "600px",
+                              maxHeight: "calc(100vh - 240px)",
+                              boxShadow:
+                                "0 8px 32px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.06)",
+                            }
+                      }
+                    >
+                      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-white/[0.04] pt-3 pb-2 sm:gap-3 sm:pt-4 sm:pb-3">
+                        <div className="flex gap-1.5 sm:gap-2">
+                          {TELEGRAM_TABS.map((label, i) => (
+                            <button
+                              key={label}
+                              className={`cursor-pointer rounded-lg px-2.5 py-1.5 text-[10px] whitespace-nowrap transition-all sm:px-3 sm:py-2 sm:text-xs ${
+                                telegramTab === i
+                                  ? "border border-white/[0.08] bg-white/[0.07] font-semibold text-white"
+                                  : "border border-transparent font-medium text-neutral-400 hover:bg-white/[0.04] hover:text-neutral-200"
+                              }`}
+                              onClick={() => setTelegramTab(i as 0 | 1 | 2)}
+                            >
+                              {label}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                      <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+                        {!user ? (
+                          <div className="flex flex-1 flex-col items-center justify-center py-8 text-center">
+                            <FiLock className="mb-3 h-10 w-10 text-neutral-700" />
+                            <span className="text-sm font-medium text-neutral-300">
+                              Log in to track channels
+                            </span>
+                            <span className="mt-1 text-xs text-neutral-500">
+                              Add Telegram channels to your watchlist
+                            </span>
+                          </div>
+                        ) : telegramTab === 0 ? (
+                          loadingTelegramChannels ? (
+                            <div className="flex flex-1 flex-col items-center justify-center py-8 text-center">
+                              <div className="mb-2 flex gap-1.5">
+                                <div className="h-1.5 w-1.5 animate-pulse rounded-full bg-neutral-500" />
+                                <div className="h-1.5 w-1.5 animate-pulse rounded-full bg-neutral-500 [animation-delay:150ms]" />
+                                <div className="h-1.5 w-1.5 animate-pulse rounded-full bg-neutral-500 [animation-delay:300ms]" />
+                              </div>
+                              <span className="text-xs text-neutral-500">
+                                Loading channels...
+                              </span>
+                            </div>
+                          ) : telegramChannels.length === 0 ? (
+                            <div className="flex flex-1 flex-col items-center justify-center py-8 text-center">
+                              <FiMessageCircle className="mb-3 h-10 w-10 text-neutral-700" />
+                              <span className="text-sm font-medium text-neutral-300">
+                                No channels tracked
+                              </span>
+                              <span className="mt-1 text-xs text-neutral-500">
+                                Add Telegram channels to catch alpha
+                              </span>
+                            </div>
+                          ) : (
+                            <div className="scrollbar-hide flex-1 overflow-auto">
+                              <table className="w-full min-w-[280px] text-[10px] sm:min-w-[320px] sm:text-xs">
+                                <thead>
+                                  <tr className="border-b border-white/[0.04]">
+                                    <th className="px-2 py-2 text-left font-medium text-neutral-500">
+                                      Channel
+                                    </th>
+                                    <th className="px-2 py-2 text-left font-medium text-neutral-500">
+                                      Added
+                                    </th>
+                                    <th className="px-2 py-2 text-right font-medium text-neutral-500">
+                                      Actions
+                                    </th>
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  {telegramChannels.map((ch) => (
+                                    <TelegramChannelRow
+                                      key={ch.id}
+                                      channel={ch}
+                                      title={telegramChannelTitles[ch.username]}
+                                      onRemove={handleRemoveTelegramChannel}
+                                    />
+                                  ))}
+                                </tbody>
+                              </table>
+                            </div>
+                          )
+                        ) : telegramTab === 1 ? (
+                          loadingTelegramFeed ? (
+                            <div className="flex flex-1 flex-col items-center justify-center py-8 text-center">
+                              <div className="mb-2 flex gap-1.5">
+                                <div className="h-1.5 w-1.5 animate-pulse rounded-full bg-neutral-500" />
+                                <div className="h-1.5 w-1.5 animate-pulse rounded-full bg-neutral-500 [animation-delay:150ms]" />
+                                <div className="h-1.5 w-1.5 animate-pulse rounded-full bg-neutral-500 [animation-delay:300ms]" />
+                              </div>
+                              <span className="text-xs text-neutral-500">
+                                Loading messages...
+                              </span>
+                            </div>
+                          ) : telegramFeed.length === 0 ? (
+                            <div className="flex flex-1 flex-col items-center justify-center py-8 text-center px-4">
+                              <FiMessageCircle className="mb-3 h-10 w-10 text-neutral-700" />
+                              <span className="text-sm font-medium text-neutral-300">
+                                No messages yet
+                              </span>
+                              <span className="mt-1 text-xs text-neutral-500">
+                                {telegramFeedHint || "Add channels and ensure Telegram client is configured on the server."}
+                              </span>
+                              <button
+                                type="button"
+                                className="mt-4 rounded-lg border border-white/[0.1] bg-white/[0.05] px-4 py-2 text-xs font-medium text-neutral-200 hover:bg-white/[0.08]"
+                                onClick={() => loadTelegramFeed()}
+                              >
+                                Retry
+                              </button>
+                            </div>
+                          ) : (
+                            <div className="scrollbar-hide flex-1 overflow-auto space-y-2 p-2">
+                              {telegramFeed.map((msg) => (
+                                <a
+                                  key={`${msg.channelUsername}-${msg.id}`}
+                                  href={`https://t.me/${msg.channelUsername}/${msg.id}`}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="block rounded-xl border border-white/[0.06] bg-white/[0.02] p-3 text-left transition-colors hover:bg-white/[0.05] hover:border-white/[0.1]"
+                                >
+                                  <div className="mb-2 flex items-center justify-between gap-2 border-b border-white/[0.06] pb-2">
+                                    <span className="text-xs font-semibold text-[#0088cc] sm:text-sm">
+                                      @{msg.channelUsername}
+                                    </span>
+                                    <span className="text-[10px] text-neutral-500 shrink-0">
+                                      {msg.date
+                                        ? new Date(msg.date * 1000).toLocaleString(undefined, {
+                                            month: "short",
+                                            day: "numeric",
+                                            hour: "2-digit",
+                                            minute: "2-digit",
+                                          })
+                                        : ""}
+                                    </span>
+                                  </div>
+                                  <div className="text-xs text-neutral-200 sm:text-sm leading-relaxed">
+                                    <TelegramMessageBody
+                                      text={msg.text}
+                                      entities={msg.entities}
+                                    />
+                                  </div>
+                                </a>
+                              ))}
+                            </div>
+                          )
+                        ) : (
+                          <>
+                            <div className="my-2 flex items-center gap-2 border-b border-white/[0.04] pb-2">
+                              <input
+                                type="text"
+                                placeholder="@ Search channel"
+                                value={approvedChannelsSearch}
+                                onChange={(e) =>
+                                  setApprovedChannelsSearch(e.target.value)
+                                }
+                                className="max-w-[180px] flex-1 rounded border border-white/[0.06] bg-white/[0.03] px-2 py-1 text-[10px] text-neutral-200 placeholder:text-neutral-600 focus:border-[#7FFFC9]/50 focus:outline-none sm:text-xs"
+                              />
+                            </div>
+                            <div className="scrollbar-hide flex-1 overflow-y-auto">
+                              {approvedTelegramChannels.length === 0 ? (
+                                <div className="flex flex-col items-center justify-center py-8 text-center">
+                                  <span className="text-xs text-neutral-500">
+                                    No approved channels to show
+                                  </span>
+                                </div>
+                              ) : (
+                                (approvedChannelsSearch.trim()
+                                  ? approvedTelegramChannels.filter((ch) =>
+                                      ch
+                                        .toLowerCase()
+                                        .includes(
+                                          approvedChannelsSearch
+                                            .trim()
+                                            .toLowerCase(),
+                                        ),
+                                    )
+                                  : approvedTelegramChannels
+                                ).map((channel, idx) => {
+                                  const username = channel.replace(/^@/, "").toLowerCase();
+                                  const isTracked = telegramChannels.some(
+                                    (c) =>
+                                      c.username.toLowerCase() === username,
+                                  );
+                                  const isAdding =
+                                    addingTelegramChannel === username;
+                                  return (
+                                    <div
+                                      key={channel}
+                                      className="flex items-center justify-between gap-2 border-b border-white/[0.04] py-1.5 text-[10px] sm:text-xs"
+                                    >
+                                      <div className="flex items-center min-w-0">
+                                        <span className="w-8 shrink-0 text-neutral-500">
+                                          {idx + 1}
+                                        </span>
+                                        <a
+                                          href={`https://t.me/${username}`}
+                                          target="_blank"
+                                          rel="noopener noreferrer"
+                                          className="min-w-0 truncate text-neutral-200 hover:underline"
+                                        >
+                                          @{username}
+                                        </a>
+                                      </div>
+                                      <button
+                                        type="button"
+                                        onClick={async () => {
+                                          if (isTracked || isAdding) return;
+                                          setAddingTelegramChannel(username);
+                                          try {
+                                            await handleAddTelegramChannel(
+                                              username,
+                                            );
+                                          } finally {
+                                            setAddingTelegramChannel(null);
+                                          }
+                                        }}
+                                        disabled={isTracked || isAdding}
+                                        className="flex h-6 w-6 shrink-0 items-center justify-center rounded border border-white/[0.08] bg-white/[0.04] text-neutral-400 transition-colors hover:border-[#7FFFC9]/50 hover:bg-[#7FFFC9]/10 hover:text-[#7FFFC9] disabled:opacity-50 disabled:hover:border-white/[0.08] disabled:hover:bg-white/[0.04] disabled:hover:text-neutral-400"
+                                        title={
+                                          isTracked
+                                            ? "Already tracked"
+                                            : "Add to tracked channels"
+                                        }
+                                        aria-label={`Add @${username}`}
+                                      >
+                                        {isAdding ? (
+                                          <span className="h-3 w-3 animate-spin rounded-full border-2 border-current border-t-transparent" />
+                                        ) : (
+                                          <FiPlus className="h-3.5 w-3.5 text-white" />
+                                        )}
+                                      </button>
+                                    </div>
+                                  );
+                                })
+                              )}
+                            </div>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                  )} */}
 
                   {/* RIGHT: TWITTER SECTION — hidden until cost-effective X API architecture is in place */}
                   {false && showTwitterSection && (
@@ -2521,6 +2899,12 @@ export default function TrackersPage() {
         isOpen={showAddTwitterModal}
         onClose={() => setShowAddTwitterModal(false)}
         onAddTwitterHandle={handleAddTwitterAccount}
+      />
+      <AddTelegramChannelModal
+        isOpen={showAddTelegramModal}
+        onClose={() => setShowAddTelegramModal(false)}
+        onAddChannel={handleAddTelegramChannel}
+        approvedChannels={approvedTelegramChannels}
       />
       <FilterPopout
         open={isFilterPopoutOpen}
