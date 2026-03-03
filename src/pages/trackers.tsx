@@ -98,7 +98,20 @@ const DEFAULT_TELEGRAM_CHANNELS = [
   "seekrtrending",
   "rugpullsurvivorscall",
   "drakeetl",
-  "memesdontlies",
+	"memesdontlies",
+	"timefliescalls",
+	"savannahcalls",
+	"gogetagambles",
+	"cryptotalkwithfrog",
+	"kolsignal",
+	"mini_degencalls",
+	"dumpscallsinsane",
+	"printingshitcoin",
+	"managingwaste",
+	"zorincalls",
+	"redbullcallz",
+	"robcall",
+	"cncryptocurrencyinsights"
 ];
 const LIVE_TRADES_CACHE_PREFIX = "walletTracker:liveTrades";
 const getLiveTradesCacheKey = (userId?: string) =>
