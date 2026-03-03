@@ -216,7 +216,7 @@ export function TradeSocialIcons({ token }: { token: Token }) {
                   </div>
                 </div>
 
-                {/* Following/Followers */}
+                {/* Following/Followers - hidden until Twitter API integration
                 <div className="flex items-center gap-4 px-4 pb-3 text-sm">
                   <span>
                     <strong className="text-white">--</strong>{" "}
@@ -227,6 +227,7 @@ export function TradeSocialIcons({ token }: { token: Token }) {
                     <span className="text-gray-500">Followers</span>
                   </span>
                 </div>
+                */}
 
                 {/* CTA Button */}
                 <div className="px-4 pb-4">

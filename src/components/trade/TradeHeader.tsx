@@ -320,8 +320,9 @@ function normalizeAssetUrl(raw?: string): string | null {
 function resolveTwitterInfo(token: Token | null): {
 	url: string | null;
 	handle: string | null;
+	isReal: boolean;
 } {
-	if (!token) return { url: null, handle: null };
+	if (!token) return { url: null, handle: null, isReal: false };
 
 	const candidates = [
 		(token as any).twitter,
@@ -346,6 +347,7 @@ function resolveTwitterInfo(token: Token | null): {
 		return {
 			handle,
 			url: `https://twitter.com/${handle}`,
+			isReal: true,
 		};
 	}
 
@@ -356,10 +358,11 @@ function resolveTwitterInfo(token: Token | null): {
 		return {
 			handle: fallback,
 			url: `https://twitter.com/${fallback}`,
+			isReal: false,
 		};
 	}
 
-	return { url: null, handle: null };
+	return { url: null, handle: null, isReal: false };
 }
 
 /* ---------- tiny UI atom ---------- */
@@ -562,7 +565,7 @@ const TradeHeader: React.FC<TradeHeaderProps> = ({ token, livePriceUsd, liveMark
 				url = `https://twitter.com/${handle}`;
 			}
 
-			return { url, handle };
+			return { url, handle, isReal: true };
 		}
 		return resolveTwitterInfo(token);
 	}, [token, wsTokenInfo?.twitter]);
@@ -1004,7 +1007,7 @@ const TradeHeader: React.FC<TradeHeaderProps> = ({ token, livePriceUsd, liveMark
 	const handleTwitterProfileMouseEnter = (
 		event: React.MouseEvent<HTMLButtonElement>,
 	) => {
-		if (!twitterProfileUrl) return;
+		if (!twitterProfileUrl || !twitterInfo.isReal) return;
 		if (typeof window === "undefined") return;
 		if (xPreviewTimeoutRef.current != null) {
 			window.clearTimeout(xPreviewTimeoutRef.current);
@@ -1311,7 +1314,7 @@ const TradeHeader: React.FC<TradeHeaderProps> = ({ token, livePriceUsd, liveMark
                             )} */}
 
 								{/* X Profile Preview Button - PulseTable style */}
-								<div className="relative">
+								{twitterInfo.isReal && (<div className="relative">
 									<button
 										ref={xButtonRef}
 										className="flex items-center justify-center rounded p-1 transition-colors duration-200 hover:bg-white/10"
@@ -1437,11 +1440,12 @@ const TradeHeader: React.FC<TradeHeaderProps> = ({ token, livePriceUsd, liveMark
 													</div>
 												</div>
 
-												{/* Following/Followers */}
+												{/* Following/Followers - hidden until Twitter API integration
 												<div className="px-4 pb-3 flex items-center gap-4 text-sm">
 													<span><strong className="text-white">--</strong> <span className="text-gray-500">Following</span></span>
 													<span><strong className="text-white">--</strong> <span className="text-gray-500">Followers</span></span>
 												</div>
+												*/}
 
 												{/* CTA Button */}
 												<div className="px-4 pb-4">
@@ -1458,7 +1462,7 @@ const TradeHeader: React.FC<TradeHeaderProps> = ({ token, livePriceUsd, liveMark
 											</div>
 										</div>
 									)}
-								</div>
+								</div>)}
 
 								{token.links && (
 									<button className="flex-shrink-0">
