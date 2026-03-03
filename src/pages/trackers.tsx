@@ -90,6 +90,16 @@ type DefaultWalletEntry = {
 const TABS = ["Wallet Manager", "Live Trades"];
 const TWITTER_TABS = ["Tracked Accounts", "X Feed", "Add X Accounts"];
 const TELEGRAM_TABS = ["Channels", "Messages", "Add Channels"];
+/** Default Telegram channels to track for all users when they have none. */
+const DEFAULT_TELEGRAM_CHANNELS = [
+  "edenscalls",
+  "gm_degencalls",
+  "zen_call",
+  "seekrtrending",
+  "rugpullsurvivorscall",
+  "drakeetl",
+  "memesdontlies",
+];
 const LIVE_TRADES_CACHE_PREFIX = "walletTracker:liveTrades";
 const getLiveTradesCacheKey = (userId?: string) =>
   userId
@@ -1568,8 +1578,20 @@ export default function TrackersPage() {
     if (!user?.bearerToken) return;
     setLoadingTelegramChannels(true);
     try {
-      const list = await getTrackedTelegramChannels(user.bearerToken);
+      let list = await getTrackedTelegramChannels(user.bearerToken);
       setTelegramChannels(list);
+      // When user has no channels, add default channels for all users
+      if (list.length === 0) {
+        for (const username of DEFAULT_TELEGRAM_CHANNELS) {
+          try {
+            await addTrackedTelegramChannel(username, user.bearerToken);
+          } catch {
+            // Skip if channel not approved or add fails
+          }
+        }
+        list = await getTrackedTelegramChannels(user.bearerToken);
+        setTelegramChannels(list);
+      }
       const titles: Record<string, string> = {};
       await Promise.all(
         list.map(async (ch) => {
@@ -2195,6 +2217,7 @@ export default function TrackersPage() {
                   {showTelegramSection && (
                     <div
                       className="flex min-h-0 flex-shrink-0 flex-col overflow-hidden rounded-xl border border-white/[0.08] bg-white/[0.05] px-3 backdrop-blur-xl sm:px-4"
+                      aria-label="TG Tracker"
                       style={
                         isMobile
                           ? {
@@ -2212,7 +2235,10 @@ export default function TrackersPage() {
                             }
                       }
                     >
-                      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-white/[0.04] pt-3 pb-2 sm:gap-3 sm:pt-4 sm:pb-3">
+                      <h2 className="border-b border-white/[0.04] pt-3 pb-2 text-sm font-semibold text-white sm:pt-4 sm:pb-3 sm:text-base">
+                        TG Tracker
+                      </h2>
+                      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-white/[0.04] pt-2 pb-2 sm:gap-3 sm:pt-3 sm:pb-3">
                         <div className="flex gap-1.5 sm:gap-2">
                           {TELEGRAM_TABS.map((label, i) => (
                             <button
