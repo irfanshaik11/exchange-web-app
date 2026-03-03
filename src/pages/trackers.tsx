@@ -568,7 +568,7 @@ export default function TrackersPage() {
   const [approvedTelegramChannels, setApprovedTelegramChannels] = useState<string[]>([]);
   const [loadingTelegramChannels, setLoadingTelegramChannels] = useState(false);
   const [telegramChannelTitles, setTelegramChannelTitles] = useState<Record<string, string>>({});
-  const [telegramTab, setTelegramTab] = useState<0 | 1 | 2>(0); // 0 = Channels, 1 = Messages, 2 = Add Channels
+  const [telegramTab, setTelegramTab] = useState<0 | 1 | 2>(1); // 0 = Channels, 1 = Messages, 2 = Add Channels
   const [telegramFeed, setTelegramFeed] = useState<TelegramChannelMessage[]>([]);
   const [loadingTelegramFeed, setLoadingTelegramFeed] = useState(false);
   const [telegramFeedHint, setTelegramFeedHint] = useState<string | null>(null);
@@ -2272,7 +2272,7 @@ export default function TrackersPage() {
                   {showTelegramSection && (
                     <div
                       className="flex min-h-0 flex-shrink-0 flex-col overflow-hidden rounded-xl border border-white/[0.08] bg-white/[0.05] px-3 backdrop-blur-xl sm:px-4"
-                      aria-label="TG Tracker"
+                      aria-label="Telegram Tracker"
                       style={
                         isMobile
                           ? {
@@ -2291,7 +2291,7 @@ export default function TrackersPage() {
                       }
                     >
                       <h2 className="border-b border-white/[0.04] pt-3 pb-2 text-sm font-semibold text-white sm:pt-4 sm:pb-3 sm:text-base">
-                        TG Tracker
+                        Telegram Tracker
                       </h2>
                       <div className="flex flex-wrap items-center justify-between gap-2 border-b border-white/[0.04] pt-2 pb-2 sm:gap-3 sm:pt-3 sm:pb-3">
                         <div className="flex gap-1.5 sm:gap-2">
