@@ -29,12 +29,12 @@ const TradeTabs: React.FC<TradeTabsProps> = ({ selectedTab, setSelectedTab, onIn
             onClick={() => setSelectedTab(tab)}
           >
             {tab}
-            {tab === 'Dev Tokens' && devTokensCount !== undefined && devTokensCount > 0 && (
+            {/* {tab === 'Dev Tokens' && devTokensCount !== undefined && devTokensCount > 0 && (
               <> {devTokensCount}</>
-            )}
-            {tab === 'Holders' && holdersCount !== undefined && holdersCount > 0 && (
+            )} */}
+            {/* {tab === 'Holders' && holdersCount !== undefined && holdersCount > 0 && (
               <> {holdersCount}</>
-            )}
+            )} */}
           </button>
         ))}
       </div>
