@@ -79,7 +79,7 @@ export default function MonadTradePage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const { isConnected } = useWallet();
-  const { user } = useUser();
+  const { user, primaryWalletAddresses } = useUser();
   const { monPrice } = useSolPrice();
   const [selectedTab, setSelectedTab] = useState("Transactions");
   const [search, setSearch] = useState("");
@@ -1027,6 +1027,7 @@ export default function MonadTradePage() {
                     className="relative"
                     tradeData={devTrades}
                     creatorAddress={devAddress}
+                    userWalletAddress={primaryWalletAddresses?.solana || user?.publicKey || null}
                     tokenSymbol={displayToken?.symbol || null}
                     tokenName={displayToken?.name || null}
                     tokenDecimals={displayToken?.decimals || null}

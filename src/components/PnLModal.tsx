@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { useRouter } from 'next/router';
 import { useUser } from '../components/UserContext';
+import { useSolPrice } from './SolPriceContext';
 import { getTradeActivityByUser, getActivePositionsByUser } from '~/utils/functions';
 import { formatSmartNumber, formatSmallPrice } from '~/utils/db';
 import type { PositionRow, TradeRow } from '~/utils/functions';
@@ -41,6 +42,7 @@ export default function PnLModal({ isOpen, onClose, chain }: PnLModalProps) {
   const router = useRouter();
   const currentChain = chain || (router.query.chain as string) || 'sol';
   const { user, solBalance, chainBalances, usdcBalance } = useUser();
+  const { solPrice } = useSolPrice();
   const chainBalance = currentChain === 'monad' ? (chainBalances?.monad ?? 0) : solBalance;
   
   const chainLogos: Record<string, string> = {
@@ -52,7 +54,6 @@ export default function PnLModal({ isOpen, onClose, chain }: PnLModalProps) {
   const [unrealizedPnlPercentage, setUnrealizedPnlPercentage] = useState(0);
   const [totalValue, setTotalValue] = useState(0);
   const [positions, setPositions] = useState<PositionRow[]>([]);
-  const [solPrice, setSolPrice] = useState(0);
   const [isHovered, setIsHovered] = useState(false);
   const [timeframeMetrics, setTimeframeMetrics] = useState({
     unrealizedPnl: 0,
@@ -67,36 +68,6 @@ export default function PnLModal({ isOpen, onClose, chain }: PnLModalProps) {
   const [position, setPosition] = useState({ x: 0, y: 0 });
   const [isDragging, setIsDragging] = useState(false);
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
-
-  // Fetch SOL price using Pyth Network
-  useEffect(() => {
-    const fetchSolPrice = async () => {
-      try {
-        // Pyth Network price feed for SOL/USD
-        const SOL_USD_FEED = '0xef0d8b6fda2ceba41da15d4095d1da392a0d2f8ed0c6c7bc0f4cfac8c280b56d';
-        const response = await fetch(
-          `https://hermes.pyth.network/v2/updates/price/latest?ids%5B%5D=${SOL_USD_FEED}`,
-          { signal: AbortSignal.timeout(5000) }
-        ).catch(() => null);
-
-        if (response?.ok) {
-          const data = await response.json().catch(() => null);
-          const priceData = data?.parsed?.[0]?.price;
-          if (priceData?.price && priceData?.expo) {
-            const price = Number(priceData.price) * Math.pow(10, priceData.expo);
-            setSolPrice(price);
-            return;
-          }
-        }
-      } catch {
-        // Silently ignore network errors - fallback below
-      }
-
-      // Fallback to static price if Pyth fails
-      setSolPrice(150);
-    };
-    fetchSolPrice().catch(() => setSolPrice(150));
-  }, []);
 
   // Drag handlers
   const handleMouseDown = (e: React.MouseEvent) => {

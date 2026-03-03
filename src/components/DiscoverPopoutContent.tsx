@@ -18,7 +18,7 @@ import PumpLive, { type PumpItem, demoLeft as demoLeftPump, demoRight as demoRig
 import { FaRunning, FaGasPump, FaCoins, FaBan, FaCheckCircle } from "react-icons/fa";
 import { HiLightningBolt } from "react-icons/hi";
 import { BsSliders2 } from "react-icons/bs";
-import { prefetchTradeData } from "~/utils/tokenCache";
+
 import toast from "react-hot-toast";
 import { extractTokenImage, getResolvedTokenImage } from "~/utils/images";
 import { broadcastMonadQuickTrade } from "~/utils/monadTradeEvents";
@@ -2946,14 +2946,6 @@ export default function DiscoverPopoutContent() {
                     }
                   }
 
-                  // Prefetch trade data before navigating
-                  console.log('[Discover] Prefetching trade data for:', id);
-                  try {
-                    await prefetchTradeData(id);
-                    console.log('[Discover] Prefetch complete for:', id);
-                  } catch (err) {
-                    console.error('[Discover] Prefetch failed:', err);
-                  }
                   // Navigate to trade page with chain=sol for Solana tokens
                   router.push(`/trade/${id}?chain=sol`);
                 }}

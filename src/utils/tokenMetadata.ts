@@ -18,8 +18,6 @@ interface FetchOptions {
 
 const DEFAULT_MONAD_ENDPOINT = "/api/token-service/monad/token";
 const DEFAULT_TOKEN_BY_MINT_ENDPOINT = "/api/token-service/token";
-const DEFAULT_TRADE_VIEW_ENDPOINT = "/api/token-service/trade-view";
-
 // Standard ERC-20 ABI for name() and symbol()
 const ERC20_ABI = [
   "function name() view returns (string)",
@@ -376,50 +374,6 @@ async function fetchSolanaMetadata(
     }
   } catch (error) {
     lastError = error;
-  }
-
-  // Fallback: trade-view with pair_address (only if pairAddress is available)
-  if (options.pairAddress) {
-    try {
-      const response = await fetch(
-        `${DEFAULT_TRADE_VIEW_ENDPOINT}?pair_address=${encodeURIComponent(options.pairAddress)}`,
-        { signal: options.signal },
-      );
-
-      if (response.ok) {
-        const payload = await response.json();
-        const token = payload?.token || payload?.data || payload;
-
-        if (token) {
-          return {
-            address: token.mint_address || token.mintAddress || token.address || address,
-            name: token.name || undefined,
-            symbol: token.symbol || undefined,
-            protocol:
-              token.launchpad_protocol ||
-              token.protocol ||
-              token.launchpadName ||
-              token.amm ||
-              undefined,
-            launchpad:
-              token.launchpad_protocol ||
-              token.protocol ||
-              token.launchpadName ||
-              token.amm ||
-              undefined,
-            imageUrl: token.uri || token.image || token.logo || undefined,
-            createdAt: token.created_timestamp || token.createdAt,
-            priceUsd: toOptionalNumber(token.price_usd ?? token.priceUsd),
-            marketCapUsd: toOptionalNumber(token.market_cap_usd ?? token.market_cap),
-            migrated_pool_address: token.migrated_pool_address || token.pair_address || undefined,
-          };
-        }
-      } else {
-        lastError = new Error(`Trade-view service responded with ${response.status}`);
-      }
-    } catch (error) {
-      lastError = error;
-    }
   }
 
   if (lastError) {

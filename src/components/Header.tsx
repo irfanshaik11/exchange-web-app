@@ -597,11 +597,11 @@ export default function Header({
   };
   
   const chainLogos: Record<string, string> = {
-    sol: "https://cryptologos.cc/logos/solana-sol-logo.svg?v=040",
+    sol: "/solana.png",
     monad: "https://i0.wp.com/www.gizmotimes.com/wp-content/uploads/2023/10/Monad-Logo.png?fit=1920%2C1080&ssl=1",
-    eth: "https://cryptologos.cc/logos/solana-sol-logo.svg?v=040", // Fallback to Solana for now
-    bnb: "https://cryptologos.cc/logos/solana-sol-logo.svg?v=040", // Fallback to Solana for now
-    base: "https://cryptologos.cc/logos/solana-sol-logo.svg?v=040", // Fallback to Solana for now
+    eth: "/solana.png", // Fallback to Solana for now
+    bnb: "/solana.png", // Fallback to Solana for now
+    base: "/solana.png", // Fallback to Solana for now
   };
   
   // Use chainBalances from UserContext as the single source of truth
@@ -780,16 +780,19 @@ export default function Header({
           // If hydration fails, use the original address as pair_address
         }
 
+        // Use Go service search to look up token metadata
+        const goUrl = process.env.NEXT_PUBLIC_GO_SERVICE_URL;
         const response = await fetch(
-          `/api/token-service/trade-view?pair_address=${pairAddress}`,
+          `${goUrl}/v1/search?phrase=${encodeURIComponent(trimmed)}&limit=1`,
         );
         if (!response.ok) {
           setClipboardToken(null);
           return;
         }
 
-        const data = await response.json();
-        const token = data?.token;
+        const searchData = await response.json();
+        const results = searchData?.results || searchData?.filterTokens?.results || [];
+        const token = results[0]?.token || results[0] || null;
 
         if (!token) {
           setClipboardToken(null);

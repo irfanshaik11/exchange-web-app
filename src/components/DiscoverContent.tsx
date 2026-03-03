@@ -24,7 +24,7 @@ import PumpLive, { type PumpItem } from './PumpLive';
 import { FaRunning, FaGasPump, FaCoins, FaBan } from "react-icons/fa";
 import { HiLightningBolt } from "react-icons/hi";
 import { BsSliders2 } from "react-icons/bs";
-import { prefetchTradeData } from "~/utils/tokenCache";
+
 
 const WRAPPED_SOL_MINT = SOL_MINT_ADDRESS;
 
@@ -1371,8 +1371,7 @@ export default function DiscoverContent() {
                     .catch(err => console.error('[Discover] Error backfilling token:', err));
                 }
 
-                // Fire-and-forget: prefetch trade data in background
-                prefetchTradeData(id).catch(err => console.error('[Discover] Prefetch failed:', err));
+
               }}
               quickBuyAmount={Number(quickBuyAmount) || 0}
               onQuickBuy={handleQuickBuy}

@@ -107,7 +107,7 @@ import { mapTradeErrorMessage } from "~/utils/tradeErrorMessages";
 import { dispatchBalanceRefresh } from "~/utils/balanceEvents";
 import { listenForTradeEvents, transformToastToError } from "~/utils/createSolanaToastHandler";
 import { TokenAge } from "./TokenAge";
-import { prefetchTradeData } from "~/utils/tokenCache";
+
 import { preloadTradeChart } from "~/utils/preloadTradeChart";
 import { VirtualizedTokenList } from "./VirtualizedTokenList";
 import {
@@ -2103,7 +2103,7 @@ function TokenImage({
 
         {/* Dynamic protocol icon bubble - aligned to the outer border's bottom-right corner */}
         <div
-          className="absolute right-0 bottom-0 z-10 flex translate-x-1/5 translate-y-1/4 transform items-center justify-center rounded-full pointer-events-auto"
+          className="pointer-events-auto absolute right-0 bottom-0 z-10 flex translate-x-1/5 translate-y-1/4 transform items-center justify-center rounded-full"
           style={{
             width: 16,
             height: 16,
@@ -2111,25 +2111,13 @@ function TokenImage({
             border: `1px solid ${protocolColor}`,
             boxShadow: `0 0 4px ${protocolColor}60`,
           }}
-          onMouseEnter={(e) => {
-            const tip = ammBubbleTipRef.current;
-            if (tip) {
-              const r = e.currentTarget.getBoundingClientRect();
-              tip.style.left = `${r.left + r.width / 2}px`;
-              tip.style.top = `${r.top - 6}px`;
-              tip.style.transform = "translate(-50%, -100%)";
-              tip.style.opacity = "1";
-            }
-          }}
-          onMouseLeave={() => {
-            const tip = ammBubbleTipRef.current;
-            if (tip) tip.style.opacity = "0";
-          }}
+          onMouseEnter={(e) => { const tip = ammBubbleTipRef.current; if (tip) { const r = e.currentTarget.getBoundingClientRect(); tip.style.left = `${r.left + r.width / 2}px`; tip.style.top = `${r.top - 6}px`; tip.style.transform = "translate(-50%, -100%)"; tip.style.opacity = "1"; } }}
+          onMouseLeave={() => { const tip = ammBubbleTipRef.current; if (tip) tip.style.opacity = "0"; }}
         >
           <img
             src={tokenIcon}
             alt={`${(token as any).launchpad_protocol || (token as any).protocol || (token as any).launchpadName || "Protocol"} logo`}
-            className={`${isFullCircleImage ? "h-full w-full object-cover" : "h-3/4 w-3/4 object-contain"} rounded-full pointer-events-none`}
+            className={`pointer-events-none ${isFullCircleImage ? "h-full w-full object-cover" : "h-3/4 w-3/4 object-contain"} rounded-full`}
             style={{
               filter:
                 protocolColor === "#eab308"
@@ -2141,14 +2129,8 @@ function TokenImage({
         {createPortal(
           <div
             ref={ammBubbleTipRef}
-            className="pointer-events-none fixed z-[999999] rounded px-2 py-1.5 text-[11px] font-medium whitespace-nowrap transition-opacity duration-150"
-            style={{
-              backgroundColor: "rgba(23, 25, 30, 0.97)",
-              color: "#e5e7eb",
-              border: "1px solid rgba(107, 114, 128, 0.4)",
-              boxShadow: "0 4px 12px rgba(0,0,0,0.3)",
-              opacity: 0,
-            }}
+            className="pointer-events-none fixed z-[9999] rounded px-2 py-1 text-[10px] font-medium whitespace-nowrap"
+            style={{ backgroundColor: "rgba(31, 41, 55, 0.95)", color: "#e5e7eb", border: "1px solid rgba(107, 114, 128, 0.3)", opacity: 0, transition: "opacity 150ms" }}
           >
             {getAmmDisplayName(token)}
           </div>,
@@ -8295,7 +8277,7 @@ function PulseTable({
                                   >
                                     <span className="text-xs">F</span>
                                     <img
-                                      src="https://cryptologos.cc/logos/solana-sol-logo.svg?v=040"
+                                      src="/solana.png"
                                       alt="SOL"
                                       className="h-3 w-3"
                                     />

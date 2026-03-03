@@ -25,7 +25,7 @@ import type { Token as BaseToken } from "~/utils/db";
 import { formatSmartNumber, formatMarketCap, formatLamportsToSol } from '~/utils/db';
 import SkeletonRow from './InterstateTable/SkeletonRow';
 import { fetchTokenMetadata } from '~/utils/functions';
-import { prefetchTradeData } from '~/utils/tokenCache';
+
 import { preloadTradeChart } from '~/utils/preloadTradeChart';
 import { withImageFallback, extractMetaImage, isMetadataUrl } from '~/utils/images';
 import { computeHashImageUrl } from '~/utils/imageHash';

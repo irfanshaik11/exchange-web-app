@@ -27,7 +27,7 @@ import { type PumpLiveToken } from '../hooks/usePumpLive';
 import { FaRunning, FaGasPump, FaCoins, FaBan, FaCheckCircle } from "react-icons/fa";
 import { HiLightningBolt } from "react-icons/hi";
 import { BsSliders2 } from "react-icons/bs";
-import { prefetchTradeData } from "~/utils/tokenCache";
+
 import { extractTokenImage, getResolvedTokenImage, resolveTokenImage, isMetadataUrl } from "~/utils/images";
 import { broadcastMonadQuickTrade } from "~/utils/monadTradeEvents";
 import toast from "react-hot-toast";

@@ -131,7 +131,7 @@ export default function TradePage() {
   const [tokenDataLoading, setTokenDataLoading] = useState(false);
   const [tradesDataLoading, setTradesDataLoading] = useState(false);
   const { isConnected } = useWallet();
-  const { user } = useUser();
+  const { user, primaryWalletAddresses } = useUser();
   const [selectedTab, setSelectedTab] = useState("Trades");
   const [devTokensCount, setDevTokensCount] = useState<number | undefined>(undefined);
   const [holdersCount, setHoldersCount] = useState<number | undefined>(undefined);
@@ -1024,6 +1024,7 @@ export default function TradePage() {
                     className="relative"
                     tradeData={tradeDataForChart}
                     creatorAddress={creatorAddress}
+                    userWalletAddress={primaryWalletAddresses?.solana || user?.publicKey || null}
                     tokenSymbol={displayToken?.symbol || null}
                     tokenName={displayToken?.name || null}
                     tokenDecimals={typeof displayToken?.decimals === 'number' ? displayToken.decimals : null}
