@@ -2189,17 +2189,17 @@ export default function TrackersPage() {
                   )}
 
                   {/* RESIZE HANDLE — between wallet and Telegram panels on desktop */}
-                  {/* {showTelegramSection && !isMobile && (
+                  {showTelegramSection && !isMobile && (
                     <div
                       className="group relative hidden h-full min-h-[530px] w-1 cursor-ew-resize items-center justify-center transition-colors hover:bg-[#7FFFC9]/5 lg:flex"
                       onMouseDown={() => setIsResizing(true)}
                     >
                       <div className="absolute h-16 w-1 rounded-full bg-neutral-400 transition-colors group-hover:bg-[#7FFFC9]" />
                     </div>
-                  )} */}
+                  )}
 
                   {/* RIGHT: TELEGRAM CHANNELS SECTION */}
-                  {/* {showTelegramSection && (
+                  {showTelegramSection && (
                     <div
                       className="flex min-h-0 flex-shrink-0 flex-col overflow-hidden rounded-xl border border-white/[0.08] bg-white/[0.05] px-3 backdrop-blur-xl sm:px-4"
                       style={
@@ -2457,7 +2457,7 @@ export default function TrackersPage() {
                         )}
                       </div>
                     </div>
-                  )} */}
+                  )}
 
                   {/* RIGHT: TWITTER SECTION — hidden until cost-effective X API architecture is in place */}
                   {false && showTwitterSection && (
