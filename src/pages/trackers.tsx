@@ -574,6 +574,7 @@ export default function TrackersPage() {
   const [telegramFeedHint, setTelegramFeedHint] = useState<string | null>(null);
   const [approvedChannelsSearch, setApprovedChannelsSearch] = useState("");
   const [addingTelegramChannel, setAddingTelegramChannel] = useState<string | null>(null);
+  const [restoringTelegramDefaults, setRestoringTelegramDefaults] = useState(false);
   // Hide wallet section when chain is Monad
   const showWalletSection = !isMobile || mobileMainTab === "wallets";
   const showTwitterSection = false; // X Tracker hidden (API cost)
@@ -1655,6 +1656,46 @@ export default function TrackersPage() {
     }
   };
 
+  const handleRestoreTelegramDefaults = async () => {
+    if (!user?.bearerToken) return;
+    setRestoringTelegramDefaults(true);
+    try {
+      const existing = new Set(
+        telegramChannels.map((ch) => ch.username.toLowerCase()),
+      );
+      const toAdd = DEFAULT_TELEGRAM_CHANNELS.filter(
+        (username) => !existing.has(username.toLowerCase()),
+      );
+      for (const username of toAdd) {
+        try {
+          await addTrackedTelegramChannel(username, user.bearerToken);
+        } catch {
+          // Skip if not approved or add fails
+        }
+      }
+      await loadTelegramChannels();
+      if (toAdd.length > 0) {
+        showEnhancedToast(
+          "success",
+          `Added ${toAdd.length} default channel${toAdd.length === 1 ? "" : "s"}.`,
+          { duration: 3000 },
+        );
+      } else {
+        showEnhancedToast("success", "All default channels already present.", {
+          duration: 3000,
+        });
+      }
+    } catch (error: unknown) {
+      showEnhancedToast(
+        "error",
+        error instanceof Error ? error.message : "Failed to restore defaults",
+        { duration: 4000 },
+      );
+    } finally {
+      setRestoringTelegramDefaults(false);
+    }
+  };
+
   const loadTelegramFeed = async () => {
     if (!user?.bearerToken) return;
     setLoadingTelegramFeed(true);
@@ -2267,6 +2308,16 @@ export default function TrackersPage() {
                             </button>
                           ))}
                         </div>
+                        {user && (
+                          <button
+                            type="button"
+                            onClick={handleRestoreTelegramDefaults}
+                            disabled={restoringTelegramDefaults}
+                            className="cursor-pointer rounded-lg border border-white/[0.08] bg-white/[0.04] px-2.5 py-1.5 text-[10px] font-medium text-neutral-300 transition-all hover:bg-white/[0.07] hover:text-white disabled:opacity-50 sm:px-3 sm:py-2 sm:text-xs"
+                          >
+                            {restoringTelegramDefaults ? "Adding…" : "Restore to default"}
+                          </button>
+                        )}
                       </div>
                       <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
                         {!user ? (
