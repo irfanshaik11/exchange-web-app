@@ -16,7 +16,7 @@ import { IoShieldCheckmarkOutline } from "react-icons/io5";
 import { SiPolygon } from "react-icons/si";
 import { BiCopy, BiCheck } from "react-icons/bi";
 import { HiOutlineQrcode } from "react-icons/hi";
-import { getPolymarketBalance, autoConvertUsdcToUsdce, type PolymarketBalance } from "~/utils/api";
+import { getPolymarketBalance, autoConvertUsdcToUsdce, type PolymarketBalance, SOL_MINT_ADDRESS } from "~/utils/api";
 import QRCode from "react-qr-code";
 import { useUser } from "./UserContext";
 import { useSolPrice } from "./SolPriceContext";
@@ -25,18 +25,27 @@ import { useQuickBuy } from "./QuickBuyContext";
 import { useSearch } from "./ui/SearchContext";
 import { formatSmartNumber, formatMarketCap } from "../utils/db";
 import type { Token } from "../utils/db";
-import { executeEnhancedTrade } from "~/utils/enhancedTradeHandler";
+
 import { executeMonadMultiBuy, formatMonadTxSummary } from "~/utils/monadWalletAllocation";
 import { formatMonadError } from "~/utils/monadError";
 import { preloadTradeChart } from "~/utils/preloadTradeChart";
-import { extractTokenImage } from "~/utils/images";
+import { extractTokenImage, resolveTokenImage, getResolvedTokenImage } from "~/utils/images";
 import { broadcastMonadQuickTrade } from "~/utils/monadTradeEvents";
+import { executeSolanaMultiBuy, buildSolanaWalletAllocations } from "~/utils/solanaWalletAllocation";
+import { validateSolanaBuy, showTradeValidationError } from "~/utils/preTradeValidation";
+import { checkAtaExists } from "~/utils/ataCheck";
+import { fetchVerifiedPairAddress } from "~/hooks/useSingleTokenPolling";
+import { getPoolTypeFromToken } from "~/utils/poolTypeDetection";
+import { mapTradeErrorMessage } from "~/utils/tradeErrorMessages";
+import { listenForTradeEvents, transformToastToError } from "~/utils/createSolanaToastHandler";
+import { dispatchBalanceRefresh } from "~/utils/balanceEvents";
+
 import Cookies from "js-cookie";
 import toast from "react-hot-toast";
 import { FaCheckCircle } from "react-icons/fa";
 import dynamic from "next/dynamic";
 import InterstateButton from "./InterstateButton";
-import { FiBarChart, FiChevronDown, FiStar, FiUsers, FiGrid } from "react-icons/fi";
+import { FiBarChart, FiChevronDown, FiEdit2, FiStar, FiUsers, FiGrid } from "react-icons/fi";
 import { GiTrophy } from "react-icons/gi";
 import SearchModal from "./SearchModal";
 import BlockchainSwitcher from "./BlockchainSwitcher";
@@ -514,7 +523,7 @@ export default function Header({
         }
       }
     }
-    return 0;
+    return 0.01;
   };
   const [quickBuyAmount, setQuickBuyAmount] = useState(getQuickBuyAmount);
   
@@ -582,11 +591,13 @@ export default function Header({
   // State for clipboard token detection
   const [clipboardToken, setClipboardToken] = useState<{
     address: string;
-    imageUrl: string;
+    imageUrl: string | null;
     name: string;
     isPumpToken: boolean;
+    tokenData: Token | null;
   } | null>(null);
   const lastCheckedClipboard = useRef<string>("");
+  const clipboardRequestIdRef = useRef(0);
 
   const chainSymbols: Record<string, string> = {
     sol: "SOL",
@@ -749,7 +760,6 @@ export default function Header({
       const trimmed = (rawValue || "").trim();
       if (!trimmed) return;
 
-      if (clipboardToken?.address === trimmed) return;
       if (lastCheckedClipboard.current === trimmed) return;
 
       const isSolanaAddress = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(trimmed);
@@ -759,7 +769,7 @@ export default function Header({
         return;
       }
 
-      lastCheckedClipboard.current = trimmed;
+      const myRequestId = ++clipboardRequestIdRef.current;
 
       try {
         // First try to resolve mint address to pair address
@@ -770,13 +780,16 @@ export default function Header({
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ mint: trimmed }),
           });
+          if (clipboardRequestIdRef.current !== myRequestId) return;
           if (hydrateResponse.ok) {
             const hydrateData = await hydrateResponse.json();
+            if (clipboardRequestIdRef.current !== myRequestId) return;
             if (hydrateData.pair_address) {
               pairAddress = hydrateData.pair_address;
             }
           }
         } catch {
+          if (clipboardRequestIdRef.current !== myRequestId) return;
           // If hydration fails, use the original address as pair_address
         }
 
@@ -785,26 +798,22 @@ export default function Header({
         const response = await fetch(
           `${goUrl}/v1/search?phrase=${encodeURIComponent(trimmed)}&limit=1`,
         );
+        if (clipboardRequestIdRef.current !== myRequestId) return;
         if (!response.ok) {
-          setClipboardToken(null);
           return;
         }
 
         const searchData = await response.json();
-        const results = searchData?.results || searchData?.filterTokens?.results || [];
+        if (clipboardRequestIdRef.current !== myRequestId) return;
+        const results = searchData?.tokens || searchData?.results || searchData?.filterTokens?.results || [];
         const token = results[0]?.token || results[0] || null;
 
         if (!token) {
-          setClipboardToken(null);
           return;
         }
 
-        const imageUrl =
-          token.imageUrl || token.image || token.thumbnail || token.uri || null;
-        if (!imageUrl) {
-          setClipboardToken(null);
-          return;
-        }
+        const imageUrl = await resolveTokenImage(token);
+        if (clipboardRequestIdRef.current !== myRequestId) return;
 
         const launchpadProtocol = (
           token.launchpad_protocol ||
@@ -827,19 +836,30 @@ export default function Header({
           (typeof token.ticker === "string" && token.ticker.trim()) ||
           null;
 
+        const enrichedToken = {
+          ...token,
+          mint: token.mint || trimmed,
+          pair_address: pairAddress || token.pair_address || '',
+          name: tokenName || token.name || 'Unknown Token',
+          symbol: token.symbol || token.ticker || tokenName || '',
+          launchpad_protocol: token.launchpad_protocol || token.launchpadProtocol || '',
+        } as Token;
+
+        lastCheckedClipboard.current = trimmed;
         setClipboardToken({
           address: trimmed,
-          imageUrl,
+          imageUrl: imageUrl || null,
           name: tokenName || "Unknown Token",
           isPumpToken,
+          tokenData: enrichedToken,
         });
       } catch (error) {
         console.error("Error fetching token data:", error);
-        setClipboardToken(null);
-        // Don't reset lastCheckedClipboard - prevents infinite retry loop
+        // Don't setClipboardToken(null) — leave previous pill intact on transient errors
+        // Don't set lastCheckedClipboard — allow retry on next check
       }
     },
-    [clipboardToken?.address],
+    [],
   );
 
   // Check clipboard for valid token address
@@ -897,24 +917,12 @@ export default function Header({
       }
     };
 
-    const handlePointer = () => {
-      checkClipboard();
-    };
-
-    const handleKey = () => {
-      checkClipboard();
-    };
-
     window.addEventListener("focus", handleFocus);
     document.addEventListener("visibilitychange", handleVisibility);
-    document.addEventListener("pointerdown", handlePointer);
-    document.addEventListener("keydown", handleKey);
 
     return () => {
       window.removeEventListener("focus", handleFocus);
       document.removeEventListener("visibilitychange", handleVisibility);
-      document.removeEventListener("pointerdown", handlePointer);
-      document.removeEventListener("keydown", handleKey);
     };
   }, [checkClipboard]);
 
@@ -926,16 +934,25 @@ export default function Header({
       if (isMonadAddress) {
         router.push(`/trade/monad/${clipboardToken.address}?chain=monad`);
       } else {
-        router.push(`/trade/${clipboardToken.address}?chain=sol`);
+        // Build full query params matching PulseTable navigation pattern
+        const td = clipboardToken.tokenData;
+        const pathAddress = td?.pair_address || clipboardToken.address;
+        const queryParams = new URLSearchParams({
+          _name: td?.name || td?.symbol || clipboardToken.name || '',
+          _symbol: td?.symbol || '',
+          _mcap: String(td?.market_cap_usd || ''),
+          _image: clipboardToken.imageUrl || extractTokenImage(td as any) || '',
+          _mint: (td as any)?.mint || clipboardToken.address,
+          _launchpad_protocol: (td as any)?.launchpad_protocol || '',
+          _created_at: (td as any)?.created_at || '',
+          chain: 'sol',
+          mode: 'buy',
+          tab: 'market',
+          timeRange: '5m',
+          sliderPct: '0',
+        }).toString();
+        router.push(`/trade/${pathAddress}?${queryParams}`);
       }
-      toast.success("Navigating to token...", {
-        duration: 2000,
-        style: {
-          background: "#1E1F26",
-          color: "#E6E7EA",
-          border: "1px solid #70E0B0",
-        },
-      });
     } else {
       // Fallback: try to read clipboard if no token detected
       try {
@@ -945,14 +962,6 @@ export default function Header({
 
         if (isSolanaAddress) {
           router.push(`/trade/${trimmed}?chain=sol`);
-          toast.success("Navigating to token...", {
-            duration: 2000,
-            style: {
-              background: "#1E1F26",
-              color: "#E6E7EA",
-              border: "1px solid #70E0B0",
-            },
-          });
         } else {
           toast.error("Invalid token address in clipboard", {
             duration: 3000,
@@ -995,6 +1004,7 @@ export default function Header({
 
   // Handler for watchlist ticker quick buy
   const handleWatchlistQuickBuy = async (token: Token) => {
+    console.log("🎯 Clipboard/Watchlist Quick Buy:", token.symbol, (token as any).mint, "amount:", quickBuyAmount);
     // Validation checks with user feedback
     if (!user?.bearerToken || !user?.id) {
       toast.error("Please log in to trade", {
@@ -1074,7 +1084,31 @@ export default function Header({
       }
     }
     
-    // For Solana chain, use enhanced trade handler
+    // For Solana chain — same path as PulseTable handleQuickBuy
+    const preset = presets[activePreset];
+    if (!preset) {
+      toast.error("Quick buy preset not configured. Update your settings in the footer.", {
+        duration: 3000,
+        style: { background: "#1E1F26", color: "#E6E7EA", border: "1px solid #ff6b6b" },
+      });
+      return;
+    }
+    const settings = preset.quickBuySettings;
+    const poolType = getPoolTypeFromToken(token);
+
+    // Pre-calculate wallet allocations
+    const { allocations, total } = buildSolanaWalletAllocations({
+      amount: quickBuyAmount,
+      walletList: walletList || [],
+      walletBalances: walletBalances || {},
+      selectedWalletIds: selectedWalletIds?.sol || [],
+      priorityFee: settings.priority || 0.0001,
+      bribe: settings.bribe || 0,
+    });
+    const walletsWithBalance = allocations.length;
+    const isMultiWallet = walletsWithBalance > 1;
+
+    // Pre-validate before showing toast
     const tokenMint = (token as any).mint || '';
     if (!tokenMint) {
       toast.error("Token mint address not found", {
@@ -1083,32 +1117,249 @@ export default function Header({
       });
       return;
     }
-    
-    const settings = presets[activePreset].quickBuySettings;
-    
-    await executeEnhancedTrade({
-      token,
-      amount: quickBuyAmount,
-      side: 'buy',
-      settings,
-      user: { bearerToken: user.bearerToken, id: user.id },
-      solBalance: 0, // Will be fetched by executeEnhancedTrade
-      solPriceUsd: 150,
-      walletContext: {
-        selectedWalletIds: currentChain === "monad" ? selectedWalletIds?.monad || [] : selectedWalletIds?.sol || [],
+    const ataExists = await checkAtaExists(tokenMint, user?.publicKey).catch(() => null);
+    const validation = validateSolanaBuy(quickBuyAmount, allocations, walletBalances || {}, walletList || [], selectedWalletIds?.sol || [], settings.priority, settings.bribe, ataExists);
+    if (!validation.valid) {
+      showTradeValidationError(validation.error, getResolvedTokenImage(token), token.symbol || token.name || 'Token');
+      return;
+    }
+
+    // Verify pair address
+    let poolAddress = (token as any).migrated_pool_address || token.pair_address || "";
+    if (tokenMint) {
+      const verifiedPairAddress = await fetchVerifiedPairAddress(tokenMint);
+      if (verifiedPairAddress) {
+        poolAddress = verifiedPairAddress;
+      }
+    }
+
+    // Animated toast with timer (same as PulseTable)
+    const timerCap = 0.4 + Math.random() * 0.2;
+    const uniqueToastId = `solana-quickbuy-${Date.now()}-${Math.random()}`;
+    const startTime = Date.now();
+    let timerFinished = false;
+    let tradeErrored = false;
+
+    const tokenImage = getResolvedTokenImage(token);
+    const tokenName = token.symbol || token.name || "Token";
+
+    toast(
+      (t) => (
+        <div className="flex items-center gap-3">
+          {tokenImage && (
+            <img
+              src={tokenImage}
+              alt={tokenName}
+              className="h-6 w-6 flex-shrink-0 rounded-full"
+              onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+            />
+          )}
+          <div className="flex min-w-0 flex-1 items-center gap-2">
+            <span className="truncate text-sm text-neutral-200">
+              Buying {tokenName}
+            </span>
+            <span
+              id={`timer-${uniqueToastId}`}
+              className="flex-shrink-0 text-xs text-neutral-400"
+            >
+              (0.00s)
+            </span>
+            <span
+              id={`check-${uniqueToastId}`}
+              className="flex-shrink-0 text-green-400"
+              style={{ display: timerFinished && !tradeErrored ? "inline" : "none" }}
+            >
+              ✓
+            </span>
+            <span
+              id={`link-${uniqueToastId}`}
+              className="flex-shrink-0"
+              style={{ display: "inline-flex" }}
+            >
+              <img
+                src="https://avatars.githubusercontent.com/u/92743431?s=200&v=4"
+                alt="Solana"
+                className="h-4 w-4 rounded-full opacity-70"
+                style={{ cursor: "default" }}
+              />
+            </span>
+          </div>
+        </div>
+      ),
+      {
+        id: uniqueToastId,
+        duration: Infinity,
+        style: {
+          background: "#1a1a1a",
+          border: "1px solid #333",
+          borderRadius: "8px",
+          padding: "12px",
+        },
+      },
+    );
+
+    // Start timer animation — keeps running after cap to enforce checkmark visibility
+    const tick = () => {
+      const elapsed = (Date.now() - startTime) / 1000;
+      const displayTime = Math.min(elapsed, timerCap).toFixed(2);
+      const timerEl = document.getElementById(`timer-${uniqueToastId}`);
+      if (timerEl) {
+        timerEl.textContent = `(${displayTime}s)`;
+      }
+      if (!timerFinished && elapsed >= timerCap) {
+        timerFinished = true;
+        if (!tradeErrored) {
+          const checkEl = document.getElementById(`check-${uniqueToastId}`);
+          if (checkEl) checkEl.style.display = "inline";
+          const linkEl = document.getElementById(`link-${uniqueToastId}`);
+          if (linkEl) {
+            if (isMultiWallet) {
+              linkEl.textContent = `${walletsWithBalance}/${total}`;
+              linkEl.className = "text-xs text-blue-400 font-medium flex-shrink-0";
+            } else {
+              linkEl.innerHTML = `<img src="https://avatars.githubusercontent.com/u/92743431?s=200&v=4" alt="Solana" class="w-4 h-4 rounded-full opacity-70" style="cursor: default;" />`;
+              linkEl.className = "flex-shrink-0";
+            }
+          }
+        }
+      }
+      // After timer cap: keep enforcing checkmark visibility against React re-renders
+      if (timerFinished && !tradeErrored) {
+        const checkEl = document.getElementById(`check-${uniqueToastId}`);
+        if (!checkEl) return; // Toast dismissed — stop loop
+        if (checkEl.style.display !== "inline") checkEl.style.display = "inline";
+      }
+      timerHandle = requestAnimationFrame(tick) as any;
+    };
+    let timerHandle = requestAnimationFrame(tick) as any;
+
+    pendingSolanaQuickBuyToastRef.current = {
+      id: uniqueToastId,
+      tokenImage,
+      tokenName,
+      fakeTime: timerCap.toFixed(2),
+      tokenAddress: tokenMint,
+      startTime,
+      timerHandle,
+      totalSelectedWallets: walletsWithBalance,
+    };
+
+    const cleanupTradeListener = listenForTradeEvents(tokenMint, uniqueToastId, (v) => { tradeErrored = v; }, 'solana');
+
+    try {
+      const baseMint = tokenMint;
+      const quoteMint = SOL_MINT_ADDRESS;
+
+      const multiResult = await executeSolanaMultiBuy({
+        poolAddress,
+        baseMint,
+        quoteMint,
+        amountSOL: quickBuyAmount,
+        poolType,
+        originalPairAddress: token.pair_address,
+        slippage: settings.maxSlippage,
+        priorityFee: settings.priority,
+        bribe: settings.bribe,
+        mevMode: settings.mevMode,
+        autoFee: settings.autoFee,
+        maxFee: settings.maxFee,
+        rpc: settings.rpc,
+        tokenName: token.name,
+        tokenSymbol: token.symbol,
+        imageUrl: await resolveTokenImage(token) || undefined,
+        authToken: user.bearerToken,
         walletList: walletList || [],
         walletBalances: walletBalances || {},
-        chain: currentChain === "monad" ? "monad" : "sol",
-      },
-      refreshBalance,
-      onSuccess: (txHash, stats) => {
-        console.log('✅ Header Watchlist Quick Buy successful:', { txHash, stats });
-      },
-      onError: (error) => {
-        console.error('❌ Header Watchlist Quick Buy failed:', error);
-      },
-    });
+        selectedWalletIds: selectedWalletIds?.sol || [],
+        onTxHash: ({ txHash }) => {
+          if (pendingSolanaQuickBuyToastRef.current?.id === uniqueToastId && txHash) {
+            const linkEl = document.getElementById(`link-${uniqueToastId}`);
+            if (linkEl) {
+              const explorerUrl = `https://solscan.io/tx/${txHash}`;
+              linkEl.innerHTML = `<a href="${explorerUrl}" target="_blank" rel="noopener noreferrer" class="hover:opacity-80 transition-opacity"><img src="https://avatars.githubusercontent.com/u/92743431?s=200&v=4" alt="Solana" class="w-4 h-4 rounded-full" style="cursor: pointer;" /></a>`;
+              linkEl.className = "";
+            }
+          }
+        },
+      });
+
+      const firstTxHash =
+        multiResult?.results?.find((r: any) => (r.result as any)?.hash || (r.result as any)?.txid)?.result?.hash ||
+        multiResult?.results?.find((r: any) => (r.result as any)?.hash || (r.result as any)?.txid)?.result?.txid;
+
+      if (firstTxHash && !isMultiWallet) {
+        const linkEl = document.getElementById(`link-${uniqueToastId}`);
+        if (linkEl) {
+          const explorerUrl = `https://solscan.io/tx/${firstTxHash}`;
+          linkEl.innerHTML = `<a href="${explorerUrl}" target="_blank" rel="noopener noreferrer" class="hover:opacity-80 transition-opacity"><img src="https://avatars.githubusercontent.com/u/92743431?s=200&v=4" alt="Solana" class="w-4 h-4 rounded-full" style="cursor: pointer;" /></a>`;
+          linkEl.className = "";
+        }
+        if (timerHandle) cancelAnimationFrame(timerHandle);
+        setTimeout(() => toast.dismiss(uniqueToastId), 10000);
+      }
+
+      console.log("✅ Header Quick Buy successful");
+
+      if (typeof window !== "undefined" && tokenMint) {
+        window.dispatchEvent(
+          new CustomEvent("solanaQuickTrade", {
+            detail: { tokenAddress: tokenMint },
+          }),
+        );
+      }
+      dispatchBalanceRefresh('sol');
+    } catch (error: any) {
+      tradeErrored = true;
+      cleanupTradeListener();
+      if (timerHandle) cancelAnimationFrame(timerHandle);
+
+      console.error("❌ Header Quick Buy failed:", error);
+      if (pendingSolanaQuickBuyToastRef.current) {
+        transformToastToError(pendingSolanaQuickBuyToastRef.current.id, mapTradeErrorMessage(error), tokenImage, tokenName);
+        pendingSolanaQuickBuyToastRef.current = null;
+      }
+    }
   };
+
+  // Clipboard quick buy state and handler
+  const [isClipboardBuying, setIsClipboardBuying] = useState(false);
+  const [clipboardAmountStr, setClipboardAmountStr] = useState(String(quickBuyAmount));
+  const clipboardInputFocusedRef = useRef(false);
+  const [isEditingClipboardAmount, setIsEditingClipboardAmount] = useState(false);
+  const pendingSolanaQuickBuyToastRef = useRef<{
+    id: string;
+    tokenImage: string | null;
+    tokenName: string;
+    fakeTime: string;
+    tokenAddress: string;
+    startTime: number;
+    timerHandle?: number;
+    totalSelectedWallets: number;
+  } | null>(null);
+
+  // Sync numeric quickBuyAmount → local display string (only when not focused)
+  useEffect(() => {
+    if (!clipboardInputFocusedRef.current) {
+      setClipboardAmountStr(String(quickBuyAmount));
+    }
+  }, [quickBuyAmount]);
+
+  const handleClipboardQuickBuy = async () => {
+    if (isClipboardBuying || !clipboardToken?.tokenData) return;
+    setIsClipboardBuying(true);
+    try {
+      await handleWatchlistQuickBuy(clipboardToken.tokenData);
+    } catch (error) {
+      console.error("❌ Clipboard Quick Buy failed:", error);
+      toast.error(`Quick buy failed: ${(error as any)?.message || 'Unknown error'}`, {
+        duration: 4000,
+        style: { background: "#1E1F26", color: "#E6E7EA", border: "1px solid #ff6b6b" },
+      });
+    } finally {
+      setIsClipboardBuying(false);
+    }
+  };
+
 
   // Toggle Search modal with Tab and '/' (outside of inputs)
   useEffect(() => {
@@ -1419,6 +1670,189 @@ export default function Header({
 
             {showSearch && (
               <div className="flex items-center gap-1 sm:gap-1.5 md:gap-2">
+                {/* Clipboard token split-button: navigate (left) + quick buy (right) */}
+                {clipboardToken && (
+                  <div className="flex h-8 flex-shrink-0 items-center">
+                    {/* Left half — navigate to trade page */}
+                    <button
+                      onClick={handlePasteCA}
+                      className="relative flex h-8 cursor-pointer items-center gap-1 rounded-l-md border border-r-0 px-1.5 transition-all duration-200 ease-out sm:gap-1.5 sm:px-2"
+                      style={{
+                        backgroundColor: "#13151b",
+                        borderColor: AX.border,
+                      }}
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.backgroundColor = "#1a1c23";
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.backgroundColor = "#13151b";
+                      }}
+                    >
+                      {clipboardToken.imageUrl ? (
+                        <img
+                          src={clipboardToken.imageUrl}
+                          alt="Token"
+                          className="h-5 w-5 flex-shrink-0 rounded object-cover sm:h-6 sm:w-6"
+                          onError={(e) => {
+                            (e.currentTarget as HTMLImageElement).style.display = 'none';
+                          }}
+                        />
+                      ) : (
+                        <div
+                          className="flex h-5 w-5 flex-shrink-0 items-center justify-center rounded sm:h-6 sm:w-6"
+                          style={{ background: 'linear-gradient(to bottom right, #1f2937, #000000)' }}
+                        >
+                          <span className="text-[10px] font-bold text-white select-none">
+                            {(clipboardToken.name || '?')[0]?.toUpperCase()}
+                          </span>
+                        </div>
+                      )}
+                      <span className="hidden max-w-[60px] truncate text-[11px] font-medium text-white sm:inline">
+                        {clipboardToken.name}
+                      </span>
+                      <IoShieldCheckmarkOutline
+                        size={12}
+                        style={{
+                          color: clipboardToken.isPumpToken ? "#31e3ac" : "#eab308",
+                        }}
+                      />
+                    </button>
+                    {/* Right half — lightning buy + amount display/edit */}
+                    <div
+                      className="flex h-8 items-center rounded-r-md border transition-all duration-200 ease-out"
+                      style={{
+                        backgroundColor: '#13151b',
+                        borderColor: AX.border,
+                        borderLeft: '1px solid rgba(255,255,255,0.08)',
+                        opacity: (!clipboardToken.tokenData || (Number(clipboardAmountStr) || 0) <= 0) ? 0.5 : 1,
+                      }}
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.backgroundColor = '#1a1c23';
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.backgroundColor = '#13151b';
+                      }}
+                    >
+                      {isEditingClipboardAmount ? (
+                        <>
+                          {/* Lightning icon — still buys in edit mode */}
+                          <button
+                            onClick={handleClipboardQuickBuy}
+                            disabled={!clipboardToken.tokenData || isClipboardBuying}
+                            className="flex h-full cursor-pointer items-center pl-1.5 sm:pl-2"
+                          >
+                            <HiLightningBolt
+                              size={12}
+                              className={isClipboardBuying ? 'animate-pulse' : ''}
+                              style={{ color: '#85d99f' }}
+                            />
+                          </button>
+                          {/* Editable input */}
+                          <input
+                            autoFocus
+                            type="text"
+                            inputMode="decimal"
+                            value={clipboardAmountStr}
+                            onChange={(e) => {
+                              const v = e.target.value;
+                              if (v === '' || /^\d*\.?\d*$/.test(v)) {
+                                setClipboardAmountStr(v);
+                                const num = parseFloat(v);
+                                if (!isNaN(num) && num >= 0) {
+                                  setQuickBuyAmount(num);
+                                  localStorage.setItem('quickBuyAmount', num.toString());
+                                }
+                              }
+                            }}
+                            onFocus={() => { clipboardInputFocusedRef.current = true; }}
+                            onBlur={() => {
+                              clipboardInputFocusedRef.current = false;
+                              const num = parseFloat(clipboardAmountStr);
+                              if (!isNaN(num) && num >= 0) {
+                                setQuickBuyAmount(num);
+                                setClipboardAmountStr(String(num));
+                              } else {
+                                setClipboardAmountStr(String(quickBuyAmount));
+                              }
+                              setIsEditingClipboardAmount(false);
+                            }}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') {
+                                const num = parseFloat(clipboardAmountStr);
+                                if (!isNaN(num) && num >= 0) {
+                                  setQuickBuyAmount(num);
+                                  setClipboardAmountStr(String(num));
+                                }
+                                setIsEditingClipboardAmount(false);
+                                handleClipboardQuickBuy();
+                              } else if (e.key === 'Escape') {
+                                setClipboardAmountStr(String(quickBuyAmount));
+                                setIsEditingClipboardAmount(false);
+                              }
+                            }}
+                            onClick={(e) => e.stopPropagation()}
+                            className="w-[32px] bg-transparent text-center text-[10px] font-medium outline-none"
+                            style={{ color: '#85d99f' }}
+                          />
+                          {/* Currency label */}
+                          <span
+                            className="pr-1.5 text-[10px] font-medium sm:pr-2"
+                            style={{ color: '#85d99f', opacity: 0.6 }}
+                          >
+                            {currentChain === 'monad' ? 'MON' : 'SOL'}
+                          </span>
+                        </>
+                      ) : (
+                        <>
+                          {/* Big buy button: lightning + amount + SOL — entire area is clickable to buy */}
+                          <button
+                            onClick={handleClipboardQuickBuy}
+                            disabled={!clipboardToken.tokenData || isClipboardBuying}
+                            className="flex h-full cursor-pointer items-center gap-0.5 pl-1.5 pr-1.5 sm:pl-2 sm:pr-2"
+                          >
+                            <HiLightningBolt
+                              size={12}
+                              className={isClipboardBuying ? 'animate-pulse' : ''}
+                              style={{ color: '#85d99f' }}
+                            />
+                            <span className="text-[10px] font-medium" style={{ color: '#85d99f' }}>
+                              {quickBuyAmount}
+                            </span>
+                            <span className="text-[10px] font-medium" style={{ color: '#85d99f', opacity: 0.6 }}>
+                              {currentChain === 'monad' ? 'MON' : 'SOL'}
+                            </span>
+                          </button>
+                          {/* Pencil — opens edit mode */}
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setClipboardAmountStr(String(quickBuyAmount));
+                              setIsEditingClipboardAmount(true);
+                            }}
+                            onMouseEnter={(e) => {
+                              // Reset parent highlight, show pencil-only highlight
+                              const parent = e.currentTarget.parentElement;
+                              if (parent) parent.style.backgroundColor = '#13151b';
+                              e.currentTarget.style.backgroundColor = 'rgba(133,217,159,0.1)';
+                              const icon = e.currentTarget.querySelector('svg') as SVGElement | null;
+                              if (icon) { icon.style.opacity = '1'; icon.style.transform = 'scale(1.15)'; }
+                            }}
+                            onMouseLeave={(e) => {
+                              e.currentTarget.style.backgroundColor = 'transparent';
+                              const icon = e.currentTarget.querySelector('svg') as SVGElement | null;
+                              if (icon) { icon.style.opacity = '0.45'; icon.style.transform = 'scale(1)'; }
+                            }}
+                            className="flex h-full cursor-pointer items-center rounded-r-md border-l pl-1.5 pr-1.5 transition-colors duration-150 sm:pr-2"
+                            style={{ borderColor: 'rgba(255,255,255,0.08)', backgroundColor: 'transparent' }}
+                          >
+                            <FiEdit2 size={9} style={{ color: '#85d99f', opacity: 0.45, transition: 'opacity 0.15s, transform 0.15s' }} />
+                          </button>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                )}
+
                 {/* Search button (desktop) - squarish pill */}
                 <button
                   onClick={() => openSearch()}
@@ -1462,40 +1896,6 @@ export default function Header({
                 >
                   <FaSearch size={12} />
                 </button>
-
-                {/* Clipboard token button - responsive */}
-                {clipboardToken && clipboardToken.imageUrl && (
-                  <button
-                    onClick={handlePasteCA}
-                    className="relative flex h-8 cursor-pointer flex-shrink-0 items-center gap-1 rounded-md border px-1.5 transition-all duration-200 ease-out sm:gap-1.5 sm:px-2"
-                    style={{
-                      backgroundColor: "rgba(13, 16, 21, 0.8)",
-                      borderColor: AX.border,
-                    }}
-                    onMouseEnter={(e) => {
-                      e.currentTarget.style.backgroundColor = "rgba(255, 255, 255, 0.06)";
-                    }}
-                    onMouseLeave={(e) => {
-                      e.currentTarget.style.backgroundColor = "rgba(13, 16, 21, 0.8)";
-                    }}
-                  >
-                    <img
-                      src={clipboardToken.imageUrl}
-                      alt="Token"
-                      className="h-5 w-5 flex-shrink-0 rounded object-cover sm:h-6 sm:w-6"
-                      onError={() => setClipboardToken(null)}
-                    />
-                    <span className="hidden max-w-[60px] truncate text-[11px] font-medium text-white sm:inline">
-                      {clipboardToken.name}
-                    </span>
-                    <IoShieldCheckmarkOutline
-                      size={12}
-                      style={{
-                        color: clipboardToken.isPumpToken ? "#31e3ac" : "#eab308",
-                      }}
-                    />
-                  </button>
-                )}
 
                 {/* Blockchain Switcher - Right of search bar */}
                 <BlockchainSwitcher />

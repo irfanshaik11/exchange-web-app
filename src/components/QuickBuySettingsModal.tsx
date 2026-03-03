@@ -147,7 +147,6 @@ export default function QuickBuySettingsModal({
       open={open}
       onClose={onClose}
       align="center"
-      overlayClassName="items-start -mt-180"
       className="relative flex w-full max-w-md mx-auto flex-col gap-3 border border-[#2A2B33] bg-[#1E1F26] text-[#E6E7EA] shadow-2xl rounded-lg"
     >
       <div className="flex items-center justify-between border-b border-[#2A2B33] px-4 py-3 text-lg font-semibold text-[#E6E7EA]">
