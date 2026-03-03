@@ -1838,6 +1838,9 @@ export default function Header({
                               if (icon) { icon.style.opacity = '1'; icon.style.transform = 'scale(1.15)'; }
                             }}
                             onMouseLeave={(e) => {
+                              // Restore parent hover since cursor is still inside the container
+                              const parent = e.currentTarget.parentElement;
+                              if (parent) parent.style.backgroundColor = '#1a1c23';
                               e.currentTarget.style.backgroundColor = 'transparent';
                               const icon = e.currentTarget.querySelector('svg') as SVGElement | null;
                               if (icon) { icon.style.opacity = '0.45'; icon.style.transform = 'scale(1)'; }
