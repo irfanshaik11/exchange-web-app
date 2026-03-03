@@ -1701,7 +1701,8 @@ export default function TrackersPage() {
     setLoadingTelegramFeed(true);
     setTelegramFeedHint(null);
     try {
-      const { messages, hint } = await getTelegramChannelFeed(user.bearerToken, 10);
+      const feedLimit = wallets.length > 6 ? 5 : 10;
+      const { messages, hint } = await getTelegramChannelFeed(user.bearerToken, feedLimit);
       setTelegramFeed(messages);
       setTelegramFeedHint(hint ?? null);
     } catch (error) {

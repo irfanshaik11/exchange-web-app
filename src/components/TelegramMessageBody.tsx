@@ -136,10 +136,23 @@ export function TelegramMessageBody({
                 {node}
               </a>
             );
-          else if (ent.type === "hashtag")
+          else if (ent.type === "hashtag") {
+            let encodedQuery = "";
+            const raw = slice.replace(/^#/, "");
+            try {
+              encodedQuery = encodeURIComponent(raw);
+            } catch {
+              // Fallback for malformed surrogate pairs or invalid sequences
+              encodedQuery = encodeURIComponent(
+                raw
+                  .normalize("NFKD")
+                  .replace(/[^\w\s-]/g, "")
+                  .trim(),
+              );
+            }
             node = (
               <a
-                href={`https://t.me/search?q=${encodeURIComponent(slice.replace(/^#/, ""))}`}
+                href={`https://t.me/search?q=${encodedQuery}`}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="text-[#0088cc] hover:opacity-90"
@@ -148,6 +161,7 @@ export function TelegramMessageBody({
                 {node}
               </a>
             );
+          }
         }
         return <React.Fragment key={idx}>{node}</React.Fragment>;
       })}
