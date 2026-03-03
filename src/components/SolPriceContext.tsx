@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, useMemo } from 'react';
+import React, { createContext, useContext, useState, useEffect, useMemo, useRef } from 'react';
 
 interface SolPriceContextType {
   solPrice: number;
@@ -11,10 +11,13 @@ export function SolPriceProvider({ children }: { children: React.ReactNode }) {
   const [solPrice, setSolPrice] = useState<number>(0);
   const [monPrice, setMonPrice] = useState<number>(0);
 
+  // Track last successfully fetched price so we never fall back to a stale hardcoded value
+  const lastGoodSolPriceRef = useRef<number>(0);
+
   useEffect(() => {
     const fetchSolPrice = async () => {
+      // Primary: Pyth Network
       try {
-        // Pyth Network price feed for SOL/USD
         const SOL_USD_FEED = '0xef0d8b6fda2ceba41da15d4095d1da392a0d2f8ed0c6c7bc0f4cfac8c280b56d';
         const response = await fetch(
           `https://hermes.pyth.network/v2/updates/price/latest?ids%5B%5D=${SOL_USD_FEED}`,
@@ -26,20 +29,44 @@ export function SolPriceProvider({ children }: { children: React.ReactNode }) {
           const priceData = data?.parsed?.[0]?.price;
           if (priceData?.price && priceData?.expo) {
             const price = Number(priceData.price) * Math.pow(10, priceData.expo);
-            setSolPrice(price);
+            if (price > 0) {
+              lastGoodSolPriceRef.current = price;
+              setSolPrice(price);
+              return;
+            }
+          }
+        }
+      } catch {
+        // Pyth failed — try CoinGecko below
+      }
+
+      // Fallback: CoinGecko
+      try {
+        const response = await fetch(
+          'https://api.coingecko.com/api/v3/simple/price?ids=solana&vs_currencies=usd',
+          { signal: AbortSignal.timeout(10000) }
+        ).catch(() => null);
+
+        if (response?.ok) {
+          const data = await response.json().catch(() => null);
+          if (data?.solana?.usd && data.solana.usd > 0) {
+            lastGoodSolPriceRef.current = data.solana.usd;
+            setSolPrice(data.solana.usd);
             return;
           }
         }
       } catch {
-        // Silently ignore network errors - fallback below
+        // CoinGecko also failed
       }
 
-      // Fallback to static price if Pyth fails
-      setSolPrice(228.58);
+      // Both APIs failed — keep the last known good price (or stay at 0 on fresh load)
+      if (lastGoodSolPriceRef.current > 0) {
+        setSolPrice(lastGoodSolPriceRef.current);
+      }
     };
 
-    fetchSolPrice().catch(() => setSolPrice(228.58));
-    const interval = setInterval(() => fetchSolPrice().catch(() => setSolPrice(228.58)), 60000);
+    fetchSolPrice();
+    const interval = setInterval(fetchSolPrice, 60000);
     return () => clearInterval(interval);
   }, []);
 

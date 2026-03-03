@@ -298,7 +298,7 @@ export function useSolanaTokenWebSocket(
   const {
     mintAddress,
     enabled = true,
-    maxTrades = 100,
+    maxTrades = Infinity,
     reconnectInterval = 3000,
     maxReconnectAttempts = 5,
     onNewTrade,

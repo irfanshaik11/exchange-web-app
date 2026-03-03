@@ -96,7 +96,7 @@ import {
 import { preloadTokenImages } from "~/utils/imagePreloader";
 import { getPoolTypeFromToken } from "~/utils/poolTypeDetection";
 import { TokenAge } from "./TokenAge";
-import { prefetchTradeData } from "~/utils/tokenCache";
+
 import {
   showCenteredErrorToast,
   showCenteredSuccessToast,
@@ -1168,46 +1168,28 @@ function TokenImage({
 
         {/* Dynamic protocol icon bubble - aligned to the outer border's bottom-right corner */}
         <div
-          className="absolute right-0 bottom-0 z-10 flex translate-x-1/5 translate-y-1/4 transform items-center justify-center rounded-full pointer-events-auto"
+          className="pointer-events-auto absolute right-0 bottom-0 z-10 flex translate-x-1/5 translate-y-1/4 transform items-center justify-center rounded-full"
           style={{
             width: 16,
             height: 16,
             backgroundColor: "#000000",
-            border: "1px solid #9333ea",
-            boxShadow: "0 0 4px rgba(147, 51, 234, 0.6)",
+            border: `1px solid ${protocolColor}`,
+            boxShadow: `0 0 4px ${protocolColor}60`,
           }}
-          onMouseEnter={(e) => {
-            const tip = ammBubbleTipRef.current;
-            if (tip) {
-              const r = e.currentTarget.getBoundingClientRect();
-              tip.style.left = `${r.left + r.width / 2}px`;
-              tip.style.top = `${r.top - 6}px`;
-              tip.style.transform = "translate(-50%, -100%)";
-              tip.style.opacity = "1";
-            }
-          }}
-          onMouseLeave={() => {
-            const tip = ammBubbleTipRef.current;
-            if (tip) tip.style.opacity = "0";
-          }}
+          onMouseEnter={(e) => { const tip = ammBubbleTipRef.current; if (tip) { const r = e.currentTarget.getBoundingClientRect(); tip.style.left = `${r.left + r.width / 2}px`; tip.style.top = `${r.top - 6}px`; tip.style.transform = "translate(-50%, -100%)"; tip.style.opacity = "1"; } }}
+          onMouseLeave={() => { const tip = ammBubbleTipRef.current; if (tip) tip.style.opacity = "0"; }}
         >
           <img
             src={tokenIcon}
             alt={`${(token as any).launchpad_protocol || (token as any).protocol || (token as any).launchpadName || "Protocol"} logo`}
-            className={`${isFullCircleImage ? "h-full w-full object-cover" : "h-3/4 w-3/4 object-contain"} rounded-full pointer-events-none`}
+            className={`pointer-events-none ${isFullCircleImage ? "h-full w-full object-cover" : "h-3/4 w-3/4 object-contain"} rounded-full`}
           />
         </div>
         {createPortal(
           <div
             ref={ammBubbleTipRef}
-            className="pointer-events-none fixed z-[999999] rounded px-2 py-1.5 text-[11px] font-medium whitespace-nowrap transition-opacity duration-150"
-            style={{
-              backgroundColor: "rgba(23, 25, 30, 0.97)",
-              color: "#e5e7eb",
-              border: "1px solid rgba(107, 114, 128, 0.4)",
-              boxShadow: "0 4px 12px rgba(0,0,0,0.3)",
-              opacity: 0,
-            }}
+            className="pointer-events-none fixed z-[9999] rounded px-2 py-1 text-[10px] font-medium whitespace-nowrap"
+            style={{ backgroundColor: "rgba(31, 41, 55, 0.95)", color: "#e5e7eb", border: "1px solid rgba(107, 114, 128, 0.3)", opacity: 0, transition: "opacity 150ms" }}
           >
             {getAmmDisplayName(token)}
           </div>,
@@ -6106,10 +6088,6 @@ function MonadTable({
                     ) as HTMLElement;
                     if (popup) {
                       popup.classList.add('popup-visible');
-                    }
-                    // Prefetch trade data on hover for instant navigation
-                    if (pairAddress) {
-                      prefetchTradeData(pairAddress, pairAddress);
                     }
                   }}
                   onMouseLeave={(e) => {

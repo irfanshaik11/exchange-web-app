@@ -1,7 +1,6 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { env } from '../env';
-import { rollingTradeCache } from '../utils/rollingTradeCache';
 
 
 interface TradeData {
@@ -188,105 +187,58 @@ export default function useInitialTradeData(
     }
   }, []);
 
-  // Fetch fresh data from API with parallel calls for maximum speed
+  // Fetch token stats from API (trade/view endpoint is dead — only token-stats remains)
   const fetchData = useCallback(async (pair: string, token?: string) => {
     const baseUrl = env.NEXT_PUBLIC_GO_SERVICE_URL;
     const controller = new AbortController();
     const timeoutId = setTimeout(() => {
       controller.abort();
       console.warn(`[useInitialTradeData] Request timeout for ${pair} after 15 seconds`);
-    }, 15000); // Increased timeout to 15 seconds to allow slow backend responses
-    
-    try {
-      console.log(`[useInitialTradeData] Fetching fresh data for ${pair} in parallel`);
-      
-      // Create all API requests in parallel for maximum speed
-      const requests: Promise<Response>[] = [
-        // Trade data
-        fetch(`${baseUrl}/v1/trade/view?pair_address=${pair}`, {
-          headers: {
-            'accept': 'application/json',
-            'X-API-Key': env.NEXT_PUBLIC_BACKEND_API_KEY || 'test-key',
-          },
-          signal: controller.signal,
-        })
-      ];
+    }, 15000);
 
-      // Token stats (if we have token address)
+    try {
+      let formattedStats = null;
+
+      // Fetch token stats if we have a token address
       if (token) {
-        requests.push(
-          fetch(`${baseUrl}/v1/ws/token-stats?pair_address=${pair}&token_address=${token}`, {
-            headers: {
-              'accept': 'application/json',
-              'X-API-Key': env.NEXT_PUBLIC_BACKEND_API_KEY || 'test-key',
-            },
-            signal: controller.signal,
-          })
-        );
+        try {
+          const statsResponse = await fetch(
+            `${baseUrl}/v1/ws/token-stats?pair_address=${pair}&token_address=${token}`,
+            {
+              headers: {
+                'accept': 'application/json',
+                'X-API-Key': env.NEXT_PUBLIC_BACKEND_API_KEY || 'test-key',
+              },
+              signal: controller.signal,
+            }
+          );
+
+          if (statsResponse.ok) {
+            const statsData = await statsResponse.json();
+            if (statsData?.data?.timeframes) {
+              formattedStats = { timeframes: statsData.data.timeframes };
+            }
+          }
+        } catch (err) {
+          console.warn('[useInitialTradeData] Failed to fetch stats:', err);
+        }
       }
 
-      // Execute all requests in parallel
-      const responses = await Promise.all(requests);
       clearTimeout(timeoutId);
 
-      // Parse responses
-      const [tradesResponse, statsResponse] = responses;
-      
-      // Handle 404 gracefully - new tokens may not have trade data yet
-      if (!tradesResponse.ok) {
-        if (tradesResponse.status === 404) {
-          console.log(`[useInitialTradeData] No trade data found for ${pair} (404 - likely new token)`);
-          // Return empty data structure instead of erroring
-          return {
-            trades: [],
-            stats: null,
-            recentTrades: [],
-          };
-        }
-        throw new Error(`Failed to fetch trades: ${tradesResponse.status}`);
-      }
-
-      const tradesData = await tradesResponse.json();
-      let statsData = null;
-
-      // Parse stats data if available
-      if (statsResponse && statsResponse.ok) {
-        try {
-          statsData = await statsResponse.json();
-        } catch (err) {
-          console.warn('[useInitialTradeData] Failed to parse stats:', err);
-        }
-      }
-
-      // Extract trades from response
-      const trades = tradesData.recentTrades || [];
-      
-      // Format stats data if available
-      let formattedStats = null;
-      if (statsData && statsData.data && statsData.data.timeframes) {
-        formattedStats = {
-          timeframes: statsData.data.timeframes
-        };
-      }
-
-      const result: InitialTradeDataResponse = {
-        trades,
+      return {
+        trades: [],
         stats: formattedStats,
-        recentTrades: tradesData.recentTrades,
+        recentTrades: [],
       };
-
-      console.log(`[useInitialTradeData] Fetched ${trades.length} trades`);
-      
-      return result;
     } catch (err: any) {
-      clearTimeout(timeoutId); // Clear timeout on error
-      
-      // Handle AbortError gracefully
+      clearTimeout(timeoutId);
+
       if (err.name === 'AbortError') {
         console.warn(`[useInitialTradeData] Request aborted for ${pair} - likely timeout`);
         throw new Error(`Request timeout for ${pair}. Please try again.`);
       }
-      
+
       console.error('[useInitialTradeData] Fetch error:', err);
       throw err;
     }
@@ -317,22 +269,6 @@ export default function useInitialTradeData(
       if (cachedMetadata && mounted) {
         setCachedTokenMetadata(cachedMetadata);
         console.log(`[useInitialTradeData] Loaded cached token metadata for ${tokenAddress || pairAddress}`);
-      }
-
-      // Step 1: Check rolling cache first (INSTANT - 0ms for pulse tokens)
-      if (tokenAddress) {
-        const rollingCached = rollingTradeCache.getCachedTradeData(tokenAddress);
-        if (rollingCached && mounted) {
-          setData({
-            trades: rollingCached.trades,
-            stats: rollingCached.stats ? { timeframes: rollingCached.stats } : null,
-            recentTrades: rollingCached.trades,
-          });
-          setIsFromCache(true);
-          setLoading(false);
-          // Don't fetch fresh data - rolling cache is already fresh
-          return;
-        }
       }
 
       // Step 1: Check localStorage cache (backup - 1ms)

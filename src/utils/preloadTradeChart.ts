@@ -1,6 +1,6 @@
 import { prefetchViaWS } from "~/utils/ohlcPrefetchManager";
 import { prefetchOHLC } from "~/hooks/useBackgroundOHLCPreload";
-import { prefetchTokenTrades } from "~/utils/rollingTradeCache";
+
 import { preloadImage } from "~/utils/imagePreloader";
 import { computeHashImageUrl } from "~/utils/imageHash";
 import type { NextRouter } from "next/router";
@@ -37,15 +37,14 @@ let lastPreloadedMint = "";
 export const creatorAddressCache = new Map<string, string | null>();
 
 /**
- * Shared 7-step hover preload pipeline extracted from PulseTable.
+ * Shared 6-step hover preload pipeline extracted from PulseTable.
  *
  * 1. prefetchViaWS (immediate, has internal 150ms debounce)
  * 2. router.prefetch (deferred via requestIdleCallback)
  * 3. localStorage metadata cache (deferred)
  * 4. prefetchOHLC via HTTP (deferred)
- * 5. prefetchTokenTrades (deferred)
- * 6. preloadImage — pre-decode token avatar into imageObjectCache (deferred)
- * 7. prefetch creator address for chart dev markers (deferred)
+ * 5. preloadImage — pre-decode token avatar into imageObjectCache (deferred)
+ * 6. prefetch creator address for chart dev markers (deferred)
  */
 export function preloadTradeChart(
   tokenInfo: PreloadTokenInfo,
@@ -62,7 +61,7 @@ export function preloadTradeChart(
     prefetchViaWS(mint);
   }
 
-  // Steps 2-5: deferred to idle time
+  // Steps 2-6: deferred to idle time
   const rIC =
     typeof requestIdleCallback === "function"
       ? requestIdleCallback
@@ -104,19 +103,13 @@ export function preloadTradeChart(
       // Step 4: HTTP OHLC prefetch
       prefetchOHLC(mint, chain);
 
-      // Step 5: Trade data prefetch
-      prefetchTokenTrades({
-        mint,
-        pair_address: tokenInfo.pairAddress || "",
-      });
-
-      // Step 6: Preload token avatar image
+      // Step 5: Preload token avatar image (deferred)
       if (tokenInfo.image) {
         const imageUrl = computeHashImageUrl(tokenInfo.image);
         if (imageUrl) preloadImage(imageUrl);
       }
 
-      // Step 7: Prefetch creator address for chart dev markers
+      // Step 6: Prefetch creator address for chart dev markers
       if (!creatorAddressCache.has(mint)) {
         fetch(`${process.env.NEXT_PUBLIC_GO_SERVICE_URL}/v1/tokens/dev?tokenAddress=${mint}&limit=1`)
           .then(r => r.ok ? r.json() : null)

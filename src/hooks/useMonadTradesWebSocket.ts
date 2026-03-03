@@ -50,7 +50,7 @@ export function useMonadTradesWebSocket(
   const {
     tokenAddress,
     enabled = true,
-    maxTrades = 100,
+    maxTrades = Infinity,
     reconnectInterval = 2000,
     maxReconnectAttempts = 10,
     onNewTrade,
@@ -107,7 +107,7 @@ export function useMonadTradesWebSocket(
       setLoading(true);
       const baseUrl = env.NEXT_PUBLIC_MONAD_TOKEN_SERVICE_URL!;
       const response = await fetch(
-        `${baseUrl}/v1/trades?token_address=${tokenAddress}&limit=${maxTrades}`
+        `${baseUrl}/v1/trades?token_address=${tokenAddress}&limit=10000`
       );
 
       if (!response.ok) {
@@ -121,7 +121,7 @@ export function useMonadTradesWebSocket(
         setTrades((prev) => {
           tradesRef.current = prev;
           if (!prev || prev.length === 0) {
-            const next = fetched.slice(0, maxTrades);
+            const next = fetched;
             tradesRef.current = next;
             return next;
           }
@@ -134,7 +134,7 @@ export function useMonadTradesWebSocket(
           }
           // Keep most recent first based on block_timestamp if available, else insertion order
           combined.sort((a, b) => (b.block_timestamp || 0) - (a.block_timestamp || 0));
-          const next = combined.slice(0, maxTrades);
+          const next = combined;
           tradesRef.current = next;
           return next;
         });
@@ -257,8 +257,7 @@ export function useMonadTradesWebSocket(
                   const exists = prev.some((t) => t.tx_hash === trade.tx_hash);
                   if (exists) return prev;
 
-                  const newTrades = [trade, ...prev];
-                  const next = newTrades.slice(0, currentMax);
+                  const next = [trade, ...prev];
                   tradesRef.current = next;
                   return next;
                 });

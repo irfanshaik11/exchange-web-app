@@ -70,7 +70,7 @@
 // import { tradeBuy, SOL_MINT_ADDRESS, ApiError } from "~/utils/api";
 // import { getPoolTypeFromToken } from "~/utils/poolTypeDetection";
 // import { TokenAge } from "./TokenAge";
-// import { prefetchTradeData } from "~/utils/tokenCache";
+
 // import {
 //   showCenteredErrorToast,
 //   showCenteredSuccessToast,

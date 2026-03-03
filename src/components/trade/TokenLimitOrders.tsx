@@ -356,35 +356,14 @@ export default function TokenLimitOrders() {
       setMetaLoading((prev) => ({ ...prev, [address]: true }));
 
       try {
-        const params = new URLSearchParams();
-        if (order.pairAddress) {
-          params.set("pair_address", order.pairAddress);
-        } else {
-          params.set("mint_address", address);
-        }
-
-        const response = await fetch(`/api/token-service/trade-view?${params.toString()}`);
         let combinedMeta: TokenMetaInfo = {};
 
-        if (response.ok) {
-          const data = await response.json();
-          combinedMeta = mergeTokenMeta(combinedMeta, extractTokenMeta(data));
-        }
-
-        const needsFallback =
-          !combinedMeta.name ||
-          !combinedMeta.symbol ||
-          !combinedMeta.image ||
-          combinedMeta.marketCap === undefined;
-
-        if (needsFallback) {
-          const searchResponse = await fetch(
-            `${process.env.NEXT_PUBLIC_GO_SERVICE_URL}/v1/search?phrase=${encodeURIComponent(address)}&limit=1`
-          );
-          if (searchResponse.ok) {
-            const searchData = await searchResponse.json();
-            combinedMeta = mergeTokenMeta(combinedMeta, extractTokenMeta(searchData));
-          }
+        const searchResponse = await fetch(
+          `${process.env.NEXT_PUBLIC_GO_SERVICE_URL}/v1/search?phrase=${encodeURIComponent(address)}&limit=1`
+        );
+        if (searchResponse.ok) {
+          const searchData = await searchResponse.json();
+          combinedMeta = mergeTokenMeta(combinedMeta, extractTokenMeta(searchData));
         }
 
         setTokenMetaMap((prev) => ({

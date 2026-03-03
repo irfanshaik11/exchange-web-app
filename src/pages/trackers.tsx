@@ -1025,19 +1025,12 @@ export default function TrackersPage() {
     Promise.allSettled(
       tradesToFetch.map(async (trade) => {
         try {
-          // Try to use pair_address if available, otherwise use mint_address
-          const params = new URLSearchParams();
-          if (trade.pair_address) {
-            params.set("pair_address", trade.pair_address);
-          } else {
-            params.set("mint_address", trade.mint);
-          }
-
+          const goUrl = process.env.NEXT_PUBLIC_GO_SERVICE_URL;
           const controller = new AbortController();
           const timeoutId = setTimeout(() => controller.abort(), 5000);
 
           const response = await fetch(
-            `/api/token-service/trade-view?${params.toString()}`,
+            `${goUrl}/v1/token/${trade.mint}`,
             {
               signal: controller.signal,
             },

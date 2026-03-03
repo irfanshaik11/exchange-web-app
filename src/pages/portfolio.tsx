@@ -637,7 +637,7 @@ export default function PortfolioPage() {
     if (currentChain === 'monad') {
       return monPrice || 0.025;
     } else {
-      return contextSolPrice || 150; // Default SOL price fallback
+      return contextSolPrice || 0;
     }
   }, [currentChain, monPrice, contextSolPrice]);
 

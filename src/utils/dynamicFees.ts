@@ -25,8 +25,8 @@ const MAX_AUTO_FEE = 0.0005; // 0.5 mSOL
 interface DynamicFeeParams {
   /** Trade amount in SOL */
   tradeAmount: number;
-  /** Token creation timestamp (ISO string or Date) */
-  tokenCreatedAt?: string | Date | null;
+  /** Token creation timestamp (ISO string, Date, or Unix ms) */
+  tokenCreatedAt?: string | Date | number | null;
   /** User-configured priority fee (if set intentionally high, we respect it) */
   userPriorityFee?: number;
   /** If true, user explicitly set this fee (don't override) */
@@ -53,9 +53,11 @@ export function calculateDynamicPriorityFee({
   // Calculate token age in hours
   let tokenAgeHours = Infinity;
   if (tokenCreatedAt) {
-    const createdTime = typeof tokenCreatedAt === 'string'
-      ? new Date(tokenCreatedAt).getTime()
-      : tokenCreatedAt.getTime();
+    const createdTime = typeof tokenCreatedAt === 'number'
+      ? tokenCreatedAt
+      : typeof tokenCreatedAt === 'string'
+        ? new Date(tokenCreatedAt).getTime()
+        : tokenCreatedAt.getTime();
 
     if (!isNaN(createdTime)) {
       tokenAgeHours = (Date.now() - createdTime) / (1000 * 60 * 60);

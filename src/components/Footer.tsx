@@ -288,7 +288,7 @@ export default function Footer() {
   const chainBalance = chainBalances[currentChain] ?? (currentChain === "sol" ? solBalance : 0);
 
   const chainLogos: Record<string, string> = {
-    sol: "https://cryptologos.cc/logos/solana-sol-logo.svg?v=040",
+    sol: "/solana.png",
     monad:
       "https://i0.wp.com/www.gizmotimes.com/wp-content/uploads/2023/10/Monad-Logo.png?fit=1920%2C1080&ssl=1",
   };
@@ -473,7 +473,7 @@ export default function Footer() {
 
   return (
     <footer
-      className="fixed z-[100] bottom-1 left-1 right-1 sm:bottom-1.5 sm:left-1.5 sm:right-1.5 rounded-lg"
+      className="fixed z-[100] bottom-0 left-1 right-1 sm:left-1.5 sm:right-1.5 rounded-lg"
       style={{
         backgroundColor: AX.bg,
         borderColor: "rgba(255, 255, 255, 0.06)",

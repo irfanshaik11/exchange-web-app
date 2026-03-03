@@ -101,7 +101,7 @@ export default function LiveTradesPanel({
   const router = useRouter();
   const { solPrice } = useSolPrice();
 
-  // Token metadata: fetched per mint from /api/token-service/trade-view
+  // Token metadata: fetched per mint from Go service
   const [tokenMetadata, setTokenMetadata] = useState<Map<string, any>>(
     new Map(),
   );
@@ -125,27 +125,8 @@ export default function LiveTradesPanel({
         try {
           let token: any = null;
 
-          // Try trade-view API first (requires pair_address)
-          if (trade.pair_address) {
-            try {
-              const controller = new AbortController();
-              const timeoutId = setTimeout(() => controller.abort(), 5000);
-              const response = await fetch(
-                `/api/token-service/trade-view?pair_address=${trade.pair_address}`,
-                { signal: controller.signal },
-              );
-              clearTimeout(timeoutId);
-              if (response.ok) {
-                const data = await response.json();
-                token = data?.token;
-              }
-            } catch {
-              // Silent fail — try Go search fallback below
-            }
-          }
-
-          // Fallback: Go service search by mint (works without pair_address)
-          if (!token && trade.mint) {
+          // Fetch token metadata from Go service by mint
+          if (trade.mint) {
             try {
               const goUrl = process.env.NEXT_PUBLIC_GO_SERVICE_URL;
               const controller = new AbortController();

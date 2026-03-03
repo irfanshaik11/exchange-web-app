@@ -79,33 +79,7 @@ const TOKEN_SERVICE_URL = (process.env.NEXT_PUBLIC_TOKEN_SERVICE_URL || "").repl
 const LIMIT_ORDER_STATUS_EVENT = "limit-order-update";
 const LIMIT_ORDER_POLL_INTERVAL_MS = 2000;
 const LIMIT_ORDER_MAX_POLLS = 40;
-const TOKEN_SERVICE_REFRESH_INTERVAL_MS = 1_000;
 const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
-
-async function fetchLatestMarketCap(pairAddress: string | undefined | null): Promise<number | null> {
-  if (!TOKEN_SERVICE_URL || !pairAddress) return null;
-
-  try {
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 10_000);
-    const response = await fetch(`${TOKEN_SERVICE_URL}/v1/trade/view?pair_address=${pairAddress}`, {
-      signal: controller.signal,
-    });
-    clearTimeout(timeoutId);
-
-    if (!response.ok) {
-      console.warn(`⚠️ Token service responded ${response.status} for ${pairAddress}`);
-      return null;
-    }
-
-    const data = await response.json();
-    const marketCap = data?.marketData?.market_cap_usd;
-    return typeof marketCap === "number" && Number.isFinite(marketCap) ? marketCap : null;
-  } catch (error) {
-    console.warn("⚠️ Failed to fetch latest market cap:", error);
-    return null;
-  }
-}
 
 /**
  * Fallback to fetch pair address from token service when not available locally
@@ -1090,102 +1064,16 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
   const [migrationMode, setMigrationMode] = useState(false);
   const [devSellMode, setDevSellMode] = useState(true);
   const [devSubmitting, setDevSubmitting] = useState(false);
-  const [tokenServiceMarketCap, setTokenServiceMarketCap] = useState<number | null>(null);
-  const [tokenServiceLiquidity, setTokenServiceLiquidity] = useState<number | null>(null);
   const [creatorAddress, setCreatorAddress] = useState<string>("");
   const isMountedRef = useRef(true);
-  const tokenServiceMarketCapRef = useRef<number | null>(null);
-  const tokenServiceMarketCapFetchedAtRef = useRef<number | null>(null);
   const manualTargetOverrideRef = useRef<boolean>(false);
   const lastSliderBaseRef = useRef<number | null>(null);
-
-  useEffect(() => {
-    tokenServiceMarketCapRef.current = tokenServiceMarketCap;
-  }, [tokenServiceMarketCap]);
 
   useEffect(() => {
     return () => {
       isMountedRef.current = false;
     };
   }, []);
-
-  const refreshTokenServiceMarketCap = useCallback(
-    async (force = false): Promise<number | null> => {
-      if (!effectivePoolAddress) {
-        if (isMountedRef.current) {
-          setTokenServiceMarketCap(null);
-          setTokenServiceLiquidity(null);
-          tokenServiceMarketCapRef.current = null;
-          tokenServiceMarketCapFetchedAtRef.current = null;
-        }
-        return null;
-      }
-
-      const now = Date.now();
-      if (
-        !force &&
-        tokenServiceMarketCapRef.current !== null &&
-        tokenServiceMarketCapFetchedAtRef.current !== null &&
-        now - tokenServiceMarketCapFetchedAtRef.current < 10_000
-      ) {
-        return tokenServiceMarketCapRef.current;
-      }
-
-      const latest = await fetchLatestMarketCap(effectivePoolAddress);
-      if (latest !== null && isMountedRef.current) {
-        setTokenServiceMarketCap(latest);
-        tokenServiceMarketCapRef.current = latest;
-        tokenServiceMarketCapFetchedAtRef.current = Date.now();
-      }
-
-      if (latest !== null) {
-        return latest;
-      }
-
-      return tokenServiceMarketCapRef.current;
-    },
-    [effectivePoolAddress]
-  );
-
-  const refreshTokenServiceData = useCallback(
-    async (force = false): Promise<number | null> => {
-      const latestMc = await refreshTokenServiceMarketCap(force);
-
-      if (effectivePoolAddress) {
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 10_000);
-        try {
-          const response = await fetch(`${TOKEN_SERVICE_URL}/v1/trade/view?pair_address=${effectivePoolAddress}`, {
-            signal: controller.signal,
-          });
-          if (response.ok) {
-            const data = await response.json();
-            const liquidity = data?.marketData?.liquidity_usd;
-            if (typeof liquidity === "number" && Number.isFinite(liquidity) && isMountedRef.current) {
-              setTokenServiceLiquidity(liquidity);
-            }
-          }
-        } catch (error) {
-          console.warn("⚠️ Failed to fetch latest liquidity:", error);
-        } finally {
-          clearTimeout(timeoutId);
-        }
-      }
-
-      return latestMc;
-    },
-    [effectivePoolAddress, refreshTokenServiceMarketCap]
-  );
-
-  useEffect(() => {
-    void refreshTokenServiceData(true);
-  }, [refreshTokenServiceData]);
-
-  useEffect(() => {
-    if (tab === "limit") {
-      void refreshTokenServiceData(true);
-    }
-  }, [tab, refreshTokenServiceData]);
 
   // High slippage warning dialog state
   const [showSlippageWarning, setShowSlippageWarning] = useState(false);
@@ -1476,13 +1364,9 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
   );
 
   const baseMarketCap: number = useMemo(() => {
-    // Priority: live chart/WS data > token service > token prop
+    // Priority: live chart/WS data > token prop
     if (typeof liveMarketCapUsd === "number" && Number.isFinite(liveMarketCapUsd) && liveMarketCapUsd > 0) {
       return liveMarketCapUsd;
-    }
-
-    if (tokenServiceMarketCap !== null && Number.isFinite(tokenServiceMarketCap) && tokenServiceMarketCap > 0) {
-      return tokenServiceMarketCap;
     }
 
     const t: any = token || {};
@@ -1497,7 +1381,7 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
           0
       ) || 0
     );
-  }, [liveMarketCapUsd, tokenServiceMarketCap, token]);
+  }, [liveMarketCapUsd, token]);
 
   const sliderBaseMarketCap = useMemo(() => {
     if (baseMarketCap > 0) {
@@ -1642,10 +1526,7 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
     if (typeof liveLiquidityUsd === "number" && Number.isFinite(liveLiquidityUsd) && liveLiquidityUsd > 0) {
       return liveLiquidityUsd;
     }
-    // Priority 2: Token service REST fetch
-    if (tokenServiceLiquidity !== null && Number.isFinite(tokenServiceLiquidity) && tokenServiceLiquidity > 0) {
-      return tokenServiceLiquidity;
-    }
+    // Priority 2: Token prop values
     if (!token) return 0;
     const possibleValues = [
       token.total_liquidity_usd,
@@ -1661,7 +1542,7 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
     }
     // Fall back to zero if we have no positive readings
     return Number(token.total_liquidity_usd) || 0;
-  }, [liveLiquidityUsd, token, tokenServiceLiquidity]);
+  }, [liveLiquidityUsd, token]);
 
   // Fetch creator address from token-service
   useEffect(() => {
@@ -2053,10 +1934,7 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
         ? quickSettings.rpc.trim()
         : undefined;
 
-    const latestMarketCap =
-      tokenServiceMarketCap !== null && Number.isFinite(tokenServiceMarketCap)
-        ? tokenServiceMarketCap
-        : baseMarketCap;
+    const latestMarketCap = baseMarketCap;
 
     const formattedAmount = mode === "buy"
       ? `${numericAmount.toLocaleString(undefined, { maximumFractionDigits: 6 })} SOL`
@@ -2129,7 +2007,6 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
     sniperAmount,
     mode,
     settings,
-    tokenServiceMarketCap,
     baseMarketCap,
     effectivePoolAddress,
     monitorLimitOrderExecution,
@@ -2197,10 +2074,7 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
         ? quickSettings.rpc.trim()
         : undefined;
 
-    const latestMarketCap =
-      tokenServiceMarketCap !== null && Number.isFinite(tokenServiceMarketCap)
-        ? tokenServiceMarketCap
-        : baseMarketCap;
+    const latestMarketCap = baseMarketCap;
 
     const actionLabel = mode === "buy" ? "Buy on Dev Sell" : "Sell on Dev Sell";
     const formattedAmount = mode === "buy"
@@ -2277,7 +2151,6 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
     creatorAddress,
     settings,
     effectivePoolAddress,
-    tokenServiceMarketCap,
     baseMarketCap,
     monitorLimitOrderExecution,
   ]);
@@ -2451,13 +2324,7 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
               ? quickSettings.rpc.trim()
               : undefined;
 
-          let latestMarketCap: number | null = tokenServiceMarketCap ?? baseMarketCap;
-          if (resolvedPoolAddress) {
-            const refreshed = await refreshTokenServiceData(true);
-            if (refreshed !== null) {
-              latestMarketCap = refreshed;
-            }
-          }
+          const latestMarketCap: number | null = baseMarketCap;
 
           // Only validate that target MC is different from current MC (basic sanity check)
           const effectiveLiveMc = latestMarketCap ?? baseMarketCap;

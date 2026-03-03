@@ -10,12 +10,14 @@ import { LuChefHat } from "react-icons/lu";
 import { TfiTarget } from "react-icons/tfi";
 import { HiOutlineCubeTransparent } from "react-icons/hi2";
 import React, { useState, useCallback, useMemo } from "react";
-import { formatSmartNumber, formatMarketCap } from "~/utils/db";
+import { formatSmartNumber, formatMarketCap, formatSmallPrice } from "~/utils/db";
 import { useSolanaTokenWebSocketContext, type SolanaTokenHolder } from "../../contexts/SolanaTokenWebSocketContext";
 import { useSolPrice } from "../SolPriceContext";
 import { useMonadTradesWebSocket } from "../../hooks/useMonadTradesWebSocket";
 import type { Token } from "~/utils/db";
 import WalletHoverCard, { type WalletHoverCardData } from "./WalletHoverCard";
+import { VirtualizedTokenList } from "../VirtualizedTokenList";
+import { TokenAge } from "../TokenAge";
 
 // Sort direction type
 type SortDirection = "asc" | "desc" | null;
@@ -530,20 +532,6 @@ interface CodexTradesProps {
   chain?: "sol" | "monad"; // Chain to determine which WebSocket to use
 }
 
-function getAge(timestamp: number) {
-  const now = Date.now() / 1000; // seconds
-  const diffSeconds = Math.floor(now - timestamp);
-  const diffMins = Math.floor(diffSeconds / 60);
-  const diffHours = Math.floor(diffSeconds / 3600);
-  const diffDays = Math.floor(diffSeconds / 86400);
-
-  if (diffSeconds < 0) return "0s";
-  if (diffDays > 0) return `${diffDays}d`;
-  if (diffHours > 0) return `${diffHours}h`;
-  if (diffMins > 0) return `${diffMins}m`;
-  return `${diffSeconds}s`;
-}
-
 function getTimeFromTimestampSec(ts: number) {
   if (!ts) return "";
   const d = new Date(ts * 1000);
@@ -575,26 +563,6 @@ function percentile(arr: number[], p: number) {
   return a[lo] * (1 - w) + a[hi] * w;
 }
 
-// Nicely format a USD price for the MC/Price column
-// Shows all decimal values without scientific notation
-function formatUsdPrice(value: number | null | undefined): string {
-  const v = Number(value);
-  if (!Number.isFinite(v) || v <= 0) return "-";
-
-  if (v >= 1) return `$${v.toFixed(2)}`;
-  if (v >= 0.01) return `$${v.toFixed(4)}`;
-  if (v >= 0.0001) return `$${v.toFixed(6)}`;
-  if (v >= 0.000001) return `$${v.toFixed(8)}`;
-  if (v >= 0.00000001) return `$${v.toFixed(10)}`;
-  if (v >= 0.0000000001) return `$${v.toFixed(12)}`;
-  if (v >= 0.000000000001) return `$${v.toFixed(14)}`;
-  // For extremely tiny prices, show up to 18 decimal places
-  // Remove trailing zeros for cleaner display
-  const formatted = v.toFixed(18);
-  const trimmed = formatted.replace(/\.?0+$/, "");
-  // Ensure we have at least the decimal point if all zeros were removed
-  return `$${trimmed || formatted}`;
-}
 
 /** Normalize trade shapes into a single structure */
 function normalizeTrade(
@@ -724,7 +692,8 @@ function normalizeTrade(
     if (solAmount > 0 && chainPrice > 0) {
       totalUSD = solAmount * chainPrice;
     }
-    if (!pricePerToken && tokenAmount > 0 && totalUSD > 0)
+    // Always compute USD price (price_mon is in native MON, not USD)
+    if (tokenAmount > 0 && totalUSD > 0)
       pricePerToken = totalUSD / tokenAmount;
     keyPart = (trade.tx_hash || trade.id || "") + (trade.block_timestamp || "");
     maker = trade.trader_address || "";
@@ -830,7 +799,7 @@ const CodexTrades: React.FC<CodexTradesProps> = ({
 
   const [showAge, setShowAge] = React.useState(true); // true = Age, false = Time
   const [totalMode, setTotalMode] = React.useState<"usd" | "sol">("usd");
-  const [mcMode, setMcMode] = React.useState<"mc" | "price">("mc"); // MC vs Price toggle
+  const [mcMode, setMcMode] = React.useState<"mc" | "price">("price"); // MC vs Price toggle
   const [fetchedMarketCap, setFetchedMarketCap] = React.useState<number | null>(
     null,
   );
@@ -1262,7 +1231,6 @@ const CodexTrades: React.FC<CodexTradesProps> = ({
     useMonadTradesWebSocket({
       tokenAddress: mintForWebSocket,
       enabled: chain === "monad" && !!mintForWebSocket,
-      maxTrades: 100,
     });
 
   // Select the appropriate trades based on chain
@@ -1317,8 +1285,7 @@ const CodexTrades: React.FC<CodexTradesProps> = ({
   }, []);
 
   const normalized = React.useMemo(() => {
-    const slice = (displayTrades || []).slice(0, 100);
-    let result = slice.map((t, i) => {
+    let result = (displayTrades || []).map((t, i) => {
       const n = normalizeTrade(t, stableToken?.decimals ?? 9, chainPrice);
       // Store the complete address from raw trade
       const completeAddress = getCompleteTraderAddress(t);
@@ -1484,8 +1451,7 @@ const CodexTrades: React.FC<CodexTradesProps> = ({
   // Calculate trade count per trader from all trades
   const traderTradeCounts = React.useMemo(() => {
     const counts: Record<string, number> = {};
-    const slice = (displayTrades || []).slice(0, 100);
-    slice.forEach((t) => {
+    (displayTrades || []).forEach((t) => {
       const completeAddress = getCompleteTraderAddress(t);
       if (completeAddress) {
         const key = completeAddress
@@ -1517,7 +1483,7 @@ const CodexTrades: React.FC<CodexTradesProps> = ({
     (v: number) => {
       if (!isFinite(v) || v <= 0) return 0;
       const ref =
-        p95 > 0 ? p95 : Math.max(...normalized.map((n) => n.totalUSD), 1);
+        p95 > 0 ? p95 : normalized.reduce((mx, n) => (n.totalUSD > mx ? n.totalUSD : mx), 1);
       return clamp01(v / ref);
     },
     [p95, normalized],
@@ -1529,10 +1495,7 @@ const CodexTrades: React.FC<CodexTradesProps> = ({
       const ref =
         p95Sol > 0
           ? p95Sol
-          : Math.max(
-              ...normalized.map((n) => n.solAmount).filter((x) => x > 0),
-              1,
-            );
+          : normalized.reduce((mx, n) => (n.solAmount > 0 && n.solAmount > mx ? n.solAmount : mx), 1);
       return clamp01(v / ref);
     },
     [p95Sol, normalized],
@@ -1578,6 +1541,242 @@ const CodexTrades: React.FC<CodexTradesProps> = ({
     const num = Number(raw);
     return Number.isFinite(num) && num > 0 ? num : 0;
   }, [stableToken]);
+
+  // Derive supply from MC + price when explicit supply is unavailable
+  const effectiveSupply = React.useMemo(() => {
+    if (supply > 0) return supply;
+    const anyToken = stableToken as any;
+    const refMc = Number(
+      anyToken?.market_cap_usd ?? anyToken?.fully_diluted_value ??
+      anyToken?.marketCapUsd ?? anyToken?.fullyDilutedValue ?? 0
+    );
+    const refPrice = fallbackPriceUsd;
+    if (refMc > 0 && refPrice > 0) return refMc / refPrice;
+    if (fetchedMarketCap && fetchedMarketCap > 0 && refPrice > 0) return fetchedMarketCap / refPrice;
+    return 0;
+  }, [supply, stableToken, fallbackPriceUsd, fetchedMarketCap]);
+
+  // Virtualized row renderer for trades
+  const renderTradeRow = useCallback(
+    (n: (typeof normalized)[number], index: number, style: React.CSSProperties) => {
+      const timeStr = getTimeFromTimestampSec(n.timestampSec);
+      const tokenAmountStr = formatSmartNumber(n.tokenAmount);
+      const solAmountStr =
+        Number.isFinite(n.solAmount) && n.solAmount > 0
+          ? formatSmartNumber(n.solAmount)
+          : "-";
+      const amtStr = Number.isFinite(n.totalUSD)
+        ? `$${n.totalUSD.toFixed(2)}`
+        : "$0.00";
+
+      const unitPriceUsd =
+        Number.isFinite(n.pricePerToken) && n.pricePerToken > 0
+          ? n.pricePerToken
+          : fallbackPriceUsd;
+
+      const tradePrice = n.pricePerToken > 0 ? n.pricePerToken : unitPriceUsd;
+      const tradeMc =
+        effectiveSupply > 0 && tradePrice > 0 ? tradePrice * effectiveSupply : null;
+
+      const anyToken = stableToken as any;
+      const tokenMarketCap =
+        anyToken?.market_cap_usd ??
+        anyToken?.fully_diluted_value ??
+        anyToken?.marketCapUsd ??
+        anyToken?.fullyDilutedValue;
+
+      const mc =
+        tradeMc !== null
+          ? tradeMc
+          : tokenMarketCap && Number(tokenMarketCap) > 0
+            ? Number(tokenMarketCap)
+            : fetchedMarketCap && fetchedMarketCap > 0
+              ? fetchedMarketCap
+              : null;
+
+      const mcStr = mc !== null ? `$${formatMarketCap(mc)}` : "-";
+      const priceStr = unitPriceUsd > 0 ? `$${formatSmallPrice(unitPriceUsd)}` : "-";
+
+      const intensityUsd = scaleAmt(n.totalUSD);
+      const gradientUsd = heatBarGradient(n.isBuy, intensityUsd);
+
+      const intensitySol = n.solAmount > 0 ? scaleAmtSol(n.solAmount) : 0;
+      const gradientSol = heatBarGradient(n.isBuy, intensitySol);
+
+      const typeLabel = n.isBuy ? "Buy" : "Sell";
+      const showingUsd = totalMode === "usd";
+
+      const totalValueStr = showingUsd ? amtStr : solAmountStr;
+      const intensity = showingUsd ? intensityUsd : intensitySol;
+      const gradient = showingUsd ? gradientUsd : gradientSol;
+
+      const hasSol = Number.isFinite(n.solAmount) && n.solAmount > 0;
+
+      return (
+        <div
+          key={n.keyPart || n.idx}
+          style={{
+            ...style,
+            backgroundColor: index % 2 === 0 ? "#111214" : "#161719",
+          }}
+          className="!font-geist flex items-center transition-colors hover:brightness-110 !text-[13px]"
+        >
+          {/* Age / Time */}
+          <div className="w-[12%] px-4 text-[13px] text-[#757e80] truncate">
+            {showAge ? <TokenAge createdAt={n.timestampSec} /> : timeStr}
+          </div>
+
+          {/* Type */}
+          <div
+            className={`w-[10%] px-2 text-[13px] font-medium ${
+              n.isBuy ? "text-emerald-400" : "text-red-400"
+            }`}
+          >
+            {typeLabel}
+          </div>
+
+          {/* MC / Price */}
+          <div className="w-[13%] px-2 text-[13px] text-[#c4cccc] truncate">
+            {mcMode === "mc" ? mcStr : priceStr}
+          </div>
+
+          {/* Amount */}
+          <div className="w-[15%] px-2 text-[13px] text-[#c4cccc] truncate">
+            {tokenAmountStr}
+          </div>
+
+          {/* merged Total column */}
+          <div
+            className="w-[15%] px-2 text-[13px] font-medium self-stretch flex items-center"
+            style={showingUsd || hasSol ? {
+              backgroundImage: gradient,
+              backgroundSize: `${Math.max(6, intensity * 100)}% 100%`,
+              backgroundPosition: "left",
+              backgroundRepeat: "no-repeat",
+              mixBlendMode: "screen" as const,
+              transition: "background-size 160ms ease",
+            } : undefined}
+          >
+            {showingUsd || hasSol ? (
+              <div
+                className={`flex items-center gap-1 ${
+                  n.isBuy ? "text-emerald-300" : "text-red-300"
+                }`}
+              >
+                {!showingUsd && (
+                  <span className={hasSol ? "" : "opacity-40"}>
+                    <SolIcon />
+                  </span>
+                )}
+                <span>{totalValueStr}</span>
+              </div>
+            ) : (
+              <div className="text-neutral-400">
+                {totalValueStr}
+              </div>
+            )}
+          </div>
+
+          {/* Trader */}
+          <div className="w-[35%] px-2 text-right align-middle text-[13px] text-[#c4cccc]">
+            <div className="flex min-w-0 flex-nowrap items-center justify-end gap-2">
+              {(() => {
+                const walletKey = (n.maker || "").toLowerCase();
+                const walletData = walletDataMap.get(walletKey);
+                const holderType = holderTypeMap.get(walletKey);
+
+                const hoverData: WalletHoverCardData = walletData || {
+                  walletAddress: n.maker || "",
+                  holderType: holderType,
+                };
+
+                return (
+                  <WalletHoverCard data={hoverData} chain={chain}>
+                    <div className="flex items-center gap-1.5">
+                      <span className="cursor-pointer truncate text-[13px] whitespace-nowrap text-gray-300 transition-colors hover:text-emerald-400">
+                        {shortAddr(n.maker || "")}
+                      </span>
+                      {holderType === "dev" && (
+                        <LuChefHat
+                          size={12}
+                          className="flex-shrink-0 text-yellow-400"
+                        />
+                      )}
+                      {holderType === "sniper" && (
+                        <TfiTarget
+                          size={12}
+                          className="flex-shrink-0 text-red-400"
+                        />
+                      )}
+                      {holderType === "bundler" && (
+                        <HiOutlineCubeTransparent
+                          size={12}
+                          className="flex-shrink-0 text-orange-400"
+                        />
+                      )}
+                    </div>
+                  </WalletHoverCard>
+                );
+              })()}
+              <div className="flex flex-shrink-0 flex-nowrap items-center gap-1">
+                {(() => {
+                  const traderKey = (
+                    n.completeTraderAddress ||
+                    n.maker ||
+                    ""
+                  )
+                    .toString()
+                    .replace(/\./g, "")
+                    .replace(/\s/g, "")
+                    .toLowerCase()
+                    .trim();
+                  const count = traderTradeCounts[traderKey] || 0;
+                  if (count > 0) {
+                    return (
+                      <span
+                        className="inline-flex min-w-[16px] items-center justify-center rounded px-1 text-[10px] font-medium whitespace-nowrap"
+                        style={{
+                          backgroundColor: "#27282e",
+                          color: "#d1d5db",
+                        }}
+                      >
+                        {count}
+                      </span>
+                    );
+                  }
+                  return null;
+                })()}
+                <a
+                  href={
+                    chain === "monad"
+                      ? `https://testnet.monadexplorer.com/address/${n.maker || ""}`
+                      : `https://solscan.io/account/${n.maker || ""}`
+                  }
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex flex-shrink-0 items-center justify-center transition-opacity hover:opacity-70"
+                  style={{ color: "#6b7280" }}
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <div className="rounded-full bg-[#757E80] p-1">
+                    <SiSolana
+                      size={8}
+                      className="flex-shrink-0 text-black"
+                    />
+                  </div>
+                </a>
+              </div>
+            </div>
+          </div>
+        </div>
+      );
+    },
+    [
+      showAge, mcMode, totalMode, chain, fallbackPriceUsd, effectiveSupply,
+      stableToken, fetchedMarketCap, scaleAmt, scaleAmtSol,
+      walletDataMap, holderTypeMap, traderTradeCounts, normalized,
+    ],
+  );
 
   const p95Display = totalMode === "usd" ? p95 : p95Sol;
 
@@ -1636,460 +1835,215 @@ const CodexTrades: React.FC<CodexTradesProps> = ({
         position={filterPopoutPosition}
       />
 
-      <div className="min-h-0 flex-1 overflow-y-auto bg-[#111214] pb-18">
-        <table className="!font-geist w-full table-fixed border-collapse bg-[#111214]">
-          <thead className="sticky top-0 z-10 bg-[#111214] !text-xs">
-            <tr className="border-t border-b border-[#27282e] py-4">
-              {/* Age / Time */}
-              <th
-                className="w-[12%] px-4 py-3 text-left whitespace-nowrap"
-                style={{ color: "#9ca3af" }}
+      <div className="min-h-0 flex-1 flex flex-col bg-[#111214]">
+        {/* Column header — sits above virtual list, not inside it */}
+        <div className="!font-geist flex items-center border-t border-b border-[#27282e] bg-[#111214] !text-xs" style={{ flexShrink: 0 }}>
+          {/* Age / Time */}
+          <div
+            className="w-[12%] px-4 py-3 text-left whitespace-nowrap"
+            style={{ color: "#9ca3af" }}
+          >
+            <button
+              type="button"
+              onClick={() => setShowAge((prev) => !prev)}
+              className="inline-flex items-center gap-0.5 text-[13px] text-[#757e80] transition-opacity hover:opacity-70"
+            >
+              <span className="font-medium">
+                {showAge ? "Age" : "Time"}
+              </span>
+              <span
+                className="text-[10px] font-medium"
+                style={{ color: "#6b7280" }}
               >
-                <button
-                  type="button"
-                  onClick={() => setShowAge((prev) => !prev)}
-                  className="inline-flex items-center gap-0.5 text-[13px] text-[#757e80] transition-opacity hover:opacity-70"
+                / {showAge ? "Time" : "Age"}
+              </span>
+            </button>
+          </div>
+
+          {/* Type */}
+          <div className="w-[10%] px-2 py-3 text-left whitespace-nowrap text-[#757e80]">
+            <div className="flex items-center gap-1">
+              <span className="text-[13px] font-medium">Type</span>
+              <button
+                onClick={handleTypeFilterClick}
+                className="hover:bg-opacity-20 rounded p-0.5 transition-colors"
+                style={{
+                  color:
+                    filters.type.filter !== "all" ? AX.mint : "#757e80",
+                }}
+              >
+                <CiFilter size={14} />
+              </button>
+              {filters.type.filter !== "all" && (
+                <span
+                  className="rounded px-1 text-[9px]"
+                  style={{
+                    backgroundColor:
+                      filters.type.filter === "buy"
+                        ? "#34d39920"
+                        : "#f8717120",
+                    color:
+                      filters.type.filter === "buy" ? "#34d399" : "#f87171",
+                  }}
                 >
-                  <span className="font-medium">
-                    {showAge ? "Age" : "Time"}
-                  </span>
-                  <span
-                    className="text-[10px] font-medium"
-                    style={{ color: "#6b7280" }}
-                  >
-                    / {showAge ? "Time" : "Age"}
-                  </span>
-                </button>
-              </th>
+                  {filters.type.filter === "buy" ? "Buy" : "Sell"}
+                </span>
+              )}
+            </div>
+          </div>
 
-              {/* Type */}
-              <th className="w-[10%] px-2 py-3 text-left whitespace-nowrap text-[#757e80]">
-                <div className="flex items-center gap-1">
-                  <span className="text-[13px] font-medium">Type</span>
-                  <button
-                    onClick={handleTypeFilterClick}
-                    className="hover:bg-opacity-20 rounded p-0.5 transition-colors"
-                    style={{
-                      color:
-                        filters.type.filter !== "all" ? AX.mint : "#757e80",
-                    }}
-                  >
-                    <CiFilter size={14} />
-                  </button>
-                  {filters.type.filter !== "all" && (
-                    <span
-                      className="rounded px-1 text-[9px]"
-                      style={{
-                        backgroundColor:
-                          filters.type.filter === "buy"
-                            ? "#34d39920"
-                            : "#f8717120",
-                        color:
-                          filters.type.filter === "buy" ? "#34d399" : "#f87171",
-                      }}
-                    >
-                      {filters.type.filter === "buy" ? "Buy" : "Sell"}
-                    </span>
-                  )}
-                </div>
-              </th>
+          {/* MC / Price column with filter */}
+          <div className="w-[13%] px-2 py-3 text-left whitespace-nowrap text-[#757e80]">
+            <div className="flex items-center gap-1">
+              <button
+                type="button"
+                onClick={() =>
+                  setMcMode((prev) => (prev === "mc" ? "price" : "mc"))
+                }
+                className="inline-flex items-center gap-0.5 text-[13px] text-[#757e80] transition-opacity hover:opacity-70"
+              >
+                <span className="font-medium">
+                  {mcMode === "mc" ? "MC" : "Price"}
+                </span>
+                <McHeaderIcon />
+              </button>
+              <SortableHeader
+                label=""
+                sortDirection={filters.price.sort}
+                onSort={() => handleSort("price")}
+                hasFilter
+                onFilterClick={(e) => handleFilterClick("price", e)}
+                isFilterActive={
+                  !!filters.price.range.min || !!filters.price.range.max
+                }
+              />
+            </div>
+          </div>
 
-              {/* MC / Price column with filter */}
-              <th className="w-[13%] px-2 py-3 text-left whitespace-nowrap text-[#757e80]">
-                <div className="flex items-center gap-1">
-                  <button
-                    type="button"
-                    onClick={() =>
-                      setMcMode((prev) => (prev === "mc" ? "price" : "mc"))
-                    }
-                    className="inline-flex items-center gap-0.5 text-[13px] text-[#757e80] transition-opacity hover:opacity-70"
-                  >
-                    <span className="font-medium">
-                      {mcMode === "mc" ? "MC" : "Price"}
-                    </span>
-                    <McHeaderIcon />
-                  </button>
-                  <SortableHeader
-                    label=""
-                    sortDirection={filters.price.sort}
-                    onSort={() => handleSort("price")}
-                    hasFilter
-                    onFilterClick={(e) => handleFilterClick("price", e)}
-                    isFilterActive={
-                      !!filters.price.range.min || !!filters.price.range.max
-                    }
-                  />
-                </div>
-              </th>
+          {/* Amount with filter */}
+          <div className="w-[15%] px-2 py-3 text-left font-medium whitespace-nowrap">
+            <SortableHeader
+              label="Amount"
+              sortDirection={filters.amount.sort}
+              onSort={() => handleSort("amount")}
+              hasFilter
+              onFilterClick={(e) => handleFilterClick("amount", e)}
+              isFilterActive={
+                !!filters.amount.range.min || !!filters.amount.range.max
+              }
+            />
+          </div>
 
-              {/* Amount with filter */}
-              <th className="w-[15%] px-2 py-3 text-left font-medium whitespace-nowrap">
-                <SortableHeader
-                  label="Amount"
-                  sortDirection={filters.amount.sort}
-                  onSort={() => handleSort("amount")}
-                  hasFilter
-                  onFilterClick={(e) => handleFilterClick("amount", e)}
-                  isFilterActive={
-                    !!filters.amount.range.min || !!filters.amount.range.max
+          {/* Total USD / SOL/MON toggle column with filter */}
+          <div className="w-[15%] px-2 py-3 text-left whitespace-nowrap text-[#757e80]">
+            <div className="flex items-center gap-1">
+              <button
+                type="button"
+                onClick={() =>
+                  setTotalMode((prev) => (prev === "usd" ? "sol" : "usd"))
+                }
+                className="inline-flex items-center gap-0.5 text-[13px] transition-opacity hover:opacity-70"
+              >
+                <span className="font-medium">
+                  {totalMode === "usd"
+                    ? "Total"
+                    : chain === "monad"
+                      ? "MON"
+                      : "SOL"}
+                </span>
+                <RiExchangeDollarLine
+                  className={
+                    totalMode === "usd"
+                      ? "h-3 w-3 text-emerald-300"
+                      : "h-3 w-3 text-neutral-400"
                   }
                 />
-              </th>
+              </button>
+              <SortableHeader
+                label=""
+                sortDirection={filters.total.sort}
+                onSort={() => handleSort("total")}
+                hasFilter
+                onFilterClick={(e) => handleFilterClick("total", e)}
+                isFilterActive={
+                  !!filters.total.range.min || !!filters.total.range.max
+                }
+              />
+            </div>
+          </div>
 
-              {/* Total USD / SOL/MON toggle column with filter */}
-              <th className="w-[15%] px-2 py-3 text-left whitespace-nowrap text-[#757e80]">
-                <div className="flex items-center gap-1">
-                  <button
-                    type="button"
-                    onClick={() =>
-                      setTotalMode((prev) => (prev === "usd" ? "sol" : "usd"))
-                    }
-                    className="inline-flex items-center gap-0.5 text-[13px] transition-opacity hover:opacity-70"
-                  >
-                    <span className="font-medium">
-                      {totalMode === "usd"
-                        ? "Total"
-                        : chain === "monad"
-                          ? "MON"
-                          : "SOL"}
-                    </span>
-                    <RiExchangeDollarLine
-                      className={
-                        totalMode === "usd"
-                          ? "h-3 w-3 text-emerald-300"
-                          : "h-3 w-3 text-neutral-400"
-                      }
-                    />
-                  </button>
-                  <SortableHeader
-                    label=""
-                    sortDirection={filters.total.sort}
-                    onSort={() => handleSort("total")}
-                    hasFilter
-                    onFilterClick={(e) => handleFilterClick("total", e)}
-                    isFilterActive={
-                      !!filters.total.range.min || !!filters.total.range.max
-                    }
-                  />
-                </div>
-              </th>
-
-              {/* Trader */}
-              <th className="w-[35%] px-2 py-3 text-right whitespace-nowrap text-[#757e80]">
-                <div className="flex items-center justify-end gap-1">
-                  <span className="text-[13px] font-normal text-[#757e80]">
-                    Trader
-                  </span>
-                  <button
-                    onClick={handleWalletFilterClick}
-                    className="hover:bg-opacity-20 rounded p-0.5 transition-colors"
-                    style={{
-                      color: isWalletFilterActive ? AX.mint : "#757e80",
-                    }}
-                  >
-                    <CiFilter size={14} />
-                  </button>
-                  {isWalletFilterActive && (
-                    <span
-                      className="rounded px-1 text-[9px]"
-                      style={{
-                        backgroundColor: `${AX.mint}20`,
-                        color: AX.mint,
-                      }}
-                    >
-                      {filters.wallet.tags.length > 0
-                        ? filters.wallet.tags.length
-                        : ""}
-                      {filters.wallet.address ? "🔍" : ""}
-                      {filters.wallet.txsRange.min ||
-                      filters.wallet.txsRange.max
-                        ? "📊"
-                        : ""}
-                    </span>
-                  )}
-                </div>
-              </th>
-            </tr>
-          </thead>
-          <tbody className="bg-[#111214] px-4 !text-[13px]">
-            {isLoading ? (
-              <tr className="bg-[#111214]">
-                <td
-                  colSpan={6}
-                  className="bg-[#111214] py-6 text-center text-neutral-500"
+          {/* Trader */}
+          <div className="w-[35%] px-2 py-3 text-right whitespace-nowrap text-[#757e80]">
+            <div className="flex items-center justify-end gap-1">
+              <span className="text-[13px] font-normal text-[#757e80]">
+                Trader
+              </span>
+              <button
+                onClick={handleWalletFilterClick}
+                className="hover:bg-opacity-20 rounded p-0.5 transition-colors"
+                style={{
+                  color: isWalletFilterActive ? AX.mint : "#757e80",
+                }}
+              >
+                <CiFilter size={14} />
+              </button>
+              {isWalletFilterActive && (
+                <span
+                  className="rounded px-1 text-[9px]"
+                  style={{
+                    backgroundColor: `${AX.mint}20`,
+                    color: AX.mint,
+                  }}
                 >
-                  Loading trades...
-                </td>
-              </tr>
-            ) : !normalized.length ? (
-              <tr className="bg-[#111214]">
-                <td
-                  colSpan={6}
-                  className="bg-[#111214] py-6 text-center text-neutral-500"
-                >
-                  No trades available.
-                </td>
-              </tr>
-            ) : (
-              normalized.map((n, index) => {
-                const age = getAge(n.timestampSec);
-                const timeStr = getTimeFromTimestampSec(n.timestampSec);
-                const tokenAmountStr = formatSmartNumber(n.tokenAmount);
-                const solAmountStr =
-                  Number.isFinite(n.solAmount) && n.solAmount > 0
-                    ? formatSmartNumber(n.solAmount)
-                    : "-";
-                const amtStr = Number.isFinite(n.totalUSD)
-                  ? `$${n.totalUSD.toFixed(2)}`
-                  : "$0.00";
+                  {filters.wallet.tags.length > 0
+                    ? filters.wallet.tags.length
+                    : ""}
+                  {filters.wallet.address ? "🔍" : ""}
+                  {filters.wallet.txsRange.min ||
+                  filters.wallet.txsRange.max
+                    ? "📊"
+                    : ""}
+                </span>
+              )}
+            </div>
+          </div>
+        </div>
 
-                // MC / Price: (trade price or fallback token price)
-                const unitPriceUsd =
-                  Number.isFinite(n.pricePerToken) && n.pricePerToken > 0
-                    ? n.pricePerToken
-                    : fallbackPriceUsd;
+        {/* Virtualized trade rows (or loading/empty states) */}
+        {isLoading ? (
+          <div className="bg-[#111214] py-6 text-center text-neutral-500">
+            Loading trades...
+          </div>
+        ) : !normalized.length ? (
+          <div className="bg-[#111214] py-6 text-center text-neutral-500">
+            No trades available.
+          </div>
+        ) : (
+          <VirtualizedTokenList
+            items={normalized}
+            itemSize={44}
+            renderRow={renderTradeRow}
+            overscanCount={10}
+            className="bg-[#111214]"
+          />
+        )}
 
-                // Calculate market cap for THIS trade using THIS trade's price
-                // This ensures each trade row shows MC at the time of that trade
-                const tradePrice = n.pricePerToken > 0 ? n.pricePerToken : unitPriceUsd;
-                const tradeMc = supply > 0 && tradePrice > 0
-                  ? tradePrice * supply
-                  : null;
-
-                // Fallback to static token market cap only if we can't calculate from trade price
-                const anyToken = stableToken as any;
-                const tokenMarketCap =
-                  anyToken?.market_cap_usd ??
-                  anyToken?.fully_diluted_value ??
-                  anyToken?.marketCapUsd ??
-                  anyToken?.fullyDilutedValue;
-
-                // Use trade-specific MC first, fallback to static values only if no price data
-                const mc = tradeMc !== null
-                  ? tradeMc
-                  : tokenMarketCap && Number(tokenMarketCap) > 0
-                    ? Number(tokenMarketCap)
-                    : fetchedMarketCap && fetchedMarketCap > 0
-                      ? fetchedMarketCap
-                      : null;
-
-                const mcStr = mc !== null ? `$${formatMarketCap(mc)}` : "-";
-                const priceStr = formatUsdPrice(unitPriceUsd);
-
-                const intensityUsd = scaleAmt(n.totalUSD);
-                const gradientUsd = heatBarGradient(n.isBuy, intensityUsd);
-
-                const intensitySol =
-                  n.solAmount > 0 ? scaleAmtSol(n.solAmount) : 0;
-                const gradientSol = heatBarGradient(n.isBuy, intensitySol);
-
-                const typeLabel = n.isBuy ? "Buy" : "Sell";
-                const showingUsd = totalMode === "usd";
-
-                const totalValueStr = showingUsd ? amtStr : solAmountStr;
-                const intensity = showingUsd ? intensityUsd : intensitySol;
-                const gradient = showingUsd ? gradientUsd : gradientSol;
-
-                const hasSol = Number.isFinite(n.solAmount) && n.solAmount > 0;
-
-                const title = showingUsd
-                  ? `~${(intensityUsd * 100).toFixed(0)}% of recent USD size`
-                  : hasSol
-                    ? `~${(intensitySol * 100).toFixed(0)}% of recent SOL size`
-                    : "No SOL data";
-
-                return (
-                  <tr
-                    key={n.keyPart || n.idx}
-                    className="transition-colors hover:brightness-110"
-                    style={{
-                      backgroundColor: index % 2 === 0 ? "#111214" : "#161719",
-                    }}
-                  >
-                    {/* Age / Time */}
-                    <td className="px-4 py-3 text-[13px] text-[#757e80]">
-                      {showAge ? age : timeStr}
-                    </td>
-
-                    {/* Type */}
-                    <td
-                      className={`px-2 py-3 text-[13px] font-medium ${
-                        n.isBuy ? "text-emerald-400" : "text-red-400"
-                      }`}
-                    >
-                      {typeLabel}
-                    </td>
-
-                    {/* MC / Price */}
-                    <td className="px-2 py-3 text-[13px] text-[#c4cccc]">
-                      {mcMode === "mc" ? mcStr : priceStr}
-                    </td>
-
-                    {/* Amount */}
-                    <td className="px-2 py-3 text-[13px] text-[#c4cccc]">
-                      {tokenAmountStr}
-                    </td>
-
-                    {/* merged Total column */}
-                    <td
-                      className="relative overflow-hidden px-2 py-3 text-[13px] font-medium"
-                      title={title}
-                    >
-                      {showingUsd || hasSol ? (
-                        <>
-                          <div
-                            aria-hidden
-                            className="absolute top-0 bottom-0 left-0 z-0"
-                            style={{
-                              width: `${Math.max(6, intensity * 100)}%`,
-                              backgroundImage: gradient,
-                              mixBlendMode: "screen",
-                              pointerEvents: "none",
-                              transition: "width 160ms ease",
-                            }}
-                          />
-                          <div
-                            className={`relative z-10 flex items-center gap-1 ${
-                              n.isBuy ? "text-emerald-300" : "text-red-300"
-                            }`}
-                          >
-                            {/* Sol icon ALWAYS shown in SOL mode, dimmed if no SOL amount */}
-                            {!showingUsd && (
-                              <span className={hasSol ? "" : "opacity-40"}>
-                                <SolIcon />
-                              </span>
-                            )}
-                            <span>{totalValueStr}</span>
-                          </div>
-                        </>
-                      ) : (
-                        <div className="relative z-10 text-neutral-400">
-                          {totalValueStr}
-                        </div>
-                      )}
-                    </td>
-
-                    {/* Trader */}
-                    <td className="px-2 py-3 text-right align-middle text-[13px] text-[#c4cccc]">
-                      <div className="flex min-w-0 flex-nowrap items-center justify-end gap-2">
-                        {(() => {
-                          const walletKey = (n.maker || "").toLowerCase();
-                          const walletData = walletDataMap.get(walletKey);
-                          const holderType = holderTypeMap.get(walletKey);
-
-                          // Build hover card data - use existing data or create minimal data
-                          const hoverData: WalletHoverCardData = walletData || {
-                            walletAddress: n.maker || "",
-                            holderType: holderType,
-                          };
-
-                          return (
-                            <WalletHoverCard data={hoverData} chain={chain}>
-                              <div className="flex items-center gap-1.5">
-                                <span className="cursor-pointer truncate text-[13px] whitespace-nowrap text-gray-300 transition-colors hover:text-emerald-400">
-                                  {shortAddr(n.maker || "")}
-                                </span>
-                                {/* Holder type icons */}
-                                {holderType === "dev" && (
-                                  <LuChefHat
-                                    size={12}
-                                    className="flex-shrink-0 text-yellow-400"
-                                  />
-                                )}
-                                {holderType === "sniper" && (
-                                  <TfiTarget
-                                    size={12}
-                                    className="flex-shrink-0 text-red-400"
-                                  />
-                                )}
-                                {holderType === "bundler" && (
-                                  <HiOutlineCubeTransparent
-                                    size={12}
-                                    className="flex-shrink-0 text-orange-400"
-                                  />
-                                )}
-                              </div>
-                            </WalletHoverCard>
-                          );
-                        })()}
-                        <div className="flex flex-shrink-0 flex-nowrap items-center gap-1">
-                          {(() => {
-                            const traderKey = (
-                              n.completeTraderAddress ||
-                              n.maker ||
-                              ""
-                            )
-                              .toString()
-                              .replace(/\./g, "")
-                              .replace(/\s/g, "")
-                              .toLowerCase()
-                              .trim();
-                            const count = traderTradeCounts[traderKey] || 0;
-                            if (count > 0) {
-                              return (
-                                <span
-                                  className="inline-flex min-w-[16px] items-center justify-center rounded px-1 text-[10px] font-medium whitespace-nowrap"
-                                  style={{
-                                    backgroundColor: "#27282e",
-                                    color: "#d1d5db",
-                                  }}
-                                >
-                                  {count}
-                                </span>
-                              );
-                            }
-                            return null;
-                          })()}
-                          <a
-                            href={
-                              chain === "monad"
-                                ? `https://testnet.monadexplorer.com/address/${n.maker || ""}`
-                                : `https://solscan.io/account/${n.maker || ""}`
-                            }
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="inline-flex flex-shrink-0 items-center justify-center transition-opacity hover:opacity-70"
-                            style={{ color: "#6b7280" }}
-                            onClick={(e) => e.stopPropagation()}
-                          >
-                            <div className="rounded-full bg-[#757E80] p-1">
-                              <SiSolana
-                                size={8}
-                                className="flex-shrink-0 text-black"
-                              />
-                            </div>
-                          </a>
-                        </div>
-                      </div>
-                    </td>
-                  </tr>
-                );
-              })
-            )}
-          </tbody>
-
-          {!!p95Display && (
-            <tfoot className="bg-[#111214]">
-              <tr>
-                <td colSpan={6} className="bg-[#111214]">
-                  <div
-                    className="flex items-center gap-2 px-2 py-1.5 text-[10px]"
-                    style={{ color: "#6b7280" }}
-                  >
-                    <span className="inline-block">
-                      Total heat = relative to ~95th percentile
-                    </span>
-                    <span className="ml-auto">
-                      {totalMode === "usd"
-                        ? `p95: $${p95Display.toFixed(2)}`
-                        : `p95: ${p95Display.toFixed(4)} ${chain === "monad" ? "MON" : "SOL"}`}
-                    </span>
-                  </div>
-                </td>
-              </tr>
-            </tfoot>
-          )}
-        </table>
+        {/* p95 heat footer */}
+        {!!p95Display && (
+          <div
+            className="flex items-center gap-2 bg-[#111214] px-2 py-1.5 text-[10px]"
+            style={{ color: "#6b7280", flexShrink: 0 }}
+          >
+            <span className="inline-block">
+              Total heat = relative to ~95th percentile
+            </span>
+            <span className="ml-auto">
+              {totalMode === "usd"
+                ? `p95: $${p95Display.toFixed(2)}`
+                : `p95: ${p95Display.toFixed(4)} ${chain === "monad" ? "MON" : "SOL"}`}
+            </span>
+          </div>
+        )}
       </div>
     </div>
   );

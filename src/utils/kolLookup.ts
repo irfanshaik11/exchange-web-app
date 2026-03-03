@@ -6,6 +6,7 @@ export interface KolInfo {
   label: string;
   namedColor: string;
   hexColor: string;
+  avatarUrl?: string;
 }
 
 // 20 distinct colors that cycle for 100 KOLs
@@ -66,6 +67,9 @@ kolWallets.forEach(
       label: makeLabel(entry.name, entry.twitterUsername),
       namedColor: color.named,
       hexColor: color.hex,
+      avatarUrl: entry.twitterUsername
+        ? `/kol-avatars/${entry.twitterUsername}.jpg`
+        : undefined,
     });
   },
 );

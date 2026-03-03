@@ -1728,7 +1728,7 @@ const InstantTradeModal: React.FC<InstantTradeModalProps> = ({ isOpen, onClose, 
   const solPrice = typeof token?.sol_price === 'number' ? token.sol_price : 0;
   const tokenValueUsd = tokensToSell * tokenPriceUsd;
   const solValue = tokensToSell * solPrice;
-  const SOL_LOGO_URL = "https://cryptologos.cc/logos/solana-sol-logo.svg?v=040";
+  const SOL_LOGO_URL = "/solana.png";
   const MONAD_LOGO_URL = "https://i0.wp.com/www.gizmotimes.com/wp-content/uploads/2023/10/Monad-Logo.png?fit=1920%2C1080&ssl=1";
   const LOGO_URL = isMonad ? MONAD_LOGO_URL : SOL_LOGO_URL;
   const LOGO_ALT = isMonad ? "Monad" : "Solana";

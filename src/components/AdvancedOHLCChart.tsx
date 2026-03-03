@@ -48,6 +48,7 @@ export interface AdvancedOHLCChartProps {
   preloadedData?: BackendOHLCData[];
   tradeData?: any[]; // Trade data for dev buy markers
   creatorAddress?: string | null; // Creator/dev wallet address
+  userWalletAddress?: string | null; // Logged-in user's wallet address for "My Trade" markers
   tokenSymbol?: string | null;
   tokenName?: string | null;
   tokenDecimals?: number | null;
@@ -451,6 +452,7 @@ const AdvancedOHLCChart: React.FC<AdvancedOHLCChartProps> = ({
   preloadedData,
   tradeData = [],
   creatorAddress = null,
+  userWalletAddress = null,
   tokenSymbol = null,
   tokenName = null,
   tokenDecimals = null,
@@ -1288,6 +1290,7 @@ const AdvancedOHLCChart: React.FC<AdvancedOHLCChartProps> = ({
   const metricsUpdatePendingRef = useRef(false);
   const latestTradeDataRef = useRef<any[]>(tradeData || []);
   const latestCreatorAddressRef = useRef<string | null>(creatorAddress || null);
+  const latestUserWalletRef = useRef<string | null>(userWalletAddress || null);
   const latestTokenSymbolRef = useRef<string | null>(tokenSymbol || null);
   const latestTokenNameRef = useRef<string | null>(tokenName || null);
   const latestTokenDecimalsRef = useRef<number | null>(
@@ -1454,6 +1457,10 @@ const AdvancedOHLCChart: React.FC<AdvancedOHLCChartProps> = ({
   useEffect(() => {
     latestCreatorAddressRef.current = creatorAddress || null;
   }, [creatorAddress]);
+
+  useEffect(() => {
+    latestUserWalletRef.current = userWalletAddress || null;
+  }, [userWalletAddress]);
 
   useEffect(() => {
     latestTokenSymbolRef.current = tokenSymbol || null;
@@ -5474,6 +5481,7 @@ const AdvancedOHLCChart: React.FC<AdvancedOHLCChartProps> = ({
       ) => {
         const currentTradeData = latestTradeDataRef.current || [];
         const currentCreatorAddress = latestCreatorAddressRef.current;
+        const currentUserWallet = latestUserWalletRef.current;
 
         marksLogCountRef.current++;
         const shouldLogMarks = marksLogCountRef.current % 10 === 1;
@@ -5496,9 +5504,10 @@ const AdvancedOHLCChart: React.FC<AdvancedOHLCChartProps> = ({
               if (!maker) return false;
 
               const isDev = currentCreatorAddress && maker === currentCreatorAddress.toLowerCase();
+              const isUser = currentUserWallet && maker === currentUserWallet.toLowerCase();
               const kolInfo = KOL_ADDRESS_MAP.get(maker);
 
-              if (!isDev && !kolInfo) return false;
+              if (!isDev && !isUser && !kolInfo) return false;
 
               // Handle different timestamp formats
               let timestamp =
@@ -5611,10 +5620,11 @@ const AdvancedOHLCChart: React.FC<AdvancedOHLCChartProps> = ({
               walletAddress,
             } = computeTradeDisplayValues(trade);
 
-            // Determine if this is a dev trade or KOL trade
+            // Determine if this is a dev trade, user trade, or KOL trade
             const maker = (trade.maker || trade.user || trade.wallet_address || "").toLowerCase();
             const isDev = currentCreatorAddress && maker === currentCreatorAddress.toLowerCase();
-            const kolInfo = !isDev ? KOL_ADDRESS_MAP.get(maker) : null;
+            const isUser = currentUserWallet && maker === currentUserWallet.toLowerCase();
+            const kolInfo = !isDev && !isUser ? KOL_ADDRESS_MAP.get(maker) : null;
 
             let label: string;
             let markColor: string;
@@ -5631,6 +5641,16 @@ Price: ${formattedPrice}
 Amount: ${formattedAmount} ${displaySymbol}
 Total: ${formattedTotalUsd}
 Maker: ${walletAddress}`;
+            } else if (isUser) {
+              // User's own trade marker: green/red, B/S label
+              label = isBuy ? "B" : "S";
+              markColor = isBuy ? "green" : "red";
+              markerText = `${isBuy ? "Your Buy" : "Your Sell"} • ${displaySymbol}
+${formattedDate} UTC
+
+Price: ${formattedPrice}
+Amount: ${formattedAmount} ${displaySymbol}
+Total: ${formattedTotalUsd}`;
             } else if (kolInfo) {
               // KOL marker: unique color per KOL, 2-char label
               label = kolInfo.label;
@@ -5652,7 +5672,7 @@ Maker: ${walletAddress}`;
 
             // getMarks only supports named colors (NOT hex)
             const markData: any = {
-              id: `${isDev ? "dev" : "kol"}_trade_${timeSeconds}_${trade.transactionHash || trade.tx_hash || trade.id || trade.maker || ''}`,
+              id: `${isDev ? "dev" : isUser ? "user" : "kol"}_trade_${timeSeconds}_${trade.transactionHash || trade.tx_hash || trade.id || trade.maker || ''}`,
               time: realToAdjusted(timeSeconds * 1000, gapShiftsRef.current) / 1000,
               color: markColor,
               label: label,
@@ -5662,6 +5682,7 @@ Maker: ${walletAddress}`;
               minSize: 24,
               size: 1,
               shape: "circle",
+              ...(kolInfo?.avatarUrl ? { imageUrl: kolInfo.avatarUrl } : {}),
             };
 
             return markData;
@@ -5694,6 +5715,7 @@ Maker: ${walletAddress}`;
         try {
           const currentTradeData = latestTradeDataRef.current || [];
           const currentCreatorAddress = latestCreatorAddressRef.current;
+          const currentUserWallet = latestUserWalletRef.current;
 
           if (
             !currentTradeData ||
@@ -5703,16 +5725,14 @@ Maker: ${walletAddress}`;
             return;
           }
 
-          // Filter for dev trades within the requested time range (timescale = dev only)
-          const devTrades = currentTradeData.filter((trade: any) => {
-            const maker = trade.maker || trade.user || trade.wallet_address;
-            if (
-              !maker ||
-              !currentCreatorAddress ||
-              maker.toLowerCase() !== currentCreatorAddress.toLowerCase()
-            ) {
-              return false;
-            }
+          // Filter for dev + user trades within the requested time range
+          const matchedTrades = currentTradeData.filter((trade: any) => {
+            const maker = (trade.maker || trade.user || trade.wallet_address || "").toLowerCase();
+            if (!maker) return false;
+
+            const isDev = currentCreatorAddress && maker === currentCreatorAddress.toLowerCase();
+            const isUser = currentUserWallet && maker === currentUserWallet.toLowerCase();
+            if (!isDev && !isUser) return false;
 
             const timestamp =
               trade.timestamp || trade.created_at || trade.unix_time;
@@ -5736,7 +5756,7 @@ Maker: ${walletAddress}`;
           const monadGreenHex = "#86d99f"; // Monad green for dev buys
           const monadRedHex = "#941839"; // Monad red for dev sells
           const currentNetwork = latestParamsRef.current.network;
-          const timescaleMarks = devTrades.map((trade: any) => {
+          const timescaleMarks = matchedTrades.map((trade: any) => {
             const timestamp =
               trade.timestamp || trade.created_at || trade.unix_time;
             let timeSeconds: number;
@@ -5813,25 +5833,41 @@ Maker: ${walletAddress}`;
               displaySymbol,
             } = computeTradeDisplayValues(trade);
 
-            // Timescale marks color assignment - DB = green, DS = red
-            // For Monad: DB = #86d99f (green), DS = #941839 (red)
-            // For other networks: DB = #22c55e (green), DS = #ef4444 (red)
-            const markColor =
-              currentNetwork === "monad"
-                ? isBuy
-                  ? monadGreenHex
-                  : monadRedHex // Monad: green for buys, red for sells
-                : isBuy
-                  ? "#22c55e"
-                  : "#ef4444"; // Standard: green for buys, red for sells
+            // Determine trade type for timescale mark
+            const maker = (trade.maker || trade.user || trade.wallet_address || "").toLowerCase();
+            const isDev = currentCreatorAddress && maker === currentCreatorAddress.toLowerCase();
+
+            // Timescale marks color assignment
+            // Dev: green/red, User: green/red
+            let markColor: string;
+            let markLabel: string;
+            let markPrefix: string;
+
+            if (isDev) {
+              markColor =
+                currentNetwork === "monad"
+                  ? isBuy
+                    ? monadGreenHex
+                    : monadRedHex
+                  : isBuy
+                    ? "#22c55e"
+                    : "#ef4444";
+              markLabel = isBuy ? "DB" : "DS";
+              markPrefix = isBuy ? "Dev Buy" : "Dev Sell";
+            } else {
+              // User trade
+              markColor = isBuy ? "#22c55e" : "#ef4444"; // green / red hex
+              markLabel = isBuy ? "B" : "S";
+              markPrefix = isBuy ? "Your Buy" : "Your Sell";
+            }
 
             return {
-              id: `dev_timescale_${timeSeconds}_${trade.transactionHash || trade.tx_hash || trade.id || trade.maker || ''}`,
+              id: `${isDev ? "dev" : "user"}_timescale_${timeSeconds}_${trade.transactionHash || trade.tx_hash || trade.id || trade.maker || ''}`,
               time: realToAdjusted(timeSeconds * 1000, gapShiftsRef.current) / 1000,
               color: markColor.toLowerCase(), // Ensure lowercase for TradingView
-              label: isBuy ? "DB" : "DS",
+              label: markLabel,
               tooltip: [
-                `${isBuy ? "Dev Buy" : "Dev Sell"} • ${displaySymbol}`,
+                `${markPrefix} • ${displaySymbol}`,
                 `Price: ${formattedPrice}`,
                 `Amount: ${formattedAmount} ${displaySymbol}`,
                 `Total: ${formattedTotalUsd}`,

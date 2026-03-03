@@ -1,7 +1,4 @@
 import { useEffect, useRef, useState, useCallback } from "react";
-import throttle from "lodash.throttle";
-import { getCachedTradeData } from "~/utils/tokenCache";
-
 const TOKEN_SERVICE_URL = (process.env.NEXT_PUBLIC_GO_SERVICE_URL || process.env.NEXT_PUBLIC_TOKEN_SERVICE_URL || "").replace(/\/$/, "");
 
 interface PollingState {
@@ -52,112 +49,18 @@ export default function useSingleTokenPolling(address: string | undefined, mintH
   const addressRef = useRef(address);
   addressRef.current = address;
 
-  const throttledSetToken = useCallback(
-    throttle((newData: any) => {
-      setToken(newData);
-      setState(prev => ({ ...prev, loading: false }));
-    }, 1000),
-    []
-  );
-
   // Resolve address — all navigation is through mint, no hydration needed.
-  // The backend /v1/trade/view and /v1/get-pair endpoints accept mint addresses directly.
   const resolveAddress = useCallback(async (addr: string) => {
     return addr;
   }, []);
 
-  // Track if we've already verified the pair address for this token
-  const pairAddressVerifiedRef = useRef<string | null>(null);
-  // Store the verified pair address to use on subsequent polls
-  const verifiedPairAddressRef = useRef<string | null>(null);
-
-  // Load data from API with caching
+  // loadData is a no-op: the /v1/trade/view endpoint is dead (404).
+  // Token and trades data now come from WebSocket and other sources.
+  // Kept as stub so the polling lifecycle doesn't need restructuring.
   const loadData = useCallback(async () => {
     if (!resolvedPairAddress) return;
-
-    // Validate pair address format
-    if (typeof resolvedPairAddress !== 'string' || resolvedPairAddress.length < 32) {
-      setToken(null);
-      setState(prev => ({ ...prev, loading: false }));
-      return;
-    }
-
-    try {
-
-      // Try to get cached data first for instant display
-      // getCachedTradeData will fetch if not cached, so this always returns data
-      const data = await getCachedTradeData(resolvedPairAddress);
-
-      if (data) {
-        // Set token data
-        if (data.token) {
-          // CRITICAL: Verify the pair address from the token service
-          // Use mintHint from URL query params as fallback if token.mint is not available
-          const mintAddress = data.token.mint || data.token.mint_address || mintHint;
-
-          // CRITICAL: If mintHint is provided, verify the returned token matches
-          // This prevents showing wrong token data when cache returns stale data
-          if (mintHint && data.token.mint && data.token.mint !== mintHint) {
-            console.warn('[useSingleTokenPolling] Token mint mismatch! Backend returned wrong token.', {
-              expectedMint: mintHint,
-              actualMint: data.token.mint,
-              actualName: data.token.name || data.token.symbol,
-              resolvedPairAddress,
-            });
-            // Don't set the token - let the UI use optimistic data from URL
-            setState(prev => ({ ...prev, loading: false }));
-            return;
-          }
-
-          // Verify pair address and use it for the token (don't reload page)
-          let effectivePairAddress = resolvedPairAddress;
-
-          if (mintAddress && pairAddressVerifiedRef.current !== mintAddress) {
-            // First time for this token - verify the pair address
-            const verifiedPairAddress = await fetchVerifiedPairAddress(mintAddress);
-            pairAddressVerifiedRef.current = mintAddress;
-
-            if (verifiedPairAddress) {
-              // Store verified address for subsequent polls
-              verifiedPairAddressRef.current = verifiedPairAddress;
-              effectivePairAddress = verifiedPairAddress;
-            }
-          } else if (verifiedPairAddressRef.current) {
-            // Already verified - use the stored verified address
-            effectivePairAddress = verifiedPairAddressRef.current;
-          }
-
-          // Update token with verified pair_address
-          // Also update migrated_pool_address to prevent getEffectivePoolAddress from using wrong address
-          const tokenWithVerifiedPair = {
-            ...data.token,
-            pair_address: effectivePairAddress,
-            migrated_pool_address: effectivePairAddress,
-            verified_pair_address: true,
-          };
-          throttledSetToken(tokenWithVerifiedPair);
-        }
-
-        // Set trades data
-        if (data.recentTrades) {
-          setTrades(data.recentTrades);
-        }
-
-        setState(prev => ({ ...prev, error: null, loading: false }));
-      } else {
-        // No data available
-        setToken(null);
-        setState(prev => ({ ...prev, loading: false }));
-      }
-
-    } catch (err: any) {
-      setState(prev => ({
-        ...prev,
-        error: err.message || 'Failed to load data',
-        loading: false
-      }));
-    }
-  }, [resolvedPairAddress, throttledSetToken, mintHint]);
+    setState(prev => ({ ...prev, loading: false }));
+  }, [resolvedPairAddress]);
 
   // Start polling
   const startPolling = useCallback(() => {
@@ -192,8 +95,6 @@ export default function useSingleTokenPolling(address: string | undefined, mintH
       setToken(null);
       setTrades([]);
       setResolvedPairAddress(null);
-      pairAddressVerifiedRef.current = null; // Reset verification state
-      verifiedPairAddressRef.current = null; // Reset verified address
       setState(prev => ({ ...prev, loading: true, error: null }));
 
       // Resolve address first
@@ -213,8 +114,6 @@ export default function useSingleTokenPolling(address: string | undefined, mintH
       setToken(null);
       setTrades([]);
       setResolvedPairAddress(null);
-      pairAddressVerifiedRef.current = null;
-      verifiedPairAddressRef.current = null;
     }
 
     // Cleanup on unmount or address change
