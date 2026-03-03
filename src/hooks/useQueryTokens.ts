@@ -233,7 +233,12 @@ export function useQueryNewPairs(enabled: boolean = true): UseQueryResult<Token[
     refetchOnMount: true,          // ✅ ALWAYS fetch on mount to ensure fresh data
     // ✅ Instant display: Show cached data immediately while fresh data loads
     placeholderData: () => loadFromLocalStorage<Token[]>(CACHE_KEYS.newPairs),
-    retry: 1,
+    retry: 3,
+    retryDelay: (attempt) => Math.min(1000 * 2 ** attempt, 10000),
+    // Silent auto-recovery: keep polling until data arrives, then stop
+    refetchInterval: (query) => {
+      return (query.state.data?.length ?? 0) === 0 ? 10_000 : false;
+    },
   });
 }
 
@@ -249,7 +254,11 @@ export function useQueryFinalStretch(enabled: boolean = true): UseQueryResult<To
     refetchOnMount: true,
     // ✅ Instant display: Show cached data immediately while fresh data loads
     placeholderData: () => loadFromLocalStorage<Token[]>(CACHE_KEYS.finalStretch),
-    retry: 1,
+    retry: 3,
+    retryDelay: (attempt) => Math.min(1000 * 2 ** attempt, 10000),
+    refetchInterval: (query) => {
+      return (query.state.data?.length ?? 0) === 0 ? 10_000 : false;
+    },
   });
 }
 
@@ -265,7 +274,11 @@ export function useQueryMigrated(enabled: boolean = true): UseQueryResult<Token[
     refetchOnMount: true,
     // ✅ Instant display: Show cached data immediately while fresh data loads
     placeholderData: () => loadFromLocalStorage<Token[]>(CACHE_KEYS.migrated),
-    retry: 1,
+    retry: 3,
+    retryDelay: (attempt) => Math.min(1000 * 2 ** attempt, 10000),
+    refetchInterval: (query) => {
+      return (query.state.data?.length ?? 0) === 0 ? 10_000 : false;
+    },
   });
 }
 
@@ -281,6 +294,13 @@ export function useQueryLaunchpadData(enabled: boolean = true): UseQueryResult<L
     refetchOnMount: true,
     // ✅ Instant display: Show cached data immediately while fresh data loads
     placeholderData: () => loadFromLocalStorage<LaunchpadData>(CACHE_KEYS.launchpad),
-    retry: 1,
+    retry: 3,
+    retryDelay: (attempt) => Math.min(1000 * 2 ** attempt, 10000),
+    refetchInterval: (query) => {
+      const hasData = (query.state.data?.new?.length ?? 0) > 0 ||
+                      (query.state.data?.completing?.length ?? 0) > 0 ||
+                      (query.state.data?.completed?.length ?? 0) > 0;
+      return hasData ? false : 10_000;
+    },
   });
 }

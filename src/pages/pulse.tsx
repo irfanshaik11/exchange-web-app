@@ -32,6 +32,7 @@ import {
   tokenKeys,
 } from "../hooks/useQueryTokens";
 import { useQueryClient } from "@tanstack/react-query";
+import { usePulseFromQueryCache } from "~/hooks/usePulseFromQueryCache";
 import { env } from "~/env";
 
 import { SiBinance, SiSolana } from "react-icons/si";
@@ -363,6 +364,13 @@ export default function PulsePage() {
   const { data: migratedTokensQuery = [] } = useQueryMigrated(
     shouldFetchSolanaData,
   );
+
+  // WebSocket data for loading-state awareness (zero overhead — useSyncExternalStore on existing singleton)
+  const {
+    newTokens: wsNewTokens,
+    finalStretchTokens: wsFinalStretchTokens,
+    migratedTokens: wsMigratedTokens,
+  } = usePulseFromQueryCache();
 
   // ✅ REAL-TIME WEBSOCKET: Handled by PulseBackgroundLoader in _app.tsx
   // PulseBackgroundLoader maintains WebSocket connections and updates React Query cache
@@ -903,24 +911,32 @@ export default function PulsePage() {
 
   // Memoize the loading state to prevent unnecessary re-renders
   // For Monad route, check Monad data; for Solana route, check Solana data
-  // NOTE: PulseTable handles its own data from WebSocket/IndexedDB cache internally
-  // So we only show loading if HTTP data hasn't arrived yet
-  // PulseTable will show cached data even while HTTP is loading
+  // Checks ALL data sources: HTTP (React Query), WebSocket, and launchpad
+  // Stops loading the instant ANY source delivers data
   const isLoading = useMemo(() => {
     if (isMonadRoute) {
-      // For Monad, check if Monad data is loaded
       return monadNew.length === 0 && monadNewTick === 0;
     }
-    // For Solana: Only show loading on very first load when no HTTP data exists
-    // After first load, HTTP data is cached by React Query
-    return !tokens.length && !launchpadData?.new?.length && !httpNew.length;
+    // For Solana: stop loading if ANY data source has delivered data
+    const hasHttpData = tokens.length > 0 || (launchpadData?.new?.length ?? 0) > 0;
+    const hasWsData = wsNewTokens.length > 0 || wsFinalStretchTokens.length > 0 || wsMigratedTokens.length > 0;
+
+    if (hasHttpData || hasWsData) {
+      return false;
+    }
+
+    // No data from any source yet — keep showing skeletons
+    // (refetchInterval in useQueryTokens will keep retrying silently)
+    return true;
   }, [
     isMonadRoute,
     tokens.length,
     launchpadData?.new?.length,
-    httpNew.length,
     monadNew.length,
     monadNewTick,
+    wsNewTokens.length,
+    wsFinalStretchTokens.length,
+    wsMigratedTokens.length,
   ]);
 
   const newPairsLoading = isLoading;

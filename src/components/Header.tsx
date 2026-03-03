@@ -23,7 +23,7 @@ import { useSolPrice } from "./SolPriceContext";
 import { useWatchlist } from "./WatchlistContext";
 import { useQuickBuy } from "./QuickBuyContext";
 import { useSearch } from "./ui/SearchContext";
-import { formatSmartNumber } from "../utils/db";
+import { formatSmartNumber, formatMarketCap } from "../utils/db";
 import type { Token } from "../utils/db";
 import { executeEnhancedTrade } from "~/utils/enhancedTradeHandler";
 import { executeMonadMultiBuy, formatMonadTxSummary } from "~/utils/monadWalletAllocation";
@@ -2184,7 +2184,12 @@ export default function Header({
               const tokenAddress = token.pair_address || (token as any).mint || '';
               // Use helper function to get correctly mapped price and price change
               const { price, priceChange } = getWatchlistTokenPriceAndChange(token);
-              
+              const marketCap =
+                (token as any).market_cap_usd ??
+                (token as any).marketCapUSD ??
+                (token as any).fully_diluted_value ??
+                0;
+
               // Debug logging for specific token address (only log once per session)
               const isTestToken = tokenAddress.toLowerCase() === '0x0cc9b2e2acd7bacff79eb7db48f5662b622e7777' || 
                                   (token as any).mint?.toLowerCase() === '0x0cc9b2e2acd7bacff79eb7db48f5662b622e7777';
@@ -2352,9 +2357,9 @@ export default function Header({
                     {token.symbol}
                   </span>
 
-                  {/* Price */}
+                  {/* Market Cap */}
                   <span className="text-xs font-medium" style={{ color: '#a3e635' }}>
-                    ${price > 0 ? formatSmallPrice(price) : '0'}
+                    ${formatMarketCap(marketCap)}
                   </span>
                   
                   {/* Price Change */}
