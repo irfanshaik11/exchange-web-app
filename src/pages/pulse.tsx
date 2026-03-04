@@ -1578,7 +1578,7 @@ export default function PulsePage() {
             {/* Content */}
             <div className="relative z-10 flex min-h-0 w-full flex-1 flex-col overflow-hidden px-1 pt-3 sm:px-1.5">
           <div className="mb-2">
-            <div className="mb-1 flex flex-col gap-3 px-2 pt-2 sm:flex-row sm:items-center sm:justify-between">
+            <div className="mb-1 flex gap-3 px-2 pt-2 flex-row items-center justify-between">
               <div className="flex items-center gap-3">
                 <h1 className="text-xl font-medium text-white">Trenches</h1>
                 <div className="flex items-center gap-3">

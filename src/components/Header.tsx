@@ -1,6 +1,7 @@
 import Link from "next/link";
-import { useRouter } from "next/router";
 import { useEffect, useState, useRef, useCallback, useMemo } from "react";
+import { useRouter } from "next/router";
+import { createPortal } from "react-dom";
 import {
   FaSearch,
   FaStar,
@@ -10,13 +11,20 @@ import {
   FaChevronDown,
   FaSync,
   FaSortAmountDown,
+  FaBars,
+  FaTimes,
 } from "react-icons/fa";
 import { HiLightningBolt } from "react-icons/hi";
 import { IoShieldCheckmarkOutline } from "react-icons/io5";
 import { SiPolygon } from "react-icons/si";
 import { BiCopy, BiCheck } from "react-icons/bi";
 import { HiOutlineQrcode } from "react-icons/hi";
-import { getPolymarketBalance, autoConvertUsdcToUsdce, type PolymarketBalance, SOL_MINT_ADDRESS } from "~/utils/api";
+import {
+  getPolymarketBalance,
+  autoConvertUsdcToUsdce,
+  type PolymarketBalance,
+  SOL_MINT_ADDRESS,
+} from "~/utils/api";
 import QRCode from "react-qr-code";
 import { useUser } from "./UserContext";
 import { useSolPrice } from "./SolPriceContext";
@@ -26,18 +34,34 @@ import { useSearch } from "./ui/SearchContext";
 import { formatSmartNumber, formatMarketCap } from "../utils/db";
 import type { Token } from "../utils/db";
 
-import { executeMonadMultiBuy, formatMonadTxSummary } from "~/utils/monadWalletAllocation";
+import {
+  executeMonadMultiBuy,
+  formatMonadTxSummary,
+} from "~/utils/monadWalletAllocation";
 import { formatMonadError } from "~/utils/monadError";
 import { preloadTradeChart } from "~/utils/preloadTradeChart";
-import { extractTokenImage, resolveTokenImage, getResolvedTokenImage } from "~/utils/images";
+import {
+  extractTokenImage,
+  resolveTokenImage,
+  getResolvedTokenImage,
+} from "~/utils/images";
 import { broadcastMonadQuickTrade } from "~/utils/monadTradeEvents";
-import { executeSolanaMultiBuy, buildSolanaWalletAllocations } from "~/utils/solanaWalletAllocation";
-import { validateSolanaBuy, showTradeValidationError } from "~/utils/preTradeValidation";
+import {
+  executeSolanaMultiBuy,
+  buildSolanaWalletAllocations,
+} from "~/utils/solanaWalletAllocation";
+import {
+  validateSolanaBuy,
+  showTradeValidationError,
+} from "~/utils/preTradeValidation";
 import { checkAtaExists } from "~/utils/ataCheck";
 import { fetchVerifiedPairAddress } from "~/hooks/useSingleTokenPolling";
 import { getPoolTypeFromToken } from "~/utils/poolTypeDetection";
 import { mapTradeErrorMessage } from "~/utils/tradeErrorMessages";
-import { listenForTradeEvents, transformToastToError } from "~/utils/createSolanaToastHandler";
+import {
+  listenForTradeEvents,
+  transformToastToError,
+} from "~/utils/createSolanaToastHandler";
 import { dispatchBalanceRefresh } from "~/utils/balanceEvents";
 
 import Cookies from "js-cookie";
@@ -45,7 +69,14 @@ import toast from "react-hot-toast";
 import { FaCheckCircle } from "react-icons/fa";
 import dynamic from "next/dynamic";
 import InterstateButton from "./InterstateButton";
-import { FiBarChart, FiChevronDown, FiEdit2, FiStar, FiUsers, FiGrid } from "react-icons/fi";
+import {
+  FiBarChart,
+  FiChevronDown,
+  FiEdit2,
+  FiStar,
+  FiUsers,
+  FiGrid,
+} from "react-icons/fi";
 import { GiTrophy } from "react-icons/gi";
 import SearchModal from "./SearchModal";
 import BlockchainSwitcher from "./BlockchainSwitcher";
@@ -140,45 +171,59 @@ const WatchlistModal = dynamic(() => import("./WatchlistModal"), {
 // Helper function to format very small prices with subscript notation
 // For prices < 0.01, displays as $0.0₅77 format (subscript indicates number of zeros)
 function formatSmallPrice(price: number): string {
-  if (price === 0 || !Number.isFinite(price)) return '0';
-  
+  if (price === 0 || !Number.isFinite(price)) return "0";
+
   const absPrice = Math.abs(price);
-  
+
   // For very small prices (< 0.01), use $0.0₅77 format
   if (absPrice > 0 && absPrice < 0.01) {
     // Convert to string to count zeros after decimal
     const priceStr = absPrice.toFixed(20); // Use enough precision
-    const decimalIndex = priceStr.indexOf('.');
-    
+    const decimalIndex = priceStr.indexOf(".");
+
     if (decimalIndex !== -1) {
       // Find first non-zero digit after decimal
       let zeroCount = 0;
-      let significantDigits = '';
-      
+      let significantDigits = "";
+
       for (let i = decimalIndex + 1; i < priceStr.length; i++) {
-        if (priceStr[i] === '0') {
+        if (priceStr[i] === "0") {
           zeroCount++;
         } else {
           // Found first significant digit, get next 2-3 digits
-          significantDigits = priceStr.substring(i, Math.min(i + 3, priceStr.length));
+          significantDigits = priceStr.substring(
+            i,
+            Math.min(i + 3, priceStr.length),
+          );
           break;
         }
       }
-      
+
       // Convert zero count to subscript
       const subscriptMap: Record<string, string> = {
-        '0': '₀', '1': '₁', '2': '₂', '3': '₃', '4': '₄',
-        '5': '₅', '6': '₆', '7': '₇', '8': '₈', '9': '₉'
+        "0": "₀",
+        "1": "₁",
+        "2": "₂",
+        "3": "₃",
+        "4": "₄",
+        "5": "₅",
+        "6": "₆",
+        "7": "₇",
+        "8": "₈",
+        "9": "₉",
       };
-      
+
       const zeroCountStr = zeroCount.toString();
-      const subscriptZeros = zeroCountStr.split('').map(char => subscriptMap[char] || char).join('');
-      
+      const subscriptZeros = zeroCountStr
+        .split("")
+        .map((char) => subscriptMap[char] || char)
+        .join("");
+
       // Format: $0.0₅77 (where subscript is number of zeros)
       return `0.0${subscriptZeros}${significantDigits}`;
     }
   }
-  
+
   // For other prices, use formatSmartNumber
   return formatSmartNumber(price);
 }
@@ -186,73 +231,79 @@ function formatSmallPrice(price: number): string {
 // Helper function to normalize price and price change for watchlist tokens
 // Handles both Birdeye tokens (from trending) and Monad tokens (from pulse endpoints)
 // Uses same coalesceNumber pattern as TradeHeader for consistency
-function getWatchlistTokenPriceAndChange(token: Token): { price: number; priceChange: number } {
+function getWatchlistTokenPriceAndChange(token: Token): {
+  price: number;
+  priceChange: number;
+} {
   const tokenData = token as any;
-  
+
   // Coalesce function similar to TradeHeader - checks multiple fields and returns first valid number
   const coalesceNumber = (...values: any[]): number | null => {
     for (const v of values) {
       if (v === undefined || v === null) continue;
-      const n = typeof v === 'string' ? parseFloat(v) : v;
+      const n = typeof v === "string" ? parseFloat(v) : v;
       if (Number.isFinite(n)) return n as number; // Return any finite number (including 0)
     }
     return null;
   };
-  
+
   // Price mapping - check multiple field names
   // Priority: price_usd (Monad pulse endpoints), then usd_price (Birdeye/common), then others
   // Note: displayToken from trade page sets both usd_price and price_usd to the same value
-  let price = coalesceNumber(
-    tokenData.price_usd,      // Monad pulse endpoints (primary)
-    tokenData.usd_price,      // displayToken format / Birdeye (secondary)
-    tokenData.chart_live_price_usd, // from TradeHeader hydration
-    tokenData.lastPriceUsd,
-    tokenData.price,           // Generic fallback
-    tokenData.priceUSD,        // Alternative format
-    tokenData.priceUsd,        // Alternative format
-    tokenData.current_price,   // Some APIs use this
-    tokenData.currentPrice,     // Alternative
-  ) ?? 0;
+  let price =
+    coalesceNumber(
+      tokenData.price_usd, // Monad pulse endpoints (primary)
+      tokenData.usd_price, // displayToken format / Birdeye (secondary)
+      tokenData.chart_live_price_usd, // from TradeHeader hydration
+      tokenData.lastPriceUsd,
+      tokenData.price, // Generic fallback
+      tokenData.priceUSD, // Alternative format
+      tokenData.priceUsd, // Alternative format
+      tokenData.current_price, // Some APIs use this
+      tokenData.currentPrice, // Alternative
+    ) ?? 0;
   // Legacy fallback to avoid regressions (keeps previous behavior if new fields are missing)
   if (price === 0) {
     price =
-      Number(tokenData?.usd_price ?? tokenData?.price ?? tokenData?.price_usd ?? 0) ||
-      0;
+      Number(
+        tokenData?.usd_price ?? tokenData?.price ?? tokenData?.price_usd ?? 0,
+      ) || 0;
   }
-  
+
   // Price change mapping - prioritize percentage fields, handle both Birdeye and Monad formats
   // Birdeye format: price24hChangePercent (already percentage)
   // Monad pulse format: price_percent_change_1h, price_change_1h (may need conversion)
   const normalizePercent = (value: any): number | null => {
     if (value === undefined || value === null) return null;
-    const num = typeof value === 'string' ? parseFloat(value) : Number(value);
+    const num = typeof value === "string" ? parseFloat(value) : Number(value);
     return Number.isFinite(num) ? num : null;
   };
-  
+
   // Try 1h change first (most relevant for watchlist ticker), then 24h
   // Use coalesceNumber pattern to get first non-null value
-  let priceChange = coalesceNumber(
-    normalizePercent(tokenData.price_percent_change_1h),
-    normalizePercent(tokenData.price_change_1h),
-    normalizePercent(tokenData.price_change),
-    normalizePercent(tokenData.priceChange1h),
-    normalizePercent(tokenData.price_percent_change_24h),
-    normalizePercent(tokenData.price_change_24h),
-    normalizePercent(tokenData.priceChange24h),
-    normalizePercent(tokenData.price24hChangePercent), // Birdeye format (already percentage)
-    normalizePercent(tokenData.price_change_1h_percent),
-    normalizePercent(tokenData.price_change_24h_percent),
-  ) ?? 0;
+  let priceChange =
+    coalesceNumber(
+      normalizePercent(tokenData.price_percent_change_1h),
+      normalizePercent(tokenData.price_change_1h),
+      normalizePercent(tokenData.price_change),
+      normalizePercent(tokenData.priceChange1h),
+      normalizePercent(tokenData.price_percent_change_24h),
+      normalizePercent(tokenData.price_change_24h),
+      normalizePercent(tokenData.priceChange24h),
+      normalizePercent(tokenData.price24hChangePercent), // Birdeye format (already percentage)
+      normalizePercent(tokenData.price_change_1h_percent),
+      normalizePercent(tokenData.price_change_24h_percent),
+    ) ?? 0;
   if (priceChange === 0) {
     priceChange =
       Number(
         tokenData?.price_percent_change_1h ??
-        tokenData?.price_change_1h ??
-        tokenData?.price24hChangePercent ??
-        0
+          tokenData?.price_change_1h ??
+          tokenData?.price24hChangePercent ??
+          0,
       ) || 0;
   }
-  
+
   return { price, priceChange };
 }
 
@@ -296,7 +347,7 @@ export default function Header({
   }, []);
   const router = useRouter();
   const isDiscover = router.pathname === "/";
-  const isPredictionsPage = router.pathname.startsWith('/predictions');
+  const isPredictionsPage = router.pathname.startsWith("/predictions");
   const {
     user,
     loading: userLoading,
@@ -316,13 +367,15 @@ export default function Header({
   const honorsLevel = useMemo(() => {
     const live = referralStats?.honorsLevel;
     if (live) {
-      try { localStorage.setItem('__honors_lvl', String(live)); } catch {}
+      try {
+        localStorage.setItem("__honors_lvl", String(live));
+      } catch {}
       return live;
     }
     // Use cached value while API is loading to avoid flicker (default 1 → real level)
-    if (typeof window !== 'undefined') {
+    if (typeof window !== "undefined") {
       try {
-        const cached = localStorage.getItem('__honors_lvl');
+        const cached = localStorage.getItem("__honors_lvl");
         if (cached) return Number(cached);
       } catch {}
     }
@@ -334,17 +387,18 @@ export default function Header({
     if (router.query.chain) {
       return router.query.chain as string;
     }
-    if (typeof window !== 'undefined') {
-      const savedChain = localStorage.getItem('selected-chain');
-      if (savedChain === 'sol' || savedChain === 'monad') {
+    if (typeof window !== "undefined") {
+      const savedChain = localStorage.getItem("selected-chain");
+      if (savedChain === "sol" || savedChain === "monad") {
         return savedChain;
       }
     }
-    return 'sol';
+    return "sol";
   })();
   const { solPrice, monPrice } = useSolPrice();
-  const chainPrice = currentChain === 'monad' ? monPrice : solPrice;
-  const { watchlist, isHydrated, removeFromWatchlist, refreshWatchlistToken } = useWatchlist();
+  const chainPrice = currentChain === "monad" ? monPrice : solPrice;
+  const { watchlist, isHydrated, removeFromWatchlist, refreshWatchlistToken } =
+    useWatchlist();
   const { presets, activePreset } = useQuickBuy();
 
   // Watchlist ticker paging (max 8 tokens visible)
@@ -358,9 +412,9 @@ export default function Header({
   // Enrich watchlist tokens with cached pulse token data when price is missing
   // Lazy-init from localStorage to avoid flicker on page navigation (no useEffect delay)
   const [cachedPulseTokens, setCachedPulseTokens] = useState<Token[]>(() => {
-    if (typeof window === 'undefined') return [];
+    if (typeof window === "undefined") return [];
     try {
-      const cached = localStorage.getItem('cached_pulse_tokens');
+      const cached = localStorage.getItem("cached_pulse_tokens");
       if (cached) {
         const parsed = JSON.parse(cached);
         const now = Date.now();
@@ -373,84 +427,122 @@ export default function Header({
     }
     return [];
   });
-  const pendingQuickBuyToastRef = useRef<{ id: string; tokenImage: string | null; tokenName: string; fakeTime: string; startTime: number; timerInterval?: NodeJS.Timeout } | null>(null);
+  const pendingQuickBuyToastRef = useRef<{
+    id: string;
+    tokenImage: string | null;
+    tokenName: string;
+    fakeTime: string;
+    startTime: number;
+    timerInterval?: NodeJS.Timeout;
+  } | null>(null);
 
   const isMonadToken = (token: any) =>
     typeof token?.mint === "string" && token.mint.startsWith("0x");
 
   // Helper function to enrich a token with cached pulse data
-  const enrichTokenWithCachedData = useCallback((token: Token): Token => {
-    const tokenAddress = token.pair_address || (token as any).mint || '';
-    if (!tokenAddress || cachedPulseTokens.length === 0) return token;
-    
-    // Check if price is missing or 0
-    const currentPrice = (token as any).price_usd || (token as any).usd_price || (token as any).price || 0;
-    if (currentPrice > 0) return token; // Already has price, no need to enrich
-    
-    // Find matching token in cached pulse tokens
-    const cachedToken = cachedPulseTokens.find(t => {
-      const cachedAddr = t.pair_address || (t as any).mint || '';
-      return cachedAddr === tokenAddress || 
-             (cachedAddr && tokenAddress && cachedAddr.toLowerCase() === tokenAddress.toLowerCase());
-    });
-    
-    if (cachedToken) {
-      const enrichedPrice = (cachedToken as any).price_usd || (cachedToken as any).usd_price || 0;
-      if (enrichedPrice > 0) {
-        console.log(`[Watchlist Enrich] Enriched ${token.symbol || tokenAddress} with cached pulse data:`, {
-          originalPrice: currentPrice,
-          enrichedPrice: enrichedPrice,
-          source: 'cached_pulse_tokens'
-        });
+  const enrichTokenWithCachedData = useCallback(
+    (token: Token): Token => {
+      const tokenAddress = token.pair_address || (token as any).mint || "";
+      if (!tokenAddress || cachedPulseTokens.length === 0) return token;
+
+      // Check if price is missing or 0
+      const currentPrice =
+        (token as any).price_usd ||
+        (token as any).usd_price ||
+        (token as any).price ||
+        0;
+      if (currentPrice > 0) return token; // Already has price, no need to enrich
+
+      // Find matching token in cached pulse tokens
+      const cachedToken = cachedPulseTokens.find((t) => {
+        const cachedAddr = t.pair_address || (t as any).mint || "";
+        return (
+          cachedAddr === tokenAddress ||
+          (cachedAddr &&
+            tokenAddress &&
+            cachedAddr.toLowerCase() === tokenAddress.toLowerCase())
+        );
+      });
+
+      if (cachedToken) {
+        const enrichedPrice =
+          (cachedToken as any).price_usd || (cachedToken as any).usd_price || 0;
+        if (enrichedPrice > 0) {
+          console.log(
+            `[Watchlist Enrich] Enriched ${token.symbol || tokenAddress} with cached pulse data:`,
+            {
+              originalPrice: currentPrice,
+              enrichedPrice: enrichedPrice,
+              source: "cached_pulse_tokens",
+            },
+          );
+        }
+
+        // Merge cached token data into watchlist token, prioritizing watchlist token's existing fields
+        return {
+          ...token,
+          ...cachedToken,
+          // Keep watchlist token's original fields but use cached price if missing
+          price_usd:
+            (token as any).price_usd ||
+            (cachedToken as any).price_usd ||
+            (cachedToken as any).usd_price ||
+            0,
+          usd_price:
+            (token as any).usd_price ||
+            (cachedToken as any).usd_price ||
+            (cachedToken as any).price_usd ||
+            0,
+          price_percent_change_1h:
+            (token as any).price_percent_change_1h ??
+            (cachedToken as any).price_percent_change_1h ??
+            (cachedToken as any).price_change_1h ??
+            0,
+          price_change_1h:
+            (token as any).price_change_1h ??
+            (cachedToken as any).price_change_1h ??
+            (cachedToken as any).price_percent_change_1h ??
+            0,
+        } as Token;
       }
-      
-      // Merge cached token data into watchlist token, prioritizing watchlist token's existing fields
-      return {
-        ...token,
-        ...cachedToken,
-        // Keep watchlist token's original fields but use cached price if missing
-        price_usd: (token as any).price_usd || (cachedToken as any).price_usd || (cachedToken as any).usd_price || 0,
-        usd_price: (token as any).usd_price || (cachedToken as any).usd_price || (cachedToken as any).price_usd || 0,
-        price_percent_change_1h: (token as any).price_percent_change_1h ?? (cachedToken as any).price_percent_change_1h ?? (cachedToken as any).price_change_1h ?? 0,
-        price_change_1h: (token as any).price_change_1h ?? (cachedToken as any).price_change_1h ?? (cachedToken as any).price_percent_change_1h ?? 0,
-      } as Token;
-    }
-    
-    return token;
-  }, [cachedPulseTokens]);
+
+      return token;
+    },
+    [cachedPulseTokens],
+  );
 
   // Track which tokens we've already tried to refresh to avoid duplicate API calls
   const refreshedTokensRef = useRef<Set<string>>(new Set());
-  
+
   // Refresh Monad tokens in watchlist that still lack price/change by hitting token service
   // Only refresh tokens that haven't been refreshed yet and don't have price data
   useEffect(() => {
     // Skip if we've already processed all tokens
-    const tokensToRefresh = watchlist.filter(token => {
+    const tokensToRefresh = watchlist.filter((token) => {
       if (!isMonadToken(token)) return false;
       const { price } = getWatchlistTokenPriceAndChange(token);
       if (price && price > 0) return false; // Already has price
-      const key = (token as any).mint || token.pair_address || '';
+      const key = (token as any).mint || token.pair_address || "";
       if (!key) return false;
       if (refreshedTokensRef.current.has(key)) return false; // Already tried to refresh
       return true;
     });
-    
+
     if (tokensToRefresh.length === 0) return;
-    
+
     // Refresh tokens one at a time with a small delay to avoid overwhelming the API
     (async () => {
       for (const token of tokensToRefresh) {
-        const key = (token as any).mint || token.pair_address || '';
+        const key = (token as any).mint || token.pair_address || "";
         if (!key) continue;
-        
+
         // Mark as attempted before making the call
         refreshedTokensRef.current.add(key);
-        
+
         try {
           await refreshWatchlistToken(key);
           // Small delay between calls to avoid rate limiting
-          await new Promise(resolve => setTimeout(resolve, 100));
+          await new Promise((resolve) => setTimeout(resolve, 100));
         } catch (error) {
           // If refresh fails, remove from set so we can retry later
           refreshedTokensRef.current.delete(key);
@@ -466,11 +558,13 @@ export default function Header({
     const seenIds = new Set<string>();
     const seenNames = new Set<string>();
     const filtered = enriched.filter((token) => {
-      const tokenId = token.pair_address || (token as any).mint || '';
+      const tokenId = token.pair_address || (token as any).mint || "";
       if (!tokenId || seenIds.has(tokenId)) return false;
 
       // Deduplicate by symbol/name — no two tokens with the same display name
-      const displayName = (token.symbol || token.name || '').toLowerCase().trim();
+      const displayName = (token.symbol || token.name || "")
+        .toLowerCase()
+        .trim();
       if (!displayName || seenNames.has(displayName)) return false;
 
       seenIds.add(tokenId);
@@ -491,7 +585,7 @@ export default function Header({
     }
     return stableEnrichedWatchlistRef.current;
   }, [watchlist, enrichTokenWithCachedData]);
-  
+
   const watchlistTickerTotalPages = Math.max(
     1,
     Math.ceil(enrichedWatchlist.length / WATCHLIST_TICKER_PAGE_SIZE),
@@ -499,10 +593,11 @@ export default function Header({
   const watchlistTickerCanPrev = watchlistTickerPage > 0;
   const watchlistTickerCanNext =
     watchlistTickerPage < watchlistTickerTotalPages - 1;
-  
+
   const watchlistTickerVisible = enrichedWatchlist.slice(
     watchlistTickerPage * WATCHLIST_TICKER_PAGE_SIZE,
-    watchlistTickerPage * WATCHLIST_TICKER_PAGE_SIZE + WATCHLIST_TICKER_PAGE_SIZE,
+    watchlistTickerPage * WATCHLIST_TICKER_PAGE_SIZE +
+      WATCHLIST_TICKER_PAGE_SIZE,
   );
 
   // Clamp ticker page when watchlist size changes
@@ -511,11 +606,11 @@ export default function Header({
       Math.min(p, Math.max(0, watchlistTickerTotalPages - 1)),
     );
   }, [watchlistTickerTotalPages]);
-  
+
   // Load quickBuyAmount from localStorage
   const getQuickBuyAmount = (): number => {
-    if (typeof window !== 'undefined') {
-      const saved = localStorage.getItem('quickBuyAmount');
+    if (typeof window !== "undefined") {
+      const saved = localStorage.getItem("quickBuyAmount");
       if (saved) {
         const parsed = parseFloat(saved);
         if (!isNaN(parsed) && parsed >= 0) {
@@ -526,22 +621,24 @@ export default function Header({
     return 0.01;
   };
   const [quickBuyAmount, setQuickBuyAmount] = useState(getQuickBuyAmount);
-  
+
   // Keep quickBuyAmount in sync with localStorage changes
   useEffect(() => {
     const handleStorageChange = () => {
       setQuickBuyAmount(getQuickBuyAmount());
     };
-    window.addEventListener('storage', handleStorageChange);
+    window.addEventListener("storage", handleStorageChange);
     // Also check periodically for same-window localStorage updates
     const interval = setInterval(handleStorageChange, 1000);
     return () => {
-      window.removeEventListener('storage', handleStorageChange);
+      window.removeEventListener("storage", handleStorageChange);
       clearInterval(interval);
     };
   }, []);
-  
-  const [hoveredWatchlistToken, setHoveredWatchlistToken] = useState<string | null>(null);
+
+  const [hoveredWatchlistToken, setHoveredWatchlistToken] = useState<
+    string | null
+  >(null);
   const [profileOpen, setProfileOpen] = useState(false);
   const [depositOpen, setDepositOpen] = useState(false);
   const [depositInitialTab, setDepositInitialTab] = useState<
@@ -558,6 +655,12 @@ export default function Header({
   const [showLeftArrow, setShowLeftArrow] = useState(false);
   const [showRightArrow, setShowRightArrow] = useState(false);
   const [isRefreshingBalance, setIsRefreshingBalance] = useState(false);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [profileDropdownPosition, setProfileDropdownPosition] = useState<{
+    top: number;
+    right: number;
+  } | null>(null);
+
   const navScrollRef = useRef<HTMLDivElement>(null);
   const profileMenuRef = useRef<HTMLDivElement>(null);
   const notificationsRef = useRef<HTMLDivElement>(null);
@@ -581,7 +684,7 @@ export default function Header({
         await refreshBalance({ chain: currentChain, force: true });
       }
     } catch (error) {
-      console.error('Failed to refresh balance:', error);
+      console.error("Failed to refresh balance:", error);
       setPolygonBalanceLoading(false);
     } finally {
       setIsRefreshingBalance(false);
@@ -606,21 +709,24 @@ export default function Header({
     bnb: "BNB",
     base: "BASE",
   };
-  
+
   const chainLogos: Record<string, string> = {
     sol: "/solana.png",
-    monad: "https://i0.wp.com/www.gizmotimes.com/wp-content/uploads/2023/10/Monad-Logo.png?fit=1920%2C1080&ssl=1",
+    monad:
+      "https://i0.wp.com/www.gizmotimes.com/wp-content/uploads/2023/10/Monad-Logo.png?fit=1920%2C1080&ssl=1",
     eth: "/solana.png", // Fallback to Solana for now
     bnb: "/solana.png", // Fallback to Solana for now
     base: "/solana.png", // Fallback to Solana for now
   };
-  
+
   // Use chainBalances from UserContext as the single source of truth
   // Derive chainBalance from chainBalances instead of maintaining separate state
-  const chainBalance = chainBalances[currentChain] ?? (currentChain === "sol" ? solBalance : 0);
+  const chainBalance =
+    chainBalances[currentChain] ?? (currentChain === "sol" ? solBalance : 0);
 
   // Polygon balance state for predictions pages
-  const [polygonBalance, setPolygonBalance] = useState<PolymarketBalance | null>(null);
+  const [polygonBalance, setPolygonBalance] =
+    useState<PolymarketBalance | null>(null);
   const [polygonBalanceLoading, setPolygonBalanceLoading] = useState(false);
   const [polygonAddressCopied, setPolygonAddressCopied] = useState(false);
   const [polygonConverting, setPolygonConverting] = useState(false);
@@ -633,12 +739,12 @@ export default function Header({
     if (address) {
       navigator.clipboard.writeText(address);
       setPolygonAddressCopied(true);
-      toast.success('Address copied successfully', {
-        icon: <BiCheck className="w-5 h-5 text-emerald-400" />,
+      toast.success("Address copied successfully", {
+        icon: <BiCheck className="h-5 w-5 text-emerald-400" />,
         style: {
-          background: '#1a1b1f',
-          color: '#f0f5f5',
-          border: '1px solid #8247E5',
+          background: "#1a1b1f",
+          color: "#f0f5f5",
+          border: "1px solid #8247E5",
         },
       });
       setTimeout(() => setPolygonAddressCopied(false), 2000);
@@ -661,7 +767,7 @@ export default function Header({
         setTimeout(() => setPolygonConvertSuccess(false), 3000);
       }
     } catch (err) {
-      console.error('[Header] Error converting USDC:', err);
+      console.error("[Header] Error converting USDC:", err);
     } finally {
       setPolygonConverting(false);
     }
@@ -682,7 +788,7 @@ export default function Header({
           setPolygonBalance(response.data);
         }
       } catch (err) {
-        console.error('[Header] Error fetching Polygon balance:', err);
+        console.error("[Header] Error fetching Polygon balance:", err);
       } finally {
         setPolygonBalanceLoading(false);
       }
@@ -695,14 +801,17 @@ export default function Header({
 
     // Listen for custom event to refresh balance (e.g., after a trade)
     const handleBalanceRefresh = () => {
-      console.log('[Header] Received polygon-balance-refresh event');
+      console.log("[Header] Received polygon-balance-refresh event");
       fetchPolygonBalance();
     };
-    window.addEventListener('polygon-balance-refresh', handleBalanceRefresh);
+    window.addEventListener("polygon-balance-refresh", handleBalanceRefresh);
 
     return () => {
       clearInterval(interval);
-      window.removeEventListener('polygon-balance-refresh', handleBalanceRefresh);
+      window.removeEventListener(
+        "polygon-balance-refresh",
+        handleBalanceRefresh,
+      );
     };
   }, [isPredictionsPage, user?.bearerToken]);
 
@@ -755,112 +864,114 @@ export default function Header({
     refreshBalance,
   ]);
 
-  const processClipboardValue = useCallback(
-    async (rawValue: string) => {
-      const trimmed = (rawValue || "").trim();
-      if (!trimmed) return;
+  const processClipboardValue = useCallback(async (rawValue: string) => {
+    const trimmed = (rawValue || "").trim();
+    if (!trimmed) return;
 
-      if (lastCheckedClipboard.current === trimmed) return;
+    if (lastCheckedClipboard.current === trimmed) return;
 
-      const isSolanaAddress = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(trimmed);
-      if (!isSolanaAddress) {
-        setClipboardToken(null);
-        lastCheckedClipboard.current = trimmed;
+    const isSolanaAddress = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(trimmed);
+    if (!isSolanaAddress) {
+      setClipboardToken(null);
+      lastCheckedClipboard.current = trimmed;
+      return;
+    }
+
+    const myRequestId = ++clipboardRequestIdRef.current;
+
+    try {
+      // First try to resolve mint address to pair address
+      let pairAddress = trimmed;
+      try {
+        const hydrateResponse = await fetch("/api/token-service/hydrate-pair", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ mint: trimmed }),
+        });
+        if (clipboardRequestIdRef.current !== myRequestId) return;
+        if (hydrateResponse.ok) {
+          const hydrateData = await hydrateResponse.json();
+          if (clipboardRequestIdRef.current !== myRequestId) return;
+          if (hydrateData.pair_address) {
+            pairAddress = hydrateData.pair_address;
+          }
+        }
+      } catch {
+        if (clipboardRequestIdRef.current !== myRequestId) return;
+        // If hydration fails, use the original address as pair_address
+      }
+
+      // Use Go service search to look up token metadata
+      const goUrl = process.env.NEXT_PUBLIC_GO_SERVICE_URL;
+      const response = await fetch(
+        `${goUrl}/v1/search?phrase=${encodeURIComponent(trimmed)}&limit=1`,
+      );
+      if (clipboardRequestIdRef.current !== myRequestId) return;
+      if (!response.ok) {
         return;
       }
 
-      const myRequestId = ++clipboardRequestIdRef.current;
+      const searchData = await response.json();
+      if (clipboardRequestIdRef.current !== myRequestId) return;
+      const results =
+        searchData?.tokens ||
+        searchData?.results ||
+        searchData?.filterTokens?.results ||
+        [];
+      const token = results[0]?.token || results[0] || null;
 
-      try {
-        // First try to resolve mint address to pair address
-        let pairAddress = trimmed;
-        try {
-          const hydrateResponse = await fetch('/api/token-service/hydrate-pair', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ mint: trimmed }),
-          });
-          if (clipboardRequestIdRef.current !== myRequestId) return;
-          if (hydrateResponse.ok) {
-            const hydrateData = await hydrateResponse.json();
-            if (clipboardRequestIdRef.current !== myRequestId) return;
-            if (hydrateData.pair_address) {
-              pairAddress = hydrateData.pair_address;
-            }
-          }
-        } catch {
-          if (clipboardRequestIdRef.current !== myRequestId) return;
-          // If hydration fails, use the original address as pair_address
-        }
-
-        // Use Go service search to look up token metadata
-        const goUrl = process.env.NEXT_PUBLIC_GO_SERVICE_URL;
-        const response = await fetch(
-          `${goUrl}/v1/search?phrase=${encodeURIComponent(trimmed)}&limit=1`,
-        );
-        if (clipboardRequestIdRef.current !== myRequestId) return;
-        if (!response.ok) {
-          return;
-        }
-
-        const searchData = await response.json();
-        if (clipboardRequestIdRef.current !== myRequestId) return;
-        const results = searchData?.tokens || searchData?.results || searchData?.filterTokens?.results || [];
-        const token = results[0]?.token || results[0] || null;
-
-        if (!token) {
-          return;
-        }
-
-        const imageUrl = await resolveTokenImage(token);
-        if (clipboardRequestIdRef.current !== myRequestId) return;
-
-        const launchpadProtocol = (
-          token.launchpad_protocol ||
-          token.launchpadProtocol ||
-          token.protocol ||
-          ""
-        ).toLowerCase();
-        const isPumpToken =
-          launchpadProtocol.includes("pump.fun") ||
-          launchpadProtocol.includes("pumpfun") ||
-          launchpadProtocol === "pump";
-
-        const tokenName =
-          (typeof token.name === "string" && token.name.trim()) ||
-          (typeof token.metadata?.name === "string" &&
-            token.metadata.name.trim()) ||
-          (typeof token.symbol === "string" && token.symbol.trim()) ||
-          (typeof token.metadata?.symbol === "string" &&
-            token.metadata.symbol.trim()) ||
-          (typeof token.ticker === "string" && token.ticker.trim()) ||
-          null;
-
-        const enrichedToken = {
-          ...token,
-          mint: token.mint || trimmed,
-          pair_address: pairAddress || token.pair_address || '',
-          name: tokenName || token.name || 'Unknown Token',
-          symbol: token.symbol || token.ticker || tokenName || '',
-          launchpad_protocol: token.launchpad_protocol || token.launchpadProtocol || '',
-        } as Token;
-
-        lastCheckedClipboard.current = trimmed;
-        setClipboardToken({
-          address: trimmed,
-          imageUrl: imageUrl || null,
-          name: tokenName || "Unknown Token",
-          isPumpToken,
-          tokenData: enrichedToken,
-        });
-      } catch (error) {
-        console.error("Error fetching token data:", error);
-        // Don't setClipboardToken(null) — leave previous pill intact on transient errors
-        // Don't set lastCheckedClipboard — allow retry on next check
+      if (!token) {
+        return;
       }
-    },
-    [],
-  );
+
+      const imageUrl = await resolveTokenImage(token);
+      if (clipboardRequestIdRef.current !== myRequestId) return;
+
+      const launchpadProtocol = (
+        token.launchpad_protocol ||
+        token.launchpadProtocol ||
+        token.protocol ||
+        ""
+      ).toLowerCase();
+      const isPumpToken =
+        launchpadProtocol.includes("pump.fun") ||
+        launchpadProtocol.includes("pumpfun") ||
+        launchpadProtocol === "pump";
+
+      const tokenName =
+        (typeof token.name === "string" && token.name.trim()) ||
+        (typeof token.metadata?.name === "string" &&
+          token.metadata.name.trim()) ||
+        (typeof token.symbol === "string" && token.symbol.trim()) ||
+        (typeof token.metadata?.symbol === "string" &&
+          token.metadata.symbol.trim()) ||
+        (typeof token.ticker === "string" && token.ticker.trim()) ||
+        null;
+
+      const enrichedToken = {
+        ...token,
+        mint: token.mint || trimmed,
+        pair_address: pairAddress || token.pair_address || "",
+        name: tokenName || token.name || "Unknown Token",
+        symbol: token.symbol || token.ticker || tokenName || "",
+        launchpad_protocol:
+          token.launchpad_protocol || token.launchpadProtocol || "",
+      } as Token;
+
+      lastCheckedClipboard.current = trimmed;
+      setClipboardToken({
+        address: trimmed,
+        imageUrl: imageUrl || null,
+        name: tokenName || "Unknown Token",
+        isPumpToken,
+        tokenData: enrichedToken,
+      });
+    } catch (error) {
+      console.error("Error fetching token data:", error);
+      // Don't setClipboardToken(null) — leave previous pill intact on transient errors
+      // Don't set lastCheckedClipboard — allow retry on next check
+    }
+  }, []);
 
   // Check clipboard for valid token address
   const checkClipboard = useCallback(async () => {
@@ -888,7 +999,6 @@ export default function Header({
     return () => clearInterval(interval);
   }, [checkClipboard]);
 
-  
   useEffect(() => {
     if (typeof document === "undefined") return;
 
@@ -930,7 +1040,9 @@ export default function Header({
   const handlePasteCA = async () => {
     if (clipboardToken) {
       // Detect if Monad (0x) or Solana address
-      const isMonadAddress = clipboardToken.address.startsWith('0x') || clipboardToken.address.startsWith('0X');
+      const isMonadAddress =
+        clipboardToken.address.startsWith("0x") ||
+        clipboardToken.address.startsWith("0X");
       if (isMonadAddress) {
         router.push(`/trade/monad/${clipboardToken.address}?chain=monad`);
       } else {
@@ -938,18 +1050,18 @@ export default function Header({
         const td = clipboardToken.tokenData;
         const pathAddress = td?.pair_address || clipboardToken.address;
         const queryParams = new URLSearchParams({
-          _name: td?.name || td?.symbol || clipboardToken.name || '',
-          _symbol: td?.symbol || '',
-          _mcap: String(td?.market_cap_usd || ''),
-          _image: clipboardToken.imageUrl || extractTokenImage(td as any) || '',
+          _name: td?.name || td?.symbol || clipboardToken.name || "",
+          _symbol: td?.symbol || "",
+          _mcap: String(td?.market_cap_usd || ""),
+          _image: clipboardToken.imageUrl || extractTokenImage(td as any) || "",
           _mint: (td as any)?.mint || clipboardToken.address,
-          _launchpad_protocol: (td as any)?.launchpad_protocol || '',
-          _created_at: (td as any)?.created_at || '',
-          chain: 'sol',
-          mode: 'buy',
-          tab: 'market',
-          timeRange: '5m',
-          sliderPct: '0',
+          _launchpad_protocol: (td as any)?.launchpad_protocol || "",
+          _created_at: (td as any)?.created_at || "",
+          chain: "sol",
+          mode: "buy",
+          tab: "market",
+          timeRange: "5m",
+          sliderPct: "0",
         }).toString();
         router.push(`/trade/${pathAddress}?${queryParams}`);
       }
@@ -987,48 +1099,68 @@ export default function Header({
   };
 
   // Helper function to get Monad launchpad from token
-  const getMonadLaunchpad = (token: Token): 'nadfun' | 'flapsh-simple' | 'flapsh-devs' => {
-    const protocol = (token as any)?.launchpad_protocol?.toLowerCase() || '';
-    
-    if (protocol.includes('nad.fun') || protocol.includes('nadfun')) {
-      return 'nadfun';
-    } else if (protocol.includes('flap.sh') || protocol.includes('flapsh')) {
-      if (protocol.includes('dev')) {
-        return 'flapsh-devs';
+  const getMonadLaunchpad = (
+    token: Token,
+  ): "nadfun" | "flapsh-simple" | "flapsh-devs" => {
+    const protocol = (token as any)?.launchpad_protocol?.toLowerCase() || "";
+
+    if (protocol.includes("nad.fun") || protocol.includes("nadfun")) {
+      return "nadfun";
+    } else if (protocol.includes("flap.sh") || protocol.includes("flapsh")) {
+      if (protocol.includes("dev")) {
+        return "flapsh-devs";
       }
-      return 'flapsh-simple';
+      return "flapsh-simple";
     }
-    
-    return 'nadfun';
+
+    return "nadfun";
   };
 
   // Handler for watchlist ticker quick buy
   const handleWatchlistQuickBuy = async (token: Token) => {
-    console.log("🎯 Clipboard/Watchlist Quick Buy:", token.symbol, (token as any).mint, "amount:", quickBuyAmount);
+    console.log(
+      "🎯 Clipboard/Watchlist Quick Buy:",
+      token.symbol,
+      (token as any).mint,
+      "amount:",
+      quickBuyAmount,
+    );
     // Validation checks with user feedback
     if (!user?.bearerToken || !user?.id) {
       toast.error("Please log in to trade", {
         duration: 3000,
-        style: { background: "#1E1F26", color: "#E6E7EA", border: "1px solid #ff6b6b" },
+        style: {
+          background: "#1E1F26",
+          color: "#E6E7EA",
+          border: "1px solid #ff6b6b",
+        },
       });
       return;
     }
-    
+
     if (!quickBuyAmount || quickBuyAmount <= 0) {
-      const currency = currentChain === 'monad' ? 'MON' : 'SOL';
+      const currency = currentChain === "monad" ? "MON" : "SOL";
       toast.error(`Set a buy amount first (use the preset buttons)`, {
         duration: 3000,
-        style: { background: "#1E1F26", color: "#E6E7EA", border: "1px solid #ff6b6b" },
+        style: {
+          background: "#1E1F26",
+          color: "#E6E7EA",
+          border: "1px solid #ff6b6b",
+        },
       });
       return;
     }
-    
+
     // For Monad chain, use Monad-specific quick buy logic (same as MonadTable)
-    if (currentChain === 'monad') {
+    if (currentChain === "monad") {
       if (!token.mint) {
         toast.error("Invalid token - missing mint address", {
           duration: 3000,
-          style: { background: "#1E1F26", color: "#E6E7EA", border: "1px solid #ff6b6b" },
+          style: {
+            background: "#1E1F26",
+            color: "#E6E7EA",
+            border: "1px solid #ff6b6b",
+          },
         });
         return;
       }
@@ -1038,14 +1170,17 @@ export default function Header({
       const launchpad = getMonadLaunchpad(token);
       const tokenAddress = token.mint;
       const slippage = settings?.maxSlippage ? settings.maxSlippage * 100 : 15;
-      const gasPrice = settings?.gasPrice !== undefined && settings.gasPrice > 0 ? settings.gasPrice : undefined;
+      const gasPrice =
+        settings?.gasPrice !== undefined && settings.gasPrice > 0
+          ? settings.gasPrice
+          : undefined;
 
       // Get token image and name
       const tokenImage = token ? extractTokenImage(token as any) : null;
-      const tokenName = token?.name || token?.symbol || '';
-      
-      const toastId = toast.loading('Placing trade...', { duration: Infinity });
-      
+      const tokenName = token?.name || token?.symbol || "";
+
+      const toastId = toast.loading("Placing trade...", { duration: Infinity });
+
       try {
         const { results, totalConsidered } = await executeMonadMultiBuy({
           tokenAddress,
@@ -1067,30 +1202,37 @@ export default function Header({
         if (txHashes.length > 0) {
           setTimeout(() => {
             refreshBalance({ chain: "monad", force: true }).catch((err) => {
-              console.warn('Failed to refresh balance:', err);
+              console.warn("Failed to refresh balance:", err);
             });
           }, 1000);
-          broadcastMonadQuickTrade(tokenAddress, 'buy');
+          broadcastMonadQuickTrade(tokenAddress, "buy");
           toast.success(summary.message, { id: toastId, duration: 6000 });
           return { success: true, txHash: txHashes[0] };
         }
-        toast.error('Trade failed', { id: toastId, duration: 6000 });
-        return { success: false, error: 'Trade failed' };
+        toast.error("Trade failed", { id: toastId, duration: 6000 });
+        return { success: false, error: "Trade failed" };
       } catch (error: any) {
-        console.error('❌ Header Watchlist Quick Buy failed:', error);
+        console.error("❌ Header Watchlist Quick Buy failed:", error);
         const errorMessage = formatMonadError(error?.message || error?.error);
         toast.error(errorMessage, { id: toastId, duration: 6000 });
         return { success: false, error: errorMessage };
       }
     }
-    
+
     // For Solana chain — same path as PulseTable handleQuickBuy
     const preset = presets[activePreset];
     if (!preset) {
-      toast.error("Quick buy preset not configured. Update your settings in the footer.", {
-        duration: 3000,
-        style: { background: "#1E1F26", color: "#E6E7EA", border: "1px solid #ff6b6b" },
-      });
+      toast.error(
+        "Quick buy preset not configured. Update your settings in the footer.",
+        {
+          duration: 3000,
+          style: {
+            background: "#1E1F26",
+            color: "#E6E7EA",
+            border: "1px solid #ff6b6b",
+          },
+        },
+      );
       return;
     }
     const settings = preset.quickBuySettings;
@@ -1109,23 +1251,43 @@ export default function Header({
     const isMultiWallet = walletsWithBalance > 1;
 
     // Pre-validate before showing toast
-    const tokenMint = (token as any).mint || '';
+    const tokenMint = (token as any).mint || "";
     if (!tokenMint) {
       toast.error("Token mint address not found", {
         duration: 3000,
-        style: { background: "#1E1F26", color: "#E6E7EA", border: "1px solid #ff6b6b" },
+        style: {
+          background: "#1E1F26",
+          color: "#E6E7EA",
+          border: "1px solid #ff6b6b",
+        },
       });
       return;
     }
-    const ataExists = await checkAtaExists(tokenMint, user?.publicKey).catch(() => null);
-    const validation = validateSolanaBuy(quickBuyAmount, allocations, walletBalances || {}, walletList || [], selectedWalletIds?.sol || [], settings.priority, settings.bribe, ataExists);
+    const ataExists = await checkAtaExists(tokenMint, user?.publicKey).catch(
+      () => null,
+    );
+    const validation = validateSolanaBuy(
+      quickBuyAmount,
+      allocations,
+      walletBalances || {},
+      walletList || [],
+      selectedWalletIds?.sol || [],
+      settings.priority,
+      settings.bribe,
+      ataExists,
+    );
     if (!validation.valid) {
-      showTradeValidationError(validation.error, getResolvedTokenImage(token), token.symbol || token.name || 'Token');
+      showTradeValidationError(
+        validation.error,
+        getResolvedTokenImage(token),
+        token.symbol || token.name || "Token",
+      );
       return;
     }
 
     // Verify pair address
-    let poolAddress = (token as any).migrated_pool_address || token.pair_address || "";
+    let poolAddress =
+      (token as any).migrated_pool_address || token.pair_address || "";
     if (tokenMint) {
       const verifiedPairAddress = await fetchVerifiedPairAddress(tokenMint);
       if (verifiedPairAddress) {
@@ -1151,7 +1313,9 @@ export default function Header({
               src={tokenImage}
               alt={tokenName}
               className="h-6 w-6 flex-shrink-0 rounded-full"
-              onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+              onError={(e) => {
+                (e.target as HTMLImageElement).style.display = "none";
+              }}
             />
           )}
           <div className="flex min-w-0 flex-1 items-center gap-2">
@@ -1167,7 +1331,9 @@ export default function Header({
             <span
               id={`check-${uniqueToastId}`}
               className="flex-shrink-0 text-green-400"
-              style={{ display: timerFinished && !tradeErrored ? "inline" : "none" }}
+              style={{
+                display: timerFinished && !tradeErrored ? "inline" : "none",
+              }}
             >
               ✓
             </span>
@@ -1215,7 +1381,8 @@ export default function Header({
           if (linkEl) {
             if (isMultiWallet) {
               linkEl.textContent = `${walletsWithBalance}/${total}`;
-              linkEl.className = "text-xs text-blue-400 font-medium flex-shrink-0";
+              linkEl.className =
+                "text-xs text-blue-400 font-medium flex-shrink-0";
             } else {
               linkEl.innerHTML = `<img src="https://avatars.githubusercontent.com/u/92743431?s=200&v=4" alt="Solana" class="w-4 h-4 rounded-full opacity-70" style="cursor: default;" />`;
               linkEl.className = "flex-shrink-0";
@@ -1227,7 +1394,8 @@ export default function Header({
       if (timerFinished && !tradeErrored) {
         const checkEl = document.getElementById(`check-${uniqueToastId}`);
         if (!checkEl) return; // Toast dismissed — stop loop
-        if (checkEl.style.display !== "inline") checkEl.style.display = "inline";
+        if (checkEl.style.display !== "inline")
+          checkEl.style.display = "inline";
       }
       timerHandle = requestAnimationFrame(tick) as any;
     };
@@ -1244,7 +1412,14 @@ export default function Header({
       totalSelectedWallets: walletsWithBalance,
     };
 
-    const cleanupTradeListener = listenForTradeEvents(tokenMint, uniqueToastId, (v) => { tradeErrored = v; }, 'solana');
+    const cleanupTradeListener = listenForTradeEvents(
+      tokenMint,
+      uniqueToastId,
+      (v) => {
+        tradeErrored = v;
+      },
+      "solana",
+    );
 
     try {
       const baseMint = tokenMint;
@@ -1266,13 +1441,16 @@ export default function Header({
         rpc: settings.rpc,
         tokenName: token.name,
         tokenSymbol: token.symbol,
-        imageUrl: await resolveTokenImage(token) || undefined,
+        imageUrl: (await resolveTokenImage(token)) || undefined,
         authToken: user.bearerToken,
         walletList: walletList || [],
         walletBalances: walletBalances || {},
         selectedWalletIds: selectedWalletIds?.sol || [],
         onTxHash: ({ txHash }) => {
-          if (pendingSolanaQuickBuyToastRef.current?.id === uniqueToastId && txHash) {
+          if (
+            pendingSolanaQuickBuyToastRef.current?.id === uniqueToastId &&
+            txHash
+          ) {
             const linkEl = document.getElementById(`link-${uniqueToastId}`);
             if (linkEl) {
               const explorerUrl = `https://solscan.io/tx/${txHash}`;
@@ -1284,8 +1462,12 @@ export default function Header({
       });
 
       const firstTxHash =
-        multiResult?.results?.find((r: any) => (r.result as any)?.hash || (r.result as any)?.txid)?.result?.hash ||
-        multiResult?.results?.find((r: any) => (r.result as any)?.hash || (r.result as any)?.txid)?.result?.txid;
+        multiResult?.results?.find(
+          (r: any) => (r.result as any)?.hash || (r.result as any)?.txid,
+        )?.result?.hash ||
+        multiResult?.results?.find(
+          (r: any) => (r.result as any)?.hash || (r.result as any)?.txid,
+        )?.result?.txid;
 
       if (firstTxHash && !isMultiWallet) {
         const linkEl = document.getElementById(`link-${uniqueToastId}`);
@@ -1307,7 +1489,7 @@ export default function Header({
           }),
         );
       }
-      dispatchBalanceRefresh('sol');
+      dispatchBalanceRefresh("sol");
     } catch (error: any) {
       tradeErrored = true;
       cleanupTradeListener();
@@ -1315,7 +1497,12 @@ export default function Header({
 
       console.error("❌ Header Quick Buy failed:", error);
       if (pendingSolanaQuickBuyToastRef.current) {
-        transformToastToError(pendingSolanaQuickBuyToastRef.current.id, mapTradeErrorMessage(error), tokenImage, tokenName);
+        transformToastToError(
+          pendingSolanaQuickBuyToastRef.current.id,
+          mapTradeErrorMessage(error),
+          tokenImage,
+          tokenName,
+        );
         pendingSolanaQuickBuyToastRef.current = null;
       }
     }
@@ -1323,9 +1510,12 @@ export default function Header({
 
   // Clipboard quick buy state and handler
   const [isClipboardBuying, setIsClipboardBuying] = useState(false);
-  const [clipboardAmountStr, setClipboardAmountStr] = useState(String(quickBuyAmount));
+  const [clipboardAmountStr, setClipboardAmountStr] = useState(
+    String(quickBuyAmount),
+  );
   const clipboardInputFocusedRef = useRef(false);
-  const [isEditingClipboardAmount, setIsEditingClipboardAmount] = useState(false);
+  const [isEditingClipboardAmount, setIsEditingClipboardAmount] =
+    useState(false);
   const pendingSolanaQuickBuyToastRef = useRef<{
     id: string;
     tokenImage: string | null;
@@ -1351,15 +1541,21 @@ export default function Header({
       await handleWatchlistQuickBuy(clipboardToken.tokenData);
     } catch (error) {
       console.error("❌ Clipboard Quick Buy failed:", error);
-      toast.error(`Quick buy failed: ${(error as any)?.message || 'Unknown error'}`, {
-        duration: 4000,
-        style: { background: "#1E1F26", color: "#E6E7EA", border: "1px solid #ff6b6b" },
-      });
+      toast.error(
+        `Quick buy failed: ${(error as any)?.message || "Unknown error"}`,
+        {
+          duration: 4000,
+          style: {
+            background: "#1E1F26",
+            color: "#E6E7EA",
+            border: "1px solid #ff6b6b",
+          },
+        },
+      );
     } finally {
       setIsClipboardBuying(false);
     }
   };
-
 
   // Toggle Search modal with Tab and '/' (outside of inputs)
   useEffect(() => {
@@ -1486,15 +1682,38 @@ export default function Header({
     };
   }, [checkScrollArrows]);
 
-  // Close profile menu when clicking outside
+  // Update profile dropdown position when open (for portaled dropdown)
+  const updateProfileDropdownPosition = useCallback(() => {
+    if (!profileMenuRef.current) return;
+    const rect = profileMenuRef.current.getBoundingClientRect();
+    setProfileDropdownPosition({
+      top: rect.bottom + 8,
+      right: window.innerWidth - rect.right,
+    });
+  }, []);
+
+  useEffect(() => {
+    if (!profileMenuOpen) {
+      setProfileDropdownPosition(null);
+      return;
+    }
+    updateProfileDropdownPosition();
+    window.addEventListener("resize", updateProfileDropdownPosition);
+    window.addEventListener("scroll", updateProfileDropdownPosition, true);
+    return () => {
+      window.removeEventListener("resize", updateProfileDropdownPosition);
+      window.removeEventListener("scroll", updateProfileDropdownPosition, true);
+    };
+  }, [profileMenuOpen, updateProfileDropdownPosition]);
+
+  // Close profile menu when clicking outside (trigger or portaled dropdown)
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
-      if (
-        profileMenuRef.current &&
-        !profileMenuRef.current.contains(event.target as Node)
-      ) {
-        setProfileMenuOpen(false);
-      }
+      const target = event.target as Node;
+      if (profileMenuRef.current?.contains(target)) return;
+      const portaled = document.querySelector("[data-profile-dropdown]");
+      if (portaled?.contains(target)) return;
+      setProfileMenuOpen(false);
     };
 
     if (profileMenuOpen) {
@@ -1526,6 +1745,21 @@ export default function Header({
     };
   }, [notificationsOpen]);
 
+  // Close mobile menu on Escape; lock body scroll when open
+  useEffect(() => {
+    const handleEscape = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setMobileMenuOpen(false);
+    };
+    if (mobileMenuOpen) {
+      document.addEventListener("keydown", handleEscape);
+      document.body.style.overflow = "hidden";
+    }
+    return () => {
+      document.removeEventListener("keydown", handleEscape);
+      document.body.style.overflow = "";
+    };
+  }, [mobileMenuOpen]);
+
   // Show Feature Updates modal only on first login
   // COMMENTED OUT: Disabled popout that shows "Enhanced Real-Time Data" on login
   // useEffect(() => {
@@ -1551,34 +1785,58 @@ export default function Header({
   return (
     <>
       <header
-        className={`${isSticky ? "sticky top-0 z-20" : "relative z-10"} w-full backdrop-blur-sm bg-[#0a0b0d]`}
+        className={`${isSticky ? "sticky top-0 z-[9999]" : "relative z-[9999]"} w-full max-w-[100vw] overflow-x-hidden bg-[#0a0b0d] backdrop-blur-sm`}
       >
         <div
-          className="flex max-w-full items-center justify-between px-3 py-2 md:px-4"
+          className="flex max-w-full flex-nowrap items-center justify-between gap-1 px-2 py-2 md:px-4"
           style={{ backgroundColor: "#0a0b0d" }}
         >
-          <div className="flex min-w-0 flex-1 items-center gap-2 overflow-hidden md:gap-3">
+          <div className="flex min-w-0 flex-1 items-center gap-1 overflow-hidden sm:gap-2 md:gap-3">
+						{/* Hamburger button */}
+            <button
+              type="button"
+              onClick={() => setMobileMenuOpen(true)}
+              className="flex h-10 min-h-[44px] w-10 min-w-[44px] flex-shrink-0 items-center justify-center rounded-md border transition-all duration-200 lg:hidden"
+              style={{
+                borderColor: AX.border,
+                color: AX.text,
+                backgroundColor: "rgba(13, 16, 21, 0.8)",
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.backgroundColor =
+                  "rgba(255, 255, 255, 0.06)";
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.backgroundColor = "rgba(13, 16, 21, 0.8)";
+              }}
+              aria-label="Open menu"
+            >
+              <FaBars size={20} />
+            </button>
+
             <Link
               href={chainAwareHref("/pulse")}
-              className="flex flex-shrink-0 items-center gap-1 tracking-tight select-none"
+              className="flex min-h-[44px] min-w-[44px] flex-shrink-0 items-center justify-center gap-1 tracking-tight select-none sm:min-h-0 sm:min-w-0 sm:justify-start"
               style={{ color: AX.text }}
               title="Go to Trenches"
             >
               <img
                 src="/interstate/logo.png"
                 alt="Interstate logo"
-                className="w-5 h-auto"
+                className="h-5 w-5 flex-shrink-0 object-contain sm:h-5 sm:w-auto"
               />
-              <h3 className="!font-orbitron">interstate</h3>
+              <h3 className="!font-orbitron hidden min-[380px]:block">
+                interstate
+              </h3>
             </Link>
 
-            {/* Navigation container with arrows */}
-            <div className="relative flex flex-1 items-center gap-1 overflow-hidden">
-              {/* Left arrow */}
+            {/* Navigation container with arrows - hidden on small/medium, visible from lg */}
+            <div className="relative hidden min-w-0 flex-1 items-center gap-0 overflow-hidden sm:gap-1 lg:flex">
+              {/* Left arrow - hidden on very small screens to save space (user can swipe nav) */}
               {showLeftArrow && (
                 <button
                   onClick={scrollLeft}
-                  className="z-10 flex h-8 w-8 flex-shrink-0 items-center justify-center transition-all duration-300 ease-out"
+                  className="z-10 flex h-9 min-h-[44px] w-9 min-w-[44px] flex-shrink-0 items-center justify-center transition-all duration-300 ease-out sm:h-8 sm:min-h-0 sm:w-8 sm:min-w-0"
                   style={{
                     color: AX.text,
                   }}
@@ -1597,8 +1855,12 @@ export default function Header({
               {/* Navigation tabs - always visible with horizontal scroll */}
               <nav
                 ref={navScrollRef}
-                className="scrollbar-hide flex flex-1 items-center gap-1 overflow-x-auto sm:gap-2 xl:gap-3"
-                style={{ position: "relative", zIndex: 1000 }}
+                className="scrollbar-hide flex flex-1 items-center gap-1 overflow-x-auto overflow-y-hidden [-webkit-overflow-scrolling:touch] sm:gap-2 xl:gap-3"
+                style={{
+                  position: "relative",
+                  zIndex: 1000,
+                  WebkitOverflowScrolling: "touch",
+                }}
               >
                 {navLinks.map((link) => {
                   const isActive =
@@ -1606,12 +1868,13 @@ export default function Header({
                     (link.name === "Trenches" &&
                       router.pathname.startsWith("/trade/")) ||
                     (link.name === "Rewards" &&
-                      (router.pathname === "/outpost" || router.pathname === "/referrals"));
+                      (router.pathname === "/outpost" ||
+                        router.pathname === "/referrals"));
                   return (
                     <Link
                       key={link.name}
                       href={chainAwareHref(link.href)}
-                      className={`flex-shrink-0 rounded-md px-2.5 py-1 text-xs font-medium whitespace-nowrap sm:px-3 sm:text-sm`}
+                      className={`flex min-h-[44px] flex-shrink-0 items-center rounded-md px-2.5 py-2 text-xs font-medium whitespace-nowrap sm:min-h-0 sm:px-3 sm:py-1 sm:text-sm`}
                       style={{
                         color: isActive ? "#18c48c" : "#9ca3af",
                         backgroundColor: isActive
@@ -1626,7 +1889,8 @@ export default function Header({
                       onMouseEnter={(e) => {
                         if (!isActive) {
                           e.currentTarget.style.color = "#18c48c";
-                          e.currentTarget.style.backgroundColor = "rgba(24, 196, 140, 0.08)";
+                          e.currentTarget.style.backgroundColor =
+                            "rgba(24, 196, 140, 0.08)";
                         }
                       }}
                       onMouseLeave={(e) => {
@@ -1646,7 +1910,7 @@ export default function Header({
               {showRightArrow && (
                 <button
                   onClick={scrollRight}
-                  className="z-10 flex h-8 w-8 flex-shrink-0 items-center justify-center transition-all duration-300 ease-out"
+                  className="z-10 flex h-9 min-h-[44px] w-9 min-w-[44px] flex-shrink-0 items-center justify-center transition-all duration-300 ease-out sm:h-8 sm:min-h-0 sm:w-8 sm:min-w-0"
                   style={{
                     color: AX.text,
                   }}
@@ -1663,20 +1927,20 @@ export default function Header({
               )}
             </div>
           </div>
-          <div className="flex min-w-0 flex-shrink-0 items-center gap-1.5 sm:gap-2 md:gap-3 lg:gap-4">
+          <div className="flex min-w-0 flex-shrink-0 flex-nowrap items-center gap-1 sm:gap-1.5 md:gap-2 lg:gap-4">
             {/* Morphing Arena Navigation - commented out, Arena now in main nav
             <MorphingArenaNav />
             */}
 
             {showSearch && (
-              <div className="flex items-center gap-1 sm:gap-1.5 md:gap-2">
+              <div className="flex flex-shrink-0 items-center gap-1 sm:gap-1.5 md:gap-2">
                 {/* Clipboard token split-button: navigate (left) + quick buy (right) */}
                 {clipboardToken && (
                   <div className="flex h-8 flex-shrink-0 items-center">
                     {/* Left half — navigate to trade page */}
                     <button
                       onClick={handlePasteCA}
-                      className="relative flex h-8 cursor-pointer items-center gap-1 rounded-l-md border border-r-0 px-1.5 transition-all duration-200 ease-out sm:gap-1.5 sm:px-2"
+                      className="relative flex h-10 min-h-[44px] w-10 min-w-[44px] cursor-pointer items-center justify-center gap-1 rounded-l-md border border-r-0 px-1.5 transition-all duration-200 ease-out sm:h-8 sm:min-h-0 sm:w-auto sm:min-w-0 sm:gap-1.5 sm:px-2"
                       style={{
                         backgroundColor: "#13151b",
                         borderColor: AX.border,
@@ -1694,26 +1958,33 @@ export default function Header({
                           alt="Token"
                           className="h-5 w-5 flex-shrink-0 rounded object-cover sm:h-6 sm:w-6"
                           onError={(e) => {
-                            (e.currentTarget as HTMLImageElement).style.display = 'none';
+                            (
+                              e.currentTarget as HTMLImageElement
+                            ).style.display = "none";
                           }}
                         />
                       ) : (
                         <div
                           className="flex h-5 w-5 flex-shrink-0 items-center justify-center rounded sm:h-6 sm:w-6"
-                          style={{ background: 'linear-gradient(to bottom right, #1f2937, #000000)' }}
+                          style={{
+                            background:
+                              "linear-gradient(to bottom right, #1f2937, #000000)",
+                          }}
                         >
                           <span className="text-[10px] font-bold text-white select-none">
-                            {(clipboardToken.name || '?')[0]?.toUpperCase()}
+                            {(clipboardToken.name || "?")[0]?.toUpperCase()}
                           </span>
                         </div>
                       )}
-                      <span className="hidden max-w-[60px] truncate text-[11px] font-medium text-white sm:inline">
+                      <span className="hidden max-w-[60px] truncate text-[11px] font-medium text-white md:inline">
                         {clipboardToken.name}
                       </span>
                       <IoShieldCheckmarkOutline
                         size={12}
                         style={{
-                          color: clipboardToken.isPumpToken ? "#31e3ac" : "#eab308",
+                          color: clipboardToken.isPumpToken
+                            ? "#31e3ac"
+                            : "#eab308",
                         }}
                       />
                     </button>
@@ -1721,16 +1992,20 @@ export default function Header({
                     <div
                       className="flex h-8 items-center rounded-r-md border transition-all duration-200 ease-out"
                       style={{
-                        backgroundColor: '#13151b',
+                        backgroundColor: "#13151b",
                         borderColor: AX.border,
-                        borderLeft: '1px solid rgba(255,255,255,0.08)',
-                        opacity: (!clipboardToken.tokenData || (Number(clipboardAmountStr) || 0) <= 0) ? 0.5 : 1,
+                        borderLeft: "1px solid rgba(255,255,255,0.08)",
+                        opacity:
+                          !clipboardToken.tokenData ||
+                          (Number(clipboardAmountStr) || 0) <= 0
+                            ? 0.5
+                            : 1,
                       }}
                       onMouseEnter={(e) => {
-                        e.currentTarget.style.backgroundColor = '#1a1c23';
+                        e.currentTarget.style.backgroundColor = "#1a1c23";
                       }}
                       onMouseLeave={(e) => {
-                        e.currentTarget.style.backgroundColor = '#13151b';
+                        e.currentTarget.style.backgroundColor = "#13151b";
                       }}
                     >
                       {isEditingClipboardAmount ? (
@@ -1738,13 +2013,17 @@ export default function Header({
                           {/* Lightning icon — still buys in edit mode */}
                           <button
                             onClick={handleClipboardQuickBuy}
-                            disabled={!clipboardToken.tokenData || isClipboardBuying}
+                            disabled={
+                              !clipboardToken.tokenData || isClipboardBuying
+                            }
                             className="flex h-full cursor-pointer items-center pl-1.5 sm:pl-2"
                           >
                             <HiLightningBolt
                               size={12}
-                              className={isClipboardBuying ? 'animate-pulse' : ''}
-                              style={{ color: '#85d99f' }}
+                              className={
+                                isClipboardBuying ? "animate-pulse" : ""
+                              }
+                              style={{ color: "#85d99f" }}
                             />
                           </button>
                           {/* Editable input */}
@@ -1755,16 +2034,21 @@ export default function Header({
                             value={clipboardAmountStr}
                             onChange={(e) => {
                               const v = e.target.value;
-                              if (v === '' || /^\d*\.?\d*$/.test(v)) {
+                              if (v === "" || /^\d*\.?\d*$/.test(v)) {
                                 setClipboardAmountStr(v);
                                 const num = parseFloat(v);
                                 if (!isNaN(num) && num >= 0) {
                                   setQuickBuyAmount(num);
-                                  localStorage.setItem('quickBuyAmount', num.toString());
+                                  localStorage.setItem(
+                                    "quickBuyAmount",
+                                    num.toString(),
+                                  );
                                 }
                               }
                             }}
-                            onFocus={() => { clipboardInputFocusedRef.current = true; }}
+                            onFocus={() => {
+                              clipboardInputFocusedRef.current = true;
+                            }}
                             onBlur={() => {
                               clipboardInputFocusedRef.current = false;
                               const num = parseFloat(clipboardAmountStr);
@@ -1777,7 +2061,7 @@ export default function Header({
                               setIsEditingClipboardAmount(false);
                             }}
                             onKeyDown={(e) => {
-                              if (e.key === 'Enter') {
+                              if (e.key === "Enter") {
                                 const num = parseFloat(clipboardAmountStr);
                                 if (!isNaN(num) && num >= 0) {
                                   setQuickBuyAmount(num);
@@ -1785,21 +2069,21 @@ export default function Header({
                                 }
                                 setIsEditingClipboardAmount(false);
                                 handleClipboardQuickBuy();
-                              } else if (e.key === 'Escape') {
+                              } else if (e.key === "Escape") {
                                 setClipboardAmountStr(String(quickBuyAmount));
                                 setIsEditingClipboardAmount(false);
                               }
                             }}
                             onClick={(e) => e.stopPropagation()}
                             className="w-[32px] bg-transparent text-center text-[10px] font-medium outline-none"
-                            style={{ color: '#85d99f' }}
+                            style={{ color: "#85d99f" }}
                           />
                           {/* Currency label */}
                           <span
                             className="pr-1.5 text-[10px] font-medium sm:pr-2"
-                            style={{ color: '#85d99f', opacity: 0.6 }}
+                            style={{ color: "#85d99f", opacity: 0.6 }}
                           >
-                            {currentChain === 'monad' ? 'MON' : 'SOL'}
+                            {currentChain === "monad" ? "MON" : "SOL"}
                           </span>
                         </>
                       ) : (
@@ -1807,19 +2091,29 @@ export default function Header({
                           {/* Big buy button: lightning + amount + SOL — entire area is clickable to buy */}
                           <button
                             onClick={handleClipboardQuickBuy}
-                            disabled={!clipboardToken.tokenData || isClipboardBuying}
-                            className="flex h-full cursor-pointer items-center gap-0.5 pl-1.5 pr-1.5 sm:pl-2 sm:pr-2"
+                            disabled={
+                              !clipboardToken.tokenData || isClipboardBuying
+                            }
+                            className="flex h-full cursor-pointer items-center gap-0.5 pr-1.5 pl-1.5 sm:pr-2 sm:pl-2"
                           >
                             <HiLightningBolt
                               size={12}
-                              className={isClipboardBuying ? 'animate-pulse' : ''}
-                              style={{ color: '#85d99f' }}
+                              className={
+                                isClipboardBuying ? "animate-pulse" : ""
+                              }
+                              style={{ color: "#85d99f" }}
                             />
-                            <span className="text-[10px] font-medium" style={{ color: '#85d99f' }}>
+                            <span
+                              className="text-[10px] font-medium"
+                              style={{ color: "#85d99f" }}
+                            >
                               {quickBuyAmount}
                             </span>
-                            <span className="text-[10px] font-medium" style={{ color: '#85d99f', opacity: 0.6 }}>
-                              {currentChain === 'monad' ? 'MON' : 'SOL'}
+                            <span
+                              className="text-[10px] font-medium"
+                              style={{ color: "#85d99f", opacity: 0.6 }}
+                            >
+                              {currentChain === "monad" ? "MON" : "SOL"}
                             </span>
                           </button>
                           {/* Pencil — opens edit mode */}
@@ -1832,23 +2126,47 @@ export default function Header({
                             onMouseEnter={(e) => {
                               // Reset parent highlight, show pencil-only highlight
                               const parent = e.currentTarget.parentElement;
-                              if (parent) parent.style.backgroundColor = '#13151b';
-                              e.currentTarget.style.backgroundColor = 'rgba(133,217,159,0.1)';
-                              const icon = e.currentTarget.querySelector('svg') as SVGElement | null;
-                              if (icon) { icon.style.opacity = '1'; icon.style.transform = 'scale(1.15)'; }
+                              if (parent)
+                                parent.style.backgroundColor = "#13151b";
+                              e.currentTarget.style.backgroundColor =
+                                "rgba(133,217,159,0.1)";
+                              const icon = e.currentTarget.querySelector(
+                                "svg",
+                              ) as SVGElement | null;
+                              if (icon) {
+                                icon.style.opacity = "1";
+                                icon.style.transform = "scale(1.15)";
+                              }
                             }}
                             onMouseLeave={(e) => {
                               // Restore parent hover since cursor is still inside the container
                               const parent = e.currentTarget.parentElement;
-                              if (parent) parent.style.backgroundColor = '#1a1c23';
-                              e.currentTarget.style.backgroundColor = 'transparent';
-                              const icon = e.currentTarget.querySelector('svg') as SVGElement | null;
-                              if (icon) { icon.style.opacity = '0.45'; icon.style.transform = 'scale(1)'; }
+                              if (parent)
+                                parent.style.backgroundColor = "#1a1c23";
+                              e.currentTarget.style.backgroundColor =
+                                "transparent";
+                              const icon = e.currentTarget.querySelector(
+                                "svg",
+                              ) as SVGElement | null;
+                              if (icon) {
+                                icon.style.opacity = "0.45";
+                                icon.style.transform = "scale(1)";
+                              }
                             }}
-                            className="flex h-full cursor-pointer items-center rounded-r-md border-l pl-1.5 pr-1.5 transition-colors duration-150 sm:pr-2"
-                            style={{ borderColor: 'rgba(255,255,255,0.08)', backgroundColor: 'transparent' }}
+                            className="flex h-full cursor-pointer items-center rounded-r-md border-l pr-1.5 pl-1.5 transition-colors duration-150 sm:pr-2"
+                            style={{
+                              borderColor: "rgba(255,255,255,0.08)",
+                              backgroundColor: "transparent",
+                            }}
                           >
-                            <FiEdit2 size={9} style={{ color: '#85d99f', opacity: 0.45, transition: 'opacity 0.15s, transform 0.15s' }} />
+                            <FiEdit2
+                              size={9}
+                              style={{
+                                color: "#85d99f",
+                                opacity: 0.45,
+                                transition: "opacity 0.15s, transform 0.15s",
+                              }}
+                            />
                           </button>
                         </>
                       )}
@@ -1866,10 +2184,12 @@ export default function Header({
                     color: AX.muted,
                   }}
                   onMouseEnter={(e) => {
-                    e.currentTarget.style.backgroundColor = "rgba(255, 255, 255, 0.06)";
+                    e.currentTarget.style.backgroundColor =
+                      "rgba(255, 255, 255, 0.06)";
                   }}
                   onMouseLeave={(e) => {
-                    e.currentTarget.style.backgroundColor = "rgba(13, 16, 21, 0.8)";
+                    e.currentTarget.style.backgroundColor =
+                      "rgba(13, 16, 21, 0.8)";
                   }}
                 >
                   <FaSearch size={11} />
@@ -1882,44 +2202,50 @@ export default function Header({
                 </button>
 
                 {/* Compact icon-only trigger on mobile/tablet */}
-                <button
+                {/* <button
                   onClick={() => openSearch()}
-                  className="flex h-8 w-8 cursor-pointer flex-shrink-0 items-center justify-center rounded-md border transition-all duration-200 ease-out lg:hidden"
+                  className="flex h-10 min-h-[44px] w-10 min-w-[44px] flex-shrink-0 cursor-pointer items-center justify-center rounded-md border transition-all duration-200 ease-out sm:h-8 sm:min-h-0 sm:w-8 sm:min-w-0 lg:hidden"
                   style={{
                     backgroundColor: "rgba(13, 16, 21, 0.8)",
                     borderColor: AX.border,
                     color: AX.muted,
                   }}
                   onMouseEnter={(e) => {
-                    e.currentTarget.style.backgroundColor = "rgba(255, 255, 255, 0.06)";
+                    e.currentTarget.style.backgroundColor =
+                      "rgba(255, 255, 255, 0.06)";
                   }}
                   onMouseLeave={(e) => {
-                    e.currentTarget.style.backgroundColor = "rgba(13, 16, 21, 0.8)";
+                    e.currentTarget.style.backgroundColor =
+                      "rgba(13, 16, 21, 0.8)";
                   }}
                 >
                   <FaSearch size={12} />
-                </button>
+                </button> */}
 
-                {/* Blockchain Switcher - Right of search bar */}
-                <BlockchainSwitcher />
+                {/* Blockchain Switcher - Right of search bar; hidden on very small screens to prevent overflow */}
+                <div className="hidden min-[420px]:block">
+                  <BlockchainSwitcher />
+                </div>
               </div>
             )}
 
             {/* Notifications Button */}
-            <div ref={notificationsRef} className="relative">
+            <div ref={notificationsRef} className="relative flex-shrink-0">
               <button
                 onClick={() => setNotificationsOpen(!notificationsOpen)}
-                className="flex h-8 w-8 cursor-pointer flex-shrink-0 items-center justify-center rounded-md border transition-all duration-200 ease-out"
+                className="flex h-10 min-h-[44px] w-10 min-w-[44px] flex-shrink-0 cursor-pointer items-center justify-center rounded-md border transition-all duration-200 ease-out sm:h-8 sm:min-h-0 sm:w-8 sm:min-w-0"
                 style={{
                   color: AX.muted,
                   borderColor: AX.border,
                   backgroundColor: "rgba(13, 16, 21, 0.8)",
                 }}
                 onMouseEnter={(e) => {
-                  e.currentTarget.style.backgroundColor = "rgba(255, 255, 255, 0.06)";
+                  e.currentTarget.style.backgroundColor =
+                    "rgba(255, 255, 255, 0.06)";
                 }}
                 onMouseLeave={(e) => {
-                  e.currentTarget.style.backgroundColor = "rgba(13, 16, 21, 0.8)";
+                  e.currentTarget.style.backgroundColor =
+                    "rgba(13, 16, 21, 0.8)";
                 }}
                 title="Notifications"
               >
@@ -1934,27 +2260,34 @@ export default function Header({
             </div>
             {/* User profile/login - visible on all screens */}
             {user && !userLoading ? (
-              <div ref={profileMenuRef} className="relative z-[1000000]">
+              <div
+                ref={profileMenuRef}
+                className="relative z-[1000000] flex-shrink-0"
+              >
                 {/* Combined Balance + Username Button */}
                 <button
                   onClick={() => setProfileMenuOpen(!profileMenuOpen)}
-                  className="group/account flex h-8 cursor-pointer flex-row items-center justify-center gap-1.5 rounded-md border px-2 transition-all duration-200 ease-out sm:gap-2 sm:px-2.5"
+                  className="group/account flex h-10 min-h-[44px] cursor-pointer flex-row items-center justify-center gap-1.5 rounded-md border px-2 transition-all duration-200 ease-out sm:h-8 sm:min-h-0 sm:gap-2 sm:px-2.5"
                   style={{
                     borderColor: AX.border,
                     color: AX.text,
                     backgroundColor: "rgba(13, 16, 21, 0.8)",
                   }}
                   onMouseEnter={(e) => {
-                    e.currentTarget.style.backgroundColor = "rgba(255, 255, 255, 0.06)";
+                    e.currentTarget.style.backgroundColor =
+                      "rgba(255, 255, 255, 0.06)";
                   }}
                   onMouseLeave={(e) => {
-                    e.currentTarget.style.backgroundColor = "rgba(13, 16, 21, 0.8)";
+                    e.currentTarget.style.backgroundColor =
+                      "rgba(13, 16, 21, 0.8)";
                   }}
                   title="Click to view account & wallet"
                 >
                   <div
-                    className="hidden h-6 w-6 select-none sm:flex bg-contain bg-center bg-no-repeat"
-                    style={{ backgroundImage: `url(/ranks/degen-${Math.max(1, Math.min(4, honorsLevel))}.png)` }}
+                    className="hidden h-6 w-6 bg-contain bg-center bg-no-repeat select-none sm:flex"
+                    style={{
+                      backgroundImage: `url(/ranks/degen-${Math.max(1, Math.min(4, honorsLevel))}.png)`,
+                    }}
                     role="img"
                     aria-label={`Honors ${honorsLevel}`}
                   />
@@ -1964,8 +2297,9 @@ export default function Header({
                         <>
                           <SiPolygon size={10} className="text-[#8247E5]" />
                           <span>
-                            {polygonBalanceLoading ? '...' :
-                              `$${formatBalance(polygonBalance?.usdc ?? 0, 2)}`}
+                            {polygonBalanceLoading
+                              ? "..."
+                              : `$${formatBalance(polygonBalance?.usdc ?? 0, 2)}`}
                           </span>
                         </>
                       ) : (
@@ -1978,434 +2312,490 @@ export default function Header({
                   </div>
                   <FaSync
                     size={9}
-                    className={`cursor-pointer ${isRefreshingBalance ? 'animate-spin text-[#18c48c]' : 'text-neutral-500 hover:text-neutral-300'}`}
-                    onClick={(e) => { e.stopPropagation(); handleManualBalanceRefresh(e); }}
+                    className={`cursor-pointer ${isRefreshingBalance ? "animate-spin text-[#18c48c]" : "text-neutral-500 hover:text-neutral-300"}`}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleManualBalanceRefresh(e);
+                    }}
                     title="Refresh balance"
                   />
-                  <FiChevronDown
-                    className="text-neutral-500"
-                    size={12}
-                  />
+                  <FiChevronDown className="text-neutral-500" size={12} />
                 </button>
-                {/* Combined Dropdown */}
-                {profileMenuOpen && (
-                  <div
-                    className="absolute top-9 right-0 z-[1000001] rounded-lg border border-[#20232b] bg-[#0a0b10] shadow-2xl"
-                    style={{
-                      width: "280px",
-                      minWidth: "280px",
-                      maxWidth: "280px",
-                    }}
-                  >
-                    <div className="p-4">
-                      {/* User Info Header */}
-                      <div
-                        className="mb-3 flex items-center gap-2 border-b pb-3"
-                        style={{ borderColor: "#20232b" }}
-                      >
+                {/* Combined Dropdown - portaled to body so it always appears on top */}
+                {profileMenuOpen &&
+                  profileDropdownPosition &&
+                  typeof document !== "undefined" &&
+                  createPortal(
+                    <div
+                      data-profile-dropdown
+                      className="mt-1 max-h-[min(85vh,600px)] w-[280px] max-w-[calc(100vw-1.5rem)] min-w-[260px] overflow-y-auto rounded-lg border border-[#20232b] bg-[#0a0b10] shadow-2xl"
+                      style={{
+                        position: "fixed",
+                        top: profileDropdownPosition.top,
+                        right: profileDropdownPosition.right,
+                        zIndex: 10002,
+                      }}
+                    >
+                      <div className="p-4">
+                        {/* User Info Header */}
                         <div
-                          className="flex h-6 w-6 select-none bg-contain bg-center bg-no-repeat"
-                          style={{ backgroundImage: `url(/ranks/degen-${Math.max(1, Math.min(4, honorsLevel))}.png)` }}
-                          role="img"
-                          aria-label={`Honors ${honorsLevel}`}
-                        />
-                        <div className="min-w-0 flex-1">
-                          <div className="truncate text-sm font-semibold text-[#f0f5f5]">
-                            {user.name}
-                          </div>
-                          <div className="text-xs text-neutral-400">
-                            Account
+                          className="mb-3 flex items-center gap-2 border-b pb-3"
+                          style={{ borderColor: "#20232b" }}
+                        >
+                          <div
+                            className="flex h-6 w-6 bg-contain bg-center bg-no-repeat select-none"
+                            style={{
+                              backgroundImage: `url(/ranks/degen-${Math.max(1, Math.min(4, honorsLevel))}.png)`,
+                            }}
+                            role="img"
+                            aria-label={`Honors ${honorsLevel}`}
+                          />
+                          <div className="min-w-0 flex-1">
+                            <div className="truncate text-sm font-semibold text-[#f0f5f5]">
+                              {user.name}
+                            </div>
+                            <div className="text-xs text-neutral-400">
+                              Account
+                            </div>
                           </div>
                         </div>
-                      </div>
 
-                      {/* Total Value - Conditional for Predictions */}
-                      {isPredictionsPage ? (
-                        <>
-                          {/* Clean Polygon Balance Display */}
-                          <div className="mb-3">
-                            <div className="text-2xl font-bold text-white">
-                              ${formatCurrency(polygonBalance?.usdc ?? 0)}
+                        {/* Total Value - Conditional for Predictions */}
+                        {isPredictionsPage ? (
+                          <>
+                            {/* Clean Polygon Balance Display */}
+                            <div className="mb-3">
+                              <div className="text-2xl font-bold text-white">
+                                ${formatCurrency(polygonBalance?.usdc ?? 0)}
+                              </div>
+                              <div className="mt-1 flex items-center gap-3 text-xs text-neutral-400">
+                                <span className="flex items-center gap-1">
+                                  <span className="h-2 w-2 rounded-full bg-emerald-400"></span>
+                                  $
+                                  {formatBalance(
+                                    polygonBalance?.usdcBridged ?? 0,
+                                    2,
+                                  )}{" "}
+                                  USDC.e
+                                </span>
+                                <span className="flex items-center gap-1">
+                                  <SiPolygon
+                                    className="h-3 w-3"
+                                    style={{ color: "#8247E5" }}
+                                  />
+                                  {formatBalance(polygonBalance?.matic ?? 0, 2)}{" "}
+                                  MATIC
+                                </span>
+                              </div>
                             </div>
-                            <div className="flex items-center gap-3 mt-1 text-xs text-neutral-400">
-                              <span className="flex items-center gap-1">
-                                <span className="w-2 h-2 rounded-full bg-emerald-400"></span>
-                                ${formatBalance(polygonBalance?.usdcBridged ?? 0, 2)} USDC.e
-                              </span>
-                              <span className="flex items-center gap-1">
-                                <SiPolygon className="w-3 h-3" style={{ color: '#8247E5' }} />
-                                {formatBalance(polygonBalance?.matic ?? 0, 2)} MATIC
-                              </span>
-                            </div>
-                          </div>
 
-                          {/* Compact Address Row */}
-                          <div className="flex items-center justify-between rounded-lg bg-[#1a1b1f] px-3 py-2 mb-3">
-                            <div className="flex items-center gap-2 min-w-0 flex-1">
-                              <span className="text-xs font-mono text-neutral-400 truncate">
-                                {primaryWalletAddresses?.ethereum ?
-                                  `${primaryWalletAddresses.ethereum.slice(0, 6)}...${primaryWalletAddresses.ethereum.slice(-4)}` :
-                                  'Not connected'}
-                              </span>
+                            {/* Compact Address Row */}
+                            <div className="mb-3 flex items-center justify-between rounded-lg bg-[#1a1b1f] px-3 py-2">
+                              <div className="flex min-w-0 flex-1 items-center gap-2">
+                                <span className="truncate font-mono text-xs text-neutral-400">
+                                  {primaryWalletAddresses?.ethereum
+                                    ? `${primaryWalletAddresses.ethereum.slice(0, 6)}...${primaryWalletAddresses.ethereum.slice(-4)}`
+                                    : "Not connected"}
+                                </span>
+                              </div>
+                              <div className="flex flex-shrink-0 items-center gap-1">
+                                <button
+                                  onClick={handleCopyPolygonAddress}
+                                  className="rounded p-1.5 transition-colors hover:bg-white/10"
+                                  title="Copy address"
+                                >
+                                  {polygonAddressCopied ? (
+                                    <BiCheck className="h-4 w-4 text-emerald-400" />
+                                  ) : (
+                                    <BiCopy className="h-4 w-4 text-neutral-400 hover:text-white" />
+                                  )}
+                                </button>
+                                <a
+                                  href={`https://polygonscan.com/address/${primaryWalletAddresses?.ethereum}`}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="rounded p-1.5 transition-colors hover:bg-white/10"
+                                  title="View on Polygonscan"
+                                >
+                                  <img
+                                    src="https://polygonscan.com/assets/poly/images/svg/logos/chain-dim.svg?v=26.1.4.2"
+                                    alt="Polygonscan"
+                                    className="h-4 w-4"
+                                  />
+                                </a>
+                              </div>
                             </div>
-                            <div className="flex items-center gap-1 flex-shrink-0">
+
+                            {/* Convert button if needed */}
+                            {(polygonBalance?.usdcNative ?? 0) >= 0.1 && (
                               <button
-                                onClick={handleCopyPolygonAddress}
-                                className="p-1.5 rounded hover:bg-white/10 transition-colors"
-                                title="Copy address"
+                                onClick={handleConvertUsdcToUsdce}
+                                disabled={polygonConverting}
+                                className="mb-3 flex w-full items-center justify-center gap-2 rounded-lg px-3 py-2 text-xs font-medium transition-all"
+                                style={{
+                                  backgroundColor: polygonConvertSuccess
+                                    ? "rgba(74, 222, 128, 0.15)"
+                                    : "rgba(251, 191, 36, 0.15)",
+                                  color: polygonConvertSuccess
+                                    ? "#4ADE80"
+                                    : "#FBBF24",
+                                  opacity: polygonConverting ? 0.7 : 1,
+                                }}
                               >
-                                {polygonAddressCopied ?
-                                  <BiCheck className="w-4 h-4 text-emerald-400" /> :
-                                  <BiCopy className="w-4 h-4 text-neutral-400 hover:text-white" />}
+                                {polygonConverting ? (
+                                  <>
+                                    <FaSync className="h-3 w-3 animate-spin" />
+                                    Converting...
+                                  </>
+                                ) : polygonConvertSuccess ? (
+                                  <>
+                                    <BiCheck className="h-4 w-4" />
+                                    Converted!
+                                  </>
+                                ) : (
+                                  <>
+                                    Convert $
+                                    {formatBalance(
+                                      polygonBalance?.usdcNative ?? 0,
+                                      2,
+                                    )}{" "}
+                                    USDC → USDC.e
+                                  </>
+                                )}
                               </button>
-                              <a
-                                href={`https://polygonscan.com/address/${primaryWalletAddresses?.ethereum}`}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="p-1.5 rounded hover:bg-white/10 transition-colors"
-                                title="View on Polygonscan"
-                              >
+                            )}
+                          </>
+                        ) : (
+                          <>
+                            {/* Standard chain balance display */}
+                            <div className="mb-3">
+                              <div className="mb-1 text-xs text-neutral-400">
+                                Total Value
+                              </div>
+                              <div className="text-2xl font-bold text-white">
+                                ${formatCurrency(chainBalance * chainPrice)}
+                              </div>
+                            </div>
+
+                            {/* Balance Display */}
+                            <div className="mb-4 flex items-center justify-between rounded-lg bg-[#25282B] p-2">
+                              <div className="flex items-center gap-2">
                                 <img
-                                  src="https://polygonscan.com/assets/poly/images/svg/logos/chain-dim.svg?v=26.1.4.2"
-                                  alt="Polygonscan"
-                                  className="w-4 h-4"
+                                  src={
+                                    chainLogos[currentChain] ?? chainLogos.monad
+                                  }
+                                  alt={chainSymbols[currentChain] ?? "MON"}
+                                  className={
+                                    currentChain === "monad"
+                                      ? "h-10 w-8 rounded-md object-contain"
+                                      : "h-4 w-4 rounded-md object-contain"
+                                  }
+                                  style={
+                                    currentChain === "monad"
+                                      ? { minWidth: "32px", minHeight: "40px" }
+                                      : { minWidth: "16px", minHeight: "16px" }
+                                  }
                                 />
-                              </a>
-                            </div>
-                          </div>
-
-                          {/* Convert button if needed */}
-                          {(polygonBalance?.usdcNative ?? 0) >= 0.1 && (
-                            <button
-                              onClick={handleConvertUsdcToUsdce}
-                              disabled={polygonConverting}
-                              className="w-full flex items-center justify-center gap-2 rounded-lg px-3 py-2 mb-3 text-xs font-medium transition-all"
-                              style={{
-                                backgroundColor: polygonConvertSuccess ? 'rgba(74, 222, 128, 0.15)' : 'rgba(251, 191, 36, 0.15)',
-                                color: polygonConvertSuccess ? '#4ADE80' : '#FBBF24',
-                                opacity: polygonConverting ? 0.7 : 1,
-                              }}
-                            >
-                              {polygonConverting ? (
-                                <><FaSync className="w-3 h-3 animate-spin" />Converting...</>
-                              ) : polygonConvertSuccess ? (
-                                <><BiCheck className="w-4 h-4" />Converted!</>
-                              ) : (
-                                <>Convert ${formatBalance(polygonBalance?.usdcNative ?? 0, 2)} USDC → USDC.e</>
-                              )}
-                            </button>
-                          )}
-                        </>
-                      ) : (
-                        <>
-                          {/* Standard chain balance display */}
-                          <div className="mb-3">
-                            <div className="mb-1 text-xs text-neutral-400">
-                              Total Value
-                            </div>
-                            <div className="text-2xl font-bold text-white">
-                              ${formatCurrency(chainBalance * chainPrice)}
-                            </div>
-                          </div>
-
-                          {/* Balance Display */}
-                          <div className="mb-4 flex items-center justify-between rounded-lg bg-[#25282B] p-2">
-                            <div className="flex items-center gap-2">
-                              <img
-                                src={chainLogos[currentChain] ?? chainLogos.monad}
-                                alt={chainSymbols[currentChain] ?? "MON"}
-                                className={
-                                  currentChain === "monad"
-                                    ? "h-10 w-8 rounded-md object-contain"
-                                    : "h-4 w-4 rounded-md object-contain"
-                                }
-                                style={
-                                  currentChain === "monad"
-                                    ? { minWidth: "32px", minHeight: "40px" }
-                                    : { minWidth: "16px", minHeight: "16px" }
-                                }
-                              />
-                              <span className="text-sm text-[#f0f5f5]">
-                                ≈ {formatBalance(chainBalance)}{" "}
-                                {chainSymbols[currentChain] ?? "MON"}
-                              </span>
-                            </div>
-                            <div className="flex items-center gap-2">
-                              <svg
-                                className="h-4 w-4 text-neutral-400"
-                                fill="none"
-                                stroke="currentColor"
-                                viewBox="0 0 24 24"
-                              >
-                                <path
-                                  strokeLinecap="round"
-                                  strokeLinejoin="round"
-                                  strokeWidth={2}
-                                  d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4"
+                                <span className="text-sm text-[#f0f5f5]">
+                                  ≈ {formatBalance(chainBalance)}{" "}
+                                  {chainSymbols[currentChain] ?? "MON"}
+                                </span>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <svg
+                                  className="h-4 w-4 text-neutral-400"
+                                  fill="none"
+                                  stroke="currentColor"
+                                  viewBox="0 0 24 24"
+                                >
+                                  <path
+                                    strokeLinecap="round"
+                                    strokeLinejoin="round"
+                                    strokeWidth={2}
+                                    d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4"
+                                  />
+                                </svg>
+                                <img
+                                  src={
+                                    chainLogos[currentChain] ?? chainLogos.monad
+                                  }
+                                  alt={chainSymbols[currentChain] ?? "MON"}
+                                  className={
+                                    currentChain === "monad"
+                                      ? "h-10 w-8 rounded-md object-contain"
+                                      : "h-4 w-4 rounded-md object-contain"
+                                  }
+                                  style={
+                                    currentChain === "monad"
+                                      ? { minWidth: "32px", minHeight: "40px" }
+                                      : { minWidth: "16px", minHeight: "16px" }
+                                  }
                                 />
-                              </svg>
-                              <img
-                                src={chainLogos[currentChain] ?? chainLogos.monad}
-                                alt={chainSymbols[currentChain] ?? "MON"}
-                                className={
-                                  currentChain === "monad"
-                                    ? "h-10 w-8 rounded-md object-contain"
-                                    : "h-4 w-4 rounded-md object-contain"
-                                }
-                                style={
-                                  currentChain === "monad"
-                                    ? { minWidth: "32px", minHeight: "40px" }
-                                    : { minWidth: "16px", minHeight: "16px" }
-                                }
-                              />
-                              <span className="text-sm text-[#f0f5f5]">
-                                {formatMultiDigitBalance(chainBalance)}
-                              </span>
+                                <span className="text-sm text-[#f0f5f5]">
+                                  {formatMultiDigitBalance(chainBalance)}
+                                </span>
+                              </div>
                             </div>
-                          </div>
-                        </>
-                      )}
+                          </>
+                        )}
 
-                      {/* Action Buttons - Conditional for Predictions */}
-                      {isPredictionsPage ? (
-                        <div>
-                          {/* Deposit Button - Opens QR - Full Width */}
-                          <button
-                            onClick={() => setShowPolygonQR(true)}
-                            className="w-full flex items-center justify-center gap-1.5 rounded-lg px-3 py-2.5 text-sm font-medium transition-all"
-                            style={{ backgroundColor: '#8247E5', color: '#fff' }}
-                            onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = '#7038d4'; }}
-                            onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = '#8247E5'; }}
-                          >
-                            <HiOutlineQrcode className="w-4 h-4" />
-                            Deposit
-                          </button>
-                        </div>
-                      ) : (
-                        <div className="space-y-2">
-                          {/* Deposit/Withdraw Buttons */}
-                          <div className="flex gap-2">
+                        {/* Action Buttons - Conditional for Predictions */}
+                        {isPredictionsPage ? (
+                          <div>
+                            {/* Deposit Button - Opens QR - Full Width */}
                             <button
-                              onClick={() => {
-                                setProfileMenuOpen(false);
-                                handleDepositClick();
-                              }}
-                              className="flex-1 rounded-lg px-3 py-2 text-sm font-medium transition-all duration-200"
+                              onClick={() => setShowPolygonQR(true)}
+                              className="flex w-full items-center justify-center gap-1.5 rounded-lg px-3 py-2.5 text-sm font-medium transition-all"
                               style={{
-                                backgroundColor: AX.mint,
-                                color: "#000000",
+                                backgroundColor: "#8247E5",
+                                color: "#fff",
                               }}
                               onMouseEnter={(e) => {
                                 e.currentTarget.style.backgroundColor =
-                                  AX.mintHover;
+                                  "#7038d4";
                               }}
                               onMouseLeave={(e) => {
-                                e.currentTarget.style.backgroundColor = AX.mint;
+                                e.currentTarget.style.backgroundColor =
+                                  "#8247E5";
                               }}
                             >
+                              <HiOutlineQrcode className="h-4 w-4" />
                               Deposit
                             </button>
-                            <button
-                              onClick={() => {
-                                setProfileMenuOpen(false);
-                                handleWithdrawClick();
-                              }}
-                              className="flex-1 rounded-lg px-3 py-2 text-sm font-medium transition-all duration-200"
-                              style={{
-                                backgroundColor: "#0f1012",
-                                color: "#ffffff",
-                                border: "1px solid #2A2B33",
-                              }}
-                              onMouseEnter={(e) => {
-                                e.currentTarget.style.backgroundColor = "#1A1B1F";
-                              }}
-                              onMouseLeave={(e) => {
-                                e.currentTarget.style.backgroundColor = "#0f1012";
-                              }}
-                            >
-                              Withdraw
-                            </button>
                           </div>
+                        ) : (
+                          <div className="space-y-2">
+                            {/* Deposit/Withdraw Buttons */}
+                            <div className="flex gap-2">
+                              <button
+                                onClick={() => {
+                                  setProfileMenuOpen(false);
+                                  handleDepositClick();
+                                }}
+                                className="flex-1 rounded-lg px-3 py-2 text-sm font-medium transition-all duration-200"
+                                style={{
+                                  backgroundColor: AX.mint,
+                                  color: "#000000",
+                                }}
+                                onMouseEnter={(e) => {
+                                  e.currentTarget.style.backgroundColor =
+                                    AX.mintHover;
+                                }}
+                                onMouseLeave={(e) => {
+                                  e.currentTarget.style.backgroundColor =
+                                    AX.mint;
+                                }}
+                              >
+                                Deposit
+                              </button>
+                              <button
+                                onClick={() => {
+                                  setProfileMenuOpen(false);
+                                  handleWithdrawClick();
+                                }}
+                                className="flex-1 rounded-lg px-3 py-2 text-sm font-medium transition-all duration-200"
+                                style={{
+                                  backgroundColor: "#0f1012",
+                                  color: "#ffffff",
+                                  border: "1px solid #2A2B33",
+                                }}
+                                onMouseEnter={(e) => {
+                                  e.currentTarget.style.backgroundColor =
+                                    "#1A1B1F";
+                                }}
+                                onMouseLeave={(e) => {
+                                  e.currentTarget.style.backgroundColor =
+                                    "#0f1012";
+                                }}
+                              >
+                                Withdraw
+                              </button>
+                            </div>
 
-                          {/* Convert/Buy Buttons */}
-                          <div className="flex gap-2">
-                            <button
-                              onClick={() => {
-                                setProfileMenuOpen(false);
-                                handleConvertClick();
-                              }}
-                              className="flex flex-1 items-center justify-center gap-1.5 rounded-lg border border-[#2A2B33] bg-[#0C0C0F] px-3 py-2 text-sm font-medium text-[#ffffff] transition-all duration-200"
-                              onMouseEnter={(e) => {
-                                e.currentTarget.style.backgroundColor = "#1A1B1F";
-                              }}
-                              onMouseLeave={(e) => {
-                                e.currentTarget.style.backgroundColor = "#0f1012";
-                              }}
-                            >
-                              <svg
-                                className="h-3.5 w-3.5"
-                                fill="none"
-                                stroke="currentColor"
-                                viewBox="0 0 24 24"
+                            {/* Convert/Buy Buttons */}
+                            <div className="flex gap-2">
+                              <button
+                                onClick={() => {
+                                  setProfileMenuOpen(false);
+                                  handleConvertClick();
+                                }}
+                                className="flex flex-1 items-center justify-center gap-1.5 rounded-lg border border-[#2A2B33] bg-[#0C0C0F] px-3 py-2 text-sm font-medium text-[#ffffff] transition-all duration-200"
+                                onMouseEnter={(e) => {
+                                  e.currentTarget.style.backgroundColor =
+                                    "#1A1B1F";
+                                }}
+                                onMouseLeave={(e) => {
+                                  e.currentTarget.style.backgroundColor =
+                                    "#0f1012";
+                                }}
                               >
-                                <path
-                                  strokeLinecap="round"
-                                  strokeLinejoin="round"
-                                  strokeWidth={2}
-                                  d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4"
-                                />
-                              </svg>
-                              Convert
-                            </button>
-                            <button
-                              onClick={() => {
-                                setProfileMenuOpen(false);
-                                handleBuyClick();
-                              }}
-                              className="flex flex-1 items-center justify-center gap-1.5 rounded-lg border border-[#2A2B33] bg-[#0C0C0F] px-3 py-2 text-sm font-medium text-[#ffffff] transition-all duration-200"
-                              onMouseEnter={(e) => {
-                                e.currentTarget.style.backgroundColor = "#1A1B1F";
-                              }}
-                              onMouseLeave={(e) => {
-                                e.currentTarget.style.backgroundColor = "#0f1012";
-                              }}
-                            >
-                              <svg
-                                className="h-3.5 w-3.5"
-                                fill="none"
-                                stroke="currentColor"
-                                viewBox="0 0 24 24"
+                                <svg
+                                  className="h-3.5 w-3.5"
+                                  fill="none"
+                                  stroke="currentColor"
+                                  viewBox="0 0 24 24"
+                                >
+                                  <path
+                                    strokeLinecap="round"
+                                    strokeLinejoin="round"
+                                    strokeWidth={2}
+                                    d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4"
+                                  />
+                                </svg>
+                                Convert
+                              </button>
+                              <button
+                                onClick={() => {
+                                  setProfileMenuOpen(false);
+                                  handleBuyClick();
+                                }}
+                                className="flex flex-1 items-center justify-center gap-1.5 rounded-lg border border-[#2A2B33] bg-[#0C0C0F] px-3 py-2 text-sm font-medium text-[#ffffff] transition-all duration-200"
+                                onMouseEnter={(e) => {
+                                  e.currentTarget.style.backgroundColor =
+                                    "#1A1B1F";
+                                }}
+                                onMouseLeave={(e) => {
+                                  e.currentTarget.style.backgroundColor =
+                                    "#0f1012";
+                                }}
                               >
-                                <path
-                                  strokeLinecap="round"
-                                  strokeLinejoin="round"
-                                  strokeWidth={2}
-                                  d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z"
-                                />
-                              </svg>
-                              Buy
-                            </button>
+                                <svg
+                                  className="h-3.5 w-3.5"
+                                  fill="none"
+                                  stroke="currentColor"
+                                  viewBox="0 0 24 24"
+                                >
+                                  <path
+                                    strokeLinecap="round"
+                                    strokeLinejoin="round"
+                                    strokeWidth={2}
+                                    d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z"
+                                  />
+                                </svg>
+                                Buy
+                              </button>
+                            </div>
                           </div>
-                        </div>
-                      )}
+                        )}
 
-                      {/* Feature Updates Button */}
-                      <button
-                        onClick={() => {
-                          setProfileMenuOpen(false);
-                          setIsFirstLogin(false);
-                          setShowUpdatesModal(true);
-                        }}
-                        className="flex w-full items-center gap-2 rounded-lg bg-transparent px-3 py-2 text-sm font-medium transition-all duration-200"
-                        style={{
-                          color: AX.text,
-                        }}
-                        onMouseEnter={(e) => {
-                          e.currentTarget.style.backgroundColor =
-                            "rgba(24, 196, 140, 0.1)";
-                          e.currentTarget.style.color = AX.mint;
-                        }}
-                        onMouseLeave={(e) => {
-                          e.currentTarget.style.backgroundColor =
-                            "transparent";
-                          e.currentTarget.style.color = AX.text;
-                        }}
-                      >
-                        <svg
-                          className="h-4 w-4"
-                          fill="none"
-                          stroke="currentColor"
-                          viewBox="0 0 24 24"
+                        {/* Feature Updates Button */}
+                        <button
+                          onClick={() => {
+                            setProfileMenuOpen(false);
+                            setIsFirstLogin(false);
+                            setShowUpdatesModal(true);
+                          }}
+                          className="flex w-full items-center gap-2 rounded-lg bg-transparent px-3 py-2 text-sm font-medium transition-all duration-200"
+                          style={{
+                            color: AX.text,
+                          }}
+                          onMouseEnter={(e) => {
+                            e.currentTarget.style.backgroundColor =
+                              "rgba(24, 196, 140, 0.1)";
+                            e.currentTarget.style.color = AX.mint;
+                          }}
+                          onMouseLeave={(e) => {
+                            e.currentTarget.style.backgroundColor =
+                              "transparent";
+                            e.currentTarget.style.color = AX.text;
+                          }}
                         >
-                          <path
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            strokeWidth={2}
-                            d="M13 10V3L4 14h7v7l9-11h-7z"
-                          />
-                        </svg>
-                        Feature Updates
-                      </button>
+                          <svg
+                            className="h-4 w-4"
+                            fill="none"
+                            stroke="currentColor"
+                            viewBox="0 0 24 24"
+                          >
+                            <path
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              strokeWidth={2}
+                              d="M13 10V3L4 14h7v7l9-11h-7z"
+                            />
+                          </svg>
+                          Feature Updates
+                        </button>
 
-                      {/* Edit Username Button */}
-                      <button
-                        onClick={() => {
-                          setProfileMenuOpen(false);
-                          setShowUsernameModal(true);
-                        }}
-                        className="flex w-full items-center gap-2 rounded-lg bg-transparent px-3 py-2 text-sm font-medium transition-all duration-200"
-                        style={{
-                          color: AX.text,
-                        }}
-                        onMouseEnter={(e) => {
-                          e.currentTarget.style.backgroundColor =
-                            "rgba(24, 196, 140, 0.1)";
-                          e.currentTarget.style.color = AX.mint;
-                        }}
-                        onMouseLeave={(e) => {
-                          e.currentTarget.style.backgroundColor =
-                            "transparent";
-                          e.currentTarget.style.color = AX.text;
-                        }}
-                      >
-                        <svg
-                          className="h-4 w-4"
-                          fill="none"
-                          stroke="currentColor"
-                          viewBox="0 0 24 24"
+                        {/* Edit Username Button */}
+                        <button
+                          onClick={() => {
+                            setProfileMenuOpen(false);
+                            setShowUsernameModal(true);
+                          }}
+                          className="flex w-full items-center gap-2 rounded-lg bg-transparent px-3 py-2 text-sm font-medium transition-all duration-200"
+                          style={{
+                            color: AX.text,
+                          }}
+                          onMouseEnter={(e) => {
+                            e.currentTarget.style.backgroundColor =
+                              "rgba(24, 196, 140, 0.1)";
+                            e.currentTarget.style.color = AX.mint;
+                          }}
+                          onMouseLeave={(e) => {
+                            e.currentTarget.style.backgroundColor =
+                              "transparent";
+                            e.currentTarget.style.color = AX.text;
+                          }}
                         >
-                          <path
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            strokeWidth={2}
-                            d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"
-                          />
-                        </svg>
-                        Edit Username
-                      </button>
+                          <svg
+                            className="h-4 w-4"
+                            fill="none"
+                            stroke="currentColor"
+                            viewBox="0 0 24 24"
+                          >
+                            <path
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              strokeWidth={2}
+                              d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"
+                            />
+                          </svg>
+                          Edit Username
+                        </button>
 
-                      {/* Logout Button */}
-                      <button
-                        onClick={() => {
-                          setProfileMenuOpen(false);
-                          logout();
-                        }}
-                        className="flex w-full items-center gap-2 rounded-lg bg-transparent px-3 py-2 text-sm font-medium transition-all duration-200"
-                        style={{
-                          color: "#ef4444",
-                        }}
-                        onMouseEnter={(e) => {
-                          e.currentTarget.style.backgroundColor =
-                            "rgba(239, 68, 68, 0.1)";
-                        }}
-                        onMouseLeave={(e) => {
-                          e.currentTarget.style.backgroundColor =
-                            "transparent";
-                        }}
-                      >
-                        <svg
-                          className="h-4 w-4"
-                          fill="none"
-                          stroke="currentColor"
-                          viewBox="0 0 24 24"
+                        {/* Logout Button */}
+                        <button
+                          onClick={() => {
+                            setProfileMenuOpen(false);
+                            logout();
+                          }}
+                          className="flex w-full items-center gap-2 rounded-lg bg-transparent px-3 py-2 text-sm font-medium transition-all duration-200"
+                          style={{
+                            color: "#ef4444",
+                          }}
+                          onMouseEnter={(e) => {
+                            e.currentTarget.style.backgroundColor =
+                              "rgba(239, 68, 68, 0.1)";
+                          }}
+                          onMouseLeave={(e) => {
+                            e.currentTarget.style.backgroundColor =
+                              "transparent";
+                          }}
                         >
-                          <path
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            strokeWidth={2}
-                            d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"
-                          />
-                        </svg>
-                        Logout
-                      </button>
-                    </div>
-                  </div>
-                )}
+                          <svg
+                            className="h-4 w-4"
+                            fill="none"
+                            stroke="currentColor"
+                            viewBox="0 0 24 24"
+                          >
+                            <path
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              strokeWidth={2}
+                              d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"
+                            />
+                          </svg>
+                          Logout
+                        </button>
+                      </div>
+                    </div>,
+                    document.body,
+                  )}
               </div>
             ) : (
               !userLoading && (
                 <button
-                  className="ml-0.5 flex-shrink-0 rounded-md border-none px-2.5 py-1.5 text-sm font-medium text-black transition-all duration-300 ease-out sm:ml-1 md:ml-1.5 md:px-3 lg:ml-2"
+                  className="ml-0.5 flex h-10 min-h-[44px] flex-shrink-0 items-center justify-center rounded-md border-none px-3 py-2 text-sm font-medium text-black transition-all duration-300 ease-out sm:ml-1 sm:h-8 sm:min-h-0 sm:py-1.5 md:ml-1.5 md:px-3 lg:ml-2"
                   style={{
                     backgroundColor: AX.mint,
                   }}
@@ -2432,9 +2822,12 @@ export default function Header({
           </div>
         </div>
         {headerBarVisible && (
-          <div className="flex items-center gap-2 px-1 py-0.5 overflow-hidden" style={{ background: '#0a0b0e' }}>
-          <div className="flex items-center gap-2 flex-1 min-w-0 rounded-md px-3 py-1 overflow-hidden" style={{ background: '#13151b' }}>
-            {/* COMMENTED OUT: Active Positions icon — may re-enable later
+          <div className="flex flex-nowrap items-center gap-1 overflow-hidden bg-[#0C0C0F] px-2 py-1 sm:gap-2 sm:px-3 sm:py-0.5">
+            <div
+              className="flex min-w-0 flex-1 items-center gap-2 overflow-hidden rounded-md px-3 py-1"
+              style={{ background: "#13151b" }}
+            >
+              {/* COMMENTED OUT: Active Positions icon — may re-enable later
             <div className="group relative">
               <button
                 className="cursor-pointer rounded p-0.5 transition-all duration-300 ease-out"
@@ -2487,23 +2880,24 @@ export default function Header({
             </div>
             END COMMENTED OUT: Active Positions icon */}
 
-            {/* Watchlist label button — opens watchlist modal */}
-            <button
-              className="flex items-center gap-1.5 cursor-pointer rounded-md px-2.5 py-1 shrink-0"
-              style={{ color: '#c5cdd8' }}
-              onClick={() => setWatchlistOpen(true)}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.06)';
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.backgroundColor = 'transparent';
-              }}
-            >
-              <span className="text-xs font-medium">Watchlist</span>
-              <FaSortAmountDown size={10} style={{ color: '#8b94a5' }} />
-            </button>
+              {/* Watchlist label button — opens watchlist modal */}
+              <button
+                className="flex shrink-0 cursor-pointer items-center gap-1.5 rounded-md px-2.5 py-1"
+                style={{ color: "#c5cdd8" }}
+                onClick={() => setWatchlistOpen(true)}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.backgroundColor =
+                    "rgba(255, 255, 255, 0.06)";
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.backgroundColor = "transparent";
+                }}
+              >
+                <span className="text-xs font-medium">Watchlist</span>
+                <FaSortAmountDown size={10} style={{ color: "#8b94a5" }} />
+              </button>
 
-            {/* COMMENTED OUT: Watchlist Star icon — replaced with text label above
+              {/* COMMENTED OUT: Watchlist Star icon — replaced with text label above
             <div className="group relative">
               <button
                 className="relative cursor-pointer rounded p-0.5 transition-all duration-300 ease-out"
@@ -2556,12 +2950,15 @@ export default function Header({
             </div>
             END COMMENTED OUT: Watchlist Star icon */}
 
-            {/* Divider before watchlist tokens - only show after hydration to prevent flicker */}
-            {isHydrated && watchlist.length > 0 && (
-              <div className="h-4 border-r" style={{ borderColor: '#262a35' }} />
-            )}
+              {/* Divider before watchlist tokens - only show after hydration to prevent flicker */}
+              {isHydrated && watchlist.length > 0 && (
+                <div
+                  className="h-4 border-r"
+                  style={{ borderColor: "#262a35" }}
+                />
+              )}
 
-            {/* COMMENTED OUT: "All" dropdown — replaced by "Watchlist" label above
+              {/* COMMENTED OUT: "All" dropdown — replaced by "Watchlist" label above
             {isHydrated && watchlist.length > 0 && (
               <div className="flex items-center">
                 <span className="text-xs font-medium" style={{ color: '#c5cdd8' }}>
@@ -2572,268 +2969,364 @@ export default function Header({
             )}
             END COMMENTED OUT: "All" dropdown */}
 
-            {/* Watchlist Tokens Ticker - Scrollable Container (uses full available panel width) */}
-            {isHydrated && enrichedWatchlist.length > 0 && (
-            <div
-              className="flex-1 flex items-center gap-3 overflow-x-auto scrollbar-hide pl-1 pr-3"
-              style={{
-                minWidth: 0, // Allow flex item to shrink below content size for proper scrolling
-                scrollbarWidth: 'none', // Firefox
-                msOverflowStyle: 'none', // IE/Edge
-              }}
-            >
-            {enrichedWatchlist.map((token, index) => {
-              const tokenKey = token.pair_address || (token as any).mint || token.symbol;
-              const tokenAddress = token.pair_address || (token as any).mint || '';
-              // Use helper function to get correctly mapped price and price change
-              const { price, priceChange } = getWatchlistTokenPriceAndChange(token);
-              const marketCap =
-                (token as any).market_cap_usd ??
-                (token as any).marketCapUSD ??
-                (token as any).fully_diluted_value ??
-                0;
-
-              // Debug logging for specific token address (only log once per session)
-              const isTestToken = tokenAddress.toLowerCase() === '0x0cc9b2e2acd7bacff79eb7db48f5662b622e7777' || 
-                                  (token as any).mint?.toLowerCase() === '0x0cc9b2e2acd7bacff79eb7db48f5662b622e7777';
-              
-              if (isTestToken && typeof window !== 'undefined') {
-                const logKey = `__watchlistTestLogged_${tokenAddress.toLowerCase()}`;
-                if (!(window as any)[logKey]) {
-                  // Get all price change related fields from token (check all possible field names)
-                  const allPriceChangeFields: Record<string, any> = {};
-                  const changeFieldNames = [
-                    'price_percent_change_1h', 'price_change_1h', 'price_change',
-                    'priceChange1h', 'price_percent_change_24h', 'price_change_24h',
-                    'priceChange24h', 'price24hChangePercent', 'price_change_1h_percent',
-                    'price_change_24h_percent', 'price_change_percent', 'pricePercentChange',
-                    'change_1h', 'change_24h', 'percent_change_1h', 'percent_change_24h',
-                    'percentChange1h', 'percentChange24h'
-                  ];
-                  
-                  // Check all keys in token object for anything that might be a price change field
-                  Object.keys(token).forEach(key => {
-                    const lowerKey = key.toLowerCase();
-                    if (lowerKey.includes('change') || lowerKey.includes('percent') || 
-                        lowerKey.includes('price') && (lowerKey.includes('1h') || lowerKey.includes('24h'))) {
-                      allPriceChangeFields[key] = (token as any)[key];
-                    }
-                  });
-                  
-                  // Also check the specific field names
-                  changeFieldNames.forEach(field => {
-                    const value = (token as any)[field];
-                    if (value !== undefined && value !== null) {
-                      allPriceChangeFields[field] = value;
-                    }
-                  });
-                  
-                  console.log(`[Watchlist Ticker Test] Token: ${token.symbol || tokenKey}`, {
-                    tokenAddress,
-                    mint: (token as any).mint,
-                    pair_address: token.pair_address,
-                    // Price fields
-                    price_usd: (token as any).price_usd,
-                    usd_price: (token as any).usd_price,
-                    chart_live_price_usd: (token as any).chart_live_price_usd,
-                    lastPriceUsd: (token as any).lastPriceUsd,
-                    price: (token as any).price,
-                    priceUSD: (token as any).priceUSD,
-                    priceUsd: (token as any).priceUsd,
-                    current_price: (token as any).current_price,
-                    currentPrice: (token as any).currentPrice,
-                    // All price change fields found (including any field with "change" or "percent" in name)
-                    priceChangeFields: allPriceChangeFields,
-                    // Final mapped values
-                    mappedPrice: price,
-                    mappedPriceChange: priceChange,
-                    formattedPrice: formatSmallPrice(price),
-                    formattedPriceChange: `${priceChange >= 0 ? '+' : ''}${formatSmartNumber(Math.abs(priceChange))}%`,
-                    // All keys for reference
-                    allKeys: Object.keys(token),
-                  });
-                  (window as any)[logKey] = true;
-                }
-              }
-              
-              // Debug logging to see what fields are available for tokens with 0 price
-              if (price === 0 && !isTestToken) {
-                console.log(`[Watchlist Debug] ${token.symbol || tokenKey} - Price is 0, checking fields:`, {
-                  symbol: token.symbol,
-                  name: token.name,
-                  pair_address: token.pair_address,
-                  mint: (token as any).mint,
-                  price_usd: (token as any).price_usd,
-                  usd_price: (token as any).usd_price,
-                  price: (token as any).price,
-                  priceUSD: (token as any).priceUSD,
-                  priceUsd: (token as any).priceUsd,
-                  price_percent_change_1h: (token as any).price_percent_change_1h,
-                  price_change_1h: (token as any).price_change_1h,
-                  price24hChangePercent: (token as any).price24hChangePercent,
-                  allKeys: Object.keys(token).slice(0, 20), // First 20 keys
-                });
-              }
-              
-              const isHovered = hoveredWatchlistToken === tokenKey;
-              const rawImg = extractTokenImage(token as any);
-              
-              return (
+              {/* Watchlist Tokens Ticker - Scrollable Container (uses full available panel width) */}
+              {isHydrated && enrichedWatchlist.length > 0 && (
                 <div
-                  key={tokenKey}
-                  className="flex items-center gap-1.5 cursor-pointer transition-all duration-200 shrink-0 px-2.5 py-1 rounded-lg hover:bg-white/[0.07]"
-                  onMouseEnter={() => {
-                    setHoveredWatchlistToken(tokenKey);
-                    // Prefetch OHLC + route + metadata + trades on hover
-                    const isMonadToken = tokenAddress.startsWith('0x') || tokenAddress.startsWith('0X');
-                    preloadTradeChart(
-                      {
-                        mint: tokenAddress,
-                        chain: isMonadToken ? 'monad' : 'sol',
-                        name: token.name,
-                        symbol: token.symbol,
-                        priceUsd: price,
-                        marketCapUsd: token.market_cap_usd || (token as any).fully_diluted_value,
-                        image: rawImg || '',
-                        launchpadProtocol: (token as any).launchpad_protocol,
-                      },
-                      { router }
-                    );
-                  }}
-                  onMouseLeave={() => setHoveredWatchlistToken(null)}
-                  onClick={() => {
-                    if (tokenAddress) {
-                      // Check if it's a Monad token (starts with 0x)
-                      const isMonadToken = tokenAddress.startsWith('0x') || tokenAddress.startsWith('0X');
-
-                      if (isMonadToken) {
-                        // Build Monad trade URL with query parameters
-                        const queryParams = new URLSearchParams();
-                        if (token.name) queryParams.set('_name', token.name);
-                        if (token.symbol) queryParams.set('_symbol', token.symbol);
-                        if (price > 0) queryParams.set('_price', price.toString());
-                        if (token.market_cap_usd || (token as any).fully_diluted_value) {
-                          queryParams.set('_mcap', ((token.market_cap_usd || (token as any).fully_diluted_value || 0)).toString());
-                        }
-                        const imageUrl = extractTokenImage(token as any) || '';
-                        if (imageUrl) queryParams.set('_image', imageUrl);
-                        queryParams.set('_mint', tokenAddress);
-                        if ((token as any).launchpad_protocol) queryParams.set('_launchpad_protocol', (token as any).launchpad_protocol);
-                        queryParams.set('chain', 'monad');
-
-                        const url = `/trade/monad/${tokenAddress}?${queryParams.toString()}`;
-                        router.push(url);
-                      } else {
-                        // For Solana tokens, include chain=sol query parameter
-                        const queryParams = new URLSearchParams();
-                        if (token.name) queryParams.set('_name', token.name);
-                        if (token.symbol) queryParams.set('_symbol', token.symbol);
-                        if (price > 0) queryParams.set('_price', price.toString());
-                        if (token.market_cap_usd || (token as any).fully_diluted_value) {
-                          queryParams.set('_mcap', ((token.market_cap_usd || (token as any).fully_diluted_value || 0)).toString());
-                        }
-                        const imageUrl = extractTokenImage(token as any) || '';
-                        if (imageUrl) queryParams.set('_image', imageUrl);
-                        queryParams.set('_mint', tokenAddress);
-                        if ((token as any).launchpad_protocol) queryParams.set('_launchpad_protocol', (token as any).launchpad_protocol);
-                        queryParams.set('chain', 'sol');
-
-                        router.push(`/trade/${tokenAddress}?${queryParams.toString()}`);
-                      }
-                    }
+                  className="scrollbar-hide flex flex-1 items-center gap-3 overflow-x-auto pr-3 pl-1"
+                  style={{
+                    minWidth: 0, // Allow flex item to shrink below content size for proper scrolling
+                    scrollbarWidth: "none", // Firefox
+                    msOverflowStyle: "none", // IE/Edge
                   }}
                 >
-                  {/* Token Image */}
-                  <FastImage
-                    src={rawImg ?? undefined}
-                    alt={token.symbol || ''}
-                    width={16}
-                    height={16}
-                    className="rounded-full ring-1 ring-white/10"
-                    symbol={token.symbol}
-                    name={token.name}
-                    showBubble={false}
-                  />
-                  
-                  {/* Token Symbol */}
-                  <span className="text-xs font-semibold" style={{ color: '#d1d5db' }}>
-                    {token.symbol}
-                  </span>
-
-                  {/* Market Cap */}
-                  <span className="text-xs font-medium" style={{ color: '#a3e635' }}>
-                    ${formatMarketCap(marketCap)}
-                  </span>
-                  
-                  {/* Price Change */}
-                  {priceChange !== 0 && (
-                    <span 
-                      className="text-xs font-medium"
-                      style={{ color: priceChange >= 0 ? '#8ee8a8' : '#f47a96' }}
-                    >
-                      {priceChange >= 0 ? '+' : ''}{formatSmartNumber(Math.abs(priceChange))}%
-                    </span>
-                  )}
-
-                  {/* Volume (1h) - show as percentage of market cap */}
-                  {(() => {
-                    // Use same volume resolution logic as watchlist modal
-                    const usdVolumeFields = [
-                      (token as any).volume_1h_usd,
-                      (token as any).volume1hUsd,
-                      (token as any).volume1h_usd,
-                      (token as any).volume_24h_usd, // fallback when 1h is missing
-                    ];
-                    let volume1h = 0;
-                    for (const v of usdVolumeFields) {
-                      const num = Number(v);
-                      if (Number.isFinite(num) && num > 0) {
-                        volume1h = num;
-                        break;
-                      }
-                    }
-                    // Fallback to buy+sell volume if USD volume not available
-                    if (volume1h === 0) {
-                      const buy = Number((token as any).total_buy_volume_1h) || Number((token as any).total_buy_volume_mon) || 0;
-                      const sell = Number((token as any).total_sell_volume_1h) || Number((token as any).total_sell_volume_mon) || 0;
-                      if (buy || sell) volume1h = buy + sell;
-                    }
-
-                    // Get market cap
+                  {enrichedWatchlist.map((token, index) => {
+                    const tokenKey =
+                      token.pair_address || (token as any).mint || token.symbol;
+                    const tokenAddress =
+                      token.pair_address || (token as any).mint || "";
+                    // Use helper function to get correctly mapped price and price change
+                    const { price, priceChange } =
+                      getWatchlistTokenPriceAndChange(token);
                     const marketCap =
                       (token as any).market_cap_usd ??
                       (token as any).marketCapUSD ??
                       (token as any).fully_diluted_value ??
                       0;
 
-                    // Calculate volume as percentage of market cap
-                    // let volumePercent = 0;
-                    // if (volume1h > 0 && marketCap > 0) {
-                    //   volumePercent = (volume1h / marketCap) * 100;
-                    // }
+                    // Debug logging for specific token address (only log once per session)
+                    const isTestToken =
+                      tokenAddress.toLowerCase() ===
+                        "0x0cc9b2e2acd7bacff79eb7db48f5662b622e7777" ||
+                      (token as any).mint?.toLowerCase() ===
+                        "0x0cc9b2e2acd7bacff79eb7db48f5662b622e7777";
 
-                    // Show USD volume amount
-                    // Color based on price change direction: green for up, red for down
-                    const volumeColor = priceChange >= 0 ? '#8ee8a8' : '#f47a96';
-                    
-                    // if (volumePercent > 0) {
-                    //   return (
-                    //     <span className="text-xs font-medium" style={{ color: volumeColor }}>
-                    //       {formatSmartNumber(volumePercent)}%
-                    //     </span>
-                    //   );
-                    // } else 
-                    if (volume1h > 0) {
-                      return (
-                        <span className="text-xs font-medium" style={{ color: volumeColor }}>
-                          ${formatSmartNumber(volume1h)}
-                        </span>
+                    if (isTestToken && typeof window !== "undefined") {
+                      const logKey = `__watchlistTestLogged_${tokenAddress.toLowerCase()}`;
+                      if (!(window as any)[logKey]) {
+                        // Get all price change related fields from token (check all possible field names)
+                        const allPriceChangeFields: Record<string, any> = {};
+                        const changeFieldNames = [
+                          "price_percent_change_1h",
+                          "price_change_1h",
+                          "price_change",
+                          "priceChange1h",
+                          "price_percent_change_24h",
+                          "price_change_24h",
+                          "priceChange24h",
+                          "price24hChangePercent",
+                          "price_change_1h_percent",
+                          "price_change_24h_percent",
+                          "price_change_percent",
+                          "pricePercentChange",
+                          "change_1h",
+                          "change_24h",
+                          "percent_change_1h",
+                          "percent_change_24h",
+                          "percentChange1h",
+                          "percentChange24h",
+                        ];
+
+                        // Check all keys in token object for anything that might be a price change field
+                        Object.keys(token).forEach((key) => {
+                          const lowerKey = key.toLowerCase();
+                          if (
+                            lowerKey.includes("change") ||
+                            lowerKey.includes("percent") ||
+                            (lowerKey.includes("price") &&
+                              (lowerKey.includes("1h") ||
+                                lowerKey.includes("24h")))
+                          ) {
+                            allPriceChangeFields[key] = (token as any)[key];
+                          }
+                        });
+
+                        // Also check the specific field names
+                        changeFieldNames.forEach((field) => {
+                          const value = (token as any)[field];
+                          if (value !== undefined && value !== null) {
+                            allPriceChangeFields[field] = value;
+                          }
+                        });
+
+                        console.log(
+                          `[Watchlist Ticker Test] Token: ${token.symbol || tokenKey}`,
+                          {
+                            tokenAddress,
+                            mint: (token as any).mint,
+                            pair_address: token.pair_address,
+                            // Price fields
+                            price_usd: (token as any).price_usd,
+                            usd_price: (token as any).usd_price,
+                            chart_live_price_usd: (token as any)
+                              .chart_live_price_usd,
+                            lastPriceUsd: (token as any).lastPriceUsd,
+                            price: (token as any).price,
+                            priceUSD: (token as any).priceUSD,
+                            priceUsd: (token as any).priceUsd,
+                            current_price: (token as any).current_price,
+                            currentPrice: (token as any).currentPrice,
+                            // All price change fields found (including any field with "change" or "percent" in name)
+                            priceChangeFields: allPriceChangeFields,
+                            // Final mapped values
+                            mappedPrice: price,
+                            mappedPriceChange: priceChange,
+                            formattedPrice: formatSmallPrice(price),
+                            formattedPriceChange: `${priceChange >= 0 ? "+" : ""}${formatSmartNumber(Math.abs(priceChange))}%`,
+                            // All keys for reference
+                            allKeys: Object.keys(token),
+                          },
+                        );
+                        (window as any)[logKey] = true;
+                      }
+                    }
+
+                    // Debug logging to see what fields are available for tokens with 0 price
+                    if (price === 0 && !isTestToken) {
+                      console.log(
+                        `[Watchlist Debug] ${token.symbol || tokenKey} - Price is 0, checking fields:`,
+                        {
+                          symbol: token.symbol,
+                          name: token.name,
+                          pair_address: token.pair_address,
+                          mint: (token as any).mint,
+                          price_usd: (token as any).price_usd,
+                          usd_price: (token as any).usd_price,
+                          price: (token as any).price,
+                          priceUSD: (token as any).priceUSD,
+                          priceUsd: (token as any).priceUsd,
+                          price_percent_change_1h: (token as any)
+                            .price_percent_change_1h,
+                          price_change_1h: (token as any).price_change_1h,
+                          price24hChangePercent: (token as any)
+                            .price24hChangePercent,
+                          allKeys: Object.keys(token).slice(0, 20), // First 20 keys
+                        },
                       );
                     }
-                    return null;
-                  })()}
-                  
-                  {/* COMMENTED OUT: Quick Buy + Unstar buttons — may re-enable later
+
+                    const isHovered = hoveredWatchlistToken === tokenKey;
+                    const rawImg = extractTokenImage(token as any);
+
+                    return (
+                      <div
+                        key={tokenKey}
+                        className="flex shrink-0 cursor-pointer items-center gap-1.5 rounded-lg px-2.5 py-1 transition-all duration-200 hover:bg-white/[0.07]"
+                        onMouseEnter={() => {
+                          setHoveredWatchlistToken(tokenKey);
+                          // Prefetch OHLC + route + metadata + trades on hover
+                          const isMonadToken =
+                            tokenAddress.startsWith("0x") ||
+                            tokenAddress.startsWith("0X");
+                          preloadTradeChart(
+                            {
+                              mint: tokenAddress,
+                              chain: isMonadToken ? "monad" : "sol",
+                              name: token.name,
+                              symbol: token.symbol,
+                              priceUsd: price,
+                              marketCapUsd:
+                                token.market_cap_usd ||
+                                (token as any).fully_diluted_value,
+                              image: rawImg || "",
+                              launchpadProtocol: (token as any)
+                                .launchpad_protocol,
+                            },
+                            { router },
+                          );
+                        }}
+                        onMouseLeave={() => setHoveredWatchlistToken(null)}
+                        onClick={() => {
+                          if (tokenAddress) {
+                            // Check if it's a Monad token (starts with 0x)
+                            const isMonadToken =
+                              tokenAddress.startsWith("0x") ||
+                              tokenAddress.startsWith("0X");
+
+                            if (isMonadToken) {
+                              // Build Monad trade URL with query parameters
+                              const queryParams = new URLSearchParams();
+                              if (token.name)
+                                queryParams.set("_name", token.name);
+                              if (token.symbol)
+                                queryParams.set("_symbol", token.symbol);
+                              if (price > 0)
+                                queryParams.set("_price", price.toString());
+                              if (
+                                token.market_cap_usd ||
+                                (token as any).fully_diluted_value
+                              ) {
+                                queryParams.set(
+                                  "_mcap",
+                                  (
+                                    token.market_cap_usd ||
+                                    (token as any).fully_diluted_value ||
+                                    0
+                                  ).toString(),
+                                );
+                              }
+                              const imageUrl =
+                                extractTokenImage(token as any) || "";
+                              if (imageUrl) queryParams.set("_image", imageUrl);
+                              queryParams.set("_mint", tokenAddress);
+                              if ((token as any).launchpad_protocol)
+                                queryParams.set(
+                                  "_launchpad_protocol",
+                                  (token as any).launchpad_protocol,
+                                );
+                              queryParams.set("chain", "monad");
+
+                              const url = `/trade/monad/${tokenAddress}?${queryParams.toString()}`;
+                              router.push(url);
+                            } else {
+                              // For Solana tokens, include chain=sol query parameter
+                              const queryParams = new URLSearchParams();
+                              if (token.name)
+                                queryParams.set("_name", token.name);
+                              if (token.symbol)
+                                queryParams.set("_symbol", token.symbol);
+                              if (price > 0)
+                                queryParams.set("_price", price.toString());
+                              if (
+                                token.market_cap_usd ||
+                                (token as any).fully_diluted_value
+                              ) {
+                                queryParams.set(
+                                  "_mcap",
+                                  (
+                                    token.market_cap_usd ||
+                                    (token as any).fully_diluted_value ||
+                                    0
+                                  ).toString(),
+                                );
+                              }
+                              const imageUrl =
+                                extractTokenImage(token as any) || "";
+                              if (imageUrl) queryParams.set("_image", imageUrl);
+                              queryParams.set("_mint", tokenAddress);
+                              if ((token as any).launchpad_protocol)
+                                queryParams.set(
+                                  "_launchpad_protocol",
+                                  (token as any).launchpad_protocol,
+                                );
+                              queryParams.set("chain", "sol");
+
+                              router.push(
+                                `/trade/${tokenAddress}?${queryParams.toString()}`,
+                              );
+                            }
+                          }
+                        }}
+                      >
+                        {/* Token Image */}
+                        <FastImage
+                          src={rawImg ?? undefined}
+                          alt={token.symbol || ""}
+                          width={16}
+                          height={16}
+                          className="rounded-full ring-1 ring-white/10"
+                          symbol={token.symbol}
+                          name={token.name}
+                          showBubble={false}
+                        />
+
+                        {/* Token Symbol */}
+                        <span
+                          className="text-xs font-semibold"
+                          style={{ color: "#d1d5db" }}
+                        >
+                          {token.symbol}
+                        </span>
+
+                        {/* Market Cap */}
+                        <span
+                          className="text-xs font-medium"
+                          style={{ color: "#a3e635" }}
+                        >
+                          ${formatMarketCap(marketCap)}
+                        </span>
+
+                        {/* Price Change */}
+                        {priceChange !== 0 && (
+                          <span
+                            className="text-xs font-medium"
+                            style={{
+                              color: priceChange >= 0 ? "#8ee8a8" : "#f47a96",
+                            }}
+                          >
+                            {priceChange >= 0 ? "+" : ""}
+                            {formatSmartNumber(Math.abs(priceChange))}%
+                          </span>
+                        )}
+
+                        {/* Volume (1h) - show as percentage of market cap */}
+                        {(() => {
+                          // Use same volume resolution logic as watchlist modal
+                          const usdVolumeFields = [
+                            (token as any).volume_1h_usd,
+                            (token as any).volume1hUsd,
+                            (token as any).volume1h_usd,
+                            (token as any).volume_24h_usd, // fallback when 1h is missing
+                          ];
+                          let volume1h = 0;
+                          for (const v of usdVolumeFields) {
+                            const num = Number(v);
+                            if (Number.isFinite(num) && num > 0) {
+                              volume1h = num;
+                              break;
+                            }
+                          }
+                          // Fallback to buy+sell volume if USD volume not available
+                          if (volume1h === 0) {
+                            const buy =
+                              Number((token as any).total_buy_volume_1h) ||
+                              Number((token as any).total_buy_volume_mon) ||
+                              0;
+                            const sell =
+                              Number((token as any).total_sell_volume_1h) ||
+                              Number((token as any).total_sell_volume_mon) ||
+                              0;
+                            if (buy || sell) volume1h = buy + sell;
+                          }
+
+                          // Get market cap
+                          const marketCap =
+                            (token as any).market_cap_usd ??
+                            (token as any).marketCapUSD ??
+                            (token as any).fully_diluted_value ??
+                            0;
+
+                          // Calculate volume as percentage of market cap
+                          // let volumePercent = 0;
+                          // if (volume1h > 0 && marketCap > 0) {
+                          //   volumePercent = (volume1h / marketCap) * 100;
+                          // }
+
+                          // Show USD volume amount
+                          // Color based on price change direction: green for up, red for down
+                          const volumeColor =
+                            priceChange >= 0 ? "#8ee8a8" : "#f47a96";
+
+                          // if (volumePercent > 0) {
+                          //   return (
+                          //     <span className="text-xs font-medium" style={{ color: volumeColor }}>
+                          //       {formatSmartNumber(volumePercent)}%
+                          //     </span>
+                          //   );
+                          // } else
+                          if (volume1h > 0) {
+                            return (
+                              <span
+                                className="text-xs font-medium"
+                                style={{ color: volumeColor }}
+                              >
+                                ${formatSmartNumber(volume1h)}
+                              </span>
+                            );
+                          }
+                          return null;
+                        })()}
+
+                        {/* COMMENTED OUT: Quick Buy + Unstar buttons — may re-enable later
                   {isHovered && (
                     <>
                       <button
@@ -2865,62 +3358,201 @@ export default function Header({
                     </>
                   )}
                   END COMMENTED OUT: Quick Buy + Unstar buttons */}
+                      </div>
+                    );
+                  })}
                 </div>
-              );
-            })}
+              )}
             </div>
-            )}
-
-          </div>
           </div>
         )}
       </header>
 
+      {/* Mobile menu overlay + slide-out panel */}
+      {mobileMenuOpen && (
+        <>
+          <div
+            className="fixed inset-0 z-[10003] bg-black/60 transition-opacity duration-200 lg:hidden"
+            aria-hidden
+            onClick={() => setMobileMenuOpen(false)}
+          />
+          <div
+            className="fixed inset-y-0 left-0 z-[10004] flex w-[min(280px,85vw)] flex-col border-r bg-[#0a0b0d] shadow-2xl lg:hidden"
+            style={{ borderColor: AX.border }}
+            role="dialog"
+            aria-modal="true"
+            aria-label="Navigation menu"
+          >
+            <div
+              className="items-centers flex flex-shrink-0 justify-between border-b px-4 py-3"
+              style={{ borderColor: AX.border }}
+            >
+              {/* <span className="text-sm font-semibold" style={{ color: AX.text }}>
+                Menu
+              </span> */}
+              <span>
+                <Link
+                  href={chainAwareHref("/pulse")}
+                  className="flex min-h-[44px] min-w-[44px] flex-shrink-0 items-center justify-center gap-1 tracking-tight select-none sm:min-h-0 sm:min-w-0 sm:justify-start"
+                  style={{ color: AX.text }}
+                  title="Go to Trenches"
+                >
+                  <img
+                    src="/interstate/logo.png"
+                    alt="Interstate logo"
+                    className="h-5 w-5 flex-shrink-0 object-contain sm:h-5 sm:w-auto"
+                  />
+                  <h3 className="!font-orbitron hidden min-[380px]:block">
+                    interstate
+                  </h3>
+                </Link>
+              </span>
+              <button
+                type="button"
+                onClick={() => setMobileMenuOpen(false)}
+                className="flex h-10 w-10 items-center justify-center rounded-md transition-colors hover:bg-white/10"
+                style={{ color: AX.text }}
+                aria-label="Close menu"
+              >
+                <FaTimes size={20} />
+              </button>
+            </div>
+            <nav className="flex flex-1 flex-col overflow-y-auto py-2">
+              {navLinks.map((link) => {
+                const isActive =
+                  router.pathname === link.href ||
+                  (link.name === "Trenches" &&
+                    router.pathname.startsWith("/trade/")) ||
+                  (link.name === "Arena" &&
+                    (router.pathname === "/arena" ||
+                      router.pathname === "/referrals"));
+                return (
+                  <Link
+                    key={link.name}
+                    href={chainAwareHref(link.href)}
+                    onClick={() => setMobileMenuOpen(false)}
+                    className="flex items-center rounded-none px-4 py-3 text-base font-medium transition-colors"
+                    style={{
+                      color: isActive ? "#18c48c" : "#e5e7eb",
+                      backgroundColor: isActive
+                        ? "rgba(24, 196, 140, 0.1)"
+                        : "transparent",
+                      borderLeft: isActive
+                        ? "3px solid #18c48c"
+                        : "3px solid transparent",
+                    }}
+                  >
+                    {link.name}
+                  </Link>
+                );
+              })}
+            </nav>
+            <div
+              className="flex flex-shrink-0 flex-col gap-2 border-t p-4"
+              style={{ borderColor: AX.border }}
+            >
+              <button
+                type="button"
+                onClick={() => {
+                  setMobileMenuOpen(false);
+                  openSearch();
+                }}
+                className="flex items-center gap-2 rounded-lg px-4 py-3 text-left text-sm font-medium transition-colors"
+                style={{
+                  color: AX.text,
+                  backgroundColor: "rgba(255,255,255,0.06)",
+                }}
+              >
+                <FaSearch size={16} />
+                Search
+              </button>
+              <div className="px-1">
+                <BlockchainSwitcher />
+              </div>
+            </div>
+          </div>
+        </>
+      )}
+
       {/* Polygon QR Code Modal - Rendered at root level for proper positioning */}
       {showPolygonQR && (
         <div
-          className="fixed inset-0 z-[9999999] flex items-center justify-center bg-black/70"
+          className="safe-area-inset fixed inset-0 z-[9999999] flex items-center justify-center bg-black/70 p-4"
           onClick={() => setShowPolygonQR(false)}
         >
           <div
-            className="bg-[#1a1b1f] rounded-xl p-6 max-w-xs w-full mx-4 shadow-2xl"
-            onClick={e => e.stopPropagation()}
+            className="w-full max-w-xs rounded-xl bg-[#1a1b1f] p-4 shadow-2xl sm:p-6"
+            onClick={(e) => e.stopPropagation()}
           >
-            <div className="flex items-center justify-between mb-4">
+            <div className="mb-4 flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <SiPolygon className="w-5 h-5" style={{ color: '#8247E5' }} />
-                <span className="text-sm font-semibold text-white">Deposit to Polygon</span>
+                <SiPolygon className="h-5 w-5" style={{ color: "#8247E5" }} />
+                <span className="text-sm font-semibold text-white">
+                  Deposit to Polygon
+                </span>
               </div>
               <button
                 onClick={() => setShowPolygonQR(false)}
-                className="text-neutral-400 hover:text-white transition-colors"
+                className="text-neutral-400 transition-colors hover:text-white"
               >
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                <svg
+                  className="h-5 w-5"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M6 18L18 6M6 6l12 12"
+                  />
                 </svg>
               </button>
             </div>
-            <div className="bg-white p-4 rounded-lg mb-4">
+            <div className="mb-4 rounded-lg bg-white p-4">
               <QRCode
-                value={primaryWalletAddresses?.ethereum || ''}
+                value={primaryWalletAddresses?.ethereum || ""}
                 size={200}
-                style={{ width: '100%', height: 'auto' }}
+                style={{ width: "100%", height: "auto" }}
               />
             </div>
-            <div className="text-center mb-3">
-              <p className="text-xs text-neutral-400 mb-2">Your Polygon Address</p>
-              <p className="text-xs font-mono text-[#f0f5f5] break-all">{primaryWalletAddresses?.ethereum}</p>
+            <div className="mb-3 text-center">
+              <p className="mb-2 text-xs text-neutral-400">
+                Your Polygon Address
+              </p>
+              <p className="font-mono text-xs break-all text-[#f0f5f5]">
+                {primaryWalletAddresses?.ethereum}
+              </p>
             </div>
             <button
-              onClick={() => { handleCopyPolygonAddress(); }}
-              className="w-full flex items-center justify-center gap-2 py-2.5 rounded-lg text-sm font-medium transition-colors"
-              style={{ backgroundColor: '#8247E5', color: '#fff' }}
-              onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = '#7038d4'; }}
-              onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = '#8247E5'; }}
+              onClick={() => {
+                handleCopyPolygonAddress();
+              }}
+              className="flex w-full items-center justify-center gap-2 rounded-lg py-2.5 text-sm font-medium transition-colors"
+              style={{ backgroundColor: "#8247E5", color: "#fff" }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.backgroundColor = "#7038d4";
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.backgroundColor = "#8247E5";
+              }}
             >
-              {polygonAddressCopied ? <><BiCheck className="w-4 h-4" />Copied!</> : <><BiCopy className="w-4 h-4" />Copy Address</>}
+              {polygonAddressCopied ? (
+                <>
+                  <BiCheck className="h-4 w-4" />
+                  Copied!
+                </>
+              ) : (
+                <>
+                  <BiCopy className="h-4 w-4" />
+                  Copy Address
+                </>
+              )}
             </button>
-            <p className="text-[10px] text-amber-400 text-center mt-3">⚠️ Only send USDC/MATIC on Polygon network</p>
+            <p className="mt-3 text-center text-[10px] text-amber-400">
+              ⚠️ Only send USDC/MATIC on Polygon network
+            </p>
           </div>
         </div>
       )}
@@ -3087,20 +3719,18 @@ export default function Header({
     </>
   );
 }
-  const resolveWatchlistPrice = (token: any) =>
-    Number(
-      (token?.usd_price ??
-        token?.price_usd ??
-        token?.priceUsd ??
-        token?.price) || 0
-    );
+const resolveWatchlistPrice = (token: any) =>
+  Number(
+    (token?.usd_price ?? token?.price_usd ?? token?.priceUsd ?? token?.price) ||
+      0,
+  );
 
-  const resolveWatchlistChange1h = (token: any) =>
-    Number(
-      token?.price_percent_change_1h ??
-        token?.price_change_1h ??
-        token?.price_change ??
-        token?.price_percent_change_24h ??
-        token?.price_change_24h ??
-        0
-    );
+const resolveWatchlistChange1h = (token: any) =>
+  Number(
+    token?.price_percent_change_1h ??
+      token?.price_change_1h ??
+      token?.price_change ??
+      token?.price_percent_change_24h ??
+      token?.price_change_24h ??
+      0,
+  );
