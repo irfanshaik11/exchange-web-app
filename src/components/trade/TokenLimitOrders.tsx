@@ -5,8 +5,11 @@ import FastImage from "../FastImage";
 import { useUser } from "../UserContext";
 import { getMyLimitOrders, updateLimitOrder } from "~/utils/api";
 import { FaRunning, FaGasPump, FaCoins, FaBan } from "react-icons/fa";
-import { showEnhancedToast, updateEnhancedToast } from "~/utils/enhancedToast";
+import { showEnhancedToast } from "~/utils/enhancedToast";
+import { showOrderToast } from "~/utils/tradeToast";
 import { dispatchBalanceRefresh } from "~/utils/balanceEvents";
+import { formatMarketCap } from "~/utils/formatPrice";
+import { extractTokenImage, normalizeImageUrl } from "~/utils/images";
 
 type LimitOrderStatus = "Active" | "Cancelled" | "Completed" | "Failed";
 
@@ -42,9 +45,12 @@ type TokenMetaInfo = {
   image?: string;
   protocol?: string;
   marketCap?: number;
+  pairAddress?: string;
+  createdAt?: string;
 };
 
 const REFRESH_INTERVAL_MS = 8000;
+const META_STALE_MS = 30_000;
 const DEFAULT_PROTOCOL_COLOR = "#22c55e";
 const DEFAULT_PROTOCOL_ICON =
   "https://logos-world.net/wp-content/uploads/2024/10/Pump-Fun-Logo.png";
@@ -56,11 +62,6 @@ function formatAmount(value: number, maximumFractionDigits = 4) {
     minimumFractionDigits: 0,
     maximumFractionDigits,
   });
-}
-
-function formatMarketCap(value?: number) {
-  if (!Number.isFinite(value ?? NaN)) return "—";
-  return `$${formatAmount(value!, 0)}`;
 }
 
 function getProtocolColor(protocol: string) {
@@ -206,10 +207,27 @@ function extractTokenMeta(raw: any): TokenMetaInfo {
     primarySource?.logoUrl,
     primarySource?.thumbnail,
     primarySource?.thumbnailUrl,
+    primarySource?.uri,
     raw?.image,
     Array.isArray(raw?.tokens) ? raw.tokens[0]?.image : undefined,
     Array.isArray(raw?.tokens) ? raw.tokens[0]?.logo : undefined,
-    Array.isArray(raw?.tokens) ? raw.tokens[0]?.logo_url : undefined
+    Array.isArray(raw?.tokens) ? raw.tokens[0]?.logo_url : undefined,
+    Array.isArray(raw?.tokens) ? raw.tokens[0]?.uri : undefined
+  );
+
+  const pairAddress = pickFirst(
+    primarySource?.pair_address,
+    primarySource?.poolId,
+    raw?.pair_address,
+    Array.isArray(raw?.tokens) ? raw.tokens[0]?.pair_address : undefined,
+  );
+
+  const createdAtCandidate = pickFirst(
+    primarySource?.created_at,
+    primarySource?.createdAt,
+    raw?.created_at,
+    raw?.createdAt,
+    Array.isArray(raw?.tokens) ? raw.tokens[0]?.created_at : undefined,
   );
 
   const protocol =
@@ -220,9 +238,11 @@ function extractTokenMeta(raw: any): TokenMetaInfo {
   return {
     name: typeof name === "string" ? name : undefined,
     symbol: typeof symbol === "string" ? symbol : undefined,
-    image: typeof image === "string" ? image : undefined,
+    image: typeof image === "string" ? (normalizeImageUrl(image) || image) : undefined,
     protocol,
     marketCap: parsedMarketCap,
+    pairAddress: typeof pairAddress === "string" ? pairAddress : undefined,
+    createdAt: typeof createdAtCandidate === "string" ? createdAtCandidate : undefined,
   };
 }
 
@@ -234,6 +254,8 @@ function mergeTokenMeta(...sources: TokenMetaInfo[]): TokenMetaInfo {
       if (source.symbol && !acc.symbol) acc.symbol = source.symbol;
       if (source.image && !acc.image) acc.image = source.image;
       if (source.protocol && !acc.protocol) acc.protocol = source.protocol;
+      if (source.pairAddress && !acc.pairAddress) acc.pairAddress = source.pairAddress;
+      if (source.createdAt && !acc.createdAt) acc.createdAt = source.createdAt;
       if (
         source.marketCap !== undefined &&
         (acc.marketCap === undefined || isValidNumber(source.marketCap))
@@ -246,7 +268,12 @@ function mergeTokenMeta(...sources: TokenMetaInfo[]): TokenMetaInfo {
   );
 }
 
-export default function TokenLimitOrders() {
+interface TokenLimitOrdersProps {
+  liveMarketCapUsd?: number | null;
+  currentTokenAddress?: string | null;
+}
+
+export default function TokenLimitOrders({ liveMarketCapUsd, currentTokenAddress }: TokenLimitOrdersProps) {
   const router = useRouter();
   const { user } = useUser();
   const [orders, setOrders] = useState<LimitOrder[]>([]);
@@ -256,6 +283,7 @@ export default function TokenLimitOrders() {
   const [metaLoading, setMetaLoading] = useState<Record<string, boolean>>({});
   const previousStatusesRef = useRef<Record<string, LimitOrderStatus>>({});
   const tokenMetaMapRef = useRef<Record<string, TokenMetaInfo>>({});
+  const metaFetchedAtRef = useRef<Record<string, number>>({});
 
   useEffect(() => {
     tokenMetaMapRef.current = tokenMetaMap;
@@ -303,10 +331,10 @@ export default function TokenLimitOrders() {
                   : `${formatAmount(Number(order.tokenAmount))} ${symbolLabel}`;
               const targetLabel = getOrderTargetLabel(order);
 
-              showEnhancedToast("success", `${displayName} limit order filled`, {
-                title: `${order.type} Order Executed`,
-                description: `${amountLabel} • Target ${targetLabel}`,
-                showExplorerLink: Boolean(order.transactionHash),
+              showOrderToast({
+                label: `${displayName} limit order filled`,
+                tokenImage: meta.image,
+                tokenName: displayName,
                 txHash: order.transactionHash,
               });
               dispatchBalanceRefresh('sol');
@@ -351,24 +379,68 @@ export default function TokenLimitOrders() {
     async (order: LimitOrder) => {
       const address = order.tokenAddress;
       if (!address) return;
-      if (tokenMetaMap[address] || metaLoading[address]) return;
+
+      const isCached = !!tokenMetaMap[address];
+      const isStale = (Date.now() - (metaFetchedAtRef.current[address] ?? 0)) > META_STALE_MS;
+      if ((isCached && !isStale) || metaLoading[address]) return;
 
       setMetaLoading((prev) => ({ ...prev, [address]: true }));
 
       try {
         let combinedMeta: TokenMetaInfo = {};
 
-        const searchResponse = await fetch(
-          `${process.env.NEXT_PUBLIC_GO_SERVICE_URL}/v1/search?phrase=${encodeURIComponent(address)}&limit=1`
-        );
-        if (searchResponse.ok) {
-          const searchData = await searchResponse.json();
+        // Fetch search (metadata) and OHLC (market cap) in parallel
+        const [searchResponse, ohlcResponse] = await Promise.allSettled([
+          fetch(
+            `${process.env.NEXT_PUBLIC_GO_SERVICE_URL}/v1/search?phrase=${encodeURIComponent(address)}&limit=1`
+          ),
+          fetch(
+            `${process.env.NEXT_PUBLIC_GO_SERVICE_URL}/v1/ohlcv/${encodeURIComponent(address)}?timeframe=1s&limit=1`,
+            {
+              headers: {
+                'accept': 'application/json',
+                'X-API-Key': process.env.NEXT_PUBLIC_BACKEND_API_KEY || 'test-key',
+              },
+            }
+          ),
+        ]);
+
+        // Parse search for metadata (name, symbol, image, protocol)
+        if (searchResponse.status === 'fulfilled' && searchResponse.value.ok) {
+          const searchData = await searchResponse.value.json();
           combinedMeta = mergeTokenMeta(combinedMeta, extractTokenMeta(searchData));
+
+          // Fallback: use extractTokenImage() which checks more fields + normalizes
+          if (!combinedMeta.image) {
+            const primarySource = searchData?.token || searchData?.tokenInfo || searchData?.tokenData ||
+              searchData?.metadata || (Array.isArray(searchData?.tokens) ? searchData.tokens[0] : null);
+            const fallbackImage = extractTokenImage(primarySource) || extractTokenImage(searchData);
+            if (fallbackImage) combinedMeta.image = fallbackImage;
+          }
         }
 
+        // Parse OHLC for market cap (close * 1B) — overrides search MC if available
+        if (ohlcResponse.status === 'fulfilled' && ohlcResponse.value.ok) {
+          const ohlcData = await ohlcResponse.value.json();
+          const candles = ohlcData?.candles;
+          if (Array.isArray(candles) && candles.length > 0) {
+            const last = candles[candles.length - 1];
+            const closePrice = Number(last.close ?? last.c);
+            if (Number.isFinite(closePrice) && closePrice > 0) {
+              combinedMeta.marketCap = closePrice * 1_000_000_000;
+            }
+          }
+        }
+
+        metaFetchedAtRef.current[address] = Date.now();
+
+        // Merge: preserve previous fields (especially marketCap) if new data doesn't provide them
         setTokenMetaMap((prev) => ({
           ...prev,
-          [address]: combinedMeta,
+          [address]: {
+            ...prev[address],
+            ...combinedMeta,
+          },
         }));
       } catch (error) {
         console.error("[TokenLimitOrders] Failed to fetch token metadata:", error);
@@ -421,6 +493,17 @@ export default function TokenLimitOrders() {
     });
   }, [activeOrders, fetchTokenMetadata, hasAuth]);
 
+  // Periodic market cap refresh — re-triggers fetchTokenMetadata which checks staleness internally
+  useEffect(() => {
+    if (!hasAuth || activeOrders.length === 0) return;
+    const interval = setInterval(() => {
+      activeOrders.forEach((order) => {
+        void fetchTokenMetadata(order);
+      });
+    }, META_STALE_MS);
+    return () => clearInterval(interval);
+  }, [activeOrders, fetchTokenMetadata, hasAuth]);
+
   const handleCancel = async (orderId: string) => {
     if (!hasAuth) return;
     const order = orders.find((item) => item.id === orderId);
@@ -435,9 +518,10 @@ export default function TokenLimitOrders() {
         : `${formatAmount(Number(order?.tokenAmount))} ${meta.symbol || meta.name || "Tokens"}`;
     const targetLabel = order ? getOrderTargetLabel(order) : "—";
 
-    const cancelToastId = showEnhancedToast("loading", "Cancelling limit order…", {
-      title: "Cancelling Order",
-      description: `${displayName} • ${amountLabel} • Target ${targetLabel}`,
+    const cancelToastId = showOrderToast({
+      label: `Cancelling ${displayName}`,
+      tokenImage: meta.image,
+      tokenName: displayName,
     });
 
     setCancellingId(orderId);
@@ -446,16 +530,19 @@ export default function TokenLimitOrders() {
         { orderId, status: "Cancelled" },
         user!.bearerToken,
       );
-      updateEnhancedToast(cancelToastId, "success", "Limit order cancelled", {
-        title: "Order Cancelled",
-        description: `${displayName} • ${amountLabel}`,
+      toast.dismiss(cancelToastId);
+      showOrderToast({
+        label: `${displayName} order cancelled`,
+        tokenImage: meta.image,
+        tokenName: displayName,
       });
       setOrders((prev) => prev.filter((order) => order.id !== orderId));
     } catch (error: any) {
       console.error("[TokenLimitOrders] Failed to cancel order:", error);
+      toast.dismiss(cancelToastId);
       const message =
         error?.message || "Unable to cancel order. Please try again.";
-      updateEnhancedToast(cancelToastId, "error", "Cancel failed", {
+      showEnhancedToast("error", "Cancel failed", {
         title: "Unable to Cancel Limit Order",
         description: message,
       });
@@ -554,7 +641,12 @@ export default function TokenLimitOrders() {
                     : isDevSellOrder
                     ? "—"
                     : formatMarketCap(Number(order.targetMC));
-                  const currentMCDisplay = formatMarketCap(meta.marketCap);
+                  const liveMC = currentTokenAddress && order.tokenAddress === currentTokenAddress
+                    ? liveMarketCapUsd
+                    : null;
+                  const currentMCDisplay = formatMarketCap(
+                    (typeof liveMC === 'number' && Number.isFinite(liveMC) && liveMC > 0) ? liveMC : meta.marketCap
+                  );
                   const statusColor =
                     order.status === "Active"
                       ? "text-emerald-400"
@@ -649,10 +741,20 @@ export default function TokenLimitOrders() {
                             <button
                               onClick={(e) => {
                                 e.stopPropagation();
-                                const navigateAddress = order.pairAddress || order.tokenAddress;
-                                if (navigateAddress) {
-                                  router.push(`/trade/${navigateAddress}`);
-                                }
+                                const navigateAddress = meta.pairAddress || order.pairAddress || order.tokenAddress;
+                                if (!navigateAddress) return;
+
+                                const queryParams = new URLSearchParams();
+                                queryParams.set('chain', 'sol');
+                                if (meta.name) queryParams.set('_name', meta.name);
+                                if (meta.symbol) queryParams.set('_symbol', meta.symbol);
+                                if (meta.marketCap) queryParams.set('_mcap', String(meta.marketCap));
+                                if (meta.image) queryParams.set('_image', meta.image);
+                                queryParams.set('_mint', order.tokenAddress);
+                                if (meta.protocol) queryParams.set('_launchpad_protocol', meta.protocol);
+                                if (meta.createdAt) queryParams.set('_created_at', meta.createdAt);
+
+                                router.push(`/trade/${navigateAddress}?${queryParams.toString()}`);
                               }}
                               className="text-sm font-semibold text-white hover:text-[#70E0B0] transition-colors cursor-pointer text-left"
                             >

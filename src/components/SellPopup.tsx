@@ -505,14 +505,14 @@ const SellPopup: React.FC<SellPopupProps> = ({ isOpen, onClose, position, tokenM
           <button
             ref={sellButtonRef}
             onClick={handleSell}
-            disabled={isLoading || !amount || Number(amount) <= 0}
+            disabled={!amount || Number(amount) <= 0}
             className={`w-full h-10 rounded-lg font-medium text-white transition-colors text-sm ${
-              isLoading || !amount || Number(amount) <= 0
+              !amount || Number(amount) <= 0
                 ? 'bg-[#2A2B33] text-[#9CA3AF] cursor-not-allowed'
                 : 'bg-[#FF4D7F] hover:bg-[#E63E6B]'
             }`}
           >
-            {isLoading ? 'Selling...' : `Sell ${amount ? amount + '%' : ''}`}
+            {`Sell ${amount ? amount + '%' : ''}`}
           </button>
         </div>
       </div>

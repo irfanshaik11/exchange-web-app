@@ -14,6 +14,7 @@ import type { Token } from "~/utils/db";
 import WalletHoverCard, { type WalletHoverCardData } from "./WalletHoverCard";
 import { CiFilter } from "react-icons/ci";
 import { SiSolana } from "react-icons/si";
+import { safeLocalStorageSet } from "~/utils/cacheManager";
 
 interface CodexTopTradersProps {
   token: Token | null;
@@ -620,47 +621,17 @@ const CodexTopTraders: React.FC<CodexTopTradersProps> = ({
     }
   }, [token?.mint]);
 
-  // Save traders to localStorage cache
+  // Save traders to localStorage cache (capped at 50 entries)
   const saveToCache = React.useCallback((traders: any[], mint: string) => {
     if (!mint || typeof window === "undefined" || traders.length === 0) return;
 
-    try {
-      const cacheKey = getCacheKey(mint);
-      const cacheData = {
-        traders,
-        timestamp: Date.now(),
-        mint,
-      };
-      localStorage.setItem(cacheKey, JSON.stringify(cacheData));
-    } catch (error) {
-      console.error("[CodexTopTraders] Error saving to cache:", error);
-      // If storage is full, try to clear old entries
-      try {
-        const keys = Object.keys(localStorage);
-        const oldCacheKeys = keys.filter((k) => k.startsWith(CACHE_KEY_PREFIX));
-        if (oldCacheKeys.length > 10) {
-          const sorted = oldCacheKeys
-            .map((key) => {
-              try {
-                const item = localStorage.getItem(key);
-                return {
-                  key,
-                  timestamp: item ? JSON.parse(item).timestamp || 0 : 0,
-                };
-              } catch {
-                return { key, timestamp: 0 };
-              }
-            })
-            .sort((a, b) => a.timestamp - b.timestamp);
-          sorted.slice(0, 3).forEach(({ key }) => localStorage.removeItem(key));
-        }
-      } catch (clearError) {
-        console.error(
-          "[CodexTopTraders] Error clearing old cache:",
-          clearError,
-        );
-      }
-    }
+    const cacheKey = getCacheKey(mint);
+    const cacheData = {
+      traders: traders.slice(0, 50),
+      timestamp: Date.now(),
+      mint,
+    };
+    safeLocalStorageSet(cacheKey, JSON.stringify(cacheData));
   }, []);
 
   // Use mint if available, fallback to pair_address, then fallback to pairAddress prop

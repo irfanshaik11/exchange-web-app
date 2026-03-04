@@ -232,7 +232,7 @@ export function useQueryNewPairs(enabled: boolean = true): UseQueryResult<Token[
     refetchOnReconnect: true,      // Refetch on reconnect to catch missed updates
     refetchOnMount: true,          // ✅ ALWAYS fetch on mount to ensure fresh data
     // ✅ Instant display: Show cached data immediately while fresh data loads
-    placeholderData: () => loadFromLocalStorage<Token[]>(CACHE_KEYS.newPairs),
+    placeholderData: (previousData) => previousData ?? loadFromLocalStorage<Token[]>(CACHE_KEYS.newPairs),
     retry: 3,
     retryDelay: (attempt) => Math.min(1000 * 2 ** attempt, 10000),
     // Silent auto-recovery: keep polling until data arrives, then stop
@@ -253,7 +253,7 @@ export function useQueryFinalStretch(enabled: boolean = true): UseQueryResult<To
     refetchOnReconnect: true,
     refetchOnMount: true,
     // ✅ Instant display: Show cached data immediately while fresh data loads
-    placeholderData: () => loadFromLocalStorage<Token[]>(CACHE_KEYS.finalStretch),
+    placeholderData: (previousData) => previousData ?? loadFromLocalStorage<Token[]>(CACHE_KEYS.finalStretch),
     retry: 3,
     retryDelay: (attempt) => Math.min(1000 * 2 ** attempt, 10000),
     refetchInterval: (query) => {
@@ -273,7 +273,7 @@ export function useQueryMigrated(enabled: boolean = true): UseQueryResult<Token[
     refetchOnReconnect: true,
     refetchOnMount: true,
     // ✅ Instant display: Show cached data immediately while fresh data loads
-    placeholderData: () => loadFromLocalStorage<Token[]>(CACHE_KEYS.migrated),
+    placeholderData: (previousData) => previousData ?? loadFromLocalStorage<Token[]>(CACHE_KEYS.migrated),
     retry: 3,
     retryDelay: (attempt) => Math.min(1000 * 2 ** attempt, 10000),
     refetchInterval: (query) => {
@@ -293,7 +293,7 @@ export function useQueryLaunchpadData(enabled: boolean = true): UseQueryResult<L
     refetchOnReconnect: true,
     refetchOnMount: true,
     // ✅ Instant display: Show cached data immediately while fresh data loads
-    placeholderData: () => loadFromLocalStorage<LaunchpadData>(CACHE_KEYS.launchpad),
+    placeholderData: (previousData) => previousData ?? loadFromLocalStorage<LaunchpadData>(CACHE_KEYS.launchpad),
     retry: 3,
     retryDelay: (attempt) => Math.min(1000 * 2 ** attempt, 10000),
     refetchInterval: (query) => {

@@ -116,3 +116,84 @@ export class CacheManager {
 if (typeof window !== 'undefined') {
   CacheManager.setupCacheCleanup();
 }
+
+// All codex / trade cache prefixes that safeLocalStorageSet manages
+const CODEX_PREFIXES = [
+  'codex_trades_cache_',
+  'codex_top_traders_cache_',
+  'codex_dev_tokens_limited_cache_',
+  'codex_dev_tokens_all_cache_',
+  'trade_data_',
+];
+
+function isCodexKey(key: string): boolean {
+  return CODEX_PREFIXES.some((p) => key.startsWith(p));
+}
+
+/**
+ * Sweep expired codex/trade entries from localStorage.
+ * Each entry is expected to have a `timestamp` field; entries older than
+ * `maxAge` ms (default 30 min) are removed.
+ */
+function sweepExpired(maxAge = 30 * 60 * 1000): void {
+  const now = Date.now();
+  for (const key of Object.keys(localStorage)) {
+    if (!isCodexKey(key)) continue;
+    try {
+      const raw = localStorage.getItem(key);
+      if (!raw) continue;
+      const parsed = JSON.parse(raw);
+      if (parsed.timestamp && now - parsed.timestamp > maxAge) {
+        localStorage.removeItem(key);
+      }
+    } catch {
+      // Corrupted entry — remove it
+      localStorage.removeItem(key);
+    }
+  }
+}
+
+/**
+ * Evict the oldest half of all codex/trade cache entries.
+ */
+function evictOldestHalf(): void {
+  const entries: { key: string; timestamp: number }[] = [];
+  for (const key of Object.keys(localStorage)) {
+    if (!isCodexKey(key)) continue;
+    try {
+      const raw = localStorage.getItem(key);
+      const ts = raw ? JSON.parse(raw).timestamp ?? 0 : 0;
+      entries.push({ key, timestamp: ts });
+    } catch {
+      entries.push({ key, timestamp: 0 });
+    }
+  }
+  entries.sort((a, b) => a.timestamp - b.timestamp);
+  const removeCount = Math.max(1, Math.ceil(entries.length / 2));
+  for (let i = 0; i < removeCount; i++) {
+    localStorage.removeItem(entries[i].key);
+  }
+}
+
+/**
+ * Safely write to localStorage with proactive cleanup and retry.
+ * Returns true on success, false on failure (cache miss is acceptable).
+ */
+export function safeLocalStorageSet(key: string, value: string): boolean {
+  if (typeof window === 'undefined') return false;
+  try {
+    // Phase 1: proactively sweep expired codex entries
+    sweepExpired();
+    localStorage.setItem(key, value);
+    return true;
+  } catch {
+    // Phase 2: quota exceeded — aggressively evict oldest half, retry once
+    try {
+      evictOldestHalf();
+      localStorage.setItem(key, value);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+}

@@ -25,9 +25,9 @@ import { GiTrophy } from 'react-icons/gi';
 import ArenaPageToggle from '~/components/ArenaPageToggle';
 import { FiCheck, FiLock, FiChevronLeft, FiChevronRight, FiClock, FiExternalLink, FiPlus, FiMinus, FiAward, FiZap, FiInfo } from 'react-icons/fi';
 import InterstateTooltip from '~/components/InterstateTooltip';
-import { HiLightningBolt, HiSparkles, HiFire } from 'react-icons/hi';
+import { HiLightningBolt, HiSparkles, HiFire, HiSwitchVertical } from 'react-icons/hi';
 import { IoRocketSharp, IoFlameSharp } from 'react-icons/io5';
-import { BiDiamond, BiTargetLock } from 'react-icons/bi';
+import { BiDiamond, BiTargetLock, BiTrendingUp } from 'react-icons/bi';
 import { SiSolana } from 'react-icons/si';
 import { RiVipCrownFill } from 'react-icons/ri';
 
@@ -559,6 +559,31 @@ const CountdownDisplay = ({ hours, minutes, seconds }: { hours: number; minutes:
   </div>
 );
 
+const formatVolume = (value: number): string => {
+  if (value >= 1000000) return `$${(value / 1000000).toFixed(2)}M`;
+  if (value >= 1000) return `$${(value / 1000).toFixed(2)}K`;
+  return `$${value.toFixed(2)}`;
+};
+
+const formatSolSubscript = (value: number): string => {
+  if (value === 0 || !Number.isFinite(value)) return '0 SOL';
+  if (value >= 0.01) return `${value.toFixed(4)} SOL`;
+  const str = value.toFixed(20);
+  const decIdx = str.indexOf('.');
+  if (decIdx === -1) return `${value} SOL`;
+  let zeroCount = 0;
+  let sigDigits = '';
+  for (let i = decIdx + 1; i < str.length; i++) {
+    if (str[i] === '0') { zeroCount++; } else {
+      sigDigits = str.substring(i, Math.min(i + 3, str.length));
+      break;
+    }
+  }
+  const subMap: Record<string, string> = { '0':'₀','1':'₁','2':'₂','3':'₃','4':'₄','5':'₅','6':'₆','7':'₇','8':'₈','9':'₉' };
+  const sub = zeroCount.toString().split('').map(c => subMap[c] || c).join('');
+  return `0.0${sub}${sigDigits} SOL`;
+};
+
 export default function ArenaPage() {
   const { user } = useUser();
   const { data: stats } = useArenaStats();
@@ -571,6 +596,7 @@ export default function ArenaPage() {
   const [showRanks, setShowRanks] = useState(true);
   const [mounted, setMounted] = useState(false);
   const [leaderboardTab, setLeaderboardTab] = useState<'gold' | 'quest'>('gold');
+  const [volumeInSol, setVolumeInSol] = useState(false);
   const carouselRef = useRef<HTMLDivElement>(null);
 
   // Live countdown
@@ -607,6 +633,9 @@ export default function ArenaPage() {
   const solCashbackEarned = (stats as any)?.solCashbackEarned || 0;
   const currentStreak = (stats as any)?.currentStreak || 0;
   const longestStreak = (stats as any)?.longestStreak || 0;
+  const totalTradingVolume = (stats as any)?.totalTradingVolume || 0;
+  const totalSolVolume = (stats as any)?.totalSolVolume || 0;
+  const totalTradeCount = (stats as any)?.totalTradeCount || 0;
 
   // Animation mount effect
   useEffect(() => {
@@ -832,6 +861,43 @@ export default function ArenaPage() {
                     <SolanaLogo className="w-3.5 h-3.5" />
                     <span className="text-white font-semibold text-sm">{solCashbackEarned.toFixed(4)} SOL</span>
                   </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Personal Trading Volume */}
+            <div className={`flex flex-col sm:flex-row items-stretch gap-3 mb-6 transition-all duration-700 delay-150 ${mounted ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'}`}>
+              {/* Trading Volume — click to toggle USD/SOL */}
+              <div
+                className="flex-1 flex items-center gap-3 px-5 py-4 bg-white/[0.06] backdrop-blur-sm border border-white/[0.08] rounded-xl cursor-pointer select-none transition-colors hover:bg-white/[0.09]"
+                onClick={() => setVolumeInSol(v => !v)}
+              >
+                <div className={`w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0 ${volumeInSol ? 'bg-purple-500/10' : 'bg-emerald-500/10'}`}>
+                  {volumeInSol ? (
+                    <SolanaLogo className="w-5 h-5" />
+                  ) : (
+                    <span className="text-emerald-400 text-lg font-bold">$</span>
+                  )}
+                </div>
+                <div className="flex flex-col flex-1 min-w-0">
+                  <span className="text-neutral-400 text-xs">{volumeInSol ? 'Volume (SOL)' : 'Volume (USD)'}</span>
+                  <span className="text-white font-semibold text-lg leading-tight">
+                    {volumeInSol ? formatSolSubscript(totalSolVolume) : formatVolume(totalTradingVolume)}
+                  </span>
+                </div>
+                <div className="flex items-center gap-1 text-neutral-500 flex-shrink-0">
+                  <HiSwitchVertical className="w-3.5 h-3.5" />
+                  <span className="text-[10px] font-medium">{volumeInSol ? 'USD' : 'SOL'}</span>
+                </div>
+              </div>
+              {/* Total Trades */}
+              <div className="flex-1 flex items-center gap-3 px-5 py-4 bg-white/[0.06] backdrop-blur-sm border border-white/[0.08] rounded-xl">
+                <div className="w-9 h-9 rounded-lg bg-amber-500/10 flex items-center justify-center flex-shrink-0">
+                  <FiZap className="w-5 h-5 text-amber-400" />
+                </div>
+                <div className="flex flex-col">
+                  <span className="text-neutral-400 text-xs">Total Trades</span>
+                  <span className="text-white font-semibold text-lg leading-tight">{totalTradeCount.toLocaleString()}</span>
                 </div>
               </div>
             </div>

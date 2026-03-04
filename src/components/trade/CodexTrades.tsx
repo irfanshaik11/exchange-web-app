@@ -18,6 +18,7 @@ import type { Token } from "~/utils/db";
 import WalletHoverCard, { type WalletHoverCardData } from "./WalletHoverCard";
 import { VirtualizedTokenList } from "../VirtualizedTokenList";
 import { TokenAge } from "../TokenAge";
+import { safeLocalStorageSet } from "~/utils/cacheManager";
 
 // Sort direction type
 type SortDirection = "asc" | "desc" | null;
@@ -1073,53 +1074,19 @@ const CodexTrades: React.FC<CodexTradesProps> = ({
     }
   }, [stableToken?.pair_address]);
 
-  // Save trades to localStorage cache
+  // Save trades to localStorage cache (capped at 100 entries)
   const saveToCache = React.useCallback(
     (trades: any[], pairAddress: string) => {
       if (!pairAddress || typeof window === "undefined" || trades.length === 0)
         return;
 
-      try {
-        const cacheKey = getCacheKey(pairAddress);
-        const cacheData = {
-          trades,
-          timestamp: Date.now(),
-          pairAddress,
-        };
-        localStorage.setItem(cacheKey, JSON.stringify(cacheData));
-      } catch (error) {
-        console.error("[CodexTrades] Error saving to cache:", error);
-        // If storage is full, try to clear old entries
-        try {
-          const keys = Object.keys(localStorage);
-          const oldCacheKeys = keys.filter((k) =>
-            k.startsWith(CACHE_KEY_PREFIX),
-          );
-          // Remove oldest cache entries if storage is full
-          if (oldCacheKeys.length > 10) {
-            const sorted = oldCacheKeys
-              .map((key) => {
-                try {
-                  const item = localStorage.getItem(key);
-                  return {
-                    key,
-                    timestamp: item ? JSON.parse(item).timestamp || 0 : 0,
-                  };
-                } catch {
-                  return { key, timestamp: 0 };
-                }
-              })
-              .sort((a, b) => a.timestamp - b.timestamp);
-
-            // Remove oldest 3 entries
-            sorted
-              .slice(0, 3)
-              .forEach(({ key }) => localStorage.removeItem(key));
-          }
-        } catch (clearError) {
-          console.error("[CodexTrades] Error clearing old cache:", clearError);
-        }
-      }
+      const cacheKey = getCacheKey(pairAddress);
+      const cacheData = {
+        trades: trades.slice(0, 100),
+        timestamp: Date.now(),
+        pairAddress,
+      };
+      safeLocalStorageSet(cacheKey, JSON.stringify(cacheData));
     },
     [],
   );

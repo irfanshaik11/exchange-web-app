@@ -2668,6 +2668,12 @@ function PulseTable({
     );
   }, [tokens, title]);
 
+  // Track whether we ever had data — prevents "No tokens found" flash on tab return
+  const hadDataRef = useRef(false);
+  if (tokens && tokens.length > 0) {
+    hadDataRef.current = true;
+  }
+
   // Preload images for visible tokens (first 20 for instant loading)
   // This runs in background and doesn't block rendering or new token updates
   useEffect(() => {
@@ -7526,7 +7532,7 @@ function PulseTable({
           </div>
         </div>
       </div>
-      {loading && tokens.length === 0 ? (
+      {tokens.length === 0 && (loading || hadDataRef.current) ? (
         <div className="custom-scrollbar flex flex-1 flex-col gap-2 overflow-x-hidden overflow-y-scroll">
           {Array.from({ length: skeletonRowCount }).map((_, idx) => (
             <div
@@ -7624,7 +7630,7 @@ function PulseTable({
             </div>
           ))}
         </div>
-      ) : tokens.length === 0 ? (
+      ) : tokens.length === 0 && !hadDataRef.current ? (
         <div className="custom-scrollbar flex flex-1 flex-col gap-2 overflow-x-hidden overflow-y-scroll">
           <div className="py-8 text-center" style={{ color: AX.muted }}>
             No tokens found.

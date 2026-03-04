@@ -10,6 +10,7 @@ import { SiSolana } from 'react-icons/si';
 import { IoIosCloseCircleOutline } from 'react-icons/io';
 import toast from 'react-hot-toast';
 import InterstateTooltip from '../InterstateTooltip';
+import { safeLocalStorageSet } from '~/utils/cacheManager';
 
 interface CodexDevTokensProps {
   token: Token | null;
@@ -222,44 +223,18 @@ const CodexDevTokens: React.FC<CodexDevTokensProps> = ({ token, chain = 'sol', o
     }
   }, [token?.mint]);
 
-  // Save tokens to localStorage cache
+  // Save tokens to localStorage cache (capped: 50 for all, 10 for limited)
   const saveToCache = useCallback((tokens: any[], mint: string, isAll: boolean) => {
     if (!mint || typeof window === 'undefined' || tokens.length === 0) return;
-    
-    try {
-      const cacheKey = getCacheKey(mint, isAll);
-      const cacheData = {
-        tokens,
-        timestamp: Date.now(),
-        mint,
-      };
-      localStorage.setItem(cacheKey, JSON.stringify(cacheData));
-    } catch (error) {
-      console.error('[CodexDevTokens] Error saving to cache:', error);
-      // If storage is full, try to clear old entries
-      try {
-        const keys = Object.keys(localStorage);
-        const oldCacheKeys = keys.filter(k => 
-          k.startsWith(CACHE_KEY_PREFIX_LIMITED) || k.startsWith(CACHE_KEY_PREFIX_ALL)
-        );
-        if (oldCacheKeys.length > 10) {
-          const sorted = oldCacheKeys.map(key => {
-            try {
-              const item = localStorage.getItem(key);
-              return {
-                key,
-                timestamp: item ? (JSON.parse(item).timestamp || 0) : 0,
-              };
-            } catch {
-              return { key, timestamp: 0 };
-            }
-          }).sort((a, b) => a.timestamp - b.timestamp);
-          sorted.slice(0, 3).forEach(({ key }) => localStorage.removeItem(key));
-        }
-      } catch (clearError) {
-        console.error('[CodexDevTokens] Error clearing old cache:', clearError);
-      }
-    }
+
+    const cap = isAll ? 50 : 10;
+    const cacheKey = getCacheKey(mint, isAll);
+    const cacheData = {
+      tokens: tokens.slice(0, cap),
+      timestamp: Date.now(),
+      mint,
+    };
+    safeLocalStorageSet(cacheKey, JSON.stringify(cacheData));
   }, []);
 
   // Show skeleton only if we have NO token data at all
