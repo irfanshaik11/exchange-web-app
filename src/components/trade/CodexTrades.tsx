@@ -23,6 +23,7 @@ import { useSolPrice } from "../SolPriceContext";
 import { useMonadTradesWebSocket } from "../../hooks/useMonadTradesWebSocket";
 import type { Token } from "~/utils/db";
 import WalletHoverCard, { type WalletHoverCardData } from "./WalletHoverCard";
+import InterstateTooltip from "../InterstateTooltip";
 import { VirtualizedTokenList } from "../VirtualizedTokenList";
 import { TokenAge } from "../TokenAge";
 import { safeLocalStorageSet } from "~/utils/cacheManager";
@@ -1688,39 +1689,42 @@ const CodexTrades: React.FC<CodexTradesProps> = ({
                 const isKol = KOL_ADDRESS_MAP.has(walletKey);
 
                 return (
-                  <WalletHoverCard data={hoverData} chain={chain}>
-                    <div className="flex items-center gap-1.5">
-                      <span className="cursor-pointer truncate text-[13px] whitespace-nowrap text-gray-300 transition-colors hover:text-emerald-400">
-                        {shortAddr(n.maker || "")}
-                      </span>
-                      {holderType === "dev" && (
-                        <LuChefHat
-                          size={12}
-                          className="flex-shrink-0 text-yellow-400"
-                        />
-                      )}
-                      {holderType === "sniper" && (
-                        <TfiTarget
-                          size={12}
-                          className="flex-shrink-0 text-red-400"
-                        />
-                      )}
-                      {holderType === "bundler" && (
-                        <HiOutlineCubeTransparent
-                          size={12}
-                          className="flex-shrink-0 text-orange-400"
-                        />
-                      )}
-                      {isKol && (
-                        <img
-                          src="/kol-tick-icon.svg"
-                          alt="KOL"
-                          className="h-3.5 w-3.5 flex-shrink-0"
-                          title="KOL wallet"
-                        />
-                      )}
-                    </div>
-                  </WalletHoverCard>
+									<>
+										<WalletHoverCard data={hoverData} chain={chain}>
+											<div className="flex items-center gap-1.5">
+												<span className="cursor-pointer truncate text-[13px] whitespace-nowrap text-gray-300 transition-colors hover:text-emerald-400">
+													{shortAddr(n.maker || "")}
+												</span>
+												{holderType === "dev" && (
+													<LuChefHat
+														size={12}
+														className="flex-shrink-0 text-yellow-400"
+													/>
+												)}
+												{holderType === "sniper" && (
+													<TfiTarget
+														size={12}
+														className="flex-shrink-0 text-red-400"
+													/>
+												)}
+												{holderType === "bundler" && (
+													<HiOutlineCubeTransparent
+														size={12}
+														className="flex-shrink-0 text-orange-400"
+													/>
+												)}
+											</div>
+										</WalletHoverCard>
+										{isKol && (
+											<InterstateTooltip label="KOL" placement="top">
+												<img
+													src="/kol-tick-icon.svg"
+													alt="KOL"
+													className="h-3.5 w-3.5 flex-shrink-0"
+												/>
+											</InterstateTooltip>
+										)}
+									</>
                 );
               })()}
               <div className="flex flex-shrink-0 flex-nowrap items-center gap-1">
