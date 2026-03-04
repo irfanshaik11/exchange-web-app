@@ -469,13 +469,13 @@ const Activity: React.FC<ActivityProps> = ({
               
               // Only use metadata as fallback if database value is missing or 0
               // This ensures we show the historical market cap at time of trade, not current
-              if ((!marketCapValue || marketCapValue < 1) && metadata?.marketCapUsd && metadata.marketCapUsd > 0) {
+              if ((!marketCapValue || marketCapValue <= 0) && metadata?.marketCapUsd && metadata.marketCapUsd > 0) {
                 console.log(`⚠️ [Activity] Market cap missing in DB for ${trade.tokenAddress}, using metadata as fallback:`, metadata.marketCapUsd);
                 marketCapValue = metadata.marketCapUsd;
               }
               
               // Final check: if still missing or suspiciously low, show N/A
-              if (!marketCapValue || marketCapValue < 1) {
+              if (!marketCapValue || marketCapValue <= 0) {
                 marketCapValue = null;
               }
               
