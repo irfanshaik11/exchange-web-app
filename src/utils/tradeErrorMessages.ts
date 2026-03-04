@@ -18,6 +18,7 @@ export function mapTradeErrorMessage(error: any): string {
     raw.includes('account rent') ||
     raw.includes('sufficient balance') ||
     raw.includes('not enough sol') ||
+    raw.includes('top up') ||
     (raw.includes('custom') && raw.includes('6000'))
   )
     return 'Insufficient SOL balance for this trade.';
@@ -27,8 +28,10 @@ export function mapTradeErrorMessage(error: any): string {
     return 'Low liquidity — try higher slippage or a smaller amount.';
 
   // No liquidity / no route
-  if (errorCode === 'NO_LIQUIDITY' || raw.includes('no liquidity') || raw.includes('no quotes') || raw.includes('no route'))
-    return 'No liquidity available for this token.';
+  if (errorCode === 'NO_LIQUIDITY' || errorCode === 'NO_ROUTE' ||
+    raw.includes('no liquidity') || raw.includes('no quotes') ||
+    raw.includes('no route') || raw.includes('failed to get quotes'))
+    return 'Check your SOL balance or token may have low liquidity.';
 
   // Pool unavailable
   if (errorCode === 'POOL_UNAVAILABLE' || raw.includes('pool unavailable') || raw.includes('pool not found'))
@@ -45,6 +48,10 @@ export function mapTradeErrorMessage(error: any): string {
   // No holdings (sell-specific)
   if (errorCode === 'NO_HOLDINGS' || raw.includes('insufficient token'))
     return 'Token already sold or transferred.';
+
+  // Transaction/order expired (Jupiter Ultra execute failures)
+  if (raw.includes('order expired') || raw.includes('transaction expired'))
+    return 'Trade expired. Please try again.';
 
   // Timeout
   if (errorCode === 'CLIENT_TIMEOUT' || raw.includes('timed out') || raw.includes('timeout'))

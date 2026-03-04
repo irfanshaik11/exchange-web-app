@@ -15,6 +15,7 @@ import {
 } from "~/utils/toast";
 import { executeEnhancedTrade } from "~/utils/enhancedTradeHandler";
 import { showEnhancedToast } from "~/utils/enhancedToast";
+import { showOrderToast, ORDER_TOAST_STYLE } from "~/utils/tradeToast";
 import { useUser } from "~/components/UserContext";
 import { executeSolanaMultiBuy, formatSolanaTxSummary, buildSolanaWalletAllocations } from "~/utils/solanaWalletAllocation";
 import { validateSolanaBuy, validateSolanaSell, showTradeValidationError } from "~/utils/preTradeValidation";
@@ -564,117 +565,7 @@ const formatCompactNumber = (n: number): string => {
   return Math.round(n).toString();
 };
 
-/* ── Toast helpers ── */
-const SOLANA_LOGO_URL = 'https://avatars.githubusercontent.com/u/92743431?s=200&v=4';
-
-const ORDER_TOAST_STYLE: React.CSSProperties = {
-  background: '#1a1a1a',
-  border: '1px solid #333',
-  borderRadius: '8px',
-  padding: '12px',
-};
-
-/**
- * Simple order-setup toast — token image + label + checkmark.
- * Used when an order is *created* (no on-chain tx yet).
- */
-function showOrderSetupToast(opts: {
-  label: string;
-  tokenImage?: string | null;
-  tokenName: string;
-}): string {
-  const id = `setup-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
-  toast(
-    (_t) => (
-      <div className="flex items-center gap-3">
-        {opts.tokenImage && (
-          <img
-            src={opts.tokenImage}
-            alt={opts.tokenName}
-            className="w-6 h-6 rounded-full flex-shrink-0"
-            onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
-          />
-        )}
-        <span className="text-sm text-neutral-200 truncate">{opts.label}</span>
-        <span className="text-green-400 flex-shrink-0">✓</span>
-      </div>
-    ),
-    { id, duration: 4000, style: ORDER_TOAST_STYLE },
-  );
-  return id;
-}
-
-/**
- * Animated execution toast — token image + label + timer + explorer link.
- * Used when an order actually *executes* an on-chain transaction (same style as market buy/sell).
- */
-function showExecutionToast(opts: {
-  label: string;
-  tokenImage?: string | null;
-  tokenName: string;
-  txHash?: string | null;
-}): string {
-  const id = `exec-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
-  const startTime = Date.now();
-  const timerCap = 0.40 + Math.random() * 0.20;
-  let timerFinished = false;
-  let handle: number | null = null;
-
-  const explorerUrl = opts.txHash ? `https://solscan.io/tx/${opts.txHash}` : null;
-
-  toast(
-    (_t) => (
-      <div className="flex items-center gap-3">
-        {opts.tokenImage && (
-          <img
-            src={opts.tokenImage}
-            alt={opts.tokenName}
-            className="w-6 h-6 rounded-full flex-shrink-0"
-            onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
-          />
-        )}
-        <div className="flex items-center gap-2 flex-1 min-w-0">
-          <span className="text-sm text-neutral-200 truncate">{opts.label}</span>
-          <span id={`timer-${id}`} className="text-xs text-neutral-400 flex-shrink-0">(0.00s)</span>
-          <span id={`check-${id}`} className="text-green-400 flex-shrink-0" style={{ display: timerFinished ? 'inline' : 'none' }}>✓</span>
-          <span className="flex-shrink-0" style={{ display: 'inline-flex' }}>
-            {explorerUrl ? (
-              <a href={explorerUrl} target="_blank" rel="noopener noreferrer" className="hover:opacity-80 transition-opacity">
-                <img src={SOLANA_LOGO_URL} alt="Solana" className="w-4 h-4 rounded-full" style={{ cursor: 'pointer' }} />
-              </a>
-            ) : (
-              <img src={SOLANA_LOGO_URL} alt="Solana" className="w-4 h-4 rounded-full opacity-70" style={{ cursor: 'default' }} />
-            )}
-          </span>
-        </div>
-      </div>
-    ),
-    { id, duration: Infinity, style: ORDER_TOAST_STYLE },
-  );
-
-  const tick = () => {
-    const elapsed = (Date.now() - startTime) / 1000;
-    const timerEl = document.getElementById(`timer-${id}`);
-    if (timerEl) timerEl.textContent = `(${Math.min(elapsed, timerCap).toFixed(2)}s)`;
-    if (!timerFinished && elapsed >= timerCap) {
-      timerFinished = true;
-      const checkEl = document.getElementById(`check-${id}`);
-      if (checkEl) checkEl.style.display = 'block';
-      handle = null;
-      return;
-    }
-    handle = requestAnimationFrame(tick);
-  };
-  handle = requestAnimationFrame(tick);
-
-  // Auto-dismiss after 10s
-  setTimeout(() => {
-    if (handle) cancelAnimationFrame(handle);
-    toast.dismiss(id);
-  }, 10_000);
-
-  return id;
-}
+/* ── Toast helpers (showOrderToast + ORDER_TOAST_STYLE imported from ~/utils/tradeToast) ── */
 
 // Pool Info Section Component
 const PoolInfoSection: React.FC<{ token: any; liveMarketCapUsd?: number | null; liveLiquidityUsd?: number | null }> = ({ token, liveMarketCapUsd, liveLiquidityUsd }) => {
@@ -1416,31 +1307,16 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
     }
   }, [tab, baseMarketCap]);
 
+  // Sync slider percentage when user manually types a market cap value
   useEffect(() => {
-    if (tab !== "limit") return;
-    if (!baseMarketCap || baseMarketCap <= 0) return;
-    if (manualTargetOverrideRef.current) return;
-
-    // Recompute targetMC from current sliderPct whenever baseMarketCap changes.
-    // This ensures the target stays consistent with the user's percentage intent
-    // even when the live market cap updates after initial load.
-    const newTarget = Math.round(baseMarketCap * (1 + Number(sliderPct) / 100));
-    const currentTarget = Number(targetMC);
-    lastSliderBaseRef.current = baseMarketCap;
-
-    if (!Number.isFinite(currentTarget) || currentTarget !== Math.max(0, newTarget)) {
-      setTargetMC(String(Math.max(0, newTarget)));
-    }
-  }, [baseMarketCap, tab, sliderPct, targetMC]);
-
-  // Sync slider percentage when market cap changes (e.g., from typing)
-  useEffect(() => {
+    if (!manualTargetOverrideRef.current) return;
     if (baseMarketCap && targetMC) {
       const t = Number(targetMC);
       if (Number.isFinite(t) && t > 0) {
         const calculatedPct = Math.round(((t - baseMarketCap) / baseMarketCap) * 100);
         const clampedPct = clamp(calculatedPct, -100, 100);
         setSliderPct(clampedPct);
+        manualTargetOverrideRef.current = false;
       }
     }
   }, [targetMC, baseMarketCap]);
@@ -1825,7 +1701,7 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
 
             // Show animated execution toast (same as market buy/sell)
             const actionVerb = orderType === "Buy" ? "Bought" : "Sold";
-            showExecutionToast({
+            showOrderToast({
               label: `${actionVerb} ${symbolLabel}`,
               tokenImage: getResolvedTokenImage(token),
               tokenName: symbolLabel,
@@ -1972,7 +1848,7 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
         user.bearerToken
       );
 
-      showOrderSetupToast({
+      showOrderToast({
         label: `${tokenName} sniper armed`,
         tokenImage: getResolvedTokenImage(token),
         tokenName,
@@ -2117,7 +1993,7 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
         user.bearerToken
       );
 
-      showOrderSetupToast({
+      showOrderToast({
         label: `${devTokenName} dev mirror armed`,
         tokenImage: getResolvedTokenImage(token),
         tokenName: devTokenName,
@@ -2331,7 +2207,7 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
           const isZeroDelta =
             Number.isFinite(effectiveLiveMc) &&
             Number.isFinite(numericTargetMc) &&
-            Math.abs((effectiveLiveMc || 0) - numericTargetMc) <= Math.max(1, Math.abs(effectiveLiveMc || 0) * 0.00001);
+            Math.abs((effectiveLiveMc || 0) - numericTargetMc) <= Math.abs(effectiveLiveMc || 0) * 0.005;
 
           if (isZeroDelta) {
             toast.error("Target matches current price — adjust target above or below live MC.", { duration: 6000, style: ORDER_TOAST_STYLE });
@@ -2375,7 +2251,7 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
           //   setPendingTradeOptions({ ...(options || {}), skipLiquidity: true });
           //   setShowLiquidityWarning(true);
           // }
-          showOrderSetupToast({
+          showOrderToast({
             label: `${limitTokenName} limit order set`,
             tokenImage: getResolvedTokenImage(token),
             tokenName: limitTokenName,
@@ -3475,7 +3351,12 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
                       if (baseForSlider > 0) {
                         lastSliderBaseRef.current = baseForSlider;
                         manualTargetOverrideRef.current = false;
-                        const next = Math.round(baseForSlider * (1 + p / 100));
+                        const raw = baseForSlider * (1 + p / 100);
+                        const next = baseForSlider < 10
+                          ? Math.round(raw * 100) / 100
+                          : baseForSlider < 1000
+                            ? Math.round(raw * 10) / 10
+                            : Math.round(raw);
                         setTargetMC(String(Math.max(0, next)));
                       }
                     }}
@@ -3550,7 +3431,12 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
                       if (baseForSlider > 0) {
                         lastSliderBaseRef.current = baseForSlider;
                         manualTargetOverrideRef.current = false;
-                        const next = Math.round(baseForSlider * (1 + p / 100));
+                        const raw = baseForSlider * (1 + p / 100);
+                        const next = baseForSlider < 10
+                          ? Math.round(raw * 100) / 100
+                          : baseForSlider < 1000
+                            ? Math.round(raw * 10) / 10
+                            : Math.round(raw);
                         setTargetMC(String(Math.max(0, next)));
                       }
                     }}
@@ -3676,7 +3562,7 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
             ? !sniperAmount || Number(sniperAmount) <= 0 || sniperSubmitting
             : isDevSellMode
               ? !amount || Number(amount) <= 0 || devSubmitting || !creatorAddress
-              : !amount || isLoading || (tab === "limit" && !targetMC)}
+              : !amount || (tab === "limit" && !targetMC)}
           onClick={() => {
             if (isSniperMode) {
               void handleCreateSniperOrder();
@@ -3719,8 +3605,6 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
                 )}
               </span>
             )
-          ) : isLoading ? (
-            "Processing..."
           ) : (
             <span className="inline-flex items-center gap-1">
               {isMigratingToken && mode === "buy" ? "Snipe" : mode === "buy" ? "Buy" : "Sell"} {token.symbol}

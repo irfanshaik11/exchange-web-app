@@ -1579,15 +1579,15 @@ const Positions: React.FC<PositionsProps> = ({
                     </div>
                     <button
                       onClick={(e) => handleQuickSell(e, sourcePosition)}
-                      disabled={isSelling || !bearerToken}
+                      disabled={!bearerToken}
                       className={`flex items-center gap-1 px-2 py-1 rounded-lg text-xs transition-colors ${
-                        isSelling || !bearerToken
+                        !bearerToken
                           ? 'bg-neutral-800 text-neutral-500 cursor-not-allowed'
                           : 'bg-red-600/20 text-red-300 hover:bg-red-600/30'
                       }`}
                     >
                       <FaArrowUp className="text-xs" />
-                      {isSelling ? 'Selling...' : 'Quick Sell'}
+                      {'Quick Sell'}
                     </button>
                   </div>
                 </td>

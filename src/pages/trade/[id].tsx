@@ -1142,7 +1142,10 @@ export default function TradePage() {
                   />
                 </div>
                 <div className={`flex flex-col h-full ${selectedTab === "Orders" ? "" : "hidden"}`}>
-                  <TokenLimitOrders />
+                  <TokenLimitOrders
+                    liveMarketCapUsd={liveMarketCapForPanel}
+                    currentTokenAddress={resolvedTokenMint}
+                  />
                 </div>
                 <div className={`flex flex-col h-full ${selectedTab === "Top Traders" ? "" : "hidden"}`}>
                   <React.Suspense fallback={<div className="flex items-center justify-center h-full text-neutral-400">Loading...</div>}>

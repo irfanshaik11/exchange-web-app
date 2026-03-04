@@ -30,6 +30,7 @@ export interface ArenaStats {
   lastTradeDate: string | null;
   honorsLevel: number;
   totalTradingVolume: number;
+  totalSolVolume: number;
   totalTradeCount: number;
   totalReferralCount: number;
   questsCompletedToday: number;

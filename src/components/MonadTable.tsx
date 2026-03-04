@@ -1627,6 +1627,12 @@ function MonadTable({
     );
   }, [tokens, title]);
 
+  // Track whether we ever had data — prevents "No tokens found" flash on tab return
+  const hadDataRef = useRef(false);
+  if (tokens && tokens.length > 0) {
+    hadDataRef.current = true;
+  }
+
   // Preload images for visible tokens (first 20 for instant loading)
   // This runs in background and doesn't block rendering or new token updates
   useEffect(() => {
@@ -5893,7 +5899,7 @@ function MonadTable({
           </div>
         </div>
       </div>
-      {(loading || isFetchingMonad) && monadTokens.length === 0 ? (
+      {monadTokens.length === 0 && (loading || isFetchingMonad || hadDataRef.current) ? (
         <div className="custom-scrollbar flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto">
           {Array.from({ length: skeletonRowCount }).map((_, idx) => (
             <div
@@ -5994,7 +6000,8 @@ function MonadTable({
       ) : monadTokens.length === 0 &&
         filteredTokens.length === 0 &&
         !isFetchingMonad &&
-        !isFetchingFiltered ? (
+        !isFetchingFiltered &&
+        !hadDataRef.current ? (
         <div className="custom-scrollbar flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto">
           <div className="py-8 text-center" style={{ color: AX.muted }}>
             No tokens found.

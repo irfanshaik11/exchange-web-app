@@ -257,7 +257,7 @@ export function useMonadTradesWebSocket(
                   const exists = prev.some((t) => t.tx_hash === trade.tx_hash);
                   if (exists) return prev;
 
-                  const next = [trade, ...prev];
+                  const next = [trade, ...prev].slice(0, 500);
                   tradesRef.current = next;
                   return next;
                 });
