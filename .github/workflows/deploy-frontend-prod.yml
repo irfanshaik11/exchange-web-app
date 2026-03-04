@@ -16,10 +16,10 @@ env:
 
   # List of MIGs with their zones (MIG:ZONE)
   MIG_LIST: >
-    interstate-narrative-frontend-prod-frankfurt:europe-west3-a
-    interstate-narrative-frontend-prod-tokyo:asia-northeast1-a
-    interstate-narrative-frontend-prod-us-east:us-east4-a
-    interstate-narrative-frontend-prod-us-west:us-west1-a
+    interstate-frontend-prod-singapore:asia-southeast1-a
+    interstate-frontend-prod-tokyo:asia-northeast1-a
+    interstate-frontend-prod-us-east:us-east4-a
+    interstate-frontend-prod-us-west:us-west1-a
 
 jobs:
   Deploy:
