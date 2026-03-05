@@ -2841,7 +2841,7 @@ function MonadTable({
           });
         }, 1000);
         broadcastMonadQuickTrade(tokenAddress, "buy");
-        broadcastTradeCompleted({ tokenAddress, tradeType: 'buy', chain: 'monad' });
+        broadcastTradeCompleted({ tokenAddress, tradeType: 'buy', chain: 'monad', tokenName: token?.name, tokenSymbol: token?.symbol, imageUrl: tokenImage || undefined, solAmountSpent: buyAmount });
         console.log("✅ Monad Quick Buy successful:", txHashes);
         return { success: true, txHash: txHashes[0] };
       } else {

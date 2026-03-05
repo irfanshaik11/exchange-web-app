@@ -964,9 +964,9 @@ export default function PortfolioPage() {
       }
 
       // Only show loading state on initial load if no cache, not on refreshes
-      if (isInitialLoad && !hasValidCache && !activityLoadedRef.current && activeSpotTab === 2) {
+      if (isInitialLoad && !hasValidCache && !activityLoadedRef.current) {
         setLoadingTradeActivity(true);
-      } else if (hasValidCache && activeSpotTab === 2) {
+      } else if (hasValidCache) {
         console.log(`[Trade Activity] 🔄 Refreshing trade activity in background (cache available for instant display)`);
       }
 
@@ -1007,7 +1007,7 @@ export default function PortfolioPage() {
     fetchTradeActivity();
     // Polling removed — Activity is now pushed via WebSocket (new_trade message).
     // REST fetch still fires on: initial load, tradeRefreshCounter change, and chain/tab switch.
-  }, [user?.id, activeSpotTab, currentChain, isTradeOnCurrentChain, tradeActivityCacheKey, tradeRefreshCounter]);
+  }, [user?.id, currentChain, isTradeOnCurrentChain, tradeActivityCacheKey, tradeRefreshCounter]);
 
   // Listen for trade-completed events and consume pending refreshes on mount
   useEffect(() => {
@@ -3652,10 +3652,10 @@ export default function PortfolioPage() {
                   </div>
                 </div>
 
-                {/* Table Content */}
+                {/* Table Content — display toggling keeps components mounted to avoid re-fetch on tab switch */}
                 <div className="min-h-[200px]">
-                  {activeSpotTab === 0 &&
-                    (userLoading && !user?.id ? (
+                  <div style={{ display: activeSpotTab === 0 ? 'block' : 'none' }}>
+                    {userLoading && !user?.id ? (
                       <div className="py-8 text-center text-[#9CA3AF]">
                         Loading...
                       </div>
@@ -3665,7 +3665,6 @@ export default function PortfolioPage() {
                       </div>
                     ) : (
                       <Positions
-                        key={`positions-tab-${activeSpotTab}`}
                         bearerToken={user.bearerToken}
                         userId={user.id}
                         onPositionsChange={setPositions}
@@ -3679,7 +3678,8 @@ export default function PortfolioPage() {
                         isCacheValid={isCacheValid}
                         fallbackPositions={fallbackPositions}
                       />
-                    ))}
+                    )}
+                  </div>
                   {/* History tab commented out */}
                   {/* {activeSpotTab === 1 &&
                     (userLoading || loadingTradeHistory ? (
@@ -3697,8 +3697,8 @@ export default function PortfolioPage() {
                         onTokenNamesChange={setTokenNames}
                       />
                     ))} */}
-                  {activeSpotTab === 1 &&
-                    (userLoading && !user?.id ? (
+                  <div style={{ display: activeSpotTab === 1 ? 'block' : 'none' }}>
+                    {userLoading && !user?.id ? (
                       <div className="py-8 text-center text-[#9CA3AF]">
                         Loading...
                       </div>
@@ -3708,7 +3708,6 @@ export default function PortfolioPage() {
                       </div>
                     ) : (
                       <Positions
-                        key={`top100-tab-${activeSpotTab}`}
                         bearerToken={user.bearerToken}
                         userId={user.id}
                         onPositionsChange={setPositions}
@@ -3720,7 +3719,7 @@ export default function PortfolioPage() {
                               ? top100Positions
                               : undefined
                         }
-                        skipFetch={searchQuery.trim() !== "" || top100Positions.length > 0}
+                        skipFetch={activeSpotTab !== 1 || searchQuery.trim() !== "" || top100Positions.length > 0}
                         showHidden={showHidden}
                         showInSOL={sortByUSD}
                         tokenMetadataCache={tokenMetadataCache}
@@ -3728,9 +3727,10 @@ export default function PortfolioPage() {
                         isCacheValid={isCacheValid}
                         fallbackPositions={fallbackPositions}
                       />
-                    ))}
-                  {activeSpotTab === 2 &&
-                    ((userLoading && !user?.id) || loadingTradeActivity ? (
+                    )}
+                  </div>
+                  <div style={{ display: activeSpotTab === 2 ? 'block' : 'none' }}>
+                    {(userLoading && !user?.id) || loadingTradeActivity ? (
                       <div className="py-8 text-center text-[#9CA3AF]">
                         Loading...
                       </div>
@@ -3749,7 +3749,8 @@ export default function PortfolioPage() {
                           isCacheValid={isCacheValid}
                         />
                       </div>
-                    ))}
+                    )}
+                  </div>
                   {/* Predictions tab - hidden while feature is disabled
                   {activeSpotTab === 3 && (
                     <div className="w-full space-y-4 pb-16">

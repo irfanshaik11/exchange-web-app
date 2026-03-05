@@ -856,6 +856,10 @@ export async function executeEnhancedTrade(params: EnhancedTradeParams): Promise
         chain: 'sol',
         txHash: txHash || undefined,
         amount,
+        tokenName: token.name,
+        tokenSymbol: token.symbol,
+        imageUrl: tokenImage || undefined,
+        solAmountSpent: side === 'buy' ? amount : undefined,
       });
 
       if (isPending && txHash) {

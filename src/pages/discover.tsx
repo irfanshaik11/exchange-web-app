@@ -2198,7 +2198,7 @@ export default function DiscoverPage() {
             });
           }, 1000);
           broadcastMonadQuickTrade(tokenAddress, 'buy');
-          broadcastTradeCompleted({ tokenAddress, tradeType: 'buy', chain: 'monad' });
+          broadcastTradeCompleted({ tokenAddress, tradeType: 'buy', chain: 'monad', tokenName: token?.name, tokenSymbol: token?.symbol, imageUrl: tokenImage || undefined, solAmountSpent: buyAmount });
           toast.success(summary.message, { duration: 4000 });
           console.log('✅ Monad Quick Buy successful:', txHashes);
           return { success: true, txHash: txHashes[0] };
@@ -2395,7 +2395,7 @@ export default function DiscoverPage() {
               linkEl.className = "";
             }
             // Fire early so Portfolio refetches immediately when Solscan link appears
-            broadcastTradeCompleted({ tokenAddress: baseMint, tradeType: 'buy', chain: 'sol', txHash });
+            broadcastTradeCompleted({ tokenAddress: baseMint, tradeType: 'buy', chain: 'sol', txHash, tokenName: token.name, tokenSymbol: token.symbol, imageUrl: tokenImage, solAmountSpent: buyAmount });
           }
         },
       });
@@ -2432,7 +2432,7 @@ export default function DiscoverPage() {
           }),
         );
       }
-      broadcastTradeCompleted({ tokenAddress: token.mint, tradeType: 'buy', chain: 'sol' });
+      broadcastTradeCompleted({ tokenAddress: token.mint, tradeType: 'buy', chain: 'sol', tokenName: token.name, tokenSymbol: token.symbol, imageUrl: tokenImage, solAmountSpent: buyAmount });
 
       // Refresh header balance after successful buy
       setTimeout(() => {
@@ -2656,7 +2656,7 @@ export default function DiscoverPage() {
               linkEl.className = "";
             }
             // Fire early so Portfolio refetches immediately when Solscan link appears
-            broadcastTradeCompleted({ tokenAddress: baseMint, tradeType: 'buy', chain: 'sol', txHash });
+            broadcastTradeCompleted({ tokenAddress: baseMint, tradeType: 'buy', chain: 'sol', txHash, tokenName: token.name, tokenSymbol: token.symbol, imageUrl: tokenImage, solAmountSpent: buyAmount });
           }
         },
       });
@@ -2693,7 +2693,7 @@ export default function DiscoverPage() {
           }),
         );
       }
-      broadcastTradeCompleted({ tokenAddress: token.mint, tradeType: 'buy', chain: 'sol' });
+      broadcastTradeCompleted({ tokenAddress: token.mint, tradeType: 'buy', chain: 'sol', tokenName: token.name, tokenSymbol: token.symbol, imageUrl: tokenImage, solAmountSpent: buyAmount });
 
       // Refresh header balance after successful buy
       setTimeout(() => {

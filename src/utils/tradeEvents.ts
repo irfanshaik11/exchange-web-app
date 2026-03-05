@@ -20,6 +20,11 @@ export interface TradeCompletedDetail {
   amount?: number;
   sellPercentage?: number;
   timestamp: number;
+  // Optional metadata for optimistic position display after buy
+  tokenName?: string;
+  tokenSymbol?: string;
+  imageUrl?: string;
+  solAmountSpent?: number;
 }
 
 // ── localStorage persistence (cross-navigation) ──────────────────────

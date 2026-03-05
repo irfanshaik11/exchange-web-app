@@ -600,7 +600,7 @@ export default function WatchlistModal({ open, onClose }: WatchlistModalProps) {
             });
           }, 1000);
           broadcastMonadQuickTrade(tokenAddress, 'buy');
-          broadcastTradeCompleted({ tokenAddress, tradeType: 'buy', chain: 'monad' });
+          broadcastTradeCompleted({ tokenAddress, tradeType: 'buy', chain: 'monad', tokenName: token?.name, tokenSymbol: token?.symbol, imageUrl: tokenImage || undefined, solAmountSpent: buyAmount });
           console.log('✅ Watchlist Monad Quick Buy successful:', txHashes);
         } else {
           tradeErrored = true;
@@ -790,7 +790,7 @@ export default function WatchlistModal({ open, onClose }: WatchlistModalProps) {
                 linkEl.className = "";
               }
               // Fire early so Portfolio refetches immediately when Solscan link appears
-              broadcastTradeCompleted({ tokenAddress: baseMint, tradeType: 'buy', chain: 'sol', txHash });
+              broadcastTradeCompleted({ tokenAddress: baseMint, tradeType: 'buy', chain: 'sol', txHash, tokenName: token?.name, tokenSymbol: token?.symbol, imageUrl: tokenImage || undefined, solAmountSpent: quickBuyAmount });
             }
           },
         });
@@ -828,7 +828,7 @@ export default function WatchlistModal({ open, onClose }: WatchlistModalProps) {
           );
         }
         dispatchBalanceRefresh('sol');
-        broadcastTradeCompleted({ tokenAddress: tokenMint, tradeType: 'buy', chain: 'sol' });
+        broadcastTradeCompleted({ tokenAddress: tokenMint, tradeType: 'buy', chain: 'sol', tokenName: token?.name, tokenSymbol: token?.symbol, imageUrl: tokenImage || undefined, solAmountSpent: quickBuyAmount });
       } catch (error: any) {
         tradeErrored = true;
         cleanupSolanaTradeListener();

@@ -818,7 +818,7 @@ const MonadTradeActionPanel: React.FC<MonadTradeActionPanelProps> = ({ token }) 
             });
           }, 1000);
           broadcastMonadQuickTrade(tokenAddress, 'buy');
-          broadcastTradeCompleted({ tokenAddress, tradeType: 'buy', chain: 'monad' });
+          broadcastTradeCompleted({ tokenAddress, tradeType: 'buy', chain: 'monad', tokenName: token?.name, tokenSymbol: token?.symbol, imageUrl: tokenImage || undefined, solAmountSpent: amountValue });
           // Keep the amount value in the input field for easy re-trading
           setIsLoading(false);
         } else {

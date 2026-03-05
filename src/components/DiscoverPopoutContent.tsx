@@ -1744,7 +1744,7 @@ export default function DiscoverPopoutContent() {
           }
           console.log("✅ Monad Quick Buy successful:", txHashes);
           broadcastMonadQuickTrade(tokenAddress, 'buy');
-          broadcastTradeCompleted({ tokenAddress, tradeType: 'buy', chain: 'monad' });
+          broadcastTradeCompleted({ tokenAddress, tradeType: 'buy', chain: 'monad', tokenName: token?.name, tokenSymbol: token?.symbol, imageUrl: tokenImage || undefined, solAmountSpent: buyAmount });
           // Refresh header balance after successful buy
           setTimeout(() => {
             refreshBalance({ chain: "monad", force: true }).catch((err: any) => {
