@@ -136,11 +136,11 @@ const Activity: React.FC<ActivityProps> = ({
   const currentChain = (router.query.chain as string) || 'sol';
   const { solPrice } = useSolPrice();
   
-  // Update current time every minute to refresh age calculations
+  // Update current time every second to keep age labels fresh
   useEffect(() => {
     const interval = setInterval(() => {
       setCurrentTime(Date.now());
-    }, 60000); // Update every minute
+    }, 1000);
     
     return () => clearInterval(interval);
   }, []);
@@ -341,11 +341,7 @@ const Activity: React.FC<ActivityProps> = ({
 
   return (
     <div className="w-full">
-      {loading ? (
-        <div className="py-8 text-center text-[#9CA3AF]">Loading...</div>
-      ) : trades.length === 0 ? (
-        <div className="py-8 text-center text-[#9CA3AF]">No activity found.</div>
-      ) : (
+      {trades.length > 0 ? (
         <div className="relative">
           {/* Header Row - Fixed */}
           <div className="grid gap-4 px-6 py-3 border-b border-white/[0.06] text-[10px] font-semibold uppercase tracking-[0.08em] text-white/30" style={{ gridTemplateColumns: '0.8fr 2fr 1.2fr 1.2fr 0.8fr 1fr', background: 'linear-gradient(180deg, rgba(255, 255, 255, 0.06) 0%, rgba(255, 255, 255, 0.02) 100%)', boxShadow: 'inset 0 1px 0 rgba(255, 255, 255, 0.08), inset 0 -1px 0 rgba(255, 255, 255, 0.02)', backdropFilter: 'blur(16px)', WebkitBackdropFilter: 'blur(16px)' }}>
@@ -421,28 +417,7 @@ const Activity: React.FC<ActivityProps> = ({
               // TODO: Backend should store full timestamp in tradeTime field
               const timestamp = trade.createdAt;
               const age = formatAge(timestamp, currentTime);
-              
-              // Debug logging for age calculation
-              console.log('Age calculation debug:', {
-                tokenAddress: trade.tokenAddress,
-                tradeTime: trade.tradeTime,
-                createdAt: trade.createdAt,
-                timestamp: timestamp,
-                age: age,
-                currentTime: new Date().toISOString()
-              });
-              
-              // Debug backend data inconsistency for same token
-              console.log('Backend data analysis:', {
-                tokenAddress: trade.tokenAddress,
-                type: trade.type,
-                marketCap: trade.marketCap,
-                tokenAmount: trade.tokenAmount,
-                usdValue: trade.usdValue,
-                solAmount: trade.solAmount,
-                transactionHash: trade.transactionHash
-              });
-              
+
               // Format market cap
               // Use the market cap saved in the database at the time of trade (historical value)
               let marketCapValue = toNumber(trade.marketCap);
@@ -848,6 +823,27 @@ const Activity: React.FC<ActivityProps> = ({
             </div>
           </div>
         </div>
+      ) : loading ? (
+        <div className="space-y-0">
+          {[...Array(5)].map((_, i) => (
+            <div key={i} className="grid gap-4 px-6 py-3 border-b border-white/[0.06]" style={{ gridTemplateColumns: '0.8fr 2fr 1.2fr 1.2fr 0.8fr 1fr' }}>
+              <div className="h-4 w-10 rounded bg-white/[0.06] animate-pulse" />
+              <div className="flex items-center gap-3">
+                <div className="h-10 w-10 rounded-lg bg-white/[0.06] animate-pulse" />
+                <div className="space-y-1.5">
+                  <div className="h-3 w-20 rounded bg-white/[0.06] animate-pulse" />
+                  <div className="h-2.5 w-16 rounded bg-white/[0.06] animate-pulse" />
+                </div>
+              </div>
+              <div className="h-4 w-16 rounded bg-white/[0.06] animate-pulse self-center" />
+              <div className="h-4 w-14 rounded bg-white/[0.06] animate-pulse self-center" />
+              <div className="h-4 w-10 rounded bg-white/[0.06] animate-pulse self-center" />
+              <div className="h-4 w-10 rounded bg-white/[0.06] animate-pulse self-center" />
+            </div>
+          ))}
+        </div>
+      ) : (
+        <div className="py-8 text-center text-[#9CA3AF]">No activity yet.</div>
       )}
     </div>
   );

@@ -212,18 +212,27 @@ export async function getTradeHistoryByUser(
   }
 }
 
-export async function getTradeActivityByUser(
+/** Typed result for trade activity fetches — lets callers distinguish "0 trades" from "request failed" */
+export type TradeActivityResult =
+  | { ok: true; data: any[] }
+  | { ok: false; data: null; error: string };
+
+export async function fetchTradeActivity(
   userId: string,
   blockchain?: string,
-): Promise<any[]> {
-  if (!userId) throw new Error("userId is required");
+): Promise<TradeActivityResult> {
+  if (!userId) return { ok: true, data: [] };
+  if (!env.NEXT_PUBLIC_BACKEND_URL) {
+    return { ok: false, data: null, error: "NEXT_PUBLIC_BACKEND_URL is not set" };
+  }
+
   const controller =
     typeof AbortController !== "undefined" ? new AbortController() : undefined;
   let timeoutId: ReturnType<typeof setTimeout> | undefined;
-  if (controller) {
-    timeoutId = setTimeout(() => controller.abort(), 10000);
-  }
   try {
+    if (controller) {
+      timeoutId = setTimeout(() => controller.abort(), 10000);
+    }
     const blockchainParam =
       blockchain && blockchain !== "all" ? `&blockchain=${blockchain}` : "";
     const res = await fetch(
@@ -231,22 +240,29 @@ export async function getTradeActivityByUser(
       controller ? { signal: controller.signal } : {},
     );
     if (!res.ok) {
-      throw new Error(
-        `Failed to fetch trade activity by user: ${res.status} ${res.statusText}`,
-      );
+      return { ok: false, data: null, error: `http_${res.status}` };
     }
-    return res.json();
+    const data = await res.json();
+    return { ok: true, data: Array.isArray(data) ? data : [] };
   } catch (err) {
     if ((err as any)?.name === "AbortError") {
-      console.warn("getTradeActivityByUser request timed out");
-      return [];
+      return { ok: false, data: null, error: "timeout" };
     }
-    throw err;
+    return { ok: false, data: null, error: "network" };
   } finally {
     if (timeoutId !== undefined) {
       clearTimeout(timeoutId);
     }
   }
+}
+
+/** Backward-compat wrapper — returns [] on error (used by callers that don't need error distinction) */
+export async function getTradeActivityByUser(
+  userId: string,
+  blockchain?: string,
+): Promise<any[]> {
+  const result = await fetchTradeActivity(userId, blockchain);
+  return result.data ?? [];
 }
 
 export interface WalletScanResponse {

@@ -13,6 +13,7 @@ import CustomCheckbox from "../components/CustomCheckbox";
 import {
   getTradeHistoryByUser,
   getTradeActivityByUser,
+  fetchTradeActivity,
 } from "~/utils/functions";
 import { getWithdrawalHistory } from "~/utils/api";
 import { formatSmartNumber, formatSmallPrice } from "~/utils/db";
@@ -944,7 +945,7 @@ export default function PortfolioPage() {
   useEffect(() => {
     let isInitialLoad = true;
 
-    const fetchTradeActivity = async () => {
+    const loadTradeActivity = async () => {
       if (!user?.id) return;
 
       // Check cache to determine if we should show loading
@@ -973,28 +974,31 @@ export default function PortfolioPage() {
       try {
         // Map chain query param to blockchain: 'sol' -> 'solana', 'monad' -> 'monad'
         const blockchain = currentChain === 'monad' ? 'monad' : currentChain === 'sol' ? 'solana' : undefined;
-        const activity = await getTradeActivityByUser(user.id, blockchain);
-        const filteredActivity = Array.isArray(activity)
-          ? activity.filter(isTradeOnCurrentChain)
-          : [];
-        setTradeActivity(filteredActivity);
+        const result = await fetchTradeActivity(user.id, blockchain);
 
-        // Save to localStorage cache for instant loading when navigating back
-        if (typeof window !== 'undefined') {
-          try {
-            const payload = {
-              data: filteredActivity,
-              timestamp: Date.now(),
-            };
-            window.localStorage.setItem(tradeActivityCacheKey, JSON.stringify(payload));
-            console.log(`[Trade Activity] 💾 Cached ${filteredActivity.length} trades to localStorage`);
-          } catch (error) {
-            console.warn(`[Trade Activity] Failed to cache trades:`, error);
+        if (!result.ok) {
+          // Error/timeout — preserve existing tradeActivity, don't wipe to []
+          console.warn(`[Trade Activity] Fetch failed (${result.error}), keeping existing data`);
+        } else {
+          const filteredActivity = result.data.filter(isTradeOnCurrentChain);
+          setTradeActivity(filteredActivity);
+
+          // Save to localStorage cache for instant loading when navigating back
+          if (typeof window !== 'undefined') {
+            try {
+              const payload = {
+                data: filteredActivity,
+                timestamp: Date.now(),
+              };
+              window.localStorage.setItem(tradeActivityCacheKey, JSON.stringify(payload));
+            } catch (error) {
+              // best-effort cache write
+            }
           }
         }
       } catch (error) {
+        // Unexpected error — still preserve existing data
         console.error("Failed to fetch trade activity:", error);
-        setTradeActivity([]);
       } finally {
         if (isInitialLoad) {
           setLoadingTradeActivity(false);
@@ -1004,7 +1008,7 @@ export default function PortfolioPage() {
       }
     };
 
-    fetchTradeActivity();
+    loadTradeActivity();
     // Polling removed — Activity is now pushed via WebSocket (new_trade message).
     // REST fetch still fires on: initial load, tradeRefreshCounter change, and chain/tab switch.
   }, [user?.id, currentChain, isTradeOnCurrentChain, tradeActivityCacheKey, tradeRefreshCounter]);
