@@ -623,6 +623,7 @@ export default function PortfolioPage() {
   // Track if balance refresh should be forced (e.g., when wallets are updated)
   const forceBalanceRefreshRef = useRef(false);
   const activityLoadedRef = useRef(false);
+  const pendingWsTradesRef = useRef<any[]>([]);
   
   // Helper to get localStorage keys (computed based on user and chain)
   const getStorageKeys = () => ({
@@ -913,20 +914,31 @@ export default function PortfolioPage() {
           const filteredHistory = Array.isArray(history)
             ? history.filter(isTradeOnCurrentChain)
             : [];
-          setTradeHistory(filteredHistory);
-          
+
+          // Merge WS trades that REST hasn't confirmed yet
+          const now = Date.now();
+          const restIds = new Set(filteredHistory.map((t: any) => t.id));
+          pendingWsTradesRef.current = pendingWsTradesRef.current.filter((t: any) => {
+            if (restIds.has(t.id)) return false; // REST confirmed
+            if (now - (t._wsTimestamp || 0) > 60000) return false; // Expired
+            return true;
+          });
+
+          let finalHistory = filteredHistory;
+          if (pendingWsTradesRef.current.length > 0) {
+            const wsIds = new Set(pendingWsTradesRef.current.map((t: any) => t.id));
+            const dedupedRest = filteredHistory.filter((t: any) => !wsIds.has(t.id));
+            finalHistory = [...pendingWsTradesRef.current, ...dedupedRest];
+          }
+          setTradeHistory(finalHistory);
+
           // Save to localStorage cache for instant loading when navigating back
           if (typeof window !== 'undefined') {
             try {
-              const payload = {
-                data: filteredHistory,
-                timestamp: Date.now(),
-              };
-              window.localStorage.setItem(tradeHistoryCacheKey, JSON.stringify(payload));
-              console.log(`[Trade History] 💾 Cached ${filteredHistory.length} trades to localStorage`);
-            } catch (error) {
-              console.warn(`[Trade History] Failed to cache trades:`, error);
-            }
+              window.localStorage.setItem(tradeHistoryCacheKey, JSON.stringify({
+                data: finalHistory, timestamp: Date.now(),
+              }));
+            } catch {}
           }
         } catch (error) {
           console.error("Failed to fetch trade history:", error);
@@ -981,19 +993,44 @@ export default function PortfolioPage() {
           console.warn(`[Trade Activity] Fetch failed (${(result as { ok: false; data: null; error: string }).error}), keeping existing data`);
         } else {
           const filteredActivity = result.data.filter(isTradeOnCurrentChain);
-          setTradeActivity(filteredActivity);
+
+          // Merge WS trades that REST hasn't confirmed yet
+          const now = Date.now();
+          const restIds = new Set(filteredActivity.map((t: any) => t.id));
+          pendingWsTradesRef.current = pendingWsTradesRef.current.filter((t: any) => {
+            if (restIds.has(t.id)) return false; // REST confirmed
+            if (now - (t._wsTimestamp || 0) > 60000) return false; // Expired
+            return true;
+          });
+
+          let finalActivity = filteredActivity;
+          if (pendingWsTradesRef.current.length > 0) {
+            const wsIds = new Set(pendingWsTradesRef.current.map((t: any) => t.id));
+            const dedupedRest = filteredActivity.filter((t: any) => !wsIds.has(t.id));
+            finalActivity = [...pendingWsTradesRef.current, ...dedupedRest];
+          }
+          setTradeActivity(finalActivity);
+
+          // Clean up pending_ws_trades localStorage too
+          if (typeof window !== 'undefined') {
+            try {
+              const lsRaw = localStorage.getItem('pending_ws_trades');
+              if (lsRaw) {
+                const lsTrades = JSON.parse(lsRaw);
+                const cleaned = lsTrades.filter((t: any) => !restIds.has(t.id) && now - (t._wsTimestamp || 0) < 60000);
+                if (cleaned.length === 0) localStorage.removeItem('pending_ws_trades');
+                else localStorage.setItem('pending_ws_trades', JSON.stringify(cleaned));
+              }
+            } catch {}
+          }
 
           // Save to localStorage cache for instant loading when navigating back
           if (typeof window !== 'undefined') {
             try {
-              const payload = {
-                data: filteredActivity,
-                timestamp: Date.now(),
-              };
-              window.localStorage.setItem(tradeActivityCacheKey, JSON.stringify(payload));
-            } catch (error) {
-              // best-effort cache write
-            }
+              window.localStorage.setItem(tradeActivityCacheKey, JSON.stringify({
+                data: finalActivity, timestamp: Date.now(),
+              }));
+            } catch {}
           }
         }
       } catch (error) {
@@ -1057,6 +1094,11 @@ export default function PortfolioPage() {
         });
         if (relevant.length > 0) {
           console.log(`[Portfolio] Consuming ${relevant.length} pending WS trade(s) from localStorage`);
+          // Add to ref for merge protection against REST overwrites
+          pendingWsTradesRef.current = [
+            ...pendingWsTradesRef.current.filter((t: any) => !relevant.some((r: any) => r.id === t.id)),
+            ...relevant.map((t: any) => ({ ...t, _wsTimestamp: t._wsTimestamp || Date.now() })),
+          ];
           setTradeActivity(prev => {
             const existingIds = new Set(prev.map((t: any) => t.id));
             const newTrades = relevant.filter((t: any) => !existingIds.has(t.id));
@@ -1123,6 +1165,12 @@ export default function PortfolioPage() {
         (currentChain === 'monad' && tradeChain === 'monad') ||
         (currentChain !== 'monad' && tradeChain === 'solana');
       if (!isRelevant) return;
+
+      // Track in ref so REST fetches don't discard it
+      if (trade.id && !pendingWsTradesRef.current.some((t: any) => t.id === trade.id)) {
+        pendingWsTradesRef.current.push({ ...trade, _wsTimestamp: Date.now() });
+        if (pendingWsTradesRef.current.length > 20) pendingWsTradesRef.current.splice(0, pendingWsTradesRef.current.length - 20);
+      }
 
       // Prepend to tradeActivity (Activity tab) — deduplicate by id
       setTradeActivity((prev) => {
