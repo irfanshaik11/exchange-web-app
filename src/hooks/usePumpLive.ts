@@ -46,7 +46,7 @@ interface UsePumpLiveReturn {
   lastUpdated: Date | null;
 }
 
-const API_URL = 'https://token-stage.narrative.trade/v1/pump/live';
+const API_URL = `${process.env.NEXT_PUBLIC_GO_SERVICE_URL}/v1/pump/live`;
 const CACHE_KEY = 'pump_live_tokens';
 const CACHE_TTL = 30 * 1000; // 30 seconds
 
