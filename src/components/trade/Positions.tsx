@@ -1100,6 +1100,31 @@ const Positions: React.FC<PositionsProps> = ({
       }, delayMs);
     };
 
+    // Use WS-persisted full_positions if fresher than cache (eliminates _ _ placeholder on buys)
+    try {
+      const wsKey = `ws_full_positions_${blockchain || 'solana'}`;
+      const wsRaw = localStorage.getItem(wsKey);
+      if (wsRaw) {
+        const wsData = JSON.parse(wsRaw);
+        // Only use if fresh (within 30s) and has data
+        if (wsData?.positions?.length > 0 && Date.now() - wsData.timestamp < 30000) {
+          const existingCache = localStorage.getItem(positionsCacheKey);
+          const existingTs = existingCache ? JSON.parse(existingCache)?.timestamp || 0 : 0;
+          if (wsData.timestamp > existingTs) {
+            console.log(`[Positions] Using WS-persisted positions (${wsData.positions.length} items, ${((Date.now() - wsData.timestamp) / 1000).toFixed(1)}s old)`);
+            const reversed = [...wsData.positions].reverse();
+            setPositions(reversed);
+            onPositionsChange(reversed);
+            setLoading(false);
+            localStorage.setItem(positionsCacheKey, JSON.stringify({
+              data: reversed, timestamp: wsData.timestamp,
+            }));
+            requestMetadataForTokens(wsData.positions);
+          }
+        }
+      }
+    } catch {}
+
     fetchPositions();
 
     // Request WS snapshot for instant data if we're in initial loading state (no localStorage cache)
