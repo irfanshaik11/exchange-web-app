@@ -1039,6 +1039,48 @@ export default function PortfolioPage() {
       setTimeout(() => setTradeRefreshCounter((c) => c + 1), 5000);
     }
 
+    // Consume any WS-pushed trades that arrived while portfolio was unmounted
+    // These come from the global WS hook (always mounted) and are guaranteed post-DB-save
+    try {
+      const wsKey = 'pending_ws_trades';
+      const pendingRaw = localStorage.getItem(wsKey);
+      if (pendingRaw) {
+        localStorage.removeItem(wsKey); // consume immediately
+        const pendingTrades = JSON.parse(pendingRaw);
+        const now = Date.now();
+        // Filter: only trades from last 60s, matching current chain
+        const relevant = pendingTrades.filter((t: any) => {
+          if (now - (t._wsTimestamp || 0) > 60000) return false;
+          const chain = (t.blockchain || 'solana').toLowerCase();
+          return (currentChain === 'monad' && chain === 'monad') ||
+                 (currentChain !== 'monad' && chain === 'solana');
+        });
+        if (relevant.length > 0) {
+          console.log(`[Portfolio] Consuming ${relevant.length} pending WS trade(s) from localStorage`);
+          setTradeActivity(prev => {
+            const existingIds = new Set(prev.map((t: any) => t.id));
+            const newTrades = relevant.filter((t: any) => !existingIds.has(t.id));
+            if (newTrades.length === 0) return prev;
+            const updated = [...newTrades, ...prev];
+            try {
+              localStorage.setItem(tradeActivityCacheKey, JSON.stringify({ data: updated, timestamp: now }));
+            } catch {}
+            return updated;
+          });
+          setTradeHistory(prev => {
+            const existingIds = new Set(prev.map((t: any) => t.id));
+            const newTrades = relevant.filter((t: any) => !existingIds.has(t.id));
+            if (newTrades.length === 0) return prev;
+            const updated = [...newTrades, ...prev];
+            try {
+              localStorage.setItem(tradeHistoryCacheKey, JSON.stringify({ data: updated, timestamp: now }));
+            } catch {}
+            return updated;
+          });
+        }
+      }
+    } catch {}
+
     // Listen for live trade-completed events (same-page)
     const handleTradeCompleted = (event: Event) => {
       const detail = (event as CustomEvent<TradeCompletedDetail>).detail;

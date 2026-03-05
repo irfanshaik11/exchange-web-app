@@ -236,6 +236,17 @@ export function useSolanaPositionWebSocket(
             window.dispatchEvent(new CustomEvent('solanaNewTrade', {
               detail: message.data
             }));
+
+            // Persist to localStorage so Portfolio can consume on mount
+            // (WS fires after DB save — data is real, not optimistic)
+            try {
+              const key = 'pending_ws_trades';
+              const existing = JSON.parse(localStorage.getItem(key) || '[]');
+              existing.push({ ...message.data, _wsTimestamp: Date.now() });
+              // Cap at 20 entries, drop oldest
+              if (existing.length > 20) existing.splice(0, existing.length - 20);
+              localStorage.setItem(key, JSON.stringify(existing));
+            } catch {}
           } else if (message.type === 'full_positions' && Array.isArray(message.data)) {
             // Full positions array pushed after trade save — instant update, no REST needed
             console.log(`[useSolanaPositionWebSocket] full_positions (${message.blockchain}): ${message.data.length} positions`);
@@ -246,6 +257,16 @@ export function useSolanaPositionWebSocket(
                 timestamp: message.timestamp,
               }
             }));
+
+            // Persist to localStorage so Positions.tsx can use on mount
+            try {
+              const bc = message.blockchain || 'solana';
+              localStorage.setItem(`ws_full_positions_${bc}`, JSON.stringify({
+                positions: message.data,
+                blockchain: bc,
+                timestamp: Date.now(),
+              }));
+            } catch {}
           } else if (message.type === 'positions_snapshot' && Array.isArray(message.data)) {
             console.log(`[useSolanaPositionWebSocket] positions_snapshot (${message.blockchain}): ${message.data.length} positions`);
             window.dispatchEvent(new CustomEvent('solanaPositionsSnapshot', {
