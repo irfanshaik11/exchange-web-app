@@ -1003,15 +1003,8 @@ export default function PortfolioPage() {
     };
 
     fetchTradeActivity();
-
-    // Auto-refresh every 5 seconds only when Activity tab is visible
-    if (user?.id && activeSpotTab === 2) {
-      const intervalId = setInterval(() => {
-        fetchTradeActivity();
-      }, 5000);
-
-      return () => clearInterval(intervalId);
-    }
+    // Polling removed — Activity is now pushed via WebSocket (new_trade message).
+    // REST fetch still fires on: initial load, tradeRefreshCounter change, and chain/tab switch.
   }, [user?.id, activeSpotTab, currentChain, isTradeOnCurrentChain, tradeActivityCacheKey, tradeRefreshCounter]);
 
   // Listen for trade-completed events and consume pending refreshes on mount
@@ -1057,11 +1050,59 @@ export default function PortfolioPage() {
     };
     window.addEventListener('solanaPositionsChanged', handlePositionsChanged);
 
+    // Listen for WS-pushed full position data (balance may have changed)
+    const handlePositionUpdate = () => {
+      refreshBalance({ chain: currentChain === 'monad' ? 'monad' : 'sol', force: true }).catch(() => {});
+    };
+    window.addEventListener('solanaPositionUpdate', handlePositionUpdate);
+
+    // Listen for WS-pushed new trade records (instant Activity/History update)
+    const handleNewTrade = (event: Event) => {
+      const trade = (event as CustomEvent).detail;
+      if (!trade?.tokenAddress) return;
+
+      // Chain filter: only process trades for the currently viewed chain
+      const tradeChain = (trade.blockchain || 'solana').toLowerCase();
+      const isRelevant =
+        (currentChain === 'monad' && tradeChain === 'monad') ||
+        (currentChain !== 'monad' && tradeChain === 'solana');
+      if (!isRelevant) return;
+
+      // Prepend to tradeActivity (Activity tab) — deduplicate by id
+      setTradeActivity((prev) => {
+        if (trade.id && prev.some((t: any) => t.id === trade.id)) return prev;
+        const updated = [trade, ...prev];
+        try {
+          window.localStorage.setItem(
+            tradeActivityCacheKey,
+            JSON.stringify({ data: updated, timestamp: Date.now() })
+          );
+        } catch {}
+        return updated;
+      });
+
+      // Prepend to tradeHistory (Trade History tab + PNL metrics) — deduplicate by id
+      setTradeHistory((prev) => {
+        if (trade.id && prev.some((t: any) => t.id === trade.id)) return prev;
+        const updated = [trade, ...prev];
+        try {
+          window.localStorage.setItem(
+            tradeHistoryCacheKey,
+            JSON.stringify({ data: updated, timestamp: Date.now() })
+          );
+        } catch {}
+        return updated;
+      });
+    };
+    window.addEventListener('solanaNewTrade', handleNewTrade);
+
     return () => {
       window.removeEventListener(TRADE_COMPLETED_EVENT, handleTradeCompleted);
       window.removeEventListener('solanaPositionsChanged', handlePositionsChanged);
+      window.removeEventListener('solanaPositionUpdate', handlePositionUpdate);
+      window.removeEventListener('solanaNewTrade', handleNewTrade);
     };
-  }, [currentChain, refreshBalance]);
+  }, [currentChain, refreshBalance, tradeActivityCacheKey, tradeHistoryCacheKey]);
 
   // Note: Initial balance is set once when first detected and persists
   // It does NOT auto-reset to prevent wallet balance change from going to 0
@@ -3580,7 +3621,7 @@ export default function PortfolioPage() {
                 {/* Table Content */}
                 <div className="min-h-[200px]">
                   {activeSpotTab === 0 &&
-                    (userLoading ? (
+                    (userLoading && !user?.id ? (
                       <div className="py-8 text-center text-[#9CA3AF]">
                         Loading...
                       </div>
@@ -3623,7 +3664,7 @@ export default function PortfolioPage() {
                       />
                     ))} */}
                   {activeSpotTab === 1 &&
-                    (userLoading ? (
+                    (userLoading && !user?.id ? (
                       <div className="py-8 text-center text-[#9CA3AF]">
                         Loading...
                       </div>
@@ -3655,7 +3696,7 @@ export default function PortfolioPage() {
                       />
                     ))}
                   {activeSpotTab === 2 &&
-                    (userLoading || loadingTradeActivity ? (
+                    ((userLoading && !user?.id) || loadingTradeActivity ? (
                       <div className="py-8 text-center text-[#9CA3AF]">
                         Loading...
                       </div>

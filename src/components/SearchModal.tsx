@@ -1239,6 +1239,54 @@ const SearchModalContent = React.memo(function SearchModalContent({
         chain,
       });
 
+      // Preload immediately — covers all paths (recent searches, trending, keyboard selection)
+      // Has built-in dedup via lastPreloadedMint
+      // Build tradeUrl matching the router.push below
+      let selectTradeUrl: string;
+      if (isMonad && address) {
+        const qp = new URLSearchParams();
+        if (token.name) qp.set('_name', token.name);
+        if (token.symbol) qp.set('_symbol', token.symbol);
+        if (token.fully_diluted_value) qp.set('_mcap', token.fully_diluted_value.toString());
+        if (token.uri || token.logo) qp.set('_image', token.uri || token.logo || '');
+        qp.set('_mint', address);
+        if ((token as any).launchpad_protocol) qp.set('_launchpad_protocol', (token as any).launchpad_protocol);
+        if (token.created_at) qp.set('_created_at', token.created_at);
+        if ((token as any).price_usd) qp.set('_price', String((token as any).price_usd));
+        if (token.total_liquidity_usd) qp.set('_liquidity', String(token.total_liquidity_usd));
+        qp.set('chain', 'monad');
+        selectTradeUrl = `/trade/monad/${address}?${qp.toString()}`;
+      } else {
+        const qp = new URLSearchParams({
+          _name: token.name || token.symbol || "",
+          _symbol: token.symbol || "",
+          _mcap: token.fully_diluted_value?.toString() || "",
+          _image: token.uri || token.logo || "",
+          _mint: token.mint || address,
+          _launchpad_protocol: (token as any).launchpad_protocol || "",
+          _created_at: token.created_at || "",
+          chain: chain || 'sol',
+          mode: 'buy',
+          tab: 'market',
+          timeRange: '5m',
+          sliderPct: '0',
+        });
+        if ((token as any).price_usd) qp.set('_price', String((token as any).price_usd));
+        if (token.total_liquidity_usd) qp.set('_liquidity', String(token.total_liquidity_usd));
+        selectTradeUrl = `/trade/${address}?${qp.toString()}`;
+      }
+      preloadTradeChart({
+        mint: token.mint || address,
+        pairAddress: token.pair_address,
+        chain: isMonad ? 'monad' : 'sol',
+        name: token.name,
+        symbol: token.symbol,
+        priceUsd: (token as any).price_usd,
+        marketCapUsd: token.fully_diluted_value,
+        image: token.uri || token.logo || "",
+        launchpadProtocol: (token as any).launchpad_protocol,
+      }, { router, tradeUrl: selectTradeUrl });
+
       // Save to search history
       const historyItem: SearchHistoryItem = {
         mint: token.mint,
@@ -1268,39 +1316,25 @@ const SearchModalContent = React.memo(function SearchModalContent({
         // First, backfill the token to the database
         console.log("🔄 Backfilling token:", token);
 
-        const backfillResponse = await fetch(
-          "/api/token-service/backfill-token",
-          {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify({
-              mint: token.mint,
-              name: token.name,
-              symbol: token.symbol,
-              uri: token.uri,
-              market_cap_usd: token.fully_diluted_value,
-              liquidity_usd: token.total_liquidity_usd,
-              pair_address: token.pair_address,
-            }),
-          },
-        );
+        // Fire-and-forget backfill — don't block navigation
+        fetch("/api/token-service/backfill-token", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            mint: token.mint,
+            name: token.name,
+            symbol: token.symbol,
+            uri: token.uri,
+            market_cap_usd: token.fully_diluted_value,
+            liquidity_usd: token.total_liquidity_usd,
+            pair_address: token.pair_address,
+          }),
+        }).catch(() => {});
 
-        if (backfillResponse.ok) {
-          console.log("✅ Token backfilled successfully");
-        } else {
-          console.warn(
-            "⚠️ Token backfill failed, but continuing with navigation",
-          );
-        }
-
-        // Navigate to trade page
-        onSubmit?.(token.pair_address);
+        // Navigate to trade page (SearchModal handles its own router.push with full query params below)
         onClose();
 
         if (isMonad && address) {
-          // Build Monad trade URL with query parameters
           const queryParams = new URLSearchParams();
           if (token.name) queryParams.set('_name', token.name);
           if (token.symbol) queryParams.set('_symbol', token.symbol);
@@ -1309,16 +1343,13 @@ const SearchModalContent = React.memo(function SearchModalContent({
           queryParams.set('_mint', address);
           if ((token as any).launchpad_protocol) queryParams.set('_launchpad_protocol', (token as any).launchpad_protocol);
           if (token.created_at) queryParams.set('_created_at', token.created_at);
+          if ((token as any).price_usd) queryParams.set('_price', String((token as any).price_usd));
+          if (token.total_liquidity_usd) queryParams.set('_liquidity', String(token.total_liquidity_usd));
           queryParams.set('chain', 'monad');
 
           const url = `/trade/monad/${address}?${queryParams.toString()}`;
           await router.push(url);
         } else if (address) {
-          // Navigate to trade page for Solana - use direct router.push
-          // IMPORTANT: Always set _name and _symbol (even if empty) to match PulseTable behavior
-          // Otherwise TradeActionPanel shows skeleton instead of buy/sell buttons
-          // Also include UI state params to prevent double navigation
-          // URL path uses pair_address, but _mint should be the actual mint address
           const queryParams = new URLSearchParams({
             _name: token.name || token.symbol || "",
             _symbol: token.symbol || "",
@@ -1328,23 +1359,22 @@ const SearchModalContent = React.memo(function SearchModalContent({
             _launchpad_protocol: (token as any).launchpad_protocol || "",
             _created_at: token.created_at || "",
             chain: chain || 'sol',
-            // UI state defaults - prevents trade page from doing a second navigation
             mode: 'buy',
             tab: 'market',
             timeRange: '5m',
             sliderPct: '0',
           });
+          if ((token as any).price_usd) queryParams.set('_price', String((token as any).price_usd));
+          if (token.total_liquidity_usd) queryParams.set('_liquidity', String(token.total_liquidity_usd));
 
           const url = `/trade/${address}?${queryParams.toString()}`;
           console.log("🔗 Navigating to:", url);
-          // Use window.location for guaranteed full page re-render
-          // router.push doesn't remount when navigating between /trade/[address] routes
-          window.location.href = url;
+          // router.push preserves in-memory caches (OHLC, WS prefetch).
+          // [id].tsx useEffect([id]) resets state when address changes.
+          router.push(url);
         }
       } catch (error) {
         console.error("❌ Error backfilling token:", error);
-        // Still navigate even if backfill fails
-        onSubmit?.(token.pair_address);
         onClose();
 
         if (isMonad && address) {
@@ -1356,16 +1386,13 @@ const SearchModalContent = React.memo(function SearchModalContent({
           queryParams.set('_mint', address);
           if ((token as any).launchpad_protocol) queryParams.set('_launchpad_protocol', (token as any).launchpad_protocol);
           if (token.created_at) queryParams.set('_created_at', token.created_at);
+          if ((token as any).price_usd) queryParams.set('_price', String((token as any).price_usd));
+          if (token.total_liquidity_usd) queryParams.set('_liquidity', String(token.total_liquidity_usd));
           queryParams.set('chain', 'monad');
 
           const url = `/trade/monad/${address}?${queryParams.toString()}`;
           await router.push(url);
         } else if (address) {
-          // Navigate to trade page for Solana - use direct router.push
-          // IMPORTANT: Always set _name and _symbol (even if empty) to match PulseTable behavior
-          // Otherwise TradeActionPanel shows skeleton instead of buy/sell buttons
-          // Also include UI state params to prevent double navigation
-          // URL path uses pair_address, but _mint should be the actual mint address
           const queryParams = new URLSearchParams({
             _name: token.name || token.symbol || "",
             _symbol: token.symbol || "",
@@ -1375,22 +1402,21 @@ const SearchModalContent = React.memo(function SearchModalContent({
             _launchpad_protocol: (token as any).launchpad_protocol || "",
             _created_at: token.created_at || "",
             chain: chain || 'sol',
-            // UI state defaults - prevents trade page from doing a second navigation
             mode: 'buy',
             tab: 'market',
             timeRange: '5m',
             sliderPct: '0',
           });
+          if ((token as any).price_usd) queryParams.set('_price', String((token as any).price_usd));
+          if (token.total_liquidity_usd) queryParams.set('_liquidity', String(token.total_liquidity_usd));
 
           const url = `/trade/${address}?${queryParams.toString()}`;
           console.log("🔗 Navigating to:", url);
-          // Use window.location for guaranteed full page re-render
-          // router.push doesn't remount when navigating between /trade/[address] routes
-          window.location.href = url;
+          router.push(url);
         }
       }
     },
-    [onSubmit, onClose, chain, user?.id, router],
+    [onClose, chain, user?.id, router],
   );
 
   const handleQueryChange = useCallback(
@@ -1820,6 +1846,55 @@ const SearchModalContent = React.memo(function SearchModalContent({
                     return (
                       <li
                         key={item.mint}
+                        onMouseEnter={() => {
+                          if (!item.mint) return;
+                          // Build tradeUrl matching handleSelectToken navigation
+                          const isMonadItem = item.chain === 'monad';
+                          const itemAddr = isMonadItem ? item.mint : (item.pair_address || item.mint);
+                          let historyTradeUrl: string;
+                          if (isMonadItem) {
+                            const qp = new URLSearchParams();
+                            if (item.name) qp.set('_name', item.name);
+                            if (item.symbol) qp.set('_symbol', item.symbol);
+                            const mcap = item.fully_diluted_value || item.total_fully_diluted_valuation;
+                            if (mcap) qp.set('_mcap', String(mcap));
+                            if (item.uri || item.logo) qp.set('_image', item.uri || item.logo || '');
+                            qp.set('_mint', itemAddr);
+                            if (item.launchpad_protocol) qp.set('_launchpad_protocol', item.launchpad_protocol);
+                            if (item.total_liquidity_usd) qp.set('_liquidity', String(item.total_liquidity_usd));
+                            qp.set('chain', 'monad');
+                            historyTradeUrl = `/trade/monad/${itemAddr}?${qp.toString()}`;
+                          } else {
+                            const qp = new URLSearchParams({
+                              _name: item.name || item.symbol || '',
+                              _symbol: item.symbol || '',
+                              _mcap: String(item.fully_diluted_value || item.total_fully_diluted_valuation || ''),
+                              _image: item.uri || item.logo || '',
+                              _mint: item.mint,
+                              _launchpad_protocol: item.launchpad_protocol || '',
+                              chain: 'sol',
+                              mode: 'buy',
+                              tab: 'market',
+                              timeRange: '5m',
+                              sliderPct: '0',
+                            });
+                            if (item.total_liquidity_usd) qp.set('_liquidity', String(item.total_liquidity_usd));
+                            historyTradeUrl = `/trade/${itemAddr}?${qp.toString()}`;
+                          }
+                          preloadTradeChart(
+                            {
+                              mint: item.mint,
+                              pairAddress: item.pair_address,
+                              chain: isMonadItem ? 'monad' : 'sol',
+                              name: item.name || '',
+                              symbol: item.symbol || '',
+                              marketCapUsd: item.fully_diluted_value || item.total_fully_diluted_valuation,
+                              image: item.uri || item.logo || '',
+                              launchpadProtocol: item.launchpad_protocol,
+                            },
+                            { router, tradeUrl: historyTradeUrl }
+                          );
+                        }}
                         onClick={() => {
                           // Convert history item to Token format for handleSelectToken
                           const token: Token = {
@@ -2499,18 +2574,53 @@ const TokenListItem = React.memo(
           }}
           onMouseEnter={() => {
             if (!token.mint) return;
+            // Build tradeUrl matching handleSelectToken navigation
+            const isMonadResult = chain === 'monad';
+            const resultAddr = isMonadResult ? token.mint : (token.pair_address || token.mint);
+            let resultTradeUrl: string;
+            if (isMonadResult) {
+              const qp = new URLSearchParams();
+              if (token.name) qp.set('_name', token.name);
+              if (token.symbol) qp.set('_symbol', token.symbol);
+              if (token.fully_diluted_value) qp.set('_mcap', token.fully_diluted_value.toString());
+              if (token.uri || token.logo) qp.set('_image', token.uri || token.logo || '');
+              qp.set('_mint', resultAddr);
+              if ((token as any).launchpad_protocol) qp.set('_launchpad_protocol', (token as any).launchpad_protocol);
+              if (token.created_at) qp.set('_created_at', token.created_at);
+              if (token.total_liquidity_usd) qp.set('_liquidity', String(token.total_liquidity_usd));
+              qp.set('chain', 'monad');
+              resultTradeUrl = `/trade/monad/${resultAddr}?${qp.toString()}`;
+            } else {
+              const qp = new URLSearchParams({
+                _name: token.name || token.symbol || '',
+                _symbol: token.symbol || '',
+                _mcap: token.fully_diluted_value?.toString() || '',
+                _image: token.uri || token.logo || '',
+                _mint: token.mint || resultAddr,
+                _launchpad_protocol: (token as any).launchpad_protocol || '',
+                _created_at: token.created_at || '',
+                chain: chain || 'sol',
+                mode: 'buy',
+                tab: 'market',
+                timeRange: '5m',
+                sliderPct: '0',
+              });
+              if ((token as any).price_usd) qp.set('_price', String((token as any).price_usd));
+              if (token.total_liquidity_usd) qp.set('_liquidity', String(token.total_liquidity_usd));
+              resultTradeUrl = `/trade/${resultAddr}?${qp.toString()}`;
+            }
             preloadTradeChart(
               {
                 mint: token.mint,
                 pairAddress: token.pair_address,
-                chain: chain === 'monad' ? 'monad' : 'sol',
+                chain: isMonadResult ? 'monad' : 'sol',
                 name: token.name,
                 symbol: token.symbol,
                 marketCapUsd: token.fully_diluted_value,
                 image: token.uri || token.logo || "",
                 createdAt: token.created_at,
               },
-              { router: searchRouter }
+              { router: searchRouter, tradeUrl: resultTradeUrl }
             );
           }}
           onClick={(e) => {

@@ -40,9 +40,9 @@ export const creatorAddressCache = new Map<string, string | null>();
  * Shared 6-step hover preload pipeline extracted from PulseTable.
  *
  * 1. prefetchViaWS (immediate, has internal 150ms debounce)
- * 2. router.prefetch (deferred via requestIdleCallback)
- * 3. localStorage metadata cache (deferred)
- * 4. prefetchOHLC via HTTP (deferred)
+ * 2. router.prefetch (immediate — must match exact tradeUrl for cache hit)
+ * 3. prefetchOHLC via HTTP (immediate — parallel fast path with WS)
+ * 4. localStorage metadata cache (deferred via requestIdleCallback)
  * 5. preloadImage — pre-decode token avatar into imageObjectCache (deferred)
  * 6. prefetch creator address for chart dev markers (deferred)
  */
@@ -61,7 +61,20 @@ export function preloadTradeChart(
     prefetchViaWS(mint);
   }
 
-  // Steps 2-6: deferred to idle time
+  // Step 2: Route prefetch — immediate (critical for cache-hit on router.push)
+  if (options.router) {
+    const url =
+      options.tradeUrl ??
+      (chain === "monad"
+        ? `/trade/monad/${tokenInfo.pairAddress || mint}`
+        : `/trade/${mint}`);
+    options.router.prefetch(url);
+  }
+
+  // Step 3: HTTP OHLC prefetch — immediate (parallel fast path with WS)
+  prefetchOHLC(mint, chain);
+
+  // Steps 4-6: deferred to idle time (non-critical)
   const rIC =
     typeof requestIdleCallback === "function"
       ? requestIdleCallback
@@ -69,17 +82,7 @@ export function preloadTradeChart(
 
   (rIC as (cb: () => void, opts?: { timeout: number }) => void)(
     () => {
-      // Step 2: Route prefetch
-      if (options.router) {
-        const url =
-          options.tradeUrl ??
-          (chain === "monad"
-            ? `/trade/monad/${tokenInfo.pairAddress || mint}`
-            : `/trade/${tokenInfo.pairAddress || mint}`);
-        options.router.prefetch(url);
-      }
-
-      // Step 3: Cache token metadata in localStorage
+      // Step 4: Cache token metadata in localStorage
       try {
         const tokenMetadata = {
           name: tokenInfo.name || "",
@@ -100,10 +103,7 @@ export function preloadTradeChart(
         // Silently fail — non-critical
       }
 
-      // Step 4: HTTP OHLC prefetch
-      prefetchOHLC(mint, chain);
-
-      // Step 5: Preload token avatar image (deferred)
+      // Step 5: Preload token avatar image
       if (tokenInfo.image) {
         const imageUrl = computeHashImageUrl(tokenInfo.image);
         if (imageUrl) preloadImage(imageUrl);

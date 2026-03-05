@@ -2310,12 +2310,43 @@ export default function InterstateTable({
               const handleTokenHover = () => {
                 if (hoverFired) return;
                 hoverFired = true;
-                if (!token.pair_address && !token.mint) return;
+                const address = token.mint || token.pair_address;
+                if (!address) return;
+                // Build tradeUrl matching handleTokenClick navigation exactly
+                const isMonad = chain === 'monad';
+                const hoverQP = new URLSearchParams();
+                if (token.name) hoverQP.set('_name', token.name);
+                if (token.symbol) hoverQP.set('_symbol', token.symbol);
+                if (isMonad) {
+                  if (token.fully_diluted_value) hoverQP.set('_mcap', token.fully_diluted_value.toString());
+                  if (token.total_liquidity_usd || (token as any)?.liquidity_usd || (token as any)?.liquidity) {
+                    const liq = token.total_liquidity_usd || (token as any)?.liquidity_usd || (token as any)?.liquidity;
+                    if (typeof liq === 'number' && Number.isFinite(liq)) hoverQP.set('_liq', liq.toString());
+                  }
+                  if (token.uri || token.logo) hoverQP.set('_image', token.uri || token.logo || '');
+                  hoverQP.set('_mint', address);
+                  if ((token as any).launchpad_protocol) hoverQP.set('_launchpad_protocol', (token as any).launchpad_protocol);
+                  const createdAt = (token as any).created_at || (token as any).launch_time || (token as any).pair_created_at;
+                  if (createdAt) hoverQP.set('_created_at', String(createdAt));
+                  hoverQP.set('chain', 'monad');
+                } else {
+                  if ((token as any).price_usd) hoverQP.set('_price', (token as any).price_usd.toString());
+                  if (token.market_cap_usd) hoverQP.set('_mcap', token.market_cap_usd.toString());
+                  if (token.uri || token.logo || (token as any).image) hoverQP.set('_image', token.uri || token.logo || (token as any).image || '');
+                  hoverQP.set('_mint', address);
+                  if ((token as any).launchpad_protocol) hoverQP.set('_launchpad_protocol', (token as any).launchpad_protocol);
+                  const createdAt = (token as any).created_at || (token as any).launch_time || (token as any).pair_created_at;
+                  if (createdAt) hoverQP.set('_created_at', String(createdAt));
+                  hoverQP.set('chain', 'sol');
+                }
+                const hoverTradeUrl = isMonad
+                  ? `/trade/monad/${address}?${hoverQP.toString()}`
+                  : `/trade/${address}?${hoverQP.toString()}`;
                 preloadTradeChart(
                   {
                     mint: token.mint,
                     pairAddress: token.pair_address,
-                    chain: chain === 'monad' ? 'monad' : 'sol',
+                    chain: isMonad ? 'monad' : 'sol',
                     name: token.name,
                     symbol: token.symbol,
                     marketCapUsd: token.fully_diluted_value,
@@ -2323,7 +2354,7 @@ export default function InterstateTable({
                     launchpadProtocol: token.launchpad_protocol,
                     createdAt: token.created_at,
                   },
-                  { router }
+                  { router, tradeUrl: hoverTradeUrl }
                 );
               };
 

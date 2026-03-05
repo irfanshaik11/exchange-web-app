@@ -10,6 +10,7 @@ import { showOrderToast } from "~/utils/tradeToast";
 import { dispatchBalanceRefresh } from "~/utils/balanceEvents";
 import { formatMarketCap } from "~/utils/formatPrice";
 import { extractTokenImage, normalizeImageUrl } from "~/utils/images";
+import { preloadTradeChart } from "~/utils/preloadTradeChart";
 
 type LimitOrderStatus = "Active" | "Cancelled" | "Completed" | "Failed";
 
@@ -676,7 +677,25 @@ export default function TokenLimitOrders({ liveMarketCapUsd, currentTokenAddress
                       : "Off";
 
                   return (
-                    <tr key={order.id} className="bg-neutral-950/20 hover:bg-neutral-900/40">
+                    <tr
+                      key={order.id}
+                      className="bg-neutral-950/20 hover:bg-neutral-900/40"
+                      onMouseEnter={() => {
+                        const navigateAddress = meta.pairAddress || order.pairAddress || order.tokenAddress;
+                        if (navigateAddress) {
+                          preloadTradeChart({
+                            mint: order.tokenAddress,
+                            pairAddress: navigateAddress,
+                            chain: 'sol',
+                            name: meta.name,
+                            symbol: meta.symbol,
+                            marketCapUsd: meta.marketCap ? Number(meta.marketCap) : undefined,
+                            image: meta.image || "",
+                            launchpadProtocol: meta.protocol,
+                          }, { router });
+                        }
+                      }}
+                    >
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-3">
                           <div className="relative flex items-center justify-center rounded-sm transition-all duration-300 ease-out">

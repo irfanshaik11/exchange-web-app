@@ -5,6 +5,7 @@ import { HiLightningBolt } from "react-icons/hi";
 import { SiSolana } from "react-icons/si";
 import { formatMarketCap } from "~/utils/db";
 import { extractTokenImage, normalizeImageUrl, resolveTokenImage } from "~/utils/images";
+import { preloadTradeChart } from "~/utils/preloadTradeChart";
 import { useSolPrice } from "~/components/SolPriceContext";
 import type { TradeEvent } from "~/utils/walletTracking";
 import type { Wallet } from "~/utils/functions";
@@ -362,6 +363,21 @@ export default function LiveTradesPanel({
                 <td className="px-1 py-1.5 sm:px-2 sm:py-2">
                   <button
                     type="button"
+                    onMouseEnter={() => {
+                      if (trade.mint) {
+                        preloadTradeChart({
+                          mint: trade.mint,
+                          pairAddress: trade.pair_address,
+                          chain: 'sol',
+                          name: trade.name || metadata?.name,
+                          symbol: trade.symbol || metadata?.symbol,
+                          priceUsd: trade.price_usd || metadata?.price_usd,
+                          marketCapUsd: metadata?.market_cap_usd,
+                          image: tokenImageUrl || (metadata ? extractTokenImage(metadata) : "") || "",
+                          launchpadProtocol: metadata?.launchpad_protocol,
+                        }, { router });
+                      }
+                    }}
                     onClick={async (e) => {
                       e.preventDefault();
                       e.stopPropagation();

@@ -691,19 +691,21 @@ const Positions: React.FC<PositionsProps> = ({
     ) => {
       event.stopPropagation();
 
-      // Build query params for proper page state and optimistic loading
       const params = new URLSearchParams({
-        mode: 'sell', // User owns the token, default to sell
+        mode: 'sell',
         tab: 'market',
         timeRange: '5m',
         sliderPct: '0',
       });
 
-      // Add optimistic data for instant display (prevents blank loading state)
       if (metadata?.name) params.set('_name', metadata.name);
       if (metadata?.symbol) params.set('_symbol', metadata.symbol);
       if (metadata?.imageUrl) params.set('_image', metadata.imageUrl);
       if (position.tokenAddress) params.set('_mint', position.tokenAddress);
+      // Use position's own currentPrice (already in the position data)
+      if (position.currentPrice) params.set('_price', String(position.currentPrice));
+      const meta = position.tokenAddress ? tokenMetadata[position.tokenAddress] : undefined;
+      if (meta?.marketCapUsd) params.set('_mcap', String(meta.marketCapUsd));
 
       const queryString = params.toString();
 
@@ -714,7 +716,7 @@ const Positions: React.FC<PositionsProps> = ({
         router.push(`/trade/${navigateAddress}?${queryString}`);
       }
     },
-    [isMonadPosition, router],
+    [isMonadPosition, router, tokenMetadata],
   );
 
   // Get unique token addresses from positions with remaining > 0
@@ -1155,12 +1157,52 @@ const Positions: React.FC<PositionsProps> = ({
     };
     window.addEventListener('solanaPositionsChanged', handlePositionsChanged);
 
+    // Listen for WS-pushed full position data (no REST fetch needed)
+    const handlePositionUpdate = (event: Event) => {
+      const { position, tokenAddress } = (event as CustomEvent).detail || {};
+      if (!tokenAddress) return;
+      // Only process updates for the currently displayed chain
+      if (position?.blockchain && position.blockchain !== blockchain) return;
+
+      setPositions((prev) => {
+        const addr = tokenAddress.toLowerCase();
+        let next: PositionRow[];
+
+        if (!position || position.remaining <= 0.001) {
+          // Position closed — remove it
+          next = prev.filter((p) => p.tokenAddress.toLowerCase() !== addr);
+        } else {
+          const idx = prev.findIndex((p) => p.tokenAddress.toLowerCase() === addr);
+          if (idx >= 0) {
+            // Update existing position in-place
+            next = [...prev];
+            next[idx] = { ...prev[idx], ...position };
+          } else {
+            // New position (buy) — prepend to top
+            next = [position as PositionRow, ...prev];
+          }
+        }
+
+        // Update localStorage cache
+        try {
+          window.localStorage.setItem(positionsCacheKey, JSON.stringify({
+            data: next,
+            timestamp: Date.now(),
+          }));
+        } catch {}
+
+        return next;
+      });
+    };
+    window.addEventListener('solanaPositionUpdate', handlePositionUpdate);
+
     return () => {
       clearInterval(intervalId);
       if (debouncedFetchTimerRef.current) clearTimeout(debouncedFetchTimerRef.current);
       window.removeEventListener('solanaQuickTrade', handleQuickTradeEvent);
       window.removeEventListener(TRADE_COMPLETED_EVENT, handleTradeCompleted);
       window.removeEventListener('solanaPositionsChanged', handlePositionsChanged);
+      window.removeEventListener('solanaPositionUpdate', handlePositionUpdate);
     };
   }, [userId, onPositionsChange, skipFetch, blockchain, requestMetadataForTokens, positionsCacheKey]);
 
@@ -1426,6 +1468,24 @@ const Positions: React.FC<PositionsProps> = ({
                 }`}
                 onMouseEnter={() => {
                   if (!pos.tokenAddress) return;
+                  // Build tradeUrl matching handleTokenNavigation exactly
+                  const isMonadPos = isMonadPosition(sourcePosition);
+                  const hoverParams = new URLSearchParams({
+                    mode: 'sell',
+                    tab: 'market',
+                    timeRange: '5m',
+                    sliderPct: '0',
+                  });
+                  if (metadata?.name) hoverParams.set('_name', metadata.name);
+                  if (metadata?.symbol) hoverParams.set('_symbol', metadata.symbol);
+                  if (finalImageUrl) hoverParams.set('_image', finalImageUrl);
+                  if (pos.tokenAddress) hoverParams.set('_mint', pos.tokenAddress);
+                  if (sourcePosition.currentPrice) hoverParams.set('_price', String(sourcePosition.currentPrice));
+                  const posMeta = pos.tokenAddress ? tokenMetadata[pos.tokenAddress] : undefined;
+                  if (posMeta?.marketCapUsd) hoverParams.set('_mcap', String(posMeta.marketCapUsd));
+                  const hoverTradeUrl = isMonadPos
+                    ? `/trade/monad/${pos.tokenAddress}?${hoverParams.toString()}`
+                    : `/trade/${navigateAddress}?${hoverParams.toString()}`;
                   preloadTradeChart(
                     {
                       mint: pos.tokenAddress,
@@ -1436,7 +1496,7 @@ const Positions: React.FC<PositionsProps> = ({
                       image: finalImageUrl,
                       launchpadProtocol: protocolSource,
                     },
-                    { router }
+                    { router, tradeUrl: hoverTradeUrl }
                   );
                 }}
                 onClick={handleRowClick}

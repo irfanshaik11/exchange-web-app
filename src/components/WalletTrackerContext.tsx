@@ -19,10 +19,12 @@ import {
   type WatchWallet,
 } from "~/utils/walletTracking";
 import toast from "react-hot-toast";
+import { useRouter } from "next/router";
 import { BellOff, CheckCircle, X } from "lucide-react";
 import { useUser } from "./UserContext";
 import { normalizeImageUrl, extractTokenImage, resolveTokenImage } from "~/utils/images";
 import FastImage from "~/components/FastImage";
+import { preloadTradeChart } from "~/utils/preloadTradeChart";
 import { FiBell } from 'react-icons/fi';
 
 const HISTORY_LIMIT = 100;
@@ -168,6 +170,7 @@ export function WalletTrackerProvider({
   children: React.ReactNode;
 }) {
   const { user } = useUser();
+  const router = useRouter();
   const [wsConnected, setWsConnected] = useState(false);
 
   // Load notifications from localStorage on mount
@@ -652,6 +655,19 @@ export function WalletTrackerProvider({
 
         // Navigate to trade page on toast click (with query params like PulseTable)
         const cachedMeta = tokenMetadata.get(normalizedEvent.mint);
+
+        // Preload chart data so clicking the toast navigates instantly
+        preloadTradeChart({
+          mint: normalizedEvent.mint,
+          pairAddress: normalizedEvent.pair_address,
+          chain: 'sol',
+          name: tokenName,
+          symbol: normalizedEvent.symbol || cachedMeta?.symbol,
+          marketCapUsd: cachedMeta?.market_cap_usd,
+          image: tokenImage || undefined,
+          launchpadProtocol: cachedMeta?.launchpad_protocol,
+        }, { router });
+
         const queryParams = new URLSearchParams({
           _name: tokenName || "",
           _symbol: normalizedEvent.symbol || cachedMeta?.symbol || "",
@@ -669,7 +685,7 @@ export function WalletTrackerProvider({
           <div
             className="flex cursor-pointer items-center gap-3 py-0.5 flex-1 min-w-0"
             style={{ borderLeft: `3px solid ${sideColor}`, paddingLeft: "10px" }}
-            onClick={() => { window.location.href = tradeUrl; }}
+            onClick={() => { router.push(tradeUrl); }}
           >
             {/* Token Image */}
             <div style={{ border: `2px solid ${sideColor}40`, borderRadius: "0.5rem" }}>

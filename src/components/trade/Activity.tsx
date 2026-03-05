@@ -705,6 +705,26 @@ const Activity: React.FC<ActivityProps> = ({
                   onMouseEnter={() => {
                     if (!trade.tokenAddress) return;
                     const isMonadTrade = (trade.blockchain || '').toLowerCase() === 'monad' || currentChain === 'monad';
+                    // Build tradeUrl matching handleRowClick navigation exactly
+                    const navigateAddr = trade.originalPairAddress || trade.pairAddress || trade.tokenAddress;
+                    const hoverQP = new URLSearchParams();
+                    hoverQP.set('chain', isMonadTrade ? 'monad' : 'sol');
+                    const hName = metadata?.name || trade.tokenName;
+                    const hSymbol = metadata?.symbol || trade.tokenSymbol;
+                    const hMcap = metadata?.marketCapUsd ?? trade.marketCap;
+                    const hImage = metadata?.imageUrl || trade.imageUrl;
+                    const hLaunchpad = metadata?.launchpad || metadata?.protocol || trade.launchpad;
+                    const hCreatedAt = metadata?.createdAt;
+                    if (hName) hoverQP.set('_name', String(hName));
+                    if (hSymbol) hoverQP.set('_symbol', String(hSymbol));
+                    if (hMcap) hoverQP.set('_mcap', String(hMcap));
+                    if (hImage) hoverQP.set('_image', String(hImage));
+                    if (trade.tokenAddress) hoverQP.set('_mint', trade.tokenAddress);
+                    if (hLaunchpad) hoverQP.set('_launchpad_protocol', String(hLaunchpad));
+                    if (hCreatedAt) hoverQP.set('_created_at', String(hCreatedAt));
+                    const hoverTradeUrl = isMonadTrade
+                      ? `/trade/monad/${trade.tokenAddress}?${hoverQP.toString()}`
+                      : `/trade/${navigateAddr}?${hoverQP.toString()}`;
                     preloadTradeChart(
                       {
                         mint: trade.tokenAddress,
@@ -716,7 +736,7 @@ const Activity: React.FC<ActivityProps> = ({
                         image: metadata?.imageUrl || trade.imageUrl,
                         launchpadProtocol: trade.launchpad,
                       },
-                      { router }
+                      { router, tradeUrl: hoverTradeUrl }
                     );
                   }}
                   onClick={handleRowClick}

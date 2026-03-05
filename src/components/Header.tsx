@@ -542,7 +542,6 @@ export default function Header({
     };
   }, []);
   
-  const [hoveredWatchlistToken, setHoveredWatchlistToken] = useState<string | null>(null);
   const [profileOpen, setProfileOpen] = useState(false);
   const [depositOpen, setDepositOpen] = useState(false);
   const [depositInitialTab, setDepositInitialTab] = useState<
@@ -932,11 +931,41 @@ export default function Header({
     if (clipboardToken) {
       // Detect if Monad (0x) or Solana address
       const isMonadAddress = clipboardToken.address.startsWith('0x') || clipboardToken.address.startsWith('0X');
+      const td = clipboardToken.tokenData;
+
+      // Preload chart data (OHLC, WS, image, route) before navigation
+      if (td) {
+        preloadTradeChart({
+          mint: (td as any)?.mint || clipboardToken.address,
+          pairAddress: td.pair_address,
+          chain: isMonadAddress ? 'monad' : 'sol',
+          name: td.name,
+          symbol: td.symbol,
+          marketCapUsd: td.market_cap_usd,
+          image: clipboardToken.imageUrl || extractTokenImage(td as any) || '',
+          launchpadProtocol: (td as any)?.launchpad_protocol,
+        }, { router });
+      }
+
       if (isMonadAddress) {
-        router.push(`/trade/monad/${clipboardToken.address}?chain=monad`);
+        // Build full query params for Monad (same pattern as Solana path)
+        const queryParams = new URLSearchParams({
+          _name: td?.name || td?.symbol || clipboardToken.name || '',
+          _symbol: td?.symbol || '',
+          _mcap: String(td?.market_cap_usd || ''),
+          _image: clipboardToken.imageUrl || extractTokenImage(td as any) || '',
+          _mint: (td as any)?.mint || clipboardToken.address,
+          _launchpad_protocol: (td as any)?.launchpad_protocol || '',
+          _created_at: (td as any)?.created_at || '',
+          chain: 'monad',
+          mode: 'buy',
+          tab: 'market',
+          timeRange: '5m',
+          sliderPct: '0',
+        }).toString();
+        router.push(`/trade/monad/${clipboardToken.address}?${queryParams}`);
       } else {
         // Build full query params matching PulseTable navigation pattern
-        const td = clipboardToken.tokenData;
         const pathAddress = td?.pair_address || clipboardToken.address;
         const queryParams = new URLSearchParams({
           _name: td?.name || td?.symbol || clipboardToken.name || '',
@@ -2590,6 +2619,7 @@ export default function Header({
             {enrichedWatchlist.map((token, index) => {
               const tokenKey = token.pair_address || (token as any).mint || token.symbol;
               const tokenAddress = token.pair_address || (token as any).mint || '';
+              const actualMint = (token as any).mint || token.pair_address || '';
               // Use helper function to get correctly mapped price and price change
               const { price, priceChange } = getWatchlistTokenPriceAndChange(token);
               const marketCap =
@@ -2598,89 +2628,6 @@ export default function Header({
                 (token as any).fully_diluted_value ??
                 0;
 
-              // Debug logging for specific token address (only log once per session)
-              const isTestToken = tokenAddress.toLowerCase() === '0x0cc9b2e2acd7bacff79eb7db48f5662b622e7777' || 
-                                  (token as any).mint?.toLowerCase() === '0x0cc9b2e2acd7bacff79eb7db48f5662b622e7777';
-              
-              if (isTestToken && typeof window !== 'undefined') {
-                const logKey = `__watchlistTestLogged_${tokenAddress.toLowerCase()}`;
-                if (!(window as any)[logKey]) {
-                  // Get all price change related fields from token (check all possible field names)
-                  const allPriceChangeFields: Record<string, any> = {};
-                  const changeFieldNames = [
-                    'price_percent_change_1h', 'price_change_1h', 'price_change',
-                    'priceChange1h', 'price_percent_change_24h', 'price_change_24h',
-                    'priceChange24h', 'price24hChangePercent', 'price_change_1h_percent',
-                    'price_change_24h_percent', 'price_change_percent', 'pricePercentChange',
-                    'change_1h', 'change_24h', 'percent_change_1h', 'percent_change_24h',
-                    'percentChange1h', 'percentChange24h'
-                  ];
-                  
-                  // Check all keys in token object for anything that might be a price change field
-                  Object.keys(token).forEach(key => {
-                    const lowerKey = key.toLowerCase();
-                    if (lowerKey.includes('change') || lowerKey.includes('percent') || 
-                        lowerKey.includes('price') && (lowerKey.includes('1h') || lowerKey.includes('24h'))) {
-                      allPriceChangeFields[key] = (token as any)[key];
-                    }
-                  });
-                  
-                  // Also check the specific field names
-                  changeFieldNames.forEach(field => {
-                    const value = (token as any)[field];
-                    if (value !== undefined && value !== null) {
-                      allPriceChangeFields[field] = value;
-                    }
-                  });
-                  
-                  console.log(`[Watchlist Ticker Test] Token: ${token.symbol || tokenKey}`, {
-                    tokenAddress,
-                    mint: (token as any).mint,
-                    pair_address: token.pair_address,
-                    // Price fields
-                    price_usd: (token as any).price_usd,
-                    usd_price: (token as any).usd_price,
-                    chart_live_price_usd: (token as any).chart_live_price_usd,
-                    lastPriceUsd: (token as any).lastPriceUsd,
-                    price: (token as any).price,
-                    priceUSD: (token as any).priceUSD,
-                    priceUsd: (token as any).priceUsd,
-                    current_price: (token as any).current_price,
-                    currentPrice: (token as any).currentPrice,
-                    // All price change fields found (including any field with "change" or "percent" in name)
-                    priceChangeFields: allPriceChangeFields,
-                    // Final mapped values
-                    mappedPrice: price,
-                    mappedPriceChange: priceChange,
-                    formattedPrice: formatSmallPrice(price),
-                    formattedPriceChange: `${priceChange >= 0 ? '+' : ''}${formatSmartNumber(Math.abs(priceChange))}%`,
-                    // All keys for reference
-                    allKeys: Object.keys(token),
-                  });
-                  (window as any)[logKey] = true;
-                }
-              }
-              
-              // Debug logging to see what fields are available for tokens with 0 price
-              if (price === 0 && !isTestToken) {
-                console.log(`[Watchlist Debug] ${token.symbol || tokenKey} - Price is 0, checking fields:`, {
-                  symbol: token.symbol,
-                  name: token.name,
-                  pair_address: token.pair_address,
-                  mint: (token as any).mint,
-                  price_usd: (token as any).price_usd,
-                  usd_price: (token as any).usd_price,
-                  price: (token as any).price,
-                  priceUSD: (token as any).priceUSD,
-                  priceUsd: (token as any).priceUsd,
-                  price_percent_change_1h: (token as any).price_percent_change_1h,
-                  price_change_1h: (token as any).price_change_1h,
-                  price24hChangePercent: (token as any).price24hChangePercent,
-                  allKeys: Object.keys(token).slice(0, 20), // First 20 keys
-                });
-              }
-              
-              const isHovered = hoveredWatchlistToken === tokenKey;
               const rawImg = extractTokenImage(token as any);
               
               return (
@@ -2688,12 +2635,28 @@ export default function Header({
                   key={tokenKey}
                   className="flex items-center gap-1.5 cursor-pointer transition-all duration-200 shrink-0 px-2.5 py-1 rounded-lg hover:bg-white/[0.07]"
                   onMouseEnter={() => {
-                    setHoveredWatchlistToken(tokenKey);
                     // Prefetch OHLC + route + metadata + trades on hover
-                    const isMonadToken = tokenAddress.startsWith('0x') || tokenAddress.startsWith('0X');
+                    const isMonadToken = actualMint.startsWith('0x') || actualMint.startsWith('0X');
+                    // Build tradeUrl matching the onClick navigation exactly
+                    const hoverQueryParams = new URLSearchParams();
+                    if (token.name) hoverQueryParams.set('_name', token.name);
+                    if (token.symbol) hoverQueryParams.set('_symbol', token.symbol);
+                    if (price > 0) hoverQueryParams.set('_price', price.toString());
+                    if (token.market_cap_usd || (token as any).fully_diluted_value) {
+                      hoverQueryParams.set('_mcap', ((token.market_cap_usd || (token as any).fully_diluted_value || 0)).toString());
+                    }
+                    const hoverImageUrl = extractTokenImage(token as any) || '';
+                    if (hoverImageUrl) hoverQueryParams.set('_image', hoverImageUrl);
+                    hoverQueryParams.set('_mint', tokenAddress);
+                    if ((token as any).launchpad_protocol) hoverQueryParams.set('_launchpad_protocol', (token as any).launchpad_protocol);
+                    hoverQueryParams.set('chain', isMonadToken ? 'monad' : 'sol');
+                    const hoverTradeUrl = isMonadToken
+                      ? `/trade/monad/${tokenAddress}?${hoverQueryParams.toString()}`
+                      : `/trade/${tokenAddress}?${hoverQueryParams.toString()}`;
                     preloadTradeChart(
                       {
-                        mint: tokenAddress,
+                        mint: actualMint,
+                        pairAddress: token.pair_address || (token as any).mint,
                         chain: isMonadToken ? 'monad' : 'sol',
                         name: token.name,
                         symbol: token.symbol,
@@ -2702,14 +2665,13 @@ export default function Header({
                         image: rawImg || '',
                         launchpadProtocol: (token as any).launchpad_protocol,
                       },
-                      { router }
+                      { router, tradeUrl: hoverTradeUrl }
                     );
                   }}
-                  onMouseLeave={() => setHoveredWatchlistToken(null)}
                   onClick={() => {
                     if (tokenAddress) {
                       // Check if it's a Monad token (starts with 0x)
-                      const isMonadToken = tokenAddress.startsWith('0x') || tokenAddress.startsWith('0X');
+                      const isMonadToken = actualMint.startsWith('0x') || actualMint.startsWith('0X');
 
                       if (isMonadToken) {
                         // Build Monad trade URL with query parameters

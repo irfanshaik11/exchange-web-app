@@ -204,14 +204,25 @@ export function useSolanaPositionWebSocket(
           } else if (message.type === 'positions_changed' && message.data) {
             console.log('[useSolanaPositionWebSocket] 📡 Positions changed:', message.data);
             window.dispatchEvent(new CustomEvent('solanaPositionsChanged', { detail: message.data }));
-          } else if (message.type === 'position_update' && message.data) {
-            const positionData: SolanaPosition = message.data;
-
-            // Only update if this is for the token we're interested in
-            if (currentToken && positionData.tokenAddress?.toLowerCase() === currentToken.toLowerCase()) {
-              setPosition(positionData);
-              onUpdateRef.current?.(positionData);
+          } else if (message.type === 'position_update') {
+            // Per-token state update (for trade page)
+            if (message.data) {
+              const positionData: SolanaPosition = message.data;
+              if (currentToken && positionData.tokenAddress?.toLowerCase() === currentToken.toLowerCase()) {
+                setPosition(positionData);
+                onUpdateRef.current?.(positionData);
+              }
             }
+            // Broadcast PositionRow data for Positions.tsx / portfolio
+            window.dispatchEvent(new CustomEvent('solanaPositionUpdate', {
+              detail: { position: message.data, tokenAddress: message.tokenAddress }
+            }));
+          } else if (message.type === 'new_trade' && message.data) {
+            console.log('[useSolanaPositionWebSocket] new_trade received:',
+              message.data.type, message.data.tokenAddress?.slice(0, 8));
+            window.dispatchEvent(new CustomEvent('solanaNewTrade', {
+              detail: message.data
+            }));
           }
         } catch (parseErr) {
           console.error('[useSolanaPositionWebSocket] Failed to parse message:', parseErr);
@@ -308,6 +319,32 @@ export function useSolanaPositionWebSocket(
       }
     };
   }, [enabled, tokenAddress, user?.bearerToken, user?.id]); // Only reconnect when these change
+
+  // Reconnect when tab becomes visible (browser may kill WS when backgrounded)
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      const { enabled: isEnabled, userId } = configRef.current;
+      if (document.visibilityState === 'visible' && isEnabled && userId) {
+        if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) {
+          console.log('[useSolanaPositionWebSocket] Tab visible, WS not open — reconnecting');
+          reconnectAttemptsRef.current = 0;
+          connect();
+        } else {
+          // WS looks open — send a ping to verify it's still alive
+          try {
+            wsRef.current.send(JSON.stringify({ type: 'ping' }));
+          } catch {
+            console.log('[useSolanaPositionWebSocket] Ping failed on tab return — reconnecting');
+            reconnectAttemptsRef.current = 0;
+            connect();
+          }
+        }
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
+  }, [connect]);
 
   const refreshPosition = useCallback(() => {
     return fetchInitialPosition();

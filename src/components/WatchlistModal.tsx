@@ -416,8 +416,9 @@ export default function WatchlistModal({ open, onClose }: WatchlistModalProps) {
   const handleTokenClick = (token: Token) => {
     const tokenAddress = token.pair_address || (token as any).mint || '';
     if (!tokenAddress) return;
+    const isMonad = isMonadToken(token);
     const queryParams = new URLSearchParams();
-    queryParams.set('chain', 'sol');
+    queryParams.set('chain', isMonad ? 'monad' : 'sol');
     if (token.name) queryParams.set('_name', token.name);
     if (token.symbol) queryParams.set('_symbol', token.symbol);
     if ((token as any).price_usd) queryParams.set('_price', String((token as any).price_usd));
@@ -428,7 +429,9 @@ export default function WatchlistModal({ open, onClose }: WatchlistModalProps) {
     if ((token as any).launchpad_protocol) queryParams.set('_launchpad_protocol', (token as any).launchpad_protocol);
     const createdAt = (token as any).created_at || (token as any).launch_time || (token as any).pair_created_at;
     if (createdAt) queryParams.set('_created_at', String(createdAt));
-    router.push(`/trade/${tokenAddress}?${queryParams.toString()}`);
+    if ((token as any).total_liquidity_usd) queryParams.set('_liquidity', String((token as any).total_liquidity_usd));
+    const tradePath = isMonad ? `/trade/monad/${tokenAddress}` : `/trade/${tokenAddress}`;
+    router.push(`${tradePath}?${queryParams.toString()}`);
     onClose();
   };
 
@@ -940,11 +943,27 @@ export default function WatchlistModal({ open, onClose }: WatchlistModalProps) {
                     e.currentTarget.style.backgroundColor = idx % 2 === 0 ? '#1a1b1f' : '#1c1d22';
                     const tokenMint = (token as any).mint || tokenAddress;
                     if (tokenMint) {
+                      // Build tradeUrl matching handleTokenClick navigation exactly
+                      const isMonad = isMonadToken(token);
+                      const hoverQP = new URLSearchParams();
+                      hoverQP.set('chain', isMonad ? 'monad' : 'sol');
+                      if (token.name) hoverQP.set('_name', token.name);
+                      if (token.symbol) hoverQP.set('_symbol', token.symbol);
+                      if ((token as any).price_usd) hoverQP.set('_price', String((token as any).price_usd));
+                      if (token.market_cap_usd) hoverQP.set('_mcap', String(token.market_cap_usd));
+                      const hoverImg = extractTokenImage(token as any);
+                      if (hoverImg) hoverQP.set('_image', hoverImg);
+                      hoverQP.set('_mint', tokenAddress);
+                      if ((token as any).launchpad_protocol) hoverQP.set('_launchpad_protocol', (token as any).launchpad_protocol);
+                      const createdAt = (token as any).created_at || (token as any).launch_time || (token as any).pair_created_at;
+                      if (createdAt) hoverQP.set('_created_at', String(createdAt));
+                      if ((token as any).total_liquidity_usd) hoverQP.set('_liquidity', String((token as any).total_liquidity_usd));
+                      const tradePath = isMonad ? `/trade/monad/${tokenAddress}` : `/trade/${tokenAddress}`;
                       preloadTradeChart(
                         {
                           mint: tokenMint,
                           pairAddress: token.pair_address,
-                          chain: isMonadToken(token) ? 'monad' : 'sol',
+                          chain: isMonad ? 'monad' : 'sol',
                           name: token.name,
                           symbol: token.symbol,
                           priceUsd: (token as any).price_usd,
@@ -952,7 +971,7 @@ export default function WatchlistModal({ open, onClose }: WatchlistModalProps) {
                           image: imgSrc || '',
                           launchpadProtocol: (token as any).launchpad_protocol,
                         },
-                        { router }
+                        { router, tradeUrl: `${tradePath}?${hoverQP.toString()}` }
                       );
                     }
                   }}
