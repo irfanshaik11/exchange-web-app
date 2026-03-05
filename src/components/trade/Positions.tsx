@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useState, useMemo, useRef } from 'react';
 import type { Dispatch, SetStateAction } from 'react';
 import { formatSmartNumber, formatSmallPrice } from '~/utils/db';
-import { getActivePositionsByUser } from '~/utils/functions';
+import { fetchActivePositions } from '~/utils/functions';
 import type { PositionRow } from '~/utils/functions';
 import { useRouter } from 'next/router';
 import FastImage from '../FastImage';
@@ -205,32 +205,29 @@ const Positions: React.FC<PositionsProps> = ({
     }
   }, [positions]);
 
-  // Safety net: Auto-retry when positions become empty but we had data before
+  // Safety net: If positions would go empty but cache has data, restore synchronously (no flash)
+  // Then retry fetch in background to get fresh data
   useEffect(() => {
     if (
       positions.length === 0 &&
       hasEverLoadedRef.current &&
       !loading &&
       !isFetchingRef.current &&
-      emptyRetryCountRef.current < MAX_EMPTY_RETRIES &&
-      fetchPositionsRef.current
+      emptyRetryCountRef.current < MAX_EMPTY_RETRIES
     ) {
-      console.log(`[Positions] 🔄 Safety net triggered - retrying fetch (attempt ${emptyRetryCountRef.current + 1}/${MAX_EMPTY_RETRIES})`);
       emptyRetryCountRef.current += 1;
 
-      // Show cached data while re-fetching
+      // Restore cache synchronously — prevents any "No positions" flash
       const cached = getCachedPositions();
       if (cached.length > 0) {
-        console.log(`[Positions] 📦 Showing ${cached.length} cached positions while re-fetching`);
+        console.log(`[Positions] Safety net: restoring ${cached.length} cached positions (attempt ${emptyRetryCountRef.current}/${MAX_EMPTY_RETRIES})`);
         setPositions(cached);
       }
 
-      // Trigger re-fetch after small delay
-      setTimeout(() => {
-        if (fetchPositionsRef.current) {
-          fetchPositionsRef.current();
-        }
-      }, 500);
+      // Re-fetch in background
+      if (fetchPositionsRef.current) {
+        fetchPositionsRef.current();
+      }
     }
   }, [positions, loading]);
   const [hiddenTokens, setHiddenTokens] = useState<Set<string>>(new Set());
@@ -437,17 +434,14 @@ const Positions: React.FC<PositionsProps> = ({
   const refreshPositions = async () => {
     if (userId) {
       try {
-        const updatedPositions = await getActivePositionsByUser(userId, blockchain);
+        const result = await fetchActivePositions(userId, blockchain);
 
-        // CRITICAL: Only update positions if we got valid data
-        // Don't clear positions if API returned empty due to error/timeout
-        if (!Array.isArray(updatedPositions)) {
-          console.warn('[Positions] ⚠️ Invalid response from getActivePositionsByUser, keeping existing positions');
+        if (!result.ok) {
+          console.warn(`[Positions] Refresh failed, keeping existing positions`);
           return;
         }
 
-        // Reverse so newest positions appear at the top
-        const reversedPositions = [...updatedPositions].reverse();
+        const reversedPositions = [...result.data].reverse();
         setPositions(reversedPositions);
         onPositionsChange(reversedPositions);
 
@@ -1008,45 +1002,42 @@ const Positions: React.FC<PositionsProps> = ({
         return;
       }
       isFetchingRef.current = true;
-      console.log(`🔍 Fetching positions for userId: ${userId}`);
 
-      // Check cache to determine if we should show loading
-      let hasValidCache = false;
-      if (typeof window !== 'undefined') {
-        try {
-          const cached = window.localStorage.getItem(positionsCacheKey);
-          if (cached) {
-            const parsed = JSON.parse(cached);
-            if (parsed && Array.isArray(parsed.data) && parsed.data.length > 0) {
-              hasValidCache = true;
-            }
-          }
-        } catch (error) {
-          // Ignore cache errors
-        }
-      }
-
-      // Only show loading on FIRST load if we don't have valid cache
-      // Use ref to persist across effect re-runs (prevents "Loading..." flicker)
-      if (isInitialLoadRef.current && !hasValidCache && positionsRef.current.length === 0) {
-        setLoading(true);
-      } else if (hasValidCache || positionsRef.current.length > 0) {
-        console.log(`[Positions] 🔄 Refreshing in background (have ${positionsRef.current.length} positions)`);
-      }
       try {
-        console.log(`🔍 [Positions] Fetching with blockchain: ${blockchain || 'all'}`);
-        const fetchedPositions = await getActivePositionsByUser(userId, blockchain);
-
-        console.log(`✅ [Positions] Received ${fetchedPositions.length} positions`);
-        if (fetchedPositions.length === 0) {
-          console.log(`   ⚠️  No positions found for blockchain: ${blockchain || 'all'}`);
+        // Check cache to determine if we should show loading
+        let hasValidCache = false;
+        if (typeof window !== 'undefined') {
+          try {
+            const cached = window.localStorage.getItem(positionsCacheKey);
+            if (cached) {
+              const parsed = JSON.parse(cached);
+              if (parsed && Array.isArray(parsed.data) && parsed.data.length > 0) {
+                hasValidCache = true;
+              }
+            }
+          } catch (error) {
+            // Ignore cache errors
+          }
         }
+
+        // Never show loading when we already have positions to display
+        if (isInitialLoadRef.current && !hasValidCache && positionsRef.current.length === 0) {
+          setLoading(true);
+        }
+
+        const result = await fetchActivePositions(userId, blockchain);
+
+        if (!result.ok) {
+          // API error (timeout, network, 500) — preserve existing positions, never clear
+          console.warn(`[Positions] Fetch failed (${(result as { error: string }).error}) — preserving ${positionsRef.current.length} existing positions`);
+          return;
+        }
+
+        const fetchedPositions = result.data;
 
         // Reverse so newest positions appear at the top
         const reversedPositions = [...fetchedPositions].reverse();
 
-        // CRITICAL FIX: Only update positions if we got actual data
-        // Don't clear existing positions when API returns empty (timeout/error)
         let positionsToUse = reversedPositions;
         let shouldUpdate = true;
 
@@ -1057,7 +1048,6 @@ const Positions: React.FC<PositionsProps> = ({
             (Date.now() - lastTradeTimestampRef.current) < 15000;
 
           if (currentPositions.length === 0 || hadRecentTrade) {
-            // Trust API: user has no positions or just completed a trade
             shouldUpdate = true;
           } else if (currentPositions.length > 0 && hasEverLoaded) {
             console.log(`[Positions] ⚠️ API returned empty during background poll — preserving existing`);
@@ -1069,7 +1059,6 @@ const Positions: React.FC<PositionsProps> = ({
           setPositions(positionsToUse);
           onPositionsChange(positionsToUse);
 
-          // Save to localStorage cache for instant loading when navigating back
           if (!skipFetch && typeof window !== 'undefined') {
             try {
               if (positionsToUse.length > 0) {
@@ -1078,7 +1067,6 @@ const Positions: React.FC<PositionsProps> = ({
                   timestamp: Date.now(),
                 };
                 window.localStorage.setItem(positionsCacheKey, JSON.stringify(payload));
-                console.log(`[Positions] 💾 Cached ${positionsToUse.length} positions to localStorage`);
               } else {
                 window.localStorage.removeItem(positionsCacheKey);
               }
@@ -1090,10 +1078,9 @@ const Positions: React.FC<PositionsProps> = ({
           requestMetadataForTokens(fetchedPositions);
         }
       } catch (error) {
-        console.error('❌ Error fetching positions:', error);
+        console.error('[Positions] Unexpected error in fetchPositions:', error);
       } finally {
         isFetchingRef.current = false;
-        // Mark initial load as complete (use ref to persist across effect re-runs)
         if (isInitialLoadRef.current) {
           setLoading(false);
           isInitialLoadRef.current = false;
@@ -1156,34 +1143,33 @@ const Positions: React.FC<PositionsProps> = ({
         );
         debouncedFetchPositions(500);
       } else if (detail?.tradeType === 'buy' && detail.tokenAddress) {
-        // Optimistic buy insertion: show the token immediately with a shimmer
+        // Instant buy insertion: show as a real position row immediately
         const addr = detail.tokenAddress.toLowerCase();
         const existing = positionsRef.current.find(
           (p) => p.tokenAddress.toLowerCase() === addr
         );
         if (!existing) {
-          const optimisticRow: PositionRow & { _isOptimistic?: boolean } = {
+          const instantRow: PositionRow & { _needsRefresh?: boolean; _pendingBuyAmount?: boolean } = {
             tokenAddress: detail.tokenAddress,
             tokenName: detail.tokenName || null,
             tokenSymbol: detail.tokenSymbol || null,
             imageUrl: detail.imageUrl || null,
             blockchain: detail.chain === 'monad' ? 'monad' : 'solana',
-            bought: 0,
+            bought: 0, // Token amount unknown until backend confirms
             boughtUsdValue: detail.solAmountSpent || 0,
             sold: 0,
             soldUsdValue: 0,
-            remaining: 1, // Placeholder non-zero to pass filter
+            remaining: 1, // Non-zero so it passes the > 0 filter
             remainingUsdValue: detail.solAmountSpent || 0,
             pnl: 0,
             pnlPercentage: 0,
             actions: '',
-            _isOptimistic: true,
+            _needsRefresh: true,
+            _pendingBuyAmount: true,
           };
           setPositions((prev) => {
-            // Double-check it wasn't added between the ref check and state update
             if (prev.some((p) => p.tokenAddress.toLowerCase() === addr)) return prev;
-            const next = [optimisticRow as PositionRow, ...prev];
-            // Update localStorage cache with optimistic entry
+            const next = [instantRow as PositionRow, ...prev];
             try {
               window.localStorage.setItem(positionsCacheKey, JSON.stringify({
                 data: next,
@@ -1192,10 +1178,10 @@ const Positions: React.FC<PositionsProps> = ({
             } catch {}
             return next;
           });
-        } else if ((existing as any)._isOptimistic && (detail.tokenName || detail.imageUrl)) {
-          // Update metadata on existing optimistic row (e.g. second broadcast from caller has richer info)
+        } else if ((existing as any)._needsRefresh && (detail.tokenName || detail.imageUrl)) {
+          // Update metadata on existing pending row (e.g. second broadcast with richer info)
           setPositions((prev) => prev.map((p) => {
-            if (p.tokenAddress.toLowerCase() === addr && (p as any)._isOptimistic) {
+            if (p.tokenAddress.toLowerCase() === addr && (p as any)._needsRefresh) {
               return {
                 ...p,
                 tokenName: detail.tokenName || p.tokenName,
@@ -1216,11 +1202,10 @@ const Positions: React.FC<PositionsProps> = ({
         const retryDelays = [500, 1500, 3000, 5000];
         for (const delay of retryDelays) {
           const timer = setTimeout(() => {
-            // Check if optimistic entry was already replaced by real data
-            const stillOptimistic = positionsRef.current.some(
-              (p) => p.tokenAddress.toLowerCase() === addr && (p as any)._isOptimistic
+            const stillPending = positionsRef.current.some(
+              (p) => p.tokenAddress.toLowerCase() === addr && (p as any)._needsRefresh
             );
-            if (stillOptimistic) {
+            if (stillPending) {
               fetchPositions();
             }
           }, delay);
@@ -1256,7 +1241,7 @@ const Positions: React.FC<PositionsProps> = ({
         } else {
           const idx = prev.findIndex((p) => p.tokenAddress.toLowerCase() === addr);
           if (idx >= 0) {
-            // Full replace — removes _isOptimistic flag when real data arrives
+            // Full replace — removes _needsRefresh/_pendingBuyAmount when real data arrives
             next = [...prev];
             next[idx] = { ...position };
           } else {
@@ -1378,15 +1363,7 @@ const Positions: React.FC<PositionsProps> = ({
           </tr>
         </thead>
         <tbody>
-          {loading ? (
-            <tr><td colSpan={6} className="text-center py-6 text-neutral-500">Loading...</td></tr>
-          ) : positions.length === 0 && !sellingTokens.size ? (
-            // Only show "No positions" if we're not in the middle of a sell operation
-            <tr><td colSpan={6} className="text-center py-6 text-neutral-500">No positions found.</td></tr>
-          ) : positions.length === 0 && sellingTokens.size > 0 ? (
-            // During sell, show loading instead of "No positions" to prevent flicker
-            <tr><td colSpan={6} className="text-center py-6 text-neutral-500">Updating positions...</td></tr>
-          ) : (
+          {positions.length > 0 ? (
             positions
               .filter(pos => (pos.remaining > 0) && (showHidden || !hiddenTokens.has(pos.tokenAddress)))
               .map((pos, idx) => {
@@ -1575,14 +1552,14 @@ const Positions: React.FC<PositionsProps> = ({
                 });
               }
               
-              const isOptimistic = !!(pos as any)._isOptimistic;
+              const isPendingBuy = !!(pos as any)._pendingBuyAmount;
 
               return (
               <tr
                 key={pos.tokenAddress || idx}
                 className={`border-b border-white/[0.06] hover:bg-white/[0.04] cursor-pointer transition-colors ${
                   isHidden ? 'opacity-40 bg-neutral-900/30' : ''
-                } ${isOptimistic ? 'animate-pulse' : ''}`}
+                }`}
                 onMouseEnter={() => {
                   if (!pos.tokenAddress) return;
                   // Build tradeUrl matching handleTokenNavigation exactly
@@ -1683,57 +1660,59 @@ const Positions: React.FC<PositionsProps> = ({
                     </div>
                   </div>
                 </td>
-                {isOptimistic ? (
-                  <>
-                    <td className="px-3 py-2.5" colSpan={3}>
-                      <span className="text-xs text-neutral-400 italic">Confirming...</span>
-                    </td>
-                    <td className="px-3 py-2.5 text-neutral-500 text-xs">—</td>
-                  </>
-                ) : (
-                  <>
-                    <td className="px-3 py-2.5">
-                      <div className="flex items-baseline gap-1">
-                        {renderTokenAmount(corrected.correctedBought)}
-                        <span className="text-neutral-400">
-                          {showInSOL && solPrice > 0
-                            ? <>(<SolIcon />{formatSmartNumber(sourcePosition.boughtUsdValue / solPrice)})</>
-                            : `($${formatSmallPrice(Math.max(0, sourcePosition.boughtUsdValue || 0))})`
-                          }
-                        </span>
-                      </div>
-                    </td>
-                    <td className="px-3 py-2.5">
-                      <div className="flex items-baseline gap-1">
-                        {renderTokenAmount(corrected.correctedSold)}
-                        <span className="text-neutral-400">
-                          {showInSOL && solPrice > 0
-                            ? <>(<SolIcon />{formatSmartNumber(corrected.correctedSoldUsdValue / solPrice)})</>
-                            : `($${formatSmallPrice(corrected.correctedSoldUsdValue)})`
-                          }
-                        </span>
-                      </div>
-                    </td>
-                    <td className="px-3 py-2.5">
-                      <div className="flex items-baseline gap-1">
-                        {renderTokenAmount(corrected.correctedRemaining)}
-                        <span className="text-neutral-400">
-                          {showInSOL && solPrice > 0
-                            ? <>(<SolIcon />{formatSmartNumber(corrected.correctedRemainingUsdValue / solPrice)})</>
-                            : `($${formatSmallPrice(corrected.correctedRemainingUsdValue)})`
-                          }
-                        </span>
-                      </div>
-                    </td>
-                    <td className={`px-3 py-2.5 font-semibold ${displayPnl >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
-                      {showInSOL && solPrice > 0
-                        ? <>{displayPnl >= 0 ? '+' : ''}<SolIcon />{formatSmartNumber(Math.abs(displayPnl) / solPrice)}</>
-                        : `${displayPnl >= 0 ? '+' : ''}$${formatSmallPrice(Math.abs(displayPnl))}`
-                      }
-                      <span className="ml-1 text-xs">({formatSmallPrice(displayPnlPercentage)}%)</span>
-                    </td>
-                  </>
-                )}
+                <>
+                  <td className="px-3 py-2.5">
+                    <div className="flex items-baseline gap-1">
+                      {isPendingBuy ? (
+                        <span className="font-mono text-xs text-neutral-300">—</span>
+                      ) : (
+                        renderTokenAmount(corrected.correctedBought)
+                      )}
+                      <span className="text-neutral-400">
+                        {showInSOL && solPrice > 0
+                          ? <>(<SolIcon />{formatSmartNumber(sourcePosition.boughtUsdValue / solPrice)})</>
+                          : `($${formatSmallPrice(Math.max(0, sourcePosition.boughtUsdValue || 0))})`
+                        }
+                      </span>
+                    </div>
+                  </td>
+                  <td className="px-3 py-2.5">
+                    <div className="flex items-baseline gap-1">
+                      {renderTokenAmount(corrected.correctedSold)}
+                      <span className="text-neutral-400">
+                        {showInSOL && solPrice > 0
+                          ? <>(<SolIcon />{formatSmartNumber(corrected.correctedSoldUsdValue / solPrice)})</>
+                          : `($${formatSmallPrice(corrected.correctedSoldUsdValue)})`
+                        }
+                      </span>
+                    </div>
+                  </td>
+                  <td className="px-3 py-2.5">
+                    <div className="flex items-baseline gap-1">
+                      {isPendingBuy ? (
+                        <span className="font-mono text-xs text-neutral-300">—</span>
+                      ) : (
+                        renderTokenAmount(corrected.correctedRemaining)
+                      )}
+                      <span className="text-neutral-400">
+                        {showInSOL && solPrice > 0
+                          ? <>(<SolIcon />{formatSmartNumber(corrected.correctedRemainingUsdValue / solPrice)})</>
+                          : `($${formatSmallPrice(corrected.correctedRemainingUsdValue)})`
+                        }
+                      </span>
+                    </div>
+                  </td>
+                  <td className={`px-3 py-2.5 font-semibold ${isPendingBuy ? 'text-neutral-400' : displayPnl >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                    {isPendingBuy ? (
+                      <span className="text-xs">—</span>
+                    ) : showInSOL && solPrice > 0 ? (
+                      <>{displayPnl >= 0 ? '+' : ''}<SolIcon />{formatSmartNumber(Math.abs(displayPnl) / solPrice)}</>
+                    ) : (
+                      `${displayPnl >= 0 ? '+' : ''}$${formatSmallPrice(Math.abs(displayPnl))}`
+                    )}
+                    {!isPendingBuy && <span className="ml-1 text-xs">({formatSmallPrice(displayPnlPercentage)}%)</span>}
+                  </td>
+                </>
                 <td className="px-3 py-2.5">
                   <div className="flex items-center gap-2">
                     <InterstateTooltip label={isHidden ? "Show token" : "Hide token"}>
@@ -1782,9 +1761,24 @@ const Positions: React.FC<PositionsProps> = ({
               </tr>
               );
             })
+          ) : loading ? (
+            // Skeleton placeholder rows while first load is in progress
+            Array.from({ length: 3 }).map((_, i) => (
+              <tr key={`skel-${i}`} className="border-b border-white/[0.06] animate-pulse">
+                <td className="px-3 py-2.5"><div className="h-4 w-24 bg-white/[0.06] rounded" /></td>
+                <td className="px-3 py-2.5"><div className="h-4 w-16 bg-white/[0.06] rounded" /></td>
+                <td className="px-3 py-2.5"><div className="h-4 w-12 bg-white/[0.06] rounded" /></td>
+                <td className="px-3 py-2.5"><div className="h-4 w-16 bg-white/[0.06] rounded" /></td>
+                <td className="px-3 py-2.5"><div className="h-4 w-14 bg-white/[0.06] rounded" /></td>
+                <td className="px-3 py-2.5"><div className="h-4 w-12 bg-white/[0.06] rounded" /></td>
+              </tr>
+            ))
+          ) : sellingTokens.size > 0 ? (
+            <tr><td colSpan={6} className="text-center py-6 text-neutral-500">Updating positions...</td></tr>
+          ) : (
+            <tr><td colSpan={6} className="text-center py-6 text-neutral-500">No positions yet.</td></tr>
           )}
-          {/* Spacer row for bottom padding to ensure last item is scrollable */}
-          {!loading && positions.length > 0 && (
+          {positions.length > 0 && (
             <tr style={{ height: '48px' }}>
               <td colSpan={6}></td>
             </tr>
