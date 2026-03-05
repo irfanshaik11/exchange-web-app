@@ -28,6 +28,7 @@ import { useUser } from '../UserContext';
 import { useSolPrice } from '../SolPriceContext';
 import { dispatchBalanceRefresh } from '~/utils/balanceEvents';
 import { preloadTradeChart } from '~/utils/preloadTradeChart';
+import { useSolanaPositionWebSocketContext } from '~/contexts/SolanaPositionWebSocketContext';
 
 type TokenMetadata = UnifiedTokenMetadata & {
   timestamp?: number;
@@ -96,6 +97,7 @@ const Positions: React.FC<PositionsProps> = ({
   fallbackPositions
 }) => {
   const { selectedWalletIds, user } = useUser();
+  const { requestSnapshot } = useSolanaPositionWebSocketContext();
   const router = useRouter();
   const currentChain = (router.query.chain as string) || 'sol';
   const blockchain = useMemo(() => {
@@ -1111,6 +1113,11 @@ const Positions: React.FC<PositionsProps> = ({
 
     fetchPositions();
 
+    // Request WS snapshot for instant data if we're in initial loading state (no localStorage cache)
+    if (isInitialLoadRef.current && positionsRef.current.length === 0) {
+      requestSnapshot();
+    }
+
     // Auto-refresh every 5 seconds to get latest positions
     const intervalId = setInterval(() => {
       fetchPositions();
@@ -1196,6 +1203,36 @@ const Positions: React.FC<PositionsProps> = ({
     };
     window.addEventListener('solanaPositionUpdate', handlePositionUpdate);
 
+    // Listen for WS snapshot — instant positions on connection (before REST responds)
+    const handlePositionsSnapshot = (event: Event) => {
+      const detail = (event as CustomEvent).detail;
+      if (!detail?.positions || !Array.isArray(detail.positions) || detail.positions.length === 0) return;
+
+      // Only apply if this matches the currently viewed blockchain
+      const snapshotBC = detail.blockchain === 'all' ? undefined : detail.blockchain;
+      if (snapshotBC !== blockchain) return;
+
+      // Only apply during initial load (before first REST response)
+      if (!isInitialLoadRef.current) return;
+
+      console.log(`[Positions] WS snapshot: ${detail.positions.length} positions`);
+      const reversedPositions = [...detail.positions].reverse();
+      setPositions(reversedPositions);
+      onPositionsChange(reversedPositions);
+      setLoading(false);
+
+      // Update localStorage cache
+      try {
+        window.localStorage.setItem(positionsCacheKey, JSON.stringify({
+          data: reversedPositions,
+          timestamp: Date.now(),
+        }));
+      } catch {}
+
+      requestMetadataForTokens(detail.positions);
+    };
+    window.addEventListener('solanaPositionsSnapshot', handlePositionsSnapshot);
+
     return () => {
       clearInterval(intervalId);
       if (debouncedFetchTimerRef.current) clearTimeout(debouncedFetchTimerRef.current);
@@ -1203,8 +1240,9 @@ const Positions: React.FC<PositionsProps> = ({
       window.removeEventListener(TRADE_COMPLETED_EVENT, handleTradeCompleted);
       window.removeEventListener('solanaPositionsChanged', handlePositionsChanged);
       window.removeEventListener('solanaPositionUpdate', handlePositionUpdate);
+      window.removeEventListener('solanaPositionsSnapshot', handlePositionsSnapshot);
     };
-  }, [userId, onPositionsChange, skipFetch, blockchain, requestMetadataForTokens, positionsCacheKey]);
+  }, [userId, onPositionsChange, skipFetch, blockchain, requestMetadataForTokens, positionsCacheKey, requestSnapshot]);
 
   // Fetch Pump.fun images for positions with missing images
   useEffect(() => {

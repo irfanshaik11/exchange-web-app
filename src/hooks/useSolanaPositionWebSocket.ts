@@ -42,6 +42,7 @@ interface UseSolanaPositionWebSocketReturn {
   error: string | null;
   loading: boolean;
   refreshPosition: () => Promise<void>;
+  requestSnapshot: () => void;
 }
 
 /**
@@ -223,6 +224,24 @@ export function useSolanaPositionWebSocket(
             window.dispatchEvent(new CustomEvent('solanaNewTrade', {
               detail: message.data
             }));
+          } else if (message.type === 'positions_snapshot' && Array.isArray(message.data)) {
+            console.log(`[useSolanaPositionWebSocket] positions_snapshot (${message.blockchain}): ${message.data.length} positions`);
+            window.dispatchEvent(new CustomEvent('solanaPositionsSnapshot', {
+              detail: {
+                positions: message.data,
+                blockchain: message.blockchain,
+                timestamp: message.timestamp,
+              }
+            }));
+          } else if (message.type === 'activity_snapshot' && Array.isArray(message.data)) {
+            console.log(`[useSolanaPositionWebSocket] activity_snapshot (${message.blockchain}): ${message.data.length} trades`);
+            window.dispatchEvent(new CustomEvent('solanaActivitySnapshot', {
+              detail: {
+                activity: message.data,
+                blockchain: message.blockchain,
+                timestamp: message.timestamp,
+              }
+            }));
           }
         } catch (parseErr) {
           console.error('[useSolanaPositionWebSocket] Failed to parse message:', parseErr);
@@ -350,12 +369,20 @@ export function useSolanaPositionWebSocket(
     return fetchInitialPosition();
   }, [fetchInitialPosition]);
 
+  // Request cached portfolio snapshot from backend (for page navigation when WS is already open)
+  const requestSnapshot = useCallback(() => {
+    if (wsRef.current?.readyState === WebSocket.OPEN) {
+      wsRef.current.send(JSON.stringify({ type: 'request_snapshot' }));
+    }
+  }, []);
+
   return {
     position,
     connected,
     error,
     loading,
     refreshPosition,
+    requestSnapshot,
   };
 }
 

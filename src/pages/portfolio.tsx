@@ -37,6 +37,7 @@ import { TRADE_COMPLETED_EVENT, consumePendingTradeRefreshes, type TradeComplete
 import { redistributeWalletFunds } from "~/utils/api";
 import { deleteUserWallet } from "~/utils/api";
 import { PredictionPositions, UnifiedPortfolio, PolygonWalletCard } from "~/components/predictions";
+import { useSolanaPositionWebSocketContext } from "~/contexts/SolanaPositionWebSocketContext";
 
 // Interactive Balance Chart Component
 const BalanceChart = ({ 
@@ -469,6 +470,7 @@ export default function PortfolioPage() {
   const [activeSpotTab, setActiveSpotTab] = useState(0);
   const [activePerpetualsTab, setActivePerpetualsTab] = useState(0);
   const { user, loading: userLoading, solBalance, usdcBalance, refreshBalance, refreshAllBalances, chainBalances, primaryWalletAddresses, walletBalances: contextWalletBalances, walletList: contextWalletList, walletListLoading, refreshWalletList, refreshUser, selectedWalletIds, selectAllWalletsForChain, selectWalletsWithFunds, clearSelectedWallets, setSelectedWalletsForChain } = useUser();
+  const { requestSnapshot } = useSolanaPositionWebSocketContext();
   const { solPrice: contextSolPrice, monPrice } = useSolPrice();
   const router = useRouter();
   // Get chain from URL first, then localStorage, then default to solana
@@ -1009,6 +1011,11 @@ export default function PortfolioPage() {
 
   // Listen for trade-completed events and consume pending refreshes on mount
   useEffect(() => {
+    // Request WS snapshot for instant activity data (handles page navigation when WS already open)
+    if (!activityLoadedRef.current) {
+      requestSnapshot();
+    }
+
     // On mount: consume any pending trade refreshes from other pages (cross-navigation)
     const pending = consumePendingTradeRefreshes();
     const relevantPending = pending.filter((p) =>
@@ -1096,13 +1103,40 @@ export default function PortfolioPage() {
     };
     window.addEventListener('solanaNewTrade', handleNewTrade);
 
+    // Listen for WS activity snapshot — instant Activity tab data on connection
+    const handleActivitySnapshot = (event: Event) => {
+      const detail = (event as CustomEvent).detail;
+      if (!detail?.activity || !Array.isArray(detail.activity) || detail.activity.length === 0) return;
+
+      const expectedBC = currentChain === 'monad' ? 'monad' : currentChain === 'sol' ? 'solana' : 'all';
+      if (detail.blockchain !== expectedBC) return;
+
+      // Only apply if activity hasn't loaded via REST yet
+      if (activityLoadedRef.current) return;
+
+      console.log(`[Portfolio] WS activity snapshot: ${detail.activity.length} trades`);
+      const filteredActivity = detail.activity.filter(isTradeOnCurrentChain);
+      setTradeActivity(filteredActivity);
+      setLoadingTradeActivity(false);
+      activityLoadedRef.current = true;
+
+      try {
+        window.localStorage.setItem(tradeActivityCacheKey, JSON.stringify({
+          data: filteredActivity,
+          timestamp: Date.now(),
+        }));
+      } catch {}
+    };
+    window.addEventListener('solanaActivitySnapshot', handleActivitySnapshot);
+
     return () => {
       window.removeEventListener(TRADE_COMPLETED_EVENT, handleTradeCompleted);
       window.removeEventListener('solanaPositionsChanged', handlePositionsChanged);
       window.removeEventListener('solanaPositionUpdate', handlePositionUpdate);
       window.removeEventListener('solanaNewTrade', handleNewTrade);
+      window.removeEventListener('solanaActivitySnapshot', handleActivitySnapshot);
     };
-  }, [currentChain, refreshBalance, tradeActivityCacheKey, tradeHistoryCacheKey]);
+  }, [currentChain, refreshBalance, tradeActivityCacheKey, tradeHistoryCacheKey, isTradeOnCurrentChain, requestSnapshot]);
 
   // Note: Initial balance is set once when first detected and persists
   // It does NOT auto-reset to prevent wallet balance change from going to 0

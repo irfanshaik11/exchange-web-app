@@ -16,6 +16,8 @@ interface SolanaPositionWebSocketContextValue {
   registerTxHashCallback: (id: string, callback: (data: TxHashMessage) => void) => void;
   /** Unregister a txHash callback */
   unregisterTxHashCallback: (id: string) => void;
+  /** Request a portfolio snapshot from backend (for page navigation when WS is already open) */
+  requestSnapshot: () => void;
 }
 
 /**
@@ -55,7 +57,7 @@ export function SolanaPositionWebSocketProvider({ children }: SolanaPositionWebS
   }, [txHashCallbacks]);
 
   // Single WebSocket connection for all listeners
-  const { connected, error, loading } = useSolanaPositionWebSocket({
+  const { connected, error, loading, requestSnapshot } = useSolanaPositionWebSocket({
     tokenAddress: "", // Empty for global listening
     enabled: !!user?.id,
     onTxHash: handleTxHash,
@@ -77,7 +79,8 @@ export function SolanaPositionWebSocketProvider({ children }: SolanaPositionWebS
     loading,
     registerTxHashCallback,
     unregisterTxHashCallback,
-  }), [connected, error, loading, registerTxHashCallback, unregisterTxHashCallback]);
+    requestSnapshot,
+  }), [connected, error, loading, registerTxHashCallback, unregisterTxHashCallback, requestSnapshot]);
 
   return (
     <SolanaPositionWebSocketContext.Provider value={value}>
