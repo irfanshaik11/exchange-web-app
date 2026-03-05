@@ -28,7 +28,7 @@ import useTokenStatsWebSocket from "~/hooks/useTokenStatsWebSocket";
 import { getPoolTypeFromToken } from "~/utils/poolTypeDetection";
 import { mapTradeErrorMessage } from "~/utils/tradeErrorMessages";
 import { listenForTradeEvents, transformToastToError } from "~/utils/createSolanaToastHandler";
-import { broadcastTradeCompleted } from "~/utils/tradeEvents";
+import { broadcastTradeCompleted, notifyTradePending } from "~/utils/tradeEvents";
 import { dispatchBalanceRefresh } from "~/utils/balanceEvents";
 import { useSolPrice } from "../SolPriceContext";
 import HighSlippageWarningDialog from "../HighSlippageWarningDialog";
@@ -2732,6 +2732,7 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
         const baseMint = token.mint || '';
         const quoteMint = SOL_MINT_ADDRESS;
 
+        notifyTradePending({ tokenAddress: baseMint, tradeType: 'buy', chain: 'sol' });
         const multiResult = await executeSolanaMultiBuy({
           poolAddress,
           baseMint,
@@ -2761,6 +2762,8 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
                 linkEl.innerHTML = `<a href="${explorerUrl}" target="_blank" rel="noopener noreferrer" class="hover:opacity-80 transition-opacity"><img src="https://avatars.githubusercontent.com/u/92743431?s=200&v=4" alt="Solana" class="w-4 h-4 rounded-full" style="cursor: pointer;" /></a>`;
                 linkEl.className = '';
               }
+              // Fire early so Portfolio refetches immediately when Solscan link appears
+              broadcastTradeCompleted({ tokenAddress: baseMint, tradeType: 'buy', chain: 'sol', txHash });
             }
           },
         });
@@ -2840,6 +2843,7 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
           }
         }, 2000);
 
+        broadcastTradeCompleted({ tokenAddress: token.mint, tradeType: 'buy', chain: 'sol' });
         setSuccessMessage(`✅ Bought ${tokenName} successfully!`);
         setIsLoading(false);
         return { success: true };

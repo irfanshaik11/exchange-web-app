@@ -32,7 +32,7 @@ import { listenForTradeEvents, transformToastToError } from '~/utils/createSolan
 import { fetchVerifiedPairAddress } from '~/hooks/useSingleTokenPolling';
 import { useTxHashCallback } from '~/contexts/SolanaPositionWebSocketContext';
 import { dispatchBalanceRefresh } from '~/utils/balanceEvents';
-import { broadcastTradeCompleted } from '~/utils/tradeEvents';
+import { broadcastTradeCompleted, notifyTradePending } from '~/utils/tradeEvents';
 
 interface InstantTradeModalProps {
   isOpen: boolean;
@@ -680,6 +680,7 @@ const InstantTradeModal: React.FC<InstantTradeModalProps> = ({ isOpen, onClose, 
     pendingToastRef.current = { id: toastId, tokenImage, tokenName, fakeTime: timerCap.toFixed(2), startTime, timerInterval };
 
     try {
+      notifyTradePending({ tokenAddress, tradeType: 'buy', chain: 'monad' });
       const { results, totalConsidered } = await executeMonadMultiBuy({
         tokenAddress,
         amountMON,
@@ -886,6 +887,7 @@ const InstantTradeModal: React.FC<InstantTradeModalProps> = ({ isOpen, onClose, 
       const baseMint = token.mint || '';
       const quoteMint = SOL_MINT_ADDRESS;
 
+      notifyTradePending({ tokenAddress: baseMint, tradeType: 'buy', chain: 'sol' });
       const multiResult = await executeSolanaMultiBuy({
         poolAddress,
         baseMint,
@@ -914,6 +916,8 @@ const InstantTradeModal: React.FC<InstantTradeModalProps> = ({ isOpen, onClose, 
               linkEl.innerHTML = `<a href="${explorerUrl}" target="_blank" rel="noopener noreferrer" class="hover:opacity-80 transition-opacity"><img src="https://avatars.githubusercontent.com/u/92743431?s=200&v=4" alt="Solana" class="w-4 h-4 rounded-full" style="cursor: pointer;" /></a>`;
               linkEl.className = '';
             }
+            // Fire early so Portfolio refetches immediately when Solscan link appears
+            broadcastTradeCompleted({ tokenAddress: baseMint, tradeType: 'buy', chain: 'sol', txHash });
           }
         },
       });
@@ -947,6 +951,7 @@ const InstantTradeModal: React.FC<InstantTradeModalProps> = ({ isOpen, onClose, 
 
       // Refresh header SOL balance
       dispatchBalanceRefresh('sol');
+      broadcastTradeCompleted({ tokenAddress: token.mint, tradeType: 'buy', chain: 'sol' });
 
       // Refresh token balance after 2s
       setTimeout(async () => {
@@ -1127,6 +1132,7 @@ const InstantTradeModal: React.FC<InstantTradeModalProps> = ({ isOpen, onClose, 
           }, 2000);
 
           broadcastMonadQuickTrade(tokenAddress, 'buy');
+          broadcastTradeCompleted({ tokenAddress, tradeType: 'buy', chain: 'monad' });
         }
 
         setIsLoading(false);
@@ -1312,6 +1318,7 @@ const InstantTradeModal: React.FC<InstantTradeModalProps> = ({ isOpen, onClose, 
             }
           }, 2000);
           broadcastMonadQuickTrade(tokenAddress, 'sell');
+          broadcastTradeCompleted({ tokenAddress, tradeType: 'sell', chain: 'monad' });
           setTimeout(() => {
             refreshBalance({ chain: "monad", force: true }).catch((err: any) => {
               console.warn('Failed to refresh balance:', err);

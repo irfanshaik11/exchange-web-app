@@ -30,7 +30,7 @@ if (typeof window !== 'undefined') {
     queryClient,
     persister,
     maxAge: 10 * 60 * 1000,
-    buster: 'v2', // Updated to bust cache for Honors II changes
+    buster: 'v3', // Bust cache for arena cashback field additions
   });
 }
 

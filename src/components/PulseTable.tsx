@@ -105,6 +105,7 @@ import {
 import { getPoolTypeFromToken } from "~/utils/poolTypeDetection";
 import { mapTradeErrorMessage } from "~/utils/tradeErrorMessages";
 import { dispatchBalanceRefresh } from "~/utils/balanceEvents";
+import { broadcastTradeCompleted, notifyTradePending } from "~/utils/tradeEvents";
 import { listenForTradeEvents, transformToastToError } from "~/utils/createSolanaToastHandler";
 import { TokenAge } from "./TokenAge";
 
@@ -226,6 +227,9 @@ const tokenMetadataCache = new LRUCache<string, any>(TOKEN_CACHE_MAX_SIZE);
 // Used by the blacklist filter to match handles found only in token metadata URIs
 // Capped via LRU to prevent unbounded memory growth
 const twitterHandleCache = new LRUCache<string, string>(TWITTER_CACHE_MAX_SIZE);
+
+// Module-level: remembers which tables have had data, survives Pages Router remounts
+const _hadDataByTitle = new Map<string, boolean>();
 
 // PHASE 4 (C2): Helper functions extracted from IIFEs to avoid recreation per render
 // Safe number parser - handles strings, NaN, Infinity
@@ -2669,9 +2673,11 @@ function PulseTable({
   }, [tokens, title]);
 
   // Track whether we ever had data — prevents "No tokens found" flash on tab return
-  const hadDataRef = useRef(false);
+  // Uses module-level map so state persists across Next.js Pages Router remounts
+  const hadDataRef = useRef(_hadDataByTitle.get(title) ?? false);
   if (tokens && tokens.length > 0) {
     hadDataRef.current = true;
+    _hadDataByTitle.set(title, true);
   }
 
   // Preload images for visible tokens (first 20 for instant loading)
@@ -3499,6 +3505,7 @@ function PulseTable({
       const baseMint = token.mint || "";
       const quoteMint = SOL_MINT_ADDRESS;
 
+      notifyTradePending({ tokenAddress: baseMint, tradeType: 'buy', chain: 'sol' });
       const multiResult = await executeSolanaMultiBuy({
         poolAddress,
         baseMint,
@@ -3531,6 +3538,8 @@ function PulseTable({
               linkEl.innerHTML = `<a href="${explorerUrl}" target="_blank" rel="noopener noreferrer" class="hover:opacity-80 transition-opacity"><img src="https://avatars.githubusercontent.com/u/92743431?s=200&v=4" alt="Solana" class="w-4 h-4 rounded-full" style="cursor: pointer;" /></a>`;
               linkEl.className = "";
             }
+            // Fire early so Portfolio refetches immediately when Solscan link appears
+            broadcastTradeCompleted({ tokenAddress: baseMint, tradeType: 'buy', chain: 'sol', txHash });
           }
         },
       });
@@ -3568,6 +3577,7 @@ function PulseTable({
         );
       }
       dispatchBalanceRefresh('sol');
+      broadcastTradeCompleted({ tokenAddress: token.mint, tradeType: 'buy', chain: 'sol' });
 
       return { success: true };
     } catch (error: any) {

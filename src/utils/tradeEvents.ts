@@ -68,13 +68,65 @@ export function consumePendingTradeRefreshes(): TradeCompletedDetail[] {
   return items.filter((item) => now - item.timestamp < TTL_MS);
 }
 
-// ── Broadcast ─────────────────────────────────────────────────────────
+// ── Helpers ───────────────────────────────────────────────────────────
+
+/** Remove stale portfolio caches so next navigation shows fresh data. */
+function clearStalePortfolioCaches() {
+  try {
+    const keys = Object.keys(window.localStorage);
+    for (const key of keys) {
+      if (key.startsWith('positions_cache_') || key.startsWith('trade_activity_cache_')) {
+        window.localStorage.removeItem(key);
+      }
+    }
+  } catch {
+    // best-effort
+  }
+}
+
+// ── Early notification (pre-buy) ─────────────────────────────────────
+
+/**
+ * Notify that a buy is about to start.
+ *
+ * Called BEFORE `executeSolanaMultiBuy`/`executeMonadMultiBuy` so that
+ * if the user navigates to Portfolio while the buy is still in-flight,
+ * `consumePendingTradeRefreshes()` will find the pending entry and
+ * trigger an immediate (+ delayed retry) refresh.
+ *
+ * Does NOT dispatch a window event — the user is still on the buy page.
+ */
+export function notifyTradePending(detail: { tokenAddress: string; tradeType?: 'buy' | 'sell'; chain: 'sol' | 'monad' }) {
+  if (typeof window === 'undefined') return;
+  const full: TradeCompletedDetail = {
+    tokenAddress: detail.tokenAddress,
+    tradeType: detail.tradeType || 'buy',
+    chain: detail.chain,
+    timestamp: Date.now(),
+  };
+
+  // Persist to localStorage so Portfolio picks it up on mount
+  try {
+    const pending = readPending();
+    pending.push(full);
+    if (pending.length > MAX_PENDING) pending.splice(0, pending.length - MAX_PENDING);
+    writePending(pending);
+  } catch {
+    // best-effort
+  }
+
+  // Clear stale portfolio caches so Portfolio doesn't show old data
+  clearStalePortfolioCaches();
+}
+
+// ── Broadcast (post-buy) ─────────────────────────────────────────────
 
 /**
  * Broadcast a trade-completed event.
  *
  * 1. Dispatches a CustomEvent on `window` for same-page listeners.
  * 2. Persists to localStorage for cross-navigation pickup.
+ * 3. Clears stale portfolio caches.
  */
 export function broadcastTradeCompleted(detail: Omit<TradeCompletedDetail, 'timestamp'>) {
   if (typeof window === 'undefined') return;
@@ -90,6 +142,9 @@ export function broadcastTradeCompleted(detail: Omit<TradeCompletedDetail, 'time
   } catch {
     // best-effort
   }
+
+  // Clear stale portfolio caches
+  clearStalePortfolioCaches();
 
   // Dispatch window event
   try {

@@ -55,6 +55,7 @@ export interface TradeRow {
   tokenName?: string; // Token name from API
   tokenSymbol?: string; // Token symbol from API
   imageUrl?: string | null; // Token image URL saved during trade
+  isSplitTrade?: boolean; // True if this is a child trade from multi-wallet execution
 }
 
 // New: Wallet Interface

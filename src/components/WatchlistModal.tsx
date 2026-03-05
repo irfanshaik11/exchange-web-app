@@ -24,6 +24,7 @@ import { validateSolanaBuy, validateMonadBuy, showTradeValidationError } from '~
 import { checkAtaExists } from '~/utils/ataCheck';
 import { formatMonadError } from '~/utils/monadError';
 import { broadcastMonadQuickTrade } from '~/utils/monadTradeEvents';
+import { broadcastTradeCompleted, notifyTradePending } from '~/utils/tradeEvents';
 import { listenForTradeEvents, transformToastToError } from '~/utils/createSolanaToastHandler';
 import { mapTradeErrorMessage } from '~/utils/tradeErrorMessages';
 import { dispatchBalanceRefresh } from '~/utils/balanceEvents';
@@ -557,6 +558,7 @@ export default function WatchlistModal({ open, onClose }: WatchlistModalProps) {
       const cleanupMonadTradeListener = listenForTradeEvents(tokenAddress, uniqueToastId, (v) => { tradeErrored = v; }, 'monad');
 
       try {
+        notifyTradePending({ tokenAddress, tradeType: 'buy', chain: 'monad' });
         const { results, totalConsidered } = await executeMonadMultiBuy({
           tokenAddress,
           amountMON: buyAmount,
@@ -595,6 +597,7 @@ export default function WatchlistModal({ open, onClose }: WatchlistModalProps) {
             });
           }, 1000);
           broadcastMonadQuickTrade(tokenAddress, 'buy');
+          broadcastTradeCompleted({ tokenAddress, tradeType: 'buy', chain: 'monad' });
           console.log('✅ Watchlist Monad Quick Buy successful:', txHashes);
         } else {
           tradeErrored = true;
@@ -754,6 +757,7 @@ export default function WatchlistModal({ open, onClose }: WatchlistModalProps) {
         const baseMint = tokenMint;
         const quoteMint = SOL_MINT_ADDRESS;
 
+        notifyTradePending({ tokenAddress: baseMint, tradeType: 'buy', chain: 'sol' });
         const multiResult = await executeSolanaMultiBuy({
           poolAddress,
           baseMint,
@@ -782,6 +786,8 @@ export default function WatchlistModal({ open, onClose }: WatchlistModalProps) {
                 linkEl.innerHTML = `<a href="${explorerUrl}" target="_blank" rel="noopener noreferrer" class="hover:opacity-80 transition-opacity"><img src="https://avatars.githubusercontent.com/u/92743431?s=200&v=4" alt="Solana" class="w-4 h-4 rounded-full" style="cursor: pointer;" /></a>`;
                 linkEl.className = "";
               }
+              // Fire early so Portfolio refetches immediately when Solscan link appears
+              broadcastTradeCompleted({ tokenAddress: baseMint, tradeType: 'buy', chain: 'sol', txHash });
             }
           },
         });
@@ -819,6 +825,7 @@ export default function WatchlistModal({ open, onClose }: WatchlistModalProps) {
           );
         }
         dispatchBalanceRefresh('sol');
+        broadcastTradeCompleted({ tokenAddress: tokenMint, tradeType: 'buy', chain: 'sol' });
       } catch (error: any) {
         tradeErrored = true;
         cleanupSolanaTradeListener();
