@@ -20,7 +20,8 @@ import {
 } from "~/utils/walletTracking";
 import toast from "react-hot-toast";
 import { useRouter } from "next/router";
-import { BellOff, CheckCircle, X } from "lucide-react";
+import CheckCircle from "lucide-react/dist/esm/icons/circle-check-big";
+import X from "lucide-react/dist/esm/icons/x";
 import { useUser } from "./UserContext";
 import { normalizeImageUrl, extractTokenImage, resolveTokenImage } from "~/utils/images";
 import FastImage from "~/components/FastImage";

@@ -12,6 +12,9 @@ const __dirname = path.dirname(__filename);
 /** @type {import("next").NextConfig} */
 const config = {
   reactStrictMode: true,
+  // Disable ETags to prevent browsers from caching HTML via conditional requests
+  // (some browsers ignore no-store but still do If-None-Match with ETags)
+  generateEtags: false,
   // output: "standalone", // Temporarily disabled to fix build
   // Disable error overlay and loading indicators in development
   devIndicators: {
@@ -21,7 +24,7 @@ const config = {
   transpilePackages: ['@vanilla-extract/sprinkles', '@vanilla-extract/css', '@rainbow-me/rainbowkit',  '@turnkey/react-wallet-kit', '@turnkey/core'],
   // Optimize package imports for faster loading
   experimental: {
-    optimizePackageImports: ['react-icons'],
+    optimizePackageImports: ['react-icons', 'lucide-react'],
   },
   // Disable page transitions and loading indicators
   compiler: {

@@ -242,6 +242,8 @@ export function useSolanaPositionWebSocket(
                 timestamp: message.timestamp,
               }
             }));
+          } else if (message.type === 'snapshot_empty') {
+            console.log('[useSolanaPositionWebSocket] snapshot_empty — cache cold, waiting for REST');
           }
         } catch (parseErr) {
           console.error('[useSolanaPositionWebSocket] Failed to parse message:', parseErr);
