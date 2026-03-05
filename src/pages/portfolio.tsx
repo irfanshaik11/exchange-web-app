@@ -3655,14 +3655,12 @@ export default function PortfolioPage() {
                 {/* Table Content — display toggling keeps components mounted to avoid re-fetch on tab switch */}
                 <div className="min-h-[200px]">
                   <div style={{ display: activeSpotTab === 0 ? 'block' : 'none' }}>
-                    {userLoading && !user?.id ? (
-                      <div className="py-8 text-center text-[#9CA3AF]">
-                        Loading...
-                      </div>
-                    ) : !user?.id ? (
+                    {!user?.id && !userLoading ? (
                       <div className="py-8 text-center text-[#9CA3AF]">
                         Please log in to view your positions.
                       </div>
+                    ) : !user?.id ? (
+                      null
                     ) : (
                       <Positions
                         bearerToken={user.bearerToken}
@@ -3698,14 +3696,12 @@ export default function PortfolioPage() {
                       />
                     ))} */}
                   <div style={{ display: activeSpotTab === 1 ? 'block' : 'none' }}>
-                    {userLoading && !user?.id ? (
-                      <div className="py-8 text-center text-[#9CA3AF]">
-                        Loading...
-                      </div>
-                    ) : !user?.id ? (
+                    {!user?.id && !userLoading ? (
                       <div className="py-8 text-center text-[#9CA3AF]">
                         Please log in to view your positions.
                       </div>
+                    ) : !user?.id ? (
+                      <div />
                     ) : (
                       <Positions
                         bearerToken={user.bearerToken}
@@ -3730,14 +3726,12 @@ export default function PortfolioPage() {
                     )}
                   </div>
                   <div style={{ display: activeSpotTab === 2 ? 'block' : 'none' }}>
-                    {(userLoading && !user?.id) || loadingTradeActivity ? (
-                      <div className="py-8 text-center text-[#9CA3AF]">
-                        Loading...
-                      </div>
-                    ) : !user?.id ? (
+                    {!user?.id && !userLoading ? (
                       <div className="py-8 text-center text-[#9CA3AF]">
                         Please log in to view your activity.
                       </div>
+                    ) : !user?.id ? (
+                      <div />
                     ) : (
                       <div className="w-full">
                         <Activity

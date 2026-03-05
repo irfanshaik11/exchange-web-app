@@ -112,14 +112,18 @@ export async function getPumpSwapPool(tokenAddress: string): Promise<any> {
   return res.json();
 }
 
-export async function getActivePositionsByUser(
+/** Typed result for position fetches — lets callers distinguish "0 positions" from "request failed" */
+export type PositionsResult =
+  | { ok: true; data: PositionRow[] }
+  | { ok: false; data: null; error: string };
+
+export async function fetchActivePositions(
   userId: string,
   blockchain?: string,
-): Promise<PositionRow[]> {
-  if (!userId) return [];
+): Promise<PositionsResult> {
+  if (!userId) return { ok: true, data: [] };
   if (!env.NEXT_PUBLIC_BACKEND_URL) {
-    console.error("NEXT_PUBLIC_BACKEND_URL is not set");
-    return [];
+    return { ok: false, data: null, error: "NEXT_PUBLIC_BACKEND_URL is not set" };
   }
 
   const controller =
@@ -136,27 +140,29 @@ export async function getActivePositionsByUser(
       controller ? { signal: controller.signal } : {},
     );
     if (!res.ok) {
-      console.error(
-        "Failed to fetch active positions:",
-        res.status,
-        res.statusText,
-      );
-      return [];
+      return { ok: false, data: null, error: `http_${res.status}` };
     }
     const data = await res.json();
-    return Array.isArray(data) ? data : [];
+    return { ok: true, data: Array.isArray(data) ? data : [] };
   } catch (err) {
     if ((err as any)?.name === "AbortError") {
-      console.warn("getActivePositionsByUser request timed out");
-    } else {
-      console.error("Error fetching active positions:", err);
+      return { ok: false, data: null, error: "timeout" };
     }
-    return [];
+    return { ok: false, data: null, error: "network" };
   } finally {
     if (timeoutId !== undefined) {
       clearTimeout(timeoutId);
     }
   }
+}
+
+/** Backward-compat wrapper — returns [] on error (used by callers that don't need error distinction) */
+export async function getActivePositionsByUser(
+  userId: string,
+  blockchain?: string,
+): Promise<PositionRow[]> {
+  const result = await fetchActivePositions(userId, blockchain);
+  return result.data ?? [];
 }
 
 export async function getTradeHistoryByTokenAddress(
