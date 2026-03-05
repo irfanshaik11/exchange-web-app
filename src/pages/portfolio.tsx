@@ -978,7 +978,7 @@ export default function PortfolioPage() {
 
         if (!result.ok) {
           // Error/timeout — preserve existing tradeActivity, don't wipe to []
-          console.warn(`[Trade Activity] Fetch failed (${result.error}), keeping existing data`);
+          console.warn(`[Trade Activity] Fetch failed (${(result as { ok: false; data: null; error: string }).error}), keeping existing data`);
         } else {
           const filteredActivity = result.data.filter(isTradeOnCurrentChain);
           setTradeActivity(filteredActivity);
