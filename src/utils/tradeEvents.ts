@@ -73,22 +73,6 @@ export function consumePendingTradeRefreshes(): TradeCompletedDetail[] {
   return items.filter((item) => now - item.timestamp < TTL_MS);
 }
 
-// ── Helpers ───────────────────────────────────────────────────────────
-
-/** Remove stale portfolio caches so next navigation shows fresh data. */
-function clearStalePortfolioCaches() {
-  try {
-    const keys = Object.keys(window.localStorage);
-    for (const key of keys) {
-      if (key.startsWith('positions_cache_') || key.startsWith('trade_activity_cache_')) {
-        window.localStorage.removeItem(key);
-      }
-    }
-  } catch {
-    // best-effort
-  }
-}
-
 // ── Early notification (pre-buy) ─────────────────────────────────────
 
 /**
@@ -119,9 +103,6 @@ export function notifyTradePending(detail: { tokenAddress: string; tradeType?: '
   } catch {
     // best-effort
   }
-
-  // Clear stale portfolio caches so Portfolio doesn't show old data
-  clearStalePortfolioCaches();
 }
 
 // ── Broadcast (post-buy) ─────────────────────────────────────────────
@@ -131,7 +112,6 @@ export function notifyTradePending(detail: { tokenAddress: string; tradeType?: '
  *
  * 1. Dispatches a CustomEvent on `window` for same-page listeners.
  * 2. Persists to localStorage for cross-navigation pickup.
- * 3. Clears stale portfolio caches.
  */
 export function broadcastTradeCompleted(detail: Omit<TradeCompletedDetail, 'timestamp'>) {
   if (typeof window === 'undefined') return;
@@ -147,9 +127,6 @@ export function broadcastTradeCompleted(detail: Omit<TradeCompletedDetail, 'time
   } catch {
     // best-effort
   }
-
-  // Clear stale portfolio caches
-  clearStalePortfolioCaches();
 
   // Dispatch window event
   try {
