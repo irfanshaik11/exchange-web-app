@@ -97,7 +97,7 @@ const Positions: React.FC<PositionsProps> = ({
   fallbackPositions
 }) => {
   const { selectedWalletIds, user } = useUser();
-  const { requestSnapshot } = useSolanaPositionWebSocketContext();
+  const { requestSnapshot, connected: wsConnected } = useSolanaPositionWebSocketContext();
   const router = useRouter();
   const currentChain = (router.query.chain as string) || 'sol';
   const blockchain = useMemo(() => {
@@ -1107,10 +1107,11 @@ const Positions: React.FC<PositionsProps> = ({
       requestSnapshot();
     }
 
-    // Auto-refresh every 5 seconds to get latest positions
+    // Adaptive polling: 15s when WS connected (full_positions pushed), 5s when disconnected
+    const pollInterval = wsConnected ? 15000 : 5000;
     const intervalId = setInterval(() => {
       fetchPositions();
-    }, 5000);
+    }, pollInterval);
 
     // Listen for trade events from other components (TradeActionPanel, InstantTradeModal)
     const handleQuickTradeEvent = (event: Event) => {
@@ -1195,22 +1196,18 @@ const Positions: React.FC<PositionsProps> = ({
           }));
         }
 
-        // Progressive retry backoff: fetch at 500ms, 1.5s, 3s, 5s
-        // Stop early if WS already delivered real position data
+        // Single fallback retry at 3s — WS full_positions should arrive in ~200ms
         buyRetryTimersRef.current.forEach(clearTimeout);
         buyRetryTimersRef.current = [];
-        const retryDelays = [500, 1500, 3000, 5000];
-        for (const delay of retryDelays) {
-          const timer = setTimeout(() => {
-            const stillPending = positionsRef.current.some(
-              (p) => p.tokenAddress.toLowerCase() === addr && (p as any)._needsRefresh
-            );
-            if (stillPending) {
-              fetchPositions();
-            }
-          }, delay);
-          buyRetryTimersRef.current.push(timer);
-        }
+        const timer = setTimeout(() => {
+          const stillPending = positionsRef.current.some(
+            (p) => p.tokenAddress.toLowerCase() === addr && (p as any)._needsRefresh
+          );
+          if (stillPending) {
+            fetchPositions();
+          }
+        }, 3000);
+        buyRetryTimersRef.current.push(timer);
       } else {
         debouncedFetchPositions(500);
       }
@@ -1293,6 +1290,37 @@ const Positions: React.FC<PositionsProps> = ({
     };
     window.addEventListener('solanaPositionsSnapshot', handlePositionsSnapshot);
 
+    // Listen for full_positions WS push (instant atomic update after trade)
+    const handleFullPositions = (event: Event) => {
+      const detail = (event as CustomEvent).detail;
+      if (!detail?.positions || !Array.isArray(detail.positions)) return;
+      // Match blockchain
+      const msgBC = detail.blockchain === 'all' ? undefined : detail.blockchain;
+      if (msgBC && msgBC !== blockchain) return;
+
+      const reversedPositions = [...detail.positions].reverse();
+      setPositions(reversedPositions);
+      onPositionsChange(reversedPositions);
+      lastTradeTimestampRef.current = Date.now();
+
+      // Update localStorage cache
+      try {
+        window.localStorage.setItem(positionsCacheKey, JSON.stringify({
+          data: reversedPositions,
+          timestamp: Date.now(),
+        }));
+      } catch {}
+
+      requestMetadataForTokens(detail.positions);
+    };
+    window.addEventListener('solanaFullPositions', handleFullPositions);
+
+    // Refresh positions when WS reconnects (may have missed updates while disconnected)
+    const handleWsReconnected = () => {
+      fetchPositions();
+    };
+    window.addEventListener('solanaWsReconnected', handleWsReconnected);
+
     return () => {
       clearInterval(intervalId);
       if (debouncedFetchTimerRef.current) clearTimeout(debouncedFetchTimerRef.current);
@@ -1303,8 +1331,10 @@ const Positions: React.FC<PositionsProps> = ({
       window.removeEventListener('solanaPositionsChanged', handlePositionsChanged);
       window.removeEventListener('solanaPositionUpdate', handlePositionUpdate);
       window.removeEventListener('solanaPositionsSnapshot', handlePositionsSnapshot);
+      window.removeEventListener('solanaFullPositions', handleFullPositions);
+      window.removeEventListener('solanaWsReconnected', handleWsReconnected);
     };
-  }, [userId, onPositionsChange, skipFetch, blockchain, requestMetadataForTokens, positionsCacheKey, requestSnapshot]);
+  }, [userId, onPositionsChange, skipFetch, blockchain, requestMetadataForTokens, positionsCacheKey, requestSnapshot, wsConnected]);
 
   // Fetch Pump.fun images for positions with missing images
   useEffect(() => {

@@ -170,6 +170,7 @@ export function useSolanaPositionWebSocket(
       ws.onopen = () => {
         if (!mountedRef.current) return;
         console.log('[useSolanaPositionWebSocket] ✅ WebSocket CONNECTED to', wsUrl);
+        const wasReconnect = reconnectAttemptsRef.current > 0;
         setConnected(true);
         setError(null);
         reconnectAttemptsRef.current = 0;
@@ -181,6 +182,17 @@ export function useSolanaPositionWebSocket(
             ws.send(JSON.stringify({ type: 'ping' }));
           }
         }, 30000);
+
+        // On reconnect, notify portfolio to refresh (may have missed updates while disconnected)
+        if (wasReconnect) {
+          window.dispatchEvent(new CustomEvent('solanaWsReconnected'));
+          // Request snapshot for instant catch-up
+          setTimeout(() => {
+            if (ws.readyState === WebSocket.OPEN) {
+              ws.send(JSON.stringify({ type: 'request_snapshot' }));
+            }
+          }, 100);
+        }
       };
 
       ws.onmessage = (event) => {
@@ -223,6 +235,16 @@ export function useSolanaPositionWebSocket(
               message.data.type, message.data.tokenAddress?.slice(0, 8));
             window.dispatchEvent(new CustomEvent('solanaNewTrade', {
               detail: message.data
+            }));
+          } else if (message.type === 'full_positions' && Array.isArray(message.data)) {
+            // Full positions array pushed after trade save — instant update, no REST needed
+            console.log(`[useSolanaPositionWebSocket] full_positions (${message.blockchain}): ${message.data.length} positions`);
+            window.dispatchEvent(new CustomEvent('solanaFullPositions', {
+              detail: {
+                positions: message.data,
+                blockchain: message.blockchain,
+                timestamp: message.timestamp,
+              }
             }));
           } else if (message.type === 'positions_snapshot' && Array.isArray(message.data)) {
             console.log(`[useSolanaPositionWebSocket] positions_snapshot (${message.blockchain}): ${message.data.length} positions`);
