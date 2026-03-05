@@ -1002,93 +1002,89 @@ const Positions: React.FC<PositionsProps> = ({
         return;
       }
       isFetchingRef.current = true;
-      console.log(`🔍 Fetching positions for userId: ${userId}`);
 
-      // Check cache to determine if we should show loading
-      let hasValidCache = false;
-      if (typeof window !== 'undefined') {
-        try {
-          const cached = window.localStorage.getItem(positionsCacheKey);
-          if (cached) {
-            const parsed = JSON.parse(cached);
-            if (parsed && Array.isArray(parsed.data) && parsed.data.length > 0) {
-              hasValidCache = true;
+      try {
+        // Check cache to determine if we should show loading
+        let hasValidCache = false;
+        if (typeof window !== 'undefined') {
+          try {
+            const cached = window.localStorage.getItem(positionsCacheKey);
+            if (cached) {
+              const parsed = JSON.parse(cached);
+              if (parsed && Array.isArray(parsed.data) && parsed.data.length > 0) {
+                hasValidCache = true;
+              }
+            }
+          } catch (error) {
+            // Ignore cache errors
+          }
+        }
+
+        // Never show loading when we already have positions to display
+        if (isInitialLoadRef.current && !hasValidCache && positionsRef.current.length === 0) {
+          setLoading(true);
+        }
+
+        const result = await fetchActivePositions(userId, blockchain);
+
+        if (!result.ok) {
+          // API error (timeout, network, 500) — preserve existing positions, never clear
+          console.warn(`[Positions] Fetch failed (${(result as { error: string }).error}) — preserving ${positionsRef.current.length} existing positions`);
+          return;
+        }
+
+        const fetchedPositions = result.data;
+
+        // Reverse so newest positions appear at the top
+        const reversedPositions = [...fetchedPositions].reverse();
+
+        let positionsToUse = reversedPositions;
+        let shouldUpdate = true;
+
+        if (reversedPositions.length === 0) {
+          const currentPositions = positionsRef.current;
+          const hasEverLoaded = hasEverLoadedRef.current;
+          const hadRecentTrade = lastTradeTimestampRef.current > 0 &&
+            (Date.now() - lastTradeTimestampRef.current) < 15000;
+
+          if (currentPositions.length === 0 || hadRecentTrade) {
+            shouldUpdate = true;
+          } else if (currentPositions.length > 0 && hasEverLoaded) {
+            console.log(`[Positions] ⚠️ API returned empty during background poll — preserving existing`);
+            shouldUpdate = false;
+          }
+        }
+
+        if (shouldUpdate) {
+          setPositions(positionsToUse);
+          onPositionsChange(positionsToUse);
+
+          if (!skipFetch && typeof window !== 'undefined') {
+            try {
+              if (positionsToUse.length > 0) {
+                const payload = {
+                  data: positionsToUse,
+                  timestamp: Date.now(),
+                };
+                window.localStorage.setItem(positionsCacheKey, JSON.stringify(payload));
+              } else {
+                window.localStorage.removeItem(positionsCacheKey);
+              }
+            } catch (error) {
+              console.warn(`[Positions] Failed to update positions cache:`, error);
             }
           }
-        } catch (error) {
-          // Ignore cache errors
+
+          requestMetadataForTokens(fetchedPositions);
         }
-      }
-
-      // Never show loading when we already have positions to display
-      if (isInitialLoadRef.current && !hasValidCache && positionsRef.current.length === 0) {
-        setLoading(true);
-      }
-
-      console.log(`🔍 [Positions] Fetching with blockchain: ${blockchain || 'all'}`);
-      const result = await fetchActivePositions(userId, blockchain);
-
-      if (!result.ok) {
-        // API error (timeout, network, 500) — preserve existing positions, don't clear
-        console.warn(`[Positions] Fetch failed (${(result as { error: string }).error}) — preserving ${positionsRef.current.length} existing positions`);
+      } catch (error) {
+        console.error('[Positions] Unexpected error in fetchPositions:', error);
+      } finally {
         isFetchingRef.current = false;
         if (isInitialLoadRef.current) {
           setLoading(false);
           isInitialLoadRef.current = false;
         }
-        return;
-      }
-
-      const fetchedPositions = result.data;
-      console.log(`✅ [Positions] Received ${fetchedPositions.length} positions`);
-
-      // Reverse so newest positions appear at the top
-      const reversedPositions = [...fetchedPositions].reverse();
-
-      let positionsToUse = reversedPositions;
-      let shouldUpdate = true;
-
-      if (reversedPositions.length === 0) {
-        const currentPositions = positionsRef.current;
-        const hasEverLoaded = hasEverLoadedRef.current;
-        const hadRecentTrade = lastTradeTimestampRef.current > 0 &&
-          (Date.now() - lastTradeTimestampRef.current) < 15000;
-
-        if (currentPositions.length === 0 || hadRecentTrade) {
-          shouldUpdate = true;
-        } else if (currentPositions.length > 0 && hasEverLoaded) {
-          console.log(`[Positions] ⚠️ API returned empty during background poll — preserving existing`);
-          shouldUpdate = false;
-        }
-      }
-
-      if (shouldUpdate) {
-        setPositions(positionsToUse);
-        onPositionsChange(positionsToUse);
-
-        if (!skipFetch && typeof window !== 'undefined') {
-          try {
-            if (positionsToUse.length > 0) {
-              const payload = {
-                data: positionsToUse,
-                timestamp: Date.now(),
-              };
-              window.localStorage.setItem(positionsCacheKey, JSON.stringify(payload));
-            } else {
-              window.localStorage.removeItem(positionsCacheKey);
-            }
-          } catch (error) {
-            console.warn(`[Positions] Failed to update positions cache:`, error);
-          }
-        }
-
-        requestMetadataForTokens(fetchedPositions);
-      }
-
-      isFetchingRef.current = false;
-      if (isInitialLoadRef.current) {
-        setLoading(false);
-        isInitialLoadRef.current = false;
       }
     };
 
