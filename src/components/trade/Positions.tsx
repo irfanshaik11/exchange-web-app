@@ -1658,11 +1658,11 @@ const Positions: React.FC<PositionsProps> = ({
                       <div 
                         className="relative rounded-lg transition-all duration-300 ease-out"
                         style={{
-                          border: `1px solid ${protocolColor}`,
+                          border: protocolSource ? `1px solid ${protocolColor}` : `1px solid rgba(128, 128, 128, 0.3)`,
                           padding: '2px'
                         }}
                       >
-                        <div 
+                        <div
                           className="relative rounded-lg"
                           style={{
                             border: `1px solid rgba(192, 192, 192, 0.5)`,
@@ -1683,10 +1683,11 @@ const Positions: React.FC<PositionsProps> = ({
                           </div>
                         </div>
                       </div>
-                      <div 
+                      {protocolSource && (
+                      <div
                         className="absolute bottom-0 right-0 bg-white rounded-full flex items-center justify-center transform translate-x-1/4 translate-y-1/4 z-10"
-                        style={{ 
-                          width: 20, 
+                        style={{
+                          width: 20,
                           height: 20,
                           border: `2px solid ${protocolColor}`,
                           boxShadow: `0 0 4px ${protocolColor}60`
@@ -1700,6 +1701,7 @@ const Positions: React.FC<PositionsProps> = ({
                           className={`${isFullCircleImage ? 'w-full h-full object-cover' : 'w-3/4 h-3/4 object-contain'} rounded-full`}
                         />
                       </div>
+                      )}
                     </div>
                     <div className="flex flex-col min-w-0">
                       <button
