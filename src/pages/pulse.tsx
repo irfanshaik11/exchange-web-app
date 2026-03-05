@@ -316,14 +316,9 @@ export default function PulsePage() {
         if (away > STALE_TAB_THRESHOLD_MS && !isMonadRoute) {
           console.log(`[Pulse] Tab hidden for ${Math.round(away / 1000)}s, refreshing Solana data...`);
 
-          // Clear localStorage placeholder caches so stale data isn't shown during refetch
-          try {
-            localStorage.removeItem('pulse_solana_new_pairs_v1');
-            localStorage.removeItem('pulse_solana_final_stretch_v1');
-            localStorage.removeItem('pulse_solana_migrated_v1');
-            localStorage.removeItem('pulse_solana_launchpad_v1');
-          } catch {}
-
+          // Don't clear localStorage caches — let React Query's placeholderData
+          // keep showing the last good data while refetch is in flight.
+          // The queryFn naturally overwrites localStorage on success.
           queryClient.invalidateQueries({ queryKey: ['tokens'] });
         }
       }

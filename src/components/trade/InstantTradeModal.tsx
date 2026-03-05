@@ -8,7 +8,7 @@ import { LuPencil, LuCheck } from 'react-icons/lu';
 import { useUser } from '~/components/UserContext';
 import { useQuickBuy } from '~/components/QuickBuyContext';
 import { executeEnhancedTrade } from '~/utils/enhancedTradeHandler';
-import { tradeMonadSell, preCheckMonadBalance } from '~/utils/api';
+import { tradeMonadSell, preCheckMonadBalance, tradeSellPercentage } from '~/utils/api';
 import { executeMonadMultiBuy, formatMonadTxSummary } from '~/utils/monadWalletAllocation';
 import { broadcastMonadQuickTrade } from '~/utils/monadTradeEvents';
 import { validateMonadBalance, validateSolanaBalance, computeMonadBalanceForValidation } from '~/utils/tradeBalanceValidation';
@@ -22,7 +22,7 @@ import type { Token } from '~/utils/db';
 import toast from 'react-hot-toast';
 import useMonadPositionWebSocket from '~/hooks/useMonadPositionWebSocket';
 import { executeSolanaMultiBuy, buildSolanaWalletAllocations } from '~/utils/solanaWalletAllocation';
-import { validateSolanaBuy } from '~/utils/preTradeValidation';
+import { validateSolanaBuy, validateSolanaSell, showTradeValidationError } from '~/utils/preTradeValidation';
 import { checkAtaExists } from '~/utils/ataCheck';
 import { SOL_MINT_ADDRESS } from '~/utils/api';
 import { getPoolTypeFromToken } from '~/utils/poolTypeDetection';
@@ -32,6 +32,7 @@ import { listenForTradeEvents, transformToastToError } from '~/utils/createSolan
 import { fetchVerifiedPairAddress } from '~/hooks/useSingleTokenPolling';
 import { useTxHashCallback } from '~/contexts/SolanaPositionWebSocketContext';
 import { dispatchBalanceRefresh } from '~/utils/balanceEvents';
+import { broadcastTradeCompleted } from '~/utils/tradeEvents';
 
 interface InstantTradeModalProps {
   isOpen: boolean;
@@ -1049,18 +1050,16 @@ const InstantTradeModal: React.FC<InstantTradeModalProps> = ({ isOpen, onClose, 
     // END PRE-VALIDATION
     // ============================================
 
-    // Skip liquidity warning for Monad (same as MonadTable)
-    if (!isMonad) {
-    const liquidityValue = Number(liquidityUsd) || 0;
-    const isLowLiquidity = liquidityValue <= 0 || liquidityValue < LOW_LIQUIDITY_WARNING_THRESHOLD;
-
-      // Check liquidity warning (only for Solana)
-    if (isLowLiquidity) {
-      setPendingTradeOptions({ skipLiquidity: false, skipSlippage: false, amount, side: 'buy' });
-      setShowLiquidityWarning(true);
-      return;
-      }
-    }
+    // Low liquidity warning disabled — let backend handle validation
+    // if (!isMonad) {
+    //   const liquidityValue = Number(liquidityUsd) || 0;
+    //   const isLowLiquidity = liquidityValue <= 0 || liquidityValue < LOW_LIQUIDITY_WARNING_THRESHOLD;
+    //   if (isLowLiquidity) {
+    //     setPendingTradeOptions({ skipLiquidity: false, skipSlippage: false, amount, side: 'buy' });
+    //     setShowLiquidityWarning(true);
+    //     return;
+    //   }
+    // }
 
     // Check slippage warning (same as TradeActionPanel)
     const slippagePercent = getEffectiveSlippage(settings.maxSlippage, true) * 100;
@@ -1160,17 +1159,6 @@ const InstantTradeModal: React.FC<InstantTradeModalProps> = ({ isOpen, onClose, 
 
     const sellSettings = presets[activePreset].quickSellSettings;
 
-    // ============================================
-    // PRE-VALIDATION: Check token balance BEFORE showing any toast
-    // This prevents the misleading "Trade placed!" toast when token balance is 0
-    // ============================================
-    if (tokenBalance <= 0) {
-      toast.error('Insufficient token balance. Your balance is 0 tokens. Cannot sell.', { duration: 5000 });
-      return;
-    }
-    // ============================================
-    // END PRE-VALIDATION
-    // ============================================
 
     // Check slippage warning (same as TradeActionPanel)
     const slippagePercent = getEffectiveSlippage(sellSettings.maxSlippage, false) * 100;
@@ -1339,69 +1327,231 @@ const InstantTradeModal: React.FC<InstantTradeModalProps> = ({ isOpen, onClose, 
         setIsLoading(false);
         return result;
       } else {
-        // Use Solana enhanced trade handler for Solana tokens
-    const effectiveSellSettings = {
-      ...sellSettings,
-      maxSlippage: getEffectiveSlippage(sellSettings.maxSlippage, false),
-    };
-    
-    const result = await executeEnhancedTrade({
-      token,
-      amount: percentage,
-      side: 'sell',
-      settings: effectiveSellSettings,
-      user: { bearerToken: user.bearerToken, id: user.id },
-      solBalance: Number(solBalance),
-      solPriceUsd: 150,
-      walletContext,
-      refreshBalance,
-      onSuccess: async (txHash, stats) => {
-        console.log("✅ Enhanced Trade successful:", { txHash, stats });
-        // Refresh token balance after trade
-        setTimeout(async () => {
-          try {
-            const trades = await getTradeActivityByUser(user.id.toString());
-            const tokenTrades = trades.filter(
-              (trade: any) => trade.tokenAddress?.toLowerCase() === (token.mint || "").toLowerCase()
-            );
+        // Solana sell — direct tradeSellPercentage (matches TradeActionPanel flow)
+        const tokenName = token.symbol || token.name || 'Token';
+        const tokenImage = getResolvedTokenImage(token);
+        const tokenAddress = token.mint || '';
 
-            if (tokenTrades.length > 0) {
-              let bought = 0;
-              let sold = 0;
+        // Pre-validate
+        const sellValidation = validateSolanaSell(percentage);
+        if (!sellValidation.valid) {
+          showTradeValidationError(sellValidation.error, tokenImage, tokenName);
+          setIsLoading(false);
+          return { success: false };
+        }
 
-              tokenTrades.forEach((trade: any) => {
-                if (trade.type === "Buy") {
-                  bought += Number(trade.tokenAmount) || 0;
-                } else if (trade.type === "Sell") {
-                  sold += Number(trade.tokenAmount) || 0;
-                }
-              });
+        // Animated toast setup (same as TradeActionPanel)
+        const uniqueToastId = `solana-sell-modal-${Date.now()}-${Math.random()}`;
+        const startTime = Date.now();
+        const timerCap = 0.40 + Math.random() * 0.20;
+        let timerFinished = false;
+        let tradeErrored = false;
 
-              const remaining = bought - sold;
-              setTokenBalance(Math.max(0, remaining));
-            } else {
-              setTokenBalance(0);
-            }
+        toast(
+          (t) => (
+            <div className="flex items-center gap-3">
+              {tokenImage && (
+                <img
+                  src={tokenImage}
+                  alt={tokenName}
+                  className="h-6 w-6 flex-shrink-0 rounded-full"
+                  onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+                />
+              )}
+              <div className="flex min-w-0 flex-1 items-center gap-2">
+                <span className="truncate text-sm text-neutral-200">
+                  Selling {tokenName}
+                </span>
+                <span
+                  id={`timer-${uniqueToastId}`}
+                  className="flex-shrink-0 text-xs text-neutral-400"
+                >
+                  (0.00s)
+                </span>
+                <span
+                  id={`check-${uniqueToastId}`}
+                  className="flex-shrink-0 text-green-400"
+                  style={{ display: timerFinished && !tradeErrored ? 'inline' : 'none' }}
+                >
+                  ✓
+                </span>
+                <span
+                  id={`link-${uniqueToastId}`}
+                  className="flex-shrink-0"
+                  style={{ display: 'inline-flex' }}
+                >
+                  <img
+                    src="https://avatars.githubusercontent.com/u/92743431?s=200&v=4"
+                    alt="Solana"
+                    className="h-4 w-4 rounded-full opacity-70"
+                    style={{ cursor: 'default' }}
+                  />
+                </span>
+              </div>
+            </div>
+          ),
+          {
+            id: uniqueToastId,
+            duration: Infinity,
+            style: {
+              background: '#1a1a1a',
+              border: '1px solid #333',
+              borderRadius: '8px',
+              padding: '12px',
+            },
+          },
+        );
 
-            // Dispatch event to refresh chart price lines
-            if (typeof window !== "undefined" && token.mint) {
-              window.dispatchEvent(new CustomEvent("solanaQuickTrade", { detail: { tokenAddress: token.mint } }));
-            }
-          } catch (error) {
-            console.error('Error refreshing token balance:', error);
+        // Timer animation via requestAnimationFrame
+        const tick = () => {
+          const elapsed = (Date.now() - startTime) / 1000;
+          const displayTime = Math.min(elapsed, timerCap).toFixed(2);
+          const timerEl = document.getElementById(`timer-${uniqueToastId}`);
+          if (timerEl) {
+            timerEl.textContent = `(${displayTime}s)`;
           }
-        }, 2000);
-      },
-      onError: (error) => {
-        console.error("❌ Enhanced Trade failed:", error);
-      },
-      onWarning: (warnings) => {
-        console.warn("⚠️ Pre-transaction warnings:", warnings);
-      },
-    });
 
-    setIsLoading(false);
-    return result;
+          if (!timerFinished && elapsed >= timerCap) {
+            timerFinished = true;
+            if (!tradeErrored) {
+              const checkEl = document.getElementById(`check-${uniqueToastId}`);
+              if (checkEl) {
+                checkEl.style.display = 'block';
+              }
+            }
+            timerHandle = null as any;
+            return;
+          }
+          timerHandle = requestAnimationFrame(tick) as any;
+        };
+        let timerHandle = requestAnimationFrame(tick) as any;
+
+        // Store pending toast ref for WebSocket instant txHash update
+        pendingSolanaQuickBuyToastRef.current = {
+          id: uniqueToastId,
+          tokenImage,
+          tokenName,
+          fakeTime: timerCap.toFixed(2),
+          tokenAddress,
+          startTime,
+          timerHandle,
+          totalSelectedWallets: 1,
+        };
+
+        // Listen for trade events (for real-time error detection)
+        const cleanupSellTradeListener = listenForTradeEvents(tokenAddress, uniqueToastId, (v) => { tradeErrored = v; }, 'solana');
+
+        try {
+          const poolType = getPoolTypeFromToken(token);
+
+          const sellResult = await tradeSellPercentage(
+            {
+              tokenAddress,
+              percentageToSell: percentage,
+              poolAddress: token.pair_address || '',
+              baseMint: tokenAddress,
+              quoteMint: SOL_MINT_ADDRESS,
+              poolType,
+              originalPairAddress: token.pair_address || '',
+              slippage: getEffectiveSlippage(sellSettings.maxSlippage, false) * 100,
+              priorityFee: sellSettings.priority ?? 0.0001,
+              bribe: sellSettings.bribe ?? 0,
+            },
+            user.bearerToken
+          );
+
+          cleanupSellTradeListener();
+
+          if (sellResult?.hash) {
+            // Update Solana logo to clickable Solscan link
+            const linkEl = document.getElementById(`link-${uniqueToastId}`);
+            if (linkEl) {
+              const explorerUrl = `https://solscan.io/tx/${sellResult.hash}`;
+              linkEl.innerHTML = `<a href="${explorerUrl}" target="_blank" rel="noopener noreferrer" class="hover:opacity-80 transition-opacity"><img src="https://avatars.githubusercontent.com/u/92743431?s=200&v=4" alt="Solana" class="w-4 h-4 rounded-full" style="cursor: pointer;" /></a>`;
+            }
+
+            // Show checkmark
+            const checkEl = document.getElementById(`check-${uniqueToastId}`);
+            if (checkEl) {
+              checkEl.style.display = 'block';
+            }
+
+            // Clear pending ref
+            pendingSolanaQuickBuyToastRef.current = null;
+
+            // Auto-dismiss after 10s
+            setTimeout(() => toast.dismiss(uniqueToastId), 10000);
+
+            // Broadcast trade completed (portfolio auto-refresh)
+            broadcastTradeCompleted({
+              tokenAddress,
+              tradeType: 'sell',
+              chain: 'sol',
+              txHash: sellResult.hash,
+              sellPercentage: percentage,
+            });
+
+            // Dispatch event for chart price lines refresh
+            if (typeof window !== 'undefined' && token.mint) {
+              window.dispatchEvent(new CustomEvent('solanaQuickTrade', { detail: { tokenAddress: token.mint } }));
+            }
+
+            // Refresh SOL balance immediately
+            dispatchBalanceRefresh('sol');
+
+            // Refresh position data after 2s
+            setTimeout(async () => {
+              try {
+                const trades = await getTradeActivityByUser(user.id.toString());
+                const tokenTrades = trades.filter(
+                  (trade: any) => trade.tokenAddress?.toLowerCase() === tokenAddress.toLowerCase()
+                );
+
+                if (tokenTrades.length > 0) {
+                  let bought = 0;
+                  let sold = 0;
+                  tokenTrades.forEach((trade: any) => {
+                    if (trade.type === 'Buy') {
+                      bought += Number(trade.tokenAmount) || 0;
+                    } else if (trade.type === 'Sell') {
+                      sold += Number(trade.tokenAmount) || 0;
+                    }
+                  });
+                  const remaining = bought - sold;
+                  setTokenBalance(Math.max(0, remaining));
+                } else {
+                  setTokenBalance(0);
+                }
+              } catch (error) {
+                console.error('Error refreshing token balance:', error);
+              }
+            }, 2000);
+
+            setIsLoading(false);
+            return { success: true, txHash: sellResult.hash };
+          } else {
+            // No hash returned — treat as failure
+            pendingSolanaQuickBuyToastRef.current = null;
+            transformToastToError(uniqueToastId, sellResult?.message || 'Sell failed', tokenImage, tokenName);
+            setIsLoading(false);
+            return { success: false };
+          }
+        } catch (error: any) {
+          tradeErrored = true;
+          cleanupSellTradeListener();
+
+          if (timerHandle) {
+            cancelAnimationFrame(timerHandle);
+          }
+
+          pendingSolanaQuickBuyToastRef.current = null;
+
+          const errorMessage = mapTradeErrorMessage(error);
+          transformToastToError(uniqueToastId, errorMessage, tokenImage, tokenName);
+          console.error('❌ Sell failed:', error);
+          setIsLoading(false);
+          return { success: false, error };
+        }
       }
     } catch (error: any) {
       console.error("Trade error:", error);
@@ -1750,6 +1900,7 @@ const InstantTradeModal: React.FC<InstantTradeModalProps> = ({ isOpen, onClose, 
           />,
           document.body
         )}
+      {/* Low liquidity warning dialog disabled
       {showLiquidityWarning &&
         createPortal(
           <LowLiquidityWarningDialog
@@ -1760,7 +1911,7 @@ const InstantTradeModal: React.FC<InstantTradeModalProps> = ({ isOpen, onClose, 
             onCancel={handleLiquidityWarningCancel}
           />,
           document.body
-        )}
+        )} */}
     </>
   ) : null;
 
@@ -1895,8 +2046,7 @@ const InstantTradeModal: React.FC<InstantTradeModalProps> = ({ isOpen, onClose, 
               return (
                 <button
                   key={idx}
-                  onClick={() => !isLoading && handleQuickBuy(preset)}
-                  disabled={isLoading}
+                  onClick={() => handleQuickBuy(preset)}
                   className="px-3 py-2 bg-[#101114] border border-[#70E0B0] text-[#70E0B0] hover:bg-[#1E1F26] text-sm font-semibold rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed tabular-nums"
                   style={{ fontFamily: 'ui-monospace, SFMono-Regular, "SF Mono", Consolas, "Liberation Mono", Menlo, monospace' }}
                 >
@@ -1981,11 +2131,8 @@ const InstantTradeModal: React.FC<InstantTradeModalProps> = ({ isOpen, onClose, 
                 onClick={() => {
                   setActiveSellPercentage(preset);
                   setHoverSellPercentage(null);
-                  if (!isLoading) {
-                    void handleQuickSell(preset);
-                  }
+                  void handleQuickSell(preset);
                 }}
-                disabled={isLoading}
                 className="px-3 py-2 bg-[#101114] border border-[#FF4D7F] text-[#FF4D7F] hover:bg-[#1E1F26] text-sm font-semibold rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed tabular-nums"
                 style={{ fontFamily: 'ui-monospace, SFMono-Regular, "SF Mono", Consolas, "Liberation Mono", Menlo, monospace' }}
               >
