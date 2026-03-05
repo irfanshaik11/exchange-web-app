@@ -471,7 +471,7 @@ export default function PortfolioPage() {
   const [activeSpotTab, setActiveSpotTab] = useState(0);
   const [activePerpetualsTab, setActivePerpetualsTab] = useState(0);
   const { user, loading: userLoading, solBalance, usdcBalance, refreshBalance, refreshAllBalances, chainBalances, primaryWalletAddresses, walletBalances: contextWalletBalances, walletList: contextWalletList, walletListLoading, refreshWalletList, refreshUser, selectedWalletIds, selectAllWalletsForChain, selectWalletsWithFunds, clearSelectedWallets, setSelectedWalletsForChain } = useUser();
-  const { requestSnapshot } = useSolanaPositionWebSocketContext();
+  const { requestSnapshot, connected: wsConnected } = useSolanaPositionWebSocketContext();
   const { solPrice: contextSolPrice, monPrice } = useSolPrice();
   const router = useRouter();
   // Get chain from URL first, then localStorage, then default to solana
@@ -1009,9 +1009,12 @@ export default function PortfolioPage() {
     };
 
     loadTradeActivity();
-    // Polling removed — Activity is now pushed via WebSocket (new_trade message).
-    // REST fetch still fires on: initial load, tradeRefreshCounter change, and chain/tab switch.
-  }, [user?.id, currentChain, isTradeOnCurrentChain, tradeActivityCacheKey, tradeRefreshCounter]);
+
+    // Fallback: poll every 10s when WS disconnected, every 30s as background safety net
+    const pollMs = wsConnected ? 30000 : 10000;
+    const activityPollId = setInterval(loadTradeActivity, pollMs);
+    return () => clearInterval(activityPollId);
+  }, [user?.id, currentChain, isTradeOnCurrentChain, tradeActivityCacheKey, tradeRefreshCounter, wsConnected]);
 
   // Listen for trade-completed events and consume pending refreshes on mount
   useEffect(() => {
@@ -1133,12 +1136,20 @@ export default function PortfolioPage() {
     };
     window.addEventListener('solanaActivitySnapshot', handleActivitySnapshot);
 
+    // Refresh all data when WS reconnects (may have missed updates while disconnected)
+    const handleWsReconnected = () => {
+      setTradeRefreshCounter((c) => c + 1);
+      refreshBalance({ chain: currentChain === 'monad' ? 'monad' : 'sol', force: true }).catch(() => {});
+    };
+    window.addEventListener('solanaWsReconnected', handleWsReconnected);
+
     return () => {
       window.removeEventListener(TRADE_COMPLETED_EVENT, handleTradeCompleted);
       window.removeEventListener('solanaPositionsChanged', handlePositionsChanged);
       window.removeEventListener('solanaPositionUpdate', handlePositionUpdate);
       window.removeEventListener('solanaNewTrade', handleNewTrade);
       window.removeEventListener('solanaActivitySnapshot', handleActivitySnapshot);
+      window.removeEventListener('solanaWsReconnected', handleWsReconnected);
     };
   }, [currentChain, refreshBalance, tradeActivityCacheKey, tradeHistoryCacheKey, isTradeOnCurrentChain, requestSnapshot]);
 
