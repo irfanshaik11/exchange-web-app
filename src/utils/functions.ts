@@ -176,15 +176,34 @@ export async function getTradeHistoryByUser(
   blockchain?: string,
 ): Promise<any[]> {
   if (!userId) throw new Error("userId is required");
-  const blockchainParam =
-    blockchain && blockchain !== "all" ? `&blockchain=${blockchain}` : "";
-  const res = await fetch(
-    `${env.NEXT_PUBLIC_BACKEND_URL}/api/trade/get_trade_history_by_user?userId=${userId}${blockchainParam}`,
-  );
-  if (!res.ok) {
-    throw new Error(`Failed to fetch trade history by user: ${res.statusText}`);
+  const controller =
+    typeof AbortController !== "undefined" ? new AbortController() : undefined;
+  let timeoutId: ReturnType<typeof setTimeout> | undefined;
+  if (controller) {
+    timeoutId = setTimeout(() => controller.abort(), 10000);
   }
-  return res.json();
+  try {
+    const blockchainParam =
+      blockchain && blockchain !== "all" ? `&blockchain=${blockchain}` : "";
+    const res = await fetch(
+      `${env.NEXT_PUBLIC_BACKEND_URL}/api/trade/get_trade_history_by_user?userId=${userId}${blockchainParam}`,
+      controller ? { signal: controller.signal } : {},
+    );
+    if (!res.ok) {
+      throw new Error(`Failed to fetch trade history by user: ${res.statusText}`);
+    }
+    return res.json();
+  } catch (err) {
+    if ((err as any)?.name === "AbortError") {
+      console.warn("getTradeHistoryByUser request timed out");
+      return [];
+    }
+    throw err;
+  } finally {
+    if (timeoutId !== undefined) {
+      clearTimeout(timeoutId);
+    }
+  }
 }
 
 export async function getTradeActivityByUser(

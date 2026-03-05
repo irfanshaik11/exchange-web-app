@@ -162,10 +162,10 @@ const formatMarketCap = (value: string | number | null | undefined): string => {
 function extractProtocolRaw(token: Token | null): string | null {
 	if (!token) return null;
 	const candidates = [
-		(token as any).launchpad_protocol,
-		(token as any).protocol,
-		(token as any).launchpadName,
-		(token as any).amm,
+		(token as any)?.launchpad_protocol,
+		(token as any)?.protocol,
+		(token as any)?.launchpadName,
+		(token as any)?.amm,
 	];
 	for (const candidate of candidates) {
 		if (candidate == null) continue;
@@ -325,11 +325,11 @@ function resolveTwitterInfo(token: Token | null): {
 	if (!token) return { url: null, handle: null, isReal: false };
 
 	const candidates = [
-		(token as any).twitter,
-		(token as any).twitter_url,
-		(token as any).x,
-		(token as any).x_url,
-		(token as any).socials?.twitter,
+		(token as any)?.twitter,
+		(token as any)?.twitter_url,
+		(token as any)?.x,
+		(token as any)?.x_url,
+		(token as any)?.socials?.twitter,
 	];
 
 	for (const candidate of candidates) {
@@ -351,7 +351,7 @@ function resolveTwitterInfo(token: Token | null): {
 		};
 	}
 
-	const fallback = (token.symbol || token.name || "")
+	const fallback = (token?.symbol || token?.name || "")
 		.toLowerCase()
 		.replace(/[^a-z0-9_]/gi, "");
 	if (fallback) {
@@ -403,24 +403,24 @@ function StatInline({
 /* ---------- column type ---------- */
 function getColumnType(token: Token): "new" | "final-stretch" | "migrated" {
 	const migrated =
-		(token as any).is_migrated ||
-		(token as any).migrated ||
-		(token as any).graduated ||
-		(token as any).is_graduated ||
-		((token.status || '').toLowerCase().includes('migrated')) ||
-		!!token.migrated_time;
+		(token as any)?.is_migrated ||
+		(token as any)?.migrated ||
+		(token as any)?.graduated ||
+		(token as any)?.is_graduated ||
+		((token?.status || '').toLowerCase().includes('migrated')) ||
+		!!token?.migrated_time;
 	if (migrated) return "migrated";
 
 	const pct =
-		(token as any).bonding_pct ??
-		((token as any).bonding_curve_progress != null
-			? (token as any).bonding_curve_progress * 100
+		(token as any)?.bonding_pct ??
+		((token as any)?.bonding_curve_progress != null
+			? (token as any)?.bonding_curve_progress * 100
 			: undefined) ??
-		(token as any).graduationPercent ??
+		(token as any)?.graduationPercent ??
 		0;
 
 	const marketCap =
-		(token as any).fully_diluted_value ?? (token as any).market_cap_usd ?? 0;
+		(token as any)?.fully_diluted_value ?? (token as any)?.market_cap_usd ?? 0;
 
 	let progress = 0;
 	if (typeof pct === "number" && pct >= 0) progress = pct;
@@ -512,16 +512,16 @@ const TradeHeader: React.FC<TradeHeaderProps> = ({ token, livePriceUsd, liveMark
 		isInWatchlist,
 		updateWatchlistToken,
 	} = useWatchlist();
-	const watchlistKey = token.pair_address || (token as any).mint || "";
+	const watchlistKey = token?.pair_address || (token as any)?.mint || "";
 	const isWatched = isInWatchlist(watchlistKey);
 
 	// Determine if this is a Monad token (vs Solana) - used for data source selection
 	const isMonadContext = useMemo(() => {
 		const protocolSource =
-			(token as any).launchpad_protocol ||
-			(token as any).protocol ||
-			(token as any).launchpadName ||
-			(token as any).amm ||
+			(token as any)?.launchpad_protocol ||
+			(token as any)?.protocol ||
+			(token as any)?.launchpadName ||
+			(token as any)?.amm ||
 			extractProtocolRaw(token) ||
 			undefined;
 		const normalizedProtocol = (protocolSource || "").toLowerCase();
@@ -530,9 +530,9 @@ const TradeHeader: React.FC<TradeHeaderProps> = ({ token, livePriceUsd, liveMark
 				normalizedProtocol.includes(keyword),
 			)
 			: false;
-		const tokenChain = ((token as any).blockchain ||
-			(token as any).network ||
-			(token as any).chain ||
+		const tokenChain = ((token as any)?.blockchain ||
+			(token as any)?.network ||
+			(token as any)?.chain ||
 			"") as string;
 		const normalizedChain = tokenChain.toLowerCase();
 		return (
@@ -604,10 +604,10 @@ const TradeHeader: React.FC<TradeHeaderProps> = ({ token, livePriceUsd, liveMark
 
 	// For Monad tokens: check REST token prop fields as before
 	const monadHasAge = isMonadContext && (
-		normalizeTimestampMs((token as any).created_at) ||
-		normalizeTimestampMs((token as any).createdAt) ||
-		normalizeTimestampMs((token as any).CreatedAt) ||
-		normalizeTimestampMs((token as any).launch_time) ||
+		normalizeTimestampMs((token as any)?.created_at) ||
+		normalizeTimestampMs((token as any)?.createdAt) ||
+		normalizeTimestampMs((token as any)?.CreatedAt) ||
+		normalizeTimestampMs((token as any)?.launch_time) ||
 		fetchedCreatedAt
 	);
 
@@ -616,7 +616,7 @@ const TradeHeader: React.FC<TradeHeaderProps> = ({ token, livePriceUsd, liveMark
 		if (!isMonadContext || monadHasAge || fetchingAgeRef.current) return;
 
 		const tokenAddress =
-			token.mint || token.pair_address || (token as any).address;
+			token?.mint || token?.pair_address || (token as any)?.address;
 		if (!tokenAddress) return;
 
 		fetchingAgeRef.current = true;
@@ -659,15 +659,15 @@ const TradeHeader: React.FC<TradeHeaderProps> = ({ token, livePriceUsd, liveMark
 		if (isSolanaToken) {
 			// Primary: REST token prop's created_at (maps to LaunchTime = correct on-chain time)
 			// Fallback: wsTokenInfo?.created_at (DB insertion time, less accurate but better than nothing)
-			createdAt = (token as any).created_at || wsTokenInfo?.created_at;
+			createdAt = (token as any)?.created_at || wsTokenInfo?.created_at;
 			if (!createdAt) return wsTokenInfo ? "-" : "...";
 		} else {
 			// Monad: REST token prop fields + search endpoint fallback
 			createdAt =
-				(token as any).created_at ||
-				(token as any).createdAt ||
-				(token as any).CreatedAt ||
-				(token as any).launch_time ||
+				(token as any)?.created_at ||
+				(token as any)?.createdAt ||
+				(token as any)?.CreatedAt ||
+				(token as any)?.launch_time ||
 				fetchedCreatedAt;
 		}
 
@@ -693,8 +693,8 @@ const TradeHeader: React.FC<TradeHeaderProps> = ({ token, livePriceUsd, liveMark
 		error: wsError,
 		getMarketData,
 	} = useMarketDataWebSocket({
-		pairAddress: token.pair_address || "",
-		tokenAddress: token.mint || "",
+		pairAddress: token?.pair_address || "",
+		tokenAddress: token?.mint || "",
 		enabled: false, // Disabled: OHLC + unified token WS already provide price/mcap with higher priority
 	});
 
@@ -714,8 +714,8 @@ const TradeHeader: React.FC<TradeHeaderProps> = ({ token, livePriceUsd, liveMark
 			chartPriceUsd,  // OHLC chart has highest priority for sync
 			wsTokenInfo?.price_usd,
 			marketData?.price_usd,
-			(token as any).usd_price,
-			(token as any).price_usd,
+			(token as any)?.usd_price,
+			(token as any)?.price_usd,
 		) ?? 0;
 	// Priority: chartMarketCapUsd (OHLC chart) > wsTokenInfo > marketData > token
 	// Chart market cap has highest priority to ensure header stays in sync with displayed chart
@@ -724,9 +724,9 @@ const TradeHeader: React.FC<TradeHeaderProps> = ({ token, livePriceUsd, liveMark
 			chartMarketCapUsd,  // OHLC chart has highest priority for sync
 			wsTokenInfo?.market_cap_usd,
 			marketData?.market_cap_usd,
-			(token as any).market_cap_usd,
-			(token as any).fully_diluted_value,
-			token.market_cap_usd,
+			(token as any)?.market_cap_usd,
+			(token as any)?.fully_diluted_value,
+			token?.market_cap_usd,
 		) ?? 0;
 	const effectivePriceChange1h = coalesceNumber(
 		(token as any)?.price_percent_change_1h,
@@ -749,20 +749,20 @@ const TradeHeader: React.FC<TradeHeaderProps> = ({ token, livePriceUsd, liveMark
 
 		updateWatchlistToken({
 			...token,
-			price_usd: hasPrice ? effectivePrice : (token as any).price_usd,
-			usd_price: hasPrice ? effectivePrice : (token as any).usd_price,
+			price_usd: hasPrice ? effectivePrice : (token as any)?.price_usd,
+			usd_price: hasPrice ? effectivePrice : (token as any)?.usd_price,
 			market_cap_usd: hasMcap
 				? effectiveMarketCap
-				: (token as any).market_cap_usd,
+				: (token as any)?.market_cap_usd,
 			fully_diluted_value: hasMcap
 				? effectiveMarketCap
-				: (token as any).fully_diluted_value,
+				: (token as any)?.fully_diluted_value,
 			price_percent_change_1h: hasChange
 				? (effectivePriceChange1h as number)
-				: (token as any).price_percent_change_1h,
+				: (token as any)?.price_percent_change_1h,
 			price_change_1h: hasChange
 				? (effectivePriceChange1h as number)
-				: (token as any).price_change_1h,
+				: (token as any)?.price_change_1h,
 		} as any);
 	}, [
 		effectiveMarketCap,
@@ -781,10 +781,10 @@ const TradeHeader: React.FC<TradeHeaderProps> = ({ token, livePriceUsd, liveMark
 	const hasWsLiquidity =
 		wsTokenInfo?.liquidity_usd !== undefined && wsTokenInfo.liquidity_usd > 0;
 	const hasTokenLiquidity =
-		(token as any).liquidity_usd !== undefined ||
-		(token as any).total_liquidity_usd !== undefined;
+		(token as any)?.liquidity_usd !== undefined ||
+		(token as any)?.total_liquidity_usd !== undefined;
 	const tokenLiquidity =
-		(token as any).liquidity_usd ?? (token as any).total_liquidity_usd ?? 0;
+		(token as any)?.liquidity_usd ?? (token as any)?.total_liquidity_usd ?? 0;
 	// For Solana: Prefer unified WebSocket, fallback to token data
 	// For Monad: Can also use marketData WebSocket as additional source
 	const wsLiquidityFromMarketData = isSolanaToken
@@ -800,7 +800,7 @@ const TradeHeader: React.FC<TradeHeaderProps> = ({ token, livePriceUsd, liveMark
 	const isLiquidityLoading = isSolanaToken
 		? !hasWsLiquidity && !hasTokenLiquidity
 		: !hasWsLiquidity && !hasTokenLiquidity && !wsLiquidityFromMarketData;
-	const supply = (token as any).total_supply ?? (token as any).supply ?? 1_000_000_000;
+	const supply = (token as any)?.total_supply ?? (token as any)?.supply ?? 1_000_000_000;
 	const formattedMarketCap = useMemo(() => formatMarketCap(mcap), [mcap]);
 	const isLowLiquidity = Number(liq) < 1000;
 
@@ -813,14 +813,14 @@ const TradeHeader: React.FC<TradeHeaderProps> = ({ token, livePriceUsd, liveMark
 			return gp < 1 ? gp * 100 : gp;
 		}
 		const v =
-			(token as any).bonding_pct ??
-			((token as any).bonding_curve_progress != null
-				? (token as any).bonding_curve_progress * 100
+			(token as any)?.bonding_pct ??
+			((token as any)?.bonding_curve_progress != null
+				? (token as any)?.bonding_curve_progress * 100
 				: undefined) ??
-			(token as any).graduationPercent ??
+			(token as any)?.graduationPercent ??
 			0;
 		if (v) return v;
-		const mc = effectiveMarketCap || (token as any).fully_diluted_value || 0;
+		const mc = effectiveMarketCap || (token as any)?.fully_diluted_value || 0;
 		return mc ? Math.min((mc / 69000000) * 100, 100) : 0;
 	})();
 
@@ -828,10 +828,10 @@ const TradeHeader: React.FC<TradeHeaderProps> = ({ token, livePriceUsd, liveMark
 	const columnType = getColumnType(token);
 	// protocolSource is used for getProtocolBranding below
 	const protocolSource =
-		(token as any).launchpad_protocol ||
-		(token as any).protocol ||
-		(token as any).launchpadName ||
-		(token as any).amm ||
+		(token as any)?.launchpad_protocol ||
+		(token as any)?.protocol ||
+		(token as any)?.launchpadName ||
+		(token as any)?.amm ||
 		extractProtocolRaw(token) ||
 		undefined;
 	// Note: isMonadContext is already defined at component level via useMemo
@@ -857,11 +857,11 @@ const TradeHeader: React.FC<TradeHeaderProps> = ({ token, livePriceUsd, liveMark
 	const tokenAny = token as any;
 	const rawImg =
 		wsTokenInfo?.image_url ||
-		tokenAny.logo ||
-		tokenAny.image ||
-		tokenAny.image_url ||
-		token.logo ||
-		tokenAny.uri;
+		tokenAny?.logo ||
+		tokenAny?.image ||
+		tokenAny?.image_url ||
+		token?.logo ||
+		tokenAny?.uri;
 	const computedImgSrc = normalizeAssetUrl(rawImg);
 
 	// Use ref to persist last valid image and prevent flickering
@@ -872,33 +872,33 @@ const TradeHeader: React.FC<TradeHeaderProps> = ({ token, livePriceUsd, liveMark
 	const imgSrc = computedImgSrc || lastValidImgRef.current;
 
 	const fallbackAvatar = `https://ui-avatars.com/api/?name=${encodeURIComponent(
-		token.symbol || token.name || "T",
+		token?.symbol || token?.name || "T",
 	)}&background=0f1012&color=E6E7EA&size=36`;
 
 	const twitterSearchQuery = useMemo(
-		() => `${token.symbol || ""} ${token.name || ""}`.trim(),
-		[token.symbol, token.name],
+		() => `${token?.symbol || ""} ${token?.name || ""}`.trim(),
+		[token?.symbol, token?.name],
 	);
 	const twitterSearchUrl = useMemo(
 		() =>
 			twitterSearchQuery
 				? `https://twitter.com/search?q=${encodeURIComponent(twitterSearchQuery)}`
-				: `https://twitter.com/search?q=${encodeURIComponent(token.symbol || token.name || "")}`,
-		[twitterSearchQuery, token.symbol, token.name],
+				: `https://twitter.com/search?q=${encodeURIComponent(token?.symbol || token?.name || "")}`,
+		[twitterSearchQuery, token?.symbol, token?.name],
 	);
 	const twitterBio = useMemo(() => {
 		const candidates = [
-			(token as any).description,
-			(token as any).bio,
-			(token as any).twitter_bio,
-			(token as any).summary,
+			(token as any)?.description,
+			(token as any)?.bio,
+			(token as any)?.twitter_bio,
+			(token as any)?.summary,
 		];
 		for (const candidate of candidates) {
 			if (!candidate) continue;
 			const value = String(candidate).trim();
 			if (value) return value;
 		}
-		const base = token.symbol || token.name || "token";
+		const base = token?.symbol || token?.name || "token";
 		return `Official ${base} community. Join the conversation!`;
 	}, [token]);
 
@@ -925,9 +925,9 @@ const TradeHeader: React.FC<TradeHeaderProps> = ({ token, livePriceUsd, liveMark
 				price_usd: effectivePrice,
 				usd_price: effectivePrice,
 				price_percent_change_1h:
-					effectivePriceChange1h ?? (token as any).price_percent_change_1h,
+					effectivePriceChange1h ?? (token as any)?.price_percent_change_1h,
 				price_change_1h:
-					effectivePriceChange1h ?? (token as any).price_change_1h,
+					effectivePriceChange1h ?? (token as any)?.price_change_1h,
 				market_cap_usd: effectiveMarketCap,
 				fully_diluted_value: effectiveMarketCap,
 			} as any);
@@ -981,8 +981,8 @@ const TradeHeader: React.FC<TradeHeaderProps> = ({ token, livePriceUsd, liveMark
 	};
 
 	const isPumpToken = useMemo(
-		() => (token.mint || "").slice(-4) === "pump",
-		[token.mint],
+		() => (token?.mint || "").slice(-4) === "pump",
+		[token?.mint],
 	);
 
 	const openLinkInNewTab = (url: string) => {
@@ -1109,12 +1109,12 @@ const TradeHeader: React.FC<TradeHeaderProps> = ({ token, livePriceUsd, liveMark
 									<FastImage
 										src={imgSrc ?? undefined}
 										fallbackSrc={fallbackAvatar}
-										alt={token.name || token.symbol || ""}
+										alt={token?.name || token?.symbol || ""}
 										width={36}
 										height={36}
 										className="h-full w-full object-cover transition-all duration-300"
-										symbol={token.symbol}
-										name={token.name}
+										symbol={token?.symbol}
+										name={token?.name}
 										showBubble={false}
 									/>
 								</div>
@@ -1133,7 +1133,7 @@ const TradeHeader: React.FC<TradeHeaderProps> = ({ token, livePriceUsd, liveMark
 						>
 							<img
 								src={tokenIcon}
-								alt={`${(token as any).launchpad_protocol || (token as any).protocol || (token as any).launchpadName || "Protocol"} logo`}
+								alt={`${(token as any)?.launchpad_protocol || (token as any)?.protocol || (token as any)?.launchpadName || "Protocol"} logo`}
 								className={`${fillProtocolBadge ? "h-full w-full object-cover" : "h-3/4 w-3/4 object-contain"} rounded-full`}
 								style={{
 									filter:
@@ -1170,12 +1170,12 @@ const TradeHeader: React.FC<TradeHeaderProps> = ({ token, livePriceUsd, liveMark
 					{/* Name / symbol / age + quick actions */}
 					<div className="flex min-w-0 flex-1 flex-col">
 						<div className="flex items-center gap-1 sm:gap-1.5">
-							<span className="truncate text-xs sm:text-xl">{token.symbol}</span>
+							<span className="truncate text-xs sm:text-xl">{token?.symbol}</span>
 							<span className="hidden truncate text-[10px] sm:inline sm:text-base" style={{ color: AX.muted }}>
-								{token.name}
+								{token?.name}
 							</span>
 
-							{!!token.mint && (
+							{!!token?.mint && (
 								<DropdownMenu>
 									<DropdownMenuTrigger asChild>
 										<button className="ml-0.5 sm:ml-1 p-0.5 sm:p-1 flex-shrink-0" style={{ color: AX.muted }}>
@@ -1187,7 +1187,7 @@ const TradeHeader: React.FC<TradeHeaderProps> = ({ token, livePriceUsd, liveMark
 										<DropdownMenuItem
 											className="dark:focus:bg-accent focus:bg-accent dark:text-popover-foreground"
 											onClick={async () => {
-												await navigator.clipboard.writeText(token.pair_address);
+												await navigator.clipboard.writeText(token?.pair_address);
 												showToast(`Pair address copied`);
 											}}
 										>
@@ -1197,7 +1197,7 @@ const TradeHeader: React.FC<TradeHeaderProps> = ({ token, livePriceUsd, liveMark
 										<DropdownMenuItem
 											className="dark:focus:bg-accent focus:bg-accent dark:text-popover-foreground"
 											onClick={async () => {
-												await navigator.clipboard.writeText(token.mint);
+												await navigator.clipboard.writeText(token?.mint);
 												showToast(`Contract address copied`);
 											}}
 										>
@@ -1207,44 +1207,44 @@ const TradeHeader: React.FC<TradeHeaderProps> = ({ token, livePriceUsd, liveMark
 										<DropdownMenuItem
 											className="dark:focus:bg-accent focus:bg-accent dark:text-popover-foreground"
 											onClick={async () => {
-												await navigator.clipboard.writeText(token.name);
-												showToast(`${token.name} copied`);
+												await navigator.clipboard.writeText(token?.name);
+												showToast(`${token?.name} copied`);
 											}}
 										>
-											Copy {token.name}
+											Copy {token?.name}
 										</DropdownMenuItem>
 
 										<DropdownMenuItem
 											className="dark:focus:bg-accent focus:bg-accent dark:text-popover-foreground"
 											onClick={() => {
 												window.open(
-													`https://www.google.com/search?q=${encodeURIComponent(token.name)}`,
+													`https://www.google.com/search?q=${encodeURIComponent(token?.name)}`,
 													"_blank",
 												);
 											}}
 										>
-											Google for {token.name}
+											Google for {token?.name}
 										</DropdownMenuItem>
 
 										<DropdownMenuItem
 											className="dark:focus:bg-accent focus:bg-accent dark:text-popover-foreground"
 											onClick={() => {
 												window.open(
-													`https://x.com/search?q=${encodeURIComponent(token.name)}`,
+													`https://x.com/search?q=${encodeURIComponent(token?.name)}`,
 													"_blank",
 												);
 											}}
 										>
-											X search for {token.name}
+											X search for {token?.name}
 										</DropdownMenuItem>
 
 										<DropdownMenuItem
 											className="dark:focus:bg-accent focus:bg-accent dark:text-popover-foreground"
 											onClick={() => {
-												openSearch(token.name);
+												openSearch(token?.name);
 											}}
 										>
-											Search for {token.name}
+											Search for {token?.name}
 										</DropdownMenuItem>
 									</DropdownMenuContent>
 								</DropdownMenu>
@@ -1286,10 +1286,10 @@ const TradeHeader: React.FC<TradeHeaderProps> = ({ token, livePriceUsd, liveMark
 							{/* Socials */}
 							<div className="relative flex items-center gap-0.5 text-neutral-400 sm:gap-1 lg:gap-1">
 								{/* Pump.fun Link - only show for pump tokens */}
-								{/* {token.mint.slice(-4) === "pump" && (
+								{/* {token?.mint.slice(-4) === "pump" && (
                               <Link
                                 target="_blank"
-                                href={`https://pump.fun/coin/${token.mint}`}
+                                href={`https://pump.fun/coin/${token?.mint}`}
                                 className="transition-colors duration-200"
                                 style={{ color: "#ec397a" }}
                                 onMouseEnter={(e) => {
@@ -1396,7 +1396,7 @@ const TradeHeader: React.FC<TradeHeaderProps> = ({ token, livePriceUsd, liveMark
 														<div className="h-12 w-12 rounded-full overflow-hidden bg-[#1a1a1a] flex-shrink-0">
 															<img
 																src={imgSrc || fallbackAvatar}
-																alt={token.symbol}
+																alt={token?.symbol}
 																className="h-full w-full object-cover"
 																onError={(e) => {
 																	(e.target as HTMLImageElement).src = fallbackAvatar;
@@ -1405,13 +1405,13 @@ const TradeHeader: React.FC<TradeHeaderProps> = ({ token, livePriceUsd, liveMark
 														</div>
 														<div>
 															<div className="flex items-center gap-1">
-																<span className="text-white font-bold text-sm">{token.name || token.symbol}</span>
+																<span className="text-white font-bold text-sm">{token?.name || token?.symbol}</span>
 																<svg className="w-4 h-4 text-[#1d9bf0]" viewBox="0 0 24 24" fill="currentColor">
 																	<path d="M22.5 12.5c0-1.58-.875-2.95-2.148-3.6.154-.435.238-.905.238-1.4 0-2.21-1.71-3.998-3.818-3.998-.47 0-.92.084-1.336.25C14.818 2.415 13.51 1.5 12 1.5s-2.816.917-3.437 2.25c-.415-.165-.866-.25-1.336-.25-2.11 0-3.818 1.79-3.818 4 0 .494.083.964.237 1.4-1.272.65-2.147 2.018-2.147 3.6 0 1.495.782 2.798 1.942 3.486-.02.17-.032.34-.032.514 0 2.21 1.708 4 3.818 4 .47 0 .92-.086 1.335-.25.62 1.334 1.926 2.25 3.437 2.25 1.512 0 2.818-.916 3.437-2.25.415.163.865.248 1.336.248 2.11 0 3.818-1.79 3.818-4 0-.174-.012-.344-.033-.513 1.158-.687 1.943-1.99 1.943-3.484zm-6.616-3.334l-4.334 6.5c-.145.217-.382.334-.625.334-.143 0-.288-.04-.416-.126l-.115-.094-2.415-2.415c-.293-.293-.293-.768 0-1.06s.768-.294 1.06 0l1.77 1.767 3.825-5.74c.23-.345.696-.436 1.04-.207.346.23.44.696.21 1.04z" />
 																</svg>
 															</div>
 															<div className="flex items-center gap-1 text-gray-500 text-xs">
-																<span>@{twitterHandle || token.symbol?.toLowerCase()}</span>
+																<span>@{twitterHandle || token?.symbol?.toLowerCase()}</span>
 																<span>·</span>
 																<span>+</span>
 															</div>
@@ -1423,7 +1423,7 @@ const TradeHeader: React.FC<TradeHeaderProps> = ({ token, livePriceUsd, liveMark
 												{/* Bio/Description */}
 												<div className="px-4 py-3">
 													<p className="text-white text-sm leading-relaxed">
-														{token.description || `Official ${token.symbol} token`}
+														{token?.description || `Official ${token?.symbol} token`}
 													</p>
 												</div>
 
@@ -1436,7 +1436,7 @@ const TradeHeader: React.FC<TradeHeaderProps> = ({ token, livePriceUsd, liveMark
 															<line x1="8" y1="2" x2="8" y2="6" strokeWidth="2" />
 															<line x1="3" y1="10" x2="21" y2="10" strokeWidth="2" />
 														</svg>
-														<span>Joined {new Date(token.created_at || Date.now()).toLocaleDateString('en-US', { month: 'short', year: 'numeric' })}</span>
+														<span>Joined {new Date(token?.created_at || Date.now()).toLocaleDateString('en-US', { month: 'short', year: 'numeric' })}</span>
 													</div>
 												</div>
 
@@ -1464,13 +1464,13 @@ const TradeHeader: React.FC<TradeHeaderProps> = ({ token, livePriceUsd, liveMark
 									)}
 								</div>)}
 
-								{token.links && (
+								{token?.links && (
 									<button className="flex-shrink-0">
 										<PiTelegramLogo size={14} className="sm:w-4 sm:h-4" />
 									</button>
 								)}
 
-								{token.links && (
+								{token?.links && (
 									<button className="flex-shrink-0">
 										<FiGlobe size={14} className="sm:w-4 sm:h-4" />
 									</button>
@@ -1539,7 +1539,7 @@ const TradeHeader: React.FC<TradeHeaderProps> = ({ token, livePriceUsd, liveMark
 												className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-sm text-white hover:bg-white/10 transition-colors"
 												onClick={(e) => {
 													e.stopPropagation();
-													const url = `https://twitter.com/search?q=${encodeURIComponent(token.mint || '')}`;
+													const url = `https://twitter.com/search?q=${encodeURIComponent(token?.mint || '')}`;
 													window.open(url, "_blank");
 													setShowSearchMenu(false);
 												}}
@@ -1553,7 +1553,7 @@ const TradeHeader: React.FC<TradeHeaderProps> = ({ token, livePriceUsd, liveMark
 												className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-sm text-white hover:bg-white/10 transition-colors"
 												onClick={(e) => {
 													e.stopPropagation();
-													const searchQuery = `${token.symbol} ${token.name}`.trim();
+													const searchQuery = `${token?.symbol} ${token?.name}`.trim();
 													const url = `https://twitter.com/search?q=${encodeURIComponent(searchQuery)}`;
 													window.open(url, "_blank");
 													setShowSearchMenu(false);
@@ -1571,7 +1571,7 @@ const TradeHeader: React.FC<TradeHeaderProps> = ({ token, livePriceUsd, liveMark
 												className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-sm text-white hover:bg-white/10 transition-colors"
 												onClick={(e) => {
 													e.stopPropagation();
-													const searchQuery = `${token.symbol} ${token.name} crypto`.trim();
+													const searchQuery = `${token?.symbol} ${token?.name} crypto`.trim();
 													const url = `https://www.google.com/search?q=${encodeURIComponent(searchQuery)}`;
 													window.open(url, "_blank");
 													setShowSearchMenu(false);
@@ -1591,7 +1591,7 @@ const TradeHeader: React.FC<TradeHeaderProps> = ({ token, livePriceUsd, liveMark
 												className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-sm text-white hover:bg-white/10 transition-colors"
 												onClick={(e) => {
 													e.stopPropagation();
-													const url = `https://dexscreener.com/solana/${token.mint}`;
+													const url = `https://dexscreener.com/solana/${token?.mint}`;
 													window.open(url, "_blank");
 													setShowSearchMenu(false);
 												}}
@@ -1624,10 +1624,10 @@ const TradeHeader: React.FC<TradeHeaderProps> = ({ token, livePriceUsd, liveMark
 										const devMigratedPct = devCreated > 0 ? Math.round((devMigrated / devCreated) * 100) : 0;
 
 										// Get kol_count from holderSummary (priority) or token
-										const kolCount = holderSummary?.kol_count ?? token.kol_count ?? 0;
+										const kolCount = holderSummary?.kol_count ?? token?.kol_count ?? 0;
 
 										// Get total holders from holderSummary (priority), wsTokenInfo, or token
-										const totalHolders = holderSummary?.total_holders ?? wsTokenInfo?.holder_count ?? token.holder_count ?? token.total_holders ?? (token as any).unique_wallets_24h ?? 0;
+										const totalHolders = holderSummary?.total_holders ?? wsTokenInfo?.holder_count ?? token?.holder_count ?? token?.total_holders ?? (token as any)?.unique_wallets_24h ?? 0;
 
 										return (
 											<>
@@ -1732,7 +1732,7 @@ const TradeHeader: React.FC<TradeHeaderProps> = ({ token, livePriceUsd, liveMark
 								</div>
 
 								{/* Pump.fun Tooltip */}
-								{token.mint?.slice(-4) === "pump" && (
+								{token?.mint?.slice(-4) === "pump" && (
 									<div
 										className="pointer-events-none absolute bottom-full left-1/2 mb-2 -translate-x-1/2 transform rounded px-2 py-1 text-xs font-medium whitespace-nowrap opacity-0 transition-opacity duration-200"
 										style={{
@@ -1939,12 +1939,12 @@ const TradeHeader: React.FC<TradeHeaderProps> = ({ token, livePriceUsd, liveMark
 									<FastImage
 										src={imgSrc ?? undefined}
 										fallbackSrc={fallbackAvatar}
-										alt={`${token.name || token.symbol || ""} avatar`}
+										alt={`${token?.name || token?.symbol || ""} avatar`}
 										width={56}
 										height={56}
 										className="h-full w-full object-cover"
-										symbol={token.symbol}
-										name={token.name}
+										symbol={token?.symbol}
+										name={token?.name}
 										showBubble={false}
 									/>
 								</div>
@@ -1953,10 +1953,10 @@ const TradeHeader: React.FC<TradeHeaderProps> = ({ token, livePriceUsd, liveMark
 										className="text-sm font-semibold"
 										style={{ color: AX.text }}
 									>
-										{token.symbol}
+										{token?.symbol}
 									</div>
 									<div className="text-xs" style={{ color: AX.muted }}>
-										{token.name}
+										{token?.name}
 									</div>
 									<div
 										className="text-[11px] leading-relaxed"
@@ -2041,12 +2041,12 @@ const TradeHeader: React.FC<TradeHeaderProps> = ({ token, livePriceUsd, liveMark
 							<FastImage
 								src={imgSrc ?? undefined}
 								fallbackSrc={fallbackAvatar}
-								alt={`${token.name || token.symbol || ""} - Zoomed`}
+								alt={`${token?.name || token?.symbol || ""} - Zoomed`}
 								width={150}
 								height={150}
 								className="h-full w-full object-cover"
-								symbol={token.symbol}
-								name={token.name}
+								symbol={token?.symbol}
+								name={token?.name}
 								showBubble={false}
 							/>
 
@@ -2058,10 +2058,10 @@ const TradeHeader: React.FC<TradeHeaderProps> = ({ token, livePriceUsd, liveMark
 								}}
 							>
 								<div className="truncate text-xs font-medium text-white">
-									{token.symbol}
+									{token?.symbol}
 								</div>
 								<div className="truncate text-[10px] text-gray-300">
-									{token.name}
+									{token?.name}
 								</div>
 							</div>
 						</div>

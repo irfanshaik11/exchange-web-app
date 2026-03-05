@@ -211,6 +211,46 @@ const AX = {
   teal: "#14b8a6",
 };
 
+function detectNearestRegion(): { name: string; abbr: string } {
+  try {
+    const tz = Intl.DateTimeFormat().resolvedOptions().timeZone; // e.g. "Asia/Tokyo"
+    const region = tz.split("/")[0]; // "Asia", "America", "Europe", etc.
+    const city = tz.split("/")[1] || "";
+
+    // Map to nearest deployed server region
+    // Deployed: Singapore (asia-southeast1), Tokyo (asia-northeast1), US East (us-east4), US West (us-west1)
+
+    if (region === "Asia" || region === "Indian") {
+      // Japan/Korea → Tokyo; everything else in Asia → Singapore
+      if (["Tokyo", "Seoul", "Yakutsk", "Vladivostok", "Magadan", "Kamchatka"].includes(city)) {
+        return { name: "Tokyo", abbr: "JP" };
+      }
+      return { name: "Singapore", abbr: "SG" };
+    }
+
+    if (region === "Australia" || region === "Pacific") {
+      return { name: "Tokyo", abbr: "JP" }; // Closest to Oceania
+    }
+
+    if (region === "America") {
+      // US West Coast + Mountain + Central America → US West
+      const westCities = ["Los_Angeles", "Vancouver", "Denver", "Phoenix", "Anchorage", "Tijuana", "Edmonton", "Boise"];
+      if (westCities.includes(city)) {
+        return { name: "US West", abbr: "USW" };
+      }
+      return { name: "US East", abbr: "USE" }; // Everything else in Americas → US East
+    }
+
+    if (region === "Europe" || region === "Africa") {
+      return { name: "US East", abbr: "USE" }; // Closest deployed region to Europe/Africa
+    }
+
+    return { name: "US East", abbr: "USE" }; // Default fallback
+  } catch {
+    return { name: "US East", abbr: "USE" };
+  }
+}
+
 export default function Footer() {
   const router = useRouter();
   const currentChain = (router.query.chain as string) || "sol";
@@ -250,7 +290,7 @@ export default function Footer() {
   const [isConnected, setIsConnected] = useState(false);
   const [latency, setLatency] = useState<number | null>(null);
   const [modalPosition, setModalPosition] = useState({ bottom: 0, right: 0 });
-  const [selectedRegion, setSelectedRegion] = useState("Europe");
+  const [selectedRegion] = useState(() => detectNearestRegion());
   const globalButtonRef = React.useRef<HTMLButtonElement>(null);
 
   // Load header bar visibility state from localStorage
@@ -851,7 +891,7 @@ export default function Footer() {
               }}
             >
               <span className="text-[11px] leading-none font-medium sm:text-xs">
-                {selectedRegion.substring(0, 2).toUpperCase()}
+                {selectedRegion.abbr}
               </span>
               <FaChevronDown size={11} className="sm:h-3 sm:w-3" />
             </button>
@@ -918,7 +958,7 @@ export default function Footer() {
                               className="text-sm font-medium"
                               style={{ color: AX.text }}
                             >
-                              Europe
+                              {selectedRegion.name}
                             </span>
                           </div>
                           <div className="flex items-center gap-2">

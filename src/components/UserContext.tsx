@@ -849,7 +849,11 @@ export function UserProvider({ children }: { children: ReactNode }) {
       //   );
       // }
 
-      const { user: fetchedUser } = await getUserById(token);
+      const userPromise = getUserById(token);
+      const timeoutPromise = new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error('getUserById timed out after 15s')), 15000)
+      );
+      const { user: fetchedUser } = await Promise.race([userPromise, timeoutPromise]);
 
       console.log("Fetched user from API:", fetchedUser);
       if (fetchedUser) {

@@ -4,6 +4,7 @@ import InterstatePopout from './InterstatePopout';
 import InterstateButton from './InterstateButton';
 import { useWalletTracker } from './WalletTrackerContext';
 import type { TradeEvent } from '~/utils/walletTracking';
+import { preloadTradeChart } from '~/utils/preloadTradeChart';
 
 interface NotificationDropdownProps {
   open: boolean;
@@ -167,10 +168,30 @@ export default function NotificationDropdown({ open, onClose }: NotificationDrop
                 <div
                   key={`${trade.tx}-${trade.at}-${index}`}
                   className="px-5 py-3 border-b border-neutral-800 hover:bg-neutral-800/50 transition-colors cursor-pointer"
+                  onMouseEnter={() => {
+                    if (trade.pair_address || trade.mint) {
+                      const addr = trade.pair_address || trade.mint;
+                      const hoverQP = new URLSearchParams({ chain: 'sol' });
+                      if (trade.name) hoverQP.set('_name', trade.name);
+                      if (trade.symbol) hoverQP.set('_symbol', trade.symbol);
+                      if (trade.mint) hoverQP.set('_mint', trade.mint);
+                      preloadTradeChart({
+                        mint: trade.mint,
+                        pairAddress: trade.pair_address,
+                        chain: 'sol',
+                        name: trade.name,
+                        symbol: trade.symbol,
+                      }, { router, tradeUrl: `/trade/${addr}?${hoverQP.toString()}` });
+                    }
+                  }}
                   onClick={() => {
-                    // Navigate to trade page if pair_address exists
-                    if (trade.pair_address) {
-                      router.push(`/trade/${trade.pair_address}`);
+                    const addr = trade.pair_address || trade.mint;
+                    if (addr) {
+                      const qp = new URLSearchParams({ chain: 'sol' });
+                      if (trade.name) qp.set('_name', trade.name);
+                      if (trade.symbol) qp.set('_symbol', trade.symbol);
+                      if (trade.mint) qp.set('_mint', trade.mint);
+                      router.push(`/trade/${addr}?${qp.toString()}`);
                     }
                     onClose();
                   }}

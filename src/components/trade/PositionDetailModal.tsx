@@ -10,6 +10,7 @@ import { env } from '~/env';
 import toast from 'react-hot-toast';
 import { normalizeMonadAddress } from '~/utils/normalizeMonadAddress';
 import { useWatchlist } from '../WatchlistContext';
+import { preloadTradeChart } from '~/utils/preloadTradeChart';
 
 interface PositionDetailModalProps {
   isOpen: boolean;
@@ -643,6 +644,22 @@ export default function PositionDetailModal({
 
     const queryString = params.toString();
 
+    // Preload chart data before navigation for instant loading
+    if (position.tokenAddress) {
+      const tradeUrl = isMonad
+        ? `/trade/monad/${position.tokenAddress}?${queryString}`
+        : `/trade/${position.tokenAddress}?${queryString}`;
+      preloadTradeChart({
+        mint: position.tokenAddress,
+        pairAddress: (position as any).pairAddress,
+        chain: isMonad ? 'monad' : 'sol',
+        name: tokenMetadata?.name || position.tokenName,
+        symbol: tokenMetadata?.symbol || position.tokenSymbol,
+        marketCapUsd: tokenMetadata?.marketCapUsd,
+        image: displayImage || undefined,
+      }, { router, tradeUrl });
+    }
+
     if (isMonad && position.tokenAddress) {
       router.push(`/trade/monad/${position.tokenAddress}?${queryString}`);
     } else if (position.tokenAddress) {
@@ -1164,6 +1181,33 @@ export default function PositionDetailModal({
         {/* Candlestick Charts Button */}
         <div className="px-4 pb-4">
           <button
+            onMouseEnter={() => {
+              // Preload on hover so click is instant
+              if (position.tokenAddress) {
+                const hoverParams = new URLSearchParams({
+                  mode: 'sell',
+                  tab: 'market',
+                  timeRange: '5m',
+                  sliderPct: '0',
+                });
+                if (tokenMetadata?.name || position.tokenName) hoverParams.set('_name', tokenMetadata?.name || position.tokenName || '');
+                if (tokenMetadata?.symbol || position.tokenSymbol) hoverParams.set('_symbol', tokenMetadata?.symbol || position.tokenSymbol || '');
+                if (displayImage) hoverParams.set('_image', displayImage);
+                if (position.tokenAddress) hoverParams.set('_mint', position.tokenAddress);
+                const hoverUrl = isMonad
+                  ? `/trade/monad/${position.tokenAddress}?${hoverParams.toString()}`
+                  : `/trade/${position.tokenAddress}?${hoverParams.toString()}`;
+                preloadTradeChart({
+                  mint: position.tokenAddress,
+                  pairAddress: (position as any).pairAddress,
+                  chain: isMonad ? 'monad' : 'sol',
+                  name: tokenMetadata?.name || position.tokenName,
+                  symbol: tokenMetadata?.symbol || position.tokenSymbol,
+                  marketCapUsd: tokenMetadata?.marketCapUsd,
+                  image: displayImage || undefined,
+                }, { router, tradeUrl: hoverUrl });
+              }
+            }}
             onClick={handleViewChart}
             className="w-full bg-[#1E1F26] hover:bg-[#2A2B33] text-white text-sm font-medium py-3 px-4 rounded-lg transition-colors border border-[#2A2B33]"
           >

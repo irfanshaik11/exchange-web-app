@@ -95,6 +95,7 @@ import {
   buildMonadWalletAllocations,
 } from "~/utils/monadWalletAllocation";
 import { preloadTokenImages } from "~/utils/imagePreloader";
+import { preloadTradeChart } from "~/utils/preloadTradeChart";
 import { getPoolTypeFromToken } from "~/utils/poolTypeDetection";
 import { TokenAge } from "./TokenAge";
 
@@ -6041,15 +6042,19 @@ function MonadTable({
                     "",
                 ),
                 _image: extractTokenImage(token as any) || "",
-                _mint: (token as any)?.mint || "", // CRITICAL: Required for cache lookup
-                chain: currentChain, // Preserve chain selection
-              }).toString();
+                _mint: (token as any)?.mint || "",
+                chain: currentChain,
+              });
+              if ((token as any)?.launchpad_protocol) queryParams.set('_launchpad_protocol', (token as any).launchpad_protocol);
+              if ((token as any)?.total_liquidity_usd) queryParams.set('_liquidity', String((token as any).total_liquidity_usd));
+              if ((token as any)?.created_at) queryParams.set('_created_at', String((token as any).created_at));
+              const queryParamsStr = queryParams.toString();
 
               return (
                 <div key={pairAddress} style={style}>
                 <div style={{ paddingBottom: '4px' }}>
                 <Link
-                  href={`/trade/monad/${pairAddress}?${queryParams}`}
+                  href={`/trade/monad/${pairAddress}?${queryParamsStr}`}
                   className="token-row group relative flex w-full max-w-full shrink-0 cursor-pointer flex-row items-start gap-2 overflow-hidden rounded-lg px-2 py-1.5 text-sm"
                   style={{
                     color: AX.text,
@@ -6057,45 +6062,19 @@ function MonadTable({
                     border: "1px solid #1e2028",
                   }}
                   onMouseEnter={(e) => {
-                    // PHASE 3: Use CSS class instead of inline style (GPU-accelerated)
                     e.currentTarget.classList.add('row-hovered');
 
-                    // Prefetch Monad trade page for instant navigation
-                    router.prefetch(
-                      `/trade/monad/${pairAddress}?${queryParams}`,
-                    );
-
-                    // Cache token metadata for instant display
-                    try {
-                      const tokenMetadata = {
-                        name: (token as any)?.name || "",
-                        symbol: (token as any)?.symbol || "",
-                        price_usd:
-                          (token as any)?.price_usd ||
-                          (token as any)?.priceUsd ||
-                          0,
-                        market_cap_usd:
-                          (token as any)?.market_cap_usd ||
-                          (token as any)?.marketCapUSD ||
-                          0,
-                        image: extractTokenImage(token as any) || "",
-                        mint: (token as any)?.mint || "",
-                        pair_address: pairAddress,
-                        timestamp: Date.now(),
-                      };
-                      localStorage.setItem(
-                        `token_metadata_${pairAddress}`,
-                        JSON.stringify(tokenMetadata),
-                      );
-                      console.log(
-                        `[PulseTable] Cached token metadata for ${pairAddress}`,
-                      );
-                    } catch (error) {
-                      console.warn(
-                        "[PulseTable] Failed to cache token metadata:",
-                        error,
-                      );
-                    }
+                    preloadTradeChart({
+                      mint: (token as any)?.mint || "",
+                      pairAddress,
+                      chain: 'monad',
+                      name: (token as any)?.name,
+                      symbol: (token as any)?.symbol,
+                      priceUsd: (token as any)?.price_usd || (token as any)?.priceUsd,
+                      marketCapUsd: (token as any)?.market_cap_usd || (token as any)?.marketCapUSD,
+                      image: extractTokenImage(token as any) || "",
+                      launchpadProtocol: (token as any)?.launchpad_protocol,
+                    }, { router, tradeUrl: `/trade/monad/${pairAddress}?${queryParamsStr}` });
 
                     // Show the status popup via CSS class
                     const popup = e.currentTarget.querySelector(

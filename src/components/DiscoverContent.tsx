@@ -19,6 +19,7 @@ import { validateSolanaBuy, showTradeValidationError } from "~/utils/preTradeVal
 import { checkAtaExists } from "~/utils/ataCheck";
 import { buildSolanaWalletAllocations } from "~/utils/solanaWalletAllocation";
 import { getResolvedTokenImage } from "~/utils/images";
+import { preloadTradeChart } from "~/utils/preloadTradeChart";
 import { useUser } from "./UserContext";
 import PumpLive, { type PumpItem } from './PumpLive';
 import { FaRunning, FaGasPump, FaCoins, FaBan } from "react-icons/fa";
@@ -1349,8 +1350,25 @@ export default function DiscoverContent() {
               leftItems={liveLeftItems}
               rightItems={liveRightItems}
               onAction={(id, rawToken) => {
-                // Navigate immediately — don't block on backfill or prefetch
-                router.push(`/trade/${id}?chain=sol`);
+                // Preload trade chart immediately
+                if (id && rawToken) {
+                  preloadTradeChart({
+                    mint: rawToken.mint || id,
+                    pairAddress: rawToken.pair_address || rawToken.bondingCurveKey,
+                    chain: 'sol',
+                    name: rawToken.name,
+                    symbol: rawToken.symbol,
+                    image: rawToken.uri || "",
+                    marketCapUsd: rawToken.market_cap_usd || (rawToken.marketCapSol ? rawToken.marketCapSol * 170 : undefined),
+                  }, { router });
+                }
+                // Navigate with query params for optimistic UI
+                const qp = new URLSearchParams({ chain: 'sol' });
+                if (rawToken?.name) qp.set('_name', rawToken.name);
+                if (rawToken?.symbol) qp.set('_symbol', rawToken.symbol);
+                if (rawToken?.uri) qp.set('_image', rawToken.uri);
+                if (rawToken?.mint) qp.set('_mint', rawToken.mint);
+                router.push(`/trade/${id}?${qp.toString()}`);
 
                 // Fire-and-forget: backfill token in background
                 if (rawToken) {

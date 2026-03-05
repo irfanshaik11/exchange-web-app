@@ -587,7 +587,7 @@ const formatSolSubscript = (value: number): string => {
 export default function ArenaPage() {
   const { user } = useUser();
   const { data: stats } = useArenaStats();
-  const { data: questsData } = useQuests();
+  const { data: questsData, isError: questsError, isLoading: questsLoading } = useQuests();
   useCashbackSummary(); // Hook called for potential cache warming
   const claimCashbackMutation = useClaimCashback();
   const queryClient = useQueryClient();
@@ -1016,7 +1016,16 @@ export default function ArenaPage() {
                       <CountdownDisplay hours={countdown.hours} minutes={countdown.minutes} seconds={countdown.seconds} />
                     </div>
                     <div className="space-y-2">
-                      {dailyQuests.length > 0 ? (
+                      {questsError ? (
+                        <div className="text-center py-6 text-red-400 text-sm">
+                          <p>Failed to load quests.</p>
+                          <p className="text-xs mt-1 text-red-500/70">Please try refreshing the page.</p>
+                        </div>
+                      ) : questsLoading ? (
+                        <div className="text-center py-6 text-neutral-500 text-sm">
+                          <p>Loading quests...</p>
+                        </div>
+                      ) : dailyQuests.length > 0 ? (
                         dailyQuests.map((quest: any, idx: number) => (
                           <QuestItem key={quest.id} quest={quest} index={idx} />
                         ))
@@ -1038,7 +1047,16 @@ export default function ArenaPage() {
                       <h3 className="text-white font-bold">Seasonal Quests</h3>
                     </div>
                     <div className="space-y-2">
-                      {seasonalQuests.length > 0 ? (
+                      {questsError ? (
+                        <div className="text-center py-6 text-red-400 text-sm">
+                          <p>Failed to load quests.</p>
+                          <p className="text-xs mt-1 text-red-500/70">Please try refreshing the page.</p>
+                        </div>
+                      ) : questsLoading ? (
+                        <div className="text-center py-6 text-neutral-500 text-sm">
+                          <p>Loading quests...</p>
+                        </div>
+                      ) : seasonalQuests.length > 0 ? (
                         seasonalQuests.map((quest: any, idx: number) => (
                           <QuestItem key={quest.id} quest={quest} index={idx} />
                         ))
