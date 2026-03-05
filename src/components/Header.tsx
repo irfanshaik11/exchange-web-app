@@ -1312,7 +1312,7 @@ export default function Header({
               linkEl.className = "";
             }
             // Fire early so Portfolio refetches immediately when Solscan link appears
-            broadcastTradeCompleted({ tokenAddress: baseMint, tradeType: 'buy', chain: 'sol', txHash });
+            broadcastTradeCompleted({ tokenAddress: baseMint, tradeType: 'buy', chain: 'sol', txHash, tokenName: token.name, tokenSymbol: token.symbol, imageUrl: tokenImage, solAmountSpent: quickBuyAmount });
           }
         },
       });

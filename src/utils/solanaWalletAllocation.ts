@@ -681,6 +681,10 @@ export async function executeSolanaMultiBuy({
     tradeType: 'buy',
     chain: 'sol',
     txHash: firstTxHash || undefined,
+    tokenName,
+    tokenSymbol,
+    imageUrl,
+    solAmountSpent: amountSOL,
   });
 
   return {

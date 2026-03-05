@@ -178,6 +178,9 @@ type MultiBuyParams = {
   walletList?: WalletListItem[];
   walletBalances?: Record<string, number>;
   selectedWalletIds?: string[];
+  tokenName?: string;
+  tokenSymbol?: string;
+  imageUrl?: string;
   onWalletStart?: (ctx: {
     allocation: MonadWalletAllocation;
     index: number;
@@ -217,6 +220,9 @@ export async function executeMonadMultiBuy({
   onWalletStart,
   onWalletSuccess,
   onWalletError,
+  tokenName,
+  tokenSymbol,
+  imageUrl,
 }: MultiBuyParams) {
   const { allocations, total } = buildMonadWalletAllocations({
     amount: amountMON,
@@ -314,7 +320,7 @@ export async function executeMonadMultiBuy({
         }
 
         const firstTxHash = multiResult.txHashes?.[0];
-        broadcastTradeCompleted({ tokenAddress, tradeType: 'buy', chain: 'monad', txHash: firstTxHash || undefined });
+        broadcastTradeCompleted({ tokenAddress, tradeType: 'buy', chain: 'monad', txHash: firstTxHash || undefined, tokenName, tokenSymbol, imageUrl, solAmountSpent: amountMON });
 
         return {
           allocations: effectiveAllocations,
@@ -422,6 +428,10 @@ export async function executeMonadMultiBuy({
     tradeType: 'buy',
     chain: 'monad',
     txHash: firstTxHash || undefined,
+    tokenName,
+    tokenSymbol,
+    imageUrl,
+    solAmountSpent: amountMON,
   });
 
   return {

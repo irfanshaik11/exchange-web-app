@@ -193,6 +193,8 @@ const Positions: React.FC<PositionsProps> = ({
   const lastTradeTimestampRef = useRef<number>(0);
   // Ref for debouncing position fetches
   const debouncedFetchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Refs for post-buy retry backoff timers
+  const buyRetryTimersRef = useRef<ReturnType<typeof setTimeout>[]>([]);
 
   // Keep refs in sync with state
   useEffect(() => {
@@ -1152,8 +1154,81 @@ const Positions: React.FC<PositionsProps> = ({
             })
             .filter((p) => !(p as any)._shouldRemove)
         );
+        debouncedFetchPositions(500);
+      } else if (detail?.tradeType === 'buy' && detail.tokenAddress) {
+        // Optimistic buy insertion: show the token immediately with a shimmer
+        const addr = detail.tokenAddress.toLowerCase();
+        const existing = positionsRef.current.find(
+          (p) => p.tokenAddress.toLowerCase() === addr
+        );
+        if (!existing) {
+          const optimisticRow: PositionRow & { _isOptimistic?: boolean } = {
+            tokenAddress: detail.tokenAddress,
+            tokenName: detail.tokenName || null,
+            tokenSymbol: detail.tokenSymbol || null,
+            imageUrl: detail.imageUrl || null,
+            blockchain: detail.chain === 'monad' ? 'monad' : 'solana',
+            bought: 0,
+            boughtUsdValue: detail.solAmountSpent || 0,
+            sold: 0,
+            soldUsdValue: 0,
+            remaining: 1, // Placeholder non-zero to pass filter
+            remainingUsdValue: detail.solAmountSpent || 0,
+            pnl: 0,
+            pnlPercentage: 0,
+            actions: '',
+            _isOptimistic: true,
+          };
+          setPositions((prev) => {
+            // Double-check it wasn't added between the ref check and state update
+            if (prev.some((p) => p.tokenAddress.toLowerCase() === addr)) return prev;
+            const next = [optimisticRow as PositionRow, ...prev];
+            // Update localStorage cache with optimistic entry
+            try {
+              window.localStorage.setItem(positionsCacheKey, JSON.stringify({
+                data: next,
+                timestamp: Date.now(),
+              }));
+            } catch {}
+            return next;
+          });
+        } else if ((existing as any)._isOptimistic && (detail.tokenName || detail.imageUrl)) {
+          // Update metadata on existing optimistic row (e.g. second broadcast from caller has richer info)
+          setPositions((prev) => prev.map((p) => {
+            if (p.tokenAddress.toLowerCase() === addr && (p as any)._isOptimistic) {
+              return {
+                ...p,
+                tokenName: detail.tokenName || p.tokenName,
+                tokenSymbol: detail.tokenSymbol || p.tokenSymbol,
+                imageUrl: detail.imageUrl || p.imageUrl,
+                boughtUsdValue: detail.solAmountSpent || p.boughtUsdValue,
+                remainingUsdValue: detail.solAmountSpent || p.remainingUsdValue,
+              };
+            }
+            return p;
+          }));
+        }
+
+        // Progressive retry backoff: fetch at 500ms, 1.5s, 3s, 5s
+        // Stop early if WS already delivered real position data
+        buyRetryTimersRef.current.forEach(clearTimeout);
+        buyRetryTimersRef.current = [];
+        const retryDelays = [500, 1500, 3000, 5000];
+        for (const delay of retryDelays) {
+          const timer = setTimeout(() => {
+            // Check if optimistic entry was already replaced by real data
+            const stillOptimistic = positionsRef.current.some(
+              (p) => p.tokenAddress.toLowerCase() === addr && (p as any)._isOptimistic
+            );
+            if (stillOptimistic) {
+              fetchPositions();
+            }
+          }, delay);
+          buyRetryTimersRef.current.push(timer);
+        }
+      } else {
+        debouncedFetchPositions(500);
       }
-      debouncedFetchPositions(500);
     };
     window.addEventListener(TRADE_COMPLETED_EVENT, handleTradeCompleted);
 
@@ -1181,9 +1256,9 @@ const Positions: React.FC<PositionsProps> = ({
         } else {
           const idx = prev.findIndex((p) => p.tokenAddress.toLowerCase() === addr);
           if (idx >= 0) {
-            // Update existing position in-place
+            // Full replace — removes _isOptimistic flag when real data arrives
             next = [...prev];
-            next[idx] = { ...prev[idx], ...position };
+            next[idx] = { ...position };
           } else {
             // New position (buy) — prepend to top
             next = [position as PositionRow, ...prev];
@@ -1236,6 +1311,8 @@ const Positions: React.FC<PositionsProps> = ({
     return () => {
       clearInterval(intervalId);
       if (debouncedFetchTimerRef.current) clearTimeout(debouncedFetchTimerRef.current);
+      buyRetryTimersRef.current.forEach(clearTimeout);
+      buyRetryTimersRef.current = [];
       window.removeEventListener('solanaQuickTrade', handleQuickTradeEvent);
       window.removeEventListener(TRADE_COMPLETED_EVENT, handleTradeCompleted);
       window.removeEventListener('solanaPositionsChanged', handlePositionsChanged);
@@ -1498,12 +1575,14 @@ const Positions: React.FC<PositionsProps> = ({
                 });
               }
               
+              const isOptimistic = !!(pos as any)._isOptimistic;
+
               return (
               <tr
                 key={pos.tokenAddress || idx}
                 className={`border-b border-white/[0.06] hover:bg-white/[0.04] cursor-pointer transition-colors ${
                   isHidden ? 'opacity-40 bg-neutral-900/30' : ''
-                }`}
+                } ${isOptimistic ? 'animate-pulse' : ''}`}
                 onMouseEnter={() => {
                   if (!pos.tokenAddress) return;
                   // Build tradeUrl matching handleTokenNavigation exactly
@@ -1604,46 +1683,57 @@ const Positions: React.FC<PositionsProps> = ({
                     </div>
                   </div>
                 </td>
-                <td className="px-3 py-2.5">
-                  <div className="flex items-baseline gap-1">
-                    {renderTokenAmount(corrected.correctedBought)}
-                    <span className="text-neutral-400">
+                {isOptimistic ? (
+                  <>
+                    <td className="px-3 py-2.5" colSpan={3}>
+                      <span className="text-xs text-neutral-400 italic">Confirming...</span>
+                    </td>
+                    <td className="px-3 py-2.5 text-neutral-500 text-xs">—</td>
+                  </>
+                ) : (
+                  <>
+                    <td className="px-3 py-2.5">
+                      <div className="flex items-baseline gap-1">
+                        {renderTokenAmount(corrected.correctedBought)}
+                        <span className="text-neutral-400">
+                          {showInSOL && solPrice > 0
+                            ? <>(<SolIcon />{formatSmartNumber(sourcePosition.boughtUsdValue / solPrice)})</>
+                            : `($${formatSmallPrice(Math.max(0, sourcePosition.boughtUsdValue || 0))})`
+                          }
+                        </span>
+                      </div>
+                    </td>
+                    <td className="px-3 py-2.5">
+                      <div className="flex items-baseline gap-1">
+                        {renderTokenAmount(corrected.correctedSold)}
+                        <span className="text-neutral-400">
+                          {showInSOL && solPrice > 0
+                            ? <>(<SolIcon />{formatSmartNumber(corrected.correctedSoldUsdValue / solPrice)})</>
+                            : `($${formatSmallPrice(corrected.correctedSoldUsdValue)})`
+                          }
+                        </span>
+                      </div>
+                    </td>
+                    <td className="px-3 py-2.5">
+                      <div className="flex items-baseline gap-1">
+                        {renderTokenAmount(corrected.correctedRemaining)}
+                        <span className="text-neutral-400">
+                          {showInSOL && solPrice > 0
+                            ? <>(<SolIcon />{formatSmartNumber(corrected.correctedRemainingUsdValue / solPrice)})</>
+                            : `($${formatSmallPrice(corrected.correctedRemainingUsdValue)})`
+                          }
+                        </span>
+                      </div>
+                    </td>
+                    <td className={`px-3 py-2.5 font-semibold ${displayPnl >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
                       {showInSOL && solPrice > 0
-                        ? <>(<SolIcon />{formatSmartNumber(sourcePosition.boughtUsdValue / solPrice)})</>
-                        : `($${formatSmallPrice(Math.max(0, sourcePosition.boughtUsdValue || 0))})`
+                        ? <>{displayPnl >= 0 ? '+' : ''}<SolIcon />{formatSmartNumber(Math.abs(displayPnl) / solPrice)}</>
+                        : `${displayPnl >= 0 ? '+' : ''}$${formatSmallPrice(Math.abs(displayPnl))}`
                       }
-                    </span>
-                  </div>
-                </td>
-                <td className="px-3 py-2.5">
-                  <div className="flex items-baseline gap-1">
-                    {renderTokenAmount(corrected.correctedSold)}
-                    <span className="text-neutral-400">
-                      {showInSOL && solPrice > 0
-                        ? <>(<SolIcon />{formatSmartNumber(corrected.correctedSoldUsdValue / solPrice)})</>
-                        : `($${formatSmallPrice(corrected.correctedSoldUsdValue)})`
-                      }
-                    </span>
-                  </div>
-                </td>
-                <td className="px-3 py-2.5">
-                  <div className="flex items-baseline gap-1">
-                    {renderTokenAmount(corrected.correctedRemaining)}
-                    <span className="text-neutral-400">
-                      {showInSOL && solPrice > 0
-                        ? <>(<SolIcon />{formatSmartNumber(corrected.correctedRemainingUsdValue / solPrice)})</>
-                        : `($${formatSmallPrice(corrected.correctedRemainingUsdValue)})`
-                      }
-                    </span>
-                  </div>
-                </td>
-                <td className={`px-3 py-2.5 font-semibold ${displayPnl >= 0 ? 'text-emerald-400' : 'text-red-400'}`}> 
-                  {showInSOL && solPrice > 0
-                    ? <>{displayPnl >= 0 ? '+' : ''}<SolIcon />{formatSmartNumber(Math.abs(displayPnl) / solPrice)}</>
-                    : `${displayPnl >= 0 ? '+' : ''}$${formatSmallPrice(Math.abs(displayPnl))}`
-                  }
-                  <span className="ml-1 text-xs">({formatSmallPrice(displayPnlPercentage)}%)</span>
-                </td>
+                      <span className="ml-1 text-xs">({formatSmallPrice(displayPnlPercentage)}%)</span>
+                    </td>
+                  </>
+                )}
                 <td className="px-3 py-2.5">
                   <div className="flex items-center gap-2">
                     <InterstateTooltip label={isHidden ? "Show token" : "Hide token"}>

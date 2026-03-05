@@ -2763,7 +2763,7 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
                 linkEl.className = '';
               }
               // Fire early so Portfolio refetches immediately when Solscan link appears
-              broadcastTradeCompleted({ tokenAddress: baseMint, tradeType: 'buy', chain: 'sol', txHash });
+              broadcastTradeCompleted({ tokenAddress: baseMint, tradeType: 'buy', chain: 'sol', txHash, tokenName: token.name, tokenSymbol: token.symbol, imageUrl: tokenImage, solAmountSpent: amount });
             }
           },
         });
@@ -2843,7 +2843,7 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
           }
         }, 2000);
 
-        broadcastTradeCompleted({ tokenAddress: token.mint, tradeType: 'buy', chain: 'sol' });
+        broadcastTradeCompleted({ tokenAddress: token.mint, tradeType: 'buy', chain: 'sol', tokenName: token.name, tokenSymbol: token.symbol, imageUrl: tokenImage, solAmountSpent: amount });
         setSuccessMessage(`✅ Bought ${tokenName} successfully!`);
         setIsLoading(false);
         return { success: true };

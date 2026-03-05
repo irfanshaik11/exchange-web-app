@@ -3539,7 +3539,7 @@ function PulseTable({
               linkEl.className = "";
             }
             // Fire early so Portfolio refetches immediately when Solscan link appears
-            broadcastTradeCompleted({ tokenAddress: baseMint, tradeType: 'buy', chain: 'sol', txHash });
+            broadcastTradeCompleted({ tokenAddress: baseMint, tradeType: 'buy', chain: 'sol', txHash, tokenName: token.name, tokenSymbol: token.symbol, imageUrl: tokenImage, solAmountSpent: buyAmount });
           }
         },
       });
@@ -3577,7 +3577,7 @@ function PulseTable({
         );
       }
       dispatchBalanceRefresh('sol');
-      broadcastTradeCompleted({ tokenAddress: token.mint, tradeType: 'buy', chain: 'sol' });
+      broadcastTradeCompleted({ tokenAddress: token.mint, tradeType: 'buy', chain: 'sol', tokenName: token.name, tokenSymbol: token.symbol, imageUrl: tokenImage, solAmountSpent: buyAmount });
 
       return { success: true };
     } catch (error: any) {
