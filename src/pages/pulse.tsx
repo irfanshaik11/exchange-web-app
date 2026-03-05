@@ -103,6 +103,14 @@ const PLATFORM_UPDATES = [
   },
 ];
 
+// Module-level Solana token cache — survives SPA navigation (tab lifetime).
+// Same pattern as _hadDataByTitle in PulseTable.tsx / MonadTable.tsx.
+const _lastSolanaTokens = {
+  newPairs: [] as any[],
+  finalStretch: [] as any[],
+  migrated: [] as any[],
+};
+
 export default function PulsePage() {
   // Tab navigation state - MOBILE VIEW DISABLED
   const [activeTab, setActiveTab] = useState<
@@ -384,45 +392,45 @@ export default function PulsePage() {
   const [httpFinalStretch, setHttpFinalStretch] = useState<any[]>([]);
   const [httpFinalStretchTick, setHttpFinalStretchTick] = useState(0);
 
-  // Monad-specific state for all three tabs (hydrated from localStorage async)
-  const [monadNew, setMonadNew] = useState<any[]>([]);
-  const [monadNewTick, setMonadNewTick] = useState(0);
-  const [monadFinalStretch, setMonadFinalStretch] = useState<any[]>([]);
-  const [monadFinalStretchTick, setMonadFinalStretchTick] = useState(0);
-  const [monadMigrated, setMonadMigrated] = useState<any[]>([]);
-  const [monadMigratedTick, setMonadMigratedTick] = useState(0);
-
-  // Deferred localStorage hydration — avoids blocking main thread with 3x JSON.parse on mount
-  useEffect(() => {
-    const hydrate = () => {
-      const cacheKeys = [
-        { key: "cached_monad_new_tokens", setter: setMonadNew },
-        { key: "cached_monad_final_stretch_tokens", setter: setMonadFinalStretch },
-        { key: "cached_monad_migrated_tokens", setter: setMonadMigrated },
-      ];
-      for (const { key, setter } of cacheKeys) {
-        try {
-          const cached = localStorage.getItem(key);
-          if (cached) {
-            const parsed = JSON.parse(cached);
-            if (Date.now() < parsed.expiresAt) {
-              setter(parsed.data || []);
-            }
-          }
-        } catch (error) {
-          console.warn(`Failed to load ${key} on init:`, error);
-        }
+  // Monad-specific state for all three tabs
+  // Synchronous localStorage hydration — eliminates empty-frame flash on remount
+  // (~21KB total parse cost is <1ms, negligible vs the visual glitch it prevents)
+  const [monadNew, setMonadNew] = useState<any[]>(() => {
+    if (typeof window === 'undefined') return [];
+    try {
+      const cached = localStorage.getItem('cached_monad_new_tokens');
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        if (Date.now() < parsed.expiresAt) return parsed.data || [];
       }
-    };
-    if (typeof requestIdleCallback !== "undefined") {
-      const id = requestIdleCallback(hydrate);
-      return () => cancelIdleCallback(id);
-    } else {
-      // Safari fallback
-      const id = setTimeout(hydrate, 0);
-      return () => clearTimeout(id);
-    }
-  }, []);
+    } catch {}
+    return [];
+  });
+  const [monadNewTick, setMonadNewTick] = useState(0);
+  const [monadFinalStretch, setMonadFinalStretch] = useState<any[]>(() => {
+    if (typeof window === 'undefined') return [];
+    try {
+      const cached = localStorage.getItem('cached_monad_final_stretch_tokens');
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        if (Date.now() < parsed.expiresAt) return parsed.data || [];
+      }
+    } catch {}
+    return [];
+  });
+  const [monadFinalStretchTick, setMonadFinalStretchTick] = useState(0);
+  const [monadMigrated, setMonadMigrated] = useState<any[]>(() => {
+    if (typeof window === 'undefined') return [];
+    try {
+      const cached = localStorage.getItem('cached_monad_migrated_tokens');
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        if (Date.now() < parsed.expiresAt) return parsed.data || [];
+      }
+    } catch {}
+    return [];
+  });
+  const [monadMigratedTick, setMonadMigratedTick] = useState(0);
 
   // Function to fetch token image from backend
   const fetchTokenImage = useCallback(
@@ -915,8 +923,12 @@ export default function PulsePage() {
     // For Solana: stop loading if ANY data source has delivered data
     const hasHttpData = tokens.length > 0 || (launchpadData?.new?.length ?? 0) > 0;
     const hasWsData = wsNewTokens.length > 0 || wsFinalStretchTokens.length > 0 || wsMigratedTokens.length > 0;
+    const hasCachedData =
+      _lastSolanaTokens.newPairs.length > 0 ||
+      _lastSolanaTokens.finalStretch.length > 0 ||
+      _lastSolanaTokens.migrated.length > 0;
 
-    if (hasHttpData || hasWsData) {
+    if (hasHttpData || hasWsData || hasCachedData) {
       return false;
     }
 
@@ -1529,6 +1541,21 @@ export default function PulsePage() {
     : finalStretchToShow;
   const enrichedMigrated = isMonadRoute ? monadMigrated : migratedToShow;
 
+  // Write to module-level Solana cache when data is present
+  if (!isMonadRoute) {
+    if (enrichedNewPairsToShow.length > 0) _lastSolanaTokens.newPairs = enrichedNewPairsToShow;
+    if (enrichedFinalStretch.length > 0)   _lastSolanaTokens.finalStretch = enrichedFinalStretch;
+    if (enrichedMigrated.length > 0)       _lastSolanaTokens.migrated = enrichedMigrated;
+  }
+
+  // Fall back to cached data when hooks haven't resolved yet (Frame 0 on remount)
+  const displayNewPairs = (!isMonadRoute && enrichedNewPairsToShow.length === 0 && _lastSolanaTokens.newPairs.length > 0)
+    ? _lastSolanaTokens.newPairs : enrichedNewPairsToShow;
+  const displayFinalStretch = (!isMonadRoute && enrichedFinalStretch.length === 0 && _lastSolanaTokens.finalStretch.length > 0)
+    ? _lastSolanaTokens.finalStretch : enrichedFinalStretch;
+  const displayMigrated = (!isMonadRoute && enrichedMigrated.length === 0 && _lastSolanaTokens.migrated.length > 0)
+    ? _lastSolanaTokens.migrated : enrichedMigrated;
+
   // DEBUG: Log what's being passed to MonadTable
   useEffect(() => {
     if (isMonadRoute) {
@@ -1684,7 +1711,7 @@ export default function PulsePage() {
                           : "bg-neutral-800 text-neutral-400"
                       }`}
                     >
-                      {enrichedNewPairsToShow.length}
+                      {displayNewPairs.length}
                     </span>
                   </div>
                 </button>
@@ -1705,7 +1732,7 @@ export default function PulsePage() {
                           : "bg-neutral-800 text-neutral-400"
                       }`}
                     >
-                      {enrichedFinalStretch.length}
+                      {displayFinalStretch.length}
                     </span>
                   </div>
                 </button>
@@ -1726,7 +1753,7 @@ export default function PulsePage() {
                           : "bg-neutral-800 text-neutral-400"
                       }`}
                     >
-                      {enrichedMigrated.length}
+                      {displayMigrated.length}
                     </span>
                   </div>
                 </button>
@@ -1742,7 +1769,7 @@ export default function PulsePage() {
                   {activeTab === "new" && (
                     <BnbTable
                       title="New Pairs"
-                      tokens={enrichedNewPairsToShow as any}
+                      tokens={displayNewPairs as any}
                       loading={newPairsLoading}
                       isFirstOrLast="only"
                       showBubbleMetrics={false}
@@ -1751,7 +1778,7 @@ export default function PulsePage() {
                   {activeTab === "final-stretch" && (
                     <BnbTable
                       title="Final Stretch"
-                      tokens={enrichedFinalStretch as any}
+                      tokens={displayFinalStretch as any}
                       isFirstOrLast="only"
                       showBubbleMetrics={false}
                     />
@@ -1759,7 +1786,7 @@ export default function PulsePage() {
                   {activeTab === "migrated" && (
                     <BnbTable
                       title="Migrated"
-                      tokens={enrichedMigrated as any}
+                      tokens={displayMigrated as any}
                       isFirstOrLast="only"
                       showBubbleMetrics={false}
                     />
@@ -1771,19 +1798,19 @@ export default function PulsePage() {
               {/* <div className="flex min-h-0 w-full flex-1 flex-row overflow-hidden">
                 <BnbTable
                   title="New Pairs"
-                  tokens={enrichedNewPairsToShow as any}
+                  tokens={displayNewPairs as any}
                   loading={newPairsLoading}
                   isFirstOrLast="first"
                   showBubbleMetrics={false}
                 />
                 <BnbTable
                   title="Final Stretch"
-                  tokens={enrichedFinalStretch as any}
+                  tokens={displayFinalStretch as any}
                   showBubbleMetrics={false}
                 />
                 <BnbTable
                   title="Migrated"
-                  tokens={enrichedMigrated as any}
+                  tokens={displayMigrated as any}
                   isFirstOrLast="last"
                   showBubbleMetrics={false}
                 />
@@ -1797,8 +1824,8 @@ export default function PulsePage() {
                   {activeTab === "new" && (
                     <MonadTable
                       title="New Pairs"
-                      tokens={enrichedNewPairsToShow}
-                      loading={false}
+                      tokens={displayNewPairs}
+                      loading={isLoading}
                       isFirstOrLast="only"
                       showBubbleMetrics={false}
                     />
@@ -1806,7 +1833,8 @@ export default function PulsePage() {
                   {activeTab === "final-stretch" && (
                     <MonadTable
                       title="Final Stretch"
-                      tokens={enrichedFinalStretch}
+                      tokens={displayFinalStretch}
+                      loading={isLoading}
                       isFirstOrLast="only"
                       showBubbleMetrics={false}
                     />
@@ -1814,7 +1842,8 @@ export default function PulsePage() {
                   {activeTab === "migrated" && (
                     <MonadTable
                       title="Migrated"
-                      tokens={enrichedMigrated}
+                      tokens={displayMigrated}
+                      loading={isLoading}
                       isFirstOrLast="only"
                       showBubbleMetrics={false}
                     />
@@ -1825,21 +1854,23 @@ export default function PulsePage() {
               <div className="hidden min-h-0 w-full flex-1 flex-row overflow-hidden lg:flex gap-3">
                 <MonadTable
                   title="New Pairs"
-                  tokens={enrichedNewPairsToShow}
-                  loading={false}
+                  tokens={displayNewPairs}
+                  loading={isLoading}
                   isFirstOrLast="first"
                   showBubbleMetrics={false}
                   currentChain={currentChain}
                 />
                 <MonadTable
                   title="Final Stretch"
-                  tokens={enrichedFinalStretch}
+                  tokens={displayFinalStretch}
+                  loading={isLoading}
                   showBubbleMetrics={false}
                   currentChain={currentChain}
                 />
                 <MonadTable
                   title="Migrated"
-                  tokens={enrichedMigrated}
+                  tokens={displayMigrated}
+                  loading={isLoading}
                   isFirstOrLast="last"
                   showBubbleMetrics={false}
                   currentChain={currentChain}
@@ -1853,7 +1884,7 @@ export default function PulsePage() {
             <div className="flex min-h-0 w-full flex-1 flex-row overflow-hidden rounded-lg border border-white/[0.06] bg-white/[0.03] backdrop-blur-xl">
               <PulseTable
                 title="New Pairs"
-                tokens={enrichedNewPairsToShow as any}
+                tokens={displayNewPairs as any}
                 loading={true}
                 isFirstOrLast="first"
                 showBubbleMetrics={false}
@@ -1861,14 +1892,14 @@ export default function PulsePage() {
               />
               <PulseTable
                 title="Final Stretch"
-                tokens={enrichedFinalStretch as any}
+                tokens={displayFinalStretch as any}
                 loading={true}
                 showBubbleMetrics={false}
                 currentChain={currentChain}
               />
               <PulseTable
                 title="Migrated"
-                tokens={enrichedMigrated as any}
+                tokens={displayMigrated as any}
                 loading={true}
                 isFirstOrLast="last"
                 showBubbleMetrics={false}
@@ -1891,13 +1922,14 @@ export default function PulsePage() {
           ) : (
             <div className="flex min-h-0 w-full flex-1 flex-col overflow-hidden">
               {/* Mobile: Single table based on active tab */}
+              {/* Per-table loading guard: show skeletons until EACH table's data arrives */}
               <div className="flex min-h-0 flex-1 flex-col overflow-hidden lg:hidden">
                 <div className="flex h-full min-h-0 flex-col transition-all duration-300 ease-in-out">
                   {activeTab === "new" && (
                     <PulseTable
                       title="New Pairs"
-                      tokens={enrichedNewPairsToShow as any}
-                      loading={newPairsLoading}
+                      tokens={displayNewPairs as any}
+                      loading={displayNewPairs.length === 0}
                       isFirstOrLast="only"
                       showBubbleMetrics={false}
                       currentChain={currentChain}
@@ -1906,7 +1938,8 @@ export default function PulsePage() {
                   {activeTab === "final-stretch" && (
                     <PulseTable
                       title="Final Stretch"
-                      tokens={enrichedFinalStretch as any}
+                      tokens={displayFinalStretch as any}
+                      loading={displayFinalStretch.length === 0}
                       isFirstOrLast="only"
                       showBubbleMetrics={false}
                       currentChain={currentChain}
@@ -1915,7 +1948,8 @@ export default function PulsePage() {
                   {activeTab === "migrated" && (
                     <PulseTable
                       title="Migrated"
-                      tokens={enrichedMigrated as any}
+                      tokens={displayMigrated as any}
+                      loading={displayMigrated.length === 0}
                       isFirstOrLast="only"
                       showBubbleMetrics={false}
                       currentChain={currentChain}
@@ -1927,21 +1961,23 @@ export default function PulsePage() {
               <div className="hidden min-h-0 w-full flex-1 flex-row overflow-hidden lg:flex gap-3">
                 <PulseTable
                   title="New Pairs"
-                  tokens={enrichedNewPairsToShow as any}
-                  loading={newPairsLoading}
+                  tokens={displayNewPairs as any}
+                  loading={displayNewPairs.length === 0}
                   isFirstOrLast="first"
                   showBubbleMetrics={false}
                   currentChain={currentChain}
                 />
                 <PulseTable
                   title="Final Stretch"
-                  tokens={enrichedFinalStretch as any}
+                  tokens={displayFinalStretch as any}
+                  loading={displayFinalStretch.length === 0}
                   showBubbleMetrics={false}
                   currentChain={currentChain}
                 />
                 <PulseTable
                   title="Migrated"
-                  tokens={enrichedMigrated as any}
+                  tokens={displayMigrated as any}
+                  loading={displayMigrated.length === 0}
                   isFirstOrLast="last"
                   showBubbleMetrics={false}
                   currentChain={currentChain}

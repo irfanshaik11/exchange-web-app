@@ -619,6 +619,7 @@ export default function PortfolioPage() {
   
   // Track if balance refresh should be forced (e.g., when wallets are updated)
   const forceBalanceRefreshRef = useRef(false);
+  const activityLoadedRef = useRef(false);
   
   // Helper to get localStorage keys (computed based on user and chain)
   const getStorageKeys = () => ({
@@ -804,7 +805,10 @@ export default function PortfolioPage() {
   const fallbackPositions = useMemo(() => {
     const map: Record<string, PositionRow> = {};
 
-    tradeHistory.forEach((trade) => {
+    // Filter out split trades (multi-wallet children) to avoid double-counting
+    const nonSplitTrades = tradeHistory.filter(t => !t.isSplitTrade);
+
+    nonSplitTrades.forEach((trade) => {
       const tokenKey = trade.tokenAddress?.toLowerCase();
       if (!tokenKey) return;
 
@@ -933,72 +937,74 @@ export default function PortfolioPage() {
     fetchTradeHistory();
   }, [user?.id, currentChain, isTradeOnCurrentChain, tradeHistoryCacheKey, tradeRefreshCounter]);
 
-  // Fetch trade activity only when on Activity tab (index 2 after History commented out)
+  // Fetch trade activity — always fetch on tradeRefreshCounter change (event-driven),
+  // but only auto-poll every 5s when the Activity tab is visible.
   useEffect(() => {
     let isInitialLoad = true;
 
     const fetchTradeActivity = async () => {
-      if (user?.id && activeSpotTab === 2) {
-        // Check cache to determine if we should show loading
-        let hasValidCache = false;
-        if (typeof window !== 'undefined') {
-          try {
-            const cached = window.localStorage.getItem(tradeActivityCacheKey);
-            if (cached) {
-              const parsed = JSON.parse(cached);
-              if (parsed && Array.isArray(parsed.data) && parsed.data.length > 0) {
-                hasValidCache = true;
-              }
-            }
-          } catch (error) {
-            // Ignore cache errors
-          }
-        }
+      if (!user?.id) return;
 
-        // Only show loading state on initial load if no cache, not on refreshes
-        if (isInitialLoad && !hasValidCache) {
-          setLoadingTradeActivity(true);
-        } else if (hasValidCache) {
-          console.log(`[Trade Activity] 🔄 Refreshing trade activity in background (cache available for instant display)`);
-        }
-
+      // Check cache to determine if we should show loading
+      let hasValidCache = false;
+      if (typeof window !== 'undefined') {
         try {
-          // Map chain query param to blockchain: 'sol' -> 'solana', 'monad' -> 'monad'
-          const blockchain = currentChain === 'monad' ? 'monad' : currentChain === 'sol' ? 'solana' : undefined;
-          const activity = await getTradeActivityByUser(user.id, blockchain);
-          const filteredActivity = Array.isArray(activity)
-            ? activity.filter(isTradeOnCurrentChain)
-            : [];
-          setTradeActivity(filteredActivity);
-          
-          // Save to localStorage cache for instant loading when navigating back
-          if (typeof window !== 'undefined') {
-            try {
-              const payload = {
-                data: filteredActivity,
-                timestamp: Date.now(),
-              };
-              window.localStorage.setItem(tradeActivityCacheKey, JSON.stringify(payload));
-              console.log(`[Trade Activity] 💾 Cached ${filteredActivity.length} trades to localStorage`);
-            } catch (error) {
-              console.warn(`[Trade Activity] Failed to cache trades:`, error);
+          const cached = window.localStorage.getItem(tradeActivityCacheKey);
+          if (cached) {
+            const parsed = JSON.parse(cached);
+            if (parsed && Array.isArray(parsed.data) && parsed.data.length > 0) {
+              hasValidCache = true;
             }
           }
         } catch (error) {
-          console.error("Failed to fetch trade activity:", error);
-          setTradeActivity([]);
-        } finally {
-          if (isInitialLoad) {
-            setLoadingTradeActivity(false);
-            isInitialLoad = false;
+          // Ignore cache errors
+        }
+      }
+
+      // Only show loading state on initial load if no cache, not on refreshes
+      if (isInitialLoad && !hasValidCache && !activityLoadedRef.current && activeSpotTab === 2) {
+        setLoadingTradeActivity(true);
+      } else if (hasValidCache && activeSpotTab === 2) {
+        console.log(`[Trade Activity] 🔄 Refreshing trade activity in background (cache available for instant display)`);
+      }
+
+      try {
+        // Map chain query param to blockchain: 'sol' -> 'solana', 'monad' -> 'monad'
+        const blockchain = currentChain === 'monad' ? 'monad' : currentChain === 'sol' ? 'solana' : undefined;
+        const activity = await getTradeActivityByUser(user.id, blockchain);
+        const filteredActivity = Array.isArray(activity)
+          ? activity.filter(isTradeOnCurrentChain)
+          : [];
+        setTradeActivity(filteredActivity);
+
+        // Save to localStorage cache for instant loading when navigating back
+        if (typeof window !== 'undefined') {
+          try {
+            const payload = {
+              data: filteredActivity,
+              timestamp: Date.now(),
+            };
+            window.localStorage.setItem(tradeActivityCacheKey, JSON.stringify(payload));
+            console.log(`[Trade Activity] 💾 Cached ${filteredActivity.length} trades to localStorage`);
+          } catch (error) {
+            console.warn(`[Trade Activity] Failed to cache trades:`, error);
           }
+        }
+      } catch (error) {
+        console.error("Failed to fetch trade activity:", error);
+        setTradeActivity([]);
+      } finally {
+        if (isInitialLoad) {
+          setLoadingTradeActivity(false);
+          isInitialLoad = false;
+          activityLoadedRef.current = true;
         }
       }
     };
 
     fetchTradeActivity();
 
-    // Auto-refresh every 5 seconds when on Activity tab
+    // Auto-refresh every 5 seconds only when Activity tab is visible
     if (user?.id && activeSpotTab === 2) {
       const intervalId = setInterval(() => {
         fetchTradeActivity();
@@ -1020,6 +1026,10 @@ export default function PortfolioPage() {
       console.log(`[Portfolio] Consuming ${relevantPending.length} pending trade refresh(es)`);
       refreshBalance({ chain: currentChain === 'monad' ? 'monad' : 'sol', force: true }).catch(() => {});
       setTradeRefreshCounter((c) => c + 1);
+      // Retry to catch trades still being saved (buy API still processing or Pumpfun async save)
+      setTimeout(() => setTradeRefreshCounter((c) => c + 1), 500);
+      setTimeout(() => setTradeRefreshCounter((c) => c + 1), 2000);
+      setTimeout(() => setTradeRefreshCounter((c) => c + 1), 5000);
     }
 
     // Listen for live trade-completed events (same-page)
@@ -1304,7 +1314,7 @@ export default function PortfolioPage() {
       );
       // Use appropriate balance based on current chain
       // For Monad: convert MON to USD, for Solana: solBalance is already in USD
-      const currentBalanceUsd = currentChain === 'monad' 
+      const currentBalanceUsd = currentChain === 'monad'
         ? monBalance * (monPrice || 0.025) // Convert MON to USD using MON price
         : solBalance; // solBalance is already in USD
       setTotalValue(currentBalanceUsd + totalRemainingValue);
@@ -1516,22 +1526,25 @@ export default function PortfolioPage() {
         return Date.now();
       };
 
-      const sellTrades = tradeHistory.filter(t => {
+      // Filter out split trades (multi-wallet children) to avoid double-counting in PnL
+      const nonSplitTrades = tradeHistory.filter(t => !t.isSplitTrade);
+
+      const sellTrades = nonSplitTrades.filter(t => {
         const type = t.type?.toLowerCase();
         return type === "sell" || type === "s";
       });
-      
+
       const buyTradesByToken = new Map<string, Array<{
-        amount: number; 
+        amount: number;
         usdValue: number;
         pricePerToken: number; // Price per token for accurate cost basis
         timestamp: number;
         tradeId: string;
         consumed: number; // Track how much of this buy has been used
       }>>();
-      
+
       // Group buys by token (normalized address)
-      tradeHistory.filter(t => {
+      nonSplitTrades.filter(t => {
         const type = t.type?.toLowerCase();
         return type === "buy" || type === "b";
       }).forEach(buy => {
@@ -1582,13 +1595,14 @@ export default function PortfolioPage() {
         
         const soldAmount = typeof sell.tokenAmount === 'string' ? parseFloat(sell.tokenAmount) : (sell.tokenAmount || 0);
         const saleValueUsd = typeof sell.usdValue === 'string' ? parseFloat(sell.usdValue) : (sell.usdValue || 0);
-        
-        if (soldAmount <= 0 || saleValueUsd <= 0) return;
-        
-        // Check if we have stored realizedPnl from database (preferred - more accurate)
-        const storedRealizedPnl = typeof sell.realizedPnl === 'string' 
-          ? parseFloat(sell.realizedPnl) 
-          : (sell.realizedPnl || null);
+
+        // Check stored PnL first — cleanup sells have usdValue=0 but valid stored PnL
+        const storedRealizedPnl = typeof sell.realizedPnl === 'string'
+          ? parseFloat(sell.realizedPnl)
+          : (sell.realizedPnl != null ? Number(sell.realizedPnl) : null);
+
+        if (soldAmount <= 0) return;
+        if (saleValueUsd <= 0 && (storedRealizedPnl === null || isNaN(storedRealizedPnl))) return;
         const storedCostBasis = typeof sell.costBasis === 'string'
           ? parseFloat(sell.costBasis)
           : (sell.costBasis || null);
@@ -1946,7 +1960,7 @@ export default function PortfolioPage() {
       const totalCostBasisOfSoldTokens = salesDetected.reduce((acc, sale) => acc + (sale.costBasis || 0), 0);
       
       // For TOTAL PNL percentage, use all buy trades (includes unrealized positions)
-      const totalCostBasisFromTrades = tradeHistory
+      const totalCostBasisFromTrades = nonSplitTrades
         .filter(t => t.type === "Buy")
         .reduce((acc, buy) => {
           const usdValue = typeof buy.usdValue === 'string' ? parseFloat(buy.usdValue) : buy.usdValue;
@@ -3625,9 +3639,13 @@ export default function PortfolioPage() {
                         onPositionsChange={setPositions}
                         onTokenNamesChange={setTokenNames}
                         preloadedPositions={
-                          searchQuery.trim() ? filteredTop100Positions : undefined
+                          searchQuery.trim()
+                            ? filteredTop100Positions
+                            : top100Positions.length > 0
+                              ? top100Positions
+                              : undefined
                         }
-                        skipFetch={searchQuery.trim() !== ""}
+                        skipFetch={searchQuery.trim() !== "" || top100Positions.length > 0}
                         showHidden={showHidden}
                         showInSOL={sortByUSD}
                         tokenMetadataCache={tokenMetadataCache}

@@ -35,6 +35,7 @@ import toast from "react-hot-toast";
 import { useQuickBuy } from "./QuickBuyContext";
 import { SOL_MINT_ADDRESS } from "~/utils/api";
 import { executeSolanaMultiBuy, buildSolanaWalletAllocations } from "~/utils/solanaWalletAllocation";
+import { broadcastTradeCompleted, notifyTradePending } from "~/utils/tradeEvents";
 import { getPoolTypeFromToken } from "~/utils/poolTypeDetection";
 import { validateSolanaBuy, showTradeValidationError } from "~/utils/preTradeValidation";
 import { checkAtaExists } from "~/utils/ataCheck";
@@ -1139,6 +1140,7 @@ const SearchModalContent = React.memo(function SearchModalContent({
       const baseMint = tokenMint;
       const quoteMint = SOL_MINT_ADDRESS;
 
+      notifyTradePending({ tokenAddress: baseMint, tradeType: 'buy', chain: 'sol' });
       const multiResult = await executeSolanaMultiBuy({
         poolAddress,
         baseMint,
@@ -1168,6 +1170,8 @@ const SearchModalContent = React.memo(function SearchModalContent({
               linkEl.innerHTML = `<a href="${explorerUrl}" target="_blank" rel="noopener noreferrer" class="hover:opacity-80 transition-opacity"><img src="https://avatars.githubusercontent.com/u/92743431?s=200&v=4" alt="Solana" class="w-4 h-4 rounded-full" style="cursor: pointer;" /></a>`;
               linkEl.className = "";
             }
+            // Fire early so Portfolio refetches immediately when Solscan link appears
+            broadcastTradeCompleted({ tokenAddress: baseMint, tradeType: 'buy', chain: 'sol', txHash });
           }
         },
       });

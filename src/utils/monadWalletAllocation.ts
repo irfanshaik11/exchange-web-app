@@ -313,6 +313,9 @@ export async function executeMonadMultiBuy({
           }
         }
 
+        const firstTxHash = multiResult.txHashes?.[0];
+        broadcastTradeCompleted({ tokenAddress, tradeType: 'buy', chain: 'monad', txHash: firstTxHash || undefined });
+
         return {
           allocations: effectiveAllocations,
           totalConsidered: total,

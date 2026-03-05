@@ -163,23 +163,26 @@ export default function PnLModal({ isOpen, onClose, chain }: PnLModalProps) {
             if (!addr) return '';
             return addr.toLowerCase().trim();
           };
-          
-          const sellTrades = filteredTradeHistory.filter(t => {
+
+          // Filter out split trades (multi-wallet children) to avoid double-counting in PnL
+          const nonSplitTrades = filteredTradeHistory.filter(t => !t.isSplitTrade);
+
+          const sellTrades = nonSplitTrades.filter(t => {
             const type = t.type?.toLowerCase();
             return type === "sell" || type === "s";
           });
-          
+
           const buyTradesByToken = new Map<string, Array<{
-            amount: number; 
+            amount: number;
             usdValue: number;
             pricePerToken: number; // Price per token for accurate cost basis
             timestamp: number;
             tradeId: string;
             consumed: number; // Track how much of this buy has been used
           }>>();
-          
+
           // Group buys by token (normalized address)
-          filteredTradeHistory.filter(t => {
+          nonSplitTrades.filter(t => {
             const type = t.type?.toLowerCase();
             return type === "buy" || type === "b";
           }).forEach(buy => {
@@ -230,13 +233,14 @@ export default function PnLModal({ isOpen, onClose, chain }: PnLModalProps) {
             
             const soldAmount = typeof sell.tokenAmount === 'string' ? parseFloat(sell.tokenAmount) : (sell.tokenAmount || 0);
             const saleValueUsd = typeof sell.usdValue === 'string' ? parseFloat(sell.usdValue) : (sell.usdValue || 0);
-            
-            if (soldAmount <= 0 || saleValueUsd <= 0) return;
-            
-            // Check if we have stored realizedPnl from database (preferred - more accurate)
-            const storedRealizedPnl = typeof sell.realizedPnl === 'string' 
-              ? parseFloat(sell.realizedPnl) 
-              : (sell.realizedPnl || null);
+
+            // Check stored PnL first — cleanup sells have usdValue=0 but valid stored PnL
+            const storedRealizedPnl = typeof sell.realizedPnl === 'string'
+              ? parseFloat(sell.realizedPnl)
+              : (sell.realizedPnl != null ? Number(sell.realizedPnl) : null);
+
+            if (soldAmount <= 0) return;
+            if (saleValueUsd <= 0 && (storedRealizedPnl === null || isNaN(storedRealizedPnl))) return;
             const storedCostBasis = typeof sell.costBasis === 'string'
               ? parseFloat(sell.costBasis)
               : (sell.costBasis || null);

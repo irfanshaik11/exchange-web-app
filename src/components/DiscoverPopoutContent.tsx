@@ -22,6 +22,7 @@ import { BsSliders2 } from "react-icons/bs";
 import toast from "react-hot-toast";
 import { extractTokenImage, getResolvedTokenImage } from "~/utils/images";
 import { broadcastMonadQuickTrade } from "~/utils/monadTradeEvents";
+import { broadcastTradeCompleted, notifyTradePending } from "~/utils/tradeEvents";
 import { formatMonadError } from "~/utils/monadError";
 import { validateMonadBuy, showTradeValidationError } from "~/utils/preTradeValidation";
 import { listenForTradeEvents, transformToastToError } from "~/utils/createSolanaToastHandler";
@@ -1679,6 +1680,7 @@ export default function DiscoverPopoutContent() {
       pendingQuickBuyToastRef.current = { id: uniqueToastId, tokenImage, tokenName, fakeTime: timerCap.toFixed(2), tokenAddress, startTime, timerInterval };
 
       try {
+        notifyTradePending({ tokenAddress, tradeType: 'buy', chain: 'monad' });
         const { results, totalConsidered } = await executeMonadMultiBuy({
           tokenAddress,
           amountMON: buyAmount,
@@ -1742,6 +1744,7 @@ export default function DiscoverPopoutContent() {
           }
           console.log("✅ Monad Quick Buy successful:", txHashes);
           broadcastMonadQuickTrade(tokenAddress, 'buy');
+          broadcastTradeCompleted({ tokenAddress, tradeType: 'buy', chain: 'monad' });
           // Refresh header balance after successful buy
           setTimeout(() => {
             refreshBalance({ chain: "monad", force: true }).catch((err: any) => {

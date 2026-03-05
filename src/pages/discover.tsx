@@ -30,6 +30,7 @@ import { BsSliders2 } from "react-icons/bs";
 
 import { extractTokenImage, getResolvedTokenImage, resolveTokenImage, isMetadataUrl } from "~/utils/images";
 import { broadcastMonadQuickTrade } from "~/utils/monadTradeEvents";
+import { broadcastTradeCompleted, notifyTradePending } from "~/utils/tradeEvents";
 import toast from "react-hot-toast";
 import { executeSolanaMultiBuy, buildSolanaWalletAllocations } from "~/utils/solanaWalletAllocation";
 import { validateSolanaBuy, validateMonadBuy, showTradeValidationError } from "~/utils/preTradeValidation";
@@ -2041,6 +2042,7 @@ export default function DiscoverPage() {
       // Helper function to attempt buy with a specific launchpad
       let firstSuccessShown = false;
       const attemptBuy = async (attemptLaunchpad: 'nadfun' | 'flapsh-simple' | 'flapsh-devs') => {
+        notifyTradePending({ tokenAddress, tradeType: 'buy', chain: 'monad' });
         const { results, totalConsidered } = await executeMonadMultiBuy({
           tokenAddress,
           amountMON: buyAmount,
@@ -2196,6 +2198,7 @@ export default function DiscoverPage() {
             });
           }, 1000);
           broadcastMonadQuickTrade(tokenAddress, 'buy');
+          broadcastTradeCompleted({ tokenAddress, tradeType: 'buy', chain: 'monad' });
           toast.success(summary.message, { duration: 4000 });
           console.log('✅ Monad Quick Buy successful:', txHashes);
           return { success: true, txHash: txHashes[0] };
@@ -2361,6 +2364,7 @@ export default function DiscoverPage() {
       const baseMint = token.mint || "";
       const quoteMint = SOL_MINT_ADDRESS;
 
+      notifyTradePending({ tokenAddress: baseMint, tradeType: 'buy', chain: 'sol' });
       const multiResult = await executeSolanaMultiBuy({
         poolAddress,
         baseMint,
@@ -2390,6 +2394,8 @@ export default function DiscoverPage() {
               linkEl.innerHTML = `<a href="${explorerUrl}" target="_blank" rel="noopener noreferrer" class="hover:opacity-80 transition-opacity"><img src="https://avatars.githubusercontent.com/u/92743431?s=200&v=4" alt="Solana" class="w-4 h-4 rounded-full" style="cursor: pointer;" /></a>`;
               linkEl.className = "";
             }
+            // Fire early so Portfolio refetches immediately when Solscan link appears
+            broadcastTradeCompleted({ tokenAddress: baseMint, tradeType: 'buy', chain: 'sol', txHash });
           }
         },
       });
@@ -2426,6 +2432,7 @@ export default function DiscoverPage() {
           }),
         );
       }
+      broadcastTradeCompleted({ tokenAddress: token.mint, tradeType: 'buy', chain: 'sol' });
 
       // Refresh header balance after successful buy
       setTimeout(() => {
@@ -2618,6 +2625,7 @@ export default function DiscoverPage() {
       const baseMint = token.mint || "";
       const quoteMint = SOL_MINT_ADDRESS;
 
+      notifyTradePending({ tokenAddress: baseMint, tradeType: 'buy', chain: 'sol' });
       const multiResult = await executeSolanaMultiBuy({
         poolAddress,
         baseMint,
@@ -2647,6 +2655,8 @@ export default function DiscoverPage() {
               linkEl.innerHTML = `<a href="${explorerUrl}" target="_blank" rel="noopener noreferrer" class="hover:opacity-80 transition-opacity"><img src="https://avatars.githubusercontent.com/u/92743431?s=200&v=4" alt="Solana" class="w-4 h-4 rounded-full" style="cursor: pointer;" /></a>`;
               linkEl.className = "";
             }
+            // Fire early so Portfolio refetches immediately when Solscan link appears
+            broadcastTradeCompleted({ tokenAddress: baseMint, tradeType: 'buy', chain: 'sol', txHash });
           }
         },
       });
@@ -2683,6 +2693,7 @@ export default function DiscoverPage() {
           }),
         );
       }
+      broadcastTradeCompleted({ tokenAddress: token.mint, tradeType: 'buy', chain: 'sol' });
 
       // Refresh header balance after successful buy
       setTimeout(() => {

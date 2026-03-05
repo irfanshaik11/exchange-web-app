@@ -80,6 +80,7 @@ import { useUser } from "~/components/UserContext";
 import { useQuickBuy } from "~/components/QuickBuyContext";
 import { extractTokenImage, getResolvedTokenImage } from "~/utils/images";
 import { broadcastMonadQuickTrade } from "~/utils/monadTradeEvents";
+import { broadcastTradeCompleted, notifyTradePending } from "~/utils/tradeEvents";
 import { useSolPrice } from "~/components/SolPriceContext";
 import {
   tradeBuy,
@@ -144,6 +145,9 @@ interface MonadTableProps {
   showBubbleMetrics?: boolean; // Feature flag for bubble metrics (Buyers, Sellers, Wallets, 24h TX, Vol 24h)
   currentChain?: string; // Chain from parent to avoid router.query timing issues
 }
+
+// Module-level: remembers which tables have had data, survives Pages Router remounts
+const _hadDataByTitle = new Map<string, boolean>();
 
 // Add a simple in-memory cache for token metadata
 const tokenMetadataCache: Record<string, any> = {};
@@ -1628,9 +1632,11 @@ function MonadTable({
   }, [tokens, title]);
 
   // Track whether we ever had data — prevents "No tokens found" flash on tab return
-  const hadDataRef = useRef(false);
+  // Uses module-level map so state persists across Next.js Pages Router remounts
+  const hadDataRef = useRef(_hadDataByTitle.get(title) ?? false);
   if (tokens && tokens.length > 0) {
     hadDataRef.current = true;
+    _hadDataByTitle.set(title, true);
   }
 
   // Preload images for visible tokens (first 20 for instant loading)
@@ -2791,6 +2797,7 @@ function MonadTable({
     };
 
     try {
+      notifyTradePending({ tokenAddress, tradeType: 'buy', chain: 'monad' });
       const { results, totalConsidered } = await executeMonadMultiBuy({
         tokenAddress,
         amountMON: buyAmount,
@@ -2833,6 +2840,7 @@ function MonadTable({
           });
         }, 1000);
         broadcastMonadQuickTrade(tokenAddress, "buy");
+        broadcastTradeCompleted({ tokenAddress, tradeType: 'buy', chain: 'monad' });
         console.log("✅ Monad Quick Buy successful:", txHashes);
         return { success: true, txHash: txHashes[0] };
       } else {

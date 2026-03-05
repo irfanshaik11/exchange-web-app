@@ -23,7 +23,7 @@ import useMonadPositionWebSocket from "~/hooks/useMonadPositionWebSocket";
 import { useSolPrice } from "~/components/SolPriceContext";
 import { broadcastMonadQuickTrade, consumePendingMonadPositionRefresh } from "~/utils/monadTradeEvents";
 import { formatMonadError } from "~/utils/monadError";
-import { broadcastTradeCompleted } from "~/utils/tradeEvents";
+import { broadcastTradeCompleted, notifyTradePending } from "~/utils/tradeEvents";
 import { listenForTradeEvents } from "~/utils/createSolanaToastHandler";
 
 type TimeRange = "5m" | "1h" | "12h" | "24h";
@@ -775,6 +775,7 @@ const MonadTradeActionPanel: React.FC<MonadTradeActionPanelProps> = ({ token }) 
 
       if (mode === "buy") {
         // Buy trade
+        notifyTradePending({ tokenAddress, tradeType: 'buy', chain: 'monad' });
         const { results, totalConsidered } = await executeMonadMultiBuy({
           tokenAddress,
           amountMON: amountValue,
@@ -817,6 +818,7 @@ const MonadTradeActionPanel: React.FC<MonadTradeActionPanelProps> = ({ token }) 
             });
           }, 1000);
           broadcastMonadQuickTrade(tokenAddress, 'buy');
+          broadcastTradeCompleted({ tokenAddress, tradeType: 'buy', chain: 'monad' });
           // Keep the amount value in the input field for easy re-trading
           setIsLoading(false);
         } else {
