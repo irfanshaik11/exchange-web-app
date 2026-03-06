@@ -24,7 +24,7 @@ import { useTxHashCallback } from "~/contexts/SolanaPositionWebSocketContext";
 import type { SolanaTokenVolume } from "~/hooks/useSolanaTokenWebSocket";
 import { extractTokenImage, getResolvedTokenImage, resolveTokenImage } from "~/utils/images";
 import { SiSolana } from "react-icons/si";
-import useTokenStatsWebSocket from "~/hooks/useTokenStatsWebSocket";
+
 import { getPoolTypeFromToken } from "~/utils/poolTypeDetection";
 import { mapTradeErrorMessage } from "~/utils/tradeErrorMessages";
 import { listenForTradeEvents, transformToastToError } from "~/utils/createSolanaToastHandler";
@@ -878,26 +878,12 @@ const MeteoraMigrationLogo: React.FC = () => (
   </div>
 );
 
-interface TokenStats {
-  timeframes: {
-    [key: string]: {
-      buys: number;
-      sells: number;
-      volume: number;
-      buyVolume: number;
-      sellVolume: number;
-      change?: number;
-    };
-  };
-}
-
 interface TradeActionPanelProps {
   token: Token | null;
   tradeParams?: any; // Use any to match TradePageParams from queryParams
   setTradeParams?: (params: any) => void;
   quickBuySettings?: any;
   quickBuySide?: "buy" | "sell";
-  initialStats?: TokenStats | null; // Initial stats from REST API
   wsVolume?: SolanaTokenVolume | null; // Volume data from unified WebSocket
   liveMarketCapUsd?: number | null; // Real-time MC from chart/WebSocket (same source as header)
   liveLiquidityUsd?: number | null; // Real-time liquidity from WebSocket (same source as header)
@@ -909,7 +895,6 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
   setTradeParams: setExternalTradeParams,
   quickBuySettings: externalQuickBuySettings,
   quickBuySide: externalQuickBuySide,
-  initialStats,
   wsVolume,
   liveMarketCapUsd,
   liveLiquidityUsd,
@@ -1001,45 +986,7 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
     // return isMeteora && bondingPct > 98.6 && !hasMigrated;
   }, []);
 
-  // Convert initialStats to TokenStatsData format if available
-  const convertedInitialStats = useMemo(() => {
-    if (!initialStats) return null;
-    
-    // Ensure all timeframe objects have the required 'change' property
-    const processedTimeframes: { [key: string]: { buys: number; sells: number; volume: number; buyVolume: number; sellVolume: number; change: number; } } = {};
-    
-    for (const [timeframe, data] of Object.entries(initialStats.timeframes)) {
-      processedTimeframes[timeframe] = {
-        ...data,
-        change: data.change ?? 0, // Default to 0 if change is undefined
-      };
-    }
-    
-    return {
-      success: true,
-      tokenAddress: token.mint || '' || '',
-      pairAddress: effectivePoolAddress || '',
-      dataSource: 'rest-api',
-      timestamp: new Date().toISOString(),
-      data: {
-        timeframes: processedTimeframes,
-      },
-    };
-  }, [initialStats, token.mint || '' || '', effectivePoolAddress]);
-
-  // WebSocket hook for real-time token stats
-  const {
-    isConnected: wsConnected,
-    loading: wsLoading,
-    error: wsError,
-    data: wsData,
-    getFormattedStats,
-  } = useTokenStatsWebSocket({
-    pairAddress: effectivePoolAddress,
-    tokenAddress: token.mint || '',
-    enabled: true,
-    initialStats: convertedInitialStats,
-  });
+  // token-stats WebSocket removed — wsVolume from unified token WS is the primary data source
 
   // Update internal state when external props change (only on mount)
   useEffect(() => {
@@ -1358,22 +1305,6 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
       }
     }
 
-    // Second priority: Use wsData from token-stats WebSocket
-    if (wsData && wsData.data && wsData.data.timeframes) {
-      const wsTimeframe = timeRange;
-      const stats = getFormattedStats(wsTimeframe);
-      return {
-        buys: stats.buys,
-        sells: stats.sells,
-        volume: stats.volume,
-        buyVolume: stats.buyVolume,
-        sellVolume: stats.sellVolume,
-        netVolume: stats.netVolume,
-        buyPercentage: stats.buyPercentage,
-        sellPercentage: stats.sellPercentage,
-      };
-    }
-
     // Fallback: Use static data from token object
     const buyStats = getCountsAndVol(token as any, "buy", timeRange);
     const sellStats = getCountsAndVol(token as any, "sell", timeRange);
@@ -1392,7 +1323,7 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
       buyPercentage: buyPct,
       sellPercentage: sellPct,
     };
-  }, [wsVolume, wsData, timeRange, getFormattedStats, token, liveSolPrice]);
+  }, [wsVolume, timeRange, token, liveSolPrice]);
 
   // Extract stats for easier access
   const { buys, sells, volume, buyVolume, sellVolume, netVolume, buyPercentage, sellPercentage } = realTimeStats;

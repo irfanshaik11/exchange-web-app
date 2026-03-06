@@ -19,7 +19,6 @@ import {
   FaRegCalendar,
 } from "react-icons/fa";
 import { FiExternalLink } from "react-icons/fi";
-import PriceChartWidget from "./PriceChartWidget";
 import type { Token } from "~/utils/db";
 import { AiOutlineCalendar } from "react-icons/ai";
 import DatePicker from "react-datepicker";
