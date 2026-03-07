@@ -18,7 +18,6 @@ import UserLimitBlocker from "../components/UserLimitBlocker";
 
 import { useTurnkey, AuthState } from '@turnkey/react-wallet-kit';
 import { turnkeyLogin } from '../utils/api';
-import { init as initOhlcvConnection } from '../utils/ohlcvConnectionManager';
 
 // Dynamically import LoginModal with no SSR to prevent wagmi provider issues
 const LoginModal = dynamic(() => import('../components/LoginModal'), {
@@ -572,11 +571,6 @@ function GlobalLoginModalManager({ enforceLogin }: { enforceLogin: boolean }) {
 const MyApp: AppType = ({ Component, pageProps }) => {
   const [toastPosition, setToastPosition] = useState<'top-left' | 'top-center' | 'top-right' | 'bottom-left' | 'bottom-center' | 'bottom-right'>('top-center');
 
-  // Pre-warm persistent OHLCV WebSocket on app boot (saves ~150ms per trade page visit)
-  useEffect(() => {
-    initOhlcvConnection();
-  }, []);
-
   // Load toast position from localStorage on mount
   useEffect(() => {
     if (typeof window !== 'undefined') {
@@ -731,6 +725,8 @@ const MyApp: AppType = ({ Component, pageProps }) => {
     };
 
     // Wait for TradingView to be available, then pre-warm during idle time
+    let warmRetries = 0;
+    const MAX_WARM_RETRIES = 20; // 20 * 500ms = 10 seconds max wait
     const checkAndWarm = () => {
       if ((window as any).TradingView?.widget) {
         if (typeof requestIdleCallback === 'function') {
@@ -738,8 +734,7 @@ const MyApp: AppType = ({ Component, pageProps }) => {
         } else {
           setTimeout(doPreWarm, 100);
         }
-      } else {
-        // TradingView not loaded yet — retry after a short delay
+      } else if (++warmRetries < MAX_WARM_RETRIES) {
         setTimeout(checkAndWarm, 500);
       }
     };

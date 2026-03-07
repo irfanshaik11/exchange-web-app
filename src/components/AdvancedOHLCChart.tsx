@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState, useCallback } from "react";
 import { KOL_ADDRESS_MAP } from "../utils/kolLookup";
 import * as ohlcPrefetchManager from "../utils/ohlcPrefetchManager";
-import * as ohlcvConnectionManager from "../utils/ohlcvConnectionManager";
+
 
 // Re-export types from BackendOHLCChart for consistency
 export type BackendInterval =
@@ -3078,9 +3078,6 @@ const AdvancedOHLCChart: React.FC<AdvancedOHLCChartProps> = ({
     // Track if connection was closed by cleanup
     let closedByCleanup = false;
 
-    // Track if using persistent pre-warmed connection (don't close on unmount)
-    let usingPersistentConn = false;
-
     // Robust reconnection state
     let reconnectAttempts = 0;
     const MAX_RECONNECT_DELAY = 30000; // Max 30 seconds between attempts
@@ -3103,9 +3100,7 @@ const AdvancedOHLCChart: React.FC<AdvancedOHLCChartProps> = ({
         // Handle ping/pong for keepalive - respond to server pings
         if (message.type === "ping" || message === "ping") {
           const pong = JSON.stringify({ type: "pong" });
-          if (usingPersistentConn) {
-            ohlcvConnectionManager.send(pong);
-          } else if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+          if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
             wsRef.current.send(pong);
           }
           return;
@@ -3462,16 +3457,7 @@ const AdvancedOHLCChart: React.FC<AdvancedOHLCChartProps> = ({
         const timeSinceLastMessage = Date.now() - lastMessageTime;
 
         // Send ping to keep connection alive
-        if (usingPersistentConn) {
-          // Persistent connection: ping via connection manager
-          if (ohlcvConnectionManager.isConnected()) {
-            try {
-              ohlcvConnectionManager.send(JSON.stringify({ type: "ping" }));
-            } catch (e) {
-              console.log("[AdvancedOHLCChart] Failed to send ping via persistent WS:", e);
-            }
-          }
-        } else if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+        if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
           try {
             wsRef.current.send(JSON.stringify({ type: "ping" }));
           } catch (e) {
@@ -3486,11 +3472,7 @@ const AdvancedOHLCChart: React.FC<AdvancedOHLCChartProps> = ({
             Math.round(timeSinceLastMessage / 1000),
             "s), reconnecting...",
           );
-          if (usingPersistentConn) {
-            // Persistent mode: unregister and let connectSolana re-establish
-            ohlcvConnectionManager.setMessageListener(null);
-            usingPersistentConn = false;
-          } else if (wsRef.current) {
+          if (wsRef.current) {
             wsRef.current.close();
             wsRef.current = null;
           }
@@ -3631,64 +3613,7 @@ const AdvancedOHLCChart: React.FC<AdvancedOHLCChartProps> = ({
         return;
       }
 
-      // ── Try persistent pre-warmed connection (saves ~150ms handshake) ──
-      if (ohlcvConnectionManager.isConnected()) {
-        usingPersistentConn = true;
-
-        // Drain snapshot cached from hover-time subscribe (if available).
-        // This avoids waiting for the server to send a fresh snapshot.
-        const cachedSnapshot = ohlcvConnectionManager.drainSnapshotCache(tokenAddress);
-        if (cachedSnapshot && cachedSnapshot.length > 0) {
-          console.log(
-            "[AdvancedOHLCChart] Persistent WS: using hover-cached snapshot for",
-            tokenAddress.slice(0, 10) + "...",
-            "(" + cachedSnapshot.length + " candles)",
-          );
-          lastGoodCandlesRef.current = cachedSnapshot;
-          cachedIntervalRef.current = latestParamsRef.current.interval;
-          cachedTimeframeRef.current = latestParamsRef.current.timeframe;
-          setCandles(cachedSnapshot);
-          setIsLoading(false);
-          hasInitializedRef.current = true;
-          firstLoadRef.current = false;
-          // Mark chart as populated IMMEDIATELY so the WS snapshot handler
-          // (which checks chartPopulatedRef) won't trigger a second resetData().
-          chartPopulatedRef.current = true;
-          updateChartMetrics();
-
-          // Force TradingView to pick up the cached data
-          try {
-            const chart =
-              widgetRef.current?.chart?.() ||
-              (widgetRef.current as any)?.activeChart?.();
-            if (chart?.resetData) {
-              chart.resetData();
-            }
-          } catch {};
-        } else {
-          console.log(
-            "[AdvancedOHLCChart] Persistent WS: subscribing to",
-            tokenAddress.slice(0, 10) + "...",
-          );
-        }
-
-        // Register our handler to receive messages from the persistent WS
-        ohlcvConnectionManager.setMessageListener(handleSolanaMessage);
-        // Only re-subscribe if the persistent WS isn't already on this mint
-        // (hover already subscribed → snapshot cached → no need for a second snapshot)
-        if (ohlcvConnectionManager.getCurrentMint() !== tokenAddress) {
-          ohlcvConnectionManager.subscribe(tokenAddress, wsInterval);
-        }
-
-        wsConnectedRef.current = true;
-        wsGapBridgedRef.current = false;
-        reconnectAttempts = 0;
-        lastMessageTime = Date.now();
-        startHeartbeat();
-        return;
-      }
-
-      // ── Normal path: create new WebSocket ──
+      // ── Create new WebSocket ──
       console.log(
         "[AdvancedOHLCChart] Solana WebSocket connecting:",
         wsUrl,
@@ -3761,19 +3686,6 @@ const AdvancedOHLCChart: React.FC<AdvancedOHLCChartProps> = ({
       if (closedByCleanup) return;
 
       if (document.visibilityState === "visible") {
-        // Persistent mode: check connection manager, re-subscribe if needed
-        if (usingPersistentConn) {
-          if (ohlcvConnectionManager.isConnected()) {
-            ohlcvConnectionManager.subscribe(tokenAddress, wsInterval);
-            lastMessageTime = Date.now();
-          } else {
-            // Connection manager will auto-reconnect and re-subscribe
-            reconnectAttempts = 0;
-            connectSolana();
-          }
-          return;
-        }
-
         // Check if WebSocket is healthy
         if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) {
           reconnectAttempts = 0; // Reset attempts for visibility-triggered reconnect
@@ -3831,12 +3743,7 @@ const AdvancedOHLCChart: React.FC<AdvancedOHLCChartProps> = ({
         wsReconnectTimeoutRef.current = null;
       }
 
-      // Persistent connection: unregister listener (don't close the shared WS).
-      // React runs cleanup then new effect synchronously — no messages lost in between.
-      if (usingPersistentConn) {
-        ohlcvConnectionManager.setMessageListener(null);
-        usingPersistentConn = false;
-      } else if (wsRef.current) {
+      if (wsRef.current) {
         // Hand off WebSocket to prefetch manager instead of closing it
         // This keeps the WS alive for 30s so returning to the same token is instant
         if (wsRef.current.readyState === WebSocket.OPEN) {
@@ -4367,8 +4274,7 @@ const AdvancedOHLCChart: React.FC<AdvancedOHLCChartProps> = ({
             // If still no data, check WS health (dedicated OR persistent connection)
             if (!lastGoodCandlesRef.current.length) {
               const dedicatedWsOpen = wsRef.current && wsRef.current.readyState === WebSocket.OPEN;
-              const persistentWsOpen = ohlcvConnectionManager.isConnected();
-              const wsOpen = dedicatedWsOpen || persistentWsOpen;
+              const wsOpen = dedicatedWsOpen;
               if (wsOpen) {
                 // WS is healthy — server had 1s to send snapshot but didn't → token has no data
                 console.log("[AdvancedOHLCChart] Solana: WS open but no data — creating placeholder");

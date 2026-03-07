@@ -731,9 +731,18 @@ const HoldersTable: React.FC<HoldersTableProps> = ({
   const wsHolders = chain === "sol" ? wsContext.holders : [];
   const wsTopTraders = chain === "sol" ? wsContext.topTraders : [];
   const wsLoading = chain === "sol" ? wsContext.loading : false;
-  const liveTokenPriceUsd = chain === "sol"
+  // Throttle live price to only update when it changes by >1%
+  // Prevents full holder sort on every WS trade tick (~1/sec)
+  const rawLiveTokenPriceUsd = chain === "sol"
     ? (wsContext.tokenInfo?.price_usd || (token as any)?.usd_price || (token as any)?.price_usd || 0)
     : 0;
+  const stablePriceRef = useRef(rawLiveTokenPriceUsd);
+  if (rawLiveTokenPriceUsd > 0 && Math.abs(rawLiveTokenPriceUsd - stablePriceRef.current) / stablePriceRef.current > 0.01) {
+    stablePriceRef.current = rawLiveTokenPriceUsd;
+  } else if (stablePriceRef.current === 0 && rawLiveTokenPriceUsd > 0) {
+    stablePriceRef.current = rawLiveTokenPriceUsd;
+  }
+  const liveTokenPriceUsd = stablePriceRef.current;
 
   // Create a lookup map of wallet addresses to full holder data for hover cards
   const walletDataMap = useMemo(() => {
