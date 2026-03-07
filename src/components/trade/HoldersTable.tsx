@@ -22,7 +22,7 @@ import {
 import useMonadHolders, { type MonadHolder } from "../../hooks/useMonadHolders";
 import { getWalletSolBalance } from "../../utils/walletTracking";
 import { useSolPrice } from "../SolPriceContext";
-import { formatSmartNumber, type Token } from "~/utils/db";
+import type { Token } from "~/utils/db";
 import WalletHoverCard, { type WalletHoverCardData } from "./WalletHoverCard";
 import { CiFilter } from "react-icons/ci";
 
@@ -159,13 +159,8 @@ function formatUsd(value: string | number | null | undefined): string {
   if (!value) return "$0";
   const num = typeof value === "string" ? parseFloat(value) : value;
   if (!Number.isFinite(num) || num === 0) return "$0";
-  const abs = Math.abs(num);
-  const sign = num < 0 ? "-" : "";
-  if (abs >= 1e9) return `${sign}$${(abs / 1e9).toFixed(1)}B`;
-  if (abs >= 1e6) return `${sign}$${(abs / 1e6).toFixed(1)}M`;
-  if (abs >= 1000) return `${sign}$${(abs / 1000).toFixed(1)}K`;
-  if (abs > 0 && abs < 0.01) return `${sign}$${formatSmartNumber(abs)}`;
-  return `${sign}$${abs.toFixed(2)}`;
+  if (num >= 1000) return `$${(num / 1000).toFixed(1)}K`;
+  return `$${num.toFixed(2)}`;
 }
 
 function formatNumber(value: string | number | null | undefined): string {
@@ -175,7 +170,6 @@ function formatNumber(value: string | number | null | undefined): string {
   if (num >= 1e9) return `${(num / 1e9).toFixed(1)}B`;
   if (num >= 1e6) return `${(num / 1e6).toFixed(1)}M`;
   if (num >= 1e3) return `${(num / 1e3).toFixed(1)}K`;
-  if (Math.abs(num) > 0 && Math.abs(num) < 0.01) return formatSmartNumber(num);
   return num.toFixed(2);
 }
 
@@ -233,12 +227,21 @@ function formatFundingAge(timeAgo: string): string {
 
 function calculateRemaining(
   tokenBalance: string,
-  tokenAmountBought: string,
-  liveTokenPriceUsd: number,
+  currentPrice?: number,
+  marketCapUsd?: number,
   decimals?: number,
 ): { value: number; percentage: number } {
+  if (
+    !currentPrice ||
+    currentPrice <= 0 ||
+    !marketCapUsd ||
+    marketCapUsd <= 0
+  ) {
+    return { value: 0, percentage: 0 };
+  }
+
   const balance = parseFloat(tokenBalance) || 0;
-  if (balance <= 0) return { value: 0, percentage: 0 };
+  if (balance === 0) return { value: 0, percentage: 0 };
 
   // Adjust balance for decimals if needed
   let adjustedBalance = balance;
@@ -246,19 +249,13 @@ function calculateRemaining(
     adjustedBalance = balance / Math.pow(10, decimals);
   }
 
-  const bought = parseFloat(tokenAmountBought) || 0;
-  let adjustedBought = bought;
-  if (decimals && bought > 0 && bought > 1e15) {
-    adjustedBought = bought / Math.pow(10, decimals);
-  }
+  // Calculate current USD value of remaining tokens
+  const currentValue = adjustedBalance * currentPrice;
 
-  // Bar % = remaining_tokens / total_bought_tokens (how much of purchase still held)
-  const percentage = adjustedBought > 0 ? (adjustedBalance / adjustedBought) * 100 : 0;
+  // Calculate percentage of market cap
+  const percentage = (currentValue / marketCapUsd) * 100;
 
-  // Value = remaining_tokens * live token price in USD
-  const value = adjustedBalance * liveTokenPriceUsd;
-
-  return { value, percentage };
+  return { value: currentValue, percentage };
 }
 
 function getFundingSource(
@@ -731,9 +728,6 @@ const HoldersTable: React.FC<HoldersTableProps> = ({
   const wsHolders = chain === "sol" ? wsContext.holders : [];
   const wsTopTraders = chain === "sol" ? wsContext.topTraders : [];
   const wsLoading = chain === "sol" ? wsContext.loading : false;
-  const liveTokenPriceUsd = chain === "sol"
-    ? (wsContext.tokenInfo?.price_usd || (token as any)?.usd_price || (token as any)?.price_usd || 0)
-    : 0;
 
   // Create a lookup map of wallet addresses to full holder data for hover cards
   const walletDataMap = useMemo(() => {
@@ -963,12 +957,12 @@ const HoldersTable: React.FC<HoldersTableProps> = ({
         solBalance:
           h.sol_balance_lamports != null ? h.sol_balance_lamports / 1e9 : null,
         isLoadingBalance: h.sol_balance_lamports == null, // Only loading if not provided
-        // Convert SOL amounts to USD using live SOL price
-        amountBoughtUsd30d: String(h.total_bought_sol * chainPrice),
-        amountSoldUsd30d: String(h.total_sold_sol * chainPrice),
+        // Convert SOL amounts to USD (approximate, using SOL price ~$200)
+        amountBoughtUsd30d: String(h.total_bought_sol * 200),
+        amountSoldUsd30d: String(h.total_sold_sol * 200),
         tokenAmountBought30d: String(h.total_bought_tokens),
         tokenAmountSold30d: String(h.total_sold_tokens),
-        tokenAcquisitionCostUsd: String(h.total_bought_sol * chainPrice),
+        tokenAcquisitionCostUsd: String(h.total_bought_sol * 200),
         tokenBalance: String(h.remaining_tokens),
         buys30d: h.buy_count,
         sells30d: h.sell_count,
@@ -992,7 +986,7 @@ const HoldersTable: React.FC<HoldersTableProps> = ({
       }));
     }
     return [];
-  }, [chain, monadHolders, useWebSocketData, wsHolders, codexHolders, chainPrice]);
+  }, [chain, monadHolders, useWebSocketData, wsHolders, codexHolders]);
 
   // Notify parent of total count changes
   useEffect(() => {
@@ -1154,18 +1148,19 @@ const HoldersTable: React.FC<HoldersTableProps> = ({
               const sells = holder.sells30d || 1;
               value = (parseFloat(holder.amountSoldUsd30d) || 0) / sells;
               break;
-            case "pnl": {
-              const hBought = parseFloat(holder.amountBoughtUsd30d) || 0;
-              const hSold = parseFloat(holder.amountSoldUsd30d) || 0;
-              const hRem = calculateRemaining(holder.tokenBalance, holder.tokenAmountBought30d, liveTokenPriceUsd, token?.decimals);
-              value = (hSold + hRem.value) - hBought;
+            case "pnl":
+              value = calculateUnrealizedPnL(
+                holder.tokenBalance,
+                holder.tokenAcquisitionCostUsd,
+                token?.usd_price,
+                token?.decimals,
+              );
               break;
-            }
             case "remaining":
               const rem = calculateRemaining(
                 holder.tokenBalance,
-                holder.tokenAmountBought30d,
-                liveTokenPriceUsd,
+                token?.usd_price,
+                token?.market_cap_usd,
                 token?.decimals,
               );
               value =
@@ -1255,24 +1250,31 @@ const HoldersTable: React.FC<HoldersTableProps> = ({
                 ? (parseFloat(b.amountSoldUsd30d) || 0) / b.sells30d
                 : 0;
             break;
-          case "pnl": {
-            const aRemPnl = calculateRemaining(a.tokenBalance, a.tokenAmountBought30d, liveTokenPriceUsd, token?.decimals);
-            aVal = ((parseFloat(a.amountSoldUsd30d) || 0) + aRemPnl.value) - (parseFloat(a.amountBoughtUsd30d) || 0);
-            const bRemPnl = calculateRemaining(b.tokenBalance, b.tokenAmountBought30d, liveTokenPriceUsd, token?.decimals);
-            bVal = ((parseFloat(b.amountSoldUsd30d) || 0) + bRemPnl.value) - (parseFloat(b.amountBoughtUsd30d) || 0);
+          case "pnl":
+            aVal = calculateUnrealizedPnL(
+              a.tokenBalance,
+              a.tokenAcquisitionCostUsd,
+              token?.usd_price,
+              token?.decimals,
+            );
+            bVal = calculateUnrealizedPnL(
+              b.tokenBalance,
+              b.tokenAcquisitionCostUsd,
+              token?.usd_price,
+              token?.decimals,
+            );
             break;
-          }
           case "remaining":
             const remA = calculateRemaining(
               a.tokenBalance,
-              a.tokenAmountBought30d,
-              liveTokenPriceUsd,
+              token?.usd_price,
+              token?.market_cap_usd,
               token?.decimals,
             );
             const remB = calculateRemaining(
               b.tokenBalance,
-              b.tokenAmountBought30d,
-              liveTokenPriceUsd,
+              token?.usd_price,
+              token?.market_cap_usd,
               token?.decimals,
             );
             aVal = remA.value;
@@ -1294,7 +1296,6 @@ const HoldersTable: React.FC<HoldersTableProps> = ({
     showRemainingInSol,
     chainPrice,
     walletFilter,
-    liveTokenPriceUsd,
   ]);
 
   return (
@@ -1540,15 +1541,18 @@ const HoldersTable: React.FC<HoldersTableProps> = ({
                   holder.buys30d > 0 ? boughtUsd / holder.buys30d : 0;
                 const avgSellPrice =
                   holder.sells30d > 0 ? soldUsd / holder.sells30d : 0;
-                const remaining = calculateRemaining(
+                const unrealizedPnL = calculateUnrealizedPnL(
                   holder.tokenBalance,
-                  holder.tokenAmountBought30d,
-                  liveTokenPriceUsd,
+                  holder.tokenAcquisitionCostUsd,
+                  token?.usd_price,
                   token?.decimals,
                 );
-                const totalPnlUsd = (soldUsd + remaining.value) - boughtUsd;
-                const totalPnlPct = boughtUsd > 0 ? (totalPnlUsd / boughtUsd) * 100 : 0;
-                const totalPnlSol = chainPrice > 0 ? totalPnlUsd / chainPrice : 0;
+                const remaining = calculateRemaining(
+                  holder.tokenBalance,
+                  token?.usd_price,
+                  token?.market_cap_usd,
+                  token?.decimals,
+                );
                 const funding = getFundingSource(holder.address, index);
 
                 return (
@@ -1583,7 +1587,7 @@ const HoldersTable: React.FC<HoldersTableProps> = ({
                           };
 
                           return (
-                            <WalletHoverCard data={hoverData} chain={chain} solPrice={chainPrice}>
+                            <WalletHoverCard data={hoverData} chain={chain}>
                               <div className="flex items-center gap-1.5">
                                 <a
                                   href={`https://solscan.io/account/${holder.address}`}
@@ -1634,7 +1638,7 @@ const HoldersTable: React.FC<HoldersTableProps> = ({
                           {holder.isLoadingBalance ? (
                             <span style={{ color: AX.muted }}>...</span>
                           ) : holder.solBalance !== null ? (
-                            formatSmartNumber(holder.solBalance)
+                            holder.solBalance.toFixed(3)
                           ) : (
                             <span style={{ color: AX.muted }}>N/A</span>
                           )}
@@ -1675,20 +1679,15 @@ const HoldersTable: React.FC<HoldersTableProps> = ({
                       </div>
                     </td>
                     <td className="px-2 py-3">
-                      <div className="flex flex-col">
-                        <span
-                          className="text-[13px] font-medium"
-                          style={{
-                            color: totalPnlUsd >= 0 ? AX.mint : AX.sell,
-                          }}
-                        >
-                          {totalPnlUsd >= 0 ? "+" : ""}
-                          {formatUsd(totalPnlUsd)}
-                        </span>
-                        <span className="text-xs text-[#757e80]">
-                          {formatSmartNumber(totalPnlPct)}% · {totalPnlSol >= 0 ? "+" : ""}{formatSmartNumber(totalPnlSol)} SOL
-                        </span>
-                      </div>
+                      <span
+                        className="text-[13px] font-medium"
+                        style={{
+                          color: unrealizedPnL >= 0 ? AX.mint : AX.sell,
+                        }}
+                      >
+                        {unrealizedPnL >= 0 ? "+" : ""}
+                        {formatUsd(unrealizedPnL)}
+                      </span>
                     </td>
                     <td className="px-2 py-3">
                       <div className="flex flex-col gap-0.5">
@@ -1698,7 +1697,7 @@ const HoldersTable: React.FC<HoldersTableProps> = ({
                               <SolanaIcon size={10} />
                               <span className="text-[13px] text-[#c4cccc]">
                                 {chainPrice > 0
-                                  ? formatSmartNumber(remaining.value / chainPrice)
+                                  ? (remaining.value / chainPrice).toFixed(4)
                                   : "0"}
                               </span>
                             </div>

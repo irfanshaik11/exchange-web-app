@@ -373,7 +373,7 @@ const Activity: React.FC<ActivityProps> = ({
               const metadata = tokenMetadata[trade.tokenAddress];
 
               const handleRowClick = () => {
-                const navigateAddress = trade.tokenAddress || trade.originalPairAddress || trade.pairAddress;
+                const navigateAddress = trade.originalPairAddress || trade.pairAddress || trade.tokenAddress;
                 const isMonadTrade =
                   (trade.blockchain || '').toLowerCase() === 'monad' || currentChain === 'monad';
 

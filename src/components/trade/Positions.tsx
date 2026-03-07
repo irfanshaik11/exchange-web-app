@@ -1557,7 +1557,7 @@ const Positions: React.FC<PositionsProps> = ({
               const displayPnlPercentage = currentPrice > 0 ? livePnlPercentage : corrected.correctedPnlPercentage;
               
               // For positions: backend stores originalPairAddress value in pairAddress field
-              const navigateAddress = pos.tokenAddress || sourcePosition.pairAddress;
+              const navigateAddress = sourcePosition.pairAddress || pos.tokenAddress;
               const displayAddress = sourcePosition.pairAddress || pos.tokenAddress;
               
               const handleRowClick = () => {

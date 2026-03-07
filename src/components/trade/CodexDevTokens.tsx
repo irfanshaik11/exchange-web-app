@@ -1,5 +1,4 @@
 import React, { useState, useEffect, useLayoutEffect, useMemo, useCallback } from 'react';
-import { useRouter } from 'next/router';
 import { formatSmartNumber } from '~/utils/db';
 import useCodexDevTokens from '../../hooks/useCodexDevTokens';
 import { useSolanaTokenWebSocketContext, type SolanaDevToken } from '../../contexts/SolanaTokenWebSocketContext';
@@ -126,8 +125,6 @@ const CACHE_KEY_PREFIX_ALL = 'codex_dev_tokens_all_cache_';
 const CACHE_EXPIRY_MS = 5 * 60 * 1000; // 5 minutes cache expiry
 
 const CodexDevTokens: React.FC<CodexDevTokensProps> = ({ token, chain = 'sol', onTotalCountChange }) => {
-  const router = useRouter();
-
   // Collapsible state for right panel - default to expanded (false = not collapsed)
   const [isRightPanelCollapsed, setIsRightPanelCollapsed] = useState<boolean>(false);
   
@@ -230,9 +227,10 @@ const CodexDevTokens: React.FC<CodexDevTokensProps> = ({ token, chain = 'sol', o
   const saveToCache = useCallback((tokens: any[], mint: string, isAll: boolean) => {
     if (!mint || typeof window === 'undefined' || tokens.length === 0) return;
 
+    const cap = isAll ? 50 : 10;
     const cacheKey = getCacheKey(mint, isAll);
     const cacheData = {
-      tokens: tokens,
+      tokens: tokens.slice(0, cap),
       timestamp: Date.now(),
       mint,
     };
@@ -268,10 +266,10 @@ const CodexDevTokens: React.FC<CodexDevTokensProps> = ({ token, chain = 'sol', o
     { fetchAll: true }
   );
 
-  // Fetch tokens for table display (REST API fallback - Solana only)
+  // Fetch limited tokens for table display (REST API fallback - Solana only)
   const { tokens, isLoading, error } = useCodexDevTokens(
     chain === 'sol' ? token?.mint : undefined,
-    { fetchAll: true }
+    { limit: 10 }
   );
 
   // Use WebSocket data as primary, then REST API, then cache as fallback
@@ -280,7 +278,7 @@ const CodexDevTokens: React.FC<CodexDevTokensProps> = ({ token, chain = 'sol', o
     // WebSocket data takes priority when available
     if (mappedWsDevTokens.length > 0) {
       console.log('[CodexDevTokens] Using WebSocket dev tokens:', mappedWsDevTokens.length);
-      return mappedWsDevTokens;
+      return mappedWsDevTokens.slice(0, 10); // Limit to 10 for table
     }
     // Fall back to REST API data
     if (tokens.length > 0) {
@@ -445,28 +443,28 @@ const CodexDevTokens: React.FC<CodexDevTokensProps> = ({ token, chain = 'sol', o
             {/* Dev Holdings */}
             <div className="p-3 rounded-lg" style={{ backgroundColor: AX.surface2, border: `1px solid ${AX.border}` }}>
               <div className="text-xs" style={{ color: AX.muted }}>Dev Holdings</div>
-              <div className="text-sm font-semibold text-white">{Number(monadDevData.dev_hold_percent || 0).toFixed(2)}%</div>
+              <div className="text-sm font-semibold text-white">{monadDevData.dev_hold_percent.toFixed(2)}%</div>
             </div>
 
             {/* Buy Activity */}
             <div className="p-3 rounded-lg" style={{ backgroundColor: AX.surface2, border: `1px solid ${AX.border}` }}>
               <div className="text-xs" style={{ color: AX.muted }}>Buy Activity</div>
               <div className="text-sm font-semibold text-emerald-400">{monadDevData.buy_count} buys</div>
-              <div className="text-xs" style={{ color: AX.muted }}>${Number(monadDevData.buy_volume_usd || 0).toFixed(2)}</div>
+              <div className="text-xs" style={{ color: AX.muted }}>${monadDevData.buy_volume_usd.toFixed(2)}</div>
             </div>
 
             {/* Sell Activity */}
             <div className="p-3 rounded-lg" style={{ backgroundColor: AX.surface2, border: `1px solid ${AX.border}` }}>
               <div className="text-xs" style={{ color: AX.muted }}>Sell Activity</div>
               <div className="text-sm font-semibold text-red-400">{monadDevData.sell_count} sells</div>
-              <div className="text-xs" style={{ color: AX.muted }}>${Number(monadDevData.sell_volume_usd || 0).toFixed(2)}</div>
+              <div className="text-xs" style={{ color: AX.muted }}>${monadDevData.sell_volume_usd.toFixed(2)}</div>
             </div>
 
             {/* MON Balance */}
             <div className="p-3 rounded-lg" style={{ backgroundColor: AX.surface2, border: `1px solid ${AX.border}` }}>
               <div className="text-xs" style={{ color: AX.muted }}>MON Balance</div>
-              <div className="text-sm font-semibold text-white">{Number(monadDevData.mon_balance || 0).toFixed(4)} MON</div>
-              <div className="text-xs" style={{ color: AX.muted }}>${Number(monadDevData.mon_balance_usd || 0).toFixed(2)}</div>
+              <div className="text-sm font-semibold text-white">{monadDevData.mon_balance.toFixed(4)} MON</div>
+              <div className="text-xs" style={{ color: AX.muted }}>${monadDevData.mon_balance_usd.toFixed(2)}</div>
             </div>
 
             {/* Token Balance */}
@@ -584,29 +582,9 @@ const CodexDevTokens: React.FC<CodexDevTokensProps> = ({ token, chain = 'sol', o
                 return (
                   <tr
                     key={devToken.token.address}
-                    className="transition-colors cursor-pointer hover:brightness-110"
+                    className="transition-colors"
                     style={{
                       backgroundColor: idx % 2 === 0 ? "#111214" : "#15161a",
-                    }}
-                    onClick={() => {
-                      const mintAddress = devToken.token.address;
-                      if ((chain as string) === 'monad') {
-                        router.push(`/trade/monad/${mintAddress}`);
-                        return;
-                      }
-                      const queryParams = new URLSearchParams({
-                        _name: devToken.token.name || devToken.token.symbol || '',
-                        _symbol: devToken.token.symbol || '',
-                        _mcap: devToken.marketCap || '',
-                        _mint: mintAddress,
-                        _liquidity: devToken.liquidity || '',
-                        _created_at: devToken.token.createdAt
-                          ? new Date(devToken.token.createdAt * 1000).toISOString()
-                          : '',
-                        chain: 'sol',
-                        _migrated: devToken.token.migrated_pool_address ? '1' : '',
-                      }).toString();
-                      router.push(`/trade/${mintAddress}?${queryParams}`);
                     }}
                   >
                     <td className="px-4 py-1">

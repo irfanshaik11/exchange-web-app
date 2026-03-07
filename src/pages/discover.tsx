@@ -3594,7 +3594,7 @@ export default function DiscoverPage() {
     const { cover, avatar } = getCachedImagesForToken(t);
 
     return {
-      id: t?.mint || t?.pair_address || Math.random().toString(36).slice(2),
+      id: t?.pair_address || t?.mint || Math.random().toString(36).slice(2),
       name,
       symbol: sym,
       desc,
@@ -3652,7 +3652,7 @@ export default function DiscoverPage() {
     });
 
     return {
-      id: t?.mint || t?.pair_address || Math.random().toString(36).slice(2),
+      id: t?.pair_address || t?.mint || Math.random().toString(36).slice(2),
       name,
       symbol: sym,
       desc,

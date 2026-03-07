@@ -6021,9 +6021,9 @@ function MonadTable({
           items={filteredTokensForDisplay}
           itemSize={MONAD_ROW_HEIGHT}
           renderRow={(token: any, idx: number, style: React.CSSProperties) => {
-              // Use mint if available, otherwise fallback to pair_address
+              // Use pair_address if available, otherwise fallback to mint
               const pairAddress =
-                (token as any)?.mint || (token as any)?.pair_address;
+                (token as any)?.pair_address || (token as any)?.mint;
 
               // Build query params for optimistic UI + cache lookup
               // Include chain parameter to preserve chain selection

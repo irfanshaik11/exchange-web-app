@@ -109,6 +109,7 @@ export function prefetchViaWS(mint: string): void {
     }
 
     currentMint = mint;
+    status = 'connecting';
     snapshotData = [];
     realtimeBuffer = [];
 
@@ -117,9 +118,6 @@ export function prefetchViaWS(mint: string): void {
       clearTimeout(cleanupTimer);
       cleanupTimer = null;
     }
-
-    // Always use a dedicated WS for prefetch (persistent connection is reserved for chart)
-    status = 'connecting';
 
     try {
       const wsUrl = buildWsUrl(mint);
@@ -152,10 +150,7 @@ export function prefetchViaWS(mint: string): void {
               (a, b) => a.unix_time - b.unix_time,
             );
 
-            if (snapshotData.length > 500) {
-              snapshotData = snapshotData.slice(-500);
-            }
-
+            // Bridge: write into globalOHLCCache so useBackgroundOHLCPreload picks it up
             if (snapshotData.length > 0) {
               writeToGlobalCache(mint, snapshotData);
             }

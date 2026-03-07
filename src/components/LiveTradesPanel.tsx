@@ -381,7 +381,28 @@ export default function LiveTradesPanel({
                     onClick={async (e) => {
                       e.preventDefault();
                       e.stopPropagation();
-                      const tokenAddress = trade.mint || trade.pair_address;
+                      let tokenAddress = trade.pair_address;
+                      if (!tokenAddress && trade.mint) {
+                        try {
+                          const searchResponse = await fetch(
+                            `${process.env.NEXT_PUBLIC_GO_SERVICE_URL}/v1/search?phrase=${encodeURIComponent(trade.mint)}&limit=1`,
+                          );
+                          if (searchResponse.ok) {
+                            const searchData = await searchResponse.json();
+                            if (
+                              searchData.tokens &&
+                              searchData.tokens.length > 0
+                            ) {
+                              tokenAddress =
+                                searchData.tokens[0].pair_address ||
+                                searchData.tokens[0].poolId;
+                            }
+                          }
+                        } catch {
+                          // Silent fail
+                        }
+                      }
+                      if (!tokenAddress) tokenAddress = trade.mint;
                       const queryParams = new URLSearchParams();
                       queryParams.set('chain', 'sol');
                       const name = trade.name || metadata?.name;

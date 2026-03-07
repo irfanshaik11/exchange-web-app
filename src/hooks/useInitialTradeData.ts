@@ -1,6 +1,6 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react';
-
+import { env } from '../env';
 
 
 interface TradeData {
@@ -187,13 +187,61 @@ export default function useInitialTradeData(
     }
   }, []);
 
-  // token-stats fetch removed — unified token WS provides volume data directly
+  // Fetch token stats from API (trade/view endpoint is dead — only token-stats remains)
   const fetchData = useCallback(async (pair: string, token?: string) => {
-    return {
-      trades: [],
-      stats: null,
-      recentTrades: [],
-    };
+    const baseUrl = env.NEXT_PUBLIC_GO_SERVICE_URL;
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => {
+      controller.abort();
+      console.warn(`[useInitialTradeData] Request timeout for ${pair} after 15 seconds`);
+    }, 15000);
+
+    try {
+      let formattedStats = null;
+
+      // Fetch token stats if we have a token address
+      if (token) {
+        try {
+          const statsResponse = await fetch(
+            `${baseUrl}/v1/ws/token-stats?pair_address=${pair}&token_address=${token}`,
+            {
+              headers: {
+                'accept': 'application/json',
+                'X-API-Key': env.NEXT_PUBLIC_BACKEND_API_KEY || 'test-key',
+              },
+              signal: controller.signal,
+            }
+          );
+
+          if (statsResponse.ok) {
+            const statsData = await statsResponse.json();
+            if (statsData?.data?.timeframes) {
+              formattedStats = { timeframes: statsData.data.timeframes };
+            }
+          }
+        } catch (err) {
+          console.warn('[useInitialTradeData] Failed to fetch stats:', err);
+        }
+      }
+
+      clearTimeout(timeoutId);
+
+      return {
+        trades: [],
+        stats: formattedStats,
+        recentTrades: [],
+      };
+    } catch (err: any) {
+      clearTimeout(timeoutId);
+
+      if (err.name === 'AbortError') {
+        console.warn(`[useInitialTradeData] Request aborted for ${pair} - likely timeout`);
+        throw new Error(`Request timeout for ${pair}. Please try again.`);
+      }
+
+      console.error('[useInitialTradeData] Fetch error:', err);
+      throw err;
+    }
   }, []);
 
   // Main effect to load data

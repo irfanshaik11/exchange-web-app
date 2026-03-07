@@ -1,6 +1,5 @@
 import { prefetchViaWS } from "~/utils/ohlcPrefetchManager";
 import { prefetchOHLC } from "~/hooks/useBackgroundOHLCPreload";
-import * as ohlcvConnectionManager from "~/utils/ohlcvConnectionManager";
 
 import { preloadImage } from "~/utils/imagePreloader";
 import { computeHashImageUrl } from "~/utils/imageHash";
@@ -58,12 +57,7 @@ export function preloadTradeChart(
   const skipWs = options.skipWs ?? chain === "monad";
 
   // Step 1: WS prefetch — immediate (Solana only)
-  // Subscribe on persistent WS so snapshot arrives before chart mounts.
-  // Also open a dedicated WS as fallback (in case persistent WS is still connecting).
   if (!skipWs) {
-    if (ohlcvConnectionManager.isConnected()) {
-      ohlcvConnectionManager.subscribe(mint, '1s');
-    }
     prefetchViaWS(mint);
   }
 

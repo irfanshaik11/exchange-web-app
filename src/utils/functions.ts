@@ -348,31 +348,9 @@ export function transformWalletScanToTradeRows(
 }
 
 export function formatSmartNumber(num: number): string {
-  const abs = Math.abs(num);
-  if (abs > 0 && abs < 0.01) {
-    const str = abs.toFixed(20);
-    const decIdx = str.indexOf('.');
-    if (decIdx !== -1) {
-      let zeroCount = 0;
-      let sigDigits = '';
-      for (let i = decIdx + 1; i < str.length; i++) {
-        if (str[i] === '0') {
-          zeroCount++;
-        } else {
-          sigDigits = str.substring(i, Math.min(i + 4, str.length)).replace(/0+$/, '');
-          break;
-        }
-      }
-      if (zeroCount >= 2 && sigDigits) {
-        const subMap: Record<string, string> = { '0':'₀','1':'₁','2':'₂','3':'₃','4':'₄','5':'₅','6':'₆','7':'₇','8':'₈','9':'₉' };
-        const sub = zeroCount.toString().split('').map(c => subMap[c] || c).join('');
-        return `${num < 0 ? '-' : ''}0.0${sub}${sigDigits}`;
-      }
-    }
-  }
-  if (abs < 1000) {
+  if (Math.abs(num) < 1000) {
     return parseFloat(num.toFixed(2)).toLocaleString();
-  } else if (abs < 1000000) {
+  } else if (Math.abs(num) < 1000000) {
     return parseFloat((num / 1000).toFixed(2)).toLocaleString() + "K";
   } else if (Math.abs(num) < 1000000000) {
     return parseFloat((num / 1000000).toFixed(2)).toLocaleString() + "M";
