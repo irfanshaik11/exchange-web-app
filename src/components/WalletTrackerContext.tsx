@@ -679,7 +679,7 @@ export function WalletTrackerProvider({
           _created_at: cachedMeta?.createdAt || "",
           chain: "sol",
         }).toString();
-        const tradeUrl = `/trade/${normalizedEvent.pair_address || normalizedEvent.mint}?${queryParams}`;
+        const tradeUrl = `/trade/${normalizedEvent.mint || normalizedEvent.pair_address}?${queryParams}`;
 
         // Create clickable custom content for live trades toast (wide, compact)
         const customContent = (

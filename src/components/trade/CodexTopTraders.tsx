@@ -1,4 +1,4 @@
-import React, { useMemo, useState, useCallback } from "react";
+import React, { useMemo, useState, useCallback, useRef } from "react";
 import { FiX } from "react-icons/fi";
 import { FaFilter, FaCaretDown } from "react-icons/fa";
 import { MdRefresh } from "react-icons/md";
@@ -15,6 +15,7 @@ import WalletHoverCard, { type WalletHoverCardData } from "./WalletHoverCard";
 import { CiFilter } from "react-icons/ci";
 import { SiSolana } from "react-icons/si";
 import { safeLocalStorageSet } from "~/utils/cacheManager";
+import { useSolPrice } from "../SolPriceContext";
 
 interface CodexTopTradersProps {
   token: Token | null;
@@ -435,6 +436,9 @@ function formatPrice(amountUsd: string, tokenAmount: string) {
   if (price >= 1000) {
     return `$${(price / 1000).toFixed(1)}K`;
   }
+  if (price > 0 && price < 0.01) {
+    return `$${formatSmartNumber(price)}`;
+  }
   return `$${price.toFixed(2)}`;
 }
 
@@ -659,6 +663,21 @@ const CodexTopTraders: React.FC<CodexTopTradersProps> = ({
   const wsLoading = chain === "sol" ? wsContext.loading : false;
   const wsError = chain === "sol" ? wsContext.error : null;
 
+  const { solPrice, monPrice } = useSolPrice();
+  const chainPrice = chain === "monad" ? monPrice : solPrice;
+  // Throttle live price to only update when it changes by >1%
+  // Prevents full trader sort on every WS trade tick (~1/sec)
+  const rawLiveTokenPriceUsd = chain === "sol"
+    ? (wsContext.tokenInfo?.price_usd || (token as any)?.usd_price || (token as any)?.price_usd || 0)
+    : 0;
+  const stablePriceRef = useRef(rawLiveTokenPriceUsd);
+  if (rawLiveTokenPriceUsd > 0 && Math.abs(rawLiveTokenPriceUsd - stablePriceRef.current) / stablePriceRef.current > 0.01) {
+    stablePriceRef.current = rawLiveTokenPriceUsd;
+  } else if (stablePriceRef.current === 0 && rawLiveTokenPriceUsd > 0) {
+    stablePriceRef.current = rawLiveTokenPriceUsd;
+  }
+  const liveTokenPriceUsd = stablePriceRef.current;
+
   // Create a lookup map of wallet addresses to holder data for hover cards
   const walletDataMap = useMemo(() => {
     const map = new Map<string, WalletHoverCardData>();
@@ -742,14 +761,12 @@ const CodexTopTraders: React.FC<CodexTopTradersProps> = ({
   const normalizedSolanaTraders = useMemo(() => {
     if (!wsTopTraders || wsTopTraders.length === 0) return [];
 
-    const SOL_PRICE = 200; // Approximate SOL price
-
     return wsTopTraders.map((t: SolanaTopTrader) => ({
       walletAddress: t.wallet_address,
-      amountBoughtUsd: String(t.total_bought_sol * SOL_PRICE),
-      amountSoldUsd: String(t.total_sold_sol * SOL_PRICE),
-      volumeUsd: String((t.total_bought_sol + t.total_sold_sol) * SOL_PRICE),
-      realizedProfitUsd: String(t.realized_pnl * SOL_PRICE),
+      amountBoughtUsd: String(t.total_bought_sol * chainPrice),
+      amountSoldUsd: String(t.total_sold_sol * chainPrice),
+      volumeUsd: String((t.total_bought_sol + t.total_sold_sol) * chainPrice),
+      realizedProfitUsd: String(t.realized_pnl * chainPrice),
       realizedProfitPercentage:
         t.realized_pnl > 0 && t.total_bought_sol > 0
           ? t.realized_pnl / t.total_bought_sol
@@ -762,9 +779,10 @@ const CodexTopTraders: React.FC<CodexTopTradersProps> = ({
       tokenAmountSold: String(t.total_sold_tokens),
       buys: t.buy_count,
       sells: t.sell_count,
-      remainingPercent: t.remaining_percent,
+      remainingPercent: t.total_bought_tokens > 0 ? (Math.max(0, t.remaining_tokens) / t.total_bought_tokens) * 100 : 0,
+      remainingValueUsd: Math.max(0, t.remaining_tokens) * liveTokenPriceUsd,
     }));
-  }, [wsTopTraders]);
+  }, [wsTopTraders, chainPrice, liveTokenPriceUsd]);
 
   // Normalize Monad top traders to common format
   const normalizedMonadTraders = useMemo(() => {
@@ -787,6 +805,7 @@ const CodexTopTraders: React.FC<CodexTopTradersProps> = ({
         t.tokens_remaining > 0 && t.tokens_bought > 0
           ? (t.tokens_remaining / t.tokens_bought) * 100
           : 0,
+      remainingValueUsd: 0, // Monad doesn't have live token price from WS yet
     }));
   }, [monadTopTraders]);
 
@@ -809,9 +828,9 @@ const CodexTopTraders: React.FC<CodexTopTradersProps> = ({
       const tokensSold = parseFloat(trader.tokenAmountSold);
       const avgBuy = tokensBought > 0 ? boughtUsd / tokensBought : 0;
       const avgSell = tokensSold > 0 ? soldUsd / tokensSold : 0;
-      const pnl = parseFloat(trader.realizedProfitUsd);
-      const pnlPct = trader.realizedProfitPercentage * 100;
-      const remaining = parseFloat(trader.tokenBalance);
+      const remaining = trader.remainingValueUsd ?? 0;
+      const pnl = (soldUsd + remaining) - boughtUsd;
+      const pnlPct = boughtUsd > 0 ? (pnl / boughtUsd) * 100 : 0;
       const remainingPct = trader.remainingPercent || 0;
       // Calculate hours since last activity
       const lastActiveHours =
@@ -976,17 +995,25 @@ const CodexTopTraders: React.FC<CodexTopTradersProps> = ({
             bVal =
               bTokensSold > 0 ? parseFloat(b.amountSoldUsd) / bTokensSold : 0;
             break;
-          case "pnl":
-            aVal = parseFloat(a.realizedProfitUsd);
-            bVal = parseFloat(b.realizedProfitUsd);
+          case "pnl": {
+            const aSold = parseFloat(a.amountSoldUsd);
+            const bSold = parseFloat(b.amountSoldUsd);
+            aVal = (aSold + (a.remainingValueUsd ?? 0)) - parseFloat(a.amountBoughtUsd);
+            bVal = (bSold + (b.remainingValueUsd ?? 0)) - parseFloat(b.amountBoughtUsd);
             break;
-          case "pnlPct":
-            aVal = a.realizedProfitPercentage * 100;
-            bVal = b.realizedProfitPercentage * 100;
+          }
+          case "pnlPct": {
+            const aBoughtP = parseFloat(a.amountBoughtUsd);
+            const bBoughtP = parseFloat(b.amountBoughtUsd);
+            const aPnl = (parseFloat(a.amountSoldUsd) + (a.remainingValueUsd ?? 0)) - aBoughtP;
+            const bPnl = (parseFloat(b.amountSoldUsd) + (b.remainingValueUsd ?? 0)) - bBoughtP;
+            aVal = aBoughtP > 0 ? (aPnl / aBoughtP) * 100 : 0;
+            bVal = bBoughtP > 0 ? (bPnl / bBoughtP) * 100 : 0;
             break;
+          }
           case "remaining":
-            aVal = parseFloat(a.tokenBalance);
-            bVal = parseFloat(b.tokenBalance);
+            aVal = a.remainingValueUsd ?? 0;
+            bVal = b.remainingValueUsd ?? 0;
             break;
           case "remainingPct":
             aVal = a.remainingPercent || 0;
@@ -1275,9 +1302,10 @@ const CodexTopTraders: React.FC<CodexTopTradersProps> = ({
               displayTraders.map((trader, idx) => {
                 const boughtUsd = parseFloat(trader.amountBoughtUsd);
                 const soldUsd = parseFloat(trader.amountSoldUsd);
-                const realizedProfit = parseFloat(trader.realizedProfitUsd);
-                const realizedProfitPct = trader.realizedProfitPercentage * 100;
-                const tokenBalance = parseFloat(trader.tokenBalance);
+                const remainingValueUsd = trader.remainingValueUsd || 0;
+                const totalPnlUsd = (soldUsd + remainingValueUsd) - boughtUsd;
+                const totalPnlPct = boughtUsd > 0 ? (totalPnlUsd / boughtUsd) * 100 : 0;
+                const totalPnlSol = chainPrice > 0 ? totalPnlUsd / chainPrice : 0;
                 const lastActive = getAge(trader.lastTransactionAt);
                 const wallet = shortAddr(trader.walletAddress);
 
@@ -1336,7 +1364,7 @@ const CodexTopTraders: React.FC<CodexTopTradersProps> = ({
                           };
 
                           return (
-                            <WalletHoverCard data={hoverData} chain={chain}>
+                            <WalletHoverCard data={hoverData} chain={chain} solPrice={chainPrice}>
                               <div className="flex items-center gap-1.5">
                                 <span className="font-normal cursor-pointer text-[#86d99f] transition-colors hover:text-[#86d99f]">
                                   {wallet}
@@ -1389,24 +1417,30 @@ const CodexTopTraders: React.FC<CodexTopTradersProps> = ({
                     <td className="px-2 py-3">
                       <div className="flex flex-col">
                         <span
-                          className={`text-[13px] font-normal ${realizedProfit >= 0 ? "text-[#86d99f]" : "text-red-400"}`}
+                          className={`text-[13px] font-normal ${totalPnlUsd >= 0 ? "text-[#86d99f]" : "text-red-400"}`}
                         >
-                          {realizedProfit >= 0 ? "+" : ""}$
-                          {formatSmartNumber(realizedProfit)}
+                          {totalPnlUsd >= 0 ? "+$" : "-$"}
+                          {formatSmartNumber(Math.abs(totalPnlUsd))}
                         </span>
                         <span className="text-xs text-[#757e80] font-normal">
-                          {realizedProfitPct.toFixed(1)}%
+                          {formatSmartNumber(totalPnlPct)}% · {totalPnlSol >= 0 ? "+" : ""}{formatSmartNumber(totalPnlSol)} SOL
                         </span>
                       </div>
                     </td>
                     <td className="px-2 py-3">
-                      <div className="flex flex-col">
-                        <span className="text-[13px] text-[#c4cccc] font-normal">
-                          ${formatSmartNumber(tokenBalance)}
-                        </span>
-                        <span className="text-xs text-[#757e80] font-normal">
-                          {(trader.remainingPercent || 0).toFixed(1)}%
-                        </span>
+                      <div className="flex flex-col gap-0.5">
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-[13px] text-[#c4cccc] font-normal">
+                            ${formatSmartNumber(trader.remainingValueUsd || 0)}
+                          </span>
+                          <span className="rounded bg-[#26282b] px-1 py-0.5 text-[9px] text-[#c4cccc]">
+                            {formatSmartNumber(trader.remainingPercent || 0)}%
+                          </span>
+                        </div>
+                        <div className="h-0.5 overflow-hidden rounded-full" style={{ backgroundColor: '#2A2B3340' }}>
+                          <div className="h-full rounded-full bg-[#c4cccc] transition-all"
+                            style={{ width: `${Math.min(trader.remainingPercent || 0, 100)}%` }} />
+                        </div>
                       </div>
                     </td>
                     <td className="px-2 py-3">

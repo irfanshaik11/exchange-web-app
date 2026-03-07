@@ -414,7 +414,7 @@ export default function WatchlistModal({ open, onClose }: WatchlistModalProps) {
   if (!open && !show) return null;
 
   const handleTokenClick = (token: Token) => {
-    const tokenAddress = token.pair_address || (token as any).mint || '';
+    const tokenAddress = (token as any).mint || token.pair_address || '';
     if (!tokenAddress) return;
     const isMonad = isMonadToken(token);
     const queryParams = new URLSearchParams();
@@ -929,11 +929,11 @@ export default function WatchlistModal({ open, onClose }: WatchlistModalProps) {
                 token.symbol || token.name || "T"
               )}&background=0f1012&color=E6E7EA&size=48`;
               const { marketCap, liquidity, volume1h, price, priceChange1h } = resolveWatchlistStats(token);
-              const tokenAddress = token.pair_address || (token as any).mint || '';
+              const tokenAddress = (token as any).mint || token.pair_address || '';
 
               return (
-                <tr 
-                  key={tokenKey} 
+                <tr
+                  key={tokenKey}
                   className="cursor-pointer"
                   style={{ 
                     borderBottom: `1px solid ${AX.border}`,

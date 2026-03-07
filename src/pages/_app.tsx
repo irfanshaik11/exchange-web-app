@@ -638,14 +638,14 @@ const MyApp: AppType = ({ Component, pageProps }) => {
   // Preload TradingView library script early for faster chart loading
   useEffect(() => {
     if (typeof window === 'undefined') return;
-    
+
     // Check if already loaded or loading
     if ((window as any).TradingView) return;
-    
+
     // Check if script tag already exists
     const existingScript = document.querySelector('script[src="/charting_library/charting_library/charting_library.standalone.js"]');
     if (existingScript) return;
-    
+
     // Preload the script in the background
     const script = document.createElement('script');
     script.src = '/charting_library/charting_library/charting_library.standalone.js';
@@ -653,6 +653,92 @@ const MyApp: AppType = ({ Component, pageProps }) => {
     script.defer = true;
     // Don't set onload - let AdvancedOHLCChart handle it
     document.head.appendChild(script);
+  }, []);
+
+  // Pre-warm TradingView sub-bundles (library.*.js, chart-widget-gui.*.js)
+  // Creating a tiny hidden widget forces V8 to parse+JIT-compile all TradingView code paths once,
+  // so subsequent real widget creation is 2-3x faster (code already compiled).
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    // Skip if already pre-warmed
+    if ((window as any).__tvPreWarmed) return;
+
+    const doPreWarm = () => {
+      const TradingView = (window as any).TradingView;
+      if (!TradingView?.widget) return;
+      if ((window as any).__tvPreWarmed) return;
+      (window as any).__tvPreWarmed = true;
+
+      // Create a tiny off-screen container
+      const container = document.createElement('div');
+      container.style.cssText = 'width:1px;height:1px;position:absolute;left:-9999px;overflow:hidden';
+      document.body.appendChild(container);
+
+      // Minimal datafeed that returns immediately — just enough to trigger sub-bundle loading
+      const minimalDatafeed = {
+        onReady: (cb: (config: any) => void) => { setTimeout(() => cb({ supported_resolutions: ['1S'] }), 0); },
+        resolveSymbol: (_symbolName: string, onResolve: (info: any) => void) => {
+          setTimeout(() => onResolve({
+            name: 'WARMUP', ticker: 'WARMUP', description: '', type: 'crypto',
+            session: '24x7', timezone: 'Etc/UTC', exchange: '', listed_exchange: '',
+            minmov: 1, pricescale: 100, has_seconds: true, seconds_multipliers: ['1'],
+            has_intraday: true, supported_resolutions: ['1S'],
+            data_status: 'streaming',
+          }), 0);
+        },
+        getBars: (_symbolInfo: any, _resolution: string, _periodParams: any, onResult: (bars: any[], meta: any) => void) => {
+          onResult([], { noData: true });
+        },
+        subscribeBars: () => {},
+        unsubscribeBars: () => {},
+        searchSymbols: () => {},
+      };
+
+      try {
+        const widget = new TradingView.widget({
+          container,
+          symbol: 'WARMUP',
+          datafeed: minimalDatafeed,
+          interval: '1S',
+          library_path: '/charting_library/charting_library/',
+          locale: 'en',
+          fullscreen: false,
+          autosize: false,
+          width: 1,
+          height: 1,
+          disabled_features: ['use_localstorage_for_settings'],
+          enabled_features: ['seconds_resolution'],
+          loading_screen: { backgroundColor: 'transparent' },
+        });
+
+        widget.onChartReady(() => {
+          // Sub-bundles are now parsed and JIT-compiled — clean up
+          try { widget.remove(); } catch {}
+          try { document.body.removeChild(container); } catch {}
+          console.log('[TradingView] Pre-warm complete — sub-bundles compiled');
+        });
+      } catch (e) {
+        // Non-critical — chart will still work, just slightly slower on first load
+        try { document.body.removeChild(container); } catch {}
+        console.warn('[TradingView] Pre-warm failed:', e);
+      }
+    };
+
+    // Wait for TradingView to be available, then pre-warm during idle time
+    let warmRetries = 0;
+    const MAX_WARM_RETRIES = 20; // 20 * 500ms = 10 seconds max wait
+    const checkAndWarm = () => {
+      if ((window as any).TradingView?.widget) {
+        if (typeof requestIdleCallback === 'function') {
+          requestIdleCallback(doPreWarm, { timeout: 3000 });
+        } else {
+          setTimeout(doPreWarm, 100);
+        }
+      } else if (++warmRetries < MAX_WARM_RETRIES) {
+        setTimeout(checkAndWarm, 500);
+      }
+    };
+    checkAndWarm();
   }, []);
 
   // Register image caching service worker (production only)
@@ -707,6 +793,9 @@ const MyApp: AppType = ({ Component, pageProps }) => {
           as="script"
           crossOrigin="anonymous"
         />
+        {/* Preload heavy TradingView bundles (high-priority download before trade page opens) */}
+        <link rel="preload" href="/charting_library/charting_library/bundles/library.15664647653f41254b4d.js" as="script" crossOrigin="anonymous" />
+        <link rel="preload" href="/charting_library/charting_library/bundles/chart-widget-gui.4ec424eb56739ee22285.js" as="script" crossOrigin="anonymous" />
         <link rel="icon" type="image/png" sizes="32x32" href="/interstate/favicon-32x32.png" />
         <link rel="icon" type="image/png" sizes="16x16" href="/interstate/favicon-16x16.png" />
         <style jsx global>{`

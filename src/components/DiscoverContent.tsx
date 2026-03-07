@@ -1088,7 +1088,7 @@ export default function DiscoverContent() {
     const imageUrl = cover || t?.image || undefined;
     const avatarImageUrl = avatar || imageUrl || undefined;
     return {
-      id: t?.pair_address || t?.mint || Math.random().toString(36).slice(2),
+      id: t?.mint || t?.pair_address || Math.random().toString(36).slice(2),
       name,
       symbol: sym,
       desc,
