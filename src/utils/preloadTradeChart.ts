@@ -59,12 +59,14 @@ export function preloadTradeChart(
 
   // Step 1: WS prefetch — immediate (Solana only)
   // Subscribe on persistent WS so snapshot arrives before chart mounts.
-  // Also open a dedicated WS as fallback (in case persistent WS is still connecting).
+  // Only open a dedicated WS as fallback if persistent WS is NOT connected.
   if (!skipWs) {
     if (ohlcvConnectionManager.isConnected()) {
       ohlcvConnectionManager.subscribe(mint, '1s');
+      // Persistent WS is subscribed — skip dedicated WS (avoids redundant connection)
+    } else {
+      prefetchViaWS(mint);
     }
-    prefetchViaWS(mint);
   }
 
   // Step 2: Route prefetch — immediate (critical for cache-hit on router.push)
@@ -77,8 +79,11 @@ export function preloadTradeChart(
     options.router.prefetch(url);
   }
 
-  // Step 3: HTTP OHLC prefetch — immediate (parallel fast path with WS)
-  prefetchOHLC(mint, chain);
+  // Step 3: HTTP OHLC prefetch — only when persistent WS isn't connected
+  // (WS snapshot is faster than HTTP when available)
+  if (!ohlcvConnectionManager.isConnected()) {
+    prefetchOHLC(mint, chain);
+  }
 
   // Steps 4-6: deferred to idle time (non-critical)
   const rIC =

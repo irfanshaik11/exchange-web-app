@@ -1173,6 +1173,45 @@ const AdvancedOHLCChart: React.FC<AdvancedOHLCChartProps> = ({
       preloadedDataAppliedRef.current = false;
       chartPopulatedRef.current = false;
       tvResolutionRef.current = "1S";
+
+      // Widget reuse: clear old token's candle data so getBars waits for new snapshot.
+      // Without key={mint}, the component stays mounted — stale data must be purged.
+      lastGoodCandlesRef.current = [];
+      cachedIntervalRef.current = null;
+      cachedTimeframeRef.current = null;
+      lastCandleHashRef.current = "";
+      setCandles([]);
+      setIsLoading(true);
+      hasInitializedRef.current = false;
+      firstLoadRef.current = true;
+
+      // Clear gap-shift state (time gap compression is per-token)
+      gapShiftsRef.current = [];
+      totalShiftRef.current = 0;
+
+      // Clear price line state for new token
+      priceLineShapesRef.current = {};
+      lastPriceLinesRef.current = {};
+      lastAppliedLinesRef.current = {};
+      syncLinesInFlightRef.current = false;
+      maxMarketCapFromApiRef.current = null;
+
+      // Wake any pending getBars snapshot wait — it needs to re-wait for new token's data
+      if (snapshotResolverRef.current) {
+        snapshotResolverRef.current();
+        snapshotResolverRef.current = null;
+      }
+
+      // Clear aggregation state
+      currentAggregatedCandleRef.current = null;
+      oneSecondCandlesRef.current = [];
+      wsGapBridgedRef.current = false;
+
+      // Null out the TradingView realtime callback to prevent stale WS bars
+      // from the old token reaching the chart during the brief transition.
+      // setSymbol() → subscribeBars will set a new callback.
+      subscribedCallbackRef.current = null;
+      activeSubscriberUIDRef.current = null;
     }
   }, [mint, pairAddress, selectedInterval]);
 
@@ -3549,20 +3588,18 @@ const AdvancedOHLCChart: React.FC<AdvancedOHLCChartProps> = ({
 
             // Force TradingView to pick up the data
             if (!chartPopulatedRef.current) {
-              requestAnimationFrame(() => {
-                try {
-                  const chart =
-                    widgetRef.current?.chart?.() ||
-                    (widgetRef.current as any)?.activeChart?.();
-                  if (chart?.resetData) {
-                    chartPopulatedRef.current = true;
-                    chart.resetData();
-                    console.log(
-                      "[AdvancedOHLCChart] ✅ Chart populated from adopted WS data",
-                    );
-                  }
-                } catch {}
-              });
+              try {
+                const chart =
+                  widgetRef.current?.chart?.() ||
+                  (widgetRef.current as any)?.activeChart?.();
+                if (chart?.resetData) {
+                  chartPopulatedRef.current = true;
+                  chart.resetData();
+                  console.log(
+                    "[AdvancedOHLCChart] ✅ Chart populated from adopted WS data",
+                  );
+                }
+              } catch {}
             }
           }
         }
@@ -3620,16 +3657,14 @@ const AdvancedOHLCChart: React.FC<AdvancedOHLCChartProps> = ({
           updateChartMetrics();
 
           // Force TradingView to pick up the cached data
-          requestAnimationFrame(() => {
-            try {
-              const chart =
-                widgetRef.current?.chart?.() ||
-                (widgetRef.current as any)?.activeChart?.();
-              if (chart?.resetData) {
-                chart.resetData();
-              }
-            } catch {}
-          });
+          try {
+            const chart =
+              widgetRef.current?.chart?.() ||
+              (widgetRef.current as any)?.activeChart?.();
+            if (chart?.resetData) {
+              chart.resetData();
+            }
+          } catch {};
         } else {
           console.log(
             "[AdvancedOHLCChart] Persistent WS: subscribing to",
@@ -4319,11 +4354,13 @@ const AdvancedOHLCChart: React.FC<AdvancedOHLCChartProps> = ({
             // Resolves immediately when snapshot arrives; 1s timeout — backend returns in <300ms.
             if (!lastGoodCandlesRef.current.length) {
               await new Promise<void>((resolve) => {
+                // Bail out immediately if data arrived between the outer check and here
+                if (lastGoodCandlesRef.current.length) { resolve(); return; }
                 snapshotResolverRef.current = resolve;
                 setTimeout(() => {
                   snapshotResolverRef.current = null;
                   resolve();
-                }, 1000);
+                }, 400);
               });
             }
 
@@ -6069,7 +6106,13 @@ Maker: ${walletAddress}`;
           if (!chart) return;
 
           if (widgetTokenRef.current !== tokenId) {
-            currentWidget.setSymbol?.(tokenId, nextResolution, () => {
+            // Include display mode suffix so TradingView treats it as a new symbol
+            // (matches the format used at widget creation: `${tokenId}|${mode}`)
+            const symbolWithMode = `${tokenId}|${displayModeRef.current}`;
+            console.log("[AdvancedOHLCChart] setSymbol for token switch:", tokenId.slice(0, 10) + "...");
+            // Remove old token's price line shapes before switching
+            try { chart.removeAllShapes?.(); } catch {}
+            currentWidget.setSymbol?.(symbolWithMode, nextResolution, () => {
               widgetTokenRef.current = tokenId;
               chart.resetData?.();
               requestPriceLineSync(50);
@@ -6411,6 +6454,9 @@ Maker: ${walletAddress}`;
               // Return a formatter that dynamically checks the mode on each format call
               return {
                 format: (price: number, signPositive?: boolean) => {
+                  // Guard: TradingView can pass non-number values during setSymbol() transitions
+                  if (typeof price !== 'number' || !isFinite(price)) return '—';
+
                   // CRITICAL: Check displayModeRef.current INSIDE format function
                   // This ensures the formatter respects the current toggle state
                   const currentMode = displayModeRef.current;
