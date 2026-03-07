@@ -899,8 +899,32 @@ export default function Header({
       }
     };
 
+    // Paste event: user presses Ctrl+V / Cmd+V — works in production without clipboard permission
+    const handlePaste = (event: ClipboardEvent) => {
+      const text = event.clipboardData?.getData("text/plain");
+      if (text) {
+        processClipboardValue(text);
+      }
+    };
+
+    // On first user click, request clipboard-read permission so auto-polling works afterward
+    const handleFirstClick = () => {
+      if (navigator.clipboard?.readText) {
+        navigator.clipboard.readText().then(text => {
+          if (text) processClipboardValue(text);
+        }).catch(() => {});
+      }
+      document.removeEventListener("click", handleFirstClick);
+    };
+
     document.addEventListener("copy", handleCopy);
-    return () => document.removeEventListener("copy", handleCopy);
+    document.addEventListener("paste", handlePaste);
+    document.addEventListener("click", handleFirstClick, { once: true });
+    return () => {
+      document.removeEventListener("copy", handleCopy);
+      document.removeEventListener("paste", handlePaste);
+      document.removeEventListener("click", handleFirstClick);
+    };
   }, [processClipboardValue]);
 
   useEffect(() => {
