@@ -990,7 +990,7 @@ export default function Header({
         router.push(`/trade/monad/${clipboardToken.address}?${queryParams}`);
       } else {
         // Build full query params matching PulseTable navigation pattern
-        const pathAddress = (td as any)?.mint || td?.pair_address || clipboardToken.address;
+        const pathAddress = td?.pair_address || clipboardToken.address;
         const queryParams = new URLSearchParams({
           _name: td?.name || td?.symbol || clipboardToken.name || '',
           _symbol: td?.symbol || '',
@@ -2642,7 +2642,7 @@ export default function Header({
             >
             {enrichedWatchlist.map((token, index) => {
               const tokenKey = token.pair_address || (token as any).mint || token.symbol;
-              const tokenAddress = (token as any).mint || token.pair_address || '';
+              const tokenAddress = token.pair_address || (token as any).mint || '';
               const actualMint = (token as any).mint || token.pair_address || '';
               // Use helper function to get correctly mapped price and price change
               const { price, priceChange } = getWatchlistTokenPriceAndChange(token);

@@ -1055,9 +1055,6 @@ export default function PortfolioPage() {
 
   // Listen for trade-completed events and consume pending refreshes on mount
   useEffect(() => {
-    // Clear stale WS trades from previous chain on chain switch
-    pendingWsTradesRef.current = [];
-
     // Request WS snapshot for instant activity data (handles page navigation when WS already open)
     if (!activityLoadedRef.current) {
       requestSnapshot();

@@ -18,7 +18,6 @@ import UserLimitBlocker from "../components/UserLimitBlocker";
 
 import { useTurnkey, AuthState } from '@turnkey/react-wallet-kit';
 import { turnkeyLogin } from '../utils/api';
-import { init as initOhlcvConnection } from '../utils/ohlcvConnectionManager';
 
 // Dynamically import LoginModal with no SSR to prevent wagmi provider issues
 const LoginModal = dynamic(() => import('../components/LoginModal'), {
@@ -572,11 +571,6 @@ function GlobalLoginModalManager({ enforceLogin }: { enforceLogin: boolean }) {
 const MyApp: AppType = ({ Component, pageProps }) => {
   const [toastPosition, setToastPosition] = useState<'top-left' | 'top-center' | 'top-right' | 'bottom-left' | 'bottom-center' | 'bottom-right'>('top-center');
 
-  // Pre-warm persistent OHLCV WebSocket on app boot (saves ~150ms per trade page visit)
-  useEffect(() => {
-    initOhlcvConnection();
-  }, []);
-
   // Load toast position from localStorage on mount
   useEffect(() => {
     if (typeof window !== 'undefined') {
@@ -713,9 +707,6 @@ const MyApp: AppType = ({ Component, pageProps }) => {
           as="script"
           crossOrigin="anonymous"
         />
-        {/* Prefetch heavy TradingView bundles so they're cached before trade page opens */}
-        <link rel="prefetch" href="/charting_library/charting_library/bundles/library.15664647653f41254b4d.js" as="script" />
-        <link rel="prefetch" href="/charting_library/charting_library/bundles/chart-widget-gui.4ec424eb56739ee22285.js" as="script" />
         <link rel="icon" type="image/png" sizes="32x32" href="/interstate/favicon-32x32.png" />
         <link rel="icon" type="image/png" sizes="16x16" href="/interstate/favicon-16x16.png" />
         <style jsx global>{`

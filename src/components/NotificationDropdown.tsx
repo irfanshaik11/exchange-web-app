@@ -169,8 +169,8 @@ export default function NotificationDropdown({ open, onClose }: NotificationDrop
                   key={`${trade.tx}-${trade.at}-${index}`}
                   className="px-5 py-3 border-b border-neutral-800 hover:bg-neutral-800/50 transition-colors cursor-pointer"
                   onMouseEnter={() => {
-                    if (trade.mint || trade.pair_address) {
-                      const addr = trade.mint || trade.pair_address;
+                    if (trade.pair_address || trade.mint) {
+                      const addr = trade.pair_address || trade.mint;
                       const hoverQP = new URLSearchParams({ chain: 'sol' });
                       if (trade.name) hoverQP.set('_name', trade.name);
                       if (trade.symbol) hoverQP.set('_symbol', trade.symbol);
@@ -185,7 +185,7 @@ export default function NotificationDropdown({ open, onClose }: NotificationDrop
                     }
                   }}
                   onClick={() => {
-                    const addr = trade.mint || trade.pair_address;
+                    const addr = trade.pair_address || trade.mint;
                     if (addr) {
                       const qp = new URLSearchParams({ chain: 'sol' });
                       if (trade.name) qp.set('_name', trade.name);

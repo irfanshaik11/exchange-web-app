@@ -7,6 +7,8 @@ import { normalizeTimestampMs, normalizeTimestampToISO } from "../../utils/db";
 import Header from "../../components/Header";
 import Footer from "../../components/Footer";
 import TradeHeader from "../../components/trade/TradeHeader";
+import CustomSolanaChart from "../../components/CustomSolanaChart";
+
 import TradeActionPanel from "../../components/trade/TradeActionPanel";
 import TradeTabs from "../../components/trade/TradeTabs";
 import InstantTradeModal from "../../components/trade/InstantTradeModal";
@@ -1176,6 +1178,7 @@ export default function TradePage() {
                   setTradeParams={setTradeParams}
                   quickBuySettings={quickBuySettings}
                   quickBuySide={quickBuySide}
+                  initialStats={initialTradeData?.stats}
                   wsVolume={wsVolume}
                   liveMarketCapUsd={liveMarketCapForPanel}
                   liveLiquidityUsd={wsTokenInfo?.liquidity_usd}

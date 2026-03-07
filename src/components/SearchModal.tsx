@@ -1223,11 +1223,11 @@ const SearchModalContent = React.memo(function SearchModalContent({
   const handleSelectToken = useCallback(
     async (token: Token) => {
       const isMonad = chain === "monad";
-      // Get the token address - for Monad use mint, for Solana prefer mint over pair_address
+      // Get the token address - for Monad use mint, for Solana use pair_address or mint
       // IMPORTANT: Use the same address for both URL path and _mint param for consistency
       const address = isMonad
         ? (token.mint || (token as any).address)
-        : (token.mint || token.pair_address);
+        : (token.pair_address || token.mint);
 
       // Debug: log navigation details
       console.log("🚀 handleSelectToken:", {
@@ -1850,7 +1850,7 @@ const SearchModalContent = React.memo(function SearchModalContent({
                           if (!item.mint) return;
                           // Build tradeUrl matching handleSelectToken navigation
                           const isMonadItem = item.chain === 'monad';
-                          const itemAddr = isMonadItem ? item.mint : (item.mint || item.pair_address);
+                          const itemAddr = isMonadItem ? item.mint : (item.pair_address || item.mint);
                           let historyTradeUrl: string;
                           if (isMonadItem) {
                             const qp = new URLSearchParams();
@@ -2359,7 +2359,7 @@ const TokenListItem = React.memo(
       [twitterSearchQuery, token.symbol, token.name],
     );
     const shareUrl = useMemo(() => {
-      const path = `/trade/${token.mint || token.pair_address}`;
+      const path = `/trade/${token.pair_address || token.mint}`;
       if (typeof window === "undefined") return path;
       return `${window.location.origin}${path}`;
     }, [token.pair_address, token.mint]);
@@ -2576,7 +2576,7 @@ const TokenListItem = React.memo(
             if (!token.mint) return;
             // Build tradeUrl matching handleSelectToken navigation
             const isMonadResult = chain === 'monad';
-            const resultAddr = isMonadResult ? token.mint : (token.mint || token.pair_address);
+            const resultAddr = isMonadResult ? token.mint : (token.pair_address || token.mint);
             let resultTradeUrl: string;
             if (isMonadResult) {
               const qp = new URLSearchParams();
