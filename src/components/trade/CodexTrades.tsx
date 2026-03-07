@@ -10,8 +10,15 @@ import { LuChefHat } from "react-icons/lu";
 import { TfiTarget } from "react-icons/tfi";
 import { HiOutlineCubeTransparent } from "react-icons/hi2";
 import React, { useState, useCallback, useMemo } from "react";
-import { formatSmartNumber, formatMarketCap, formatSmallPrice } from "~/utils/db";
-import { useSolanaTokenWebSocketContext, type SolanaTokenHolder } from "../../contexts/SolanaTokenWebSocketContext";
+import {
+  formatSmartNumber,
+  formatMarketCap,
+  formatSmallPrice,
+} from "~/utils/db";
+import {
+  useSolanaTokenWebSocketContext,
+  type SolanaTokenHolder,
+} from "../../contexts/SolanaTokenWebSocketContext";
 import { useSolPrice } from "../SolPriceContext";
 import { useMonadTradesWebSocket } from "../../hooks/useMonadTradesWebSocket";
 import type { Token } from "~/utils/db";
@@ -19,6 +26,8 @@ import WalletHoverCard, { type WalletHoverCardData } from "./WalletHoverCard";
 import { VirtualizedTokenList } from "../VirtualizedTokenList";
 import { TokenAge } from "../TokenAge";
 import { safeLocalStorageSet } from "~/utils/cacheManager";
+import { KOL_ADDRESS_MAP } from "../../utils/kolLookup";
+import InterstateTooltip from "../InterstateTooltip";
 
 // Sort direction type
 type SortDirection = "asc" | "desc" | null;
@@ -564,7 +573,6 @@ function percentile(arr: number[], p: number) {
   return a[lo] * (1 - w) + a[hi] * w;
 }
 
-
 /** Normalize trade shapes into a single structure */
 function normalizeTrade(
   trade: any,
@@ -694,8 +702,7 @@ function normalizeTrade(
       totalUSD = solAmount * chainPrice;
     }
     // Always compute USD price (price_mon is in native MON, not USD)
-    if (tokenAmount > 0 && totalUSD > 0)
-      pricePerToken = totalUSD / tokenAmount;
+    if (tokenAmount > 0 && totalUSD > 0) pricePerToken = totalUSD / tokenAmount;
     keyPart = (trade.tx_hash || trade.id || "") + (trade.block_timestamp || "");
     maker = trade.trader_address || "";
     // Use block_timestamp for Monad trades
@@ -1450,7 +1457,12 @@ const CodexTrades: React.FC<CodexTradesProps> = ({
     (v: number) => {
       if (!isFinite(v) || v <= 0) return 0;
       const ref =
-        p95 > 0 ? p95 : normalized.reduce((mx, n) => (n.totalUSD > mx ? n.totalUSD : mx), 1);
+        p95 > 0
+          ? p95
+          : normalized.reduce(
+              (mx, n) => (n.totalUSD > mx ? n.totalUSD : mx),
+              1,
+            );
       return clamp01(v / ref);
     },
     [p95, normalized],
@@ -1462,7 +1474,11 @@ const CodexTrades: React.FC<CodexTradesProps> = ({
       const ref =
         p95Sol > 0
           ? p95Sol
-          : normalized.reduce((mx, n) => (n.solAmount > 0 && n.solAmount > mx ? n.solAmount : mx), 1);
+          : normalized.reduce(
+              (mx, n) =>
+                n.solAmount > 0 && n.solAmount > mx ? n.solAmount : mx,
+              1,
+            );
       return clamp01(v / ref);
     },
     [p95Sol, normalized],
@@ -1514,18 +1530,26 @@ const CodexTrades: React.FC<CodexTradesProps> = ({
     if (supply > 0) return supply;
     const anyToken = stableToken as any;
     const refMc = Number(
-      anyToken?.market_cap_usd ?? anyToken?.fully_diluted_value ??
-      anyToken?.marketCapUsd ?? anyToken?.fullyDilutedValue ?? 0
+      anyToken?.market_cap_usd ??
+        anyToken?.fully_diluted_value ??
+        anyToken?.marketCapUsd ??
+        anyToken?.fullyDilutedValue ??
+        0,
     );
     const refPrice = fallbackPriceUsd;
     if (refMc > 0 && refPrice > 0) return refMc / refPrice;
-    if (fetchedMarketCap && fetchedMarketCap > 0 && refPrice > 0) return fetchedMarketCap / refPrice;
+    if (fetchedMarketCap && fetchedMarketCap > 0 && refPrice > 0)
+      return fetchedMarketCap / refPrice;
     return 0;
   }, [supply, stableToken, fallbackPriceUsd, fetchedMarketCap]);
 
   // Virtualized row renderer for trades
   const renderTradeRow = useCallback(
-    (n: (typeof normalized)[number], index: number, style: React.CSSProperties) => {
+    (
+      n: (typeof normalized)[number],
+      index: number,
+      style: React.CSSProperties,
+    ) => {
       const timeStr = getTimeFromTimestampSec(n.timestampSec);
       const tokenAmountStr = formatSmartNumber(n.tokenAmount);
       const solAmountStr =
@@ -1543,7 +1567,9 @@ const CodexTrades: React.FC<CodexTradesProps> = ({
 
       const tradePrice = n.pricePerToken > 0 ? n.pricePerToken : unitPriceUsd;
       const tradeMc =
-        effectiveSupply > 0 && tradePrice > 0 ? tradePrice * effectiveSupply : null;
+        effectiveSupply > 0 && tradePrice > 0
+          ? tradePrice * effectiveSupply
+          : null;
 
       const anyToken = stableToken as any;
       const tokenMarketCap =
@@ -1562,7 +1588,8 @@ const CodexTrades: React.FC<CodexTradesProps> = ({
               : null;
 
       const mcStr = mc !== null ? `$${formatMarketCap(mc)}` : "-";
-      const priceStr = unitPriceUsd > 0 ? `$${formatSmallPrice(unitPriceUsd)}` : "-";
+      const priceStr =
+        unitPriceUsd > 0 ? `$${formatSmallPrice(unitPriceUsd)}` : "-";
 
       const intensityUsd = scaleAmt(n.totalUSD);
       const gradientUsd = heatBarGradient(n.isBuy, intensityUsd);
@@ -1586,10 +1613,10 @@ const CodexTrades: React.FC<CodexTradesProps> = ({
             ...style,
             backgroundColor: index % 2 === 0 ? "#111214" : "#161719",
           }}
-          className="!font-geist flex items-center transition-colors hover:brightness-110 !text-[13px]"
+          className="!font-geist flex items-center !text-[13px] transition-colors hover:brightness-110"
         >
           {/* Age / Time */}
-          <div className="w-[12%] px-4 text-[13px] text-[#757e80] truncate">
+          <div className="w-[12%] truncate px-4 text-[13px] text-[#757e80]">
             {showAge ? <TokenAge createdAt={n.timestampSec} /> : timeStr}
           </div>
 
@@ -1603,26 +1630,30 @@ const CodexTrades: React.FC<CodexTradesProps> = ({
           </div>
 
           {/* MC / Price */}
-          <div className="w-[13%] px-2 text-[13px] text-[#c4cccc] truncate">
+          <div className="w-[13%] truncate px-2 text-[13px] text-[#c4cccc]">
             {mcMode === "mc" ? mcStr : priceStr}
           </div>
 
           {/* Amount */}
-          <div className="w-[15%] px-2 text-[13px] text-[#c4cccc] truncate">
+          <div className="w-[15%] truncate px-2 text-[13px] text-[#c4cccc]">
             {tokenAmountStr}
           </div>
 
           {/* merged Total column */}
           <div
-            className="w-[15%] px-2 text-[13px] font-medium self-stretch flex items-center"
-            style={showingUsd || hasSol ? {
-              backgroundImage: gradient,
-              backgroundSize: `${Math.max(6, intensity * 100)}% 100%`,
-              backgroundPosition: "left",
-              backgroundRepeat: "no-repeat",
-              mixBlendMode: "screen" as const,
-              transition: "background-size 160ms ease",
-            } : undefined}
+            className="flex w-[15%] items-center self-stretch px-2 text-[13px] font-medium"
+            style={
+              showingUsd || hasSol
+                ? {
+                    backgroundImage: gradient,
+                    backgroundSize: `${Math.max(6, intensity * 100)}% 100%`,
+                    backgroundPosition: "left",
+                    backgroundRepeat: "no-repeat",
+                    mixBlendMode: "screen" as const,
+                    transition: "background-size 160ms ease",
+                  }
+                : undefined
+            }
           >
             {showingUsd || hasSol ? (
               <div
@@ -1638,9 +1669,7 @@ const CodexTrades: React.FC<CodexTradesProps> = ({
                 <span>{totalValueStr}</span>
               </div>
             ) : (
-              <div className="text-neutral-400">
-                {totalValueStr}
-              </div>
+              <div className="text-neutral-400">{totalValueStr}</div>
             )}
           </div>
 
@@ -1657,41 +1686,50 @@ const CodexTrades: React.FC<CodexTradesProps> = ({
                   holderType: holderType,
                 };
 
+                const isKol = KOL_ADDRESS_MAP.has(walletKey);
+
                 return (
-                  <WalletHoverCard data={hoverData} chain={chain}>
-                    <div className="flex items-center gap-1.5">
-                      <span className="cursor-pointer truncate text-[13px] whitespace-nowrap text-gray-300 transition-colors hover:text-emerald-400">
-                        {shortAddr(n.maker || "")}
-                      </span>
-                      {holderType === "dev" && (
-                        <LuChefHat
-                          size={12}
-                          className="flex-shrink-0 text-yellow-400"
-                        />
-                      )}
-                      {holderType === "sniper" && (
-                        <TfiTarget
-                          size={12}
-                          className="flex-shrink-0 text-red-400"
-                        />
-                      )}
-                      {holderType === "bundler" && (
-                        <HiOutlineCubeTransparent
-                          size={12}
-                          className="flex-shrink-0 text-orange-400"
-                        />
-                      )}
-                    </div>
-                  </WalletHoverCard>
+                  <>
+                    <WalletHoverCard data={hoverData} chain={chain}>
+                      <div className="flex items-center gap-1.5">
+                        <span className="cursor-pointer truncate text-[13px] whitespace-nowrap text-gray-300 transition-colors hover:text-emerald-400">
+                          {shortAddr(n.maker || "")}
+                        </span>
+                        {holderType === "dev" && (
+                          <LuChefHat
+                            size={12}
+                            className="flex-shrink-0 text-yellow-400"
+                          />
+                        )}
+                        {holderType === "sniper" && (
+                          <TfiTarget
+                            size={12}
+                            className="flex-shrink-0 text-red-400"
+                          />
+                        )}
+                        {holderType === "bundler" && (
+                          <HiOutlineCubeTransparent
+                            size={12}
+                            className="flex-shrink-0 text-orange-400"
+                          />
+                        )}
+                        {isKol && (
+                          <InterstateTooltip label="KOL" placement="top">
+                            <img
+                              src="/kol-tick-icon.svg"
+                              alt="KOL"
+                              className="h-3.5 w-3.5 flex-shrink-0"
+                            />
+                          </InterstateTooltip>
+                        )}
+                      </div>
+                    </WalletHoverCard>
+                  </>
                 );
               })()}
               <div className="flex flex-shrink-0 flex-nowrap items-center gap-1">
                 {(() => {
-                  const traderKey = (
-                    n.completeTraderAddress ||
-                    n.maker ||
-                    ""
-                  )
+                  const traderKey = (n.completeTraderAddress || n.maker || "")
                     .toString()
                     .replace(/\./g, "")
                     .replace(/\s/g, "")
@@ -1726,10 +1764,7 @@ const CodexTrades: React.FC<CodexTradesProps> = ({
                   onClick={(e) => e.stopPropagation()}
                 >
                   <div className="rounded-full bg-[#757E80] p-1">
-                    <SiSolana
-                      size={8}
-                      className="flex-shrink-0 text-black"
-                    />
+                    <SiSolana size={8} className="flex-shrink-0 text-black" />
                   </div>
                 </a>
               </div>
@@ -1739,9 +1774,20 @@ const CodexTrades: React.FC<CodexTradesProps> = ({
       );
     },
     [
-      showAge, mcMode, totalMode, chain, fallbackPriceUsd, effectiveSupply,
-      stableToken, fetchedMarketCap, scaleAmt, scaleAmtSol,
-      walletDataMap, holderTypeMap, traderTradeCounts, normalized,
+      showAge,
+      mcMode,
+      totalMode,
+      chain,
+      fallbackPriceUsd,
+      effectiveSupply,
+      stableToken,
+      fetchedMarketCap,
+      scaleAmt,
+      scaleAmtSol,
+      walletDataMap,
+      holderTypeMap,
+      traderTradeCounts,
+      normalized,
     ],
   );
 
@@ -1750,7 +1796,10 @@ const CodexTrades: React.FC<CodexTradesProps> = ({
   // Show skeleton only if we have NO token data at all
   // If we have mint address, we have enough to display (name/symbol can be empty for new tokens)
   const tokenMint = stableToken?.mint || (stableToken as any)?.pair_address;
-  if (!stableToken || (!stableToken.name && !stableToken.symbol && !tokenMint)) {
+  if (
+    !stableToken ||
+    (!stableToken.name && !stableToken.symbol && !tokenMint)
+  ) {
     return (
       <div className="min-h-0 flex-1 bg-black p-4">
         <div className="animate-pulse">
@@ -1802,9 +1851,12 @@ const CodexTrades: React.FC<CodexTradesProps> = ({
         position={filterPopoutPosition}
       />
 
-      <div className="min-h-0 flex-1 flex flex-col bg-[#111214]">
+      <div className="flex min-h-0 flex-1 flex-col bg-[#111214]">
         {/* Column header — sits above virtual list, not inside it */}
-        <div className="!font-geist flex items-center border-t border-b border-[#27282e] bg-[#111214] !text-xs" style={{ flexShrink: 0 }}>
+        <div
+          className="!font-geist flex items-center border-t border-b border-[#27282e] bg-[#111214] !text-xs"
+          style={{ flexShrink: 0 }}
+        >
           {/* Age / Time */}
           <div
             className="w-[12%] px-4 py-3 text-left whitespace-nowrap"
@@ -1815,9 +1867,7 @@ const CodexTrades: React.FC<CodexTradesProps> = ({
               onClick={() => setShowAge((prev) => !prev)}
               className="inline-flex items-center gap-0.5 text-[13px] text-[#757e80] transition-opacity hover:opacity-70"
             >
-              <span className="font-medium">
-                {showAge ? "Age" : "Time"}
-              </span>
+              <span className="font-medium">{showAge ? "Age" : "Time"}</span>
               <span
                 className="text-[10px] font-medium"
                 style={{ color: "#6b7280" }}
@@ -1835,8 +1885,7 @@ const CodexTrades: React.FC<CodexTradesProps> = ({
                 onClick={handleTypeFilterClick}
                 className="hover:bg-opacity-20 rounded p-0.5 transition-colors"
                 style={{
-                  color:
-                    filters.type.filter !== "all" ? AX.mint : "#757e80",
+                  color: filters.type.filter !== "all" ? AX.mint : "#757e80",
                 }}
               >
                 <CiFilter size={14} />
@@ -1846,9 +1895,7 @@ const CodexTrades: React.FC<CodexTradesProps> = ({
                   className="rounded px-1 text-[9px]"
                   style={{
                     backgroundColor:
-                      filters.type.filter === "buy"
-                        ? "#34d39920"
-                        : "#f8717120",
+                      filters.type.filter === "buy" ? "#34d39920" : "#f8717120",
                     color:
                       filters.type.filter === "buy" ? "#34d399" : "#f87171",
                   }}
@@ -1966,8 +2013,7 @@ const CodexTrades: React.FC<CodexTradesProps> = ({
                     ? filters.wallet.tags.length
                     : ""}
                   {filters.wallet.address ? "🔍" : ""}
-                  {filters.wallet.txsRange.min ||
-                  filters.wallet.txsRange.max
+                  {filters.wallet.txsRange.min || filters.wallet.txsRange.max
                     ? "📊"
                     : ""}
                 </span>
