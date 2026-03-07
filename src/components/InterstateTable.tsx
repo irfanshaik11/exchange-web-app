@@ -1,4 +1,5 @@
 import React, { useEffect, useState, useRef, useMemo, useCallback } from "react";
+import { createPortal } from "react-dom";
 import {
   FaQuestionCircle,
   FaRegStar,
@@ -511,7 +512,8 @@ const TokenAvatar: React.FC<{
   loading: boolean;
   showInitial: boolean;
   chain?: string; // 'sol' | 'monad' - chain identifier
-}> = ({ token, meta, loading, showInitial, chain = 'sol' }) => {
+  imageTooltipContent?: React.ReactNode; // when provided, only hovering the image shows this tooltip (not the bubble)
+}> = ({ token, meta, loading, showInitial, chain = 'sol', imageTooltipContent }) => {
   const initial = token.name?.charAt(0)?.toUpperCase() || '?';
   const [imgError, setImgError] = useState(false);
   
@@ -604,6 +606,27 @@ const TokenAvatar: React.FC<{
 
   const showFallbackLetter = imgError || (!loading && !imgSrc);
 
+  // AMM/protocol display name for bubble tooltip (matches PulseTable getAmmDisplayName)
+  const getAmmDisplayName = (t: Token): string => {
+    const protocol = ((t as any).launchpad_protocol || "").toLowerCase();
+    const mint = (t.mint || (t as any).mint_address || "").toLowerCase();
+    if (mint.includes("bags")) return "Bags";
+    if (!protocol) return "Pump";
+    if (protocol.includes("nad.fun") || protocol === "nadfun") return "Nad.fun";
+    if (protocol.includes("flap")) return "Flap.sh";
+    if (protocol.includes("kuru")) return "Kuru";
+    if (protocol.includes("pump")) return protocol.includes("pump_amm") || protocol.includes("pumpamm") || protocol.includes("pumpswap") ? "Pump AMM" : "Pump";
+    if (protocol.includes("meteora")) return "Meteora AMM";
+    if (protocol.includes("raydium")) return "Raydium";
+    if (protocol.includes("boop")) return "Boop";
+    if (protocol.includes("moonit") || protocol.includes("moonshot") || protocol.includes("moonshoot")) return "Moonit";
+    if (protocol.includes("bonk") || protocol.includes("launchlab") || mint.endsWith("bonk")) return protocol.includes("launchlab") ? "LaunchLab" : "Bonk";
+    if (protocol.includes("bags")) return "Bags";
+    return "Pump";
+  };
+
+  const ammBubbleTipRef = useRef<HTMLDivElement>(null);
+
   // Compute protocol badge values
   const protocolColor = getProtocolColor(token);
   const tokenIcon = getTokenIcon(token);
@@ -616,33 +639,50 @@ const TokenAvatar: React.FC<{
     _proto.includes('moonit') || _proto.includes('moonshot') || _proto.includes('moonshoot')
   );
 
+  const imageContainer = (
+    <div className="relative rounded-full overflow-hidden" style={{ width: '48px', height: '48px' }}>
+      {loading && !showInitial ? (
+        <div className="w-full h-full flex items-center justify-center rounded-full" style={{ backgroundColor: AX.surface2 }}>
+          <div className="w-6 h-6 border-2 border-t-2 border-b-2 border-yellow-400 rounded-full animate-spin"></div>
+        </div>
+      ) : showFallbackLetter ? (
+        <div className="w-full h-full flex items-center justify-center rounded-full" style={{ backgroundColor: AX.surface2, width: '48px', height: '48px' }}>
+          <span className="text-sm font-bold" style={{ color: AX.text }}>{initial}</span>
+        </div>
+      ) : (
+        <img
+          src={imgSrc}
+          alt={token.name || token.symbol || ''}
+          width={48}
+          height={48}
+          className="h-full w-full object-cover rounded-full transition-all duration-300"
+          onError={() => setImgError(true)}
+        />
+      )}
+    </div>
+  );
+
   return (
     <div className="relative h-12 w-12 flex items-center justify-center">
-      {/* Image container - circular */}
-      <div className="relative rounded-full overflow-hidden" style={{ width: '48px', height: '48px' }}>
-        {loading && !showInitial ? (
-          <div className="w-full h-full flex items-center justify-center rounded-full" style={{ backgroundColor: AX.surface2 }}>
-            <div className="w-6 h-6 border-2 border-t-2 border-b-2 border-yellow-400 rounded-full animate-spin"></div>
-          </div>
-        ) : showFallbackLetter ? (
-          <div className="w-full h-full flex items-center justify-center rounded-full" style={{ backgroundColor: AX.surface2, width: '48px', height: '48px' }}>
-            <span className="text-sm font-bold" style={{ color: AX.text }}>{initial}</span>
-          </div>
-        ) : (
-          <img
-            src={imgSrc}
-            alt={token.name || token.symbol || ''}
-            width={48}
-            height={48}
-            className="h-full w-full object-cover rounded-full transition-all duration-300"
-            onError={() => setImgError(true)}
-          />
-        )}
-      </div>
+      {/* Image container - circular; image tooltip only when hovering this (not the bubble) */}
+      {imageTooltipContent ? (
+        <InterstateTooltip
+          width={undefined}
+          height={undefined}
+          xOffset="ml-0"
+          label={imageTooltipContent}
+          className="bg-neutral-900/100"
+          noPadding
+        >
+          {imageContainer}
+        </InterstateTooltip>
+      ) : (
+        imageContainer
+      )}
       
-      {/* Protocol logo badge - bottom right */}
+      {/* Protocol logo badge - bottom right (tooltip on hover, same as pulse page) */}
       <div
-        className="pointer-events-none absolute right-0 bottom-0 z-10 flex translate-x-1/5 translate-y-1/4 transform items-center justify-center rounded-full"
+        className="pointer-events-auto absolute right-0 bottom-0 z-10 flex translate-x-1/5 translate-y-1/4 transform items-center justify-center rounded-full"
         style={{
           width: 16,
           height: 16,
@@ -650,11 +690,25 @@ const TokenAvatar: React.FC<{
           border: `1px solid ${protocolColor}`,
           boxShadow: `0 0 4px ${protocolColor}60`,
         }}
+        onMouseEnter={(e) => {
+          const tip = ammBubbleTipRef.current;
+          if (tip && typeof document !== "undefined") {
+            const r = e.currentTarget.getBoundingClientRect();
+            tip.style.left = `${r.left + r.width / 2}px`;
+            tip.style.top = `${r.top - 6}px`;
+            tip.style.transform = "translate(-50%, -100%)";
+            tip.style.opacity = "1";
+          }
+        }}
+        onMouseLeave={() => {
+          const tip = ammBubbleTipRef.current;
+          if (tip) tip.style.opacity = "0";
+        }}
       >
         <img
           src={tokenIcon}
-          alt="Protocol"
-          className={`${fillBadge ? 'h-full w-full object-cover' : 'h-3/4 w-3/4 object-contain'} rounded-full`}
+          alt={`${(token as any).launchpad_protocol || (token as any).protocol || (token as any).launchpadName || "Protocol"} logo`}
+          className={`${fillBadge ? 'h-full w-full object-cover' : 'h-3/4 w-3/4 object-contain'} rounded-full pointer-events-none`}
           style={{
             filter: protocolColor === '#eab308'
               ? 'sepia(1) saturate(3) hue-rotate(-10deg) brightness(1.1)'
@@ -663,6 +717,23 @@ const TokenAvatar: React.FC<{
           onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
         />
       </div>
+      {typeof document !== "undefined" &&
+        createPortal(
+          <div
+            ref={ammBubbleTipRef}
+            className="pointer-events-none fixed z-[9999] rounded px-2 py-1 text-[10px] font-medium whitespace-nowrap"
+            style={{
+              backgroundColor: "rgba(31, 41, 55, 0.95)",
+              color: "#e5e7eb",
+              border: "1px solid rgba(107, 114, 128, 0.3)",
+              opacity: 0,
+              transition: "opacity 150ms",
+            }}
+          >
+            {getAmmDisplayName(token)}
+          </div>,
+          document.body
+        )}
     </div>
   );
 };
@@ -855,16 +926,14 @@ const TokenInfo: React.FC<{
         {isWatched ? <FaStar className="w-5 h-5" /> : <FaRegStar className="w-5 h-5" />}
       </button>
       
-      <InterstateTooltip
-        width={undefined}
-        height={undefined}
-        xOffset="ml-0"
-        label={tooltipContent}
-        className="bg-neutral-900/100"
-        noPadding
-      >
-        <TokenAvatar token={token} meta={meta} loading={loading} showInitial={showInitial} chain={chain} />
-      </InterstateTooltip>
+      <TokenAvatar
+        token={token}
+        meta={meta}
+        loading={loading}
+        showInitial={showInitial}
+        chain={chain}
+        imageTooltipContent={tooltipContent}
+      />
       
       <div className="flex flex-col min-w-0 flex-1">
         <div className="flex items-center gap-2 mb-1">
