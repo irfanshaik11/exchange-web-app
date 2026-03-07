@@ -36,6 +36,17 @@ let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
 let messageListener: MessageListener | null = null;
 let initialized = false;
 
+// Snapshot cache — populated when subscribe is called before the chart mounts (e.g. on hover).
+// The chart can drain this on mount instead of waiting for a fresh snapshot.
+interface CachedCandle {
+  unix_time: number;
+  o: number; h: number; l: number; c: number;
+  v_usd: number;
+}
+let snapshotCache: CachedCandle[] = [];
+let snapshotCacheMint: string | null = null;
+let realtimeCache: CachedCandle[] = [];
+
 // Keepalive state
 let keepaliveInterval: ReturnType<typeof setInterval> | null = null;
 let lastMessageTime = 0;
@@ -141,6 +152,39 @@ function connect(): void {
       // Track last message time for dead connection detection
       lastMessageTime = Date.now();
 
+      // Cache snapshots and candles so the chart can drain them on mount.
+      // This enables "subscribe on hover" — snapshot arrives before the chart exists.
+      try {
+        const msg = JSON.parse(event.data);
+        if (msg.type === 'snapshot' && Array.isArray(msg.data) && currentMint) {
+          snapshotCacheMint = currentMint;
+          snapshotCache = msg.data.map((c: any) => ({
+            unix_time: c.unix_time || c.time,
+            o: c.o ?? c.open ?? 0,
+            h: c.h ?? c.high ?? 0,
+            l: c.l ?? c.low ?? 0,
+            c: c.c ?? c.close ?? 0,
+            v_usd: c.v_usd ?? c.v ?? c.volume ?? 0,
+          }));
+          if (snapshotCache.length > 500) {
+            snapshotCache = snapshotCache.slice(-500);
+          }
+          realtimeCache = [];
+          console.log('[OHLCVConn] Snapshot cached:', snapshotCache.length, 'candles for', currentMint.slice(0, 10) + '...');
+        } else if (msg.type === 'candle' && msg.data && snapshotCacheMint === currentMint) {
+          realtimeCache.push({
+            unix_time: msg.data.unix_time || msg.data.time,
+            o: msg.data.o ?? msg.data.open ?? 0,
+            h: msg.data.h ?? msg.data.high ?? 0,
+            l: msg.data.l ?? msg.data.low ?? 0,
+            c: msg.data.c ?? msg.data.close ?? 0,
+            v_usd: msg.data.v_usd ?? msg.data.v ?? msg.data.volume ?? 0,
+          });
+        }
+      } catch {
+        // Parse failed — still forward to listener below
+      }
+
       // Forward all messages to the registered listener (chart or prefetch manager).
       // The listener handles pings, snapshots, candles, etc.
       if (messageListener) {
@@ -227,6 +271,12 @@ export function init(): void {
 
 /** Subscribe to a token. Sends a subscribe message on the existing persistent WS. */
 export function subscribe(mint: string, timeframe: string = '1s'): void {
+  // Clear snapshot cache if switching to a different mint
+  if (currentMint !== mint) {
+    snapshotCache = [];
+    realtimeCache = [];
+    snapshotCacheMint = null;
+  }
   currentMint = mint;
   if (ws?.readyState === WebSocket.OPEN) {
     ws.send(JSON.stringify({ type: 'subscribe', mint, timeframe }));
@@ -254,4 +304,32 @@ export function isConnected(): boolean {
 /** Get the currently subscribed mint (if any). */
 export function getCurrentMint(): string | null {
   return currentMint;
+}
+
+/**
+ * Drain the cached snapshot + realtime candles for `mint`.
+ * Returns null if no cached data or wrong mint.
+ * Clears the cache after draining so it's only consumed once.
+ */
+export function drainSnapshotCache(mint: string): CachedCandle[] | null {
+  if (snapshotCacheMint !== mint || snapshotCache.length === 0) return null;
+
+  const merged = [...snapshotCache, ...realtimeCache];
+  merged.sort((a, b) => a.unix_time - b.unix_time);
+
+  // Dedupe by unix_time
+  const seen = new Set<number>();
+  const result = merged.filter((c) => {
+    if (seen.has(c.unix_time)) return false;
+    seen.add(c.unix_time);
+    return true;
+  });
+
+  // Clear cache — chart now owns this data
+  snapshotCache = [];
+  realtimeCache = [];
+  snapshotCacheMint = null;
+
+  console.log('[OHLCVConn] Snapshot cache drained:', result.length, 'candles for', mint.slice(0, 10) + '...');
+  return result;
 }

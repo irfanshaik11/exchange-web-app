@@ -1141,17 +1141,6 @@ const AdvancedOHLCChart: React.FC<AdvancedOHLCChartProps> = ({
     const tokenChanged = prevResetTokenRef.current !== currentToken;
     prevResetTokenRef.current = currentToken;
 
-    // Always reset on token OR interval change
-    console.warn("[AdvancedOHLCChart] 🔄 RESET EFFECT fired", {
-      tokenChanged,
-      currentToken,
-      selectedInterval,
-      prevInterval: currentAggregatingIntervalRef.current,
-      chartPopulated: chartPopulatedRef.current,
-      hasCallback: !!subscribedCallbackRef.current,
-      activeUID: activeSubscriberUIDRef.current,
-      totalShift: totalShiftRef.current,
-    });
     hasRightAlignedRef.current = false;
     wsResetDoneRef.current = false;
     wsLogCountRef.current = 0;
@@ -3608,15 +3597,53 @@ const AdvancedOHLCChart: React.FC<AdvancedOHLCChartProps> = ({
       // ── Try persistent pre-warmed connection (saves ~150ms handshake) ──
       if (ohlcvConnectionManager.isConnected()) {
         usingPersistentConn = true;
-        console.log(
-          "[AdvancedOHLCChart] Persistent WS: subscribing to",
-          tokenAddress.slice(0, 10) + "...",
-        );
+
+        // Drain snapshot cached from hover-time subscribe (if available).
+        // This avoids waiting for the server to send a fresh snapshot.
+        const cachedSnapshot = ohlcvConnectionManager.drainSnapshotCache(tokenAddress);
+        if (cachedSnapshot && cachedSnapshot.length > 0) {
+          console.log(
+            "[AdvancedOHLCChart] Persistent WS: using hover-cached snapshot for",
+            tokenAddress.slice(0, 10) + "...",
+            "(" + cachedSnapshot.length + " candles)",
+          );
+          lastGoodCandlesRef.current = cachedSnapshot;
+          cachedIntervalRef.current = latestParamsRef.current.interval;
+          cachedTimeframeRef.current = latestParamsRef.current.timeframe;
+          setCandles(cachedSnapshot);
+          setIsLoading(false);
+          hasInitializedRef.current = true;
+          firstLoadRef.current = false;
+          // Mark chart as populated IMMEDIATELY so the WS snapshot handler
+          // (which checks chartPopulatedRef) won't trigger a second resetData().
+          chartPopulatedRef.current = true;
+          updateChartMetrics();
+
+          // Force TradingView to pick up the cached data
+          requestAnimationFrame(() => {
+            try {
+              const chart =
+                widgetRef.current?.chart?.() ||
+                (widgetRef.current as any)?.activeChart?.();
+              if (chart?.resetData) {
+                chart.resetData();
+              }
+            } catch {}
+          });
+        } else {
+          console.log(
+            "[AdvancedOHLCChart] Persistent WS: subscribing to",
+            tokenAddress.slice(0, 10) + "...",
+          );
+        }
 
         // Register our handler to receive messages from the persistent WS
         ohlcvConnectionManager.setMessageListener(handleSolanaMessage);
-        // Subscribe to this token — server sends snapshot immediately
-        ohlcvConnectionManager.subscribe(tokenAddress, wsInterval);
+        // Only re-subscribe if the persistent WS isn't already on this mint
+        // (hover already subscribed → snapshot cached → no need for a second snapshot)
+        if (ohlcvConnectionManager.getCurrentMint() !== tokenAddress) {
+          ohlcvConnectionManager.subscribe(tokenAddress, wsInterval);
+        }
 
         wsConnectedRef.current = true;
         wsGapBridgedRef.current = false;

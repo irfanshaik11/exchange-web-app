@@ -445,28 +445,28 @@ const CodexDevTokens: React.FC<CodexDevTokensProps> = ({ token, chain = 'sol', o
             {/* Dev Holdings */}
             <div className="p-3 rounded-lg" style={{ backgroundColor: AX.surface2, border: `1px solid ${AX.border}` }}>
               <div className="text-xs" style={{ color: AX.muted }}>Dev Holdings</div>
-              <div className="text-sm font-semibold text-white">{monadDevData.dev_hold_percent.toFixed(2)}%</div>
+              <div className="text-sm font-semibold text-white">{Number(monadDevData.dev_hold_percent || 0).toFixed(2)}%</div>
             </div>
 
             {/* Buy Activity */}
             <div className="p-3 rounded-lg" style={{ backgroundColor: AX.surface2, border: `1px solid ${AX.border}` }}>
               <div className="text-xs" style={{ color: AX.muted }}>Buy Activity</div>
               <div className="text-sm font-semibold text-emerald-400">{monadDevData.buy_count} buys</div>
-              <div className="text-xs" style={{ color: AX.muted }}>${monadDevData.buy_volume_usd.toFixed(2)}</div>
+              <div className="text-xs" style={{ color: AX.muted }}>${Number(monadDevData.buy_volume_usd || 0).toFixed(2)}</div>
             </div>
 
             {/* Sell Activity */}
             <div className="p-3 rounded-lg" style={{ backgroundColor: AX.surface2, border: `1px solid ${AX.border}` }}>
               <div className="text-xs" style={{ color: AX.muted }}>Sell Activity</div>
               <div className="text-sm font-semibold text-red-400">{monadDevData.sell_count} sells</div>
-              <div className="text-xs" style={{ color: AX.muted }}>${monadDevData.sell_volume_usd.toFixed(2)}</div>
+              <div className="text-xs" style={{ color: AX.muted }}>${Number(monadDevData.sell_volume_usd || 0).toFixed(2)}</div>
             </div>
 
             {/* MON Balance */}
             <div className="p-3 rounded-lg" style={{ backgroundColor: AX.surface2, border: `1px solid ${AX.border}` }}>
               <div className="text-xs" style={{ color: AX.muted }}>MON Balance</div>
-              <div className="text-sm font-semibold text-white">{monadDevData.mon_balance.toFixed(4)} MON</div>
-              <div className="text-xs" style={{ color: AX.muted }}>${monadDevData.mon_balance_usd.toFixed(2)}</div>
+              <div className="text-sm font-semibold text-white">{Number(monadDevData.mon_balance || 0).toFixed(4)} MON</div>
+              <div className="text-xs" style={{ color: AX.muted }}>${Number(monadDevData.mon_balance_usd || 0).toFixed(2)}</div>
             </div>
 
             {/* Token Balance */}

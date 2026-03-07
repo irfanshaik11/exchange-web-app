@@ -38,9 +38,29 @@ setInterval(cleanupCache, 60000);
 
 export default function useBackgroundOHLCPreload(interval: string = '1h', timeframe: string = '30d'): UseBackgroundOHLCPreloadResult {
   const router = useRouter();
-  const [backgroundData, setBackgroundData] = useState<OHLCData[] | null>(null);
+
+  // Synchronous cache check on first render — eliminates the 1-frame delay where
+  // preloadedData is null and TradingView shows "..." while getBars waits.
+  const [backgroundData, setBackgroundData] = useState<OHLCData[] | null>(() => {
+    if (typeof window === 'undefined') return null;
+    const q = router.query;
+    const mint = (typeof q._mint === 'string' && q._mint.length >= 32) ? q._mint
+      : (typeof q.id === 'string' && (q.id as string).length >= 32 ? q.id as string : null);
+    if (!mint) return null;
+    const cacheKey = `${mint}:${interval}:${timeframe}`;
+    const cached = globalOHLCCache.get(cacheKey);
+    if (cached && (Date.now() - cached.timestamp) < CACHE_DURATION && cached.data.length > 0 && cached.mint === mint) {
+      return cached.data;
+    }
+    const wsPrefetch = getWsPrefetchData(mint);
+    if (wsPrefetch && wsPrefetch.length > 0) {
+      globalOHLCCache.set(cacheKey, { data: wsPrefetch, timestamp: Date.now(), mint });
+      return wsPrefetch;
+    }
+    return null;
+  });
   const [isPreloading, setIsPreloading] = useState(false);
-  const [preloadComplete, setPreloadComplete] = useState(false);
+  const [preloadComplete, setPreloadComplete] = useState(() => backgroundData !== null);
   const fetchRef = useRef<Promise<void> | null>(null);
   const previousMintRef = useRef<string | null>(null);
   const currentMintRef = useRef<string | null>(null);
@@ -68,13 +88,6 @@ export default function useBackgroundOHLCPreload(interval: string = '1h', timefr
         setPreloadComplete(false);
       }
       previousMintRef.current = mintAddress;
-
-      // ALWAYS clear background data when mint changes to prevent stale data
-      if (backgroundData) {
-        console.log('[Background OHLC] Clearing stale data for new token:', mintAddress);
-        setBackgroundData(null);
-        setPreloadComplete(false);
-      }
 
       // Create cache key that includes parameters to avoid conflicts
       const cacheKey = `${mintAddress}:${interval}:${timeframe}`;
