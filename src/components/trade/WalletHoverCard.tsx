@@ -5,6 +5,7 @@ import { TfiTarget } from 'react-icons/tfi';
 import { HiOutlineCubeTransparent } from 'react-icons/hi2';
 import { FiExternalLink, FiCopy } from 'react-icons/fi';
 import { formatSmartNumber } from '~/utils/db';
+import { useSolPrice } from '../SolPriceContext';
 
 export interface WalletHoverCardData {
   walletAddress: string;
@@ -71,7 +72,10 @@ function shortAddr(addr: string): string {
   return `${addr.slice(0, 4)}...${addr.slice(-4)}`;
 }
 
-export default function WalletHoverCard({ data, chain = 'sol', children, solPrice = 200 }: WalletHoverCardProps) {
+export default function WalletHoverCard({ data, chain = 'sol', children, solPrice }: WalletHoverCardProps) {
+  const { solPrice: contextSolPrice, monPrice } = useSolPrice();
+  const effectiveSolPrice = solPrice ?? ((chain === 'monad' ? monPrice : contextSolPrice) || 0);
+
   const [isVisible, setIsVisible] = useState(false);
   const [position, setPosition] = useState({ top: 0, left: 0, showBelow: true });
   const [copied, setCopied] = useState(false);
@@ -174,9 +178,9 @@ export default function WalletHoverCard({ data, chain = 'sol', children, solPric
   }, []);
 
   // Calculate values
-  const boughtUsd = data.totalBoughtUsd ?? (data.totalBoughtSol ?? 0) * solPrice;
-  const soldUsd = data.totalSoldUsd ?? (data.totalSoldSol ?? 0) * solPrice;
-  const pnlUsd = data.realizedPnlUsd ?? (data.realizedPnl ?? 0) * solPrice;
+  const boughtUsd = data.totalBoughtUsd ?? (data.totalBoughtSol ?? 0) * effectiveSolPrice;
+  const soldUsd = data.totalSoldUsd ?? (data.totalSoldSol ?? 0) * effectiveSolPrice;
+  const pnlUsd = data.realizedPnlUsd ?? (data.realizedPnl ?? 0) * effectiveSolPrice;
   const holdingDuration = data.firstBuyAt ? formatDuration(data.firstBuyAt) : '-';
 
   const explorerUrl = chain === 'monad'
@@ -319,13 +323,13 @@ export default function WalletHoverCard({ data, chain = 'sol', children, solPric
               {data.avgBuyPrice !== undefined && data.avgBuyPrice > 0 && (
                 <div className="flex justify-between items-center">
                   <span className="text-[11px] text-gray-400">Avg Buy Price</span>
-                  <span className="text-[11px] text-emerald-400">${formatSmartNumber(data.avgBuyPrice * solPrice)}</span>
+                  <span className="text-[11px] text-emerald-400">${formatSmartNumber(data.avgBuyPrice * effectiveSolPrice)}</span>
                 </div>
               )}
               {data.avgSellPrice !== undefined && data.avgSellPrice > 0 && (
                 <div className="flex justify-between items-center">
                   <span className="text-[11px] text-gray-400">Avg Sell Price</span>
-                  <span className="text-[11px] text-red-400">${formatSmartNumber(data.avgSellPrice * solPrice)}</span>
+                  <span className="text-[11px] text-red-400">${formatSmartNumber(data.avgSellPrice * effectiveSolPrice)}</span>
                 </div>
               )}
             </>

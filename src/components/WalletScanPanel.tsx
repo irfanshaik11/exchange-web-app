@@ -19,7 +19,6 @@ import {
   FaRegCalendar,
 } from "react-icons/fa";
 import { FiExternalLink } from "react-icons/fi";
-import PriceChartWidget from "./PriceChartWidget";
 import type { Token } from "~/utils/db";
 import { AiOutlineCalendar } from "react-icons/ai";
 import DatePicker from "react-datepicker";
@@ -1721,15 +1720,16 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({
                               key={position.mint || idx}
                               className="transition-colors hover:bg-neutral-800"
                               onClick={() => {
-                                // Navigate to token page if pair_address is available
+                                // Navigate to token page using mint (faster WebSocket connection)
                                 const trade = history.find(t => t.mint === position.mint);
-                                if (trade?.pair_address) {
+                                const addr = position.mint || trade?.pair_address;
+                                if (addr) {
                                   const qp = new URLSearchParams();
                                   if (position.tokenName) qp.set('_name', position.tokenName);
                                   if (position.tokenSymbol) qp.set('_symbol', position.tokenSymbol);
                                   qp.set('_mint', position.mint);
                                   qp.set('chain', 'sol');
-                                  window.open(`/trade/${trade.pair_address}?${qp.toString()}`, '_blank');
+                                  window.open(`/trade/${addr}?${qp.toString()}`, '_blank');
                                 }
                               }}
                             >
@@ -1914,15 +1914,16 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({
                               key={position.mint || idx}
                               className="transition-colors hover:bg-neutral-800 cursor-pointer"
                               onClick={() => {
-                                // Navigate to token page if pair_address is available
+                                // Navigate to token page using mint (faster WebSocket connection)
                                 const trade = history.find(t => t.mint === position.mint);
-                                if (trade?.pair_address) {
+                                const addr = position.mint || trade?.pair_address;
+                                if (addr) {
                                   const qp = new URLSearchParams();
                                   if (position.tokenName) qp.set('_name', position.tokenName);
                                   if (position.tokenSymbol) qp.set('_symbol', position.tokenSymbol);
                                   qp.set('_mint', position.mint);
                                   qp.set('chain', 'sol');
-                                  window.open(`/trade/${trade.pair_address}?${qp.toString()}`, '_blank');
+                                  window.open(`/trade/${addr}?${qp.toString()}`, '_blank');
                                 }
                               }}
                             >

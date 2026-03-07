@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState, useCallback } from "react";
 import { KOL_ADDRESS_MAP } from "../utils/kolLookup";
 import * as ohlcPrefetchManager from "../utils/ohlcPrefetchManager";
+import * as ohlcvConnectionManager from "../utils/ohlcvConnectionManager";
 
 // Re-export types from BackendOHLCChart for consistency
 export type BackendInterval =
@@ -1126,22 +1127,54 @@ const AdvancedOHLCChart: React.FC<AdvancedOHLCChartProps> = ({
     latestParamsRef.current = {
       mint,
       pairAddress,
-      interval: VALID_INTERVALS.includes(interval) ? interval : "1m",
+      interval: VALID_INTERVALS.includes(interval) ? interval : "1s",
       timeframe,
       optimize,
       network,
     };
   }, [mint, pairAddress, interval, timeframe, optimize, network]);
 
-  // Reset right-alignment and WS reset flags when token changes
+  // Reset flags on token change (full reset — new WS, new snapshot needed)
+  const prevResetTokenRef = useRef<string>((mint || pairAddress) ?? "");
   useEffect(() => {
+    const currentToken = (mint || pairAddress) ?? "";
+    const tokenChanged = prevResetTokenRef.current !== currentToken;
+    prevResetTokenRef.current = currentToken;
+
     hasRightAlignedRef.current = false;
     wsResetDoneRef.current = false;
-    wsConnectedRef.current = false;
-    preloadedDataAppliedRef.current = false;
-    chartPopulatedRef.current = false;
     wsLogCountRef.current = 0;
-  }, [mint, pairAddress]);
+    if (pendingCandleResetRef.current) {
+      clearTimeout(pendingCandleResetRef.current);
+      pendingCandleResetRef.current = null;
+    }
+    if (subscribeBarsRecoveryRef.current) {
+      clearTimeout(subscribeBarsRecoveryRef.current);
+      subscribeBarsRecoveryRef.current = null;
+    }
+    if (lazyLoadAbortRef.current) {
+      lazyLoadAbortRef.current.abort();
+      lazyLoadAbortRef.current = null;
+    }
+    resolutionCallbackMapRef.current.clear();
+    // Reset aggregation state for Solana WS (1s candles aggregated client-side)
+    if (currentAggregatingIntervalRef.current !== selectedInterval) {
+      currentAggregatedCandleRef.current = null;
+      oneSecondCandlesRef.current = [];
+      currentAggregatingIntervalRef.current = selectedInterval;
+    }
+
+    // Only reset these on TOKEN change — resolution changes are handled by
+    // TradingView's unsubscribeBars→getBars→subscribeBars lifecycle.
+    // Resetting chartPopulatedRef on resolution changes caused live WS candles
+    // to be silently dropped because no code path restored it to true.
+    if (tokenChanged) {
+      wsConnectedRef.current = false;
+      preloadedDataAppliedRef.current = false;
+      chartPopulatedRef.current = false;
+      tvResolutionRef.current = "1S";
+    }
+  }, [mint, pairAddress, selectedInterval]);
 
   // Refresh chart when displayMode changes (for USD/MC toggle - both Monad and Solana)
   // FIX: Don't change symbol - just reset chart data to re-render with new transformation
@@ -1282,6 +1315,7 @@ const AdvancedOHLCChart: React.FC<AdvancedOHLCChartProps> = ({
   const wsRef = useRef<WebSocket | null>(null);
   const wsReconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const subscribedCallbackRef = useRef<((bar: any) => void) | null>(null);
+  const lifecycleSeqRef = useRef(0); // Debug: monotonic counter for lifecycle event ordering
   const historyCallbackRef = useRef<((bars: any[], meta: any) => void) | null>(
     null,
   ); // Store current history callback for fast refresh
@@ -1361,6 +1395,25 @@ const AdvancedOHLCChart: React.FC<AdvancedOHLCChartProps> = ({
   const pendingCandleResetRef = useRef<NodeJS.Timeout | null>(null);
   // Guard: ensure only the FIRST data path triggers resetData() on initial load
   const chartPopulatedRef = useRef(false);
+  // Signal getBars() instantly when WS snapshot or preloaded data arrives (replaces 100ms polling)
+  const snapshotResolverRef = useRef<(() => void) | null>(null);
+  // Recovery timer: if subscribeBars isn't called within 500ms of unsubscribeBars, force resetData()
+  const subscribeBarsRecoveryRef = useRef<NodeJS.Timeout | null>(null);
+  // Abort controller for in-flight lazy-load fetch in getBars (scroll-left pagination)
+  // Allows unsubscribeBars to cancel a blocking fetch so TradingView's lifecycle can proceed
+  const lazyLoadAbortRef = useRef<AbortController | null>(null);
+  // Track TradingView's actual current resolution (dropdown selection), separate from React interval prop
+  const tvResolutionRef = useRef<string>("1S");
+  // Map of resolution → TradingView's raw onRealtimeCallback.
+  // TradingView may reuse old subscriptions without calling subscribeBars again
+  // (e.g., switching 1S→30S→1D→1S — TV never unsubscribes 1S and reuses it).
+  // This Map lets us restore the correct callback when TV switches back.
+  const resolutionCallbackMapRef = useRef<Map<string, {
+    subscriberUID: string;
+    onRealtimeCallback: (bar: any) => void;
+  }>>(new Map());
+  // Track active TradingView subscriber so stale unsubscribes can't kill the current callback
+  const activeSubscriberUIDRef = useRef<string | null>(null);
   // Debounce ref for refreshMarks() calls
   const refreshMarksTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   // Lightweight hash to skip redundant setCandles/updateChartMetrics in getBars
@@ -1623,7 +1676,7 @@ const AdvancedOHLCChart: React.FC<AdvancedOHLCChartProps> = ({
       };
       const from = Math.floor(Date.now() / 1000) - (timeRangeSeconds[effectiveTimeframe] || 86400);
       url.searchParams.set("from", String(from));
-      // No limit param — Go service returns all candles in the time range
+      url.searchParams.set("limit", "500");
       return url;
     },
     [],
@@ -2146,10 +2199,16 @@ const AdvancedOHLCChart: React.FC<AdvancedOHLCChartProps> = ({
       prevIntervalRef.current = selectedInterval;
       prevTimeframeRef.current = timeframe;
 
-      // Reset and refetch with new parameters
-      hasInitializedRef.current = false;
-      firstLoadRef.current = true;
-      fetchCandles();
+      // For Solana: WS always streams 1s candles, no HTTP refetch needed.
+      // TradingView's setResolution lifecycle (from syncWidgetWithParams effect)
+      // handles resolution changes using cached 1s data.
+      const currentNetwork = latestParamsRef.current.network;
+      if (currentNetwork === "monad") {
+        hasInitializedRef.current = false;
+        firstLoadRef.current = true;
+        fetchCandles();
+      }
+      // Solana: hasInitializedRef stays true, fetchCandles() skipped
     }
   }, [selectedInterval, timeframe, fetchCandles]);
 
@@ -2213,13 +2272,6 @@ const AdvancedOHLCChart: React.FC<AdvancedOHLCChartProps> = ({
 
     // Check if we need to aggregate 1s -> 1m when viewing 1m candles
     const needsAggregation = selectedInterval === "1m";
-
-    // Reset aggregation state if interval changed
-    if (currentAggregatingIntervalRef.current !== selectedInterval) {
-      currentAggregatedCandleRef.current = null;
-      oneSecondCandlesRef.current = [];
-      currentAggregatingIntervalRef.current = selectedInterval;
-    }
 
     // Track if connection was closed by cleanup (don't reconnect in that case)
     let closedByCleanup = false;
@@ -2681,17 +2733,12 @@ const AdvancedOHLCChart: React.FC<AdvancedOHLCChartProps> = ({
                 },
               );
             }
-            subscribedCallbackRef.current(bar);
-          } else {
-            console.warn(
-              `[AdvancedOHLCChart] ⚠️ Aggregated ${currentSelectedInterval} update received but callback not available:`,
-              {
-                hasCallback: !!subscribedCallbackRef.current,
-                barTime: bar.time,
-                message:
-                  "subscribeBars may not have been called yet by TradingView",
-              },
-            );
+            try {
+              subscribedCallbackRef.current(bar);
+            } catch (e) {
+              console.warn("[AdvancedOHLCChart] Stale aggregated callback error, clearing:", e);
+              subscribedCallbackRef.current = null;
+            }
           }
           // Throttled updateChartMetrics (max once per second from WS)
           if (!metricsThrottleRef.current) {
@@ -2794,7 +2841,12 @@ const AdvancedOHLCChart: React.FC<AdvancedOHLCChartProps> = ({
               },
             );
           }
-          subscribedCallbackRef.current(bar);
+          try {
+            subscribedCallbackRef.current(bar);
+          } catch (e) {
+            console.warn("[AdvancedOHLCChart] Stale Monad callback error, clearing:", e);
+            subscribedCallbackRef.current = null;
+          }
         } else {
           console.warn(
             "[AdvancedOHLCChart] ⚠️ Real-time update received but callback not available:",
@@ -2951,7 +3003,7 @@ const AdvancedOHLCChart: React.FC<AdvancedOHLCChartProps> = ({
         wsRef.current = null;
       }
     };
-  }, [network, mint, pairAddress, selectedInterval]); // Re-connect when token or interval changes (always use 1s WS, aggregate if needed)
+  }, [network, mint, pairAddress]); // Re-connect when token changes (NOT interval — WS always streams 1s, aggregation is client-side)
 
   // Solana OHLC WebSocket connection - uses /v1/ws/ohlcv/{mint}?timeframe=1s endpoint
   // HTTP loads initial data first, then WebSocket takes over for real-time updates only
@@ -2984,22 +3036,11 @@ const AdvancedOHLCChart: React.FC<AdvancedOHLCChartProps> = ({
     const wsHost = wsBaseUrl.replace(/^https?:\/\//, "");
     const wsUrl = `${wsProtocol}://${wsHost}/v1/ws/ohlcv/${tokenAddress}?timeframe=${wsInterval}`;
 
-    // Check if we need to aggregate 1s -> viewing interval
-    const needsAggregation =
-      selectedInterval !== "1s" &&
-      selectedInterval !== "5s" &&
-      selectedInterval !== "15s" &&
-      selectedInterval !== "30s";
-
-    // Reset aggregation state if interval changed
-    if (currentAggregatingIntervalRef.current !== selectedInterval) {
-      currentAggregatedCandleRef.current = null;
-      oneSecondCandlesRef.current = [];
-      currentAggregatingIntervalRef.current = selectedInterval;
-    }
-
     // Track if connection was closed by cleanup
     let closedByCleanup = false;
+
+    // Track if using persistent pre-warmed connection (don't close on unmount)
+    let usingPersistentConn = false;
 
     // Robust reconnection state
     let reconnectAttempts = 0;
@@ -3022,11 +3063,11 @@ const AdvancedOHLCChart: React.FC<AdvancedOHLCChartProps> = ({
 
         // Handle ping/pong for keepalive - respond to server pings
         if (message.type === "ping" || message === "ping") {
-          if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
-            wsRef.current.send(JSON.stringify({ type: "pong" }));
-            console.log(
-              "[AdvancedOHLCChart] 🏓 Solana WebSocket: Responded to ping with pong",
-            );
+          const pong = JSON.stringify({ type: "pong" });
+          if (usingPersistentConn) {
+            ohlcvConnectionManager.send(pong);
+          } else if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+            wsRef.current.send(pong);
           }
           return;
         }
@@ -3058,6 +3099,11 @@ const AdvancedOHLCChart: React.FC<AdvancedOHLCChartProps> = ({
             cachedIntervalRef.current = latestParamsRef.current.interval;
             cachedTimeframeRef.current = latestParamsRef.current.timeframe;
             wsConnectedRef.current = true;
+            // Wake getBars() — even empty snapshot means "no data, stop waiting"
+            if (snapshotResolverRef.current) {
+              snapshotResolverRef.current();
+              snapshotResolverRef.current = null;
+            }
             setCandles([placeholderCandle]);
             setIsLoading(false);
             hasInitializedRef.current = true;
@@ -3133,6 +3179,13 @@ const AdvancedOHLCChart: React.FC<AdvancedOHLCChartProps> = ({
             cachedIntervalRef.current = latestParamsRef.current.interval;
             cachedTimeframeRef.current = latestParamsRef.current.timeframe;
             wsConnectedRef.current = true;
+
+            // Instantly wake getBars() if it's waiting for snapshot data
+            if (snapshotResolverRef.current) {
+              snapshotResolverRef.current();
+              snapshotResolverRef.current = null;
+            }
+
             setCandles(lastGoodCandlesRef.current);
             setIsLoading(false);
             hasInitializedRef.current = true;
@@ -3183,6 +3236,12 @@ const AdvancedOHLCChart: React.FC<AdvancedOHLCChartProps> = ({
           // Between snapshot processing and resetData() (via rAF), a live candle
           // could flash on the empty/placeholder chart. Cache it instead.
           if (!chartPopulatedRef.current) {
+            console.warn("[AdvancedOHLCChart] ⏳ WS candle QUEUED (chartPopulated=false)", {
+              hasCallback: !!subscribedCallbackRef.current,
+              activeUID: activeSubscriberUIDRef.current,
+              tvResolution: tvResolutionRef.current,
+              cacheSize: lastGoodCandlesRef.current.length,
+            });
             const ohlcData = message.data;
             const oneSecCandle: BackendOHLCData = {
               unix_time: ohlcData.unix_time || ohlcData.time,
@@ -3229,175 +3288,80 @@ const AdvancedOHLCChart: React.FC<AdvancedOHLCChartProps> = ({
             oneSecCandle.l = Math.min(oneSecCandle.c, oneSecCandle.h > 0 ? oneSecCandle.h : oneSecCandle.c);
           }
 
-          const currentSelectedInterval = latestParamsRef.current.interval;
-
           // Bridge gap between REST/snapshot end and first real-time WS candle (one-time)
           if (!wsGapBridgedRef.current) {
             wsGapBridgedRef.current = true;
             const cachedData = lastGoodCandlesRef.current;
-            if (cachedData.length > 0 && subscribedCallbackRef.current) {
+            if (cachedData.length > 0) {
               const lastCached = cachedData[cachedData.length - 1];
-              const resolution = INTERVAL_TO_RESOLUTION[currentSelectedInterval];
-              const resolutionMs = parseResolutionToMs(resolution);
-              const resolutionSec = resolutionMs / 1000;
-
-              const lastCachedDisplayTime = needsAggregation
-                ? getWindowStartTime(lastCached.unix_time, currentSelectedInterval)
-                : lastCached.unix_time;
-              const newCandleDisplayTime = needsAggregation
-                ? getWindowStartTime(oneSecCandle.unix_time, currentSelectedInterval)
-                : oneSecCandle.unix_time;
-
-              const gapSec = newCandleDisplayTime - lastCachedDisplayTime;
-              const missedCandles = Math.floor(gapSec / resolutionSec) - 1;
-
-              if (missedCandles > 0 && missedCandles <= 300) {
+              const gapSec = oneSecCandle.unix_time - lastCached.unix_time;
+              if (gapSec > 1 && gapSec <= 300) {
                 console.log(
-                  `[AdvancedOHLCChart] Skipped ${missedCandles} gap candles (no flat-line fill)`,
+                  `[AdvancedOHLCChart] Skipped ${gapSec - 1}s gap (no flat-line fill)`,
                 );
               }
             }
           }
 
-          // Aggregate if viewing a longer timeframe
-          if (needsAggregation) {
-            const windowStart = getWindowStartTime(
-              oneSecCandle.unix_time,
-              currentSelectedInterval,
-            );
+          // Solana: ALWAYS push raw 1s bars — let TradingView handle aggregation
+          // to any resolution (5s, 15s, 1m, 15m, 1h, 1d, etc.) internally.
+          // This ensures getBars (history) and realtime use the same resolution
+          // model. Manual aggregation here caused a mismatch that made TradingView
+          // silently drop live candles after resolution switches.
+          const baseBar = {
+            time: oneSecCandle.unix_time * 1000,
+            open: oneSecCandle.o,
+            high: oneSecCandle.h,
+            low: oneSecCandle.l,
+            close: oneSecCandle.c,
+            volume: oneSecCandle.v_usd,
+          };
 
-            if (
-              !currentAggregatedCandleRef.current ||
-              currentAggregatedCandleRef.current.unix_time !== windowStart
-            ) {
-              // Finalize previous candle if exists
-              if (currentAggregatedCandleRef.current) {
-                const finalizedCandle = currentAggregatedCandleRef.current;
-                const cachedData = lastGoodCandlesRef.current;
-                const existingIdx = cachedData.findIndex(
-                  (c) => c.unix_time === finalizedCandle.unix_time,
-                );
-                if (existingIdx >= 0) {
-                  cachedData[existingIdx] = finalizedCandle;
-                } else {
-                  cachedData.push(finalizedCandle);
-                  cachedData.sort((a, b) => a.unix_time - b.unix_time);
-                }
+          // Connectivity: force open to match previous candle's close
+          const cachedData = lastGoodCandlesRef.current;
+          if (cachedData.length > 0) {
+            const prevCandle = cachedData[cachedData.length - 1];
+            if (oneSecCandle.unix_time > prevCandle.unix_time) {
+              const previousClose = prevCandle.c;
+              if (baseBar.open !== previousClose) {
+                baseBar.open = previousClose;
+                if (baseBar.high < baseBar.open) baseBar.high = baseBar.open;
+                if (baseBar.low > baseBar.open) baseBar.low = baseBar.open;
               }
-
-              // Create new aggregated candle — force Open to previous window's Close for connectivity
-              const prevCachedData = lastGoodCandlesRef.current;
-              let newOpen = oneSecCandle.o;
-              if (prevCachedData.length > 0) {
-                const prevCandle = prevCachedData[prevCachedData.length - 1];
-                if (windowStart > prevCandle.unix_time) {
-                  newOpen = prevCandle.c;
-                }
-              }
-              currentAggregatedCandleRef.current = {
-                unix_time: windowStart,
-                o: newOpen,
-                h: Math.max(newOpen, oneSecCandle.h),
-                l: Math.min(newOpen, oneSecCandle.l),
-                c: oneSecCandle.c,
-                v_usd: oneSecCandle.v_usd,
-              };
-              oneSecondCandlesRef.current = [oneSecCandle];
-            } else {
-              // Update existing aggregated candle
-              const currentCandle = currentAggregatedCandleRef.current;
-              currentCandle.h = Math.max(currentCandle.h, oneSecCandle.h);
-              currentCandle.l = Math.min(currentCandle.l, oneSecCandle.l);
-              currentCandle.c = oneSecCandle.c;
-              currentCandle.v_usd += oneSecCandle.v_usd;
-              oneSecondCandlesRef.current.push(oneSecCandle);
             }
+          }
 
-            // Use aggregated candle for chart update
-            const aggregatedCandle = currentAggregatedCandleRef.current;
-            const baseBar = {
-              time: aggregatedCandle.unix_time * 1000,
-              open: aggregatedCandle.o,
-              high: aggregatedCandle.h,
-              low: aggregatedCandle.l,
-              close: aggregatedCandle.c,
-              volume: aggregatedCandle.v_usd,
-            };
+          // Apply display mode transformation (USD/MC toggle)
+          const currentDisplayMode = displayModeRef.current;
+          const bar = applyFlatCandleSpread(transformBar(baseBar, currentDisplayMode, true));
 
-            // Apply display mode transformation (USD/MC toggle)
-            const currentDisplayMode = displayModeRef.current;
-            const bar = applyFlatCandleSpread(transformBar(baseBar, currentDisplayMode, true));
-
-            // Update cache (store raw USD data)
-            const cachedData = lastGoodCandlesRef.current;
-            const existingIdx = cachedData.findIndex(
-              (c) => c.unix_time === aggregatedCandle.unix_time,
-            );
-            if (existingIdx >= 0) {
-              cachedData[existingIdx] = aggregatedCandle;
-            } else {
-              cachedData.push(aggregatedCandle);
-              cachedData.sort((a, b) => a.unix_time - b.unix_time);
-            }
-
-            // Update chart via callback (with transformed bar)
-            if (subscribedCallbackRef.current && bar.time > 0) {
-              if (shouldLogWs) {
-                console.log(
-                  "[AdvancedOHLCChart] 📊 Solana aggregated bar update:",
-                  bar,
-                );
-              }
-              subscribedCallbackRef.current(bar);
-            }
+          // Update cache (store raw 1s candle with connectivity-adjusted open)
+          const cachedCandle = { ...oneSecCandle, o: baseBar.open };
+          const existingIdx = cachedData.findIndex(
+            (c) => c.unix_time === oneSecCandle.unix_time,
+          );
+          if (existingIdx >= 0) {
+            cachedData[existingIdx] = cachedCandle;
           } else {
-            // No aggregation needed - use 1s candle directly
-            const baseBar = {
-              time: oneSecCandle.unix_time * 1000,
-              open: oneSecCandle.o,
-              high: oneSecCandle.h,
-              low: oneSecCandle.l,
-              close: oneSecCandle.c,
-              volume: oneSecCandle.v_usd,
-            };
+            cachedData.push(cachedCandle);
+            cachedData.sort((a, b) => a.unix_time - b.unix_time);
+          }
 
-            // Connectivity: force open to match previous candle's close (Solana)
-            const cachedData = lastGoodCandlesRef.current;
-            if (cachedData.length > 0) {
-              const prevCandle = cachedData[cachedData.length - 1];
-              if (oneSecCandle.unix_time > prevCandle.unix_time) {
-                const previousClose = prevCandle.c;
-                if (baseBar.open !== previousClose) {
-                  baseBar.open = previousClose;
-                  if (baseBar.high < baseBar.open) baseBar.high = baseBar.open;
-                  if (baseBar.low > baseBar.open) baseBar.low = baseBar.open;
-                }
-              }
-            }
-
-            // Apply display mode transformation (USD/MC toggle)
-            const currentDisplayMode = displayModeRef.current;
-            const bar = applyFlatCandleSpread(transformBar(baseBar, currentDisplayMode, true));
-
-            // Update cache (store raw USD data — with connectivity-adjusted open)
-            const cachedCandle = { ...oneSecCandle, o: baseBar.open };
-            const existingIdx = cachedData.findIndex(
-              (c) => c.unix_time === oneSecCandle.unix_time,
-            );
-            if (existingIdx >= 0) {
-              cachedData[existingIdx] = cachedCandle;
-            } else {
-              cachedData.push(cachedCandle);
-              cachedData.sort((a, b) => a.unix_time - b.unix_time);
-            }
-
-            // Update chart via callback (with transformed bar)
-            if (subscribedCallbackRef.current && bar.time > 0) {
-              if (shouldLogWs) {
-                console.log("[AdvancedOHLCChart] 📊 Solana 1s bar update:", bar);
-              }
+          // Update chart via callback
+          if (subscribedCallbackRef.current && bar.time > 0) {
+            try {
               subscribedCallbackRef.current(bar);
+            } catch (e) {
+              console.error("[AdvancedOHLCChart] Solana callback threw — clearing subscribedCallbackRef", String(e));
+              subscribedCallbackRef.current = null;
             }
+          } else if (!subscribedCallbackRef.current) {
+            // Only log when callback is missing (not on every bar with invalid time)
+            console.warn("[AdvancedOHLCChart] ⚠️ Solana WS candle dropped — no callback", {
+              activeUID: activeSubscriberUIDRef.current,
+              tvResolution: tvResolutionRef.current,
+              chartPopulated: chartPopulatedRef.current,
+            });
           }
 
           // Fallback: if subscribeBars hasn't been called yet (callback is null),
@@ -3459,14 +3423,18 @@ const AdvancedOHLCChart: React.FC<AdvancedOHLCChartProps> = ({
         const timeSinceLastMessage = Date.now() - lastMessageTime;
 
         // Send ping to keep connection alive
-        if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+        if (usingPersistentConn) {
+          // Persistent connection: ping via connection manager
+          if (ohlcvConnectionManager.isConnected()) {
+            try {
+              ohlcvConnectionManager.send(JSON.stringify({ type: "ping" }));
+            } catch (e) {
+              console.log("[AdvancedOHLCChart] Failed to send ping via persistent WS:", e);
+            }
+          }
+        } else if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
           try {
             wsRef.current.send(JSON.stringify({ type: "ping" }));
-            console.log(
-              "[AdvancedOHLCChart] 🏓 Solana WebSocket: Sent ping (last message:",
-              Math.round(timeSinceLastMessage / 1000),
-              "s ago)",
-            );
           } catch (e) {
             console.log("[AdvancedOHLCChart] Failed to send ping:", e);
           }
@@ -3479,7 +3447,11 @@ const AdvancedOHLCChart: React.FC<AdvancedOHLCChartProps> = ({
             Math.round(timeSinceLastMessage / 1000),
             "s), reconnecting...",
           );
-          if (wsRef.current) {
+          if (usingPersistentConn) {
+            // Persistent mode: unregister and let connectSolana re-establish
+            ohlcvConnectionManager.setMessageListener(null);
+            usingPersistentConn = false;
+          } else if (wsRef.current) {
             wsRef.current.close();
             wsRef.current = null;
           }
@@ -3622,9 +3594,68 @@ const AdvancedOHLCChart: React.FC<AdvancedOHLCChartProps> = ({
         return;
       }
 
+      // ── Try persistent pre-warmed connection (saves ~150ms handshake) ──
+      if (ohlcvConnectionManager.isConnected()) {
+        usingPersistentConn = true;
+
+        // Drain snapshot cached from hover-time subscribe (if available).
+        // This avoids waiting for the server to send a fresh snapshot.
+        const cachedSnapshot = ohlcvConnectionManager.drainSnapshotCache(tokenAddress);
+        if (cachedSnapshot && cachedSnapshot.length > 0) {
+          console.log(
+            "[AdvancedOHLCChart] Persistent WS: using hover-cached snapshot for",
+            tokenAddress.slice(0, 10) + "...",
+            "(" + cachedSnapshot.length + " candles)",
+          );
+          lastGoodCandlesRef.current = cachedSnapshot;
+          cachedIntervalRef.current = latestParamsRef.current.interval;
+          cachedTimeframeRef.current = latestParamsRef.current.timeframe;
+          setCandles(cachedSnapshot);
+          setIsLoading(false);
+          hasInitializedRef.current = true;
+          firstLoadRef.current = false;
+          // Mark chart as populated IMMEDIATELY so the WS snapshot handler
+          // (which checks chartPopulatedRef) won't trigger a second resetData().
+          chartPopulatedRef.current = true;
+          updateChartMetrics();
+
+          // Force TradingView to pick up the cached data
+          requestAnimationFrame(() => {
+            try {
+              const chart =
+                widgetRef.current?.chart?.() ||
+                (widgetRef.current as any)?.activeChart?.();
+              if (chart?.resetData) {
+                chart.resetData();
+              }
+            } catch {}
+          });
+        } else {
+          console.log(
+            "[AdvancedOHLCChart] Persistent WS: subscribing to",
+            tokenAddress.slice(0, 10) + "...",
+          );
+        }
+
+        // Register our handler to receive messages from the persistent WS
+        ohlcvConnectionManager.setMessageListener(handleSolanaMessage);
+        // Only re-subscribe if the persistent WS isn't already on this mint
+        // (hover already subscribed → snapshot cached → no need for a second snapshot)
+        if (ohlcvConnectionManager.getCurrentMint() !== tokenAddress) {
+          ohlcvConnectionManager.subscribe(tokenAddress, wsInterval);
+        }
+
+        wsConnectedRef.current = true;
+        wsGapBridgedRef.current = false;
+        reconnectAttempts = 0;
+        lastMessageTime = Date.now();
+        startHeartbeat();
+        return;
+      }
+
       // ── Normal path: create new WebSocket ──
       console.log(
-        "[AdvancedOHLCChart] 🔌 Solana WebSocket connecting:",
+        "[AdvancedOHLCChart] Solana WebSocket connecting:",
         wsUrl,
         "(attempt",
         reconnectAttempts + 1,
@@ -3695,27 +3726,28 @@ const AdvancedOHLCChart: React.FC<AdvancedOHLCChartProps> = ({
       if (closedByCleanup) return;
 
       if (document.visibilityState === "visible") {
-        console.log(
-          "[AdvancedOHLCChart] 👁️ Tab became visible, checking Solana WebSocket...",
-        );
+        // Persistent mode: check connection manager, re-subscribe if needed
+        if (usingPersistentConn) {
+          if (ohlcvConnectionManager.isConnected()) {
+            ohlcvConnectionManager.subscribe(tokenAddress, wsInterval);
+            lastMessageTime = Date.now();
+          } else {
+            // Connection manager will auto-reconnect and re-subscribe
+            reconnectAttempts = 0;
+            connectSolana();
+          }
+          return;
+        }
+
         // Check if WebSocket is healthy
         if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) {
-          console.log(
-            "[AdvancedOHLCChart] 🔄 WebSocket not open, reconnecting...",
-          );
           reconnectAttempts = 0; // Reset attempts for visibility-triggered reconnect
           connectSolana();
         } else {
           // Send ping to verify connection is still alive
           try {
             wsRef.current.send(JSON.stringify({ type: "ping" }));
-            console.log(
-              "[AdvancedOHLCChart] 🏓 Sent ping after tab visibility change",
-            );
           } catch (e) {
-            console.log(
-              "[AdvancedOHLCChart] Failed to send ping, reconnecting...",
-            );
             connectSolana();
           }
         }
@@ -3764,9 +3796,14 @@ const AdvancedOHLCChart: React.FC<AdvancedOHLCChartProps> = ({
         wsReconnectTimeoutRef.current = null;
       }
 
-      // Hand off WebSocket to prefetch manager instead of closing it
-      // This keeps the WS alive for 30s so returning to the same token is instant
-      if (wsRef.current) {
+      // Persistent connection: unregister listener (don't close the shared WS).
+      // React runs cleanup then new effect synchronously — no messages lost in between.
+      if (usingPersistentConn) {
+        ohlcvConnectionManager.setMessageListener(null);
+        usingPersistentConn = false;
+      } else if (wsRef.current) {
+        // Hand off WebSocket to prefetch manager instead of closing it
+        // This keeps the WS alive for 30s so returning to the same token is instant
         if (wsRef.current.readyState === WebSocket.OPEN) {
           ohlcPrefetchManager.handoffConnection(
             tokenAddress,
@@ -3784,7 +3821,7 @@ const AdvancedOHLCChart: React.FC<AdvancedOHLCChartProps> = ({
         }
       }
     };
-  }, [network, mint, pairAddress, selectedInterval]); // Re-connect when token or interval changes
+  }, [network, mint, pairAddress]); // Re-connect when token changes (NOT interval — WS always streams 1s, aggregation is client-side)
 
   // Convert TradingView resolution string to milliseconds
   // Used by gap-fill logic to calculate expected candle spacing
@@ -4238,6 +4275,7 @@ const AdvancedOHLCChart: React.FC<AdvancedOHLCChartProps> = ({
         onHistoryCallback: any,
         onErrorCallback: any,
       ) => {
+        const gbSeq = ++lifecycleSeqRef.current;
         // Store the callback for fast refresh when displayMode changes
         historyCallbackRef.current = onHistoryCallback;
 
@@ -4247,22 +4285,20 @@ const AdvancedOHLCChart: React.FC<AdvancedOHLCChartProps> = ({
         // Strip mode suffix for display purposes
         const baseSymbolName = symbolName.split("|")[0];
 
-        if (CHART_DEBUG) {
-          console.log(
-            "[AdvancedOHLCChart] 🔵 getBars CALLED - symbol:",
-            symbolName,
-            "base:",
-            baseSymbolName,
-            "mode:",
-            displayModeRef.current,
-            "resolution:",
-            resolution,
-          );
-        }
-
         // Convert TradingView resolution to our interval format
         const requestedInterval =
           RESOLUTION_TO_INTERVAL[resolution] || dfInterval;
+
+        // Track TradingView's actual resolution and reset stale state on change
+        const prevTvResolution = tvResolutionRef.current;
+        tvResolutionRef.current = resolution;
+        if (prevTvResolution !== resolution) {
+          hasRightAlignedRef.current = false;
+          currentAggregatedCandleRef.current = null;
+          oneSecondCandlesRef.current = [];
+          wsGapBridgedRef.current = false;
+        }
+
         // FIX: Always use the prop timeframe - don't let TradingView's periodParams override it
         // TradingView's periodParams represents the visible window, not how much data to fetch
         // The prop timeframe (e.g., "30d") should control the API call
@@ -4279,19 +4315,25 @@ const AdvancedOHLCChart: React.FC<AdvancedOHLCChartProps> = ({
           if (currentNetwork !== "monad" && !lastGoodCandlesRef.current.length) {
             console.log("[AdvancedOHLCChart] Solana: Awaiting WS snapshot...");
 
-            // Wait up to 2s for snapshot data (normal arrival ~200ms).
-            // Once WS is OPEN, server sends snapshot immediately — if no data by 2s, token has none.
-            const waitStart = Date.now();
-            while (!lastGoodCandlesRef.current.length && Date.now() - waitStart < 2000) {
-              await new Promise(resolve => setTimeout(resolve, 100));
+            // Wait for WS snapshot via Promise signal (instant wake, no polling jitter).
+            // Resolves immediately when snapshot arrives; 1s timeout — backend returns in <300ms.
+            if (!lastGoodCandlesRef.current.length) {
+              await new Promise<void>((resolve) => {
+                snapshotResolverRef.current = resolve;
+                setTimeout(() => {
+                  snapshotResolverRef.current = null;
+                  resolve();
+                }, 1000);
+              });
             }
 
-            // If still no data, check WS health
+            // If still no data, check WS health (dedicated OR persistent connection)
             if (!lastGoodCandlesRef.current.length) {
-              const ws = wsRef.current;
-              const wsOpen = ws && ws.readyState === WebSocket.OPEN;
+              const dedicatedWsOpen = wsRef.current && wsRef.current.readyState === WebSocket.OPEN;
+              const persistentWsOpen = ohlcvConnectionManager.isConnected();
+              const wsOpen = dedicatedWsOpen || persistentWsOpen;
               if (wsOpen) {
-                // WS is healthy — server had 2s to send snapshot but didn't → token has no data
+                // WS is healthy — server had 1s to send snapshot but didn't → token has no data
                 console.log("[AdvancedOHLCChart] Solana: WS open but no data — creating placeholder");
               } else {
                 // WS not connected — connection failed or still connecting
@@ -4322,7 +4364,11 @@ const AdvancedOHLCChart: React.FC<AdvancedOHLCChartProps> = ({
         // CHECK CACHE FIRST - Only fetch if cache is empty OR interval/timeframe changed
         // IMPORTANT: Compare BEFORE updating the refs, otherwise change detection won't work
         const hasCachedData = lastGoodCandlesRef.current.length > 0;
-        const intervalChanged = cachedIntervalRef.current !== requestedInterval;
+        const currentNetwork = latestParamsRef.current.network;
+        // For Solana: WS always streams 1s candles — TradingView aggregates them to any resolution.
+        // Never re-fetch on resolution change; only re-fetch when cache is empty or timeframe changes.
+        const isSolana = currentNetwork !== "monad";
+        const intervalChanged = isSolana ? false : cachedIntervalRef.current !== requestedInterval;
         const timeframeChanged =
           cachedTimeframeRef.current !== requestedTimeframe;
         const needsFetch =
@@ -4445,14 +4491,21 @@ const AdvancedOHLCChart: React.FC<AdvancedOHLCChartProps> = ({
             .filter((bar) => bar.time > 0 && isFinite(bar.time));
           allBars.sort((a, b) => a.time - b.time);
 
-          // Collapse large gaps, then fill remaining small gaps with carry-forward
+          // Only collapse time gaps for Monad — Solana trades 24/7, no session gaps to collapse.
+          // Gap collapse + resolution switching causes timestamp mismatches between historical and live bars.
           {
-            const resMs = parseResolutionToMs(resolution);
-            const { shifts, totalShift } = collapseTimeGaps(allBars, resMs);
-            gapShiftsRef.current = shifts;
-            totalShiftRef.current = totalShift;
+            const isSolana = latestParamsRef.current.network !== "monad";
+            if (!isSolana) {
+              const resMs = parseResolutionToMs(resolution);
+              const { shifts, totalShift } = collapseTimeGaps(allBars, resMs);
+              gapShiftsRef.current = shifts;
+              totalShiftRef.current = totalShift;
+              gapFillBars(allBars, resolution);
+            } else {
+              gapShiftsRef.current = [];
+              totalShiftRef.current = 0;
+            }
           }
-          gapFillBars(allBars, resolution);
 
           // Ensure candles connect properly by making close of one = open of next
           if (allBars.length > 1) {
@@ -4503,68 +4556,117 @@ const AdvancedOHLCChart: React.FC<AdvancedOHLCChartProps> = ({
             }
           }
 
-          // CRITICAL: Check if cached data is within requested time range
-          // to prevent infinite loop of TradingView requesting older data
+          // TradingView pagination for scroll-left:
+          // On non-first requests, TradingView sets `to` to the oldest bar time it has.
+          // If that's at or before our oldest cached candle, we need to lazy-load older data.
+          // We compare using the oldest COLLAPSED bar time (allBars[0].time) since
+          // TradingView's periodParams are in collapsed time space after collapseTimeGaps.
           const fromMs = (periodParams.from ?? 0) * 1000;
           const toMs = (periodParams.to ?? 0) * 1000;
 
-          if (allBars.length > 0 && fromMs && toMs) {
-            const oldestDataTime = allBars[0].time;
-            const newestDataTime = allBars[allBars.length - 1].time;
+          if (
+            !periodParams.firstDataRequest &&
+            allBars.length > 0 &&
+            toMs &&
+            toMs <= allBars[0].time &&
+            latestParamsRef.current.network !== "monad"
+          ) {
+            const oldestCachedTime = lastGoodCandlesRef.current[0]?.unix_time ?? 0;
+            const tokenAddress = latestParamsRef.current.mint;
 
-            if (CHART_DEBUG) {
-              console.log(
-                "[AdvancedOHLCChart] 📦 Cached data time range check:",
-                {
-                  requestedFrom: new Date(fromMs).toISOString(),
-                  requestedTo: new Date(toMs).toISOString(),
-                  dataFrom: new Date(oldestDataTime).toISOString(),
-                  dataTo: new Date(newestDataTime).toISOString(),
-                  isFirstRequest: periodParams.firstDataRequest,
+            if (CHART_DEBUG) console.log("[AdvancedOHLCChart] Lazy-loading older candles...");
+
+            try {
+              const lazyUrl = new URL(`${BACKEND_URL}/v1/ohlcv/${tokenAddress}`);
+              lazyUrl.searchParams.set("timeframe", "1s");
+              lazyUrl.searchParams.set("to", String(oldestCachedTime));
+              lazyUrl.searchParams.set("limit", "1000");
+              console.log("[AdvancedOHLCChart] Lazy-loading older candles before", new Date(oldestCachedTime * 1000).toISOString());
+              // Abort controller shared via ref so unsubscribeBars can cancel immediately
+              // on resolution switch — prevents this fetch from blocking TradingView's pipeline
+              const lazyAbort = new AbortController();
+              lazyLoadAbortRef.current = lazyAbort;
+              const lazyTimeout = setTimeout(() => lazyAbort.abort(), 3000);
+              const resp = await fetch(lazyUrl.toString(), {
+                method: "GET",
+                headers: {
+                  accept: "application/json",
+                  "X-API-Key": process.env.NEXT_PUBLIC_BACKEND_API_KEY || "test-key",
                 },
-              );
-            }
+                signal: lazyAbort.signal,
+              });
+              clearTimeout(lazyTimeout);
+              lazyLoadAbortRef.current = null;
+              if (resp.ok) {
+                const body = await resp.json();
+                if (body?.success && Array.isArray(body.candles) && body.candles.length > 0) {
+                  const olderItems: BackendOHLCData[] = body.candles.map((c: any) => ({
+                    unix_time: c.time || c.unix_time,
+                    o: c.open ?? c.o,
+                    h: c.high ?? c.h,
+                    l: c.low ?? c.l,
+                    c: c.close ?? c.c,
+                    v_usd: c.volume ?? c.volume_usd ?? c.v_usd ?? 0,
+                  }));
+                  const deduped = olderItems.filter(c => c.unix_time < oldestCachedTime);
+                  if (deduped.length > 0) {
+                    lastGoodCandlesRef.current = [...deduped, ...lastGoodCandlesRef.current];
+                    clampLaunchCandles(lastGoodCandlesRef.current);
+                    console.log("[AdvancedOHLCChart] Prepended", deduped.length, "older candles, total:", lastGoodCandlesRef.current.length);
 
-            // If ALL cached data is AFTER the requested range (future relative to request)
-            if (oldestDataTime > toMs) {
-              if (!periodParams.firstDataRequest) {
-                // Not first request - stop backward pagination (use noData: false to avoid ghost)
-                console.log(
-                  "[AdvancedOHLCChart] 📦 Cached data is in future, stopping backward pagination (noData: false)",
-                );
-                if (typeof onHistoryCallback === "function") {
-                  onHistoryCallback([], { noData: false });
+                    // Return ONLY the new bars with real timestamps.
+                    // No gap-collapse — TradingView merges them to the left.
+                    // Re-collapsing the full dataset would shift existing bar times,
+                    // causing visual disconnects with what TV already rendered.
+                    const currentDisplayMode = displayModeRef.current;
+                    const MIN_PRICE = 0.0000001;
+                    const newBars = deduped
+                      .map((item) => {
+                        const hasZeroValues = item.o === 0 && item.h === 0 && item.l === 0 && item.c === 0;
+                        const baseBar = {
+                          time: item.unix_time * 1000,
+                          open: hasZeroValues ? MIN_PRICE : item.o,
+                          high: hasZeroValues ? MIN_PRICE : item.h,
+                          low: hasZeroValues ? MIN_PRICE : item.l,
+                          close: hasZeroValues ? MIN_PRICE : item.c,
+                          volume: item.v_usd || 0,
+                        };
+                        return applyFlatCandleSpread(transformBar(baseBar, currentDisplayMode, true));
+                      })
+                      .filter((bar) => bar.time > 0 && isFinite(bar.time));
+                    newBars.sort((a, b) => a.time - b.time);
+
+                    if (typeof onHistoryCallback === "function") {
+                      onHistoryCallback(newBars, { noData: false });
+                    }
+                    return;
+                  }
                 }
-                return;
               }
-              // First request - return data and navigate chart
-              console.log(
-                "[AdvancedOHLCChart] 📦 First request with future data - returning and will navigate",
-              );
+            } catch (e) {
+              lazyLoadAbortRef.current = null;
+              const isAbort = (e as any)?.name === 'AbortError';
+              if (CHART_DEBUG) console.log("[AdvancedOHLCChart] Lazy-load:", (e as any)?.name === 'AbortError' ? 'aborted' : String(e));
             }
-            // If ALL cached data is BEFORE the requested range
-            else if (
-              newestDataTime < fromMs &&
-              !periodParams.firstDataRequest
-            ) {
-              // Use noData: false to avoid ghost - data exists, just not in this window
-              console.log(
-                "[AdvancedOHLCChart] 📦 Cached data is before range, noData: false",
-              );
-              if (typeof onHistoryCallback === "function") {
-                onHistoryCallback([], { noData: false });
-              }
-              return;
+            // No older data available
+            if (CHART_DEBUG) console.log("[AdvancedOHLCChart] Lazy-load: no older data");
+            if (typeof onHistoryCallback === "function") {
+              onHistoryCallback([], { noData: true });
             }
+            return;
           }
 
           if (allBars.length > 0 && typeof onHistoryCallback === "function") {
-            console.log(
-              "[AdvancedOHLCChart] ✅ Calling onHistoryCallback with",
-              allBars.length,
-              "bars (noData: false)",
-            );
+            const firstBar = allBars[0];
+            const lastBar = allBars[allBars.length - 1];
+            if (CHART_DEBUG) console.log("[AdvancedOHLCChart] getBars (cached):", resolution, allBars.length, "bars");
             onHistoryCallback(allBars, { noData: false });
+
+            // Mark chart as populated so live WS candles flow through subscribedCallbackRef
+            // Without this, resolution changes reset chartPopulatedRef to false (line ~1143)
+            // but the cached-data path never restores it, causing all live candles to be
+            // silently cached at line ~3203 instead of being forwarded to TradingView.
+            chartPopulatedRef.current = true;
 
             // Right-align chart after first data load from cache
             if (periodParams.firstDataRequest && allBars.length > 0) {
@@ -4574,8 +4676,6 @@ const AdvancedOHLCChart: React.FC<AdvancedOHLCChartProps> = ({
             }
 
             // IMPORTANT: Ensure price lines (including max MC) are synced after returning cached data
-            // This is needed because: 1) Initial load from preloaded data, 2) Mode toggle (MC/USD)
-            // The updateChartMetrics computes max MC and then calls syncPriceLines
             requestAnimationFrame(() => {
               if (CHART_DEBUG) console.log(
                 "[AdvancedOHLCChart] 📊 Cached data returned - ensuring price lines are synced",
@@ -4584,7 +4684,6 @@ const AdvancedOHLCChart: React.FC<AdvancedOHLCChartProps> = ({
             });
           } else if (typeof onHistoryCallback === "function") {
             console.log("[AdvancedOHLCChart] ⚠️ No bars to return");
-
             onHistoryCallback([], { noData: true });
           }
           return;
@@ -4628,17 +4727,25 @@ const AdvancedOHLCChart: React.FC<AdvancedOHLCChartProps> = ({
                 .filter((bar) => bar.time > 0 && isFinite(bar.time));
               allBars.sort((a, b) => a.time - b.time);
 
-              // Collapse large gaps, then fill remaining small gaps with carry-forward
+              // Only collapse time gaps for Monad — Solana trades 24/7, no session gaps to collapse.
+              // Gap collapse + resolution switching causes timestamp mismatches between historical and live bars.
               {
-                const resMs = parseResolutionToMs(resolution);
-                const { shifts, totalShift } = collapseTimeGaps(allBars, resMs);
-                gapShiftsRef.current = shifts;
-                totalShiftRef.current = totalShift;
+                const isSolana = latestParamsRef.current.network !== "monad";
+                if (!isSolana) {
+                  const resMs = parseResolutionToMs(resolution);
+                  const { shifts, totalShift } = collapseTimeGaps(allBars, resMs);
+                  gapShiftsRef.current = shifts;
+                  totalShiftRef.current = totalShift;
+                  gapFillBars(allBars, resolution);
+                } else {
+                  gapShiftsRef.current = [];
+                  totalShiftRef.current = 0;
+                }
               }
-              gapFillBars(allBars, resolution);
 
               if (typeof onHistoryCallback === "function") {
                 onHistoryCallback(allBars, { noData: false });
+                chartPopulatedRef.current = true;
               }
               return;
             }
@@ -4860,14 +4967,21 @@ const AdvancedOHLCChart: React.FC<AdvancedOHLCChartProps> = ({
           // Sort by time (ascending - oldest first)
           allBars.sort((a, b) => a.time - b.time);
 
-          // Collapse large gaps, then fill remaining small gaps with carry-forward
+          // Only collapse time gaps for Monad — Solana trades 24/7, no session gaps to collapse.
+          // Gap collapse + resolution switching causes timestamp mismatches between historical and live bars.
           {
-            const resMs = parseResolutionToMs(resolution);
-            const { shifts, totalShift } = collapseTimeGaps(allBars, resMs);
-            gapShiftsRef.current = shifts;
-            totalShiftRef.current = totalShift;
+            const isSolana = latestParamsRef.current.network !== "monad";
+            if (!isSolana) {
+              const resMs = parseResolutionToMs(resolution);
+              const { shifts, totalShift } = collapseTimeGaps(allBars, resMs);
+              gapShiftsRef.current = shifts;
+              totalShiftRef.current = totalShift;
+              gapFillBars(allBars, resolution);
+            } else {
+              gapShiftsRef.current = [];
+              totalShiftRef.current = 0;
+            }
           }
-          gapFillBars(allBars, resolution);
 
           // Ensure candles connect properly by making close of one = open of next
           // This creates visual continuity even when candles are flat (o=h=l=c)
@@ -4926,6 +5040,7 @@ const AdvancedOHLCChart: React.FC<AdvancedOHLCChartProps> = ({
             }
             if (typeof onHistoryCallback === "function") {
               onHistoryCallback(allBars, { noData: false });
+              chartPopulatedRef.current = true;
             }
             rightAlignChart(allBars.length);
             // Ensure price lines (including max MC) are synced after first data load
@@ -5092,6 +5207,7 @@ const AdvancedOHLCChart: React.FC<AdvancedOHLCChartProps> = ({
               "[AdvancedOHLCChart] ✅ Calling onHistoryCallback with noData: false",
             );
             onHistoryCallback(bars, { noData: false });
+            chartPopulatedRef.current = true;
 
             // Right-align chart after first data load for all networks
             if (periodParams.firstDataRequest && bars.length > 0) {
@@ -5156,14 +5272,21 @@ const AdvancedOHLCChart: React.FC<AdvancedOHLCChartProps> = ({
               .filter((bar) => bar.time > 0); // Filter out invalid bars
             allBars.sort((a, b) => a.time - b.time);
 
-            // Collapse large gaps, then fill remaining small gaps with carry-forward
+            // Only collapse time gaps for Monad — Solana trades 24/7, no session gaps to collapse.
+            // Gap collapse + resolution switching causes timestamp mismatches between historical and live bars.
             {
-              const resMs = parseResolutionToMs(resolution);
-              const { shifts, totalShift } = collapseTimeGaps(allBars, resMs);
-              gapShiftsRef.current = shifts;
-              totalShiftRef.current = totalShift;
+              const isSolana = latestParamsRef.current.network !== "monad";
+              if (!isSolana) {
+                const resMs = parseResolutionToMs(resolution);
+                const { shifts, totalShift } = collapseTimeGaps(allBars, resMs);
+                gapShiftsRef.current = shifts;
+                totalShiftRef.current = totalShift;
+                gapFillBars(allBars, resolution);
+              } else {
+                gapShiftsRef.current = [];
+                totalShiftRef.current = 0;
+              }
             }
-            gapFillBars(allBars, resolution);
 
             // Ensure candles connect properly in error fallback
             if (allBars.length > 1) {
@@ -5220,6 +5343,7 @@ const AdvancedOHLCChart: React.FC<AdvancedOHLCChartProps> = ({
             );
             if (typeof onHistoryCallback === "function") {
               onHistoryCallback(bars, { noData: false });
+              chartPopulatedRef.current = true;
             }
             return;
           }
@@ -5240,6 +5364,21 @@ const AdvancedOHLCChart: React.FC<AdvancedOHLCChartProps> = ({
         subscriberUID: string,
         onResetCacheNeededCallback?: () => void,
       ) => {
+        ++lifecycleSeqRef.current;
+        // Clear any pending recovery/reset timers from previous lifecycle
+        if (subscribeBarsRecoveryRef.current) {
+          clearTimeout(subscribeBarsRecoveryRef.current);
+          subscribeBarsRecoveryRef.current = null;
+        }
+        if (pendingCandleResetRef.current) {
+          clearTimeout(pendingCandleResetRef.current);
+          pendingCandleResetRef.current = null;
+        }
+
+        // Track active subscriber — prevents stale unsubscribes from killing this callback
+        activeSubscriberUIDRef.current = subscriberUID;
+        tvResolutionRef.current = resolution;
+
         const {
           network: currentNetwork,
           mint: currentMint,
@@ -5247,19 +5386,6 @@ const AdvancedOHLCChart: React.FC<AdvancedOHLCChartProps> = ({
         } = latestParamsRef.current;
         const tokenAddress = currentMint || currentPairAddress;
 
-        // DEBUG: Log all values to trace why WebSocket might not connect
-        console.log("[AdvancedOHLCChart] subscribeBars called with:", {
-          currentNetwork,
-          currentMint,
-          currentPairAddress,
-          tokenAddress,
-          resolution,
-          subscriberUID,
-          hasExistingWs: !!wsRef.current,
-        });
-
-        // Store callback for use in WebSocket message handler (from useEffect)
-        // This callback is used by BOTH Monad and Solana WebSocket handlers
         if (!tokenAddress) {
           console.log(
             "[AdvancedOHLCChart] subscribeBars skipped - no token address",
@@ -5267,8 +5393,10 @@ const AdvancedOHLCChart: React.FC<AdvancedOHLCChartProps> = ({
           return;
         }
 
-        // Wrap the callback to auto-shift real-time bars into collapsed time
+        // Wrap the callback to auto-shift real-time bars into collapsed time.
+        // Guard: ignore calls if this subscriber has been superseded.
         subscribedCallbackRef.current = (bar: any) => {
+          if (activeSubscriberUIDRef.current !== subscriberUID) return;
           const shift = totalShiftRef.current;
           if (shift > 0) {
             onRealtimeCallback({ ...bar, time: bar.time - shift });
@@ -5276,26 +5404,16 @@ const AdvancedOHLCChart: React.FC<AdvancedOHLCChartProps> = ({
             onRealtimeCallback(bar);
           }
         };
-        console.log(
-          "[AdvancedOHLCChart] ✅ subscribeBars registered callback for real-time updates",
-          {
-            network: currentNetwork,
-            hasWebSocket: !!wsRef.current,
-            wsState: wsRef.current ? wsRef.current.readyState : "none",
-            wsStateName: wsRef.current
-              ? ["CONNECTING", "OPEN", "CLOSING", "CLOSED"][
-                  wsRef.current.readyState
-                ]
-              : "none",
-          },
-        );
+        // Store raw callback in Map for potential reuse when TV switches back
+        // to this resolution without calling subscribeBars again
+        resolutionCallbackMapRef.current.set(resolution, {
+          subscriberUID,
+          onRealtimeCallback,
+        });
 
         // For Solana: callback is registered, useEffect WebSocket will use it
         // Don't create WebSocket here - the Solana useEffect handles it
         if (currentNetwork !== "monad") {
-          console.log(
-            "[AdvancedOHLCChart] 📡 Solana: callback registered, useEffect WebSocket will handle real-time updates",
-          );
           return;
         }
 
@@ -5414,7 +5532,12 @@ const AdvancedOHLCChart: React.FC<AdvancedOHLCChartProps> = ({
 
               // Update the chart via callback
               if (subscribedCallbackRef.current && bar.time > 0) {
-                subscribedCallbackRef.current(bar);
+                try {
+                  subscribedCallbackRef.current(bar);
+                } catch (cbErr) {
+                  console.warn("[AdvancedOHLCChart] Stale Monad sub callback error, clearing:", cbErr);
+                  subscribedCallbackRef.current = null;
+                }
               }
             } catch (e) {
               console.error(
@@ -5444,31 +5567,61 @@ const AdvancedOHLCChart: React.FC<AdvancedOHLCChartProps> = ({
       },
 
       unsubscribeBars: (subscriberUID: string) => {
-        const { network: currentNetwork } = latestParamsRef.current;
-        console.log(
-          "[AdvancedOHLCChart] unsubscribeBars called:",
-          subscriberUID,
-          "network:",
-          currentNetwork,
-        );
+        ++lifecycleSeqRef.current;
+        const isActive = activeSubscriberUIDRef.current === subscriberUID;
 
-        // Only clear the callback - DON'T close the WebSocket!
-        // For BOTH Monad and Solana, the WebSocket lifecycle is managed by dedicated useEffects
-        // that only re-run when [network, mint, pairAddress, selectedInterval] change.
-        // When toggling MC/USD (displayMode), we want to keep the WebSocket alive.
-        // The callback will be re-registered by the next subscribeBars call.
-        subscribedCallbackRef.current = null;
-        console.log(
-          "[AdvancedOHLCChart] Cleared callback, WebSocket kept alive for",
-          currentNetwork,
-        );
+        // Remove this subscriber's callback from the resolution Map
+        // Format: "SYMBOL_#_RESOLUTION" → extract resolution suffix
+        const uidParts = subscriberUID.split('_#_');
+        const uidResolution = uidParts.length > 1 ? uidParts[uidParts.length - 1] : null;
+        if (uidResolution) {
+          resolutionCallbackMapRef.current.delete(uidResolution);
+        }
 
-        // NOTE: WebSocket cleanup happens in the useEffect cleanup functions when:
-        // - Component unmounts
-        // - Token address changes (mint, pairAddress)
-        // - Network changes
-        // - Interval changes
-        // This is NOT one of those cases - we're just changing display mode.
+        // Only mark inactive if this unsubscribe belongs to the currently
+        // active subscriber. A stale unsubscribe from a previous resolution
+        // lifecycle must NOT kill the new active callback.
+        //
+        // IMPORTANT: Do NOT null subscribedCallbackRef here. The callback
+        // wrapper already guards against stale calls (checks activeSubscriberUID
+        // inside the closure). Keeping the ref non-null prevents:
+        //   1) WS bars hitting the "no callback" drop path
+        //   2) pendingCandleResetRef triggering spurious resetData() cycles
+        //   3) Race conditions between resetData() and pending lazy-load fetches
+        // When subscribeBars is called for the new resolution, it replaces both
+        // activeSubscriberUIDRef and subscribedCallbackRef atomically.
+        if (isActive) {
+          activeSubscriberUIDRef.current = null;
+
+          // CRITICAL: Abort any in-flight lazy-load fetch immediately.
+          // TradingView serializes getBars calls — a pending lazy-load blocks the
+          // entire resolveSymbol→getBars→subscribeBars pipeline for the new resolution.
+          // Aborting causes the old getBars to return noData instantly, unblocking TV.
+          if (lazyLoadAbortRef.current) {
+            lazyLoadAbortRef.current.abort();
+            lazyLoadAbortRef.current = null;
+          }
+
+          // Recovery: if subscribeBars isn't called within 3s, TradingView's
+          // lifecycle got stuck. Force resetData() to restart it.
+          // (Now that lazy-load is aborted, lifecycle should complete in <500ms;
+          //  this timer is a safety net for unexpected edge cases.)
+          if (subscribeBarsRecoveryRef.current) {
+            clearTimeout(subscribeBarsRecoveryRef.current);
+          }
+          subscribeBarsRecoveryRef.current = setTimeout(() => {
+            subscribeBarsRecoveryRef.current = null;
+            if (!activeSubscriberUIDRef.current) {
+              console.warn("[AdvancedOHLCChart] RECOVERY: subscribeBars never called after 3s — forcing resetData()", {
+                tvResolution: tvResolutionRef.current,
+              });
+              subscribedCallbackRef.current = null;
+              try { widgetRef.current?.chart?.()?.resetData?.(); } catch {}
+            }
+          }, 3000);
+        } else {
+          // Stale unsubscribe — callback preserved
+        }
       },
 
       // ✅ Implement getMarks for dev buy/sell indicators
@@ -5925,7 +6078,13 @@ Maker: ${walletAddress}`;
           }
 
           chart.setResolution?.(nextResolution, () => {
-            chart.resetData?.();
+            // NOTE: Do NOT call chart.resetData() here.
+            // setResolution already triggers the full TradingView lifecycle
+            // (unsubscribeBars → resolveSymbol → getBars → subscribeBars).
+            // Calling resetData() in the callback creates a SECOND lifecycle cycle,
+            // which nulls subscribedCallbackRef again and causes a race where
+            // live WS candles arrive between unsubscribeBars and subscribeBars
+            // with no callback to forward them to TradingView.
             requestPriceLineSync(50);
           });
         } catch (error) {
@@ -6039,6 +6198,11 @@ Maker: ${walletAddress}`;
         if (preloadedData && preloadedData.length > 0 && lastGoodCandlesRef.current.length === 0) {
           lastGoodCandlesRef.current = preloadedData;
           clampLaunchCandles(lastGoodCandlesRef.current);
+          // Wake getBars() if it's waiting for data
+          if (snapshotResolverRef.current) {
+            snapshotResolverRef.current();
+            snapshotResolverRef.current = null;
+          }
         }
 
         // Include mode suffix in symbol to ensure TradingView refreshes data when mode changes
@@ -6572,6 +6736,51 @@ Maker: ${walletAddress}`;
               e,
             );
           }
+          // Track TradingView native resolution dropdown changes
+          try {
+            const chart = widget.chart?.();
+            if (chart && chart.onIntervalChanged) {
+              chart.onIntervalChanged().subscribe(null, (interval: string) => {
+                ++lifecycleSeqRef.current;
+                const storedEntry = resolutionCallbackMapRef.current.get(interval);
+
+                // TradingView may reuse old subscriber UIDs without calling subscribeBars
+                // again (e.g., 1S→30S→1D→1S — TV never unsubscribes 1S and silently
+                // reuses its internal subscription). If we have a stored callback for
+                // this resolution, restore it so WS bars flow to the correct TV callback.
+                if (storedEntry) {
+                  console.log(`[AdvancedOHLCChart] onIntervalChanged: restoring ${interval} callback (TV reuse)`);
+                  activeSubscriberUIDRef.current = storedEntry.subscriberUID;
+                  tvResolutionRef.current = interval;
+                  // Rebuild the wrapped callback with shift logic
+                  subscribedCallbackRef.current = (bar: any) => {
+                    if (activeSubscriberUIDRef.current !== storedEntry.subscriberUID) {
+                      return; // Another subscribeBars call superseded this
+                    }
+                    const shift = totalShiftRef.current;
+                    try {
+                      if (shift > 0) {
+                        storedEntry.onRealtimeCallback({ ...bar, time: bar.time - shift });
+                      } else {
+                        storedEntry.onRealtimeCallback(bar);
+                      }
+                    } catch (tvErr) {
+                      console.error("[AdvancedOHLCChart] Restored callback threw:", String(tvErr));
+                    }
+                  };
+                  // Cancel any pending recovery timer — we have a valid callback
+                  if (subscribeBarsRecoveryRef.current) {
+                    clearTimeout(subscribeBarsRecoveryRef.current);
+                    subscribeBarsRecoveryRef.current = null;
+                  }
+                }
+              });
+              console.log("[AdvancedOHLCChart] ✅ onIntervalChanged listener registered");
+            }
+          } catch (e) {
+            console.warn("[AdvancedOHLCChart] Could not register onIntervalChanged:", e);
+          }
+
           syncWidgetWithParams();
         });
       } catch (error: any) {
@@ -6605,6 +6814,10 @@ Maker: ${walletAddress}`;
       if (visibleRangeDebounceRef.current) {
         clearTimeout(visibleRangeDebounceRef.current);
         visibleRangeDebounceRef.current = null;
+      }
+      if (subscribeBarsRecoveryRef.current) {
+        clearTimeout(subscribeBarsRecoveryRef.current);
+        subscribeBarsRecoveryRef.current = null;
       }
     };
   }, [libraryLoaded, createDatafeed, initialTokenId, syncWidgetWithParams]);

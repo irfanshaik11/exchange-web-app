@@ -760,7 +760,7 @@ export default function TokenLimitOrders({ liveMarketCapUsd, currentTokenAddress
                             <button
                               onClick={(e) => {
                                 e.stopPropagation();
-                                const navigateAddress = meta.pairAddress || order.pairAddress || order.tokenAddress;
+                                const navigateAddress = order.tokenAddress || meta.pairAddress || order.pairAddress;
                                 if (!navigateAddress) return;
 
                                 const queryParams = new URLSearchParams();
