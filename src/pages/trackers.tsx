@@ -90,6 +90,29 @@ type DefaultWalletEntry = {
 const TABS = ["Wallet Manager", "Live Trades"];
 const TWITTER_TABS = ["Tracked Accounts", "X Feed", "Add X Accounts"];
 const TELEGRAM_TABS = ["Channels", "Messages", "Add Channels"];
+/** Default Telegram channels to track for all users when they have none. */
+const DEFAULT_TELEGRAM_CHANNELS = [
+  "edenscalls",
+  "gm_degencalls",
+  "zen_call",
+  "seekrtrending",
+  "rugpullsurvivorscall",
+  "drakeetl",
+  "memesdontlies",
+	"timefliescalls",
+	"savannahcalls",
+	"gogetagambles",
+	"cryptotalkwithfrog",
+	"kolsignal",
+	"mini_degencalls",
+	"dumpscallsinsane",
+	"printingshitcoin",
+	"managingwaste",
+	"zorincalls",
+	"redbullcallz",
+	"robcall",
+	"cncryptocurrencyinsights"
+];
 const LIVE_TRADES_CACHE_PREFIX = "walletTracker:liveTrades";
 const getLiveTradesCacheKey = (userId?: string) =>
   userId
@@ -545,12 +568,14 @@ export default function TrackersPage() {
   const [approvedTelegramChannels, setApprovedTelegramChannels] = useState<string[]>([]);
   const [loadingTelegramChannels, setLoadingTelegramChannels] = useState(false);
   const [telegramChannelTitles, setTelegramChannelTitles] = useState<Record<string, string>>({});
-  const [telegramTab, setTelegramTab] = useState<0 | 1 | 2>(0); // 0 = Channels, 1 = Messages, 2 = Add Channels
+  const [telegramTab, setTelegramTab] = useState<0 | 1 | 2>(1); // 0 = Channels, 1 = Messages, 2 = Add Channels
   const [telegramFeed, setTelegramFeed] = useState<TelegramChannelMessage[]>([]);
   const [loadingTelegramFeed, setLoadingTelegramFeed] = useState(false);
   const [telegramFeedHint, setTelegramFeedHint] = useState<string | null>(null);
   const [approvedChannelsSearch, setApprovedChannelsSearch] = useState("");
-  const [addingTelegramChannel, setAddingTelegramChannel] = useState<string | null>(null);
+	const [addingTelegramChannel, setAddingTelegramChannel] = useState<string | null>(null);
+	const [restoringTelegramDefaults, setRestoringTelegramDefaults] = useState(false);
+
   // Hide wallet section when chain is Monad
   const showWalletSection = !isMobile || mobileMainTab === "wallets";
   const showTwitterSection = false; // X Tracker hidden (API cost)
@@ -1568,8 +1593,20 @@ export default function TrackersPage() {
     if (!user?.bearerToken) return;
     setLoadingTelegramChannels(true);
     try {
-      const list = await getTrackedTelegramChannels(user.bearerToken);
-      setTelegramChannels(list);
+      let list = await getTrackedTelegramChannels(user.bearerToken);
+			setTelegramChannels(list);
+			// When user has no channels, add default channels for all users
+      if (list.length === 0) {
+        for (const username of DEFAULT_TELEGRAM_CHANNELS) {
+          try {
+            await addTrackedTelegramChannel(username, user.bearerToken);
+          } catch {
+            // Skip if channel not approved or add fails
+          }
+        }
+        list = await getTrackedTelegramChannels(user.bearerToken);
+        setTelegramChannels(list);
+      }
       const titles: Record<string, string> = {};
       await Promise.all(
         list.map(async (ch) => {
@@ -1618,6 +1655,46 @@ export default function TrackersPage() {
         duration: 4000,
       });
     }
+	};
+	
+	const handleRestoreTelegramDefaults = async () => {
+    if (!user?.bearerToken) return;
+    setRestoringTelegramDefaults(true);
+    try {
+      const existing = new Set(
+        telegramChannels.map((ch) => ch.username.toLowerCase()),
+      );
+      const toAdd = DEFAULT_TELEGRAM_CHANNELS.filter(
+        (username) => !existing.has(username.toLowerCase()),
+      );
+      for (const username of toAdd) {
+        try {
+          await addTrackedTelegramChannel(username, user.bearerToken);
+        } catch {
+          // Skip if not approved or add fails
+        }
+      }
+      await loadTelegramChannels();
+      if (toAdd.length > 0) {
+        showEnhancedToast(
+          "success",
+          `Added ${toAdd.length} default channel${toAdd.length === 1 ? "" : "s"}.`,
+          { duration: 3000 },
+        );
+      } else {
+        showEnhancedToast("success", "All default channels already present.", {
+          duration: 3000,
+        });
+      }
+    } catch (error: unknown) {
+      showEnhancedToast(
+        "error",
+        error instanceof Error ? error.message : "Failed to restore defaults",
+        { duration: 4000 },
+      );
+    } finally {
+      setRestoringTelegramDefaults(false);
+    }
   };
 
   const loadTelegramFeed = async () => {
@@ -1625,7 +1702,8 @@ export default function TrackersPage() {
     setLoadingTelegramFeed(true);
     setTelegramFeedHint(null);
     try {
-      const { messages, hint } = await getTelegramChannelFeed(user.bearerToken, 10);
+      const feedLimit = wallets.length > 6 ? 5 : 10;
+      const { messages, hint } = await getTelegramChannelFeed(user.bearerToken, feedLimit);
       setTelegramFeed(messages);
       setTelegramFeedHint(hint ?? null);
     } catch (error) {
@@ -2182,19 +2260,20 @@ export default function TrackersPage() {
                   )}
 
                   {/* RESIZE HANDLE — between wallet and Telegram panels on desktop */}
-                  {/* {showTelegramSection && !isMobile && (
+                  {showTelegramSection && !isMobile && (
                     <div
                       className="group relative hidden h-full min-h-[530px] w-1 cursor-ew-resize items-center justify-center transition-colors hover:bg-[#7FFFC9]/5 lg:flex"
                       onMouseDown={() => setIsResizing(true)}
                     >
                       <div className="absolute h-16 w-1 rounded-full bg-neutral-400 transition-colors group-hover:bg-[#7FFFC9]" />
                     </div>
-                  )} */}
+                  )}
 
                   {/* RIGHT: TELEGRAM CHANNELS SECTION */}
-                  {/* {showTelegramSection && (
+                  {showTelegramSection && (
                     <div
                       className="flex min-h-0 flex-shrink-0 flex-col overflow-hidden rounded-xl border border-white/[0.08] bg-white/[0.05] px-3 backdrop-blur-xl sm:px-4"
+											aria-label="Telegram Tracker"
                       style={
                         isMobile
                           ? {
@@ -2211,8 +2290,11 @@ export default function TrackersPage() {
                                 "0 8px 32px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.06)",
                             }
                       }
-                    >
-                      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-white/[0.04] pt-3 pb-2 sm:gap-3 sm:pt-4 sm:pb-3">
+										>
+											<h2 className="border-b border-white/[0.04] pt-3 pb-2 text-sm font-semibold text-white sm:pt-4 sm:pb-3 sm:text-base">
+                        Telegram Tracker
+                      </h2>
+                      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-white/[0.04] pt-2 pb-2 sm:gap-3 sm:pt-3 sm:pb-3">
                         <div className="flex gap-1.5 sm:gap-2">
                           {TELEGRAM_TABS.map((label, i) => (
                             <button
@@ -2227,7 +2309,17 @@ export default function TrackersPage() {
                               {label}
                             </button>
                           ))}
-                        </div>
+												</div>
+												{user && (
+                          <button
+                            type="button"
+                            onClick={handleRestoreTelegramDefaults}
+                            disabled={restoringTelegramDefaults}
+                            className="cursor-pointer rounded-lg border border-white/[0.08] bg-white/[0.04] px-2.5 py-1.5 text-[10px] font-medium text-neutral-300 transition-all hover:bg-white/[0.07] hover:text-white disabled:opacity-50 sm:px-3 sm:py-2 sm:text-xs"
+                          >
+                            {restoringTelegramDefaults ? "Adding…" : "Restore to default"}
+                          </button>
+                        )}
                       </div>
                       <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
                         {!user ? (
@@ -2450,7 +2542,7 @@ export default function TrackersPage() {
                         )}
                       </div>
                     </div>
-                  )} */}
+                  )}
 
                   {/* RIGHT: TWITTER SECTION — hidden until cost-effective X API architecture is in place */}
                   {false && showTwitterSection && (
