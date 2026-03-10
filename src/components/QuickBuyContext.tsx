@@ -1,6 +1,8 @@
 import React, { createContext, useContext, useState, useEffect, useMemo } from 'react';
 import type { ReactNode } from 'react';
 
+const isDev = process.env.NODE_ENV !== 'production';
+
 export type MevMode = 'off' | 'reduced' | 'on';
 
 export interface QuickBuySettings {
@@ -85,13 +87,13 @@ export function QuickBuyProvider({ children }: { children: ReactNode }) {
       if (shouldReset) {
         localStorage.removeItem('quickBuySettings');
         sessionStorage.setItem('quickBuySettingsReset_v3', 'true');
-        console.log('🧹 Cleared localStorage quickBuySettings (forced reset for priority fee tweak)');
-        console.log('🔧 Default settings:', defaultSettings);
+        isDev && console.log('Cleared localStorage quickBuySettings (forced reset for priority fee tweak)');
+        isDev && console.log('Default settings:', defaultSettings);
       }
     }
     if (typeof window !== 'undefined') {
       const saved = localStorage.getItem('quickBuySettings');
-      console.log('📦 Saved settings from localStorage:', saved);
+      isDev && console.log('Saved settings from localStorage:', saved);
       if (saved) {
         try {
           const parsed = JSON.parse(saved);

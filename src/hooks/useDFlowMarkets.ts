@@ -2,6 +2,8 @@ import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import type { PredictionMarket } from '~/components/predictions';
 import { env } from '~/env';
 
+const isDev = process.env.NODE_ENV !== 'production';
+
 // DFlow API Configuration
 // Use backend API (API keys are securely stored on backend)
 const API_BASE = `${env.NEXT_PUBLIC_BACKEND_URL}/api/prediction/dflow`;
@@ -393,7 +395,7 @@ export default function useDFlowMarkets(options: UseDFlowMarketsOptions = {}): U
       setTotalOpenInterest(totalOI);
       setTotalLiquidity(totalLiq);
 
-      console.log(`[DFlow] Fetched ${mappedMarkets.length} markets, ${eventsData.events?.length || 0} events`);
+      isDev && console.log(`[DFlow] Fetched ${mappedMarkets.length} markets, ${eventsData.events?.length || 0} events`);
 
     } catch (err) {
       console.error('[DFlow] Failed to fetch markets:', err);
@@ -840,7 +842,7 @@ class DFlowWebSocketService {
         this.ws = new WebSocket(WS_BASE);
 
         this.ws.onopen = () => {
-          console.log('[DFlow WS] Connected');
+          isDev && console.log('[DFlow WS] Connected');
           this.isConnecting = false;
           this.reconnectAttempts = 0;
 
@@ -875,7 +877,7 @@ class DFlowWebSocketService {
         };
 
         this.ws.onclose = () => {
-          console.log('[DFlow WS] Disconnected');
+          isDev && console.log('[DFlow WS] Disconnected');
           this.isConnecting = false;
           this.stopPing();
           this.attemptReconnect();
@@ -912,7 +914,7 @@ class DFlowWebSocketService {
 
     this.reconnectAttempts++;
     const delay = this.reconnectDelay * Math.pow(2, this.reconnectAttempts - 1);
-    console.log(`[DFlow WS] Reconnecting in ${delay}ms (attempt ${this.reconnectAttempts})`);
+    isDev && console.log(`[DFlow WS] Reconnecting in ${delay}ms (attempt ${this.reconnectAttempts})`);
 
     setTimeout(() => {
       this.connect().catch(console.error);

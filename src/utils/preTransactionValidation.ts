@@ -1,5 +1,7 @@
 import type { Token } from './db';
 
+const isDev = process.env.NODE_ENV !== 'production';
+
 export interface ValidationWarning {
   level: 'info' | 'warning' | 'critical';
   title: string;
@@ -147,7 +149,7 @@ export const checkPumpfunSlippage = (
     launchpadProtocol.toLowerCase().includes('pump') ||
     pairAddress.length === 44; // Pumpfun uses bonding curve addresses (44 chars)
 
-  console.log('[PreTransactionValidation] Pumpfun check:', {
+  isDev && console.log('[PreTransactionValidation] Pumpfun check:', {
     poolTypeParam: poolType,
     tokenPoolType,
     launchpadProtocol,

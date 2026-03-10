@@ -11,6 +11,8 @@ import { AuthState, ClientState, WalletSource, useTurnkey } from "~/lib/turnkeyW
 import { useUser } from "~/components/UserContext";
 import { normalizeMonadAddress } from "~/utils/normalizeMonadAddress";
 
+const isDev = process.env.NODE_ENV !== 'production';
+
 // Dynamically import LoginModal to avoid SSR issues
 const LoginModal = dynamic(() => import("~/components/LoginModal"), {
   ssr: false,
@@ -504,12 +506,12 @@ export default function ExportWalletModal({
       if (isSolanaOnly) {
         // For Solana-only wallets, generate our own key pair for decryption
         // This allows us to show the key in base58 format directly
-        console.log("[ExportWalletModal] Using direct decryption for Solana key");
+        isDev && console.log("[ExportWalletModal] Using direct decryption for Solana key");
         keyPair = generateP256KeyPair();
         publicKey = keyPair.publicKeyUncompressed;
       } else {
         // For EVM or multi-chain wallets, use iframe (standard flow)
-        console.log("[ExportWalletModal] Using iframe for wallet export");
+        isDev && console.log("[ExportWalletModal] Using iframe for wallet export");
         if (iframeStamperRef.current) {
           iframeStamperRef.current.clear();
         }
@@ -655,7 +657,7 @@ export default function ExportWalletModal({
 
       if (isSolanaOnly && keyPair) {
         // For Solana-only wallets, decrypt directly and show in base58 format
-        console.log("[ExportWalletModal] Decrypting Solana key directly");
+        isDev && console.log("[ExportWalletModal] Decrypting Solana key directly");
         try {
           // decryptExportBundle with keyFormat: "SOLANA" returns the key in Base58 format directly!
           const base58Key = await decryptExportBundle({
@@ -666,7 +668,7 @@ export default function ExportWalletModal({
             keyFormat: "SOLANA",
           });
 
-          console.log("[ExportWalletModal] Decrypted Solana key (Base58):", base58Key);
+          isDev && console.log("[ExportWalletModal] Decrypted Solana key (Base58):", base58Key);
 
           if (!base58Key || typeof base58Key !== 'string') {
             throw new Error("Failed to decrypt private key");
@@ -692,7 +694,7 @@ export default function ExportWalletModal({
         try {
           if (isPrivateKeyExport) {
             // For imported private keys, use injectKeyExportBundle
-            console.log("[ExportWalletModal] Injecting private key export bundle");
+            isDev && console.log("[ExportWalletModal] Injecting private key export bundle");
             injected = await withTimeout(
               stamper.injectKeyExportBundle(
                 exportBundle,
@@ -703,7 +705,7 @@ export default function ExportWalletModal({
             );
           } else {
             // For wallets (mnemonic), use injectWalletExportBundle
-            console.log("[ExportWalletModal] Injecting wallet export bundle");
+            isDev && console.log("[ExportWalletModal] Injecting wallet export bundle");
             injected = await withTimeout(
               stamper.injectWalletExportBundle(
                 exportBundle,

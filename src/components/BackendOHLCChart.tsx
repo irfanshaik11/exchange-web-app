@@ -158,16 +158,6 @@ const BackendOHLCChart: React.FC<BackendOHLCChartProps> = ({
   tradeData = [],
   creatorAddress = null,
 }) => {
-  // Log received props for debugging
-  useEffect(() => {
-    console.log("[BackendOHLCChart] Received props:", {
-      tradeDataLength: tradeData?.length,
-      creatorAddress: creatorAddress,
-      hasTradeData: !!tradeData && tradeData.length > 0,
-      hasCreatorAddress: !!creatorAddress,
-    });
-  }, [tradeData, creatorAddress]);
-
   // Use prop directly instead of state to respond to changes
   const selectedInterval = VALID_INTERVALS.includes(interval) ? interval : "1m";
   const [isLoading, setIsLoading] = useState(
@@ -223,11 +213,6 @@ const BackendOHLCChart: React.FC<BackendOHLCChartProps> = ({
 
     // AGGRESSIVELY skip fetching if we have preloaded data
     if (preloadedData && preloadedData.length > 0) {
-      console.log(
-        "[BackendOHLCChart] BLOCKING fetch - preloaded data available:",
-        preloadedData.length,
-        "candles",
-      );
       setIsLoading(false);
       hasInitializedRef.current = true;
       return;
@@ -235,7 +220,6 @@ const BackendOHLCChart: React.FC<BackendOHLCChartProps> = ({
 
     // Skip if we've already made an initial request
     if (hasInitializedRef.current && firstLoadRef.current) {
-      console.log("[BackendOHLCChart] Skipping fetch - already initialized");
       return;
     }
 
@@ -244,11 +228,9 @@ const BackendOHLCChart: React.FC<BackendOHLCChartProps> = ({
 
     // Prevent concurrent requests with the same key
     if (inFlightRef.current === key) {
-      console.log("[BackendOHLCChart] Request already in flight for:", key);
       return;
     }
 
-    console.log("[BackendOHLCChart] Starting fetch for:", key);
     inFlightRef.current = key;
 
     const now = Date.now();
@@ -260,7 +242,6 @@ const BackendOHLCChart: React.FC<BackendOHLCChartProps> = ({
     lastFetchAtRef.current = Date.now();
 
     const doFetch = async (u: URL) => {
-      console.log("[BackendOHLCChart] Fetching OHLC data from:", u.toString());
       const r = await fetch(u.toString(), {
         method: "GET",
         headers: {
@@ -280,11 +261,6 @@ const BackendOHLCChart: React.FC<BackendOHLCChartProps> = ({
         throw new Error(
           body?.message || body?.error || "API returned unsuccessful response",
         );
-      console.log(
-        "[BackendOHLCChart] Received OHLC data:",
-        body?.data?.items?.length || 0,
-        "candles",
-      );
       return (body?.data?.items ?? []) as BackendOHLCData[];
     };
 
@@ -494,17 +470,8 @@ const BackendOHLCChart: React.FC<BackendOHLCChartProps> = ({
       // Only use preloaded data if we have valid mint or pairAddress
       // This prevents using stale data when parameters are still loading
       if (!mint && !pairAddress) {
-        console.log(
-          "[BackendOHLCChart] Rejecting preloaded data - no mint or pairAddress yet",
-        );
         return;
       }
-
-      console.log(
-        "[BackendOHLCChart] PRIORITY: Using preloaded data:",
-        preloadedData.length,
-        "candles",
-      );
 
       // Set preloaded data as the primary source and disable API fetching
       setCandles(preloadedData);
@@ -522,10 +489,6 @@ const BackendOHLCChart: React.FC<BackendOHLCChartProps> = ({
       return;
     }
 
-    // Only start polling if we don't have preloaded data
-    console.log(
-      "[BackendOHLCChart] Starting API polling - no preloaded data available",
-    );
     mountedRef.current = true;
     fetchCandles();
 
@@ -562,7 +525,6 @@ const BackendOHLCChart: React.FC<BackendOHLCChartProps> = ({
       (prevIntervalRef.current !== selectedInterval ||
         prevTimeframeRef.current !== timeframe)
     ) {
-      console.log("[BackendOHLCChart] Parameters changed, refetching data");
       prevIntervalRef.current = selectedInterval;
       prevTimeframeRef.current = timeframe;
 
@@ -615,19 +577,8 @@ const BackendOHLCChart: React.FC<BackendOHLCChartProps> = ({
   const buildMarkersFromEvents = useCallback(
     (events: any[], creatorAddr: string | null) => {
       if (!events || events.length === 0 || !creatorAddr) {
-        console.log("[BackendOHLCChart] No events or creator address", {
-          eventsLength: events?.length,
-          creatorAddr,
-        });
         return [];
       }
-
-      console.log(
-        "[BackendOHLCChart] Building markers from events:",
-        events.length,
-        "creator:",
-        creatorAddr,
-      );
 
       // Get seconds per bar for snapping timestamps to candle times
       const secondsPerBar = SEC_PER_BAR[selectedInterval];
@@ -662,24 +613,6 @@ const BackendOHLCChart: React.FC<BackendOHLCChartProps> = ({
             creatorAddr &&
             maker.toLowerCase() === creatorAddr.toLowerCase();
 
-          // Log address comparison for debugging
-          console.log(
-            "[BackendOHLCChart] Comparing addresses - Maker:",
-            maker,
-            "| Creator:",
-            creatorAddr,
-            "| Match:",
-            isDevTrade,
-          );
-
-          // Warn if no maker field found
-          if (!maker) {
-            console.log(
-              "[BackendOHLCChart] ⚠️ Trade has no maker field. Event keys:",
-              Object.keys(evt),
-            );
-          }
-
           // Only mark dev trades
           if (!isDevTrade) {
             return null;
@@ -687,17 +620,6 @@ const BackendOHLCChart: React.FC<BackendOHLCChartProps> = ({
 
           const isBuy = evt.side === "buy" || evt.eventDisplayType === "Buy";
           const eventType = isBuy ? "DEV_BUY" : "DEV_SELL";
-
-          const shortMaker =
-            maker.length > 10
-              ? `${maker.slice(0, 4)}...${maker.slice(-4)}`
-              : maker;
-          console.log(
-            "[BackendOHLCChart] ✅ Creating marker for dev trade:",
-            eventType,
-            "maker:",
-            shortMaker,
-          );
 
           const price = parseFloat(evt.price || evt.data?.priceUsd || "0");
 
@@ -750,41 +672,16 @@ const BackendOHLCChart: React.FC<BackendOHLCChartProps> = ({
     const markers = buildMarkersFromEvents(tradeData, creatorAddress);
     markersRef.current = markers;
 
-    console.log(
-      "[BackendOHLCChart] Setting markers:",
-      markers.length,
-      "markers",
-    );
-    console.log("[BackendOHLCChart] Sample marker:", markers[0]);
-
     // Use setTimeout to ensure series is fully initialized
     const timeoutId = setTimeout(() => {
-      console.log("[BackendOHLCChart] Series state:", {
-        hasSeries: !!seriesRef.current,
-        markersCount: markers.length,
-        seriesType: "Candlestick",
-      });
-
       if (seriesRef.current && markers.length > 0) {
         try {
-          // Check if setMarkers exists
-          const hasSetMarkers = "setMarkers" in seriesRef.current;
-          const isFunction =
-            typeof (seriesRef.current as any).setMarkers === "function";
-          console.log("[BackendOHLCChart] setMarkers check:", {
-            hasSetMarkers,
-            isFunction,
-          });
-
           // Try the old API first (backwards compatibility)
           const series = seriesRef.current as any;
 
           try {
             if (series.setMarkers && typeof series.setMarkers === "function") {
               series.setMarkers(markers);
-              console.log(
-                "[BackendOHLCChart] ✅ setMarkers called directly (old API)",
-              );
               return; // Success, exit
             }
           } catch (err) {
@@ -792,30 +689,23 @@ const BackendOHLCChart: React.FC<BackendOHLCChartProps> = ({
           }
 
           // Use v5 API: createSeriesMarkers
-          console.log("[BackendOHLCChart] Using createSeriesMarkers v5 API");
           try {
             const markersApi = createSeriesMarkers(seriesRef.current, markers);
             markersApiRef.current = markersApi;
-            console.log(
-              "[BackendOHLCChart] ✅ Markers created using createSeriesMarkers",
-            );
           } catch (createError: any) {
             console.error(
-              "[BackendOHLCChart] ❌ createSeriesMarkers failed:",
+              "[BackendOHLCChart] createSeriesMarkers failed:",
               createError,
             );
           }
         } catch (error) {
-          console.error("[BackendOHLCChart] ❌ Error setting markers:", error);
+          console.error("[BackendOHLCChart] Error setting markers:", error);
         }
       } else {
-        console.log("[BackendOHLCChart] No markers to set or series not ready");
-
         // If markers exist but data changed, try to update via the API
         if (markersApiRef.current && markers.length > 0) {
           try {
             (markersApiRef.current as any).setMarkers?.(markers);
-            console.log("[BackendOHLCChart] Updated markers via API");
           } catch (err) {
             console.error("[BackendOHLCChart] Failed to update markers:", err);
           }

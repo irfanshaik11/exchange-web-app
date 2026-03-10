@@ -2,6 +2,8 @@ import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { createChart, ColorType, CandlestickSeries } from 'lightweight-charts';
 import type { IChartApi, ISeriesApi, Time, UTCTimestamp } from 'lightweight-charts';
 
+const isDev = process.env.NODE_ENV !== 'production';
+
 export interface OHLCData {
   time: Time;
   open: number;
@@ -36,7 +38,7 @@ const LightweightChart: React.FC<LightweightChartProps> = ({
   // Initialize chart
   const initializeChart = useCallback(() => {
     if (!chartContainerRef.current || chartRef.current) {
-      console.log('LightweightChart: Cannot initialize', {
+      isDev && console.log('LightweightChart: Cannot initialize', {
         hasContainer: !!chartContainerRef.current,
         hasChart: !!chartRef.current
       });
@@ -44,7 +46,7 @@ const LightweightChart: React.FC<LightweightChartProps> = ({
     }
 
     try {
-      console.log('LightweightChart: Initializing chart', {
+      isDev && console.log('LightweightChart: Initializing chart', {
         containerWidth: chartContainerRef.current.clientWidth,
         containerHeight: chartContainerRef.current.clientHeight
       });
@@ -96,7 +98,7 @@ const LightweightChart: React.FC<LightweightChartProps> = ({
       chartRef.current = chart;
       seriesRef.current = candlestickSeries;
 
-      console.log('LightweightChart: Chart initialized successfully');
+      isDev && console.log('LightweightChart: Chart initialized successfully');
 
       // Handle resize
       const handleResize = () => {
@@ -121,7 +123,7 @@ const LightweightChart: React.FC<LightweightChartProps> = ({
   // Update chart data
   const updateChartData = useCallback(() => {
     if (!seriesRef.current || !data.length) {
-      console.log('LightweightChart: Cannot update data', {
+      isDev && console.log('LightweightChart: Cannot update data', {
         hasSeries: !!seriesRef.current,
         dataLength: data.length,
         firstDataPoint: data[0]
@@ -139,14 +141,12 @@ const LightweightChart: React.FC<LightweightChartProps> = ({
         close: item.close,
       }));
 
-      console.log('LightweightChart: Setting formatted data', {
+      isDev && console.log('LightweightChart: Setting formatted data', {
         count: formattedData.length,
-        firstPoint: formattedData[0],
-        lastPoint: formattedData[formattedData.length - 1]
       });
 
       seriesRef.current.setData(formattedData);
-      console.log('LightweightChart: Data set successfully');
+      isDev && console.log('LightweightChart: Data set successfully');
     } catch (error) {
       console.error('LightweightChart: Failed to update chart data:', error);
     }
@@ -167,10 +167,8 @@ const LightweightChart: React.FC<LightweightChartProps> = ({
 
   // Update data when it changes
   useEffect(() => {
-    console.log('LightweightChart: Updating chart data', {
+    isDev && console.log('LightweightChart: Updating chart data', {
       dataLength: data.length,
-      hasSeries: !!seriesRef.current,
-      hasChart: !!chartRef.current
     });
     updateChartData();
   }, [updateChartData]);

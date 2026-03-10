@@ -1,5 +1,7 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 
+const isDev = process.env.NODE_ENV !== 'production';
+
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   // Disable caching
   res.setHeader('Cache-Control', 'no-store, max-age=0, must-revalidate');
@@ -32,7 +34,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     pair_address: `mock_pair_${i}`,
   }));
 
-  console.log(`[MockAPI] Returning ${mockTokens.length} mock tokens for filter: ${filter}`);
+  isDev && console.log(`[MockAPI] Returning ${mockTokens.length} mock tokens for filter: ${filter}`);
   
   return res.json(mockTokens);
 }

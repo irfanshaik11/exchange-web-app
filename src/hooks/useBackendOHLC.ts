@@ -111,8 +111,6 @@ export function useBackendOHLC({
         if (optimize) url.searchParams.append('optimize', 'true');
       }
 
-      console.log('useBackendOHLC: Fetching data', { mint, pairAddress, interval, timeframe, optimize, url: url.toString() });
-
       const response = await fetch(url.toString(), {
         method: 'GET',
         headers: {
@@ -166,14 +164,11 @@ export function useBackendOHLC({
       setLastUpdate(new Date());
       setIsLoading(false);
 
-      console.log('useBackendOHLC: Data fetched successfully', { count: items.length });
-
       if (onSuccess) {
         onSuccess(items);
       }
     } catch (err) {
       if (err instanceof Error && err.name === 'AbortError') {
-        console.log('useBackendOHLC: Request aborted');
         return;
       }
 
@@ -210,11 +205,6 @@ export function useBackendOHLC({
     // Apply exponential backoff on rate limits
     const backoffMultiplier = Math.min(Math.pow(2, retryCount), 8); // Max 8x backoff
     const intervalTime = refreshInterval * backoffMultiplier;
-
-    console.log('useBackendOHLC: Setting refresh interval', {
-      intervalSeconds: intervalTime / 1000,
-      retryCount
-    });
 
     const interval = setInterval(() => {
       fetchData();

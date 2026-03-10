@@ -12,6 +12,8 @@ import { useEffect, useRef, useState, useCallback } from 'react';
 import { env } from '~/env';
 import type { ActivityEvent } from '~/components/admin/LiveActivityFeed';
 
+const isDev = process.env.NODE_ENV !== 'production';
+
 export interface DailySignup {
   date: string;
   count: number;
@@ -101,14 +103,14 @@ export function useAdminWebSocket(): UseAdminWebSocketResult {
       return;
     }
 
-    console.log('[Admin WS] Connecting to:', wsUrl);
+    isDev && console.log('[Admin WS] Connecting to:', wsUrl);
 
     try {
       const ws = new WebSocket(wsUrl);
       wsRef.current = ws;
 
       ws.onopen = () => {
-        console.log('[Admin WS] Connected');
+        isDev && console.log('[Admin WS] Connected');
         setIsConnected(true);
         setError(null);
         reconnectAttemptsRef.current = 0;
@@ -117,7 +119,7 @@ export function useAdminWebSocket(): UseAdminWebSocketResult {
       ws.onmessage = (event) => {
         try {
           const message: AdminWebSocketMessage = JSON.parse(event.data);
-          console.log('[Admin WS] Message:', message.type);
+          isDev && console.log('[Admin WS] Message:', message.type);
 
           switch (message.type) {
             case 'stats_update':
@@ -224,7 +226,7 @@ export function useAdminWebSocket(): UseAdminWebSocketResult {
       };
 
       ws.onclose = () => {
-        console.log('[Admin WS] Disconnected');
+        isDev && console.log('[Admin WS] Disconnected');
         setIsConnected(false);
         wsRef.current = null;
 
@@ -233,7 +235,7 @@ export function useAdminWebSocket(): UseAdminWebSocketResult {
         reconnectAttemptsRef.current++;
 
         reconnectTimeoutRef.current = setTimeout(() => {
-          console.log('[Admin WS] Attempting reconnect...');
+          isDev && console.log('[Admin WS] Attempting reconnect...');
           connect();
         }, delay);
       };

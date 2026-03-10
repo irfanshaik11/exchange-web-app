@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/router";
 
+const isDev = process.env.NODE_ENV !== 'production';
 const BLOCKVISION_API_KEY = process.env.NEXT_PUBLIC_BLOCKVISION_API_KEY;
 
 const ensureMs = (ts: unknown): number | null => {
@@ -35,7 +36,7 @@ export default function WalletTransactionsPage() {
   const pollingIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
   const fetchTransactions = async () => {
-    console.log("[wallet:transactions] Starting fetch", {
+    isDev && console.log("[wallet:transactions] Starting fetch", {
       walletAddress,
       hasApiKey: !!BLOCKVISION_API_KEY,
     });
@@ -54,7 +55,7 @@ export default function WalletTransactionsPage() {
         walletAddress,
       )}&limit=10&ascendingOrder=false`;
 
-      console.log("[wallet:transactions] Making request to:", url);
+      isDev && console.log("[wallet:transactions] Making request to:", url);
 
       const resp = await fetchWithTimeout(
         url,
@@ -68,22 +69,15 @@ export default function WalletTransactionsPage() {
         10_000,
       );
 
-      console.log("[wallet:transactions] Response status:", resp.status, resp.statusText);
+      isDev && console.log("[wallet:transactions] Response status:", resp.status, resp.statusText);
 
       const text = await resp.text();
-      console.log("[wallet:transactions] Response text length:", text.length);
-      console.log("[wallet:transactions] Response text preview:", text.slice(0, 500));
+      isDev && console.log("[wallet:transactions] Response text length:", text.length);
 
       let payload: any = null;
       try {
         payload = JSON.parse(text);
-        console.log("[wallet:transactions] Parsed payload:", {
-          hasPayload: !!payload,
-          code: payload?.code,
-          message: payload?.message,
-          hasResult: !!payload?.result,
-          hasData: !!payload?.result?.data,
-          dataIsArray: Array.isArray(payload?.result?.data),
+        isDev && console.log("[wallet:transactions] Parsed payload:", {
           dataLength: Array.isArray(payload?.result?.data) ? payload.result.data.length : 0,
         });
       } catch (parseError) {
@@ -100,36 +94,14 @@ export default function WalletTransactionsPage() {
       }
 
       const data = Array.isArray(payload?.result?.data) ? payload.result.data : [];
-      console.log("[wallet:transactions] Extracted data:", {
-        dataLength: data.length,
-        firstTx: data[0] ? {
-          hash: data[0].hash,
-          from: data[0].from,
-          to: data[0].to,
-          value: data[0].value,
-          timestamp: data[0].timestamp,
-          status: data[0].status,
-        } : null,
-      });
+      isDev && console.log("[wallet:transactions] Extracted data count:", data.length);
       
       const normalized = data.map((tx: any, index: number) => {
         const normalizedTx = {
           ...tx,
           timestamp: ensureMs(tx.timestamp) || tx.timestamp,
         };
-        console.log(`[wallet:transactions] Normalized tx ${index}:`, {
-          hash: normalizedTx.hash,
-          timestamp: normalizedTx.timestamp,
-          hasHash: !!normalizedTx.hash,
-          hasFrom: !!normalizedTx.from,
-          hasTo: !!normalizedTx.to,
-        });
         return normalizedTx;
-      });
-      
-      console.log("[wallet:transactions] Setting transactions state:", {
-        count: normalized.length,
-        transactions: normalized,
       });
       
       setTransactions(normalized);
@@ -139,34 +111,18 @@ export default function WalletTransactionsPage() {
       console.error("[wallet:transactions] Error stack:", err?.stack);
       setError(err?.message || "Failed to fetch transactions");
     } finally {
-      console.log("[wallet:transactions] Setting loading to false");
       setLoading(false);
     }
   };
 
-  // Add this useEffect to log state changes
-  useEffect(() => {
-    console.log("[wallet:transactions] State update:", {
-      loading,
-      error,
-      transactionsCount: transactions.length,
-      transactions: transactions,
-      walletAddress,
-      routerReady: router.isReady,
-    });
-  }, [loading, error, transactions, walletAddress, router.isReady]);
-
   // Initial fetch
   useEffect(() => {
     if (!router.isReady) {
-      console.log("[wallet:transactions] Router not ready yet");
       return;
     }
     if (walletAddress) {
-      console.log("[wallet:transactions] Router ready, fetching transactions");
       fetchTransactions();
     } else {
-      console.log("[wallet:transactions] No wallet address");
       setLoading(false);
     }
   }, [walletAddress, router.isReady]);
@@ -191,19 +147,12 @@ export default function WalletTransactionsPage() {
   }, [walletAddress, router.isReady]);
 
   if (!walletAddress) {
-    console.log("[wallet:transactions] No wallet address");
     return (
       <div className="flex h-screen items-center justify-center bg-[#050608] text-neutral-400">
         <p>Invalid wallet address</p>
       </div>
     );
   }
-
-  console.log("[wallet:transactions] Rendering with:", {
-    loading,
-    error,
-    transactionsCount: transactions.length,
-  });
 
   const formatValue = (value: string) => {
     if (!value) return "0";

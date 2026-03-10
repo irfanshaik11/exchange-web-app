@@ -1,6 +1,8 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { extractTokenImage } from '~/utils/images';
 
+const isDev = process.env.NODE_ENV !== 'production';
+
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   // Disable server-side caching/etag for this proxy to prevent 304s
   res.setHeader('Cache-Control', 'no-store, max-age=0, must-revalidate');
@@ -147,7 +149,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   try {
     const tryGo = async (base: string) => {
       const url = `${base}/v1/pulse/migrated?${params.toString()}`;
-      console.log('[Proxy:pulse-migrated] Using Go service:', url);
+      isDev && console.log('[Proxy:pulse-migrated] Using Go service:', url);
       const upstream = await fetchWithTimeout(url, 3000);
       return await tryParseAndSend(upstream);
     };

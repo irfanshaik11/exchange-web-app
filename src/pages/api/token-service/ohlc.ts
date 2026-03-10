@@ -1,5 +1,7 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 
+const isDev = process.env.NODE_ENV !== 'production';
+
 // Map chart intervals to backend supported intervals
 // Backend supports: 1s, 1m, 5m, 15m, 30m, 1h, 4h, 1d
 const INTERVAL_MAP: Record<string, string> = {
@@ -52,7 +54,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     if (to) params.append('to', to as string);
 
     const fetchUrl = `${goServiceUrl}/v1/ohlcv/${encodeURIComponent(address)}?${params.toString()}`;
-    console.log(`[OHLC API] Fetching: ${fetchUrl}`);
+    isDev && console.log(`[OHLC API] Fetching: ${fetchUrl}`);
 
     const response = await fetch(fetchUrl, {
       headers: { 'Accept': 'application/json' },
@@ -66,7 +68,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
 
     const data = await response.json();
-    console.log(`[OHLC API] Received ${data.count || 0} candles for ${address}`);
+    isDev && console.log(`[OHLC API] Received ${data.count || 0} candles for ${address}`);
 
     // Transform to chart-compatible format if needed
     // New endpoint returns: { success, mint, timeframe, candles: [...], count, source }

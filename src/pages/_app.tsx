@@ -46,6 +46,8 @@ import { PulseBackgroundLoader } from '../components/PulseBackgroundLoader';
 import { SolanaPositionWebSocketProvider } from '../contexts/SolanaPositionWebSocketContext';
 import ErrorBoundary from '../components/ErrorBoundary';
 
+const isDev = process.env.NODE_ENV !== 'production';
+
 // Suppress Next.js error overlay for caught errors in development
 if (typeof window !== 'undefined' && process.env.NODE_ENV === 'development') {
   // LAYER 1: Suppress console.error that triggers overlay
@@ -95,7 +97,7 @@ if (typeof window !== 'undefined' && process.env.NODE_ENV === 'development') {
     ) {
       event.preventDefault();
       event.stopImmediatePropagation();
-      console.log('[Error Suppressed] Error caught and handled by application:', errorMessage);
+      isDev && console.log('[Error Suppressed] Error caught and handled by application:', errorMessage);
       return false;
     }
   }, true); // Use capture phase to intercept early
@@ -120,7 +122,7 @@ if (typeof window !== 'undefined' && process.env.NODE_ENV === 'development') {
     ) {
       event.preventDefault();
       event.stopImmediatePropagation();
-      console.log('[Error Suppressed] Unhandled error rejection caught:', reasonMessage);
+      isDev && console.log('[Error Suppressed] Unhandled error rejection caught:', reasonMessage);
       return false;
     }
   }, true); // Use capture phase to intercept early
@@ -152,7 +154,7 @@ function TurnkeySessionBridge() {
 
   const isRunningRef = useRef(false);
 
-  console.log(
+  isDev && console.log(
     "[TurnkeySessionBridge] State:",
     {
       authState,
@@ -199,7 +201,7 @@ function TurnkeySessionBridge() {
         organizationId: session.organizationId,
         userId: session.userId,
       };
-      console.log("[TurnkeySessionBridge] Session data captured:", {
+      isDev && console.log("[TurnkeySessionBridge] Session data captured:", {
         organizationId: session.organizationId,
         userId: session.userId,
       });
@@ -260,7 +262,7 @@ function TurnkeySessionBridge() {
                 delegatedUserIdRef.current = uid;
                 hasCreatedDelegatedUserRef.current = true;
                 hasCreatedDelegatedPolicyRef.current = false;
-                console.log("[TurnkeySessionBridge] Delegated user ready:", uid);
+                isDev && console.log("[TurnkeySessionBridge] Delegated user ready:", uid);
               } else {
                 console.error(
                   "[TurnkeySessionBridge] fetchOrCreateP256ApiKeyUser succeeded but no userId returned"
@@ -273,7 +275,7 @@ function TurnkeySessionBridge() {
                 errorMessage.includes("Session public key") ||
                 errorMessage.includes("session public key could not be found")
               ) {
-                console.log(
+                isDev && console.log(
                   "[TurnkeySessionBridge] Delegated user creation session error (handled):",
                   errorMessage
                 );
@@ -306,7 +308,7 @@ function TurnkeySessionBridge() {
 
             try {
               await fetchOrCreatePolicies({ policies });
-              console.log(
+              isDev && console.log(
                 "[TurnkeySessionBridge] Delegated policy ensured:",
                 delegatedUserId
               );
@@ -316,7 +318,7 @@ function TurnkeySessionBridge() {
                 errorMessage.includes("Session public key") ||
                 errorMessage.includes("session public key could not be found")
               ) {
-                console.log(
+                isDev && console.log(
                   "[TurnkeySessionBridge] Delegated policy session error (handled):",
                   errorMessage
                 );
@@ -352,7 +354,7 @@ function TurnkeySessionBridge() {
               referralCode,
             });
 
-            console.log("Turnkey login response:", data);
+            isDev && console.log("Turnkey login response:", data);
             const appToken = data?.token || undefined;
 
             if (!appToken) {
@@ -377,7 +379,7 @@ function TurnkeySessionBridge() {
             if (!isOnExportPage) {
               router.push("/pulse?chain=sol");
             } else {
-              console.log("[TurnkeySessionBridge] User authenticated on export page, staying on page");
+              isDev && console.log("[TurnkeySessionBridge] User authenticated on export page, staying on page");
             }
           } catch (err: any) {
             const errorMessage = err?.message || err?.toString() || "";
@@ -389,7 +391,7 @@ function TurnkeySessionBridge() {
             }
             // Suppress Turnkey session errors - they're handled gracefully
             if (errorMessage.includes("Session public key") || errorMessage.includes("session public key could not be found")) {
-              console.log("[TurnkeySessionBridge] Session error handled gracefully:", errorMessage);
+              isDev && console.log("[TurnkeySessionBridge] Session error handled gracefully:", errorMessage);
             } else {
               console.error("Error linking Turnkey session to app user", err);
             }
@@ -715,7 +717,7 @@ const MyApp: AppType = ({ Component, pageProps }) => {
           // Sub-bundles are now parsed and JIT-compiled — clean up
           try { widget.remove(); } catch {}
           try { document.body.removeChild(container); } catch {}
-          console.log('[TradingView] Pre-warm complete — sub-bundles compiled');
+          isDev && console.log('[TradingView] Pre-warm complete — sub-bundles compiled');
         });
       } catch (e) {
         // Non-critical — chart will still work, just slightly slower on first load
@@ -749,7 +751,7 @@ const MyApp: AppType = ({ Component, pageProps }) => {
     navigator.serviceWorker
       .register('/sw.js', { scope: '/' })
       .then((reg) => {
-        console.log('[SW] Image cache registered, scope:', reg.scope);
+        isDev && console.log('[SW] Image cache registered, scope:', reg.scope);
       })
       .catch((err) => {
         console.warn('[SW] Registration failed:', err);

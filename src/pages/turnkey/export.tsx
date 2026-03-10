@@ -7,6 +7,8 @@ import dynamic from "next/dynamic";
 
 import Header from "~/components/Header";
 import Footer from "~/components/Footer";
+
+const isDev = process.env.NODE_ENV !== 'production';
 import {
   AuthState,
   ClientState,
@@ -128,7 +130,7 @@ export default function TurnkeyExportPage() {
       }
     }
     
-    console.log('[Export Page] Page initialized');
+    isDev && console.log('[Export Page] Page initialized');
   }, []);
 
   // Track auth status for UI gating
@@ -264,7 +266,7 @@ export default function TurnkeyExportPage() {
             errorMessage.includes("invalid")
           )
         ) {
-          console.log('[Export Page] Session error detected - resetting authentication');
+          isDev && console.log('[Export Page] Session error detected - resetting authentication');
           setError("Session expired or invalid. Please click 'Connect with Turnkey' to log in again.");
           // Clear wallets to force re-fetch after re-authentication
           setFetchedWallets([]);
@@ -393,7 +395,7 @@ export default function TurnkeyExportPage() {
           errorLower.includes("could not be found")
         ))
       ) {
-        console.log('[Export Page] Session error during export - resetting authentication');
+        isDev && console.log('[Export Page] Session error during export - resetting authentication');
         // Reset authentication state to force re-authentication
         setError("Session expired or invalid. Please click 'Connect with Turnkey' to log in again and try exporting.");
         // Clear wallets to force re-fetch after re-authentication

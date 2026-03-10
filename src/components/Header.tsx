@@ -1,3 +1,5 @@
+const isDev = process.env.NODE_ENV !== 'production';
+
 import Link from "next/link";
 import { useRouter } from "next/router";
 import { useEffect, useState, useRef, useCallback, useMemo } from "react";
@@ -396,20 +398,9 @@ export default function Header({
     });
     
     if (cachedToken) {
-      const enrichedPrice = (cachedToken as any).price_usd || (cachedToken as any).usd_price || 0;
-      if (enrichedPrice > 0) {
-        console.log(`[Watchlist Enrich] Enriched ${token.symbol || tokenAddress} with cached pulse data:`, {
-          originalPrice: currentPrice,
-          enrichedPrice: enrichedPrice,
-          source: 'cached_pulse_tokens'
-        });
-      }
-      
-      // Merge cached token data into watchlist token, prioritizing watchlist token's existing fields
+      // Only enrich price/change from cache — never overwrite MC or other live fields
       return {
         ...token,
-        ...cachedToken,
-        // Keep watchlist token's original fields but use cached price if missing
         price_usd: (token as any).price_usd || (cachedToken as any).price_usd || (cachedToken as any).usd_price || 0,
         usd_price: (token as any).usd_price || (cachedToken as any).usd_price || (cachedToken as any).price_usd || 0,
         price_percent_change_1h: (token as any).price_percent_change_1h ?? (cachedToken as any).price_percent_change_1h ?? (cachedToken as any).price_change_1h ?? 0,
@@ -695,7 +686,7 @@ export default function Header({
 
     // Listen for custom event to refresh balance (e.g., after a trade)
     const handleBalanceRefresh = () => {
-      console.log('[Header] Received polygon-balance-refresh event');
+      isDev && console.log('[Header] Received polygon-balance-refresh event');
       fetchPolygonBalance();
     };
     window.addEventListener('polygon-balance-refresh', handleBalanceRefresh);
@@ -1058,7 +1049,7 @@ export default function Header({
 
   // Handler for watchlist ticker quick buy
   const handleWatchlistQuickBuy = async (token: Token) => {
-    console.log("🎯 Clipboard/Watchlist Quick Buy:", token.symbol, (token as any).mint, "amount:", quickBuyAmount);
+    isDev && console.log("Clipboard/Watchlist Quick Buy:", token.symbol, (token as any).mint, "amount:", quickBuyAmount);
     // Validation checks with user feedback
     if (!user?.bearerToken || !user?.id) {
       toast.error("Please log in to trade", {
@@ -1356,7 +1347,7 @@ export default function Header({
         setTimeout(() => toast.dismiss(uniqueToastId), 10000);
       }
 
-      console.log("✅ Header Quick Buy successful");
+      isDev && console.log("Header Quick Buy successful");
 
       if (typeof window !== "undefined" && tokenMint) {
         window.dispatchEvent(
@@ -2755,75 +2746,7 @@ export default function Header({
                   <span className="text-xs font-medium" style={{ color: '#a3e635' }}>
                     ${formatMarketCap(marketCap)}
                   </span>
-                  
-                  {/* Price Change */}
-                  {priceChange !== 0 && (
-                    <span 
-                      className="text-xs font-medium"
-                      style={{ color: priceChange >= 0 ? '#8ee8a8' : '#f47a96' }}
-                    >
-                      {priceChange >= 0 ? '+' : ''}{formatSmartNumber(Math.abs(priceChange))}%
-                    </span>
-                  )}
 
-                  {/* Volume (1h) - show as percentage of market cap */}
-                  {(() => {
-                    // Use same volume resolution logic as watchlist modal
-                    const usdVolumeFields = [
-                      (token as any).volume_1h_usd,
-                      (token as any).volume1hUsd,
-                      (token as any).volume1h_usd,
-                      (token as any).volume_24h_usd, // fallback when 1h is missing
-                    ];
-                    let volume1h = 0;
-                    for (const v of usdVolumeFields) {
-                      const num = Number(v);
-                      if (Number.isFinite(num) && num > 0) {
-                        volume1h = num;
-                        break;
-                      }
-                    }
-                    // Fallback to buy+sell volume if USD volume not available
-                    if (volume1h === 0) {
-                      const buy = Number((token as any).total_buy_volume_1h) || Number((token as any).total_buy_volume_mon) || 0;
-                      const sell = Number((token as any).total_sell_volume_1h) || Number((token as any).total_sell_volume_mon) || 0;
-                      if (buy || sell) volume1h = buy + sell;
-                    }
-
-                    // Get market cap
-                    const marketCap =
-                      (token as any).market_cap_usd ??
-                      (token as any).marketCapUSD ??
-                      (token as any).fully_diluted_value ??
-                      0;
-
-                    // Calculate volume as percentage of market cap
-                    // let volumePercent = 0;
-                    // if (volume1h > 0 && marketCap > 0) {
-                    //   volumePercent = (volume1h / marketCap) * 100;
-                    // }
-
-                    // Show USD volume amount
-                    // Color based on price change direction: green for up, red for down
-                    const volumeColor = priceChange >= 0 ? '#8ee8a8' : '#f47a96';
-                    
-                    // if (volumePercent > 0) {
-                    //   return (
-                    //     <span className="text-xs font-medium" style={{ color: volumeColor }}>
-                    //       {formatSmartNumber(volumePercent)}%
-                    //     </span>
-                    //   );
-                    // } else 
-                    if (volume1h > 0) {
-                      return (
-                        <span className="text-xs font-medium" style={{ color: volumeColor }}>
-                          ${formatSmartNumber(volume1h)}
-                        </span>
-                      );
-                    }
-                    return null;
-                  })()}
-                  
                   {/* COMMENTED OUT: Quick Buy + Unstar buttons — may re-enable later
                   {isHovered && (
                     <>

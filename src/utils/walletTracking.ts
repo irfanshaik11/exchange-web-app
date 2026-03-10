@@ -1,3 +1,5 @@
+const isDev = process.env.NODE_ENV !== 'production';
+
 // Wallet tracking API utilities - Integrates with wallet-tracker-backend
 
 // ===== Backend Data Types =====
@@ -496,20 +498,20 @@ export async function getWalletBalance(
   try {
     if (WALLET_TRACKER_API_URL) {
       const url = `${WALLET_TRACKER_API_URL}/api/wallet-balance/${encodeURIComponent(address)}?chain=${chain}`;
-      console.log(
+      isDev && console.log(
         `[getWalletBalance] Fetching ${chain} balance for ${address.slice(0, 8)}... from ${url}`,
       );
       const response = await fetch(url);
 
       if (response.ok) {
         const data = await response.json();
-        console.log(
+        isDev && console.log(
           `[getWalletBalance] Response for ${chain} wallet ${address.slice(0, 8)}...:`,
           data,
         );
         const balance = parseBalanceFromResponse(data);
         if (balance !== null) {
-          console.log(
+          isDev && console.log(
             `[getWalletBalance] Successfully got ${chain} balance: ${balance}`,
           );
           return balance;
@@ -537,7 +539,7 @@ export async function getWalletBalance(
           const data = await fallbackRes.json();
           const balance = parseBalanceFromResponse(data);
           if (balance !== null) {
-            console.log(
+            isDev && console.log(
               `[getWalletBalance] Got SOL balance via fallback: ${balance}`,
             );
             return balance;

@@ -1,5 +1,7 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 
+const isDev = process.env.NODE_ENV !== 'production';
+
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   // Disable server-side caching/etag for this proxy to prevent 304s
   res.setHeader('Cache-Control', 'no-store, max-age=0, must-revalidate');
@@ -68,7 +70,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
     
     const goURL = `${goBase}${pulseEndpoint}?limit=${limit}`;
-    console.log('[Proxy:getAllTokens] Using Go service pulse endpoint:', goURL);
+    isDev && console.log('[Proxy:getAllTokens] Using Go service pulse endpoint:', goURL);
     const upstream = await fetchWithTimeout(goURL, 3000);
     
     if (upstream.ok) {

@@ -79,12 +79,6 @@ function formatAge(timestamp: number | string, currentTime: number): string {
         const testDiff = diff + adjustment;
         if (testDiff > 0) {
           adjustedDiff = testDiff;
-          console.log('Applied timezone adjustment:', {
-            timestamp,
-            originalDiff: diff,
-            adjustment: adjustment / (60 * 60 * 1000) + ' hours',
-            adjustedDiff: adjustedDiff
-          });
           break;
         }
       }
@@ -203,11 +197,8 @@ const Activity: React.FC<ActivityProps> = ({
       const tokensToFetch = uniqueTokens.filter((token) => !isCacheValid || !isCacheValid(token));
 
       if (tokensToFetch.length === 0) {
-        console.log("✅ All activity tokens loaded from cache");
         return;
       }
-
-      console.log(`🔄 [Activity] Fetching ${tokensToFetch.length} tokens (${uniqueTokens.length - tokensToFetch.length} from cache)`);
 
       await Promise.allSettled(
         tokensToFetch.map(async (tokenAddress) => {
@@ -241,13 +232,6 @@ const Activity: React.FC<ActivityProps> = ({
               priceUsd: metadata.priceUsd, // Preserve price from metadata
               imageUrl: trade.imageUrl || metadata.imageUrl, // Prefer DB-saved direct URL over metadata JSON URI
             };
-            
-            console.log(`📊 [Activity] Metadata for ${normalizedAddress}:`, {
-              name: enriched.name,
-              symbol: enriched.symbol,
-              marketCapUsd: enriched.marketCapUsd,
-              priceUsd: enriched.priceUsd,
-            });
 
             setTokenMetadata((prev) => ({
               ...prev,
@@ -418,38 +402,14 @@ const Activity: React.FC<ActivityProps> = ({
               const timestamp = trade.createdAt;
               const age = formatAge(timestamp, currentTime);
 
-              // Format market cap
-              // Use the market cap saved in the database at the time of trade (historical value)
+              // Format market cap — use the historical value saved in DB at time of trade
               let marketCapValue = toNumber(trade.marketCap);
-              
-              // TEMPORARY FIX: For same token, use the highest market cap value
-              // This addresses backend inconsistency where same token has different market caps for buy/sell
-              const sameTokenTrades = trades.filter(t => t.tokenAddress === trade.tokenAddress);
-              const marketCaps = sameTokenTrades
-                .map(t => typeof t.marketCap === 'string' ? parseFloat(t.marketCap) : t.marketCap)
-                .filter(mc => mc && mc > 0);
-              
-              if (marketCaps.length > 0) {
-                const maxMarketCap = Math.max(...marketCaps);
-                if (maxMarketCap > marketCapValue) {
-                  console.log('Using max market cap for consistency:', {
-                    tokenAddress: trade.tokenAddress,
-                    originalMarketCap: marketCapValue,
-                    maxMarketCap: maxMarketCap,
-                    allMarketCaps: marketCaps
-                  });
-                  marketCapValue = maxMarketCap;
-                }
-              }
-              
-              // Only use metadata as fallback if database value is missing or 0
-              // This ensures we show the historical market cap at time of trade, not current
+
+              // Fallback: if DB value is missing or 0 (old trades before OHLC fix), use live metadata
               if ((!marketCapValue || marketCapValue <= 0) && metadata?.marketCapUsd && metadata.marketCapUsd > 0) {
-                console.log(`⚠️ [Activity] Market cap missing in DB for ${trade.tokenAddress}, using metadata as fallback:`, metadata.marketCapUsd);
                 marketCapValue = metadata.marketCapUsd;
               }
-              
-              // Final check: if still missing or suspiciously low, show N/A
+
               if (!marketCapValue || marketCapValue <= 0) {
                 marketCapValue = null;
               }
@@ -467,12 +427,6 @@ const Activity: React.FC<ActivityProps> = ({
               // Apply same unit correction as in Positions component
               if (tokenAmountValue && tokenAmountValue > 1000000) {
                 tokenAmountValue = tokenAmountValue / 1000000; // Scale down by 1 million
-                console.log('Token amount unit correction applied:', {
-                  tokenAddress: trade.tokenAddress,
-                  type: trade.type,
-                  originalAmount: trade.tokenAmount,
-                  correctedAmount: tokenAmountValue
-                });
               }
               
               // For Sell trades, if tokenAmount is missing or 0, try to calculate it from other data
@@ -480,12 +434,6 @@ const Activity: React.FC<ActivityProps> = ({
                 // Try to calculate from usdValue and price
                 if (amountValue && amountValue > 0 && metadata?.priceUsd && metadata.priceUsd > 0) {
                   tokenAmountValue = amountValue / metadata.priceUsd;
-                  console.log('✅ Calculated sell tokenAmount from usdValue and price:', {
-                    tokenAddress: trade.tokenAddress,
-                    usdValue: amountValue,
-                    priceUsd: metadata.priceUsd,
-                    calculatedTokenAmount: tokenAmountValue
-                  });
                 }
                 // If still missing, try to find corresponding buy trade
                 if ((!tokenAmountValue || tokenAmountValue <= 0) && amountValue && amountValue > 0) {
@@ -506,14 +454,6 @@ const Activity: React.FC<ActivityProps> = ({
                     if (buyUsdValue && buyUsdValue > 0 && correctedBuyTokenAmount && correctedBuyTokenAmount > 0) {
                       const sellRatio = amountValue / buyUsdValue;
                       tokenAmountValue = correctedBuyTokenAmount * sellRatio;
-                      console.log('✅ Calculated sell tokenAmount from buy trade ratio:', {
-                        tokenAddress: trade.tokenAddress,
-                        buyTokenAmount: correctedBuyTokenAmount,
-                        buyUsdValue: buyUsdValue,
-                        sellUsdValue: amountValue,
-                        sellRatio: sellRatio,
-                        calculatedTokenAmount: tokenAmountValue
-                      });
                     }
                   }
                 }
@@ -539,11 +479,6 @@ const Activity: React.FC<ActivityProps> = ({
                     // If solAmount is reasonable (< 100 SOL), use it to calculate
                     const currentSolPrice = solPrice > 0 ? solPrice : 200; // Fallback to $200 if not available
                     amountValue = solAmountNum * currentSolPrice;
-                    console.log('✅ Fixed usdValue using solAmount:', {
-                      solAmount: solAmountNum,
-                      solPrice: currentSolPrice,
-                      calculatedUsdValue: amountValue
-                    });
                   } else {
                     // If solAmount is also wrong, try to estimate from buy/sell comparison
                     const buyTrade = trades.find(t => 
@@ -566,7 +501,6 @@ const Activity: React.FC<ActivityProps> = ({
                         if (buyTokenAmount && sellTokenAmount && buyTokenAmount > 0) {
                           const sellRatio = sellTokenAmount / buyTokenAmount;
                           amountValue = buyUsdValue * sellRatio;
-                          console.log('✅ Fixed usdValue using buy/sell ratio:', amountValue);
                         }
                       }
                     }

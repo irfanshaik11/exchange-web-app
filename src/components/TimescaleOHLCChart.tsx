@@ -35,6 +35,7 @@ export interface TimescaleOHLCChartProps {
   refreshInterval?: number;
 }
 
+const isDev = process.env.NODE_ENV !== 'production';
 const BACKEND_URL = process.env.NEXT_PUBLIC_MONAD_TOKEN_SERVICE_URL!;
 
 // Interval configurations with smart timeframes and limits
@@ -93,7 +94,7 @@ const TimescaleOHLCChart: React.FC<TimescaleOHLCChartProps> = ({
       `timeframe=${config.timeframe}&` +
       `limit=${config.limit}`;
 
-    console.log(`[TimescaleOHLC] Fetching ${interval} candles:`, url);
+    isDev && console.log(`[TimescaleOHLC] Fetching ${interval} candles:`, url);
 
     const response = await fetch(url);
     if (!response.ok) {
@@ -101,7 +102,7 @@ const TimescaleOHLCChart: React.FC<TimescaleOHLCChartProps> = ({
     }
 
     const data: OHLCResponse = await response.json();
-    console.log(`[TimescaleOHLC] Received ${data.count} ${interval} candles from TimescaleDB`);
+    isDev && console.log(`[TimescaleOHLC] Received ${data.count} ${interval} candles from TimescaleDB`);
 
     return data.data;
   }, [tokenAddress]);
@@ -254,7 +255,7 @@ const TimescaleOHLCChart: React.FC<TimescaleOHLCChartProps> = ({
     const interval = refreshInterval || config.refreshMs;
 
     refreshTimerRef.current = setInterval(() => {
-      console.log(`[TimescaleOHLC] Auto-refreshing ${selectedInterval} candles...`);
+      isDev && console.log(`[TimescaleOHLC] Auto-refreshing ${selectedInterval} candles...`);
       loadChartData(selectedInterval);
     }, interval);
 
@@ -283,14 +284,14 @@ const TimescaleOHLCChart: React.FC<TimescaleOHLCChartProps> = ({
     const wsHost = baseUrl.replace(/^https?:\/\//, '');
     const wsUrl = `${wsProtocol}://${wsHost}/v1/stream`;
 
-    console.log(`[TimescaleOHLC WS] Connecting to ${wsUrl}`);
+    isDev && console.log(`[TimescaleOHLC WS] Connecting to ${wsUrl}`);
 
     try {
       const ws = new WebSocket(wsUrl);
       wsRef.current = ws;
 
       ws.onopen = () => {
-        console.log('[TimescaleOHLC WS] Connected');
+        isDev && console.log('[TimescaleOHLC WS] Connected');
         setWsConnected(true);
       };
 
@@ -314,7 +315,7 @@ const TimescaleOHLCChart: React.FC<TimescaleOHLCChartProps> = ({
               return;
             }
 
-            console.log(`[TimescaleOHLC WS] Received candle: time=${candle.time}, close=${candle.c}`);
+            isDev && console.log(`[TimescaleOHLC WS] Received candle: time=${candle.time}, close=${candle.c}`);
 
             // Update chart with new candle
             if (seriesRef.current) {
@@ -349,7 +350,7 @@ const TimescaleOHLCChart: React.FC<TimescaleOHLCChartProps> = ({
       };
 
       ws.onclose = () => {
-        console.log('[TimescaleOHLC WS] Disconnected');
+        isDev && console.log('[TimescaleOHLC WS] Disconnected');
         setWsConnected(false);
         wsRef.current = null;
       };

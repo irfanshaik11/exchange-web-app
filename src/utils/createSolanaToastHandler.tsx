@@ -1,3 +1,5 @@
+const isDev = process.env.NODE_ENV !== 'production';
+
 import toast from "react-hot-toast";
 import { getResolvedTokenImage } from "./images";
 import { buildSolanaWalletAllocations, executeSolanaMultiBuy } from "./solanaWalletAllocation";
@@ -239,11 +241,11 @@ export async function executeSolanaBuyWithToast({
 
     // CRITICAL: Verify the pair address from the token service before trading
     if (token.mint) {
-      console.log(`[createSolanaToastHandler] Verifying pair address for: ${token.mint}`);
+      isDev && console.log(`[createSolanaToastHandler] Verifying pair address for: ${token.mint}`);
       const verifiedPairAddress = await fetchVerifiedPairAddress(token.mint);
       if (verifiedPairAddress) {
         if (verifiedPairAddress !== effectivePoolAddress) {
-          console.log(`[createSolanaToastHandler] Pair address mismatch! Local: ${effectivePoolAddress}, Verified: ${verifiedPairAddress}`);
+          isDev && console.log(`[createSolanaToastHandler] Pair address mismatch! Local: ${effectivePoolAddress}, Verified: ${verifiedPairAddress}`);
         }
         effectivePoolAddress = verifiedPairAddress;
       }
@@ -406,7 +408,7 @@ export function createSolanaWsHandler(pendingRef: PendingSolanaToastRef) {
     const pending = pendingRef.current;
     if (!pending || pending.tokenAddress.toLowerCase() !== data.tokenAddress.toLowerCase()) return;
 
-    console.log('[Solana] 🚀 INSTANT txHash via WebSocket:', data.txHash);
+    isDev && console.log('[Solana] INSTANT txHash via WebSocket:', data.txHash);
 
     // For multi-wallet trades: Don't update the toast (count was already shown at timer cap)
     // For single wallet: Update the link element with clickable Solana logo

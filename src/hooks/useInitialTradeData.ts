@@ -1,6 +1,7 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 
+const isDev = process.env.NODE_ENV !== 'production';
 
 
 interface TradeData {
@@ -90,7 +91,7 @@ export default function useInitialTradeData(
         
         // Return cached metadata if not expired (5 minutes)
         if (age < 300000) {
-          console.log(`[useInitialTradeData] Using cached token metadata for ${pair}`);
+          isDev && console.log(`[useInitialTradeData] Using cached token metadata for ${pair}`);
           return parsed;
         } else {
           localStorage.removeItem(cacheKey);
@@ -147,7 +148,7 @@ export default function useInitialTradeData(
 
     const refreshPromise = (async () => {
       try {
-        console.log(`[useInitialTradeData] Background refresh for ${pair}`);
+        isDev && console.log(`[useInitialTradeData] Background refresh for ${pair}`);
         cacheStatsRef.current.backgroundRefreshes++;
         
         const freshData = await fetchData(pair, token);
@@ -160,7 +161,7 @@ export default function useInitialTradeData(
         };
         localStorage.setItem(cacheKey, JSON.stringify(cached));
         
-        console.log(`[useInitialTradeData] Background refresh completed for ${pair}`);
+        isDev && console.log(`[useInitialTradeData] Background refresh completed for ${pair}`);
       } catch (err) {
         console.warn(`[useInitialTradeData] Background refresh failed for ${pair}:`, err);
       } finally {
@@ -181,7 +182,7 @@ export default function useInitialTradeData(
         version: Date.now(),
       };
       localStorage.setItem(cacheKey, JSON.stringify(cached));
-      console.log(`[useInitialTradeData] Cached data for ${pair}`);
+      isDev && console.log(`[useInitialTradeData] Cached data for ${pair}`);
     } catch (err) {
       console.warn('[useInitialTradeData] Failed to cache data:', err);
     }
@@ -220,7 +221,7 @@ export default function useInitialTradeData(
       const cachedMetadata = (tokenAddress && getCachedTokenMetadata(tokenAddress)) || getCachedTokenMetadata(pairAddress);
       if (cachedMetadata && mounted) {
         setCachedTokenMetadata(cachedMetadata);
-        console.log(`[useInitialTradeData] Loaded cached token metadata for ${tokenAddress || pairAddress}`);
+        isDev && console.log(`[useInitialTradeData] Loaded cached token metadata for ${tokenAddress || pairAddress}`);
       }
 
       // Step 1: Check localStorage cache (backup - 1ms)
@@ -250,7 +251,7 @@ export default function useInitialTradeData(
         if (mounted) {
           // Handle different error types gracefully
           if (err.message && err.message.includes('404')) {
-            console.log('[useInitialTradeData] New token detected, showing empty state');
+            isDev && console.log('[useInitialTradeData] New token detected, showing empty state');
             setData({ trades: [], stats: null, recentTrades: [] });
             setError(null);
           } else if (err.message && err.message.includes('timeout')) {
@@ -328,7 +329,7 @@ export default function useInitialTradeData(
         }
       });
       
-      console.log(`[useInitialTradeData] Cache cleanup completed. Stats:`, cacheStatsRef.current);
+      isDev && console.log(`[useInitialTradeData] Cache cleanup completed. Stats:`, cacheStatsRef.current);
     } catch (err) {
       console.warn('[useInitialTradeData] Cache cleanup failed:', err);
     }

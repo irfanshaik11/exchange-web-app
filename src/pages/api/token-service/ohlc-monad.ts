@@ -1,5 +1,7 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 
+const isDev = process.env.NODE_ENV !== 'production';
+
 // Map chart intervals to Monad service intervals
 // TimescaleDB supports: 1s, 1m, 5m, 15m, 30m, 1h, 4h, 1d, 1w
 const INTERVAL_MAP: Record<string, string> = {
@@ -53,7 +55,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     if (limit) params.append('limit', limit as string);
 
     const fetchUrl = `${monadServiceUrl}/v1/ohlc?${params.toString()}`;
-    console.log(`[Monad OHLC] Fetching: ${fetchUrl}`);
+    isDev && console.log(`[Monad OHLC] Fetching: ${fetchUrl}`);
 
     const response = await fetch(fetchUrl, {
       signal: AbortSignal.timeout(10000),
@@ -69,7 +71,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
 
     const monadData = await response.json();
-    console.log(`[Monad OHLC] Received ${monadData.count || 0} candles for ${token_address}`);
+    isDev && console.log(`[Monad OHLC] Received ${monadData.count || 0} candles for ${token_address}`);
 
     // Transform Monad format to chart format
     // Monad returns: { status, count, interval, data: [{ time, open, high, low, close, volume_usd, ... }] }

@@ -1,5 +1,7 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 
+const isDev = process.env.NODE_ENV !== 'production';
+
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== 'GET') {
     return res.status(405).json({ error: 'Method not allowed' });
@@ -16,7 +18,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const goBase = process.env.NEXT_PUBLIC_GO_SERVICE_URL!;
     const backendUrl = `${goBase}/v1/token/${mint}/image`;
     
-    console.log(`[getTokenImage] Fetching image for ${name} (${symbol}) from: ${backendUrl}`);
+    isDev && console.log(`[getTokenImage] Fetching image for ${name} (${symbol}) from: ${backendUrl}`);
     
     const response = await fetch(backendUrl, {
       method: 'GET',
@@ -29,7 +31,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     if (response.ok) {
       const data = await response.json();
-      console.log(`[getTokenImage] Found image for ${name}:`, data.image ? 'Yes' : 'No');
+      isDev && console.log(`[getTokenImage] Found image for ${name}:`, data.image ? 'Yes' : 'No');
       return res.json({
         success: true,
         image: data.image || data.logo || data.uri,
@@ -37,7 +39,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         source: 'backend'
       });
     } else {
-      console.log(`[getTokenImage] Backend returned ${response.status} for ${name}`);
+      isDev && console.log(`[getTokenImage] Backend returned ${response.status} for ${name}`);
       
       // Fallback: try to generate a placeholder or search for image
       const fallbackImage = generateFallbackImage(name as string, symbol as string);

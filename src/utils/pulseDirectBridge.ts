@@ -11,6 +11,8 @@
 
 import { loadPulseCache, savePulseCache, type PulseToken } from './pulseCache';
 
+const isDev = process.env.NODE_ENV !== 'production';
+
 type ConnectionStatus = {
   new: boolean;
   final_stretch: boolean;
@@ -89,7 +91,7 @@ export async function initDirectPulseBridge(baseUrl: string): Promise<void> {
         finalStretchTokens: cached.finalStretchTokens || [],
         migratedTokens: cached.migratedTokens || [],
       };
-      console.log('[DirectBridge] Loaded from cache:', {
+      isDev && console.log('[DirectBridge] Loaded from cache:', {
         new: currentData.newTokens.length,
         final: currentData.finalStretchTokens.length,
         migrated: currentData.migratedTokens.length,
@@ -126,7 +128,7 @@ function initBroadcastChannel() {
           leaderId = from;
           lastLeaderHeartbeat = Date.now();
           if (isLeader) {
-            console.log('[DirectBridge] Another tab is leader, stepping down');
+            isDev && console.log('[DirectBridge] Another tab is leader, stepping down');
             isLeader = false;
             disconnectAllChannels();
           }
@@ -189,7 +191,7 @@ function electLeader() {
   broadcastChannel?.postMessage({ type: 'LEADER_ELECTION', from: tabId });
 
   // Become leader immediately (optimistic)
-  console.log('[DirectBridge] Starting as leader (optimistic)');
+  isDev && console.log('[DirectBridge] Starting as leader (optimistic)');
   isLeader = true;
   leaderId = tabId;
   connectAllChannels();
@@ -198,7 +200,7 @@ function electLeader() {
   // Check if another leader responds within 200ms
   setTimeout(() => {
     if (leaderId !== tabId && Date.now() - lastLeaderHeartbeat < 1000) {
-      console.log('[DirectBridge] Another leader found, stepping down');
+      isDev && console.log('[DirectBridge] Another leader found, stepping down');
       isLeader = false;
       disconnectAllChannels();
       broadcastChannel?.postMessage({ type: 'REQUEST_DATA', from: tabId });
@@ -211,7 +213,7 @@ function electLeader() {
     if (isLeader) {
       sendHeartbeat();
     } else if (Date.now() - lastLeaderHeartbeat > 10000) {
-      console.log('[DirectBridge] Leader timeout, starting election');
+      isDev && console.log('[DirectBridge] Leader timeout, starting election');
       electLeader();
     }
   }, 3000);
@@ -252,14 +254,14 @@ function connectChannel(channel: 'new' | 'final_stretch' | 'migrated') {
   if (!wsBaseUrl) return;
 
   const url = `${wsBaseUrl}/v1/stream?channel=${channel}`;
-  console.log(`[DirectBridge] Connecting to ${channel}:`, url);
+  isDev && console.log(`[DirectBridge] Connecting to ${channel}:`, url);
 
   try {
     const ws = new WebSocket(url);
     wsConnections[channel] = ws;
 
     ws.onopen = () => {
-      console.log(`[DirectBridge] ✅ Connected: ${channel}`);
+      isDev && console.log(`[DirectBridge] Connected: ${channel}`);
       connectionStatus = { ...connectionStatus, [channel]: true };
       notifyConnectionListeners();
       broadcastChannel?.postMessage({
@@ -270,7 +272,7 @@ function connectChannel(channel: 'new' | 'final_stretch' | 'migrated') {
     };
 
     ws.onclose = () => {
-      console.log(`[DirectBridge] Disconnected: ${channel}`);
+      isDev && console.log(`[DirectBridge] Disconnected: ${channel}`);
       connectionStatus = { ...connectionStatus, [channel]: false };
       notifyConnectionListeners();
       wsConnections[channel] = null;

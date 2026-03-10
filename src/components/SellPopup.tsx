@@ -15,6 +15,8 @@ import HighSlippageWarningDialog from "./HighSlippageWarningDialog";
 import { fetchVerifiedPairAddress } from "~/hooks/useSingleTokenPolling";
 import { dispatchBalanceRefresh } from "~/utils/balanceEvents";
 
+const isDev = process.env.NODE_ENV !== 'production';
+
 interface SellPopupProps {
   isOpen: boolean;
   onClose: () => void;
@@ -54,7 +56,7 @@ const SellPopup: React.FC<SellPopupProps> = ({ isOpen, onClose, position, tokenM
   // Debug logging when popup opens
   useEffect(() => {
     if (isOpen) {
-      console.log('🔍 [SellPopup] Opened with data:', {
+      isDev && console.log('[SellPopup] Opened with data:', {
         tokenAddress: position.tokenAddress,
         pairAddress: position.pairAddress,
         protocol: tokenMetadata?.protocol,
@@ -98,9 +100,9 @@ const SellPopup: React.FC<SellPopupProps> = ({ isOpen, onClose, position, tokenM
     const effectivePool = migratedPool && migratedPool !== '' ? migratedPool : position.pairAddress;
 
     if (migratedPool && migratedPool !== '') {
-      console.log(`🔄 [SellPopup] Using migrated pool address: ${migratedPool}`);
+      isDev && console.log(`[SellPopup] Using migrated pool address: ${migratedPool}`);
     } else {
-      console.log(`📍 [SellPopup] Using original pair address: ${position.pairAddress}`);
+      isDev && console.log(`[SellPopup] Using original pair address: ${position.pairAddress}`);
     }
 
     return effectivePool;
@@ -119,11 +121,11 @@ const SellPopup: React.FC<SellPopupProps> = ({ isOpen, onClose, position, tokenM
 
     // If protocol is just "meteora" without a specific type (dbc/v1/v2), return empty to let backend auto-detect
     if (protocol.toLowerCase() === 'meteora' && detectedType === '') {
-      console.log(`🏷️  [SellPopup] Protocol is "meteora" without specific type - letting backend auto-detect from pool address`);
+      isDev && console.log(`[SellPopup] Protocol is "meteora" without specific type - letting backend auto-detect from pool address`);
       return ''; // Backend will auto-detect from migrated pool address
     }
 
-    console.log(`🏷️  [SellPopup] Pool type detected: "${detectedType}" (protocol: ${protocol || 'none'})`);
+    isDev && console.log(`[SellPopup] Pool type detected: "${detectedType}" (protocol: ${protocol || 'none'})`);
 
     return detectedType;
   }, [position.tokenAddress, effectivePoolAddress, tokenMetadata?.protocol]);
@@ -196,11 +198,11 @@ const SellPopup: React.FC<SellPopupProps> = ({ isOpen, onClose, position, tokenM
       let poolSource = 'position';
 
       if (position.tokenAddress) {
-        console.log(`[SellPopup] Verifying pair address for sell: ${position.tokenAddress}`);
+        isDev && console.log(`[SellPopup] Verifying pair address for sell: ${position.tokenAddress}`);
         const fetchedAddress = await fetchVerifiedPairAddress(position.tokenAddress);
         if (fetchedAddress) {
           if (fetchedAddress !== effectivePoolAddress) {
-            console.log(`[SellPopup] Pair address mismatch! Local: ${effectivePoolAddress}, Verified: ${fetchedAddress}`);
+            isDev && console.log(`[SellPopup] Pair address mismatch! Local: ${effectivePoolAddress}, Verified: ${fetchedAddress}`);
           }
           verifiedPoolAddress = fetchedAddress;
           poolSource = 'token-service';
@@ -216,7 +218,7 @@ const SellPopup: React.FC<SellPopupProps> = ({ isOpen, onClose, position, tokenM
 
       // DexScreener fallback if pool address looks invalid
       if (poolLooksInvalid && position.tokenAddress) {
-        console.log(`[SellPopup] ⚠️ Pool address looks invalid (${verifiedPoolAddress}), trying DexScreener fallback...`);
+        isDev && console.log(`[SellPopup] Pool address looks invalid (${verifiedPoolAddress}), trying DexScreener fallback...`);
         try {
           const controller = new AbortController();
           const timeoutId = setTimeout(() => controller.abort(), 5000);
@@ -237,7 +239,7 @@ const SellPopup: React.FC<SellPopupProps> = ({ isOpen, onClose, position, tokenM
 
               if (solanaPairs.length > 0) {
                 const bestPair = solanaPairs[0];
-                console.log(`[SellPopup] ✅ DexScreener found pool: ${bestPair.pairAddress} (${bestPair.dexId}, $${bestPair.liquidity?.usd || 0} liq)`);
+                isDev && console.log(`[SellPopup] DexScreener found pool: ${bestPair.pairAddress} (${bestPair.dexId}, $${bestPair.liquidity?.usd || 0} liq)`);
                 verifiedPoolAddress = bestPair.pairAddress;
                 poolSource = `dexscreener-${bestPair.dexId}`;
               }
@@ -248,7 +250,7 @@ const SellPopup: React.FC<SellPopupProps> = ({ isOpen, onClose, position, tokenM
         }
       }
 
-      console.log(`[SellPopup] Using pool address: ${verifiedPoolAddress} (source: ${poolSource})`);
+      isDev && console.log(`[SellPopup] Using pool address: ${verifiedPoolAddress} (source: ${poolSource})`);
 
       // Final validation - don't proceed if pool address is still clearly invalid
       if (!verifiedPoolAddress ||
@@ -274,7 +276,7 @@ const SellPopup: React.FC<SellPopupProps> = ({ isOpen, onClose, position, tokenM
         bribe: settings.bribe ?? 0.05,
       };
 
-      console.log('🚀 [SellPopup] Sending sell request:', sellParams);
+      isDev && console.log('[SellPopup] Sending sell request:', sellParams);
 
       const result = await tradeSellPercentage(sellParams, user.bearerToken);
 

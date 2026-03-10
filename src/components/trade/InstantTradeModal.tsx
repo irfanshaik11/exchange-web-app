@@ -66,8 +66,6 @@ const InstantTradeModal: React.FC<InstantTradeModalProps> = ({ isOpen, onClose, 
     const pending = pendingToastRef.current;
     if (!pending) return;
     
-    console.log('[InstantTradeModal] 🚀 INSTANT txHash via WebSocket:', data.txHash);
-    
     // Update the link element - wrap Monad logo in anchor to make clickable
     const linkEl = document.getElementById(`link-${pending.id}`);
     if (linkEl) {
@@ -115,8 +113,6 @@ const InstantTradeModal: React.FC<InstantTradeModalProps> = ({ isOpen, onClose, 
   }) => {
     const pending = pendingSolanaQuickBuyToastRef.current;
     if (!pending || pending.tokenAddress.toLowerCase() !== data.tokenAddress.toLowerCase()) return;
-
-    console.log('[InstantTradeModal] INSTANT Solana txHash via WebSocket:', data.txHash);
 
     // For single wallet: update the link element with clickable Solana logo
     if (pending.totalSelectedWallets === 1) {
@@ -1730,7 +1726,6 @@ const InstantTradeModal: React.FC<InstantTradeModalProps> = ({ isOpen, onClose, 
             walletContext,
             refreshBalance,
             onSuccess: async (txHash, stats) => {
-              console.log("✅ Enhanced Trade successful:", { txHash, stats });
               setTimeout(async () => {
                 try {
                   const trades = await getTradeActivityByUser(user.id.toString());

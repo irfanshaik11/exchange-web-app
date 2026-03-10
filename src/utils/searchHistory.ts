@@ -31,7 +31,6 @@ export function getHistory(userId?: string): SearchHistoryItem[] {
   try {
     const key = getStorageKey(userId);
     const raw = localStorage.getItem(key);
-    console.log("📖 getHistory:", { key, raw: raw?.substring(0, 100) });
     return JSON.parse(raw || "[]");
   } catch (e) {
     console.error("❌ getHistory error:", e);
@@ -51,7 +50,6 @@ export function addToHistory(item: SearchHistoryItem, userId?: string, maxEntrie
   const current = getHistory(userId).filter((t) => t.mint !== item.mint);
   const updated = [item, ...current].slice(0, maxEntries);
   localStorage.setItem(key, JSON.stringify(updated));
-  console.log("📝 addToHistory:", { key, itemSymbol: item.symbol, totalItems: updated.length });
 }
 
 /**
@@ -64,7 +62,6 @@ export function removeFromHistory(mint: string, userId?: string) {
   const key = getStorageKey(userId);
   const current = getHistory(userId).filter((t) => t.mint !== mint);
   localStorage.setItem(key, JSON.stringify(current));
-  console.log("🗑️ removeFromHistory:", { key, mint, remainingItems: current.length });
 }
 
 /**

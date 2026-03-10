@@ -1,11 +1,13 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { extractTokenImage } from '~/utils/images';
 
+const isDev = process.env.NODE_ENV !== 'production';
+
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   // Set appropriate cache headers for better performance
   const isFresh = req.query.fresh === '1';
   
-  console.log('[pulse-trending] Handler called with query:', req.query);
+  isDev && console.log('[pulse-trending] Handler called with query:', req.query);
   
   if (isFresh) {
     // Disable caching for fresh requests
@@ -70,10 +72,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     
     const limit = params.get('limit') || '50';
     
-    console.log('[pulse-trending] Request params:', { 
+    isDev && console.log('[pulse-trending] Request params:', {
       requested_timeframe: requestedTimeframe,
       validated_timeframe: timeframe,
-      limit 
+      limit
     });
     
     const trendingParams = new URLSearchParams();
@@ -81,7 +83,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     trendingParams.set('limit', limit);
     
     const trendingUrl = `${goBase}/v1/tokens/trending?${trendingParams.toString()}`;
-    console.log('[pulse-trending] Fetching from:', trendingUrl);
+    isDev && console.log('[pulse-trending] Fetching from:', trendingUrl);
     
     const upstream = await fetchWithTimeout(trendingUrl, 3000);
     const text = await upstream.text();
@@ -215,7 +217,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           };
         });
         
-        console.log('[pulse-trending] Mapped', mapped.length, 'tokens');
+        isDev && console.log('[pulse-trending] Mapped', mapped.length, 'tokens');
         return res.json(mapped);
       }
       return res.json(raw);

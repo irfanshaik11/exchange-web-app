@@ -40,6 +40,8 @@ import { deleteUserWallet } from "~/utils/api";
 import { PredictionPositions, UnifiedPortfolio, PolygonWalletCard } from "~/components/predictions";
 import { useSolanaPositionWebSocketContext } from "~/contexts/SolanaPositionWebSocketContext";
 
+const isDev = process.env.NODE_ENV !== 'production';
+
 // Interactive Balance Chart Component
 const BalanceChart = ({ 
   data, 
@@ -512,7 +514,7 @@ export default function PortfolioPage() {
       if (cached) {
         const parsed = JSON.parse(cached);
         if (parsed && Array.isArray(parsed.data) && parsed.data.length > 0) {
-          console.log(`[Trade History] ✅ Restored ${parsed.data.length} trades from cache for instant display`);
+          isDev && console.log(`[Trade History] ✅ Restored ${parsed.data.length} trades from cache for instant display`);
           return parsed.data as TradeRow[];
         }
       }
@@ -544,7 +546,7 @@ export default function PortfolioPage() {
       if (cached) {
         const parsed = JSON.parse(cached);
         if (parsed && Array.isArray(parsed.data) && parsed.data.length > 0) {
-          console.log(`[Trade Activity] ✅ Restored ${parsed.data.length} trades from cache for instant display`);
+          isDev && console.log(`[Trade Activity] ✅ Restored ${parsed.data.length} trades from cache for instant display`);
           return parsed.data as TradeRow[];
         }
       }
@@ -576,7 +578,7 @@ export default function PortfolioPage() {
       if (cached) {
         const parsed = JSON.parse(cached);
         if (parsed && Array.isArray(parsed.data) && parsed.data.length > 0) {
-          console.log(`[Trade History] ✅ Loaded ${parsed.data.length} trades from cache (cache key changed)`);
+          isDev && console.log(`[Trade History] ✅ Loaded ${parsed.data.length} trades from cache (cache key changed)`);
           setTradeHistory(parsed.data as TradeRow[]);
           setLoadingTradeHistory(false);
         }
@@ -591,7 +593,7 @@ export default function PortfolioPage() {
       if (cached) {
         const parsed = JSON.parse(cached);
         if (parsed && Array.isArray(parsed.data) && parsed.data.length > 0) {
-          console.log(`[Trade Activity] ✅ Loaded ${parsed.data.length} trades from cache (cache key changed)`);
+          isDev && console.log(`[Trade Activity] ✅ Loaded ${parsed.data.length} trades from cache (cache key changed)`);
           setTradeActivity(parsed.data as TradeRow[]);
           setLoadingTradeActivity(false);
         }
@@ -708,7 +710,7 @@ export default function PortfolioPage() {
         if (Object.keys(validCache).length > 0) {
           setTokenMetadataCache(validCache);
           tokenMetadataCacheRef.current = validCache;
-          console.log(
+          isDev && console.log(
             `📦 Loaded ${Object.keys(validCache).length} cached tokens from localStorage`,
           );
         }
@@ -754,7 +756,6 @@ export default function PortfolioPage() {
     const timeoutId = setTimeout(() => {
       try {
         localStorage.setItem(CACHE_KEY, JSON.stringify(tokenMetadataCache));
-        console.log(`💾 Saved ${Object.keys(tokenMetadataCache).length} tokens to cache`);
       } catch (error) {
         console.error("Error saving token cache:", error);
       }
@@ -903,7 +904,7 @@ export default function PortfolioPage() {
         if (!hasValidCache) {
           setLoadingTradeHistory(true);
         } else {
-          console.log(`[Trade History] 🔄 Refreshing trade history in background (cache available for instant display)`);
+          isDev && console.log(`[Trade History] 🔄 Refreshing trade history in background (cache available for instant display)`);
         }
 
         try {
@@ -980,7 +981,7 @@ export default function PortfolioPage() {
       if (isInitialLoad && !hasValidCache && !activityLoadedRef.current) {
         setLoadingTradeActivity(true);
       } else if (hasValidCache) {
-        console.log(`[Trade Activity] 🔄 Refreshing trade activity in background (cache available for instant display)`);
+        isDev && console.log(`[Trade Activity] 🔄 Refreshing trade activity in background (cache available for instant display)`);
       }
 
       try {
@@ -1070,7 +1071,7 @@ export default function PortfolioPage() {
       (currentChain !== 'monad' && p.chain === 'sol')
     );
     if (relevantPending.length > 0) {
-      console.log(`[Portfolio] Consuming ${relevantPending.length} pending trade refresh(es)`);
+      isDev && console.log(`[Portfolio] Consuming ${relevantPending.length} pending trade refresh(es)`);
       refreshBalance({ chain: currentChain === 'monad' ? 'monad' : 'sol', force: true }).catch(() => {});
       setTradeRefreshCounter((c) => c + 1);
       // Retry to catch trades still being saved (buy API still processing or Pumpfun async save)
@@ -1096,7 +1097,7 @@ export default function PortfolioPage() {
                  (currentChain !== 'monad' && chain === 'solana');
         });
         if (relevant.length > 0) {
-          console.log(`[Portfolio] Consuming ${relevant.length} pending WS trade(s) from localStorage`);
+          isDev && console.log(`[Portfolio] Consuming ${relevant.length} pending WS trade(s) from localStorage`);
           // Add to ref for merge protection against REST overwrites
           pendingWsTradesRef.current = [
             ...pendingWsTradesRef.current.filter((t: any) => !relevant.some((r: any) => r.id === t.id)),
@@ -1135,7 +1136,7 @@ export default function PortfolioPage() {
         (currentChain !== 'monad' && detail?.chain === 'sol');
       if (!isRelevant) return;
 
-      console.log(`[Portfolio] Trade completed: ${detail?.tradeType} on ${detail?.chain}`);
+      isDev && console.log(`[Portfolio] Trade completed: ${detail?.tradeType} on ${detail?.chain}`);
       // Force balance refresh
       refreshBalance({ chain: currentChain === 'monad' ? 'monad' : 'sol', force: true }).catch(() => {});
       // Increment counter to trigger trade history/activity re-fetch
@@ -1214,7 +1215,7 @@ export default function PortfolioPage() {
       // Only apply if activity hasn't loaded via REST yet
       if (activityLoadedRef.current) return;
 
-      console.log(`[Portfolio] WS activity snapshot: ${detail.activity.length} trades`);
+      isDev && console.log(`[Portfolio] WS activity snapshot: ${detail.activity.length} trades`);
       const filteredActivity = detail.activity.filter(isTradeOnCurrentChain);
       setTradeActivity(filteredActivity);
       setLoadingTradeActivity(false);
@@ -1308,21 +1309,21 @@ export default function PortfolioPage() {
       const savedBalances = localStorage.getItem(storageKeys.previousBalances);
       if (savedBalances) {
         previousBalancesRef.current = JSON.parse(savedBalances);
-        console.log("📊 Loaded previous balances from localStorage:", previousBalancesRef.current);
+        isDev && console.log("📊 Loaded previous balances from localStorage:", previousBalancesRef.current);
       }
       
       // Load cumulative realized PNL
       const savedCumulative = localStorage.getItem(storageKeys.cumulativeRealizedPnl);
       if (savedCumulative) {
         cumulativeRealizedPnlRef.current = parseFloat(savedCumulative) || 0;
-        console.log("📊 Loaded cumulative realized PNL:", cumulativeRealizedPnlRef.current);
+        isDev && console.log("📊 Loaded cumulative realized PNL:", cumulativeRealizedPnlRef.current);
       }
       
       // Load initial native balance
       const savedInitialBalance = localStorage.getItem(storageKeys.initialNativeBalance);
       if (savedInitialBalance) {
         initialNativeBalanceRef.current = parseFloat(savedInitialBalance);
-        console.log("📊 Loaded initial native balance:", initialNativeBalanceRef.current, currentChain === "monad" ? "MON" : "SOL");
+        isDev && console.log("📊 Loaded initial native balance:", initialNativeBalanceRef.current, currentChain === "monad" ? "MON" : "SOL");
       }
     } catch (error) {
       console.error("Error loading persisted data:", error);
@@ -1340,7 +1341,7 @@ export default function PortfolioPage() {
             previousBalancesRef.current[pos.tokenAddress] = pos.remaining;
           }
         });
-        console.log("📊 Initialized previous balances from positions:", previousBalancesRef.current);
+        isDev && console.log("📊 Initialized previous balances from positions:", previousBalancesRef.current);
         
         // Save to localStorage
         try {
@@ -1645,13 +1646,6 @@ export default function PortfolioPage() {
   // Calculate metrics based on selected timeframe
   useEffect(() => {
     const calculateTimeframeMetrics = () => {
-      console.log("🔄 Calculating timeframe metrics...", {
-        selectedTimeframe,
-        positionsCount: positions.length,
-        tradeHistoryCount: tradeHistory.length,
-        unrealizedPnl,
-      });
-
       const currentTime = Date.now();
       let timeframeDays = 0;
 
@@ -1798,14 +1792,6 @@ export default function PortfolioPage() {
           saleRealizedPnl = storedRealizedPnl;
           totalCostBasis = storedCostBasis || (saleValueUsd - saleRealizedPnl);
           
-          console.log("💰 Using stored realized PNL from database:", {
-            tokenAddress: sell.tokenAddress,
-            soldAmount,
-            saleValueUsd,
-            storedCostBasis: totalCostBasis,
-            storedRealizedPnl: saleRealizedPnl,
-            tradeId,
-          });
         } else {
           // Fallback: Calculate using FIFO matching (for older trades without stored PNL)
           const buys = buyTradesByToken.get(tokenAddress) || [];
@@ -1855,15 +1841,6 @@ export default function PortfolioPage() {
           // Calculate realized PNL for this sale
           saleRealizedPnl = saleValueUsd - totalCostBasis;
           
-          console.log("💰 Calculated realized PNL (fallback - no stored value):", {
-            tokenAddress: sell.tokenAddress,
-            soldAmount,
-            saleValueUsd,
-            totalCostBasis,
-            realizedPnl: saleRealizedPnl,
-            tradeId,
-            note: "Consider backfilling this trade with stored PNL for accuracy",
-          });
         }
         
         totalRealizedPnl += saleRealizedPnl;
@@ -1982,21 +1959,9 @@ export default function PortfolioPage() {
               tokenName: position?.tokenName || '',
             });
             
-            console.log("💰 BALANCE CHANGE SALE - Realized PNL:", {
-              tokenAddress: originalTokenAddress,
-              normalizedTokenAddress,
-              previousBalance,
-              currentBalance,
-              soldAmount,
-              avgBuyPrice,
-              salePrice,
-              saleValueUsd,
-              costBasisOfSold,
-              realizedPnl: saleRealizedPnl,
-            });
           } else {
             // No position found - might be fully sold, try to find in trade history
-            console.log("⚠️ Balance decreased but no position found:", {
+            isDev && console.log("⚠️ Balance decreased but no position found:", {
               tokenAddress: originalTokenAddress,
               normalizedTokenAddress,
               previousBalance,
@@ -2050,13 +2015,6 @@ export default function PortfolioPage() {
             tokenName: pos.tokenName || '',
           });
           
-          console.log("💰 BACKEND SALE - Realized PNL:", {
-            tokenAddress: pos.tokenAddress,
-            sold: pos.sold,
-            soldUsdValue: pos.soldUsdValue,
-            costBasisOfSold,
-            saleRealizedPnl,
-          });
         }
       });
 
@@ -2163,24 +2121,6 @@ export default function PortfolioPage() {
         ? (totalRealizedPnl / totalCostBasisOfSoldTokens) * 100 
         : 0;
 
-      console.log("📊 Final timeframe metrics:", {
-        unrealizedPnl: unrealizedPnlForTimeframe,
-        realizedPnl: totalRealizedPnl,
-        realizedPnlPercentage: realizedPnlPercentage,
-        totalPnl: totalPnlForTimeframe,
-        totalPnlPercentage: totalPnlPercentageForTimeframe,
-        totalCostBasis,
-        totalCostBasisFromTrades,
-        totalCostBasisFromPositions,
-        totalCostBasisOfSoldTokens, // Cost basis of only sold tokens (for realized PNL %)
-        winningTrades,
-        losingTrades,
-        salesDetected: salesDetected.length,
-        salesDetails: salesDetected,
-        sellTradesCount: sellTrades.length,
-        actualBalancesCount: Object.keys(actualBalances).length,
-      });
-
       setTimeframeMetrics({
         unrealizedPnl: unrealizedPnlForTimeframe,
         realizedPnl: totalRealizedPnl,
@@ -2209,7 +2149,7 @@ export default function PortfolioPage() {
         const storageKeys = getStorageKeys();
         try {
           localStorage.setItem(storageKeys.initialNativeBalance, currentNativeBalance.toString());
-          console.log("📊 Initialized initial native balance:", currentNativeBalance, currentChain === "monad" ? "MON" : "SOL");
+          isDev && console.log("📊 Initialized initial native balance:", currentNativeBalance, currentChain === "monad" ? "MON" : "SOL");
         } catch (error) {
           console.error("Error saving initial balance:", error);
         }
@@ -2329,24 +2269,6 @@ export default function PortfolioPage() {
               return updated.slice(-100);
             });
             
-            console.log("📊 ROBUST Actual Trading PNL Calculation:", {
-              storedInitialBalance,
-              storedInitialBalanceUsd,
-              currentBalance: currentNativeBalance,
-              totalDeposits,
-              totalWithdrawals,
-              netDeposits,
-              tradingBalanceChange,
-              tradingBalanceChangeUsd,
-              tradingBalanceChangePercentage: tradingBalanceChangePercentage !== 0 
-                ? `${tradingBalanceChangePercentage.toFixed(2)}%` 
-                : "N/A (initial balance < $1.00)",
-              nativePrice,
-              tradeBasedPnl: totalPnlForTimeframe,
-              discrepancy: tradingBalanceChangeUsd - totalPnlForTimeframe,
-              formula: "Trading PNL = Current - Initial - (Deposits - Withdrawals)",
-              validation: storedInitialBalanceUsd >= 1.00 ? "✅ Valid" : "⚠️ Initial balance too small",
-            });
           })
           .catch((error) => {
             console.error("Failed to fetch transaction history for PNL calculation:", error);
@@ -2383,16 +2305,6 @@ export default function PortfolioPage() {
               return updated.slice(-100);
             });
             
-            console.log("📊 Actual Balance Change (fallback, no transaction history):", {
-              storedInitialBalance,
-              currentBalance: currentNativeBalance,
-              balanceChange,
-              balanceChangeUsd,
-              balanceChangePercentage: balanceChangePercentage !== 0 
-                ? `${balanceChangePercentage.toFixed(2)}%` 
-                : "N/A",
-              note: "Deposits/withdrawals not accounted for in fallback calculation",
-            });
           });
       } else if (storedInitialBalance === null && currentNativeBalance > 0) {
         // No stored initial balance - initialize with current balance (first time user)
@@ -2400,7 +2312,7 @@ export default function PortfolioPage() {
         const storageKeys = getStorageKeys();
         try {
           localStorage.setItem(storageKeys.initialNativeBalance, currentNativeBalance.toString());
-          console.log("📊 Initialized initial native balance (first time):", currentNativeBalance);
+          isDev && console.log("📊 Initialized initial native balance (first time):", currentNativeBalance);
         } catch (error) {
           console.error("Error saving initial balance:", error);
         }
@@ -2615,7 +2527,7 @@ export default function PortfolioPage() {
     if (typeof window === "undefined") return;
 
     const handleWalletsUpdated = () => {
-      console.log("🔄 Wallets updated event - forcing balance refresh");
+      isDev && console.log("🔄 Wallets updated event - forcing balance refresh");
       forceBalanceRefreshRef.current = true;
     };
 
@@ -2825,7 +2737,7 @@ export default function PortfolioPage() {
       // - create Turnkey sub-org / wallet for this user
       // - persist wallet to DB
       // - return the new wallet with balance = 0 (or computed)
-      console.log("Creating new wallet for user:", user.id);
+      isDev && console.log("Creating new wallet for user:", user.id);
       const res = await fetch(
   `${process.env.NEXT_PUBLIC_BACKEND_URL}/api/users/wallet`,
   {

@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 
+const isDev = process.env.NODE_ENV !== 'production';
+
 export interface OHLCCandle {
   token_address: string;
   interval: string;
@@ -57,7 +59,7 @@ export function useMonadOHLCWebSocket({
           }
         }));
 
-        console.log(`[OHLC WS] Subscribed to ${tokenAddress} (${interval})`);
+        isDev && console.log(`[OHLC WS] Subscribed to ${tokenAddress} (${interval})`);
       };
 
       ws.onmessage = (event) => {
@@ -110,7 +112,7 @@ export function useMonadOHLCWebSocket({
           reconnectAttempts.current++;
 
           reconnectTimeoutRef.current = setTimeout(() => {
-            console.log(`[OHLC WS] Reconnecting... (attempt ${reconnectAttempts.current})`);
+            isDev && console.log(`[OHLC WS] Reconnecting... (attempt ${reconnectAttempts.current})`);
             connect();
           }, delay);
         }

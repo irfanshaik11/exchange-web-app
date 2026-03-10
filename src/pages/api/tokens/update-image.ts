@@ -1,5 +1,7 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 
+const isDev = process.env.NODE_ENV !== 'production';
+
 interface UpdateImageRequest {
   mint: string;
   imageUrl: string;
@@ -37,7 +39,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     // Note: You'll need to implement the actual database update here
     // This is a placeholder structure
-    console.log(`Updating token ${mint} with image ${imageUrl} from ${source}`);
+    isDev && console.log(`Updating token ${mint} with image ${imageUrl} from ${source}`);
     
     // For demonstration, return success
     // Replace this with actual database update

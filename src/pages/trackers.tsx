@@ -79,6 +79,8 @@ import { useFilter } from "../components/FilterContext";
 import FilterPopout from "../components/FilterPopout";
 import LiveTradesPanel from "../components/LiveTradesPanel";
 
+const isDev = process.env.NODE_ENV !== 'production';
+
 type DefaultWalletEntry = {
   chain: string;
   address: string;
@@ -586,18 +588,6 @@ export default function TrackersPage() {
     watchedWallets.length > 0 &&
     watchedWallets.every((w) => w.notificationsEnabled);
 
-  // Debug logging
-  useEffect(() => {
-    console.log("🔍 Notification Status:", {
-      totalWallets: watchedWallets.length,
-      allNotificationsEnabled,
-      walletStates: watchedWallets.map((w) => ({
-        address: w.address.slice(0, 8),
-        enabled: w.notificationsEnabled,
-      })),
-    });
-  }, [watchedWallets, allNotificationsEnabled]);
-
   // Keep walletsRef in sync with wallets state
   useEffect(() => {
     walletsRef.current = wallets;
@@ -846,7 +836,7 @@ export default function TrackersPage() {
           .filter((w) => w.chain !== "monad")
           .map((w) => w.address);
 
-        console.log("[trackers:lastActive] fetching timestamps:", {
+        isDev && console.log("[trackers:lastActive] fetching timestamps:", {
           monad: monadWallets.length,
           sol: solWallets.length,
         });
@@ -896,16 +886,6 @@ export default function TrackersPage() {
 
                 const newestRaw = payload?.result?.data?.[0]?.timestamp;
                 const newest = ensureMs(newestRaw);
-
-                console.log("[trackers:lastActive] Monad wallet result", {
-                  address,
-                  newestRaw,
-                  newest,
-                  newestIso: newest ? new Date(newest).toISOString() : null,
-                  txCount: Array.isArray(payload?.result?.data)
-                    ? payload.result.data.length
-                    : 0,
-                });
 
                 return { address, lastActive: newest };
               }),
@@ -983,7 +963,7 @@ export default function TrackersPage() {
         if (solWallets.length > 0) {
           try {
             const solResults = await getWalletsLastActive(solWallets, "sol");
-            console.log("[trackers:lastActive] sol API returned", solResults.length, "results");
+            isDev && console.log("[trackers:lastActive] sol API returned", solResults.length, "results");
 
             for (const result of solResults) {
               map[result.wallet] = result.lastActive;
@@ -1004,7 +984,7 @@ export default function TrackersPage() {
 
         // Always apply results via merge — never discard completed fetches.
         // Merge ensures data from concurrent fetches accumulates instead of being lost.
-        console.log("[trackers:lastActive] applying results:", Object.keys(map).length, "wallets");
+        isDev && console.log("[trackers:lastActive] applying results:", Object.keys(map).length, "wallets");
         setLastActiveMap((prev) => ({ ...prev, ...map }));
       } catch (error) {
         console.error("Failed to fetch last active timestamps:", error);
@@ -1351,12 +1331,12 @@ export default function TrackersPage() {
   // Toggle all wallet notifications
   const handleToggleAllNotifications = async () => {
     if (watchedWallets.length === 0) {
-      console.log("No wallets to toggle");
+      isDev && console.log("No wallets to toggle");
       return;
     }
 
     if (isTogglingAllNotifications) {
-      console.log("⏳ Already toggling, please wait...");
+      isDev && console.log("⏳ Already toggling, please wait...");
       return;
     }
 
@@ -1365,16 +1345,13 @@ export default function TrackersPage() {
     try {
       // Determine new state: if all are enabled, disable all. Otherwise, enable all.
       const newState = !allNotificationsEnabled;
-      console.log(
+      isDev && console.log(
         `🔔 Toggle all notifications: ${allNotificationsEnabled} → ${newState}`,
       );
-      console.log(`📊 Toggling ${watchedWallets.length} wallets`);
+      isDev && console.log(`📊 Toggling ${watchedWallets.length} wallets`);
 
       // Toggle each wallet's notifications
       const togglePromises = watchedWallets.map((wallet) => {
-        console.log(
-          `  - ${wallet.address.slice(0, 8)}... from ${wallet.notificationsEnabled} to ${newState}`,
-        );
         return toggleWalletNotifications(
           wallet.address,
           newState,
@@ -1385,22 +1362,15 @@ export default function TrackersPage() {
       });
 
       const results = await Promise.all(togglePromises);
-      console.log("✅ All API calls completed:", results);
-
       // Update localStorage for each wallet
       watchedWallets.forEach((wallet) => {
         const storageKey = `wallet_notifications_${wallet.address}`;
         localStorage.setItem(storageKey, JSON.stringify(newState));
-        console.log(
-          `💾 Saved to localStorage: ${wallet.address.slice(0, 8)}... = ${newState}`,
-        );
       });
 
       // Reload from backend to refresh state
-      console.log("🔄 Reloading wallets from backend...");
       await loadWalletsFromBackend();
       await refreshWatchedWallets();
-      console.log("✅ State refreshed - Ready for next toggle");
     } catch (error) {
       console.error("❌ Failed to toggle all notifications:", error);
     } finally {
@@ -1410,10 +1380,7 @@ export default function TrackersPage() {
 
   // QUICK BUY handler – using enhanced trade flow (same as discover page)
   const handleQuickBuy = async (trade: TradeEvent) => {
-    console.log("🎯 Quick Buy called for token:", trade.symbol || trade.mint);
-
     if (!user?.bearerToken || !user?.id) {
-      console.log("❌ User not logged in");
       showEnhancedToast("warning", "Please connect your wallet to trade", {
         title: "Authentication Required",
       });
@@ -1422,7 +1389,6 @@ export default function TrackersPage() {
 
     const buyAmount = parseFloat(quickBuyAmount);
     if (isNaN(buyAmount) || buyAmount <= 0) {
-      console.log("❌ Invalid buy amount:", quickBuyAmount);
       showEnhancedToast(
         "warning",
         "Please enter a valid SOL amount (minimum 0.001 SOL)",
@@ -1436,7 +1402,6 @@ export default function TrackersPage() {
     const presetIndex = parseInt(selectedPill.replace("P", "")) - 1;
     const preset = presets[presetIndex];
     if (!preset) {
-      console.log("❌ Quick buy preset missing for index", presetIndex);
       showEnhancedToast("error", "Quick buy preset not configured", {
         title: "Configuration Error",
         suggestions: ["Update your presets in settings"],
@@ -1509,7 +1474,6 @@ export default function TrackersPage() {
         chain: selectedChain === "monad" ? "monad" : "sol",
       },
       onSuccess: (txHash, stats) => {
-        console.log("✅ Quick Buy successful:", { txHash, stats });
       },
       onError: (error) => {
         console.error("❌ Quick Buy failed:", error);

@@ -2,6 +2,8 @@
 import { useEffect, useState, useRef, useCallback } from 'react';
 import { useUser } from '~/components/UserContext';
 
+const isDev = process.env.NODE_ENV !== 'production';
+
 export interface MonadPosition {
   tokenAddress: string;
   userId: number;
@@ -143,7 +145,6 @@ export function useMonadPositionWebSocket(
     
     // Allow connection even without tokenAddress (for global txHash listening)
     if (!enabled || !userId) {
-      console.log('[useMonadPositionWebSocket] ⏭️ Skipping connection - enabled:', enabled, 'userId:', userId);
       return;
     }
 
@@ -166,12 +167,12 @@ export function useMonadPositionWebSocket(
       // Convert http:// to ws:// or https:// to wss://
       const wsUrl = backendUrl.replace(/^http/, 'ws') + `/ws/monad/positions?userId=${userId}`;
 
-      console.log('[useMonadPositionWebSocket] 🔌 Connecting to WebSocket:', wsUrl);
+      if (isDev) console.log('[useMonadPositionWebSocket] Connecting to:', wsUrl);
       const ws = new WebSocket(wsUrl);
 
       ws.onopen = () => {
         if (!mountedRef.current) return;
-        console.log('[useMonadPositionWebSocket] ✅ WebSocket CONNECTED to', wsUrl);
+        if (isDev) console.log('[useMonadPositionWebSocket] Connected');
         setConnected(true);
         setError(null);
         reconnectAttemptsRef.current = 0;
@@ -185,14 +186,12 @@ export function useMonadPositionWebSocket(
           const message = JSON.parse(event.data);
 
           if (message.type === 'connected') {
-            console.log('[useMonadPositionWebSocket] Connection confirmed:', message);
+            // Connection confirmed
           } else if (message.type === 'tx_hash' && message.data) {
             // INSTANT txHash push from backend - fires immediately after signing
-            console.log('[useMonadPositionWebSocket] 🚀 INSTANT txHash received:', message.data.txHash);
             window.dispatchEvent(new CustomEvent('monadTradeSuccess', { detail: message.data }));
             onTxHashRef.current?.(message.data as TxHashMessage);
           } else if (message.type === 'trade_error' && message.data) {
-            console.log('[useMonadPositionWebSocket] ⚠️ Trade error via WS:', message.data.errorMessage);
             window.dispatchEvent(new CustomEvent('monadTradeError', { detail: message.data }));
           } else if (message.type === 'position_update' && message.data) {
             const positionData: MonadPosition = message.data;
@@ -216,7 +215,7 @@ export function useMonadPositionWebSocket(
 
       ws.onclose = (event) => {
         if (!mountedRef.current) return;
-        console.log('[useMonadPositionWebSocket] 🔌 WebSocket CLOSED:', event.code, event.reason);
+        if (isDev) console.log('[useMonadPositionWebSocket] WebSocket closed:', event.code);
         setConnected(false);
         wsRef.current = null;
 
@@ -224,7 +223,7 @@ export function useMonadPositionWebSocket(
         const { enabled: stillEnabled } = configRef.current;
         if (stillEnabled && reconnectAttemptsRef.current < maxReconnectAttempts) {
           reconnectAttemptsRef.current += 1;
-          console.log(`[useMonadPositionWebSocket] Reconnecting in ${reconnectInterval}ms (attempt ${reconnectAttemptsRef.current}/${maxReconnectAttempts})`);
+          if (isDev) console.log(`[useMonadPositionWebSocket] Reconnecting in ${reconnectInterval}ms (attempt ${reconnectAttemptsRef.current}/${maxReconnectAttempts})`);
           reconnectTimeoutRef.current = setTimeout(() => {
             if (mountedRef.current) {
               connect();

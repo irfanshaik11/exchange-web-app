@@ -1,5 +1,7 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 
+const isDev = process.env.NODE_ENV !== 'production';
+
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   // Disable server-side caching/etag for this proxy to prevent 304s
   res.setHeader('Cache-Control', 'no-store, max-age=0, must-revalidate');
@@ -58,7 +60,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   try {
     const goURL = `${goBase}/v1/tokens/trending/birdeye?${params.toString()}`;
-    console.log('[Proxy:birdeye-trending] Using Go service Birdeye trending endpoint:', goURL);
+    isDev && console.log('[Proxy:birdeye-trending] Using Go service Birdeye trending endpoint:', goURL);
     const upstream = await fetchWithTimeout(goURL, 10000);
     
     if (upstream.ok) {

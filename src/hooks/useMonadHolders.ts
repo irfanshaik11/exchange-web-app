@@ -1,5 +1,7 @@
 import { useState, useEffect } from 'react';
 
+const isDev = process.env.NODE_ENV !== 'production';
+
 export interface MonadHolder {
   wallet_address: string;
   mon_balance: number;
@@ -96,10 +98,10 @@ export default function useMonadHolders(
         
         if (result.status === 'success' && Array.isArray(result.data)) {
           setHolders(result.data);
-          console.log(`[useMonadHolders] Fetched ${result.data.length} holders for ${tokenAddress}`);
+          isDev && console.log(`[useMonadHolders] Fetched ${result.data.length} holders for ${tokenAddress}`);
         } else {
           setHolders([]);
-          console.log(`[useMonadHolders] No holders found for ${tokenAddress}`);
+          isDev && console.log(`[useMonadHolders] No holders found for ${tokenAddress}`);
         }
       } catch (err) {
         console.error(`[useMonadHolders] Failed to fetch holders for ${tokenAddress}:`, err);

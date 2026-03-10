@@ -126,7 +126,6 @@ const Positions: React.FC<PositionsProps> = ({
       if (cached) {
         const parsed = JSON.parse(cached);
         if (parsed && Array.isArray(parsed.data) && parsed.data.length > 0) {
-          console.log(`[Positions] ✅ Restored ${parsed.data.length} positions from cache for instant display`);
           return parsed.data as PositionRow[];
         }
       }
@@ -220,7 +219,6 @@ const Positions: React.FC<PositionsProps> = ({
       // Restore cache synchronously — prevents any "No positions" flash
       const cached = getCachedPositions();
       if (cached.length > 0) {
-        console.log(`[Positions] Safety net: restoring ${cached.length} cached positions (attempt ${emptyRetryCountRef.current}/${MAX_EMPTY_RETRIES})`);
         setPositions(cached);
       }
 
@@ -453,7 +451,6 @@ const Positions: React.FC<PositionsProps> = ({
               timestamp: Date.now(),
             };
             window.localStorage.setItem(positionsCacheKey, JSON.stringify(payload));
-            console.log(`[Positions] 💾 Cached ${reversedPositions.length} positions after refresh`);
           } catch (error) {
             console.warn(`[Positions] Failed to cache positions after refresh:`, error);
           }
@@ -573,8 +570,6 @@ const Positions: React.FC<PositionsProps> = ({
             resolvePool(position.tokenAddress, false, position.launchpad || undefined)
               .catch(() => {});
           }
-
-          console.log(`[Positions] 🎯 Sell: pool=${verifiedPoolAddress} type="${poolType}" (source: ${poolSource}, no pre-resolve wait)`);
 
           const sellResult = await tradeSellPercentage(
             {
@@ -702,8 +697,11 @@ const Positions: React.FC<PositionsProps> = ({
       if (position.tokenAddress) params.set('_mint', position.tokenAddress);
       // Use position's own currentPrice (already in the position data)
       if (position.currentPrice) params.set('_price', String(position.currentPrice));
+      // Prefer historical avgBuyMarketCap from positions API; fall back to live token metadata
+      const positionMcap = position.avgBuyMarketCap && position.avgBuyMarketCap > 0 ? position.avgBuyMarketCap : undefined;
       const meta = position.tokenAddress ? tokenMetadata[position.tokenAddress] : undefined;
-      if (meta?.marketCapUsd) params.set('_mcap', String(meta.marketCapUsd));
+      if (positionMcap) params.set('_mcap', String(positionMcap));
+      else if (meta?.marketCapUsd) params.set('_mcap', String(meta.marketCapUsd));
 
       const queryString = params.toString();
 
@@ -820,11 +818,8 @@ const Positions: React.FC<PositionsProps> = ({
       const tokensToFetch = uniqueTokens.filter((token) => !isCacheValid || !isCacheValid(token));
 
       if (tokensToFetch.length === 0) {
-        console.log("✅ All position tokens loaded from cache");
         return;
       }
-
-      console.log(`🔄 Fetching ${tokensToFetch.length} tokens (${uniqueTokens.length - tokensToFetch.length} from cache)`);
 
       await Promise.allSettled(
         tokensToFetch.map(async (tokenAddress) => {
@@ -843,21 +838,12 @@ const Positions: React.FC<PositionsProps> = ({
               ? tokenAddress.toLowerCase() 
               : tokenAddress;
             
-            console.log(`🔍 [Positions] Fetching metadata for ${isMonadToken ? 'Monad' : 'Solana'} token:`, {
-              original: tokenAddress,
-              normalized: normalizedAddress,
-              blockchain: position.blockchain,
-            });
-            
             const metadata = await fetchChainTokenMetadata(normalizedAddress, {
               signal: controller.signal,
               pairAddress: position.pairAddress,
             });
 
             if (!metadata) {
-              console.log(`ℹ️ [Positions] No metadata returned for ${normalizedAddress} - using fallback`, {
-                positionImageUrl: position.imageUrl ? 'present' : 'missing',
-              });
               // Don't throw - create fallback metadata instead
               // Use imageUrl from position if available (saved during buy)
               const fallbackMetadata: TokenMetadata = {
@@ -868,8 +854,6 @@ const Positions: React.FC<PositionsProps> = ({
                 launchpad: position.launchpad || "",
                 imageUrl: position.imageUrl || undefined, // Use saved imageUrl from position
               };
-              
-              console.log(`📸 [Positions] Fallback imageUrl for ${normalizedAddress}:`, fallbackMetadata.imageUrl || 'NONE');
               
               setTokenMetadata((prev) => ({
                 ...prev,
@@ -885,13 +869,6 @@ const Positions: React.FC<PositionsProps> = ({
               return; // Exit early, don't process as success
             }
             
-            console.log(`✅ [Positions] Metadata fetched for ${normalizedAddress}:`, {
-              name: metadata.name,
-              symbol: metadata.symbol,
-              imageUrl: metadata.imageUrl ? 'present' : 'missing',
-              positionImageUrl: position.imageUrl ? 'present' : 'missing',
-            });
-
             const enriched: TokenMetadata = {
               ...metadata,
               protocol: metadata.protocol || metadata.launchpad || position.launchpad || "",
@@ -901,8 +878,6 @@ const Positions: React.FC<PositionsProps> = ({
               imageUrl: position.imageUrl || metadata.imageUrl,
             };
             
-            console.log(`📸 [Positions] Final imageUrl for ${normalizedAddress}:`, enriched.imageUrl || 'NONE');
-
             setTokenMetadata((prev) => ({
               ...prev,
               [tokenAddress]: enriched,
@@ -966,7 +941,6 @@ const Positions: React.FC<PositionsProps> = ({
       if (cached) {
         const parsed = JSON.parse(cached);
         if (parsed && Array.isArray(parsed.data) && parsed.data.length > 0) {
-          console.log(`[Positions] ✅ Loaded ${parsed.data.length} positions from cache (cache key changed)`);
           setPositions(parsed.data as PositionRow[]);
           setLoading(false);
         }
@@ -991,14 +965,12 @@ const Positions: React.FC<PositionsProps> = ({
     if (skipFetch) return; // Skip fetch if using preloaded positions
     
     if (!userId) {
-      console.log('⚠️ Positions: No userId provided');
       return;
     }
 
     const fetchPositions = async () => {
       // Prevent concurrent fetches
       if (isFetchingRef.current) {
-        console.log(`[Positions] ⏳ Fetch already in progress, skipping`);
         return;
       }
       isFetchingRef.current = true;
@@ -1050,7 +1022,6 @@ const Positions: React.FC<PositionsProps> = ({
           if (currentPositions.length === 0 || hadRecentTrade) {
             shouldUpdate = true;
           } else if (currentPositions.length > 0 && hasEverLoaded) {
-            console.log(`[Positions] ⚠️ API returned empty during background poll — preserving existing`);
             shouldUpdate = false;
           }
         }
@@ -1111,7 +1082,6 @@ const Positions: React.FC<PositionsProps> = ({
           const existingCache = localStorage.getItem(positionsCacheKey);
           const existingTs = existingCache ? JSON.parse(existingCache)?.timestamp || 0 : 0;
           if (wsData.timestamp > existingTs) {
-            console.log(`[Positions] Using WS-persisted positions (${wsData.positions.length} items, ${((Date.now() - wsData.timestamp) / 1000).toFixed(1)}s old)`);
             const reversed = [...wsData.positions].reverse();
             setPositions(reversed);
             onPositionsChange(reversed);
@@ -1141,7 +1111,6 @@ const Positions: React.FC<PositionsProps> = ({
     // Listen for trade events from other components (TradeActionPanel, InstantTradeModal)
     const handleQuickTradeEvent = (event: Event) => {
       const customEvent = event as CustomEvent<{ tokenAddress: string }>;
-      console.log(`[Positions] 📡 Received solanaQuickTrade event for ${customEvent.detail?.tokenAddress}`);
       debouncedFetchPositions(500);
     };
 
@@ -1297,7 +1266,6 @@ const Positions: React.FC<PositionsProps> = ({
       // Only apply during initial load (before first REST response)
       if (!isInitialLoadRef.current) return;
 
-      console.log(`[Positions] WS snapshot: ${detail.positions.length} positions`);
       const reversedPositions = [...detail.positions].reverse();
       setPositions(reversedPositions);
       onPositionsChange(reversedPositions);
@@ -1447,41 +1415,16 @@ const Positions: React.FC<PositionsProps> = ({
                     if (correctedBought > 0) {
                       const sellRatio = Math.min(correctedSold / correctedBought, 1);
                       correctedSoldUsdValue = boughtUsdValue * sellRatio;
-                      
-                      console.warn('⚠️ DETECTED: Invalid soldUsdValue in Positions (sold > bought) - fixing:', {
-                        tokenAddress: pos.tokenAddress,
-                        originalSoldUsdValue: pos.soldUsdValue,
-                        boughtUsdValue: boughtUsdValue,
-                        sold: correctedSold,
-                        bought: correctedBought,
-                        correctedSold: correctedSold,
-                        sellRatio: sellRatio,
-                        correctedSoldUsdValue: correctedSoldUsdValue
-                      });
                     }
                   } else if (correctedSoldUsdValue > boughtUsdValue * 100) {
                     const sellRatio = correctedSold / correctedBought;
                     correctedSoldUsdValue = boughtUsdValue * Math.min(sellRatio, 1);
-                    
-                    console.warn('⚠️ DETECTED: soldUsdValue is way too high in Positions - fixing:', {
-                      tokenAddress: pos.tokenAddress,
-                      originalSoldUsdValue: pos.soldUsdValue,
-                      boughtUsdValue: boughtUsdValue,
-                      sellRatio: sellRatio,
-                      correctedSoldUsdValue: correctedSoldUsdValue
-                    });
                   }
                 }
                 
                 // Final sanity check: if sold > bought (impossible), cap soldUsdValue at boughtUsdValue
                 if (correctedSold > correctedBought && correctedSoldUsdValue > boughtUsdValue) {
                   correctedSoldUsdValue = boughtUsdValue;
-                  console.warn('⚠️ Capping soldUsdValue at boughtUsdValue (sold > bought is impossible):', {
-                    tokenAddress: pos.tokenAddress,
-                    sold: correctedSold,
-                    bought: correctedBought,
-                    correctedSoldUsdValue: correctedSoldUsdValue
-                  });
                 }
                 
                 // Correct remainingUsdValue
@@ -1492,15 +1435,6 @@ const Positions: React.FC<PositionsProps> = ({
                   if (correctedBought > 0 && correctedRemaining >= 0) {
                     const avgBuyPrice = boughtUsdValue / correctedBought;
                     correctedRemainingUsdValue = correctedRemaining * avgBuyPrice;
-                    
-                    console.warn('⚠️ DETECTED: Invalid remainingUsdValue in Positions - fixing:', {
-                      tokenAddress: pos.tokenAddress,
-                      originalRemainingUsdValue: sourcePosition.remainingUsdValue,
-                      remaining: correctedRemaining,
-                      correctedRemaining: correctedRemaining,
-                      avgBuyPrice: avgBuyPrice,
-                      correctedRemainingUsdValue: correctedRemainingUsdValue
-                    });
                   } else {
                     correctedRemainingUsdValue = 0;
                   }
@@ -1512,13 +1446,6 @@ const Positions: React.FC<PositionsProps> = ({
                   if (correctedBought > 0) {
                     const avgBuyPrice = boughtUsdValue / correctedBought;
                     correctedRemainingUsdValue = safeRemaining * avgBuyPrice;
-                    
-                    console.warn('⚠️ DETECTED: remainingUsdValue is suspiciously large - fixing:', {
-                      tokenAddress: pos.tokenAddress,
-                      originalRemainingUsdValue: pos.remainingUsdValue,
-                      correctedRemaining: correctedRemaining,
-                      correctedRemainingUsdValue: correctedRemainingUsdValue
-                    });
                   }
                 }
                 
@@ -1596,16 +1523,6 @@ const Positions: React.FC<PositionsProps> = ({
               const tokenKey = getPositionKey(sourcePosition);
               const quickSellValue = quickSellInputs[tokenKey] ?? '100';
               const isSelling = sellingTokens.has(tokenKey);
-              
-              // Debug logging for missing images
-              if (!finalImageUrl && (metadata?.symbol || sourcePosition.tokenAddress)) {
-                console.log(`⚠️ [Positions Render] No imageUrl for token:`, {
-                  tokenAddress: pos.tokenAddress,
-                  symbol: metadata?.symbol,
-                  metadataImageUrl: metadata?.imageUrl,
-                  positionImageUrl: sourcePosition.imageUrl,
-                });
-              }
               
               const isPendingBuy = !!(pos as any)._pendingBuyAmount;
 

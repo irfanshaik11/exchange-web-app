@@ -1,3 +1,5 @@
+const isDev = process.env.NODE_ENV !== 'production';
+
 // Image search utilities for finding missing token images
 export interface ImageSearchResult {
   url: string;
@@ -100,7 +102,7 @@ export class ImageSearchService {
           });
         }
       } catch (error) {
-        console.log(`Failed to check ${source.name} for ${token.symbol}:`, error);
+        isDev && console.log(`Failed to check ${source.name} for ${token.symbol}:`, error);
       }
     }
 
@@ -123,7 +125,7 @@ export class ImageSearchService {
           }
         }
       } catch (error) {
-        console.log(`Failed to check ${source.name} metadata for ${token.mint}:`, error);
+        isDev && console.log(`Failed to check ${source.name} metadata for ${token.mint}:`, error);
       }
     }
 
@@ -284,7 +286,7 @@ export class PriorityImageSearcher {
   async searchNewPairsImages(tokens: TokenImageInfo[]): Promise<void> {
     if (!tokens || tokens.length === 0) return;
 
-    console.log(`🚀 Priority image search for ${tokens.length} new pairs tokens`);
+    isDev && console.log(`Priority image search for ${tokens.length} new pairs tokens`);
     
     // Process tokens in parallel with limited concurrency
     const concurrency = 3;
@@ -300,7 +302,7 @@ export class PriorityImageSearcher {
                 current.confidence > best.confidence ? current : best
               );
               
-              console.log(`🎯 Found priority image for ${token.symbol}: ${bestResult.url} (${bestResult.source})`);
+              isDev && console.log(`Found priority image for ${token.symbol}: ${bestResult.url} (${bestResult.source})`);
               
               const success = await this.searchService.updateTokenImage(
                 token.mint,
@@ -309,7 +311,7 @@ export class PriorityImageSearcher {
               );
               
               if (success) {
-                console.log(`✅ Successfully updated ${token.symbol} with priority image`);
+                isDev && console.log(`Successfully updated ${token.symbol} with priority image`);
               }
             }
           } catch (error) {
@@ -340,12 +342,12 @@ export class BackgroundImageSearcher {
 
   start(): void {
     if (this.isRunning) {
-      console.log('Background image searcher is already running');
+      isDev && console.log('Background image searcher is already running');
       return;
     }
 
     this.isRunning = true;
-    console.log('Starting background image searcher...');
+    isDev && console.log('Starting background image searcher...');
     
     // Run immediately
     this.searchForMissingImages();
@@ -366,15 +368,15 @@ export class BackgroundImageSearcher {
       clearInterval(this.intervalId);
       this.intervalId = null;
     }
-    console.log('Background image searcher stopped');
+    isDev && console.log('Background image searcher stopped');
   }
 
   private async searchForMissingImages(): Promise<void> {
     try {
-      console.log('Searching for missing token images...');
+      isDev && console.log('Searching for missing token images...');
       
       const tokens = await this.searchService.getTokensNeedingImages(this.batchSize);
-      console.log(`Found ${tokens.length} tokens needing images`);
+      isDev && console.log(`Found ${tokens.length} tokens needing images`);
       
       for (const token of tokens) {
         try {
@@ -386,7 +388,7 @@ export class BackgroundImageSearcher {
               current.confidence > best.confidence ? current : best
             );
             
-            console.log(`Found image for ${token.symbol}: ${bestResult.url} (${bestResult.source})`);
+            isDev && console.log(`Found image for ${token.symbol}: ${bestResult.url} (${bestResult.source})`);
             
             // Update the token with the found image
             const success = await this.searchService.updateTokenImage(
@@ -396,12 +398,12 @@ export class BackgroundImageSearcher {
             );
             
             if (success) {
-              console.log(`Successfully updated ${token.symbol} with image from ${bestResult.source}`);
+              isDev && console.log(`Successfully updated ${token.symbol} with image from ${bestResult.source}`);
             } else {
               console.error(`Failed to update ${token.symbol} with image`);
             }
           } else {
-            console.log(`No images found for ${token.symbol}`);
+            isDev && console.log(`No images found for ${token.symbol}`);
           }
         } catch (error) {
           console.error(`Error searching for ${token.symbol}:`, error);

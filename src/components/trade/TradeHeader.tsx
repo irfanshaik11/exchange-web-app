@@ -457,14 +457,19 @@ const TradeHeader: React.FC<TradeHeaderProps> = ({ token, livePriceUsd, liveMark
 		return null;
 	};
 
+	// Resolve name/symbol with WS fallback — skip placeholder values like "???" or "Unknown"
+	const isUsable = (v: string | undefined | null): v is string =>
+		!!v && v !== "???" && v.toLowerCase() !== "unknown";
+	const resolvedName = isUsable(token?.name) ? token.name : (wsTokenInfo?.name || token?.name || undefined);
+	const resolvedSymbol = isUsable(token?.symbol) ? token.symbol : (wsTokenInfo?.symbol || token?.symbol || undefined);
+
 	// Check if we have ANY way to identify the token:
 	// 1. name or symbol from token prop
 	// 2. name or symbol from wsTokenInfo
 	// 3. mint address (can show truncated address as fallback)
 	const tokenMint = token?.mint || (token as any)?.pair_address || wsTokenInfo?.mint;
 	const hasTokenIdentity =
-		(token?.name || token?.symbol) ||
-		(wsTokenInfo?.name || wsTokenInfo?.symbol) ||
+		(resolvedName || resolvedSymbol) ||
 		tokenMint; // Mint address is enough - we can show truncated address
 
 	if (!token && !wsTokenInfo) {
@@ -510,9 +515,8 @@ const TradeHeader: React.FC<TradeHeaderProps> = ({ token, livePriceUsd, liveMark
 		addToWatchlist,
 		removeFromWatchlist,
 		isInWatchlist,
-		updateWatchlistToken,
 	} = useWatchlist();
-	const watchlistKey = token?.pair_address || (token as any)?.mint || "";
+	const watchlistKey = (token as any)?.mint || token?.pair_address || "";
 	const isWatched = isInWatchlist(watchlistKey);
 
 	// Determine if this is a Monad token (vs Solana) - used for data source selection
@@ -736,43 +740,6 @@ const TradeHeader: React.FC<TradeHeaderProps> = ({ token, livePriceUsd, liveMark
 		(token as any)?.price_change_24h,
 	);
 
-	// Keep watchlist entry hydrated with fresh price/percent/mcap when viewed on trade page
-	useEffect(() => {
-		if (!watchlistKey || !isWatched) return;
-
-		// Only update when we have meaningful data
-		const hasPrice = Number.isFinite(effectivePrice) && effectivePrice > 0;
-		const hasMcap =
-			Number.isFinite(effectiveMarketCap) && effectiveMarketCap > 0;
-		const hasChange = Number.isFinite(effectivePriceChange1h ?? NaN);
-		if (!hasPrice && !hasMcap && !hasChange) return;
-
-		updateWatchlistToken({
-			...token,
-			price_usd: hasPrice ? effectivePrice : (token as any)?.price_usd,
-			usd_price: hasPrice ? effectivePrice : (token as any)?.usd_price,
-			market_cap_usd: hasMcap
-				? effectiveMarketCap
-				: (token as any)?.market_cap_usd,
-			fully_diluted_value: hasMcap
-				? effectiveMarketCap
-				: (token as any)?.fully_diluted_value,
-			price_percent_change_1h: hasChange
-				? (effectivePriceChange1h as number)
-				: (token as any)?.price_percent_change_1h,
-			price_change_1h: hasChange
-				? (effectivePriceChange1h as number)
-				: (token as any)?.price_change_1h,
-		} as any);
-	}, [
-		effectiveMarketCap,
-		effectivePrice,
-		effectivePriceChange1h,
-		isWatched,
-		token,
-		updateWatchlistToken,
-		watchlistKey,
-	]);
 	const mcap = effectiveMarketCap;
 	const price = effectivePrice;
 
@@ -872,19 +839,19 @@ const TradeHeader: React.FC<TradeHeaderProps> = ({ token, livePriceUsd, liveMark
 	const imgSrc = computedImgSrc || lastValidImgRef.current;
 
 	const fallbackAvatar = `https://ui-avatars.com/api/?name=${encodeURIComponent(
-		token?.symbol || token?.name || "T",
+		resolvedSymbol || resolvedName || "T",
 	)}&background=0f1012&color=E6E7EA&size=36`;
 
 	const twitterSearchQuery = useMemo(
-		() => `${token?.symbol || ""} ${token?.name || ""}`.trim(),
-		[token?.symbol, token?.name],
+		() => `${resolvedSymbol || ""} ${resolvedName || ""}`.trim(),
+		[resolvedSymbol, resolvedName],
 	);
 	const twitterSearchUrl = useMemo(
 		() =>
 			twitterSearchQuery
 				? `https://twitter.com/search?q=${encodeURIComponent(twitterSearchQuery)}`
-				: `https://twitter.com/search?q=${encodeURIComponent(token?.symbol || token?.name || "")}`,
-		[twitterSearchQuery, token?.symbol, token?.name],
+				: `https://twitter.com/search?q=${encodeURIComponent(resolvedSymbol || resolvedName || "")}`,
+		[twitterSearchQuery, resolvedSymbol, resolvedName],
 	);
 	const twitterBio = useMemo(() => {
 		const candidates = [
@@ -898,7 +865,7 @@ const TradeHeader: React.FC<TradeHeaderProps> = ({ token, livePriceUsd, liveMark
 			const value = String(candidate).trim();
 			if (value) return value;
 		}
-		const base = token?.symbol || token?.name || "token";
+		const base = resolvedSymbol || resolvedName || "token";
 		return `Official ${base} community. Join the conversation!`;
 	}, [token]);
 
@@ -1109,12 +1076,12 @@ const TradeHeader: React.FC<TradeHeaderProps> = ({ token, livePriceUsd, liveMark
 									<FastImage
 										src={imgSrc ?? undefined}
 										fallbackSrc={fallbackAvatar}
-										alt={token?.name || token?.symbol || ""}
+										alt={resolvedName || resolvedSymbol || ""}
 										width={36}
 										height={36}
 										className="h-full w-full object-cover transition-all duration-300"
-										symbol={token?.symbol}
-										name={token?.name}
+										symbol={resolvedSymbol}
+										name={resolvedName}
 										showBubble={false}
 									/>
 								</div>
@@ -1170,9 +1137,9 @@ const TradeHeader: React.FC<TradeHeaderProps> = ({ token, livePriceUsd, liveMark
 					{/* Name / symbol / age + quick actions */}
 					<div className="flex min-w-0 flex-1 flex-col">
 						<div className="flex items-center gap-1 sm:gap-1.5">
-							<span className="truncate text-xs sm:text-xl">{token?.symbol}</span>
+							<span className="truncate text-xs sm:text-xl">{resolvedSymbol}</span>
 							<span className="hidden truncate text-[10px] sm:inline sm:text-base" style={{ color: AX.muted }}>
-								{token?.name}
+								{resolvedName}
 							</span>
 
 							{!!token?.mint && (
@@ -1207,44 +1174,44 @@ const TradeHeader: React.FC<TradeHeaderProps> = ({ token, livePriceUsd, liveMark
 										<DropdownMenuItem
 											className="dark:focus:bg-accent focus:bg-accent dark:text-popover-foreground"
 											onClick={async () => {
-												await navigator.clipboard.writeText(token?.name);
-												showToast(`${token?.name} copied`);
+												await navigator.clipboard.writeText(resolvedName);
+												showToast(`${resolvedName} copied`);
 											}}
 										>
-											Copy {token?.name}
+											Copy {resolvedName}
 										</DropdownMenuItem>
 
 										<DropdownMenuItem
 											className="dark:focus:bg-accent focus:bg-accent dark:text-popover-foreground"
 											onClick={() => {
 												window.open(
-													`https://www.google.com/search?q=${encodeURIComponent(token?.name)}`,
+													`https://www.google.com/search?q=${encodeURIComponent(resolvedName)}`,
 													"_blank",
 												);
 											}}
 										>
-											Google for {token?.name}
+											Google for {resolvedName}
 										</DropdownMenuItem>
 
 										<DropdownMenuItem
 											className="dark:focus:bg-accent focus:bg-accent dark:text-popover-foreground"
 											onClick={() => {
 												window.open(
-													`https://x.com/search?q=${encodeURIComponent(token?.name)}`,
+													`https://x.com/search?q=${encodeURIComponent(resolvedName)}`,
 													"_blank",
 												);
 											}}
 										>
-											X search for {token?.name}
+											X search for {resolvedName}
 										</DropdownMenuItem>
 
 										<DropdownMenuItem
 											className="dark:focus:bg-accent focus:bg-accent dark:text-popover-foreground"
 											onClick={() => {
-												openSearch(token?.name);
+												openSearch(resolvedName);
 											}}
 										>
-											Search for {token?.name}
+											Search for {resolvedName}
 										</DropdownMenuItem>
 									</DropdownMenuContent>
 								</DropdownMenu>
@@ -1396,7 +1363,7 @@ const TradeHeader: React.FC<TradeHeaderProps> = ({ token, livePriceUsd, liveMark
 														<div className="h-12 w-12 rounded-full overflow-hidden bg-[#1a1a1a] flex-shrink-0">
 															<img
 																src={imgSrc || fallbackAvatar}
-																alt={token?.symbol}
+																alt={resolvedSymbol}
 																className="h-full w-full object-cover"
 																onError={(e) => {
 																	(e.target as HTMLImageElement).src = fallbackAvatar;
@@ -1405,13 +1372,13 @@ const TradeHeader: React.FC<TradeHeaderProps> = ({ token, livePriceUsd, liveMark
 														</div>
 														<div>
 															<div className="flex items-center gap-1">
-																<span className="text-white font-bold text-sm">{token?.name || token?.symbol}</span>
+																<span className="text-white font-bold text-sm">{resolvedName || resolvedSymbol}</span>
 																<svg className="w-4 h-4 text-[#1d9bf0]" viewBox="0 0 24 24" fill="currentColor">
 																	<path d="M22.5 12.5c0-1.58-.875-2.95-2.148-3.6.154-.435.238-.905.238-1.4 0-2.21-1.71-3.998-3.818-3.998-.47 0-.92.084-1.336.25C14.818 2.415 13.51 1.5 12 1.5s-2.816.917-3.437 2.25c-.415-.165-.866-.25-1.336-.25-2.11 0-3.818 1.79-3.818 4 0 .494.083.964.237 1.4-1.272.65-2.147 2.018-2.147 3.6 0 1.495.782 2.798 1.942 3.486-.02.17-.032.34-.032.514 0 2.21 1.708 4 3.818 4 .47 0 .92-.086 1.335-.25.62 1.334 1.926 2.25 3.437 2.25 1.512 0 2.818-.916 3.437-2.25.415.163.865.248 1.336.248 2.11 0 3.818-1.79 3.818-4 0-.174-.012-.344-.033-.513 1.158-.687 1.943-1.99 1.943-3.484zm-6.616-3.334l-4.334 6.5c-.145.217-.382.334-.625.334-.143 0-.288-.04-.416-.126l-.115-.094-2.415-2.415c-.293-.293-.293-.768 0-1.06s.768-.294 1.06 0l1.77 1.767 3.825-5.74c.23-.345.696-.436 1.04-.207.346.23.44.696.21 1.04z" />
 																</svg>
 															</div>
 															<div className="flex items-center gap-1 text-gray-500 text-xs">
-																<span>@{twitterHandle || token?.symbol?.toLowerCase()}</span>
+																<span>@{twitterHandle || resolvedSymbol?.toLowerCase()}</span>
 																<span>·</span>
 																<span>+</span>
 															</div>
@@ -1423,7 +1390,7 @@ const TradeHeader: React.FC<TradeHeaderProps> = ({ token, livePriceUsd, liveMark
 												{/* Bio/Description */}
 												<div className="px-4 py-3">
 													<p className="text-white text-sm leading-relaxed">
-														{token?.description || `Official ${token?.symbol} token`}
+														{token?.description || `Official ${resolvedSymbol} token`}
 													</p>
 												</div>
 
@@ -1553,7 +1520,7 @@ const TradeHeader: React.FC<TradeHeaderProps> = ({ token, livePriceUsd, liveMark
 												className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-sm text-white hover:bg-white/10 transition-colors"
 												onClick={(e) => {
 													e.stopPropagation();
-													const searchQuery = `${token?.symbol} ${token?.name}`.trim();
+													const searchQuery = `${resolvedSymbol} ${resolvedName}`.trim();
 													const url = `https://twitter.com/search?q=${encodeURIComponent(searchQuery)}`;
 													window.open(url, "_blank");
 													setShowSearchMenu(false);
@@ -1571,7 +1538,7 @@ const TradeHeader: React.FC<TradeHeaderProps> = ({ token, livePriceUsd, liveMark
 												className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-sm text-white hover:bg-white/10 transition-colors"
 												onClick={(e) => {
 													e.stopPropagation();
-													const searchQuery = `${token?.symbol} ${token?.name} crypto`.trim();
+													const searchQuery = `${resolvedSymbol} ${resolvedName} crypto`.trim();
 													const url = `https://www.google.com/search?q=${encodeURIComponent(searchQuery)}`;
 													window.open(url, "_blank");
 													setShowSearchMenu(false);
@@ -1939,12 +1906,12 @@ const TradeHeader: React.FC<TradeHeaderProps> = ({ token, livePriceUsd, liveMark
 									<FastImage
 										src={imgSrc ?? undefined}
 										fallbackSrc={fallbackAvatar}
-										alt={`${token?.name || token?.symbol || ""} avatar`}
+										alt={`${resolvedName || resolvedSymbol || ""} avatar`}
 										width={56}
 										height={56}
 										className="h-full w-full object-cover"
-										symbol={token?.symbol}
-										name={token?.name}
+										symbol={resolvedSymbol}
+										name={resolvedName}
 										showBubble={false}
 									/>
 								</div>
@@ -1953,10 +1920,10 @@ const TradeHeader: React.FC<TradeHeaderProps> = ({ token, livePriceUsd, liveMark
 										className="text-sm font-semibold"
 										style={{ color: AX.text }}
 									>
-										{token?.symbol}
+										{resolvedSymbol}
 									</div>
 									<div className="text-xs" style={{ color: AX.muted }}>
-										{token?.name}
+										{resolvedName}
 									</div>
 									<div
 										className="text-[11px] leading-relaxed"
@@ -2041,12 +2008,12 @@ const TradeHeader: React.FC<TradeHeaderProps> = ({ token, livePriceUsd, liveMark
 							<FastImage
 								src={imgSrc ?? undefined}
 								fallbackSrc={fallbackAvatar}
-								alt={`${token?.name || token?.symbol || ""} - Zoomed`}
+								alt={`${resolvedName || resolvedSymbol || ""} - Zoomed`}
 								width={150}
 								height={150}
 								className="h-full w-full object-cover"
-								symbol={token?.symbol}
-								name={token?.name}
+								symbol={resolvedSymbol}
+								name={resolvedName}
 								showBubble={false}
 							/>
 
@@ -2058,10 +2025,10 @@ const TradeHeader: React.FC<TradeHeaderProps> = ({ token, livePriceUsd, liveMark
 								}}
 							>
 								<div className="truncate text-xs font-medium text-white">
-									{token?.symbol}
+									{resolvedSymbol}
 								</div>
 								<div className="truncate text-[10px] text-gray-300">
-									{token?.name}
+									{resolvedName}
 								</div>
 							</div>
 						</div>

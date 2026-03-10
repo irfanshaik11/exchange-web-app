@@ -27,6 +27,8 @@ import { HiLightningBolt } from "react-icons/hi";
 import { BsSliders2 } from "react-icons/bs";
 
 
+const isDev = process.env.NODE_ENV !== 'production';
+
 const WRAPPED_SOL_MINT = SOL_MINT_ADDRESS;
 
 export type Timeframe = "5m" | "1h" | "6h" | "24h";
@@ -650,7 +652,7 @@ export default function DiscoverContent() {
         walletBalances: walletBalances || {},
         chain: 'sol',
       },
-      onSuccess: () => console.log('✅ Quick Buy successful'),
+      onSuccess: () => isDev && console.log('Quick Buy successful'),
       onError: (error) => console.error('❌ Quick Buy failed:', error),
     });
   };
@@ -1385,7 +1387,7 @@ export default function DiscoverContent() {
                       pair_address: rawToken.pair_address || rawToken.bondingCurveKey
                     })
                   })
-                    .then(res => { if (res.ok) console.log('[Discover] Token backfilled successfully'); })
+                    .then(res => { if (res.ok && isDev) console.log('[Discover] Token backfilled successfully'); })
                     .catch(err => console.error('[Discover] Error backfilling token:', err));
                 }
 

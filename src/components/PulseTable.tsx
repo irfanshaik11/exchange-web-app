@@ -1880,21 +1880,6 @@ function TokenImage({
     isBags ||
     isMoonit;
 
-  // Debug logging for protocol detection
-  if (
-    typeof window !== "undefined" &&
-    (window as any).__DEBUG_PROTOCOL_ICONS__
-  ) {
-    console.log(`[TokenImage] ${token.symbol}:`, {
-      launchpad_protocol: (token as any).launchpad_protocol,
-      protocol: (token as any).protocol,
-      launchpadName: (token as any).launchpadName,
-      amm: (token as any).amm,
-      selectedIcon: tokenIcon,
-      protocolColor: protocolColor,
-    });
-  }
-
   // Use real migration progress for each token, with fallback to unique test progress
   const getUniqueTestProgress = (token: Token): number => {
     if (!token.symbol) return 0;
@@ -2659,19 +2644,6 @@ function PulseTable({
   showBubbleMetrics = false,
   currentChain: chainProp,
 }: PulseTableProps) {
-  // DEBUG: Log EVERY render (not just when tokens change)
-  console.log(
-    `[PulseTable ${title}] 🔥 RENDER START - tokens count: ${tokens?.length || 0}, first token:`,
-    tokens?.[0]?.name || "none",
-  );
-
-  // DEBUG: Log when component receives new props
-  useEffect(() => {
-    console.log(
-      `[PulseTable ${title}] 🎯 Received tokens prop, count: ${tokens?.length || 0}`,
-    );
-  }, [tokens, title]);
-
   // Track whether we ever had data — prevents "No tokens found" flash on tab return
   // Uses module-level map so state persists across Next.js Pages Router remounts
   const hadDataRef = useRef(_hadDataByTitle.get(title) ?? false);
@@ -3256,11 +3228,6 @@ function PulseTable({
       )
         return;
 
-      console.log(
-        "[PulseTable] 🚀 INSTANT Solana txHash via WebSocket:",
-        data.txHash,
-      );
-
       // For multi-wallet trades: Don't update the toast (count was already shown at timer cap)
       // For single wallet: Update the link element with clickable Solana logo
       if (pending.totalSelectedWallets === 1) {
@@ -3305,10 +3272,7 @@ function PulseTable({
   };
   // QUICK BUY handler – with Monad-style toast
   const handleQuickBuy = async (token: Token) => {
-    console.log("🎯 Quick Buy called for token:", token.symbol);
-
     if (!user?.bearerToken || !user?.id) {
-      console.log("❌ User not logged in");
       showEnhancedToast("warning", "Please connect your wallet to trade", {
         title: "Authentication Required",
       });
@@ -3317,7 +3281,6 @@ function PulseTable({
 
     const buyAmount = parseFloat(thunderAmount);
     if (isNaN(buyAmount) || buyAmount <= 0) {
-      console.log("❌ Invalid buy amount:", thunderAmount);
       showEnhancedToast(
         "warning",
         "Please enter a valid SOL amount (minimum 0.001 SOL)",
@@ -3331,7 +3294,6 @@ function PulseTable({
     const presetIndex = getPresetIndex();
     const preset = presets[presetIndex];
     if (!preset) {
-      console.log("❌ Quick buy preset missing for index", presetIndex);
       showEnhancedToast("error", "Quick buy preset not configured", {
         title: "Configuration Error",
         suggestions: ["Update your presets in settings"],
@@ -3365,16 +3327,8 @@ function PulseTable({
     // CRITICAL: Verify the pair address before toast to avoid checkmark-before-error UX
     let poolAddress = token.migrated_pool_address || token.pair_address || "";
     if (token.mint) {
-      console.log(
-        `[PulseTable] Verifying pair address for quick buy: ${token.mint}`,
-      );
       const verifiedPairAddress = await fetchVerifiedPairAddress(token.mint);
       if (verifiedPairAddress) {
-        if (verifiedPairAddress !== poolAddress) {
-          console.log(
-            `[PulseTable] Pair address mismatch! Local: ${poolAddress}, Verified: ${verifiedPairAddress}`,
-          );
-        }
         poolAddress = verifiedPairAddress;
       }
     }
@@ -3565,8 +3519,6 @@ function PulseTable({
         }
         setTimeout(() => toast.dismiss(uniqueToastId), 10000);
       }
-
-      console.log("✅ Quick Buy successful");
 
       // Dispatch event to refresh chart price lines
       if (typeof window !== "undefined" && token.mint) {
@@ -4675,40 +4627,6 @@ function PulseTable({
         const aTimestamp = getTokenTimestamp(a, MIGRATED_TIMESTAMP_FIELDS);
         const bTimestamp = getTokenTimestamp(b, MIGRATED_TIMESTAMP_FIELDS);
 
-        // Debug logging for first 3 tokens to verify token age (not migration time) is being used
-        if (typeof window !== "undefined" && filtered.length > 0) {
-          const aIdx = filtered.indexOf(a);
-          const bIdx = filtered.indexOf(b);
-          if (aIdx < 3 || bIdx < 3) {
-            console.log(
-              `[PulseTable ${title}] Migrated sorting by token age:`,
-              {
-                tokenA: {
-                  name: a.name,
-                  symbol: a.symbol,
-                  ts: aTimestamp,
-                  created_at: (a as any).created_at,
-                  launch_time: (a as any).launch_time,
-                  migrated_time: (a as any).migrated_time,
-                },
-                tokenB: {
-                  name: b.name,
-                  symbol: b.symbol,
-                  ts: bTimestamp,
-                  created_at: (b as any).created_at,
-                  launch_time: (b as any).launch_time,
-                  migrated_time: (b as any).migrated_time,
-                },
-                diff: bTimestamp - aTimestamp,
-                result:
-                  bTimestamp > aTimestamp
-                    ? "B first (younger)"
-                    : "A first (younger)",
-              },
-            );
-          }
-        }
-
         return bTimestamp - aTimestamp;
       }
 
@@ -4993,16 +4911,8 @@ function PulseTable({
 
     // CRITICAL: Verify the pair address from the token service before creating sniper
     if (token.mint) {
-      console.log(
-        `[PulseTable] Verifying pair address for sniper: ${token.mint}`,
-      );
       const verifiedPairAddress = await fetchVerifiedPairAddress(token.mint);
       if (verifiedPairAddress) {
-        if (verifiedPairAddress !== poolAddress) {
-          console.log(
-            `[PulseTable] Sniper: Pair address mismatch! Local: ${poolAddress}, Verified: ${verifiedPairAddress}`,
-          );
-        }
         poolAddress = verifiedPairAddress;
       }
     }
@@ -5114,10 +5024,6 @@ function PulseTable({
             },
           }),
         );
-      }
-
-      if (response?.order?.id) {
-        console.log("📡 Sniper order created:", response.order.id);
       }
 
       setShowSnipeModal(false);
@@ -5347,7 +5253,6 @@ function PulseTable({
                   onClick={() => {
                     // Update local preset selection for this column only
                     setSelectedPill(pill);
-                    console.log(`Selected ${pill} in ${title} column`);
                   }}
                   onMouseEnter={(e) => {
                     if (selectedPill !== pill) {

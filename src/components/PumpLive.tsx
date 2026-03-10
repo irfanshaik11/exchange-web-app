@@ -13,6 +13,8 @@ import { getPoolTypeFromToken } from "~/utils/poolTypeDetection";
 import { showCenteredErrorToast } from "~/utils/toast";
 import type { Token } from "~/utils/db";
 
+const isDev = process.env.NODE_ENV !== 'production';
+
 /* ---- Enhanced Axiom AI Palette (matching PulseTable) ---- */
 const AX = {
   bg: "#0b0c0e",
@@ -699,14 +701,9 @@ export function PumpRow({
                     return;
                   }
                   
-                  console.log('[PumpLive] Copy button clicked, mintAddress:', mintAddress);
-                  console.log('[PumpLive] showCopyToast available:', !!showCopyToast);
-                  
                   try {
                     await navigator.clipboard.writeText(mintAddress);
-                    console.log('[PumpLive] Clipboard write successful');
                     if (showCopyToast) {
-                      console.log('[PumpLive] Calling showCopyToast');
                       showCopyToast();
                     } else {
                       console.warn('[PumpLive] showCopyToast is not available');
@@ -735,9 +732,7 @@ export function PumpRow({
                     textArea.select();
                     try {
                       const successful = document.execCommand('copy');
-                      console.log('[PumpLive] Fallback copy command result:', successful);
                       if (showCopyToast) {
-                        console.log('[PumpLive] Calling showCopyToast after fallback');
                         showCopyToast();
                       }
                     const button = e.currentTarget as HTMLButtonElement;
@@ -825,19 +820,11 @@ export function PumpRow({
               // Convert PumpItem to Token format for handleQuickBuy - exactly like trending tab
               const rawToken = item._rawToken;
               if (rawToken && onQuickBuy) {
-                // DEBUG: Log raw token data to see what we're working with
-                console.log('[PumpLive] Raw token data:', {
+                isDev && console.log('[PumpLive] Raw token data:', {
                   mint: rawToken.mint,
-                  bondingCurveKey: rawToken.bondingCurveKey,
                   pair_address: rawToken.pair_address,
-                  pairAddress: rawToken.pairAddress,
-                  migrated_pool_address: rawToken.migrated_pool_address,
-                  migratedPoolAddress: rawToken.migratedPoolAddress,
                   protocol: rawToken.protocol,
                   launchpad_protocol: rawToken.launchpad_protocol,
-                  pool: rawToken.pool,
-                  poolAddress: rawToken.poolAddress || rawToken.pool_address,
-                  amm_id: rawToken.amm_id,
                 });
                 
                 // Calculate market cap from available data
@@ -899,12 +886,8 @@ export function PumpRow({
                   return;
                 }
                 
-                console.log('[PumpLive] Pool address selection:', {
-                  originalPairAddress: originalPairAddress || 'none',
-                  migrated_pool_address: migratedPoolAddress || 'none',
-                  bondingCurveKey: rawToken.bondingCurveKey || 'none',
-                  fallbackPoolAddress: fallbackPoolAddress || 'none',
-                  effectivePoolAddress: effectivePoolAddress,
+                isDev && console.log('[PumpLive] Pool address selection:', {
+                  effectivePoolAddress,
                   isMigrated: !!migratedPoolAddress
                 });
                 
@@ -984,30 +967,11 @@ export function PumpRow({
                   amm_id: getFirstString(rawToken.amm_id, rawToken.ammId) || undefined,
                 };
                 
-                // DEBUG: Log the constructed token to compare with Trending
-                console.log('[PumpLive] ✅ Constructed Token object (FULL):', JSON.stringify(token, null, 2));
-                console.log('[PumpLive] ✅ Token summary:', {
+                isDev && console.log('[PumpLive] Constructed Token:', {
                   mint: token.mint,
                   pair_address: token.pair_address,
-                  migrated_pool_address: token.migrated_pool_address || '(none)',
                   launchpad_protocol: token.launchpad_protocol,
-                  protocol: token.protocol,
-                  amm_id: token.amm_id,
-                  effectivePoolAddress: token.migrated_pool_address || token.pair_address,
-                  decimals: token.decimals,
-                  standard: token.standard,
-                  name: token.name,
-                  symbol: token.symbol,
-                });
-                console.log('[PumpLive] ✅ Raw token data:', {
-                  mint: rawToken.mint,
-                  pair_address: rawToken.pair_address,
-                  pairAddress: rawToken.pairAddress,
-                  bondingCurveKey: rawToken.bondingCurveKey,
-                  migrated_pool_address: rawToken.migrated_pool_address,
-                  migratedPoolAddress: rawToken.migratedPoolAddress,
                   protocol: rawToken.protocol,
-                  launchpad_protocol: rawToken.launchpad_protocol,
                 });
                 
                 // Call handleQuickBuy exactly like Trending does

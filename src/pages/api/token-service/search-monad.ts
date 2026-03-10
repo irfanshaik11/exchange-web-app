@@ -1,5 +1,7 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 
+const isDev = process.env.NODE_ENV !== 'production';
+
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   // Disable server-side caching/etag for this proxy to prevent 304s
   res.setHeader('Cache-Control', 'no-store, max-age=0, must-revalidate');
@@ -58,7 +60,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   try {
     // Use the Monad token service search endpoint
     const monadURL = `${monadTokenServiceUrl}/v1/search?q=${encodeURIComponent(query)}&limit=${limit}`;
-    console.log('[Proxy:search-monad] Using Monad token service search endpoint:', monadURL);
+    isDev && console.log('[Proxy:search-monad] Using Monad token service search endpoint:', monadURL);
     const upstream = await fetchWithTimeout(monadURL, 5000);
     
     if (upstream.ok) {

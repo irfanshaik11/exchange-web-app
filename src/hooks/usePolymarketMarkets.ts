@@ -3,6 +3,8 @@ import { useQuery } from '@tanstack/react-query';
 import type { ExtendedPredictionMarket } from './useDFlowMarkets';
 import { env } from '~/env';
 
+const isDev = process.env.NODE_ENV !== 'production';
+
 // Polymarket API Configuration
 // Use backend API (no API keys exposed on frontend)
 const API_BASE = `${env.NEXT_PUBLIC_BACKEND_URL}/api/prediction/polymarket`;
@@ -240,7 +242,7 @@ async function fetchPolymarketEvents(limit: number): Promise<{
 
   const totalVolume = allMarkets.reduce((sum, m) => sum + (m.volume24h || 0), 0);
 
-  console.log(`[Polymarket] Fetched ${allMarkets.length} markets from ${eventsData.length} events`);
+  isDev && console.log(`[Polymarket] Fetched ${allMarkets.length} markets from ${eventsData.length} events`);
 
   return { events: eventsData, markets: allMarkets, totalVolume };
 }
@@ -493,7 +495,7 @@ export function usePolymarketPriceHistory(
       setHistory(data.history || []);
       setError(null);
 
-      console.log(`[usePolymarketPriceHistory] Fetched ${data.history?.length || 0} price points for token ${tokenId.slice(0, 8)}...`);
+      isDev && console.log(`[usePolymarketPriceHistory] Fetched ${data.history?.length || 0} price points for token ${tokenId.slice(0, 8)}...`);
     } catch (err) {
       console.error('[Polymarket] Failed to fetch price history:', err);
       setError(err instanceof Error ? err.message : 'Failed to fetch price history');

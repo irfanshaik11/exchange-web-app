@@ -1,6 +1,8 @@
 import React from 'react';
 import { useMoralisSniperHoldings } from '../hooks/useMoralisSniperHoldings';
 
+const isDev = process.env.NODE_ENV !== 'production';
+
 interface SniperHoldingsDisplayProps {
   pairAddress?: string;
   chainId?: string;
@@ -52,7 +54,7 @@ const SniperHoldingsDisplay: React.FC<SniperHoldingsDisplayProps> = ({
   }
 
   // Debug logging
-  if (data) {
+  if (isDev && data) {
     console.log('SniperHoldingsDisplay data:', {
       pairAddress,
       totalSnipers: data.totalSnipers,

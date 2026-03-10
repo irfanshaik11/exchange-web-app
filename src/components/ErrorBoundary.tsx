@@ -11,6 +11,8 @@
 import React, { Component } from 'react';
 import type { ErrorInfo, ReactNode } from 'react';
 
+const isDev = process.env.NODE_ENV !== 'production';
+
 interface Props {
   children: ReactNode;
   fallback?: ReactNode;
@@ -68,7 +70,7 @@ class ErrorBoundary extends Component<Props, State> {
         const already = sessionStorage.getItem(EB_KEY);
         if (!already) {
           sessionStorage.setItem(EB_KEY, '1');
-          console.log('[ErrorBoundary] ChunkLoadError detected — clearing caches and reloading');
+          isDev && console.log('[ErrorBoundary] ChunkLoadError detected — clearing caches and reloading');
           // Clear non-image caches, then reload
           if (typeof caches !== 'undefined') {
             caches.keys().then((keys) => {
@@ -85,7 +87,7 @@ class ErrorBoundary extends Component<Props, State> {
           return;
         }
         // Already tried auto-recovery — fall through to show fallback UI
-        console.log('[ErrorBoundary] ChunkLoadError persists after auto-recovery — showing fallback');
+        isDev && console.log('[ErrorBoundary] ChunkLoadError persists after auto-recovery — showing fallback');
       } catch (e) {
         // sessionStorage unavailable — fall through to fallback UI
       }

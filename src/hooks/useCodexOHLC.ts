@@ -1,5 +1,7 @@
 import { useEffect, useState, useRef, useCallback } from 'react';
 
+const isDev = process.env.NODE_ENV !== 'production';
+
 interface OHLCData {
   o: number;    // Open
   h: number;    // High
@@ -40,7 +42,7 @@ export const useCodexOHLC = ({ tokenId, enabled = true }: UseCodexOHLCOptions) =
       const ws = new WebSocket(wsUrl);
       
       ws.onopen = () => {
-        console.log('✅ Connected to OHLC WebSocket');
+        isDev && console.log('Connected to OHLC WebSocket');
         setIsConnected(true);
         setError(null);
         
@@ -76,12 +78,12 @@ export const useCodexOHLC = ({ tokenId, enabled = true }: UseCodexOHLCOptions) =
           // Handle both direct Codex response and our WebSocket wrapper
           if (data.type === 'ohlc_update' && data.data?.onTokenBarsUpdated?.aggregates?.r1?.usd) {
             const ohlc = data.data.onTokenBarsUpdated.aggregates.r1.usd;
-            console.log('📊 Received OHLC data:', ohlc);
+            isDev && console.log('Received OHLC data:', ohlc);
             setOHLCData(ohlc);
           } else if (data.onTokenBarsUpdated?.aggregates?.r1?.usd) {
             // Direct Codex response format
             const ohlc = data.onTokenBarsUpdated.aggregates.r1.usd;
-            console.log('📊 Received OHLC data:', ohlc);
+            isDev && console.log('Received OHLC data:', ohlc);
             setOHLCData(ohlc);
           }
         } catch (err) {
@@ -90,13 +92,13 @@ export const useCodexOHLC = ({ tokenId, enabled = true }: UseCodexOHLCOptions) =
       };
 
       ws.onclose = () => {
-        console.log('❌ OHLC WebSocket disconnected');
+        isDev && console.log('OHLC WebSocket disconnected');
         setIsConnected(false);
         
         // Auto-reconnect after 3 seconds
         if (enabled) {
           reconnectTimeoutRef.current = setTimeout(() => {
-            console.log('🔄 Reconnecting OHLC WebSocket...');
+            isDev && console.log('Reconnecting OHLC WebSocket...');
             connect();
           }, 3000);
         }

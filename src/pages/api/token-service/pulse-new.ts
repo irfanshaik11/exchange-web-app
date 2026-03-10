@@ -1,5 +1,7 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { extractTokenImage } from '~/utils/images';
+
+const isDev = process.env.NODE_ENV !== 'production';
 // import { ImageSearchService } from '~/utils/imageSearch'; // REMOVED - not used
 
 // In-memory cache for new pairs
@@ -240,7 +242,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
             timestamp: now,
             expiresAt: now + CACHE_TTL,
           });
-          console.log(`[pulse-new] Cached data for key: ${cacheKey}`);
+          isDev && console.log(`[pulse-new] Cached data for key: ${cacheKey}`);
         }
         
         return mapped;
@@ -270,12 +272,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     
     if (cached && now < cached.expiresAt) {
       // Cache hit - return cached data immediately
-      console.log(`[pulse-new] Cache hit for key: ${cacheKey}`);
+      isDev && console.log(`[pulse-new] Cache hit for key: ${cacheKey}`);
       res.setHeader('X-Cache', 'HIT');
       return res.json(cached.data);
     } else if (cached && now < cached.expiresAt + 60000) {
       // Stale but usable - return it and refresh in background
-      console.log(`[pulse-new] Stale cache hit for key: ${cacheKey}, refreshing in background`);
+      isDev && console.log(`[pulse-new] Stale cache hit for key: ${cacheKey}, refreshing in background`);
       res.setHeader('X-Cache', 'STALE');
       // Trigger background refresh (don't await)
       fetchFreshData(params, cacheKey).catch(err => {
@@ -286,7 +288,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
 
   // Cache miss or fresh request - fetch new data
-  console.log(`[pulse-new] Cache miss, fetching fresh data`);
+  isDev && console.log(`[pulse-new] Cache miss, fetching fresh data`);
   res.setHeader('X-Cache', 'MISS');
 
   try {

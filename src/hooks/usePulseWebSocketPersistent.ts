@@ -10,6 +10,8 @@ import {
 import { extractTokenImage } from '~/utils/images';
 import { applyPriceUpdate, type PriceUpdate } from '~/utils/applyPriceUpdate';
 
+const isDev = process.env.NODE_ENV !== 'production';
+
 /**
  * Persistent WebSocket hook for Pulse token updates
  *
@@ -187,12 +189,14 @@ export function usePulseWebSocketPersistent(
       if (!cached) return;
 
       cacheLoadedRef.current = true;
-      console.log('[usePulseWebSocketPersistent] Loaded from IndexedDB cache:', {
-        newTokens: cached.newTokens.length,
-        finalStretchTokens: cached.finalStretchTokens.length,
-        migratedTokens: cached.migratedTokens.length,
-        age: Date.now() - cached.timestamp + 'ms'
-      });
+      if (isDev) {
+        console.log('[usePulseWebSocketPersistent] Loaded from IndexedDB cache:', {
+          newTokens: cached.newTokens.length,
+          finalStretchTokens: cached.finalStretchTokens.length,
+          migratedTokens: cached.migratedTokens.length,
+          age: Date.now() - cached.timestamp + 'ms'
+        });
+      }
 
       // Only set state if we don't have data yet
       setNewTokens(prev => prev.length > 0 ? prev : cached.newTokens);
@@ -296,7 +300,7 @@ export function usePulseWebSocketPersistent(
   // Regular WebSocket connection (fallback or primary if SharedWorker unavailable)
   const connectWebSocket = useCallback(() => {
     if (!enabled) {
-      console.log('[usePulseWebSocketPersistent] WebSocket disabled via feature flag');
+      isDev && console.log('[usePulseWebSocketPersistent] WebSocket disabled via feature flag');
       return;
     }
 
@@ -305,18 +309,18 @@ export function usePulseWebSocketPersistent(
     }
 
     if (reconnectAttemptsRef.current >= maxReconnectAttempts) {
-      console.log('[usePulseWebSocketPersistent] Max reconnect attempts reached');
+      isDev && console.log('[usePulseWebSocketPersistent] Max reconnect attempts reached');
       setError('Max reconnection attempts reached');
       return;
     }
 
     try {
-      console.log('[usePulseWebSocketPersistent] Connecting to:', url);
+      isDev && console.log('[usePulseWebSocketPersistent] Connecting to:', url);
       const ws = new WebSocket(url);
 
       ws.onopen = () => {
         if (!mountedRef.current) return;
-        console.log('[usePulseWebSocketPersistent] ✅ Connected');
+        isDev && console.log('[usePulseWebSocketPersistent] Connected');
         setConnected(true);
         setError(null);
         reconnectAttemptsRef.current = 0;
@@ -357,7 +361,6 @@ export function usePulseWebSocketPersistent(
             if (message.type === 'new_token' && message.data) {
               // Handle both single token and array of tokens
               const tokens = Array.isArray(message.data) ? message.data : [message.data];
-              console.log(`[usePulseWebSocketPersistent][${channel}] 🆕 Received ${tokens.length} new token(s):`, tokens.map((t: any) => t.mint || t.address || t.mint_address || 'NO_MINT'));
               for (const t of tokens) {
                 const normalized = normalizeToken(t);
                 if (normalized.mint) {
@@ -368,7 +371,6 @@ export function usePulseWebSocketPersistent(
               }
             } else if (message.type === 'final_stretch_token' && message.data) {
               const tokens = Array.isArray(message.data) ? message.data : [message.data];
-              console.log(`[usePulseWebSocketPersistent][${channel}] 🎯 Received ${tokens.length} final_stretch token(s):`, tokens.map((t: any) => t.mint || t.address || t.mint_address || 'NO_MINT'));
               for (const t of tokens) {
                 const normalized = normalizeToken(t);
                 if (normalized.mint) {
@@ -379,7 +381,6 @@ export function usePulseWebSocketPersistent(
               }
             } else if (message.type === 'migrated_token' && message.data) {
               const tokens = Array.isArray(message.data) ? message.data : [message.data];
-              console.log(`[usePulseWebSocketPersistent][${channel}] ✅ Received ${tokens.length} migrated token(s):`, tokens.map((t: any) => t.mint || t.address || t.mint_address || 'NO_MINT'));
               for (const t of tokens) {
                 const normalized = normalizeToken(t);
                 if (normalized.mint) {
@@ -390,7 +391,6 @@ export function usePulseWebSocketPersistent(
               }
             } else if (message.type === 'price_update' && message.data) {
               const rawUpdates = Array.isArray(message.data) ? message.data : [message.data];
-              console.log(`[usePulseWebSocketPersistent][${channel}] 📊 Received ${rawUpdates.length} price updates`);
               for (const u of rawUpdates) {
                 priceUpdatesBatch.push({ ...u, mint: u.address || u.mint });
               }
@@ -497,7 +497,6 @@ export function usePulseWebSocketPersistent(
             }
           }
 
-          console.log(`[usePulseWebSocketPersistent][${channel}] 📤 Calling onPriceUpdate with ${priceUpdatesBatch.length} updates, callback exists:`, !!onPriceUpdateRef.current);
           onPriceUpdateRef.current?.(priceUpdatesBatch as PulseToken[]);
         }
 
@@ -573,12 +572,12 @@ export function usePulseWebSocketPersistent(
 
       ws.onclose = () => {
         if (!mountedRef.current) return;
-        console.log('[usePulseWebSocketPersistent] Disconnected');
+        isDev && console.log('[usePulseWebSocketPersistent] Disconnected');
         setConnected(false);
 
         if (enabled && reconnectAttemptsRef.current < maxReconnectAttempts) {
           reconnectAttemptsRef.current++;
-          console.log(
+          isDev && console.log(
             `[usePulseWebSocketPersistent] Reconnecting in ${reconnectInterval}ms (attempt ${reconnectAttemptsRef.current}/${maxReconnectAttempts})`
           );
 

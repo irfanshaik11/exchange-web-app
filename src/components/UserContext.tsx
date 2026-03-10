@@ -19,6 +19,8 @@ import { useTurnkey } from "@turnkey/react-wallet-kit";
 import next from "next";
 import { normalizeMonadAddress } from "~/utils/normalizeMonadAddress";
 
+const isDev = process.env.NODE_ENV !== 'production';
+
 export interface UserInfo {
   id: string;
   name: string;
@@ -329,7 +331,7 @@ export function UserProvider({ children }: { children: ReactNode }) {
   // Derive primary wallet addresses from Turnkey if available
   useEffect(() => {
     const deriveWalletsFromTurnkey = () => {
-      console.log("Deriving wallets from Turnkey:", turnkey?.wallets);
+      isDev && console.log("Deriving wallets from Turnkey:", turnkey?.wallets);
       const accounts = (turnkey?.wallets || []).flatMap((w: any) =>
         Array.isArray(w?.accounts) ? w.accounts : []
       );
@@ -400,14 +402,14 @@ export function UserProvider({ children }: { children: ReactNode }) {
       if (!force) {
         const timeSinceLastFetch = Date.now() - lastWalletListFetchRef.current;
         if (timeSinceLastFetch < WALLET_LIST_COOLDOWN_MS) {
-          console.log(`⏸️ Wallet list fetch on cooldown, skipping (${timeSinceLastFetch}ms)`);
+          isDev && console.log(`Wallet list fetch on cooldown, skipping (${timeSinceLastFetch}ms)`);
           return;
         }
       }
 
       // Prevent multiple simultaneous fetches
       if (walletListFetchInProgressRef.current) {
-        console.log("⏸️ Wallet list fetch already in progress, skipping");
+        isDev && console.log("Wallet list fetch already in progress, skipping");
         return;
       }
 
@@ -538,7 +540,7 @@ export function UserProvider({ children }: { children: ReactNode }) {
       // Prevent multiple simultaneous balance checks for the same address
       // force: true bypasses the lock so init effects are never blocked by a competing non-forced fetch
       if (balanceCheckInProgressRef.current[checkKey] && !options?.force) {
-        console.log(`⏸️ Balance check already in progress for ${checkKey}`);
+        isDev && console.log(`Balance check already in progress for ${checkKey}`);
         return null;
       }
 
@@ -593,7 +595,7 @@ export function UserProvider({ children }: { children: ReactNode }) {
           const lastNotified =
             lastNotifiedBalanceRef.current[targetAddress] ?? newBalance;
 
-          console.log(
+          isDev && console.log(
             `Balance check for ${targetAddress}: current=${solBalanceRef.current.toFixed(
               4
             )}, new=${newBalance.toFixed(
@@ -611,8 +613,8 @@ export function UserProvider({ children }: { children: ReactNode }) {
             hasPreviousBalance &&
             notificationsEnabled
           ) {
-            console.log(
-              `🚨 DEPOSIT DETECTED: ${depositAmount.toFixed(
+            isDev && console.log(
+              `DEPOSIT DETECTED: ${depositAmount.toFixed(
                 4
               )} SOL (from ${lastNotified.toFixed(
                 4
@@ -622,8 +624,8 @@ export function UserProvider({ children }: { children: ReactNode }) {
               ...prev,
               [targetAddress]: newBalance,
             }));
-            console.log(
-              `✅ Updated lastNotifiedBalance for ${targetAddress} to: ${newBalance.toFixed(
+            isDev && console.log(
+              `Updated lastNotifiedBalance for ${targetAddress} to: ${newBalance.toFixed(
                 4
               )}`
             );
@@ -632,8 +634,8 @@ export function UserProvider({ children }: { children: ReactNode }) {
             hasPreviousBalance &&
             !notificationsEnabled
           ) {
-            console.log(
-              `🚨 DEPOSIT DETECTED but notifications disabled: ${depositAmount.toFixed(
+            isDev && console.log(
+              `DEPOSIT DETECTED but notifications disabled: ${depositAmount.toFixed(
                 4
               )} SOL`
             );
@@ -647,8 +649,8 @@ export function UserProvider({ children }: { children: ReactNode }) {
                 ...prev,
                 [targetAddress]: newBalance,
               }));
-              console.log(
-                `🔧 Initialized lastNotifiedBalance for ${targetAddress}: ${newBalance.toFixed(
+              isDev && console.log(
+                `Initialized lastNotifiedBalance for ${targetAddress}: ${newBalance.toFixed(
                   4
                 )}`
               );
@@ -657,8 +659,8 @@ export function UserProvider({ children }: { children: ReactNode }) {
                 ...prev,
                 [targetAddress]: newBalance,
               }));
-              console.log(
-                "ℹ️ No deposit detected. Balance unchanged or already notified."
+              isDev && console.log(
+                "No deposit detected. Balance unchanged or already notified."
               );
             }
           }
@@ -716,14 +718,14 @@ export function UserProvider({ children }: { children: ReactNode }) {
       if (!force) {
         const timeSinceLastFetch = Date.now() - lastBatchFetchRef.current;
         if (timeSinceLastFetch < BATCH_FETCH_COOLDOWN_MS) {
-          console.log(`⏸️ Batch fetch on cooldown, skipping (${timeSinceLastFetch}ms since last fetch)`);
+          isDev && console.log(`Batch fetch on cooldown, skipping (${timeSinceLastFetch}ms since last fetch)`);
           return;
         }
       }
 
       // Prevent multiple simultaneous batch fetches
       if (batchFetchInProgressRef.current) {
-        console.log("⏸️ Batch fetch already in progress, skipping");
+        isDev && console.log("Batch fetch already in progress, skipping");
         return;
       }
 
@@ -735,7 +737,7 @@ export function UserProvider({ children }: { children: ReactNode }) {
           return;
         }
 
-        console.log(`📦 Batch fetching ${uniqueWallets.length} unique wallet balances...`);
+        isDev && console.log(`Batch fetching ${uniqueWallets.length} unique wallet balances...`);
 
         const addressChainMap = new Map<string, "sol" | "monad">();
         uniqueWallets.forEach(({ address, chain }) => {
@@ -805,7 +807,7 @@ export function UserProvider({ children }: { children: ReactNode }) {
           setChainBalances(prev => ({ ...prev, monad: monadData.balance }));
         }
 
-        console.log(`✅ Batch fetch complete: ${Object.keys(newWalletBalances).length} balances updated`);
+        isDev && console.log(`Batch fetch complete: ${Object.keys(newWalletBalances).length} balances updated`);
       } catch (error) {
         console.error("Failed to batch fetch balances:", error);
       } finally {
@@ -828,7 +830,7 @@ export function UserProvider({ children }: { children: ReactNode }) {
     }
     setLoading(true);
     try {
-      console.log("Refreshing user with token:", token);
+      isDev && console.log("Refreshing user with token:", token);
 
       // // Use Turnkey user + session if available to update backend
       // if (
@@ -855,7 +857,7 @@ export function UserProvider({ children }: { children: ReactNode }) {
       );
       const { user: fetchedUser } = await Promise.race([userPromise, timeoutPromise]);
 
-      console.log("Fetched user from API:", fetchedUser);
+      isDev && console.log("Fetched user from API:", fetchedUser);
       if (fetchedUser) {
         let nextUser = fetchedUser;
 
@@ -872,7 +874,7 @@ export function UserProvider({ children }: { children: ReactNode }) {
           typeof desiredName === "string" &&
           desiredName.trim().length > 0 &&
           desiredName !== fetchedUser.name;
-        console.log("UPDATED USER --- >", nextUser);
+        isDev && console.log("UPDATED USER --- >", nextUser);
         if (!hasSyncedProfileRef.current && (needsEmailUpdate || needsNameUpdate) && token) {
           try {
             const { user: updatedUser } = await updateUser(
@@ -1028,8 +1030,8 @@ export function UserProvider({ children }: { children: ReactNode }) {
           setSolBalance(currentBalance);
           setUsdcBalance(currentUsdBalance);
 
-          console.log(
-            `🔧 INITIALIZED balance tracking for ${address}: ${currentBalance.toFixed(
+          isDev && console.log(
+            `INITIALIZED balance tracking for ${address}: ${currentBalance.toFixed(
               4
             )} SOL (lastNotifiedBalance set to ${currentBalance.toFixed(4)})`
           );

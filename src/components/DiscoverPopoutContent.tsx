@@ -28,6 +28,7 @@ import { validateMonadBuy, showTradeValidationError } from "~/utils/preTradeVali
 import { listenForTradeEvents, transformToastToError } from "~/utils/createSolanaToastHandler";
 
 const WRAPPED_SOL_MINT = SOL_MINT_ADDRESS;
+const isDev = process.env.NODE_ENV !== 'production';
 
 export type Timeframe = "5m" | "1h" | "6h" | "24h";
 
@@ -61,11 +62,11 @@ export default function DiscoverPopoutContent() {
     }
     const chainFromQuery = (router.query.chain as string) || 'sol';
     if (chainFromQuery !== currentChain) {
-      console.log('[DiscoverPopout] Chain changed from router:', currentChain, '->', chainFromQuery);
+      isDev && console.log('[DiscoverPopout] Chain changed from router:', currentChain, '->', chainFromQuery);
       setCurrentChain(chainFromQuery);
     }
   }, [router.query.chain, router.isReady]);
-  
+
   // Also watch router.asPath as a fallback (only if not manually switched)
   useEffect(() => {
     if (!router.isReady || manualChainSwitchRef.current) {
@@ -75,15 +76,10 @@ export default function DiscoverPopoutContent() {
     const urlParams = new URLSearchParams(router.asPath.split('?')[1] || '');
     const chainFromUrl = urlParams.get('chain') || 'sol';
     if (chainFromUrl !== currentChain) {
-      console.log('[DiscoverPopout] Chain changed from URL:', currentChain, '->', chainFromUrl);
+      isDev && console.log('[DiscoverPopout] Chain changed from URL:', currentChain, '->', chainFromUrl);
       setCurrentChain(chainFromUrl);
     }
   }, [router.asPath, router.isReady]);
-  
-  // Debug: Log chain changes
-  useEffect(() => {
-    console.log('[Discover] Current chain state:', currentChain, 'router.query.chain:', router.query.chain);
-  }, [currentChain, router.query.chain]);
   
   // For Monad, only allow 'trending' and 'newPairs' tabs
   // Initialize activeTab from localStorage to persist across navigation
@@ -132,21 +128,6 @@ export default function DiscoverPopoutContent() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [isFilterPopoutOpen, setIsFilterPopoutOpen] = useState(false);
   const { filter } = useFilter();
-  
-  // Debug: Log when filter context changes to track filter application
-  useEffect(() => {
-    console.log('[Filters] Filter context changed:', {
-      amms: filter.amms,
-      searchKeywords: filter.searchKeywords,
-      excludeKeywords: filter.excludeKeywords,
-      marketCapMin: filter.marketCapMin,
-      marketCapMax: filter.marketCapMax,
-      volumeMin: filter.volumeMin,
-      volumeMax: filter.volumeMax,
-      liquidityMin: filter.liquidityMin,
-      liquidityMax: filter.liquidityMax,
-    });
-  }, [filter]);
   
   const normalizedSearch = useMemo(
     () => search.trim().toLowerCase(),
@@ -441,7 +422,7 @@ export default function DiscoverPopoutContent() {
 
   // CRITICAL: Clear ALL data when chain changes to prevent stale data from showing
   useEffect(() => {
-    console.log('[Discover] 🔄 Chain changed to:', currentChain, '- Clearing all data and refetching');
+    isDev && console.log('[Discover] Chain changed to:', currentChain, '- Clearing all data');
     // Clear token map
     tokenMapRef.current.clear();
     // Clear filtered and displayed tokens
@@ -465,9 +446,9 @@ export default function DiscoverPopoutContent() {
     limit: 200 // Fetch 200 tokens for trending tab
   });
   
-  // CRITICAL: Log when hook data changes to track chain switching
+  // Log when hook data changes to track chain switching
   useEffect(() => {
-    console.log('[Discover] Hook data updated:', {
+    isDev && console.log('[Discover] Hook data updated:', {
       chain: currentChain,
       tokenCount: allTokens?.length || 0,
       loading: tokensLoading,
@@ -498,7 +479,7 @@ export default function DiscoverPopoutContent() {
           if (age < 60 * 1000 && parsed.data && parsed.data.length > 0) {
             // Load cached data for this chain
             setNewPairsRawForChain(currentChain, parsed.data);
-            console.log(`[Discover] Loaded cached data for chain ${currentChain}: ${parsed.data.length} tokens`);
+            isDev && console.log(`[Discover] Loaded cached data for chain ${currentChain}: ${parsed.data.length} tokens`);
           }
         } catch (err) {
           console.warn(`[Discover] Failed to load cache for chain ${currentChain}:`, err);
@@ -533,7 +514,7 @@ export default function DiscoverPopoutContent() {
           const age = Date.now() - parsed.timestamp;
           // If we have data in state and cache is still valid, skip fetching
           if (age < STALE_THRESHOLD && parsed.data && parsed.data.length > 0) {
-            console.log('[Discover] Already have cached data in state, skipping re-fetch on navigation');
+            isDev && console.log('[Discover] Already have cached data in state, skipping re-fetch');
             // Just set up the refresh interval for stale cache updates
             intervalId = setInterval(() => {
               if (cancelled) return;
@@ -610,7 +591,7 @@ export default function DiscoverPopoutContent() {
           const age = Date.now() - parsed.timestamp;
           if (parsed.data && parsed.data.length > 0) {
             const isStale = age > STALE_THRESHOLD;
-            console.log(`[Discover] Loaded ${parsed.data.length} new pairs from cache (age: ${Math.round(age / 1000)}s${isStale ? ', stale' : ''})`);
+            isDev && console.log(`[Discover] Loaded ${parsed.data.length} new pairs from cache (age: ${Math.round(age / 1000)}s${isStale ? ', stale' : ''})`);
             return parsed.data;
           }
           // Cache exists but empty data - drop it
@@ -631,7 +612,7 @@ export default function DiscoverPopoutContent() {
           data,
           timestamp: Date.now(),
         }));
-        console.log(`[Discover] Cached ${data.length} new pairs`);
+        isDev && console.log(`[Discover] Cached ${data.length} new pairs`);
       } catch (err) {
         console.warn('[Discover] Failed to save cache:', err);
       }
@@ -661,7 +642,7 @@ export default function DiscoverPopoutContent() {
               const age = Date.now() - parsed.timestamp;
               if (age > CACHE_TTL) {
                 // Cache is stale, refresh in background (silently)
-                console.log('[Discover] Cache is stale, refreshing in background');
+                isDev && console.log('[Discover] Cache is stale, refreshing in background');
                 fetchNewPairs(false, false).catch(err => {
                   console.error('[Discover] Background refresh failed:', err);
                 });
@@ -689,11 +670,9 @@ export default function DiscoverPopoutContent() {
         if (chainToUse === 'monad') {
           // Use Next.js API route which proxies to Monad service server-side (avoids CORS)
           apiUrl = `/api/token-service/pulse-new-monad?limit=200&fresh=1`;
-          console.log('[Discover] Fetching Monad new pairs via API route:', apiUrl);
         } else {
           // Use Next.js API route for Solana (which proxies to exchange-token-service)
           apiUrl = `/api/token-service/pulse-new?limit=200&fresh=1`;
-          console.log('[Discover] Fetching Solana new pairs from:', apiUrl);
         }
         
         const response = await fetch(apiUrl, {
@@ -757,7 +736,6 @@ export default function DiscoverPopoutContent() {
         
         if (!tokensArray || tokensArray.length === 0) {
           // Don't clear existing data if refresh returns empty - preserve what we have
-          console.log('[Discover] Empty tokens array in response, preserving existing data if available');
           setNewPairsError(null);
           setNewPairsLoading(false);
           // Use functional update to preserve existing data - never clear once we have data
@@ -953,11 +931,6 @@ export default function DiscoverPopoutContent() {
               // For pump.fun tokens only, use mint as pair_address if no other pool address is available
               // Backend has special handling to resolve mint to bonding curve address for pump.fun
               normalized.pair_address = token.mint;
-              console.log(`[Discover] Pump.fun token ${token.symbol || token.mint} using mint as pair_address (backend will resolve to bonding curve)`, {
-                launchpad_protocol: normalized.launchpad_protocol,
-                mint: token.mint,
-                pair_address: normalized.pair_address
-              });
             } else if (effectivePairAddress === token.mint && !isPumpFun) {
               // If pair_address equals mint for non-pump.fun tokens (like Meteora), it's invalid
               // Meteora requires the actual DBC pool address, not the mint
@@ -1094,10 +1067,10 @@ export default function DiscoverPopoutContent() {
             
             // Save to cache
             saveToCache(deduped);
-            console.log(`[Discover] ✅ Updated new pairs: ${deduped.length} tokens for ${currentChain}`);
+            isDev && console.log(`[Discover] Updated new pairs: ${deduped.length} tokens for ${currentChain}`);
           } else {
             // If transformation resulted in empty array, preserve existing data for current chain
-            console.log('[Discover] Transformation resulted in empty array, preserving existing data');
+            isDev && console.log('[Discover] Transformation resulted in empty array, preserving existing data');
             setNewPairsRawByChain((prev) => {
               const currentData = prev[currentChain] || [];
               if (currentData.length === 0) {
@@ -1120,7 +1093,7 @@ export default function DiscoverPopoutContent() {
         if (useCache) {
           const cached = loadFromCache();
           if (cached && cached.length > 0) {
-            console.log('[Discover] Using cached data after fetch failure');
+            isDev && console.log('[Discover] Using cached data after fetch failure');
             setNewPairsRawForChain(currentChain, cached);
             setNewPairsError(null);
             handled = true;
@@ -1200,7 +1173,7 @@ export default function DiscoverPopoutContent() {
           const parsed = JSON.parse(cached);
           const age = Date.now() - parsed.timestamp;
           if (age < STALE_THRESHOLD) {
-            console.log(`[Discover] Loaded ${parsed.data.length} xStocks from cache (age: ${Math.round(age / 1000)}s)`);
+            isDev && console.log(`[Discover] Loaded ${parsed.data.length} xStocks from cache (age: ${Math.round(age / 1000)}s)`);
             return parsed.data;
           } else {
             localStorage.removeItem(CACHE_KEY);
@@ -1220,7 +1193,7 @@ export default function DiscoverPopoutContent() {
           data,
           timestamp: Date.now(),
         }));
-        console.log(`[Discover] Cached ${data.length} xStocks`);
+        isDev && console.log(`[Discover] Cached ${data.length} xStocks`);
       } catch (err) {
         console.warn('[Discover] Failed to save xStocks cache:', err);
       }
@@ -1552,10 +1525,7 @@ export default function DiscoverPopoutContent() {
 
   // QUICK BUY handler – using MonadTable logic for Monad, enhanced trade flow for Solana
   const handleQuickBuy = async (token: Token) => {
-    console.log("🎯 Quick Buy called for token:", token.symbol, "on chain:", currentChain);
-    
     if (!user?.bearerToken || !user?.id) {
-      console.log("❌ User not logged in");
       showEnhancedToast('warning', 'Please connect your wallet to trade', {
         title: 'Authentication Required',
       });
@@ -1564,7 +1534,6 @@ export default function DiscoverPopoutContent() {
 
     const buyAmount = parseFloat(quickBuyAmount);
     if (isNaN(buyAmount) || buyAmount <= 0) {
-      console.log("❌ Invalid buy amount:", quickBuyAmount);
       const currency = currentChain === 'monad' ? 'MON' : 'SOL';
       showEnhancedToast('warning', `Please enter a valid ${currency} amount (minimum 0.001 ${currency})`, {
         title: 'Invalid Amount',
@@ -1576,7 +1545,6 @@ export default function DiscoverPopoutContent() {
     const presetIndex = parseInt(selectedPill.replace('P', '')) - 1;
     const preset = presets[presetIndex];
     if (!preset) {
-      console.log("❌ Quick buy preset missing for index", presetIndex);
       showEnhancedToast('error', 'Quick buy preset not configured', {
         title: 'Configuration Error',
         suggestions: ['Update your presets in settings'],
@@ -1587,7 +1555,6 @@ export default function DiscoverPopoutContent() {
     // For Monad chain, use MonadTable quick buy logic
     if (currentChain === 'monad') {
       if (!token.mint) {
-        console.log("❌ Invalid token - missing mint address");
         showEnhancedToast('error', 'Invalid token information', {
           title: 'Token Error',
         });
@@ -1609,14 +1576,6 @@ export default function DiscoverPopoutContent() {
         showTradeValidationError(monadValidation.error, getResolvedTokenImage(token as any), token.symbol || token.name || 'Token');
         return;
       }
-
-      console.log("📤 Monad Quick Buy params:", {
-        tokenAddress,
-        amountMON: buyAmount,
-        launchpad,
-        slippage,
-        gasPrice: gasPrice !== undefined ? `${gasPrice} gwei` : 'network suggestion',
-      });
 
       // Get token image and name - use resolved version to get cached metadata images
       const tokenImage = token ? getResolvedTokenImage(token as any) : null;
@@ -1742,7 +1701,7 @@ export default function DiscoverPopoutContent() {
             }, 10000);
             pendingQuickBuyToastRef.current = null;
           }
-          console.log("✅ Monad Quick Buy successful:", txHashes);
+          isDev && console.log('Monad Quick Buy successful:', txHashes);
           broadcastMonadQuickTrade(tokenAddress, 'buy');
           broadcastTradeCompleted({ tokenAddress, tradeType: 'buy', chain: 'monad', tokenName: token?.name, tokenSymbol: token?.symbol, imageUrl: tokenImage || undefined, solAmountSpent: buyAmount });
           // Refresh header balance after successful buy
@@ -1794,7 +1753,7 @@ export default function DiscoverPopoutContent() {
       },
       refreshBalance,
       onSuccess: (txHash, stats) => {
-        console.log('✅ Enhanced Quick Buy successful:', { txHash, stats });
+        isDev && console.log('Enhanced Quick Buy successful:', { txHash, stats });
       },
       onError: (error) => {
         console.error('❌ Enhanced Quick Buy failed:', error);
@@ -2055,19 +2014,6 @@ export default function DiscoverPopoutContent() {
         filtered.length < Math.min(baselineThreshold, safeArr.length);
       const workingTokens = shouldUseBaseline ? safeArr : filtered;
       
-      console.log(`[Filters] Applied filters to ${safeArr.length} tokens, result: ${filtered.length} tokens`, {
-        activeFilters: {
-          amms: filter.amms?.length || 0,
-          searchKeywords: filter.searchKeywords || '',
-          excludeKeywords: filter.excludeKeywords || '',
-          marketCapMin: filter.marketCapMin,
-          marketCapMax: filter.marketCapMax,
-          volumeMin: filter.volumeMin,
-          volumeMax: filter.volumeMax,
-          liquidityMin: filter.liquidityMin,
-          liquidityMax: filter.liquidityMax,
-        }
-      });
       
       // Create deep copies to avoid mutation during sort
       const sortedTokens = workingTokens.map(t => JSON.parse(JSON.stringify(t)));
@@ -2143,7 +2089,6 @@ export default function DiscoverPopoutContent() {
       
       // If we have fewer than 10 trending tokens, supplement with top tokens from new pairs
       if (uniqueSafe.length < 10 && newPairsRaw && newPairsRaw.length > 0) {
-        console.log(`[Trending] Only ${uniqueSafe.length} trending tokens, supplementing with top tokens from new pairs`);
         
         // Get top tokens from new pairs, sorted by volume (for selected timeframe)
         const topNewPairs = newPairsRaw
@@ -2201,7 +2146,6 @@ export default function DiscoverPopoutContent() {
           }
         }
         
-        console.log(`[Trending] Added ${topNewPairs.length} top tokens from new pairs, total now: ${uniqueSafe.length}`);
       }
       
       setDisplayed(uniqueSafe);
@@ -2216,11 +2160,9 @@ export default function DiscoverPopoutContent() {
 
   const processedNewPairs = useMemo(() => {
     if (!newPairsRaw || newPairsRaw.length === 0) {
-      console.log('[Discover] processedNewPairs: newPairsRaw is empty', { currentChain });
       return [] as TokenWithDexPaid[];
     }
 
-    console.log(`[Discover] Processing ${newPairsRaw.length} new pairs for ${currentChain}`);
     
     // Match pulse.tsx filtering logic - only filter by zero liquidity and wrapped SOL
     // This ensures we show the same tokens as pulse table
@@ -2245,7 +2187,6 @@ export default function DiscoverPopoutContent() {
       return true;
     });
     
-    console.log(`[Discover] After filtering: ${base.length} tokens remain for ${currentChain}`);
     const filtered = applyFilters(base);
     const sortedTokens = filtered.map((token) => JSON.parse(JSON.stringify(token)) as TokenWithDexPaid);
 
@@ -2499,15 +2440,6 @@ export default function DiscoverPopoutContent() {
     const imageUrl = cover || t?.image || undefined;
     const avatarImageUrl = avatar || imageUrl || undefined;
     
-    // Debug: Log individual token mapping
-    console.log(`[toPumpPortalItem] Mapping ${name}:`, {
-      hasImage: !!t.image,
-      hasCover: !!cover,
-      finalImageUrl: !!imageUrl,
-      finalAvatarUrl: !!avatarImageUrl,
-      raw: { tImage: t.image, cover, avatar }
-    });
-
     return {
       id: t?.mint || t?.pair_address || Math.random().toString(36).slice(2),
       name,
@@ -2525,22 +2457,6 @@ export default function DiscoverPopoutContent() {
 
   const liveLeftItems: PumpItem[] = pumpPortalTokens.slice(0, 30).map(toPumpPortalItem);
   const liveRightItems: PumpItem[] = pumpPortalTokens.slice(30, 60).map(toPumpPortalItem);
-
-  // Debug: Log image data for PumpPortal tokens
-  useEffect(() => {
-    if (pumpPortalTokens.length > 0) {
-      console.log('[Discover] PumpPortal tokens with image data:', 
-        pumpPortalTokens.slice(0, 12).map(t => ({
-          name: t.name,
-          mint: t.mint,
-          hasUri: !!t.uri,
-          hasImage: !!t.image,
-          uri: t.uri,
-          image: t.image
-        }))
-      );
-    }
-  }, [pumpPortalTokens]);
 
   // Simple LRU-ish trim when the cache gets large (optional)
   useEffect(() => {
@@ -2821,7 +2737,6 @@ export default function DiscoverPopoutContent() {
                       onClick={() => {
                         setSelectedPill(pill);
                         setActivePreset(presetIndex); // Also update global preset for consistency
-                        console.log(`Selected ${pill} in discover page`);
                       }}
                       onMouseEnter={(e) => {
                         if (selectedPill !== pill) {
@@ -2922,7 +2837,6 @@ export default function DiscoverPopoutContent() {
                   // Backfill token data first
                   if (rawToken) {
                     try {
-                      console.log('[Discover] Backfilling token:', rawToken);
                       const backfillResponse = await fetch('/api/token-service/backfill-token', {
                         method: 'POST',
                         headers: {
@@ -2940,7 +2854,6 @@ export default function DiscoverPopoutContent() {
                       });
 
                       if (backfillResponse.ok) {
-                        console.log('[Discover] Token backfilled successfully');
                       } else {
                         console.warn('[Discover] Token backfill failed, but continuing with navigation');
                       }

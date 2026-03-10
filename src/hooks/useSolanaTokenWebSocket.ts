@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback, useRef } from 'react';
+import { useEffect, useState, useCallback, useRef, useMemo } from 'react';
 import { env } from '~/env';
 
 // Gate verbose logging behind dev-only check — eliminated in production builds by dead-code removal
@@ -139,7 +139,7 @@ export interface SolanaTokenVolume {
 
 // WebSocket message types
 interface WebSocketMessage {
-  type: 'snapshot' | 'trade_update' | 'holder_update' | 'top_trader_update' | 'dev_token_update' | 'token_update' | 'pong';
+  type: 'snapshot' | 'trade_update' | 'holder_update' | 'top_trader_update' | 'dev_token_update' | 'token_update' | 'price_update' | 'pong';
   data: {
     trades: SolanaTokenTrade[] | null;
     holders: SolanaTokenHolder[] | null;
@@ -181,15 +181,6 @@ interface UseSolanaTokenWebSocketReturn {
 // Helper to format trade for UI
 function formatTradeForUI(trade: SolanaTokenTrade): SolanaTokenTrade {
   const age = getAge(trade.timestamp);
-
-  // Debug log for new trades to verify timestamp is correct
-  if (isDev && (age === '0s' || age === '1s' || age === '2s')) {
-    console.log('[formatTradeForUI] Fresh trade:', {
-      signature: trade.signature?.slice(0, 8),
-      timestamp: trade.timestamp,
-      age,
-    });
-  }
 
   return {
     ...trade,
@@ -646,6 +637,96 @@ export function useSolanaTokenWebSocket(
                 onTokenInfoUpdateRef.current?.(rawToken);
               }
             }
+          } else if (message.type === 'price_update') {
+            // Real-time price update with holder analysis, liquidity, and volume data
+            // NOTE: price_usd and market_cap_usd are NOT updated here — OHLC provides more accurate values
+            const tokenData = (message.data as any)?.token || (message.data as any);
+
+            // Guard: need valid data with mint, and mint must match current token
+            if (!tokenData?.mint || tokenData.mint !== mintAddress) {
+              if (isDev && tokenData?.mint && tokenData.mint !== mintAddress) {
+                console.warn('[useSolanaTokenWebSocket] price_update mint mismatch, ignoring', {
+                  expected: mintAddress, got: tokenData.mint,
+                });
+              }
+            } else {
+
+            if (isDev) console.log('[useSolanaTokenWebSocket] price_update:', {
+              mint: tokenData.mint?.slice(0, 8),
+              liquidity: tokenData.liquidity_usd,
+              holders: tokenData.holder_count,
+              bundle: tokenData.bundle_percent,
+            });
+
+            // A. Update tokenInfo — only liquidity, holder_count, graduation, fees (NOT price/mcap)
+            setTokenInfo((prev) => {
+              if (!prev) return prev; // Need snapshot first
+              return {
+                ...prev,
+                // Only update liquidity (price_usd/market_cap_usd come from OHLC)
+                ...(tokenData.liquidity_usd > 0 && { liquidity_usd: tokenData.liquidity_usd }),
+                ...(tokenData.holder_count > 0 && { holder_count: tokenData.holder_count }),
+                ...(tokenData.graduation_percent > 0 && { graduation_percent: tokenData.graduation_percent }),
+                ...(tokenData.total_fees_lamports > 0 && { total_fees_lamports: tokenData.total_fees_lamports }),
+                ...(tokenData.dev_tokens_created > 0 && { dev_tokens_created: tokenData.dev_tokens_created }),
+                ...(tokenData.dev_tokens_migrated > 0 && { dev_tokens_migrated: tokenData.dev_tokens_migrated }),
+              };
+            });
+
+            // B. Update holderSummary (holder analysis fields with non-zero guard)
+            setHolderSummary((prev) => {
+              if (!prev) return prev; // Need snapshot first
+              return {
+                ...prev,
+                ...(tokenData.dev_percent > 0 && { dev_held_percent: tokenData.dev_percent }),
+                ...(tokenData.sniper_percent > 0 && { sniper_held_percent: tokenData.sniper_percent }),
+                ...(tokenData.insider_percent > 0 && { insider_held_percent: tokenData.insider_percent }),
+                ...(tokenData.top10_holders_pct > 0 && { top10_held_percent: tokenData.top10_holders_pct }),
+                ...(tokenData.bundle_percent > 0 && { bundler_held_percent: tokenData.bundle_percent }),
+                ...(tokenData.bundle_wallet_count > 0 && { bundler_count: tokenData.bundle_wallet_count }),
+                ...(tokenData.holder_count > 0 && { total_holders: tokenData.holder_count }),
+                ...(tokenData.kol_count > 0 && { kol_count: tokenData.kol_count }),
+              };
+            });
+
+            // C. Update volume (convert flat fields → nested SolanaTokenVolume)
+            if (tokenData.total_buy_volume_5m !== undefined || tokenData.total_buy_volume_1h !== undefined) {
+              setVolume((prev) => {
+                const base = prev || {
+                  volume_5m: { buy_volume_sol: 0, sell_volume_sol: 0, buy_count: 0, sell_count: 0 },
+                  volume_1h: { buy_volume_sol: 0, sell_volume_sol: 0, buy_count: 0, sell_count: 0 },
+                  volume_6h: { buy_volume_sol: 0, sell_volume_sol: 0, buy_count: 0, sell_count: 0 },
+                  volume_24h: { buy_volume_sol: 0, sell_volume_sol: 0, buy_count: 0, sell_count: 0 },
+                };
+                return {
+                  volume_5m: {
+                    buy_volume_sol: tokenData.total_buy_volume_5m ?? base.volume_5m.buy_volume_sol,
+                    sell_volume_sol: tokenData.total_sell_volume_5m ?? base.volume_5m.sell_volume_sol,
+                    buy_count: tokenData.total_buys_5m ?? base.volume_5m.buy_count,
+                    sell_count: tokenData.total_sells_5m ?? base.volume_5m.sell_count,
+                  },
+                  volume_1h: {
+                    buy_volume_sol: tokenData.total_buy_volume_1h ?? base.volume_1h.buy_volume_sol,
+                    sell_volume_sol: tokenData.total_sell_volume_1h ?? base.volume_1h.sell_volume_sol,
+                    buy_count: tokenData.total_buys_1h ?? base.volume_1h.buy_count,
+                    sell_count: tokenData.total_sells_1h ?? base.volume_1h.sell_count,
+                  },
+                  volume_6h: {
+                    buy_volume_sol: tokenData.total_buy_volume_6h ?? base.volume_6h.buy_volume_sol,
+                    sell_volume_sol: tokenData.total_sell_volume_6h ?? base.volume_6h.sell_volume_sol,
+                    buy_count: tokenData.total_buys_6h ?? base.volume_6h.buy_count,
+                    sell_count: tokenData.total_sells_6h ?? base.volume_6h.sell_count,
+                  },
+                  volume_24h: {
+                    buy_volume_sol: tokenData.total_buy_volume_24h ?? base.volume_24h.buy_volume_sol,
+                    sell_volume_sol: tokenData.total_sell_volume_24h ?? base.volume_24h.sell_volume_sol,
+                    buy_count: tokenData.total_buys_24h ?? base.volume_24h.buy_count,
+                    sell_count: tokenData.total_sells_24h ?? base.volume_24h.sell_count,
+                  },
+                };
+              });
+            }
+            } // end else (mint matched)
           }
           // Ignore pong messages
         } catch (err) {
@@ -766,13 +847,23 @@ export function useSolanaTokenWebSocket(
     return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
   }, [enabled, mintAddress, connect]);
 
+  // Guard: synchronously null out tokenInfo when its mint doesn't match the
+  // current mintAddress. useEffect-based resets run AFTER render, so without
+  // this, one render leaks stale Token A data into Token B's consumers
+  // (causing the watchlist ticker MC flash).
+  const safeTokenInfo = useMemo(() => {
+    if (!tokenInfo) return null;
+    if (mintAddress && tokenInfo.mint && tokenInfo.mint.toLowerCase() !== mintAddress.toLowerCase()) return null;
+    return tokenInfo;
+  }, [tokenInfo, mintAddress]);
+
   return {
     trades,
     holders,
     topTraders,
     devTokens,
     holderSummary,
-    tokenInfo,
+    tokenInfo: safeTokenInfo,
     volume,
     connected,
     error,

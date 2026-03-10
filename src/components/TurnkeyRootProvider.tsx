@@ -4,6 +4,8 @@
 import React, { useCallback, useEffect, useMemo } from "react";
 import { env } from '../env';
 
+const isDev = process.env.NODE_ENV !== 'production';
+
 import {
   TurnkeyProvider,
   type TurnkeyProviderConfig,
@@ -30,7 +32,7 @@ async function clearTurnkeyIndexedDB() {
         // Wait for deletion to complete
         await new Promise<void>((resolve, reject) => {
           deleteRequest.onsuccess = () => {
-            console.log(`[Turnkey] Deleted IndexedDB: ${dbName}`);
+            isDev && console.log(`[Turnkey] Deleted IndexedDB: ${dbName}`);
             resolve();
           };
           deleteRequest.onerror = () => {
@@ -54,7 +56,7 @@ async function clearTurnkeyIndexedDB() {
 // Helper to clear all Turnkey session data
 // Per Turnkey docs, clearing session requires removing both the JWT and the IndexedDB key pairs
 export async function clearTurnkeySession() {
-  console.log('[Turnkey] Clearing stale session data...');
+  isDev && console.log('[Turnkey] Clearing stale session data...');
   
   // Clear IndexedDB (where Turnkey stores unextractable P-256 key pairs)
   await clearTurnkeyIndexedDB();
@@ -77,7 +79,7 @@ export async function clearTurnkeySession() {
     }
     keysToRemove.forEach(key => {
       localStorage.removeItem(key);
-      console.log(`[Turnkey] Removed localStorage: ${key}`);
+      isDev && console.log(`[Turnkey] Removed localStorage: ${key}`);
     });
   }
   
@@ -98,11 +100,11 @@ export async function clearTurnkeySession() {
     }
     keysToRemove.forEach(key => {
       sessionStorage.removeItem(key);
-      console.log(`[Turnkey] Removed sessionStorage: ${key}`);
+      isDev && console.log(`[Turnkey] Removed sessionStorage: ${key}`);
     });
   }
   
-  console.log('[Turnkey] Session data cleared successfully.');
+  isDev && console.log('[Turnkey] Session data cleared successfully.');
 }
 
 export function TurnkeyRootProvider({ children }: { children: React.ReactNode }) {
@@ -178,7 +180,7 @@ export function TurnkeyRootProvider({ children }: { children: React.ReactNode })
   }, []);
 
   useEffect(() => {
-    console.log("[Turnkey] client env", {
+    isDev && console.log("[Turnkey] client env", {
       orgId: turnkeyConfig.organizationId,
       authProxyConfigId: turnkeyConfig.authProxyConfigId,
       authProxyUrl: turnkeyConfig.authProxyUrl,
@@ -204,7 +206,7 @@ export function TurnkeyRootProvider({ children }: { children: React.ReactNode })
       errorMessage.includes('no_session_found') ||
       errorMessage.includes('requires a valid session')
     ) {
-      console.log('[Turnkey] No active session - user needs to sign in with Turnkey');
+      isDev && console.log('[Turnkey] No active session - user needs to sign in with Turnkey');
       // Don't show alert - the UI will handle this gracefully
       return;
     }

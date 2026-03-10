@@ -1,4 +1,6 @@
 // Cache invalidation utilities for token data
+const isDev = process.env.NODE_ENV !== 'production';
+
 export class CacheManager {
   private static readonly CACHE_PREFIX = 'cached_tokens_';
   private static readonly LAUNCHPAD_CACHE_KEY = 'cached_launchpad_data';
@@ -15,7 +17,7 @@ export class CacheManager {
           localStorage.removeItem(key);
         }
       });
-      console.log('All token caches invalidated');
+      isDev && console.log('All token caches invalidated');
     } catch (error) {
       console.warn('Failed to invalidate caches:', error);
     }
@@ -25,7 +27,7 @@ export class CacheManager {
   static invalidateCache(key: string): void {
     try {
       localStorage.removeItem(key);
-      console.log(`Cache invalidated: ${key}`);
+      isDev && console.log(`Cache invalidated: ${key}`);
     } catch (error) {
       console.warn(`Failed to invalidate cache ${key}:`, error);
     }
@@ -103,7 +105,7 @@ export class CacheManager {
         });
         
         if (cleanedCount > 0) {
-          console.log(`Cleaned up ${cleanedCount} expired cache entries`);
+          isDev && console.log(`Cleaned up ${cleanedCount} expired cache entries`);
         }
       } catch (error) {
         console.warn('Failed to clean up caches:', error);

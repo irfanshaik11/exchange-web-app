@@ -1,3 +1,5 @@
+const isDev = process.env.NODE_ENV !== 'production';
+
 import React, { useState, useEffect } from "react";
 import type { Wallet } from "~/utils/functions";
 import type { WatchWallet, WalletEvent } from "~/utils/walletTracking";
@@ -101,8 +103,8 @@ export default function WalletRow({
       if (saved !== null) {
         try {
           const parsed = JSON.parse(saved);
-          console.log(
-            `✅ Found localStorage value for ${wallet.address}: ${parsed}`,
+          isDev && console.log(
+            `Found localStorage value for ${wallet.address}: ${parsed}`,
           );
           return parsed;
         } catch {
@@ -141,8 +143,8 @@ export default function WalletRow({
     if (stored !== null) {
       // localStorage exists - use it ALWAYS (don't trust backend)
       hasLoadedFromStorageRef.current = true;
-      console.log(
-        `📖 [USE EFFECT] Loaded from localStorage: ${wallet.address} = ${stored}`,
+      isDev && console.log(
+        `[USE EFFECT] Loaded from localStorage: ${wallet.address} = ${stored}`,
       );
       setNotificationsEnabled(stored);
       return; // Exit early - don't check backend
@@ -169,8 +171,8 @@ export default function WalletRow({
     if (stored !== null) {
       // localStorage takes precedence - always use it, ignore backend changes
       hasLoadedFromStorageRef.current = true;
-      console.log(
-        `🛡️ [BACKEND UPDATE] localStorage overrides backend change: ${wallet.address} = ${stored}`,
+      isDev && console.log(
+        `[BACKEND UPDATE] localStorage overrides backend change: ${wallet.address} = ${stored}`,
       );
       setNotificationsEnabled(stored);
       return; // Exit - don't use backend value
@@ -253,8 +255,8 @@ export default function WalletRow({
           (localStorage as any).sync();
         }
         hasLoadedFromStorageRef.current = true; // Mark that we've saved to storage
-        console.log(
-          `💾 [TOGGLE] Saved to localStorage: ${wallet.address} = ${newState}`,
+        isDev && console.log(
+          `[TOGGLE] Saved to localStorage: ${wallet.address} = ${newState}`,
         );
 
         // Verify it was saved correctly
@@ -264,8 +266,8 @@ export default function WalletRow({
             `❌ [TOGGLE] localStorage save verification FAILED for ${wallet.address}`,
           );
         } else {
-          console.log(
-            `✅ [TOGGLE] localStorage save verified for ${wallet.address}`,
+          isDev && console.log(
+            `[TOGGLE] localStorage save verified for ${wallet.address}`,
           );
         }
       }
@@ -279,8 +281,8 @@ export default function WalletRow({
           watchedWallet?.chain || "sol",
           user?.bearerToken,
         );
-        console.log(
-          `✅ [TOGGLE] Backend updated successfully for ${wallet.address}`,
+        isDev && console.log(
+          `[TOGGLE] Backend updated successfully for ${wallet.address}`,
         );
 
         // Update toast to success
@@ -321,8 +323,8 @@ export default function WalletRow({
         const storageKey = `wallet_notifications_${wallet.address}`;
         localStorage.removeItem(storageKey);
         hasLoadedFromStorageRef.current = false;
-        console.log(
-          `❌ [TOGGLE] Removed localStorage entry due to error for: ${wallet.address}`,
+        isDev && console.log(
+          `[TOGGLE] Removed localStorage entry due to error for: ${wallet.address}`,
         );
       }
       console.error("Failed to toggle notifications:", error);

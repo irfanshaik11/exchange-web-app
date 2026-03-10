@@ -1,6 +1,8 @@
 import { useEffect, useRef } from 'react';
 import { computeHashImageUrl } from '~/utils/imageHash';
 
+const isDev = process.env.NODE_ENV !== 'production';
+
 interface PreloadImageOptions {
   priority?: boolean;
   timeout?: number;
@@ -37,13 +39,13 @@ export function useImagePreloader() {
       img.onload = () => {
         cleanup();
         preloadedImages.current.add(imageUrl);
-        console.log(`✅ Preloaded image: ${imageUrl}`);
+        isDev && console.log(`Preloaded image: ${imageUrl}`);
         resolve(true);
       };
 
       img.onerror = () => {
         cleanup();
-        console.log(`❌ Failed to preload: ${imageUrl}`);
+        isDev && console.log(`Failed to preload: ${imageUrl}`);
         resolve(false);
       };
 
@@ -63,7 +65,7 @@ export function useImagePreloader() {
     const results = await Promise.allSettled(promises);
     
     const successful = results.filter(result => result.status === 'fulfilled' && result.value).length;
-    console.log(`🚀 Preloaded ${successful}/${sources.length} images`);
+    isDev && console.log(`Preloaded ${successful}/${sources.length} images`);
     
     return results;
   };

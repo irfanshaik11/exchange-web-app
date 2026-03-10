@@ -651,28 +651,6 @@ function TokenImage({
   // Priority: image, uri, logo, imageUrl, logoUrl, image_url, logo_url, icon, thumbnail
   const imageUrl = extractTokenImage(token as any) || null;
 
-  // Debug logging to help diagnose image loading issues
-  useEffect(() => {
-    if (imageUrl) {
-      console.log(
-        `[TokenImage] ${token.symbol || "Unknown"}: imageUrl extracted:`,
-        imageUrl,
-      );
-    } else {
-      console.warn(
-        `[TokenImage] ${token.symbol || "Unknown"}: No image URL found. Token data:`,
-        {
-          image: (token as any).image,
-          image_url: (token as any).image_url,
-          uri: (token as any).uri,
-          logo: token.logo,
-          imageUrl: (token as any).imageUrl,
-          logoUrl: (token as any).logoUrl,
-        },
-      );
-    }
-  }, [imageUrl, token.symbol, token]);
-
   // Calculate migration progress for border color (only for New Pairs, NOT for migrated)
   const getMigrationProgress = (token: Token): number => {
     // Don't apply bonding progress to migrated column
@@ -974,21 +952,6 @@ function TokenImage({
     launchpadProtocol.includes("moonshoot");
   const isFullCircleImage = isMeteora || isBonk || isBags || isMoonit;
 
-  // Debug logging for protocol detection
-  if (
-    typeof window !== "undefined" &&
-    (window as any).__DEBUG_PROTOCOL_ICONS__
-  ) {
-    console.log(`[TokenImage] ${token.symbol}:`, {
-      launchpad_protocol: (token as any).launchpad_protocol,
-      protocol: (token as any).protocol,
-      launchpadName: (token as any).launchpadName,
-      amm: (token as any).amm,
-      selectedIcon: tokenIcon,
-      protocolColor: protocolColor,
-    });
-  }
-
   // Use real migration progress for each token, with fallback to unique test progress
   const getUniqueTestProgress = (token: Token): number => {
     if (!token.symbol) return 0;
@@ -1018,22 +981,7 @@ function TokenImage({
     ? Math.min(finalProgress / 0.6, 0.95)
     : finalProgress;
 
-  // Debug logging for New Pairs
-  if (isNewPairs) {
-    console.log(`[TokenImage] ${token.symbol} progress:`, {
-      bonding_pct: (token as any).bonding_pct,
-      bonding_curve_progress: token.bonding_curve_progress,
-      graduationPercent: (token as any).graduationPercent,
-      calculatedProgress: migrationProgress,
-      finalProgress: finalProgress,
-      scaledProgress: scaledProgress,
-      protocolColor: protocolColor,
-      protocol: (token as any).launchpad_protocol,
-    });
-  }
-
   const handleMouseEnter = (e: React.MouseEvent<HTMLDivElement>) => {
-    console.log("Mouse enter - showing preview for:", token.symbol);
     setShowPreview(true);
     const target = e.currentTarget as HTMLDivElement;
     // Minimal hover effect - no glow
@@ -1051,7 +999,6 @@ function TokenImage({
   };
 
   const handleMouseLeave = (e: React.MouseEvent<HTMLDivElement>) => {
-    console.log("Mouse leave - hiding preview for:", token.symbol);
     setShowPreview(false);
     const target = e.currentTarget as HTMLDivElement;
     // Don't change border color since we're using SVG border now
@@ -1619,19 +1566,6 @@ function MonadTable({
   showBubbleMetrics = false,
   currentChain: chainProp,
 }: MonadTableProps) {
-  // DEBUG: Log EVERY render (not just when tokens change)
-  console.log(
-    `[PulseTable ${title}] 🔥 RENDER START - tokens count: ${tokens?.length || 0}, first token:`,
-    tokens?.[0]?.name || "none",
-  );
-
-  // DEBUG: Log when component receives new props
-  useEffect(() => {
-    console.log(
-      `[PulseTable ${title}] 🎯 Received tokens prop, count: ${tokens?.length || 0}`,
-    );
-  }, [tokens, title]);
-
   // Track whether we ever had data — prevents "No tokens found" flash on tab return
   // Uses module-level map so state persists across Next.js Pages Router remounts
   const hadDataRef = useRef(_hadDataByTitle.get(title) ?? false);
@@ -1738,9 +1672,6 @@ function MonadTable({
         typeof parsed.timestamp === "number" &&
         Date.now() - parsed.timestamp <= HTTP_CACHE_TTL_MS
       ) {
-        console.log(
-          `[MonadTable ${title}] ✅ Restored ${parsed.data.length} tokens from cache`,
-        );
         return parsed.data as Token[];
       }
     } catch (error) {
@@ -1966,10 +1897,6 @@ function MonadTable({
       // Only show loading if we don't have valid cache (for instant display)
       if (!hasValidCache) {
         setIsFetchingMonad(true);
-      } else {
-        console.log(
-          `[MonadTable ${title}] 🔄 Refreshing tokens in background (cache available for instant display)`,
-        );
       }
 
       try {
@@ -1994,9 +1921,6 @@ function MonadTable({
           fullUrl += `&protocols=${encodeURIComponent(protocolsParam)}`;
         }
 
-        console.log(
-          `[MonadTable ${title}] 🌊 Fetching Monad tokens directly from ${fullUrl} (Redis cache enabled)`,
-        );
         // Fetch Monad launchpad tokens (backend has Redis cache with 5s TTL for 354x faster responses)
         const response = await fetch(fullUrl, {
           cache: "no-store",
@@ -2022,9 +1946,6 @@ function MonadTable({
               httpCacheStorageKey,
               JSON.stringify(payload),
             );
-            console.log(
-              `[MonadTable ${title}] 💾 Cached ${tokens.length} tokens to localStorage`,
-            );
           } catch (error) {
             console.warn(
               `[MonadTable ${title}] Failed to cache tokens:`,
@@ -2032,9 +1953,6 @@ function MonadTable({
             );
           }
 
-          console.log(
-            `[MonadTable ${title}] ✅ Fetched ${tokens.length} Monad tokens from backend (Redis cache)`,
-          );
         } else {
           console.error(
             `[MonadTable ${title}] ❌ Failed to fetch Monad tokens: ${response.status}`,
@@ -2487,14 +2405,6 @@ function MonadTable({
     const filtersStr = JSON.stringify(filters);
     const pendingStr = JSON.stringify(pendingFilters);
     const hasChanges = filtersStr !== pendingStr;
-    // Debug log for troubleshooting
-    if (process.env.NODE_ENV === "development") {
-      console.log("[MonadTable] Filter comparison:", {
-        current: filters.protocols,
-        pending: pendingFilters.protocols,
-        hasChanges,
-      });
-    }
     return hasChanges;
   }, [filters, pendingFilters]);
 
@@ -2542,8 +2452,6 @@ function MonadTable({
         pending.tokenAddress.toLowerCase() !== data.tokenAddress.toLowerCase()
       )
         return;
-
-      console.log("[MonadTable] 🚀 INSTANT txHash via WebSocket:", data.txHash);
 
       // For multi-wallet trades: Don't update the toast (count was already shown)
       // For single wallet: Update the link element with clickable Monad logo
@@ -2612,10 +2520,7 @@ function MonadTable({
   };
 
   const handleQuickBuy = async (token: Token) => {
-    console.log("🎯 Monad Quick Buy called for token:", token.symbol);
-
     if (!user?.bearerToken || !user?.id) {
-      console.log("❌ User not logged in");
       showEnhancedToast("warning", "Please connect your wallet to trade", {
         title: "Authentication Required",
       });
@@ -2624,7 +2529,6 @@ function MonadTable({
 
     const buyAmount = parseFloat(thunderAmount);
     if (isNaN(buyAmount) || buyAmount <= 0) {
-      console.log("❌ Invalid buy amount:", thunderAmount);
       showEnhancedToast(
         "warning",
         "Please enter a valid MON amount (minimum 0.001 MON)",
@@ -2636,7 +2540,6 @@ function MonadTable({
     }
 
     if (!token.mint) {
-      console.log("❌ Invalid token - missing mint address");
       showEnhancedToast("error", "Invalid token information", {
         title: "Token Error",
       });
@@ -2669,15 +2572,6 @@ function MonadTable({
       showTradeValidationError(monadValidation.error, getResolvedTokenImage(token as any), token.symbol || token.name || 'Token');
       return;
     }
-
-    console.log("📤 Monad Quick Buy params:", {
-      tokenAddress,
-      amountMON: buyAmount,
-      launchpad,
-      slippage,
-      gasPrice:
-        gasPrice !== undefined ? `${gasPrice} gwei` : "network suggestion",
-    });
 
     // Get token image and name - use resolved version to get cached metadata images
     const tokenImage = token ? getResolvedTokenImage(token as any) : null;
@@ -2842,7 +2736,6 @@ function MonadTable({
         }, 1000);
         broadcastMonadQuickTrade(tokenAddress, "buy");
         broadcastTradeCompleted({ tokenAddress, tradeType: 'buy', chain: 'monad', tokenName: token?.name, tokenSymbol: token?.symbol, imageUrl: tokenImage || undefined, solAmountSpent: buyAmount });
-        console.log("✅ Monad Quick Buy successful:", txHashes);
         return { success: true, txHash: txHashes[0] };
       } else {
         tradeErrored = true;
@@ -3030,10 +2923,6 @@ function MonadTable({
   // Protocol filtering is now 100% server-side via HTTP API and WebSocket
   // MonadTable ONLY uses Monad token service data - NO FE filtering, IGNORE tokens prop
   const filteredAndSortedTokens = useMemo(() => {
-    console.log(
-      `[MonadTable ${title}] 🔧 MonadTable filtering - monadTokens: ${monadTokens.length}, filteredTokens: ${filteredTokens.length}, wsTokens: ${wsTokens.length}`,
-    );
-
     // MonadTable ONLY uses Monad token service endpoints - IGNORE tokens prop entirely
     // Use filteredTokens if protocol filter is active, otherwise use monadTokens
     // MonadTable always uses nad.fun - no 'All' option
@@ -3115,10 +3004,6 @@ function MonadTable({
         });
       });
     }
-
-    console.log(
-      `[MonadTable ${title}] 🔀 Merged ${filteredWsTokens.length} WS (filtered from ${wsTokens.length}) + ${tokensToUse.length} HTTP = ${filtered.length} total tokens after protocol filter, protocols: ${filters.protocols.join(",")}`,
-    );
 
     // Filter out specific blocked token address for New Pairs
     if (isNewPairs) {
@@ -3477,12 +3362,6 @@ function MonadTable({
 
   // Memoize token rendering to prevent unnecessary re-renders
   const memoizedTokens = useMemo(() => {
-    console.log(
-      `[PulseTable ${title}] 🎬 memoizedTokens recomputed, count: ${filteredAndSortedTokens?.length || 0}, first 3:`,
-      filteredAndSortedTokens
-        ?.slice(0, 3)
-        .map((t) => ({ name: t.name, symbol: t.symbol, mint: t.mint })),
-    );
     return filteredAndSortedTokens;
   }, [filteredAndSortedTokens, title]);
 
@@ -3519,17 +3398,10 @@ function MonadTable({
 
         if (isMeteora && bondingPct > 98.6) {
           newWaveTokens.add(idx);
-          console.log(
-            `[Wave Animation] Adding Meteora token ${token.symbol} (bonding: ${bondingPct}%)`,
-          );
         }
       });
     }
 
-    console.log(
-      `[Wave Animation] Setting wave tokens for Final Stretch:`,
-      Array.from(newWaveTokens),
-    );
     setWaveTokens(newWaveTokens);
   }, [memoizedTokens, title]);
 
@@ -3688,10 +3560,6 @@ function MonadTable({
             },
           }),
         );
-      }
-
-      if (response?.order?.id) {
-        console.log("📡 Sniper order created:", response.order.id);
       }
 
       setShowSnipeModal(false);
@@ -3918,7 +3786,6 @@ function MonadTable({
                   onClick={() => {
                     // Update local preset selection for this column only
                     setSelectedPill(pill);
-                    console.log(`Selected ${pill} in ${title} column`);
                   }}
                   onMouseEnter={(e) => {
                     if (selectedPill !== pill) {

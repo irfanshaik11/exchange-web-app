@@ -1,3 +1,5 @@
+const isDev = process.env.NODE_ENV !== 'production';
+
 import React, { useEffect, useState, useMemo } from "react";
 import type { Wallet, TradeRow } from "~/utils/functions";
 import {
@@ -868,7 +870,7 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({
           };
         });
         
-        console.log("[Activity] Updated activity data:", {
+        isDev && console.log("[Activity] Updated activity data:", {
           openTransactions: openPositionTransactions.length,
           buys: openPositionTransactions.filter(t => t.side === 'buy').length,
           sells: openPositionTransactions.filter(t => t.side === 'sell').length,
@@ -988,7 +990,7 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({
           (a, b) => b.at - a.at,
         );
 
-        console.log("[WalletScan] Fetched history for all tabs:", {
+        isDev && console.log("[WalletScan] Fetched history for all tabs:", {
           realTime: realTimeTrades.length,
           historical: historicalTrades.length,
           merged: mergedTrades.length,
@@ -1042,7 +1044,7 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({
 
     if (mintsToFetch.length === 0) return;
 
-    console.log(
+    isDev && console.log(
       "[WalletScan] Fetching metadata for",
       mintsToFetch.length,
       "tokens",
@@ -1050,7 +1052,7 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({
 
     batchFetchChainTokenMetadata(mintsToFetch)
       .then((metadata) => {
-        console.log("[WalletScan] Fetched token metadata:", metadata);
+        isDev && console.log("[WalletScan] Fetched token metadata:", metadata);
         setTokenMetadata(metadata);
       })
       .catch((err) => {

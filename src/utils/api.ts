@@ -280,7 +280,6 @@ export const turnkeyLogin = (
   const endpoints = [
     "/api/users/turnkey/login"
   ];
-  console.log("Turnkey login called with params:", params);
   return (async () => {
     let lastError: unknown;
     for (const endpoint of endpoints) {
@@ -657,10 +656,6 @@ export type BuyParams = {
 };
 
 export const tradeBuy = (params: BuyParams, authToken: string) => {
-  console.log("🚀 tradeBuy called with params:", params);
-  console.log("🔗 Backend URL:", env.NEXT_PUBLIC_BACKEND_URL);
-  console.log("🎯 Full URL:", `${env.NEXT_PUBLIC_BACKEND_URL}/api/trade/buy`);
-  
   return apiFetch<{ 
     message: string; 
     txid: string; 
