@@ -569,20 +569,9 @@ export default function TradePage() {
     }
   }, [wsHistoricalTrades]);
 
-  // Throttle holderSummary and wsTopTraders updates to avoid re-rendering TradeActionPanel on every WS message
-  const [throttledHolderSummary, setThrottledHolderSummary] = React.useState(holderSummary);
-  const [throttledWsTopTraders, setThrottledWsTopTraders] = React.useState(wsTopTraders);
-  const holderThrottleRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  React.useEffect(() => {
-    if (!holderThrottleRef.current) {
-      setThrottledHolderSummary(holderSummary);
-      setThrottledWsTopTraders(wsTopTraders);
-      holderThrottleRef.current = setTimeout(() => {
-        holderThrottleRef.current = null;
-      }, 5000);
-    }
-  }, [holderSummary, wsTopTraders]);
+  // [HOLDERS-SNAPSHOT-ONLY] No throttle needed — holderSummary only updates once (from snapshot).
+  // If price_updates are re-enabled, re-add throttle to avoid re-rendering TradeActionPanel on every WS message.
+  // Previous throttle: 5s interval with throttledHolderSummary/throttledWsTopTraders state + holderThrottleRef timer.
 
   // Enhance displayToken with holderSummary data for TradeActionPanel
   const enhancedDisplayToken = React.useMemo(() => {
@@ -592,20 +581,20 @@ export default function TradePage() {
     return {
       ...displayToken,
       // Map holder_summary fields to token fields expected by TokenInfoDropdown
-      dev_wallet: throttledHolderSummary?.dev_wallet ?? displayToken.dev_wallet,
-      dev_held_percentage: throttledHolderSummary?.dev_held_percent ?? displayToken.dev_held_percentage,
-      sniper_held_percentage: throttledHolderSummary?.sniper_held_percent ?? displayToken.sniper_held_percentage,
-      sniper_count: throttledHolderSummary?.sniper_count ?? displayToken.sniper_count,
-      bundler_held_percentage: throttledHolderSummary?.bundler_held_percent ?? displayToken.bundler_held_percentage,
-      bundler_count: throttledHolderSummary?.bundler_count ?? displayToken.bundler_count,
-      insider_held_percentage: throttledHolderSummary?.insider_held_percent ?? displayToken.insider_held_percentage,
-      insider_count: throttledHolderSummary?.insider_count ?? displayToken.insider_count,
-      top10_holding_percentage: throttledHolderSummary?.top10_held_percent ?? displayToken.top10_holding_percentage,
-      total_holders: throttledHolderSummary?.total_holders ?? displayToken.total_holders,
+      dev_wallet: holderSummary?.dev_wallet ?? displayToken.dev_wallet,
+      dev_held_percentage: holderSummary?.dev_held_percent ?? displayToken.dev_held_percentage,
+      sniper_held_percentage: holderSummary?.sniper_held_percent ?? displayToken.sniper_held_percentage,
+      sniper_count: holderSummary?.sniper_count ?? displayToken.sniper_count,
+      bundler_held_percentage: holderSummary?.bundler_held_percent ?? displayToken.bundler_held_percentage,
+      bundler_count: holderSummary?.bundler_count ?? displayToken.bundler_count,
+      insider_held_percentage: holderSummary?.insider_held_percent ?? displayToken.insider_held_percentage,
+      insider_count: holderSummary?.insider_count ?? displayToken.insider_count,
+      top10_holding_percentage: holderSummary?.top10_held_percent ?? displayToken.top10_holding_percentage,
+      total_holders: holderSummary?.total_holders ?? displayToken.total_holders,
       // Pro traders = count of top traders from WebSocket
-      pro_traders: throttledWsTopTraders?.length ?? displayToken.pro_traders,
+      pro_traders: wsTopTraders?.length ?? displayToken.pro_traders,
     };
-  }, [displayToken, throttledHolderSummary, throttledWsTopTraders]);
+  }, [displayToken, holderSummary, wsTopTraders]);
 
   // Also use dev_wallet from WebSocket holderSummary for chart dev markers
   useEffect(() => {
