@@ -21,7 +21,7 @@ const config = {
     position: "bottom-right",
   },
   // Transpile these packages to fix CommonJS/ESM issues
-  transpilePackages: ['@vanilla-extract/sprinkles', '@vanilla-extract/css', '@rainbow-me/rainbowkit',  '@turnkey/react-wallet-kit', '@turnkey/core'],
+  transpilePackages: ['@vanilla-extract/sprinkles', '@vanilla-extract/css', '@rainbow-me/rainbowkit',  '@turnkey/react-wallet-kit', '@turnkey/core', '@wallet-standard/app', '@wallet-standard/base'],
   // Optimize package imports for faster loading
   experimental: {
     optimizePackageImports: ['react-icons', 'lucide-react'],

@@ -12,11 +12,8 @@ import InterstateButton from "./InterstateButton";
 import { env } from "../env";
 import { useUser } from "./UserContext";
 import { getWaitlistStatus, redeemAccessCode, completeAllQuests } from "../utils/api";
-import Cookies from "js-cookie";
 import { FaDiscord } from "react-icons/fa";
 import { shouldShowWaitlistModal } from "../utils/waitlist";
-import bs58 from "bs58";
-import { clearStoredReferralCodeHint, getStoredReferralCodeHint } from "../utils/referralStorage";
 
 type ReferralGateStatus = "checking" | "prompt" | "validating" | "granted";
 
@@ -46,9 +43,6 @@ const STORAGE_FLAG_KEY = "referralAccess.granted"; // legacy (session)
 const STORAGE_META_KEY = "referralAccess.meta"; // legacy (session)
 const LS_KEY_PREFIX = "referralAccess.granted.user:"; // persistent per-user
 const LS_BYPASS_KEY = "referralAccess.bypass"; // user-independent bypass (for X button)
-const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL;
-const buildWalletLoginMessage = () =>
-  `Login to Interstate with nonce: ${Date.now()}`;
 
 type StoredAccessMeta = {
   grantedAt: number;
@@ -186,10 +180,6 @@ export function ReferralAccessGate({
   const [error, setError] = useState<string | null>(null);
   const [info, setInfo] = useState<string | null>(null);
   const [autoSubmitCode, setAutoSubmitCode] = useState<string | null>(null);
-  const [showWalletOptions, setShowWalletOptions] = useState(false);
-  const [phantomLoading, setPhantomLoading] = useState(false);
-  const [metamaskLoading, setMetamaskLoading] = useState(false);
-  const [walletError, setWalletError] = useState<string | null>(null);
   const [showQuests, setShowQuests] = useState(false);
   const [showWaitlist, setShowWaitlist] = useState(false);
   const [waitlistForm, setWaitlistForm] = useState({});
@@ -790,168 +780,6 @@ export function ReferralAccessGate({
       console.error('Error disconnecting Twitter account:', error);
     }
   }, []);
-
-  // Phantom Wallet Login handler - backend Turnkey wallet + app JWT
-  const handlePhantomLogin = useCallback(async () => {
-    setPhantomLoading(true);
-    setError(null);
-    setWalletError(null);
-    setInfo(null);
-
-    try {
-      if (!BACKEND_URL) {
-        throw new Error("Backend URL is not configured");
-      }
-
-      const provider = (window as any).solana;
-      if (!provider) {
-        setWalletError("Phantom wallet not found. Please install Phantom wallet.");
-        return;
-      }
-
-      const connectionResult = await provider.connect?.();
-      const publicKey =
-        connectionResult?.publicKey?.toString?.() ||
-        provider.publicKey?.toString?.();
-
-      if (!publicKey) {
-        setWalletError("Unable to read Phantom public key. Please try again.");
-        return;
-      }
-
-      const message = buildWalletLoginMessage();
-      const encodedMessage = new TextEncoder().encode(message);
-      const signed = await provider.signMessage(encodedMessage, "utf8");
-      const signatureBytes = signed?.signature || signed;
-      const signatureBase58 = bs58.encode(signatureBytes);
-      const referralCode = getStoredReferralCodeHint() || undefined;
-
-      const response = await fetch(`${BACKEND_URL}/api/users/phantom/login`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          publicKey,
-          signature: signatureBase58,
-          message,
-          referralCode,
-        }),
-      });
-
-      const data = await response.json().catch(() => ({}));
-      if (!response.ok) {
-        const errorMsg = data?.error || `Phantom login failed (${response.status})`;
-        throw new Error(errorMsg);
-      }
-
-      const token = data?.token;
-      if (!token) {
-        throw new Error("Login succeeded but no token was returned.");
-      }
-
-      Cookies.set("token", token, { expires: 7, path: "/" });
-      clearStoredReferralCodeHint();
-      await refreshUser();
-      setInfo("Login successful. Please enter your access code.");
-      setShowWalletOptions(false);
-      // Don't show waitlist - user must enter access code first
-      // They can click "Join Waitlist" if they don't have a code
-    } catch (error: any) {
-      console.error("Phantom login error:", error);
-
-      if (error.message?.includes("rejected") || error.message?.includes("cancelled") || error.message?.includes("denied")) {
-        setWalletError("Connection request was rejected. Please try again.");
-      } else if (error.message?.includes("not found") || error.message?.includes("not installed")) {
-        setWalletError("Phantom wallet not found. Please install Phantom wallet.");
-      } else {
-        setWalletError(error?.message || "Phantom login failed. Please try again.");
-      }
-    } finally {
-      setPhantomLoading(false);
-    }
-  }, [refreshUser]);
-
-  // MetaMask Wallet Login handler - backend Turnkey wallet + app JWT
-  const handleMetamaskLogin = useCallback(async () => {
-    setMetamaskLoading(true);
-    setError(null);
-    setWalletError(null);
-    setInfo(null);
-
-    try {
-      if (!BACKEND_URL) {
-        throw new Error("Backend URL is not configured");
-      }
-
-      const ethereum = (window as any).ethereum;
-      if (!ethereum) {
-        setWalletError("MetaMask wallet not found. Please install MetaMask extension.");
-        return;
-      }
-
-      const accounts: string[] = await ethereum.request({
-        method: "eth_requestAccounts",
-      });
-      const address = accounts?.[0];
-      if (!address) {
-        setWalletError("Unable to read MetaMask address. Please try again.");
-        return;
-      }
-
-      const message = buildWalletLoginMessage();
-      const signature = await ethereum.request({
-        method: "personal_sign",
-        params: [message, address],
-      });
-
-      const referralCode = getStoredReferralCodeHint() || undefined;
-
-      const response = await fetch(`${BACKEND_URL}/api/users/metamask/login`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          address,
-          signature,
-          message,
-          referralCode,
-        }),
-      });
-
-      const data = await response.json().catch(() => ({}));
-      if (!response.ok) {
-        const errorMsg = data?.error || `MetaMask login failed (${response.status})`;
-        throw new Error(errorMsg);
-      }
-
-      const token = data?.token;
-      if (!token) {
-        throw new Error("Login succeeded but no token was returned.");
-      }
-
-      Cookies.set("token", token, { expires: 7, path: "/" });
-      clearStoredReferralCodeHint();
-      await refreshUser();
-      setInfo("Login successful. Please enter your access code.");
-      setShowWalletOptions(false);
-      // Don't show waitlist - user must enter access code first
-      // They can click "Join Waitlist" if they don't have a code
-    } catch (error: any) {
-      console.error("MetaMask login error:", error);
-
-      if (error.message?.includes("rejected") || error.message?.includes("cancelled") || error.message?.includes("denied")) {
-        setWalletError("Connection request was rejected. Please try again.");
-      } else if (error.message?.includes("not found") || error.message?.includes("not installed")) {
-        setWalletError("MetaMask wallet not found. Please install MetaMask extension.");
-      } else {
-        setWalletError(error?.message || "MetaMask login failed. Please try again.");
-      }
-    } finally {
-      setMetamaskLoading(false);
-    }
-  }, [refreshUser]);
 
   const contextValue = useMemo<ReferralAccessContextValue>(() => {
     return {

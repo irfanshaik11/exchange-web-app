@@ -9,11 +9,10 @@ import { useTurnkey, ClientState, AuthState } from '@turnkey/react-wallet-kit';
 import { GoogleOAuthProvider, GoogleLogin, type CredentialResponse } from '@react-oauth/google';
 import { sha256 } from '@noble/hashes/sha256';
 import { bytesToHex } from '@noble/hashes/utils';
-import bs58 from "bs58";
-import { clearStoredReferralCodeHint, getStoredReferralCodeHint } from "../utils/referralStorage";
 import { useUserLimit } from "./UserLimitContext";
 import { ApiError } from "../utils/api";
 import { FiCheck, FiAlertCircle, FiLoader } from 'react-icons/fi';
+import { useWalletDiscovery, type DiscoveredWallet } from '../hooks/useWalletDiscovery';
 
 const isDev = process.env.NODE_ENV !== 'production';
 const ENABLE_EMAIL_AUTH = false;
@@ -58,9 +57,6 @@ const recordPasskeyReady = () => {
   }
 };
 
-const buildWalletLoginMessage = () =>
-  `Login to Interstate with nonce: ${Date.now()}`;
-
 export default function LoginModal({ open, onClose, forceLogin = false }: LoginModalProps) {
   const [mode, setMode] = useState<'login' | 'signup'>('login');
   const [email, setEmail] = useState('');
@@ -70,8 +66,6 @@ export default function LoginModal({ open, onClose, forceLogin = false }: LoginM
   
   // Separate loading states for each login method
   const [loading, setLoading] = useState(false); // For email/password login
-  const [phantomLoading, setPhantomLoading] = useState(false);
-  const [metamaskLoading, setMetamaskLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
   const [googleNonce, setGoogleNonce] = useState<string | null>(null);
   const pubKeyRef = useRef<string | null>(null);
@@ -84,7 +78,6 @@ export default function LoginModal({ open, onClose, forceLogin = false }: LoginM
   const { refreshUser, user, loading: userLoading } = useUser();
   const { setUserLimitReached } = useUserLimit();
   const [wiggle, setWiggle] = useState(false);
-  const [showWalletOptions, setShowWalletOptions] = useState(false);
 
   // Username setup step for new users
   const [loginStep, setLoginStep] = useState<'auth' | 'username'>('auth');
@@ -102,11 +95,20 @@ export default function LoginModal({ open, onClose, forceLogin = false }: LoginM
 const turnkey = useTurnkey();
 const authState = turnkey?.authState;
 const clientState = turnkey?.clientState;
+
+  // Dynamic wallet discovery
+  const {
+    allWallets,
+    activeWalletId,
+    walletError: discoveryWalletError,
+    clearError: clearDiscoveryError,
+    connectAndSign,
+  } = useWalletDiscovery();
+
   // Helper function to clear all loading states
   const clearAllLoadingStates = () => {
-    setPhantomLoading(false);
-    setMetamaskLoading(false);
     setGoogleLoading(false);
+    clearDiscoveryError();
     setError(null);
     setWalletError(null);
   };
@@ -316,6 +318,49 @@ const clientState = turnkey?.clientState;
       }
     })();
   }, [open, turnkey, clientState, googleNonce]);
+
+  // Unified wallet login handler via wallet discovery
+  // IMPORTANT: This useCallback must be ABOVE the early return to satisfy React's rules of hooks
+  const handleWalletLogin = useCallback(
+    (wallet: DiscoveredWallet) => {
+      setError(null);
+      setWalletError(null);
+      setSuccess(null);
+
+      connectAndSign(wallet, {
+        onToken: async (token, isNewUser) => {
+          isDev && console.log("[LoginModal] Wallet login response:", { isNewUser, walletName: wallet.name });
+
+          if (isNewUser) {
+            isInNewUserFlowRef.current = true;
+          }
+
+          await refreshUser();
+          setSuccess(`${wallet.name} login successful`);
+          recordAuthMethod("wallet");
+
+          if (isNewUser) {
+            isDev && console.log("[LoginModal] New user detected, showing username step");
+            setLoginStep('username');
+            window.dispatchEvent(new CustomEvent('login-modal-keep-open'));
+          } else {
+            isDev && console.log("[LoginModal] Existing user, closing modal");
+            onClose();
+          }
+        },
+        onError: (msg) => {
+          console.error("[LoginModal] Wallet login error:", msg);
+          setWalletError(msg);
+          toast.error(msg);
+        },
+        onUserLimitReached: (msg) => {
+          setUserLimitReached(msg);
+          setWalletError(null);
+        },
+      });
+    },
+    [connectAndSign, refreshUser, onClose, setUserLimitReached],
+  );
 
   if (!open && !show) return null;
 
@@ -579,219 +624,6 @@ async function handleGoogleSuccess(resp: CredentialResponse) {
   };
 
 
-  // Phantom Wallet Login handler - server-side Turnkey wallet + backend JWT
-  async function handlePhantomLogin() {
-    setPhantomLoading(true);
-    setError(null);
-    setWalletError(null);
-    setSuccess(null);
-
-    try {
-      if (!BACKEND_URL) {
-        throw new Error("Backend URL is not configured");
-      }
-
-      const provider = (window as any).solana;
-      if (!provider) {
-        setWalletError('Phantom wallet not found. Please install Phantom wallet and refresh the page.');
-        return;
-      }
-
-      const connectionResult = await provider.connect?.();
-      const publicKey =
-        connectionResult?.publicKey?.toString?.() ||
-        provider.publicKey?.toString?.();
-
-      if (!publicKey) {
-        setWalletError('Unable to read Phantom public key. Please try again.');
-        return;
-      }
-
-      const message = buildWalletLoginMessage();
-      const encodedMessage = new TextEncoder().encode(message);
-      const signed = await provider.signMessage(encodedMessage, "utf8");
-      const signatureBytes = signed?.signature || signed;
-      const signatureBase58 = bs58.encode(signatureBytes);
-
-      const referralCode = getStoredReferralCodeHint() || undefined;
-
-      const response = await fetch(`${BACKEND_URL}/api/users/phantom/login`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          publicKey,
-          signature: signatureBase58,
-          message,
-          referralCode,
-        }),
-      });
-
-      const data = await response.json().catch(() => ({}));
-      if (!response.ok) {
-        // Check for user limit error
-        if (data?.code === 'USER_LIMIT_REACHED') {
-          setUserLimitReached(data?.message);
-          setWalletError(null);
-          return;
-        }
-        const errorMsg = data?.error || `Phantom login failed (${response.status})`;
-        throw new Error(errorMsg);
-      }
-
-      const token = data?.token;
-      if (!token) {
-        throw new Error("Login succeeded but no token was returned.");
-      }
-
-      Cookies.set("token", token, { expires: 7, path: "/" });
-      clearStoredReferralCodeHint();
-
-      // Check if this is a new user (backend returns isNewUser flag)
-      const isNewUser = data?.isNewUser === true;
-      isDev && console.log("[LoginModal] Phantom login response:", { isNewUser, data });
-
-      // If new user, set the ref BEFORE refreshUser to prevent useEffect from interfering
-      if (isNewUser) {
-        isInNewUserFlowRef.current = true;
-      }
-
-      await refreshUser();
-      setSuccess("Phantom login successful");
-      recordAuthMethod("wallet");
-
-      // If new user, show username step; otherwise close
-      if (isNewUser) {
-        isDev && console.log("[LoginModal] New user detected, showing username step");
-        setLoginStep('username');
-        // Dispatch event to tell parent NOT to auto-close the modal
-        window.dispatchEvent(new CustomEvent('login-modal-keep-open'));
-      } else {
-        isDev && console.log("[LoginModal] Existing user, closing modal");
-        onClose();
-      }
-    } catch (error: any) {
-      console.error("[LoginModal] Phantom login error:", error);
-      const msg = error?.message || "Phantom login failed. Please try again.";
-      setWalletError(msg);
-      toast.error(msg);
-    } finally {
-      setPhantomLoading(false);
-    }
-  }
-
-  // MetaMask Wallet Login handler - server-side Turnkey wallet + backend JWT
-  async function handleMetamaskLogin() {
-    setMetamaskLoading(true);
-    setError(null);
-    setWalletError(null);
-    setSuccess(null);
-
-    try {
-      if (!BACKEND_URL) {
-        throw new Error("Backend URL is not configured");
-      }
-
-      const rawProvider = (window as any).ethereum;
-      let ethereum = null;
-
-      if (rawProvider?.providers && Array.isArray(rawProvider.providers)) {
-        // Multiple wallets installed — find MetaMask specifically
-        ethereum = rawProvider.providers.find((p: any) => p.isMetaMask === true);
-      } else if (rawProvider?.isMetaMask === true) {
-        // Single provider that is MetaMask
-        ethereum = rawProvider;
-      }
-
-      if (!ethereum) {
-        setWalletError('MetaMask wallet not found. Please install MetaMask extension.');
-        return;
-      }
-
-      const accounts: string[] = await ethereum.request({
-        method: "eth_requestAccounts",
-      });
-      const address = accounts?.[0];
-      if (!address) {
-        setWalletError("Unable to read MetaMask address. Please try again.");
-        return;
-      }
-
-      const message = buildWalletLoginMessage();
-      const signature = await ethereum.request({
-        method: "personal_sign",
-        params: [message, address],
-      });
-
-      const referralCode = getStoredReferralCodeHint() || undefined;
-
-      const response = await fetch(`${BACKEND_URL}/api/users/metamask/login`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          address,
-          signature,
-          message,
-          referralCode,
-        }),
-      });
-
-      const data = await response.json().catch(() => ({}));
-      if (!response.ok) {
-        // Check for user limit error
-        if (data?.code === 'USER_LIMIT_REACHED') {
-          setUserLimitReached(data?.message);
-          setWalletError(null);
-          return;
-        }
-        const errorMsg = data?.error || `MetaMask login failed (${response.status})`;
-        throw new Error(errorMsg);
-      }
-
-      const token = data?.token;
-      if (!token) {
-        throw new Error("Login succeeded but no token was returned.");
-      }
-
-      Cookies.set("token", token, { expires: 7, path: "/" });
-      clearStoredReferralCodeHint();
-
-      // Check if this is a new user (backend returns isNewUser flag)
-      const isNewUser = data?.isNewUser === true;
-      isDev && console.log("[LoginModal] MetaMask login response:", { isNewUser, data });
-
-      // If new user, set the ref BEFORE refreshUser to prevent useEffect from interfering
-      if (isNewUser) {
-        isInNewUserFlowRef.current = true;
-      }
-
-      await refreshUser();
-      setSuccess("MetaMask login successful");
-      recordAuthMethod("wallet");
-
-      // If new user, show username step; otherwise close
-      if (isNewUser) {
-        isDev && console.log("[LoginModal] New user detected, showing username step");
-        setLoginStep('username');
-        // Dispatch event to tell parent NOT to auto-close the modal
-        window.dispatchEvent(new CustomEvent('login-modal-keep-open'));
-      } else {
-        isDev && console.log("[LoginModal] Existing user, closing modal");
-        onClose();
-      }
-    } catch (error: any) {
-      console.error("[LoginModal] MetaMask login error:", error);
-      const msg = error?.message || "MetaMask login failed. Please try again.";
-      setWalletError(msg);
-      toast.error(msg);
-    } finally {
-      setMetamaskLoading(false);
-    }
-  }
-
   // Handle close attempt
   const handleClose = () => {
     if (forceLogin) {
@@ -808,10 +640,10 @@ async function handleGoogleSuccess(resp: CredentialResponse) {
       open={open}
       onClose={handleClose}
       align="center"
-      className={`relative w-[460px] max-w-[94vw] overflow-hidden rounded-[28px] border border-white/5 bg-[#0c0f18]/95 p-8 pt-12 shadow-[0_48px_160px_rgba(12,20,33,0.6)] backdrop-blur-xl text-neutral-100 ${wiggle ? ' wiggle' : ''}`}
+      className={`relative w-[460px] max-w-[94vw] max-h-[90vh] overflow-y-auto rounded-[28px] border border-white/5 bg-[#0c0f18]/95 p-8 pt-12 shadow-[0_48px_160px_rgba(12,20,33,0.6)] backdrop-blur-xl text-neutral-100 ${wiggle ? ' wiggle' : ''}`}
       disableClickOutside={forceLogin}
-      zIndex={150}
-      overlayClassName="bg-[radial-gradient(circle_at_22%_18%,rgba(16,185,129,0.02),transparent_62%),radial-gradient(circle_at_78%_20%,rgba(59,130,246,0.02),transparent_58%),radial-gradient(circle_at_center,rgba(12,18,32,0.05),rgba(6,8,12,0.08))] !backdrop-blur-[2px]"
+      zIndex={10000}
+      overlayClassName="bg-[radial-gradient(circle_at_22%_18%,rgba(16,185,129,0.02),transparent_62%),radial-gradient(circle_at_78%_20%,rgba(59,130,246,0.02),transparent_58%),radial-gradient(circle_at_center,rgba(12,18,32,0.05),rgba(6,8,12,0.08))]"
     >
       <div className="pointer-events-none absolute -inset-14 -z-10 bg-[radial-gradient(circle_at_top_left,rgba(16,185,129,0.25),transparent_55%),radial-gradient(circle_at_bottom_right,rgba(110,231,183,0.12),transparent_55%),radial-gradient(circle_at_top_right,rgba(129,140,248,0.2),transparent_55%)] opacity-80 blur-[90px]" />
       <div className="pointer-events-none absolute inset-0 -z-10 bg-[radial-gradient(circle_at_center,rgba(148,163,184,0.12),transparent_70%)]" />
@@ -1070,83 +902,38 @@ async function handleGoogleSuccess(resp: CredentialResponse) {
           </InterstateButton>
         )}
 
-        <InterstateButton
-          type="button"
-          fullWidth
-          variant="secondary"
-          onClick={() => {
-            clearAllLoadingStates();
-            setShowWalletOptions(!showWalletOptions);
-          }}
-          disabled={phantomLoading || metamaskLoading}
-          className={`flex items-center justify-between hover:bg-neutral-800 transition-colors ${AUTH_BUTTON_WIDTH_CLASS}`}
-        >
-          <span className="flex items-center gap-2 font-normal text-sm">
-            <img src="/Phantom-Wallet-300x300.png" alt="Phantom" className="w-6 h-6 rounded-[100px]" />
-            Continue with crypto wallet 
-          </span>
-          <div className={`flex items-center justify-center transform transition-transform duration-200 ${showWalletOptions ? 'rotate-180' : ''}`}>
-            <svg className="w-4 h-4 text-neutral-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-            </svg>
-          </div>
-        </InterstateButton>
       </div>
-      
-      {walletError && <div className="text-xs text-red-400 mt-4 text-center">{walletError}</div>}
 
+      {(walletError || discoveryWalletError) && <div className="text-xs text-red-400 mt-4 text-center">{walletError || discoveryWalletError}</div>}
 
-      {/* Wallet Options with Better Design */}
-      {showWalletOptions && (
-        <div className={`mt-4 overflow-hidden transition-all duration-300 ease-in-out ${AUTH_BUTTON_WIDTH_CLASS}`}>
-          <div className="bg-neutral-800/50 rounded-xl p-4 border border-neutral-700/50">
-            <div className="text-xs text-neutral-400 mb-3 font-medium">Choose your wallet</div>
-            <div className="space-y-2">
-              {/* MetaMask */}
+      {/* Wallet list — shown directly, no toggle */}
+      {allWallets.length > 0 && (
+        <div className={`mt-4 ${AUTH_BUTTON_WIDTH_CLASS}`}>
+          <div className="text-xs text-neutral-500 mb-2 font-medium">Sign in with wallet</div>
+          <div className="space-y-1.5 max-h-[35vh] overflow-y-auto pr-1">
+            {allWallets.map((w) => (
               <button
+                key={w.id}
                 type="button"
-                className={`w-full flex items-center justify-between p-3 rounded-lg transition-all duration-200 bg-neutral-700/50 hover:bg-neutral-600/50 border border-neutral-600/50 hover:border-neutral-500/50 ${metamaskLoading ? 'opacity-50 cursor-not-allowed' : ''}`}
+                className={`w-full flex items-center gap-3 p-3 rounded-lg transition-colors bg-neutral-700/50 hover:bg-neutral-600/50 border border-neutral-600/50 hover:border-neutral-500/50 ${activeWalletId === w.id ? 'opacity-50 cursor-not-allowed' : ''} ${activeWalletId && activeWalletId !== w.id ? 'opacity-30 pointer-events-none' : ''}`}
                 onClick={() => {
-                  setPhantomLoading(false);
                   setGoogleLoading(false);
-                  handleMetamaskLogin();
+                  handleWalletLogin(w);
                 }}
-                disabled={metamaskLoading}
+                disabled={!!activeWalletId}
               >
-                <div className="flex items-center gap-3">
-                  <img src="/MetaMask-icon-fox.svg" alt="MetaMask" className="w-5 h-5" />
-                  <div className="flex flex-col items-start">
-                    <span className="font-medium text-sm">MetaMask</span>
-                    {metamaskLoading && (
-                      <span className="text-xs text-yellow-400">Connecting...</span>
-                    )}
-                  </div>
-                </div>
+                <img
+                  src={w.icon}
+                  alt=""
+                  className="w-5 h-5 rounded-full shrink-0"
+                  onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+                />
+                <span className="font-medium text-sm">{w.name}</span>
+                {activeWalletId === w.id && (
+                  <span className="ml-auto text-xs text-yellow-400">Connecting...</span>
+                )}
               </button>
-
-              {/* Phantom */}
-              <button
-                type="button"
-                className={`w-full flex items-center justify-between p-3 rounded-lg transition-all duration-200 bg-neutral-700/50 hover:bg-neutral-600/50 border border-neutral-600/50 hover:border-neutral-500/50 ${phantomLoading ? 'opacity-50 cursor-not-allowed' : ''}`}
-                onClick={() => {
-                  setMetamaskLoading(false);
-                  setGoogleLoading(false);
-                  handlePhantomLogin();
-                }}
-                disabled={phantomLoading}
-              >
-                <div className="flex items-center gap-3">
-                  <img src="/Phantom-Wallet-300x300.png" alt="Phantom" className="w-5 h-5 rounded-full" />
-                  <div className="flex flex-col items-start">
-                    <span className="font-medium text-sm">Phantom</span>
-                    {phantomLoading && (
-                      <span className="text-xs text-yellow-400">Connecting...</span>
-                    )}
-                  </div>
-                </div>
-              </button>
-
-            </div>
+            ))}
           </div>
         </div>
       )}

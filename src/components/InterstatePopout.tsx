@@ -62,9 +62,9 @@ export default function InterstatePopout({
       : "opacity-0 pointer-events-none"
   }`;
   const overlayCenter =
-    "flex items-center justify-center bg-black/40 backdrop-blur-sm";
+    "flex items-center justify-center bg-black/60 overflow-y-auto";
   const overlayTopRight =
-    "flex items-start justify-end bg-black/40 backdrop-blur-sm";
+    "flex items-start justify-end bg-black/60";
 
   // Double-check: if not visible, ensure pointer-events are disabled via inline style too
   return (

@@ -269,6 +269,19 @@ export const metamaskLogin = (
   });
 };
 
+export const walletLogin = (
+  chain: 'solana' | 'ethereum',
+  address: string,
+  signature: string,
+  message: string,
+  walletName?: string,
+  referralCode?: string,
+) =>
+  apiFetch<{ token: string; isNewUser?: boolean }>("/api/users/wallet/login", {
+    method: "POST",
+    body: { chain, address, signature, message, ...(walletName && { walletName }), ...(referralCode && { referralCode }) },
+  });
+
 export const turnkeyLogin = (
   params: {
     turnkeySessionToken: string;
