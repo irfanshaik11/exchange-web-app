@@ -917,6 +917,7 @@ interface TradeActionPanelProps {
   wsVolume?: SolanaTokenVolume | null; // Volume data from unified WebSocket
   liveMarketCapUsd?: number | null; // Real-time MC from chart/WebSocket (same source as header)
   liveLiquidityUsd?: number | null; // Real-time liquidity from WebSocket (same source as header)
+  livePriceUsd?: number | null; // Real-time USD price from chart OHLC data
 }
 
 const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
@@ -928,6 +929,7 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
   wsVolume,
   liveMarketCapUsd,
   liveLiquidityUsd,
+  livePriceUsd,
 }) => {
   // Live SOL price from Pyth Network (same source as footer)
   const { solPrice: liveSolPrice } = useSolPrice();
@@ -1246,6 +1248,11 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
     if (baseMarketCap > 0 && supply > 0 && solUsd > 0) {
       return baseMarketCap / (supply * solUsd);
     }
+    // Strong fallback: live chart price / SOL price (works even without total_supply)
+    const chartPrice = typeof livePriceUsd === "number" && Number.isFinite(livePriceUsd) ? livePriceUsd : 0;
+    if (chartPrice > 0 && solUsd > 0) {
+      return chartPrice / solUsd;
+    }
     // Fallback: derive from usd_price / SOL price
     const usdPrice = Number(token?.usd_price) || 0;
     if (usdPrice > 0 && solUsd > 0) {
@@ -1253,7 +1260,24 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
     }
     // Last resort: static sol_price
     return token?.sol_price || 0;
-  }, [baseMarketCap, token?.total_supply, token?.usd_price, token?.sol_price, liveSolPrice]);
+  }, [baseMarketCap, token?.total_supply, token?.usd_price, token?.sol_price, liveSolPrice, livePriceUsd]);
+
+  // Token price in SOL at the limit order's target market cap
+  const limitTokenPriceInSol = useMemo(() => {
+    if (tab !== "limit") return 0;
+    const supply = token?.total_supply || 0;
+    const solUsd = liveSolPrice > 0 ? liveSolPrice : 0;
+    const tmc = Number(targetMC);
+    if (tmc > 0 && supply > 0 && solUsd > 0) {
+      return tmc / (supply * solUsd);
+    }
+    return 0;
+  }, [tab, token?.total_supply, liveSolPrice, targetMC]);
+
+  // For buy estimates: use target price in limit tab, current price in market tab
+  const effectiveBuyTokenPrice = tab === "limit" && limitTokenPriceInSol > 0
+    ? limitTokenPriceInSol
+    : liveTokenPriceInSol;
 
   const sliderBaseMarketCap = useMemo(() => {
     if (baseMarketCap > 0) {
@@ -3182,7 +3206,7 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
           {/* Presets */}
           {(() => {
             const isSellWithPosition = mode === "sell" && positionData && positionData.remaining > 0;
-            const isBuyWithPrice = mode === "buy" && liveTokenPriceInSol > 0;
+            const isBuyWithPrice = mode === "buy" && effectiveBuyTokenPrice > 0;
             const showSubtext = isSellWithPosition || isBuyWithPrice;
             const presetRowHeight = showSubtext ? "h-12" : "h-9";
             return (
@@ -3194,7 +3218,7 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
                 const tokenAmountForPreset = isSellWithPosition
                   ? (opt / 100) * positionData.remaining
                   : isBuyWithPrice
-                    ? opt / liveTokenPriceInSol
+                    ? opt / effectiveBuyTokenPrice
                     : null;
                 if (editingPresets) {
                   return (
@@ -3543,13 +3567,23 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
                       </defs>
                     </svg>
                   </div>
-                  {liveTokenPriceInSol > 0 && Number(amount) > 0 && (
-                    <span className="text-[#9CA3AF]"> (~{formatCompactNumber(Number(amount) / liveTokenPriceInSol)} tokens)</span>
+                  {effectiveBuyTokenPrice > 0 && Number(amount) > 0 && (
+                    <span className="text-[#9CA3AF]"> (~{formatCompactNumber(Number(amount) / effectiveBuyTokenPrice)} tokens)</span>
                   )}
                 </>
               )}
             </>
           ) : null}
+        </div>
+      )}
+
+      {/* Est. receive row for buy mode */}
+      {mode === "buy" && effectiveBuyTokenPrice > 0 && Number(isSniperMode ? sniperAmount : amount) > 0 && (
+        <div className="mx-3 mt-1 flex items-center justify-between rounded-md bg-[#1A1B1E] px-3 py-1.5">
+          <span className="text-[11px] text-[#9CA3AF]">Est. receive</span>
+          <span className="text-[12px] font-semibold text-[#E6E7EA] tabular-nums">
+            ~{formatCompactNumber(Number(isSniperMode ? sniperAmount : amount) / effectiveBuyTokenPrice)} {token.symbol}
+          </span>
         </div>
       )}
 
@@ -3618,8 +3652,8 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
               {mode === "sell" && positionData && positionData.remaining > 0 && Number(amount) > 0 && (
                 <> {formatCompactNumber((Number(amount) / 100) * positionData.remaining)}</>
               )}
-              {mode === "buy" && liveTokenPriceInSol > 0 && Number(amount) > 0 && (
-                <> ~{formatCompactNumber(Number(amount) / liveTokenPriceInSol)}</>
+              {mode === "buy" && effectiveBuyTokenPrice > 0 && Number(amount) > 0 && (
+                <> ~{formatCompactNumber(Number(amount) / effectiveBuyTokenPrice)}</>
               )}
               {" "}{token.symbol}
               {prettyAmt(amount) && (

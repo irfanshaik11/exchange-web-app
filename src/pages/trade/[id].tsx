@@ -1220,6 +1220,7 @@ export default function TradePage() {
                   wsVolume={wsVolume}
                   liveMarketCapUsd={liveMarketCapForPanel}
                   liveLiquidityUsd={wsTokenInfo?.liquidity_usd}
+                  livePriceUsd={validChartMetrics.lastPriceUsd}
                 />
               </div>
 
@@ -1288,6 +1289,7 @@ export default function TradePage() {
                 wsVolume={wsVolume}
                 liveMarketCapUsd={liveMarketCapForPanel}
                 liveLiquidityUsd={wsTokenInfo?.liquidity_usd}
+                livePriceUsd={validChartMetrics.lastPriceUsd}
               />
             </div>
           </div>
