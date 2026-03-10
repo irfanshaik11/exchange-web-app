@@ -44,6 +44,7 @@ import { storeReferralCodeHint, getStoredReferralCodeHint, clearStoredReferralCo
 import PagePreloader from '../components/PagePreloader';
 import { PulseBackgroundLoader } from '../components/PulseBackgroundLoader';
 import { SolanaPositionWebSocketProvider } from '../contexts/SolanaPositionWebSocketContext';
+import { DockedPanelProvider } from '../contexts/DockedPanelContext';
 import ErrorBoundary from '../components/ErrorBoundary';
 
 const isDev = process.env.NODE_ENV !== 'production';
@@ -866,11 +867,13 @@ const MyApp: AppType = ({ Component, pageProps }) => {
                             <WalletTrackerProvider>
                               <SolanaPositionWebSocketProvider>
                                 <ReferralAccessGate>
-                                  <PagePreloader />
-                                  <PulseBackgroundLoader />
-                                  <ErrorBoundary>
-                                    <Component {...pageProps} />
-                                  </ErrorBoundary>
+                                  <DockedPanelProvider>
+                                    <PagePreloader />
+                                    <PulseBackgroundLoader />
+                                    <ErrorBoundary>
+                                      <Component {...pageProps} />
+                                    </ErrorBoundary>
+                                  </DockedPanelProvider>
                                 </ReferralAccessGate>
                               </SolanaPositionWebSocketProvider>
                             </WalletTrackerProvider>
