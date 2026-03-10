@@ -28,6 +28,8 @@ import FastImage from "~/components/FastImage";
 import { preloadTradeChart } from "~/utils/preloadTradeChart";
 import { FiBell } from 'react-icons/fi';
 
+const isDev = process.env.NODE_ENV !== 'production';
+
 const HISTORY_LIMIT = 100;
 // Use 7 days window to ensure backfilled transactions are included
 const HISTORY_WINDOW_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
@@ -821,7 +823,7 @@ export function WalletTrackerProvider({
         MAX_RECONNECT_DELAY
       );
       reconnectAttempts++;
-      console.log(`[WalletTracker] Reconnecting in ${delay}ms (attempt ${reconnectAttempts})`);
+      isDev && console.log(`[WalletTracker] Reconnecting in ${delay}ms (attempt ${reconnectAttempts})`);
 
       reconnectTimeout = setTimeout(() => {
         initializeWebSocket();
@@ -861,7 +863,7 @@ export function WalletTrackerProvider({
         clearTimeout(reconnectTimeout);
       }
       if (connection) {
-        console.log("Closing WebSocket connection (cleanup)...");
+        isDev && console.log("Closing WebSocket connection (cleanup)...");
         connection.close();
       }
       subscribedWalletsRef.current = [];

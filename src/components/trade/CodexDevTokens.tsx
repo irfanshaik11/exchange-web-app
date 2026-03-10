@@ -279,7 +279,6 @@ const CodexDevTokens: React.FC<CodexDevTokensProps> = ({ token, chain = 'sol', o
   const displayTokens = useMemo(() => {
     // WebSocket data takes priority when available
     if (mappedWsDevTokens.length > 0) {
-      console.log('[CodexDevTokens] Using WebSocket dev tokens:', mappedWsDevTokens.length);
       return mappedWsDevTokens;
     }
     // Fall back to REST API data

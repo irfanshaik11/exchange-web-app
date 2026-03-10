@@ -5,6 +5,8 @@ import { getMyLimitOrders, updateLimitOrder } from "~/utils/api";
 import { useUser } from "./UserContext";
 import toast from "react-hot-toast";
 
+const isDev = process.env.NODE_ENV !== 'production';
+
 interface LimitOrder {
   id: string;
   tokenAddress: string;
@@ -41,7 +43,7 @@ export default function LimitOrdersPanel() {
     try {
       const response = await getMyLimitOrders(user.bearerToken);
       setOrders(response.orders || []);
-      console.log('Fetched limit orders:', response.orders);
+      isDev && console.log('Fetched limit orders:', response.orders);
     } catch (error: any) {
       console.error('Failed to fetch limit orders:', error);
       toast.error('Failed to load limit orders');
@@ -59,9 +61,13 @@ export default function LimitOrdersPanel() {
       toast.success('Order cancelled successfully');
       
       // Update local state
-      setOrders(prev => prev.map(order => 
+      setOrders(prev => prev.map(order =>
         order.id === orderId ? { ...order, status: "Cancelled" as const, failureReason: undefined, failureCode: undefined } : order
       ));
+      // Notify chart to remove the dotted line
+      if (typeof window !== "undefined") {
+        window.dispatchEvent(new CustomEvent("limit-order-update"));
+      }
     } catch (error: any) {
       console.error('Failed to cancel order:', error);
       toast.error(`Failed to cancel: ${error.message}`);

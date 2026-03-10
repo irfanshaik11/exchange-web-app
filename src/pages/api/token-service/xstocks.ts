@@ -1,5 +1,7 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 
+const isDev = process.env.NODE_ENV !== 'production';
+
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
 
   // Disable server-side caching/etag for this proxy to prevent 304s
@@ -53,8 +55,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   try {
     const url = `${goBase}/v1/xstocks?${params.toString()}`;
-    console.log('[Proxy:xstocks] Using Go token service:', url);
-    console.log('[Proxy:xstocks] Environment check - NEXT_PUBLIC_GO_SERVICE_URL:', process.env.NEXT_PUBLIC_GO_SERVICE_URL);
+    isDev && console.log('[Proxy:xstocks] Using Go token service:', url);
+    isDev && console.log('[Proxy:xstocks] Environment check - NEXT_PUBLIC_GO_SERVICE_URL:', process.env.NEXT_PUBLIC_GO_SERVICE_URL);
     
     const upstream = await fetchWithTimeout(url, 5000);
     

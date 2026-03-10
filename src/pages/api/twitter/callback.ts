@@ -5,6 +5,8 @@ import {
   getTwitterUser,
 } from '../../../utils/twitterAuth';
 
+const isDev = process.env.NODE_ENV !== 'production';
+
 /**
  * Handles Twitter OAuth 2.0 callback
  * 
@@ -21,9 +23,9 @@ export default async function handler(
   }
 
   try {
-    console.log('[Twitter OAuth] Callback received');
-    console.log('[Twitter OAuth] Query params:', { 
-      hasCode: !!req.query.code, 
+    isDev && console.log('[Twitter OAuth] Callback received');
+    isDev && console.log('[Twitter OAuth] Query params:', {
+      hasCode: !!req.query.code,
       hasState: !!req.query.state,
       hasError: !!req.query.error,
       error: req.query.error,
@@ -131,11 +133,11 @@ export default async function handler(
           }),
         }).catch(err => {
           // Silently fail - frontend will handle saving with proper user context
-          console.log('[Twitter OAuth] Could not save Twitter info from callback (frontend will handle):', err.message);
+          isDev && console.log('[Twitter OAuth] Could not save Twitter info from callback (frontend will handle):', err.message);
         });
       } catch (error) {
         // Silently fail - frontend will handle saving with proper user context
-        console.log('[Twitter OAuth] Could not save Twitter info from callback (frontend will handle)');
+        isDev && console.log('[Twitter OAuth] Could not save Twitter info from callback (frontend will handle)');
       }
     }
 

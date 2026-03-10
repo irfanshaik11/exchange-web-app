@@ -263,8 +263,6 @@ const MonadTradeActionPanel: React.FC<MonadTradeActionPanelProps> = ({ token }) 
     const pending = pendingToastRef.current;
     if (!pending) return;
 
-    console.log('[MonadTradeActionPanel] 🚀 INSTANT txHash via WebSocket:', data.txHash);
-
     // For multi-wallet trades: Don't update the toast (count was already shown at timer cap)
     // For single wallet: Update the link element with clickable Monad logo
     if (pending.totalSelectedWallets === 1) {
@@ -286,9 +284,8 @@ const MonadTradeActionPanel: React.FC<MonadTradeActionPanelProps> = ({ token }) 
   const { position: wsPosition, loading: positionLoading, connected: positionConnected, refreshPosition } = useMonadPositionWebSocket({
     tokenAddress,
     enabled: !!user?.id, // Don't require tokenAddress - we want to receive txHash even before token is loaded
-    onUpdate: (pos) => {
+    onUpdate: (_pos) => {
       // Position updated via WebSocket
-      console.log('[MonadTradeActionPanel] Position updated via WebSocket:', pos);
     },
     onTxHash: handleWsTxHash, // INSTANT txHash callback
   });

@@ -1,3 +1,5 @@
+const isDev = process.env.NODE_ENV !== 'production';
+
 import { tradeBuy } from "./api";
 import { broadcastTradeCompleted } from "./tradeEvents";
 
@@ -412,7 +414,7 @@ export async function executeSolanaMultiBuy({
   // IMPORTANT: For multi-wallet mode, let BACKEND validate and distribute
   // Don't block on frontend if primary wallet has no balance - other wallets might!
   if (selectedWalletIds.length > 1) {
-    console.log(`🚀 Using NEW backend multi-wallet API (1 call for ${allocations.length} wallets)`);
+    isDev && console.log(`Using backend multi-wallet API (1 call for ${allocations.length} wallets)`);
 
     try {
       const result = await tradeBuy(
@@ -506,7 +508,7 @@ export async function executeSolanaMultiBuy({
   // ========================================
   // OLD: Sequential approach (single wallet OR fallback)
   // ========================================
-  console.log(`🔄 Using sequential API calls (${allocations.length} wallet${allocations.length > 1 ? 's' : ''})`);
+  isDev && console.log(`Using sequential API calls (${allocations.length} wallet${allocations.length > 1 ? 's' : ''})`);
 
   // Validate balance ONLY for sequential mode (single wallet or fallback)
   if (allocations.length === 0) {
@@ -582,7 +584,7 @@ export async function executeSolanaMultiBuy({
         const retryWith = (result as any)?.retryWith;
 
         if (errorCode === 'BONDING_CURVE_COMPLETE' && retryWith?.poolAddress && retryWith?.poolType) {
-          console.log(`🔄 Token graduated - retrying with migrated pool: ${retryWith.poolType}`);
+          isDev && console.log(`Token graduated - retrying with migrated pool: ${retryWith.poolType}`);
 
           // Retry the trade with the migrated pool info
           try {
@@ -612,7 +614,7 @@ export async function executeSolanaMultiBuy({
             const retryIsSuccessful = retryResult && (retryResult as any).success !== false && retryTxHash;
 
             if (retryIsSuccessful && retryTxHash) {
-              console.log(`✅ Retry with migrated pool successful: ${retryTxHash}`);
+              isDev && console.log(`Retry with migrated pool successful: ${retryTxHash}`);
               onTxHash?.({ allocation, txHash: retryTxHash });
               results.push({ allocation, result: retryResult });
               onWalletSuccess?.({

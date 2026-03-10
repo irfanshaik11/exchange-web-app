@@ -78,6 +78,38 @@ const HIGH_SLIPPAGE_WARNING_THRESHOLD = 50; // Percent
 const LIMIT_ORDER_TOLERANCE_BPS = Number(process.env.NEXT_PUBLIC_LIMIT_ORDER_TOLERANCE_BPS ?? "100");
 const TOKEN_SERVICE_URL = (process.env.NEXT_PUBLIC_TOKEN_SERVICE_URL || "").replace(/\/$/, "");
 const LIMIT_ORDER_STATUS_EVENT = "limit-order-update";
+
+/** Normalize a raw order entity from createLimitOrder response into the shape getUserLimitOrders returns */
+function normalizeOrderForEvent(rawOrder: any) {
+  if (!rawOrder) return undefined;
+  return {
+    id: String(rawOrder.id),
+    tokenAddress: rawOrder.tokenAddress,
+    pairAddress: rawOrder.pairAddress ?? null,
+    type: rawOrder.type,
+    direction: rawOrder.direction,
+    targetMC: Number(rawOrder.targetMC) || 0,
+    solAmount: Number(rawOrder.solAmount) || 0,
+    tokenAmount: Number(rawOrder.tokenAmount) || 0,
+    status: "Active" as const,
+    createdAt: rawOrder.createdAt ? new Date(rawOrder.createdAt).toISOString() : new Date().toISOString(),
+    slippage: Number(rawOrder.slippage) || 0,
+    priorityFee: Number(rawOrder.priorityFee) || 0,
+    bribe: Number(rawOrder.bribe) || 0,
+    mevMode: rawOrder.mevMode ?? null,
+    autoFee: rawOrder.autoFee ?? false,
+    poolType: rawOrder.poolType ?? null,
+    triggerType: rawOrder.triggerType,
+    bondingTarget: Number(rawOrder.bondingTarget) || 0,
+    initialBondingPct: Number(rawOrder.initialBondingPct) || 0,
+    devWallet: rawOrder.devWallet ?? null,
+    transactionHash: null,
+    failureReason: null,
+    failureCode: null,
+  };
+}
+const LIMIT_PREVIEW_EVENT = "limit-preview-update";
+const LIMIT_PREVIEW_CLEAR_EVENT = "limit-preview-clear";
 const LIMIT_ORDER_POLL_INTERVAL_MS = 2000;
 const LIMIT_ORDER_MAX_POLLS = 40;
 const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -105,7 +137,6 @@ async function fetchPairAddressFromTokenService(mintAddress: string): Promise<st
     const data = await response.json();
     const pairAddress = data?.pair_address;
     if (typeof pairAddress === "string" && pairAddress.length > 0) {
-      console.log(`✅ Fetched pair address from token service for ${mintAddress}: ${pairAddress}`);
       return pairAddress;
     }
     return null;
@@ -260,7 +291,6 @@ const TokenInfoDropdown: React.FC<{ token: any; liveMarketCapUsd?: number | null
         <button
           onClick={() => {
             // Refresh action could go here
-            console.log('Refresh token info');
           }}
           className="p-1 rounded hover:bg-[#1E1F26] transition-colors"
         >
@@ -948,8 +978,16 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
   useEffect(() => {
     return () => {
       isMountedRef.current = false;
+      window.dispatchEvent(new CustomEvent(LIMIT_PREVIEW_CLEAR_EVENT));
     };
   }, []);
+
+  // Clear preview line when leaving limit tab
+  useEffect(() => {
+    if (tab !== "limit") {
+      window.dispatchEvent(new CustomEvent(LIMIT_PREVIEW_CLEAR_EVENT));
+    }
+  }, [tab]);
 
   // High slippage warning dialog state
   const [showSlippageWarning, setShowSlippageWarning] = useState(false);
@@ -1052,8 +1090,6 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
     const pending = pendingSolanaToastRef.current;
     if (!pending || data.tokenAddress.toLowerCase() !== tokenAddress.toLowerCase()) return;
 
-    console.log('[TradeActionPanel] 🚀 INSTANT Solana txHash via WebSocket:', data.txHash);
-
     // For multi-wallet trades: Don't update the toast (count was already shown at timer cap)
     // For single wallet: Update the link element with clickable Solana logo
     if (pending.totalSelectedWallets === 1) {
@@ -1097,16 +1133,11 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
         // Get all trade activity for this user (like Activity tab)
         const trades = await getTradeActivityByUser(user.id.toString());
         
-        console.log('🔍 TradeActionPanel - Fetched trade activity:', trades.length, 'trades');
-        console.log('🔍 TradeActionPanel - Looking for token:', token.mint || '');
-        
         // Filter trades for this specific token (case-insensitive comparison)
         const tokenMint = (token.mint || '').toLowerCase();
         const tokenTrades = trades.filter((trade: any) =>
           (trade.tokenAddress || '').toLowerCase() === tokenMint
         );
-        
-        console.log('🔍 TradeActionPanel - Found', tokenTrades.length, 'trades for this token');
         
         if (tokenTrades.length > 0) {
           // Calculate position from individual trades
@@ -1146,18 +1177,6 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
           };
           
           setPositionData(newData);
-          console.log('✅ TradeActionPanel - Calculated position from trades:', newData);
-          console.log('🔍 Sample trades:', tokenTrades.slice(0, 3));
-          console.log('🔍 Position data set:', {
-            bought: newData.bought,
-            boughtUsdValue: newData.boughtUsdValue,
-            sold: newData.sold,
-            soldUsdValue: newData.soldUsdValue,
-            remaining: newData.remaining,
-            remainingUsdValue: newData.remainingUsdValue,
-            pnl: newData.pnl,
-            pnlPercentage: newData.pnlPercentage
-          });
         } else {
           // No trades found for this token
           setPositionData({
@@ -1170,7 +1189,6 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
             pnl: 0,
             pnlPercentage: 0,
           });
-          console.log('ℹ️ TradeActionPanel - No trades found for token:', token.mint || '');
         }
       } catch (error) {
         console.error('Error calculating position from trades:', error);
@@ -1220,6 +1238,22 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
       ) || 0
     );
   }, [liveMarketCapUsd, token]);
+
+  const liveTokenPriceInSol = useMemo(() => {
+    const supply = token?.total_supply || 0;
+    const solUsd = liveSolPrice > 0 ? liveSolPrice : 0;
+    // Best: derive from live market cap + total supply
+    if (baseMarketCap > 0 && supply > 0 && solUsd > 0) {
+      return baseMarketCap / (supply * solUsd);
+    }
+    // Fallback: derive from usd_price / SOL price
+    const usdPrice = Number(token?.usd_price) || 0;
+    if (usdPrice > 0 && solUsd > 0) {
+      return usdPrice / solUsd;
+    }
+    // Last resort: static sol_price
+    return token?.sol_price || 0;
+  }, [baseMarketCap, token?.total_supply, token?.usd_price, token?.sol_price, liveSolPrice]);
 
   const sliderBaseMarketCap = useMemo(() => {
     if (baseMarketCap > 0) {
@@ -1360,14 +1394,9 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
         );
         if (response.ok) {
           const data = await response.json();
-          console.log('📊 Creator address data received:', data);
-          
           if (data?.filterTokens?.results?.[0]?.token?.creatorAddress) {
             const creatorAddr = data.filterTokens.results[0].token.creatorAddress;
-            console.log('✅ Creator address found:', creatorAddr);
             setCreatorAddress(creatorAddr);
-          } else {
-            console.log('⚠️ No creator address found in response');
           }
         } else {
           console.warn('⚠️ Creator address fetch failed with status:', response.status);
@@ -1386,7 +1415,6 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
   useEffect(() => {
     const devWallet = (token as any)?.dev_wallet;
     if (devWallet && !creatorAddress) {
-      console.log('✅ Using dev_wallet from WebSocket:', devWallet);
       setCreatorAddress(devWallet);
     }
   }, [(token as any)?.dev_wallet, creatorAddress]);
@@ -1785,6 +1813,10 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
         tokenName,
       });
 
+      // Notify chart + orders tab — include normalized order for optimistic insert
+      window.dispatchEvent(new CustomEvent(LIMIT_ORDER_STATUS_EVENT, { detail: { status: "Pending", newOrder: normalizeOrderForEvent(response?.order) } }));
+      window.dispatchEvent(new CustomEvent(LIMIT_PREVIEW_CLEAR_EVENT));
+
       if (response?.order?.id) {
         const normalizedOrderId = String(response.order.id);
         void monitorLimitOrderExecution({
@@ -1930,6 +1962,10 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
         tokenName: devTokenName,
       });
 
+      // Notify chart + orders tab — include normalized order for optimistic insert
+      window.dispatchEvent(new CustomEvent(LIMIT_ORDER_STATUS_EVENT, { detail: { status: "Pending", newOrder: normalizeOrderForEvent(response?.order) } }));
+      window.dispatchEvent(new CustomEvent(LIMIT_PREVIEW_CLEAR_EVENT));
+
       if (response?.order?.id) {
         const normalizedOrderId = String(response.order.id);
         void monitorLimitOrderExecution({
@@ -2012,13 +2048,9 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
 
       if (mode !== 'sell') {
         if (!resolvedPoolAddress && token.mint) {
-          console.log(`[TradeActionPanel] Pool address empty, fetching from token service for ${token.mint}`);
           const fetchedPairAddress = await fetchPairAddressFromTokenService(token.mint);
           if (fetchedPairAddress) {
             resolvedPoolAddress = fetchedPairAddress;
-            console.log(`[TradeActionPanel] Resolved pool address from token service: ${resolvedPoolAddress}`);
-          } else {
-            console.warn(`[TradeActionPanel] Failed to resolve pool address for ${token.mint}`);
           }
         }
 
@@ -2030,7 +2062,6 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
 
         // DexScreener fallback if pool address looks invalid
         if (poolLooksInvalid && token.mint) {
-          console.log(`[TradeActionPanel] ⚠️ Pool address looks invalid (${resolvedPoolAddress}), trying DexScreener fallback...`);
           try {
             const controller = new AbortController();
             const timeoutId = setTimeout(() => controller.abort(), 5000);
@@ -2051,7 +2082,6 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
 
                 if (solanaPairs.length > 0) {
                   const bestPair = solanaPairs[0];
-                  console.log(`[TradeActionPanel] ✅ DexScreener found pool: ${bestPair.pairAddress} (${bestPair.dexId}, $${bestPair.liquidity?.usd || 0} liq)`);
                   resolvedPoolAddress = bestPair.pairAddress;
                 }
               }
@@ -2060,8 +2090,6 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
             console.warn(`[TradeActionPanel] DexScreener fallback failed:`, dexError?.message || dexError);
           }
         }
-      } else {
-        console.log(`[TradeActionPanel] Sell mode: skipping pool resolution (Jupiter Ultra routes by token address)`);
       }
 
       if (tab === "limit") {
@@ -2187,6 +2215,9 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
             tokenImage: getResolvedTokenImage(token),
             tokenName: limitTokenName,
           });
+          // Notify chart + orders tab — include normalized order for optimistic insert
+          window.dispatchEvent(new CustomEvent(LIMIT_ORDER_STATUS_EVENT, { detail: { status: "Pending", newOrder: normalizeOrderForEvent(limitOrderResponse?.order) } }));
+          window.dispatchEvent(new CustomEvent(LIMIT_PREVIEW_CLEAR_EVENT));
           if (limitOrderResponse?.order?.id) {
             const normalizedOrderId = String(limitOrderResponse.order.id);
             void monitorLimitOrderExecution({
@@ -2762,7 +2793,6 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
               };
 
               setPositionData(newData);
-              console.log("🔄 TradeActionPanel - Position data refreshed after trade:", newData);
             }
 
             // Dispatch event to refresh chart price lines
@@ -3150,14 +3180,25 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
           {/* Minimum hint removed per request */}
 
           {/* Presets */}
+          {(() => {
+            const isSellWithPosition = mode === "sell" && positionData && positionData.remaining > 0;
+            const isBuyWithPrice = mode === "buy" && liveTokenPriceInSol > 0;
+            const showSubtext = isSellWithPosition || isBuyWithPrice;
+            const presetRowHeight = showSubtext ? "h-12" : "h-9";
+            return (
           <div className="border-t border-[#000] rounded-b-lg overflow-hidden">
             <div className="grid grid-cols-5">
               {amountPresets.map((opt, i) => {
                 const currentValue = editingPresets ? (presetDrafts[i] || "") : String(opt);
                 const active = (isSniperMode ? sniperAmount : amount) === currentValue;
+                const tokenAmountForPreset = isSellWithPosition
+                  ? (opt / 100) * positionData.remaining
+                  : isBuyWithPrice
+                    ? opt / liveTokenPriceInSol
+                    : null;
                 if (editingPresets) {
                   return (
-                    <div key={i} className="h-9 border-r border-[#000] last:border-r-0 min-w-0">
+                    <div key={i} className={`${presetRowHeight} border-r border-[#000] last:border-r-0 min-w-0`}>
                       <input
                         type="text"
                         inputMode="decimal"
@@ -3185,7 +3226,7 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
                     key={i}
                     type="button"
                     className={cx(
-                      "h-9 border-r border-[#000] last:border-r-0 text-[12px] font-semibold tabular-nums",
+                      `${presetRowHeight} border-r border-[#000] last:border-r-0 text-[12px] font-semibold tabular-nums`,
                       active
                         ? "bg-[#2A2B33] text-[#E6E7EA]"
                         : "bg-[#25282B] hover:bg-[#1E1F26] text-[#E6E7EA]"
@@ -3198,7 +3239,16 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
                       }
                     }}
                   >
-                    {opt}
+                    {tokenAmountForPreset !== null ? (
+                      <div className="flex flex-col items-center justify-center leading-tight">
+                        <span>{opt}{mode === "sell" ? "%" : ""}</span>
+                        <span className="text-[9px] text-[#9CA3AF] font-normal">
+                          {mode === "buy" ? "~" : ""}{formatCompactNumber(tokenAmountForPreset)}
+                        </span>
+                      </div>
+                    ) : (
+                      opt
+                    )}
                   </button>
                 );
               })}
@@ -3206,7 +3256,7 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
                 <button
                   type="button"
                   onClick={() => setEditingPresets(true)}
-                  className="h-9 bg-[#25282B] hover:bg-[#1E1F26] text-[#E6E7EA]"
+                  className={`${presetRowHeight} bg-[#25282B] hover:bg-[#1E1F26] text-[#E6E7EA]`}
                   title="Edit preset values"
                 >
                   <LuPencil className="mx-auto h-4 w-4" />
@@ -3215,7 +3265,7 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
                 <button
                   type="button"
                   onClick={commitPresetDrafts}
-                  className="h-9 bg-[#1E1F26] text-[#E6E7EA] hover:bg-[#25282B]"
+                  className={`${presetRowHeight} bg-[#1E1F26] text-[#E6E7EA] hover:bg-[#25282B]`}
                   title="Done"
                 >
                   <LuCheck className="mx-auto h-4 w-4" />
@@ -3223,6 +3273,8 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
               )}
             </div>
           </div>
+            );
+          })()}
         </div>
       </div>
 
@@ -3248,7 +3300,15 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
                     onChange={(e) => {
                       manualTargetOverrideRef.current = true;
                       const v = e.target.value.replace(/,/g, ".");
-                      if (/^\d*\.?\d*$/.test(v)) setTargetMC(v);
+                      if (/^\d*\.?\d*$/.test(v)) {
+                        setTargetMC(v);
+                        if (tab === "limit") {
+                          const num = Number(v);
+                          if (Number.isFinite(num) && num > 0) {
+                            window.dispatchEvent(new CustomEvent(LIMIT_PREVIEW_EVENT, { detail: { targetMC: num } }));
+                          }
+                        }
+                      }
                     }}
                   />
                 </div>
@@ -3293,6 +3353,7 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
                             ? Math.round(raw * 10) / 10
                             : Math.round(raw);
                         setTargetMC(String(Math.max(0, next)));
+                        window.dispatchEvent(new CustomEvent(LIMIT_PREVIEW_EVENT, { detail: { targetMC: Math.max(0, next) } }));
                       }
                     }}
                     className="w-full h-0.5 appearance-none cursor-pointer slider relative z-10 bg-transparent"
@@ -3373,6 +3434,7 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
                             ? Math.round(raw * 10) / 10
                             : Math.round(raw);
                         setTargetMC(String(Math.max(0, next)));
+                        window.dispatchEvent(new CustomEvent(LIMIT_PREVIEW_EVENT, { detail: { targetMC: Math.max(0, next) } }));
                       }
                     }}
                     className="h-8 w-full rounded border border-[#2A2B33] bg-[#101114] px-2 pr-5 text-[12px] font-semibold text-[#E6E7EA] outline-none focus:border-[#52c5ff] focus:ring-1 focus:ring-[#52c5ff]/20 transition-all duration-200"
@@ -3452,29 +3514,39 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
             <>
               You'll {mode === "buy" ? "spend" : "sell"} <span className="text-[#E6E7EA] font-semibold">{amount}</span>
               {mode === "sell" ? (
-                <span className="text-[#E6E7EA] font-semibold">%</span>
+                <>
+                  <span className="text-[#E6E7EA] font-semibold">%</span>
+                  {positionData && positionData.remaining > 0 && Number(amount) > 0 && (
+                    <span className="text-[#9CA3AF]"> ({formatCompactNumber((Number(amount) / 100) * positionData.remaining)} tokens)</span>
+                  )}
+                </>
               ) : (
-                <div className="inline-block w-3 h-3 ml-1 align-middle">
-                  <svg width="12" height="12" viewBox="0 0 397.7 311.7" fill="none">
-                    <path d="M64.6 237.9c2.4-2.4 5.7-3.8 9.2-3.8h317.4c5.8 0 8.7 7 4.6 11.1l-62.7 62.7c-2.4 2.4-5.7 3.8-9.2 3.8H6.5c-5.8 0-8.7-7-4.6-11.1L64.6 237.9z" fill="url(#paint0_linear_helper)"/>
-                    <path d="M64.6 3.8C67.1 1.4 70.4 0 73.8 0h317.4c5.8 0 8.7 7 4.6 11.1L333.1 73.8c-2.4 2.4-5.7 3.8-9.2 3.8H6.5c-5.8 0-8.7-7-4.6-11.1L64.6 3.8z" fill="url(#paint1_linear_helper)"/>
-                    <path d="M333.1 120.1c-2.4-2.4-5.7-3.8-9.2-3.8H6.5c-5.8 0-8.7 7-4.6 11.1l62.7 62.7c2.4 2.4 5.7 3.8 9.2 3.8h317.4c5.8 0 8.7-7 4.6-11.1l-62.7-62.7z" fill="url(#paint2_linear_helper)"/>
-                    <defs>
-                      <linearGradient id="paint0_linear_helper" x1="360.8" y1="351.5" x2="141.44" y2="132.14" gradientUnits="userSpaceOnUse">
-                        <stop offset="0" stopColor="#00FFA3"/>
-                        <stop offset="1" stopColor="#DC1FFF"/>
-                      </linearGradient>
-                      <linearGradient id="paint1_linear_helper" x1="264.8" y1="116.2" x2="45.44" y2="-103.16" gradientUnits="userSpaceOnUse">
-                        <stop offset="0" stopColor="#00FFA3"/>
-                        <stop offset="1" stopColor="#DC1FFF"/>
-                      </linearGradient>
-                      <linearGradient id="paint2_linear_helper" x1="312.5" y1="233.9" x2="93.14" y2="14.54" gradientUnits="userSpaceOnUse">
-                        <stop offset="0" stopColor="#00FFA3"/>
-                        <stop offset="1" stopColor="#DC1FFF"/>
-                      </linearGradient>
-                    </defs>
-                  </svg>
-                </div>
+                <>
+                  <div className="inline-block w-3 h-3 ml-1 align-middle">
+                    <svg width="12" height="12" viewBox="0 0 397.7 311.7" fill="none">
+                      <path d="M64.6 237.9c2.4-2.4 5.7-3.8 9.2-3.8h317.4c5.8 0 8.7 7 4.6 11.1l-62.7 62.7c-2.4 2.4-5.7 3.8-9.2 3.8H6.5c-5.8 0-8.7-7-4.6-11.1L64.6 237.9z" fill="url(#paint0_linear_helper)"/>
+                      <path d="M64.6 3.8C67.1 1.4 70.4 0 73.8 0h317.4c5.8 0 8.7 7 4.6 11.1L333.1 73.8c-2.4 2.4-5.7 3.8-9.2 3.8H6.5c-5.8 0-8.7-7-4.6-11.1L64.6 3.8z" fill="url(#paint1_linear_helper)"/>
+                      <path d="M333.1 120.1c-2.4-2.4-5.7-3.8-9.2-3.8H6.5c-5.8 0-8.7 7-4.6 11.1l62.7 62.7c2.4 2.4 5.7 3.8 9.2 3.8h317.4c5.8 0 8.7-7 4.6-11.1l-62.7-62.7z" fill="url(#paint2_linear_helper)"/>
+                      <defs>
+                        <linearGradient id="paint0_linear_helper" x1="360.8" y1="351.5" x2="141.44" y2="132.14" gradientUnits="userSpaceOnUse">
+                          <stop offset="0" stopColor="#00FFA3"/>
+                          <stop offset="1" stopColor="#DC1FFF"/>
+                        </linearGradient>
+                        <linearGradient id="paint1_linear_helper" x1="264.8" y1="116.2" x2="45.44" y2="-103.16" gradientUnits="userSpaceOnUse">
+                          <stop offset="0" stopColor="#00FFA3"/>
+                          <stop offset="1" stopColor="#DC1FFF"/>
+                        </linearGradient>
+                        <linearGradient id="paint2_linear_helper" x1="312.5" y1="233.9" x2="93.14" y2="14.54" gradientUnits="userSpaceOnUse">
+                          <stop offset="0" stopColor="#00FFA3"/>
+                          <stop offset="1" stopColor="#DC1FFF"/>
+                        </linearGradient>
+                      </defs>
+                    </svg>
+                  </div>
+                  {liveTokenPriceInSol > 0 && Number(amount) > 0 && (
+                    <span className="text-[#9CA3AF]"> (~{formatCompactNumber(Number(amount) / liveTokenPriceInSol)} tokens)</span>
+                  )}
+                </>
               )}
             </>
           ) : null}
@@ -3542,7 +3614,14 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
             )
           ) : (
             <span className="inline-flex items-center gap-1">
-              {isMigratingToken && mode === "buy" ? "Snipe" : mode === "buy" ? "Buy" : "Sell"} {token.symbol}
+              {isMigratingToken && mode === "buy" ? "Snipe" : mode === "buy" ? "Buy" : "Sell"}
+              {mode === "sell" && positionData && positionData.remaining > 0 && Number(amount) > 0 && (
+                <> {formatCompactNumber((Number(amount) / 100) * positionData.remaining)}</>
+              )}
+              {mode === "buy" && liveTokenPriceInSol > 0 && Number(amount) > 0 && (
+                <> ~{formatCompactNumber(Number(amount) / liveTokenPriceInSol)}</>
+              )}
+              {" "}{token.symbol}
               {prettyAmt(amount) && (
                 <>
                   {" "}{prettyAmt(amount)}

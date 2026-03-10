@@ -2,6 +2,8 @@ import { env } from "../env";
 import { Connection, PublicKey, clusterApiUrl } from "@solana/web3.js";
 import { ethers } from "ethers";
 
+const isDev = process.env.NODE_ENV !== 'production';
+
 export interface PositionRow {
   tokenAddress: string;
   pairAddress?: string; // Pool/pair address (contains originalPairAddress from backend)
@@ -20,6 +22,8 @@ export interface PositionRow {
   pnlPercentage: number;
   currentPrice?: number;
   actions: string;
+  avgBuyMarketCap?: number;
+  avgSellMarketCap?: number;
 }
 
 export interface TradeRow {
@@ -169,7 +173,7 @@ export async function getTradeHistoryByTokenAddress(
   tokenAddress: string,
 ): Promise<TradeRow[]> {
   if (!tokenAddress) return [];
-  console.log(env.NEXT_PUBLIC_BACKEND_URL);
+  isDev && console.log(env.NEXT_PUBLIC_BACKEND_URL);
   const res = await fetch(
     `${env.NEXT_PUBLIC_BACKEND_URL}/api/trade/get_trade_history_by_tokenaddress?tokenAddress=${tokenAddress}`,
   );

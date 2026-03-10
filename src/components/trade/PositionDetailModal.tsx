@@ -498,9 +498,13 @@ export default function PositionDetailModal({
   const realizedPnl = soldUsdValue - realizedCostBasis;
   const realizedPnlPercentage = realizedCostBasis > 0 ? (realizedPnl / realizedCostBasis) * 100 : 0;
 
-  const avgBuyMC = buyTrades.length > 0
-    ? buyTrades.reduce((sum, t) => sum + toNum(t.marketCap), 0) / buyTrades.length
-    : avgBuyPrice * 1000000;
+  const avgBuyMC = (() => {
+    const validMCs = buyTrades.map(t => toNum(t.marketCap)).filter(mc => mc > 0);
+    if (validMCs.length > 0) return validMCs.reduce((a, b) => a + b, 0) / validMCs.length;
+    if (position?.avgBuyMarketCap && position.avgBuyMarketCap > 0) return position.avgBuyMarketCap;
+    if (tokenMetadata?.marketCapUsd && tokenMetadata.marketCapUsd > 0) return tokenMetadata.marketCapUsd;
+    return 0;
+  })();
 
   const fallbackMarketCapValue = useMemo(() => {
     if (sortedTrades.length > 0) {

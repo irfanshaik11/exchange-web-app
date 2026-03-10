@@ -1,3 +1,5 @@
+const isDev = process.env.NODE_ENV !== 'production';
+
 import React, {
   useEffect,
   useState,
@@ -165,7 +167,7 @@ export default function PulsePage() {
     if (router.query.chain) {
       const chainFromQuery = router.query.chain as string;
       if (chainFromQuery !== currentChain) {
-        console.log(
+        isDev && console.log(
           "[Pulse] Chain changed from router:",
           currentChain,
           "->",
@@ -183,7 +185,7 @@ export default function PulsePage() {
     const chainFromUrl = urlParams.get("chain");
     // Only update if there's an explicit chain in the URL
     if (chainFromUrl && chainFromUrl !== currentChain) {
-      console.log(
+      isDev && console.log(
         "[Pulse] Chain changed from URL:",
         currentChain,
         "->",
@@ -200,14 +202,12 @@ export default function PulsePage() {
   // const isEthereumRoute = chain === 'eth';
   const isSolanaRoute = chain === "sol"; // Only Solana if explicitly set
 
-  // Debug logging for chain state
-  console.log("[Pulse] Chain state:", {
+  // Debug logging for chain state (dev only)
+  isDev && console.log("[Pulse] Chain state:", {
     currentChain,
     chain,
     isMonadRoute,
     isSolanaRoute,
-    routerQueryChain: router.query.chain,
-    routerAsPath: router.asPath,
   });
   const chainButtonBase =
     "relative inline-flex h-8 w-8 items-center justify-center rounded-full border border-white/[0.06] bg-white/[0.03] text-neutral-300 shadow-sm transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/40 focus-visible:ring-offset-2 focus-visible:ring-offset-black";
@@ -322,7 +322,7 @@ export default function PulsePage() {
         hiddenAtRef.current = 0;
 
         if (away > STALE_TAB_THRESHOLD_MS && !isMonadRoute) {
-          console.log(`[Pulse] Tab hidden for ${Math.round(away / 1000)}s, refreshing Solana data...`);
+          isDev && console.log(`[Pulse] Tab hidden for ${Math.round(away / 1000)}s, refreshing Solana data...`);
 
           // Don't clear localStorage caches — let React Query's placeholderData
           // keep showing the last good data while refetch is in flight.
@@ -436,8 +436,6 @@ export default function PulsePage() {
   const fetchTokenImage = useCallback(
     async (mint: string, name: string, symbol: string) => {
       try {
-        console.log(`[Pulse] 🖼️ Fetching image for ${name} (${symbol})`);
-
         // Try to get image from backend API
         const response = await fetch(
           `/api/token-service/getTokenImage?mint=${mint}&name=${encodeURIComponent(name)}&symbol=${encodeURIComponent(symbol)}`,
@@ -445,7 +443,6 @@ export default function PulsePage() {
         if (response.ok) {
           const data = await response.json();
           if (data.image) {
-            console.log(`[Pulse] 🖼️ Found image for ${name}:`, data.image);
             // Update the token in httpNew with the new image
             setHttpNew((prev) =>
               prev.map((token) =>
@@ -462,7 +459,7 @@ export default function PulsePage() {
           }
         }
       } catch (error) {
-        console.log(`[Pulse] 🖼️ Failed to fetch image for ${name}:`, error);
+        // Image fetch failed silently
       }
     },
     [],
@@ -507,20 +504,12 @@ export default function PulsePage() {
           if (Array.isArray(data) && data.length > 0) {
             const filteredData = (data as any[]).filter((token) => {
               if (isZeroLiquidityToken(token)) {
-                console.log(
-                  "[Final Stretch] ⛔ Skipping token with zero liquidity from immediate poll:",
-                  token?.name,
-                  token?.mint,
-                );
                 return false;
               }
               return true;
             });
 
             if (filteredData.length === 0) {
-              console.log(
-                "[Final Stretch] ⚠️ All tokens filtered due to zero liquidity. Clearing final stretch list.",
-              );
               if (isMonadRoute) {
                 setMonadFinalStretch([]);
                 setMonadFinalStretchTick((t) => t + 1);
@@ -534,20 +523,14 @@ export default function PulsePage() {
             if (isMonadRoute) {
               setMonadFinalStretch(filteredData as any[]);
               setMonadFinalStretchTick((t) => t + 1);
-              console.log(
-                `[Final Stretch Monad] Immediate poll got ${filteredData.length} tokens (after filtering)`,
-              );
             } else {
               setHttpFinalStretch(filteredData as any[]);
               setHttpFinalStretchTick((t) => t + 1);
-              console.log(
-                `[Final Stretch] Immediate poll got ${filteredData.length} tokens (after filtering)`,
-              );
             }
           }
         }
       } catch (error) {
-        console.log("[Final Stretch] Immediate poll failed:", error);
+        // Final stretch immediate poll failed silently
       }
     };
 
@@ -612,8 +595,8 @@ export default function PulsePage() {
 
     const cacheValid = loadFromCache();
 
-    console.log(
-      "[Pulse] 🌊 Fetching Monad data for chain=monad",
+    isDev && console.log(
+      "[Pulse] Fetching Monad data for chain=monad",
       cacheValid
         ? "(cache valid, refreshing in background)"
         : "(no cache, fetching now)",
@@ -627,7 +610,7 @@ export default function PulsePage() {
         const cacheTTL = 5 * 60 * 1000; // 5 minutes
 
         // Fetch new pairs - call backend directly (Redis cache enabled)
-        console.log("[Monad] Fetching new pairs directly from backend...");
+        isDev && console.log("[Monad] Fetching new pairs directly from backend...");
         const newRes = await fetch(`${monadServiceUrl}/v1/pulse/new?limit=35`, {
           cache: "no-store",
           headers: { Accept: "application/json" },
@@ -662,8 +645,8 @@ export default function PulsePage() {
             console.warn("[Monad] Failed to cache new tokens:", error);
           }
 
-          console.log(
-            `[Monad] ✅ Fetched ${filteredNew.length} new tokens from backend (Redis cache)`,
+          isDev && console.log(
+            `[Monad] Fetched ${filteredNew.length} new tokens from backend (Redis cache)`,
           );
         } else {
           console.error(
@@ -672,7 +655,7 @@ export default function PulsePage() {
         }
 
         // Fetch final stretch tokens - call backend directly (Redis cache enabled)
-        console.log(
+        isDev && console.log(
           "[Monad] Fetching final stretch tokens directly from backend...",
         );
         const finalStretchRes = await fetch(
@@ -716,13 +699,13 @@ export default function PulsePage() {
             );
           }
 
-          console.log(
-            `[Monad] ✅ Fetched ${filteredFinalStretch.length} final stretch tokens from backend (Redis cache)`,
+          isDev && console.log(
+            `[Monad] Fetched ${filteredFinalStretch.length} final stretch tokens from backend (Redis cache)`,
           );
         }
 
         // Fetch migrated tokens - call backend directly (Redis cache enabled)
-        console.log(
+        isDev && console.log(
           "[Monad] Fetching migrated tokens directly from backend...",
         );
         const migratedRes = await fetch(
@@ -763,8 +746,8 @@ export default function PulsePage() {
             console.warn("[Monad] Failed to cache migrated tokens:", error);
           }
 
-          console.log(
-            `[Monad] ✅ Fetched ${filteredMigrated.length} migrated tokens from backend (Redis cache)`,
+          isDev && console.log(
+            `[Monad] Fetched ${filteredMigrated.length} migrated tokens from backend (Redis cache)`,
           );
         } else {
           console.error(
@@ -1307,55 +1290,7 @@ export default function PulsePage() {
   // Alias for debug / legacy variables
   const newPairsData = newPairsToShow;
 
-  // DEBUG: Log the data being passed to UI
-  useEffect(() => {
-    console.log(
-      `[Pulse] 🎯 UI Data - chain: ${chain}, isMonadRoute: ${isMonadRoute}`,
-    );
-    console.log(
-      `[Pulse] 🎯 UI Data - newPairsToShow: ${newPairsToShow.length}, httpNew: ${httpNew.length}, httpNewTick: ${httpNewTick}, monadNew: ${monadNew.length}, monadNewTick: ${monadNewTick}`,
-    );
-    if (newPairsToShow.length > 0) {
-      console.log(
-        `[Pulse] 🎯 First token in UI:`,
-        newPairsToShow[0]?.name || "none",
-        `chain: ${(newPairsToShow[0] as any)?.chain || "unknown"}`,
-      );
-    }
-  }, [
-    newPairsToShow,
-    httpNew,
-    httpNewTick,
-    isMonadRoute,
-    chain,
-    monadNew,
-    monadNewTick,
-  ]);
-
-  // DEBUG: Log migrated data
-  useEffect(() => {
-    console.log(
-      `[Pulse] 🎯 Migrated UI Data - chain: ${chain}, isMonadRoute: ${isMonadRoute}`,
-    );
-    console.log(
-      `[Pulse] 🎯 Migrated UI Data - migratedToShow: ${migratedToShow.length}, httpMigrated: ${httpMigrated.length}, httpMigratedTick: ${httpMigratedTick}, monadMigrated: ${monadMigrated.length}, monadMigratedTick: ${monadMigratedTick}`,
-    );
-    if (migratedToShow.length > 0) {
-      console.log(
-        `[Pulse] 🎯 First migrated token in UI:`,
-        migratedToShow[0]?.name || "none",
-        `chain: ${(migratedToShow[0] as any)?.chain || "unknown"}`,
-      );
-    }
-  }, [
-    migratedToShow,
-    httpMigrated,
-    httpMigratedTick,
-    isMonadRoute,
-    chain,
-    monadMigrated,
-    monadMigratedTick,
-  ]);
+  // DEBUG useEffects removed — data logging was causing unnecessary renders in production
 
   // Fetch initial migrated tokens on page load (only for Solana route)
   useEffect(() => {
@@ -1366,11 +1301,8 @@ export default function PulsePage() {
 
     const fetchInitialMigratedTokens = async () => {
       try {
-        console.log(`[Pulse] 🔄 Fetching initial migrated tokens...`);
         // Use Next.js proxy to avoid CORS issues
         const endpoint = `/api/token-service/pulse-migrated?limit=50`;
-        console.log(`[Pulse] 🔄 URL:`, endpoint);
-        console.log(`[Pulse] 🔄 Chain: Solana`);
         const response = await fetch(endpoint, {
           cache: "no-store",
           headers: {
@@ -1378,22 +1310,13 @@ export default function PulsePage() {
             Pragma: "no-cache",
           },
         });
-        console.log(`[Pulse] 🔄 Response status:`, response.status);
         if (response.ok) {
           const data = await response.json();
-          console.log(
-            `[Pulse] 🔄 Fetched ${data.length} migrated tokens from API`,
-          );
           if (data.length > 0) {
             const filteredData = data.filter((token: any) => {
               if (!token) return false;
 
               if (isZeroLiquidityToken(token)) {
-                console.log(
-                  "[Pulse] ⛔ Skipping migrated token with zero liquidity:",
-                  token?.name,
-                  token?.mint,
-                );
                 return false;
               }
 
@@ -1401,9 +1324,6 @@ export default function PulsePage() {
             });
 
             if (filteredData.length === 0) {
-              console.log(
-                "[Pulse] ⚠️ All migrated tokens filtered due to zero liquidity. Clearing migrated list.",
-              );
               setHttpMigrated([]);
               setHttpMigratedTick((prev) => prev + 1);
               return;
@@ -1415,18 +1335,8 @@ export default function PulsePage() {
               created_at: token.migrated_time || new Date().toISOString(),
               timestamp: Date.now(),
             }));
-            console.log(
-              `[Pulse] 🔄 BEFORE setHttpMigrated - current count: ${httpMigrated.length}`,
-            );
             setHttpMigrated(tokensWithTimestamp);
             setHttpMigratedTick((prev) => prev + 1);
-            console.log(
-              `[Pulse] 🔄 Set initial migrated tokens:`,
-              tokensWithTimestamp.map((t) => t.name),
-            );
-            console.log(
-              `[Pulse] 🔄 AFTER setHttpMigrated - should be ${tokensWithTimestamp.length} tokens`,
-            );
           }
         } else {
           console.error(
@@ -1447,21 +1357,7 @@ export default function PulsePage() {
   }, [isMonadRoute]); // Re-run when chain changes
 
   // Debug: log top entries order and timestamps (after data is computed)
-  if (typeof window !== "undefined") {
-    try {
-      const sample = (newPairsData || []).slice(0, 10).map((t: any) => ({
-        addr: t.pair_address || t.mint,
-        ts: getTs(t),
-        created_at:
-          t.created_at || t.createdAt || t.launch_time || t.launchTime,
-        firstSeen: t.firstSeen,
-        updated_at: t.updated_at || t.updatedAt,
-        name: t.name,
-        symbol: t.symbol,
-      }));
-      console.log("[Pulse] NewPairs top10 with timestamps:", sample);
-    } catch {}
-  }
+  // NewPairs debug logging removed — was running on every render
   const newPairsFallback = newPairsData;
   // Show loading until at least one source has tried and no data yet
   // (kept for compatibility, but wsLoading is currently false)
@@ -1556,25 +1452,7 @@ export default function PulsePage() {
   const displayMigrated = (!isMonadRoute && enrichedMigrated.length === 0 && _lastSolanaTokens.migrated.length > 0)
     ? _lastSolanaTokens.migrated : enrichedMigrated;
 
-  // DEBUG: Log what's being passed to MonadTable
-  useEffect(() => {
-    if (isMonadRoute) {
-      console.log(
-        `[Pulse] 🌊 Monad Route Active - enrichedNewPairsToShow: ${enrichedNewPairsToShow.length}, enrichedFinalStretch: ${enrichedFinalStretch.length}, enrichedMigrated: ${enrichedMigrated.length}`,
-      );
-      if (enrichedNewPairsToShow.length > 0) {
-        console.log(
-          `[Pulse] 🌊 First Monad token in enrichedNewPairsToShow:`,
-          enrichedNewPairsToShow[0]?.name || "none",
-        );
-      }
-    }
-  }, [
-    isMonadRoute,
-    enrichedNewPairsToShow,
-    enrichedFinalStretch,
-    enrichedMigrated,
-  ]);
+  // MonadTable debug useEffect removed — was causing unnecessary work on every data change
 
   if (typeof window !== "undefined") {
     try {

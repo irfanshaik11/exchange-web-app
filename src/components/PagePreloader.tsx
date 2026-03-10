@@ -3,6 +3,8 @@ import { useRouter } from 'next/router';
 import { useUser } from './UserContext';
 import { env } from '~/env';
 
+const isDev = process.env.NODE_ENV !== 'production';
+
 /**
  * PagePreloader - Preloads critical pages and their data for instant navigation
  * 
@@ -119,7 +121,7 @@ async function preloadPageData(user: any) {
         fetch(`${monadServiceUrl}/v1/pulse/new?limit=30`, {
           headers: { 'Accept': 'application/json' },
         }).catch(err => {
-          console.log('[Preloader] Monad pulse new data preload failed:', err);
+          isDev && console.log('[Preloader] Monad pulse new data preload failed:', err);
         })
       );
 
@@ -127,7 +129,7 @@ async function preloadPageData(user: any) {
         fetch(`${monadServiceUrl}/v1/pulse/final-stretch?limit=30`, {
           headers: { 'Accept': 'application/json' },
         }).catch(err => {
-          console.log('[Preloader] Monad pulse final-stretch data preload failed:', err);
+          isDev && console.log('[Preloader] Monad pulse final-stretch data preload failed:', err);
         })
       );
 
@@ -135,7 +137,7 @@ async function preloadPageData(user: any) {
         fetch(`${monadServiceUrl}/v1/pulse/migrated?limit=30`, {
           headers: { 'Accept': 'application/json' },
         }).catch(err => {
-          console.log('[Preloader] Monad pulse migrated data preload failed:', err);
+          isDev && console.log('[Preloader] Monad pulse migrated data preload failed:', err);
         })
       );
     }
@@ -146,7 +148,7 @@ async function preloadPageData(user: any) {
 
   // Execute all preloads in parallel (fire and forget)
   Promise.allSettled(preloadPromises).then(() => {
-    console.log('[Preloader] Page data preloading complete');
+    isDev && console.log('[Preloader] Page data preloading complete');
   });
 }
 

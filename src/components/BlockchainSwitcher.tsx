@@ -2,6 +2,8 @@ import React, { useState, useRef, useEffect } from 'react';
 import { useRouter } from 'next/router';
 import { FaChevronDown } from 'react-icons/fa';
 
+const isDev = process.env.NODE_ENV !== 'production';
+
 interface Blockchain {
   id: string;
   name: string;
@@ -150,10 +152,7 @@ export default function BlockchainSwitcher() {
 
     // Update the current page's chain query parameter
     const currentPath = router.pathname;
-    console.log('[BlockchainSwitcher] Selecting chain:', chainId);
-    console.log('[BlockchainSwitcher] Current path:', currentPath);
-    console.log('[BlockchainSwitcher] Current query:', router.query);
-    console.log('[BlockchainSwitcher] New query will be:', { ...router.query, chain: chainId });
+    isDev && console.log('[BlockchainSwitcher] Selecting chain:', chainId);
 
     router.push({
       pathname: currentPath,

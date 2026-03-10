@@ -1,5 +1,7 @@
 "use client";
 
+const isDev = process.env.NODE_ENV !== 'production';
+
 import React, { useState, useEffect } from "react";
 import { useRouter } from "next/router";
 import { useUser } from "./UserContext";
@@ -146,7 +148,7 @@ export default function WalletTrackerContent() {
           .filter((w) => w.chain !== "monad")
           .map((w) => w.address);
 
-        console.log("[walletTracker:lastActive] fetching timestamps:", {
+        isDev && console.log("[walletTracker:lastActive] fetching timestamps:", {
           monad: monadWallets.length,
           sol: solWallets.length,
         });
@@ -197,7 +199,7 @@ export default function WalletTrackerContent() {
                 const newestRaw = payload?.result?.data?.[0]?.timestamp;
                 const newest = ensureMs(newestRaw);
 
-                console.log("[walletTracker:lastActive] Monad wallet result", {
+                isDev && console.log("[walletTracker:lastActive] Monad wallet result", {
                   address,
                   newestRaw,
                   newest,
@@ -292,7 +294,7 @@ export default function WalletTrackerContent() {
             chunks.push(solWallets.slice(i, i + CHUNK_SIZE));
           }
 
-          console.log(
+          isDev && console.log(
             `[walletTracker:lastActive] fetching ${solWallets.length} Solana wallets in ${chunks.length} chunks of ${CHUNK_SIZE}`,
           );
 
@@ -565,7 +567,7 @@ export default function WalletTrackerContent() {
         chain: selectedChain,
       },
       onSuccess: () => {
-        console.log("Quick Buy successful");
+        isDev && console.log("Quick Buy successful");
       },
       onError: (error) => {
         console.error("Quick Buy failed:", error);

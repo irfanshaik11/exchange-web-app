@@ -197,13 +197,6 @@ export async function executeEnhancedTrade(params: EnhancedTradeParams): Promise
   let walletAllocations: WalletAllocation[] = [];
   let walletsConsidered = 0;
   if (side === "buy" && chain === "sol" && params.walletContext) {
-    console.log('[EnhancedTradeHandler] Wallet context:', {
-      selectedWalletIds: params.walletContext.selectedWalletIds,
-      walletListCount: params.walletContext.walletList?.length,
-      walletBalancesKeys: Object.keys(params.walletContext.walletBalances || {}),
-      walletBalances: params.walletContext.walletBalances,
-    });
-
     const availableWallets =
       params.walletContext.walletList?.filter(
         (w) => !w.isArchived && (w.solanaAddress || w.address)
@@ -214,12 +207,6 @@ export async function executeEnhancedTrade(params: EnhancedTradeParams): Promise
     const primaryId =
       availableWallets.find((w) => w.isPrimary)?.id ||
       availableWallets[0]?.id;
-
-    console.log('[EnhancedTradeHandler] Wallet selection:', {
-      availableWalletsCount: availableWallets.length,
-      selectedIds,
-      primaryId,
-    });
 
     const idsToUse =
       selectionSet.size > 0
@@ -246,13 +233,6 @@ export async function executeEnhancedTrade(params: EnhancedTradeParams): Promise
               ? params.walletContext!.walletBalances[addressKey] ?? wallet.balance ?? 0
               : wallet.balance ?? 0;
 
-            console.log('[EnhancedTradeHandler] Checking wallet:', {
-              walletId: wallet.id,
-              address,
-              balanceFromContext: balance,
-              allBalanceKeys: Object.keys(params.walletContext!.walletBalances || {}),
-            });
-
             const balanceWarning = checkBalanceSufficiency(
               balance,
               perWalletAmount,
@@ -264,12 +244,6 @@ export async function executeEnhancedTrade(params: EnhancedTradeParams): Promise
             );
 
             if (balanceWarning && !balanceWarning.canProceed) {
-              console.log('[EnhancedTradeHandler] Wallet filtered out due to insufficient balance:', {
-                walletId: wallet.id,
-                balance,
-                required: perWalletAmount,
-                warning: balanceWarning.message,
-              });
               return null;
             }
 
@@ -321,17 +295,6 @@ export async function executeEnhancedTrade(params: EnhancedTradeParams): Promise
     ? walletAllocations.reduce((sum, w) => sum + (w.balance || 0), 0)
     : solBalance;
 
-  console.log('[EnhancedTradeHandler] Balance check:', {
-    solBalance,
-    walletAllocationsCount: walletAllocations.length,
-    validationBalance,
-    walletAllocations: walletAllocations.map(w => ({
-      walletId: w.walletId,
-      address: w.address?.substring(0, 8) + '...',
-      balance: w.balance
-    })),
-  });
-
   // Declare timerInterval outside try block so it's accessible in catch/finally
   let timerInterval: NodeJS.Timeout | null = null;
   let tradeErrored = false;
@@ -347,12 +310,8 @@ export async function executeEnhancedTrade(params: EnhancedTradeParams): Promise
     // CRITICAL: Verify the pair address from the token service
     // This ensures we use the correct/up-to-date pool address for trades
     if (token.mint) {
-      console.log(`[EnhancedTrade] Verifying pair address for ${token.symbol}: ${token.mint}`);
       const verifiedPairAddress = await fetchVerifiedPairAddress(token.mint);
       if (verifiedPairAddress) {
-        if (verifiedPairAddress !== effectivePoolAddress) {
-          console.log(`[EnhancedTrade] Pair address mismatch! Local: ${effectivePoolAddress}, Verified: ${verifiedPairAddress}`);
-        }
         effectivePoolAddress = verifiedPairAddress;
       }
     }
@@ -385,14 +344,6 @@ export async function executeEnhancedTrade(params: EnhancedTradeParams): Promise
     }
 
     // Perform pre-transaction checks
-    console.log('[EnhancedTradeHandler] Running pre-transaction validation:', {
-      tokenSymbol: token.symbol,
-      amount,
-      slippage: (settings.maxSlippage || 0.4) * 100,
-      poolType,
-      side,
-    });
-
     const preCheck: PreTransactionCheck = performPreTransactionCheck(
       token,
       amount,
@@ -405,12 +356,6 @@ export async function executeEnhancedTrade(params: EnhancedTradeParams): Promise
       side === 'sell', // Pass whether this is a sell order
       ataExists
     );
-
-    console.log('[EnhancedTradeHandler] Validation result:', {
-      warnings: preCheck.warnings.length,
-      canProceed: preCheck.canProceed,
-      warningDetails: preCheck.warnings.map(w => ({ level: w.level, title: w.title })),
-    });
 
     // Handle validation warnings
     if (preCheck.warnings.length > 0) {

@@ -25,6 +25,8 @@ interface QuickBuySettingsModalProps {
   onClose: () => void;
 }
 
+const isDev = process.env.NODE_ENV !== 'production';
+
 const presetLabels = ["PRESET 1", "PRESET 2", "PRESET 3"];
 const mevModes = [
   { label: "Off", value: "off" },
@@ -81,7 +83,7 @@ export default function QuickBuySettingsModal({
 
     const trimmed = rawValue.trim();
 
-    console.log('[QuickBuySettingsModal] RPC input change detected:', {
+    isDev && console.log('[QuickBuySettingsModal] RPC input change detected:', {
       rawValue,
       trimmed,
       hasToken: Boolean(user?.bearerToken),
@@ -103,7 +105,7 @@ export default function QuickBuySettingsModal({
     rpcUpdateTimeout.current = setTimeout(async () => {
       rpcUpdateTimeout.current = null;
       setIsSavingRpc(true);
-      console.log('[QuickBuySettingsModal] ▶️ Sending RPC update request...');
+      isDev && console.log('[QuickBuySettingsModal] Sending RPC update request...');
       try {
         await updateRpcEndpoint(trimmed, user.bearerToken);
         lastSubmittedRpc.current = trimmed;

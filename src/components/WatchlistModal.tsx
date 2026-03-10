@@ -32,6 +32,8 @@ import { extractTokenImage, getResolvedTokenImage } from '~/utils/images';
 import { preloadTradeChart } from '~/utils/preloadTradeChart';
 import { FaCheckCircle } from 'react-icons/fa';
 
+const isDev = process.env.NODE_ENV !== 'production';
+
 interface WatchlistModalProps {
   open: boolean;
   onClose: () => void;
@@ -601,7 +603,7 @@ export default function WatchlistModal({ open, onClose }: WatchlistModalProps) {
           }, 1000);
           broadcastMonadQuickTrade(tokenAddress, 'buy');
           broadcastTradeCompleted({ tokenAddress, tradeType: 'buy', chain: 'monad', tokenName: token?.name, tokenSymbol: token?.symbol, imageUrl: tokenImage || undefined, solAmountSpent: buyAmount });
-          console.log('✅ Watchlist Monad Quick Buy successful:', txHashes);
+          isDev && console.log('Watchlist Monad Quick Buy successful:', txHashes);
         } else {
           tradeErrored = true;
           cleanupMonadTradeListener();
@@ -645,11 +647,11 @@ export default function WatchlistModal({ open, onClose }: WatchlistModalProps) {
       let poolAddress = (token as any).migrated_pool_address || token.pair_address || "";
       const tokenMint = (token as any).mint || '';
       if (tokenMint) {
-        console.log(`[Watchlist] Verifying pair address for quick buy: ${tokenMint}`);
+        isDev && console.log(`[Watchlist] Verifying pair address for quick buy: ${tokenMint}`);
         const verifiedPairAddress = await fetchVerifiedPairAddress(tokenMint);
         if (verifiedPairAddress) {
           if (verifiedPairAddress !== poolAddress) {
-            console.log(`[Watchlist] Pair address mismatch! Local: ${poolAddress}, Verified: ${verifiedPairAddress}`);
+            isDev && console.log(`[Watchlist] Pair address mismatch! Local: ${poolAddress}, Verified: ${verifiedPairAddress}`);
           }
           poolAddress = verifiedPairAddress;
         }
@@ -817,7 +819,7 @@ export default function WatchlistModal({ open, onClose }: WatchlistModalProps) {
           setTimeout(() => toast.dismiss(uniqueToastId), 10000);
         }
 
-        console.log("✅ Watchlist Quick Buy successful");
+        isDev && console.log("Watchlist Quick Buy successful");
 
         // Dispatch event to refresh chart price lines
         if (typeof window !== "undefined" && tokenMint) {
@@ -910,7 +912,7 @@ export default function WatchlistModal({ open, onClose }: WatchlistModalProps) {
           <thead className="sticky top-0 z-10">
             <tr style={{ backgroundColor: '#111214', borderBottom: `1px solid ${AX.border}` }}>
               <th className="w-72 px-4 py-3 text-left text-xs font-medium tracking-wide uppercase" style={{ color: '#787a8d', fontWeight: '300' }}>Token</th>
-              <th className="w-28 px-4 py-3 text-right text-xs font-medium tracking-wide uppercase" style={{ color: '#787a8d', fontWeight: '300' }}>Vol</th>
+              {/* <th className="w-28 px-4 py-3 text-right text-xs font-medium tracking-wide uppercase" style={{ color: '#787a8d', fontWeight: '300' }}>Vol</th> */}
               {/* <th className="w-20 px-4 py-3 text-right text-xs font-medium tracking-wide uppercase" style={{ color: '#787a8d', fontWeight: '300' }}>1h%</th> */}
               <th className="w-28 px-4 py-3 text-right text-xs font-medium tracking-wide uppercase" style={{ color: '#787a8d', fontWeight: '300' }}>MKT Cap</th>
               <th className="w-28 px-4 py-3 text-right text-xs font-medium tracking-wide uppercase" style={{ color: '#787a8d', fontWeight: '300' }}>Liq</th>
@@ -1062,29 +1064,12 @@ export default function WatchlistModal({ open, onClose }: WatchlistModalProps) {
                     </div>
                   </td>
                   
-                  {/* 1h Vol Column */}
-                  <td className="w-28 px-4 py-3 align-middle text-right">
+                  {/* 1h Vol Column - Commented out */}
+                  {/* <td className="w-28 px-4 py-3 align-middle text-right">
                     <div className="text-sm font-medium" style={{ color: AX.text }}>
                       ${formatSmartNumber(volume1h)}
                     </div>
-                    {/* Volume as percentage of market cap - Commented out for now */}
-                    {/* {(() => {
-                      // Calculate volume as percentage of market cap
-                      let volumePercent = 0;
-                      if (volume1h > 0 && marketCap > 0) {
-                        volumePercent = (volume1h / marketCap) * 100;
-                      }
-                      
-                      // Color based on price change direction: green for up, red for down
-                      const volumeColor = priceChange1h >= 0 ? '#85d99f' : '#f26681';
-                      
-                      return volumePercent > 0 ? (
-                        <div className="text-xs font-medium mt-0.5" style={{ color: volumeColor }}>
-                          {formatSmartNumber(volumePercent)}%
-                        </div>
-                      ) : null;
-                    })()} */}
-                  </td>
+                  </td> */}
                   
                   {/* 1h% Column - Commented out */}
                   {/* <td className="w-20 px-4 py-3 align-middle text-right">

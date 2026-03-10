@@ -48,6 +48,8 @@ import { dispatchBalanceRefresh } from "~/utils/balanceEvents";
 // import { PiTelegramLogo } from "react-icons/pi";
 // import { TiDocumentText } from "react-icons/ti";
 
+const isDev = process.env.NODE_ENV !== 'production';
+
 // Cache of mint → resolved direct image URL, populated by TokenListItem components.
 // Persists for the lifetime of this module (across modal open/close).
 const resolvedImageByMint = new Map<string, string>();
@@ -775,7 +777,7 @@ const SearchModalContent = React.memo(function SearchModalContent({
     }
 
     try {
-      console.log("📥 Fetching tokens from service...");
+      isDev && console.log("Fetching tokens from service...");
 
       const endpoints = [
         "/api/token-service/pulse-new?limit=100",
@@ -795,7 +797,7 @@ const SearchModalContent = React.memo(function SearchModalContent({
         .flat()
         .filter((token: any) => token && token.mint);
 
-      console.log("✅ Cached", allTokens.length, "tokens");
+      isDev && console.log("Cached", allTokens.length, "tokens");
       setCachedTokens(allTokens);
       setLastFetchTime(now);
 
@@ -829,7 +831,7 @@ const SearchModalContent = React.memo(function SearchModalContent({
       setSearchLoading(true);
       setHasSearched(true);
       try {
-        console.log("🔍 Searching:", { query: searchQuery.trim(), requestId: currentRequestId });
+        isDev && console.log("Searching:", { query: searchQuery.trim(), requestId: currentRequestId });
 
         // Use different endpoint based on chain
         const isMonad = chain === "monad";
@@ -855,7 +857,7 @@ const SearchModalContent = React.memo(function SearchModalContent({
           ? searchData.data || []
           : searchData.tokens || [];
 
-        console.log("🔍 Found results:", {
+        isDev && console.log("Found results:", {
           query: searchQuery,
           chain,
           matchedTokens: filteredTokens.length,
@@ -942,12 +944,12 @@ const SearchModalContent = React.memo(function SearchModalContent({
         if (currentRequestId === searchRequestIdRef.current) {
           setSearchResults(tokens);
         } else {
-          console.log("🔍 Ignoring stale search results:", { requestId: currentRequestId, latestId: searchRequestIdRef.current });
+          isDev && console.log("Ignoring stale search results:", { requestId: currentRequestId, latestId: searchRequestIdRef.current });
         }
       } catch (error: any) {
         // Ignore abort errors (expected when user types quickly)
         if (error?.name === "AbortError") {
-          console.log("🔍 Search aborted:", { requestId: currentRequestId });
+          isDev && console.log("Search aborted:", { requestId: currentRequestId });
           return;
         }
         console.error("Search error:", error);
@@ -1025,11 +1027,11 @@ const SearchModalContent = React.memo(function SearchModalContent({
     let poolAddress = (token as any).migrated_pool_address || token.pair_address || "";
     const tokenMint = token.mint || '';
     if (tokenMint) {
-      console.log(`[SearchModal] Verifying pair address for quick buy: ${tokenMint}`);
+      isDev && console.log(`[SearchModal] Verifying pair address for quick buy: ${tokenMint}`);
       const verifiedPairAddress = await fetchVerifiedPairAddress(tokenMint);
       if (verifiedPairAddress) {
         if (verifiedPairAddress !== poolAddress) {
-          console.log(`[SearchModal] Pair address mismatch! Local: ${poolAddress}, Verified: ${verifiedPairAddress}`);
+          isDev && console.log(`[SearchModal] Pair address mismatch! Local: ${poolAddress}, Verified: ${verifiedPairAddress}`);
         }
         poolAddress = verifiedPairAddress;
       }
@@ -1198,7 +1200,7 @@ const SearchModalContent = React.memo(function SearchModalContent({
         setTimeout(() => toast.dismiss(uniqueToastId), 10000);
       }
 
-      console.log("✅ SearchModal Quick Buy successful");
+      isDev && console.log("SearchModal Quick Buy successful");
 
       // Dispatch event to refresh chart price lines
       if (typeof window !== "undefined" && tokenMint) {
@@ -1230,7 +1232,7 @@ const SearchModalContent = React.memo(function SearchModalContent({
         : (token.mint || token.pair_address);
 
       // Debug: log navigation details
-      console.log("🚀 handleSelectToken:", {
+      isDev && console.log("handleSelectToken:", {
         symbol: token.symbol,
         name: token.name,
         address,
@@ -1305,7 +1307,7 @@ const SearchModalContent = React.memo(function SearchModalContent({
         resolvedImageUrl: resolvedImageByMint.get(token.mint) || undefined,
       };
       addToHistory(historyItem, user?.id);
-      console.log("💾 Saved to search history:", { userId: user?.id, token: historyItem.symbol });
+      isDev && console.log("Saved to search history:", { userId: user?.id, token: historyItem.symbol });
       // Update local state so it appears immediately if modal reopens
       setRecentSearches(prev => {
         const filtered = prev.filter(t => t.mint !== token.mint);
@@ -1314,7 +1316,7 @@ const SearchModalContent = React.memo(function SearchModalContent({
 
       try {
         // First, backfill the token to the database
-        console.log("🔄 Backfilling token:", token);
+        isDev && console.log("Backfilling token:", token);
 
         // Fire-and-forget backfill — don't block navigation
         fetch("/api/token-service/backfill-token", {
@@ -1368,7 +1370,7 @@ const SearchModalContent = React.memo(function SearchModalContent({
           if (token.total_liquidity_usd) queryParams.set('_liquidity', String(token.total_liquidity_usd));
 
           const url = `/trade/${address}?${queryParams.toString()}`;
-          console.log("🔗 Navigating to:", url);
+          isDev && console.log("Navigating to:", url);
           // router.push preserves in-memory caches (OHLC, WS prefetch).
           // [id].tsx useEffect([id]) resets state when address changes.
           router.push(url);
@@ -1411,7 +1413,7 @@ const SearchModalContent = React.memo(function SearchModalContent({
           if (token.total_liquidity_usd) queryParams.set('_liquidity', String(token.total_liquidity_usd));
 
           const url = `/trade/${address}?${queryParams.toString()}`;
-          console.log("🔗 Navigating to:", url);
+          isDev && console.log("Navigating to:", url);
           router.push(url);
         }
       }
@@ -1491,7 +1493,7 @@ const SearchModalContent = React.memo(function SearchModalContent({
       setHasSearched(false);
       // Load search history for the current user
       const history = getHistory(user?.id);
-      console.log("📜 Loaded search history:", { userId: user?.id, historyCount: history.length, history });
+      isDev && console.log("Loaded search history:", { userId: user?.id, historyCount: history.length });
       setRecentSearches(history);
       // Pre-fetch tokens when modal opens for instant search
       fetchTokens();
@@ -1507,13 +1509,7 @@ const SearchModalContent = React.memo(function SearchModalContent({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, user?.id]);
 
-  // Debug: log render state
-  console.log("🔍 SearchModal render:", {
-    hasSearched,
-    displayTokensLength: displayTokens.length,
-    recentSearchesLength: recentSearches.length,
-    shouldShowRecent: !hasSearched && recentSearches.length > 0 && displayTokens.length === 0
-  });
+  // Debug: log render state (removed - fires on every render)
 
   return (
     <>

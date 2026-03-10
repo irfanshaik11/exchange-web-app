@@ -1,6 +1,8 @@
 import React, { useEffect, useRef, useState, useCallback, useMemo } from 'react';
 import { HiOutlineRefresh } from 'react-icons/hi';
 
+const isDev = process.env.NODE_ENV !== 'production';
+
 /* ---------- AXIOM palette ---------- */
 const AX = {
   bg: "#101114",
@@ -482,7 +484,7 @@ const TradingViewPredictionChart: React.FC<TradingViewPredictionChartProps> = ({
       ? initialSeriesConfig.map(s => s.id)
       : [ticker];
 
-    console.log('[TV] Creating widget, series cache size:', seriesCacheRef.current.size, 'main symbol:', isMultiSeries && initialSeriesConfig.length > 0 ? initialSeriesConfig[0].id : ticker);
+    isDev && console.log('[TV] Creating widget, series cache size:', seriesCacheRef.current.size, 'main symbol:', isMultiSeries && initialSeriesConfig.length > 0 ? initialSeriesConfig[0].id : ticker);
 
     // Create datafeed
     const datafeed = {
@@ -672,7 +674,7 @@ const TradingViewPredictionChart: React.FC<TradingViewPredictionChartProps> = ({
       });
 
       widget.onChartReady(() => {
-        console.log('[TV] Chart ready - hiding loading');
+        isDev && console.log('[TV] Chart ready - hiding loading');
         setIsLoading(false);
 
         // For multi-series, add comparison symbols using ref for latest config

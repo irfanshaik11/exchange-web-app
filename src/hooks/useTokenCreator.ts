@@ -1,5 +1,7 @@
 import { useState, useEffect } from 'react';
 
+const isDev = process.env.NODE_ENV !== 'production';
+
 interface TokenCreatorResponse {
   data: {
     token: {
@@ -57,7 +59,7 @@ export default function useTokenCreator(tokenAddress: string | undefined) {
         
         if (result.data?.token?.creatorAddress) {
           setCreatorAddress(result.data.token.creatorAddress);
-          console.log(`Found creator address: ${result.data.token.creatorAddress}`);
+          isDev && console.log(`Found creator address: ${result.data.token.creatorAddress}`);
         }
       } catch (err) {
         console.error('Failed to fetch creator address:', err);

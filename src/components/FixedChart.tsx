@@ -3,6 +3,8 @@ import { createChart, ColorType, CandlestickSeries } from 'lightweight-charts';
 import type { IChartApi, ISeriesApi, UTCTimestamp } from 'lightweight-charts';
 import useOHLCWebSocket from '../hooks/useOHLCWebSocket';
 
+const isDev = process.env.NODE_ENV !== 'production';
+
 interface FixedChartProps {
   height?: string;
   width?: string;
@@ -37,7 +39,7 @@ const FixedChart: React.FC<FixedChartProps> = ({
   useEffect(() => {
     if (!chartContainerRef.current) return;
 
-    console.log('FixedChart: Starting initialization');
+    isDev && console.log('FixedChart: Starting initialization');
 
     // Add delay to ensure container is ready
     const timer = setTimeout(() => {
@@ -48,7 +50,7 @@ const FixedChart: React.FC<FixedChartProps> = ({
         const containerWidth = container.clientWidth || 600;
         const containerHeight = container.clientHeight || 300;
 
-        console.log('FixedChart: Container dimensions', { containerWidth, containerHeight });
+        isDev && console.log('FixedChart: Container dimensions', { containerWidth, containerHeight });
 
         // Create chart
         const chart = createChart(container, {
@@ -147,12 +149,12 @@ const FixedChart: React.FC<FixedChartProps> = ({
             basePrice = close;
           }
 
-          console.log('FixedChart: Generated mock data', { count: data.length });
+          isDev && console.log('FixedChart: Generated mock data', { count: data.length });
 
           // Set mock data with a small delay to ensure chart is ready
           setTimeout(() => {
             if (candlestickSeries && chart) {
-              console.log('FixedChart: Setting mock data to series');
+              isDev && console.log('FixedChart: Setting mock data to series');
               candlestickSeries.setData(data);
               
               // After seriesRef.current.setData(data)
@@ -184,7 +186,7 @@ const FixedChart: React.FC<FixedChartProps> = ({
               }
               
               setIsReady(true);
-              console.log('FixedChart: Mock data set successfully with dynamic spacing');
+              isDev && console.log('FixedChart: Mock data set successfully with dynamic spacing');
             }
           }, 100);
         } else {
@@ -226,7 +228,7 @@ const FixedChart: React.FC<FixedChartProps> = ({
       return;
     }
 
-    console.log('FixedChart: Processing OHLC data', { count: ohlcData.length });
+    isDev && console.log('FixedChart: Processing OHLC data', { count: ohlcData.length });
 
     // Convert OHLC data to chart format and deduplicate by timestamp
     const dataMap = new Map<number, any>();
@@ -245,10 +247,9 @@ const FixedChart: React.FC<FixedChartProps> = ({
     // Convert to array and sort by time
     const chartData = Array.from(dataMap.values()).sort((a, b) => a.time - b.time);
 
-    console.log('FixedChart: Setting real OHLC data to series', { 
-      originalCount: ohlcData.length, 
+    isDev && console.log('FixedChart: Setting real OHLC data to series', {
+      originalCount: ohlcData.length,
       deduplicatedCount: chartData.length,
-      times: chartData.map(d => new Date(d.time * 1000).toISOString())
     });
     
     seriesRef.current.setData(chartData);

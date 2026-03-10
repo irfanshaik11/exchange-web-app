@@ -2,6 +2,8 @@
 import { useEffect, useState, useRef, useCallback } from 'react';
 import { useUser } from '~/components/UserContext';
 
+const isDev = process.env.NODE_ENV !== 'production';
+
 export interface SolanaPosition {
   tokenAddress: string;
   userId: number;
@@ -146,7 +148,6 @@ export function useSolanaPositionWebSocket(
 
     // Allow connection even without tokenAddress (for global txHash listening)
     if (!enabled || !userId) {
-      console.log('[useSolanaPositionWebSocket] ⏭️ Skipping connection - enabled:', enabled, 'userId:', userId);
       return;
     }
 
@@ -164,12 +165,12 @@ export function useSolanaPositionWebSocket(
       // Convert http:// to ws:// or https:// to wss://
       const wsUrl = backendUrl.replace(/^http/, 'ws') + `/ws/solana/positions?userId=${userId}`;
 
-      console.log('[useSolanaPositionWebSocket] 🔌 Connecting to WebSocket:', wsUrl);
+      if (isDev) console.log('[useSolanaPositionWebSocket] Connecting to:', wsUrl);
       const ws = new WebSocket(wsUrl);
 
       ws.onopen = () => {
         if (!mountedRef.current) return;
-        console.log('[useSolanaPositionWebSocket] ✅ WebSocket CONNECTED to', wsUrl);
+        if (isDev) console.log('[useSolanaPositionWebSocket] Connected');
         const wasReconnect = reconnectAttemptsRef.current > 0;
         setConnected(true);
         setError(null);
@@ -205,17 +206,14 @@ export function useSolanaPositionWebSocket(
           if (message.type === 'pong') {
             // Server acknowledged our heartbeat ping — connection is alive
           } else if (message.type === 'connected') {
-            console.log('[useSolanaPositionWebSocket] Connection confirmed:', message);
+            // Connection confirmed
           } else if (message.type === 'tx_hash' && message.data) {
             // INSTANT txHash push from backend - fires immediately after signing
-            console.log('[useSolanaPositionWebSocket] 🚀 INSTANT txHash received:', message.data.txHash);
             window.dispatchEvent(new CustomEvent('solanaTradeSuccess', { detail: message.data }));
             onTxHashRef.current?.(message.data as TxHashMessage);
           } else if (message.type === 'trade_error' && message.data) {
-            console.log('[useSolanaPositionWebSocket] ⚠️ Trade error via WS:', message.data.errorMessage);
             window.dispatchEvent(new CustomEvent('solanaTradeError', { detail: message.data }));
           } else if (message.type === 'positions_changed' && message.data) {
-            console.log('[useSolanaPositionWebSocket] 📡 Positions changed:', message.data);
             window.dispatchEvent(new CustomEvent('solanaPositionsChanged', { detail: message.data }));
           } else if (message.type === 'position_update') {
             // Per-token state update (for trade page)
@@ -231,8 +229,6 @@ export function useSolanaPositionWebSocket(
               detail: { position: message.data, tokenAddress: message.tokenAddress }
             }));
           } else if (message.type === 'new_trade' && message.data) {
-            console.log('[useSolanaPositionWebSocket] new_trade received:',
-              message.data.type, message.data.tokenAddress?.slice(0, 8));
             window.dispatchEvent(new CustomEvent('solanaNewTrade', {
               detail: message.data
             }));
@@ -249,7 +245,6 @@ export function useSolanaPositionWebSocket(
             } catch {}
           } else if (message.type === 'full_positions' && Array.isArray(message.data)) {
             // Full positions array pushed after trade save — instant update, no REST needed
-            console.log(`[useSolanaPositionWebSocket] full_positions (${message.blockchain}): ${message.data.length} positions`);
             window.dispatchEvent(new CustomEvent('solanaFullPositions', {
               detail: {
                 positions: message.data,
@@ -268,7 +263,6 @@ export function useSolanaPositionWebSocket(
               }));
             } catch {}
           } else if (message.type === 'positions_snapshot' && Array.isArray(message.data)) {
-            console.log(`[useSolanaPositionWebSocket] positions_snapshot (${message.blockchain}): ${message.data.length} positions`);
             window.dispatchEvent(new CustomEvent('solanaPositionsSnapshot', {
               detail: {
                 positions: message.data,
@@ -277,7 +271,6 @@ export function useSolanaPositionWebSocket(
               }
             }));
           } else if (message.type === 'activity_snapshot' && Array.isArray(message.data)) {
-            console.log(`[useSolanaPositionWebSocket] activity_snapshot (${message.blockchain}): ${message.data.length} trades`);
             window.dispatchEvent(new CustomEvent('solanaActivitySnapshot', {
               detail: {
                 activity: message.data,
@@ -285,8 +278,6 @@ export function useSolanaPositionWebSocket(
                 timestamp: message.timestamp,
               }
             }));
-          } else if (message.type === 'snapshot_empty') {
-            console.log('[useSolanaPositionWebSocket] snapshot_empty — cache cold, waiting for REST');
           }
         } catch (parseErr) {
           console.error('[useSolanaPositionWebSocket] Failed to parse message:', parseErr);
@@ -301,7 +292,7 @@ export function useSolanaPositionWebSocket(
 
       ws.onclose = (event) => {
         if (!mountedRef.current) return;
-        console.log('[useSolanaPositionWebSocket] 🔌 WebSocket CLOSED:', event.code, event.reason);
+        if (isDev) console.log('[useSolanaPositionWebSocket] WebSocket closed:', event.code);
         setConnected(false);
         wsRef.current = null;
 
@@ -320,7 +311,7 @@ export function useSolanaPositionWebSocket(
             baseReconnectInterval * Math.pow(2, reconnectAttemptsRef.current - 1),
             maxBackoffInterval
           );
-          console.log(`[useSolanaPositionWebSocket] Reconnecting in ${backoffDelay / 1000}s (attempt ${reconnectAttemptsRef.current})`);
+          if (isDev) console.log(`[useSolanaPositionWebSocket] Reconnecting in ${backoffDelay / 1000}s (attempt ${reconnectAttemptsRef.current})`);
           reconnectTimeoutRef.current = setTimeout(() => {
             if (mountedRef.current) {
               connect();
@@ -390,7 +381,6 @@ export function useSolanaPositionWebSocket(
       const { enabled: isEnabled, userId } = configRef.current;
       if (document.visibilityState === 'visible' && isEnabled && userId) {
         if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) {
-          console.log('[useSolanaPositionWebSocket] Tab visible, WS not open — reconnecting');
           reconnectAttemptsRef.current = 0;
           connect();
         } else {
@@ -398,7 +388,6 @@ export function useSolanaPositionWebSocket(
           try {
             wsRef.current.send(JSON.stringify({ type: 'ping' }));
           } catch {
-            console.log('[useSolanaPositionWebSocket] Ping failed on tab return — reconnecting');
             reconnectAttemptsRef.current = 0;
             connect();
           }

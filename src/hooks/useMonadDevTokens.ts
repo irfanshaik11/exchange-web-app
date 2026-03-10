@@ -1,5 +1,7 @@
 import { useState, useEffect } from 'react';
 
+const isDev = process.env.NODE_ENV !== 'production';
+
 export interface MonadDevTokenData {
   buy_count: number;
   buy_volume_mon: number;
@@ -69,10 +71,10 @@ export default function useMonadDevTokens(
         
         if (result.status === 'success' && result.data) {
           setDevTokenData(result.data);
-          console.log(`[useMonadDevTokens] Fetched dev token data for ${tokenAddress}`);
+          isDev && console.log(`[useMonadDevTokens] Fetched dev token data for ${tokenAddress}`);
         } else {
           setDevTokenData(null);
-          console.log(`[useMonadDevTokens] No dev token data found for ${tokenAddress}`);
+          isDev && console.log(`[useMonadDevTokens] No dev token data found for ${tokenAddress}`);
         }
       } catch (err) {
         console.error(`[useMonadDevTokens] Failed to fetch dev token data for ${tokenAddress}:`, err);

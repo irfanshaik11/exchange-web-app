@@ -1,5 +1,7 @@
 import { useState, useEffect } from 'react';
 
+const isDev = process.env.NODE_ENV !== 'production';
+
 export interface MonadXrayData {
   token_address: string;
   name: string | null;
@@ -81,10 +83,10 @@ export default function useMonadXray(
         
         if (result.status === 'success' && result.data) {
           setXrayData(result.data);
-          console.log(`[useMonadXray] Fetched xray data for ${tokenAddress}`);
+          isDev && console.log(`[useMonadXray] Fetched xray data for ${tokenAddress}`);
         } else {
           setXrayData(null);
-          console.log(`[useMonadXray] No xray data found for ${tokenAddress}`);
+          isDev && console.log(`[useMonadXray] No xray data found for ${tokenAddress}`);
         }
       } catch (err) {
         console.error(`[useMonadXray] Failed to fetch xray data for ${tokenAddress}:`, err);

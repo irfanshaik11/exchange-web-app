@@ -2,6 +2,8 @@ import { useState, useEffect } from 'react';
 import { getTokenMetrics, registerToken } from '~/utils/api';
 import type { TokenMetrics } from '~/utils/api';
 
+const isDev = process.env.NODE_ENV !== 'production';
+
 interface UseTokenAnalyticsOptions {
   mintAddress?: string;
   enabled?: boolean;
@@ -76,7 +78,7 @@ export function useTokenAnalytics({
           // After registration, fetch with refresh to get blockchain data
           result = await getTokenMetrics(mintAddress, true);
         } catch (regError) {
-          console.log('Token registration failed (may already exist):', regError);
+          isDev && console.log('Token registration failed (may already exist):', regError);
           // Try fetching again anyway
           result = await getTokenMetrics(mintAddress, forceRefresh);
         }

@@ -644,17 +644,6 @@ const CodexTopTraders: React.FC<CodexTopTradersProps> = ({
   // Only show skeleton if we have absolutely no address to work with
   const shouldShowSkeleton = !mintForWebSocket;
 
-  // Debug logging
-  console.log("[CodexTopTraders] Debug:", {
-    hasToken: !!token,
-    tokenMint: token?.mint,
-    tokenPairAddress: token?.pair_address,
-    propPairAddress: pairAddress,
-    mintForWebSocket,
-    shouldShowSkeleton,
-    chain,
-  });
-
   // Use shared WebSocket context for Solana chain (eliminates duplicate connections)
   // Context is provided by parent [id].tsx with SolanaTokenWebSocketProvider
   const wsContext = useSolanaTokenWebSocketContext();

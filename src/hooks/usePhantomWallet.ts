@@ -1,6 +1,8 @@
 import { useState, useEffect, useCallback } from 'react';
 import bs58 from 'bs58';
 
+const isDev = process.env.NODE_ENV !== 'production';
+
 interface PhantomWallet {
   isInstalled: boolean;
   isConnected: boolean;
@@ -91,7 +93,7 @@ export function usePhantomWallet(): UsePhantomWalletReturn {
     try {
       // Always attempt to connect, even if already connected
       // This ensures the wallet is in a fresh, ready state
-      console.log('Attempting to connect to Phantom wallet...');
+      isDev && console.log('Attempting to connect to Phantom wallet...');
       
       // Add timeout to prevent hanging (reduced to 15 seconds for better UX)
       // Create a timeout promise that resolves with a special value
@@ -119,7 +121,7 @@ export function usePhantomWallet(): UsePhantomWalletReturn {
       
       const response = result as any;
       const publicKey = response.publicKey?.toString() || null;
-      console.log('Phantom wallet connected successfully:', publicKey);
+      isDev && console.log('Phantom wallet connected successfully:', publicKey);
       
       // Update state immediately
       setState(prev => ({
@@ -190,7 +192,7 @@ export function usePhantomWallet(): UsePhantomWalletReturn {
     }
 
     try {
-      console.log('Attempting to sign message with Phantom wallet...');
+      isDev && console.log('Attempting to sign message with Phantom wallet...');
       
       // Check if wallet is actually connected by checking the provider state
       if (!provider.isConnected) {
@@ -203,8 +205,8 @@ export function usePhantomWallet(): UsePhantomWalletReturn {
         return { error: 'No public key available. Please connect your wallet first.' };
       }
       
-      console.log('Phantom signing with public key:', currentPublicKey.toString());
-      console.log('Message to sign:', message);
+      isDev && console.log('Phantom signing with public key:', currentPublicKey.toString());
+      isDev && console.log('Message to sign:', message);
       
       // Add timeout to prevent hanging (reduced to 15 seconds for better UX)
       // Create a timeout promise that resolves with a special value
@@ -234,7 +236,7 @@ export function usePhantomWallet(): UsePhantomWalletReturn {
         // Race between signing and timeout - wrap in try-catch to handle rejections
         const result = await Promise.race([signPromise, timeoutPromise]).catch((err: any) => {
           // Handle rejection from Promise.race
-          console.log('Promise.race caught error:', err);
+          isDev && console.log('Promise.race caught error:', err);
           
           // Check for user rejection (multiple possible formats)
           if (
@@ -268,7 +270,7 @@ export function usePhantomWallet(): UsePhantomWalletReturn {
         // Encode signature to base58 as expected by backend
         const signature = bs58.encode(signed.signature);
         
-        console.log('Message signed successfully:', { publicKey, message });
+        isDev && console.log('Message signed successfully:', { publicKey, message });
         
         return {
           publicKey,

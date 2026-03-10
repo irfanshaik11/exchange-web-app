@@ -1,5 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 
+const isDev = process.env.NODE_ENV !== 'production';
+
 export interface BirdeyeOHLCItem {
   address: string;
   h: number; // high
@@ -86,7 +88,7 @@ export function useBirdeyeOHLC({
       url.searchParams.append('type', timeframe);
       url.searchParams.append('limit', '1000');
 
-      console.log('useBirdeyeOHLC: Fetching data from proxy', { pairAddress, timeframe });
+      isDev && console.log('useBirdeyeOHLC: Fetching data from proxy', { pairAddress, timeframe });
 
       const response = await fetch(url.toString(), {
         method: 'GET',
@@ -126,14 +128,14 @@ export function useBirdeyeOHLC({
       setLastUpdate(new Date());
       setIsLoading(false);
 
-      console.log('useBirdeyeOHLC: Data fetched successfully', { count: items.length });
+      isDev && console.log('useBirdeyeOHLC: Data fetched successfully', { count: items.length });
 
       if (onSuccess) {
         onSuccess(items);
       }
     } catch (err) {
       if (err instanceof Error && err.name === 'AbortError') {
-        console.log('useBirdeyeOHLC: Request aborted');
+        isDev && console.log('useBirdeyeOHLC: Request aborted');
         return;
       }
 
@@ -171,7 +173,7 @@ export function useBirdeyeOHLC({
     const backoffMultiplier = Math.min(Math.pow(2, retryCount), 8); // Max 8x backoff
     const intervalTime = refreshInterval * backoffMultiplier;
 
-    console.log('useBirdeyeOHLC: Setting refresh interval', {
+    isDev && console.log('useBirdeyeOHLC: Setting refresh interval', {
       intervalSeconds: intervalTime / 1000,
       retryCount
     });

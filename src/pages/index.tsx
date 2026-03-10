@@ -68,6 +68,8 @@ type TokenWithDexPaid = Token & { dexPaid?: boolean };
 
 export type Timeframe = "5m" | "1h" | "6h" | "24h";
 
+const isDev = process.env.NODE_ENV !== 'production';
+
 export default function Home() {
   const router = useRouter();
 
@@ -99,11 +101,6 @@ export default function Home() {
   const [selectedTimeframe, setSelectedTimeframe] =
     useState<Timeframe>("1h");
   
-  // Log timeframe changes in index page
-  useEffect(() => {
-    console.log('🔍 [INDEX] selectedTimeframe changed to:', selectedTimeframe);
-  }, [selectedTimeframe]);
-  
   const { user, loading: userLoading, refreshUser, refreshBalance, walletList, walletBalances, selectedWalletIds } = useUser();
   const [selectedTab, setSelectedTab] = useState<"dex" | "trending">("trending");
   const [sortKey, setSortKey] = useState<"market_cap_total" | "liquidity" | "volume" | "txns" | "name">("volume");
@@ -115,14 +112,6 @@ export default function Home() {
   const { filter, setFilter, resetFilter } = useFilter();
   const [showSkeleton, setShowSkeleton] = useState(true);
 
-  // WebSocket token service - ONLY for home page, not discover
-  console.log('🔧 [INDEX] About to call usePaginatedTokensWithFallback with:', { 
-    filter: selectedTab === 'dex' ? 'new' : 'trending', 
-    timeframe: selectedTimeframe,
-    pathname: router.pathname
-  });
-  console.log('🔧 [INDEX] selectedTimeframe value:', selectedTimeframe, 'type:', typeof selectedTimeframe);
-  
   // Don't make API calls if we're on a different page
   const shouldMakeCalls = router.pathname === '/';
   
@@ -144,57 +133,17 @@ export default function Home() {
     limit: shouldMakeCalls ? 20 : 0
   });
   
-  // Only make API calls on the home page, not discover page
+  // Efficiently update tokenMapRef and trigger re-renders only for changed tokens
   useEffect(() => {
-    if (router.pathname !== '/') {
-      console.log('🚫 Index page: Skipping API calls - not on home route');
-    }
-  }, [router.pathname]);  // Efficiently update tokenMapRef and trigger re-renders only for changed tokens
-  useEffect(() => {
-    console.log('🔧 allTokens changed:', { allTokens, isArray: Array.isArray(allTokens), length: Array.isArray(allTokens) ? allTokens.length : 'not array' });
     if (Array.isArray(allTokens)) {
-      // Check for duplicates
-      const uniqueTokens = new Map();
-      allTokens.forEach((token, index) => {
-        if (uniqueTokens.has(token.pair_address)) {
-          console.log('🔧 DUPLICATE FOUND:', { 
-            index, 
-            pair_address: token.pair_address, 
-            name: token.name,
-            firstOccurrence: uniqueTokens.get(token.pair_address)
-          });
-        } else {
-          uniqueTokens.set(token.pair_address, { index, name: token.name });
-        }
-      });
-      console.log('🔧 Unique tokens count:', uniqueTokens.size, 'out of', allTokens.length);
       let changed = false;
       const map = tokenMapRef.current;
-      console.log('🔧 Processing tokens:', allTokens.length, 'tokens');
-      console.log('🔧 All tokens raw data:', allTokens.map((t, i) => ({ 
-        index: i,
-        name: t.name, 
-        symbol: t.symbol, 
-        pair_address: t.pair_address 
-      })));
       for (let i = 0; i < allTokens.length; i++) {
         const token = allTokens[i] as TokenWithDexPaid;
-        console.log(`🔧 Processing token ${i + 1}/${allTokens.length}:`, { 
-          name: token.name, 
-          symbol: token.symbol, 
-          pair_address: token.pair_address,
-          hasName: 'name' in token,
-          hasSymbol: 'symbol' in token,
-          hasPairAddress: 'pair_address' in token,
-          keys: Object.keys(token)
-        });
         const prev = map.get(token.pair_address);
         if (!prev || JSON.stringify(prev) !== JSON.stringify(token)) {
           map.set(token.pair_address, token);
           changed = true;
-          console.log('🔧 Added/updated token:', token.name);
-        } else {
-          console.log('🔧 Skipped token (no changes):', token.name);
         }
       }
       // Optionally, remove tokens that are no longer present, but only when incoming list is reasonably sized
@@ -208,18 +157,10 @@ export default function Home() {
             changed = true;
           }
         }
-      } else {
-        console.log('🛡️ Skipping deletions to keep table stable (incoming too small):', { incomingLen, minCount, currentSize: map.size });
       }
       if (changed) {
         // Create a stable array for downstream use
         const arr = Array.from(map.values());
-        console.log('🔧 Setting filteredTokens:', arr.length, 'tokens');
-        console.log('🔧 FilteredTokens data:', arr.map(t => ({ 
-          name: t.name, 
-          symbol: t.symbol, 
-          pair_address: t.pair_address 
-        })));
         setFilteredTokens(arr);
       }
     }
@@ -229,10 +170,6 @@ export default function Home() {
   const handleMinMaxChange = (key: keyof typeof filter, value: string | number) => {
     setFilter({ ...filter, [key]: value });
   };
-
-  useEffect(() => {
-    console.log(sortKey);
-  }, [sortKey]);
 
   // Filter tokens when search changes
   // Fetch from backend /search endpoint when the search term changes
@@ -288,22 +225,14 @@ export default function Home() {
   }, [search]); */
 
   const handleTimeframeClick = (tf: string) => {
-    console.log('🔧 Timeframe clicked:', tf);
-    console.log('🔧 Current selectedTimeframe before change:', selectedTimeframe);
     setSelectedTimeframe(tf as Timeframe);
     setSortKey("volume");
     setSortDirection("desc");
-    console.log('🔧 selectedTimeframe state updated to:', tf);
-    console.log('🔧 State update scheduled, hook should re-run soon');
-    // Let the hook handle data fetching and sorting
   };
 
   // QUICK BUY handler
   async function handleQuickBuy(token: Token) {
-    console.log("🎯 handleQuickBuy called for token:", token.symbol);
-    
     if (!user?.bearerToken || !user?.id) {
-      console.log("❌ No user found");
       return;
     }
     
@@ -353,7 +282,7 @@ export default function Home() {
       },
       refreshBalance,
       onSuccess: (txHash, stats) => {
-        console.log('✅ Home Quick Buy successful:', { txHash, stats });
+        isDev && console.log('Home Quick Buy successful:', { txHash, stats });
       },
       onError: (error) => {
         console.error('❌ Home Quick Buy failed:', error);
@@ -383,8 +312,6 @@ export default function Home() {
   useEffect(() => {
     if (selectedTab === "trending") {
       const arr = Array.from(tokenMapRef.current.values());
-      console.log('🔧 Setting displayed tokens for trending tab. TokenMapRef size:', tokenMapRef.current.size, 'arr length:', arr.length);
-      console.log('🔧 TokenMapRef contents:', arr.map(t => ({ name: t.name, symbol: t.symbol, pair_address: t.pair_address })));
       const sortedTokens = [...arr];
       sortedTokens.sort((a, b) => {
         let aVal = 0, bVal = 0;
@@ -404,19 +331,7 @@ export default function Home() {
         return sortDirection === 'asc' ? aVal - bVal : bVal - aVal;
       });
       setDisplayed(sortedTokens);
-      console.log('🔧 Set displayed to:', sortedTokens.length, 'tokens');
-      console.log('🔧 Displayed tokens:', sortedTokens.map(t => ({ 
-        name: t.name, 
-        symbol: t.symbol, 
-        pair_address: t.pair_address,
-        hasName: 'name' in t,
-        hasSymbol: 'symbol' in t,
-        hasPairAddress: 'pair_address' in t,
-        keys: Object.keys(t)
-      })));
-      console.log('🔧 Displayed state updated, should trigger re-render');
     } else {
-      console.log('🔧 Setting displayed tokens for dex tab. FilteredTokens length:', filteredTokens.length);
       setDisplayed(filteredTokens.slice(0, 10));
     }
   }, [selectedTab, filteredTokens, sortKey, sortDirection, selectedTimeframe, getVolumeForTimeframe]);
@@ -447,14 +362,7 @@ export default function Home() {
 
   // Hide skeleton when we have data or when loading is complete
   useEffect(() => {
-    console.log('🔧 Skeleton effect triggered:', {
-      allTokens: !!allTokens,
-      allTokensLength: Array.isArray(allTokens) ? allTokens.length : 'not array',
-      tokensLoading,
-      shouldHideSkeleton: (allTokens && Array.isArray(allTokens) && allTokens.length > 0) || tokensLoading === false
-    });
     if ((allTokens && Array.isArray(allTokens) && allTokens.length > 0) || tokensLoading === false) {
-      console.log('🔧 Hiding skeleton');
       setShowSkeleton(false);
     }
   }, [allTokens, tokensLoading]);
@@ -573,22 +481,6 @@ export default function Home() {
 
         {/* Main Content */}
         <main className="mx-auto px-20 pb-10">
-          {(() => {
-            console.log('🔧 Render conditions:', {
-              showSkeleton,
-              allTokens: !!allTokens,
-              allTokensLength: Array.isArray(allTokens) ? allTokens.length : 'not array',
-              tokenError,
-              displayedLength: displayed.length,
-              tokensLoading,
-              displayedTokens: displayed.map(t => ({ 
-                name: t.name, 
-                symbol: t.symbol, 
-                pair_address: t.pair_address 
-              }))
-            });
-            return null;
-          })()}
           {(showSkeleton || tokensLoading) ? (
             <div className="space-y-4">
               {Array.from({ length: 10 }).map((_, i) => (
@@ -606,23 +498,6 @@ export default function Home() {
           ) : (
             <InterstateTable
               rows={displayed.map((token, i) => {
-                // Debug: Check what token data looks like before passing to table
-                console.log(`🔧 Mapping token ${i + 1}/${displayed.length} for table:`, { 
-                  name: token.name, 
-                  symbol: token.symbol, 
-                  pair_address: token.pair_address 
-                });
-                if (i === 0) {
-                  console.log('🔧 First token being passed to table FULL OBJECT:', JSON.stringify(token, null, 2));
-                  console.log('🔧 First token being passed to table:', {
-                    name: token.name,
-                    symbol: token.symbol,
-                    usd_price: token.usd_price,
-                    fully_diluted_value: token.fully_diluted_value,
-                    total_liquidity_usd: token.total_liquidity_usd,
-                    keys: Object.keys(token)
-                  });
-                }
                 return { token, i };
               })}
               onQuickBuy={handleQuickBuy}

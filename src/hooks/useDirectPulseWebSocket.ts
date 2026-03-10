@@ -95,7 +95,6 @@ export function useDirectPulseWebSocket(
     if (!mountedRef.current) return;
 
     const now = Date.now();
-    console.log(`[DirectWS] 🚀 Token received: ${token.symbol} at ${now}`);
 
     setTokens(prev => {
       // Remove existing if present, add to front
@@ -197,21 +196,18 @@ export function useDirectPulseWebSocket(
       if (!mountedRef.current) return;
 
       const url = `${wsUrl}/v1/stream?channel=${channel}`;
-      console.log(`[DirectWS] Connecting to ${channel}:`, url);
 
       try {
         const ws = new WebSocket(url);
         wsRef.current = ws;
 
         ws.onopen = () => {
-          console.log(`[DirectWS] ✅ Connected: ${channel}`);
           if (mountedRef.current) {
             setConnected(true);
           }
         };
 
         ws.onclose = () => {
-          console.log(`[DirectWS] Disconnected: ${channel}`);
           if (mountedRef.current) {
             setConnected(false);
             // Reconnect after 3 seconds

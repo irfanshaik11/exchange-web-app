@@ -1,5 +1,7 @@
 import { useState, useEffect } from 'react';
 
+const isDev = process.env.NODE_ENV !== 'production';
+
 interface CodexDevToken {
   token: {
     address: string;
@@ -64,7 +66,7 @@ export default function useCodexDevTokens(
 
         if (!response.ok) {
           // 404 or other non-OK responses just mean no dev tokens - not an error
-          console.log(`Dev tokens endpoint returned ${response.status} - treating as no tokens`);
+          isDev && console.log(`Dev tokens endpoint returned ${response.status} - treating as no tokens`);
           setTokens([]);
           setIsLoading(false);
           return;
@@ -74,14 +76,14 @@ export default function useCodexDevTokens(
 
         if (result.filterTokens?.results) {
           setTokens(result.filterTokens.results);
-          console.log(`Fetched ${result.filterTokens.results.length} dev tokens`);
+          isDev && console.log(`Fetched ${result.filterTokens.results.length} dev tokens`);
         } else {
           setTokens([]);
-          console.log('No dev tokens found');
+          isDev && console.log('No dev tokens found');
         }
       } catch (err) {
         // Only log to console, don't show error to user - no dev tokens is normal
-        console.log('Dev tokens fetch issue (may be expected):', err);
+        isDev && console.log('Dev tokens fetch issue (may be expected):', err);
         setTokens([]);
       } finally {
         setIsLoading(false);

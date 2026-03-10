@@ -10,6 +10,8 @@ import { useEffect } from 'react';
 import { env } from '~/env';
 import { initPulseWorker } from '~/utils/pulseWorkerBridge';
 
+const isDev = process.env.NODE_ENV !== 'production';
+
 export function PulseBackgroundLoader() {
   useEffect(() => {
     // Get WebSocket URL from env
@@ -28,7 +30,7 @@ export function PulseBackgroundLoader() {
     wsBaseUrl = wsBaseUrl.replace(/\/v1\/stream.*$/, '');
     wsBaseUrl = wsBaseUrl.replace(/\/+$/, ''); // Remove trailing slashes
 
-    console.log('[PulseBackgroundLoader] Initializing worker with:', wsBaseUrl);
+    isDev && console.log('[PulseBackgroundLoader] Initializing worker with:', wsBaseUrl);
     initPulseWorker(wsBaseUrl);
 
     // Worker persists - no cleanup needed

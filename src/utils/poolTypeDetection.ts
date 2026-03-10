@@ -1,5 +1,7 @@
 import type { Token } from "./db";
 
+const isDev = process.env.NODE_ENV !== 'production';
+
 export type PoolType =
   | "PumpAmm"
   | "Raydium"
@@ -76,7 +78,7 @@ export function getPoolTypeFromToken(token: Token): PoolType {
     // If just "meteora" without variant, return "Meteora" for DLMM pools
     // Backend can still auto-detect the specific type from the pool address if needed
     if (protocolLower === "meteora") {
-      console.log(`ℹ️ Protocol is "meteora" without specific variant for ${token.symbol}. Using generic "Meteora" pool type.`);
+      isDev && console.log(`Protocol is "meteora" without specific variant for ${token.symbol}. Using generic "Meteora" pool type.`);
       return "Meteora"; // Generic Meteora (usually DLMM)
     }
     // If it contains "meteora" but we couldn't determine variant, return generic Meteora

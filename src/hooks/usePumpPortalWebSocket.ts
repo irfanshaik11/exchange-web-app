@@ -1,5 +1,7 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
 
+const isDev = process.env.NODE_ENV !== 'production';
+
 interface PumpPortalToken {
   signature: string;
   mint: string;
@@ -79,7 +81,6 @@ export function usePumpPortalWebSocket(
         const { tokens: cachedTokens, timestamp } = JSON.parse(cached);
         const age = Date.now() - timestamp;
         if (age < CACHE_TTL && Array.isArray(cachedTokens) && cachedTokens.length > 0) {
-          console.log('[usePumpPortalWebSocket] Loading cached tokens:', cachedTokens.length);
           setTokens(cachedTokens);
         }
       }
@@ -130,25 +131,17 @@ export function usePumpPortalWebSocket(
   // Function to fetch token image from metadata URI
   const fetchTokenImage = useCallback(async (uri: string): Promise<string | undefined> => {
     try {
-      console.log('[usePumpPortalWebSocket] Attempting to fetch metadata from:', uri);
       const proxied = uri.startsWith('/api/metadata') ? uri : `/api/metadata?url=${encodeURIComponent(uri)}`;
       let response = await fetch(proxied);
       if (!response.ok && proxied !== uri) {
         response = await fetch(uri);
       }
-      console.log('[usePumpPortalWebSocket] Metadata fetch response status:', response.status, 'ok:', response.ok);
       if (response.ok) {
         const metadata = await response.json();
-        console.log('[usePumpPortalWebSocket] Metadata received:', JSON.stringify(metadata).slice(0, 200));
         const imageUrl = metadata?.image;
-        console.log('[usePumpPortalWebSocket] Image URL from metadata:', imageUrl);
         if (imageUrl) {
           return imageUrl;
-        } else {
-          console.log('[usePumpPortalWebSocket] No image field in metadata');
         }
-      } else {
-        console.log('[usePumpPortalWebSocket] Metadata fetch failed with status:', response.status);
       }
     } catch (err) {
       console.error('[usePumpPortalWebSocket] Error fetching metadata:', err);
@@ -159,7 +152,7 @@ export function usePumpPortalWebSocket(
   const connect = useCallback(() => {
     // Don't connect if feature is disabled
     if (!enabled) {
-      console.log('[usePumpPortalWebSocket] WebSocket disabled');
+      isDev && console.log('[usePumpPortalWebSocket] WebSocket disabled');
       return;
     }
 
@@ -169,18 +162,18 @@ export function usePumpPortalWebSocket(
     }
 
     if (reconnectAttemptsRef.current >= maxReconnectAttempts) {
-      console.log('[usePumpPortalWebSocket] Max reconnect attempts reached');
+      isDev && console.log('[usePumpPortalWebSocket] Max reconnect attempts reached');
       setError('Max reconnection attempts reached');
       return;
     }
 
     try {
-      console.log('[usePumpPortalWebSocket] Connecting to:', url);
+      isDev && console.log('[usePumpPortalWebSocket] Connecting to:', url);
       const ws = new WebSocket(url);
 
       ws.onopen = () => {
         if (!mountedRef.current) return;
-        console.log('[usePumpPortalWebSocket] ✅ Connected to PumpPortal');
+        isDev && console.log('[usePumpPortalWebSocket] Connected to PumpPortal');
         setConnected(true);
         setError(null);
         reconnectAttemptsRef.current = 0;
@@ -195,7 +188,7 @@ export function usePumpPortalWebSocket(
           method: 'subscribeMigration'
         }));
 
-        console.log('[usePumpPortalWebSocket] Subscribed to NewToken and Migration events');
+        isDev && console.log('[usePumpPortalWebSocket] Subscribed to NewToken and Migration events');
       };
 
       ws.onmessage = (event) => {
@@ -209,7 +202,6 @@ export function usePumpPortalWebSocket(
 
           // Check if it's a confirmation message
           if (msg.message) {
-            console.log('[usePumpPortalWebSocket] Confirmation:', msg.message);
             return;
           }
 
@@ -239,30 +231,19 @@ export function usePumpPortalWebSocket(
               pair_address: msg.bondingCurveKey,
             };
 
-            console.log('[usePumpPortalWebSocket] Received token:', {
-              mint: tokenEvent.mint,
-              name: tokenEvent.name,
-              symbol: tokenEvent.symbol,
-              txType: tokenEvent.txType,
-            });
-
             // Handle different event types
             if (msg.txType === 'create') {
               // Check for duplicates first
               const exists = tokensRef.current.some((t) => t.mint === tokenEvent.mint);
               if (exists) {
-                console.log('[usePumpPortalWebSocket] Token already exists, skipping:', tokenEvent.mint);
                 return;
               }
 
               // Fetch image first, then add token with metadata
               if (tokenEvent.uri) {
-                console.log('[usePumpPortalWebSocket] Fetching image for:', tokenEvent.mint, 'URI:', tokenEvent.uri);
                 fetchTokenImage(tokenEvent.uri)
                   .then((imageUrl) => {
                     if (!mountedRef.current) return;
-                    
-                    console.log('[usePumpPortalWebSocket] Image fetch result:', tokenEvent.mint, 'got image:', !!imageUrl);
                     
                     // Only add token if we got a valid image URL
                     if (imageUrl) {
@@ -274,7 +255,6 @@ export function usePumpPortalWebSocket(
                         return [tokenWithImage, ...prev].slice(0, 100);
                       });
                     } else {
-                      console.log('[usePumpPortalWebSocket] No image URL, skipping token:', tokenEvent.mint);
                     }
                   })
                   .catch((err) => {
@@ -282,7 +262,6 @@ export function usePumpPortalWebSocket(
                     // Don't add token if image fetch fails
                   });
               } else {
-                console.log('[usePumpPortalWebSocket] No URI for token, skipping:', tokenEvent.mint);
                 // Don't add token without URI
               }
 
@@ -292,8 +271,6 @@ export function usePumpPortalWebSocket(
               }
             } else if (msg.txType === 'migrate') {
               // Handle migration events
-              console.log('[usePumpPortalWebSocket] Token migrated:', tokenEvent.mint);
-
               // Call callback if provided
               if (onTokenMigratedRef.current) {
                 onTokenMigratedRef.current(tokenEvent);
@@ -313,13 +290,13 @@ export function usePumpPortalWebSocket(
 
       ws.onclose = (event) => {
         if (!mountedRef.current) return;
-        console.log('[usePumpPortalWebSocket] WebSocket closed:', event.code, event.reason);
+        isDev && console.log('[usePumpPortalWebSocket] WebSocket closed:', event.code, event.reason);
         setConnected(false);
 
         // Attempt to reconnect if we haven't exceeded max attempts
         if (reconnectAttemptsRef.current < maxReconnectAttempts) {
           reconnectAttemptsRef.current += 1;
-          console.log(
+          isDev && console.log(
             `[usePumpPortalWebSocket] Attempting to reconnect (${reconnectAttemptsRef.current}/${maxReconnectAttempts})...`
           );
 
@@ -327,7 +304,7 @@ export function usePumpPortalWebSocket(
             connect();
           }, reconnectInterval);
         } else {
-          console.log('[usePumpPortalWebSocket] Max reconnection attempts reached');
+          isDev && console.log('[usePumpPortalWebSocket] Max reconnection attempts reached');
           setError('Max reconnection attempts reached');
         }
       };

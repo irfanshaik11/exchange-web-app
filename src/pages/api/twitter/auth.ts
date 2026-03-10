@@ -2,6 +2,8 @@ import type { NextApiRequest, NextApiResponse } from 'next';
 import { serialize } from 'cookie';
 import { generateState, generatePKCE, buildAuthorizationUrl } from '../../../utils/twitterAuth';
 
+const isDev = process.env.NODE_ENV !== 'production';
+
 /**
  * Initiates Twitter OAuth 2.0 flow
  * 
@@ -18,8 +20,8 @@ export default async function handler(
 
   try {
     // Log environment check (without exposing secrets)
-    console.log('[Twitter OAuth] Initiating auth flow...');
-    console.log('[Twitter OAuth] Environment check:', {
+    isDev && console.log('[Twitter OAuth] Initiating auth flow...');
+    isDev && console.log('[Twitter OAuth] Environment check:', {
       hasClientId: !!process.env.X_CLIENT_ID,
       hasClientSecret: !!process.env.X_CLIENT_SECRET,
       hasRedirectUri: !!process.env.X_REDIRECT_URI,
@@ -66,7 +68,7 @@ export default async function handler(
     // Build authorization URL
     const authUrl = buildAuthorizationUrl(state, codeChallenge);
     
-    console.log('[Twitter OAuth] Redirecting to Twitter with URL:', authUrl);
+    isDev && console.log('[Twitter OAuth] Redirecting to Twitter with URL:', authUrl);
 
     // Redirect to Twitter authorization page
     res.redirect(authUrl);

@@ -1,5 +1,7 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 
+const isDev = process.env.NODE_ENV !== 'production';
+
 // Fetch with timeout helper
 const fetchWithTimeout = async (url: string, timeoutMs = 10000) => {
   const ctrl = new AbortController();
@@ -50,12 +52,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     if (monadServiceUrl) {
       fetchUrl = `${monadServiceUrl}/v1/pulse/new?${params.toString()}`;
       source = 'monad-service';
-      console.log('[pulse-new-monad] Attempting Monad token service:', fetchUrl);
+      isDev && console.log('[pulse-new-monad] Attempting Monad token service:', fetchUrl);
     } else if (goServiceUrl) {
       // Use exchange-token-service backend's Birdeye endpoint for Monad
       fetchUrl = `${goServiceUrl}/v1/pulse/new/monad?${params.toString()}`;
       source = 'exchange-service-birdeye';
-      console.log('[pulse-new-monad] Using exchange-token-service Birdeye endpoint:', fetchUrl);
+      isDev && console.log('[pulse-new-monad] Using exchange-token-service Birdeye endpoint:', fetchUrl);
     } else {
       throw new Error('Neither MONAD_TOKEN_SERVICE_URL nor NEXT_PUBLIC_GO_SERVICE_URL is configured');
     }
@@ -69,7 +71,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       
       // If Monad service failed and we have exchange-service as fallback, try it
       if (source === 'monad-service' && goServiceUrl) {
-        console.log('[pulse-new-monad] Monad service failed, trying exchange-service Birdeye endpoint as fallback');
+        isDev && console.log('[pulse-new-monad] Monad service failed, trying exchange-service Birdeye endpoint as fallback');
         const fallbackUrl = `${goServiceUrl}/v1/pulse/new/monad?${params.toString()}`;
         const fallbackResp = await fetchWithTimeout(fallbackUrl, 10000);
         const fallbackText = await fallbackResp.text();

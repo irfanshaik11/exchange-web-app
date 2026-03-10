@@ -23,6 +23,7 @@ import dynamic from "next/dynamic";
 import SimilarTokensPanel from "../../components/trade/SimilarTokensPanel";
 import ReusedImageTokensPanel from "../../components/trade/ReusedImageTokensPanel";
 import TokenLimitOrders from "../../components/trade/TokenLimitOrders";
+import { getMyLimitOrders } from "../../utils/api";
 import { creatorAddressCache } from "../../utils/preloadTradeChart";
 // Eager load AdvancedOHLCChart on trade pages - always needed, so no point in lazy loading
 import AdvancedOHLCChart from "../../components/AdvancedOHLCChart";
@@ -80,6 +81,11 @@ export default function TradePage() {
   const isRouterReady = router.isReady;
   const idString = typeof id === "string" ? id : "";
 
+  // Ref tracks the current route id so handleChartMetrics can tag metrics
+  // without adding id to its useCallback deps (which would destabilize the callback).
+  const idRef = React.useRef(idString);
+  React.useEffect(() => { idRef.current = idString; }, [idString]);
+
   // /trade/[id] is the Solana trade page - always use solana
   // Monad has its own page at /trade/monad/[contractAddress]
   const network = 'solana';
@@ -108,23 +114,6 @@ export default function TradePage() {
     }
     return null;
   }, [_name, _symbol, _price, _mcap, _image, _mint, _launchpad_protocol, _liquidity, _created_at, _migrated]);
-
-  if (process.env.NODE_ENV === "development") {
-    console.log("TradePage Debug:", {
-      id,
-      idType: typeof id,
-      isString: typeof id === "string",
-      mintFromQuery: _mint,
-      optimisticToken,
-      // Debug liquidity/age/image from query params
-      queryParams: { _liquidity, _created_at, _image },
-      optimisticHasData: {
-        liquidity: optimisticToken?.liquidity_usd,
-        age: optimisticToken?.launch_time || optimisticToken?.created_at,
-        image: optimisticToken?.image,
-      }
-    });
-  }
 
   const [tokenDataLoading, setTokenDataLoading] = useState(false);
   const [tradesDataLoading, setTradesDataLoading] = useState(false);
@@ -193,7 +182,6 @@ export default function TradePage() {
 
   // Reset state when navigating to a different token
   useEffect(() => {
-    console.log('[TradePage] Token ID changed, resetting state:', id);
     setCorrectTokenData(null);
     setCreatorAddress(null);
     setIsLoadingCorrectData(false);
@@ -226,12 +214,6 @@ export default function TradePage() {
 
       if (searchData?.tokens?.[0]) {
         const fetchedToken = searchData.tokens[0];
-        console.log("[TradePage] correctTokenData from /v1/search:", {
-          created_at: fetchedToken.created_at,
-          createdAt: fetchedToken.createdAt,
-          launch_time: fetchedToken.launch_time,
-          name: fetchedToken.name || fetchedToken.symbol,
-        });
         setCorrectTokenData(fetchedToken);
       }
       if (typeof devResult === 'string') {
@@ -478,19 +460,6 @@ export default function TradePage() {
         const normalizedOptimisticCreatedAt = normalizeTimestampToISO((baseOptimistic as any).created_at);
         const normalizedOptimisticLaunchTime = normalizeTimestampToISO((baseOptimistic as any).launch_time);
 
-        // Debug: Log created_at values to trace the overwrite issue
-        if (process.env.NODE_ENV === "development") {
-          console.log("[TradePage] displayToken merge - created_at sources:", {
-            "token.created_at (raw)": token.created_at,
-            "token.created_at (normalized)": normalizedTokenCreatedAt,
-            "token.launch_time (raw)": token.launch_time,
-            "token.launch_time (normalized)": normalizedTokenLaunchTime,
-            "optimistic.created_at (raw)": (baseOptimistic as any).created_at,
-            "optimistic.created_at (normalized)": normalizedOptimisticCreatedAt,
-            tokenName: token.name || token.symbol,
-            tokenMint: token.mint,
-          });
-        }
         // Merge: token data takes priority, but fill gaps with optimistic data
         // Use normalized timestamps to ensure consistent parsing
         return {
@@ -504,12 +473,6 @@ export default function TradePage() {
           image: token.image ?? token.image_url ?? token.logo ?? (baseOptimistic as any).image,
         };
       }
-      // Token doesn't match current id - it's stale data from previous token
-      console.log('[TradePage] token does not match current id, skipping stale data', {
-        tokenMint: token.mint,
-        tokenPairAddress: token.pair_address,
-        idString
-      });
     }
 
     // Second priority: cached metadata - but ONLY if it matches current id
@@ -560,20 +523,10 @@ export default function TradePage() {
       return correctTokenData;
     }
 
-    // If it doesn't match, return null to prevent showing stale data
-    console.log('[TradePage] correctTokenData does not match current id, skipping', {
-      correctTokenData: correctTokenData.mint || correctTokenData.pair_address,
-      idString
-    });
     return null;
   }, [correctTokenData, idString]);
 
-  // Use validated displayToken for title to prevent showing stale token name
-  const tokenNameForTitle =
-    (typeof displayToken?.symbol === "string" && displayToken.symbol.trim()) ||
-    (typeof displayToken?.name === "string" && displayToken.name.trim()) ||
-    (typeof id === "string" && id.trim()) ||
-    "";
+  // tokenNameForTitle is computed below (after wsTokenInfo is available) as a useMemo
 
 
   // URL structure: /trade/{mint}?_name=...&_symbol=...
@@ -596,6 +549,18 @@ export default function TradePage() {
   });
   // Destructure for local use in this component
   const { holderSummary, topTraders: wsTopTraders, trades: wsHistoricalTrades, tokenInfo: wsTokenInfo, volume: wsVolume } = wsData;
+
+  // Use validated displayToken for title — skip "???" / "Unknown" and fall back to wsTokenInfo
+  const isUsableTitle = (v: string | undefined | null): boolean =>
+    !!v && v.trim() !== "" && v !== "???" && v.toLowerCase() !== "unknown";
+  const tokenNameForTitle = React.useMemo(() => {
+    if (isUsableTitle(displayToken?.symbol)) return displayToken!.symbol.trim();
+    if (isUsableTitle(displayToken?.name)) return displayToken!.name.trim();
+    if (isUsableTitle(wsTokenInfo?.symbol)) return wsTokenInfo!.symbol!.trim();
+    if (isUsableTitle(wsTokenInfo?.name)) return wsTokenInfo!.name!.trim();
+    if (typeof id === "string" && id.trim()) return id.trim();
+    return "";
+  }, [displayToken?.symbol, displayToken?.name, wsTokenInfo?.symbol, wsTokenInfo?.name, id]);
 
   // Clear trades loading spinner once WS snapshot arrives (before REST completes)
   useEffect(() => {
@@ -645,7 +610,6 @@ export default function TradePage() {
   // Also use dev_wallet from WebSocket holderSummary for chart dev markers
   useEffect(() => {
     if (holderSummary?.dev_wallet && !creatorAddress) {
-      console.log('[TradePage] Using dev_wallet from WebSocket for chart markers:', holderSummary.dev_wallet);
       setCreatorAddress(holderSummary.dev_wallet);
     }
   }, [holderSummary?.dev_wallet, creatorAddress]);
@@ -712,32 +676,29 @@ export default function TradePage() {
     return combined;
   }, [wsHistoricalTrades]);
 
-  useEffect(() => {
-    if (tradeDataForChart && tradeDataForChart.length > 0) {
-      console.log("[TradePage] Trade data for chart:", tradeDataForChart.length, "trades (real-time + historical)");
-      // Log first few trades to debug dev marker matching
-      const devTrades = tradeDataForChart.filter((t: any) =>
-        creatorAddress && (t.maker || t.wallet_address)?.toLowerCase() === creatorAddress.toLowerCase()
-      );
-      if (devTrades.length > 0) {
-        console.log("[TradePage] Found dev trades for markers:", devTrades.length, devTrades);
-      }
-    }
-    if (creatorAddress) console.log("[TradePage] Creator address for dev markers:", creatorAddress);
-  }, [tradeDataForChart, creatorAddress]);
-
   // -------- Position Lines for Chart (avg entry/exit prices) --------
   const [positionLinesApi, setPositionLinesApi] = useState<{ avgBuyPriceUsd: number | null; avgSellPriceUsd: number | null } | null>(null);
-  const [chartMetrics, setChartMetrics] = useState<{ lastPriceUsd?: number; lastMarketCapUsd?: number; maxMarketCapUsd?: number }>({});
+  const [chartMetrics, setChartMetrics] = useState<{ lastPriceUsd?: number; lastMarketCapUsd?: number; maxMarketCapUsd?: number; forTokenId?: string }>({});
+
+  // Clear stale chart metrics when navigating to a different token.
+  // Without this, chartMetrics retains old values until the new chart emits — combined with the
+  // forTokenId guard below, the old data is already hidden, but clearing keeps state clean.
+  React.useEffect(() => {
+    setChartMetrics({});
+  }, [idString]);
+
+  // Only use chartMetrics when they belong to the currently displayed token.
+  // Prevents one-frame flicker of previous token's MC when switching via watchlist ticker.
+  const validChartMetrics = chartMetrics.forTokenId === idString ? chartMetrics : {};
 
   // Coalesced live market cap for TradeActionPanel (same priority as chart header)
   const liveMarketCapForPanel = React.useMemo(() => {
-    const chart = chartMetrics.lastMarketCapUsd;
+    const chart = validChartMetrics.lastMarketCapUsd;
     if (typeof chart === "number" && Number.isFinite(chart) && chart > 0) return chart;
     const ws = wsTokenInfo?.market_cap_usd;
     if (typeof ws === "number" && Number.isFinite(ws) && ws > 0) return ws;
     return null;
-  }, [chartMetrics.lastMarketCapUsd, wsTokenInfo?.market_cap_usd]);
+  }, [validChartMetrics.lastMarketCapUsd, wsTokenInfo?.market_cap_usd]);
 
   // Live browser tab title: "TOKEN ↑ $264K" with direction arrow
   const prevMcapRef = useRef<number | null>(null);
@@ -830,6 +791,22 @@ export default function TradePage() {
     return () => window.removeEventListener("solanaQuickTrade", handler as EventListener);
   }, [fetchPositionLines, resolvedTokenMint]);
 
+  // Refresh position lines when positions change via WS (e.g. limit order executes)
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const normalized = resolvedTokenMint?.toLowerCase();
+    if (!normalized) return;
+    const handler = (event: Event) => {
+      const detail = (event as CustomEvent<{ tokenAddress?: string }>).detail;
+      const addr = detail?.tokenAddress?.toLowerCase();
+      if (addr === normalized) {
+        fetchPositionLines();
+      }
+    };
+    window.addEventListener("solanaPositionsChanged", handler as EventListener);
+    return () => window.removeEventListener("solanaPositionsChanged", handler as EventListener);
+  }, [fetchPositionLines, resolvedTokenMint]);
+
   // Calculate price line values for the chart
   const priceLineValues = React.useMemo(() => {
     const sanitize = (value: any) => {
@@ -841,19 +818,82 @@ export default function TradePage() {
     return { avgEntryPriceUsd: entry, avgExitPriceUsd: exit };
   }, [positionLinesApi?.avgBuyPriceUsd, positionLinesApi?.avgSellPriceUsd]);
 
+  // -------- Active Limit Orders for Chart Lines --------
+  const [activeLimitOrders, setActiveLimitOrders] = React.useState<
+    Array<{ id: string; type: "Buy" | "Sell"; targetMC: number }>
+  >([]);
+
+  const fetchLimitOrdersForChart = React.useCallback(async () => {
+    if (!resolvedTokenMint || !user?.bearerToken) {
+      setActiveLimitOrders([]);
+      return;
+    }
+    try {
+      const resp = await getMyLimitOrders(user.bearerToken);
+      const orders = (resp as any)?.orders || [];
+      const filtered = orders
+        .filter(
+          (o: any) =>
+            o.status === "Active" &&
+            o.tokenAddress === resolvedTokenMint &&
+            (o.triggerType === "marketCap" || !o.triggerType),
+        )
+        .map((o: any) => ({
+          id: String(o.id),
+          type: o.type as "Buy" | "Sell",
+          targetMC: Number(o.targetMC),
+        }));
+      setActiveLimitOrders(filtered);
+    } catch {
+      // Non-critical — chart lines are a nice-to-have
+    }
+  }, [resolvedTokenMint, user?.bearerToken]);
+
+  // Fetch on mount and on limit-order-update events (also refresh position lines
+  // since an executed limit order changes avg entry/exit)
+  React.useEffect(() => {
+    fetchLimitOrdersForChart();
+
+    const handler = (event: Event) => {
+      const detail = (event as CustomEvent)?.detail;
+      // Optimistic chart line: insert immediately from the event's newOrder if it's
+      // a marketCap trigger for the current token, so the dotted line appears instantly.
+      if (detail?.newOrder) {
+        const no = detail.newOrder;
+        if (
+          no.tokenAddress?.toLowerCase() === resolvedTokenMint?.toLowerCase() &&
+          (no.triggerType === "marketCap" || !no.triggerType)
+        ) {
+          setActiveLimitOrders((prev) => {
+            if (prev.some((o) => o.id === String(no.id))) return prev;
+            return [...prev, { id: String(no.id), type: no.type as "Buy" | "Sell", targetMC: Number(no.targetMC) }];
+          });
+        }
+      }
+      fetchLimitOrdersForChart();
+      fetchPositionLines();
+    };
+    window.addEventListener("limit-order-update", handler);
+    return () => window.removeEventListener("limit-order-update", handler);
+  }, [fetchLimitOrdersForChart, fetchPositionLines, resolvedTokenMint]);
+
   const currentMintRef = React.useRef(displayToken?.mint || resolvedTokenMint);
   useEffect(() => {
     currentMintRef.current = displayToken?.mint || resolvedTokenMint;
   }, [displayToken?.mint, resolvedTokenMint]);
 
   const handleChartMetrics = React.useCallback((metrics: { lastPriceUsd?: number; lastMarketCapUsd?: number; maxMarketCapUsd?: number }) => {
-    // Only accept metrics from the current token's chart — reject stale callbacks from unmounting charts
+    // Only accept metrics from the current token's chart — reject stale callbacks from unmounting charts.
+    // IMPORTANT: We capture `idString` in the closure (not idRef.current) so that callbacks from an
+    // unmounting chart tag metrics with the OLD token id.  validChartMetrics then rejects them because
+    // forTokenId !== current idString.  Using idRef.current would read the ALREADY-UPDATED new id,
+    // causing stale metrics to slip through the guard.
     setChartMetrics(prev => {
       // If metrics are empty (reset), always accept
       if (!metrics.lastPriceUsd && !metrics.lastMarketCapUsd) return prev;
-      return metrics;
+      return { ...metrics, forTokenId: idString };
     });
-  }, []);
+  }, [idString]);
 
   // -------- Similar Tokens (right rail) --------
   const [similarTokens, setSimilarTokens] = useState<SimilarTokenLite[]>([]);
@@ -987,8 +1027,8 @@ export default function TradePage() {
                   wsTokenInfo={wsTokenInfo} 
                   wsVolume={wsVolume} 
                   holderSummary={holderSummary} 
-                  livePriceUsd={chartMetrics.lastPriceUsd} 
-                  liveMarketCapUsd={chartMetrics.lastMarketCapUsd}
+                  livePriceUsd={validChartMetrics.lastPriceUsd}
+                  liveMarketCapUsd={validChartMetrics.lastMarketCapUsd}
                   onToggleRightPanel={() => setIsRightPanelVisible(!isRightPanelVisible)}
                   isRightPanelVisible={isRightPanelVisible}
                 />
@@ -1028,6 +1068,7 @@ export default function TradePage() {
                     tokenDecimals={typeof displayToken?.decimals === 'number' ? displayToken.decimals : null}
                     network={network}
                     priceLines={priceLineValues}
+                    limitOrders={activeLimitOrders}
                     onChartMetrics={handleChartMetrics}
                     preloadedData={backgroundOHLCData || undefined}
                   />

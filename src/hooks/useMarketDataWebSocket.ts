@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 
+const isDev = process.env.NODE_ENV !== 'production';
+
 interface MarketData {
   mint: string;
   price_usd: number;
@@ -79,7 +81,7 @@ export default function useMarketDataWebSocket(
       wsRef.current = ws;
 
       ws.onopen = () => {
-        console.log('Market data WebSocket connected');
+        isDev && console.log('Market data WebSocket connected');
         setConnected(true);
         setLoading(false);
         setError(null);
@@ -88,10 +90,8 @@ export default function useMarketDataWebSocket(
 
       ws.onmessage = (event) => {
         try {
-          // Log raw data for debugging (first 200 chars)
           const rawData = event.data;
-          console.log('WebSocket raw data (first 200 chars):', rawData.substring(0, 200));
-          
+
           // Check if data contains multiple JSON objects or extra content
           const trimmedData = rawData.trim();
           
@@ -194,12 +194,12 @@ export default function useMarketDataWebSocket(
       };
 
       ws.onclose = (event) => {
-        console.log('Market data WebSocket closed:', event.code, event.reason);
+        isDev && console.log('Market data WebSocket closed:', event.code, event.reason);
         setConnected(false);
         
         if (reconnectAttemptsRef.current < maxReconnectAttemptsCount) {
           reconnectAttemptsRef.current++;
-          console.log(`Attempting to reconnect (${reconnectAttemptsRef.current}/${maxReconnectAttemptsCount})...`);
+          isDev && console.log(`Attempting to reconnect (${reconnectAttemptsRef.current}/${maxReconnectAttemptsCount})...`);
           
           reconnectTimeoutRef.current = setTimeout(() => {
             connect();

@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 
+const isDev = process.env.NODE_ENV !== 'production';
+
 // WebSocket URL for trending data
 const TRENDING_WS_URL = 'wss://token-stage.narrative.trade/v1/ws/trending';
 
@@ -190,18 +192,18 @@ function notifyListeners(timeframe?: TrendingTimeframe) {
 function connectGlobal() {
   // Prevent multiple simultaneous connection attempts
   if (globalIsConnecting) {
-    console.log('[TrendingWS] Already connecting, skipping');
+    isDev && console.log('[TrendingWS] Already connecting, skipping');
     return;
   }
 
   // Check if WebSocket exists and is either OPEN or CONNECTING
   if (globalWs) {
     if (globalWs.readyState === WebSocket.OPEN) {
-      console.log('[TrendingWS] Already connected, skipping');
+      isDev && console.log('[TrendingWS] Already connected, skipping');
       return;
     }
     if (globalWs.readyState === WebSocket.CONNECTING) {
-      console.log('[TrendingWS] Connection in progress, skipping');
+      isDev && console.log('[TrendingWS] Connection in progress, skipping');
       return;
     }
     // Close existing connection if in CLOSING or CLOSED state
@@ -220,14 +222,14 @@ function connectGlobal() {
 
   // No timeframe param needed - server sends all timeframes in snapshot
   const wsUrl = TRENDING_WS_URL;
-  console.log('[TrendingWS] Connecting to:', wsUrl);
+  isDev && console.log('[TrendingWS] Connecting to:', wsUrl);
 
   try {
     const ws = new WebSocket(wsUrl);
     globalWs = ws;
 
     ws.onopen = () => {
-      console.log('[TrendingWS] Connected');
+      isDev && console.log('[TrendingWS] Connected');
       globalIsConnecting = false;
       globalIsConnected = true;
       globalReconnectAttempt = 0;
@@ -241,8 +243,6 @@ function connectGlobal() {
         if (message.type === 'snapshot') {
           // Snapshot contains all timeframes: { "5m": [...], "1h": [...], "6h": [...] }
           const data = message.data;
-          console.log('[TrendingWS] Received snapshot');
-
           // Process each timeframe
           (['5m', '1h', '6h'] as TrendingTimeframe[]).forEach(tf => {
             if (Array.isArray(data[tf])) {
@@ -257,8 +257,6 @@ function connectGlobal() {
                 const normalized = normalizeToken(token);
                 globalTokenMaps[tf].set(normalized.mint, normalized);
               });
-              console.log(`[TrendingWS] Loaded ${data[tf].length - filteredCount} tokens for ${tf} (filtered ${filteredCount} blacklisted)`);
-
               // Save to localStorage cache for instant display on tab switch
               const tokens = Array.from(globalTokenMaps[tf].values());
               saveTrendingCache(tf, tokens);
@@ -355,7 +353,7 @@ function connectGlobal() {
     };
 
     ws.onclose = (event) => {
-      console.log('[TrendingWS] Disconnected, code:', event.code);
+      isDev && console.log('[TrendingWS] Disconnected, code:', event.code);
       globalIsConnecting = false;
       globalIsConnected = false;
       globalWs = null;
@@ -364,7 +362,7 @@ function connectGlobal() {
       // Reconnect with exponential backoff if we have listeners
       if (globalListeners.size > 0 && globalReconnectAttempt < 5) {
         const delay = Math.min(1000 * Math.pow(2, globalReconnectAttempt), 30000);
-        console.log(`[TrendingWS] Reconnecting in ${delay}ms (attempt ${globalReconnectAttempt + 1}/5)`);
+        isDev && console.log(`[TrendingWS] Reconnecting in ${delay}ms (attempt ${globalReconnectAttempt + 1}/5)`);
         globalReconnectAttempt++;
 
         globalReconnectTimeout = setTimeout(() => {
@@ -497,7 +495,7 @@ export function useTrendingWebSocket(options: UseTrendingWebSocketOptions = {}) 
       // NOTE: We do NOT clear the token maps here - this allows instant display
       // when switching back to the trending tab. Fresh data will come from WebSocket.
       if (globalListeners.size === 0) {
-        console.log('[TrendingWS] No more listeners, disconnecting (keeping cached data)');
+        isDev && console.log('[TrendingWS] No more listeners, disconnecting (keeping cached data)');
         disconnectGlobal();
       }
     };

@@ -1,5 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 
+const isDev = process.env.NODE_ENV !== 'production';
+
 interface CodexHolder {
   address: string;
   tokenAmountBought30d: string;
@@ -111,7 +113,7 @@ export default function useCodexHolders(tokenAddress: string | undefined) {
       
       if (result.data?.filterTokenWallets?.results) {
         setHolders(result.data.filterTokenWallets.results);
-        console.log(`Fetched ${result.data.filterTokenWallets.results.length} holders`);
+        isDev && console.log(`Fetched ${result.data.filterTokenWallets.results.length} holders`);
       }
     } catch (err) {
       console.error('Failed to fetch holders:', err);
@@ -134,7 +136,7 @@ export default function useCodexHolders(tokenAddress: string | undefined) {
     fetchHolders(tokenAddress);
 
     // DISABLED: External Codex WebSocket - using only backend data
-    console.log('🚫 Codex Holders WebSocket disabled - using only backend data');
+    isDev && console.log('Codex Holders WebSocket disabled - using only backend data');
     setIsConnected(false);
     setError(null);
     setIsLoading(false);
@@ -242,7 +244,7 @@ export default function useCodexHolders(tokenAddress: string | undefined) {
                   });
                 });
                 
-                console.log(`Updated ${balanceUpdates.length} holder balances`);
+                isDev && console.log(`Updated ${balanceUpdates.length} holder balances`);
               }
               
               // Handle trade events for real-time bought/sold updates
@@ -292,10 +294,10 @@ export default function useCodexHolders(tokenAddress: string | undefined) {
                   });
                 });
                 
-                console.log(`Updated holders with ${tradeEvents.length} new trade events`);
+                isDev && console.log(`Updated holders with ${tradeEvents.length} new trade events`);
               }
             } else if (message.type === "complete") {
-              console.log("Holders subscription completed");
+              isDev && console.log("Holders subscription completed");
             } else if (message.type === "error") {
               console.error("Holders subscription error:", message.payload);
             }

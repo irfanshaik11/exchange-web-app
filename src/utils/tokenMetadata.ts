@@ -35,6 +35,8 @@ const TOKEN_URI_ABI = [
 const MONAD_RPC_URL = process.env.NEXT_PUBLIC_MONAD_RPC_URL || 
   "https://rpc-mainnet.monadinfra.com/rpc/2jSlaER7hP372wZ53U9JBwrxTWm7BTt8";
 
+const isDev = process.env.NODE_ENV !== 'production';
+
 export function isProbablyMonadAddress(address?: string | null): boolean {
   return typeof address === "string" && address.trim().toLowerCase().startsWith("0x");
 }
@@ -115,11 +117,11 @@ async function fetchMonadMetadataFromBlockchain(address: string, signal?: AbortS
       clearTimeout(timeoutId);
       
       if (!name && !symbol) {
-        console.log(`ℹ️ [fetchMonadMetadataFromBlockchain] No name/symbol found for ${address}`);
+        isDev && console.log(`ℹ️ [fetchMonadMetadataFromBlockchain] No name/symbol found for ${address}`);
         return null;
       }
       
-      console.log(`✅ [fetchMonadMetadataFromBlockchain] Fetched from blockchain:`, { name, symbol });
+      isDev && console.log(`✅ [fetchMonadMetadataFromBlockchain] Fetched from blockchain:`, { name, symbol });
       
       // Try to search for image using symbol (for launchpad tokens like nadfun)
       // Note: This is async but we don't want to block too long
@@ -164,7 +166,7 @@ async function fetchMonadMetadataFromBlockchain(address: string, signal?: AbortS
             clearTimeout(timeoutId);
             
             if (imgResponse.ok && imgResponse.headers.get('content-type')?.startsWith('image/')) {
-              console.log(`✅ [fetchMonadMetadataFromBlockchain] Found image at: ${imgSrc}`);
+              isDev && console.log(`✅ [fetchMonadMetadataFromBlockchain] Found image at: ${imgSrc}`);
               return imgSrc;
             }
           } catch (err) {
@@ -193,7 +195,7 @@ async function fetchMonadMetadataFromBlockchain(address: string, signal?: AbortS
           }
         } catch {
           // Timeout or error - continue without image
-          console.log(`⏱️ [fetchMonadMetadataFromBlockchain] Image search timed out for ${address}`);
+          isDev && console.log(`⏱️ [fetchMonadMetadataFromBlockchain] Image search timed out for ${address}`);
         }
       }
       
@@ -206,7 +208,7 @@ async function fetchMonadMetadataFromBlockchain(address: string, signal?: AbortS
     } catch (contractError: any) {
       clearTimeout(timeoutId);
       if (controller.signal.aborted || contractError?.message === 'Timeout') {
-        console.log(`⏱️ [fetchMonadMetadataFromBlockchain] Request timed out for ${address}`);
+        isDev && console.log(`⏱️ [fetchMonadMetadataFromBlockchain] Request timed out for ${address}`);
         return null;
       }
       throw contractError;
@@ -222,8 +224,8 @@ async function fetchMonadMetadata(address: string, signal?: AbortSignal): Promis
   const normalizedAddress = address.toLowerCase();
   const url = `${DEFAULT_MONAD_ENDPOINT}?address=${encodeURIComponent(normalizedAddress)}`;
   
-  console.log(`🔍 [fetchMonadMetadata] Fetching metadata for: ${normalizedAddress}`);
-  console.log(`   URL: ${url}`);
+  isDev && console.log(`🔍 [fetchMonadMetadata] Fetching metadata for: ${normalizedAddress}`);
+  isDev && console.log(`   URL: ${url}`);
   
   try {
     const response = await fetch(url, { signal });
@@ -231,11 +233,11 @@ async function fetchMonadMetadata(address: string, signal?: AbortSignal): Promis
     if (!response.ok) {
       // Handle 404 gracefully - try blockchain fallback
       if (response.status === 404) {
-        console.log(`ℹ️ [fetchMonadMetadata] Token ${normalizedAddress} not found in service (404) - trying blockchain fallback`);
+        isDev && console.log(`ℹ️ [fetchMonadMetadata] Token ${normalizedAddress} not found in service (404) - trying blockchain fallback`);
         // Try to fetch from blockchain directly
         const blockchainMetadata = await fetchMonadMetadataFromBlockchain(normalizedAddress, signal);
         if (blockchainMetadata) {
-          console.log(`✅ [fetchMonadMetadata] Got metadata from blockchain fallback`);
+          isDev && console.log(`✅ [fetchMonadMetadata] Got metadata from blockchain fallback`);
           
           // If we have symbol but no image, try multiple sources
           if (blockchainMetadata.symbol && !blockchainMetadata.imageUrl) {
@@ -251,7 +253,7 @@ async function fetchMonadMetadata(address: string, signal?: AbortSignal): Promis
                 const nadfunData = await nadfunResponse.json();
                 if (nadfunData?.image || nadfunData?.logo || nadfunData?.imageUrl) {
                   blockchainMetadata.imageUrl = nadfunData.image || nadfunData.logo || nadfunData.imageUrl;
-                  console.log(`✅ [fetchMonadMetadata] Found image from nadfun API`);
+                  isDev && console.log(`✅ [fetchMonadMetadata] Found image from nadfun API`);
                   return blockchainMetadata;
                 }
               }
@@ -275,7 +277,7 @@ async function fetchMonadMetadata(address: string, signal?: AbortSignal): Promis
                   const imageUrl = token.image || token.logo || token.uri || token.image_url;
                   if (imageUrl) {
                     blockchainMetadata.imageUrl = imageUrl;
-                    console.log(`✅ [fetchMonadMetadata] Found image from pulse-new endpoint`);
+                    isDev && console.log(`✅ [fetchMonadMetadata] Found image from pulse-new endpoint`);
                     return blockchainMetadata;
                   }
                 }
@@ -294,7 +296,7 @@ async function fetchMonadMetadata(address: string, signal?: AbortSignal): Promis
     }
 
     const payload = await response.json();
-    console.log(`📦 [fetchMonadMetadata] Response for ${normalizedAddress}:`, payload);
+    isDev && console.log(`📦 [fetchMonadMetadata] Response for ${normalizedAddress}:`, payload);
     
     // The API might return data directly or nested in a 'data' field
     // Also handle case where response is already the token object
@@ -323,7 +325,7 @@ async function fetchMonadMetadata(address: string, signal?: AbortSignal): Promis
       marketCapUsd: toOptionalNumber(data.market_cap_usd),
     };
     
-    console.log(`✅ [fetchMonadMetadata] Successfully parsed metadata for ${normalizedAddress}:`, {
+    isDev && console.log(`✅ [fetchMonadMetadata] Successfully parsed metadata for ${normalizedAddress}:`, {
       name: metadata.name,
       symbol: metadata.symbol,
       hasImage: !!metadata.imageUrl,

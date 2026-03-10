@@ -43,6 +43,8 @@ interface UseOptimizedTradeEventsWebSocketParams {
   enableDeduplication?: boolean; // Remove duplicate trades
 }
 
+const isDev = process.env.NODE_ENV !== 'production';
+
 // Enhanced WebSocket hook with optimized caching and memory management
 export default function useOptimizedTradeEventsWebSocket({
   pairAddress,
@@ -254,26 +256,15 @@ export default function useOptimizedTradeEventsWebSocket({
 
   const processMessage = useCallback((message: any) => {
     try {
-      // Reduced logging for performance
-      if (process.env.NODE_ENV === 'development') {
-        console.log('Trade events websocket message received:', message);
-      }
-      
       let events: any[] = [];
       
       // Handle initial trades response (getTokenEvents format)
       if (message.data && message.data.getTokenEvents && message.data.getTokenEvents.items) {
         events = message.data.getTokenEvents.items;
-        if (process.env.NODE_ENV === 'development') {
-          console.log('Processing initial trades:', events.length, 'events');
-        }
       }
       // Handle real-time updates (onEventsCreated format)
       else if (message.data && message.data.onEventsCreated && message.data.onEventsCreated.events) {
         events = message.data.onEventsCreated.events;
-        if (process.env.NODE_ENV === 'development') {
-          console.log('Processing real-time events:', events.length, 'events');
-        }
       }
       
       if (events.length > 0) {
@@ -299,24 +290,15 @@ export default function useOptimizedTradeEventsWebSocket({
               // This prevents replacing existing trades on reconnection
               if (prev.trades.length === 0) {
                 updatedTrades = newTrades;
-                if (process.env.NODE_ENV === 'development') {
-                  console.log('Set initial trades (no existing trades):', updatedTrades.length);
-                }
               } else {
                 // We already have trades - merge new ones instead of replacing
                 const combinedTrades = [...newTrades, ...prev.trades];
                 updatedTrades = manageTradesMemory(deduplicateTrades(combinedTrades));
-                if (process.env.NODE_ENV === 'development') {
-                  console.log('Merged initial trades with existing (preserving existing):', updatedTrades.length, 'existing:', prev.trades.length);
-                }
               }
             } else {
               // Real-time updates - prepend to existing trades
               const combinedTrades = [...newTrades, ...prev.trades];
               updatedTrades = manageTradesMemory(deduplicateTrades(combinedTrades));
-              if (process.env.NODE_ENV === 'development') {
-                console.log('Added new trades to existing:', updatedTrades.length);
-              }
             }
             
             return {
@@ -334,7 +316,6 @@ export default function useOptimizedTradeEventsWebSocket({
           }));
         }
       } else {
-        console.warn('No events found in message:', message);
         // Ensure loading is false even when no events
         setState(prev => ({
           ...prev,
@@ -359,7 +340,6 @@ export default function useOptimizedTradeEventsWebSocket({
 
     // Prevent multiple simultaneous connections
     if (wsRef.current && wsRef.current.readyState === WebSocket.CONNECTING) {
-      console.log('[useOptimizedTradeEventsWebSocket] Connection already in progress, skipping');
       return;
     }
 
@@ -391,7 +371,7 @@ export default function useOptimizedTradeEventsWebSocket({
           error: null,
         }));
         reconnectAttemptRef.current = 0;
-        console.log('Trade events websocket connected to:', wsUrl);
+        if (isDev) console.log('Trade events websocket connected to:', wsUrl);
       };
 
       ws.onmessage = (event) => {
@@ -574,7 +554,6 @@ export default function useOptimizedTradeEventsWebSocket({
   // Clear seen trades cache (useful for testing or manual refresh)
   const clearSeenTrades = useCallback(() => {
     seenTradesRef.current.clear();
-    console.log('[useOptimizedTradeEventsWebSocket] Cleared seen trades cache');
   }, []);
 
   // Get memory usage stats

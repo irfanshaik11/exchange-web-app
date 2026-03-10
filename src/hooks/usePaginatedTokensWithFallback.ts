@@ -51,7 +51,6 @@ export default function usePaginatedTokensWithFallback({
         const cacheKey = `trending_${cacheChain}_${timeframe || '1h'}_${TRENDING_CACHE_VERSION}`;
         const cached = getCached<any[]>(cacheKey);
         if (cached && Array.isArray(cached) && cached.length > 0) {
-          console.log(`[Trending Cache] ✅ Restored ${cached.length} tokens from cache for instant display`);
           return {
             data: cached,
             loading: false, // Don't show loading if we have cache
@@ -169,12 +168,6 @@ export default function usePaginatedTokensWithFallback({
   const throttledSetData = useCallback((newData: any[]) => {
     // CRITICAL: Only process data if it's for the current timeframe and chain
     if (currentRequestTimeframeRef.current !== timeframe || currentChainRef.current !== chain) {
-      console.log('🚫 Ignoring data - timeframe/chain mismatch:', {
-        requestTimeframe: currentRequestTimeframeRef.current,
-        currentTimeframe: timeframe,
-        requestChain: currentChainRef.current,
-        currentChain: chain
-      });
       return;
     }
     
@@ -222,7 +215,6 @@ export default function usePaginatedTokensWithFallback({
     const timeframeChanged = lastTimeframeRef.current !== timeframe;
     
     if (chainChanged || timeframeChanged) {
-      console.log(`🔄 Chain/timeframe changed (${lastChainRef.current}/${lastTimeframeRef.current} -> ${chain}/${timeframe}), clearing existing polling`);
       clearPolling();
       lastTimeframeRef.current = timeframe;
       lastChainRef.current = chain;
@@ -236,7 +228,6 @@ export default function usePaginatedTokensWithFallback({
     
     // Don't start polling if already polling (unless chain/timeframe changed)
     if ((isPollingRef.current || pollIntervalRef.current) && !chainChanged && !timeframeChanged) {
-      console.log('🔄 Already polling, skipping');
       return;
     }
     
@@ -267,12 +258,6 @@ export default function usePaginatedTokensWithFallback({
       
       // CRITICAL: Check if timeframe or chain has changed - abort if so
       if (currentTimeframe !== timeframe || currentChain !== chain) {
-        console.log('🚫 Aborting poll request - timeframe/chain changed:', {
-          refTimeframe: currentTimeframe,
-          paramTimeframe: timeframe,
-          refChain: currentChain,
-          paramChain: chain
-        });
         return;
       }
       
@@ -336,17 +321,14 @@ export default function usePaginatedTokensWithFallback({
           // CRITICAL: Always use the chain parameter to ensure cache keys are chain-specific
           const cacheChain = chain || 'sol';
           const cacheKey = `trending_${cacheChain}_${currentTimeframe || '1h'}_${TRENDING_CACHE_VERSION}`;
-          console.log(`[Cache] Checking cache for key: ${cacheKey} (chain: ${cacheChain}, timeframe: ${currentTimeframe})`);
           const cached = getCached<any[]>(cacheKey);
           // Check cache even if we have data - when switching chains, we want to use cache for the new chain
           if (cached && cached.length > 0) {
-            console.log(`[Cache] ✅ Cache HIT for ${cacheKey}, loading ${cached.length} tokens immediately`);
             throttledSetData(cached);
             setState(prev => ({ ...prev, error: null, loading: false }));
             isPollingRef.current = false;
             return;
           } else {
-            console.log(`[Cache] ❌ Cache MISS for ${cacheKey}, fetching from API`);
           }
           
           // Birdeye API only accepts limit between 1-20, but we need ~50 tokens after filtering
@@ -371,7 +353,6 @@ export default function usePaginatedTokensWithFallback({
             chain: fetchChain,
           });
           
-          console.log(`[Birdeye] 🚀 Fetching first page immediately with chain: ${fetchChain}`);
           try {
             const firstResp = await fetch(`/api/token-service/birdeye-trending?${firstPageParams}`, {
               signal: abortController.signal,
@@ -384,7 +365,6 @@ export default function usePaginatedTokensWithFallback({
                 allTokens = allTokens.concat(firstPageData.data.tokens);
                 // Get total count from Birdeye response to know how many pages to fetch
                 totalTokens = firstPageData?.data?.total || firstPageData.data.tokens.length;
-                console.log(`[Birdeye] ✅ First page loaded: ${firstPageData.data.tokens.length} tokens (total available: ${totalTokens})`);
               }
             }
           } catch (e: any) {
@@ -400,7 +380,6 @@ export default function usePaginatedTokensWithFallback({
           
           // Fetch remaining pages in PARALLEL (cache makes them fast)
           const remainingPages = Array.from({ length: pagesToFetch - 1 }, (_, i) => i + 1);
-          console.log(`[Birdeye] 🚀 Fetching remaining ${remainingPages.length} pages in parallel (total tokens: ${totalTokens}, pages needed: ${pagesToFetch})`);
           
           const pagePromises = remainingPages.map(async (page) => {
             // CRITICAL: Use chain parameter (not ref) to ensure correct chain is used
@@ -435,21 +414,17 @@ export default function usePaginatedTokensWithFallback({
           remainingResults.forEach((tokens, idx) => {
             if (tokens.length > 0) {
               allTokens = allTokens.concat(tokens);
-              console.log(`[Birdeye] ✅ Page ${idx + 2} loaded: ${tokens.length} tokens`);
             }
           });
           
-          console.log(`[Birdeye] Total tokens fetched: ${allTokens.length} from ${pagesToFetch} pages`);
           
           // If no tokens were fetched, check cache before giving up
           if (allTokens.length === 0) {
             console.warn(`[Birdeye] ⚠️ No tokens fetched from API, checking cache...`);
             // CRITICAL: Use chain parameter (not ref) to ensure correct cache key
             const cacheKey = `trending_${chain || 'sol'}_${currentTimeframe || '1h'}_${TRENDING_CACHE_VERSION}`;
-            console.log(`[Cache] Checking fallback cache for key: ${cacheKey}`);
             const cached = getCached<any[]>(cacheKey);
             if (cached && cached.length > 0) {
-              console.log(`[Birdeye] ✅ Using cached data: ${cached.length} tokens`);
               // Use cached data directly - it's already filtered and transformed
               throttledSetData(cached);
               setState(prev => ({ ...prev, error: null }));
@@ -478,7 +453,6 @@ export default function usePaginatedTokensWithFallback({
         
         // CRITICAL: Check again before making request - use refs for current values
         if (currentRequestTimeframeRef.current !== timeframe || currentChainRef.current !== chain) {
-          console.log('🚫 Aborting fetch - timeframe/chain changed during request setup');
           return;
         }
         
@@ -489,18 +463,14 @@ export default function usePaginatedTokensWithFallback({
           ? `trending_${cacheChain}_${currentTimeframe || '1h'}_${TRENDING_CACHE_VERSION}`
           : url;
         
-        console.log(`[Cache] Checking cache for key: ${cacheKey} (chain: ${cacheChain}, timeframe: ${currentTimeframe})`);
         const cached = getCached<any[]>(cacheKey);
         if (cached && state.data.length === 0) {
-          console.log(`[Cache] ✅ Cache HIT for ${cacheKey}, loading ${cached.length} tokens`);
           // throttledSetData sets both data AND loading: false
           throttledSetData(cached);
           // Only clear error here - loading is handled by throttledSetData
           setState(prev => ({ ...prev, error: null }));
         } else if (cached) {
-          console.log(`[Cache] ✅ Cache HIT for ${cacheKey}, but data already exists`);
         } else {
-          console.log(`[Cache] ❌ Cache MISS for ${cacheKey}`);
         }
 
         // console.log('📡 Polling response status:', response.status, response.ok);
@@ -522,7 +492,6 @@ export default function usePaginatedTokensWithFallback({
         if (response.ok) {
           // CRITICAL: Check again before processing response - use refs for current values
           if (currentRequestTimeframeRef.current !== timeframe || currentChainRef.current !== chain) {
-            console.log('🚫 Ignoring response - timeframe/chain changed during fetch');
             return;
           }
           
@@ -667,11 +636,9 @@ export default function usePaginatedTokensWithFallback({
           
           // Transform Birdeye format to Token format if needed (for trending filter or Monad chain)
           // Use the same isMonadChain variable defined earlier for consistency
-          console.log(`[Birdeye] Processing data - filter: ${filter}, isMonadChain: ${isMonadChain}, currentChainRef: ${currentChainRef.current}, chain param: ${chain}`);
           if (filter === 'trending' || isMonadChain) {
             // Birdeye API returns: { data: { tokens: [...], total: number }, success: true }
             if (data?.data?.tokens && Array.isArray(data.data.tokens)) {
-              console.log(`[Birdeye] Transforming ${data.data.tokens.length} tokens from Birdeye format`);
               tokens = data.data.tokens.map((token: any) => {
                 // Helper to safely convert to number
                 const toNum = (val: any): number => {
@@ -772,20 +739,12 @@ export default function usePaginatedTokensWithFallback({
                 };
               });
               
-              console.log(`[Birdeye] Transformed ${tokens.length} tokens. First token sample:`, tokens[0] ? {
-                mint: tokens[0].mint,
-                name: tokens[0].name,
-                symbol: tokens[0].symbol,
-                birdeye_rank: tokens[0].birdeye_rank,
-                volume_24h: tokens[0].volume_24h,
-              } : 'No tokens');
               
               // Enrich Birdeye tokens with created_at and liquidity from our token service
               // Note: We prioritize Birdeye's values (market cap, etc.) but enrich liquidity if Birdeye shows 0
               // Only do this for Monad chain (since that's where our token service operates)
               if (isMonadChain && tokens.length > 0) {
                 const monadServiceUrl = process.env.NEXT_PUBLIC_MONAD_TOKEN_SERVICE_URL || 'https://monad-token-service.narrative.trade';
-                console.log(`[Birdeye] Enriching ${tokens.length} tokens with created_at and liquidity from our token service...`);
                 
                 // Fetch created_at and liquidity for all tokens in parallel
                 const enrichmentPromises = tokens.map(async (token: any) => {
@@ -920,28 +879,19 @@ export default function usePaginatedTokensWithFallback({
                 const enrichedCount = tokens.filter((t: any) => 
                   t.created_at || (t.total_liquidity_usd || t.liquidity_usd) > 0
                 ).length;
-                console.log(`[Birdeye] ✅ Enrichment complete. Tokens enriched: ${enrichedCount}/${tokens.length}`);
               }
               
               // Filter out boring tokens (stablecoins, infrastructure tokens, mega-caps, high volume/liquidity)
               // This filtering happens client-side on all tokens fetched from Birdeye
               const beforeFilter = tokens.length;
-              console.log(`[Filter] Starting filter for ${isMonadChain ? 'Monad' : 'Solana'} chain. Before filter: ${beforeFilter} tokens`);
               
               // Debug: Log first few tokens before filtering
               if (tokens.length > 0) {
-                console.log(`[Filter] Sample tokens before filtering:`, tokens.slice(0, 5).map(t => ({
-                  symbol: t.symbol,
-                  name: t.name,
-                  volume_24h: t.volume_24h,
-                  market_cap_usd: t.market_cap_usd
-                })));
               }
               
               tokens = tokens.filter((token: any) => {
                 // Skip boring tokens (stablecoins, infrastructure)
                 if (isBoringToken(token)) {
-                  console.log(`[Filter] ❌ Filtered out boring token: ${token.symbol} (${token.name})`);
                   return false;
                 }
                 
@@ -973,35 +923,13 @@ export default function usePaginatedTokensWithFallback({
               const maxTokens = isMonadChain ? 100 : 50; // Show up to 100 for Monad, 50 for Solana
               tokens = tokens.slice(0, maxTokens);
               
-              console.log(`[Filter] ✅ Filtered ${beforeFilter} tokens down to ${tokens.length} memecoins/degen tokens (max 50) for ${isMonadChain ? 'Monad' : 'Solana'}`);
               
               // Debug: Log first few tokens after filtering
               if (tokens.length > 0) {
-                console.log(`[Filter] Sample tokens after filtering:`, tokens.slice(0, 5).map(t => ({
-                  symbol: t.symbol,
-                  name: t.name,
-                  volume_24h: t.volume_24h,
-                  market_cap_usd: t.market_cap_usd
-                })));
               } else {
                 console.warn(`[Filter] ⚠️ No tokens passed filtering! Check filter logic.`);
               }
               if (tokens.length > 0) {
-                console.log(`[Birdeye] First filtered token:`, {
-                  mint: tokens[0]?.mint,
-                  name: tokens[0]?.name,
-                  symbol: tokens[0]?.symbol,
-                  usd_price: tokens[0]?.usd_price,
-                  volume_24h: tokens[0]?.volume_24h,
-                  market_cap_usd: tokens[0]?.market_cap_usd,
-                  total_liquidity_usd: tokens[0]?.total_liquidity_usd
-                });
-                console.log(`[Birdeye] Sample of filtered tokens (first 5):`, tokens.slice(0, 5).map(t => ({
-                  symbol: t.symbol,
-                  volume_24h: t.volume_24h,
-                  liquidity: t.total_liquidity_usd,
-                  marketCap: t.market_cap_usd
-                })));
               } else {
                 console.warn(`[Birdeye] ⚠️ No tokens passed filtering! This might indicate overly aggressive filters.`);
                 console.warn(`[Birdeye] Consider adjusting filter thresholds. Before filter: ${beforeFilter} tokens`);
@@ -1038,14 +966,6 @@ export default function usePaginatedTokensWithFallback({
           // }
           
           if (tokens && Array.isArray(tokens)) {
-            console.log(`🔧 Setting ${tokens.length} tokens for chain: ${currentChainRef.current || chain}, timeframe: ${currentRequestTimeframeRef.current || timeframe}`);
-            console.log('🔧 First token:', tokens[0] ? { 
-              name: tokens[0].name, 
-              symbol: tokens[0].symbol,
-              mint: tokens[0].mint,
-              volume_24h: tokens[0].volume_24h,
-              market_cap_usd: tokens[0].market_cap_usd
-            } : 'No tokens');
             // throttledSetData sets both data AND loading: false, so don't set loading separately
             throttledSetData(tokens);
             // Cache fresh tokens with chain-specific key and longer TTL for cross-chain persistence
@@ -1057,7 +977,6 @@ export default function usePaginatedTokensWithFallback({
               : url;
             const cacheTTL = filter === 'trending' ? 120_000 : 15_000; // 2 minutes for trending, 15s for others
             setCached(cacheKey, tokens, cacheTTL);
-            console.log(`[Cache] 💾 Cached ${tokens.length} tokens with key: ${cacheKey} (chain: ${cacheChain}, timeframe: ${currentTimeframe}), TTL: ${cacheTTL}ms`);
             // Only clear error here - loading is handled by throttledSetData
             setState(prev => ({ ...prev, error: null }));
           } else {
@@ -1090,7 +1009,6 @@ export default function usePaginatedTokensWithFallback({
       } catch (error: any) {
         // Ignore abort errors - they're expected when switching timeframes/chains
         if (error?.name === 'AbortError') {
-          console.log('🚫 Polling request aborted (timeframe/chain changed)');
           return;
         }
         console.error('❌ Polling error:', error?.message || error);
@@ -1114,7 +1032,6 @@ export default function usePaginatedTokensWithFallback({
     // CRITICAL: Ensure refs are up-to-date before calling poll
     currentRequestTimeframeRef.current = timeframe;
     currentChainRef.current = chain;
-    console.log(`🔄 Starting immediate poll for chain: ${currentChainRef.current || chain}, filter: ${filter}, timeframe: ${timeframe}`);
     // Call poll immediately - it will check cache first, then fetch if needed
     poll();
 
@@ -1159,19 +1076,9 @@ export default function usePaginatedTokensWithFallback({
     const chainChanged = previousChain !== chain;
     const timeframeChanged = previousTimeframe !== timeframe;
     
-    console.log('🔄 Hook useEffect triggered:', {
-      chain: chain,
-      previousChain: previousChain,
-      chainChanged: chainChanged,
-      timeframe: timeframe,
-      previousTimeframe: previousTimeframe,
-      timeframeChanged: timeframeChanged,
-      filter: filter
-    });
     
     // CRITICAL: Abort any in-flight requests from previous timeframe/chain
     if (abortControllerRef.current) {
-      console.log('🚫 Aborting previous request due to timeframe/chain change');
       abortControllerRef.current.abort();
       abortControllerRef.current = null;
     }
@@ -1189,12 +1096,6 @@ export default function usePaginatedTokensWithFallback({
     // CRITICAL: Clear stable data reference and STOP any existing polling FIRST when timeframe or chain changes
     // This must happen BEFORE checking cache to ensure clean state
     if (lastTimeframeRef.current !== timeframe || lastChainRef.current !== chain) {
-      console.log('🧹 Clearing stable data reference due to timeframe/chain change:', {
-        oldTimeframe: lastTimeframeRef.current,
-        newTimeframe: timeframe,
-        oldChain: lastChainRef.current,
-        newChain: chain
-      });
       // Clear stable data reference - this prevents old data from being used
       lastStableDataRef.current = null;
       // CRITICAL: Clear any existing polling interval when timeframe/chain changes
@@ -1206,7 +1107,6 @@ export default function usePaginatedTokensWithFallback({
     
     // CRITICAL: If chain changed, clear data immediately to prevent showing stale data from previous chain
     if (chainChanged) {
-      console.log(`🔄 Chain changed from ${previousChain} to ${chain}, clearing data immediately`);
       setState(prev => ({ 
         ...prev, 
         loading: true, 
@@ -1223,10 +1123,8 @@ export default function usePaginatedTokensWithFallback({
     if (filter === 'trending' || chain === 'monad') {
       const cacheChain = chain || 'sol';
       const cacheKey = `trending_${cacheChain}_${timeframe || '1h'}_${TRENDING_CACHE_VERSION}`;
-      console.log(`[Cache] Checking cache for chain: ${cacheChain}, key: ${cacheKey}`);
       const cached = getCached<any[]>(cacheKey);
       if (cached && cached.length > 0) {
-        console.log(`[Cache] ✅ Found cache for chain ${cacheChain}, loading ${cached.length} tokens immediately`);
         hasCache = true;
         // Use cached data immediately
         throttledSetData(cached);
@@ -1241,7 +1139,6 @@ export default function usePaginatedTokensWithFallback({
         // Still start polling in background to refresh data, but don't show loading
         // The effect will continue and start polling below
       } else {
-        console.log(`[Cache] ❌ No cache for chain ${cacheChain}, will fetch from API`);
       }
     }
     
@@ -1294,7 +1191,6 @@ export default function usePaginatedTokensWithFallback({
         // Set a connection timeout - shorter for faster fallback
         wsConnectionTimeoutRef.current = setTimeout(() => {
           if (ws.readyState === WebSocket.CONNECTING) {
-            console.log('⏰ WebSocket connection timeout, falling back to polling');
             setState(prev => ({ ...prev, usingFallback: true, loading: true, error: null }));
             ws.close();
             // PRODUCTION FIX: Start polling instead of trying to reconnect WebSocket
@@ -1308,14 +1204,12 @@ export default function usePaginatedTokensWithFallback({
             clearTimeout(wsConnectionTimeoutRef.current);
             wsConnectionTimeoutRef.current = null;
           }
-          console.log('✅ WebSocket connected successfully!');
           setState(prev => ({ ...prev, isConnected: true, isReconnecting: false, error: null, usingFallback: false }));
           reconnectAttemptRef.current = 0;
           
           // Send a ping to request data
           try {
             ws.send('ping');
-            console.log('📤 Sent ping to WebSocket server');
           } catch (error) {
             console.error('Failed to send ping:', error);
           }
@@ -1323,7 +1217,6 @@ export default function usePaginatedTokensWithFallback({
           // Set a timeout to detect if no data is received - shorter timeout for faster fallback
           setTimeout(() => {
             if (ws.readyState === WebSocket.OPEN && state.data.length === 0) {
-              console.log('⏰ No data received from WebSocket after 2 seconds, falling back to polling');
               setState(prev => ({ ...prev, usingFallback: true, loading: true, error: null }));
               ws.close();
               startPolling();
@@ -1338,18 +1231,6 @@ export default function usePaginatedTokensWithFallback({
             if (trimmed === 'ping' || trimmed === 'pong' || trimmed === 'ok') return;
 
             const deliver = (payload: any) => {
-              console.log('🔌 WebSocket message received:', {
-                messageType: typeof payload,
-                isArray: Array.isArray(payload),
-                length: Array.isArray(payload) ? payload.length : 'not array',
-                firstItem: Array.isArray(payload) && payload[0] ? {
-                  name: payload[0].name,
-                  symbol: payload[0].symbol,
-                  usd_price: payload[0].usd_price,
-                  fully_diluted_value: payload[0].fully_diluted_value,
-                  total_liquidity_usd: payload[0].total_liquidity_usd
-                } : 'no first item'
-              });
               throttledSetData(payload);
             };
 
@@ -1410,7 +1291,6 @@ export default function usePaginatedTokensWithFallback({
           // PRODUCTION FIX: For trending filter, always fall back to polling (WebSocket doesn't support it)
           // Also fall back if connection closed abnormally (1006) or we have no data
           if (filter === 'trending' || event.code === 1006 || state.data.length === 0) {
-            console.log(`📡 WebSocket closed (code: ${event.code}, filter: ${filter}) - falling back to polling`);
             setState(prev => ({ ...prev, usingFallback: true, loading: prev.data.length === 0 ? true : prev.loading, error: null }));
             startPolling();
             return;
@@ -1447,7 +1327,6 @@ export default function usePaginatedTokensWithFallback({
           // PRODUCTION FIX: For trending filter, immediately start polling (WebSocket doesn't support it)
           // For other filters, try reconnect first
           if (filter === 'trending') {
-            console.log('📡 WebSocket error for trending filter - starting polling immediately');
             setState(prev => ({ 
               ...prev, 
               usingFallback: true,
@@ -1518,11 +1397,9 @@ export default function usePaginatedTokensWithFallback({
     // Monad chain always uses Birdeye API (not WebSocket)
     // This prevents unnecessary WebSocket connection attempts that will fail
     if (filter === 'trending' || chain === 'monad') {
-      console.log(`📡 ${chain === 'monad' ? 'Monad chain' : 'Trending filter'} detected - using HTTP polling only (WebSocket not supported)`);
       // CRITICAL: If chain changed, ensure we start fresh - don't use cache if chain changed
       // This ensures we always fetch fresh data for the new chain
       if (chainChanged && !hasCache) {
-        console.log(`📡 Chain changed to ${chain} - starting fresh fetch (no cache)`);
       }
       // Start polling immediately (even if we have cache, we want to refresh in background)
       // If we have cache, polling will update data when new data arrives

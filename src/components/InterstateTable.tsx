@@ -34,6 +34,8 @@ import { useFilter } from "./FilterContext";
 import { getAmm } from "~/utils/amms";
 import { copyToClipboard } from "~/utils/clipboard";
 
+const isDev = process.env.NODE_ENV !== 'production';
+
 /* ---- Enhanced Axiom AI Palette ---- */
 const AX = {
   bg: "#0f1012",
@@ -2302,7 +2304,7 @@ export default function InterstateTable({
                     pair_address: token.pair_address
                   })
                 })
-                  .then(res => { if (res.ok) console.log('✅ Token backfilled successfully'); })
+                  .then(res => { if (res.ok && isDev) console.log('Token backfilled successfully'); })
                   .catch(err => console.error('❌ Error backfilling token:', err));
               };
 

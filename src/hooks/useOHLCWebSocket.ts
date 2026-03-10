@@ -1,6 +1,8 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { env } from '~/env';
 
+const isDev = process.env.NODE_ENV !== 'production';
+
 // OHLCV candle data from WebSocket
 export interface OHLCVCandle {
   unix_time: number;  // Unix timestamp in seconds
@@ -114,12 +116,12 @@ export default function useOHLCWebSocket({
       // Connect to OHLCV WebSocket endpoint
       const wsUrl = `${baseUrl.replace(/^http/, 'ws')}/v1/ws/ohlcv/${tokenAddress}?timeframe=${timeframe}`;
 
-      console.log('[useOHLCWebSocket] Connecting to:', wsUrl);
+      isDev && console.log('[useOHLCWebSocket] Connecting to:', wsUrl);
       const ws = new WebSocket(wsUrl);
 
       ws.onopen = () => {
         if (!mountedRef.current) return;
-        console.log('[useOHLCWebSocket] Connected');
+        isDev && console.log('[useOHLCWebSocket] Connected');
         setIsConnected(true);
         setError(null);
         setLoading(false);
@@ -138,7 +140,7 @@ export default function useOHLCWebSocket({
             const initialCandles: OHLCVCandle[] = Array.isArray(message.data)
               ? message.data
               : [];
-            console.log('[useOHLCWebSocket] Snapshot received:', initialCandles.length, 'candles');
+            isDev && console.log('[useOHLCWebSocket] Snapshot received:', initialCandles.length, 'candles');
             setCandles(initialCandles.slice(-maxCandles));
             setLoading(false);
           } else if (message.type === 'candle' && message.data) {
@@ -174,14 +176,14 @@ export default function useOHLCWebSocket({
 
       ws.onclose = (event) => {
         if (!mountedRef.current) return;
-        console.log('[useOHLCWebSocket] Disconnected:', event.code, event.reason);
+        isDev && console.log('[useOHLCWebSocket] Disconnected:', event.code, event.reason);
         setIsConnected(false);
 
         // Attempt to reconnect with exponential backoff
         if (enabled && reconnectAttemptsRef.current < maxReconnectAttempts) {
           const delay = Math.min(1000 * Math.pow(2, reconnectAttemptsRef.current), 30000);
           reconnectAttemptsRef.current += 1;
-          console.log(`[useOHLCWebSocket] Reconnecting in ${delay}ms (attempt ${reconnectAttemptsRef.current})`);
+          isDev && console.log(`[useOHLCWebSocket] Reconnecting in ${delay}ms (attempt ${reconnectAttemptsRef.current})`);
 
           reconnectTimeoutRef.current = setTimeout(() => {
             if (mountedRef.current) {

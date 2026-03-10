@@ -477,7 +477,19 @@ export default function TokenLimitOrders({ liveMarketCapUsd, currentTokenAddress
   useEffect(() => {
     if (!hasAuth || typeof window === "undefined") return;
 
-    const handleUpdate = () => {
+    const handleUpdate = (event: Event) => {
+      const detail = (event as CustomEvent)?.detail;
+      // Optimistic insert: if the event carries a normalized newOrder, insert it immediately
+      // so the user sees it in the orders tab without waiting for the next API poll.
+      if (detail?.newOrder) {
+        const newOrder = detail.newOrder as LimitOrder;
+        setOrders((prev) => {
+          if (prev.some((o) => String(o.id) === String(newOrder.id))) return prev;
+          return [newOrder, ...prev];
+        });
+        previousStatusesRef.current[newOrder.id] = newOrder.status;
+      }
+      // Still reconcile with server in background (replaces entire array on next poll)
       void fetchOrders({ silent: true });
     };
 
@@ -538,6 +550,10 @@ export default function TokenLimitOrders({ liveMarketCapUsd, currentTokenAddress
         tokenName: displayName,
       });
       setOrders((prev) => prev.filter((order) => order.id !== orderId));
+      // Notify chart to remove the dotted line
+      if (typeof window !== "undefined") {
+        window.dispatchEvent(new CustomEvent("limit-order-update"));
+      }
     } catch (error: any) {
       console.error("[TokenLimitOrders] Failed to cancel order:", error);
       toast.dismiss(cancelToastId);

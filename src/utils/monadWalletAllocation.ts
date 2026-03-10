@@ -2,6 +2,8 @@ import { tradeMonadBuy } from "./api";
 import { normalizeMonadAddress } from "./normalizeMonadAddress";
 import { broadcastTradeCompleted } from "./tradeEvents";
 
+const isDev = process.env.NODE_ENV !== 'production';
+
 type WalletListItem = {
   id: string;
   solanaAddress?: string | null;
@@ -256,7 +258,7 @@ export async function executeMonadMultiBuy({
   // IMPORTANT: For multi-wallet mode, let BACKEND validate and distribute
   // Don't block on frontend if primary wallet has no balance - other wallets might!
   if (selectedWalletIds.length > 1) {
-    console.log(`🚀 Using NEW backend multi-wallet Monad API (1 call for ${effectiveAllocations.length} wallets)`);
+    isDev && console.log(`Using NEW backend multi-wallet Monad API (1 call for ${effectiveAllocations.length} wallets)`);
 
     try {
       const result = await tradeMonadBuy(
@@ -340,7 +342,7 @@ export async function executeMonadMultiBuy({
   // ========================================
   // OLD: Sequential approach (single wallet OR fallback)
   // ========================================
-  console.log(`🔄 Using sequential Monad API calls (${effectiveAllocations.length} wallet${effectiveAllocations.length > 1 ? 's' : ''})`);
+  isDev && console.log(`Using sequential Monad API calls (${effectiveAllocations.length} wallet${effectiveAllocations.length > 1 ? 's' : ''})`);
 
   // Validate balance ONLY for sequential mode (single wallet or fallback)
   if (effectiveAllocations.length === 0) {

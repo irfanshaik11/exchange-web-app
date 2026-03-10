@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 
+const isDev = process.env.NODE_ENV !== 'production';
+
 interface CodexTradeEvent {
   eventDisplayType: "Buy" | "Sell" | "Add";
   maker: string;
@@ -46,7 +48,7 @@ export default function useCodexTradesWebSocket(
   // Update trades when initialTrades are provided (from REST pre-fetch)
   useEffect(() => {
     if (initialTrades && initialTrades.length > 0 && !hasSetInitialDataRef.current) {
-      console.log('[useCodexTradesWebSocket] Using initial trades from pre-fetch:', initialTrades.length);
+      isDev && console.log('[useCodexTradesWebSocket] Using initial trades from pre-fetch:', initialTrades.length);
       setTrades(initialTrades);
       setIsLoading(false);
       hasSetInitialDataRef.current = true;
@@ -104,7 +106,7 @@ export default function useCodexTradesWebSocket(
       
       if (result.data?.getTokenEvents?.items) {
         setTrades(result.data.getTokenEvents.items);
-        console.log(`Fetched ${result.data.getTokenEvents.items.length} initial trades`);
+        isDev && console.log(`Fetched ${result.data.getTokenEvents.items.length} initial trades`);
       }
     } catch (err) {
       console.error('Failed to fetch initial trades:', err);
@@ -126,7 +128,7 @@ export default function useCodexTradesWebSocket(
     fetchInitialTrades(tokenAddress);
 
     // DISABLED: External Codex WebSocket - using only backend data
-    console.log('🚫 Codex WebSocket disabled - using only backend trade data');
+    isDev && console.log('Codex WebSocket disabled - using only backend trade data');
     setIsConnected(false);
     setError(null);
     setIsLoading(false);
@@ -225,7 +227,7 @@ export default function useCodexTradesWebSocket(
                 });
               }
             } else if (message.type === "complete") {
-              console.log("Subscription completed");
+              isDev && console.log("Subscription completed");
             } else if (message.type === "error") {
               console.error("Subscription error:", message.payload);
             }

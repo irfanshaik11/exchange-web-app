@@ -9,6 +9,8 @@
  * The cache has a TTL to prevent showing stale data.
  */
 
+const isDev = process.env.NODE_ENV !== 'production';
+
 const DB_NAME = 'pulse-websocket-cache';
 const DB_VERSION = 1;
 const STORE_NAME = 'tokens';
@@ -186,7 +188,7 @@ function openDB(): Promise<IDBDatabase> {
       }
     } catch {
       // Connection is stale, reset and reopen
-      console.log('[PulseCache] Stale connection detected, reopening...');
+      isDev && console.log('[PulseCache] Stale connection detected, reopening...');
       dbInstance = null;
       dbPromise = null;
     }

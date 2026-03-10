@@ -1,5 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 
+const isDev = process.env.NODE_ENV !== 'production';
+
 export interface MarketData {
   mint: string;
   price_usd: number;
@@ -58,7 +60,7 @@ export function useRealtimeWebSocket(
 
     // If using deployed service, disable WebSocket and use HTTP polling fallback
     if (process.env.NEXT_PUBLIC_IS_BACKEND_DEPLOYED === 'true') {
-      console.log('🚫 WebSocket disabled for deployed service, using HTTP polling fallback');
+      isDev && console.log('WebSocket disabled for deployed service, using HTTP polling fallback');
       setLoading(false);
       setConnected(false);
       setError(null);
@@ -73,7 +75,7 @@ export function useRealtimeWebSocket(
       wsRef.current = ws;
 
       ws.onopen = () => {
-        console.log('WebSocket connected');
+        isDev && console.log('WebSocket connected');
         setConnected(true);
         setLoading(false);
         setError(null);
@@ -106,13 +108,13 @@ export function useRealtimeWebSocket(
       };
 
       ws.onclose = (event) => {
-        console.log('WebSocket disconnected:', event.code, event.reason);
+        isDev && console.log('WebSocket disconnected:', event.code, event.reason);
         setConnected(false);
         
         // Attempt to reconnect if not a clean close
         if (event.code !== 1000 && reconnectAttemptsRef.current < maxReconnectAttempts) {
           reconnectAttemptsRef.current++;
-          console.log(`Attempting to reconnect (${reconnectAttemptsRef.current}/${maxReconnectAttempts})...`);
+          isDev && console.log(`Attempting to reconnect (${reconnectAttemptsRef.current}/${maxReconnectAttempts})...`);
           
           reconnectTimeoutRef.current = setTimeout(() => {
             connect();

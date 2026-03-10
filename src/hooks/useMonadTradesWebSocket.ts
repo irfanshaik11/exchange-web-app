@@ -1,6 +1,8 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { env } from '~/env';
 
+const isDev = process.env.NODE_ENV !== 'production';
+
 export interface MonadTrade {
   tx_hash: string;
   block_number: number;
@@ -212,12 +214,12 @@ export function useMonadTradesWebSocket(
       const baseUrl = env.NEXT_PUBLIC_MONAD_TOKEN_SERVICE_URL!;
       const wsUrl = `${baseUrl.replace(/^http/, 'ws')}/v1/stream`;
 
-      console.log('[useMonadTradesWebSocket] 🔌 Connecting to:', wsUrl);
+      isDev && console.log('[useMonadTradesWebSocket] Connecting to:', wsUrl);
       const ws = new WebSocket(wsUrl);
 
       ws.onopen = () => {
         if (!mountedRef.current) return;
-        console.log('[useMonadTradesWebSocket] ✅ Connected');
+        isDev && console.log('[useMonadTradesWebSocket] Connected');
         setConnected(true);
         setError(null);
         reconnectAttemptsRef.current = 0;
@@ -279,7 +281,7 @@ export function useMonadTradesWebSocket(
 
       ws.onclose = (event) => {
         if (!mountedRef.current) return;
-        console.log('[useMonadTradesWebSocket] 🔌 Closed:', event.code, event.reason);
+        isDev && console.log('[useMonadTradesWebSocket] Closed:', event.code, event.reason);
         setConnected(false);
         wsRef.current = null;
 
@@ -287,7 +289,7 @@ export function useMonadTradesWebSocket(
         const { enabled: stillEnabled, maxReconnectAttempts: maxAttempts, reconnectInterval: interval } = configRef.current;
         if (stillEnabled && reconnectAttemptsRef.current < maxAttempts) {
           reconnectAttemptsRef.current += 1;
-          console.log(`[useMonadTradesWebSocket] Reconnecting in ${interval}ms (attempt ${reconnectAttemptsRef.current}/${maxAttempts})`);
+          isDev && console.log(`[useMonadTradesWebSocket] Reconnecting in ${interval}ms (attempt ${reconnectAttemptsRef.current}/${maxAttempts})`);
           reconnectTimeoutRef.current = setTimeout(() => {
             if (mountedRef.current) {
               connect();
@@ -350,14 +352,14 @@ export function useMonadTradesWebSocket(
         if (!isEnabled || !ta) return;
 
         if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) {
-          console.log('[useMonadTradesWebSocket] Tab visible, WS not open — reconnecting');
+          isDev && console.log('[useMonadTradesWebSocket] Tab visible, WS not open — reconnecting');
           reconnectAttemptsRef.current = 0;
           connect();
         } else {
           try {
             wsRef.current.send(JSON.stringify({ type: 'ping' }));
           } catch {
-            console.log('[useMonadTradesWebSocket] Ping failed on tab return — reconnecting');
+            isDev && console.log('[useMonadTradesWebSocket] Ping failed on tab return — reconnecting');
             reconnectAttemptsRef.current = 0;
             connect();
           }

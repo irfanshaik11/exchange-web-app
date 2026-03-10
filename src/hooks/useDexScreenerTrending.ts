@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import type { NormalizedTrendingToken } from './useTrendingWebSocket';
 
+const isDev = process.env.NODE_ENV !== 'production';
+
 // Derive URLs from environment (same env vars as the rest of the app)
 function getBaseUrl(): string {
   return process.env.NEXT_PUBLIC_GO_SERVICE_URL || 'http://localhost:8085';
@@ -133,7 +135,7 @@ async function fetchRestSnapshot() {
   if (globalRestFetched && globalTokenMap.size > 0) return; // Already have data
   try {
     const url = `${getBaseUrl()}${DS_REST_PATH}`;
-    console.log('[DexScreenerWS] Fetching initial data from REST:', url);
+    isDev && console.log('[DexScreenerWS] Fetching initial data from REST:', url);
     const resp = await fetch(url);
     if (!resp.ok) throw new Error(`REST ${resp.status}`);
     const data = await resp.json();
@@ -143,7 +145,7 @@ async function fetchRestSnapshot() {
         if (BLACKLISTED_TOKENS.has(token.mint)) return;
         globalTokenMap.set(token.mint, normalizeDexScreenerToken(token));
       });
-      console.log(`[DexScreenerWS] REST loaded ${globalTokenMap.size} tokens`);
+      isDev && console.log(`[DexScreenerWS] REST loaded ${globalTokenMap.size} tokens`);
       saveDexScreenerCache(Array.from(globalTokenMap.values()));
       globalRestFetched = true;
       notifyListeners();
@@ -171,14 +173,14 @@ function connectDexScreenerWS() {
   }
 
   const wsUrl = `${getWsUrl()}${DS_WS_PATH}`;
-  console.log('[DexScreenerWS] Connecting to:', wsUrl);
+  isDev && console.log('[DexScreenerWS] Connecting to:', wsUrl);
 
   try {
     const ws = new WebSocket(wsUrl);
     globalWs = ws;
 
     ws.onopen = () => {
-      console.log('[DexScreenerWS] Connected');
+      isDev && console.log('[DexScreenerWS] Connected');
       globalIsConnecting = false;
       globalIsConnected = true;
       globalReconnectAttempt = 0;
@@ -197,7 +199,7 @@ function connectDexScreenerWS() {
               if (BLACKLISTED_TOKENS.has(token.mint)) return;
               globalTokenMap.set(token.mint, normalizeDexScreenerToken(token));
             });
-            console.log(`[DexScreenerWS] Loaded ${globalTokenMap.size} tokens from WS snapshot`);
+            isDev && console.log(`[DexScreenerWS] Loaded ${globalTokenMap.size} tokens from WS snapshot`);
             saveDexScreenerCache(Array.from(globalTokenMap.values()));
           }
           notifyListeners();
@@ -270,7 +272,7 @@ function connectDexScreenerWS() {
     };
 
     ws.onclose = (event) => {
-      console.log('[DexScreenerWS] Disconnected, code:', event.code);
+      isDev && console.log('[DexScreenerWS] Disconnected, code:', event.code);
       globalIsConnecting = false;
       globalIsConnected = false;
       globalWs = null;
@@ -279,7 +281,7 @@ function connectDexScreenerWS() {
       // Exponential backoff reconnect
       if (globalListeners.size > 0 && globalReconnectAttempt < 5) {
         const delay = Math.min(1000 * Math.pow(2, globalReconnectAttempt), 30000);
-        console.log(`[DexScreenerWS] Reconnecting in ${delay}ms (attempt ${globalReconnectAttempt + 1}/5)`);
+        isDev && console.log(`[DexScreenerWS] Reconnecting in ${delay}ms (attempt ${globalReconnectAttempt + 1}/5)`);
         globalReconnectAttempt++;
         globalReconnectTimeout = setTimeout(() => {
           if (globalListeners.size > 0) {
@@ -367,7 +369,7 @@ export function useDexScreenerTrending(enabled: boolean = true) {
       mountedRef.current = false;
       globalListeners.delete(syncState);
       if (globalListeners.size === 0) {
-        console.log('[DexScreenerWS] No more listeners, disconnecting');
+        isDev && console.log('[DexScreenerWS] No more listeners, disconnecting');
         disconnectDexScreenerWS();
       }
     };

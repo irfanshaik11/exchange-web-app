@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 
+const isDev = process.env.NODE_ENV !== 'production';
+
 export interface TokenMetrics {
   address: string;
 
@@ -68,7 +70,7 @@ export function useMonadTokenMetrics({
         setConnected(true);
         setError(null);
         reconnectAttempts.current = 0;
-        console.log(`[TokenMetrics WS] Connected, listening for ${tokenAddress}`);
+        if (isDev) console.log(`[TokenMetrics WS] Connected, listening for ${tokenAddress}`);
       };
 
       ws.onmessage = (event) => {
@@ -86,7 +88,6 @@ export function useMonadTokenMetrics({
             if (data.address?.toLowerCase() === tokenAddress.toLowerCase()) {
               setMetrics(data);
               onUpdate?.(data);
-              console.log(`[TokenMetrics WS] Updated: $${data.price_usd?.toFixed(6)}, B.Curve ${data.graduation_percent?.toFixed(1)}%`);
             }
           }
 
@@ -114,7 +115,6 @@ export function useMonadTokenMetrics({
           reconnectAttempts.current++;
 
           reconnectTimeoutRef.current = setTimeout(() => {
-            console.log(`[TokenMetrics WS] Reconnecting... (attempt ${reconnectAttempts.current})`);
             connect();
           }, delay);
         }

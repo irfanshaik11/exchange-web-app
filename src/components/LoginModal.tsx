@@ -15,6 +15,7 @@ import { useUserLimit } from "./UserLimitContext";
 import { ApiError } from "../utils/api";
 import { FiCheck, FiAlertCircle, FiLoader } from 'react-icons/fi';
 
+const isDev = process.env.NODE_ENV !== 'production';
 const ENABLE_EMAIL_AUTH = false;
 const AUTH_BUTTON_WIDTH_CLASS = 'w-full max-w-[400px] mx-auto';
 const SESSION_METADATA_KEY = "@turnkey/session-metadata";
@@ -238,9 +239,9 @@ const clientState = turnkey?.clientState;
 
   // Debug: log session and wallets whenever they change
   useEffect(() => {
-    console.log("[LoginModal] useTurnkey session snapshot:", turnkey?.session);
+    isDev && console.log("[LoginModal] useTurnkey session snapshot:", turnkey?.session);
     if (turnkey?.wallets) {
-      console.log("[LoginModal] useTurnkey wallets snapshot:", turnkey.wallets);
+      isDev && console.log("[LoginModal] useTurnkey wallets snapshot:", turnkey.wallets);
     }
   }, [turnkey?.session, turnkey?.wallets]);
 
@@ -395,7 +396,7 @@ const clientState = turnkey?.clientState;
 //     }
 
 //     // -------- Decode Google ID token to extract optional metadata ----------
-//     console.log("Google credential:", resp.credential);
+//     isDev && console.log("Google credential:", resp.credential);
 //     const createSubOrgParams = (() => {
 //       try {
 //         const [, payloadSegment] = resp.credential.split(".");
@@ -427,7 +428,7 @@ const clientState = turnkey?.clientState;
 //       }
 //     })();
 
-//     console.log("createSubOrgParams:", createSubOrgParams);
+//     isDev && console.log("createSubOrgParams:", createSubOrgParams);
 
 //     // -------- Build OAuth parameters for Turnkey --------
 //     const oauthParams: any = {
@@ -439,12 +440,12 @@ const clientState = turnkey?.clientState;
 //     if (createSubOrgParams) {
 //     oauthParams.createSubOrgParams = createSubOrgParams;
 //     }
-//     console.log("Final OAuth params:", oauthParams);
+//     isDev && console.log("Final OAuth params:", oauthParams);
 
 //     // -------- SUPER IMPORTANT: Use completeWithOauth --------
 //     const sessionResult = await turnkey.completeOauth(oauthParams);
 
-//     console.log("Turnkey OAuth result:", sessionResult);
+//     isDev && console.log("Turnkey OAuth result:", sessionResult);
 //     setSuccess("Google sign-in complete!");
 
 //   } catch (err: any) {
@@ -484,7 +485,7 @@ async function handleGoogleSuccess(resp: CredentialResponse) {
     }
 
     // -------- Decode Google token ----------
-    console.log("Google credential:", resp.credential);
+    isDev && console.log("Google credential:", resp.credential);
     const decoded = (() => {
       try {
         const [, payloadSegment] = resp.credential.split(".");
@@ -499,7 +500,7 @@ async function handleGoogleSuccess(resp: CredentialResponse) {
       }
     })();
 
-    console.log("Decoded Google payload:", decoded);
+    isDev && console.log("Decoded Google payload:", decoded);
 
     const email =
       typeof decoded?.email === "string" ? decoded.email : undefined;
@@ -533,7 +534,7 @@ async function handleGoogleSuccess(resp: CredentialResponse) {
       };
     }
 
-    console.log("createSubOrgParams:", createSubOrgParams);
+    isDev && console.log("createSubOrgParams:", createSubOrgParams);
 
     // -------- Build OAuth params ----------
     const oauthParams: any = {
@@ -547,11 +548,11 @@ async function handleGoogleSuccess(resp: CredentialResponse) {
 
 
 
-    console.log("Final OAuth params:", oauthParams);
+    isDev && console.log("Final OAuth params:", oauthParams);
 
     // -------- Complete OAuth login via Turnkey ----------
     const sessionResult = await turnkey.completeOauth(oauthParams);
-    console.log("Turnkey OAuth result:", sessionResult);
+    isDev && console.log("Turnkey OAuth result:", sessionResult);
 
     setSuccess("Google sign-in complete!");
     recordAuthMethod("google");
@@ -649,7 +650,7 @@ async function handleGoogleSuccess(resp: CredentialResponse) {
 
       // Check if this is a new user (backend returns isNewUser flag)
       const isNewUser = data?.isNewUser === true;
-      console.log("[LoginModal] Phantom login response:", { isNewUser, data });
+      isDev && console.log("[LoginModal] Phantom login response:", { isNewUser, data });
 
       // If new user, set the ref BEFORE refreshUser to prevent useEffect from interfering
       if (isNewUser) {
@@ -662,12 +663,12 @@ async function handleGoogleSuccess(resp: CredentialResponse) {
 
       // If new user, show username step; otherwise close
       if (isNewUser) {
-        console.log("[LoginModal] New user detected, showing username step");
+        isDev && console.log("[LoginModal] New user detected, showing username step");
         setLoginStep('username');
         // Dispatch event to tell parent NOT to auto-close the modal
         window.dispatchEvent(new CustomEvent('login-modal-keep-open'));
       } else {
-        console.log("[LoginModal] Existing user, closing modal");
+        isDev && console.log("[LoginModal] Existing user, closing modal");
         onClose();
       }
     } catch (error: any) {
@@ -760,7 +761,7 @@ async function handleGoogleSuccess(resp: CredentialResponse) {
 
       // Check if this is a new user (backend returns isNewUser flag)
       const isNewUser = data?.isNewUser === true;
-      console.log("[LoginModal] MetaMask login response:", { isNewUser, data });
+      isDev && console.log("[LoginModal] MetaMask login response:", { isNewUser, data });
 
       // If new user, set the ref BEFORE refreshUser to prevent useEffect from interfering
       if (isNewUser) {
@@ -773,12 +774,12 @@ async function handleGoogleSuccess(resp: CredentialResponse) {
 
       // If new user, show username step; otherwise close
       if (isNewUser) {
-        console.log("[LoginModal] New user detected, showing username step");
+        isDev && console.log("[LoginModal] New user detected, showing username step");
         setLoginStep('username');
         // Dispatch event to tell parent NOT to auto-close the modal
         window.dispatchEvent(new CustomEvent('login-modal-keep-open'));
       } else {
-        console.log("[LoginModal] Existing user, closing modal");
+        isDev && console.log("[LoginModal] Existing user, closing modal");
         onClose();
       }
     } catch (error: any) {

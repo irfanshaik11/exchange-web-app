@@ -9,6 +9,8 @@
  * - Fallback for browsers without Worker support
  */
 
+const isDev = process.env.NODE_ENV !== 'production';
+
 import { loadPulseCache, savePulseCache, type PulseToken } from './pulseCache';
 import { extractImageUrls, preloadImage } from './imagePreloader';
 
@@ -132,7 +134,7 @@ function scheduleBroadcast() {
  */
 function initBroadcastChannel() {
   if (typeof BroadcastChannel === 'undefined') {
-    console.log('[PulseWorkerBridge] BroadcastChannel not supported, starting worker directly');
+    isDev && console.log('[PulseWorkerBridge] BroadcastChannel not supported, starting worker directly');
     // Without BroadcastChannel, this tab becomes leader by default
     isLeader = true;
     startWorker(); // Start worker immediately!
@@ -152,7 +154,7 @@ function initBroadcastChannel() {
             leaderId = from;
             lastLeaderHeartbeat = Date.now();
             if (isLeader) {
-              console.log('[PulseWorkerBridge] Another tab is leader, stepping down');
+              isDev && console.log('[PulseWorkerBridge] Another tab is leader, stepping down');
               isLeader = false;
               stopWorker();
             }
@@ -235,7 +237,7 @@ function electLeader() {
 
   // START IMMEDIATELY - don't wait for responses
   // We'll step down if another leader responds within 200ms
-  console.log('[PulseWorkerBridge] Starting as leader (optimistic)');
+  isDev && console.log('[PulseWorkerBridge] Starting as leader (optimistic)');
   isLeader = true;
   leaderId = tabId;
   startWorker();
@@ -247,7 +249,7 @@ function electLeader() {
     const now = Date.now();
     // If we received a heartbeat from another leader, step down
     if (leaderId !== tabId && now - lastLeaderHeartbeat < 1000) {
-      console.log('[PulseWorkerBridge] Another leader found, stepping down:', leaderId);
+      isDev && console.log('[PulseWorkerBridge] Another leader found, stepping down:', leaderId);
       isLeader = false;
       stopWorker();
       // Request current data from the actual leader
@@ -267,7 +269,7 @@ function electLeader() {
       // Check if leader is still alive
       const now = Date.now();
       if (now - lastLeaderHeartbeat > 10000) {
-        console.log('[PulseWorkerBridge] Leader timeout, starting election');
+        isDev && console.log('[PulseWorkerBridge] Leader timeout, starting election');
         electLeader();
       }
     }
@@ -381,7 +383,7 @@ function startWorker() {
       },
     });
 
-    console.log('[PulseWorkerBridge] Worker started (leader tab)');
+    isDev && console.log('[PulseWorkerBridge] Worker started (leader tab)');
   } catch (err) {
     console.error('[PulseWorkerBridge] Failed to create worker:', err);
     initFallback(wsBaseUrl);
@@ -412,7 +414,7 @@ export async function initPulseWorker(baseUrl: string): Promise<void> {
   }
 
   if (isInitialized) {
-    console.log('[PulseWorkerBridge] Already initialized');
+    isDev && console.log('[PulseWorkerBridge] Already initialized');
     return;
   }
 
@@ -508,7 +510,7 @@ async function doInit(): Promise<void> {
       }
     });
     window.addEventListener('online', () => {
-      console.log('[PulseWorkerBridge] Network back online, forcing WebSocket reconnection');
+      isDev && console.log('[PulseWorkerBridge] Network back online, forcing WebSocket reconnection');
       if (worker && isLeader) {
         worker.postMessage({ type: 'FORCE_RECONNECT' });
       }

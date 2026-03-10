@@ -3,6 +3,8 @@ import type { UseQueryResult } from '@tanstack/react-query';
 import { env } from '../env';
 import type { Token } from '~/utils/db';
 
+const isDev = process.env.NODE_ENV !== 'production';
+
 export const tokenKeys = {
   trenches: {
     newPairs: () => ['tokens', 'trenches', 'new-pairs'] as const,
@@ -157,7 +159,7 @@ async function fetchNewPairs(): Promise<Token[]> {
     const httpAgo = httpYoungest > 0 ? ((now - httpYoungest) / 1000).toFixed(0) : '??';
     const cacheAgo = cacheYoungest > 0 ? ((now - cacheYoungest) / 1000).toFixed(0) : '??';
     const fresher = httpYoungest >= cacheYoungest ? 'HTTP is fresher' : 'CACHE was fresher';
-    console.log(
+    isDev && console.log(
       `[PulseFreshness] HTTP youngest: ${httpAgo}s ago, Cache youngest: ${cacheAgo}s ago → ${fresher} (${tokens.length} tokens)`
     );
   }

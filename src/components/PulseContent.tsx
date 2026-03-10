@@ -257,7 +257,7 @@ export default function PulseContent({ forceMobileView = false }: PulseContentPr
           }
         }
       } catch (error) {
-        console.log("[Final Stretch] Immediate poll failed:", error);
+        // Silent: poll failure on interval
       }
     };
 

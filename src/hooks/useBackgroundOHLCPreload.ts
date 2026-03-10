@@ -28,7 +28,6 @@ const cleanupCache = () => {
   for (const [key, value] of globalOHLCCache.entries()) {
     if (now - value.timestamp > CACHE_DURATION) {
       globalOHLCCache.delete(key);
-      console.log('[Background OHLC] Cleaned up stale cache entry:', key);
     }
   }
 };
@@ -62,7 +61,6 @@ export default function useBackgroundOHLCPreload(interval: string = '1h', timefr
       
       // If mint changed, clear all cached data to prevent cross-token pollution
       if (previousMintRef.current && previousMintRef.current !== mintAddress) {
-        console.log('[Background OHLC] Mint changed from', previousMintRef.current, 'to', mintAddress, '- clearing all cache');
         globalOHLCCache.clear();
         setBackgroundData(null);
         setPreloadComplete(false);
@@ -71,16 +69,13 @@ export default function useBackgroundOHLCPreload(interval: string = '1h', timefr
 
       // ALWAYS clear background data when mint changes to prevent stale data
       if (backgroundData) {
-        console.log('[Background OHLC] Clearing stale data for new token:', mintAddress);
         setBackgroundData(null);
         setPreloadComplete(false);
       }
 
       // Create cache key that includes parameters to avoid conflicts
       const cacheKey = `${mintAddress}:${interval}:${timeframe}`;
-      
-      console.log('[Background OHLC] Checking cache for:', cacheKey);
-      
+
       // Check global cache first
       const cached = globalOHLCCache.get(cacheKey);
       const now = Date.now();
@@ -89,12 +84,10 @@ export default function useBackgroundOHLCPreload(interval: string = '1h', timefr
         // Validate that cached data is for the current mint and has actual candles
         // (data.length === 0 means a hover prefetch is still in-flight)
         if (cached.mint === mintAddress) {
-          console.log('[Background OHLC] Using cached data for', cacheKey, 'with', cached.data.length, 'candles');
           setBackgroundData(cached.data);
           setPreloadComplete(true);
           return;
         } else {
-          console.log('[Background OHLC] Cached data is for different mint, clearing cache');
           globalOHLCCache.delete(cacheKey);
         }
       }
@@ -103,7 +96,6 @@ export default function useBackgroundOHLCPreload(interval: string = '1h', timefr
       // (WS snapshot may have arrived but globalOHLCCache write was missed due to timing)
       const wsPrefetchCandles = getWsPrefetchData(mintAddress);
       if (wsPrefetchCandles && wsPrefetchCandles.length > 0) {
-        console.log('[Background OHLC] Using WS prefetch data for', mintAddress, 'with', wsPrefetchCandles.length, 'candles');
         globalOHLCCache.set(cacheKey, { data: wsPrefetchCandles, timestamp: Date.now(), mint: mintAddress });
         setBackgroundData(wsPrefetchCandles);
         setPreloadComplete(true);
@@ -132,7 +124,6 @@ export default function useBackgroundOHLCPreload(interval: string = '1h', timefr
               url.searchParams.set('limit', '500');
             }
 
-            console.log('[Background OHLC] Starting preload for', cacheKey, 'chain:', chain, 'URL:', url.toString());
             const response = await fetch(url.toString(), {
               method: 'GET',
               headers: {
@@ -160,8 +151,6 @@ export default function useBackgroundOHLCPreload(interval: string = '1h', timefr
               }
 
               if (data?.success && items.length > 0) {
-                console.log('[Background OHLC] Preload complete:', items.length, 'candles for', cacheKey);
-
                 // Cache the data globally with parameter-specific key and mint validation
                 globalOHLCCache.set(cacheKey, { data: items, timestamp: now, mint: mintAddress });
 
@@ -180,7 +169,6 @@ export default function useBackgroundOHLCPreload(interval: string = '1h', timefr
     } else {
       // If no valid mint, clear any existing data
       if (backgroundData) {
-        console.log('[Background OHLC] No valid mint - clearing background data');
         setBackgroundData(null);
         setPreloadComplete(false);
       }
@@ -253,7 +241,6 @@ export function prefetchOHLC(mint: string, chain: 'sol' | 'monad' = 'sol'): void
       }
       if (data?.success && items.length > 0) {
         globalOHLCCache.set(cacheKey, { data: items, timestamp: Date.now(), mint });
-        console.log('[Background OHLC] Hover prefetch complete:', items.length, 'candles for', mint);
       } else {
         // Remove the in-flight marker so the hook can try its own fetch
         globalOHLCCache.delete(cacheKey);

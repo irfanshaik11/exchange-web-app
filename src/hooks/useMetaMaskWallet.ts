@@ -1,5 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 
+const isDev = process.env.NODE_ENV !== 'production';
+
 interface MetaMaskWallet {
   isInstalled: boolean;
   isConnected: boolean;
@@ -146,12 +148,12 @@ export function useMetaMaskWallet(): UseMetaMaskWalletReturn {
     if (provider.providers && Array.isArray(provider.providers)) {
       // Multiple providers case - find MetaMask specifically
       metamaskProvider = provider.providers.find((p: any) => p.isMetaMask === true);
-      console.log('Found MetaMask in providers array:', !!metamaskProvider);
-      console.log('All providers:', provider.providers.map((p: any) => ({ isMetaMask: p.isMetaMask, isBraveWallet: p.isBraveWallet })));
+      isDev && console.log('Found MetaMask in providers array:', !!metamaskProvider);
+      isDev && console.log('All providers:', provider.providers.map((p: any) => ({ isMetaMask: p.isMetaMask, isBraveWallet: p.isBraveWallet })));
     } else if (provider.isMetaMask === true) {
       // Single provider case
       metamaskProvider = provider;
-      console.log('Using window.ethereum directly as MetaMask');
+      isDev && console.log('Using window.ethereum directly as MetaMask');
     }
 
     if (!metamaskProvider) {
@@ -169,7 +171,7 @@ export function useMetaMaskWallet(): UseMetaMaskWalletReturn {
       return false;
     }
 
-    console.log('Using MetaMask provider:', metamaskProvider);
+    isDev && console.log('Using MetaMask provider:', metamaskProvider);
 
     setState(prev => ({ ...prev, connecting: true, error: null }));
 

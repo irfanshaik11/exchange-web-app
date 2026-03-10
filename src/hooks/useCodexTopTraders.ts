@@ -1,5 +1,7 @@
 import { useState, useEffect } from 'react';
 
+const isDev = process.env.NODE_ENV !== 'production';
+
 interface CodexTopTrader {
   walletAddress: string;
   tokenAmountBought: string;
@@ -73,10 +75,10 @@ export default function useCodexTopTraders(
         
         if (result.tokenTopTraders?.items) {
           setTraders(result.tokenTopTraders.items);
-          console.log(`Fetched ${result.tokenTopTraders.items.length} top traders`);
+          isDev && console.log(`Fetched ${result.tokenTopTraders.items.length} top traders`);
         } else {
           setTraders([]);
-          console.log('No top traders found');
+          isDev && console.log('No top traders found');
         }
       } catch (err) {
         console.error('Failed to fetch top traders:', err);

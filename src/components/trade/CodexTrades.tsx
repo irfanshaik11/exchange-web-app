@@ -1105,16 +1105,6 @@ const CodexTrades: React.FC<CodexTradesProps> = ({
   const mintForWebSocket =
     stableToken?.mint || stableToken?.pair_address || pairAddress;
 
-  // Debug logging
-  console.log("[CodexTrades] Debug:", {
-    tokenMint: stableToken?.mint,
-    tokenPairAddress: stableToken?.pair_address,
-    propPairAddress: pairAddress,
-    mintForWebSocket,
-    enabled: !!mintForWebSocket,
-    chain,
-  });
-
   // Use shared WebSocket context for Solana chain (eliminates duplicate connections)
   // Context is provided by parent [id].tsx with SolanaTokenWebSocketProvider
   const wsContext = useSolanaTokenWebSocketContext();

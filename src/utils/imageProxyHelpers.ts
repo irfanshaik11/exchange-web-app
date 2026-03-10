@@ -1,5 +1,7 @@
 import type { NextApiResponse } from 'next';
 
+const isDev = process.env.NODE_ENV !== 'production';
+
 // Allowed image MIME types - only image types are permitted
 // NOTE: SVG is allowed but guarded later to block obvious script tags
 const ALLOWED_IMAGE_TYPES = [
@@ -271,7 +273,7 @@ export async function resolveJsonMetadataImage(
     const resolvedImageUrl = imageField || filesImage;
 
     if (resolvedImageUrl && typeof resolvedImageUrl === 'string' && resolvedImageUrl.startsWith('http')) {
-      console.log(`[image proxy] JSON metadata detected, resolving to: ${resolvedImageUrl.substring(0, 80)}`);
+      isDev && console.log(`[image proxy] JSON metadata detected, resolving to: ${resolvedImageUrl.substring(0, 80)}`);
       const imgController = new AbortController();
       const imgTimeout = setTimeout(() => imgController.abort(), 12000);
       const imgResponse = await fetch(resolvedImageUrl, {
@@ -292,7 +294,7 @@ export async function resolveJsonMetadataImage(
       }
     }
   } catch (e) {
-    console.log('[image proxy] JSON auto-resolve failed, serving original:', (e as any)?.message);
+    isDev && console.log('[image proxy] JSON auto-resolve failed, serving original:', (e as any)?.message);
   }
 
   return null;

@@ -19,6 +19,8 @@ interface OHLCCandle {
   v_usd: number;
 }
 
+const isDev = process.env.NODE_ENV !== 'production';
+
 type PrefetchStatus = 'idle' | 'connecting' | 'connected' | 'closed';
 
 // ── Module-level singleton state ─────────────────────────────────────────
@@ -127,7 +129,7 @@ export function prefetchViaWS(mint: string): void {
       newWs.onopen = () => {
         if (ws !== newWs) return; // stale
         status = 'connected';
-        console.log(
+        isDev && console.log(
           '[OHLCPrefetch] WS connected for',
           mint.slice(0, 10) + '...',
         );
@@ -155,7 +157,7 @@ export function prefetchViaWS(mint: string): void {
               writeToGlobalCache(mint, snapshotData);
             }
 
-            console.log(
+            isDev && console.log(
               '[OHLCPrefetch] Snapshot:',
               snapshotData.length,
               'candles for',
@@ -175,7 +177,7 @@ export function prefetchViaWS(mint: string): void {
 
       newWs.onerror = () => {
         if (ws !== newWs) return;
-        console.log(
+        isDev && console.log(
           '[OHLCPrefetch] WS error for',
           mint.slice(0, 10) + '...',
         );
@@ -185,13 +187,13 @@ export function prefetchViaWS(mint: string): void {
         if (ws !== newWs) return;
         status = 'closed';
         ws = null;
-        console.log(
+        isDev && console.log(
           '[OHLCPrefetch] WS closed for',
           mint.slice(0, 10) + '...',
         );
       };
     } catch (e) {
-      console.log('[OHLCPrefetch] Failed to create WS:', e);
+      isDev && console.log('[OHLCPrefetch] Failed to create WS:', e);
       status = 'idle';
     }
   }, 50);
@@ -241,7 +243,7 @@ export function adoptConnection(
     cleanupTimer = null;
   }
 
-  console.log(
+  isDev && console.log(
     '[OHLCPrefetch] Connection adopted by chart for',
     mint.slice(0, 10) + '...',
     '(' + cachedData.length + ' cached candles)',
@@ -290,7 +292,7 @@ export function handoffConnection(
     if (ws !== handedWs) return;
     status = 'closed';
     ws = null;
-    console.log(
+    isDev && console.log(
       '[OHLCPrefetch] Handed-off WS closed for',
       mint.slice(0, 10) + '...',
     );
@@ -298,7 +300,7 @@ export function handoffConnection(
 
   handedWs.onerror = () => {
     if (ws !== handedWs) return;
-    console.log(
+    isDev && console.log(
       '[OHLCPrefetch] Handed-off WS error for',
       mint.slice(0, 10) + '...',
     );
@@ -307,7 +309,7 @@ export function handoffConnection(
   // Auto-close after 30 seconds of inactivity
   cleanupTimer = setTimeout(() => {
     if (ws === handedWs) {
-      console.log(
+      isDev && console.log(
         '[OHLCPrefetch] 30s timeout — closing handed-off WS for',
         mint.slice(0, 10) + '...',
       );
@@ -315,7 +317,7 @@ export function handoffConnection(
     }
   }, 30_000);
 
-  console.log(
+  isDev && console.log(
     '[OHLCPrefetch] Connection handed off from chart for',
     mint.slice(0, 10) + '...',
     '(' + snapshotData.length + ' candles preserved)',

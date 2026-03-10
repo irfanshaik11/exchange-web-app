@@ -456,7 +456,6 @@ export default function MonadTradePage() {
               
               if (Number.isFinite(parsedLiquidity) && parsedLiquidity > 0) {
                 liquidity = parsedLiquidity;
-                console.log(`[MonadTradePage] 💧 Fetched fallback liquidity (v1/liquidity): $${liquidity.toLocaleString()}`);
               }
             }
           }
@@ -484,7 +483,6 @@ export default function MonadTradePage() {
                 
                 if (Number.isFinite(parsedLiqdexLiquidity) && parsedLiqdexLiquidity > 0) {
                   liquidity = parsedLiqdexLiquidity;
-                  console.log(`[MonadTradePage] 💧 Fetched fallback liquidity (v1/liqdex): $${liquidity.toLocaleString()}`);
                 }
               }
             }
@@ -692,18 +690,6 @@ export default function MonadTradePage() {
     // Prioritize: OHLC chart metrics (real-time from WebSocket) > Token metrics WebSocket > API value
     const finalMarketCap = liveMcap ?? wsMarketCap ?? apiOrWsMarketCap;
     
-    // Debug: Log displayTokenWithChartMetrics calculation
-    console.log('[DISPLAY_TOKEN_MC_DEBUG] displayTokenWithChartMetrics calculation:', {
-      'chartMetrics.lastPriceUsd': livePrice,
-      'chartMetrics.lastMarketCapUsd (OHLC WebSocket)': liveMcap,
-      'liveMetrics?.market_cap_usd': liveMetrics?.market_cap_usd,
-      'wsMetrics?.market_cap_usd': wsMetrics?.market_cap_usd,
-      'wsMarketCap (token metrics WebSocket)': wsMarketCap,
-      'displayToken.market_cap_usd': displayToken.market_cap_usd,
-      'apiOrWsMarketCap': apiOrWsMarketCap,
-      'finalMarketCap (result - OHLC prioritized)': finalMarketCap,
-    });
-    
     return {
       ...displayToken,
       usd_price: livePrice ?? (displayToken as any)?.usd_price,
@@ -725,18 +711,7 @@ export default function MonadTradePage() {
     const ohlcMarketCap = chartMetrics?.lastMarketCapUsd;
     // Priority: OHLC WebSocket (real-time from chart) > Token metrics WebSocket > null (fallback to token.market_cap_usd)
     const result = ohlcMarketCap ?? wsMarketCap ?? null;
-    
-    // Debug: Log all market cap sources
-    console.log('[MARKET_CAP_DEBUG] All market cap sources (OHLC prioritized):', {
-      'chartMetrics.lastMarketCapUsd (OHLC WebSocket)': ohlcMarketCap,
-      'liveMetrics?.market_cap_usd': liveMetrics?.market_cap_usd,
-      'wsMetrics?.market_cap_usd': wsMetrics?.market_cap_usd,
-      'wsMarketCap (token metrics WebSocket)': wsMarketCap,
-      'displayToken.market_cap_usd': displayToken?.market_cap_usd,
-      'tokenData.market_cap_usd (API)': (tokenData as any)?.market_cap_usd,
-      'final priorityMarketCapUsd (OHLC first)': result,
-    });
-    
+
     return result;
   }, [liveMetrics, wsMetrics, chartMetrics, displayToken, tokenData]);
 

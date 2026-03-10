@@ -2,6 +2,8 @@ import { useEffect, useRef, useState } from 'react';
 import throttle from 'lodash.throttle';
 import { env } from '../env';
 
+const isDev = process.env.NODE_ENV !== 'production';
+
 interface UsePaginatedTokensWebSocketParams {
   filter?: 'marketcap' | 'volume_24h' | 'txs_24h' | 'txs_5m' | 'txs_1h' | 'txs_6h' | 'new' | 'newmarketcap' | 'trending';
   order?: 'asc' | 'desc';
@@ -125,7 +127,7 @@ export default function usePaginatedTokensWebSocket({
 
     // If using deployed service, disable WebSocket and use HTTP polling fallback
     if (env.NEXT_PUBLIC_IS_BACKEND_DEPLOYED) {
-      console.log('🚫 WebSocket disabled for deployed service, using HTTP polling fallback');
+      isDev && console.log('WebSocket disabled for deployed service, using HTTP polling fallback');
       
       const pollData = async () => {
         try {
@@ -286,7 +288,7 @@ export default function usePaginatedTokensWebSocket({
         };
 
         ws.onclose = (event) => {
-          console.log('WebSocket connection closed with code:', event.code, 'reason:', event.reason);
+          isDev && console.log('WebSocket connection closed with code:', event.code, 'reason:', event.reason);
           setState(prev => ({ ...prev, isConnected: false, loading: false }));
           // Don't reconnect if the component is unmounted or the close was intentional
           if (wsRef.current) {

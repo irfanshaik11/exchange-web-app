@@ -1,3 +1,5 @@
+const isDev = process.env.NODE_ENV !== 'production';
+
 import { env } from "../env";
 import { useEffect, useRef, useCallback, useState } from "react";
 
@@ -174,21 +176,21 @@ export function useReferralWebSocket(
     const wsHost = backendUrl.replace(/^https?:\/\//, '');
     const wsUrl = `${wsProtocol}://${wsHost}/ws/referrals?userId=${userId}`;
 
-    console.log('[Referral WS] Connecting to:', wsUrl);
+    isDev && console.log('[Referral WS] Connecting to:', wsUrl);
 
     try {
       const ws = new WebSocket(wsUrl);
       wsRef.current = ws;
 
       ws.onopen = () => {
-        console.log('[Referral WS] Connected');
+        isDev && console.log('[Referral WS] Connected');
         setIsConnected(true);
       };
 
       ws.onmessage = (event) => {
         try {
           const message: ReferralWebSocketMessage = JSON.parse(event.data);
-          console.log('[Referral WS] Message:', message.type);
+          isDev && console.log('[Referral WS] Message:', message.type);
 
           if (message.type === 'new_referral' && onNewReferral) {
             onNewReferral(message);
@@ -207,7 +209,7 @@ export function useReferralWebSocket(
       };
 
       ws.onclose = () => {
-        console.log('[Referral WS] Disconnected');
+        isDev && console.log('[Referral WS] Disconnected');
         setIsConnected(false);
         wsRef.current = null;
 
