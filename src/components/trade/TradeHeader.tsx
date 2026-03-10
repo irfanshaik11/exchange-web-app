@@ -516,7 +516,7 @@ const TradeHeader: React.FC<TradeHeaderProps> = ({ token, livePriceUsd, liveMark
 		removeFromWatchlist,
 		isInWatchlist,
 	} = useWatchlist();
-	const watchlistKey = token?.pair_address || (token as any)?.mint || "";
+	const watchlistKey = (token as any)?.mint || token?.pair_address || "";
 	const isWatched = isInWatchlist(watchlistKey);
 
 	// Determine if this is a Monad token (vs Solana) - used for data source selection

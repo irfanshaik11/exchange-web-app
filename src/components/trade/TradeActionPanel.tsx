@@ -575,24 +575,25 @@ const TokenInfoDropdown: React.FC<{ token: any; liveMarketCapUsd?: number | null
   );
 };
 
-const formatCompactNumber = (n: number): string => {
-  if (!Number.isFinite(n)) return "0";
-  const abs = Math.abs(n);
+const formatCompactNumber = (n: number | string): string => {
+  const num = typeof n === "number" ? n : Number(n);
+  if (!Number.isFinite(num)) return "0";
+  const abs = Math.abs(num);
 
   if (abs >= 1_000_000_000) {
-    return (n / 1_000_000_000).toFixed(1).replace(/\.0$/, "") + "B";
+    return (num / 1_000_000_000).toFixed(1).replace(/\.0$/, "") + "B";
   }
   if (abs >= 1_000_000) {
-    return (n / 1_000_000).toFixed(1).replace(/\.0$/, "") + "M";
+    return (num / 1_000_000).toFixed(1).replace(/\.0$/, "") + "M";
   }
   if (abs >= 1_000) {
-    return (n / 1_000).toFixed(1).replace(/\.0$/, "") + "K";
+    return (num / 1_000).toFixed(1).replace(/\.0$/, "") + "K";
   }
   // For small numbers, show decimal places instead of rounding to 0
   if (abs < 1) {
-    return n.toFixed(4).replace(/\.?0+$/, ""); // Show up to 4 decimal places, remove trailing zeros
+    return num.toFixed(4).replace(/\.?0+$/, ""); // Show up to 4 decimal places, remove trailing zeros
   }
-  return Math.round(n).toString();
+  return Math.round(num).toString();
 };
 
 /* ── Toast helpers (showOrderToast + ORDER_TOAST_STYLE imported from ~/utils/tradeToast) ── */
@@ -1241,8 +1242,10 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
     );
   }, [liveMarketCapUsd, token]);
 
+  const tokenPriceUsdField = Number((token as any)?.price_usd) || 0;
+
   const liveTokenPriceInSol = useMemo(() => {
-    const supply = token?.total_supply || 0;
+    const supply = Number(token?.total_supply) || 0;
     const solUsd = liveSolPrice > 0 ? liveSolPrice : 0;
     // Best: derive from live market cap + total supply
     if (baseMarketCap > 0 && supply > 0 && solUsd > 0) {
@@ -1253,19 +1256,19 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
     if (chartPrice > 0 && solUsd > 0) {
       return chartPrice / solUsd;
     }
-    // Fallback: derive from usd_price / SOL price
-    const usdPrice = Number(token?.usd_price) || 0;
+    // Fallback: derive from usd_price or price_usd / SOL price
+    const usdPrice = Number(token?.usd_price) || tokenPriceUsdField;
     if (usdPrice > 0 && solUsd > 0) {
       return usdPrice / solUsd;
     }
-    // Last resort: static sol_price
-    return token?.sol_price || 0;
-  }, [baseMarketCap, token?.total_supply, token?.usd_price, token?.sol_price, liveSolPrice, livePriceUsd]);
+    // Last resort: static sol_price (ensure numeric)
+    return Number(token?.sol_price) || 0;
+  }, [baseMarketCap, token?.total_supply, token?.usd_price, token?.sol_price, liveSolPrice, livePriceUsd, tokenPriceUsdField]);
 
   // Token price in SOL at the limit order's target market cap
   const limitTokenPriceInSol = useMemo(() => {
     if (tab !== "limit") return 0;
-    const supply = token?.total_supply || 0;
+    const supply = Number(token?.total_supply) || 0;
     const solUsd = liveSolPrice > 0 ? liveSolPrice : 0;
     const tmc = Number(targetMC);
     if (tmc > 0 && supply > 0 && solUsd > 0) {
@@ -3791,7 +3794,7 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
                     {positionData.pnl >= 0 ? '+' : ''}${formatCompactNumber(Math.abs(positionData.pnl))}
                   </div>
                   <div>
-                    ({positionData.pnl >= 0 ? '+' : ''}{positionData.pnlPercentage.toFixed(1)}%)
+                    ({positionData.pnl >= 0 ? '+' : ''}{Number(positionData.pnlPercentage).toFixed(1)}%)
                   </div>
                 </div>
               ) : (
