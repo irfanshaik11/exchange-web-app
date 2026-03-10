@@ -14,6 +14,7 @@ import Head from 'next/head';
 import Link from 'next/link';
 import Header from '~/components/Header';
 import Footer from '~/components/Footer';
+import { DockedPanelMarginWrapper } from '~/contexts/DockedPanelContext';
 import { useUser } from '~/components/UserContext';
 import { useArenaStats, useQuests, useCashbackSummary, useClaimCashback } from '~/hooks/useArena';
 import { claimQuest } from '~/utils/arenaApi';
@@ -747,7 +748,8 @@ export default function ArenaPage() {
         {/* Header stays outside the rounded container */}
         <Header />
 
-        {/* Outer padding wrapper - uniform padding on all sides */}
+        {/* Outer padding wrapper - collapses when a popup is docked */}
+        <DockedPanelMarginWrapper>
         <div className="p-1 sm:p-1.5">
           {/* Rounded container with background */}
           <div className="relative rounded-2xl overflow-hidden min-h-[calc(100vh-80px)] border border-white/[0.06]">
@@ -1419,6 +1421,7 @@ export default function ArenaPage() {
             </div>
           </div>
         </div>
+        </DockedPanelMarginWrapper>
       </div>
 
       <style jsx global>{`
