@@ -9,7 +9,6 @@ import React, { useState, useEffect, useRef } from 'react';
 import Head from 'next/head';
 import Header from '~/components/Header';
 import Footer from '~/components/Footer';
-import { DockedPanelMarginWrapper } from '~/contexts/DockedPanelContext';
 import { useUser } from '~/components/UserContext';
 import { useReferralsPageData, useAllReferrals, useArenaStats } from '~/hooks/useArena';
 import type { ReferralStats, HonorsInfo } from '~/utils/arenaApi';
@@ -355,8 +354,7 @@ export default function ReferralsPage() {
         {/* Header stays outside the rounded container */}
         <Header />
 
-        {/* Outer padding wrapper - collapses when a popup is docked */}
-        <DockedPanelMarginWrapper>
+        {/* Outer padding wrapper - uniform padding on all sides */}
         <div className="p-1 sm:p-1.5">
           {/* Rounded container with background */}
           <div className="relative rounded-2xl overflow-hidden min-h-[calc(100vh-80px)] border border-white/[0.06]">
@@ -1393,7 +1391,6 @@ export default function ReferralsPage() {
             </div>
           </div>
         </div>
-        </DockedPanelMarginWrapper>
       </div>
 
       <style jsx global>{`

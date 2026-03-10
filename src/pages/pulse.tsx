@@ -17,7 +17,6 @@ import PulseControlBar from "../components/PulseControlBar";
 import type { Token } from "~/utils/db";
 import Header from "../components/Header";
 import Footer from "../components/Footer";
-import { DockedPanelMarginWrapper } from "../contexts/DockedPanelContext";
 import UpdatesModal from "../components/UpdatesModal";
 import { useUser } from "../components/UserContext";
 import Cookies from "js-cookie";
@@ -1475,7 +1474,6 @@ export default function PulsePage() {
       <div className="flex h-screen flex-col overflow-hidden bg-[#050608] text-neutral-100">
         <div className="relative z-[10000]"><Header /></div>
         <div className="flex-1 min-h-0 p-1 pb-7 sm:p-1.5 sm:pb-7">
-          <DockedPanelMarginWrapper>
           <div className="relative flex h-full flex-col overflow-hidden rounded-t-2xl rounded-b-lg border border-white/[0.06]" style={{ backgroundColor: '#0a0b0d' }}>
             {/* Content */}
             <div className="relative z-10 flex min-h-0 w-full flex-1 flex-col overflow-hidden px-1 pt-3 sm:px-1.5">
@@ -1571,9 +1569,9 @@ export default function PulsePage() {
               {/* <PulseControlBar className="mb-0.5" /> */}
             </div>
 
-            {/* Tab Navigation - Mobile Only (also when content is narrow due to docked panels) */}
-            <div className="content-mobile-only mt-3 mb-4 lg:hidden">
-              <div className="w-full flex gap-1.5 rounded-lg border border-white/[0.06] bg-white/[0.03] backdrop-blur-xl p-1">
+            {/* Tab Navigation - Mobile Only */}
+            <div className="mt-3 mb-4 lg:hidden">
+              <div className="flex gap-1.5 rounded-lg border border-white/[0.06] bg-white/[0.03] backdrop-blur-xl p-1">
                 <button
                   onClick={() => setActiveTab("new")}
                   className={`relative flex-1 rounded-md px-3 py-2.5 text-xs font-semibold transition-all duration-200 ${
@@ -1644,7 +1642,7 @@ export default function PulsePage() {
           {false ? ( // isBnbRoute commented out
             <div className="flex min-h-0 w-full flex-1 flex-col overflow-hidden">
               {/* Mobile: Single table based on active tab - MOBILE VIEW DISABLED
-              <div className="content-mobile-only lg:hidden">
+              <div className="lg:hidden">
                 <div className="transition-all duration-300 ease-in-out">
                   {activeTab === "new" && (
                     <BnbTable
@@ -1698,8 +1696,8 @@ export default function PulsePage() {
             </div>
           ) : isMonadRoute ? ( // || isBaseRoute || isEthereumRoute
             <div className="flex min-h-0 w-full flex-1 flex-col overflow-hidden">
-              {/* Mobile: Single table based on active tab (also when content narrow) */}
-              <div className="content-mobile-only flex min-h-0 flex-1 flex-col overflow-hidden lg:hidden">
+              {/* Mobile: Single table based on active tab */}
+              <div className="flex min-h-0 flex-1 flex-col overflow-hidden lg:hidden">
                 <div className="flex h-full min-h-0 flex-col transition-all duration-300 ease-in-out">
                   {activeTab === "new" && (
                     <MonadTable
@@ -1730,8 +1728,8 @@ export default function PulsePage() {
                   )}
                 </div>
               </div>
-              {/* All tables horizontally - Desktop only (hidden when content narrow) */}
-              <div className="content-desktop-only hidden min-h-0 w-full flex-1 flex-row overflow-hidden lg:flex gap-3">
+              {/* All tables horizontally - Desktop only */}
+              <div className="hidden min-h-0 w-full flex-1 flex-row overflow-hidden lg:flex gap-3">
                 <MonadTable
                   title="New Pairs"
                   tokens={displayNewPairs}
@@ -1801,9 +1799,9 @@ export default function PulsePage() {
             </div>
           ) : (
             <div className="flex min-h-0 w-full flex-1 flex-col overflow-hidden">
-              {/* Mobile: Single table based on active tab (also when content narrow) */}
+              {/* Mobile: Single table based on active tab */}
               {/* Per-table loading guard: show skeletons until EACH table's data arrives */}
-              <div className="content-mobile-only flex min-h-0 flex-1 flex-col overflow-hidden lg:hidden">
+              <div className="flex min-h-0 flex-1 flex-col overflow-hidden lg:hidden">
                 <div className="flex h-full min-h-0 flex-col transition-all duration-300 ease-in-out">
                   {activeTab === "new" && (
                     <PulseTable
@@ -1837,8 +1835,8 @@ export default function PulsePage() {
                   )}
                 </div>
               </div>
-              {/* Desktop: All tables horizontally (hidden when content narrow) */}
-              <div className="content-desktop-only hidden min-h-0 w-full flex-1 flex-row overflow-hidden lg:flex gap-3">
+              {/* Desktop: All tables horizontally */}
+              <div className="hidden min-h-0 w-full flex-1 flex-row overflow-hidden lg:flex gap-3">
                 <PulseTable
                   title="New Pairs"
                   tokens={displayNewPairs as any}
@@ -1866,11 +1864,10 @@ export default function PulsePage() {
             </div>
           )}
             </div>
-          </div>
-          </DockedPanelMarginWrapper>
             <div className="relative z-10"><Footer /></div>
           </div>
         </div>
+      </div>
 
       {/* Updates Modal */}
       {showUpdatesModal && user && (

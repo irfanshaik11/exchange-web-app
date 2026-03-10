@@ -115,15 +115,6 @@ h1, h2, h3, h4, h5, h6,
   font-variant-numeric: tabular-nums;
   font-feature-settings: "tnum" 1, "ss01" 1;
 }
-
-/* When main content area is narrow (e.g. docked panels), show mobile layout */
-.content-narrow .content-mobile-only {
-  display: flex !important;
-}
-.content-narrow .content-desktop-only {
-  display: none !important;
-}
-
 /* styles/globals.css */
 html,
 body {

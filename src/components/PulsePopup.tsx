@@ -4,24 +4,13 @@ import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { FaTimes } from 'react-icons/fa';
 import PulsePopoutContent from './PulsePopoutContent';
-import { useDockedPanel, DOCKED_PANEL_WIDTH } from '../contexts/DockedPanelContext';
-
-const DOCK_THRESHOLD = 60;
-const DOCKED_WIDTH = 400;
-const DOCK_TOP_OFFSET_PX = 80;
-const DOCK_FOOTER_OFFSET_PX = 56;
-type DockSide = 'none' | 'left' | 'right';
 
 interface PulsePopupProps {
   isOpen: boolean;
   onClose: () => void;
 }
 
-const POPUP_ID = 'pulse';
-
 const PulsePopup: React.FC<PulsePopupProps> = ({ isOpen, onClose }) => {
-  const dockCtx = useDockedPanel();
-
   // Load position and size from localStorage
   const getInitialPosition = (): { x: number; y: number } => {
     if (typeof window === 'undefined') return { x: 0, y: 0 };
@@ -51,20 +40,8 @@ const PulsePopup: React.FC<PulsePopupProps> = ({ isOpen, onClose }) => {
     return { width: 800, height: 700 };
   };
 
-  const getInitialDock = (): DockSide => {
-    if (typeof window === 'undefined') return 'none';
-    try {
-      const saved = localStorage.getItem('pulse-popup-dock');
-      if (saved === 'left' || saved === 'right') return saved;
-    } catch {
-      // Ignore
-    }
-    return 'none';
-  };
-
   const [position, setPosition] = useState(getInitialPosition);
   const [size, setSize] = useState(getInitialSize);
-  const [dockSide, setDockSide] = useState<DockSide>(getInitialDock);
   const [isDragging, setIsDragging] = useState(false);
   const [isResizing, setIsResizing] = useState(false);
   const modalRef = useRef<HTMLDivElement>(null);
@@ -114,18 +91,6 @@ const PulsePopup: React.FC<PulsePopupProps> = ({ isOpen, onClose }) => {
       localStorage.setItem('pulse-popup-size', JSON.stringify(size));
     }
   }, [size, isOpen]);
-
-  useEffect(() => {
-    if (typeof window !== 'undefined' && isOpen) {
-      localStorage.setItem('pulse-popup-dock', dockSide);
-    }
-  }, [dockSide, isOpen]);
-
-  useEffect(() => {
-    if (!dockCtx) return;
-    const w = isOpen && dockSide !== 'none' ? DOCKED_PANEL_WIDTH : 0;
-    dockCtx.setDockContrib(POPUP_ID, dockSide === 'left' ? w : 0, dockSide === 'right' ? w : 0);
-  }, [isOpen, dockSide, dockCtx]);
 
   // Handle drag functionality - optimized for performance
   const handlePointerMove = useCallback((e: PointerEvent) => {
@@ -183,20 +148,8 @@ const PulsePopup: React.FC<PulsePopupProps> = ({ isOpen, onClose }) => {
         return;
       }
 
-      const x = positionRef.current.x;
-      const w = sizeRef.current.width;
-      const winW = typeof window !== 'undefined' ? window.innerWidth : 0;
-      if (x <= DOCK_THRESHOLD) {
-        setDockSide('left');
-        setPosition({ x: 0, y: positionRef.current.y });
-      } else if (x + w >= winW - DOCK_THRESHOLD) {
-        setDockSide('right');
-        setPosition({ x: winW - w, y: positionRef.current.y });
-      } else {
-        setDockSide('none');
-        setPosition(positionRef.current);
-      }
-
+      // Commit position to state
+      setPosition(positionRef.current);
       isDraggingRef.current = false;
       setIsDragging(false);
       activePointerIdRef.current = null;
@@ -241,18 +194,6 @@ const PulsePopup: React.FC<PulsePopupProps> = ({ isOpen, onClose }) => {
     if (e.button !== 0) return;
 
     const target = e.target as HTMLElement;
-    if (target.closest('button, input')) return;
-
-    // When docked, starting a drag undocks; use current visual position so panel doesn't jump
-    if (dockSide !== 'none') {
-      const winW = window.innerWidth;
-      const offset = dockCtx ? dockCtx.getDockedOffset(POPUP_ID, dockSide) : 0;
-      const newX = dockSide === 'left' ? offset : winW - offset - DOCKED_WIDTH;
-      const newY = DOCK_TOP_OFFSET_PX;
-      setPosition({ x: newX, y: newY });
-      setDockSide('none');
-      positionRef.current = { x: newX, y: newY };
-    }
     
     // Check if clicking on resize handle
     if (resizeHandleRef.current?.contains(target)) {
@@ -280,6 +221,10 @@ const PulsePopup: React.FC<PulsePopupProps> = ({ isOpen, onClose }) => {
 
     // Check if clicking on header for dragging
     if (headerRef.current?.contains(target)) {
+      if (target.closest('button, input')) {
+        return;
+      }
+
       e.preventDefault();
       e.stopPropagation();
 
@@ -299,63 +244,32 @@ const PulsePopup: React.FC<PulsePopupProps> = ({ isOpen, onClose }) => {
         }
       }
     }
-  }, [dockSide, dockCtx]);
-
-  const isDocked = dockSide !== 'none';
-  const dockOffset = dockCtx && isDocked ? dockCtx.getDockedOffset(POPUP_ID, dockSide as 'left' | 'right') : 0;
-  const modalStyle: React.CSSProperties = isDocked
-    ? {
-        ...(dockSide === 'left' ? { left: dockOffset } : { right: dockOffset }),
-        top: DOCK_TOP_OFFSET_PX,
-        width: `${DOCKED_WIDTH}px`,
-        height: `calc(100vh - ${DOCK_TOP_OFFSET_PX}px - ${DOCK_FOOTER_OFFSET_PX}px)`,
-        maxWidth: 'none',
-        maxHeight: 'none',
-        minWidth: '320px',
-        minHeight: '400px',
-        backgroundColor: '#050608',
-        opacity: (isDragging || isResizing) ? 0.85 : 1,
-        cursor: isDragging ? 'grabbing' : 'default',
-        zIndex: 10000,
-        display: 'flex',
-        flexDirection: 'column',
-        transition: (isDragging || isResizing) ? 'none' : 'opacity 0.15s',
-        borderLeft: dockSide === 'left' ? '1px solid #2A2B33' : 'none',
-        borderRight: dockSide === 'right' ? '1px solid #2A2B33' : 'none',
-        borderTop: 'none',
-        borderBottom: 'none',
-        borderRadius: dockSide === 'left' ? '0 8px 8px 0' : '8px 0 0 8px',
-        boxShadow: '2px 0 24px rgba(0,0,0,0.4)',
-      }
-    : {
-        left: `${position.x}px`,
-        top: `${position.y}px`,
-        width: `${size.width}px`,
-        height: `${size.height}px`,
-        maxWidth: '95vw',
-        maxHeight: '95vh',
-        minWidth: '600px',
-        minHeight: '400px',
-        backgroundColor: '#050608',
-        opacity: (isDragging || isResizing) ? 0.85 : 1,
-        cursor: isDragging ? 'grabbing' : 'default',
-        zIndex: 10000,
-        display: 'flex',
-        flexDirection: 'column',
-        transition: (isDragging || isResizing) ? 'none' : 'opacity 0.15s',
-        border: '1px solid #2A2B33',
-        borderRadius: '8px',
-        boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.5)',
-      };
+  }, []);
 
   if (!isOpen || typeof window === 'undefined') return null;
 
   return createPortal(
-    <div className="fixed inset-0 z-[99999] pointer-events-none">
+    <div className="fixed inset-0 z-[9999] pointer-events-none">
       <div
         ref={modalRef}
-        className="fixed shadow-2xl pointer-events-auto"
-        style={modalStyle}
+        className="fixed border border-[#2A2B33] rounded-lg shadow-2xl pointer-events-auto"
+        style={{
+          left: `${position.x}px`,
+          top: `${position.y}px`,
+          width: `${size.width}px`,
+          height: `${size.height}px`,
+          maxWidth: '95vw',
+          maxHeight: '95vh',
+          minWidth: '600px',
+          minHeight: '400px',
+          backgroundColor: '#050608',
+          opacity: (isDragging || isResizing) ? 0.85 : 1,
+          cursor: isDragging ? 'grabbing' : 'default',
+          zIndex: 10000,
+          display: 'flex',
+          flexDirection: 'column',
+          transition: (isDragging || isResizing) ? 'none' : 'opacity 0.15s',
+        }}
       >
         {/* Header - Draggable with ::: handle */}
         <div
@@ -385,13 +299,12 @@ const PulsePopup: React.FC<PulsePopupProps> = ({ isOpen, onClose }) => {
 
         {/* Content - Pulse Page */}
         <div className="flex-1 overflow-hidden min-h-0" style={{ maxWidth: '100%' }}>
-          <div className="h-full w-full" style={{ maxWidth: (isDocked ? DOCKED_WIDTH : size.width) < 1024 ? '100%' : 'none' }}>
-            <PulsePopoutContent forceMobileView={isDocked || size.width < 1024} />
+          <div className="h-full w-full" style={{ maxWidth: size.width < 1024 ? '100%' : 'none' }}>
+            <PulsePopoutContent forceMobileView={size.width < 1024} />
           </div>
         </div>
 
-        {/* Resize Handle - Bottom Right Corner (hidden when docked) */}
-        {!isDocked && (
+        {/* Resize Handle - Bottom Right Corner */}
         <div
           ref={resizeHandleRef}
           className="absolute bottom-0 right-0 w-8 h-8 cursor-nwse-resize z-20"
@@ -417,7 +330,6 @@ const PulsePopup: React.FC<PulsePopupProps> = ({ isOpen, onClose }) => {
             </div>
           </div>
         </div>
-        )}
       </div>
     </div>,
     document.body

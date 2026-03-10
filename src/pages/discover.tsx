@@ -6,7 +6,6 @@ import InterstateTable from '../components/InterstateTable';
 import type { Token } from '~/utils/db';
 import Header from '../components/Header';
 import Footer from '../components/Footer';
-import { DockedPanelMarginWrapper } from '../contexts/DockedPanelContext';
 import usePaginatedTokensWithFallback from '../hooks/usePaginatedTokensWithFallback';
 import useTrendingWebSocket, { type TrendingTimeframe, type NormalizedTrendingToken } from '../hooks/useTrendingWebSocket';
 import { useDexScreenerTrending } from '../hooks/useDexScreenerTrending';
@@ -3640,8 +3639,7 @@ export default function DiscoverPage() {
           />
         </div>
 
-        {/* Outer padding wrapper - collapses when a popup is docked */}
-        <DockedPanelMarginWrapper>
+        {/* Outer padding wrapper */}
         <div className="p-1 sm:p-1.5">
           {/* Rounded container with background */}
           <div className="relative overflow-hidden rounded-2xl border border-white/[0.06] h-[calc(100vh-80px)] flex flex-col">
@@ -4129,8 +4127,7 @@ export default function DiscoverPage() {
         </main>
 
           </div>{/* end rounded container */}
-        </div>
-        </DockedPanelMarginWrapper>{/* end outer padding wrapper */}
+        </div>{/* end outer padding wrapper */}
 
         <div className="relative z-10">
           <Footer />

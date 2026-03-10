@@ -21,7 +21,6 @@ import Cookies from "js-cookie";
 import QRCode from "qrcode";
 import Header from "../components/Header";
 import Footer from "../components/Footer";
-import { DockedPanelMarginWrapper } from "../contexts/DockedPanelContext";
 import type { Token } from "~/utils/db";
 import InterstateButton from "../components/InterstateButton";
 import InterstateTable from "../components/InterstateTable";
@@ -380,7 +379,6 @@ export default function Home() {
       <div className="min-h-screen bg-neutral-950 text-neutral-100">
         {/* Header */}
         <Header search={search} setSearch={setSearch} selectedTimeframe={selectedTimeframe} />
-        <DockedPanelMarginWrapper>
         {/* Tab Navigation */}
         <div className="mx-auto my-4 flex flex-row items-center justify-between gap-6 px-20">
           <div className="flex max-w-7xl items-center gap-6">
@@ -511,7 +509,6 @@ export default function Home() {
             />
           )}
         </main>
-        </DockedPanelMarginWrapper>
         <Footer />
         <QuickBuySettingsModal open={settingsOpen} onClose={() => setSettingsOpen(false)} />
       </div>
