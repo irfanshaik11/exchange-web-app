@@ -3,7 +3,6 @@ import Head from "next/head";
 import { useRouter } from "next/router";
 import Header from "../components/Header";
 import Footer from "../components/Footer";
-import { DockedPanelMarginWrapper, useDockedPanel } from "../contexts/DockedPanelContext";
 import { getActivePositionsByUser } from "~/utils/functions";
 import type { PositionRow, Wallet } from "~/utils/functions";
 import { formatMarketCap } from "~/utils/db";
@@ -284,9 +283,7 @@ export default function TrackersPage() {
     useState(false);
   const [sidebarWidth, setSidebarWidth] = useState(384); // 384px = w-96
   const [isResizing, setIsResizing] = useState(false);
-  const dockCtx = useDockedPanel();
-  const [viewportNarrow, setViewportNarrow] = useState(false);
-  const isMobile = viewportNarrow || (dockCtx?.isContentNarrow ?? false);
+  const [isMobile, setIsMobile] = useState(false);
   const [mobileMainTab, setMobileMainTab] = useState<"wallets" | "telegram">(
     "wallets",
   );
@@ -599,16 +596,16 @@ export default function TrackersPage() {
   useEffect(() => {
     if (typeof window === "undefined") return;
     const handleResize = () => {
-      setViewportNarrow(window.innerWidth < 1024);
+      const currentlyMobile = window.innerWidth < 1024;
+      setIsMobile(currentlyMobile);
+      if (!currentlyMobile) {
+        setMobileMainTab("wallets");
+      }
     };
     handleResize();
     window.addEventListener("resize", handleResize);
     return () => window.removeEventListener("resize", handleResize);
   }, []);
-
-  useEffect(() => {
-    if (!isMobile) setMobileMainTab("wallets");
-  }, [isMobile]);
 
   // Hydrate wallets from localStorage cache on mount
   useEffect(() => {
@@ -1860,8 +1857,7 @@ export default function TrackersPage() {
             <Header isSticky={false} />
           </div>
 
-          {/* Outer padding wrapper - collapses when a popup is docked */}
-          <DockedPanelMarginWrapper>
+          {/* Outer padding wrapper */}
           <div className="p-1 sm:p-1.5">
             {/* Rounded container with background */}
             <div className="relative min-h-[calc(100vh-80px)] overflow-hidden rounded-2xl border border-white/[0.06]">
@@ -1896,10 +1892,8 @@ export default function TrackersPage() {
                 </div>
               </div>
               <div className="relative z-10 mb-4 flex min-h-0 w-full flex-1 flex-col px-2 sm:mb-8 sm:px-6">
-                {/* Main Content Area: single column when narrow (mobile or docked panels), two columns when wide */}
-                <div
-                  className={`flex min-h-0 flex-1 flex-col gap-2 ${!isMobile ? "flex-row" : ""}`}
-                >
+                {/* Main Content Area: Two Columns */}
+                <div className="flex min-h-0 flex-1 flex-col gap-2 lg:flex-row">
                   {isMobile && (
                     <div className="flex w-full rounded-xl border border-white/[0.06] bg-[#0f1014] p-1 text-[10px] font-medium text-neutral-400 shadow-lg sm:p-1.5 sm:text-xs">
                       <button
@@ -1985,11 +1979,11 @@ export default function TrackersPage() {
                                   {wallets.length}
                                 </span>
                                 <span className="ml-1 hidden text-neutral-500 sm:ml-1.5 sm:inline">
-                                  / {MAX_WALLETS} wallet
+                                  /{MAX_WALLETS} wallet
                                   {wallets.length === 1 ? "" : "s"}
                                 </span>
                                 <span className="ml-1 text-neutral-500 sm:ml-1.5 sm:hidden">
-                                  / {MAX_WALLETS}
+                                  /{MAX_WALLETS}
                                 </span>
                               </div>
                             </div>
@@ -2798,7 +2792,6 @@ export default function TrackersPage() {
             </div>
             {/* end rounded container */}
           </div>
-          </DockedPanelMarginWrapper>
           {/* end outer padding wrapper */}
         </div>
       </div>

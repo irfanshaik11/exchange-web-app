@@ -390,7 +390,7 @@ export default function PnLModal({ isOpen, onClose, chain }: PnLModalProps) {
 
   const modalContent = (
     <div 
-      className="fixed z-[99999] w-96"
+      className="fixed z-[9999] w-96"
       style={{
         background: 'linear-gradient(135deg, #0a0a0a 0%, #1a1a1a 50%, #0f0f0f 100%)',
         border: '1px solid #2a2a2a',

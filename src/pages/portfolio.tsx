@@ -3,7 +3,6 @@ import Head from "next/head";
 import { useRouter } from "next/router";
 import Header from "../components/Header";
 import Footer from "../components/Footer";
-import { DockedPanelMarginWrapper } from "../contexts/DockedPanelContext";
 import Positions from "../components/trade/Positions";
 import TradeTable from "../components/trade/TradeTable";
 import Activity from "../components/trade/Activity";
@@ -3046,7 +3045,6 @@ export default function PortfolioPage() {
       </Head>
       <div className="flex min-h-screen flex-col bg-[#050608] text-[#E6E7EA]">
         <div className="relative z-[10000]"><Header /></div>
-        <DockedPanelMarginWrapper>
         <div className="p-1 sm:p-1.5">
           <div className="relative overflow-hidden rounded-2xl border border-white/[0.06] min-h-[calc(100vh-80px)]">
             {/* Background Image with multi-layer fade */}
@@ -4459,7 +4457,6 @@ export default function PortfolioPage() {
             </div>
           </div>
         </div>
-        </DockedPanelMarginWrapper>
       </div>
       <Footer />
       
