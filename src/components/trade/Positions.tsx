@@ -4,6 +4,7 @@ import { formatSmartNumber, formatSmallPrice } from '~/utils/db';
 import { fetchActivePositions } from '~/utils/functions';
 import type { PositionRow } from '~/utils/functions';
 import { useRouter } from 'next/router';
+import { setTradeNavIntent } from '~/utils/queryParams';
 import FastImage from '../FastImage';
 import InterstateTooltip from '~/components/InterstateTooltip';
 import { FaArrowUp, FaCheckCircle, FaEye, FaEyeSlash } from 'react-icons/fa';
@@ -684,32 +685,24 @@ const Positions: React.FC<PositionsProps> = ({
     ) => {
       event.stopPropagation();
 
-      const params = new URLSearchParams({
-        mode: 'sell',
-        tab: 'market',
-        timeRange: '5m',
-        sliderPct: '0',
-      });
-
-      if (metadata?.name) params.set('_name', metadata.name);
-      if (metadata?.symbol) params.set('_symbol', metadata.symbol);
-      if (metadata?.imageUrl) params.set('_image', metadata.imageUrl);
-      if (position.tokenAddress) params.set('_mint', position.tokenAddress);
-      // Use position's own currentPrice (already in the position data)
-      if (position.currentPrice) params.set('_price', String(position.currentPrice));
-      // Prefer historical avgBuyMarketCap from positions API; fall back to live token metadata
-      const positionMcap = position.avgBuyMarketCap && position.avgBuyMarketCap > 0 ? position.avgBuyMarketCap : undefined;
-      const meta = position.tokenAddress ? tokenMetadata[position.tokenAddress] : undefined;
-      if (positionMcap) params.set('_mcap', String(positionMcap));
-      else if (meta?.marketCapUsd) params.set('_mcap', String(meta.marketCapUsd));
-
-      const queryString = params.toString();
+      // Signal sell mode to the trade page via sessionStorage
+      setTradeNavIntent({ mode: 'sell' });
 
       if (isMonadPosition(position)) {
         const normalized = normalizeMonadAddress(position.tokenAddress) || position.tokenAddress;
-        router.push(`/trade/monad/${normalized}?${queryString}`);
+        const meta = tokenMetadata[position.tokenAddress];
+        const monadParams = new URLSearchParams();
+        if (meta?.name || metadata?.name) monadParams.set('_name', meta?.name || metadata?.name || '');
+        if (meta?.symbol || metadata?.symbol) monadParams.set('_symbol', meta?.symbol || metadata?.symbol || '');
+        if (meta?.marketCapUsd) monadParams.set('_mcap', String(meta.marketCapUsd));
+        if (meta?.imageUrl || metadata?.imageUrl) monadParams.set('_image', meta?.imageUrl || metadata?.imageUrl || '');
+        monadParams.set('_mint', normalized);
+        if (meta?.launchpad || meta?.protocol) monadParams.set('_launchpad_protocol', meta?.launchpad || meta?.protocol || '');
+        monadParams.set('chain', 'monad');
+        monadParams.set('mode', 'sell');
+        router.push(`/trade/monad/${normalized}?${monadParams.toString()}`);
       } else if (navigateAddress) {
-        router.push(`/trade/${navigateAddress}?${queryString}`);
+        router.push(`/trade/${navigateAddress}`);
       }
     },
     [isMonadPosition, router, tokenMetadata],
@@ -1536,22 +1529,9 @@ const Positions: React.FC<PositionsProps> = ({
                   if (!pos.tokenAddress) return;
                   // Build tradeUrl matching handleTokenNavigation exactly
                   const isMonadPos = isMonadPosition(sourcePosition);
-                  const hoverParams = new URLSearchParams({
-                    mode: 'sell',
-                    tab: 'market',
-                    timeRange: '5m',
-                    sliderPct: '0',
-                  });
-                  if (metadata?.name) hoverParams.set('_name', metadata.name);
-                  if (metadata?.symbol) hoverParams.set('_symbol', metadata.symbol);
-                  if (finalImageUrl) hoverParams.set('_image', finalImageUrl);
-                  if (pos.tokenAddress) hoverParams.set('_mint', pos.tokenAddress);
-                  if (sourcePosition.currentPrice) hoverParams.set('_price', String(sourcePosition.currentPrice));
-                  const posMeta = pos.tokenAddress ? tokenMetadata[pos.tokenAddress] : undefined;
-                  if (posMeta?.marketCapUsd) hoverParams.set('_mcap', String(posMeta.marketCapUsd));
                   const hoverTradeUrl = isMonadPos
-                    ? `/trade/monad/${pos.tokenAddress}?${hoverParams.toString()}`
-                    : `/trade/${navigateAddress}?${hoverParams.toString()}`;
+                    ? `/trade/monad/${pos.tokenAddress}`
+                    : `/trade/${navigateAddress}`;
                   preloadTradeChart(
                     {
                       mint: pos.tokenAddress,

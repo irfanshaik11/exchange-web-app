@@ -935,21 +935,11 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
   // Live SOL price from Pyth Network (same source as footer)
   const { solPrice: liveSolPrice } = useSolPrice();
 
-  // Only show skeleton if we have absolutely no token data (not even optimistic)
-  // Allow tokens with just mint address (for tokens without metadata from search)
+  // No token data yet — reserve layout space with invisible placeholder (no skeleton flicker)
   if (!token || (!token.name && !token.symbol && !token.mint)) {
     return (
       <div className="flex-shrink-0 min-w-[260px] basis-[280px] md:basis-[310px] lg:basis-[330px] hidden lg:block">
-        <div className="h-full bg-neutral-800/50 rounded-lg p-4">
-          <div className="animate-pulse">
-            <div className="h-6 w-32 bg-neutral-700 rounded mb-4" />
-            <div className="space-y-3">
-              <div className="h-4 w-full bg-neutral-700 rounded" />
-              <div className="h-4 w-3/4 bg-neutral-700 rounded" />
-              <div className="h-4 w-1/2 bg-neutral-700 rounded" />
-            </div>
-          </div>
-        </div>
+        <div className="h-full rounded-lg p-4" />
       </div>
     );
   }

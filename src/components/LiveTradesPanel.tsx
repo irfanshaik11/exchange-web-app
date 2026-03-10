@@ -384,21 +384,7 @@ export default function LiveTradesPanel({
                       const tokenAddress = trade.mint || trade.pair_address;
                       const queryParams = new URLSearchParams();
                       queryParams.set('chain', 'sol');
-                      const name = trade.name || metadata?.name;
-                      if (name) queryParams.set('_name', name);
-                      const symbol = trade.symbol || metadata?.symbol;
-                      if (symbol) queryParams.set('_symbol', symbol);
-                      const price = trade.price_usd || metadata?.price_usd;
-                      if (price) queryParams.set('_price', String(price));
-                      const mcap = metadata?.market_cap_usd || trade.market_cap_usd;
-                      if (mcap) queryParams.set('_mcap', String(mcap));
-                      const image = tokenImageUrl || (metadata ? extractTokenImage(metadata) : null);
-                      if (image) queryParams.set('_image', image);
-                      queryParams.set('_mint', trade.mint);
-                      if (metadata?.launchpad_protocol) queryParams.set('_launchpad_protocol', metadata.launchpad_protocol);
-                      const createdAt = metadata?.createdAt;
-                      if (createdAt) queryParams.set('_created_at', String(createdAt));
-                      router.push(`/trade/${tokenAddress}?${queryParams.toString()}`);
+                      router.push(`/trade/${tokenAddress}`);
                     }}
                     className="flex cursor-pointer items-center gap-1 font-mono text-[9px] text-emerald-300 transition-colors hover:text-emerald-200 sm:gap-2 sm:text-xs"
                     title={displayName || undefined}

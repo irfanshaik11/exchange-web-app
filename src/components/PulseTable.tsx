@@ -7571,38 +7571,13 @@ function PulseTable({
                 chainProp || (router.query.chain as string) || "sol";
               // Build query params for optimistic UI
               // Note: mint is in URL path AND query for backward compat + robustness
-              const queryParams = new URLSearchParams({
-                _name: (token as any)?.name || (token as any)?.symbol || "",
-                _symbol: (token as any)?.symbol || "",
-                _price: String(
-                  (token as any)?.price_usd || (token as any)?.priceUsd || "",
-                ),
-                _mcap: String(
-                  (token as any)?.market_cap_usd ||
-                    (token as any)?.marketCapUSD ||
-                    "",
-                ),
-                _image: extractTokenImage(token as any) || "",
-                _mint: tokenMint, // Redundant with URL path but kept for backward compat
-                _launchpad_protocol: (token as any)?.launchpad_protocol || "", // Required for poolType detection
-                _liquidity: String(
-                  (token as any)?.liquidity_usd ||
-                    (token as any)?.total_liquidity_usd ||
-                    "",
-                ),
-                _created_at:
-                  (token as any)?.launch_time ||
-                  (token as any)?.created_at ||
-                  "",
-                chain: currentChain, // Preserve chain selection
-                _migrated: title.toLowerCase().includes("migrated") ? "1" : "",
-              }).toString();
+              // Query params removed — trade page resolves metadata via WS + search
 
               return (
                 <div key={tokenMint} style={style}>
                 <div style={{ paddingBottom: '4px' }}>
                 <Link
-                  href={`/trade/${tokenMint}?${queryParams}`}
+                  href={`/trade/${tokenMint}`}
                   className="token-row group relative flex w-full max-w-full shrink-0 cursor-pointer flex-row items-start gap-2 overflow-visible rounded-lg px-2 py-1.5 text-sm"
                   style={{
                     color: AX.text,
@@ -7633,7 +7608,7 @@ function PulseTable({
                         image: extractTokenImage(token as any) || "",
                         launchpadProtocol: (token as any)?.launchpad_protocol,
                       },
-                      { router, tradeUrl: `/trade/${tokenMint}?${queryParams}` }
+                      { router, tradeUrl: `/trade/${tokenMint}` }
                     );
                   }}
                   onMouseLeave={(e) => {

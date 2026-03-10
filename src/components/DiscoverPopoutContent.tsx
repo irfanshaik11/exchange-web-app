@@ -2862,8 +2862,8 @@ export default function DiscoverPopoutContent() {
                     }
                   }
 
-                  // Navigate to trade page with chain=sol for Solana tokens
-                  router.push(`/trade/${id}?chain=sol`);
+                  // Navigate to trade page
+                  router.push(`/trade/${id}`);
                 }}
                 quickBuyAmount={Number(quickBuyAmount) || 0}
                 onQuickBuy={handleQuickBuy}

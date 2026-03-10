@@ -473,17 +473,14 @@ const TradeHeader: React.FC<TradeHeaderProps> = ({ token, livePriceUsd, liveMark
 		tokenMint; // Mint address is enough - we can show truncated address
 
 	if (!token && !wsTokenInfo) {
-		// No data at all - show skeleton
+		// No data yet — reserve layout space with invisible placeholder (no skeleton flicker)
 		return (
 			<div className="flex-shrink-0 px-2">
-				<div
-					className="flex items-center gap-3 rounded-lg p-3"
-					style={{ backgroundColor: AX.surface }}
-				>
-					<div className="h-10 w-10 animate-pulse rounded-md bg-neutral-800" />
+				<div className="flex items-center gap-3 rounded-lg p-3" style={{ backgroundColor: AX.surface }}>
+					<div className="h-10 w-10 rounded-md" />
 					<div className="flex flex-col gap-1">
-						<div className="h-4 w-24 animate-pulse rounded bg-neutral-800" />
-						<div className="h-3 w-16 animate-pulse rounded bg-neutral-800" />
+						<div className="h-4 w-24 rounded" />
+						<div className="h-3 w-16 rounded" />
 					</div>
 				</div>
 			</div>
@@ -491,17 +488,14 @@ const TradeHeader: React.FC<TradeHeaderProps> = ({ token, livePriceUsd, liveMark
 	}
 
 	if (!hasTokenIdentity) {
-		// Have objects but no identity fields yet - show skeleton
+		// Have objects but no identity yet — invisible placeholder
 		return (
 			<div className="flex-shrink-0 px-2">
-				<div
-					className="flex items-center gap-3 rounded-lg p-3"
-					style={{ backgroundColor: AX.surface }}
-				>
-					<div className="h-10 w-10 animate-pulse rounded-md bg-neutral-800" />
+				<div className="flex items-center gap-3 rounded-lg p-3" style={{ backgroundColor: AX.surface }}>
+					<div className="h-10 w-10 rounded-md" />
 					<div className="flex flex-col gap-1">
-						<div className="h-4 w-24 animate-pulse rounded bg-neutral-800" />
-						<div className="h-3 w-16 animate-pulse rounded bg-neutral-800" />
+						<div className="h-4 w-24 rounded" />
+						<div className="h-3 w-16 rounded" />
 					</div>
 				</div>
 			</div>

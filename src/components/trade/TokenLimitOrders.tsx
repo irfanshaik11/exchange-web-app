@@ -779,17 +779,7 @@ export default function TokenLimitOrders({ liveMarketCapUsd, currentTokenAddress
                                 const navigateAddress = order.tokenAddress || meta.pairAddress || order.pairAddress;
                                 if (!navigateAddress) return;
 
-                                const queryParams = new URLSearchParams();
-                                queryParams.set('chain', 'sol');
-                                if (meta.name) queryParams.set('_name', meta.name);
-                                if (meta.symbol) queryParams.set('_symbol', meta.symbol);
-                                if (meta.marketCap) queryParams.set('_mcap', String(meta.marketCap));
-                                if (meta.image) queryParams.set('_image', meta.image);
-                                queryParams.set('_mint', order.tokenAddress);
-                                if (meta.protocol) queryParams.set('_launchpad_protocol', meta.protocol);
-                                if (meta.createdAt) queryParams.set('_created_at', meta.createdAt);
-
-                                router.push(`/trade/${navigateAddress}?${queryParams.toString()}`);
+                                router.push(`/trade/${navigateAddress}`);
                               }}
                               className="text-sm font-semibold text-white hover:text-[#70E0B0] transition-colors cursor-pointer text-left"
                             >
