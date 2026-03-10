@@ -658,14 +658,16 @@ export function useSolanaTokenWebSocket(
               bundle: tokenData.bundle_percent,
             });
 
-            // A. Update tokenInfo — only liquidity, holder_count, graduation, fees (NOT price/mcap)
+            // A. Update tokenInfo — only liquidity, graduation, fees (NOT price/mcap)
             setTokenInfo((prev) => {
               if (!prev) return prev; // Need snapshot first
               return {
                 ...prev,
                 // Only update liquidity (price_usd/market_cap_usd come from OHLC)
                 ...(tokenData.liquidity_usd > 0 && { liquidity_usd: tokenData.liquidity_usd }),
-                ...(tokenData.holder_count > 0 && { holder_count: tokenData.holder_count }),
+                // [HOLDERS-SNAPSHOT-ONLY] holder_count from price_updates disabled — using snapshot only for now
+                // Re-enable when price_updates holder data is reliable:
+                // ...(tokenData.holder_count > 0 && { holder_count: tokenData.holder_count }),
                 ...(tokenData.graduation_percent > 0 && { graduation_percent: tokenData.graduation_percent }),
                 ...(tokenData.total_fees_lamports > 0 && { total_fees_lamports: tokenData.total_fees_lamports }),
                 ...(tokenData.dev_tokens_created > 0 && { dev_tokens_created: tokenData.dev_tokens_created }),
@@ -673,21 +675,23 @@ export function useSolanaTokenWebSocket(
               };
             });
 
+            // [HOLDERS-SNAPSHOT-ONLY] holderSummary updates from price_updates disabled — using snapshot only for now.
+            // Re-enable this entire block when price_updates holder data is reliable:
             // B. Update holderSummary (holder analysis fields with non-zero guard)
-            setHolderSummary((prev) => {
-              if (!prev) return prev; // Need snapshot first
-              return {
-                ...prev,
-                ...(tokenData.dev_percent > 0 && { dev_held_percent: tokenData.dev_percent }),
-                ...(tokenData.sniper_percent > 0 && { sniper_held_percent: tokenData.sniper_percent }),
-                ...(tokenData.insider_percent > 0 && { insider_held_percent: tokenData.insider_percent }),
-                ...(tokenData.top10_holders_pct > 0 && { top10_held_percent: tokenData.top10_holders_pct }),
-                ...(tokenData.bundle_percent > 0 && { bundler_held_percent: tokenData.bundle_percent }),
-                ...(tokenData.bundle_wallet_count > 0 && { bundler_count: tokenData.bundle_wallet_count }),
-                ...(tokenData.holder_count > 0 && { total_holders: tokenData.holder_count }),
-                ...(tokenData.kol_count > 0 && { kol_count: tokenData.kol_count }),
-              };
-            });
+            // setHolderSummary((prev) => {
+            //   if (!prev) return prev; // Need snapshot first
+            //   return {
+            //     ...prev,
+            //     ...(tokenData.dev_percent > 0 && { dev_held_percent: tokenData.dev_percent }),
+            //     ...(tokenData.sniper_percent > 0 && { sniper_held_percent: tokenData.sniper_percent }),
+            //     ...(tokenData.insider_percent > 0 && { insider_held_percent: tokenData.insider_percent }),
+            //     ...(tokenData.top10_holders_pct > 0 && { top10_held_percent: tokenData.top10_holders_pct }),
+            //     ...(tokenData.bundle_percent > 0 && { bundler_held_percent: tokenData.bundle_percent }),
+            //     ...(tokenData.bundle_wallet_count > 0 && { bundler_count: tokenData.bundle_wallet_count }),
+            //     ...(tokenData.holder_count > 0 && { total_holders: tokenData.holder_count }),
+            //     ...(tokenData.kol_count > 0 && { kol_count: tokenData.kol_count }),
+            //   };
+            // });
 
             // C. Update volume (convert flat fields → nested SolanaTokenVolume)
             if (tokenData.total_buy_volume_5m !== undefined || tokenData.total_buy_volume_1h !== undefined) {
