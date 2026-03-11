@@ -50,7 +50,12 @@ export type Timeframe = "5m" | "1h" | "6h" | "24h";
 // Extend Token with optional flags
 type TokenWithDexPaid = Token & { dexPaid?: boolean };
 
-export default function DiscoverPage() {
+export interface DiscoverPageContentProps {
+  /** When "popup", renders only the inner content (no Head/Header/Footer) for use inside DiscoverPopup */
+  variant?: 'standalone' | 'popup';
+}
+
+export function DiscoverPageContent({ variant = 'standalone' }: DiscoverPageContentProps) {
   const router = useRouter();
   
   // Helper to get chain from localStorage
@@ -3599,52 +3604,8 @@ export default function DiscoverPage() {
     }
   }, [displayed]);
 
-  return (
-    <>
-      <Head>
-        <title>Interstate Memeboard | Discover</title>
-        <meta name="description" content="Interstate dashboard" />
-        <link
-          rel="icon"
-          type="image/png"
-          sizes="32x32"
-          href="/interstate/favicon-32x32.png"
-        />
-        <link
-          rel="icon"
-          type="image/png"
-          sizes="16x16"
-          href="/interstate/favicon-16x16.png"
-        />
-        <link
-          rel="apple-touch-icon"
-          sizes="180x180"
-          href="/apple-touch-icon.png?v=2"
-        />
-        {/* Preload the static fallbacks used many times in PumpLive */}
-        <link rel="preload" as="image" href="/placeholder/fallback-cover.jpg" />
-        <link
-          rel="preload"
-          as="image"
-          href="/placeholder/fallback-avatar.jpg"
-        />
-      </Head>
-
-      <div className="relative min-h-screen bg-[#050608] text-[#E6E7EA]">
-        {/* Header stays outside the rounded container */}
-        <div className="relative z-[10000]">
-          <Header
-            search={search}
-            setSearch={setSearch}
-            selectedTimeframe={selectedTimeframe}
-          />
-        </div>
-
-        {/* Outer padding wrapper - collapses when a popup is docked */}
-        <DockedPanelMarginWrapper>
-        <div className="p-1 sm:p-1.5">
-          {/* Rounded container with background */}
-          <div className="relative overflow-hidden rounded-2xl border border-white/[0.06] h-[calc(100vh-80px)] flex flex-col">
+  const innerContent = (
+          <div className={`relative overflow-hidden rounded-2xl border border-white/[0.06] flex flex-col ${variant === 'popup' ? 'h-full min-h-[400px]' : 'h-[calc(100vh-80px)]'}`}>
             {/* Background image inside the container */}
             <div className="pointer-events-none absolute inset-0 overflow-hidden rounded-2xl">
               <div
@@ -3667,8 +3628,8 @@ export default function DiscoverPage() {
               <div className="absolute inset-0 bg-gradient-to-r from-black/20 via-transparent to-black/20" />
             </div>
 
-        {/* Tab Navigation */}
-        <div className="relative z-10 mt-3 mb-4 flex flex-shrink-0 flex-col gap-4 px-4 sm:mt-4 sm:px-6 lg:flex-row lg:items-center lg:justify-between lg:gap-6 lg:px-8">
+        {/* Tab Navigation - in popup variant always stack so buttons sit on next line (phone-like) */}
+        <div className={`relative z-10 mt-3 mb-4 flex flex-shrink-0 flex-col gap-3 px-4 sm:mt-4 sm:px-6 lg:gap-6 lg:px-8 ${variant === 'popup' ? 'lg:flex-col' : 'lg:flex-row lg:items-center lg:justify-between'}`}>
           {/* Tabs Section - Scrollable on mobile */}
           <div className="scrollbar-hide -mx-4 flex items-center gap-3 overflow-x-auto px-4 pb-2 sm:-mx-6 sm:gap-4 sm:px-6 lg:mx-0 lg:gap-4 lg:px-0 lg:pb-0">
             <button
@@ -3722,8 +3683,8 @@ export default function DiscoverPage() {
             </button> */}
           </div>
 
-          {/* Right controls - Stack on mobile, row on desktop */}
-          <div className="flex flex-wrap items-center gap-2 sm:gap-3 lg:gap-4">
+          {/* Right controls - In popup take full width and wrap to next line(s); otherwise row on desktop */}
+          <div className={`flex flex-wrap items-center gap-2 sm:gap-3 lg:gap-4 ${variant === 'popup' ? 'w-full' : ''}`}>
             {/* Connection status - commented out per user request */}
             {/* <div className="flex items-center gap-2">
               <div className={`w-2 h-2 rounded-full ${isConnected ? 'bg-emerald-400' : usingFallback ? 'bg-yellow-400' : 'bg-red-400'}`}></div>
@@ -3739,7 +3700,7 @@ export default function DiscoverPage() {
               activeTab !== "surge" &&
               // Show timeframes for Solana trending with WebSocket support
               (activeTab !== "trending" || currentChain === "sol") && (
-                <div className="relative hidden h-7 min-w-[100px] items-center justify-center gap-1 rounded-md border border-white/[0.08] bg-white/[0.05] backdrop-blur-xl px-1.5 py-1 sm:flex">
+                <div className={`relative h-7 min-w-[100px] items-center justify-center gap-1 rounded-md border border-white/[0.08] bg-white/[0.05] backdrop-blur-xl px-1.5 py-1 ${variant === 'popup' ? 'flex' : 'hidden sm:flex'}`}>
                   {/* For trending tab, only show 5m, 1h, 6h (WebSocket supported timeframes) */}
                   {((activeTab === "trending" ? ["5m", "1h", "6h"] : ["5m", "1h", "6h", "24h"]) as Timeframe[]).map(
                     (tf: Timeframe) => (
@@ -3856,7 +3817,7 @@ export default function DiscoverPage() {
             )}
 
             {/* Thunder Icon and Amount Entry - Separate Thin Box */}
-            <div className="hidden h-7 w-[85px] min-w-[85px] items-center justify-center gap-1 rounded-md border border-white/[0.08] bg-white/[0.05] backdrop-blur-xl px-1.5 py-1 sm:flex">
+            <div className={`h-7 min-w-[70px] w-[85px] items-center justify-center gap-1 rounded-md border border-white/[0.08] bg-white/[0.05] backdrop-blur-xl px-1.5 py-1 ${variant === 'popup' ? 'flex' : 'hidden sm:flex'}`}>
               <HiLightningBolt size={14} className="text-[#31e3ac]" />
               <input
                 type="text"
@@ -3898,7 +3859,7 @@ export default function DiscoverPage() {
             </div>
 
             {/* P1 P2 P3 Boxes - Separate Thin Box With Background Color */}
-            <div className="relative hidden h-7 w-[100px] min-w-[100px] items-center justify-center gap-1 rounded-md border border-white/[0.08] bg-white/[0.05] backdrop-blur-xl px-1.5 py-1 sm:flex">
+            <div className={`relative h-7 min-w-[80px] w-[100px] items-center justify-center gap-1 rounded-md border border-white/[0.08] bg-white/[0.05] backdrop-blur-xl px-1.5 py-1 ${variant === 'popup' ? 'flex' : 'hidden sm:flex'}`}>
               {["P1", "P2", "P3"].map((pill) => {
                 const presetIndex = parseInt(pill.replace("P", "")) - 1;
                 const preset = presets[presetIndex];
@@ -4128,10 +4089,63 @@ export default function DiscoverPage() {
           )}
         </main>
 
-          </div>{/* end rounded container */}
-        </div>
-        </DockedPanelMarginWrapper>{/* end outer padding wrapper */}
+          </div>
+  );
 
+  if (variant === 'popup') {
+    return (
+      <>
+        {innerContent}
+        <QuickBuySettingsModal
+          open={settingsOpen}
+          onClose={() => setSettingsOpen(false)}
+        />
+      </>
+    );
+  }
+
+  return (
+    <>
+      <Head>
+        <title>Interstate Memeboard | Discover</title>
+        <meta name="description" content="Interstate dashboard" />
+        <link
+          rel="icon"
+          type="image/png"
+          sizes="32x32"
+          href="/interstate/favicon-32x32.png"
+        />
+        <link
+          rel="icon"
+          type="image/png"
+          sizes="16x16"
+          href="/interstate/favicon-16x16.png"
+        />
+        <link
+          rel="apple-touch-icon"
+          sizes="180x180"
+          href="/apple-touch-icon.png?v=2"
+        />
+        <link rel="preload" as="image" href="/placeholder/fallback-cover.jpg" />
+        <link
+          rel="preload"
+          as="image"
+          href="/placeholder/fallback-avatar.jpg"
+        />
+      </Head>
+      <div className="relative min-h-screen bg-[#050608] text-[#E6E7EA]">
+        <div className="relative z-[10000]">
+          <Header
+            search={search}
+            setSearch={setSearch}
+            selectedTimeframe={selectedTimeframe}
+          />
+        </div>
+        <DockedPanelMarginWrapper>
+          <div className="p-1 sm:p-1.5">
+            {innerContent}
+          </div>
+        </DockedPanelMarginWrapper>
         <div className="relative z-10">
           <Footer />
         </div>
@@ -4142,4 +4156,8 @@ export default function DiscoverPage() {
       </div>
     </>
   );
+}
+
+export default function DiscoverPage() {
+  return <DiscoverPageContent />;
 }

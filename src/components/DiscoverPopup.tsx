@@ -3,7 +3,7 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { FaTimes } from 'react-icons/fa';
-import DiscoverPopoutContent from './DiscoverPopoutContent';
+import { DiscoverPageContent } from '../pages/discover';
 import { useDockedPanel, DOCKED_PANEL_WIDTH } from '../contexts/DockedPanelContext';
 
 const DOCK_THRESHOLD = 60;
@@ -388,9 +388,9 @@ const DiscoverPopup: React.FC<DiscoverPopupProps> = ({ isOpen, onClose }) => {
           </button>
         </div>
 
-        {/* Content - Discover Page */}
+        {/* Content - same as Discover page so data stays identical */}
         <div className="flex-1 min-h-0 overflow-y-auto">
-          <DiscoverPopoutContent />
+          <DiscoverPageContent variant="popup" />
         </div>
 
         {/* Resize Handle - Bottom Right Corner (hidden when docked) */}
