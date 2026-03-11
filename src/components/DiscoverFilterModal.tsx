@@ -19,6 +19,7 @@ const AX = {
 const protocols = [
   { name: 'All',  icon: <span className="text-sm">🌐</span>, color: '#9333ea' },
   { name: 'Pump', icon: <Image src="/pump.svg" alt="Pump" width={16} height={16} className="rounded-full" />, color: '#31e3ac' },
+  { name: 'Pump AMM', icon: <Image src="/pump.svg" alt="Pump AMM" width={16} height={16} className="rounded-full" style={{ filter: 'hue-rotate(30deg) brightness(1.2)' }} />, color: '#22c993' },
   { name: 'Bonk', icon: <div className="flex h-4 w-4 items-center justify-center rounded-full bg-orange-500 text-xs font-bold" style={{ color: '#f0f5f5' }}>B</div>, color: '#ff6b35' },
   { name: 'Bags', icon: <Image src="https://bags.fm/assets/images/bags-icon.png" alt="Bags" width={16} height={16} className="rounded-full" />, color: '#31e3ac' },
   { name: 'Moonit', icon: <Image src="/moonit.svg" alt="Moonit" width={16} height={16} className="rounded-full" />, color: '#fbbf24' },

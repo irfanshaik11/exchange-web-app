@@ -3603,7 +3603,9 @@ export default function DiscoverPage() {
       );
     }
 
-    if (allTokens && Array.isArray(allTokens) && allTokens.length > 0) {
+    // Only fall back to unfiltered allTokens when NO discover filters are active.
+    // Otherwise, an empty `displayed` means the filter correctly excluded everything.
+    if (!discoverHasActive && allTokens && Array.isArray(allTokens) && allTokens.length > 0) {
       return (
         <section aria-label="Trending" className={activeTab === "trending" ? "pb-16" : ""}>
           <InterstateTable

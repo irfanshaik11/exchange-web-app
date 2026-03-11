@@ -31,6 +31,7 @@ import ThemeCustomizationModal from "./ThemeCustomizationModal";
 import { useQuickBuy } from "./QuickBuyContext";
 import { useSolPrice } from "./SolPriceContext";
 import { useUser } from "./UserContext";
+import { useServerLatency } from "~/hooks/useServerLatency";
 
 
 // Custom X (Twitter) icon component
@@ -287,8 +288,7 @@ export default function Footer() {
   const [showNotificationSettings, setShowNotificationSettings] =
     useState(false);
   const [showThemeCustomization, setShowThemeCustomization] = useState(false);
-  const [isConnected, setIsConnected] = useState(false);
-  const [latency, setLatency] = useState<number | null>(null);
+  const { latencyMs, isConnected, latencyColor } = useServerLatency();
   const [modalPosition, setModalPosition] = useState({ bottom: 0, right: 0 });
   const [selectedRegion] = useState(() => detectNearestRegion());
   const globalButtonRef = React.useRef<HTMLButtonElement>(null);
@@ -366,33 +366,7 @@ export default function Footer() {
     }
   }, [showPulseDropdown]);
 
-  // Listen for WebSocket latency measurements from position WS ping/pong
-  useEffect(() => {
-    let lastUpdateAt = 0;
-
-    const handleLatency = (e: Event) => {
-      const ms = (e as CustomEvent<number>).detail;
-      lastUpdateAt = Date.now();
-      setLatency(ms);
-      setIsConnected(true);
-    };
-
-    window.addEventListener('wsLatencyUpdate', handleLatency);
-
-    // If no latency update within 45s, mark as disconnected
-    // (position WS pings every 30s, so 45s means we missed a cycle)
-    const staleCheck = setInterval(() => {
-      if (lastUpdateAt > 0 && Date.now() - lastUpdateAt > 45000) {
-        setIsConnected(false);
-        setLatency(null);
-      }
-    }, 10000);
-
-    return () => {
-      window.removeEventListener('wsLatencyUpdate', handleLatency);
-      clearInterval(staleCheck);
-    };
-  }, []);
+  // Latency is now measured by useServerLatency hook (HTTP-based, no auth required)
 
   // Update modal position when dropdown opens
   useEffect(() => {
@@ -970,15 +944,9 @@ export default function Footer() {
                             )}
                           </div>
                         </div>
-                        {latency !== null ? (
-                          <div className="text-xs" style={{ color: AX.muted }}>
-                            Latency: {latency}ms
-                          </div>
-                        ) : (
-                          <div className="text-xs" style={{ color: AX.muted }}>
-                            Latency: --ms
-                          </div>
-                        )}
+                        <div className="text-xs" style={{ color: latencyMs !== null ? latencyColor : AX.muted }}>
+                          Latency: {latencyMs !== null ? `${latencyMs}ms` : '--ms'}
+                        </div>
                       </div>
                     </div>
                   </div>

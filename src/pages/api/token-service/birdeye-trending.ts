@@ -29,7 +29,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   // Default chain to 'sol' if not provided (will be normalized to 'solana' in backend)
   if (!params.get('chain')) params.set('chain', 'sol');
 
-  const goBase = process.env.NEXT_PUBLIC_GO_SERVICE_URL || 'http://localhost:8080';
+  const goBase = process.env.NEXT_PUBLIC_GO_SERVICE_URL;
+  if (!goBase) {
+    return res.status(500).json({ error: 'NEXT_PUBLIC_GO_SERVICE_URL not configured' });
+  }
 
   const fetchWithTimeout = async (url: string, timeoutMs = 10000) => {
     const ctrl = new AbortController();

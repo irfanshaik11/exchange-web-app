@@ -871,10 +871,10 @@ const TokenInfo: React.FC<{
       <div className="flex flex-col min-w-0 flex-1">
         <div className="flex items-center gap-2 mb-1">
           <span className="truncate text-sm font-bold" style={{ color: AX.text }}>
-            {token.name}
+            {token.symbol}
           </span>
           <span className="truncate text-xs font-medium" style={{ color: AX.muted }}>
-            {token.symbol}
+            {token.name}
           </span>
           {/* Copy contract button */}
           <button

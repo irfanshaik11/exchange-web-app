@@ -206,12 +206,8 @@ export function useSolanaPositionWebSocket(
           const message = JSON.parse(event.data);
 
           if (message.type === 'pong') {
-            // Measure round-trip latency from our ping
-            if (pingSentAtRef.current > 0) {
-              const latencyMs = Math.round(performance.now() - pingSentAtRef.current);
-              pingSentAtRef.current = 0;
-              window.dispatchEvent(new CustomEvent('wsLatencyUpdate', { detail: latencyMs }));
-            }
+            // Pong received — keepalive confirmed (latency measured via useServerLatency hook)
+            pingSentAtRef.current = 0;
           } else if (message.type === 'connected') {
             // Connection confirmed
           } else if (message.type === 'tx_hash' && message.data) {

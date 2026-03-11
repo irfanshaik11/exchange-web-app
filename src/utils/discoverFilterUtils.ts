@@ -83,6 +83,8 @@ export function tokenMatchesProtocolFilter(token: any, protocols: string[]): boo
 
   return protocols.some((selectedFilter) => {
     if (selectedFilter === category) return true;
+    // "Pump" includes "Pump AMM" tokens (full Pump ecosystem)
+    if (selectedFilter === 'Pump' && category === 'Pump AMM') return true;
     // Meteora AMM V2 should also match Meteora AMM tokens
     if (selectedFilter === 'Meteora AMM V2' && category === 'Meteora AMM') return true;
     // LaunchLab and Bonk are the same ecosystem

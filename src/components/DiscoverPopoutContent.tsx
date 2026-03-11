@@ -2335,7 +2335,8 @@ export default function DiscoverPopoutContent() {
       );
     }
 
-    if (allTokens && Array.isArray(allTokens) && allTokens.length > 0) {
+    // Only fall back to unfiltered allTokens when no filters are active
+    if (activeFilterCount === 0 && allTokens && Array.isArray(allTokens) && allTokens.length > 0) {
       return (
         <InterstateTable
           rows={allTokens.map((token, i) => ({
