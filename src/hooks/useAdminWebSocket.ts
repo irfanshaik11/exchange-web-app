@@ -278,8 +278,155 @@ export function useAdminWebSocket(): UseAdminWebSocketResult {
   return { stats, events, isConnected, error, reconnect };
 }
 
+// ==================== Analytics Types & Hook ====================
+
+export interface TierBreakdown {
+  direct: number;
+  tier1: number;
+  tier2: number;
+  tier3: number;
+  tier4: number;
+}
+
+export interface RewardByTier {
+  layer: number;
+  rewardCount: number;
+  totalSol: number;
+  totalUsd: number;
+  volumeUsd: number;
+}
+
+export interface DailyVolume {
+  date: string;
+  tradeCount: number;
+  volume: number;
+}
+
+export interface HonorsDistribution {
+  level: number;
+  count: number;
+}
+
+export interface TopTrader {
+  name: string;
+  email: string;
+  tradeCount: number;
+  totalVolume: number;
+}
+
+export interface PnlUser {
+  name: string;
+  email: string;
+  totalPnl: number;
+  sellCount: number;
+  winCount: number;
+  totalVolume: number;
+}
+
+export interface PnlSummary {
+  totalPnl: number;
+  totalSells: number;
+  wins: number;
+  losses: number;
+  winRate: number;
+  avgPnl: number;
+  biggestWin: number;
+  biggestLoss: number;
+}
+
+export interface AdminAnalytics {
+  tierBreakdown: TierBreakdown;
+  rewardsByTier: RewardByTier[];
+  dailyVolume: DailyVolume[];
+  honorsDistribution: HonorsDistribution[];
+  topTraders: TopTrader[];
+  conversionRate: {
+    referredUsers: number;
+    referredWhoTraded: number;
+    rate: number;
+  };
+  rewardsSummary: {
+    totalPendingSol: number;
+    totalClaimedSol: number;
+    totalDistributedSol: number;
+  };
+  pnlLeaderboard: {
+    winners: PnlUser[];
+    losers: PnlUser[];
+  };
+  pnlSummary: PnlSummary;
+}
+
+interface UseAdminAnalyticsResult {
+  analytics: AdminAnalytics | null;
+  isLoading: boolean;
+  error: string | null;
+  refetch: () => void;
+}
+
+export function useAdminAnalytics(
+  intervalMs: number = 60000,
+  enabled: boolean = true,
+  volumeDays: number = 30
+): UseAdminAnalyticsResult {
+  const [analytics, setAnalytics] = useState<AdminAnalytics | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [isReady, setIsReady] = useState(false);
+
+  const fetchAnalytics = useCallback(async () => {
+    if (!isReady || !enabled) return;
+
+    setIsLoading(true);
+    try {
+      const params = new URLSearchParams();
+      if (volumeDays !== 30) params.set('days', String(volumeDays));
+      const qs = params.toString();
+      const response = await fetch(`/api/admin/stats/analytics${qs ? `?${qs}` : ''}`, {
+        credentials: 'include',
+      });
+
+      if (response.status === 401) {
+        setIsLoading(false);
+        return;
+      }
+
+      if (!response.ok) {
+        console.warn('[Admin Analytics] Non-OK response:', response.status);
+        setIsLoading(false);
+        return;
+      }
+
+      const data = await response.json();
+      setAnalytics(data);
+      setError(null);
+    } catch (err) {
+      console.error('[Admin Analytics] Error:', err);
+      setError('Failed to fetch analytics');
+    } finally {
+      setIsLoading(false);
+    }
+  }, [isReady, enabled, volumeDays]);
+
+  // Enable after a short delay to allow auth to complete
+  useEffect(() => {
+    const timer = setTimeout(() => setIsReady(true), 800);
+    return () => clearTimeout(timer);
+  }, []);
+
+  useEffect(() => {
+    if (!isReady || !enabled) return;
+
+    fetchAnalytics();
+    const interval = setInterval(fetchAnalytics, intervalMs);
+    return () => clearInterval(interval);
+  }, [fetchAnalytics, intervalMs, isReady, enabled]);
+
+  return { analytics, isLoading, error, refetch: fetchAnalytics };
+}
+
 // Fallback hook that uses polling instead of WebSocket
-export function useAdminPolling(intervalMs: number = 5000, enabled: boolean = true): UseAdminWebSocketResult {
+export function useAdminPolling(intervalMs: number = 5000, enabled: boolean = true, signupDays: number = 30): UseAdminWebSocketResult {
   const [stats, setStats] = useState<AdminStats | null>(null);
   const [events, setEvents] = useState<ActivityEvent[]>([]);
   const [isConnected, setIsConnected] = useState(false);
@@ -290,7 +437,10 @@ export function useAdminPolling(intervalMs: number = 5000, enabled: boolean = tr
     if (!isReady || !enabled) return;
 
     try {
-      const response = await fetch('/api/admin/stats/overview', {
+      const params = new URLSearchParams();
+      if (signupDays !== 30) params.set('days', String(signupDays));
+      const qs = params.toString();
+      const response = await fetch(`/api/admin/stats/overview${qs ? `?${qs}` : ''}`, {
         credentials: 'include',
       });
 
@@ -319,7 +469,7 @@ export function useAdminPolling(intervalMs: number = 5000, enabled: boolean = tr
       }
       setIsConnected(false);
     }
-  }, [isReady, enabled, isConnected]);
+  }, [isReady, enabled, isConnected, signupDays]);
 
   // Enable polling after a short delay to allow auth to complete
   useEffect(() => {
