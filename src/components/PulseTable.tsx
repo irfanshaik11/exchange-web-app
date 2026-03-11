@@ -2738,7 +2738,30 @@ function PulseTable({
   const { solPrice } = useSolPrice(); // Use shared SOL price from Footer context
 
   // State for filtered tokens from API
-  const [filteredTokens, setFilteredTokens] = useState<Token[]>([]);
+  const [filteredTokens, setFilteredTokens] = useState<Token[]>(() => {
+    if (typeof window === 'undefined') return [];
+    try {
+      const lowerTitle = title.toLowerCase();
+      const cacheKey = `pulse_protocol_cache_${lowerTitle.replace(/\s+/g, '_')}`;
+      const cached = sessionStorage.getItem(cacheKey);
+      if (!cached) return [];
+      const parsed = JSON.parse(cached);
+      // Verify cache matches current protocol filters
+      const filterKey = lowerTitle.includes('final') ? 'pulse_filters_final_stretch'
+        : lowerTitle.includes('migrated') ? 'pulse_filters_migrated'
+        : lowerTitle.includes('new') ? 'pulse_filters_new_pairs'
+        : `pulse_filters_${lowerTitle.replace(/\s+/g, '_')}`;
+      const filterRaw = localStorage.getItem(filterKey);
+      const currentProtos: string[] = filterRaw ? (JSON.parse(filterRaw).protocols || []) : [];
+      const hasSpecific = currentProtos.length > 0 && !currentProtos.includes('All');
+      if (hasSpecific && parsed.protocols &&
+          JSON.stringify([...parsed.protocols].sort()) === JSON.stringify([...currentProtos].sort()) &&
+          parsed.data?.length > 0) {
+        return parsed.data; // Already normalized when cached
+      }
+    } catch {}
+    return [];
+  });
   const [isFetchingFiltered, setIsFetchingFiltered] = useState(false);
   const isNewPairs = title.toLowerCase().includes("new");
   const isMigrated = title.toLowerCase().includes("migrated");
@@ -3016,6 +3039,11 @@ function PulseTable({
     async (protocols: string[]) => {
       if (protocols.length === 0) {
         setFilteredTokens([]);
+        // Clear protocol cache
+        try {
+          const cacheKey = `pulse_protocol_cache_${title.toLowerCase().replace(/\s+/g, '_')}`;
+          sessionStorage.removeItem(cacheKey);
+        } catch {}
         return;
       }
 
@@ -3044,11 +3072,16 @@ function PulseTable({
           // Normalize HTTP tokens for consistent filtering (same as WebSocket tokens)
           const normalizedTokens = rawTokens.map(normalizeHttpToken);
           // Skip liquidity filtering for New Pairs and Migrated
-          if (isNewPairs || isMigrated) {
-            setFilteredTokens(normalizedTokens);
-          } else {
-            setFilteredTokens(filterNonZeroLiquidity(normalizedTokens));
-          }
+          const tokensToSet = (isNewPairs || isMigrated) ? normalizedTokens : filterNonZeroLiquidity(normalizedTokens);
+          setFilteredTokens(tokensToSet);
+          // Cache protocol-filtered results for instant restoration on navigation back
+          try {
+            const cacheKey = `pulse_protocol_cache_${title.toLowerCase().replace(/\s+/g, '_')}`;
+            sessionStorage.setItem(cacheKey, JSON.stringify({
+              data: tokensToSet.slice(0, 50),
+              protocols: protocols,
+            }));
+          } catch {}
         } else {
           console.error("Failed to fetch filtered tokens:", response.status);
           setFilteredTokens([]);
@@ -3179,6 +3212,11 @@ function PulseTable({
     } catch (error) {
       // Silent fail
     }
+    // Also clear protocol cache
+    try {
+      const cacheKey = `pulse_protocol_cache_${title.toLowerCase().replace(/\s+/g, '_')}`;
+      sessionStorage.removeItem(cacheKey);
+    } catch {}
   };
 
   // Update pending filters - user must click "Apply All" to apply them
@@ -7467,6 +7505,102 @@ function PulseTable({
                 />
               </div>
               {/* Main Info Section skeleton */}
+              <div className="flex min-w-0 flex-1 flex-col gap-1">
+                <div className="flex flex-row justify-between gap-2">
+                  <div className="flex min-w-0 flex-col gap-1">
+                    <div className="flex min-w-0 items-center gap-2">
+                      <div
+                        className="h-4 w-20 rounded"
+                        style={{ backgroundColor: AX.surface }}
+                      />
+                      <div
+                        className="h-3 w-16 rounded"
+                        style={{ backgroundColor: AX.surface }}
+                      />
+                      <div
+                        className="h-3 w-6 rounded"
+                        style={{ backgroundColor: AX.surface }}
+                      />
+                    </div>
+                    <div className="mt-1 flex items-center gap-2">
+                      <div
+                        className="h-3 w-8 rounded"
+                        style={{ backgroundColor: AX.surface }}
+                      />
+                      <div
+                        className="h-3 w-6 rounded"
+                        style={{ backgroundColor: AX.surface }}
+                      />
+                      <div
+                        className="h-3 w-6 rounded"
+                        style={{ backgroundColor: AX.surface }}
+                      />
+                      <div
+                        className="h-3 w-6 rounded"
+                        style={{ backgroundColor: AX.surface }}
+                      />
+                    </div>
+                  </div>
+                  <div className="flex min-w-[140px] flex-col items-end gap-1">
+                    <div className="flex gap-2 text-xs">
+                      <div
+                        className="h-3 w-12 rounded"
+                        style={{ backgroundColor: AX.surface }}
+                      />
+                      <div
+                        className="h-3 w-12 rounded"
+                        style={{ backgroundColor: AX.surface }}
+                      />
+                    </div>
+                    <div className="flex items-center gap-2 text-xs">
+                      <div
+                        className="h-3 w-8 rounded"
+                        style={{ backgroundColor: AX.surface }}
+                      />
+                      <div
+                        className="h-3 w-8 rounded"
+                        style={{ backgroundColor: AX.surface }}
+                      />
+                    </div>
+                  </div>
+                </div>
+                <div className="mt-1 flex flex-row items-center justify-between gap-2">
+                  <div className="flex gap-1">
+                    {Array.from({ length: 5 }).map((_, i) => (
+                      <div
+                        key={i}
+                        className="h-4 w-10 rounded-full"
+                        style={{ backgroundColor: AX.surface }}
+                      />
+                    ))}
+                  </div>
+                  <div
+                    className="h-6 w-16 rounded-full"
+                    style={{ backgroundColor: AX.surface }}
+                  />
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : (filteredTokensForDisplay.length === 0 && isFetchingFiltered) ? (
+        <div className="custom-scrollbar flex flex-1 flex-col gap-2 overflow-x-hidden overflow-y-scroll">
+          {Array.from({ length: skeletonRowCount }).map((_, idx) => (
+            <div
+              key={idx}
+              className="flex shrink-0 animate-pulse flex-row items-start rounded-lg p-2"
+              style={{ backgroundColor: "#13151b", border: "1px solid #1e2028" }}
+            >
+              <div className="mr-2 flex w-20 flex-col items-center">
+                <div
+                  className="relative h-20 w-20 rounded-sm"
+                  style={{ backgroundColor: AX.surface }}
+                />
+                <div
+                  className="mt-1 h-3 w-16 rounded"
+                  style={{ backgroundColor: AX.surface }}
+                />
+              </div>
               <div className="flex min-w-0 flex-1 flex-col gap-1">
                 <div className="flex flex-row justify-between gap-2">
                   <div className="flex min-w-0 flex-col gap-1">

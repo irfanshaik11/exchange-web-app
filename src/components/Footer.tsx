@@ -31,7 +31,7 @@ import ThemeCustomizationModal from "./ThemeCustomizationModal";
 import { useQuickBuy } from "./QuickBuyContext";
 import { useSolPrice } from "./SolPriceContext";
 import { useUser } from "./UserContext";
-import { env } from "../env";
+
 
 // Custom X (Twitter) icon component
 const XIcon = ({ size = 14 }: { size?: number }) => (
@@ -366,53 +366,32 @@ export default function Footer() {
     }
   }, [showPulseDropdown]);
 
-  // Check backend health and measure latency
+  // Listen for WebSocket latency measurements from position WS ping/pong
   useEffect(() => {
-    const checkHealth = async () => {
-      // Use the Go service health endpoint which is more reliable
-      const healthUrl = `${env.NEXT_PUBLIC_GO_SERVICE_URL}/healthz`;
+    let lastUpdateAt = 0;
 
-      try {
-        const startTime = performance.now();
-        const response = await fetch(healthUrl, {
-          method: "GET",
-          headers: {
-            accept: "application/json",
-          },
-          signal: AbortSignal.timeout(5000),
-        });
-        const endTime = performance.now();
-        const ping = Math.round(endTime - startTime);
+    const handleLatency = (e: Event) => {
+      const ms = (e as CustomEvent<number>).detail;
+      lastUpdateAt = Date.now();
+      setLatency(ms);
+      setIsConnected(true);
+    };
 
-        if (response.ok) {
-          // Try to parse JSON to confirm it's a valid health response
-          try {
-            const data = await response.json();
-            setIsConnected(true);
-            setLatency(ping);
-          } catch {
-            // If JSON parse fails but status is OK, still consider connected
-            setIsConnected(true);
-            setLatency(ping);
-          }
-        } else {
-          setIsConnected(false);
-          setLatency(null);
-        }
-      } catch (error) {
-        // Network error, timeout, or CORS issue - server is likely down
+    window.addEventListener('wsLatencyUpdate', handleLatency);
+
+    // If no latency update within 45s, mark as disconnected
+    // (position WS pings every 30s, so 45s means we missed a cycle)
+    const staleCheck = setInterval(() => {
+      if (lastUpdateAt > 0 && Date.now() - lastUpdateAt > 45000) {
         setIsConnected(false);
         setLatency(null);
       }
+    }, 10000);
+
+    return () => {
+      window.removeEventListener('wsLatencyUpdate', handleLatency);
+      clearInterval(staleCheck);
     };
-
-    // Check immediately
-    checkHealth();
-
-    // Then check every 10 seconds
-    const interval = setInterval(checkHealth, 10000);
-
-    return () => clearInterval(interval);
   }, []);
 
   // Update modal position when dropdown opens

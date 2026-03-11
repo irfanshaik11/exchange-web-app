@@ -35,13 +35,17 @@ let debounceTimer: ReturnType<typeof setTimeout> | null = null;
 
 // ── Helpers ──────────────────────────────────────────────────────────────
 
-function buildWsUrl(mint: string): string {
+function buildWsUrl(mint: string, snapshotTimeframe?: string): string {
   const wsBaseUrl =
     process.env.NEXT_PUBLIC_WEBSOCKET_URL ||
     'https://token-stage.narrative.trade';
   const wsProtocol = wsBaseUrl.startsWith('https') ? 'wss' : 'ws';
   const wsHost = wsBaseUrl.replace(/^https?:\/\//, '');
-  return `${wsProtocol}://${wsHost}/v1/ws/ohlcv/${mint}?timeframe=1s`;
+  // Add snapshot_timeframe for display-resolution snapshots (skip sub-minute — no backend tables)
+  const snapshotParam = snapshotTimeframe && !['1s', '5s', '15s', '30s'].includes(snapshotTimeframe)
+    ? `&snapshot_timeframe=${snapshotTimeframe}`
+    : '';
+  return `${wsProtocol}://${wsHost}/v1/ws/ohlcv/${mint}?timeframe=1s${snapshotParam}`;
 }
 
 function parseCandle(c: any): OHLCCandle {
@@ -88,7 +92,7 @@ function cleanupInternal(): void {
  * Open an OHLC WS for `mint` (150ms debounced).
  * Closes any existing prefetch connection first — only one at a time.
  */
-export function prefetchViaWS(mint: string): void {
+export function prefetchViaWS(mint: string, snapshotTimeframe?: string): void {
   // Same mint already being prefetched or connected
   if (
     currentMint === mint &&
@@ -122,7 +126,7 @@ export function prefetchViaWS(mint: string): void {
     }
 
     try {
-      const wsUrl = buildWsUrl(mint);
+      const wsUrl = buildWsUrl(mint, snapshotTimeframe);
       const newWs = new WebSocket(wsUrl);
       ws = newWs;
 

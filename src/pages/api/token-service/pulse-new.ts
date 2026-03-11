@@ -73,7 +73,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   // Cleanup expired cache entries
   cleanupCache();
 
-  const fetchWithTimeout = async (url: string, timeoutMs = 2500) => {
+  const fetchWithTimeout = async (url: string, timeoutMs = 6000) => {
     const ctrl = new AbortController();
     const t = setTimeout(() => ctrl.abort(), timeoutMs);
     try {

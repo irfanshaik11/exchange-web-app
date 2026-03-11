@@ -20,7 +20,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   const goBase = process.env.NEXT_PUBLIC_GO_SERVICE_URL;
 
-  const fetchWithTimeout = async (url: string, timeoutMs = 2500) => {
+  const fetchWithTimeout = async (url: string, timeoutMs = 6000) => {
     const ctrl = new AbortController();
     const t = setTimeout(() => ctrl.abort(), timeoutMs);
     try {

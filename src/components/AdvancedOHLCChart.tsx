@@ -1107,6 +1107,10 @@ const AdvancedOHLCChart: React.FC<AdvancedOHLCChartProps> = ({
       lazyLoadAbortRef.current.abort();
       lazyLoadAbortRef.current = null;
     }
+    if (predictivePrefetchAbortRef.current) {
+      predictivePrefetchAbortRef.current.abort();
+      predictivePrefetchAbortRef.current = null;
+    }
     resolutionCallbackMapRef.current.clear();
     // Reset aggregation state for Solana WS (1s candles aggregated client-side)
     if (currentAggregatingIntervalRef.current !== selectedInterval) {
@@ -1128,6 +1132,7 @@ const AdvancedOHLCChart: React.FC<AdvancedOHLCChartProps> = ({
       // Widget reuse: clear old token's candle data so getBars waits for new snapshot.
       // Without key={mint}, the component stays mounted — stale data must be purged.
       lastGoodCandlesRef.current = [];
+      resolutionCacheRef.current.clear(); // Clear per-resolution cache on token change
       cachedIntervalRef.current = null;
       cachedTimeframeRef.current = null;
       lastCandleHashRef.current = "";
@@ -1347,6 +1352,9 @@ const AdvancedOHLCChart: React.FC<AdvancedOHLCChartProps> = ({
 
   // Refs for data management (same as BackendOHLCChart)
   const lastGoodCandlesRef = useRef<BackendOHLCData[]>(preloadedData || []);
+  // Phase 5: Per-resolution cache — avoids re-fetching when switching between timeframes
+  // Key: resolution string (e.g. "1S", "15", "60"), Value: cached candle array
+  const resolutionCacheRef = useRef<Map<string, BackendOHLCData[]>>(new Map());
   const inFlightRef = useRef<string | null>(null);
   const mountedRef = useRef(true);
   const lastFetchAtRef = useRef<number>(0);
@@ -1468,6 +1476,8 @@ const AdvancedOHLCChart: React.FC<AdvancedOHLCChartProps> = ({
   // Abort controller for in-flight lazy-load fetch in getBars (scroll-left pagination)
   // Allows unsubscribeBars to cancel a blocking fetch so TradingView's lifecycle can proceed
   const lazyLoadAbortRef = useRef<AbortController | null>(null);
+  // Abort controller for predictive scroll-left prefetch (Phase 4: fetches older data before user reaches edge)
+  const predictivePrefetchAbortRef = useRef<AbortController | null>(null);
   // Track TradingView's actual current resolution (dropdown selection), separate from React interval prop
   const tvResolutionRef = useRef<string>("1S");
   // Map of resolution → TradingView's raw onRealtimeCallback.
@@ -2844,10 +2854,15 @@ const AdvancedOHLCChart: React.FC<AdvancedOHLCChartProps> = ({
       process.env.NEXT_PUBLIC_WEBSOCKET_URL ||
       "https://token-stage.narrative.trade";
     const wsInterval = "1s"; // Always use 1s for real-time updates
+    // Compute snapshot resolution: use display interval for history so the snapshot
+    // covers more time (e.g. 500×15m = 5.2 days vs 500×1s = 8 min)
+    const currentInterval = latestParamsRef.current.interval;
+    const snapshotInterval = ["1s", "5s", "15s", "30s"].includes(currentInterval) ? "1s" : currentInterval;
+    const snapshotParam = snapshotInterval !== "1s" ? `&snapshot_timeframe=${snapshotInterval}` : "";
     // Convert http/https to ws/wss for WebSocket
     const wsProtocol = wsBaseUrl.startsWith("https") ? "wss" : "ws";
     const wsHost = wsBaseUrl.replace(/^https?:\/\//, "");
-    const wsUrl = `${wsProtocol}://${wsHost}/v1/ws/ohlcv/${tokenAddress}?timeframe=${wsInterval}`;
+    const wsUrl = `${wsProtocol}://${wsHost}/v1/ws/ohlcv/${tokenAddress}?timeframe=${wsInterval}${snapshotParam}`;
 
     // Track if connection was closed by cleanup
     let closedByCleanup = false;
@@ -3851,6 +3866,16 @@ const AdvancedOHLCChart: React.FC<AdvancedOHLCChartProps> = ({
           currentAggregatedCandleRef.current = null;
           oneSecondCandlesRef.current = [];
           wsGapBridgedRef.current = false;
+
+          // Phase 5: Per-resolution cache — save current candles to old resolution's cache slot,
+          // then restore from new resolution's cache if available (avoids re-fetching on switch-back)
+          if (lastGoodCandlesRef.current.length > 0) {
+            resolutionCacheRef.current.set(prevTvResolution, [...lastGoodCandlesRef.current]);
+          }
+          const cached = resolutionCacheRef.current.get(resolution);
+          if (cached && cached.length > 0) {
+            lastGoodCandlesRef.current = cached;
+          }
         }
 
         // FIX: Always use the prop timeframe - don't let TradingView's periodParams override it
@@ -4068,7 +4093,11 @@ const AdvancedOHLCChart: React.FC<AdvancedOHLCChartProps> = ({
 
             try {
               const lazyUrl = new URL(`${BACKEND_URL}/v1/ohlcv/${tokenAddress}`);
-              lazyUrl.searchParams.set("timeframe", "1s");
+              // Use display resolution for history fetch; sub-minute resolutions fall back to 1s
+              // because the backend only has ohlcv_1s (no 5s/15s/30s aggregates)
+              const displayInterval = RESOLUTION_TO_INTERVAL[resolution] || "1s";
+              const lazyTimeframe = ["5s", "15s", "30s"].includes(displayInterval) ? "1s" : displayInterval;
+              lazyUrl.searchParams.set("timeframe", lazyTimeframe);
               lazyUrl.searchParams.set("to", String(oldestCachedTime));
               lazyUrl.searchParams.set("limit", "1000");
               // Abort controller shared via ref so unsubscribeBars can cancel immediately
@@ -5811,6 +5840,77 @@ Maker: ${walletAddress}`;
         firstLoadRef.current = false; // Ensure loading overlay is dismissed
         setError(null);
 
+        // Phase 4: Predictive scroll-left prefetch — fetch older candles before user reaches the edge.
+        // Subscribes to TradingView's visible range changes and triggers a background fetch
+        // when the user scrolls within 2x viewport width of the oldest cached data.
+        widget.onChartReady(() => {
+          try {
+            const chart = widget.chart();
+            if (chart?.onVisibleRangeChanged) {
+              chart.onVisibleRangeChanged().subscribe(null, (range: { from: number; to: number }) => {
+                const oldest = lastGoodCandlesRef.current[0]?.unix_time;
+                if (!oldest || !range?.from || !range?.to) return;
+                const viewportSpan = range.to - range.from;
+                // Trigger prefetch when visible range is within 2x viewport of oldest cached candle
+                if (range.from < oldest + viewportSpan * 2) {
+                  // Skip if already prefetching or lazy-loading
+                  if (predictivePrefetchAbortRef.current || lazyLoadAbortRef.current) return;
+                  if (latestParamsRef.current.network === "monad") return;
+
+                  const tokenAddress = latestParamsRef.current.mint || latestParamsRef.current.pairAddress;
+                  if (!tokenAddress) return;
+
+                  const res = tvResolutionRef.current;
+                  const displayInterval = RESOLUTION_TO_INTERVAL[res] || "1s";
+                  const prefetchTf = ["5s", "15s", "30s"].includes(displayInterval) ? "1s" : displayInterval;
+
+                  const abortCtrl = new AbortController();
+                  predictivePrefetchAbortRef.current = abortCtrl;
+                  const timeout = setTimeout(() => abortCtrl.abort(), 5000);
+
+                  const prefetchUrl = new URL(`${BACKEND_URL}/v1/ohlcv/${tokenAddress}`);
+                  prefetchUrl.searchParams.set("timeframe", prefetchTf);
+                  prefetchUrl.searchParams.set("to", String(oldest));
+                  prefetchUrl.searchParams.set("limit", "1000");
+
+                  fetch(prefetchUrl.toString(), {
+                    method: "GET",
+                    headers: {
+                      accept: "application/json",
+                      "X-API-Key": process.env.NEXT_PUBLIC_BACKEND_API_KEY || "test-key",
+                    },
+                    signal: abortCtrl.signal,
+                  })
+                    .then((resp) => resp.ok ? resp.json() : null)
+                    .then((body) => {
+                      clearTimeout(timeout);
+                      predictivePrefetchAbortRef.current = null;
+                      if (body?.success && Array.isArray(body.candles) && body.candles.length > 0) {
+                        const olderItems = body.candles
+                          .map((c: any) => ({
+                            unix_time: c.time || c.unix_time,
+                            o: c.open ?? c.o,
+                            h: c.high ?? c.h,
+                            l: c.low ?? c.l,
+                            c: c.close ?? c.c,
+                            v_usd: c.volume ?? c.volume_usd ?? c.v_usd ?? 0,
+                          }))
+                          .filter((c: any) => c.unix_time < oldest);
+                        if (olderItems.length > 0) {
+                          lastGoodCandlesRef.current = [...olderItems, ...lastGoodCandlesRef.current];
+                          if (CHART_DEBUG) console.log("[AdvancedOHLCChart] Predictive prefetch: cached", olderItems.length, "older candles");
+                        }
+                      }
+                    })
+                    .catch(() => {
+                      clearTimeout(timeout);
+                      predictivePrefetchAbortRef.current = null;
+                    });
+                }
+              });
+            }
+          } catch {}
+        });
 
         // Add USD/MC toggle button for both Monad and Solana (both have 1B token supply)
         widget.headerReady().then(() => {
