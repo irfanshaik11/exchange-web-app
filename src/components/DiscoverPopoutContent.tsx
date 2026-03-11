@@ -2476,10 +2476,10 @@ export default function DiscoverPopoutContent() {
   return (
     <div className="flex h-full flex-col text-[#E6E7EA]" style={{ backgroundColor: '#111214' }}>
 
-        {/* Tab Navigation */}
-        <div className="flex flex-col gap-4 px-4 pt-4 sm:px-6 lg:flex-row lg:items-center lg:justify-between lg:gap-6 lg:px-8">
-          {/* Tabs Section - Scrollable on mobile */}
-          <div className="scrollbar-hide -mx-4 flex items-center gap-3 overflow-x-auto px-4 pb-2 sm:-mx-6 sm:gap-4 sm:px-6 lg:mx-0 lg:gap-6 lg:px-0 lg:pb-0">
+        {/* Tab Navigation + Controls: tabs on first line, Filter/amount/P1-P3 on second line */}
+        <div className="flex flex-col gap-3 px-4 pt-4 sm:px-6 lg:px-8">
+          {/* Tabs Section - first row */}
+          <div className="scrollbar-hide -mx-4 flex items-center gap-3 overflow-x-auto px-4 pb-0 sm:-mx-6 sm:gap-4 sm:px-6 lg:mx-0 lg:gap-6 lg:px-0">
             {/* Chain Switcher - Commented out */}
             {/* <div className="flex items-center gap-2 mr-2">
               <button
@@ -2590,8 +2590,8 @@ export default function DiscoverPopoutContent() {
             </button> */}
           </div>
 
-          {/* Right controls - Stack on mobile, row on desktop */}
-          <div className="flex flex-wrap items-center gap-2 sm:gap-3 lg:gap-4">
+          {/* Second row: Filter, amount input, P1 P2 P3 */}
+          <div className="flex flex-wrap items-center gap-2 border-t border-white/[0.06] pt-3 sm:gap-3 sm:pt-3 lg:gap-4 mb-4">
             {/* Connection status - commented out per user request */}
             {/* <div className="flex items-center gap-2">
               <div className={`w-2 h-2 rounded-full ${isConnected ? 'bg-emerald-400' : usingFallback ? 'bg-yellow-400' : 'bg-red-400'}`}></div>
