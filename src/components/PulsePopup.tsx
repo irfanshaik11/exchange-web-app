@@ -121,11 +121,16 @@ const PulsePopup: React.FC<PulsePopupProps> = ({ isOpen, onClose }) => {
     }
   }, [dockSide, isOpen]);
 
+  // Notify layout so main content collapses when this popup is docked.
+  // Do NOT include dockCtx in deps: it changes when setDockContrib runs, causing an infinite loop.
+  const setDockContribRef = useRef(dockCtx?.setDockContrib);
+  setDockContribRef.current = dockCtx?.setDockContrib;
   useEffect(() => {
-    if (!dockCtx) return;
+    const setDockContrib = setDockContribRef.current;
+    if (!setDockContrib) return;
     const w = isOpen && dockSide !== 'none' ? DOCKED_PANEL_WIDTH : 0;
-    dockCtx.setDockContrib(POPUP_ID, dockSide === 'left' ? w : 0, dockSide === 'right' ? w : 0);
-  }, [isOpen, dockSide, dockCtx]);
+    setDockContrib(POPUP_ID, dockSide === 'left' ? w : 0, dockSide === 'right' ? w : 0);
+  }, [isOpen, dockSide]);
 
   // Handle drag functionality - optimized for performance
   const handlePointerMove = useCallback((e: PointerEvent) => {
