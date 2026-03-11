@@ -78,6 +78,11 @@ export function useDiscoverFilters(activeTab: string) {
   const setPending = isTrending ? setTrendingPending : setNewPairsPending;
   const lsKey = isTrending ? LS_KEY_TRENDING : LS_KEY_NEW_PAIRS;
 
+  // Keep a ref to the latest pending filters so handleApplyFilters never
+  // captures a stale closure value (React 18 batching race).
+  const pendingRef = useRef(pendingFilters);
+  pendingRef.current = pendingFilters;
+
   // ── Pending changes detection ──
   const hasPendingChanges = useMemo(
     () => JSON.stringify(pendingFilters) !== JSON.stringify(filters),
@@ -93,16 +98,22 @@ export function useDiscoverFilters(activeTab: string) {
   );
 
   const handleApplyFilters = useCallback(() => {
-    setFilters(pendingFilters);
-    saveFilters(lsKey, pendingFilters);
+    const current = pendingRef.current;
+    setFilters(current);
+    saveFilters(lsKey, current);
     setShowFilterModal(false);
-  }, [pendingFilters, setFilters, lsKey]);
+  }, [setFilters, lsKey]);
 
   const handleResetFilters = useCallback(() => {
     setPending(defaultPulseFilters);
     setFilters(defaultPulseFilters);
     saveFilters(lsKey, defaultPulseFilters);
   }, [setPending, setFilters, lsKey]);
+
+  const openFilterModal = useCallback(() => {
+    setPending(filters);
+    setShowFilterModal(true);
+  }, [filters, setPending]);
 
   // ── Derived ──
   const activeFilterCount = useMemo(() => countActiveFilters(filters), [filters]);
@@ -119,5 +130,6 @@ export function useDiscoverFilters(activeTab: string) {
     handleResetFilters,
     showFilterModal,
     setShowFilterModal,
+    openFilterModal,
   };
 }

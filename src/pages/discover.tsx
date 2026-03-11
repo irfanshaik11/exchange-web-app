@@ -168,6 +168,7 @@ export default function DiscoverPage() {
     handleResetFilters: handleDiscoverReset,
     showFilterModal: showDiscoverFilter,
     setShowFilterModal: setShowDiscoverFilter,
+    openFilterModal: openDiscoverFilter,
   } = useDiscoverFilters(activeTab);
   const { newTokens: wsNewTokens, connected: wsNewConnected } = usePulseFromQueryCache({ channel: 'new' });
 
@@ -3917,7 +3918,7 @@ export default function DiscoverPage() {
               <button
                 className="relative flex h-7 w-7 cursor-pointer items-center justify-center rounded-md transition-all"
                 style={{ color: showDiscoverFilter ? "#526fff" : "#9CA3AF" }}
-                onClick={() => setShowDiscoverFilter(!showDiscoverFilter)}
+                onClick={() => showDiscoverFilter ? setShowDiscoverFilter(false) : openDiscoverFilter()}
               >
                 <BsSliders2 size={14} />
                 {discoverFilterCount > 0 && (
