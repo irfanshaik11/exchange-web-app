@@ -57,7 +57,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   };
 
   try {
-    // Use the trending endpoint directly: http://157.180.71.112:8080/v1/tokens/trending
     const requestedTimeframe = params.get('timeframe');
     
     // STRICTLY validate timeframe - only allow supported values

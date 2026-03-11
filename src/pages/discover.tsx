@@ -41,6 +41,9 @@ import { mapTradeErrorMessage } from "~/utils/tradeErrorMessages";
 import { fetchVerifiedPairAddress } from "~/hooks/useSingleTokenPolling";
 import { useQueryNewPairs, useQueryLaunchpadData } from '../hooks/useQueryTokens';
 import { usePulseFromQueryCache } from '~/hooks/usePulseFromQueryCache';
+import { useDiscoverFilters } from '~/hooks/useDiscoverFilters';
+import DiscoverFilterModal from '~/components/DiscoverFilterModal';
+import { applyDiscoverFilters, mapProtocolToBackend, tokenMatchesProtocolFilter } from '~/utils/discoverFilterUtils';
 
 const WRAPPED_SOL_MINT = SOL_MINT_ADDRESS;
 const isDev = process.env.NODE_ENV !== 'production';
@@ -158,7 +161,27 @@ export function DiscoverPageContent({ variant = 'standalone' }: DiscoverPageCont
   const [isFilterPopoutOpen, setIsFilterPopoutOpen] = useState(false);
   const { filter } = useFilter();
   const { solPrice } = useSolPrice();
+
+  // Discover-specific filters (independent per tab: trending vs newPairs)
+  const {
+    filters: discoverFilters,
+    pendingFilters: discoverPendingFilters,
+    hasPendingChanges: discoverHasPendingChanges,
+    hasActiveFilters: discoverHasActive,
+    activeFilterCount: discoverFilterCount,
+    handlePendingFilterChange: handleDiscoverFilterChange,
+    handleApplyFilters: handleDiscoverApply,
+    handleResetFilters: handleDiscoverReset,
+    showFilterModal: showDiscoverFilter,
+    setShowFilterModal: setShowDiscoverFilter,
+    openFilterModal: openDiscoverFilter,
+  } = useDiscoverFilters(activeTab);
   const { newTokens: wsNewTokens, connected: wsNewConnected } = usePulseFromQueryCache({ channel: 'new' });
+
+  // Protocol-filtered tokens fetched from API (like PulseTable does)
+  const [protocolFilteredTokens, setProtocolFilteredTokens] = useState<TokenWithDexPaid[]>([]);
+  const [isFetchingProtocolTokens, setIsFetchingProtocolTokens] = useState(false);
+  const protocolFetchAbortRef = useRef<AbortController | null>(null);
 
   // Pump Live sorting state
   const [pumpLiveSortField, setPumpLiveSortField] = useState<PumpLiveSortField>('time');
@@ -2866,6 +2889,94 @@ export function DiscoverPageContent({ variant = 'standalone' }: DiscoverPageCont
     return filtered;
   }, [filter, selectedTimeframe, getVolumeForTimeframe, mapAmmToProtocolPatterns, normalizedSearch]);
 
+  // Discover-page filter wrapper — applies PulseFilters from the new modal
+  const applyDiscoverFiltersFn = useCallback((tokens: TokenWithDexPaid[]) => {
+    return applyDiscoverFilters(tokens, discoverFilters, {
+      getVolume: (t) => getVolumeForTimeframe(t, selectedTimeframe),
+      getTxns: (t) => getTxnsForTimeframe(t, selectedTimeframe),
+      getBuys: (t) => {
+        const tfMap: Record<string, string> = { '5m': '5m', '1h': '1h', '6h': '6h', '24h': '24h' };
+        const suffix = tfMap[selectedTimeframe] || '5m';
+        return Number(t?.[`total_buys_${suffix}`]) || 0;
+      },
+      getSells: (t) => {
+        const tfMap: Record<string, string> = { '5m': '5m', '1h': '1h', '6h': '6h', '24h': '24h' };
+        const suffix = tfMap[selectedTimeframe] || '5m';
+        return Number(t?.[`total_sells_${suffix}`]) || 0;
+      },
+    });
+  }, [discoverFilters, selectedTimeframe, getVolumeForTimeframe, getTxnsForTimeframe]);
+
+  // Fetch protocol-filtered tokens from API when protocols are selected
+  // Same pattern as PulseTable's fetchFilteredTokens — hits /api/token-service/pulse-new?protocols=...
+  const fetchProtocolFilteredTokens = useCallback(async (protocols: string[]) => {
+    // Cancel any in-flight fetch
+    if (protocolFetchAbortRef.current) {
+      protocolFetchAbortRef.current.abort();
+    }
+
+    if (!protocols.length || protocols.includes('All')) {
+      setProtocolFilteredTokens([]);
+      setIsFetchingProtocolTokens(false);
+      return;
+    }
+
+    const controller = new AbortController();
+    protocolFetchAbortRef.current = controller;
+    setIsFetchingProtocolTokens(true);
+    setProtocolFilteredTokens([]);
+
+    const protocolsParam = protocols.flatMap(mapProtocolToBackend).join(',');
+    const url = `/api/token-service/pulse-new?limit=50&protocols=${encodeURIComponent(protocolsParam)}`;
+
+    const normalize = (raw: any[]): TokenWithDexPaid[] =>
+      raw.map((t: any) => ({
+        ...t,
+        mint: t.mint || t.mint_address || '',
+        holder_count: t.holder_count ?? t.holders ?? 0,
+        holders: t.holder_count ?? t.holders ?? 0,
+        market_cap_usd: t.market_cap_usd ?? t.fully_diluted_value ?? t.marketCapUSD ?? 0,
+        fully_diluted_value: t.fully_diluted_value ?? t.market_cap_usd ?? t.marketCapUSD ?? 0,
+        liquidity_usd: t.liquidity_usd ?? t.total_liquidity_usd ?? 0,
+        total_liquidity_usd: t.total_liquidity_usd ?? t.liquidity_usd ?? 0,
+        created_at: t.created_at ?? t.pair_created_at ?? t.launch_time ?? null,
+      })) as TokenWithDexPaid[];
+
+    // Try up to 2 attempts to handle proxy timeouts (2.5s backend timeout)
+    for (let attempt = 0; attempt < 2; attempt++) {
+      if (controller.signal.aborted) return; // New filter selected — don't touch state
+      try {
+        const resp = await fetch(`${url}&t=${Date.now()}`, { signal: controller.signal });
+        if (!resp.ok) { if (attempt === 0) continue; break; }
+        const data = await resp.json();
+        const raw = Array.isArray(data) ? data : (data.result || []);
+        if (raw.length > 0 || attempt > 0) {
+          // Got data, or second attempt confirmed empty — commit result
+          if (protocolFetchAbortRef.current === controller) {
+            setProtocolFilteredTokens(normalize(raw));
+            setIsFetchingProtocolTokens(false);
+          }
+          return;
+        }
+        // First attempt returned empty — retry once (might be proxy timeout)
+      } catch (err) {
+        if ((err as any)?.name === 'AbortError') return; // Don't touch state
+        if (attempt === 0) continue; // Retry
+      }
+    }
+
+    // Both attempts failed — clear loading, let base WS fallback handle it
+    if (protocolFetchAbortRef.current === controller) {
+      setProtocolFilteredTokens([]);
+      setIsFetchingProtocolTokens(false);
+    }
+  }, []);
+
+  // Trigger API fetch when protocol filters change (on Apply)
+  useEffect(() => {
+    fetchProtocolFilteredTokens(discoverFilters.protocols);
+  }, [discoverFilters.protocols, fetchProtocolFilteredTokens]);
+
   // Count active filters for badge
   const activeFilterCount = useMemo(() => {
     let count = 0;
@@ -3090,29 +3201,20 @@ export function DiscoverPageContent({ variant = 'standalone' }: DiscoverPageCont
         };
       });
       
-      // CRITICAL: Deduplicate using Set to track seen mints AND addresses
-      // This prevents duplicate wrapped SOL with different pair_addresses
-      const seenAddresses = new Set<string>();
+      // Deduplicate by mint only (matches PulseTable's approach)
+      // mint is the unique token identifier; pair_address identifies a pool and can be shared
+      // across tokens on launchpad protocols (BonkFun, Meteora DBC, LaunchLab)
       const seenMints = new Set<string>();
       const uniqueSafe: TokenWithDexPaid[] = [];
-      
+
       for (const token of normalizedTokens) {
         const mint = token.mint;
-        const address = token.pair_address;
-        
-        // Skip if we've already seen this mint (prevents wrapped SOL duplicates)
+
         if (mint && seenMints.has(mint)) {
           continue;
         }
-        
-        // Also check address to be safe
-        if (address && seenAddresses.has(address)) {
-          continue;
-        }
-        
-        // Mark as seen and add to results
+
         if (mint) seenMints.add(mint);
-        if (address) seenAddresses.add(address);
         uniqueSafe.push(token);
       }
       
@@ -3225,7 +3327,9 @@ export function DiscoverPageContent({ variant = 'standalone' }: DiscoverPageCont
         finalDisplayList = [...featuredInList, ...regularInList];
       }
       
-      setDisplayed(finalDisplayList);
+      // Apply discover-page filters (protocol, market cap, volume, etc.)
+      const discoverFiltered = applyDiscoverFiltersFn(finalDisplayList);
+      setDisplayed(discoverFiltered);
     } else if (activeTab === "dex") {
       // dex tab → show all filtered tokens
       const safe = filteredTokens.filter(t => t && t.mint && !isWrappedSol(t));
@@ -3233,10 +3337,12 @@ export function DiscoverPageContent({ variant = 'standalone' }: DiscoverPageCont
     } else {
       setDisplayed([]);
     }
-  }, [activeTab, filteredTokens, sortKey, sortDirection, selectedTimeframe, applyFilters, getVolumeForTimeframe, isWrappedSol, filter, activeFilterCount, newPairsRaw, currentChain, isZeroLiquidityToken, featuredTokens, wsTokens, wsNewTokens]); // Ensure filters are reapplied when they change; wsTokens/wsNewTokens for real-time data
+  }, [activeTab, filteredTokens, sortKey, sortDirection, selectedTimeframe, applyFilters, getVolumeForTimeframe, isWrappedSol, filter, activeFilterCount, newPairsRaw, currentChain, isZeroLiquidityToken, featuredTokens, wsTokens, wsNewTokens, discoverFilters, applyDiscoverFiltersFn]); // Ensure filters are reapplied when they change; wsTokens/wsNewTokens for real-time data
 
   const processedNewPairs = useMemo(() => {
-    if (!volumeEnrichedNewPairs || volumeEnrichedNewPairs.length === 0) {
+    const hasProtocolData = protocolFilteredTokens.length > 0 &&
+      discoverFilters.protocols.length > 0 && !discoverFilters.protocols.includes('All');
+    if ((!volumeEnrichedNewPairs || volumeEnrichedNewPairs.length === 0) && !hasProtocolData) {
       return [] as TokenWithDexPaid[];
     }
 
@@ -3248,7 +3354,7 @@ export function DiscoverPageContent({ variant = 'standalone' }: DiscoverPageCont
       'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v', // USDC
     ]);
 
-    const base = volumeEnrichedNewPairs.filter((token) => {
+    const base = (volumeEnrichedNewPairs || []).filter((token) => {
       // Filter out wrapped SOL
       if (isWrappedSol(token)) {
         return false;
@@ -3270,17 +3376,65 @@ export function DiscoverPageContent({ variant = 'standalone' }: DiscoverPageCont
     });
     
 
-    // For New Pairs, only apply text search — NOT range filters (market cap, volume, liquidity, AMM).
-    // New tokens naturally have very low values for these metrics, so applying the same
-    // filter panel settings used for Trending/DEX would eliminate almost all results.
-    // This matches PulseTable behavior which also doesn't apply user filter ranges.
-    let filtered = [...base];
+    // Protocol filter logic — 3 paths:
+    // 1. API data available → use it (dedup by mint, no re-filtering — trust the server)
+    // 2. Loading (API in-flight) → return early so JSX shows loading pulse
+    // 3. No API data (failed/empty) or no protocol filter → use base WS tokens
+    const hasSpecificProtocolsNP = discoverFilters.protocols.length > 0 && !discoverFilters.protocols.includes('All');
+    let dataSource: TokenWithDexPaid[];
+    if (hasSpecificProtocolsNP && protocolFilteredTokens.length > 0) {
+      // Path 1: API returned protocol tokens — dedup by mint + client-side re-check.
+      // Re-check needed because backend returns by launchpad_protocol only, but Bags tokens
+      // share launchpad_protocol='meteora' and are distinguished by mint suffix (BAGS).
+      const seenMints = new Set<string>();
+      const merged: TokenWithDexPaid[] = [];
+      for (const token of protocolFilteredTokens) {
+        const mint = (token.mint || '').toLowerCase();
+        if (mint && !seenMints.has(mint) && !isWrappedSol(token) &&
+            tokenMatchesProtocolFilter(token, discoverFilters.protocols)) {
+          seenMints.add(mint);
+          merged.push(token);
+        }
+      }
+      dataSource = merged;
+    } else if (hasSpecificProtocolsNP && isFetchingProtocolTokens) {
+      // Path 2: API still loading — return empty so JSX shows loading pulse
+      return [] as TokenWithDexPaid[];
+    } else {
+      // Path 3: No protocol filter, or API returned empty/failed
+      // Use base WS tokens — applyDiscoverFiltersFn handles protocol matching client-side
+      dataSource = base;
+    }
+
+    // Apply text search + discover-page filters (protocol, market cap, etc.)
+    // The old range filters (FilterContext) are intentionally NOT applied here.
+    let filtered = [...dataSource];
     if (normalizedSearch) {
       filtered = filtered.filter((token) => {
         const tokenText = `${token.name || ""} ${token.symbol || ""}`.toLowerCase();
         return tokenText.includes(normalizedSearch);
       });
     }
+
+    // Apply discover-page filters (market cap, volume, holders, etc.)
+    // When protocol tokens came from API, skip client-side protocol re-filter — server already filtered.
+    // This prevents tokens with protocol values like 'raydiumlaunchpad' from being dropped by
+    // client-side categorization mismatch. Other filters (market cap, volume, etc.) still apply.
+    const beforeFilterCount = filtered.length;
+    if (hasSpecificProtocolsNP && protocolFilteredTokens.length > 0) {
+      // API already filtered by protocol — apply non-protocol filters only
+      filtered = applyDiscoverFilters(filtered, { ...discoverFilters, protocols: [] }, {
+        getVolume: (t: any) => getVolumeForTimeframe(t, selectedTimeframe),
+        getTxns: (t: any) => getTxnsForTimeframe(t, selectedTimeframe),
+      });
+    } else {
+      filtered = applyDiscoverFiltersFn(filtered);
+    }
+    isDev && console.log('[Discover] After filter:', {
+      beforeFilter: beforeFilterCount,
+      afterFilter: filtered.length,
+      droppedCount: beforeFilterCount - filtered.length,
+    });
 
     const sortedTokens = filtered.map((token) => JSON.parse(JSON.stringify(token)) as TokenWithDexPaid);
 
@@ -3331,23 +3485,19 @@ export function DiscoverPageContent({ variant = 'standalone' }: DiscoverPageCont
     });
 
     const seenMints = new Set<string>();
-    const seenAddresses = new Set<string>();
     const unique: TokenWithDexPaid[] = [];
 
     for (const token of sortedTokens) {
       const mint = token?.mint;
-      const address = (token as any)?.pair_address;
 
       if (mint && seenMints.has(mint)) continue;
-      if (address && seenAddresses.has(address)) continue;
 
       if (mint) seenMints.add(mint);
-      if (address) seenAddresses.add(address);
       unique.push(token);
     }
 
     return unique;
-  }, [volumeEnrichedNewPairs, normalizedSearch, getVolumeForTimeframe, getTxnsForTimeframe, getCompositeScore, getNewPairTimestamp, isWrappedSol, isZeroLiquidityToken, currentChain, sortDirection, sortKey, selectedTimeframe]);
+  }, [volumeEnrichedNewPairs, normalizedSearch, getVolumeForTimeframe, getTxnsForTimeframe, getCompositeScore, getNewPairTimestamp, isWrappedSol, isZeroLiquidityToken, currentChain, sortDirection, sortKey, selectedTimeframe, discoverFilters, applyDiscoverFiltersFn, protocolFilteredTokens, isFetchingProtocolTokens]);
 
   const newPairsRows = useMemo(
     () =>
@@ -3412,20 +3562,16 @@ export function DiscoverPageContent({ variant = 'standalone' }: DiscoverPageCont
       return sortDirection === 'asc' ? aVal - bVal : bVal - aVal;
     });
 
-    // Deduplicate
+    // Deduplicate by mint only (matches PulseTable)
     const seenMints = new Set<string>();
-    const seenAddresses = new Set<string>();
     const unique: TokenWithDexPaid[] = [];
 
     for (const token of sortedTokens) {
       const mint = token?.mint;
-      const address = (token as any)?.pair_address;
 
       if (mint && seenMints.has(mint)) continue;
-      if (address && seenAddresses.has(address)) continue;
 
       if (mint) seenMints.add(mint);
-      if (address) seenAddresses.add(address);
       unique.push(token);
     }
 
@@ -3463,7 +3609,9 @@ export function DiscoverPageContent({ variant = 'standalone' }: DiscoverPageCont
       );
     }
 
-    if (allTokens && Array.isArray(allTokens) && allTokens.length > 0) {
+    // Only fall back to unfiltered allTokens when NO discover filters are active.
+    // Otherwise, an empty `displayed` means the filter correctly excluded everything.
+    if (!discoverHasActive && allTokens && Array.isArray(allTokens) && allTokens.length > 0) {
       return (
         <section aria-label="Trending" className={activeTab === "trending" ? "pb-16" : ""}>
           <InterstateTable
@@ -3634,7 +3782,7 @@ export function DiscoverPageContent({ variant = 'standalone' }: DiscoverPageCont
           <div className="scrollbar-hide -mx-4 flex items-center gap-3 overflow-x-auto px-4 pb-2 sm:-mx-6 sm:gap-4 sm:px-6 lg:mx-0 lg:gap-4 lg:px-0 lg:pb-0">
             <button
               className={`text-sm whitespace-nowrap transition-colors sm:text-base lg:text-xl font-medium ${activeTab === "trending" ? "text-white" : "text-[#6B7280] hover:text-white"} cursor-pointer`}
-              onClick={() => { setActiveTab("trending"); if (sortKey === "timestamp") { setSortKey("score"); setSortDirection("desc"); } }}
+              onClick={() => { setActiveTab("trending"); setShowDiscoverFilter(false); if (sortKey === "timestamp") { setSortKey("score"); setSortDirection("desc"); } }}
             >
               Trending
             </button>
@@ -3646,7 +3794,7 @@ export function DiscoverPageContent({ variant = 'standalone' }: DiscoverPageCont
             </button> */}
             <button
               className={`text-sm whitespace-nowrap transition-colors sm:text-base lg:text-xl font-medium ${activeTab === "newPairs" ? "text-white" : "text-[#6B7280] hover:text-white"} cursor-pointer`}
-              onClick={() => { setActiveTab("newPairs"); setSortKey("timestamp"); setSortDirection("desc"); }}
+              onClick={() => { setActiveTab("newPairs"); setShowDiscoverFilter(false); setSortKey("timestamp"); setSortDirection("desc"); }}
             >
               New Pairs
             </button>
@@ -3730,7 +3878,26 @@ export function DiscoverPageContent({ variant = 'standalone' }: DiscoverPageCont
                 </div>
               )}
 
-            {/* Filter button - disabled for now */}
+            {/* Discover filter button (new PulseTable-style filters) */}
+            {activeTab !== "live" && (
+              <button
+                className="relative flex h-7 w-7 cursor-pointer items-center justify-center rounded-md transition-all"
+                style={{ color: showDiscoverFilter ? "#526fff" : "#9CA3AF" }}
+                onClick={() => showDiscoverFilter ? setShowDiscoverFilter(false) : openDiscoverFilter()}
+              >
+                <BsSliders2 size={14} />
+                {discoverFilterCount > 0 && (
+                  <span
+                    className="absolute -top-0.5 -right-0.5 flex h-3 w-3 items-center justify-center rounded-full font-bold"
+                    style={{ backgroundColor: "#31e3ac", color: "#000", fontSize: "8px" }}
+                  >
+                    {discoverFilterCount}
+                  </span>
+                )}
+              </button>
+            )}
+
+            {/* Filter button - disabled (old filter system) */}
             {false && currentChain !== "monad" && activeTab !== "live" && (
               <div className="relative hidden h-7 w-[85px] min-w-[85px] items-center justify-center gap-1 rounded-md border border-white/[0.08] bg-white/[0.05] backdrop-blur-xl px-1.5 py-1 sm:flex">
                 <button
@@ -3956,7 +4123,7 @@ export function DiscoverPageContent({ variant = 'standalone' }: DiscoverPageCont
           </div>
         </div>
 
-        {/* Filter Popout */}
+        {/* Filter Popout (old — disabled) */}
         <div className="flex-shrink-0">
         {isFilterPopoutOpen && (
           <FilterPopout
@@ -3965,6 +4132,17 @@ export function DiscoverPageContent({ variant = 'standalone' }: DiscoverPageCont
           />
         )}
         </div>
+
+        {/* Discover Filter Modal (new PulseTable-style) */}
+        <DiscoverFilterModal
+          isOpen={showDiscoverFilter}
+          onClose={() => setShowDiscoverFilter(false)}
+          pendingFilters={discoverPendingFilters}
+          hasPendingChanges={discoverHasPendingChanges}
+          onPendingFilterChange={handleDiscoverFilterChange}
+          onApply={handleDiscoverApply}
+          onReset={handleDiscoverReset}
+        />
 
         {/* Main Content */}
         <main className="relative z-10 w-full flex-1 overflow-y-auto min-h-0">
@@ -4006,6 +4184,15 @@ export function DiscoverPageContent({ variant = 'standalone' }: DiscoverPageCont
                   solPrice={solPrice}
                   isDiscoverPage={true}
                 />
+              ) : isFetchingProtocolTokens ? (
+                <div className="space-y-4">
+                  {Array.from({ length: 8 }).map((_, i) => (
+                    <div
+                      key={i}
+                      className="h-12 w-full animate-pulse rounded bg-white/[0.04]"
+                    />
+                  ))}
+                </div>
               ) : (
                 <div className="py-10 text-center text-[#9CA3AF]">
                   No new pairs available right now. Check back shortly.

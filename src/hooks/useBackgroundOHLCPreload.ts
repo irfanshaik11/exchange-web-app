@@ -118,9 +118,12 @@ export default function useBackgroundOHLCPreload(interval: string = '1h', timefr
               url.searchParams.set('interval', interval);
               url.searchParams.set('timeframe', timeframe);
             } else {
-              // Solana uses new /v1/ohlcv/{tokenAddress} endpoint with 1s candles
+              // Solana uses new /v1/ohlcv/{tokenAddress} endpoint
+              // Use display resolution for preload so it covers more history
+              // (e.g. 500×15m = 5.2 days vs 500×1s = 8 min). Sub-minute falls back to 1s.
+              const preloadTimeframe = ['5s', '15s', '30s'].includes(interval) ? '1s' : interval;
               url = new URL(`${process.env.NEXT_PUBLIC_GO_SERVICE_URL}/v1/ohlcv/${mintAddress}`);
-              url.searchParams.set('timeframe', '1s');
+              url.searchParams.set('timeframe', preloadTimeframe);
               url.searchParams.set('limit', '500');
             }
 

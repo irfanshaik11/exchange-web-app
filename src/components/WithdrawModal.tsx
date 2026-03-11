@@ -281,7 +281,8 @@ const WithdrawModal: React.FC<WithdrawModalProps> = ({ isOpen, onClose }) => {
                 <label className="block text-sm font-medium text-white">Withdraw Amount</label>
                 <div className="flex items-center gap-2">
                   <input
-                    type="number"
+                    type="text"
+                    inputMode="decimal"
                     value={withdrawAmount}
                     onChange={(e) => {
                       const value = e.target.value;
@@ -289,8 +290,11 @@ const WithdrawModal: React.FC<WithdrawModalProps> = ({ isOpen, onClose }) => {
                         setWithdrawAmount(value);
                       }
                     }}
+                    onKeyDown={(e) => {
+                      if (e.key === ',') e.preventDefault();
+                    }}
                     placeholder="0.0"
-                    className="flex-1 h-10 px-3 bg-[#17191E] border border-[#2A2B33] rounded-lg text-white placeholder-[#9CA3AF] focus:outline-none focus:border-[#70E0B0] text-sm [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                    className="flex-1 h-10 px-3 bg-[#17191E] border border-[#2A2B33] rounded-lg text-white placeholder-[#9CA3AF] focus:outline-none focus:border-[#70E0B0] text-sm"
                   />
                   <InterstateButton
                     variant="secondary"
@@ -350,7 +354,7 @@ const WithdrawModal: React.FC<WithdrawModalProps> = ({ isOpen, onClose }) => {
                   <label className="block text-sm font-medium text-white">Amount to Receive</label>
                   <div className="flex items-center gap-2">
                     <input
-                      type="number"
+                      type="text"
                       value={withdrawAmount}
                       readOnly
                       className="flex-1 h-10 px-3 bg-[#17191E] border border-[#2A2B33] rounded-lg text-white text-sm"

@@ -1094,6 +1094,22 @@ export function UserProvider({ children }: { children: ReactNode }) {
     };
   }, [user?.publicKey, refreshBalance]);
 
+  // Auto-logout when backend returns TOKEN_EXPIRED / INVALID_TOKEN / UNAUTHORIZED
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    let logoutTriggered = false;
+    const handleSessionExpired = () => {
+      if (logoutTriggered) return;
+      logoutTriggered = true;
+      showEnhancedToast('error', 'Session expired. Please log in again.');
+      logout();
+    };
+    window.addEventListener('auth-session-expired', handleSessionExpired);
+    return () => {
+      window.removeEventListener('auth-session-expired', handleSessionExpired);
+    };
+  }, [logout]);
+
   const value = useMemo(
     () => ({
       user,

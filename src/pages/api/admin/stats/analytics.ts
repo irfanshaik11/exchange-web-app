@@ -1,5 +1,6 @@
 /**
- * Admin Stats Overview - Proxies to backend
+ * Admin Analytics Stats - Proxies to backend
+ * Tier breakdown, weekly volume, honors distribution, conversion rate, top traders, rewards summary
  */
 
 import type { NextApiRequest, NextApiResponse } from 'next';
@@ -12,7 +13,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
 
   try {
-    // Forward query params (e.g., days for signup chart range)
+    // Forward query params (e.g., weeks for volume chart range)
     const params = new URLSearchParams();
     for (const [key, value] of Object.entries(req.query)) {
       if (value && typeof value === 'string') {
@@ -20,7 +21,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       }
     }
     const qs = params.toString();
-    const url = `${BACKEND_URL}/api/admin/stats/overview${qs ? `?${qs}` : ''}`;
+    const url = `${BACKEND_URL}/api/admin/stats/analytics${qs ? `?${qs}` : ''}`;
 
     const response = await fetch(url, {
       method: 'GET',
@@ -35,12 +36,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     const data = await response.json();
 
-    res.setHeader('Cache-Control', 'private, max-age=5');
+    res.setHeader('Cache-Control', 'private, max-age=30');
     return res.status(response.status).json(data);
   } catch (error) {
-    console.error('[Admin Stats] Proxy error:', error);
+    console.error('[Admin Analytics] Proxy error:', error);
     return res.status(500).json({
-      error: 'Failed to fetch admin stats',
+      error: 'Failed to fetch analytics stats',
       message: error instanceof Error ? error.message : 'Backend connection failed',
     });
   }

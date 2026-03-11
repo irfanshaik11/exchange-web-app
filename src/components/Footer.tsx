@@ -32,7 +32,8 @@ import ThemeCustomizationModal from "./ThemeCustomizationModal";
 import { useQuickBuy } from "./QuickBuyContext";
 import { useSolPrice } from "./SolPriceContext";
 import { useUser } from "./UserContext";
-import { env } from "../env";
+import { useServerLatency } from "~/hooks/useServerLatency";
+
 
 // Custom X (Twitter) icon component
 const XIcon = ({ size = 14 }: { size?: number }) => (
@@ -291,8 +292,7 @@ export default function Footer() {
   const [showNotificationSettings, setShowNotificationSettings] =
     useState(false);
   const [showThemeCustomization, setShowThemeCustomization] = useState(false);
-  const [isConnected, setIsConnected] = useState(false);
-  const [latency, setLatency] = useState<number | null>(null);
+  const { latencyMs, isConnected, latencyColor } = useServerLatency();
   const [modalPosition, setModalPosition] = useState({ bottom: 0, right: 0 });
   const [selectedRegion] = useState(() => detectNearestRegion());
   const globalButtonRef = React.useRef<HTMLButtonElement>(null);
@@ -370,60 +370,7 @@ export default function Footer() {
     }
   }, [showPulseDropdown]);
 
-  useEffect(() => {
-    if (typeof window !== "undefined") {
-      localStorage.setItem("footer-popup-telegram", String(showTelegramDropdown));
-    }
-  }, [showTelegramDropdown]);
-
-  // Check backend health and measure latency
-  useEffect(() => {
-    const checkHealth = async () => {
-      // Use the Go service health endpoint which is more reliable
-      const healthUrl = `${env.NEXT_PUBLIC_GO_SERVICE_URL}/healthz`;
-
-      try {
-        const startTime = performance.now();
-        const response = await fetch(healthUrl, {
-          method: "GET",
-          headers: {
-            accept: "application/json",
-          },
-          signal: AbortSignal.timeout(5000),
-        });
-        const endTime = performance.now();
-        const ping = Math.round(endTime - startTime);
-
-        if (response.ok) {
-          // Try to parse JSON to confirm it's a valid health response
-          try {
-            const data = await response.json();
-            setIsConnected(true);
-            setLatency(ping);
-          } catch {
-            // If JSON parse fails but status is OK, still consider connected
-            setIsConnected(true);
-            setLatency(ping);
-          }
-        } else {
-          setIsConnected(false);
-          setLatency(null);
-        }
-      } catch (error) {
-        // Network error, timeout, or CORS issue - server is likely down
-        setIsConnected(false);
-        setLatency(null);
-      }
-    };
-
-    // Check immediately
-    checkHealth();
-
-    // Then check every 10 seconds
-    const interval = setInterval(checkHealth, 10000);
-
-    return () => clearInterval(interval);
-  }, []);
+  // Latency is now measured by useServerLatency hook (HTTP-based, no auth required)
 
   // Update modal position when dropdown opens
   useEffect(() => {
@@ -1033,15 +980,9 @@ export default function Footer() {
                             )}
                           </div>
                         </div>
-                        {latency !== null ? (
-                          <div className="text-xs" style={{ color: AX.muted }}>
-                            Latency: {latency}ms
-                          </div>
-                        ) : (
-                          <div className="text-xs" style={{ color: AX.muted }}>
-                            Latency: --ms
-                          </div>
-                        )}
+                        <div className="text-xs" style={{ color: latencyMs !== null ? latencyColor : AX.muted }}>
+                          Latency: {latencyMs !== null ? `${latencyMs}ms` : '--ms'}
+                        </div>
                       </div>
                     </div>
                   </div>

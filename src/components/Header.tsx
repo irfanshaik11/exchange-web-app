@@ -963,40 +963,19 @@ export default function Header({
       }
 
       if (isMonadAddress) {
-        // Build full query params for Monad (same pattern as Solana path)
-        const queryParams = new URLSearchParams({
-          _name: td?.name || td?.symbol || clipboardToken.name || '',
-          _symbol: td?.symbol || '',
-          _mcap: String(td?.market_cap_usd || ''),
-          _image: clipboardToken.imageUrl || extractTokenImage(td as any) || '',
-          _mint: (td as any)?.mint || clipboardToken.address,
-          _launchpad_protocol: (td as any)?.launchpad_protocol || '',
-          _created_at: (td as any)?.created_at || '',
-          chain: 'monad',
-          mode: 'buy',
-          tab: 'market',
-          timeRange: '5m',
-          sliderPct: '0',
-        }).toString();
-        router.push(`/trade/monad/${clipboardToken.address}?${queryParams}`);
+        const queryParams = new URLSearchParams();
+        if (td?.name) queryParams.set('_name', td.name);
+        if (td?.symbol) queryParams.set('_symbol', td.symbol);
+        if (td?.market_cap_usd) queryParams.set('_mcap', String(td.market_cap_usd));
+        if (clipboardToken.imageUrl) queryParams.set('_image', clipboardToken.imageUrl);
+        queryParams.set('_mint', clipboardToken.address);
+        if ((td as any)?.launchpad_protocol) queryParams.set('_launchpad_protocol', (td as any).launchpad_protocol);
+        if (td?.total_liquidity_usd) queryParams.set('_liquidity', String(td.total_liquidity_usd));
+        queryParams.set('chain', 'monad');
+        router.push(`/trade/monad/${clipboardToken.address}?${queryParams.toString()}`);
       } else {
-        // Build full query params matching PulseTable navigation pattern
         const pathAddress = (td as any)?.mint || td?.pair_address || clipboardToken.address;
-        const queryParams = new URLSearchParams({
-          _name: td?.name || td?.symbol || clipboardToken.name || '',
-          _symbol: td?.symbol || '',
-          _mcap: String(td?.market_cap_usd || ''),
-          _image: clipboardToken.imageUrl || extractTokenImage(td as any) || '',
-          _mint: (td as any)?.mint || clipboardToken.address,
-          _launchpad_protocol: (td as any)?.launchpad_protocol || '',
-          _created_at: (td as any)?.created_at || '',
-          chain: 'sol',
-          mode: 'buy',
-          tab: 'market',
-          timeRange: '5m',
-          sliderPct: '0',
-        }).toString();
-        router.push(`/trade/${pathAddress}?${queryParams}`);
+        router.push(`/trade/${pathAddress}`);
       }
     } else {
       // Fallback: try to read clipboard if no token detected
@@ -1006,7 +985,7 @@ export default function Header({
         const isSolanaAddress = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(trimmed);
 
         if (isSolanaAddress) {
-          router.push(`/trade/${trimmed}?chain=sol`);
+          router.push(`/trade/${trimmed}`);
         } else {
           toast.error("Invalid token address in clipboard", {
             duration: 3000,
@@ -2660,14 +2639,9 @@ export default function Header({
                     if (token.market_cap_usd || (token as any).fully_diluted_value) {
                       hoverQueryParams.set('_mcap', ((token.market_cap_usd || (token as any).fully_diluted_value || 0)).toString());
                     }
-                    const hoverImageUrl = extractTokenImage(token as any) || '';
-                    if (hoverImageUrl) hoverQueryParams.set('_image', hoverImageUrl);
-                    hoverQueryParams.set('_mint', tokenAddress);
-                    if ((token as any).launchpad_protocol) hoverQueryParams.set('_launchpad_protocol', (token as any).launchpad_protocol);
-                    hoverQueryParams.set('chain', isMonadToken ? 'monad' : 'sol');
                     const hoverTradeUrl = isMonadToken
-                      ? `/trade/monad/${tokenAddress}?${hoverQueryParams.toString()}`
-                      : `/trade/${tokenAddress}?${hoverQueryParams.toString()}`;
+                      ? `/trade/monad/${tokenAddress}`
+                      : `/trade/${tokenAddress}`;
                     preloadTradeChart(
                       {
                         mint: actualMint,
@@ -2707,20 +2681,7 @@ export default function Header({
                         router.push(url);
                       } else {
                         // For Solana tokens, include chain=sol query parameter
-                        const queryParams = new URLSearchParams();
-                        if (token.name) queryParams.set('_name', token.name);
-                        if (token.symbol) queryParams.set('_symbol', token.symbol);
-                        if (price > 0) queryParams.set('_price', price.toString());
-                        if (token.market_cap_usd || (token as any).fully_diluted_value) {
-                          queryParams.set('_mcap', ((token.market_cap_usd || (token as any).fully_diluted_value || 0)).toString());
-                        }
-                        const imageUrl = extractTokenImage(token as any) || '';
-                        if (imageUrl) queryParams.set('_image', imageUrl);
-                        queryParams.set('_mint', tokenAddress);
-                        if ((token as any).launchpad_protocol) queryParams.set('_launchpad_protocol', (token as any).launchpad_protocol);
-                        queryParams.set('chain', 'sol');
-
-                        router.push(`/trade/${tokenAddress}?${queryParams.toString()}`);
+                        router.push(`/trade/${tokenAddress}`);
                       }
                     }
                   }}
@@ -2868,10 +2829,9 @@ export default function Header({
               trimmed.startsWith("0x") || trimmed.startsWith("0X");
             // For Monad tokens, use the Monad trade page route
             if (isMonadAddress) {
-              router.push(`/trade/monad/${trimmed}?chain=monad`);
+              router.push(`/trade/monad/${trimmed}`);
             } else {
-              // For Solana tokens, always include chain=sol
-              router.push(`/trade/${trimmed}?chain=sol`);
+              router.push(`/trade/${trimmed}`);
             }
             setSearch?.("");
             return;

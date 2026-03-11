@@ -25,7 +25,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const primaryBase = process.env.NEXT_PUBLIC_GO_SERVICE_URL;
   const fallbackBase = process.env.NEXT_PUBLIC_GO_FALLBACK_URL;
 
-  const fetchWithTimeout = async (url: string, timeoutMs = 2000) => {
+  const fetchWithTimeout = async (url: string, timeoutMs = 6000) => {
     const ctrl = new AbortController();
     const t = setTimeout(() => ctrl.abort(), timeoutMs);
     try {
@@ -150,7 +150,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const tryGo = async (base: string) => {
       const url = `${base}/v1/pulse/migrated?${params.toString()}`;
       isDev && console.log('[Proxy:pulse-migrated] Using Go service:', url);
-      const upstream = await fetchWithTimeout(url, 3000);
+      const upstream = await fetchWithTimeout(url, 6000);
       return await tryParseAndSend(upstream);
     };
     try {

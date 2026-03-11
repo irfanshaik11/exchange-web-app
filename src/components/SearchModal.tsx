@@ -1247,35 +1247,9 @@ const SearchModalContent = React.memo(function SearchModalContent({
       let selectTradeUrl: string;
       if (isMonad && address) {
         const qp = new URLSearchParams();
-        if (token.name) qp.set('_name', token.name);
-        if (token.symbol) qp.set('_symbol', token.symbol);
-        if (token.fully_diluted_value) qp.set('_mcap', token.fully_diluted_value.toString());
-        if (token.uri || token.logo) qp.set('_image', token.uri || token.logo || '');
-        qp.set('_mint', address);
-        if ((token as any).launchpad_protocol) qp.set('_launchpad_protocol', (token as any).launchpad_protocol);
-        if (token.created_at) qp.set('_created_at', token.created_at);
-        if ((token as any).price_usd) qp.set('_price', String((token as any).price_usd));
-        if (token.total_liquidity_usd) qp.set('_liquidity', String(token.total_liquidity_usd));
-        qp.set('chain', 'monad');
-        selectTradeUrl = `/trade/monad/${address}?${qp.toString()}`;
+        selectTradeUrl = `/trade/monad/${address}`;
       } else {
-        const qp = new URLSearchParams({
-          _name: token.name || token.symbol || "",
-          _symbol: token.symbol || "",
-          _mcap: token.fully_diluted_value?.toString() || "",
-          _image: token.uri || token.logo || "",
-          _mint: token.mint || address,
-          _launchpad_protocol: (token as any).launchpad_protocol || "",
-          _created_at: token.created_at || "",
-          chain: chain || 'sol',
-          mode: 'buy',
-          tab: 'market',
-          timeRange: '5m',
-          sliderPct: '0',
-        });
-        if ((token as any).price_usd) qp.set('_price', String((token as any).price_usd));
-        if (token.total_liquidity_usd) qp.set('_liquidity', String(token.total_liquidity_usd));
-        selectTradeUrl = `/trade/${address}?${qp.toString()}`;
+        selectTradeUrl = `/trade/${address}`;
       }
       preloadTradeChart({
         mint: token.mint || address,
@@ -1352,24 +1326,7 @@ const SearchModalContent = React.memo(function SearchModalContent({
           const url = `/trade/monad/${address}?${queryParams.toString()}`;
           await router.push(url);
         } else if (address) {
-          const queryParams = new URLSearchParams({
-            _name: token.name || token.symbol || "",
-            _symbol: token.symbol || "",
-            _mcap: token.fully_diluted_value?.toString() || "",
-            _image: token.uri || token.logo || "",
-            _mint: token.mint || address,
-            _launchpad_protocol: (token as any).launchpad_protocol || "",
-            _created_at: token.created_at || "",
-            chain: chain || 'sol',
-            mode: 'buy',
-            tab: 'market',
-            timeRange: '5m',
-            sliderPct: '0',
-          });
-          if ((token as any).price_usd) queryParams.set('_price', String((token as any).price_usd));
-          if (token.total_liquidity_usd) queryParams.set('_liquidity', String(token.total_liquidity_usd));
-
-          const url = `/trade/${address}?${queryParams.toString()}`;
+          const url = `/trade/${address}`;
           isDev && console.log("Navigating to:", url);
           // router.push preserves in-memory caches (OHLC, WS prefetch).
           // [id].tsx useEffect([id]) resets state when address changes.
@@ -1395,24 +1352,7 @@ const SearchModalContent = React.memo(function SearchModalContent({
           const url = `/trade/monad/${address}?${queryParams.toString()}`;
           await router.push(url);
         } else if (address) {
-          const queryParams = new URLSearchParams({
-            _name: token.name || token.symbol || "",
-            _symbol: token.symbol || "",
-            _mcap: token.fully_diluted_value?.toString() || "",
-            _image: token.uri || token.logo || "",
-            _mint: token.mint || address,
-            _launchpad_protocol: (token as any).launchpad_protocol || "",
-            _created_at: token.created_at || "",
-            chain: chain || 'sol',
-            mode: 'buy',
-            tab: 'market',
-            timeRange: '5m',
-            sliderPct: '0',
-          });
-          if ((token as any).price_usd) queryParams.set('_price', String((token as any).price_usd));
-          if (token.total_liquidity_usd) queryParams.set('_liquidity', String(token.total_liquidity_usd));
-
-          const url = `/trade/${address}?${queryParams.toString()}`;
+          const url = `/trade/${address}`;
           isDev && console.log("Navigating to:", url);
           router.push(url);
         }
@@ -1849,33 +1789,9 @@ const SearchModalContent = React.memo(function SearchModalContent({
                           const itemAddr = isMonadItem ? item.mint : (item.mint || item.pair_address);
                           let historyTradeUrl: string;
                           if (isMonadItem) {
-                            const qp = new URLSearchParams();
-                            if (item.name) qp.set('_name', item.name);
-                            if (item.symbol) qp.set('_symbol', item.symbol);
-                            const mcap = item.fully_diluted_value || item.total_fully_diluted_valuation;
-                            if (mcap) qp.set('_mcap', String(mcap));
-                            if (item.uri || item.logo) qp.set('_image', item.uri || item.logo || '');
-                            qp.set('_mint', itemAddr);
-                            if (item.launchpad_protocol) qp.set('_launchpad_protocol', item.launchpad_protocol);
-                            if (item.total_liquidity_usd) qp.set('_liquidity', String(item.total_liquidity_usd));
-                            qp.set('chain', 'monad');
-                            historyTradeUrl = `/trade/monad/${itemAddr}?${qp.toString()}`;
+                            historyTradeUrl = `/trade/monad/${itemAddr}`;
                           } else {
-                            const qp = new URLSearchParams({
-                              _name: item.name || item.symbol || '',
-                              _symbol: item.symbol || '',
-                              _mcap: String(item.fully_diluted_value || item.total_fully_diluted_valuation || ''),
-                              _image: item.uri || item.logo || '',
-                              _mint: item.mint,
-                              _launchpad_protocol: item.launchpad_protocol || '',
-                              chain: 'sol',
-                              mode: 'buy',
-                              tab: 'market',
-                              timeRange: '5m',
-                              sliderPct: '0',
-                            });
-                            if (item.total_liquidity_usd) qp.set('_liquidity', String(item.total_liquidity_usd));
-                            historyTradeUrl = `/trade/${itemAddr}?${qp.toString()}`;
+                            historyTradeUrl = `/trade/${itemAddr}`;
                           }
                           preloadTradeChart(
                             {
@@ -2575,35 +2491,9 @@ const TokenListItem = React.memo(
             const resultAddr = isMonadResult ? token.mint : (token.mint || token.pair_address);
             let resultTradeUrl: string;
             if (isMonadResult) {
-              const qp = new URLSearchParams();
-              if (token.name) qp.set('_name', token.name);
-              if (token.symbol) qp.set('_symbol', token.symbol);
-              if (token.fully_diluted_value) qp.set('_mcap', token.fully_diluted_value.toString());
-              if (token.uri || token.logo) qp.set('_image', token.uri || token.logo || '');
-              qp.set('_mint', resultAddr);
-              if ((token as any).launchpad_protocol) qp.set('_launchpad_protocol', (token as any).launchpad_protocol);
-              if (token.created_at) qp.set('_created_at', token.created_at);
-              if (token.total_liquidity_usd) qp.set('_liquidity', String(token.total_liquidity_usd));
-              qp.set('chain', 'monad');
-              resultTradeUrl = `/trade/monad/${resultAddr}?${qp.toString()}`;
+              resultTradeUrl = `/trade/monad/${resultAddr}`;
             } else {
-              const qp = new URLSearchParams({
-                _name: token.name || token.symbol || '',
-                _symbol: token.symbol || '',
-                _mcap: token.fully_diluted_value?.toString() || '',
-                _image: token.uri || token.logo || '',
-                _mint: token.mint || resultAddr,
-                _launchpad_protocol: (token as any).launchpad_protocol || '',
-                _created_at: token.created_at || '',
-                chain: chain || 'sol',
-                mode: 'buy',
-                tab: 'market',
-                timeRange: '5m',
-                sliderPct: '0',
-              });
-              if ((token as any).price_usd) qp.set('_price', String((token as any).price_usd));
-              if (token.total_liquidity_usd) qp.set('_liquidity', String(token.total_liquidity_usd));
-              resultTradeUrl = `/trade/${resultAddr}?${qp.toString()}`;
+              resultTradeUrl = `/trade/${resultAddr}`;
             }
             preloadTradeChart(
               {

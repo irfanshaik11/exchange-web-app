@@ -11,6 +11,7 @@ import toast from 'react-hot-toast';
 import { normalizeMonadAddress } from '~/utils/normalizeMonadAddress';
 import { useWatchlist } from '../WatchlistContext';
 import { preloadTradeChart } from '~/utils/preloadTradeChart';
+import { setTradeNavIntent } from '~/utils/queryParams';
 
 interface PositionDetailModalProps {
   isOpen: boolean;
@@ -624,35 +625,14 @@ export default function PositionDetailModal({
   const displayImage = tokenMetadata?.imageUrl || position.imageUrl || '';
 
   const handleViewChart = () => {
-    // Build query params for proper page state and optimistic loading
-    const params = new URLSearchParams({
-      mode: 'sell', // User owns the token, default to sell mode
-      tab: 'market',
-      timeRange: '5m',
-      sliderPct: '0',
-    });
-
-    // Add optimistic data for instant display (prevents blank loading state)
-    if (tokenMetadata?.name || position.tokenName) {
-      params.set('_name', tokenMetadata?.name || position.tokenName || '');
-    }
-    if (tokenMetadata?.symbol || position.tokenSymbol) {
-      params.set('_symbol', tokenMetadata?.symbol || position.tokenSymbol || '');
-    }
-    if (displayImage) {
-      params.set('_image', displayImage);
-    }
-    if (position.tokenAddress) {
-      params.set('_mint', position.tokenAddress);
-    }
-
-    const queryString = params.toString();
+    // Signal sell mode to the trade page via sessionStorage
+    setTradeNavIntent({ mode: 'sell' });
 
     // Preload chart data before navigation for instant loading
     if (position.tokenAddress) {
       const tradeUrl = isMonad
-        ? `/trade/monad/${position.tokenAddress}?${queryString}`
-        : `/trade/${position.tokenAddress}?${queryString}`;
+        ? `/trade/monad/${position.tokenAddress}`
+        : `/trade/${position.tokenAddress}`;
       preloadTradeChart({
         mint: position.tokenAddress,
         pairAddress: (position as any).pairAddress,
@@ -665,9 +645,18 @@ export default function PositionDetailModal({
     }
 
     if (isMonad && position.tokenAddress) {
-      router.push(`/trade/monad/${position.tokenAddress}?${queryString}`);
+      const monadParams = new URLSearchParams();
+      if (displayName && displayName !== 'Unknown') monadParams.set('_name', displayName);
+      if (displaySymbol && displaySymbol !== '???') monadParams.set('_symbol', displaySymbol);
+      if (tokenMetadata?.marketCapUsd) monadParams.set('_mcap', String(tokenMetadata.marketCapUsd));
+      if (displayImage) monadParams.set('_image', displayImage);
+      monadParams.set('_mint', position.tokenAddress);
+      if (tokenMetadata?.launchpad || tokenMetadata?.protocol) monadParams.set('_launchpad_protocol', tokenMetadata?.launchpad || tokenMetadata?.protocol || '');
+      monadParams.set('chain', 'monad');
+      monadParams.set('mode', 'sell');
+      router.push(`/trade/monad/${position.tokenAddress}?${monadParams.toString()}`);
     } else if (position.tokenAddress) {
-      router.push(`/trade/${position.tokenAddress}?${queryString}`);
+      router.push(`/trade/${position.tokenAddress}`);
     }
     onClose();
   };
@@ -1188,19 +1177,9 @@ export default function PositionDetailModal({
             onMouseEnter={() => {
               // Preload on hover so click is instant
               if (position.tokenAddress) {
-                const hoverParams = new URLSearchParams({
-                  mode: 'sell',
-                  tab: 'market',
-                  timeRange: '5m',
-                  sliderPct: '0',
-                });
-                if (tokenMetadata?.name || position.tokenName) hoverParams.set('_name', tokenMetadata?.name || position.tokenName || '');
-                if (tokenMetadata?.symbol || position.tokenSymbol) hoverParams.set('_symbol', tokenMetadata?.symbol || position.tokenSymbol || '');
-                if (displayImage) hoverParams.set('_image', displayImage);
-                if (position.tokenAddress) hoverParams.set('_mint', position.tokenAddress);
                 const hoverUrl = isMonad
-                  ? `/trade/monad/${position.tokenAddress}?${hoverParams.toString()}`
-                  : `/trade/${position.tokenAddress}?${hoverParams.toString()}`;
+                  ? `/trade/monad/${position.tokenAddress}`
+                  : `/trade/${position.tokenAddress}`;
                 preloadTradeChart({
                   mint: position.tokenAddress,
                   pairAddress: (position as any).pairAddress,

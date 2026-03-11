@@ -2389,7 +2389,8 @@ export default function DiscoverPopoutContent() {
       );
     }
 
-    if (allTokens && Array.isArray(allTokens) && allTokens.length > 0) {
+    // Only fall back to unfiltered allTokens when no filters are active
+    if (activeFilterCount === 0 && allTokens && Array.isArray(allTokens) && allTokens.length > 0) {
       return (
         <InterstateTable
           rows={allTokens.map((token, i) => ({
@@ -2916,8 +2917,8 @@ export default function DiscoverPopoutContent() {
                     }
                   }
 
-                  // Navigate to trade page with chain=sol for Solana tokens
-                  router.push(`/trade/${id}?chain=sol`);
+                  // Navigate to trade page
+                  router.push(`/trade/${id}`);
                 }}
                 quickBuyAmount={Number(quickBuyAmount) || 0}
                 onQuickBuy={handleQuickBuy}

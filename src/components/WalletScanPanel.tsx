@@ -1726,12 +1726,7 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({
                                 const trade = history.find(t => t.mint === position.mint);
                                 const addr = position.mint || trade?.pair_address;
                                 if (addr) {
-                                  const qp = new URLSearchParams();
-                                  if (position.tokenName) qp.set('_name', position.tokenName);
-                                  if (position.tokenSymbol) qp.set('_symbol', position.tokenSymbol);
-                                  qp.set('_mint', position.mint);
-                                  qp.set('chain', 'sol');
-                                  window.open(`/trade/${addr}?${qp.toString()}`, '_blank');
+                                  window.open(`/trade/${addr}`, '_blank');
                                 }
                               }}
                             >
@@ -1920,12 +1915,7 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({
                                 const trade = history.find(t => t.mint === position.mint);
                                 const addr = position.mint || trade?.pair_address;
                                 if (addr) {
-                                  const qp = new URLSearchParams();
-                                  if (position.tokenName) qp.set('_name', position.tokenName);
-                                  if (position.tokenSymbol) qp.set('_symbol', position.tokenSymbol);
-                                  qp.set('_mint', position.mint);
-                                  qp.set('chain', 'sol');
-                                  window.open(`/trade/${addr}?${qp.toString()}`, '_blank');
+                                  window.open(`/trade/${addr}`, '_blank');
                                 }
                               }}
                             >

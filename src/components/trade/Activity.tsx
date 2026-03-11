@@ -361,9 +361,6 @@ const Activity: React.FC<ActivityProps> = ({
                 const isMonadTrade =
                   (trade.blockchain || '').toLowerCase() === 'monad' || currentChain === 'monad';
 
-                const queryParams = new URLSearchParams();
-                queryParams.set('chain', isMonadTrade ? 'monad' : 'sol');
-
                 // Token metadata params (optimistic loading)
                 const name = metadata?.name || trade.tokenName;
                 const symbol = metadata?.symbol || trade.tokenSymbol;
@@ -372,21 +369,22 @@ const Activity: React.FC<ActivityProps> = ({
                 const launchpad = metadata?.launchpad || metadata?.protocol || trade.launchpad;
                 const createdAt = metadata?.createdAt;
 
-                if (name) queryParams.set('_name', String(name));
-                if (symbol) queryParams.set('_symbol', String(symbol));
-                if (mcap) queryParams.set('_mcap', String(mcap));
-                if (image) queryParams.set('_image', String(image));
-                if (trade.tokenAddress) queryParams.set('_mint', trade.tokenAddress);
-                if (launchpad) queryParams.set('_launchpad_protocol', String(launchpad));
-                if (createdAt) queryParams.set('_created_at', String(createdAt));
-
                 if (isMonadTrade && trade.tokenAddress) {
-                  router.push(`/trade/monad/${trade.tokenAddress}?${queryParams.toString()}`);
+                  const monadParams = new URLSearchParams();
+                  if (name) monadParams.set('_name', name);
+                  if (symbol) monadParams.set('_symbol', symbol);
+                  if (mcap) monadParams.set('_mcap', String(mcap));
+                  if (image) monadParams.set('_image', image);
+                  monadParams.set('_mint', trade.tokenAddress);
+                  if (launchpad) monadParams.set('_launchpad_protocol', launchpad);
+                  if (createdAt) monadParams.set('_created_at', String(createdAt));
+                  monadParams.set('chain', 'monad');
+                  router.push(`/trade/monad/${trade.tokenAddress}?${monadParams.toString()}`);
                   return;
                 }
 
                 if (navigateAddress) {
-                  router.push(`/trade/${navigateAddress}?${queryParams.toString()}`);
+                  router.push(`/trade/${navigateAddress}`);
                 }
               };
               const protocolSource = metadata?.protocol || metadata?.launchpad || trade.launchpad || '';
@@ -624,16 +622,9 @@ const Activity: React.FC<ActivityProps> = ({
                     const hImage = metadata?.imageUrl || trade.imageUrl;
                     const hLaunchpad = metadata?.launchpad || metadata?.protocol || trade.launchpad;
                     const hCreatedAt = metadata?.createdAt;
-                    if (hName) hoverQP.set('_name', String(hName));
-                    if (hSymbol) hoverQP.set('_symbol', String(hSymbol));
-                    if (hMcap) hoverQP.set('_mcap', String(hMcap));
-                    if (hImage) hoverQP.set('_image', String(hImage));
-                    if (trade.tokenAddress) hoverQP.set('_mint', trade.tokenAddress);
-                    if (hLaunchpad) hoverQP.set('_launchpad_protocol', String(hLaunchpad));
-                    if (hCreatedAt) hoverQP.set('_created_at', String(hCreatedAt));
                     const hoverTradeUrl = isMonadTrade
-                      ? `/trade/monad/${trade.tokenAddress}?${hoverQP.toString()}`
-                      : `/trade/${navigateAddr}?${hoverQP.toString()}`;
+                      ? `/trade/monad/${trade.tokenAddress}`
+                      : `/trade/${navigateAddr}`;
                     preloadTradeChart(
                       {
                         mint: trade.tokenAddress,

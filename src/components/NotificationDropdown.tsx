@@ -181,17 +181,13 @@ export default function NotificationDropdown({ open, onClose }: NotificationDrop
                         chain: 'sol',
                         name: trade.name,
                         symbol: trade.symbol,
-                      }, { router, tradeUrl: `/trade/${addr}?${hoverQP.toString()}` });
+                      }, { router, tradeUrl: `/trade/${addr}` });
                     }
                   }}
                   onClick={() => {
                     const addr = trade.mint || trade.pair_address;
                     if (addr) {
-                      const qp = new URLSearchParams({ chain: 'sol' });
-                      if (trade.name) qp.set('_name', trade.name);
-                      if (trade.symbol) qp.set('_symbol', trade.symbol);
-                      if (trade.mint) qp.set('_mint', trade.mint);
-                      router.push(`/trade/${addr}?${qp.toString()}`);
+                      router.push(`/trade/${addr}`);
                     }
                     onClose();
                   }}

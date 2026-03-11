@@ -693,43 +693,46 @@ export function useSolanaTokenWebSocket(
             //   };
             // });
 
-            // C. Update volume (convert flat fields → nested SolanaTokenVolume)
-            if (tokenData.total_buy_volume_5m !== undefined || tokenData.total_buy_volume_1h !== undefined) {
-              setVolume((prev) => {
-                const base = prev || {
-                  volume_5m: { buy_volume_sol: 0, sell_volume_sol: 0, buy_count: 0, sell_count: 0 },
-                  volume_1h: { buy_volume_sol: 0, sell_volume_sol: 0, buy_count: 0, sell_count: 0 },
-                  volume_6h: { buy_volume_sol: 0, sell_volume_sol: 0, buy_count: 0, sell_count: 0 },
-                  volume_24h: { buy_volume_sol: 0, sell_volume_sol: 0, buy_count: 0, sell_count: 0 },
-                };
-                return {
-                  volume_5m: {
-                    buy_volume_sol: tokenData.total_buy_volume_5m ?? base.volume_5m.buy_volume_sol,
-                    sell_volume_sol: tokenData.total_sell_volume_5m ?? base.volume_5m.sell_volume_sol,
-                    buy_count: tokenData.total_buys_5m ?? base.volume_5m.buy_count,
-                    sell_count: tokenData.total_sells_5m ?? base.volume_5m.sell_count,
-                  },
-                  volume_1h: {
-                    buy_volume_sol: tokenData.total_buy_volume_1h ?? base.volume_1h.buy_volume_sol,
-                    sell_volume_sol: tokenData.total_sell_volume_1h ?? base.volume_1h.sell_volume_sol,
-                    buy_count: tokenData.total_buys_1h ?? base.volume_1h.buy_count,
-                    sell_count: tokenData.total_sells_1h ?? base.volume_1h.sell_count,
-                  },
-                  volume_6h: {
-                    buy_volume_sol: tokenData.total_buy_volume_6h ?? base.volume_6h.buy_volume_sol,
-                    sell_volume_sol: tokenData.total_sell_volume_6h ?? base.volume_6h.sell_volume_sol,
-                    buy_count: tokenData.total_buys_6h ?? base.volume_6h.buy_count,
-                    sell_count: tokenData.total_sells_6h ?? base.volume_6h.sell_count,
-                  },
-                  volume_24h: {
-                    buy_volume_sol: tokenData.total_buy_volume_24h ?? base.volume_24h.buy_volume_sol,
-                    sell_volume_sol: tokenData.total_sell_volume_24h ?? base.volume_24h.sell_volume_sol,
-                    buy_count: tokenData.total_buys_24h ?? base.volume_24h.buy_count,
-                    sell_count: tokenData.total_sells_24h ?? base.volume_24h.sell_count,
-                  },
-                };
-              });
-            }
+            // C. Volume from price_update disabled — snapshot provides authoritative volume data.
+            //    price_update flat fields (total_buy_volume_5m, etc.) were transformed here into
+            //    the nested SolanaTokenVolume structure, but this caused flickering and could
+            //    override the more accurate server-aggregated snapshot volume.
+            // if (tokenData.total_buy_volume_5m !== undefined || tokenData.total_buy_volume_1h !== undefined) {
+            //   setVolume((prev) => {
+            //     const base = prev || {
+            //       volume_5m: { buy_volume_sol: 0, sell_volume_sol: 0, buy_count: 0, sell_count: 0 },
+            //       volume_1h: { buy_volume_sol: 0, sell_volume_sol: 0, buy_count: 0, sell_count: 0 },
+            //       volume_6h: { buy_volume_sol: 0, sell_volume_sol: 0, buy_count: 0, sell_count: 0 },
+            //       volume_24h: { buy_volume_sol: 0, sell_volume_sol: 0, buy_count: 0, sell_count: 0 },
+            //     };
+            //     return {
+            //       volume_5m: {
+            //         buy_volume_sol: tokenData.total_buy_volume_5m ?? base.volume_5m.buy_volume_sol,
+            //         sell_volume_sol: tokenData.total_sell_volume_5m ?? base.volume_5m.sell_volume_sol,
+            //         buy_count: tokenData.total_buys_5m ?? base.volume_5m.buy_count,
+            //         sell_count: tokenData.total_sells_5m ?? base.volume_5m.sell_count,
+            //       },
+            //       volume_1h: {
+            //         buy_volume_sol: tokenData.total_buy_volume_1h ?? base.volume_1h.buy_volume_sol,
+            //         sell_volume_sol: tokenData.total_sell_volume_1h ?? base.volume_1h.sell_volume_sol,
+            //         buy_count: tokenData.total_buys_1h ?? base.volume_1h.buy_count,
+            //         sell_count: tokenData.total_sells_1h ?? base.volume_1h.sell_count,
+            //       },
+            //       volume_6h: {
+            //         buy_volume_sol: tokenData.total_buy_volume_6h ?? base.volume_6h.buy_volume_sol,
+            //         sell_volume_sol: tokenData.total_sell_volume_6h ?? base.volume_6h.sell_volume_sol,
+            //         buy_count: tokenData.total_buys_6h ?? base.volume_6h.buy_count,
+            //         sell_count: tokenData.total_sells_6h ?? base.volume_6h.sell_count,
+            //       },
+            //       volume_24h: {
+            //         buy_volume_sol: tokenData.total_buy_volume_24h ?? base.volume_24h.buy_volume_sol,
+            //         sell_volume_sol: tokenData.total_sell_volume_24h ?? base.volume_24h.sell_volume_sol,
+            //         buy_count: tokenData.total_buys_24h ?? base.volume_24h.buy_count,
+            //         sell_count: tokenData.total_sells_24h ?? base.volume_24h.sell_count,
+            //       },
+            //     };
+            //   });
+            // }
             } // end else (mint matched)
           }
           // Ignore pong messages
