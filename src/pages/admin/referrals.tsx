@@ -21,6 +21,7 @@ import {
   HiTrendingUp,
   HiChevronDown,
   HiChevronUp,
+  HiStar,
 } from 'react-icons/hi';
 import AdminLayout from '~/components/admin/AdminLayout';
 
@@ -45,6 +46,19 @@ interface ReferralsResponse {
     totalVolume: number;
     totalTrades: number;
   };
+}
+
+interface RewardEarner {
+  id: number;
+  name: string;
+  email: string;
+  referralCode: string;
+  honorsLevel: number;
+  pendingSol: number;
+  claimedSol: number;
+  totalEarned: number;
+  referralVolume: number;
+  directReferrals: number;
 }
 
 function formatVolume(value: number): string {
@@ -77,6 +91,17 @@ export default function AdminReferralsPage() {
   const [sortBy, setSortBy] = useState<'referralCount' | 'totalVolume' | 'createdAt' | 'code'>('referralCount');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
   const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
+
+  // Reward earnings state
+  const [activeTab, setActiveTab] = useState<'codes' | 'earnings'>('codes');
+  const [earners, setEarners] = useState<RewardEarner[]>([]);
+  const [earnersTotal, setEarnersTotal] = useState(0);
+  const [earnersFiltered, setEarnersFiltered] = useState(0);
+  const [earnersPage, setEarnersPage] = useState(0);
+  const [earnersSearch, setEarnersSearch] = useState('');
+  const [earnersSortBy, setEarnersSortBy] = useState<'totalEarned' | 'pendingSol' | 'claimedSol'>('totalEarned');
+  const [earnersSortOrder, setEarnersSortOrder] = useState<'asc' | 'desc'>('desc');
+  const [earnersLoading, setEarnersLoading] = useState(false);
 
   const limit = 25;
 
@@ -141,6 +166,45 @@ export default function AdminReferralsPage() {
     fetchReferrals();
   }, [fetchReferrals]);
 
+  // Fetch reward earnings
+  const fetchEarners = useCallback(async () => {
+    if (!isAuthorized || activeTab !== 'earnings') return;
+
+    setEarnersLoading(true);
+    try {
+      const params = new URLSearchParams();
+      if (earnersSearch) params.set('search', earnersSearch);
+      params.set('limit', String(limit));
+      params.set('offset', String(earnersPage * limit));
+      params.set('sortBy', earnersSortBy);
+      params.set('sortOrder', earnersSortOrder);
+
+      const response = await fetch(`/api/admin/stats/rewards?${params}`, {
+        credentials: 'include',
+      });
+
+      if (!response.ok) throw new Error('Failed to fetch');
+
+      const data = await response.json();
+      setEarners(data.users || []);
+      setEarnersTotal(data.total || 0);
+      setEarnersFiltered(data.filtered || 0);
+    } catch (err) {
+      console.error('Failed to fetch earners:', err);
+    } finally {
+      setEarnersLoading(false);
+    }
+  }, [isAuthorized, activeTab, earnersSearch, earnersPage, earnersSortBy, earnersSortOrder]);
+
+  useEffect(() => {
+    fetchEarners();
+  }, [fetchEarners]);
+
+  // Reset earners page when filters change
+  useEffect(() => {
+    setEarnersPage(0);
+  }, [earnersSearch, earnersSortBy, earnersSortOrder]);
+
   // Reset page when filters change
   useEffect(() => {
     setPage(0);
@@ -196,6 +260,27 @@ export default function AdminReferralsPage() {
   const hasAdvancedFilters = minReferrals || maxReferrals || minVolume || maxVolume;
   const totalPages = Math.ceil(filtered / limit);
 
+  // Toggle earner sort
+  const toggleEarnerSort = (column: 'totalEarned' | 'pendingSol' | 'claimedSol') => {
+    if (earnersSortBy === column) {
+      setEarnersSortOrder(earnersSortOrder === 'desc' ? 'asc' : 'desc');
+    } else {
+      setEarnersSortBy(column);
+      setEarnersSortOrder('desc');
+    }
+  };
+
+  const earnersTotalPages = Math.ceil(earnersFiltered / limit);
+
+  // Honors level labels
+  const honorsLabels: Record<number, string> = { 1: 'I', 2: 'II', 3: 'III', 4: 'IV' };
+  const honorsColors: Record<number, string> = {
+    1: 'text-neutral-400 bg-neutral-700/50',
+    2: 'text-blue-400 bg-blue-500/20',
+    3: 'text-purple-400 bg-purple-500/20',
+    4: 'text-yellow-400 bg-yellow-500/20',
+  };
+
   // Sort icon component
   const SortIcon = ({ column }: { column: 'referralCount' | 'totalVolume' | 'createdAt' | 'code' }) => {
     if (sortBy !== column) return null;
@@ -214,6 +299,16 @@ export default function AdminReferralsPage() {
     );
   }
 
+  // Earner sort icon
+  const EarnerSortIcon = ({ column }: { column: 'totalEarned' | 'pendingSol' | 'claimedSol' }) => {
+    if (earnersSortBy !== column) return null;
+    return earnersSortOrder === 'desc' ? (
+      <HiSortDescending className="w-4 h-4 text-emerald-400" />
+    ) : (
+      <HiSortAscending className="w-4 h-4 text-emerald-400" />
+    );
+  };
+
   return (
     <AdminLayout title="Referrals">
       {/* Header */}
@@ -221,20 +316,57 @@ export default function AdminReferralsPage() {
         <div>
           <h2 className="text-xl sm:text-2xl font-bold text-white">Referrals</h2>
           <p className="text-neutral-500 text-sm mt-1">
-            {filtered.toLocaleString()} of {total.toLocaleString()} referral codes
+            {activeTab === 'codes'
+              ? `${filtered.toLocaleString()} of ${total.toLocaleString()} referral codes`
+              : `${earnersFiltered.toLocaleString()} of ${earnersTotal.toLocaleString()} earners`}
           </p>
         </div>
 
+        <div className="flex items-center gap-3">
+          {activeTab === 'codes' && (
+            <button
+              onClick={exportCSV}
+              disabled={referrals.length === 0}
+              className="flex items-center gap-2 px-4 py-2 rounded-lg bg-neutral-800 hover:bg-neutral-700 text-white text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <HiDownload className="w-4 h-4" />
+              Export CSV
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* Tabs */}
+      <div className="flex gap-1 mb-6 bg-neutral-900/50 border border-neutral-800/50 rounded-xl p-1 w-fit">
         <button
-          onClick={exportCSV}
-          disabled={referrals.length === 0}
-          className="flex items-center gap-2 px-4 py-2 rounded-lg bg-neutral-800 hover:bg-neutral-700 text-white text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          onClick={() => setActiveTab('codes')}
+          className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+            activeTab === 'codes'
+              ? 'bg-neutral-800 text-white'
+              : 'text-neutral-400 hover:text-white'
+          }`}
         >
-          <HiDownload className="w-4 h-4" />
-          Export CSV
+          <span className="flex items-center gap-2">
+            <HiUserGroup className="w-4 h-4" />
+            Referral Codes
+          </span>
+        </button>
+        <button
+          onClick={() => setActiveTab('earnings')}
+          className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+            activeTab === 'earnings'
+              ? 'bg-neutral-800 text-white'
+              : 'text-neutral-400 hover:text-white'
+          }`}
+        >
+          <span className="flex items-center gap-2">
+            <HiStar className="w-4 h-4" />
+            Reward Earnings
+          </span>
         </button>
       </div>
 
+      {activeTab === 'codes' && (<>
       {/* Summary Cards */}
       <div className="grid grid-cols-3 gap-3 sm:gap-4 mb-6">
         <div className="rounded-xl bg-gradient-to-br from-purple-500/10 to-neutral-900/50 border border-purple-500/20 p-4">
@@ -557,6 +689,182 @@ export default function AdminReferralsPage() {
           </div>
         )}
       </div>
+      </>)}
+
+      {/* ==================== Reward Earnings Tab ==================== */}
+      {activeTab === 'earnings' && (
+        <>
+          {/* Search */}
+          <div className="rounded-2xl bg-neutral-900/50 border border-neutral-800/50 p-4 mb-6">
+            <div className="relative">
+              <HiSearch className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-neutral-500" />
+              <input
+                type="text"
+                value={earnersSearch}
+                onChange={(e) => setEarnersSearch(e.target.value)}
+                placeholder="Search by name, email, or referral code..."
+                className="w-full pl-10 pr-4 py-2 rounded-lg bg-neutral-800/50 border border-neutral-700/50 text-white text-sm placeholder-neutral-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/50"
+              />
+            </div>
+          </div>
+
+          {/* Earnings Table */}
+          <div className="rounded-2xl bg-neutral-900/50 border border-neutral-800/50 overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead>
+                  <tr className="border-b border-neutral-800/50 bg-neutral-900/50">
+                    <th className="text-left p-4 text-xs font-medium text-neutral-500 uppercase tracking-wider">
+                      Name
+                    </th>
+                    <th className="text-left p-4 text-xs font-medium text-neutral-500 uppercase tracking-wider hidden md:table-cell">
+                      Code
+                    </th>
+                    <th className="text-center p-4 text-xs font-medium text-neutral-500 uppercase tracking-wider hidden sm:table-cell">
+                      Honors
+                    </th>
+                    <th
+                      className="text-right p-4 text-xs font-medium text-neutral-500 uppercase tracking-wider cursor-pointer hover:text-white transition-colors"
+                      onClick={() => toggleEarnerSort('pendingSol')}
+                    >
+                      <span className="flex items-center justify-end gap-1">
+                        Pending
+                        <EarnerSortIcon column="pendingSol" />
+                      </span>
+                    </th>
+                    <th
+                      className="text-right p-4 text-xs font-medium text-neutral-500 uppercase tracking-wider cursor-pointer hover:text-white transition-colors"
+                      onClick={() => toggleEarnerSort('claimedSol')}
+                    >
+                      <span className="flex items-center justify-end gap-1">
+                        Claimed
+                        <EarnerSortIcon column="claimedSol" />
+                      </span>
+                    </th>
+                    <th
+                      className="text-right p-4 text-xs font-medium text-neutral-500 uppercase tracking-wider cursor-pointer hover:text-white transition-colors"
+                      onClick={() => toggleEarnerSort('totalEarned')}
+                    >
+                      <span className="flex items-center justify-end gap-1">
+                        Total Earned
+                        <EarnerSortIcon column="totalEarned" />
+                      </span>
+                    </th>
+                    <th className="text-right p-4 text-xs font-medium text-neutral-500 uppercase tracking-wider hidden lg:table-cell">
+                      Ref Volume
+                    </th>
+                    <th className="text-right p-4 text-xs font-medium text-neutral-500 uppercase tracking-wider hidden lg:table-cell">
+                      Referrals
+                    </th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-neutral-800/30">
+                  {earnersLoading ? (
+                    <tr>
+                      <td colSpan={8} className="p-8 text-center text-neutral-500">
+                        <div className="animate-spin rounded-full h-6 w-6 border-2 border-emerald-500 border-t-transparent mx-auto mb-2" />
+                        Loading...
+                      </td>
+                    </tr>
+                  ) : earners.length === 0 ? (
+                    <tr>
+                      <td colSpan={8} className="p-8 text-center text-neutral-500">
+                        No reward earners found
+                      </td>
+                    </tr>
+                  ) : (
+                    earners.map((earner) => (
+                      <tr key={earner.id} className="hover:bg-neutral-800/30 transition-colors">
+                        <td className="p-4">
+                          <div>
+                            <p className="text-sm font-medium text-white truncate">
+                              {earner.name || 'Unknown'}
+                            </p>
+                            <p className="text-xs text-neutral-500 truncate">
+                              {earner.email}
+                            </p>
+                          </div>
+                        </td>
+                        <td className="p-4 hidden md:table-cell">
+                          {earner.referralCode ? (
+                            <code className="text-xs font-mono text-purple-400 bg-purple-500/10 px-2 py-0.5 rounded">
+                              {earner.referralCode}
+                            </code>
+                          ) : (
+                            <span className="text-xs text-neutral-600">-</span>
+                          )}
+                        </td>
+                        <td className="p-4 text-center hidden sm:table-cell">
+                          <span
+                            className={`text-xs px-2 py-0.5 rounded font-medium ${
+                              honorsColors[earner.honorsLevel] || honorsColors[1]
+                            }`}
+                          >
+                            {honorsLabels[earner.honorsLevel] || earner.honorsLevel}
+                          </span>
+                        </td>
+                        <td className="p-4 text-right">
+                          <span className="text-sm font-medium text-amber-400 tabular-nums">
+                            {earner.pendingSol.toFixed(6)}
+                          </span>
+                        </td>
+                        <td className="p-4 text-right">
+                          <span className="text-sm font-medium text-emerald-400 tabular-nums">
+                            {earner.claimedSol.toFixed(6)}
+                          </span>
+                        </td>
+                        <td className="p-4 text-right">
+                          <span className="text-sm font-bold text-white tabular-nums">
+                            {earner.totalEarned.toFixed(6)}
+                          </span>
+                          <span className="text-xs text-neutral-500 ml-1">SOL</span>
+                        </td>
+                        <td className="p-4 text-right hidden lg:table-cell">
+                          <span className="text-sm text-neutral-400">
+                            {formatVolume(earner.referralVolume)}
+                          </span>
+                        </td>
+                        <td className="p-4 text-right hidden lg:table-cell">
+                          <span className="text-sm text-neutral-400">
+                            {earner.directReferrals}
+                          </span>
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Pagination */}
+            {earnersTotalPages > 1 && (
+              <div className="flex items-center justify-between p-4 border-t border-neutral-800/50">
+                <p className="text-sm text-neutral-500">
+                  Page {earnersPage + 1} of {earnersTotalPages}
+                </p>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => setEarnersPage((p) => Math.max(0, p - 1))}
+                    disabled={earnersPage === 0}
+                    className="p-2 rounded-lg bg-neutral-800 hover:bg-neutral-700 text-white disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                  >
+                    <HiChevronLeft className="w-4 h-4" />
+                  </button>
+                  <button
+                    onClick={() =>
+                      setEarnersPage((p) => Math.min(earnersTotalPages - 1, p + 1))
+                    }
+                    disabled={earnersPage >= earnersTotalPages - 1}
+                    className="p-2 rounded-lg bg-neutral-800 hover:bg-neutral-700 text-white disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                  >
+                    <HiChevronRight className="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        </>
+      )}
     </AdminLayout>
   );
 }

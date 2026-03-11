@@ -75,19 +75,7 @@ export default function PumpLiveGrid({
   }, [tokens, sortField, sortDirection]);
 
   const handleTokenClick = useCallback((token: PumpLiveToken) => {
-    // Build query params with prefill data for faster initial render
-    const queryParams = new URLSearchParams();
-    queryParams.set('chain', 'sol');
-    if (token.name) queryParams.set('_name', token.name);
-    if (token.symbol) queryParams.set('_symbol', token.symbol);
-    if (token.usd_market_cap) queryParams.set('_mcap', token.usd_market_cap.toString());
-    if (token.image_uri) queryParams.set('_image', token.image_uri);
-    queryParams.set('_mint', token.mint);
-    queryParams.set('_launchpad_protocol', 'pump');
-    if (token.created_timestamp) queryParams.set('_created_at', new Date(token.created_timestamp * 1000).toISOString());
-
-    // Navigate to trade page with prefill data
-    router.push(`/trade/${token.mint}?${queryParams.toString()}`);
+    router.push(`/trade/${token.mint}`);
   }, [router]);
 
   const handleTokenHover = useCallback((token: PumpLiveToken) => {
@@ -109,17 +97,8 @@ export default function PumpLiveGrid({
     if (onQuickBuy && quickBuyAmount > 0) {
       onQuickBuy(token, quickBuyAmount);
     } else {
-      // Fallback: navigate to trade page with prefill data
-      const queryParams = new URLSearchParams();
-      queryParams.set('chain', 'sol');
-      if (token.name) queryParams.set('_name', token.name);
-      if (token.symbol) queryParams.set('_symbol', token.symbol);
-      if (token.usd_market_cap) queryParams.set('_mcap', token.usd_market_cap.toString());
-      if (token.image_uri) queryParams.set('_image', token.image_uri);
-      queryParams.set('_mint', token.mint);
-      queryParams.set('_launchpad_protocol', 'pump');
-
-      router.push(`/trade/${token.mint}?${queryParams.toString()}`);
+      // Fallback: navigate to trade page
+      router.push(`/trade/${token.mint}`);
     }
   }, [onQuickBuy, quickBuyAmount, router]);
 

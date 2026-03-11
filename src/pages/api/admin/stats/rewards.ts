@@ -1,5 +1,6 @@
 /**
- * Admin Stats Overview - Proxies to backend
+ * Admin Reward Earnings - Proxies to backend
+ * Per-user reward earnings with pagination, search, and sorting
  */
 
 import type { NextApiRequest, NextApiResponse } from 'next';
@@ -12,16 +13,15 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
 
   try {
-    // Forward query params (e.g., days for signup chart range)
+    // Forward query params (limit, offset, search, sortBy, sortOrder)
     const params = new URLSearchParams();
     for (const [key, value] of Object.entries(req.query)) {
       if (value && typeof value === 'string') {
         params.set(key, value);
       }
     }
-    const qs = params.toString();
-    const url = `${BACKEND_URL}/api/admin/stats/overview${qs ? `?${qs}` : ''}`;
 
+    const url = `${BACKEND_URL}/api/admin/stats/rewards?${params.toString()}`;
     const response = await fetch(url, {
       method: 'GET',
       headers: {
@@ -35,12 +35,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     const data = await response.json();
 
-    res.setHeader('Cache-Control', 'private, max-age=5');
+    res.setHeader('Cache-Control', 'private, max-age=10');
     return res.status(response.status).json(data);
   } catch (error) {
-    console.error('[Admin Stats] Proxy error:', error);
+    console.error('[Admin Rewards] Proxy error:', error);
     return res.status(500).json({
-      error: 'Failed to fetch admin stats',
+      error: 'Failed to fetch reward earnings',
       message: error instanceof Error ? error.message : 'Backend connection failed',
     });
   }

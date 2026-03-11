@@ -871,10 +871,10 @@ const TokenInfo: React.FC<{
       <div className="flex flex-col min-w-0 flex-1">
         <div className="flex items-center gap-2 mb-1">
           <span className="truncate text-sm font-bold" style={{ color: AX.text }}>
-            {token.name}
+            {token.symbol}
           </span>
           <span className="truncate text-xs font-medium" style={{ color: AX.muted }}>
-            {token.symbol}
+            {token.name}
           </span>
           {/* Copy contract button */}
           <button
@@ -2254,40 +2254,19 @@ export default function InterstateTable({
                 const isMonad = chain === 'monad';
 
                 if (isMonad) {
-                  // Build Monad trade URL with query parameters
                   const queryParams = new URLSearchParams();
                   if (token.name) queryParams.set('_name', token.name);
                   if (token.symbol) queryParams.set('_symbol', token.symbol);
                   if (token.fully_diluted_value) queryParams.set('_mcap', token.fully_diluted_value.toString());
-                  if (token.total_liquidity_usd || (token as any)?.liquidity_usd || (token as any)?.liquidity) {
-                    const liq = token.total_liquidity_usd || (token as any)?.liquidity_usd || (token as any)?.liquidity;
-                    if (typeof liq === 'number' && Number.isFinite(liq)) {
-                      queryParams.set('_liq', liq.toString());
-                    }
-                  }
                   if (token.uri || token.logo) queryParams.set('_image', token.uri || token.logo || '');
-                  queryParams.set('_mint', address);
-                  if ((token as any).launchpad_protocol) queryParams.set('_launchpad_protocol', (token as any).launchpad_protocol);
-                  const createdAt = (token as any).created_at || (token as any).launch_time || (token as any).pair_created_at;
-                  if (createdAt) queryParams.set('_created_at', String(createdAt));
+                  queryParams.set('_mint', token.mint || address);
+                  if (token.launchpad_protocol) queryParams.set('_launchpad_protocol', token.launchpad_protocol);
+                  if (token.created_at) queryParams.set('_created_at', token.created_at);
+                  if (token.total_liquidity_usd) queryParams.set('_liquidity', String(token.total_liquidity_usd));
                   queryParams.set('chain', 'monad');
-
-                  const url = `/trade/monad/${address}?${queryParams.toString()}`;
-                  router.push(url);
+                  router.push(`/trade/monad/${address}?${queryParams.toString()}`);
                 } else {
-                  // For Solana, include chain=sol parameter
-                  const solQueryParams = new URLSearchParams();
-                  if (token.name) solQueryParams.set('_name', token.name);
-                  if (token.symbol) solQueryParams.set('_symbol', token.symbol);
-                  if ((token as any).price_usd) solQueryParams.set('_price', (token as any).price_usd.toString());
-                  if (token.market_cap_usd) solQueryParams.set('_mcap', token.market_cap_usd.toString());
-                  if (token.uri || token.logo || (token as any).image) solQueryParams.set('_image', token.uri || token.logo || (token as any).image || '');
-                  solQueryParams.set('_mint', address);
-                  if ((token as any).launchpad_protocol) solQueryParams.set('_launchpad_protocol', (token as any).launchpad_protocol);
-                  const createdAt = (token as any).created_at || (token as any).launch_time || (token as any).pair_created_at;
-                  if (createdAt) solQueryParams.set('_created_at', String(createdAt));
-                  solQueryParams.set('chain', 'sol');
-                  router.push(`/trade/${address}?${solQueryParams.toString()}`);
+                  router.push(`/trade/${address}`);
                 }
 
                 // Fire-and-forget: backfill token in background
@@ -2316,34 +2295,9 @@ export default function InterstateTable({
                 if (!address) return;
                 // Build tradeUrl matching handleTokenClick navigation exactly
                 const isMonad = chain === 'monad';
-                const hoverQP = new URLSearchParams();
-                if (token.name) hoverQP.set('_name', token.name);
-                if (token.symbol) hoverQP.set('_symbol', token.symbol);
-                if (isMonad) {
-                  if (token.fully_diluted_value) hoverQP.set('_mcap', token.fully_diluted_value.toString());
-                  if (token.total_liquidity_usd || (token as any)?.liquidity_usd || (token as any)?.liquidity) {
-                    const liq = token.total_liquidity_usd || (token as any)?.liquidity_usd || (token as any)?.liquidity;
-                    if (typeof liq === 'number' && Number.isFinite(liq)) hoverQP.set('_liq', liq.toString());
-                  }
-                  if (token.uri || token.logo) hoverQP.set('_image', token.uri || token.logo || '');
-                  hoverQP.set('_mint', address);
-                  if ((token as any).launchpad_protocol) hoverQP.set('_launchpad_protocol', (token as any).launchpad_protocol);
-                  const createdAt = (token as any).created_at || (token as any).launch_time || (token as any).pair_created_at;
-                  if (createdAt) hoverQP.set('_created_at', String(createdAt));
-                  hoverQP.set('chain', 'monad');
-                } else {
-                  if ((token as any).price_usd) hoverQP.set('_price', (token as any).price_usd.toString());
-                  if (token.market_cap_usd) hoverQP.set('_mcap', token.market_cap_usd.toString());
-                  if (token.uri || token.logo || (token as any).image) hoverQP.set('_image', token.uri || token.logo || (token as any).image || '');
-                  hoverQP.set('_mint', address);
-                  if ((token as any).launchpad_protocol) hoverQP.set('_launchpad_protocol', (token as any).launchpad_protocol);
-                  const createdAt = (token as any).created_at || (token as any).launch_time || (token as any).pair_created_at;
-                  if (createdAt) hoverQP.set('_created_at', String(createdAt));
-                  hoverQP.set('chain', 'sol');
-                }
                 const hoverTradeUrl = isMonad
-                  ? `/trade/monad/${address}?${hoverQP.toString()}`
-                  : `/trade/${address}?${hoverQP.toString()}`;
+                  ? `/trade/monad/${address}`
+                  : `/trade/${address}`;
                 preloadTradeChart(
                   {
                     mint: token.mint,

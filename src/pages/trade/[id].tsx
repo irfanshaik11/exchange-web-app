@@ -189,43 +189,7 @@ export default function TradePage() {
     setPositionLinesApi(null); // Clear stale position lines (wrong token's avg entry/exit)
   }, [id]);
 
-  useEffect(() => {
-    if (!token?.mint) return;
-    let cancelled = false;
-
-    const fetchParallel = async () => {
-      const needsSearch = !(correctTokenData?.mint === token.mint || normalizeTimestampMs(token.created_at));
-
-      const searchPromise = needsSearch
-        ? fetch(`${process.env.NEXT_PUBLIC_GO_SERVICE_URL}/v1/search?phrase=${encodeURIComponent(token.mint)}&limit=1`)
-            .then(r => r.ok ? r.json() : null).catch(() => null)
-        : Promise.resolve(null);
-
-      const cachedCreator = creatorAddressCache.get(token.mint);
-      const devPromise = cachedCreator !== undefined
-        ? Promise.resolve(cachedCreator)
-        : fetch(`${process.env.NEXT_PUBLIC_GO_SERVICE_URL}/v1/tokens/dev?tokenAddress=${token.mint}&limit=1`)
-            .then(r => r.ok ? r.json() : null)
-            .then(data => data?.filterTokens?.results?.[0]?.token?.creatorAddress || null)
-            .catch(() => null);
-
-      const [searchData, devResult] = await Promise.all([searchPromise, devPromise]);
-      if (cancelled) return;
-
-      if (searchData?.tokens?.[0]) {
-        const fetchedToken = searchData.tokens[0];
-        setCorrectTokenData(fetchedToken);
-      }
-      if (typeof devResult === 'string') {
-        setCreatorAddress(devResult);
-        creatorAddressCache.set(token.mint, devResult);
-      }
-    };
-
-    setIsLoadingCorrectData(true);
-    fetchParallel().finally(() => { if (!cancelled) setIsLoadingCorrectData(false); });
-    return () => { cancelled = true; };
-  }, [token?.mint, token?.created_at, correctTokenData?.mint]);
+  // Search/creator fetch effect moved below — needs resolvedTokenMint which is defined after displayToken
 
   const getOHLCParams = useComponentCache(
     "ohlc-params",
@@ -422,6 +386,27 @@ export default function TradePage() {
   // IMPORTANT: Only use cached/fallback data if it matches the current URL id
   // This prevents showing stale data from a previous token when navigating
 
+  // Resolve the mint address early from URL params (before displayToken needs WS data)
+  // This breaks the circular dependency: resolvedTokenMint -> WS hook -> wsTokenInfo -> displayToken
+  const resolvedTokenMint = React.useMemo(() => {
+    if (optimisticToken?.mint) return optimisticToken.mint;
+    // Backward compat: Check _mint query param (old URLs had _mint in query string)
+    if (typeof _mint === "string" && _mint.length > 0) return _mint;
+    // New architecture: id is the mint directly
+    if (typeof id === "string" && id.length > 0) return id;
+    return undefined;
+  }, [optimisticToken?.mint, _mint, id]);
+
+  // Single WebSocket connection for entire trade page (shared via context to child components)
+  // This eliminates the 5 duplicate connections that tabs were creating
+  // Placed before displayToken so wsTokenInfo is available as a fallback layer
+  const wsData = useSolanaTokenWebSocket({
+    mintAddress: resolvedTokenMint,
+    enabled: !!resolvedTokenMint,
+  });
+  // Destructure for local use in this component
+  const { holderSummary, topTraders: wsTopTraders, trades: wsHistoricalTrades, tokenInfo: wsTokenInfo, volume: wsVolume } = wsData;
+
   const displayToken = React.useMemo(() => {
     // Start with optimistic data from URL query params (instant display)
     // This ensures liquidity, age, image from PulseTable are shown immediately
@@ -496,8 +481,37 @@ export default function TradePage() {
       }
     }
 
-    // Third priority: optimistic data from URL query params alone
-    if (optimisticToken) return optimisticToken;
+    // Third priority: optimistic data enhanced with WS snapshot
+    if (optimisticToken) {
+      if (wsTokenInfo) {
+        return {
+          ...optimisticToken,
+          name: optimisticToken.name || wsTokenInfo.name,
+          symbol: optimisticToken.symbol || wsTokenInfo.symbol,
+          image: optimisticToken.image || wsTokenInfo.image_url,
+          price_usd: optimisticToken.price_usd ?? wsTokenInfo.price_usd,
+          market_cap_usd: optimisticToken.market_cap_usd ?? wsTokenInfo.market_cap_usd,
+          liquidity_usd: optimisticToken.liquidity_usd ?? wsTokenInfo.liquidity_usd,
+          created_at: optimisticToken.created_at || wsTokenInfo.created_at,
+        };
+      }
+      return optimisticToken;
+    }
+
+    // Fourth priority: WS snapshot alone (bare URL /trade/{mint} with no query params)
+    if (wsTokenInfo) {
+      return {
+        mint: wsTokenInfo.mint,
+        name: wsTokenInfo.name,
+        symbol: wsTokenInfo.symbol,
+        image: wsTokenInfo.image_url,
+        image_url: wsTokenInfo.image_url,
+        price_usd: wsTokenInfo.price_usd,
+        market_cap_usd: wsTokenInfo.market_cap_usd,
+        liquidity_usd: wsTokenInfo.liquidity_usd,
+        created_at: wsTokenInfo.created_at,
+      };
+    }
 
     // During hydration, router.query is empty - don't return null yet as query params are coming
     // This prevents the flash of "-" and "0" values before hydration completes
@@ -507,7 +521,7 @@ export default function TradePage() {
 
     // No valid data - return null to show loading state
     return null;
-  }, [token, cachedTokenMetadata, optimisticToken, idString, isRouterReady]);
+  }, [token, cachedTokenMetadata, optimisticToken, idString, isRouterReady, wsTokenInfo]);
 
   // Validate correctTokenData matches current id to prevent showing stale data
   const validatedCorrectTokenData = React.useMemo(() => {
@@ -526,29 +540,45 @@ export default function TradePage() {
     return null;
   }, [correctTokenData, idString]);
 
-  // tokenNameForTitle is computed below (after wsTokenInfo is available) as a useMemo
+  // Fetch search data (launchpad_protocol, created_at, image) and creator address
+  // Triggered by resolvedTokenMint so it fires even when useSingleTokenPolling returns null
+  useEffect(() => {
+    if (!resolvedTokenMint) return;
+    let cancelled = false;
 
+    const fetchParallel = async () => {
+      const needsSearch = !correctTokenData || correctTokenData.mint !== resolvedTokenMint;
 
-  // URL structure: /trade/{mint}?_name=...&_symbol=...
-  // id IS the mint address now (not pair_address), allowing immediate WebSocket connection
-  // _mint query param kept for backward compatibility with old URLs
-  const resolvedTokenMint = React.useMemo(() => {
-    if (displayToken?.mint) return displayToken.mint;
-    // Backward compat: Check _mint query param (old URLs had _mint in query string)
-    if (typeof _mint === "string" && _mint.length > 0) return _mint;
-    // New architecture: id is the mint directly
-    if (typeof id === "string" && id.length > 0) return id;
-    return undefined;
-  }, [displayToken?.mint, _mint, id]);
+      const searchPromise = needsSearch
+        ? fetch(`${process.env.NEXT_PUBLIC_GO_SERVICE_URL}/v1/search?phrase=${encodeURIComponent(resolvedTokenMint)}&limit=1`)
+            .then(r => r.ok ? r.json() : null).catch(() => null)
+        : Promise.resolve(null);
 
-  // Single WebSocket connection for entire trade page (shared via context to child components)
-  // This eliminates the 5 duplicate connections that tabs were creating
-  const wsData = useSolanaTokenWebSocket({
-    mintAddress: displayToken?.mint || resolvedTokenMint,
-    enabled: !!(displayToken?.mint || resolvedTokenMint),
-  });
-  // Destructure for local use in this component
-  const { holderSummary, topTraders: wsTopTraders, trades: wsHistoricalTrades, tokenInfo: wsTokenInfo, volume: wsVolume } = wsData;
+      const cachedCreator = creatorAddressCache.get(resolvedTokenMint);
+      const devPromise = cachedCreator !== undefined
+        ? Promise.resolve(cachedCreator)
+        : fetch(`${process.env.NEXT_PUBLIC_GO_SERVICE_URL}/v1/tokens/dev?tokenAddress=${resolvedTokenMint}&limit=1`)
+            .then(r => r.ok ? r.json() : null)
+            .then(data => data?.filterTokens?.results?.[0]?.token?.creatorAddress || null)
+            .catch(() => null);
+
+      const [searchData, devResult] = await Promise.all([searchPromise, devPromise]);
+      if (cancelled) return;
+
+      if (searchData?.tokens?.[0]) {
+        const fetchedToken = searchData.tokens[0];
+        setCorrectTokenData(fetchedToken);
+      }
+      if (typeof devResult === 'string') {
+        setCreatorAddress(devResult);
+        creatorAddressCache.set(resolvedTokenMint, devResult);
+      }
+    };
+
+    setIsLoadingCorrectData(true);
+    fetchParallel().finally(() => { if (!cancelled) setIsLoadingCorrectData(false); });
+    return () => { cancelled = true; };
+  }, [resolvedTokenMint, correctTokenData?.mint]);
 
   // Use validated displayToken for title — skip "???" / "Unknown" and fall back to wsTokenInfo
   const isUsableTitle = (v: string | undefined | null): boolean =>
@@ -1040,7 +1070,7 @@ export default function TradePage() {
                 {(canStartOHLC || (idString.length >= 32)) && isRouterReady ? (
                   <AdvancedOHLCChart
                     key={`chart-${displayToken?.mint || idString}`}
-                    mint={typeof _mint === "string" ? _mint : (displayToken?.mint || undefined)}
+                    mint={displayToken?.mint || resolvedTokenMint || undefined}
                     pairAddress={resolvedPairAddress || idString || undefined}
                     interval={currentOHLCParams.interval}
                     timeframe={currentOHLCParams.timeframe}

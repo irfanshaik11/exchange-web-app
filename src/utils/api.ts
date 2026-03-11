@@ -158,6 +158,12 @@ async function apiFetch<T = unknown>(
         // Create structured error
         const apiError = new ApiError(message, code, details, suggestions, res.status);
 
+        // Auto-logout on expired/invalid token (specific codes only, not all 401/403)
+        const SESSION_EXPIRED_CODES = ['TOKEN_EXPIRED', 'INVALID_TOKEN', 'UNAUTHORIZED'];
+        if (typeof window !== 'undefined' && SESSION_EXPIRED_CODES.includes(code)) {
+          window.dispatchEvent(new CustomEvent('auth-session-expired'));
+        }
+
         // Suppress console.error for expected validation errors to prevent Next.js dev overlay
         const EXPECTED_ERROR_CODES = [
           'NO_HOLDINGS', 'INSUFFICIENT_BALANCE', 'VALIDATION_ERROR',
@@ -268,6 +274,19 @@ export const metamaskLogin = (
     body: { address, signature, message, ...(referralCode && { referralCode }) },
   });
 };
+
+export const walletLogin = (
+  chain: 'solana' | 'ethereum',
+  address: string,
+  signature: string,
+  message: string,
+  walletName?: string,
+  referralCode?: string,
+) =>
+  apiFetch<{ token: string; isNewUser?: boolean }>("/api/users/wallet/login", {
+    method: "POST",
+    body: { chain, address, signature, message, ...(walletName && { walletName }), ...(referralCode && { referralCode }) },
+  });
 
 export const turnkeyLogin = (
   params: {

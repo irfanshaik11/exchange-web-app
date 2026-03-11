@@ -593,19 +593,7 @@ const CodexDevTokens: React.FC<CodexDevTokensProps> = ({ token, chain = 'sol', o
                         router.push(`/trade/monad/${mintAddress}`);
                         return;
                       }
-                      const queryParams = new URLSearchParams({
-                        _name: devToken.token.name || devToken.token.symbol || '',
-                        _symbol: devToken.token.symbol || '',
-                        _mcap: devToken.marketCap || '',
-                        _mint: mintAddress,
-                        _liquidity: devToken.liquidity || '',
-                        _created_at: devToken.token.createdAt
-                          ? new Date(devToken.token.createdAt * 1000).toISOString()
-                          : '',
-                        chain: 'sol',
-                        _migrated: devToken.token.migrated_pool_address ? '1' : '',
-                      }).toString();
-                      router.push(`/trade/${mintAddress}?${queryParams}`);
+                      router.push(`/trade/${mintAddress}`);
                     }}
                   >
                     <td className="px-4 py-1">

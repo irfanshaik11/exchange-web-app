@@ -1364,13 +1364,8 @@ export default function DiscoverContent() {
                     marketCapUsd: rawToken.market_cap_usd || (rawToken.marketCapSol ? rawToken.marketCapSol * 170 : undefined),
                   }, { router });
                 }
-                // Navigate with query params for optimistic UI
-                const qp = new URLSearchParams({ chain: 'sol' });
-                if (rawToken?.name) qp.set('_name', rawToken.name);
-                if (rawToken?.symbol) qp.set('_symbol', rawToken.symbol);
-                if (rawToken?.uri) qp.set('_image', rawToken.uri);
-                if (rawToken?.mint) qp.set('_mint', rawToken.mint);
-                router.push(`/trade/${id}?${qp.toString()}`);
+                // Navigate to trade page (metadata resolved via WS + search)
+                router.push(`/trade/${id}`);
 
                 // Fire-and-forget: backfill token in background
                 if (rawToken) {

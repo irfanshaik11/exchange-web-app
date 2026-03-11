@@ -2,8 +2,11 @@ import { useEffect, useRef, useState, useCallback } from 'react';
 
 const isDev = process.env.NODE_ENV !== 'production';
 
-// WebSocket URL for trending data
-const TRENDING_WS_URL = 'wss://token-stage.narrative.trade/v1/ws/trending';
+// Derive WebSocket URL from environment
+function getTrendingWsUrl(): string {
+  const base = process.env.NEXT_PUBLIC_WEBSOCKET_URL || process.env.NEXT_PUBLIC_GO_SERVICE_URL || '';
+  return base.replace(/^http/, 'ws') + '/v1/ws/trending';
+}
 
 // Cache key and version for localStorage persistence
 const TRENDING_CACHE_KEY = 'trending_ws_cache';
@@ -221,7 +224,7 @@ function connectGlobal() {
   }
 
   // No timeframe param needed - server sends all timeframes in snapshot
-  const wsUrl = TRENDING_WS_URL;
+  const wsUrl = getTrendingWsUrl();
   isDev && console.log('[TrendingWS] Connecting to:', wsUrl);
 
   try {

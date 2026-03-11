@@ -1,4 +1,3 @@
-import { useRouter } from 'next/router';
 import { useCallback, useEffect, useState } from 'react';
 
 // Types for trade page parameters
@@ -21,68 +20,45 @@ export const defaultTradePageParams: TradePageParams = {
   sliderPct: 0,
 };
 
-// Hook for managing trade page query parameters
+// Ephemeral navigation intent — set before router.push, consumed once on mount
+const TRADE_NAV_INTENT_KEY = 'trade-nav-intent';
+
+/**
+ * Set a navigation intent that the trade page will consume on mount.
+ * Used by Positions/PositionDetailModal to signal mode=sell without URL params.
+ */
+export const setTradeNavIntent = (intent: { mode: 'buy' | 'sell' }) => {
+  try {
+    sessionStorage.setItem(TRADE_NAV_INTENT_KEY, JSON.stringify(intent));
+  } catch {}
+};
+
+// Hook for managing trade page parameters (state-only, URL stays clean)
 export const useTradePageQueryParams = () => {
-  const router = useRouter();
-  const [params, setParams] = useState<TradePageParams>(defaultTradePageParams);
+  const [params, setParamsState] = useState<TradePageParams>(defaultTradePageParams);
   const [isReady, setIsReady] = useState(false);
 
-  // Load parameters from URL on mount
+  // On mount: read ephemeral intent from sessionStorage (e.g., mode=sell from Positions)
   useEffect(() => {
-    if (router.isReady) {
-      const { query } = router;
-      
-      const newParams: TradePageParams = {
-        mode: (query.mode as "buy" | "sell") || defaultTradePageParams.mode,
-        tab: (query.tab as "market" | "limit" | "adv") || defaultTradePageParams.tab,
-        timeRange: (query.timeRange as "5m" | "1h" | "12h" | "24h") || defaultTradePageParams.timeRange,
-        amount: (query.amount as string) || defaultTradePageParams.amount,
-        targetMC: (query.targetMC as string) || defaultTradePageParams.targetMC,
-        sliderPct: parseFloat(query.sliderPct as string) || defaultTradePageParams.sliderPct,
-      };
-      
-      setParams(newParams);
-      setIsReady(true);
-    }
-  }, [router.isReady, router.query]);
-
-  // Update URL with current parameters
-  const updateUrl = useCallback((newParams: Partial<TradePageParams>) => {
-    if (!router.isReady) return;
-
-    const updatedParams = { ...params, ...newParams };
-    setParams(updatedParams);
-
-    const urlParams = new URLSearchParams();
-
-    // PRESERVE optimistic data params (_, chain) for instant loading
-    // These params are passed from source pages (PulseTable, etc.) and contain
-    // liquidity, age, image data that allows instant rendering without API wait
-    const currentQuery = router.query;
-    Object.entries(currentQuery).forEach(([key, value]) => {
-      if ((key.startsWith('_') || key === 'chain') && value) {
-        urlParams.set(key, Array.isArray(value) ? value[0] : value);
+    try {
+      const raw = sessionStorage.getItem(TRADE_NAV_INTENT_KEY);
+      if (raw) {
+        sessionStorage.removeItem(TRADE_NAV_INTENT_KEY);
+        const intent = JSON.parse(raw);
+        if (intent?.mode === 'sell' || intent?.mode === 'buy') {
+          setParamsState(prev => ({ ...prev, mode: intent.mode }));
+        }
       }
-    });
+    } catch {}
+    setIsReady(true);
+  }, []);
 
-    // Add trade page parameters
-    urlParams.set('mode', updatedParams.mode);
-    urlParams.set('tab', updatedParams.tab);
-    urlParams.set('timeRange', updatedParams.timeRange);
-    if (updatedParams.amount) urlParams.set('amount', updatedParams.amount);
-    if (updatedParams.targetMC) urlParams.set('targetMC', updatedParams.targetMC);
-    urlParams.set('sliderPct', updatedParams.sliderPct.toString());
+  // Update internal state only — URL stays clean
+  const updateParams = useCallback((newParams: Partial<TradePageParams>) => {
+    setParamsState(prev => ({ ...prev, ...newParams }));
+  }, []);
 
-    // Update URL without causing a page reload
-    // Extract the base path without query parameters
-    const basePath = router.asPath.split('?')[0];
-    const newUrl = `${basePath}?${urlParams.toString()}`;
-    if (newUrl !== router.asPath) {
-      router.replace(newUrl, undefined, { shallow: true });
-    }
-  }, [params, router]);
-
-  // Get current parameters as query string
+  // Get current parameters as query string (for API calls, not URL)
   const getQueryString = useCallback(() => {
     const urlParams = new URLSearchParams();
     urlParams.set('mode', params.mode);
@@ -106,7 +82,7 @@ export const useTradePageQueryParams = () => {
 
   return {
     params,
-    setParams: updateUrl,
+    setParams: updateParams,
     getQueryString,
     getApiParams,
     isReady,
@@ -116,7 +92,7 @@ export const useTradePageQueryParams = () => {
 // Utility function to parse query parameters from URL
 export const parseQueryParams = (query: any): Partial<TradePageParams> => {
   const parsed: Partial<TradePageParams> = {};
-  
+
   if (query.mode && typeof query.mode === 'string') {
     parsed.mode = query.mode as "buy" | "sell";
   }
@@ -135,20 +111,20 @@ export const parseQueryParams = (query: any): Partial<TradePageParams> => {
   if (query.sliderPct && typeof query.sliderPct === 'string') {
     parsed.sliderPct = parseFloat(query.sliderPct);
   }
-  
+
   return parsed;
 };
 
 // Utility function to create query string from parameters
 export const createQueryString = (params: Partial<TradePageParams>): string => {
   const urlParams = new URLSearchParams();
-  
+
   if (params.mode) urlParams.set('mode', params.mode);
   if (params.tab) urlParams.set('tab', params.tab);
   if (params.timeRange) urlParams.set('timeRange', params.timeRange);
   if (params.amount) urlParams.set('amount', params.amount);
   if (params.targetMC) urlParams.set('targetMC', params.targetMC);
   if (params.sliderPct !== undefined) urlParams.set('sliderPct', params.sliderPct.toString());
-  
+
   return urlParams.toString();
 };

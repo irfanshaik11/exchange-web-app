@@ -671,17 +671,7 @@ export function WalletTrackerProvider({
           launchpadProtocol: cachedMeta?.launchpad_protocol,
         }, { router });
 
-        const queryParams = new URLSearchParams({
-          _name: tokenName || "",
-          _symbol: normalizedEvent.symbol || cachedMeta?.symbol || "",
-          _mcap: String(cachedMeta?.market_cap_usd || ""),
-          _image: tokenImage || "",
-          _mint: normalizedEvent.mint,
-          _launchpad_protocol: cachedMeta?.launchpad_protocol || "",
-          _created_at: cachedMeta?.createdAt || "",
-          chain: "sol",
-        }).toString();
-        const tradeUrl = `/trade/${normalizedEvent.mint || normalizedEvent.pair_address}?${queryParams}`;
+        const tradeUrl = `/trade/${normalizedEvent.mint || normalizedEvent.pair_address}`;
 
         // Create clickable custom content for live trades toast (wide, compact)
         const customContent = (

@@ -66,6 +66,7 @@ export function useSolanaPositionWebSocket(
   const reconnectAttemptsRef = useRef(0);
   const heartbeatRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const mountedRef = useRef(true);
+  const pingSentAtRef = useRef<number>(0);
   const onUpdateRef = useRef(onUpdate);
   const onTxHashRef = useRef(onTxHash);
   // Always reconnect with capped exponential backoff (no max attempts)
@@ -180,6 +181,7 @@ export function useSolanaPositionWebSocket(
         if (heartbeatRef.current) clearInterval(heartbeatRef.current);
         heartbeatRef.current = setInterval(() => {
           if (ws.readyState === WebSocket.OPEN) {
+            pingSentAtRef.current = performance.now();
             ws.send(JSON.stringify({ type: 'ping' }));
           }
         }, 30000);
@@ -204,7 +206,8 @@ export function useSolanaPositionWebSocket(
           const message = JSON.parse(event.data);
 
           if (message.type === 'pong') {
-            // Server acknowledged our heartbeat ping — connection is alive
+            // Pong received — keepalive confirmed (latency measured via useServerLatency hook)
+            pingSentAtRef.current = 0;
           } else if (message.type === 'connected') {
             // Connection confirmed
           } else if (message.type === 'tx_hash' && message.data) {
@@ -386,6 +389,7 @@ export function useSolanaPositionWebSocket(
         } else {
           // WS looks open — send a ping to verify it's still alive
           try {
+            pingSentAtRef.current = performance.now();
             wsRef.current.send(JSON.stringify({ type: 'ping' }));
           } catch {
             reconnectAttemptsRef.current = 0;

@@ -1,0 +1,337 @@
+// Pure filter-application functions for the Discover page (Trending + New Pairs).
+// No React, no side effects — just data filtering.
+
+import { type PulseFilters, defaultPulseFilters } from '~/contexts/PulseFiltersContext';
+
+/**
+ * Maps a UI protocol name to one or more backend `launchpad_protocol` values.
+ * This is a standalone copy of the mapping in PulseTable — kept separate so
+ * Discover filters are completely independent of PulseTable.
+ */
+export function mapProtocolToBackend(protocol: string): string[] {
+  switch (protocol) {
+    case 'Pump':
+      return ['pump.fun', 'pump', 'pumpfun'];
+    case 'Pump AMM':
+      return ['pump_amm', 'pumpamm', 'pumpswap', 'pump_swap'];
+    case 'Raydium':
+      return ['raydium', 'raydiumlaunchpad'];
+    case 'Meteora AMM':
+      return ['meteora'];
+    case 'Meteora AMM V2':
+      return ['meteora'];
+    case 'Bonk':
+      return ['bonk', 'bonk.fun', 'bonkfun', 'launchlab', 'raydiumlaunchpad'];
+    case 'Bags':
+      return ['bags'];
+    case 'Moonit':
+      return ['moonit', 'moonshot', 'moonshoot'];
+    case 'Boop':
+      return ['boop', 'boopfun'];
+    case 'LaunchLab':
+      return ['launchlab', 'bonk', 'bonk.fun', 'bonkfun', 'raydiumlaunchpad'];
+    case 'All':
+      return ['all'];
+    default:
+      return [protocol.toLowerCase()];
+  }
+}
+
+/**
+ * Checks whether a token's `launchpad_protocol` matches ANY of the selected
+ * protocol names. Returns true if the token should be included.
+ */
+export function tokenMatchesProtocolFilter(token: any, protocols: string[]): boolean {
+  if (protocols.length === 0 || protocols.includes('All')) return true;
+
+  // Match PulseTable exactly: only check launchpad_protocol (not protocol/amm fallbacks)
+  const protocol = ((token as any).launchpad_protocol || '').toLowerCase();
+  const mint = (token.mint || '').toLowerCase();
+
+  // Priority 1: Bags mint override (same as PulseTable)
+  if (mint.includes('bags')) {
+    return protocols.some(f => f === 'Bags');
+  }
+
+  // Priority 2: Empty protocol → default "Pump" (same as PulseTable)
+  if (!protocol) {
+    return protocols.some(f => f === 'Pump');
+  }
+
+  // Determine category — SAME order as PulseTable to avoid substring conflicts
+  let category = 'Pump';
+
+  if (protocol.includes('pump')) {
+    category = (protocol.includes('pump_amm') || protocol.includes('pumpamm') || protocol.includes('pumpswap'))
+      ? 'Pump AMM' : 'Pump';
+  } else if (protocol.includes('meteora')) {
+    category = 'Meteora AMM';
+  } else if (protocol.includes('boop')) {
+    category = 'Boop';
+  } else if (protocol.includes('moonit') || protocol.includes('moonshot') || protocol.includes('moonshoot')) {
+    category = 'Moonit';
+  } else if (protocol.includes('bonk') || protocol.includes('launchlab') || protocol.includes('launchpad') || mint.endsWith('bonk')) {
+    // CRITICAL: 'raydiumlaunchpad' is LaunchLab/Bonk ecosystem on Raydium infra
+    // Must check 'launchpad' (not just 'launchlab') — the actual protocol string is 'raydiumlaunchpad'
+    category = 'Bonk';
+  } else if (protocol.includes('raydium')) {
+    // Only matches pure 'raydium' tokens now — 'raydiumlaunchpad' caught above
+    category = 'Raydium';
+  } else if (protocol.includes('bags')) {
+    category = 'Bags';
+  }
+
+  return protocols.some((selectedFilter) => {
+    if (selectedFilter === category) return true;
+    // "Pump" includes "Pump AMM" tokens (full Pump ecosystem)
+    if (selectedFilter === 'Pump' && category === 'Pump AMM') return true;
+    // Meteora AMM V2 should also match Meteora AMM tokens
+    if (selectedFilter === 'Meteora AMM V2' && category === 'Meteora AMM') return true;
+    // LaunchLab and Bonk are the same ecosystem
+    if (selectedFilter === 'LaunchLab' && category === 'Bonk') return true;
+    if (selectedFilter === 'Bonk' && category === 'LaunchLab') return true;
+    return false;
+  });
+}
+
+/** Helper: parse a numeric filter string, returning undefined for empty/NaN. */
+function parseNum(val: string | undefined): number | undefined {
+  if (!val || val.trim() === '') return undefined;
+  const n = parseFloat(val);
+  return isNaN(n) ? undefined : n;
+}
+
+/** Convert an age value + unit to minutes for comparison. */
+function ageToMinutes(value: number, unit: string): number {
+  switch (unit) {
+    case 'h': return value * 60;
+    case 'd': return value * 60 * 24;
+    default:  return value; // 'm'
+  }
+}
+
+interface FilterCallbacks {
+  getVolume?: (t: any) => number;
+  getTxns?: (t: any) => number;
+  getBuys?: (t: any) => number;
+  getSells?: (t: any) => number;
+}
+
+/**
+ * Main filter function: applies ALL active PulseFilters fields client-side.
+ * Callbacks are used for timeframe-dependent values (volume, txns, buys, sells)
+ * so the caller can pass the correct timeframe-aware extractors.
+ */
+export function applyDiscoverFilters(
+  tokens: any[],
+  filters: PulseFilters,
+  options?: FilterCallbacks,
+): any[] {
+  // Fast path: if no filters are active, skip entirely
+  if (!hasActiveFilters(filters)) return tokens;
+
+  return tokens.filter((token) => {
+    // ── Protocol ──
+    if (!tokenMatchesProtocolFilter(token, filters.protocols)) return false;
+
+    // ── Quote Token ──
+    if (filters.quoteTokens.length > 0) {
+      const quoteToken = (token.quote_token_symbol || token.quoteSymbol || '').toUpperCase();
+      if (!filters.quoteTokens.includes(quoteToken)) return false;
+    }
+
+    // ── Search Keywords ──
+    if (filters.searchKeywords.trim()) {
+      const keywords = filters.searchKeywords
+        .split(',')
+        .map((k) => k.trim().toLowerCase())
+        .filter(Boolean);
+      if (keywords.length > 0) {
+        const text = `${token.name || ''} ${token.symbol || ''}`.toLowerCase();
+        if (!keywords.some((kw) => text.includes(kw))) return false;
+      }
+    }
+
+    // ── Exclude Keywords ──
+    if (filters.excludeKeywords.trim()) {
+      const keywords = filters.excludeKeywords
+        .split(',')
+        .map((k) => k.trim().toLowerCase())
+        .filter(Boolean);
+      if (keywords.length > 0) {
+        const text = `${token.name || ''} ${token.symbol || ''}`.toLowerCase();
+        if (keywords.some((kw) => text.includes(kw))) return false;
+      }
+    }
+
+    // ── Market Cap ──
+    const minMc = parseNum(filters.minMarketCap);
+    const maxMc = parseNum(filters.maxMarketCap);
+    if (minMc !== undefined || maxMc !== undefined) {
+      const mc = Number(token.fully_diluted_value || token.market_cap_usd) || 0;
+      if (minMc !== undefined && mc < minMc) return false;
+      if (maxMc !== undefined && mc > maxMc) return false;
+    }
+
+    // ── Volume ──
+    const minVol = parseNum(filters.minVolume);
+    const maxVol = parseNum(filters.maxVolume);
+    if (minVol !== undefined || maxVol !== undefined) {
+      const vol = options?.getVolume ? options.getVolume(token) : 0;
+      if (minVol !== undefined && vol < minVol) return false;
+      if (maxVol !== undefined && vol > maxVol) return false;
+    }
+
+    // ── Liquidity ──
+    const minLiq = parseNum(filters.minLiquidity);
+    const maxLiq = parseNum(filters.maxLiquidity);
+    if (minLiq !== undefined || maxLiq !== undefined) {
+      const liq = Number(token.total_liquidity_usd || token.liquidity_usd) || 0;
+      if (minLiq !== undefined && liq < minLiq) return false;
+      if (maxLiq !== undefined && liq > maxLiq) return false;
+    }
+
+    // ── Holders ──
+    const minH = parseNum(filters.holdersMin);
+    const maxH = parseNum(filters.holdersMax);
+    if (minH !== undefined || maxH !== undefined) {
+      const holders = Number(token.holder_count || token.holders) || 0;
+      if (minH !== undefined && holders < minH) return false;
+      if (maxH !== undefined && holders > maxH) return false;
+    }
+
+    // ── Age ──
+    const minAge = parseNum(filters.minAge);
+    const maxAge = parseNum(filters.maxAge);
+    if (minAge !== undefined || maxAge !== undefined) {
+      const createdAt = token.created_at || token.createdAt || token.pair_created_at;
+      if (createdAt) {
+        const ageMs = Date.now() - new Date(createdAt).getTime();
+        const ageMins = ageMs / 60000;
+        if (minAge !== undefined && ageMins < ageToMinutes(minAge, filters.ageUnit)) return false;
+        if (maxAge !== undefined && ageMins > ageToMinutes(maxAge, filters.ageUnit)) return false;
+      }
+    }
+
+    // ── Dev Migrations ──
+    const minDM = parseNum(filters.devMigrationsMin);
+    const maxDM = parseNum(filters.devMigrationsMax);
+    if (minDM !== undefined || maxDM !== undefined) {
+      const dm = Number(token.dev_migrations) || 0;
+      if (minDM !== undefined && dm < minDM) return false;
+      if (maxDM !== undefined && dm > maxDM) return false;
+    }
+
+    // ── Dev Pairs Created ──
+    const minDP = parseNum(filters.devPairsCreatedMin);
+    const maxDP = parseNum(filters.devPairsCreatedMax);
+    if (minDP !== undefined || maxDP !== undefined) {
+      const dp = Number(token.dev_pairs_created) || 0;
+      if (minDP !== undefined && dp < minDP) return false;
+      if (maxDP !== undefined && dp > maxDP) return false;
+    }
+
+    // ── KOL Count ──
+    const minKol = parseNum(filters.kolCountMin);
+    const maxKol = parseNum(filters.kolCountMax);
+    if (minKol !== undefined || maxKol !== undefined) {
+      const kol = Number(token.kol_count) || 0;
+      if (minKol !== undefined && kol < minKol) return false;
+      if (maxKol !== undefined && kol > maxKol) return false;
+    }
+
+    // ── B-Curve % ──
+    const minBC = parseNum(filters.bCurvePercentMin);
+    const maxBC = parseNum(filters.bCurvePercentMax);
+    if (minBC !== undefined || maxBC !== undefined) {
+      const bc = Number(token.bonding_pct || token.bCurvePercent) || 0;
+      if (minBC !== undefined && bc < minBC) return false;
+      if (maxBC !== undefined && bc > maxBC) return false;
+    }
+
+    // ── Txns ──
+    const minTxn = parseNum(filters.txnsMin);
+    const maxTxn = parseNum(filters.txnsMax);
+    if (minTxn !== undefined || maxTxn !== undefined) {
+      const txns = options?.getTxns ? options.getTxns(token) : 0;
+      if (minTxn !== undefined && txns < minTxn) return false;
+      if (maxTxn !== undefined && txns > maxTxn) return false;
+    }
+
+    // ── Buys ──
+    const minBuys = parseNum(filters.numBuysMin);
+    const maxBuys = parseNum(filters.numBuysMax);
+    if (minBuys !== undefined || maxBuys !== undefined) {
+      const buys = options?.getBuys ? options.getBuys(token) : 0;
+      if (minBuys !== undefined && buys < minBuys) return false;
+      if (maxBuys !== undefined && buys > maxBuys) return false;
+    }
+
+    // ── Sells ──
+    const minSells = parseNum(filters.numSellsMin);
+    const maxSells = parseNum(filters.numSellsMax);
+    if (minSells !== undefined || maxSells !== undefined) {
+      const sells = options?.getSells ? options.getSells(token) : 0;
+      if (minSells !== undefined && sells < minSells) return false;
+      if (maxSells !== undefined && sells > maxSells) return false;
+    }
+
+    return true;
+  });
+}
+
+/** Counts the number of non-default filter categories for the badge display. */
+export function countActiveFilters(filters: PulseFilters): number {
+  let count = 0;
+  if (filters.protocols.length > 0 && !filters.protocols.includes('All')) count++;
+  if (filters.quoteTokens.length > 0) count++;
+  if (filters.searchKeywords.trim()) count++;
+  if (filters.excludeKeywords.trim()) count++;
+  if (filters.minMarketCap || filters.maxMarketCap) count++;
+  if (filters.minVolume || filters.maxVolume) count++;
+  if (filters.minLiquidity || filters.maxLiquidity) count++;
+  if (filters.holdersMin || filters.holdersMax) count++;
+  if (filters.minAge || filters.maxAge) count++;
+  if (filters.devMigrationsMin || filters.devMigrationsMax) count++;
+  if (filters.devPairsCreatedMin || filters.devPairsCreatedMax) count++;
+  if (filters.kolCountMin || filters.kolCountMax) count++;
+  if (filters.bCurvePercentMin || filters.bCurvePercentMax) count++;
+  if (filters.txnsMin || filters.txnsMax) count++;
+  if (filters.numBuysMin || filters.numBuysMax) count++;
+  if (filters.numSellsMin || filters.numSellsMax) count++;
+  return count;
+}
+
+/** Quick check if any filter deviates from defaults. */
+export function hasActiveFilters(filters: PulseFilters): boolean {
+  return (
+    (filters.protocols.length > 0 && !filters.protocols.includes('All')) ||
+    filters.quoteTokens.length > 0 ||
+    !!filters.searchKeywords.trim() ||
+    !!filters.excludeKeywords.trim() ||
+    !!filters.minMarketCap ||
+    !!filters.maxMarketCap ||
+    !!filters.minVolume ||
+    !!filters.maxVolume ||
+    !!filters.minLiquidity ||
+    !!filters.maxLiquidity ||
+    !!filters.holdersMin ||
+    !!filters.holdersMax ||
+    !!filters.minAge ||
+    !!filters.maxAge ||
+    !!filters.devMigrationsMin ||
+    !!filters.devMigrationsMax ||
+    !!filters.devPairsCreatedMin ||
+    !!filters.devPairsCreatedMax ||
+    !!filters.kolCountMin ||
+    !!filters.kolCountMax ||
+    !!filters.bCurvePercentMin ||
+    !!filters.bCurvePercentMax ||
+    !!filters.txnsMin ||
+    !!filters.txnsMax ||
+    !!filters.numBuysMin ||
+    !!filters.numBuysMax ||
+    !!filters.numSellsMin ||
+    !!filters.numSellsMax
+  );
+}

@@ -5,12 +5,11 @@ const isDev = process.env.NODE_ENV !== 'production';
 
 // Derive URLs from environment (same env vars as the rest of the app)
 function getBaseUrl(): string {
-  return process.env.NEXT_PUBLIC_GO_SERVICE_URL || 'http://localhost:8085';
+  return process.env.NEXT_PUBLIC_GO_SERVICE_URL || '';
 }
 
 function getWsUrl(): string {
-  const base = process.env.NEXT_PUBLIC_WEBSOCKET_URL || process.env.NEXT_PUBLIC_GO_SERVICE_URL || 'http://localhost:8085';
-  // Convert http(s):// to ws(s)://
+  const base = process.env.NEXT_PUBLIC_WEBSOCKET_URL || process.env.NEXT_PUBLIC_GO_SERVICE_URL || '';
   return base.replace(/^http/, 'ws');
 }
 
