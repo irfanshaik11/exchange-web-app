@@ -200,7 +200,7 @@ export function prefetchViaWS(mint: string, snapshotTimeframe?: string): void {
       isDev && console.log('[OHLCPrefetch] Failed to create WS:', e);
       status = 'idle';
     }
-  }, 50);
+  }, 20);
 }
 
 /**
