@@ -501,6 +501,12 @@ const AdvancedOHLCChart: React.FC<AdvancedOHLCChartProps> = ({
     network,
   });
 
+  // RACE FIX: Synchronous token identity — guards WS handlers against stale data.
+  // Updated during render (not in useEffect) so it reflects the current token
+  // BEFORE any effects or WS message handlers execute.
+  const activeTokenRef = useRef<string>((mint || pairAddress) ?? "");
+  activeTokenRef.current = (mint || pairAddress) ?? "";
+
   // Keep ref in sync with state
   useEffect(() => {
     displayModeRef.current = displayMode;
@@ -2303,6 +2309,11 @@ const AdvancedOHLCChart: React.FC<AdvancedOHLCChartProps> = ({
     // Extract message handler to reuse in connect function
     const handleMessage = (event: MessageEvent) => {
       try {
+        // RACE FIX: Reject if this WS is for a different token than currently displayed
+        if (activeTokenRef.current !== tokenAddress) {
+          return;
+        }
+
         const message = JSON.parse(event.data);
 
         // Handle initial history batch
@@ -2884,6 +2895,13 @@ const AdvancedOHLCChart: React.FC<AdvancedOHLCChartProps> = ({
         // Update last message time for heartbeat detection
         lastMessageTime = Date.now();
 
+        // RACE FIX: Reject if this WS is for a different token than currently displayed.
+        // tokenAddress is closure-captured when this WS was created; activeTokenRef
+        // is updated synchronously during render, so a mismatch = stale WS.
+        if (activeTokenRef.current !== tokenAddress) {
+          return;
+        }
+
         const message = JSON.parse(event.data);
 
         // Handle ping/pong for keepalive - respond to server pings
@@ -2941,6 +2959,13 @@ const AdvancedOHLCChart: React.FC<AdvancedOHLCChartProps> = ({
               v_usd: c.v_usd || c.v || c.volume || 0,
             }))
             .sort((a: BackendOHLCData, b: BackendOHLCData) => a.unix_time - b.unix_time);
+
+          // RACE FIX (defense-in-depth): If chart hasn't been populated yet
+          // (token switch in progress), any existing cache is stale from the
+          // previous token — purge before applying snapshot.
+          if (!chartPopulatedRef.current && lastGoodCandlesRef.current.length > 0) {
+            lastGoodCandlesRef.current = [];
+          }
 
           const cachedData = lastGoodCandlesRef.current;
 
@@ -3268,6 +3293,11 @@ const AdvancedOHLCChart: React.FC<AdvancedOHLCChartProps> = ({
       // ── Try adopting a prefetched WS from ohlcPrefetchManager ──
       const adopted = ohlcPrefetchManager.adoptConnection(tokenAddress);
       if (adopted?.ws?.readyState === WebSocket.OPEN) {
+        // RACE FIX: If token changed since connectSolana was scheduled, discard adopted WS
+        if (activeTokenRef.current !== tokenAddress) {
+          try { adopted.ws.close(); } catch {}
+          // Fall through to create fresh WS for the correct token
+        } else {
 
         // Stop existing heartbeat & close any stale WS
         stopHeartbeat();
@@ -3338,6 +3368,7 @@ const AdvancedOHLCChart: React.FC<AdvancedOHLCChartProps> = ({
         // Start heartbeat monitoring on adopted WS
         startHeartbeat();
         return;
+        } // end else (activeTokenRef matches)
       }
 
       // ── Create new WebSocket ──
@@ -4888,6 +4919,9 @@ const AdvancedOHLCChart: React.FC<AdvancedOHLCChartProps> = ({
 
           ws.onmessage = (event) => {
             try {
+              // RACE FIX: Reject if token changed since this fallback WS was created
+              if (activeTokenRef.current !== tokenAddress) return;
+
               const message = JSON.parse(event.data);
 
               // Handle real-time candle updates (history is handled by useEffect)
