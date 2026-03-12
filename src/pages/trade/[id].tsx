@@ -1090,6 +1090,15 @@ export default function TradePage() {
                     limitOrders={activeLimitOrders}
                     onChartMetrics={handleChartMetrics}
                     preloadedData={backgroundOHLCData || undefined}
+                    tokenAgeSec={(() => {
+                      const tokenForAge = correctTokenData || token;
+                      const ca = (tokenForAge as any)?.created_at || (tokenForAge as any)?.createdAt || (tokenForAge as any)?.CreatedAt;
+                      if (!ca) return undefined;
+                      let ts = ca as any;
+                      if (typeof ca === "number" && ca < 10000000000) ts = ca * 1000;
+                      const d = new Date(ts);
+                      return Math.max(0, Math.floor((Date.now() - d.getTime()) / 1000));
+                    })()}
                   />
                   // <BackendOHLCChart
                   //   key={`chart-${resolvedPairAddress || _mint}`}
