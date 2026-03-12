@@ -12,6 +12,7 @@ export type BackendInterval =
   | "1m"
   | "5m"
   | "15m"
+  | "30m"
   | "1h"
   | "4h"
   | "1d"
@@ -68,6 +69,7 @@ export interface AdvancedOHLCChartProps {
     lastMarketCapUsd?: number;
     maxMarketCapUsd?: number;
   }) => void;
+  tokenAgeSec?: number;
 }
 
 const BACKEND_URL = process.env.NEXT_PUBLIC_GO_SERVICE_URL;
@@ -80,6 +82,7 @@ const VALID_INTERVALS: BackendInterval[] = [
   "1m",
   "5m",
   "15m",
+  "30m",
   "1h",
   "4h",
   "1d",
@@ -97,6 +100,7 @@ const INTERVAL_TO_RESOLUTION: Record<BackendInterval, string> = {
   "1m": "1",
   "5m": "5",
   "15m": "15",
+  "30m": "30",
   "1h": "60",
   "4h": "240",
   "1d": "1D",
@@ -113,6 +117,7 @@ const MONAD_DISPLAY_RESOLUTION: Record<BackendInterval, string> = {
   "1m": "1",
   "5m": "5",
   "15m": "15",
+  "30m": "30",
   "1h": "60",
   "4h": "240",
   "1d": "1D",
@@ -128,6 +133,7 @@ const MONAD_FETCH_INTERVAL: Record<BackendInterval, BackendInterval> = {
   "1m": "1m",
   "5m": "5m",
   "15m": "15m",
+  "30m": "30m",
   "1h": "1h",
   "4h": "4h",
   "1d": "1d",
@@ -143,10 +149,19 @@ const RESOLUTION_TO_INTERVAL: Record<string, BackendInterval> = {
   "1": "1m",
   "5": "5m",
   "15": "15m",
+  "30": "30m",
   "60": "1h",
   "240": "4h",
   "1D": "1d",
   "1W": "7d",
+};
+
+// Maps TV resolution → how much historical data to fetch (initial visible window)
+const RESOLUTION_TO_TIMEFRAME: Record<string, BackendTimeRange | "auto"> = {
+  "1S": "auto",    // use prop-based timeframe (default 1s live view)
+  "5": "24h",      // 5min candles → fetch 1 day
+  "30": "7d",      // 30min candles → fetch 7 days
+  "240": "180d",   // 4h candles → fetch 180 days (covers both 30D and 180D buttons)
 };
 
 const formatUsdCompact = (value: number): string => {
@@ -256,6 +271,8 @@ const getWindowStartTime = (
       return Math.floor(seconds / 300) * 300; // Floor to 5 minutes
     case "15m":
       return Math.floor(seconds / 900) * 900; // Floor to 15 minutes
+    case "30m":
+      return Math.floor(seconds / 1800) * 1800; // Floor to 30 minutes
     case "1h":
       return Math.floor(seconds / 3600) * 3600; // Floor to hour
     case "4h":
@@ -267,6 +284,37 @@ const getWindowStartTime = (
     default:
       return seconds;
   }
+};
+
+// Aggregate fine-grained candles (e.g., 1s) into coarser intervals (e.g., 5m, 30m, 4h)
+// Used as client-side fallback when backend pre-aggregated tables lack data (newer tokens)
+const aggregateCandlesToInterval = (
+  candles: BackendOHLCData[],
+  targetInterval: BackendInterval,
+): BackendOHLCData[] => {
+  if (candles.length === 0) return [];
+  const buckets = new Map<number, BackendOHLCData>();
+  for (const candle of candles) {
+    if (candle.o === 0 && candle.h === 0 && candle.l === 0 && candle.c === 0) continue;
+    const windowStart = getWindowStartTime(candle.unix_time, targetInterval);
+    const existing = buckets.get(windowStart);
+    if (!existing) {
+      buckets.set(windowStart, {
+        unix_time: windowStart,
+        o: candle.o,
+        h: candle.h,
+        l: candle.l,
+        c: candle.c,
+        v_usd: candle.v_usd,
+      });
+    } else {
+      existing.h = Math.max(existing.h, candle.h);
+      existing.l = Math.min(existing.l, candle.l);
+      existing.c = candle.c;
+      existing.v_usd += candle.v_usd;
+    }
+  }
+  return Array.from(buckets.values()).sort((a, b) => a.unix_time - b.unix_time);
 };
 
 const mapSecondsToTimeframe = (spanSeconds: number): BackendTimeRange => {
@@ -466,6 +514,7 @@ const AdvancedOHLCChart: React.FC<AdvancedOHLCChartProps> = ({
   priceLines,
   limitOrders,
   onChartMetrics,
+  tokenAgeSec,
 }) => {
   // DEBUG: Confirm component is rendering with latest code
 
@@ -1797,12 +1846,9 @@ const AdvancedOHLCChart: React.FC<AdvancedOHLCChartProps> = ({
       const tokenAddress = currentMint;
       const url = new URL(`${BACKEND_URL}/v1/ohlcv/${tokenAddress}`);
 
-      // Use optimal resolution per view timeframe
-      const intervalMap: Record<string, string> = {
-        "1h": "1s", "4h": "1s", "24h": "1s",
-        "7d": "1s", "30d": "1s", "90d": "1s", "180d": "1s", "365d": "1s",
-      };
-      url.searchParams.set("timeframe", intervalMap[effectiveTimeframe] || "1s");
+      // Use effectiveInterval directly — maps to TimescaleDB continuous aggregate table
+      // e.g., "5m" → ohlcv_5m, "30m" → ohlcv_30m, "4h" → ohlcv_4h, "1d" → ohlcv_1d
+      url.searchParams.set("timeframe", effectiveInterval);
 
       // Set from timestamp so Go service queries the correct time range
       const timeRangeSeconds: Record<string, number> = {
@@ -1817,7 +1863,7 @@ const AdvancedOHLCChart: React.FC<AdvancedOHLCChartProps> = ({
       };
       const from = Math.floor(Date.now() / 1000) - (timeRangeSeconds[effectiveTimeframe] || 86400);
       url.searchParams.set("from", String(from));
-      url.searchParams.set("limit", "500");
+      url.searchParams.set("limit", "2500");
       return url;
     },
     [],
@@ -3682,6 +3728,7 @@ const AdvancedOHLCChart: React.FC<AdvancedOHLCChartProps> = ({
             "1",
             "5",
             "15",
+            "30",
             "60",
             "240",
             "1D",
@@ -3837,6 +3884,7 @@ const AdvancedOHLCChart: React.FC<AdvancedOHLCChartProps> = ({
             "1",
             "5",
             "15",
+            "30",
             "60",
             "240",
             "1D",
@@ -3903,14 +3951,22 @@ const AdvancedOHLCChart: React.FC<AdvancedOHLCChartProps> = ({
           const cached = resolutionCacheRef.current.get(resolution);
           if (cached && cached.length > 0) {
             lastGoodCandlesRef.current = cached;
+            cachedIntervalRef.current = RESOLUTION_TO_INTERVAL[resolution] || dfInterval;
+            const mappedTf = RESOLUTION_TO_TIMEFRAME[resolution];
+            cachedTimeframeRef.current = (mappedTf && mappedTf !== "auto")
+              ? mappedTf as BackendTimeRange
+              : latestParamsRef.current.timeframe;
           }
         }
 
-        // FIX: Always use the prop timeframe - don't let TradingView's periodParams override it
-        // TradingView's periodParams represents the visible window, not how much data to fetch
-        // The prop timeframe (e.g., "30d") should control the API call
+        // Derive timeframe from TV resolution when user clicks a time frame button
+        // (e.g., resolution "30" → RESOLUTION_TO_TIMEFRAME["30"] = "7d")
+        // For default "1S" view, fall back to the prop timeframe
+        const mappedTimeframe = RESOLUTION_TO_TIMEFRAME[resolution];
         const requestedTimeframe: BackendTimeRange =
-          latestParamsRef.current.timeframe;
+          (mappedTimeframe && mappedTimeframe !== "auto")
+            ? mappedTimeframe as BackendTimeRange
+            : latestParamsRef.current.timeframe;
 
         fetchCountRef.current += 1;
         const currentFetchCount = fetchCountRef.current;
@@ -3982,7 +4038,11 @@ const AdvancedOHLCChart: React.FC<AdvancedOHLCChartProps> = ({
         // For Solana: WS always streams 1s candles — TradingView aggregates them to any resolution.
         // Never re-fetch on resolution change; only re-fetch when cache is empty or timeframe changes.
         const isSolana = currentNetwork !== "monad";
-        const intervalChanged = isSolana ? false : cachedIntervalRef.current !== requestedInterval;
+        // Allow Solana interval changes when TV resolution is not the default 1S
+        // (i.e., user clicked a time frame button like 7D → resolution "30" → interval "30m")
+        const intervalChanged = isSolana
+          ? (resolution !== "1S" && cachedIntervalRef.current !== requestedInterval)
+          : cachedIntervalRef.current !== requestedInterval;
         const timeframeChanged =
           cachedTimeframeRef.current !== requestedTimeframe;
         const needsFetch =
@@ -4384,6 +4444,45 @@ const AdvancedOHLCChart: React.FC<AdvancedOHLCChartProps> = ({
             if (lastGoodCandlesRef.current.length > 0 && !cachedTimeframeRef.current) {
               cachedIntervalRef.current = requestedInterval;
               cachedTimeframeRef.current = requestedTimeframe;
+            }
+
+            // Fallback: aggregate 1s WS candles client-side when backend has no pre-aggregated data
+            // (common for newer tokens whose TimescaleDB continuous aggregates haven't populated yet)
+            if (isSolana && resolution !== "1S") {
+              const baseCandles = resolutionCacheRef.current.get("1S");
+              if (baseCandles && baseCandles.length > 0) {
+                const aggregated = aggregateCandlesToInterval(baseCandles, requestedInterval);
+                if (aggregated.length > 0) {
+                  lastGoodCandlesRef.current = aggregated;
+                  cachedIntervalRef.current = requestedInterval;
+                  cachedTimeframeRef.current = requestedTimeframe;
+                  resolutionCacheRef.current.set(resolution, [...aggregated]);
+
+                  const MIN_PRICE = 0.0000001;
+                  const currentDisplayMode = effectiveDisplayMode;
+                  const aggBars = aggregated
+                    .map((item) => {
+                      const hasZeroValues = item.o === 0 && item.h === 0 && item.l === 0 && item.c === 0;
+                      const baseBar = {
+                        time: item.unix_time * 1000,
+                        open: hasZeroValues ? MIN_PRICE : item.o,
+                        high: hasZeroValues ? MIN_PRICE : item.h,
+                        low: hasZeroValues ? MIN_PRICE : item.l,
+                        close: hasZeroValues ? MIN_PRICE : item.c,
+                        volume: item.v_usd || 0,
+                      };
+                      return applyFlatCandleSpread(transformBar(baseBar, currentDisplayMode, true));
+                    })
+                    .filter((bar) => bar.time > 0 && isFinite(bar.time));
+                  aggBars.sort((a, b) => a.time - b.time);
+
+                  if (typeof onHistoryCallback === "function") {
+                    onHistoryCallback(aggBars, { noData: false });
+                    chartPopulatedRef.current = true;
+                  }
+                  return;
+                }
+              }
             }
 
             // Check if we have cached data before returning noData
@@ -5553,6 +5652,16 @@ Maker: ${walletAddress}`;
   // Note: Dev trade markers are now handled by TradingView's native marks system
   // via the getMarks() method in the datafeed. No manual marker creation needed.
 
+  // Compute time frame buttons based on token age (hides buttons for periods > token's lifetime)
+  const computeTimeFrames = useCallback(() => {
+    return [
+      { text: "1D",   resolution: "5",   description: "1 Day",    title: "1D"   },
+      { text: "7D",   resolution: "30",  description: "7 Days",   title: "7D"   },
+      { text: "30D",  resolution: "240", description: "30 Days",  title: "30D"  },
+      { text: "180D", resolution: "240", description: "180 Days", title: "180D" },
+    ];
+  }, []);
+
   // Initialize TradingView widget
   // Track the token identifier to prevent recreation when pairAddress just refines
   const widgetTokenRef = useRef<string | null>(null);
@@ -5664,30 +5773,10 @@ Maker: ${walletAddress}`;
           client_id: "tradingview.com",
           user_id: "public_user_id",
           theme: "dark", // Dark mode
-          // Time frames shown in the bottom toolbar
-          // Both Monad and Solana use 1s candles
-          // The resolution field keeps the candle interval the same (1S), only changes visible range
-          time_frames: [
-            { text: "1D", resolution: "1S", description: "1 Day", title: "1D" },
-            {
-              text: "7D",
-              resolution: "1S",
-              description: "7 Days",
-              title: "7D",
-            },
-            {
-              text: "30D",
-              resolution: "1S",
-              description: "30 Days",
-              title: "30D",
-            },
-            {
-              text: "180D",
-              resolution: "1S",
-              description: "180 Days",
-              title: "180D",
-            },
-          ],
+          // Time frames shown in the bottom toolbar — each button switches candle resolution
+          // and fetches the matching backend aggregate (e.g., 7D → 30m candles, 30D → 4h candles)
+          // Buttons are filtered by token age (don't show 180D for a 5-minute-old token)
+          time_frames: computeTimeFrames(),
           // Remove custom_css_url to avoid pink theme issues
           custom_css_url: '/charting_library/themed.css',
           loading_screen: { backgroundColor: "transparent" },
