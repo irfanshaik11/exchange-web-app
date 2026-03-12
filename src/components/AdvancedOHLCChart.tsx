@@ -2347,26 +2347,20 @@ const AdvancedOHLCChart: React.FC<AdvancedOHLCChartProps> = ({
           lastGoodCandlesRef.current = [];
 
           // Update cache with historical data - WebSocket sends { time, o, h, l, c, v }
+          // Skip all-zero candles (no trades in that period) to avoid MIN_PRICE → 100 MC artifacts
           candles.forEach((ohlcData: any, idx: number) => {
-            // Handle 0-value candles: if all OHLC values are 0, set a small minimum
-            // This ensures TradingView renders them (otherwise they may be invisible)
-            const hasZeroValues =
-              ohlcData.o === 0 &&
-              ohlcData.h === 0 &&
-              ohlcData.l === 0 &&
-              ohlcData.c === 0;
-            const minPrice = 0.0000001; // Small non-zero value for display
+            if (ohlcData.o === 0 && ohlcData.h === 0 && ohlcData.l === 0 && ohlcData.c === 0) {
+              return; // Drop zero candles
+            }
 
             const newCandle: BackendOHLCData = {
               unix_time: ohlcData.time,
-              o: hasZeroValues ? minPrice : ohlcData.o,
-              h: hasZeroValues ? minPrice : ohlcData.h,
-              l: hasZeroValues ? minPrice : ohlcData.l,
-              c: hasZeroValues ? minPrice : ohlcData.c,
+              o: ohlcData.o,
+              h: ohlcData.h,
+              l: ohlcData.l,
+              c: ohlcData.c,
               v_usd: ohlcData.v || 0,
             };
-
-            // Log first few candles for debugging
 
             lastGoodCandlesRef.current.push(newCandle);
           });
@@ -2948,7 +2942,9 @@ const AdvancedOHLCChart: React.FC<AdvancedOHLCChartProps> = ({
             return;
           }
 
-          // Convert snapshot to our format
+          // Convert snapshot to our format, dropping all-zero candles (no trades in
+          // that second). Without this filter, getBars() substitutes MIN_PRICE (1e-7)
+          // which in MC mode = 0.0000001 × 1B = 100 — creating a visible green dot.
           const converted: BackendOHLCData[] = snapshotCandles
             .map((c: any) => ({
               unix_time: c.unix_time || c.time,
@@ -2958,6 +2954,7 @@ const AdvancedOHLCChart: React.FC<AdvancedOHLCChartProps> = ({
               c: c.c || c.close || 0,
               v_usd: c.v_usd || c.v || c.volume || 0,
             }))
+            .filter((c: BackendOHLCData) => !(c.o === 0 && c.h === 0 && c.l === 0 && c.c === 0))
             .sort((a: BackendOHLCData, b: BackendOHLCData) => a.unix_time - b.unix_time);
 
           // RACE FIX (defense-in-depth): If chart hasn't been populated yet
