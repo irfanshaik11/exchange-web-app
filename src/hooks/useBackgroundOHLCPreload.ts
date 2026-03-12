@@ -43,26 +43,41 @@ export default function useBackgroundOHLCPreload(interval: string = '1h', timefr
   const fetchRef = useRef<Promise<void> | null>(null);
   const previousMintRef = useRef<string | null>(null);
   const currentMintRef = useRef<string | null>(null);
+  // RACE FIX: Track which mint the current backgroundData belongs to.
+  // Updated synchronously alongside every setBackgroundData call so the
+  // render-time return check can reject stale data without waiting for
+  // the async state flush.
+  const dataMintRef = useRef<string | null>(null);
 
   // Detect chain from URL path or query
   const chain = router.pathname.startsWith('/trade/monad') ? 'monad' :
                 (router.query.chain as string) || 'sol';
 
+  // RACE FIX: Compute the current mint synchronously during render (not in effect).
+  // router.query updates on the same render as the route change, so this always
+  // reflects the current page's token — unlike backgroundData state which lags.
+  const { _mint: qMint, id: qId } = router.query;
+  const renderMint = (typeof qMint === 'string' && qMint.length >= 32)
+    ? qMint
+    : (typeof qId === 'string' && qId.length >= 32 ? qId : null);
+
   useEffect(() => {
-    const { _mint, id: routeId } = router.query;
-    // Use _mint (from PulseTable nav) or route id (from direct URL / bookmark)
-    const mintAddress = (typeof _mint === 'string' && _mint.length >= 32)
-      ? _mint
-      : (typeof routeId === 'string' && routeId.length >= 32 ? routeId : null);
+    const mintAddress = renderMint;
 
     if (mintAddress) {
       // Track current mint for validation
       currentMintRef.current = mintAddress;
       
-      // If mint changed, clear all cached data to prevent cross-token pollution
+      // If mint changed, evict only the previous mint's cache entry.
+      // globalOHLCCache.clear() was used before but it nuked the NEW mint's
+      // prefetched data (from hover WS snapshot) right before we read it.
+      // Per-entry mint validation (cached.mint === mintAddress) already
+      // prevents cross-token pollution, so surgical eviction is safe.
       if (previousMintRef.current && previousMintRef.current !== mintAddress) {
-        globalOHLCCache.clear();
+        const prevKey = `${previousMintRef.current}:${interval}:${timeframe}`;
+        globalOHLCCache.delete(prevKey);
         setBackgroundData(null);
+        dataMintRef.current = null;
         setPreloadComplete(false);
       }
       previousMintRef.current = mintAddress;
@@ -70,6 +85,7 @@ export default function useBackgroundOHLCPreload(interval: string = '1h', timefr
       // ALWAYS clear background data when mint changes to prevent stale data
       if (backgroundData) {
         setBackgroundData(null);
+        dataMintRef.current = null;
         setPreloadComplete(false);
       }
 
@@ -85,6 +101,7 @@ export default function useBackgroundOHLCPreload(interval: string = '1h', timefr
         // (data.length === 0 means a hover prefetch is still in-flight)
         if (cached.mint === mintAddress) {
           setBackgroundData(cached.data);
+          dataMintRef.current = mintAddress;
           setPreloadComplete(true);
           return;
         } else {
@@ -98,6 +115,7 @@ export default function useBackgroundOHLCPreload(interval: string = '1h', timefr
       if (wsPrefetchCandles && wsPrefetchCandles.length > 0) {
         globalOHLCCache.set(cacheKey, { data: wsPrefetchCandles, timestamp: Date.now(), mint: mintAddress });
         setBackgroundData(wsPrefetchCandles);
+        dataMintRef.current = mintAddress;
         setPreloadComplete(true);
         return;
       }
@@ -157,7 +175,10 @@ export default function useBackgroundOHLCPreload(interval: string = '1h', timefr
                 // Cache the data globally with parameter-specific key and mint validation
                 globalOHLCCache.set(cacheKey, { data: items, timestamp: now, mint: mintAddress });
 
+                // RACE FIX: Don't set data if user navigated away during fetch
+                if (currentMintRef.current !== mintAddress) return;
                 setBackgroundData(items);
+                dataMintRef.current = mintAddress;
                 setPreloadComplete(true);
               }
             }
@@ -173,6 +194,7 @@ export default function useBackgroundOHLCPreload(interval: string = '1h', timefr
       // If no valid mint, clear any existing data
       if (backgroundData) {
         setBackgroundData(null);
+        dataMintRef.current = null;
         setPreloadComplete(false);
       }
     }
@@ -183,12 +205,17 @@ export default function useBackgroundOHLCPreload(interval: string = '1h', timefr
         fetchRef.current = null;
       }
     };
-  }, [router.query._mint, router.query.id, interval, timeframe]);
+  }, [renderMint, interval, timeframe]);
 
+  // RACE FIX: Synchronous render-time validation. During the first render after
+  // token navigation, backgroundData state still holds the OLD token's candles
+  // (setState is async). dataMintRef tracks which mint the data belongs to,
+  // and renderMint is the current page's token — a mismatch means stale data.
+  const dataMatchesMint = dataMintRef.current != null && dataMintRef.current === renderMint;
   return {
-    backgroundData,
+    backgroundData: dataMatchesMint ? backgroundData : null,
     isPreloading,
-    preloadComplete,
+    preloadComplete: dataMatchesMint ? preloadComplete : false,
   };
 }
 
