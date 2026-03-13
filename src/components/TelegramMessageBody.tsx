@@ -68,86 +68,100 @@ export function TelegramMessageBody({
           (a, b) => order.indexOf(a.type) - order.indexOf(b.type),
         );
         for (const ent of sortedTypes) {
-          if (ent.type === "bold")
-            node = <strong className="font-semibold">{node}</strong>;
-          else if (ent.type === "italic")
-            node = <em className="italic">{node}</em>;
-          else if (ent.type === "underline")
-            node = <span className="underline">{node}</span>;
-          else if (ent.type === "strikethrough")
-            node = <span className="line-through">{node}</span>;
-          else if (ent.type === "spoiler")
-            node = (
-              <span className="rounded bg-white/20 px-0.5 text-inherit">
-                {node}
-              </span>
-            );
-          else if (ent.type === "code")
-            node = (
-              <code className="rounded bg-white/10 px-1 font-mono text-[0.9em]">
-                {node}
-              </code>
-            );
-          else if (ent.type === "pre")
-            node = (
-              <code className="block rounded bg-white/10 p-2 font-mono text-[0.85em] whitespace-pre">
-                {node}
-              </code>
-            );
-          else if (ent.type === "blockquote")
-            node = (
-              <span className="border-l-2 border-white/20 pl-2 text-neutral-400">
-                {node}
-              </span>
-            );
-          else if (ent.type === "text_link" && ent.url)
-            node = (
-              <a
-                href={ent.url}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-[#0088cc] underline hover:opacity-90"
-                onClick={(e) => e.stopPropagation()}
-              >
-                {node}
-              </a>
-            );
-          else if (ent.type === "url")
-            node = (
-              <a
-                href={slice.startsWith("http") ? slice : `https://${slice}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-[#0088cc] underline hover:opacity-90"
-                onClick={(e) => e.stopPropagation()}
-              >
-                {node}
-              </a>
-            );
-          else if (ent.type === "mention")
-            node = (
-              <a
-                href={`https://t.me/${slice.startsWith("@") ? slice.slice(1) : slice}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-[#0088cc] hover:opacity-90"
-                onClick={(e) => e.stopPropagation()}
-              >
-                {node}
-              </a>
-            );
-          else if (ent.type === "hashtag")
-            node = (
-              <a
-                href={`https://t.me/search?q=${encodeURIComponent(slice.replace(/^#/, ""))}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-[#0088cc] hover:opacity-90"
-                onClick={(e) => e.stopPropagation()}
-              >
-                {node}
-              </a>
-            );
+					if (ent.type === "bold")
+						node = <strong className="font-semibold">{node}</strong>;
+					else if (ent.type === "italic")
+						node = <em className="italic">{node}</em>;
+					else if (ent.type === "underline")
+						node = <span className="underline">{node}</span>;
+					else if (ent.type === "strikethrough")
+						node = <span className="line-through">{node}</span>;
+					else if (ent.type === "spoiler")
+						node = (
+							<span className="rounded bg-white/20 px-0.5 text-inherit">
+								{node}
+							</span>
+						);
+					else if (ent.type === "code")
+						node = (
+							<code className="rounded bg-white/10 px-1 font-mono text-[0.9em]">
+								{node}
+							</code>
+						);
+					else if (ent.type === "pre")
+						node = (
+							<code className="block rounded bg-white/10 p-2 font-mono text-[0.85em] whitespace-pre">
+								{node}
+							</code>
+						);
+					else if (ent.type === "blockquote")
+						node = (
+							<span className="border-l-2 border-white/20 pl-2 text-neutral-400">
+								{node}
+							</span>
+						);
+					else if (ent.type === "text_link" && ent.url)
+						node = (
+							<a
+								href={ent.url}
+								target="_blank"
+								rel="noopener noreferrer"
+								className="text-[#0088cc] underline hover:opacity-90"
+								onClick={(e) => e.stopPropagation()}
+							>
+								{node}
+							</a>
+						);
+					else if (ent.type === "url")
+						node = (
+							<a
+								href={slice.startsWith("http") ? slice : `https://${slice}`}
+								target="_blank"
+								rel="noopener noreferrer"
+								className="text-[#0088cc] underline hover:opacity-90"
+								onClick={(e) => e.stopPropagation()}
+							>
+								{node}
+							</a>
+						);
+					else if (ent.type === "mention")
+						node = (
+							<a
+								href={`https://t.me/${slice.startsWith("@") ? slice.slice(1) : slice}`}
+								target="_blank"
+								rel="noopener noreferrer"
+								className="text-[#0088cc] hover:opacity-90"
+								onClick={(e) => e.stopPropagation()}
+							>
+								{node}
+							</a>
+						);
+					else if (ent.type === "hashtag") {
+						let encodedQuery = "";
+						const raw = slice.replace(/^#/, "");
+						try {
+							encodedQuery = encodeURIComponent(raw);
+						} catch {
+							// Fallback for malformed surrogate pairs or invalid sequences
+							encodedQuery = encodeURIComponent(
+								raw
+									.normalize("NFKD")
+									.replace(/[^\w\s-]/g, "")
+									.trim(),
+							);
+						}
+						node = (
+							<a
+								href={`https://t.me/search?q=${encodedQuery}`}
+								target="_blank"
+								rel="noopener noreferrer"
+								className="text-[#0088cc] hover:opacity-90"
+								onClick={(e) => e.stopPropagation()}
+							>
+								{node}
+							</a>
+						);
+					}
         }
         return <React.Fragment key={idx}>{node}</React.Fragment>;
       })}

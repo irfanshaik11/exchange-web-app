@@ -5,6 +5,8 @@ import InterstateTable from './InterstateTable';
 import type { Token } from '~/utils/db';
 import usePaginatedTokensWithFallback from '../hooks/usePaginatedTokensWithFallback';
 import { usePumpPortalWebSocket } from '../hooks/usePumpPortalWebSocket';
+import useTrendingWebSocket, { type TrendingTimeframe } from '../hooks/useTrendingWebSocket';
+import { useDexScreenerTrending } from '../hooks/useDexScreenerTrending';
 import { useQuickBuy } from "~/components/QuickBuyContext";
 import QuickBuySettingsModal from '../components/QuickBuySettingsModal';
 import { useFilter } from '../components/FilterContext';
@@ -431,30 +433,75 @@ export default function DiscoverPopoutContent() {
     // Force a small delay to ensure state is cleared before hook re-runs
   }, [currentChain]);
   
+  // Use same data source strategy as main Discover page:
+  // - Solana trending tab: WebSocket (real-time)
+  // - Everything else (including Monad): paginated HTTP fallback
   const {
-    data: allTokens,
-    loading: tokensLoading,
-    isConnected,
-    error: tokenError,
-    isReconnecting,
+    data: fallbackTokens,
+    loading: fallbackLoading,
+    isConnected: fallbackConnected,
+    error: fallbackError,
+    isReconnecting: fallbackReconnecting,
     usingFallback,
   } = usePaginatedTokensWithFallback({
-    // Always use trending endpoint
     filter: 'trending',
     timeframe: selectedTimeframe,
-    chain: currentChain, // Use state value - this will trigger re-fetch when chain changes
-    limit: 200 // Fetch 200 tokens for trending tab
+    chain: currentChain,
+    // Only enable fallback fetch when on Monad or when not on Solana trending tab
+    limit: (currentChain === 'monad' || activeTab !== 'trending') ? 500 : 0,
   });
-  
+
+  const trendingWsTimeframe = (selectedTimeframe === '24h' ? '6h' : selectedTimeframe) as TrendingTimeframe;
+  const {
+    tokens: wsTokens,
+    loading: wsLoading,
+    isConnected: wsConnected,
+    error: wsError,
+    isReconnecting: wsReconnecting,
+    lastUpdate: wsLastUpdate,
+  } = useTrendingWebSocket({
+    timeframe: trendingWsTimeframe,
+    enabled: currentChain === 'sol' && activeTab === 'trending',
+  });
+
+  // DexScreener trending (kept in sync with main Discover, even though this popout
+  // currently doesn't expose the separate \"Trending 2\" tab)
+  const {
+    tokens: dexScreenerTokens,
+    loading: dsLoading,
+    isConnected: dsConnected,
+    error: dsError,
+  } = useDexScreenerTrending(false);
+
+  const allTokens = useMemo(() => {
+    if (currentChain === 'sol' && activeTab === 'trending') {
+      return wsTokens as unknown as TokenWithDexPaid[];
+    }
+    return fallbackTokens;
+  }, [currentChain, activeTab, wsTokens, fallbackTokens]);
+
+  const tokensLoading =
+    currentChain === 'sol' && activeTab === 'trending' ? wsLoading : fallbackLoading;
+  const isConnected =
+    currentChain === 'sol' && activeTab === 'trending' ? wsConnected : fallbackConnected;
+  const tokenError =
+    currentChain === 'sol' && activeTab === 'trending' ? wsError : fallbackError;
+  const isReconnecting =
+    currentChain === 'sol' && activeTab === 'trending' ? wsReconnecting : fallbackReconnecting;
+
   // Log when hook data changes to track chain switching
   useEffect(() => {
-    isDev && console.log('[Discover] Hook data updated:', {
+    isDev && console.log('[DiscoverPopout] Hook data updated:', {
       chain: currentChain,
+      activeTab,
       tokenCount: allTokens?.length || 0,
       loading: tokensLoading,
-      usingFallback: usingFallback
+      usingWebSocket: currentChain === 'sol' && activeTab === 'trending',
+      wsConnected,
+      wsLastUpdate,
+      usingFallback,
     });
-  }, [allTokens, tokensLoading, currentChain, usingFallback]);
+  }, [allTokens, tokensLoading, currentChain, activeTab, wsConnected, wsLastUpdate, usingFallback]);
 
   // PumpPortal WebSocket for live pump section
   const {
@@ -1973,10 +2020,18 @@ export default function DiscoverPopoutContent() {
 
   // Update displayed tokens
   // CRITICAL: This effect applies filters and updates displayed tokens
-  // It depends on filteredTokens (which comes from allTokens) and filter context
+  // For Solana trending, ALWAYS use wsTokens (never tokenMapRef) so we show the exact same
+  // full list as the Discover page and avoid any stale or partial ref data.
   useEffect(() => {
     if (activeTab === "trending") {
-      const arr = Array.from(tokenMapRef.current.values());
+      let arr: TokenWithDexPaid[];
+      if (currentChain === 'sol') {
+        // Always use WebSocket data for Solana trending (even when empty) so count matches Discover
+        arr = Array.isArray(wsTokens) ? (wsTokens as unknown as TokenWithDexPaid[]) : [];
+      } else {
+        // Monad: use tokenMapRef (populated from fallback HTTP)
+        arr = Array.from(tokenMapRef.current.values());
+      }
       
       // Safety check: filter out wrapped SOL before processing
       let safeArr = arr.filter(t => t && t.mint && !isWrappedSol(t));
@@ -2087,7 +2142,7 @@ export default function DiscoverPopoutContent() {
         uniqueSafe.push(token);
       }
       
-      // If we have fewer than 10 trending tokens, supplement with top tokens from new pairs
+      // If we have fewer than 10 trending tokens, supplement with top tokens from new pairs (match Discover page: up to 50)
       if (uniqueSafe.length < 10 && newPairsRaw && newPairsRaw.length > 0) {
         
         // Get top tokens from new pairs, sorted by volume (for selected timeframe)
@@ -2129,20 +2184,19 @@ export default function DiscoverPopoutContent() {
             const bMc = Number((b as any).fully_diluted_value || (b as any).market_cap_usd || 0);
             return bMc - aMc;
           })
-          .slice(0, 10) // Take top 10 from new pairs
+          .slice(0, 50) // Take top 50 from new pairs (same as Discover page)
           .map((token: any) => {
             // Remove the sortVolume property we added
             const { sortVolume, ...rest } = token;
             return rest;
           });
         
-        // Add to uniqueSafe, tracking their mints to avoid duplicates
+        // Add to uniqueSafe, tracking their mints to avoid duplicates (no cap - show same as Discover)
         for (const token of topNewPairs) {
           const mint = (token.mint || token.address || '').toLowerCase();
           if (mint && !seenMints.has(mint)) {
             seenMints.add(mint);
             uniqueSafe.push(token);
-            if (uniqueSafe.length >= 20) break; // Cap at 20 total tokens
           }
         }
         
@@ -2150,13 +2204,13 @@ export default function DiscoverPopoutContent() {
       
       setDisplayed(uniqueSafe);
     } else if (activeTab === "dex") {
-      // dex tab → show limited slice
+      // dex tab → show all filtered tokens (match Discover page behavior)
       const safe = filteredTokens.filter(t => t && t.mint && !isWrappedSol(t));
-      setDisplayed(safe.slice(0, 10));
+      setDisplayed(safe);
     } else {
       setDisplayed([]);
     }
-  }, [activeTab, filteredTokens, sortKey, sortDirection, selectedTimeframe, applyFilters, getVolumeForTimeframe, isWrappedSol, filter, activeFilterCount, newPairsRaw, currentChain, isZeroLiquidityToken]); // Ensure filters are reapplied when they change
+  }, [activeTab, filteredTokens, sortKey, sortDirection, selectedTimeframe, applyFilters, getVolumeForTimeframe, isWrappedSol, filter, activeFilterCount, newPairsRaw, currentChain, isZeroLiquidityToken, wsTokens]); // wsTokens required so displayed updates when WebSocket delivers full list
 
   const processedNewPairs = useMemo(() => {
     if (!newPairsRaw || newPairsRaw.length === 0) {
@@ -2477,10 +2531,10 @@ export default function DiscoverPopoutContent() {
   return (
     <div className="flex h-full flex-col text-[#E6E7EA]" style={{ backgroundColor: '#111214' }}>
 
-        {/* Tab Navigation */}
-        <div className="flex flex-col gap-4 px-4 pt-4 sm:px-6 lg:flex-row lg:items-center lg:justify-between lg:gap-6 lg:px-8">
-          {/* Tabs Section - Scrollable on mobile */}
-          <div className="scrollbar-hide -mx-4 flex items-center gap-3 overflow-x-auto px-4 pb-2 sm:-mx-6 sm:gap-4 sm:px-6 lg:mx-0 lg:gap-6 lg:px-0 lg:pb-0">
+        {/* Tab Navigation + Controls: tabs on first line, Filter/amount/P1-P3 on second line */}
+        <div className="flex flex-col gap-3 px-4 pt-4 sm:px-6 lg:px-8">
+          {/* Tabs Section - first row */}
+          <div className="scrollbar-hide -mx-4 flex items-center gap-3 overflow-x-auto px-4 pb-0 sm:-mx-6 sm:gap-4 sm:px-6 lg:mx-0 lg:gap-6 lg:px-0">
             {/* Chain Switcher - Commented out */}
             {/* <div className="flex items-center gap-2 mr-2">
               <button
@@ -2591,8 +2645,8 @@ export default function DiscoverPopoutContent() {
             </button> */}
           </div>
 
-          {/* Right controls - Stack on mobile, row on desktop */}
-          <div className="flex flex-wrap items-center gap-2 sm:gap-3 lg:gap-4">
+          {/* Second row: Filter, amount input, P1 P2 P3 */}
+          <div className="flex flex-wrap items-center gap-2 border-t border-white/[0.06] pt-3 sm:gap-3 sm:pt-3 lg:gap-4 mb-4">
             {/* Connection status - commented out per user request */}
             {/* <div className="flex items-center gap-2">
               <div className={`w-2 h-2 rounded-full ${isConnected ? 'bg-emerald-400' : usingFallback ? 'bg-yellow-400' : 'bg-red-400'}`}></div>

@@ -44,6 +44,7 @@ import { storeReferralCodeHint, getStoredReferralCodeHint, clearStoredReferralCo
 import PagePreloader from '../components/PagePreloader';
 import { PulseBackgroundLoader } from '../components/PulseBackgroundLoader';
 import { SolanaPositionWebSocketProvider } from '../contexts/SolanaPositionWebSocketContext';
+import { DockedPanelProvider } from '../contexts/DockedPanelContext';
 import ErrorBoundary from '../components/ErrorBoundary';
 
 const isDev = process.env.NODE_ENV !== 'production';
@@ -768,7 +769,7 @@ const MyApp: AppType = ({ Component, pageProps }) => {
         {/* Open Graph meta tags for social sharing */}
         <meta property="og:title" content="Interstate - The Fastest Exchange" />
         <meta property="og:description" content="Get ready to win on Interstate, the fastest exchange! Get free Solana for joining today, win daily Jackpots, level up and earn progressively higher rewards. Start trading today!" />
-        <meta property="og:image" content="https://app.interstate.so/referral-share.png" />
+        {/* <meta property="og:image" content="https://app.interstate.so/referral-share.png" /> */}
         <meta property="og:image:width" content="1920" />
         <meta property="og:image:height" content="1080" />
         <meta property="og:type" content="website" />
@@ -778,7 +779,7 @@ const MyApp: AppType = ({ Component, pageProps }) => {
         <meta name="twitter:card" content="summary_large_image" />
         <meta name="twitter:title" content="Interstate - The Fastest Exchange" />
         <meta name="twitter:description" content="Get ready to win on Interstate, the fastest exchange! Get free Solana for joining today, win daily Jackpots, level up and earn progressively higher rewards. Start trading today!" />
-        <meta name="twitter:image" content="https://app.interstate.so/referral-share.png" />
+        {/* <meta name="twitter:image" content="https://app.interstate.so/referral-share.png" /> */}
         {/* Preload rank backgrounds, textures + badge images to prevent flicker on navigation */}
         <link rel="preload" href="/ranks/Background.png" as="image" />
         <link rel="preload" href="/ranks/Background2.png" as="image" />
@@ -866,11 +867,13 @@ const MyApp: AppType = ({ Component, pageProps }) => {
                             <WalletTrackerProvider>
                               <SolanaPositionWebSocketProvider>
                                 <ReferralAccessGate>
-                                  <PagePreloader />
-                                  <PulseBackgroundLoader />
-                                  <ErrorBoundary>
-                                    <Component {...pageProps} />
-                                  </ErrorBoundary>
+                                  <DockedPanelProvider>
+                                    <PagePreloader />
+                                    <PulseBackgroundLoader />
+                                    <ErrorBoundary>
+                                      <Component {...pageProps} />
+                                    </ErrorBoundary>
+                                  </DockedPanelProvider>
                                 </ReferralAccessGate>
                               </SolanaPositionWebSocketProvider>
                             </WalletTrackerProvider>

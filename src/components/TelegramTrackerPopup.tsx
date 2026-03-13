@@ -3,30 +3,32 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { FaTimes } from 'react-icons/fa';
-import PulsePopoutContent from './PulsePopoutContent';
+import TelegramTrackerContent from './TelegramTrackerContent';
 import { useDockedPanel, DOCKED_PANEL_WIDTH } from '../contexts/DockedPanelContext';
 
 const DOCK_THRESHOLD = 60;
 const DOCKED_WIDTH = 400;
+/** Top offset so docked panel sits below navbar + header (matches app chrome) */
 const DOCK_TOP_OFFSET_PX = 80;
+/** Bottom offset so docked panel stops above the fixed footer */
 const DOCK_FOOTER_OFFSET_PX = 56;
 type DockSide = 'none' | 'left' | 'right';
 
-interface PulsePopupProps {
+interface TelegramTrackerPopupProps {
   isOpen: boolean;
   onClose: () => void;
 }
 
-const POPUP_ID = 'pulse';
+const POPUP_ID = 'telegram';
 
-const PulsePopup: React.FC<PulsePopupProps> = ({ isOpen, onClose }) => {
+const TelegramTrackerPopup: React.FC<TelegramTrackerPopupProps> = ({ isOpen, onClose }) => {
   const dockCtx = useDockedPanel();
 
   // Load position and size from localStorage
   const getInitialPosition = (): { x: number; y: number } => {
     if (typeof window === 'undefined') return { x: 0, y: 0 };
     try {
-      const saved = localStorage.getItem('pulse-popup-position');
+      const saved = localStorage.getItem('telegram-popup-position');
       if (saved) {
         const parsed = JSON.parse(saved);
         return { x: parsed.x || 0, y: parsed.y || 0 };
@@ -38,23 +40,23 @@ const PulsePopup: React.FC<PulsePopupProps> = ({ isOpen, onClose }) => {
   };
 
   const getInitialSize = (): { width: number; height: number } => {
-    if (typeof window === 'undefined') return { width: 800, height: 700 };
+    if (typeof window === 'undefined') return { width: 600, height: 600 };
     try {
-      const saved = localStorage.getItem('pulse-popup-size');
+      const saved = localStorage.getItem('telegram-popup-size');
       if (saved) {
         const parsed = JSON.parse(saved);
-        return { width: parsed.width || 800, height: parsed.height || 700 };
+        return { width: parsed.width || 600, height: parsed.height || 600 };
       }
     } catch {
       // Ignore parse errors
     }
-    return { width: 800, height: 700 };
+    return { width: 600, height: 600 };
   };
 
   const getInitialDock = (): DockSide => {
     if (typeof window === 'undefined') return 'none';
     try {
-      const saved = localStorage.getItem('pulse-popup-dock');
+      const saved = localStorage.getItem('telegram-popup-dock');
       if (saved === 'left' || saved === 'right') return saved;
     } catch {
       // Ignore
@@ -89,9 +91,8 @@ const PulsePopup: React.FC<PulsePopupProps> = ({ isOpen, onClose }) => {
   // Initialize position in center of screen only if no saved position exists
   useEffect(() => {
     if (isOpen && typeof window !== 'undefined') {
-      const saved = localStorage.getItem('pulse-popup-position');
+      const saved = localStorage.getItem('telegram-popup-position');
       if (!saved) {
-        // Only center if no saved position
         const centerX = window.innerWidth / 2 - size.width / 2;
         const centerY = window.innerHeight / 2 - size.height / 2;
         setPosition({
@@ -105,19 +106,19 @@ const PulsePopup: React.FC<PulsePopupProps> = ({ isOpen, onClose }) => {
   // Save position and size to localStorage whenever they change
   useEffect(() => {
     if (typeof window !== 'undefined' && isOpen) {
-      localStorage.setItem('pulse-popup-position', JSON.stringify(position));
+      localStorage.setItem('telegram-popup-position', JSON.stringify(position));
     }
   }, [position, isOpen]);
 
   useEffect(() => {
     if (typeof window !== 'undefined' && isOpen) {
-      localStorage.setItem('pulse-popup-size', JSON.stringify(size));
+      localStorage.setItem('telegram-popup-size', JSON.stringify(size));
     }
   }, [size, isOpen]);
 
   useEffect(() => {
     if (typeof window !== 'undefined' && isOpen) {
-      localStorage.setItem('pulse-popup-dock', dockSide);
+      localStorage.setItem('telegram-popup-dock', dockSide);
     }
   }, [dockSide, isOpen]);
 
@@ -132,62 +133,41 @@ const PulsePopup: React.FC<PulsePopupProps> = ({ isOpen, onClose }) => {
     setDockContrib(POPUP_ID, dockSide === 'left' ? w : 0, dockSide === 'right' ? w : 0);
   }, [isOpen, dockSide]);
 
-  // Handle drag functionality - optimized for performance
   const handlePointerMove = useCallback((e: PointerEvent) => {
     if (isResizingRef.current) {
-      // Handle resize
       if (!modalRef.current) return;
-      
       const deltaX = e.clientX - resizeStartRef.current.x;
       const deltaY = e.clientY - resizeStartRef.current.y;
-      
-      const newWidth = Math.max(600, Math.min(1600, resizeStartRef.current.width + deltaX));
-      const newHeight = Math.max(400, Math.min(window.innerHeight - 40, resizeStartRef.current.height + deltaY));
-      
-      // Direct DOM update for smooth resizing
+      const newWidth = Math.max(400, Math.min(1200, resizeStartRef.current.width + deltaX));
+      const newHeight = Math.max(300, Math.min(window.innerHeight - 40, resizeStartRef.current.height + deltaY));
       modalRef.current.style.width = `${newWidth}px`;
       modalRef.current.style.height = `${newHeight}px`;
-      
       sizeRef.current = { width: newWidth, height: newHeight };
     } else if (isDraggingRef.current && e.pointerId === activePointerIdRef.current) {
-      // Handle drag - direct DOM update for performance
       if (!modalRef.current) return;
-      
       const nextX = e.clientX - dragStartRef.current.x;
       const nextY = e.clientY - dragStartRef.current.y;
-      
-      // Constrain to viewport
       const maxX = window.innerWidth - sizeRef.current.width;
       const maxY = window.innerHeight - 60;
-      
       const constrainedX = Math.max(0, Math.min(nextX, maxX));
       const constrainedY = Math.max(0, Math.min(nextY, maxY));
-      
-      // Direct DOM update for smooth dragging
       modalRef.current.style.left = `${constrainedX}px`;
       modalRef.current.style.top = `${constrainedY}px`;
-      
       positionRef.current = { x: constrainedX, y: constrainedY };
     }
   }, []);
 
   const handlePointerUp = useCallback((e?: PointerEvent) => {
     if (!isDraggingRef.current && !isResizingRef.current) return;
-
     if (isResizingRef.current) {
-      // Commit resize to state
       setSize(sizeRef.current);
       isResizingRef.current = false;
       setIsResizing(false);
-      
       if (resizeHandleRef.current && e && resizeHandleRef.current.hasPointerCapture(e.pointerId)) {
         resizeHandleRef.current.releasePointerCapture(e.pointerId);
       }
     } else if (isDraggingRef.current) {
-      if (e && activePointerIdRef.current !== null && e.pointerId !== activePointerIdRef.current) {
-        return;
-      }
-
+      if (e && activePointerIdRef.current !== null && e.pointerId !== activePointerIdRef.current) return;
       const x = positionRef.current.x;
       const w = sizeRef.current.width;
       const winW = typeof window !== 'undefined' ? window.innerWidth : 0;
@@ -201,23 +181,19 @@ const PulsePopup: React.FC<PulsePopupProps> = ({ isOpen, onClose }) => {
         setDockSide('none');
         setPosition(positionRef.current);
       }
-
       isDraggingRef.current = false;
       setIsDragging(false);
       activePointerIdRef.current = null;
-
       if (headerRef.current && e && headerRef.current.hasPointerCapture(e.pointerId)) {
         headerRef.current.releasePointerCapture(e.pointerId);
       }
     }
   }, []);
 
-  // Set up global mouse event listeners once
   useEffect(() => {
     window.addEventListener('pointermove', handlePointerMove, true);
     window.addEventListener('pointerup', handlePointerUp, true);
     window.addEventListener('pointercancel', handlePointerUp, true);
-
     return () => {
       window.removeEventListener('pointermove', handlePointerMove, true);
       window.removeEventListener('pointerup', handlePointerUp, true);
@@ -225,7 +201,6 @@ const PulsePopup: React.FC<PulsePopupProps> = ({ isOpen, onClose }) => {
     };
   }, [handlePointerMove, handlePointerUp]);
 
-  // Manage body styles while dragging/resizing
   useEffect(() => {
     if (isDragging || isResizing) {
       document.body.style.userSelect = 'none';
@@ -234,21 +209,16 @@ const PulsePopup: React.FC<PulsePopupProps> = ({ isOpen, onClose }) => {
       document.body.style.userSelect = '';
       document.body.style.cursor = '';
     }
-
     return () => {
       document.body.style.userSelect = '';
       document.body.style.cursor = '';
     };
   }, [isDragging, isResizing]);
 
-  // Handle drag start
   const handlePointerDown = useCallback((e: React.PointerEvent) => {
     if (e.button !== 0) return;
-
     const target = e.target as HTMLElement;
     if (target.closest('button, input')) return;
-
-    // When docked, starting a drag undocks; use current visual position so panel doesn't jump
     if (dockSide !== 'none') {
       const winW = window.innerWidth;
       const offset = dockCtx ? dockCtx.getDockedOffset(POPUP_ID, dockSide) : 0;
@@ -258,12 +228,9 @@ const PulsePopup: React.FC<PulsePopupProps> = ({ isOpen, onClose }) => {
       setDockSide('none');
       positionRef.current = { x: newX, y: newY };
     }
-    
-    // Check if clicking on resize handle
     if (resizeHandleRef.current?.contains(target)) {
       e.preventDefault();
       e.stopPropagation();
-
       isResizingRef.current = true;
       setIsResizing(true);
       resizeStartRef.current = {
@@ -272,39 +239,34 @@ const PulsePopup: React.FC<PulsePopupProps> = ({ isOpen, onClose }) => {
         width: sizeRef.current.width,
         height: sizeRef.current.height,
       };
-
       if (resizeHandleRef.current) {
         try {
           resizeHandleRef.current.setPointerCapture(e.pointerId);
         } catch {
-          // Ignore if pointer capture not supported
+          // Ignore
         }
       }
       return;
     }
-
-    // Check if clicking on header for dragging
     if (headerRef.current?.contains(target)) {
       e.preventDefault();
       e.stopPropagation();
-
       isDraggingRef.current = true;
       activePointerIdRef.current = e.pointerId;
       setIsDragging(true);
-      dragStartRef.current = {
-        x: e.clientX - positionRef.current.x,
-        y: e.clientY - positionRef.current.y,
-      };
-
+      const pos = positionRef.current;
+      dragStartRef.current = { x: e.clientX - pos.x, y: e.clientY - pos.y };
       if (headerRef.current) {
         try {
           headerRef.current.setPointerCapture(e.pointerId);
         } catch {
-          // Ignore if pointer capture not supported
+          // Ignore
         }
       }
     }
   }, [dockSide, dockCtx]);
+
+  if (!isOpen || typeof window === 'undefined') return null;
 
   const isDocked = dockSide !== 'none';
   const dockOffset = dockCtx && isDocked ? dockCtx.getDockedOffset(POPUP_ID, dockSide as 'left' | 'right') : 0;
@@ -317,7 +279,7 @@ const PulsePopup: React.FC<PulsePopupProps> = ({ isOpen, onClose }) => {
         maxWidth: 'none',
         maxHeight: 'none',
         minWidth: '320px',
-        minHeight: '400px',
+        minHeight: '300px',
         backgroundColor: '#050608',
         opacity: (isDragging || isResizing) ? 0.85 : 1,
         cursor: isDragging ? 'grabbing' : 'default',
@@ -337,10 +299,10 @@ const PulsePopup: React.FC<PulsePopupProps> = ({ isOpen, onClose }) => {
         top: `${position.y}px`,
         width: `${size.width}px`,
         height: `${size.height}px`,
-        maxWidth: '95vw',
-        maxHeight: '95vh',
-        minWidth: '600px',
-        minHeight: '400px',
+        maxWidth: '90vw',
+        maxHeight: '90vh',
+        minWidth: '400px',
+        minHeight: '300px',
         backgroundColor: '#050608',
         opacity: (isDragging || isResizing) ? 0.85 : 1,
         cursor: isDragging ? 'grabbing' : 'default',
@@ -353,8 +315,6 @@ const PulsePopup: React.FC<PulsePopupProps> = ({ isOpen, onClose }) => {
         boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.5)',
       };
 
-  if (!isOpen || typeof window === 'undefined') return null;
-
   return createPortal(
     <div className="fixed inset-0 z-[99999] pointer-events-none">
       <div
@@ -362,7 +322,6 @@ const PulsePopup: React.FC<PulsePopupProps> = ({ isOpen, onClose }) => {
         className="fixed shadow-2xl pointer-events-auto"
         style={modalStyle}
       >
-        {/* Header - Draggable with ::: handle */}
         <div
           ref={headerRef}
           className="flex items-center justify-between px-4 py-3 border-b border-[#2A2B33] select-none flex-shrink-0"
@@ -370,58 +329,40 @@ const PulsePopup: React.FC<PulsePopupProps> = ({ isOpen, onClose }) => {
           onPointerDown={handlePointerDown}
         >
           <div className="flex items-center gap-2">
-            {/* Grid icon drag handle */}
             <div className="w-4 h-4 grid grid-cols-3 gap-0.5">
               {[...Array(9)].map((_, i) => (
                 <div key={i} className="w-0.5 h-0.5 bg-[#9CA3AF] rounded" />
               ))}
             </div>
-            <span className="text-sm font-semibold text-white ml-2">Pulse</span>
+            <span className="text-sm font-semibold text-white ml-2">Telegram Tracker</span>
           </div>
-
-          {/* Close button */}
-          <button
-            onClick={onClose}
-            className="p-1 text-[#9CA3AF] hover:text-white"
-          >
+          <button onClick={onClose} className="p-1 text-[#9CA3AF] hover:text-white">
             <FaTimes className="w-4 h-4" />
           </button>
         </div>
-
-        {/* Content - Pulse Page */}
-        <div className="flex-1 overflow-hidden min-h-0" style={{ maxWidth: '100%' }}>
-          <div className="h-full w-full" style={{ maxWidth: (isDocked ? DOCKED_WIDTH : size.width) < 1024 ? '100%' : 'none' }}>
-            <PulsePopoutContent forceMobileView={isDocked || size.width < 1024} />
-          </div>
+        <div className="flex-1 overflow-y-auto min-h-0">
+          <TelegramTrackerContent />
         </div>
-
-        {/* Resize Handle - Bottom Right Corner (hidden when docked) */}
         {!isDocked && (
-        <div
-          ref={resizeHandleRef}
-          className="absolute bottom-0 right-0 w-8 h-8 cursor-nwse-resize z-20"
-          style={{
-            background: 'transparent',
-          }}
-          onPointerDown={handlePointerDown}
-          onMouseEnter={(e) => {
-            e.currentTarget.style.cursor = 'nwse-resize';
-          }}
-        >
-          {/* Visual resize indicator - more visible and larger */}
-          <div className="absolute bottom-0 right-0 w-6 h-6 flex items-end justify-end">
-            <div className="flex flex-col gap-0.5">
-              <div className="flex gap-0.5">
-                <div className="w-1.5 h-1.5 bg-[#9CA3AF] rounded-sm"></div>
-                <div className="w-1.5 h-1.5 bg-[#9CA3AF] rounded-sm"></div>
-              </div>
-              <div className="flex gap-0.5">
-                <div className="w-1.5 h-1.5 bg-[#9CA3AF] rounded-sm"></div>
-                <div className="w-1.5 h-1.5 bg-[#9CA3AF] rounded-sm"></div>
+          <div
+            ref={resizeHandleRef}
+            className="absolute bottom-0 right-0 w-6 h-6 cursor-nwse-resize z-20"
+            style={{ background: 'transparent' }}
+            onPointerDown={handlePointerDown}
+          >
+            <div className="absolute bottom-0 right-0 w-5 h-5 flex items-end justify-end">
+              <div className="flex flex-col gap-0.5">
+                <div className="flex gap-0.5">
+                  <div className="w-1 h-1 bg-[#9CA3AF] rounded-sm"></div>
+                  <div className="w-1 h-1 bg-[#9CA3AF] rounded-sm"></div>
+                </div>
+                <div className="flex gap-0.5">
+                  <div className="w-1 h-1 bg-[#9CA3AF] rounded-sm"></div>
+                  <div className="w-1 h-1 bg-[#9CA3AF] rounded-sm"></div>
+                </div>
               </div>
             </div>
           </div>
-        </div>
         )}
       </div>
     </div>,
@@ -429,5 +370,4 @@ const PulsePopup: React.FC<PulsePopupProps> = ({ isOpen, onClose }) => {
   );
 };
 
-export default PulsePopup;
-
+export default TelegramTrackerPopup;
