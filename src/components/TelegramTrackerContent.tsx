@@ -64,13 +64,11 @@ export default function TelegramTrackerContent() {
       let list = await getTrackedTelegramChannels(user.bearerToken);
       setTelegramChannels(list);
       if (list.length === 0) {
-        for (const username of DEFAULT_TELEGRAM_CHANNELS) {
-          try {
-            await addTrackedTelegramChannel(username, user.bearerToken);
-          } catch {
-            // Skip if channel not approved or add fails
-          }
-        }
+        await Promise.allSettled(
+          DEFAULT_TELEGRAM_CHANNELS.map((username) =>
+            addTrackedTelegramChannel(username, user.bearerToken)
+          )
+        );
         list = await getTrackedTelegramChannels(user.bearerToken);
         setTelegramChannels(list);
       }
@@ -164,13 +162,11 @@ export default function TelegramTrackerContent() {
       const toAdd = DEFAULT_TELEGRAM_CHANNELS.filter(
         (username) => !existing.has(username.toLowerCase()),
       );
-      for (const username of toAdd) {
-        try {
-          await addTrackedTelegramChannel(username, user.bearerToken);
-        } catch {
-          // Skip if not approved or add fails
-        }
-      }
+      await Promise.allSettled(
+        toAdd.map((username) =>
+          addTrackedTelegramChannel(username, user.bearerToken)
+        )
+      );
       await loadTelegramChannels();
       if (toAdd.length > 0) {
         showEnhancedToast(

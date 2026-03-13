@@ -370,6 +370,12 @@ export default function Footer() {
     }
   }, [showPulseDropdown]);
 
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      localStorage.setItem("footer-popup-telegram", String(showTelegramDropdown));
+    }
+  }, [showTelegramDropdown]);
+
   // Latency is now measured by useServerLatency hook (HTTP-based, no auth required)
 
   // Update modal position when dropdown opens

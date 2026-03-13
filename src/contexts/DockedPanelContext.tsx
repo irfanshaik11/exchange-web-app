@@ -9,6 +9,11 @@ export const CONTENT_NARROW_BREAKPOINT = 1024;
 
 type PanelSlot = { id: string; width: number };
 
+interface PanelState {
+  left: PanelSlot[];
+  right: PanelSlot[];
+}
+
 interface DockedPanelContextValue {
   dockedLeftWidth: number;
   dockedRightWidth: number;
@@ -35,9 +40,19 @@ function offsetForId(panels: PanelSlot[], id: string): number {
   return 0;
 }
 
+function updateSide(prev: PanelSlot[], id: string, width: number): PanelSlot[] {
+  if (width === 0) return prev.filter((p) => p.id !== id);
+  const idx = prev.findIndex((p) => p.id === id);
+  if (idx >= 0) {
+    const next = [...prev];
+    next[idx] = { id, width };
+    return next;
+  }
+  return [...prev, { id, width }];
+}
+
 export function DockedPanelProvider({ children }: { children: React.ReactNode }) {
-  const [leftPanels, setLeftPanels] = useState<PanelSlot[]>([]);
-  const [rightPanels, setRightPanels] = useState<PanelSlot[]>([]);
+  const [panels, setPanels] = useState<PanelState>({ left: [], right: [] });
   const [windowWidth, setWindowWidth] = useState(
     typeof window !== "undefined" ? window.innerWidth : 0
   );
@@ -50,38 +65,22 @@ export function DockedPanelProvider({ children }: { children: React.ReactNode })
   }, []);
 
   const setDockContrib = useCallback((id: string, left: number, right: number) => {
-    setLeftPanels((prev) => {
-      if (left === 0) return prev.filter((p) => p.id !== id);
-      const idx = prev.findIndex((p) => p.id === id);
-      if (idx >= 0) {
-        const next = [...prev];
-        next[idx] = { id, width: left };
-        return next;
-      }
-      return [...prev, { id, width: left }];
-    });
-    setRightPanels((prev) => {
-      if (right === 0) return prev.filter((p) => p.id !== id);
-      const idx = prev.findIndex((p) => p.id === id);
-      if (idx >= 0) {
-        const next = [...prev];
-        next[idx] = { id, width: right };
-        return next;
-      }
-      return [...prev, { id, width: right }];
-    });
+    setPanels((prev) => ({
+      left: updateSide(prev.left, id, left),
+      right: updateSide(prev.right, id, right),
+    }));
   }, []);
 
   const getDockedOffset = useCallback(
     (id: string, side: "left" | "right") => {
-      const panels = side === "left" ? leftPanels : rightPanels;
-      return offsetForId(panels, id);
+      const list = side === "left" ? panels.left : panels.right;
+      return offsetForId(list, id);
     },
-    [leftPanels, rightPanels]
+    [panels]
   );
 
-  const dockedLeftWidth = useMemo(() => totalWidth(leftPanels), [leftPanels]);
-  const dockedRightWidth = useMemo(() => totalWidth(rightPanels), [rightPanels]);
+  const dockedLeftWidth = useMemo(() => totalWidth(panels.left), [panels.left]);
+  const dockedRightWidth = useMemo(() => totalWidth(panels.right), [panels.right]);
   const contentWidth = useMemo(
     () => Math.max(0, windowWidth - dockedLeftWidth - dockedRightWidth),
     [windowWidth, dockedLeftWidth, dockedRightWidth]
@@ -129,7 +128,7 @@ export function DockedPanelMarginWrapper({
   const narrow = ctx?.isContentNarrow ?? false;
   return (
     <div
-      className={narrow ? "content-narrow" : undefined}
+      className={`h-full${narrow ? " content-narrow" : ""}`}
       style={{
         marginLeft: marginLeft ? `${marginLeft}px` : undefined,
         marginRight: marginRight ? `${marginRight}px` : undefined,
