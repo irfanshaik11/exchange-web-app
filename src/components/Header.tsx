@@ -115,7 +115,7 @@ const navLinks = [
   { name: "Trackers", href: "/trackers" },
   { name: "Rewards", href: "/outpost" },
   // { name: "Predictions", href: "/predictions" },
-  // { name: "Perpetuals", href: "/construction" },
+  // { name: "Perpetuals", href: "/perpetuals" },
   // { name: "Yield", href: "/construction" },
 ];
 
