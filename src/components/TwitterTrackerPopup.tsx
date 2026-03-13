@@ -4,13 +4,26 @@ import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { FaTimes } from 'react-icons/fa';
 import TwitterTrackerContent from './TwitterTrackerContent';
+import { useDockedPanel, DOCKED_PANEL_WIDTH } from '../contexts/DockedPanelContext';
+
+const DOCK_THRESHOLD = 60;
+const DOCKED_WIDTH = 400;
+/** Top offset so docked panel sits below navbar + header (matches app chrome) */
+const DOCK_TOP_OFFSET_PX = 80;
+/** Bottom offset so docked panel stops above the fixed footer */
+const DOCK_FOOTER_OFFSET_PX = 56;
+type DockSide = 'none' | 'left' | 'right';
 
 interface TwitterTrackerPopupProps {
   isOpen: boolean;
   onClose: () => void;
 }
 
+const POPUP_ID = 'twitter';
+
 const TwitterTrackerPopup: React.FC<TwitterTrackerPopupProps> = ({ isOpen, onClose }) => {
+  const dockCtx = useDockedPanel();
+
   // Load position and size from localStorage
   const getInitialPosition = (): { x: number; y: number } => {
     if (typeof window === 'undefined') return { x: 0, y: 0 };
@@ -40,8 +53,20 @@ const TwitterTrackerPopup: React.FC<TwitterTrackerPopupProps> = ({ isOpen, onClo
     return { width: 600, height: 600 };
   };
 
+  const getInitialDock = (): DockSide => {
+    if (typeof window === 'undefined') return 'none';
+    try {
+      const saved = localStorage.getItem('twitter-popup-dock');
+      if (saved === 'left' || saved === 'right') return saved;
+    } catch {
+      // Ignore
+    }
+    return 'none';
+  };
+
   const [position, setPosition] = useState(getInitialPosition);
   const [size, setSize] = useState(getInitialSize);
+  const [dockSide, setDockSide] = useState<DockSide>(getInitialDock);
   const [isDragging, setIsDragging] = useState(false);
   const [isResizing, setIsResizing] = useState(false);
   const modalRef = useRef<HTMLDivElement>(null);
@@ -93,6 +118,23 @@ const TwitterTrackerPopup: React.FC<TwitterTrackerPopupProps> = ({ isOpen, onClo
     }
   }, [size, isOpen]);
 
+  useEffect(() => {
+    if (typeof window !== 'undefined' && isOpen) {
+      localStorage.setItem('twitter-popup-dock', dockSide);
+    }
+  }, [dockSide, isOpen]);
+
+  // Notify layout so main content collapses when this popup is docked.
+  // Do NOT include dockCtx in deps: it changes when setDockContrib runs, causing an infinite loop.
+  const setDockContribRef = useRef(dockCtx?.setDockContrib);
+  setDockContribRef.current = dockCtx?.setDockContrib;
+  useEffect(() => {
+    const setDockContrib = setDockContribRef.current;
+    if (!setDockContrib) return;
+    const w = isOpen && dockSide !== 'none' ? DOCKED_PANEL_WIDTH : 0;
+    setDockContrib(POPUP_ID, dockSide === 'left' ? w : 0, dockSide === 'right' ? w : 0);
+  }, [isOpen, dockSide]);
+
   // Handle drag functionality - optimized for performance
   const handlePointerMove = useCallback((e: PointerEvent) => {
     if (isResizingRef.current) {
@@ -111,7 +153,7 @@ const TwitterTrackerPopup: React.FC<TwitterTrackerPopupProps> = ({ isOpen, onClo
       
       sizeRef.current = { width: newWidth, height: newHeight };
     } else if (isDraggingRef.current && e.pointerId === activePointerIdRef.current) {
-      // Handle drag - direct DOM update for performance
+      // Handle drag - direct DOM update for performance (only when not docked)
       if (!modalRef.current) return;
       
       const nextX = e.clientX - dragStartRef.current.x;
@@ -149,8 +191,21 @@ const TwitterTrackerPopup: React.FC<TwitterTrackerPopupProps> = ({ isOpen, onClo
         return;
       }
 
-      // Commit position to state
-      setPosition(positionRef.current);
+      const x = positionRef.current.x;
+      const w = sizeRef.current.width;
+      const winW = typeof window !== 'undefined' ? window.innerWidth : 0;
+      // Dock to left if left edge touches/near left side; dock to right if right edge touches/near right side
+      if (x <= DOCK_THRESHOLD) {
+        setDockSide('left');
+        setPosition({ x: 0, y: positionRef.current.y });
+      } else if (x + w >= winW - DOCK_THRESHOLD) {
+        setDockSide('right');
+        setPosition({ x: winW - w, y: positionRef.current.y });
+      } else {
+        setDockSide('none');
+        setPosition(positionRef.current);
+      }
+
       isDraggingRef.current = false;
       setIsDragging(false);
       activePointerIdRef.current = null;
@@ -195,6 +250,19 @@ const TwitterTrackerPopup: React.FC<TwitterTrackerPopupProps> = ({ isOpen, onClo
     if (e.button !== 0) return;
 
     const target = e.target as HTMLElement;
+    // Don't treat button clicks (e.g. close) as drag/undock - let the button's onClick fire
+    if (target.closest('button, input')) return;
+
+    // When docked, starting a drag undocks; use current visual position so panel doesn't jump
+    if (dockSide !== 'none') {
+      const winW = window.innerWidth;
+      const offset = dockCtx ? dockCtx.getDockedOffset(POPUP_ID, dockSide) : 0;
+      const newX = dockSide === 'left' ? offset : winW - offset - DOCKED_WIDTH;
+      const newY = DOCK_TOP_OFFSET_PX;
+      setPosition({ x: newX, y: newY });
+      setDockSide('none');
+      positionRef.current = { x: newX, y: newY };
+    }
     
     // Check if clicking on resize handle
     if (resizeHandleRef.current?.contains(target)) {
@@ -222,19 +290,16 @@ const TwitterTrackerPopup: React.FC<TwitterTrackerPopupProps> = ({ isOpen, onClo
 
     // Check if clicking on header for dragging
     if (headerRef.current?.contains(target)) {
-      if (target.closest('button, input')) {
-        return;
-      }
-
       e.preventDefault();
       e.stopPropagation();
 
       isDraggingRef.current = true;
       activePointerIdRef.current = e.pointerId;
       setIsDragging(true);
+      const pos = positionRef.current;
       dragStartRef.current = {
-        x: e.clientX - positionRef.current.x,
-        y: e.clientY - positionRef.current.y,
+        x: e.clientX - pos.x,
+        y: e.clientY - pos.y,
       };
 
       if (headerRef.current) {
@@ -245,32 +310,63 @@ const TwitterTrackerPopup: React.FC<TwitterTrackerPopupProps> = ({ isOpen, onClo
         }
       }
     }
-  }, []);
+  }, [dockSide, dockCtx]);
 
   if (!isOpen || typeof window === 'undefined') return null;
 
+  const isDocked = dockSide !== 'none';
+  const dockOffset = dockCtx && isDocked ? dockCtx.getDockedOffset(POPUP_ID, dockSide as 'left' | 'right') : 0;
+  const modalStyle: React.CSSProperties = isDocked
+    ? {
+        ...(dockSide === 'left' ? { left: dockOffset } : { right: dockOffset }),
+        top: DOCK_TOP_OFFSET_PX,
+        width: `${DOCKED_WIDTH}px`,
+        height: `calc(100vh - ${DOCK_TOP_OFFSET_PX}px - ${DOCK_FOOTER_OFFSET_PX}px)`,
+        maxWidth: 'none',
+        maxHeight: 'none',
+        minWidth: '320px',
+        minHeight: '300px',
+        backgroundColor: '#050608',
+        opacity: (isDragging || isResizing) ? 0.85 : 1,
+        cursor: isDragging ? 'grabbing' : 'default',
+        zIndex: 10000,
+        display: 'flex',
+        flexDirection: 'column',
+        transition: (isDragging || isResizing) ? 'none' : 'opacity 0.15s',
+        borderLeft: dockSide === 'left' ? '1px solid #2A2B33' : 'none',
+        borderRight: dockSide === 'right' ? '1px solid #2A2B33' : 'none',
+        borderTop: 'none',
+        borderBottom: 'none',
+        borderRadius: dockSide === 'left' ? '0 8px 8px 0' : '8px 0 0 8px',
+        boxShadow: '2px 0 24px rgba(0,0,0,0.4)',
+      }
+    : {
+        left: `${position.x}px`,
+        top: `${position.y}px`,
+        width: `${size.width}px`,
+        height: `${size.height}px`,
+        maxWidth: '90vw',
+        maxHeight: '90vh',
+        minWidth: '400px',
+        minHeight: '300px',
+        backgroundColor: '#050608',
+        opacity: (isDragging || isResizing) ? 0.85 : 1,
+        cursor: isDragging ? 'grabbing' : 'default',
+        zIndex: 10000,
+        display: 'flex',
+        flexDirection: 'column',
+        transition: (isDragging || isResizing) ? 'none' : 'opacity 0.15s',
+        border: '1px solid #2A2B33',
+        borderRadius: '8px',
+        boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.5)',
+      };
+
   return createPortal(
-    <div className="fixed inset-0 z-[9999] pointer-events-none">
+    <div className="fixed inset-0 z-[99999] pointer-events-none">
       <div
         ref={modalRef}
-        className="fixed border border-[#2A2B33] rounded-lg shadow-2xl pointer-events-auto"
-        style={{
-          left: `${position.x}px`,
-          top: `${position.y}px`,
-          width: `${size.width}px`,
-          height: `${size.height}px`,
-          maxWidth: '90vw',
-          maxHeight: '90vh',
-          minWidth: '400px',
-          minHeight: '300px',
-          backgroundColor: '#050608',
-          opacity: (isDragging || isResizing) ? 0.85 : 1,
-          cursor: isDragging ? 'grabbing' : 'default',
-          zIndex: 10000,
-          display: 'flex',
-          flexDirection: 'column',
-          transition: (isDragging || isResizing) ? 'none' : 'opacity 0.15s',
-        }}
+        className="fixed shadow-2xl pointer-events-auto"
+        style={modalStyle}
       >
         {/* Header - Draggable with ::: handle */}
         <div
@@ -303,7 +399,8 @@ const TwitterTrackerPopup: React.FC<TwitterTrackerPopupProps> = ({ isOpen, onClo
           <TwitterTrackerContent />
         </div>
 
-        {/* Resize Handle - Bottom Right Corner */}
+        {/* Resize Handle - Bottom Right Corner (hidden when docked) */}
+        {!isDocked && (
         <div
           ref={resizeHandleRef}
           className="absolute bottom-0 right-0 w-6 h-6 cursor-nwse-resize z-20"
@@ -326,6 +423,7 @@ const TwitterTrackerPopup: React.FC<TwitterTrackerPopupProps> = ({ isOpen, onClo
             </div>
           </div>
         </div>
+        )}
       </div>
     </div>,
     document.body
@@ -333,4 +431,3 @@ const TwitterTrackerPopup: React.FC<TwitterTrackerPopupProps> = ({ isOpen, onClo
 };
 
 export default TwitterTrackerPopup;
-

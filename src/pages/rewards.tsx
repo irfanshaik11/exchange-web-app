@@ -6,6 +6,7 @@ import { Copy, Gift, Users, Wallet } from "lucide-react";
 import Header from "~/components/Header";
 import InterstateButton from "~/components/InterstateButton";
 import Footer from "~/components/Footer";
+import { DockedPanelMarginWrapper } from "~/contexts/DockedPanelContext";
 import { useUser } from "~/components/UserContext";
 import {
   fetchReferralCodeForUser,
@@ -168,6 +169,7 @@ export default function RewardsPage() {
       </Head>
       <div className="flex min-h-screen flex-col bg-gradient-to-br from-neutral-950 via-neutral-900 to-neutral-950 text-neutral-100">
         <Header />
+        <DockedPanelMarginWrapper>
         <main className="mx-auto w-full max-w-6xl flex-1 px-6 pt-16 pb-24 sm:px-8 lg:px-10">
           <section className="space-y-12">
             {/* Hide header, stats cards, and referral table when chain is Monad */}
@@ -419,6 +421,7 @@ export default function RewardsPage() {
             </>
           </section>
         </main>
+        </DockedPanelMarginWrapper>
 
         {/* Footer */}
         <Footer />

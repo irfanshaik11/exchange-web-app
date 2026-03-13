@@ -24,6 +24,7 @@ import PnLModal from "./PnLModal";
 import WalletSwitcher from "./WalletSwitcher";
 import MonadWalletSwitcher from "./MonadWalletSwitcher";
 import TwitterTrackerPopup from "./TwitterTrackerPopup";
+import TelegramTrackerPopup from "./TelegramTrackerPopup";
 import DiscoverPopup from "./DiscoverPopup";
 import PulsePopup from "./PulsePopup";
 import NotificationSettingsModal from "./NotificationSettingsModal";
@@ -282,6 +283,9 @@ export default function Footer() {
   const [showPulseDropdown, setShowPulseDropdown] = useState(() =>
     getInitialPopupState("pulse"),
   );
+  const [showTelegramDropdown, setShowTelegramDropdown] = useState(() =>
+    getInitialPopupState("telegram"),
+  );
   const [showGlobalDropdown, setShowGlobalDropdown] = useState(false);
   const [showPresetModal, setShowPresetModal] = useState(false);
   const [showPnLModal, setShowPnLModal] = useState(false);
@@ -366,6 +370,12 @@ export default function Footer() {
     }
   }, [showPulseDropdown]);
 
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      localStorage.setItem("footer-popup-telegram", String(showTelegramDropdown));
+    }
+  }, [showTelegramDropdown]);
+
   // Latency is now measured by useServerLatency hook (HTTP-based, no auth required)
 
   // Update modal position when dropdown opens
@@ -403,9 +413,10 @@ export default function Footer() {
 
   const navLinks = [
     { name: "Wallet", href: "/trackers", icon: FaWallet },
-    { name: "Twitter", href: "/twitter", icon: XIcon, hasNotification: true },
+    // { name: "Twitter", href: "/twitter", icon: XIcon, hasNotification: true },
     { name: "Discover", href: "/", icon: FaCompass, hasNotification: true },
     { name: "Pulse", href: "/pulse", icon: FaChartLine, hasNotification: true },
+    { name: "Telegram", href: "/trackers", icon: FaTelegram },
     // { name: "PnL", href: "/pnl", icon: FaChartBar }, // Disabled: 404 route not available
   ];
 
@@ -578,7 +589,9 @@ export default function Footer() {
                     ? showDiscoverDropdown
                     : link.name === "Pulse"
                       ? showPulseDropdown
-                      : router.pathname === link.href;
+                      : link.name === "Telegram"
+                        ? showTelegramDropdown
+                        : router.pathname === link.href;
 
             return (
               <React.Fragment key={link.name}>
@@ -680,6 +693,35 @@ export default function Footer() {
                 ) : link.name === "Pulse" ? (
                   <button
                     onClick={() => setShowPulseDropdown(!showPulseDropdown)}
+                    className="group relative flex items-center gap-1 rounded px-2 py-0.5 transition-all duration-300 ease-out sm:gap-2"
+                    style={{
+                      color: isActive ? AX.mint : AX.muted,
+                      backgroundColor: isActive
+                        ? `${AX.mint}20`
+                        : "transparent",
+                      cursor: "pointer",
+                    }}
+                    onMouseEnter={(e) => {
+                      if (!isActive) {
+                        e.currentTarget.style.color = AX.mint;
+                        e.currentTarget.style.backgroundColor = `${AX.mint}10`;
+                      }
+                    }}
+                    onMouseLeave={(e) => {
+                      if (!isActive) {
+                        e.currentTarget.style.color = AX.muted;
+                        e.currentTarget.style.backgroundColor = "transparent";
+                      }
+                    }}
+                  >
+                    <IconComponent size={11} className="sm:h-3 sm:w-3" />
+                    <span className="hidden text-[11px] leading-none sm:inline sm:text-xs">
+                      {link.name}
+                    </span>
+                  </button>
+                ) : link.name === "Telegram" ? (
+                  <button
+                    onClick={() => setShowTelegramDropdown(!showTelegramDropdown)}
                     className="group relative flex items-center gap-1 rounded px-2 py-0.5 transition-all duration-300 ease-out sm:gap-2"
                     style={{
                       color: isActive ? AX.mint : AX.muted,
@@ -1041,10 +1083,10 @@ export default function Footer() {
       )}
 
       {/* Twitter Tracker Popup */}
-      <TwitterTrackerPopup
+      {/* <TwitterTrackerPopup
         isOpen={showTwitterDropdown}
         onClose={() => setShowTwitterDropdown(false)}
-      />
+      /> */}
 
       {/* Discover Popup */}
       <DiscoverPopup
@@ -1056,6 +1098,12 @@ export default function Footer() {
       <PulsePopup
         isOpen={showPulseDropdown}
         onClose={() => setShowPulseDropdown(false)}
+      />
+
+      {/* Telegram Tracker Popup */}
+      <TelegramTrackerPopup
+        isOpen={showTelegramDropdown}
+        onClose={() => setShowTelegramDropdown(false)}
       />
 
       {/* Notification Settings Modal */}
