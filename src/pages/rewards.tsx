@@ -1,3 +1,4 @@
+// Page disabled — to re-enable, remove the getServerSideProps at the bottom of this file
 import { useCallback, useEffect, useState, useRef } from "react";
 import Head from "next/head";
 import { useRouter } from "next/router";
@@ -425,3 +426,6 @@ export default function RewardsPage() {
     </>
   );
 }
+
+// Disable this page — returns 404 to any visitor
+export const getServerSideProps = () => ({ notFound: true as const });

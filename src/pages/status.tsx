@@ -1,3 +1,4 @@
+// Page disabled — to re-enable, remove the getServerSideProps at the bottom of this file
 import { useEffect, useState, useCallback } from 'react';
 import Head from 'next/head';
 
@@ -288,3 +289,6 @@ export default function StatusPage() {
     </>
   );
 }
+
+// Disable this page — returns 404 to any visitor
+export const getServerSideProps = () => ({ notFound: true as const });
