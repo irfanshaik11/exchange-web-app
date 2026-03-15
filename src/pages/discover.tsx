@@ -1,5 +1,6 @@
 // src/pages/discover.tsx
 import React, { useEffect, useState, useRef, useCallback, useMemo } from 'react';
+import { createPortal } from 'react-dom';
 import Head from 'next/head';
 import { useRouter } from 'next/router';
 import InterstateTable from '../components/InterstateTable';
@@ -227,6 +228,7 @@ export function DiscoverPageContent({ variant = 'standalone' }: DiscoverPageCont
   const [quickBuyAmount, setQuickBuyAmount] = useState(getInitialQuickBuyAmount().toString());
   const [selectedPill, setSelectedPill] = useState('P1'); // Local preset selection for discover page
   const [showPillTooltip, setShowPillTooltip] = useState<string | null>(null);
+  const [pillTooltipAnchor, setPillTooltipAnchor] = useState<{ left: number; top: number; width: number; height: number } | null>(null);
   const tokenMapRef = useRef<Map<string, TokenWithDexPaid>>(new Map());
   const [filteredTokens, setFilteredTokens] = useState<TokenWithDexPaid[]>([]);
   const [displayed, setDisplayed] = useState<TokenWithDexPaid[]>([]);
@@ -3753,7 +3755,7 @@ export function DiscoverPageContent({ variant = 'standalone' }: DiscoverPageCont
   }, [displayed]);
 
   const innerContent = (
-          <div className={`relative overflow-hidden rounded-2xl border border-white/[0.06] flex flex-col ${variant === 'popup' ? 'h-full min-h-[400px]' : 'h-[calc(100vh-80px)]'}`}>
+          <div className={`relative overflow-hidden rounded-2xl border border-white/[0.06] flex flex-col ${variant === 'popup' ? 'h-full min-h-[400px] bg-white/[0.03] backdrop-blur-xl' : 'h-[calc(100vh-80px)]'}`}>
             {/* Background image inside the container */}
             <div className="pointer-events-none absolute inset-0 overflow-hidden rounded-2xl">
               <div
@@ -3776,7 +3778,7 @@ export function DiscoverPageContent({ variant = 'standalone' }: DiscoverPageCont
               <div className="absolute inset-0 bg-gradient-to-r from-black/20 via-transparent to-black/20" />
             </div>
 
-        {/* Tab Navigation - in popup variant always stack so buttons sit on next line (phone-like) */}
+        {/* Tab Navigation - in popup variant use Trenches-style bordered pill container */}
         <div className={`relative z-10 mt-3 mb-4 flex flex-shrink-0 flex-col gap-3 px-4 sm:mt-4 sm:px-6 lg:gap-6 lg:px-8 ${variant === 'popup' ? 'lg:flex-col' : 'lg:flex-row lg:items-center lg:justify-between'}`}>
           {/* Tabs Section - Scrollable on mobile */}
           <div className="scrollbar-hide -mx-4 flex items-center gap-3 overflow-x-auto px-4 pb-2 sm:-mx-6 sm:gap-4 sm:px-6 lg:mx-0 lg:gap-4 lg:px-0 lg:pb-0">
@@ -3852,27 +3854,14 @@ export function DiscoverPageContent({ variant = 'standalone' }: DiscoverPageCont
                   {/* For trending tab, only show 5m, 1h, 6h (WebSocket supported timeframes) */}
                   {((activeTab === "trending" ? ["5m", "1h", "6h"] : ["5m", "1h", "6h", "24h"]) as Timeframe[]).map(
                     (tf: Timeframe) => (
-                      <div
-                        key={tf}
-                        className="relative flex items-center justify-center"
-                      >
-                        <button
+                      <button
                           className={`flex cursor-pointer items-center justify-center rounded px-1 py-[2px] text-sm font-medium whitespace-nowrap transition-all duration-200 ${selectedTimeframe === tf ? "bg-[rgba(24,196,140,0.15)] text-[#f0f5f5]" : "bg-transparent"}`}
-                          onClick={() => handleTimeframeClick(tf)}
-                          onMouseEnter={(e) => {
-                            if (selectedTimeframe !== tf) {
-                              e.currentTarget.style.color = "#f0f5f5";
-                            }
-                          }}
-                          onMouseLeave={(e) => {
-                            if (selectedTimeframe !== tf) {
-                              e.currentTarget.style.color = "";
-                            }
-                          }}
-                        >
-                          {tf}
-                        </button>
-                      </div>
+                        onClick={() => handleTimeframeClick(tf)}
+                        onMouseEnter={variant !== 'popup' ? (e) => { if (selectedTimeframe !== tf) e.currentTarget.style.color = "#f0f5f5"; } : undefined}
+                        onMouseLeave={variant !== 'popup' ? (e) => { if (selectedTimeframe !== tf) e.currentTarget.style.color = ""; } : undefined}
+                      >
+                        {tf}
+                      </button>
                     ),
                   )}
                 </div>
@@ -3983,8 +3972,8 @@ export function DiscoverPageContent({ variant = 'standalone' }: DiscoverPageCont
               </div>
             )}
 
-            {/* Thunder Icon and Amount Entry - Separate Thin Box */}
-            <div className={`h-7 min-w-[70px] w-[85px] items-center justify-center gap-1 rounded-md border border-white/[0.08] bg-white/[0.05] backdrop-blur-xl px-1.5 py-1 ${variant === 'popup' ? 'flex' : 'hidden sm:flex'}`}>
+            {/* Thunder Icon and Amount Entry */}
+            <div className={`min-w-[70px] w-[85px] items-center justify-center gap-1 rounded-lg border backdrop-blur-xl p-1 ${variant === 'popup' ? 'flex border-white/[0.06] bg-white/[0.03]' : 'hidden sm:flex h-7 rounded-md border-white/[0.08] bg-white/[0.05] px-1.5 py-1'}`}>
               <HiLightningBolt size={14} className="text-[#31e3ac]" />
               <input
                 type="text"
@@ -4041,87 +4030,70 @@ export function DiscoverPageContent({ variant = 'standalone' }: DiscoverPageCont
                       className={`flex cursor-pointer items-center justify-center rounded px-1 py-[2px] text-sm font-medium transition-all duration-200 ${selectedPill === pill ? "bg-[rgba(24,196,140,0.15)] text-[#f0f5f5]" : "bg-transparent"}`}
                       onClick={() => {
                         setSelectedPill(pill);
-                        setActivePreset(presetIndex); // Also update global preset for consistency
+                        setActivePreset(presetIndex);
                       }}
                       onMouseEnter={(e) => {
-                        if (selectedPill !== pill) {
-                          e.currentTarget.style.color = "#f0f5f5";
-                        }
+                        if (variant !== 'popup' && selectedPill !== pill) e.currentTarget.style.color = "#f0f5f5";
                         setShowPillTooltip(pill);
+                        const rect = e.currentTarget.getBoundingClientRect();
+                        setPillTooltipAnchor({ left: rect.left, top: rect.top, width: rect.width, height: rect.height });
                       }}
                       onMouseLeave={(e) => {
-                        if (selectedPill !== pill) {
-                          e.currentTarget.style.color = "";
-                        }
+                        if (variant !== 'popup' && selectedPill !== pill) e.currentTarget.style.color = "";
                         setShowPillTooltip(null);
+                        setPillTooltipAnchor(null);
                       }}
                     >
                       {pill}
                     </button>
-
-                    {/* Tooltip for each pill */}
-                    {showPillTooltip === pill && settings && (
-                      <div className="absolute top-full left-0 z-50 mt-1 w-28 rounded-lg border border-white/[0.08] bg-black/90 backdrop-blur-xl shadow-xl">
-                        <div className="space-y-1.5 p-2">
-                          {/* Slippage - Running person icon */}
-                          <div className="flex items-center gap-1.5">
-                            <FaRunning
-                              size={10}
-                              className="stroke-2 opacity-80"
-                            />
-                            <span className="text-xs font-light text-gray-300">
-                              {(settings.maxSlippage * 100).toFixed(0)}%
-                            </span>
-                          </div>
-
-                          {/* Priority Fee - Gas pump icon with yellow styling */}
-                          <div className="flex items-center gap-1.5">
-                            <FaGasPump
-                              size={10}
-                              className="stroke-2 text-[#FCD34D] opacity-90"
-                            />
-                            <span className="text-xs font-light text-yellow-400">
-                              {settings.priority}
-                            </span>
-                            <span className="text-xs font-light text-[#d11f3a]">
-                              ⚠
-                            </span>
-                          </div>
-
-                          {/* Bribe - Coins icon with yellow styling */}
-                          <div className="flex items-center gap-1.5">
-                            <FaCoins
-                              size={10}
-                              className="stroke-2 text-[#FCD34D] opacity-90"
-                            />
-                            <span className="text-xs font-light text-yellow-400">
-                              {settings.bribe}
-                            </span>
-                            <span className="text-xs font-light text-[#d11f3a]">
-                              ⚠
-                            </span>
-                          </div>
-
-                          {/* MEV Protection - Ban icon */}
-                          <div className="flex items-center gap-1.5">
-                            <FaBan size={10} className="stroke-2 opacity-90" />
-                            <span className="text-xs font-light text-gray-300">
-                              {settings.mevMode === "off"
-                                ? "Off"
-                                : settings.mevMode === "reduced"
-                                  ? "Reduced"
-                                  : "Secure"}
-                            </span>
-                          </div>
-                        </div>
-                      </div>
-                    )}
                   </div>
                 );
               })}
             </div>
           </div>
         </div>
+
+        {/* Pill settings tooltip — portaled so it appears on top of overflow/stacking contexts */}
+        {typeof document !== 'undefined' &&
+          showPillTooltip &&
+          pillTooltipAnchor &&
+          (() => {
+            const presetIndex = parseInt(showPillTooltip.replace('P', ''), 10) - 1;
+            const settings = presets[presetIndex]?.quickBuySettings;
+            if (!settings) return null;
+            const top = pillTooltipAnchor.top + pillTooltipAnchor.height + 4;
+            const left = pillTooltipAnchor.left;
+            return createPortal(
+              <div
+                className="fixed z-[999999] w-28 rounded-lg border border-white/[0.08] bg-black/90 backdrop-blur-xl shadow-xl"
+                style={{ top, left }}
+              >
+                <div className="space-y-1.5 p-2">
+                  <div className="flex items-center gap-1.5">
+                    <FaRunning size={10} className="stroke-2 opacity-80" />
+                    <span className="text-xs font-light text-gray-300">{(settings.maxSlippage * 100).toFixed(0)}%</span>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <FaGasPump size={10} className="stroke-2 text-[#FCD34D] opacity-90" />
+                    <span className="text-xs font-light text-yellow-400">{settings.priority}</span>
+                    <span className="text-xs font-light text-[#d11f3a]">⚠</span>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <FaCoins size={10} className="stroke-2 text-[#FCD34D] opacity-90" />
+                    <span className="text-xs font-light text-yellow-400">{settings.bribe}</span>
+                    <span className="text-xs font-light text-[#d11f3a]">⚠</span>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <FaBan size={10} className="stroke-2 opacity-90" />
+                    <span className="text-xs font-light text-gray-300">
+                      {settings.mevMode === 'off' ? 'Off' : settings.mevMode === 'reduced' ? 'Reduced' : 'Secure'}
+                    </span>
+                  </div>
+                </div>
+              </div>,
+              document.body
+            );
+          })()}
 
         {/* Filter Popout (old — disabled) */}
         <div className="flex-shrink-0">

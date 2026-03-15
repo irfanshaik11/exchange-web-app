@@ -69,6 +69,7 @@ export default function PulsePopoutContent({ forceMobileView = false }: PulsePop
     categoryCounts: blacklistCategoryCounts,
   } = useBlacklist();
   const [showBlacklistModal, setShowBlacklistModal] = useState(false);
+  const [activeTab, setActiveTab] = useState<"new" | "final-stretch" | "migrated">("new");
   
   // CRITICAL: Default to solana chain for popout
   const [currentChain, setCurrentChain] = useState<string>(() => {
@@ -1012,7 +1013,7 @@ export default function PulsePopoutContent({ forceMobileView = false }: PulsePop
   return (
     <>
     <div className="flex h-full flex-col text-neutral-100 overflow-hidden" style={{ backgroundColor: '#06070b' }}>
-      <div className="w-full px-6 pt-4 flex-1 flex flex-col min-h-0 overflow-hidden">
+      <div className="w-full px-4 pt-2 flex-1 flex flex-col min-h-0 overflow-hidden">
         <div className="mb-1">
           <div className="mb-1 flex flex-col gap-3 px-2 pt-2 sm:flex-row sm:items-center sm:justify-between">
             <div className="flex items-center gap-3">
@@ -1068,73 +1069,221 @@ export default function PulsePopoutContent({ forceMobileView = false }: PulsePop
           </div>
         </div>
 
-        {isMonadRoute ? (
-          <div className="flex min-h-0 w-full flex-1 flex-col overflow-hidden">
-            <div className="flex min-h-0 w-full flex-1 flex-row overflow-hidden">
-              <MonadTable
-                title="New Pairs"
-                tokens={enrichedNewPairsToShow}
-                loading={monadNewTick === 0}
-                isFirstOrLast="first"
-                showBubbleMetrics={false}
-              />
-              <MonadTable
-                title="Final Stretch"
-                tokens={enrichedFinalStretch}
-                loading={monadFinalStretchTick === 0}
-                showBubbleMetrics={false}
-              />
-              <MonadTable
-                title="Migrated"
-                tokens={enrichedMigrated}
-                loading={monadMigratedTick === 0}
-                isFirstOrLast="last"
-                showBubbleMetrics={false}
-              />
-            </div>
-          </div>
-        ) : isLoading ? (
-              <div className="flex min-h-0 w-full flex-1 flex-col overflow-hidden">
-                <div className="flex min-h-0 w-full flex-1 flex-row overflow-hidden">
-                  <PulseTable
-                    title="New Pairs"
-                    tokens={[]}
-                    loading
-                    skeletonRowCount={10}
-                    isFirstOrLast="first"
-                    showBubbleMetrics={false}
-                  />
-                  <PulseTable
-                    title="Final Stretch"
-                    tokens={[]}
-                    loading
-                    skeletonRowCount={10}
-                    showBubbleMetrics={false}
-                  />
-                  <PulseTable
-                    title="Migrated"
-                    tokens={[]}
-                    loading
-                    skeletonRowCount={10}
-                    isFirstOrLast="last"
-                    showBubbleMetrics={false}
-                  />
+        {/* Mobile / docked layout: tab strip + single table */}
+        {forceMobileView && (
+          <>
+            <div className="mt-2 mb-3 flex w-full gap-1.5 rounded-lg border border-white/[0.06] bg-white/[0.03] p-1 backdrop-blur-xl">
+              <button
+                onClick={() => setActiveTab("new")}
+                className={`relative flex-1 rounded-md px-2 py-2 text-xs font-semibold transition-all duration-200 ${
+                  activeTab === "new"
+                    ? "bg-[#7FFFC9] text-black"
+                    : "text-neutral-300 hover:bg-neutral-800/60 hover:text-neutral-100"
+                }`}
+              >
+                <div className="flex items-center justify-center gap-1.5">
+                  <span>New</span>
+                  <span
+                    className={`inline-flex min-w-[18px] items-center justify-center rounded-full px-1 py-0.5 text-[10px] leading-none font-bold ${
+                      activeTab === "new"
+                        ? "bg-black/15 text-black/90"
+                        : "bg-neutral-800 text-neutral-400"
+                    }`}
+                  >
+                    {isMonadRoute ? enrichedNewPairsToShow.length : (enrichedNewPairsToShow as any[]).length}
+                  </span>
                 </div>
-              </div>
-        ) : hasError ? (
-          <div className="py-10 text-center text-red-400">
-            <div className="mb-2 text-xl font-semibold">
-              Error Loading Launchpad Data
+              </button>
+              <button
+                onClick={() => setActiveTab("final-stretch")}
+                className={`relative flex-1 rounded-md px-2 py-2 text-xs font-semibold transition-all duration-200 ${
+                  activeTab === "final-stretch"
+                    ? "bg-[#7FFFC9] text-black"
+                    : "text-neutral-300 hover:bg-neutral-800/60 hover:text-neutral-100"
+                }`}
+              >
+                <div className="flex items-center justify-center gap-1.5">
+                  <span>Final</span>
+                  <span
+                    className={`inline-flex min-w-[18px] items-center justify-center rounded-full px-1 py-0.5 text-[10px] leading-none font-bold ${
+                      activeTab === "final-stretch"
+                        ? "bg-black/15 text-black/90"
+                        : "bg-neutral-800 text-neutral-400"
+                    }`}
+                  >
+                    {isMonadRoute ? enrichedFinalStretch.length : (enrichedFinalStretch as any[]).length}
+                  </span>
+                </div>
+              </button>
+              <button
+                onClick={() => setActiveTab("migrated")}
+                className={`relative flex-1 rounded-md px-2 py-2 text-xs font-semibold transition-all duration-200 ${
+                  activeTab === "migrated"
+                    ? "bg-[#7FFFC9] text-black"
+                    : "text-neutral-300 hover:bg-neutral-800/60 hover:text-neutral-100"
+                }`}
+              >
+                <div className="flex items-center justify-center gap-1.5">
+                  <span>Migrated</span>
+                  <span
+                    className={`inline-flex min-w-[18px] items-center justify-center rounded-full px-1 py-0.5 text-[10px] leading-none font-bold ${
+                      activeTab === "migrated"
+                        ? "bg-black/15 text-black/90"
+                        : "bg-neutral-800 text-neutral-400"
+                    }`}
+                  >
+                    {isMonadRoute ? enrichedMigrated.length : (enrichedMigrated as any[]).length}
+                  </span>
+                </div>
+              </button>
             </div>
-            <div>{launchpadError?.message || "Unknown error"}</div>
-            <button
-              onClick={() => window.location.reload()}
-              className="mt-4 rounded bg-emerald-600 px-4 py-2 text-white transition-colors hover:bg-emerald-700"
-            >
-              Retry
-            </button>
-          </div>
-        ) : (
+            <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+              {isMonadRoute ? (
+                <div className="flex h-full min-h-0 flex-col">
+                  {activeTab === "new" && (
+                    <MonadTable
+                      title="New Pairs"
+                      tokens={enrichedNewPairsToShow}
+                      loading={monadNewTick === 0}
+                      isFirstOrLast="only"
+                      showBubbleMetrics={false}
+                    />
+                  )}
+                  {activeTab === "final-stretch" && (
+                    <MonadTable
+                      title="Final Stretch"
+                      tokens={enrichedFinalStretch}
+                      loading={monadFinalStretchTick === 0}
+                      isFirstOrLast="only"
+                      showBubbleMetrics={false}
+                    />
+                  )}
+                  {activeTab === "migrated" && (
+                    <MonadTable
+                      title="Migrated"
+                      tokens={enrichedMigrated}
+                      loading={monadMigratedTick === 0}
+                      isFirstOrLast="only"
+                      showBubbleMetrics={false}
+                    />
+                  )}
+                </div>
+              ) : isLoading ? (
+                <PulseTable
+                  title="New Pairs"
+                  tokens={[]}
+                  loading
+                  skeletonRowCount={10}
+                  isFirstOrLast="only"
+                  showBubbleMetrics={false}
+                />
+              ) : hasError ? (
+                <div className="py-6 text-center text-red-400">
+                  <div className="mb-2 text-sm font-semibold">Error Loading Launchpad Data</div>
+                  <div className="text-xs">{launchpadError?.message || "Unknown error"}</div>
+                </div>
+              ) : (
+                <div className="flex h-full min-h-0 flex-col">
+                  {activeTab === "new" && (
+                    <PulseTable
+                      title="New Pairs"
+                      tokens={enrichedNewPairsToShow as any}
+                      loading={newPairsLoading}
+                      isFirstOrLast="only"
+                      showBubbleMetrics={false}
+                    />
+                  )}
+                  {activeTab === "final-stretch" && (
+                    <PulseTable
+                      title="Final Stretch"
+                      tokens={enrichedFinalStretch as any}
+                      isFirstOrLast="only"
+                      showBubbleMetrics={false}
+                    />
+                  )}
+                  {activeTab === "migrated" && (
+                    <PulseTable
+                      title="Migrated"
+                      tokens={enrichedMigrated as any}
+                      isFirstOrLast="only"
+                      showBubbleMetrics={false}
+                    />
+                  )}
+                </div>
+              )}
+            </div>
+          </>
+        )}
+
+        {/* Desktop layout: 3 columns (only when not forceMobileView) */}
+        {!forceMobileView && (
+          isMonadRoute ? (
+            <div className="flex min-h-0 w-full flex-1 flex-col overflow-hidden">
+              <div className="flex min-h-0 w-full flex-1 flex-row overflow-hidden">
+                <MonadTable
+                  title="New Pairs"
+                  tokens={enrichedNewPairsToShow}
+                  loading={monadNewTick === 0}
+                  isFirstOrLast="first"
+                  showBubbleMetrics={false}
+                />
+                <MonadTable
+                  title="Final Stretch"
+                  tokens={enrichedFinalStretch}
+                  loading={monadFinalStretchTick === 0}
+                  showBubbleMetrics={false}
+                />
+                <MonadTable
+                  title="Migrated"
+                  tokens={enrichedMigrated}
+                  loading={monadMigratedTick === 0}
+                  isFirstOrLast="last"
+                  showBubbleMetrics={false}
+                />
+              </div>
+            </div>
+          ) : isLoading ? (
+            <div className="flex min-h-0 w-full flex-1 flex-col overflow-hidden">
+              <div className="flex min-h-0 w-full flex-1 flex-row overflow-hidden">
+                <PulseTable
+                  title="New Pairs"
+                  tokens={[]}
+                  loading
+                  skeletonRowCount={10}
+                  isFirstOrLast="first"
+                  showBubbleMetrics={false}
+                />
+                <PulseTable
+                  title="Final Stretch"
+                  tokens={[]}
+                  loading
+                  skeletonRowCount={10}
+                  showBubbleMetrics={false}
+                />
+                <PulseTable
+                  title="Migrated"
+                  tokens={[]}
+                  loading
+                  skeletonRowCount={10}
+                  isFirstOrLast="last"
+                  showBubbleMetrics={false}
+                />
+              </div>
+            </div>
+          ) : hasError ? (
+            <div className="py-10 text-center text-red-400">
+              <div className="mb-2 text-xl font-semibold">
+                Error Loading Launchpad Data
+              </div>
+              <div>{launchpadError?.message || "Unknown error"}</div>
+              <button
+                onClick={() => window.location.reload()}
+                className="mt-4 rounded bg-emerald-600 px-4 py-2 text-white transition-colors hover:bg-emerald-700"
+              >
+                Retry
+              </button>
+            </div>
+          ) : (
             <div className="flex min-h-0 w-full flex-1 flex-col overflow-hidden">
               <div className="flex min-h-0 w-full flex-1 flex-row overflow-hidden">
                 <PulseTable
@@ -1157,7 +1306,8 @@ export default function PulsePopoutContent({ forceMobileView = false }: PulsePop
                 />
               </div>
             </div>
-      )}
+          )
+        )}
       </div>
     </div>
 

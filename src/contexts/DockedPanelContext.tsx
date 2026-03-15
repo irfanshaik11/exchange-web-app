@@ -4,8 +4,14 @@ import React, { createContext, useContext, useCallback, useState, useMemo, useEf
 
 export const DOCKED_PANEL_WIDTH = 400;
 
+/** Gap between docked panels so the resize handle is visible and not covered. */
+export const DOCKED_PANEL_GAP = 10;
+
 /** Breakpoint below which main content uses mobile layout (e.g. when docked panels shrink the area) */
 export const CONTENT_NARROW_BREAKPOINT = 1024;
+
+/** Base z-index for docked panels; leftmost/rightmost gets higher so its resize handle shows above the next panel. */
+const DOCKED_PANEL_Z_BASE = 10000;
 
 type PanelSlot = { id: string; width: number };
 
@@ -23,21 +29,29 @@ interface DockedPanelContextValue {
   isContentNarrow: boolean;
   setDockContrib: (id: string, left: number, right: number) => void;
   getDockedOffset: (id: string, side: "left" | "right") => number;
+  /** Z-index for this docked panel so the resize handle in the gap is not covered by the adjacent panel. */
+  getDockedZIndex: (id: string, side: "left" | "right") => number;
 }
 
 const DockedPanelContext = createContext<DockedPanelContextValue | null>(null);
 
 function totalWidth(panels: PanelSlot[]): number {
-  return panels.reduce((sum, p) => sum + p.width, 0);
+  if (panels.length === 0) return 0;
+  const sum = panels.reduce((s, p) => s + p.width, 0);
+  return sum + (panels.length - 1) * DOCKED_PANEL_GAP;
 }
 
 function offsetForId(panels: PanelSlot[], id: string): number {
   let offset = 0;
   for (const p of panels) {
     if (p.id === id) return offset;
-    offset += p.width;
+    offset += p.width + DOCKED_PANEL_GAP;
   }
   return 0;
+}
+
+function indexOfId(panels: PanelSlot[], id: string): number {
+  return panels.findIndex((p) => p.id === id);
 }
 
 function updateSide(prev: PanelSlot[], id: string, width: number): PanelSlot[] {
@@ -79,6 +93,16 @@ export function DockedPanelProvider({ children }: { children: React.ReactNode })
     [panels]
   );
 
+  const getDockedZIndex = useCallback(
+    (id: string, side: "left" | "right") => {
+      const list = side === "left" ? panels.left : panels.right;
+      const idx = indexOfId(list, id);
+      if (idx < 0) return DOCKED_PANEL_Z_BASE;
+      return DOCKED_PANEL_Z_BASE + (list.length - 1 - idx);
+    },
+    [panels]
+  );
+
   const dockedLeftWidth = useMemo(() => totalWidth(panels.left), [panels.left]);
   const dockedRightWidth = useMemo(() => totalWidth(panels.right), [panels.right]);
   const contentWidth = useMemo(
@@ -95,8 +119,9 @@ export function DockedPanelProvider({ children }: { children: React.ReactNode })
       isContentNarrow,
       setDockContrib,
       getDockedOffset,
+      getDockedZIndex,
     }),
-    [dockedLeftWidth, dockedRightWidth, contentWidth, isContentNarrow, setDockContrib, getDockedOffset]
+    [dockedLeftWidth, dockedRightWidth, contentWidth, isContentNarrow, setDockContrib, getDockedOffset, getDockedZIndex]
   );
 
   return (
