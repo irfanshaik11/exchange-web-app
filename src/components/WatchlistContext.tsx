@@ -1,6 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import type { Token } from '../utils/db';
-import { extractTokenImage } from '../utils/images';
 import useTrendingWebSocket from '../hooks/useTrendingWebSocket';
 import useWatchlistWebSocket from '../hooks/useWatchlistWebSocket';
 
@@ -15,8 +14,6 @@ interface WatchlistContextType {
 }
 
 const WatchlistContext = createContext<WatchlistContextType | undefined>(undefined);
-
-const DEFAULT_WATCHLIST_COUNT = 10;
 
 // Dismissed tokens — mints the user manually removed (never re-added by auto-refresh)
 const WATCHLIST_DISMISSED_KEY = 'watchlist_dismissed';
@@ -163,37 +160,9 @@ export function WatchlistProvider({ children }: { children: React.ReactNode }) {
         }
       }
 
-      // Phase 2: Fill remaining slots with trending tokens (composition only).
-      // Prefer existing entries so watchlist WS prices are preserved.
-      const autoFillTarget = Math.max(result.length, DEFAULT_WATCHLIST_COUNT - dismissed.size);
-      for (const t of wsTokens) {
-        if (result.length >= autoFillTarget) break;
-        const mint = getMint(t);
-        if (!mint || dismissed.has(mint) || seenMints.has(mint.toLowerCase())) continue;
-        const img = extractTokenImage(t as any);
-        if (!img || !img.trim()) continue;
-        seenMints.add(mint.toLowerCase());
-        // Use existing entry if we already have it (preserves OHLCV prices)
-        const existing = prevByMint.get(mint.toLowerCase());
-        if (existing) {
-          result.push(existing);
-        } else {
-          // New trending token — zero out price/MC fields so the watchlist WS
-          // provides authoritative data on its next 1s tick (prevents stale trending prices).
-          const newToken = {
-            ...(t as any as Token),
-            price_usd: 0,
-            usd_price: 0,
-            market_cap_usd: 0,
-            fully_diluted_value: 0,
-          };
-          result.push(newToken);
-        }
-      }
-
       if (result.length === 0) return prev;
 
-      // Phase 3: Apply OHLCV prices from dedicated watchlist WS (more accurate than trending).
+      // Phase 2: Apply OHLCV prices from dedicated watchlist WS (more accurate than trending).
       // Without this, every trending tick would overwrite the OHLCV prices that the overlay
       // effect applied, causing prices to flip between data sources.
       const liveRef = liveWatchlistRef.current;
