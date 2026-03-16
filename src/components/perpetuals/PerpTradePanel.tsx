@@ -31,6 +31,7 @@ interface PerpTradePanelProps {
   accountValue: number;
   token: string | undefined;
   onOrderPlaced?: () => void;
+  onAddFunds?: () => void;
   initialPrice?: string;
 }
 
@@ -51,6 +52,7 @@ export default function PerpTradePanel({
   accountValue,
   token,
   onOrderPlaced,
+  onAddFunds,
   initialPrice,
 }: PerpTradePanelProps) {
   const [side, setSide] = useState<Side>("LONG");
@@ -382,28 +384,36 @@ export default function PerpTradePanel({
         )}
 
         {/* ── Submit Button ── */}
-        <button
-          onClick={handleSubmit}
-          disabled={submitting || !token || collateralNum <= 0}
-          className="w-full py-2.5 rounded-lg font-bold text-[13px] transition-all duration-150 disabled:opacity-40 disabled:cursor-not-allowed"
-          style={{ backgroundColor: accentColor, color: side === "LONG" ? "#000" : "#fff" }}
-          onMouseEnter={(e) => {
-            if (!(e.currentTarget as HTMLButtonElement).disabled) {
-              e.currentTarget.style.backgroundColor = accentHover;
-            }
-          }}
-          onMouseLeave={(e) => {
-            e.currentTarget.style.backgroundColor = accentColor;
-          }}
-        >
-          {submitting
-            ? "Placing Order..."
-            : !token
-            ? "Add More Funds"
-            : collateralNum <= 0
-            ? "Add More Funds"
-            : `${side === "LONG" ? "Long" : "Short"} ${market.name}`}
-        </button>
+        {(!token || collateralNum <= 0) && onAddFunds ? (
+          <button
+            onClick={onAddFunds}
+            className="w-full py-2.5 rounded-lg font-bold text-[13px] transition-all duration-150"
+            style={{ backgroundColor: accentColor, color: side === "LONG" ? "#000" : "#fff" }}
+            onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = accentHover; }}
+            onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = accentColor; }}
+          >
+            Add More Funds
+          </button>
+        ) : (
+          <button
+            onClick={handleSubmit}
+            disabled={submitting || !token || collateralNum <= 0}
+            className="w-full py-2.5 rounded-lg font-bold text-[13px] transition-all duration-150 disabled:opacity-40 disabled:cursor-not-allowed"
+            style={{ backgroundColor: accentColor, color: side === "LONG" ? "#000" : "#fff" }}
+            onMouseEnter={(e) => {
+              if (!(e.currentTarget as HTMLButtonElement).disabled) {
+                e.currentTarget.style.backgroundColor = accentHover;
+              }
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.backgroundColor = accentColor;
+            }}
+          >
+            {submitting
+              ? "Placing Order..."
+              : `${side === "LONG" ? "Long" : "Short"} ${market.name}`}
+          </button>
+        )}
 
         {/* ── Account Info ── */}
         <div
@@ -434,6 +444,15 @@ export default function PerpTradePanel({
             <span className="text-[11px]" style={{ color: AX.muted }}>Current Position</span>
             <span className="text-[11px]" style={{ color: AX.muted, ...TABULAR }}>--</span>
           </div>
+          {onAddFunds && (
+            <button
+              onClick={onAddFunds}
+              className="text-[11px] font-medium transition-colors hover:opacity-80 mt-1"
+              style={{ color: AX.mint }}
+            >
+              Fund Account →
+            </button>
+          )}
         </div>
       </div>
     </div>

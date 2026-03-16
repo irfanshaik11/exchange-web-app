@@ -44,6 +44,7 @@ import { storeReferralCodeHint, getStoredReferralCodeHint, clearStoredReferralCo
 import PagePreloader from '../components/PagePreloader';
 import { PulseBackgroundLoader } from '../components/PulseBackgroundLoader';
 import { SolanaPositionWebSocketProvider } from '../contexts/SolanaPositionWebSocketContext';
+import { listenForConfirmationUpdates } from '../utils/tradeToast';
 import { DockedPanelProvider } from '../contexts/DockedPanelContext';
 import { HyperliquidProvider } from '../contexts/HyperliquidContext';
 import ErrorBoundary from '../components/ErrorBoundary';
@@ -581,6 +582,11 @@ function GlobalLoginModalManager({ enforceLogin }: { enforceLogin: boolean }) {
 
 const MyApp: AppType = ({ Component, pageProps }) => {
   const [toastPosition, setToastPosition] = useState<'top-left' | 'top-center' | 'top-right' | 'bottom-left' | 'bottom-center' | 'bottom-right'>('top-center');
+
+  // Initialize WS confirmation listeners for optimistic trade mode (once)
+  useEffect(() => {
+    listenForConfirmationUpdates();
+  }, []);
 
   // Load toast position from localStorage on mount
   useEffect(() => {

@@ -45,6 +45,7 @@ interface UseSolanaPositionWebSocketReturn {
   loading: boolean;
   refreshPosition: () => Promise<void>;
   requestSnapshot: () => void;
+  sendMessage: (msg: Record<string, unknown>) => void;
 }
 
 /**
@@ -214,6 +215,12 @@ export function useSolanaPositionWebSocket(
             // INSTANT txHash push from backend - fires immediately after signing
             window.dispatchEvent(new CustomEvent('solanaTradeSuccess', { detail: message.data }));
             onTxHashRef.current?.(message.data as TxHashMessage);
+          } else if (message.type === 'tx_confirmed' && message.data) {
+            // Transaction confirmed on-chain (optimistic mode follow-up)
+            window.dispatchEvent(new CustomEvent('solanaTxConfirmed', { detail: message.data }));
+          } else if (message.type === 'tx_failed' && message.data) {
+            // Transaction failed on-chain (optimistic mode follow-up)
+            window.dispatchEvent(new CustomEvent('solanaTxFailed', { detail: message.data }));
           } else if (message.type === 'trade_error' && message.data) {
             window.dispatchEvent(new CustomEvent('solanaTradeError', { detail: message.data }));
           } else if (message.type === 'positions_changed' && message.data) {
@@ -414,6 +421,13 @@ export function useSolanaPositionWebSocket(
     }
   }, []);
 
+  // Send an arbitrary JSON message to the WS (used for prefetch_order, etc.)
+  const sendMessage = useCallback((msg: Record<string, unknown>) => {
+    if (wsRef.current?.readyState === WebSocket.OPEN) {
+      wsRef.current.send(JSON.stringify(msg));
+    }
+  }, []);
+
   return {
     position,
     connected,
@@ -421,6 +435,7 @@ export function useSolanaPositionWebSocket(
     loading,
     refreshPosition,
     requestSnapshot,
+    sendMessage,
   };
 }
 

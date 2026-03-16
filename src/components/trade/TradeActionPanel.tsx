@@ -37,6 +37,7 @@ import { BsCoin, BsPersonGear } from "react-icons/bs";
 import { RiGhostLine } from "react-icons/ri";
 import { LuChefHat } from "react-icons/lu";
 import { BiCandles } from "react-icons/bi";
+import { usePrefetchOrder } from "~/hooks/usePrefetchOrder";
 // import TokenAnalyticsPanel from "../TokenAnalyticsPanel";
 
 type TimeRange = "5m" | "1h" | "6h" | "24h";
@@ -967,6 +968,7 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
   const isMountedRef = useRef(true);
   const manualTargetOverrideRef = useRef<boolean>(false);
   const lastSliderBaseRef = useRef<number | null>(null);
+  const { prefetch: prefetchOrder, prefetchImmediate: prefetchOrderImmediate } = usePrefetchOrder();
 
   useEffect(() => {
     return () => {
@@ -1555,7 +1557,22 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
       prevModeRef.current = mode;
     }
   }, [mode]);
-  
+
+  // Prefetch 100% sell order immediately when user switches to sell mode
+  useEffect(() => {
+    if (mode !== 'sell' || !token?.mint) return;
+    prefetchOrderImmediate({ baseMint: token.mint, amount: 100, side: 'sell' });
+  }, [mode, token?.mint, prefetchOrderImmediate]);
+
+  // Prefetch sell order on percentage change (debounced)
+  useEffect(() => {
+    if (mode !== 'sell' || !token?.mint || !amount) return;
+    const pct = Number(amount);
+    if (pct > 0 && pct <= 100) {
+      prefetchOrder({ baseMint: token.mint, amount: pct, side: 'sell' });
+    }
+  }, [mode, amount, token?.mint, prefetchOrder]);
+
   useEffect(() => setPresetDrafts(amountPresets.map(String)), [amountPresets]);
 
   const commitPresetDrafts = () => {

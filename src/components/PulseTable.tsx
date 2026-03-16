@@ -133,6 +133,7 @@ import { FiGlobe } from "react-icons/fi";
 import BottomCardInfoHolder from "./BottomCardInfoHolder";
 import InterstateTooltip from "./InterstateTooltip";
 import { useBlacklist } from "~/hooks/useBlacklist";
+import { usePrefetchOrder } from "~/hooks/usePrefetchOrder";
 
 /* ---- Enhanced Monad Green Palette (matching MonadTable) ---- */
 const AX = {
@@ -3250,6 +3251,8 @@ function PulseTable({
     timerHandle?: number;
     totalSelectedWallets: number;
   } | null>(null);
+
+  const { prefetchImmediate: prefetchBuyOrder } = usePrefetchOrder();
 
   // Callback for instant txHash update via WebSocket (fires before HTTP response)
   const handleSolanaQuickBuyWsTxHash = useCallback(
@@ -7744,6 +7747,11 @@ function PulseTable({
                       },
                       { router, tradeUrl: `/trade/${tokenMint}` }
                     );
+
+                    // Prefetch buy order so quick-buy click gets a cached order (<1ms vs ~700ms)
+                    if (tokenMint && thunderAmount) {
+                      prefetchBuyOrder({ baseMint: tokenMint, amount: parseFloat(thunderAmount) || 0.1, side: 'buy' });
+                    }
                   }}
                   onMouseLeave={(e) => {
                     // PHASE 3: Use CSS class instead of inline style

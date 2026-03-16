@@ -145,22 +145,26 @@ const AVATAR_COLORS = [
 
 /**
  * Get token image URL synchronously.
- * Checks: static map → backend cache.
+ * Checks: static map → backend cache → Hyperliquid CDN pattern.
  * Returns null if not found (use letter avatar).
  */
 export function getHyperliquidTokenImage(coin: string): string | null {
   const key = coin.toUpperCase();
 
-  // 1. Static map (instant)
+  // 1. Static map (instant, CoinGecko PNGs)
   if (STATIC_MAP[key]) return STATIC_MAP[key];
 
-  // 2. Backend-resolved images
+  // 2. Backend-resolved images (Redis-cached DexScreener/HL CDN URLs)
   if (backendImages[key]) return backendImages[key];
 
-  // Trigger lazy fetch if stale
+  // 3. Hyperliquid CDN fallback — covers ~96% of perps as SVG
+  // This URL may 404 for some tokens, but CoinIcon has onError → letter avatar
+  const hlCdnUrl = `https://app.hyperliquid.xyz/coins/${key}.svg`;
+
+  // Trigger lazy backend fetch if stale (will eventually populate backendImages)
   ensureBackendImages();
 
-  return null;
+  return hlCdnUrl;
 }
 
 /**

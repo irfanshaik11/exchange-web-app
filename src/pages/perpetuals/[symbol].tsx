@@ -3,7 +3,7 @@
 // 3-column layout: LEFT (header + chart + tabs), MIDDLE (order book), RIGHT (trade panel)
 // Pattern: follows trade/[id].tsx and trade/monad/[contractAddress].tsx
 
-import React, { useEffect, useState, useCallback, useMemo } from "react";
+import React, { useEffect, useState, useCallback, useMemo, useRef } from "react";
 import { useRouter } from "next/router";
 import Head from "next/head";
 import dynamic from "next/dynamic";
@@ -13,6 +13,7 @@ import OrderBookTradesPanel from "../../components/perpetuals/OrderBookTradesPan
 import PerpTradePanel from "../../components/perpetuals/PerpTradePanel";
 import PerpTabs from "../../components/perpetuals/PerpTabs";
 import PerpPositionModal from "../../components/perpetuals/PerpPositionModal";
+import PerpFundingModal from "../../components/perpetuals/PerpFundingModal";
 import { useHyperliquid } from "../../contexts/HyperliquidContext";
 import { useHyperliquidOrderBook } from "../../hooks/useHyperliquidOrderBook";
 import { useHyperliquidTrades } from "../../hooks/useHyperliquidTrades";
@@ -97,6 +98,44 @@ export default function PerpTradePage() {
   const [showMobileTradePanel, setShowMobileTradePanel] = useState(false);
   const [isClosingModal, setIsClosingModal] = useState(false);
   const [orderBookCollapsed, setOrderBookCollapsed] = useState(false);
+  const [showFundingModal, setShowFundingModal] = useState(false);
+
+  // Resizable chart/tabs split — same pattern as trade/[id].tsx
+  const containerRef = useRef<HTMLDivElement>(null);
+  const DEFAULT_CHART_RATIO = 0.6;
+
+  const getResizeLimits = useCallback(() => {
+    if (typeof window === "undefined") return { min: MIN_CHART_HEIGHT, max: 800 };
+    const vh = window.innerHeight;
+    const min = Math.max(MIN_CHART_HEIGHT, vh * 0.25);
+    const max = Math.min(vh * 0.85, vh - 160);
+    return { min, max };
+  }, []);
+
+  const clampTop = useCallback((desired: number) => {
+    const { min, max } = getResizeLimits();
+    return Math.max(min, Math.min(desired, max));
+  }, [getResizeLimits]);
+
+  const [topPanePx, setTopPanePx] = useState<number>(() => {
+    if (typeof window === "undefined") return MIN_CHART_HEIGHT;
+    const vh = window.innerHeight;
+    return clampTop(vh * DEFAULT_CHART_RATIO);
+  });
+  const topPanePxRef = useRef(topPanePx);
+
+  useEffect(() => { topPanePxRef.current = topPanePx; }, [topPanePx]);
+
+  // Adjust on window resize
+  useEffect(() => {
+    const onResize = () => {
+      const { min, max } = getResizeLimits();
+      if (topPanePx < min) setTopPanePx(min);
+      else if (topPanePx > max) setTopPanePx(max);
+    };
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, [topPanePx, getResizeLimits]);
 
   const handlePriceClick = useCallback((price: string) => {
     setSelectedPrice(price);
@@ -179,6 +218,7 @@ export default function PerpTradePage() {
         <Header />
 
         <div
+          ref={containerRef}
           className="flex flex-1 w-full max-w-full min-h-0"
           style={{
             minHeight: 'calc(100vh - 60px)',
@@ -190,37 +230,36 @@ export default function PerpTradePage() {
             className="flex-1 min-w-0 max-w-full flex flex-col"
             style={{ minHeight: 0 }}
           >
-            {/* TOP ROW: Header + Chart + Order Book (side by side) */}
+            {/* Header row — spans full width above chart + order book */}
+            <div className="pl-2 flex-shrink-0">
+              <PerpHeader market={market} markPrice={orderBook.midPrice} />
+            </div>
+
+            {/* TOP ROW: Chart + Order Book (side by side, below header) */}
             <div
-              className="flex-shrink-0 flex"
+              className="flex-shrink-0 flex relative overflow-hidden"
               style={{
-                height: '55vh',
-                minHeight: `${MIN_CHART_HEIGHT}px`,
+                height: topPanePx,
+                minHeight: MIN_CHART_HEIGHT,
               }}
             >
-              {/* Chart column */}
-              <div className="flex-1 min-w-0 flex flex-col">
-                <div className="pl-2 flex-shrink-0">
-                  <PerpHeader market={market} markPrice={orderBook.midPrice} />
-                </div>
-
-                <div
-                  className="flex-1 relative w-full overflow-hidden"
-                  style={{ minHeight: 0, minWidth: 0 }}
-                >
-                  {coin && (
-                    <PerpChart
-                      coin={coin}
-                      tokenName={`${coin}-PERP`}
-                      preloadedData={preloadedChartData}
-                      height="100%"
-                      width="100%"
-                    />
-                  )}
-                </div>
+              {/* Chart */}
+              <div
+                className="flex-1 min-w-0 relative overflow-hidden"
+                style={{ minHeight: 0, minWidth: 0, zIndex: 1 }}
+              >
+                {coin && (
+                  <PerpChart
+                    coin={coin}
+                    tokenName={`${coin}-PERP`}
+                    preloadedData={preloadedChartData}
+                    height="100%"
+                    width="100%"
+                  />
+                )}
               </div>
 
-              {/* Order Book / Trades panel — collapsible, same height as chart (desktop only) */}
+              {/* Order Book / Trades panel — collapsible, starts at header level (desktop only) */}
               <div
                 className="hidden lg:flex flex-shrink-0 relative"
                 style={{ borderLeft: `1px solid ${AX.border}` }}
@@ -265,10 +304,60 @@ export default function PerpTradePage() {
               </div>
             </div>
 
+            {/* Resizer — pointer capture, same as trade/[id].tsx */}
+            <div
+              role="separator"
+              aria-orientation="horizontal"
+              aria-label="Resize chart and trades panels"
+              tabIndex={0}
+              onPointerDown={(e) => {
+                if (e.pointerType === 'mouse' && e.button !== 0) return;
+                e.preventDefault();
+                e.stopPropagation();
+
+                const el = e.currentTarget;
+                const startY = e.clientY;
+                const startTop = topPanePxRef.current;
+
+                el.setPointerCapture(e.pointerId);
+
+                document.body.style.cursor = "row-resize";
+                document.body.style.userSelect = "none";
+
+                const onMove = (ev: PointerEvent) => {
+                  ev.preventDefault();
+                  const newH = clampTop(startTop + (ev.clientY - startY));
+                  setTopPanePx(newH);
+                  topPanePxRef.current = newH;
+                };
+                const onUp = () => {
+                  el.releasePointerCapture(e.pointerId);
+                  document.body.style.cursor = "";
+                  document.body.style.userSelect = "";
+                  el.removeEventListener("pointermove", onMove);
+                  el.removeEventListener("pointerup", onUp);
+                  el.removeEventListener("pointercancel", onUp);
+                };
+
+                el.addEventListener("pointermove", onMove, { passive: false });
+                el.addEventListener("pointerup", onUp, { passive: false });
+                el.addEventListener("pointercancel", onUp, { passive: false });
+              }}
+              className="relative h-10 -mt-5 -mb-5 cursor-row-resize select-none touch-none flex-shrink-0 flex items-center justify-center"
+              style={{ touchAction: "none", zIndex: 50, pointerEvents: "auto" }}
+            >
+              {/* Separator line + dots handle */}
+              <div className="absolute inset-x-0 top-1/2 -translate-y-1/2 h-[1px] bg-gray-700/30 cursor-row-resize" />
+              <div className="relative z-10 flex items-center gap-1 cursor-row-resize">
+                <div className="w-1 h-1 rounded-full bg-[#757e80] cursor-row-resize" />
+                <div className="w-1 h-1 rounded-full bg-[#757e80] cursor-row-resize" />
+                <div className="w-1 h-1 rounded-full bg-[#757e80] cursor-row-resize" />
+              </div>
+            </div>
+
             {/* BOTTOM pane: Tabs + Tables */}
             <div
-              className="flex-1 flex flex-col min-h-[260px]"
-              style={{ borderTop: `1px solid ${AX.border}` }}
+              className="flex-1 flex flex-col min-h-[120px]"
             >
               <PerpTabs
                 positions={positions}
@@ -298,6 +387,7 @@ export default function PerpTradePage() {
               accountValue={accountValue}
               token={bearerToken}
               onOrderPlaced={handleOrderPlaced}
+              onAddFunds={() => setShowFundingModal(true)}
               initialPrice={selectedPrice}
             />
           </div>
@@ -350,6 +440,7 @@ export default function PerpTradePage() {
                     handleOrderPlaced();
                     closeModal();
                   }}
+                  onAddFunds={() => { closeModal(); setShowFundingModal(true); }}
                   initialPrice={selectedPrice}
                 />
               </div>
@@ -363,6 +454,13 @@ export default function PerpTradePage() {
           token={bearerToken}
           onClose={() => setSelectedPosition(null)}
           onPositionClosed={refreshPositions}
+        />
+
+        {/* Funding Modal */}
+        <PerpFundingModal
+          open={showFundingModal}
+          onClose={() => setShowFundingModal(false)}
+          token={bearerToken || ""}
         />
       </div>
     </>

@@ -52,9 +52,11 @@ function LevelRow({
   const depthPct = maxCumulative > 0 ? (data.cumulativeUsd / maxCumulative) * 100 : 0;
   const barColor =
     side === "bid"
-      ? "rgba(134, 217, 159, 0.10)"
-      : "rgba(242, 102, 130, 0.10)";
+      ? "rgba(134, 217, 159, 0.18)"
+      : "rgba(242, 102, 130, 0.18)";
   const textColor = side === "bid" ? "text-[#86d99f]" : "text-[#f26682]";
+  // Bar only spans the price column (35% of row width)
+  const barWidthPct = Math.min(depthPct, 100) * 0.35;
 
   return (
     <div
@@ -62,10 +64,10 @@ function LevelRow({
       style={{ fontVariantNumeric: "tabular-nums" }}
       onClick={() => onClick?.(data.level.px)}
     >
-      {/* Depth bar */}
+      {/* Depth bar — spans price column only */}
       <div
-        className="absolute top-0 bottom-0 right-0"
-        style={{ width: `${Math.min(depthPct, 100)}%`, background: barColor }}
+        className="absolute top-0 bottom-0 left-0"
+        style={{ width: `${barWidthPct}%`, background: barColor }}
       />
 
       {/* Price */}
