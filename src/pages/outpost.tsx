@@ -17,7 +17,7 @@ import Footer from '~/components/Footer';
 import { DockedPanelMarginWrapper } from '~/contexts/DockedPanelContext';
 import { useUser } from '~/components/UserContext';
 import { useArenaStats, useQuests, useCashbackSummary, useClaimCashback } from '~/hooks/useArena';
-import { claimQuest } from '~/utils/arenaApi';
+import { claimAllQuests } from '~/utils/arenaApi';
 import { useQueryClient } from '@tanstack/react-query';
 import { toast } from 'react-hot-toast';
 
@@ -643,38 +643,39 @@ export default function ArenaPage() {
     setMounted(true);
   }, []);
 
-  // Claim all unclaimed quests - uses API directly to avoid multiple toasts
+  // Claim all unclaimed quests via single batch endpoint
   const handleClaimAllGold = async () => {
+    if (!user?.bearerToken) {
+      toast.error('Please log in to claim rewards');
+      return;
+    }
+
     const unclaimedQuests = allQuests.filter((q: any) => q.isCompleted && !q.isClaimed);
     if (unclaimedQuests.length === 0) {
       toast('No credits to claim!', { icon: '💡' });
       return;
     }
 
-    if (!user?.bearerToken) {
-      toast.error('Please log in to claim rewards');
-      return;
-    }
-
     setIsClaimingGold(true);
-    let totalClaimed = 0;
 
     try {
-      // Claim all quests sequentially using API directly (no individual toasts)
-      for (const quest of unclaimedQuests) {
-        const result = await claimQuest(user.bearerToken, quest.id);
-        totalClaimed += result.goldAwarded || 0;
-      }
+      const result = await claimAllQuests(user.bearerToken);
 
-      // Refresh data
+      // Refresh all related data
       queryClient.invalidateQueries({ queryKey: ['arena', 'stats'] });
       queryClient.invalidateQueries({ queryKey: ['arena', 'quests'] });
+      queryClient.invalidateQueries({ queryKey: ['arena', 'cashback'] });
+      queryClient.invalidateQueries({ queryKey: ['arena', 'gold-history'] });
 
-      // Show ONE toast with total
-      toast.success(`🪙 Claimed ${totalClaimed.toLocaleString()} Credits!`, { duration: 4000 });
+      toast.success(`🪙 Claimed ${result.totalGoldAwarded.toLocaleString()} Credits!`, { duration: 4000 });
+
+      // Show rank-up toast if applicable
+      if (result.rankUp && result.newRank) {
+        toast.success(`🎖️ Ranked up to ${result.newRank}${result.newLevel ? ` ${['', 'I', 'II', 'III', 'IV'][result.newLevel]}` : ''}!`, { duration: 5000 });
+      }
     } catch (error: any) {
       toast.error(error.message || 'Failed to claim credits');
-      // Still refresh in case some claims succeeded
+      // Still refresh in case the backend partially succeeded
       queryClient.invalidateQueries({ queryKey: ['arena', 'stats'] });
       queryClient.invalidateQueries({ queryKey: ['arena', 'quests'] });
     } finally {

@@ -399,11 +399,9 @@ export default function TradePage() {
     return undefined;
   }, [optimisticToken?.mint, _mint, id]);
 
-  // Continuously refresh pre-built buy order every 3 seconds while on this page.
-  // Keeps the cached order fresh so the user gets <1ms cache hit on Buy click.
-  useKeepOrderFresh(
-    resolvedTokenMint ? { baseMint: resolvedTokenMint, amount: 0.1, side: 'buy' } : null
-  );
+  // Prefetch is handled by TradeActionPanel when the user selects an amount.
+  // The previous page-level prefetch used a hardcoded 0.1 SOL which spammed
+  // Jupiter's API with "Insufficient funds" errors on low-balance wallets.
 
   // Single WebSocket connection for entire trade page (shared via context to child components)
   // This eliminates the 5 duplicate connections that tabs were creating

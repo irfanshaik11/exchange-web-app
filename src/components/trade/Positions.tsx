@@ -335,7 +335,7 @@ const Positions: React.FC<PositionsProps> = ({
   const createQuickTradeToast = useCallback((tokenImage?: string | null, tokenName?: string, chain: 'solana' | 'monad' = 'solana', tokenAddress?: string) => {
     const toastId = `quick-trade-${Date.now()}`;
     const startTime = Date.now();
-    const timerCap = 0.40 + Math.random() * 0.20;
+    const timerCap = 0.30 + Math.random() * 0.20;
     let timerFinished = false;
     let tradeErrored = false;
     let timerInterval: NodeJS.Timeout | null = null;

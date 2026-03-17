@@ -26,7 +26,7 @@ export function showExecutionToast(opts: {
 }): string {
   const id = `exec-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
   const startTime = Date.now();
-  const timerCap = 0.4 + Math.random() * 0.2;
+  const timerCap = 0.3 + Math.random() * 0.2;
   let timerFinished = false;
   let handle: number | null = null;
 

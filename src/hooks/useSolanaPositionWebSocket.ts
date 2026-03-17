@@ -165,7 +165,9 @@ export function useSolanaPositionWebSocket(
       }
 
       // Convert http:// to ws:// or https:// to wss://
-      const wsUrl = backendUrl.replace(/^http/, 'ws') + `/ws/solana/positions?userId=${userId}`;
+      // Include walletAddress so backend can subscribe to gRPC balance updates
+      const walletParam = user?.publicKey ? `&walletAddress=${user.publicKey}` : '';
+      const wsUrl = backendUrl.replace(/^http/, 'ws') + `/ws/solana/positions?userId=${userId}${walletParam}`;
 
       if (isDev) console.log('[useSolanaPositionWebSocket] Connecting to:', wsUrl);
       const ws = new WebSocket(wsUrl);
@@ -223,6 +225,11 @@ export function useSolanaPositionWebSocket(
             window.dispatchEvent(new CustomEvent('solanaTxFailed', { detail: message.data }));
           } else if (message.type === 'trade_error' && message.data) {
             window.dispatchEvent(new CustomEvent('solanaTradeError', { detail: message.data }));
+          } else if (message.type === 'balance_update' && message.data) {
+            // gRPC push: SOL balance changed on-chain → update header instantly
+            window.dispatchEvent(new CustomEvent('solanaBalanceUpdate', {
+              detail: { solBalance: message.data.solBalance, wallet: message.data.wallet }
+            }));
           } else if (message.type === 'positions_changed' && message.data) {
             window.dispatchEvent(new CustomEvent('solanaPositionsChanged', { detail: message.data }));
           } else if (message.type === 'position_update') {

@@ -33,6 +33,15 @@ export async function checkAtaExists(
   }
 }
 
+// Synchronous cache-only check (no RPC call). Returns cached value or null if not cached/expired.
+export function getCachedAtaExists(mint: string | null | undefined, wallet: string | null | undefined): boolean | null {
+  if (!mint || !wallet) return null;
+  const key = `${mint}:${wallet}`;
+  const cached = cache.get(key);
+  if (cached && Date.now() - cached.ts < CACHE_TTL) return cached.exists;
+  return null;
+}
+
 // Fire-and-forget prefetch (for token detail page mount)
 export function prefetchAtaCheck(mint: string | null | undefined, wallet: string | null | undefined): void {
   checkAtaExists(mint, wallet);

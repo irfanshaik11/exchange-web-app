@@ -2081,9 +2081,9 @@ export function DiscoverPageContent({ variant = 'standalone' }: DiscoverPageCont
       
       // Generate unique toast ID and fake fast time (0.40-0.60s)
       const uniqueToastId = `discover-quickbuy-${Date.now()}`;
-      const fakeTime = (Math.random() * 0.2 + 0.4).toFixed(2);
+      const fakeTime = (Math.random() * 0.2 + 0.3).toFixed(2);
       const startTime = Date.now();
-      const timerCap = 0.40 + Math.random() * 0.20;
+      const timerCap = 0.30 + Math.random() * 0.20;
       let timerFinished = false;
       let tradeErrored = false;
 
@@ -2239,7 +2239,7 @@ export function DiscoverPageContent({ variant = 'standalone' }: DiscoverPageCont
     }
 
     // Generate random timer cap (0.40-0.60s)
-    const timerCap = 0.4 + Math.random() * 0.2;
+    const timerCap = 0.3 + Math.random() * 0.2;
     const uniqueToastId = `solana-quickbuy-${Date.now()}-${Math.random()}`;
     const startTime = Date.now();
     let timerFinished = false;
@@ -2493,7 +2493,7 @@ export function DiscoverPageContent({ variant = 'standalone' }: DiscoverPageCont
     }
 
     // Generate random timer cap (0.40-0.60s)
-    const timerCap = 0.4 + Math.random() * 0.2;
+    const timerCap = 0.3 + Math.random() * 0.2;
     const uniqueToastId = `pumplive-quickbuy-${Date.now()}-${Math.random()}`;
     const startTime = Date.now();
     let timerFinished = false;

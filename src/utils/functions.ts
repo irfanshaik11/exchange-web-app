@@ -1,5 +1,6 @@
 import { env } from "../env";
 import { Connection, PublicKey, clusterApiUrl } from "@solana/web3.js";
+import { getAssociatedTokenAddressSync, NATIVE_MINT } from "@solana/spl-token";
 import { ethers } from "ethers";
 
 const isDev = process.env.NODE_ENV !== 'production';
@@ -447,9 +448,16 @@ export async function getSolBalance(address: string, isDevnet = false) {
       "confirmed",
     );
     const publicKey = new PublicKey(address);
-    const lamports = await connection.getBalance(publicKey);
-    const sol = lamports / 1e9;
-    return sol;
+
+    // Fetch native SOL and WSOL ATA balance in parallel
+    const [lamports, wsolLamports] = await Promise.all([
+      connection.getBalance(publicKey),
+      connection.getTokenAccountBalance(
+        getAssociatedTokenAddressSync(NATIVE_MINT, publicKey)
+      ).then(b => Number(b.value.amount)).catch(() => 0),
+    ]);
+
+    return (lamports + wsolLamports) / 1e9;
   } catch (error) {
     console.error("Failed to fetch balance:", error);
     return null;

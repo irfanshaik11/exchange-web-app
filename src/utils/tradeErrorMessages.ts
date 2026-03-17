@@ -49,8 +49,8 @@ export function mapTradeErrorMessage(error: any): string {
   if (errorCode === 'NO_HOLDINGS' || raw.includes('insufficient token'))
     return 'Token already sold or transferred.';
 
-  // Transaction/order expired (Jupiter Ultra execute failures)
-  if (raw.includes('order expired') || raw.includes('transaction expired'))
+  // Transaction/order expired (Jupiter Ultra execute failures + blockhash expiry)
+  if (raw.includes('order expired') || raw.includes('transaction expired') || raw.includes('blockhash expired'))
     return 'Trade expired. Please try again.';
 
   // Timeout

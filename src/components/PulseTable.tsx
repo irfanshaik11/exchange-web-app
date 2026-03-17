@@ -3375,7 +3375,7 @@ function PulseTable({
     }
 
     // Generate random timer cap (0.40-0.60s)
-    const timerCap = 0.4 + Math.random() * 0.2;
+    const timerCap = 0.3 + Math.random() * 0.2;
     const uniqueToastId = `solana-quickbuy-${Date.now()}-${Math.random()}`;
     const startTime = Date.now();
     let timerFinished = false;
