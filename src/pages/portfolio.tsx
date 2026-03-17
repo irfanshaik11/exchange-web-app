@@ -1140,6 +1140,33 @@ export default function PortfolioPage() {
       isDev && console.log(`[Portfolio] Trade completed: ${detail?.tradeType} on ${detail?.chain}`);
       // Force balance refresh
       refreshBalance({ chain: currentChain === 'monad' ? 'monad' : 'sol', force: true }).catch(() => {});
+
+      // Optimistic buy entry: show in Activity tab immediately (before DB record arrives via REST/WS)
+      if (detail?.tradeType === 'buy' && detail.tokenAddress) {
+        const optimisticTrade: TradeRow = {
+          id: -Date.now(),
+          tokenAddress: detail.tokenAddress,
+          tokenName: detail.tokenName || undefined,
+          tokenSymbol: detail.tokenSymbol || undefined,
+          imageUrl: detail.imageUrl || null,
+          type: 'Buy' as const,
+          marketCap: 0,
+          solAmount: detail.solAmountSpent || 0,
+          tokenAmount: 0,
+          usdValue: detail.solAmountSpent || 0,
+          transactionHash: detail.txHash || '',
+          blockchain: detail.chain === 'monad' ? 'monad' : 'solana',
+          createdAt: new Date().toISOString(),
+          tradeTime: new Date().toTimeString().split(" ")[0],
+        };
+        setTradeActivity((prev) => {
+          // Deduplicate: skip if a buy for this token was added in the last 5s
+          if (prev.some((t: any) => t.tokenAddress === detail.tokenAddress && t.type === 'Buy'
+              && Date.now() - new Date(t.createdAt).getTime() < 5000)) return prev;
+          return [optimisticTrade, ...prev];
+        });
+      }
+
       // Increment counter to trigger trade history/activity re-fetch
       setTradeRefreshCounter((c) => c + 1);
     };
