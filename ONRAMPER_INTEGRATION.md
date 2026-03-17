@@ -1,7 +1,7 @@
 # Onramper Integration - Migration from MoonPay
 
 ## Summary
-Successfully replaced MoonPay with Onramper as the fiat on-ramp provider.
+Successfully replaced MoonPay with Onramper as the fiat onramp provider.
 
 ## Changes Made
 
