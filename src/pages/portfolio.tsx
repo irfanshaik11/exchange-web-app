@@ -1011,7 +1011,17 @@ export default function PortfolioPage() {
             const dedupedRest = filteredActivity.filter((t: any) => !wsIds.has(t.id));
             finalActivity = [...pendingWsTradesRef.current, ...dedupedRest];
           }
-          setTradeActivity(finalActivity);
+          // Preserve recent optimistic entries (negative id) that REST hasn't confirmed yet
+          const mergedActivity = finalActivity;
+          setTradeActivity((prev) => {
+            const now = Date.now();
+            const recentOptimistic = prev.filter((t: any) =>
+              t.id < 0 && (now + t.id) < 10000 // id is -Date.now(), so age = now + id
+              && (!t.transactionHash || !mergedActivity.some((r: any) => r.transactionHash === t.transactionHash))
+            );
+            if (recentOptimistic.length === 0) return mergedActivity;
+            return [...recentOptimistic, ...mergedActivity];
+          });
 
           // Clean up pending_ws_trades localStorage too
           if (typeof window !== 'undefined') {
@@ -1160,15 +1170,15 @@ export default function PortfolioPage() {
           tradeTime: new Date().toTimeString().split(" ")[0],
         };
         setTradeActivity((prev) => {
-          // Deduplicate: skip if a buy for this token was added in the last 5s
-          if (prev.some((t: any) => t.tokenAddress === detail.tokenAddress && t.type === 'Buy'
-              && Date.now() - new Date(t.createdAt).getTime() < 5000)) return prev;
+          // Deduplicate by txHash (allows multi-buys of same token)
+          if (detail.txHash && prev.some((t: any) => t.transactionHash === detail.txHash)) return prev;
           return [optimisticTrade, ...prev];
         });
       }
 
-      // Increment counter to trigger trade history/activity re-fetch
-      setTradeRefreshCounter((c) => c + 1);
+      // Delay REST re-fetch by 2s so backend setImmediate saves complete before fetch
+      // WS solanaNewTrade events still push real data at ~200ms for instant display
+      setTimeout(() => setTradeRefreshCounter((c) => c + 1), 2000);
     };
 
     window.addEventListener(TRADE_COMPLETED_EVENT, handleTradeCompleted);
