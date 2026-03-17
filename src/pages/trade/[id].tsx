@@ -25,6 +25,7 @@ import ReusedImageTokensPanel from "../../components/trade/ReusedImageTokensPane
 import TokenLimitOrders from "../../components/trade/TokenLimitOrders";
 import { getMyLimitOrders } from "../../utils/api";
 import { creatorAddressCache } from "../../utils/preloadTradeChart";
+import { useKeepOrderFresh } from "../../hooks/usePrefetchOrder";
 // Eager load AdvancedOHLCChart on trade pages - always needed, so no point in lazy loading
 import AdvancedOHLCChart from "../../components/AdvancedOHLCChart";
 
@@ -159,6 +160,7 @@ export default function TradePage() {
 
   const { settings: quickBuySettings, side: quickBuySide } = useQuickBuyQueryParams();
   const { params: tradeParams, setParams: setTradeParams, isReady: tradeParamsReady } = useTradePageQueryParams();
+  // useKeepOrderFresh is called below after resolvedTokenMint is computed
 
   const { token, isPolling, loading: pollingLoading, resolvedPairAddress } = useSingleTokenPolling(
     typeof id === "string" ? id : undefined,
@@ -396,6 +398,10 @@ export default function TradePage() {
     if (typeof id === "string" && id.length > 0) return id;
     return undefined;
   }, [optimisticToken?.mint, _mint, id]);
+
+  // Prefetch is handled by TradeActionPanel when the user selects an amount.
+  // The previous page-level prefetch used a hardcoded 0.1 SOL which spammed
+  // Jupiter's API with "Insufficient funds" errors on low-balance wallets.
 
   // Single WebSocket connection for entire trade page (shared via context to child components)
   // This eliminates the 5 duplicate connections that tabs were creating

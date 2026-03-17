@@ -44,7 +44,9 @@ import { storeReferralCodeHint, getStoredReferralCodeHint, clearStoredReferralCo
 import PagePreloader from '../components/PagePreloader';
 import { PulseBackgroundLoader } from '../components/PulseBackgroundLoader';
 import { SolanaPositionWebSocketProvider } from '../contexts/SolanaPositionWebSocketContext';
+import { listenForConfirmationUpdates } from '../utils/tradeToast';
 import { DockedPanelProvider } from '../contexts/DockedPanelContext';
+import { HyperliquidProvider } from '../contexts/HyperliquidContext';
 import ErrorBoundary from '../components/ErrorBoundary';
 
 const isDev = process.env.NODE_ENV !== 'production';
@@ -66,10 +68,13 @@ if (typeof window !== 'undefined' && process.env.NODE_ENV === 'development') {
       errorString.includes('TurnkeyError') ||
       errorString.includes('Session public key') ||
       errorString.includes('session public key could not be found') ||
+      errorString.includes('chrome-extension://') ||
+      errorString.includes('runtime.sendMessage') ||
       stackTrace.includes('TradeActionPanel') ||
       stackTrace.includes('api.ts') ||
       stackTrace.includes('turnkey') ||
-      stackTrace.includes('Turnkey')
+      stackTrace.includes('Turnkey') ||
+      stackTrace.includes('chrome-extension://')
     ) {
       // Still log to console for debugging, just don't trigger overlay
       originalConsoleError('[Handled Error - No Overlay]', ...args);
@@ -94,7 +99,9 @@ if (typeof window !== 'undefined' && process.env.NODE_ENV === 'development') {
       errorMessage.includes('NO_HOLDINGS') ||
       errorMessage.includes('AMOUNT_TOO_SMALL') ||
       errorMessage.includes('Session public key') ||
-      errorMessage.includes('session public key could not be found')
+      errorMessage.includes('session public key could not be found') ||
+      errorMessage.includes('runtime.sendMessage') ||
+      (error?.stack && error.stack.includes('chrome-extension://'))
     ) {
       event.preventDefault();
       event.stopImmediatePropagation();
@@ -119,7 +126,9 @@ if (typeof window !== 'undefined' && process.env.NODE_ENV === 'development') {
       reasonMessage.includes('NO_HOLDINGS') ||
       reasonMessage.includes('AMOUNT_TOO_SMALL') ||
       reasonMessage.includes('Session public key') ||
-      reasonMessage.includes('session public key could not be found')
+      reasonMessage.includes('session public key could not be found') ||
+      reasonMessage.includes('runtime.sendMessage') ||
+      (reason?.stack && reason.stack.includes('chrome-extension://'))
     ) {
       event.preventDefault();
       event.stopImmediatePropagation();
@@ -574,6 +583,11 @@ function GlobalLoginModalManager({ enforceLogin }: { enforceLogin: boolean }) {
 const MyApp: AppType = ({ Component, pageProps }) => {
   const [toastPosition, setToastPosition] = useState<'top-left' | 'top-center' | 'top-right' | 'bottom-left' | 'bottom-center' | 'bottom-right'>('top-center');
 
+  // Initialize WS confirmation listeners for optimistic trade mode (once)
+  useEffect(() => {
+    listenForConfirmationUpdates();
+  }, []);
+
   // Load toast position from localStorage on mount
   useEffect(() => {
     if (typeof window !== 'undefined') {
@@ -868,11 +882,13 @@ const MyApp: AppType = ({ Component, pageProps }) => {
                               <SolanaPositionWebSocketProvider>
                                 <ReferralAccessGate>
                                   <DockedPanelProvider>
-                                    <PagePreloader />
-                                    <PulseBackgroundLoader />
-                                    <ErrorBoundary>
-                                      <Component {...pageProps} />
-                                    </ErrorBoundary>
+                                    <HyperliquidProvider>
+                                      <PagePreloader />
+                                      <PulseBackgroundLoader />
+                                      <ErrorBoundary>
+                                        <Component {...pageProps} />
+                                      </ErrorBoundary>
+                                    </HyperliquidProvider>
                                   </DockedPanelProvider>
                                 </ReferralAccessGate>
                               </SolanaPositionWebSocketProvider>

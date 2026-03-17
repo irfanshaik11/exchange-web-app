@@ -140,6 +140,10 @@ export function buildSolanaWalletAllocations({
     const selectedId = Array.from(selectionSet)[0];
     const match = candidates.find((c) => c.wallet.id === selectedId && c.address);
     if (match) {
+      // If balance IS known and insufficient, reject early (avoids toast-then-error UX)
+      if (match.hasBalanceEntry && typeof match.balance === "number" && match.balance < requiredBalanceFull) {
+        return { allocations: [], total: 1 };
+      }
       return {
         allocations: [
           {
@@ -178,12 +182,12 @@ export function buildSolanaWalletAllocations({
       .sort((a, b) => (b.balance as number) - (a.balance as number));
     if (pool.length > 0) return pool[0];
 
-    // 3) Selected wallet with address (unknown balance)
-    const selUnknown = candidates.find((c) => c.selected && c.address);
+    // 3) Selected wallet with unknown balance (let backend validate)
+    const selUnknown = candidates.find((c) => c.selected && c.address && !c.hasBalanceEntry);
     if (selUnknown) return selUnknown;
 
-    // 4) Any wallet with address
-    return candidates.find((c) => c.address) || null;
+    // 4) Any wallet with unknown balance
+    return candidates.find((c) => c.address && !c.hasBalanceEntry) || null;
   };
 
   // If trade is tiny, don't split; pick the best single wallet with balance

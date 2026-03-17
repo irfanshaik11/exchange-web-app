@@ -496,7 +496,7 @@ export default function WatchlistModal({ open, onClose }: WatchlistModalProps) {
       // Generate unique toast ID
       const uniqueToastId = `monad-quickbuy-${Date.now()}`;
       const startTime = Date.now();
-      const timerCap = 0.40 + Math.random() * 0.20;
+      const timerCap = 0.30 + Math.random() * 0.20;
       let timerFinished = false;
       let tradeErrored = false;
 
@@ -658,7 +658,7 @@ export default function WatchlistModal({ open, onClose }: WatchlistModalProps) {
       }
 
       // Generate random timer cap (0.40-0.60s)
-      const timerCap = 0.4 + Math.random() * 0.2;
+      const timerCap = 0.3 + Math.random() * 0.2;
       const uniqueToastId = `watchlist-quickbuy-${Date.now()}-${Math.random()}`;
       const startTime = Date.now();
       let timerFinished = false;

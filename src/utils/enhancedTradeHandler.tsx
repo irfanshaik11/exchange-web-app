@@ -397,7 +397,7 @@ export async function executeEnhancedTrade(params: EnhancedTradeParams): Promise
 
     // Step 2: Show Monad-style toast after validation passes - trade is being submitted
     // Generate random timer cap (0.40-0.60s)
-    const timerCap = 0.40 + Math.random() * 0.20;
+    const timerCap = 0.30 + Math.random() * 0.20;
     const uniqueToastId = `solana-trade-${Date.now()}-${Math.random()}`;
     const startTime = Date.now();
     let timerFinished = false;

@@ -627,7 +627,7 @@ const InstantTradeModal: React.FC<InstantTradeModalProps> = ({ isOpen, onClose, 
   }) => {
     const toastId = `${toastPrefix}-${Date.now()}`;
     const startTime = Date.now();
-    const timerCap = 0.40 + Math.random() * 0.20;
+    const timerCap = 0.30 + Math.random() * 0.20;
     let timerFinished = false;
     let tradeErrored = false;
 
@@ -764,7 +764,7 @@ const InstantTradeModal: React.FC<InstantTradeModalProps> = ({ isOpen, onClose, 
     // Create PulseTable-style toast
     const uniqueToastId = `${toastPrefix}-${Date.now()}`;
     const startTime = Date.now();
-    const timerCap = 0.40 + Math.random() * 0.20;
+    const timerCap = 0.30 + Math.random() * 0.20;
     let timerFinished = false;
     let tradeErrored = false;
 
@@ -1186,11 +1186,11 @@ const InstantTradeModal: React.FC<InstantTradeModalProps> = ({ isOpen, onClose, 
         
         // Generate unique toast ID and fake fast time (0.40-0.60s)
         const uniqueSellToastId = `monad-sell-${Date.now()}`;
-        const fakeTime = (Math.random() * 0.2 + 0.4).toFixed(2);
+        const fakeTime = (Math.random() * 0.2 + 0.3).toFixed(2);
         const sellStartTime = Date.now();
         
         // Random cap time between 0.40 and 0.60 seconds
-        const sellTimerCap = 0.40 + Math.random() * 0.20;
+        const sellTimerCap = 0.30 + Math.random() * 0.20;
         let sellTimerFinished = false;
         let tradeErrored = false;
 
@@ -1346,7 +1346,7 @@ const InstantTradeModal: React.FC<InstantTradeModalProps> = ({ isOpen, onClose, 
         // Animated toast setup (same as TradeActionPanel)
         const uniqueToastId = `solana-sell-modal-${Date.now()}-${Math.random()}`;
         const startTime = Date.now();
-        const timerCap = 0.40 + Math.random() * 0.20;
+        const timerCap = 0.30 + Math.random() * 0.20;
         let timerFinished = false;
         let tradeErrored = false;
 

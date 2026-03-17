@@ -335,7 +335,7 @@ const Positions: React.FC<PositionsProps> = ({
   const createQuickTradeToast = useCallback((tokenImage?: string | null, tokenName?: string, chain: 'solana' | 'monad' = 'solana', tokenAddress?: string) => {
     const toastId = `quick-trade-${Date.now()}`;
     const startTime = Date.now();
-    const timerCap = 0.40 + Math.random() * 0.20;
+    const timerCap = 0.30 + Math.random() * 0.20;
     let timerFinished = false;
     let tradeErrored = false;
     let timerInterval: NodeJS.Timeout | null = null;
@@ -1183,10 +1183,11 @@ const Positions: React.FC<PositionsProps> = ({
           }));
         }
 
-        // Single fallback retry at 3s — WS full_positions should arrive in ~200ms
+        // Fallback retries at 3s and 10s — WS full_positions should arrive in ~200ms
+        // but inline DB save may take 250-300ms; second retry covers edge cases
         buyRetryTimersRef.current.forEach(clearTimeout);
         buyRetryTimersRef.current = [];
-        const timer = setTimeout(() => {
+        const timer1 = setTimeout(() => {
           const stillPending = positionsRef.current.some(
             (p) => p.tokenAddress.toLowerCase() === addr && (p as any)._needsRefresh
           );
@@ -1194,7 +1195,15 @@ const Positions: React.FC<PositionsProps> = ({
             fetchPositions();
           }
         }, 3000);
-        buyRetryTimersRef.current.push(timer);
+        const timer2 = setTimeout(() => {
+          const stillPending = positionsRef.current.some(
+            (p) => p.tokenAddress.toLowerCase() === addr && (p as any)._needsRefresh
+          );
+          if (stillPending) {
+            fetchPositions();
+          }
+        }, 10000);
+        buyRetryTimersRef.current.push(timer1, timer2);
       } else {
         debouncedFetchPositions(500);
       }

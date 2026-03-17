@@ -1633,7 +1633,7 @@ export default function DiscoverPopoutContent() {
       const startTime = Date.now();
       
       // Random cap time between 0.40 and 0.60 seconds
-      const timerCap = 0.40 + Math.random() * 0.20;
+      const timerCap = 0.30 + Math.random() * 0.20;
       let timerFinished = false;
       let tradeErrored = false;
       let firstSuccessShown = false;

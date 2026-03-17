@@ -14,6 +14,7 @@ import { useQuickBuy } from "~/components/QuickBuyContext";
 import HighSlippageWarningDialog from "./HighSlippageWarningDialog";
 import { fetchVerifiedPairAddress } from "~/hooks/useSingleTokenPolling";
 import { dispatchBalanceRefresh } from "~/utils/balanceEvents";
+import { usePrefetchOrder } from "~/hooks/usePrefetchOrder";
 
 const isDev = process.env.NODE_ENV !== 'production';
 
@@ -48,6 +49,7 @@ const sellPresets = [10, 25, 50, 100];
 const SellPopup: React.FC<SellPopupProps> = ({ isOpen, onClose, position, tokenMetadata, onSellSuccess }) => {
   const { user } = useUser();
   const { presets, activePreset } = useQuickBuy();
+  const { prefetch, prefetchImmediate } = usePrefetchOrder();
   const [amount, setAmount] = useState("");
   const [sliderPct, setSliderPct] = useState(0);
   const [isLoading, setIsLoading] = useState(false);
@@ -65,6 +67,27 @@ const SellPopup: React.FC<SellPopupProps> = ({ isOpen, onClose, position, tokenM
       });
     }
   }, [isOpen, position, tokenMetadata]);
+
+  // Prefetch sell order when popup opens (100% sell)
+  useEffect(() => {
+    if (!isOpen || !position?.tokenAddress) return;
+    const tokenBalance = position.remaining || 0;
+    if (tokenBalance > 0) {
+      prefetchImmediate({ baseMint: position.tokenAddress, amount: tokenBalance, side: 'sell' });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen, position?.tokenAddress]);
+
+  // Prefetch sell order when percentage changes
+  useEffect(() => {
+    if (!isOpen || !position?.tokenAddress) return;
+    const tokenBalance = position.remaining || 0;
+    const amountToSell = tokenBalance * Number(amount || 0) / 100;
+    if (amountToSell > 0) {
+      prefetch({ baseMint: position.tokenAddress, amount: amountToSell, side: 'sell' });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [amount, isOpen, position?.tokenAddress]);
 
   // High slippage warning dialog state
   const [showSlippageWarning, setShowSlippageWarning] = useState(false);

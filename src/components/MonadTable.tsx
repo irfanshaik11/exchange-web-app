@@ -2579,11 +2579,11 @@ function MonadTable({
 
     // Generate unique toast ID and fake fast time (0.40-0.60s)
     const uniqueToastId = `monad-quickbuy-${Date.now()}`;
-    const fakeTime = (Math.random() * 0.2 + 0.4).toFixed(2);
+    const fakeTime = (Math.random() * 0.2 + 0.3).toFixed(2);
     const startTime = Date.now();
 
     // Random cap time between 0.40 and 0.60 seconds
-    const timerCap = 0.4 + Math.random() * 0.2;
+    const timerCap = 0.3 + Math.random() * 0.2;
     let timerFinished = false;
     let tradeErrored = false;
 

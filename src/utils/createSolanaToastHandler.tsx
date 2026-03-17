@@ -48,7 +48,7 @@ export function createSolanaTradeToast(
   pendingRef: PendingSolanaToastRef
 ): { toastId: string; timerHandle: number; timerCap: number; setTradeErrored: (v: boolean) => void; cleanupTradeListener: () => void } {
   // Generate random timer cap (0.40-0.60s)
-  const timerCap = 0.40 + Math.random() * 0.20;
+  const timerCap = 0.30 + Math.random() * 0.20;
   const uniqueToastId = `solana-buy-${Date.now()}-${Math.random()}`;
   const startTime = Date.now();
   let timerFinished = false;

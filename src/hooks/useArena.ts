@@ -55,8 +55,10 @@ export function useArenaStats() {
     queryKey: ['arena', 'stats', user?.id],
     queryFn: () => getArenaStats(user!.bearerToken),
     enabled: !!user?.bearerToken,
-    staleTime: 30 * 1000, // 30 seconds
-    refetchInterval: 60 * 1000, // Refetch every minute
+    staleTime: 30 * 1000,
+    refetchInterval: 60 * 1000,
+    refetchOnMount: true,
+    refetchOnWindowFocus: true,
   });
 }
 
@@ -73,6 +75,8 @@ export function useQuests(type?: 'DAILY' | 'SEASONAL' | 'REFERRAL' | 'SPECIAL') 
     enabled: !!user?.bearerToken,
     staleTime: 30 * 1000,
     refetchInterval: 60 * 1000,
+    refetchOnMount: true,
+    refetchOnWindowFocus: true,
   });
 }
 
@@ -86,6 +90,8 @@ export function useClaimQuest() {
       // Invalidate related queries
       queryClient.invalidateQueries({ queryKey: ['arena', 'stats'] });
       queryClient.invalidateQueries({ queryKey: ['arena', 'quests'] });
+      queryClient.invalidateQueries({ queryKey: ['arena', 'cashback'] });
+      queryClient.invalidateQueries({ queryKey: ['arena', 'gold-history'] });
 
       // Show success toast
       if (data.goldAwarded) {
@@ -117,6 +123,9 @@ export function useCashbackSummary() {
     queryFn: () => getCashbackSummary(user!.bearerToken),
     enabled: !!user?.bearerToken,
     staleTime: 30 * 1000,
+    refetchInterval: 30_000,
+    refetchOnMount: true,
+    refetchOnWindowFocus: true,
   });
 }
 
@@ -154,6 +163,9 @@ export function useGoldHistory(options: { limit?: number; offset?: number; type?
     queryFn: () => getGoldHistory(user!.bearerToken, options),
     enabled: !!user?.bearerToken,
     staleTime: 30 * 1000,
+    refetchInterval: 60_000,
+    refetchOnMount: true,
+    refetchOnWindowFocus: true,
   });
 }
 
@@ -257,8 +269,10 @@ export function useReferralStats() {
     queryKey: ['referrals', 'stats', user?.id],
     queryFn: () => getReferralStats(user!.bearerToken),
     enabled: !!user?.bearerToken,
-    staleTime: 5 * 60 * 1000, // 5 minutes — honors level rarely changes, prevents badge flicker on navigation
-    refetchInterval: 60 * 1000, // Refetch every 60 seconds in background
+    staleTime: 30 * 1000,
+    refetchInterval: 60 * 1000,
+    refetchOnMount: true,
+    refetchOnWindowFocus: true,
   });
 }
 
@@ -270,6 +284,9 @@ export function useDirectReferrals(options: { limit?: number; offset?: number; s
     queryFn: () => getDirectReferrals(user!.bearerToken, options),
     enabled: !!user?.bearerToken,
     staleTime: 30 * 1000,
+    refetchInterval: 30_000,
+    refetchOnMount: true,
+    refetchOnWindowFocus: true,
   });
 }
 
@@ -280,8 +297,10 @@ export function useAllReferrals(options: { limit?: number; offset?: number; sear
     queryKey: ['referrals', 'all', user?.id, options],
     queryFn: () => getAllReferrals(user!.bearerToken, options),
     enabled: !!user?.bearerToken,
-    staleTime: 10 * 1000, // 10 seconds
-    refetchInterval: 30 * 1000, // Refetch every 30 seconds
+    staleTime: 10 * 1000,
+    refetchInterval: 30 * 1000,
+    refetchOnMount: true,
+    refetchOnWindowFocus: true,
   });
 }
 
@@ -316,8 +335,10 @@ export function useHonorsInfo() {
     queryKey: ['referrals', 'honors', user?.id],
     queryFn: () => getHonorsInfo(user!.bearerToken),
     enabled: !!user?.bearerToken,
-    staleTime: 10 * 1000, // 10 seconds - keep honors data fresh
-    refetchInterval: 30 * 1000, // Refetch every 30 seconds
+    staleTime: 10 * 1000,
+    refetchInterval: 30 * 1000,
+    refetchOnMount: true,
+    refetchOnWindowFocus: true,
   });
 }
 
@@ -329,6 +350,9 @@ export function useRewardHistory(options: { limit?: number; offset?: number } = 
     queryFn: () => getRewardHistory(user!.bearerToken, options),
     enabled: !!user?.bearerToken,
     staleTime: 30 * 1000,
+    refetchInterval: 60_000,
+    refetchOnMount: true,
+    refetchOnWindowFocus: true,
   });
 }
 
@@ -340,6 +364,9 @@ export function useReferralQuests() {
     queryFn: () => getReferralQuests(user!.bearerToken),
     enabled: !!user?.bearerToken,
     staleTime: 30 * 1000,
+    refetchInterval: 60_000,
+    refetchOnMount: true,
+    refetchOnWindowFocus: true,
   });
 }
 
@@ -351,6 +378,9 @@ export function useReferralTree() {
     queryFn: () => getReferralTree(user!.bearerToken),
     enabled: !!user?.bearerToken,
     staleTime: 60 * 1000,
+    refetchInterval: 60_000,
+    refetchOnMount: true,
+    refetchOnWindowFocus: true,
   });
 }
 

@@ -54,7 +54,7 @@ export interface AdvancedOHLCChartProps {
   tokenSymbol?: string | null;
   tokenName?: string | null;
   tokenDecimals?: number | null;
-  network?: "solana" | "monad"; // Network type (defaults to 'solana' for backward compatibility)
+  network?: "solana" | "monad" | "hyperliquid"; // Network type (defaults to 'solana' for backward compatibility)
   priceLines?: {
     avgEntryPriceUsd?: number | null;
     avgExitPriceUsd?: number | null;
@@ -2325,7 +2325,7 @@ const AdvancedOHLCChart: React.FC<AdvancedOHLCChartProps> = ({
   // Monad OHLC WebSocket connection - runs independently of TradingView's lifecycle
   // This ensures real-time updates work even if subscribeBars isn't called by TradingView
   useEffect(() => {
-    // Only connect for Monad network
+    // Only connect for Monad network (hyperliquid uses its own candle hook)
     if (network !== "monad") {
       return;
     }
@@ -2886,8 +2886,8 @@ const AdvancedOHLCChart: React.FC<AdvancedOHLCChartProps> = ({
   // HTTP loads initial data first, then WebSocket takes over for real-time updates only
   // ROBUST IMPLEMENTATION: Never disconnects - includes heartbeat, exponential backoff, visibility handling
   useEffect(() => {
-    // Only connect for Solana network (non-monad)
-    if (network === "monad") {
+    // Only connect for Solana network (non-monad, non-hyperliquid)
+    if (network === "monad" || network === "hyperliquid") {
       return;
     }
 

@@ -137,6 +137,25 @@ export function useBalancePolling(options: UseBalancePollingOptions = {}): UseBa
     }, intervalMs);
   }, [chain, intervalMs, maxDurationMs, getCurrentBalance, refreshBalance, onBalanceChange, stopPolling]);
 
+  // Auto-stop polling when gRPC pushes a balance update (instant detection)
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const handleGrpcBalance = (event: Event) => {
+      if (!isPollingRef.current) return;
+      const { solBalance: newBal } = (event as CustomEvent).detail || {};
+      if (typeof newBal !== 'number' || !Number.isFinite(newBal)) return;
+      const oldBal = previousBalanceRef.current ?? 0;
+      if (chain === 'sol' && Math.abs(newBal - oldBal) > 0.0001) {
+        onBalanceChange?.(oldBal, newBal);
+        stopPolling();
+      }
+    };
+    window.addEventListener('solanaBalanceUpdate', handleGrpcBalance);
+    return () => {
+      window.removeEventListener('solanaBalanceUpdate', handleGrpcBalance);
+    };
+  }, [chain, onBalanceChange, stopPolling]);
+
   // Cleanup on unmount
   useEffect(() => {
     return () => {

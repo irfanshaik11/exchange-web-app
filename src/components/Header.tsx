@@ -115,7 +115,7 @@ const navLinks = [
   { name: "Trackers", href: "/trackers" },
   { name: "Rewards", href: "/outpost" },
   // { name: "Predictions", href: "/predictions" },
-  // { name: "Perpetuals", href: "/construction" },
+  // { name: "Perpetuals", href: "/perpetuals" },
   // { name: "Yield", href: "/construction" },
 ];
 
@@ -1159,7 +1159,7 @@ export default function Header({
     }
 
     // Animated toast with timer (same as PulseTable)
-    const timerCap = 0.4 + Math.random() * 0.2;
+    const timerCap = 0.3 + Math.random() * 0.2;
     const uniqueToastId = `solana-quickbuy-${Date.now()}-${Math.random()}`;
     const startTime = Date.now();
     let timerFinished = false;

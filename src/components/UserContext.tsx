@@ -1094,6 +1094,22 @@ export function UserProvider({ children }: { children: ReactNode }) {
     };
   }, [user?.publicKey, refreshBalance]);
 
+  // gRPC push: instant SOL balance updates via WebSocket (bypasses 20s cooldown)
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const handleGrpcBalance = (event: Event) => {
+      const { solBalance: newBal } = (event as CustomEvent).detail || {};
+      if (typeof newBal === 'number' && Number.isFinite(newBal) && newBal >= 0) {
+        setSolBalance(newBal);
+        solBalanceRef.current = newBal;
+      }
+    };
+    window.addEventListener('solanaBalanceUpdate', handleGrpcBalance);
+    return () => {
+      window.removeEventListener('solanaBalanceUpdate', handleGrpcBalance);
+    };
+  }, []);
+
   // Auto-logout when backend returns TOKEN_EXPIRED / INVALID_TOKEN / UNAUTHORIZED
   useEffect(() => {
     if (typeof window === 'undefined') return;

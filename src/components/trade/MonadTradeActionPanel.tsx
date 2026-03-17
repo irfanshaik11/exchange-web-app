@@ -691,7 +691,7 @@ const MonadTradeActionPanel: React.FC<MonadTradeActionPanelProps> = ({ token }) 
     
     // Generate unique toast ID and fake fast time (0.40-0.60s)
     const uniqueToastId = `monad-trade-${Date.now()}`;
-    const fakeTime = (Math.random() * 0.2 + 0.4).toFixed(2);
+    const fakeTime = (Math.random() * 0.2 + 0.3).toFixed(2);
     const startTime = Date.now();
     
     // Show initial loading toast with timer - checkmark hidden until timer finishes, link icon grayed out
@@ -713,7 +713,7 @@ const MonadTradeActionPanel: React.FC<MonadTradeActionPanelProps> = ({ token }) 
     );
     
     // Random cap time between 0.40 and 0.60 seconds
-    const timerCap = 0.40 + Math.random() * 0.20;
+    const timerCap = 0.30 + Math.random() * 0.20;
     let timerFinished = false;
     let tradeErrored = false;
 

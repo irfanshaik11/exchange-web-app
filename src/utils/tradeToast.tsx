@@ -26,7 +26,7 @@ export function showExecutionToast(opts: {
 }): string {
   const id = `exec-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
   const startTime = Date.now();
-  const timerCap = 0.4 + Math.random() * 0.2;
+  const timerCap = 0.3 + Math.random() * 0.2;
   let timerFinished = false;
   let handle: number | null = null;
 
@@ -177,4 +177,64 @@ export function showOrderToast(opts: {
   );
 
   return id;
+}
+
+/**
+ * Global listener for optimistic-mode trade failures.
+ * The backend sends `tx_failed` via WS after the HTTP 200 already returned.
+ * This is the ONLY way the user learns their optimistic trade didn't land.
+ *
+ * We intentionally do NOT listen for `solanaTxConfirmed` — the existing trade
+ * flow UI (toast from HTTP response) already handles the success case.
+ * Adding a second confirmation toast would be redundant.
+ *
+ * Call once at app startup (idempotent — guards against double-init).
+ */
+let confirmationListenersInitialized = false;
+
+export function listenForConfirmationUpdates(): void {
+  if (confirmationListenersInitialized) return;
+  confirmationListenersInitialized = true;
+
+  window.addEventListener('solanaTxFailed', ((e: CustomEvent) => {
+    const { txHash, tokenAddress, tradeType, error } = e.detail ?? {};
+    if (!txHash) return;
+    const side = tradeType === 'sell' ? 'Sell' : 'Buy';
+    const shortMint = tokenAddress ? `${tokenAddress.slice(0, 4)}…${tokenAddress.slice(-4)}` : '';
+    const explorerUrl = `https://solscan.io/tx/${txHash}`;
+    toast(
+      (_t) => (
+        <div className="flex items-center gap-3">
+          <span className="text-red-400 flex-shrink-0">✗</span>
+          <div className="flex flex-col flex-1 min-w-0">
+            <div className="flex items-center gap-2">
+              <span className="text-sm text-red-400 truncate">
+                {side} failed {shortMint}
+              </span>
+              <a
+                href={explorerUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="hover:opacity-80 transition-opacity flex-shrink-0"
+              >
+                <img
+                  src={SOLANA_LOGO_URL}
+                  alt="Solana"
+                  className="w-4 h-4 rounded-full"
+                  style={{ cursor: "pointer" }}
+                />
+              </a>
+            </div>
+            {error && (
+              <span className="text-xs text-neutral-400 truncate">{error}</span>
+            )}
+          </div>
+        </div>
+      ),
+      {
+        duration: 6000,
+        style: { ...ORDER_TOAST_STYLE, border: '1px solid #ef4444' },
+      }
+    );
+  }) as EventListener);
 }

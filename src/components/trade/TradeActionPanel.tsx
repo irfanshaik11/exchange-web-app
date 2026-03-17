@@ -19,7 +19,7 @@ import { showOrderToast, ORDER_TOAST_STYLE } from "~/utils/tradeToast";
 import { useUser } from "~/components/UserContext";
 import { executeSolanaMultiBuy, formatSolanaTxSummary, buildSolanaWalletAllocations } from "~/utils/solanaWalletAllocation";
 import { validateSolanaBuy, validateSolanaSell, showTradeValidationError } from "~/utils/preTradeValidation";
-import { checkAtaExists, prefetchAtaCheck } from "~/utils/ataCheck";
+import { checkAtaExists, getCachedAtaExists, prefetchAtaCheck } from "~/utils/ataCheck";
 import { useTxHashCallback } from "~/contexts/SolanaPositionWebSocketContext";
 import type { SolanaTokenVolume } from "~/hooks/useSolanaTokenWebSocket";
 import { extractTokenImage, getResolvedTokenImage, resolveTokenImage } from "~/utils/images";
@@ -37,6 +37,7 @@ import { BsCoin, BsPersonGear } from "react-icons/bs";
 import { RiGhostLine } from "react-icons/ri";
 import { LuChefHat } from "react-icons/lu";
 import { BiCandles } from "react-icons/bi";
+import { usePrefetchOrder } from "~/hooks/usePrefetchOrder";
 // import TokenAnalyticsPanel from "../TokenAnalyticsPanel";
 
 type TimeRange = "5m" | "1h" | "6h" | "24h";
@@ -967,6 +968,7 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
   const isMountedRef = useRef(true);
   const manualTargetOverrideRef = useRef<boolean>(false);
   const lastSliderBaseRef = useRef<number | null>(null);
+  const { prefetch: prefetchOrder, prefetchImmediate: prefetchOrderImmediate } = usePrefetchOrder();
 
   useEffect(() => {
     return () => {
@@ -1555,7 +1557,22 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
       prevModeRef.current = mode;
     }
   }, [mode]);
-  
+
+  // Prefetch 100% sell order immediately when user switches to sell mode
+  useEffect(() => {
+    if (mode !== 'sell' || !token?.mint) return;
+    prefetchOrderImmediate({ baseMint: token.mint, amount: 100, side: 'sell' });
+  }, [mode, token?.mint, prefetchOrderImmediate]);
+
+  // Prefetch sell order on percentage change (debounced)
+  useEffect(() => {
+    if (mode !== 'sell' || !token?.mint || !amount) return;
+    const pct = Number(amount);
+    if (pct > 0 && pct <= 100) {
+      prefetchOrder({ baseMint: token.mint, amount: pct, side: 'sell' });
+    }
+  }, [mode, amount, token?.mint, prefetchOrder]);
+
   useEffect(() => setPresetDrafts(amountPresets.map(String)), [amountPresets]);
 
   const commitPresetDrafts = () => {
@@ -2054,6 +2071,33 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
       }
 
       setPendingTradeOptions(null);
+
+      // Pre-loading balance validation for buy mode — fires BEFORE spinner starts
+      // Uses cached ATA result (sync) or assumes ATA doesn't exist (pessimistic = safe)
+      if (mode === "buy" && tab === "market") {
+        const buyAmountPreCheck = Number(amount || 0);
+        if (buyAmountPreCheck > 0) {
+          const { allocations: preAllocations } = buildSolanaWalletAllocations({
+            amount: buyAmountPreCheck,
+            walletList,
+            walletBalances,
+            selectedWalletIds: selectedWalletIds?.sol || [],
+            priorityFee: settings.priority || 0.0001,
+            bribe: settings.bribe || 0,
+          });
+          // Use cached ATA result if available, otherwise assume it doesn't exist (overestimates cost)
+          const cachedAta = getCachedAtaExists(token?.mint, user?.publicKey) ?? false;
+          const preValidation = validateSolanaBuy(
+            buyAmountPreCheck, preAllocations, walletBalances, walletList,
+            selectedWalletIds?.sol || [], settings.priority, settings.bribe, cachedAta
+          );
+          if (!preValidation.valid) {
+            showTradeValidationError(preValidation.error, getResolvedTokenImage(token), token?.symbol || token?.name || 'Token');
+            return { success: false };
+          }
+        }
+      }
+
       setIsLoading(true);
       setSuccessMessage(null);
 
@@ -2305,7 +2349,7 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
         }
 
         // Generate random timer cap (0.40-0.60s)
-        const timerCap = 0.40 + Math.random() * 0.20;
+        const timerCap = 0.30 + Math.random() * 0.20;
         const uniqueToastId = `solana-sell-${Date.now()}-${Math.random()}`;
         const startTime = Date.now();
         let timerFinished = false;
@@ -2591,7 +2635,7 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
       }
 
       // Generate random timer cap (0.40-0.60s)
-      const timerCap = 0.40 + Math.random() * 0.20;
+      const timerCap = 0.30 + Math.random() * 0.20;
       const uniqueToastId = `solana-buy-${Date.now()}-${Math.random()}`;
       const startTime = Date.now();
       let timerFinished = false;

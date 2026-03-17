@@ -268,6 +268,22 @@ export async function claimQuest(
   });
 }
 
+export async function claimAllQuests(
+  bearerToken: string
+): Promise<{
+  success: boolean;
+  totalGoldAwarded: number;
+  claimedCount: number;
+  rankUp: boolean;
+  newRank?: string;
+  newLevel?: number;
+  message: string;
+}> {
+  return fetchWithAuth('/api/arena/quests/claim-all', bearerToken, {
+    method: 'POST',
+  });
+}
+
 // ============================================================
 // CASHBACK
 // ============================================================

@@ -1011,7 +1011,17 @@ export default function PortfolioPage() {
             const dedupedRest = filteredActivity.filter((t: any) => !wsIds.has(t.id));
             finalActivity = [...pendingWsTradesRef.current, ...dedupedRest];
           }
-          setTradeActivity(finalActivity);
+          // Preserve recent optimistic entries (negative id) that REST hasn't confirmed yet
+          const mergedActivity = finalActivity;
+          setTradeActivity((prev) => {
+            const now = Date.now();
+            const recentOptimistic = prev.filter((t: any) =>
+              t.id < 0 && (now + t.id) < 10000 // id is -Date.now(), so age = now + id
+              && (!t.transactionHash || !mergedActivity.some((r: any) => r.transactionHash === t.transactionHash))
+            );
+            if (recentOptimistic.length === 0) return mergedActivity;
+            return [...recentOptimistic, ...mergedActivity];
+          });
 
           // Clean up pending_ws_trades localStorage too
           if (typeof window !== 'undefined') {
@@ -1140,8 +1150,35 @@ export default function PortfolioPage() {
       isDev && console.log(`[Portfolio] Trade completed: ${detail?.tradeType} on ${detail?.chain}`);
       // Force balance refresh
       refreshBalance({ chain: currentChain === 'monad' ? 'monad' : 'sol', force: true }).catch(() => {});
-      // Increment counter to trigger trade history/activity re-fetch
-      setTradeRefreshCounter((c) => c + 1);
+
+      // Optimistic buy entry: show in Activity tab immediately (before DB record arrives via REST/WS)
+      if (detail?.tradeType === 'buy' && detail.tokenAddress) {
+        const optimisticTrade: TradeRow = {
+          id: -Date.now(),
+          tokenAddress: detail.tokenAddress,
+          tokenName: detail.tokenName || undefined,
+          tokenSymbol: detail.tokenSymbol || undefined,
+          imageUrl: detail.imageUrl || null,
+          type: 'Buy' as const,
+          marketCap: 0,
+          solAmount: detail.solAmountSpent || 0,
+          tokenAmount: 0,
+          usdValue: detail.solAmountSpent || 0,
+          transactionHash: detail.txHash || '',
+          blockchain: detail.chain === 'monad' ? 'monad' : 'solana',
+          createdAt: new Date().toISOString(),
+          tradeTime: new Date().toTimeString().split(" ")[0],
+        };
+        setTradeActivity((prev) => {
+          // Deduplicate by txHash (allows multi-buys of same token)
+          if (detail.txHash && prev.some((t: any) => t.transactionHash === detail.txHash)) return prev;
+          return [optimisticTrade, ...prev];
+        });
+      }
+
+      // Delay REST re-fetch by 2s so backend setImmediate saves complete before fetch
+      // WS solanaNewTrade events still push real data at ~200ms for instant display
+      setTimeout(() => setTradeRefreshCounter((c) => c + 1), 2000);
     };
 
     window.addEventListener(TRADE_COMPLETED_EVENT, handleTradeCompleted);
