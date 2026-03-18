@@ -6,7 +6,7 @@ import { useUser } from "./UserContext";
 import { acknowledgeWalletExport } from "../utils/api";
 
 export default function WalletExportGuard() {
-  const { user, refreshUser, primaryWalletAddresses } = useUser();
+  const { user, refreshUser, primaryWalletAddresses, walletList } = useUser();
   const [forceOpen, setForceOpen] = useState(false);
   const [preferredChain, setPreferredChain] = useState<"sol" | "monad">("sol");
 
@@ -22,8 +22,10 @@ export default function WalletExportGuard() {
   const { sol: needsSol, monad: needsMonad } = needsExportFlags();
 
   const mustForce = !!user && (user.hasExportedWallet === false || needsSol || needsMonad);
+  // Prefer backend wallet list (authoritative) over SDK-derived addresses
+  const primaryWallet = walletList?.find((w: any) => w.isPrimary) ?? walletList?.[0];
   const derivedAddress =
-    primaryWalletAddresses?.ethereum ||
+    primaryWallet?.solanaAddress?.trim() ||
     primaryWalletAddresses?.solana ||
     user?.publicKey ||
     undefined;

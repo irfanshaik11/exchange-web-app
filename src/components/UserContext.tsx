@@ -364,9 +364,17 @@ export function UserProvider({ children }: { children: ReactNode }) {
 
     const turnkeyAddresses = deriveWalletsFromTurnkey();
     if (turnkeyAddresses?.solana || turnkeyAddresses?.ethereum) {
-      setPrimaryWalletAddresses({
-        solana: turnkeyAddresses.solana ?? null,
-        ethereum: turnkeyAddresses.ethereum ?? null,
+      // Only apply SDK addresses when backend hasn't loaded wallet data yet.
+      // Backend wallet list is authoritative — prevents FE Turnkey sub-org
+      // from overwriting the backend-created wallet address (Google OAuth fix).
+      setPrimaryWalletAddresses((prev) => {
+        if (prev.solana || prev.ethereum) {
+          return prev; // backend already set addresses — don't overwrite
+        }
+        return {
+          solana: turnkeyAddresses.solana ?? null,
+          ethereum: turnkeyAddresses.ethereum ?? null,
+        };
       });
     }
     // REMOVED: Redundant fetchPrimaryWallets - now handled by refreshWalletList

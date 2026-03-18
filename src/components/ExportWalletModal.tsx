@@ -220,6 +220,13 @@ export default function ExportWalletModal({
   }, [isOpen, isWalletAuth, isGoogleAuthenticated]);
 
   const walletsSource = useMemo(() => {
+    // Always prefer backend wallet list — it's authoritative for both
+    // wallet-auth (Phantom/MetaMask) AND Google OAuth users.
+    // The backend creates and owns the sub-org + wallet, so the backend
+    // wallet list has the correct walletId and address.
+    if (Array.isArray(walletList) && walletList.length) return walletList;
+
+    // Fallback to SDK wallets only if backend list is empty
     if (!isWalletAuth) {
       let sourceList: any[] = [];
       try {
@@ -242,7 +249,6 @@ export default function ExportWalletModal({
       return sourceList;
     }
 
-    if (Array.isArray(walletList) && walletList.length) return walletList;
     return Array.isArray(fetchedWallets) ? fetchedWallets : [];
   }, [isWalletAuth, walletList, wallets, fetchedWallets]);
 
@@ -436,7 +442,12 @@ export default function ExportWalletModal({
       setShowLoginModal(false);
     }
 
+    // Use backend export path for ALL users when backend wallet list is available.
+    // This ensures Google OAuth users export from the backend-created sub-org
+    // (which the backend has delegated API access to), not the FE-created sub-org.
+    const hasBackendWallets = Array.isArray(walletList) && walletList.length > 0;
     const isGooglePath =
+      !hasBackendWallets &&
       !isWalletAuth &&
       isGoogleAuthenticated &&
       typeof exportWallet === "function" &&
