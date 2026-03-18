@@ -205,19 +205,21 @@ export default function ExportWalletModal({
     }
   }, [authState, clientState, hasSdkSession, isOpen, isWalletAuth]);
 
-  // Pull latest backend wallets when modal opens for wallet-auth path
+  // Pull latest backend wallets when modal opens (all auth paths)
   useEffect(() => {
-    if (!isOpen || !isWalletAuth) return;
+    if (!isOpen) return;
     refreshWalletList?.(true);
-  }, [isOpen, isWalletAuth, refreshWalletList]);
+  }, [isOpen, refreshWalletList]);
 
-  // Prompt Google login when needed
+  // Prompt Google login when needed — but skip if backend wallets exist
+  // (export will use the backend API path, no SDK session required)
+  const hasBackendWalletsForPrompt = Array.isArray(walletList) && walletList.length > 0;
   useEffect(() => {
-    if (!isOpen || isWalletAuth) return;
+    if (!isOpen || isWalletAuth || hasBackendWalletsForPrompt) return;
     if (!isGoogleAuthenticated) {
       setShowLoginModal(true);
     }
-  }, [isOpen, isWalletAuth, isGoogleAuthenticated]);
+  }, [isOpen, isWalletAuth, isGoogleAuthenticated, hasBackendWalletsForPrompt]);
 
   const walletsSource = useMemo(() => {
     // Always prefer backend wallet list — it's authoritative for both
