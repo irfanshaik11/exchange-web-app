@@ -4241,14 +4241,15 @@ function PulseTable({
       });
     }
 
-    // Apply top 10 holders percent filter
-    if (filters.top10HoldersPercent) {
-      const threshold = parseFloat(filters.top10HoldersPercent);
+    // Apply top 10 holders percent filter (min/max)
+    if (filters.top10HoldersPercentMin || filters.top10HoldersPercentMax || filters.top10HoldersPercent) {
+      const minPct = filters.top10HoldersPercentMin ? parseFloat(filters.top10HoldersPercentMin) : NaN;
+      const maxPct = filters.top10HoldersPercentMax ? parseFloat(filters.top10HoldersPercentMax) : (filters.top10HoldersPercent ? parseFloat(filters.top10HoldersPercent) : NaN);
       filtered = filtered.filter((token) => {
-        // Use top10_holders_pct from WebSocket price_update data
         const top10Pct = (token as any).top10_holders_pct ?? 0;
-        // Filter tokens where top 10 holders own LESS than the threshold (lower = better distribution)
-        return top10Pct <= threshold;
+        if (!isNaN(minPct) && top10Pct < minPct) return false;
+        if (!isNaN(maxPct) && top10Pct > maxPct) return false;
+        return true;
       });
     }
 
@@ -6524,29 +6525,53 @@ function PulseTable({
                           </div>
                         </div>
                         {/* Top 10 Holders % */}
+                        {/* Top 10 Holders % */}
                         <div>
-                          <label className="block text-sm font-medium mb-2" style={{ color: AX.text }}>Top 10 Holders %</label>
-                          <input
-                            type="number"
-                            placeholder="Max % (e.g. 50)"
-                            value={pendingFilters.top10HoldersPercent}
-                            onChange={(e) => handlePendingFilterChange(prev => ({ ...prev, top10HoldersPercent: e.target.value }))}
-                            className="w-full px-3 py-2 rounded text-sm border"
-                            style={{
-                              backgroundColor: AX.surface,
-                              borderColor: AX.border,
-                              color: AX.text,
-                              WebkitAppearance: 'none',
-                              MozAppearance: 'textfield',
-                              outline: 'none',
-                              boxShadow: 'none'
-                            }}
-                            onFocus={(e) => {
-                              e.target.style.outline = 'none';
-                              e.target.style.boxShadow = 'none';
-                              e.target.style.borderColor = AX.border;
-                            }}
-                          />
+                          <label className="mb-2 block text-sm font-medium" style={{ color: AX.text }}>Top 10 Holders %</label>
+                          <div className="flex gap-1">
+                            <input
+                              type="number"
+                              placeholder="Min"
+                              value={pendingFilters.top10HoldersPercentMin}
+                              onChange={(e) => handlePendingFilterChange(prev => ({ ...prev, top10HoldersPercentMin: e.target.value }))}
+                              className="flex-1 rounded border px-3 py-2 text-sm"
+                              style={{
+                                backgroundColor: AX.surface,
+                                borderColor: AX.border,
+                                color: AX.text,
+                                WebkitAppearance: 'none',
+                                MozAppearance: 'textfield',
+                                outline: 'none',
+                                boxShadow: 'none'
+                              }}
+                              onFocus={(e) => {
+                                e.target.style.outline = 'none';
+                                e.target.style.boxShadow = 'none';
+                                e.target.style.borderColor = AX.border;
+                              }}
+                            />
+                            <input
+                              type="number"
+                              placeholder="Max"
+                              value={pendingFilters.top10HoldersPercentMax}
+                              onChange={(e) => handlePendingFilterChange(prev => ({ ...prev, top10HoldersPercentMax: e.target.value }))}
+                              className="flex-1 rounded border px-3 py-2 text-sm"
+                              style={{
+                                backgroundColor: AX.surface,
+                                borderColor: AX.border,
+                                color: AX.text,
+                                WebkitAppearance: 'none',
+                                MozAppearance: 'textfield',
+                                outline: 'none',
+                                boxShadow: 'none'
+                              }}
+                              onFocus={(e) => {
+                                e.target.style.outline = 'none';
+                                e.target.style.boxShadow = 'none';
+                                e.target.style.borderColor = AX.border;
+                              }}
+                            />
+                          </div>
                         </div>
                       </div>
                     )}

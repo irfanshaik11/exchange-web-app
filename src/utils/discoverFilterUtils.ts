@@ -276,13 +276,13 @@ export function applyDiscoverFilters(
       if (maxSells !== undefined && sells > maxSells) return false;
     }
 
-    // ── Top 10 Holders % ──
-    if (filters.top10HoldersPercent) {
-      const threshold = parseFloat(filters.top10HoldersPercent);
-      if (!isNaN(threshold)) {
-        const pct = Number(token.top10_holders_pct ?? token.top10HoldersPct ?? 0) || 0;
-        if (pct > threshold) return false;
-      }
+    // ── Top 10 Holders % (min/max) ──
+    const minTop10 = parseNum(filters.top10HoldersPercentMin);
+    const maxTop10 = parseNum(filters.top10HoldersPercentMax) ?? (filters.top10HoldersPercent ? parseNum(filters.top10HoldersPercent) : undefined);
+    if (minTop10 !== undefined || maxTop10 !== undefined) {
+      const pct = Number(token.top10_holders_pct ?? token.top10HoldersPct ?? 0) || 0;
+      if (minTop10 !== undefined && pct < minTop10) return false;
+      if (maxTop10 !== undefined && pct > maxTop10) return false;
     }
 
     // ── Dev Holding % ──
@@ -372,7 +372,7 @@ export function countActiveFilters(filters: PulseFilters): number {
   if (filters.txnsMin || filters.txnsMax) count++;
   if (filters.numBuysMin || filters.numBuysMax) count++;
   if (filters.numSellsMin || filters.numSellsMax) count++;
-  if (filters.top10HoldersPercent) count++;
+  if (filters.top10HoldersPercent || filters.top10HoldersPercentMin || filters.top10HoldersPercentMax) count++;
   if (filters.devHoldingPercentMin || filters.devHoldingPercentMax) count++;
   if (filters.snipersPercentMin || filters.snipersPercentMax) count++;
   if (filters.insidersPercentMin || filters.insidersPercentMax) count++;
@@ -415,6 +415,8 @@ export function hasActiveFilters(filters: PulseFilters): boolean {
     !!filters.numSellsMin ||
     !!filters.numSellsMax ||
     !!filters.top10HoldersPercent ||
+    !!filters.top10HoldersPercentMin ||
+    !!filters.top10HoldersPercentMax ||
     !!filters.devHoldingPercentMin ||
     !!filters.devHoldingPercentMax ||
     !!filters.snipersPercentMin ||

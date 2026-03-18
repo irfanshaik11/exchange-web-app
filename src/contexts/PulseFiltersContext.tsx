@@ -15,7 +15,9 @@ export interface PulseFilters {
   minAge: string;
   maxAge: string;
   ageUnit: string;
-  top10HoldersPercent: string;
+  top10HoldersPercent: string; // legacy: acts as max threshold
+  top10HoldersPercentMin: string;
+  top10HoldersPercentMax: string;
   // New Audit Fields
   devHoldingPercentMin: string;
   devHoldingPercentMax: string;
@@ -80,6 +82,8 @@ export const defaultPulseFilters: PulseFilters = {
   maxAge: "",
   ageUnit: "m",
   top10HoldersPercent: "",
+  top10HoldersPercentMin: "",
+  top10HoldersPercentMax: "",
   devHoldingPercentMin: "",
   devHoldingPercentMax: "",
   snipersPercentMin: "",
@@ -159,6 +163,8 @@ export function PulseFiltersProvider({ children }: PulseFiltersProviderProps) {
     !!filters.minAge ||
     !!filters.maxAge ||
     !!filters.top10HoldersPercent ||
+    !!filters.top10HoldersPercentMin ||
+    !!filters.top10HoldersPercentMax ||
     !!filters.minMarketCap ||
     !!filters.maxMarketCap ||
     !!filters.minVolume ||
