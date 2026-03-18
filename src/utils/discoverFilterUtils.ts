@@ -276,6 +276,79 @@ export function applyDiscoverFilters(
       if (maxSells !== undefined && sells > maxSells) return false;
     }
 
+    // ── Top 10 Holders % ──
+    if (filters.top10HoldersPercent) {
+      const threshold = parseFloat(filters.top10HoldersPercent);
+      if (!isNaN(threshold)) {
+        const pct = Number(token.top10_holders_pct ?? token.top10HoldersPct ?? 0) || 0;
+        if (pct > threshold) return false;
+      }
+    }
+
+    // ── Dev Holding % ──
+    const minDev = parseNum(filters.devHoldingPercentMin);
+    const maxDev = parseNum(filters.devHoldingPercentMax);
+    if (minDev !== undefined || maxDev !== undefined) {
+      const devPct = Number(token.dev_percent ?? token.dev_held_percentage ?? 0) || 0;
+      if (minDev !== undefined && devPct < minDev) return false;
+      if (maxDev !== undefined && devPct > maxDev) return false;
+    }
+
+    // ── Snipers % ──
+    const minSniper = parseNum(filters.snipersPercentMin);
+    const maxSniper = parseNum(filters.snipersPercentMax);
+    if (minSniper !== undefined || maxSniper !== undefined) {
+      const sniperPct = Number(token.sniper_percent ?? token.sniper_held_percentage ?? 0) || 0;
+      if (minSniper !== undefined && sniperPct < minSniper) return false;
+      if (maxSniper !== undefined && sniperPct > maxSniper) return false;
+    }
+
+    // ── Insiders % ──
+    const minInsider = parseNum(filters.insidersPercentMin);
+    const maxInsider = parseNum(filters.insidersPercentMax);
+    if (minInsider !== undefined || maxInsider !== undefined) {
+      const insiderPct = Number(token.insider_percent ?? token.insider_held_percentage ?? 0) || 0;
+      if (minInsider !== undefined && insiderPct < minInsider) return false;
+      if (maxInsider !== undefined && insiderPct > maxInsider) return false;
+    }
+
+    // ── Bundlers % ──
+    const minBundle = parseNum(filters.bundlePercentMin);
+    const maxBundle = parseNum(filters.bundlePercentMax);
+    if (minBundle !== undefined || maxBundle !== undefined) {
+      const bundlePct = Number(token.bundle_percent ?? token.bundled_percentage ?? token.bundler_held_percentage ?? 0) || 0;
+      if (minBundle !== undefined && bundlePct < minBundle) return false;
+      if (maxBundle !== undefined && bundlePct > maxBundle) return false;
+    }
+
+    // ── Pro Traders ──
+    const minPro = parseNum(filters.proTradersMin);
+    const maxPro = parseNum(filters.proTradersMax);
+    if (minPro !== undefined || maxPro !== undefined) {
+      const pro = Number(token.pro_traders_count ?? token.pro_traders ?? token.smart_money_count ?? 0) || 0;
+      if (minPro !== undefined && pro < minPro) return false;
+      if (maxPro !== undefined && pro > maxPro) return false;
+    }
+
+    // ── Socials ──
+    if (filters.hasTwitter || filters.hasWebsite || filters.hasTelegram || filters.atLeastOneSocial) {
+      const links = token.links || {};
+      const twitter = links.twitter || links.x || token.twitter_url || '';
+      const website = links.website || token.website_url || '';
+      const telegram = links.telegram || token.telegram_url || '';
+      if (filters.hasTwitter && !twitter) return false;
+      if (filters.hasWebsite && !website) return false;
+      if (filters.hasTelegram && !telegram) return false;
+      if (filters.atLeastOneSocial && !twitter && !website && !telegram) return false;
+    }
+
+    // ── Only Pump Live ──
+    if (filters.onlyPumpLive) {
+      const protocol = (token.launchpad_protocol || '').toLowerCase();
+      const isLive = token.is_live ?? token.isLive ?? true;
+      if (!(protocol.includes('pump') && isLive)) return false;
+    }
+
     return true;
   });
 }
@@ -299,6 +372,14 @@ export function countActiveFilters(filters: PulseFilters): number {
   if (filters.txnsMin || filters.txnsMax) count++;
   if (filters.numBuysMin || filters.numBuysMax) count++;
   if (filters.numSellsMin || filters.numSellsMax) count++;
+  if (filters.top10HoldersPercent) count++;
+  if (filters.devHoldingPercentMin || filters.devHoldingPercentMax) count++;
+  if (filters.snipersPercentMin || filters.snipersPercentMax) count++;
+  if (filters.insidersPercentMin || filters.insidersPercentMax) count++;
+  if (filters.bundlePercentMin || filters.bundlePercentMax) count++;
+  if (filters.proTradersMin || filters.proTradersMax) count++;
+  if (filters.hasTwitter || filters.hasWebsite || filters.hasTelegram || filters.atLeastOneSocial) count++;
+  if (filters.onlyPumpLive) count++;
   return count;
 }
 
@@ -332,6 +413,22 @@ export function hasActiveFilters(filters: PulseFilters): boolean {
     !!filters.numBuysMin ||
     !!filters.numBuysMax ||
     !!filters.numSellsMin ||
-    !!filters.numSellsMax
+    !!filters.numSellsMax ||
+    !!filters.top10HoldersPercent ||
+    !!filters.devHoldingPercentMin ||
+    !!filters.devHoldingPercentMax ||
+    !!filters.snipersPercentMin ||
+    !!filters.snipersPercentMax ||
+    !!filters.insidersPercentMin ||
+    !!filters.insidersPercentMax ||
+    !!filters.bundlePercentMin ||
+    !!filters.bundlePercentMax ||
+    !!filters.proTradersMin ||
+    !!filters.proTradersMax ||
+    !!filters.hasTwitter ||
+    !!filters.hasWebsite ||
+    !!filters.hasTelegram ||
+    !!filters.atLeastOneSocial ||
+    !!filters.onlyPumpLive
   );
 }
