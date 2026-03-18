@@ -5913,8 +5913,8 @@ function PulseTable({
                       <label htmlFor="caEndsInPump" className="text-sm" style={{ color: AX.text }}>CA ends in 'pump'</label>
                     </div> */}
 
-                        {/* Dev Holding % - COMMENTED OUT: Filter not implemented in filter logic */}
-                        {/* <div>
+                        {/* Dev Holding % */}
+                        <div>
                       <label className="block text-sm font-medium mb-2" style={{ color: AX.text }}>Dev Holding %</label>
                       <div className="flex gap-1">
                         <input
@@ -5960,10 +5960,10 @@ function PulseTable({
                           }}
                         />
                       </div>
-                    </div> */}
+                    </div>
 
                         {/* Snipers % */}
-                        {/* <div>
+                        <div>
                       <label className="block text-sm font-medium mb-2" style={{ color: AX.text }}>Snipers %</label>
                       <div className="flex gap-1">
                         <input
@@ -6009,9 +6009,9 @@ function PulseTable({
                           }}
                         />
                       </div>
-                    </div> */}
+                    </div>
                         {/* Insiders % */}
-                        {/* <div>
+                        <div>
                       <label className="block text-sm font-medium mb-2" style={{ color: AX.text }}>Insiders %</label>
                       <div className="flex gap-1">
                         <input
@@ -6057,10 +6057,10 @@ function PulseTable({
                           }}
                         />
                       </div>
-                    </div> */}
+                    </div>
 
                         {/* Bundle % */}
-                        {/* <div>
+                        <div>
                       <label className="block text-sm font-medium mb-2" style={{ color: AX.text }}>Bundle %</label>
                       <div className="flex gap-1">
                         <input
@@ -6106,7 +6106,7 @@ function PulseTable({
                           }}
                         />
                       </div>
-                    </div> */}
+                    </div>
                         {/* Holders */}
                         <div>
                           <label
@@ -6171,7 +6171,7 @@ function PulseTable({
                           </div>
                         </div>
 
-                        {/* Pro Traders - Commented out for now
+                        {/* Pro Traders */}
                         <div>
                           <label
                             className="mb-2 block text-sm font-medium"
@@ -6234,7 +6234,6 @@ function PulseTable({
                             />
                           </div>
                         </div>
-                        */}
                         {/* Dev Migrations */}
                         <div>
                           <label
