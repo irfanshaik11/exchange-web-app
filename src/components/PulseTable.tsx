@@ -5865,8 +5865,7 @@ function PulseTable({
                       className="mb-4 flex border-b"
                       style={{ borderColor: AX.border }}
                     >
-                      {/* Socials tab commented out - filters work but rarely used */}
-                      {["Audit", "$ Metrics"].map((tab) => (
+                      {["Audit", "$ Metrics", "Socials"].map((tab) => (
                         <button
                           key={tab}
                           className={`cursor-pointer px-3 py-2 text-sm font-medium transition-colors ${
@@ -6524,31 +6523,31 @@ function PulseTable({
                             </select>
                           </div>
                         </div>
-                        {/* Top 10 Holders % - COMMENTED OUT: Filter not implemented (always returns true) */}
-                        {/* <div>
-                      <label className="block text-sm font-medium mb-2" style={{ color: AX.text }}>Top 10 Holders %</label>
-                      <input
-                        type="number"
-                        placeholder="Enter percentage"
-                        value={pendingFilters.top10HoldersPercent}
-                        onChange={(e) => handlePendingFilterChange(prev => ({ ...prev, top10HoldersPercent: e.target.value }))}
-                          className="w-full px-3 py-2 rounded text-sm border"
-                        style={{
-                            backgroundColor: AX.surface,
-                          borderColor: AX.border,
-                            color: AX.text,
-                            WebkitAppearance: 'none',
-                            MozAppearance: 'textfield',
-                            outline: 'none',
-                            boxShadow: 'none'
-                          }}
-                          onFocus={(e) => {
-                            e.target.style.outline = 'none';
-                            e.target.style.boxShadow = 'none';
-                            e.target.style.borderColor = AX.border;
-                        }}
-                      />
-                    </div> */}
+                        {/* Top 10 Holders % */}
+                        <div>
+                          <label className="block text-sm font-medium mb-2" style={{ color: AX.text }}>Top 10 Holders %</label>
+                          <input
+                            type="number"
+                            placeholder="Max % (e.g. 50)"
+                            value={pendingFilters.top10HoldersPercent}
+                            onChange={(e) => handlePendingFilterChange(prev => ({ ...prev, top10HoldersPercent: e.target.value }))}
+                            className="w-full px-3 py-2 rounded text-sm border"
+                            style={{
+                              backgroundColor: AX.surface,
+                              borderColor: AX.border,
+                              color: AX.text,
+                              WebkitAppearance: 'none',
+                              MozAppearance: 'textfield',
+                              outline: 'none',
+                              boxShadow: 'none'
+                            }}
+                            onFocus={(e) => {
+                              e.target.style.outline = 'none';
+                              e.target.style.boxShadow = 'none';
+                              e.target.style.borderColor = AX.border;
+                            }}
+                          />
+                        </div>
                       </div>
                     )}
                     {activeCategoryTab === "$ Metrics" && (
@@ -7065,8 +7064,7 @@ function PulseTable({
                         </div>
                       </div>
                     )}
-                    {/* SOCIALS TAB - COMMENTED OUT: Filters work but rarely used */}
-                    {false && activeCategoryTab === "Socials" && (
+                    {activeCategoryTab === "Socials" && (
                       <div className="space-y-3">
                         {/* Twitter Reuses */}
                         <div>
