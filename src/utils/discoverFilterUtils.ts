@@ -276,11 +276,14 @@ export function applyDiscoverFilters(
       if (maxSells !== undefined && sells > maxSells) return false;
     }
 
+    // Helper: normalize percent to 0-100 range (WS sends 0-1, HTTP sends 0-100)
+    const toP100 = (v: number): number => v > 1 ? v : v * 100;
+
     // ── Top 10 Holders % (min/max) ──
     const minTop10 = parseNum(filters.top10HoldersPercentMin);
     const maxTop10 = parseNum(filters.top10HoldersPercentMax) ?? (filters.top10HoldersPercent ? parseNum(filters.top10HoldersPercent) : undefined);
     if (minTop10 !== undefined || maxTop10 !== undefined) {
-      const pct = Number(token.top10_holders_pct ?? token.top10HoldersPct ?? 0) || 0;
+      const pct = toP100(Number(token.top10_holders_pct ?? token.top10HoldersPct ?? 0) || 0);
       if (minTop10 !== undefined && pct < minTop10) return false;
       if (maxTop10 !== undefined && pct > maxTop10) return false;
     }
@@ -289,36 +292,36 @@ export function applyDiscoverFilters(
     const minDev = parseNum(filters.devHoldingPercentMin);
     const maxDev = parseNum(filters.devHoldingPercentMax);
     if (minDev !== undefined || maxDev !== undefined) {
-      const devPct = Number(token.dev_percent ?? token.dev_held_percentage ?? 0) || 0;
-      if (minDev !== undefined && devPct < minDev) return false;
-      if (maxDev !== undefined && devPct > maxDev) return false;
+      const pct = toP100(Number(token.dev_percent ?? token.dev_held_percentage ?? 0) || 0);
+      if (minDev !== undefined && pct < minDev) return false;
+      if (maxDev !== undefined && pct > maxDev) return false;
     }
 
     // ── Snipers % ──
     const minSniper = parseNum(filters.snipersPercentMin);
     const maxSniper = parseNum(filters.snipersPercentMax);
     if (minSniper !== undefined || maxSniper !== undefined) {
-      const sniperPct = Number(token.sniper_percent ?? token.sniper_held_percentage ?? 0) || 0;
-      if (minSniper !== undefined && sniperPct < minSniper) return false;
-      if (maxSniper !== undefined && sniperPct > maxSniper) return false;
+      const pct = toP100(Number(token.sniper_percent ?? token.sniper_held_percentage ?? 0) || 0);
+      if (minSniper !== undefined && pct < minSniper) return false;
+      if (maxSniper !== undefined && pct > maxSniper) return false;
     }
 
     // ── Insiders % ──
     const minInsider = parseNum(filters.insidersPercentMin);
     const maxInsider = parseNum(filters.insidersPercentMax);
     if (minInsider !== undefined || maxInsider !== undefined) {
-      const insiderPct = Number(token.insider_percent ?? token.insider_held_percentage ?? 0) || 0;
-      if (minInsider !== undefined && insiderPct < minInsider) return false;
-      if (maxInsider !== undefined && insiderPct > maxInsider) return false;
+      const pct = toP100(Number(token.insider_percent ?? token.insider_held_percentage ?? 0) || 0);
+      if (minInsider !== undefined && pct < minInsider) return false;
+      if (maxInsider !== undefined && pct > maxInsider) return false;
     }
 
     // ── Bundlers % ──
     const minBundle = parseNum(filters.bundlePercentMin);
     const maxBundle = parseNum(filters.bundlePercentMax);
     if (minBundle !== undefined || maxBundle !== undefined) {
-      const bundlePct = Number(token.bundle_percent ?? token.bundled_percentage ?? token.bundler_held_percentage ?? 0) || 0;
-      if (minBundle !== undefined && bundlePct < minBundle) return false;
-      if (maxBundle !== undefined && bundlePct > maxBundle) return false;
+      const pct = toP100(Number(token.bundle_percent ?? token.bundled_percentage ?? token.bundler_held_percentage ?? 0) || 0);
+      if (minBundle !== undefined && pct < minBundle) return false;
+      if (maxBundle !== undefined && pct > maxBundle) return false;
     }
 
     // ── Pro Traders ──

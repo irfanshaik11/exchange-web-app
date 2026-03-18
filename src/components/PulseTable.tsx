@@ -4241,14 +4241,19 @@ function PulseTable({
       });
     }
 
-    // Apply top 10 holders percent filter (min/max)
+    // Helper: normalize percent value to 0-100 range
+    // WS may send decimals (0.35 = 35%), HTTP sends percentages (74.5 = 74.5%)
+    const toPercent100 = (val: number): number => val > 1 ? val : val * 100;
+
+    // Apply top 10 holders percent filter (min/max, user input is 0-100)
     if (filters.top10HoldersPercentMin || filters.top10HoldersPercentMax || filters.top10HoldersPercent) {
       const minPct = filters.top10HoldersPercentMin ? parseFloat(filters.top10HoldersPercentMin) : NaN;
       const maxPct = filters.top10HoldersPercentMax ? parseFloat(filters.top10HoldersPercentMax) : (filters.top10HoldersPercent ? parseFloat(filters.top10HoldersPercent) : NaN);
       filtered = filtered.filter((token) => {
-        const top10Pct = (token as any).top10_holders_pct ?? 0;
-        if (!isNaN(minPct) && top10Pct < minPct) return false;
-        if (!isNaN(maxPct) && top10Pct > maxPct) return false;
+        const raw = (token as any).top10_holders_pct ?? 0;
+        const pct = toPercent100(raw);
+        if (!isNaN(minPct) && pct < minPct) return false;
+        if (!isNaN(maxPct) && pct > maxPct) return false;
         return true;
       });
     }
@@ -4415,54 +4420,42 @@ function PulseTable({
       });
     }
 
-    // Apply dev holding percent filters (values are decimals 0-1, filter input is percentage 0-100)
-    if (filters.devHoldingPercentMin) {
-      const minPercent = parseFloat(filters.devHoldingPercentMin) / 100;
+    // Apply dev holding percent filters (user input is 0-100)
+    if (filters.devHoldingPercentMin || filters.devHoldingPercentMax) {
+      const minPct = filters.devHoldingPercentMin ? parseFloat(filters.devHoldingPercentMin) : NaN;
+      const maxPct = filters.devHoldingPercentMax ? parseFloat(filters.devHoldingPercentMax) : NaN;
       filtered = filtered.filter((token) => {
-        const devPercent = (token as any).dev_percent ?? (token as any).dev_held_percentage ?? 0;
-        return devPercent >= minPercent;
+        const raw = (token as any).dev_percent ?? (token as any).dev_held_percentage ?? 0;
+        const pct = toPercent100(raw);
+        if (!isNaN(minPct) && pct < minPct) return false;
+        if (!isNaN(maxPct) && pct > maxPct) return false;
+        return true;
       });
     }
 
-    if (filters.devHoldingPercentMax) {
-      const maxPercent = parseFloat(filters.devHoldingPercentMax) / 100;
+    // Apply sniper percent filters (user input is 0-100)
+    if (filters.snipersPercentMin || filters.snipersPercentMax) {
+      const minPct = filters.snipersPercentMin ? parseFloat(filters.snipersPercentMin) : NaN;
+      const maxPct = filters.snipersPercentMax ? parseFloat(filters.snipersPercentMax) : NaN;
       filtered = filtered.filter((token) => {
-        const devPercent = (token as any).dev_percent ?? (token as any).dev_held_percentage ?? 0;
-        return devPercent <= maxPercent;
+        const raw = (token as any).sniper_percent ?? (token as any).sniper_held_percentage ?? 0;
+        const pct = toPercent100(raw);
+        if (!isNaN(minPct) && pct < minPct) return false;
+        if (!isNaN(maxPct) && pct > maxPct) return false;
+        return true;
       });
     }
 
-    // Apply sniper percent filters (values are decimals 0-1, filter input is percentage 0-100)
-    if (filters.snipersPercentMin) {
-      const minPercent = parseFloat(filters.snipersPercentMin) / 100;
+    // Apply insider percent filters (user input is 0-100)
+    if (filters.insidersPercentMin || filters.insidersPercentMax) {
+      const minPct = filters.insidersPercentMin ? parseFloat(filters.insidersPercentMin) : NaN;
+      const maxPct = filters.insidersPercentMax ? parseFloat(filters.insidersPercentMax) : NaN;
       filtered = filtered.filter((token) => {
-        const sniperPercent = (token as any).sniper_percent ?? (token as any).sniper_held_percentage ?? 0;
-        return sniperPercent >= minPercent;
-      });
-    }
-
-    if (filters.snipersPercentMax) {
-      const maxPercent = parseFloat(filters.snipersPercentMax) / 100;
-      filtered = filtered.filter((token) => {
-        const sniperPercent = (token as any).sniper_percent ?? (token as any).sniper_held_percentage ?? 0;
-        return sniperPercent <= maxPercent;
-      });
-    }
-
-    // Apply insider percent filters (values are decimals 0-1, filter input is percentage 0-100)
-    if (filters.insidersPercentMin) {
-      const minPercent = parseFloat(filters.insidersPercentMin) / 100;
-      filtered = filtered.filter((token) => {
-        const insiderPercent = (token as any).insider_percent ?? (token as any).insider_held_percentage ?? 0;
-        return insiderPercent >= minPercent;
-      });
-    }
-
-    if (filters.insidersPercentMax) {
-      const maxPercent = parseFloat(filters.insidersPercentMax) / 100;
-      filtered = filtered.filter((token) => {
-        const insiderPercent = (token as any).insider_percent ?? (token as any).insider_held_percentage ?? 0;
-        return insiderPercent <= maxPercent;
+        const raw = (token as any).insider_percent ?? (token as any).insider_held_percentage ?? 0;
+        const pct = toPercent100(raw);
+        if (!isNaN(minPct) && pct < minPct) return false;
+        if (!isNaN(maxPct) && pct > maxPct) return false;
+        return true;
       });
     }
 
