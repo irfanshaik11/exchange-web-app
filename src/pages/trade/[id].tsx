@@ -639,6 +639,14 @@ export default function TradePage() {
     }
   }, [holderSummary?.dev_wallet, creatorAddress]);
 
+  // Set holdersCount from WebSocket snapshot (same source as TradeHeader/TradeActionPanel)
+  useEffect(() => {
+    const wsHolders = holderSummary?.total_holders;
+    if (wsHolders != null && wsHolders > 0) {
+      setHoldersCount(wsHolders);
+    }
+  }, [holderSummary?.total_holders]);
+
   // Get current pair address for caching
   const currentPairAddress = React.useMemo(() => {
     const currentToken = validatedCorrectTokenData || displayToken;
