@@ -107,6 +107,7 @@ import { mapTradeErrorMessage } from "~/utils/tradeErrorMessages";
 import { dispatchBalanceRefresh } from "~/utils/balanceEvents";
 import { broadcastTradeCompleted, notifyTradePending } from "~/utils/tradeEvents";
 import { listenForTradeEvents, transformToastToError } from "~/utils/createSolanaToastHandler";
+import { hasActiveFilters as checkActiveFilters } from "~/utils/discoverFilterUtils";
 import { TokenAge } from "./TokenAge";
 
 import { preloadTradeChart } from "~/utils/preloadTradeChart";
@@ -2934,45 +2935,8 @@ function PulseTable({
     return getDefaultFilters();
   });
 
-  // Check if any non-default filters are active
-  const hasActiveFilters = useMemo(() => {
-    const d = getDefaultFilters();
-    return (
-      JSON.stringify(filters.protocols) !== JSON.stringify(d.protocols) ||
-      filters.quoteTokens.length > 0 ||
-      !!filters.searchKeywords.trim() ||
-      !!filters.excludeKeywords.trim() ||
-      filters.dexPaid !== d.dexPaid ||
-      filters.caEndsInPump !== d.caEndsInPump ||
-      !!filters.minAge ||
-      !!filters.maxAge ||
-      !!filters.top10HoldersPercent ||
-      !!filters.top10HoldersPercentMin ||
-      !!filters.top10HoldersPercentMax ||
-      !!filters.minMarketCap ||
-      !!filters.maxMarketCap ||
-      !!filters.minVolume ||
-      !!filters.maxVolume ||
-      !!filters.minLiquidity ||
-      !!filters.maxLiquidity ||
-      !!filters.bCurvePercentMin ||
-      !!filters.bCurvePercentMax ||
-      !!filters.txnsMin ||
-      !!filters.txnsMax ||
-      !!filters.holdersMin ||
-      !!filters.holdersMax ||
-      !!filters.devHoldingPercentMin ||
-      !!filters.devHoldingPercentMax ||
-      !!filters.snipersPercentMin ||
-      !!filters.snipersPercentMax ||
-      !!filters.insidersPercentMin ||
-      !!filters.insidersPercentMax ||
-      !!filters.bundlePercentMin ||
-      !!filters.bundlePercentMax ||
-      !!filters.proTradersMin ||
-      !!filters.proTradersMax
-    );
-  }, [filters, getDefaultFilters]);
+  // Check if any non-default filters are active — single source of truth from discoverFilterUtils
+  const hasActiveFilters = useMemo(() => checkActiveFilters(filters), [filters]);
 
   // Persist filters to localStorage whenever they change
   useEffect(() => {
