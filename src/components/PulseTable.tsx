@@ -5213,8 +5213,8 @@ function PulseTable({
                 }));
               }}
               placeholder="keyword1, keyword2"
-              className="min-w-0 flex-1 border-none bg-transparent text-left text-xs font-medium placeholder-gray-500 outline-none"
-              style={{ color: AX.text, width: "100%", maxWidth: "100%" }}
+              className="w-full max-w-full min-w-0 flex-1 border-none bg-transparent text-left text-xs font-medium placeholder-gray-500 outline-none"
+              style={{ color: AX.text }}
             />
           </div>
 
@@ -5266,14 +5266,9 @@ function PulseTable({
 
           {/* P1 P2 P3 Boxes - Separate Thin Box With Background Color */}
           <div
-            className="relative hidden flex-shrink-0 items-center justify-center gap-1 rounded-md border px-2 sm:flex"
+            className="w-[84px] h-[26px] relative hidden sm:flex flex-shrink-0 items-center justify-center gap-1 rounded-md border px-2 py-1 bg-[#1a1c20]"
             style={{
               borderColor: AX.border,
-              backgroundColor: "#1a1c20",
-              paddingTop: "4px",
-              paddingBottom: "4px",
-              width: "72px",
-              height: "26px",
             }}
           >
             {["P1", "P2", "P3"].map((pill, i) => (
