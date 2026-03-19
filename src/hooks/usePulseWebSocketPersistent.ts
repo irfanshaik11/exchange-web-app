@@ -214,12 +214,11 @@ export function usePulseWebSocketPersistent(
   const normalizeToken = useCallback((rawToken: any): PulseToken => {
     // Pre-compute common fallback values to ensure both field name variants are populated
     const holderValue = rawToken.holder_count ?? rawToken.holders ?? rawToken.unique_wallets_24h ?? 0;
-    // Normalize percent: if value is in 0-1 decimal range (from WS), convert to 0-100
-    const toPercent = (v: number): number => (v > 0 && v <= 1) ? v * 100 : v;
-    const devPercentValue = toPercent(rawToken.dev_percent ?? rawToken.dev_held_percentage ?? 0);
-    const sniperPercentValue = toPercent(rawToken.sniper_percent ?? rawToken.sniper_held_percentage ?? 0);
-    const insiderPercentValue = toPercent(rawToken.insider_percent ?? rawToken.insider_held_percentage ?? 0);
-    const bundlePercentValue = toPercent(rawToken.bundle_percent ?? rawToken.bundled_percentage ?? 0);
+    // Backend already sends percent values in 0-100 format, no conversion needed
+    const devPercentValue = rawToken.dev_percent ?? rawToken.dev_held_percentage ?? 0;
+    const sniperPercentValue = rawToken.sniper_percent ?? rawToken.sniper_held_percentage ?? 0;
+    const insiderPercentValue = rawToken.insider_percent ?? rawToken.insider_held_percentage ?? 0;
+    const bundlePercentValue = rawToken.bundle_percent ?? rawToken.bundled_percentage ?? 0;
 
     // Extract mint address from various possible field names
     // Priority: mint > address > mint_address > token_address > contract_address
@@ -280,7 +279,7 @@ export function usePulseWebSocketPersistent(
       bundler_count: rawToken.bundle_wallet_count ?? rawToken.bundler_count ?? 0,  // For BottomCardInfoHolder
 
       // === Top holders percentage ===
-      top10_holders_pct: toPercent(rawToken.top10_holders_pct ?? rawToken.top_10_holders_percent ?? 0),
+      top10_holders_pct: rawToken.top10_holders_pct ?? rawToken.top_10_holders_percent ?? 0,
 
       // === Dev activity stats ===
       dev_tokens_created: rawToken.dev_tokens_created ?? 0,

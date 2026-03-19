@@ -399,9 +399,6 @@ function normalizeToken(raw: any): PulseToken | null {
 
   const liquidityVal = raw.liquidity_usd || raw.liquidity || 0;
   const mcapVal = raw.market_cap_usd || raw.marketCap || raw.market_cap || 0;
-  // Normalize percent: if value is in 0-1 decimal range (from WS), convert to 0-100
-  const toPercent = (v: number): number => (v > 0 && v <= 1) ? v * 100 : v;
-
   return {
     mint,
     mint_address: mint,
@@ -424,12 +421,12 @@ function normalizeToken(raw: any): PulseToken | null {
     total_buys_24h: raw.total_buys_24h ?? 0,
     total_sells_24h: raw.total_sells_24h ?? 0,
     kol_count: raw.kol_count ?? 0,
-    dev_percent: toPercent(raw.dev_percent ?? raw.dev_held_percentage ?? 0),
-    sniper_percent: toPercent(raw.sniper_percent ?? raw.sniper_held_percentage ?? 0),
-    insider_percent: toPercent(raw.insider_percent ?? raw.insider_held_percentage ?? 0),
-    bundle_percent: toPercent(raw.bundle_percent ?? raw.bundled_percentage ?? 0),
+    dev_percent: raw.dev_percent ?? raw.dev_held_percentage ?? 0,
+    sniper_percent: raw.sniper_percent ?? raw.sniper_held_percentage ?? 0,
+    insider_percent: raw.insider_percent ?? raw.insider_held_percentage ?? 0,
+    bundle_percent: raw.bundle_percent ?? raw.bundled_percentage ?? 0,
     // Filter-relevant fields previously dropped from WS data
-    top10_holders_pct: toPercent(raw.top10_holders_pct ?? raw.top10HoldersPct ?? 0),
+    top10_holders_pct: raw.top10_holders_pct ?? raw.top10HoldersPct ?? 0,
     dev_tokens_created: raw.dev_tokens_created ?? raw.devTokensCreated ?? 0,
     dev_tokens_migrated: raw.dev_tokens_migrated ?? raw.devTokensMigrated ?? 0,
     global_fees_paid: raw.global_fees_paid ?? raw.globalFeesPaid ?? 0,
@@ -441,8 +438,8 @@ function normalizeToken(raw: any): PulseToken | null {
     twitter: raw.twitter || raw.twitter_url || raw.x || raw.x_url || null,
     telegram: raw.telegram || raw.telegram_url || null,
     is_live: raw.is_live ?? null,
-    bundled_percentage: toPercent(raw.bundled_percentage ?? raw.bundle_percent ?? 0),
-    bundler_held_percentage: toPercent(raw.bundler_held_percentage ?? 0),
+    bundled_percentage: raw.bundled_percentage ?? raw.bundle_percent ?? 0,
+    bundler_held_percentage: raw.bundler_held_percentage ?? 0,
     dex_paid: raw.dex_paid ?? raw.dexPaid ?? false,
     // === CRITICAL: created_at for age display & sorting ===
     // Mirrors pulseWorkerBridge.ts logic (lines 767-778)
