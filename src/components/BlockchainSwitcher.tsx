@@ -1,8 +1,12 @@
-import React, { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import { useRouter } from 'next/router';
 import { FaChevronDown } from 'react-icons/fa';
 
 const isDev = process.env.NODE_ENV !== 'production';
+
+// Above header UI but below mobile menu panel so dropdown opens *above* the trigger inside the panel
+const DROPDOWN_Z_INDEX = 10005;
 
 interface Blockchain {
   id: string;
@@ -87,7 +91,8 @@ function BlockchainLogo({ logo, color, alt }: { logo: string; color: string; alt
 export default function BlockchainSwitcher() {
   const router = useRouter();
   const [isOpen, setIsOpen] = useState(false);
-  const dropdownRef = useRef<HTMLDivElement>(null);
+  const [dropdownPosition, setDropdownPosition] = useState<{ top?: number; bottom?: number; right: number } | null>(null);
+  const triggerRef = useRef<HTMLDivElement>(null);
 
   // Determine chain based on route and query parameter
   // /trade/monad/[contractAddress] = always monad
@@ -124,12 +129,43 @@ export default function BlockchainSwitcher() {
     }
   }, [currentChain]);
 
-  // Close dropdown when clicking outside
+  // Update dropdown position when open. On mobile (or when trigger is near bottom), open *above* the trigger so the popup shows on top of the dropdown box.
+  const updatePosition = useCallback(() => {
+    if (!triggerRef.current) return;
+    const rect = triggerRef.current.getBoundingClientRect();
+    const right = window.innerWidth - rect.right;
+    const dropdownHeight = 100; // approx height of 2 options
+    const spaceBelow = window.innerHeight - rect.bottom;
+    const openAbove = spaceBelow < dropdownHeight + 16 || rect.bottom > window.innerHeight * 0.6;
+    setDropdownPosition(
+      openAbove
+        ? { bottom: window.innerHeight - rect.top + 8, right }
+        : { top: rect.bottom + 8, right }
+    );
+  }, []);
+
+  useEffect(() => {
+    if (!isOpen) {
+      setDropdownPosition(null);
+      return;
+    }
+    updatePosition();
+    window.addEventListener('resize', updatePosition);
+    window.addEventListener('scroll', updatePosition);
+    return () => {
+      window.removeEventListener('resize', updatePosition);
+      window.removeEventListener('scroll', updatePosition);
+    };
+  }, [isOpen, updatePosition]);
+
+  // Close dropdown when clicking outside (trigger or portaled dropdown)
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
-        setIsOpen(false);
-      }
+      const target = event.target as Node;
+      if (triggerRef.current?.contains(target)) return;
+      const portaled = document.querySelector('[data-chain-switcher-dropdown]');
+      if (portaled?.contains(target)) return;
+      setIsOpen(false);
     };
 
     if (isOpen) {
@@ -159,89 +195,94 @@ export default function BlockchainSwitcher() {
       query: { ...router.query, chain: chainId },
     }, undefined, { shallow: true });
   };
+    const dropdownContent = isOpen && dropdownPosition && typeof document !== 'undefined' && (
+			<div
+				data-chain-switcher-dropdown
+				className="fixed min-w-[160px] max-w-[200px] rounded-lg border shadow-lg overflow-hidden"
+				style={{
+					...(dropdownPosition.top !== undefined ? { top: dropdownPosition.top } : { bottom: dropdownPosition.bottom }),
+					right: dropdownPosition.right,
+					zIndex: DROPDOWN_Z_INDEX,
+					backgroundColor: AX.surface,
+					borderColor: AX.border,
+				}}
+			>
+				{blockchains.map((blockchain) => {
+					const isSelected = blockchain.id === currentChain;
+					return (
+						<button
+							key={blockchain.id}
+							onClick={() => handleChainSelect(blockchain.id)}
+							className="w-full flex items-center gap-2 px-3 py-2 text-left transition-colors cursor-pointer"
+							style={{
+								backgroundColor: isSelected
+									? 'rgba(255, 255, 255, 0.08)'
+									: 'transparent',
+								color: isSelected ? AX.text : AX.muted,
+							}}
+							onMouseEnter={(e) => {
+								if (!isSelected) {
+									e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.06)';
+								}
+							}}
+							onMouseLeave={(e) => {
+								if (!isSelected) {
+									e.currentTarget.style.backgroundColor = 'transparent';
+								}
+							}}
+						>
+							<BlockchainLogo
+								logo={blockchain.logo}
+								color={blockchain.color}
+								alt={blockchain.name}
+							/>
+							<span className="text-xs font-medium">{blockchain.name}</span>
+							{isSelected && (
+								<span className="ml-auto text-xs" style={{ color: AX.text }}>
+									✓
+								</span>
+							)}
+						</button>
+					);
+				})}
+			</div>
+		);
 
-  return (
-    <div className="relative" ref={dropdownRef}>
-      <button
-        onClick={() => !isOnTradePage && setIsOpen(!isOpen)}
-        className={`flex items-center gap-1.5 h-8 rounded-md px-2.5 transition-all duration-200 ease-out border ${isOnTradePage ? 'cursor-default opacity-75' : 'cursor-pointer'}`}
-        style={{
-          color: AX.text,
-          borderColor: AX.border,
-          backgroundColor: "rgba(13, 16, 21, 0.8)",
-        }}
-        onMouseEnter={(e) => {
-          if (!isOnTradePage) {
-            e.currentTarget.style.backgroundColor = "rgba(255, 255, 255, 0.06)";
-          }
-        }}
-        onMouseLeave={(e) => {
-          e.currentTarget.style.backgroundColor = "rgba(13, 16, 21, 0.8)";
-        }}
-      >
-        <BlockchainLogo
-          logo={selectedBlockchain.logo}
-          color={selectedBlockchain.color}
-          alt={selectedBlockchain.name}
-        />
-        <span className="text-xs font-medium">{selectedBlockchain.name}</span>
-        {!isOnTradePage && (
-          <FaChevronDown
-            size={8}
-            className={`transition-transform ml-auto duration-200 ${isOpen ? 'rotate-180' : ''}`}
-            style={{ color: AX.muted }}
-          />
-        )}
-      </button>
-
-      {isOpen && (
-        <div
-          className="absolute right-0 top-full mt-2 z-50 min-w-[160px] max-w-[200px] rounded-lg border shadow-lg overflow-hidden"
-          style={{
-            backgroundColor: AX.surface,
+      return (
+				<>
+					<div className="relative" ref={triggerRef}>
+        <button
+          onClick={() => !isOnTradePage && setIsOpen(!isOpen)}
+          className={`w-full flex items-center gap-1.5 h-8 rounded-md px-2.5 transition-all duration-200 ease-out border ${isOnTradePage ? 'cursor-default opacity-75' : 'cursor-pointer'}`}
+					style={{
+						color: AX.text,
             borderColor: AX.border,
-          }}
-        >
-          {blockchains.map((blockchain) => {
-            const isSelected = blockchain.id === currentChain;
-            return (
-              <button
-                key={blockchain.id}
-                onClick={() => handleChainSelect(blockchain.id)}
-                className="w-full flex items-center gap-2 px-3 py-2 text-left transition-colors cursor-pointer"
-                style={{
-                  backgroundColor: isSelected
-                    ? 'rgba(255, 255, 255, 0.08)'
-                    : 'transparent',
-                  color: isSelected ? AX.text : AX.muted,
-                }}
-                onMouseEnter={(e) => {
-                  if (!isSelected) {
-                    e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.06)';
-                  }
-                }}
-                onMouseLeave={(e) => {
-                  if (!isSelected) {
-                    e.currentTarget.style.backgroundColor = 'transparent';
-                  }
-                }}
-              >
-                <BlockchainLogo
-                  logo={blockchain.logo}
-                  color={blockchain.color}
-                  alt={blockchain.name}
-                />
-                <span className="text-xs font-medium">{blockchain.name}</span>
-                {isSelected && (
-                  <span className="ml-auto text-xs" style={{ color: AX.text }}>
-                    ✓
-                  </span>
-                )}
-              </button>
-            );
-          })}
-        </div>
-      )}
-    </div>
+            backgroundColor: "rgba(13, 16, 21, 0.8)",
+							}}
+							onMouseEnter={(e) => {
+								if (!isOnTradePage) {
+									e.currentTarget.style.backgroundColor = "rgba(255, 255, 255, 0.06)";
+								}
+							}}
+							onMouseLeave={(e) => {
+								e.currentTarget.style.backgroundColor = "rgba(13, 16, 21, 0.8)";
+							}}>
+          <BlockchainLogo
+            logo={selectedBlockchain.logo}
+            color={selectedBlockchain.color}
+            alt={selectedBlockchain.name}
+          />
+          <span className="text-xs font-medium">{selectedBlockchain.name}</span>
+          {!isOnTradePage && (
+            <FaChevronDown
+              size={8}
+              className={`transition-transform ml-auto duration-200 ${isOpen ? 'rotate-180' : ''}`}
+              style={{ color: AX.muted }}
+            />
+          )}
+        </button>
+      </div>
+      {typeof document !== 'undefined' && dropdownContent && createPortal(dropdownContent, document.body)}
+    </>
   );
 }
