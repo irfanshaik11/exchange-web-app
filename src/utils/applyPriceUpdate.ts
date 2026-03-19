@@ -137,18 +137,22 @@ export function applyPriceUpdate<T extends { mint: string }>(token: T, update: P
         { total_sells_24h: update.total_sells_24h }),
 
     // Holder percentages - only update with positive values
+    // Normalize percent: if value is in 0-1 decimal range (from WS), convert to 0-100
     ...(update.insider_percent !== undefined && Number(update.insider_percent) > 0 &&
-        { insider_percent: update.insider_percent }),
+        { insider_percent: ((v: number): number => (v > 0 && v <= 1) ? v * 100 : v)(Number(update.insider_percent)) }),
     ...(update.sniper_percent !== undefined && Number(update.sniper_percent) > 0 &&
-        { sniper_percent: update.sniper_percent }),
+        { sniper_percent: ((v: number): number => (v > 0 && v <= 1) ? v * 100 : v)(Number(update.sniper_percent)) }),
     ...(update.dev_percent !== undefined && Number(update.dev_percent) > 0 &&
-        { dev_percent: update.dev_percent }),
+        { dev_percent: ((v: number): number => (v > 0 && v <= 1) ? v * 100 : v)(Number(update.dev_percent)) }),
     ...(update.top10_holders_pct !== undefined && Number(update.top10_holders_pct) > 0 &&
-        { top10_holders_pct: update.top10_holders_pct }),
+        { top10_holders_pct: ((v: number): number => (v > 0 && v <= 1) ? v * 100 : v)(Number(update.top10_holders_pct)) }),
 
     // Bundler data with aliases
-    ...(update.bundle_percent !== undefined && Number(update.bundle_percent) > 0 &&
-        { bundle_percent: update.bundle_percent, bundler_held_percentage: update.bundle_percent }),
+    ...(update.bundle_percent !== undefined && Number(update.bundle_percent) > 0 && (() => {
+        const toPercent = (v: number): number => (v > 0 && v <= 1) ? v * 100 : v;
+        const val = toPercent(Number(update.bundle_percent));
+        return { bundle_percent: val, bundler_held_percentage: val };
+    })()),
     ...(update.bundle_wallet_count !== undefined && Number(update.bundle_wallet_count) > 0 &&
         { bundle_wallet_count: update.bundle_wallet_count, bundler_count: update.bundle_wallet_count }),
 

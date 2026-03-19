@@ -2771,10 +2771,12 @@ function PulseTable({
   // Ensures all filter-relevant fields have default values with both field name variants
   const normalizeHttpToken = useCallback((rawToken: any): Token => {
     const holderValue = rawToken.holder_count ?? rawToken.holders ?? rawToken.unique_wallets_24h ?? 0;
-    const devPercentValue = rawToken.dev_percent ?? rawToken.dev_held_percentage ?? 0;
-    const sniperPercentValue = rawToken.sniper_percent ?? rawToken.sniper_held_percentage ?? 0;
-    const insiderPercentValue = rawToken.insider_percent ?? rawToken.insider_held_percentage ?? 0;
-    const bundlePercentValue = rawToken.bundle_percent ?? rawToken.bundled_percentage ?? rawToken.bundler_held_percentage ?? 0;
+    // Normalize percent: if value is in 0-1 decimal range (from WS), convert to 0-100
+    const toPercent = (v: number): number => (v > 0 && v <= 1) ? v * 100 : v;
+    const devPercentValue = toPercent(rawToken.dev_percent ?? rawToken.dev_held_percentage ?? 0);
+    const sniperPercentValue = toPercent(rawToken.sniper_percent ?? rawToken.sniper_held_percentage ?? 0);
+    const insiderPercentValue = toPercent(rawToken.insider_percent ?? rawToken.insider_held_percentage ?? 0);
+    const bundlePercentValue = toPercent(rawToken.bundle_percent ?? rawToken.bundled_percentage ?? rawToken.bundler_held_percentage ?? 0);
 
     return {
       ...rawToken,
@@ -2809,7 +2811,7 @@ function PulseTable({
       bundle_wallet_count: rawToken.bundle_wallet_count ?? 0,
       bundler_count: rawToken.bundle_wallet_count ?? rawToken.bundler_count ?? 0,
       // Top holders
-      top10_holders_pct: rawToken.top10_holders_pct ?? rawToken.top_10_holders_percent ?? 0,
+      top10_holders_pct: toPercent(rawToken.top10_holders_pct ?? rawToken.top_10_holders_percent ?? 0),
       // Dev activity
       dev_tokens_created: rawToken.dev_tokens_created ?? 0,
       dev_tokens_migrated: rawToken.dev_tokens_migrated ?? 0,
@@ -4241,9 +4243,8 @@ function PulseTable({
       });
     }
 
-    // Helper: normalize percent value to 0-100 range
-    // WS may send decimals (0.35 = 35%), HTTP sends percentages (74.5 = 74.5%)
-    const toPercent100 = (val: number): number => val > 1 ? val : val * 100;
+    // Values are already normalized to 0-100 at ingestion time
+    const toPercent100 = (val: number): number => val;
 
     // Apply top 10 holders percent filter (min/max, user input is 0-100)
     if (filters.top10HoldersPercentMin || filters.top10HoldersPercentMax || filters.top10HoldersPercent) {

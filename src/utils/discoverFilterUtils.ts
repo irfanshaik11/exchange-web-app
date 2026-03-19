@@ -276,8 +276,8 @@ export function applyDiscoverFilters(
       if (maxSells !== undefined && sells > maxSells) return false;
     }
 
-    // Helper: normalize percent to 0-100 range (WS sends 0-1, HTTP sends 0-100)
-    const toP100 = (v: number): number => v > 1 ? v : v * 100;
+    // Values are already normalized to 0-100 at ingestion time
+    const toP100 = (v: number): number => v;
 
     // ── Top 10 Holders % (min/max) ──
     const minTop10 = parseNum(filters.top10HoldersPercentMin);
