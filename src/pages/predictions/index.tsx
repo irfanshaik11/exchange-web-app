@@ -220,14 +220,21 @@ export default function PredictionsPage() {
           <div className="py-2 overflow-hidden relative">
             <div className="flex animate-marquee whitespace-nowrap">
               {[...Array(4)].map((_, i) => (
-                <span key={i} className="mx-8 text-[13px] font-medium inline-flex items-center gap-2" style={{ color: '#F87171' }}>
-                  <svg className="w-4 h-4 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z" />
-                  </svg>
-                  Trading on prediction markets is not available in your region due to regulatory restrictions
-                  <span className="mx-4 text-red-400/40">•</span>
-                  US users are restricted from trading on Polymarket via Interstate
-                  <span className="mx-4 text-red-400/40">•</span>
+                <span key={i} className="text-[13px] font-medium inline-flex items-center" style={{ color: '#F87171' }}>
+                  <span className="inline-flex items-center gap-2 mx-10">
+                    <svg className="w-4 h-4 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z" />
+                    </svg>
+                    Trading on prediction markets is not available in your region due to regulatory restrictions
+                  </span>
+                  <span className="text-red-400/40">•</span>
+                  <span className="inline-flex items-center gap-2 mx-10">
+                    <svg className="w-4 h-4 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z" />
+                    </svg>
+                    US users are restricted from trading on Polymarket via Interstate
+                  </span>
+                  <span className="text-red-400/40">•</span>
                 </span>
               ))}
             </div>
