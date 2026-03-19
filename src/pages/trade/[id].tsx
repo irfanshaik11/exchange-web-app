@@ -26,6 +26,7 @@ import TokenLimitOrders from "../../components/trade/TokenLimitOrders";
 import { getMyLimitOrders } from "../../utils/api";
 import { creatorAddressCache } from "../../utils/preloadTradeChart";
 import { useKeepOrderFresh } from "../../hooks/usePrefetchOrder";
+import useTokenSupply from "../../hooks/useTokenSupply";
 // Eager load AdvancedOHLCChart on trade pages - always needed, so no point in lazy loading
 import AdvancedOHLCChart from "../../components/AdvancedOHLCChart";
 
@@ -398,6 +399,9 @@ export default function TradePage() {
     if (typeof id === "string" && id.length > 0) return id;
     return undefined;
   }, [optimisticToken?.mint, _mint, id]);
+
+  // Fetch real circulating supply from token service (falls back to 1B)
+  const { circulatingSupply, refetch: refetchSupply } = useTokenSupply(resolvedTokenMint);
 
   // Prefetch is handled by TradeActionPanel when the user selects an amount.
   // The previous page-level prefetch used a hardcoded 0.1 SOL which spammed
@@ -1055,15 +1059,17 @@ export default function TradePage() {
               }}
             >
               <div className="pl-2 flex-shrink-0">
-                <TradeHeader 
-                  token={validatedCorrectTokenData || displayToken} 
-                  wsTokenInfo={wsTokenInfo} 
-                  wsVolume={wsVolume} 
-                  holderSummary={holderSummary} 
+                <TradeHeader
+                  token={validatedCorrectTokenData || displayToken}
+                  wsTokenInfo={wsTokenInfo}
+                  wsVolume={wsVolume}
+                  holderSummary={holderSummary}
                   livePriceUsd={validChartMetrics.lastPriceUsd}
                   liveMarketCapUsd={validChartMetrics.lastMarketCapUsd}
                   onToggleRightPanel={() => setIsRightPanelVisible(!isRightPanelVisible)}
                   isRightPanelVisible={isRightPanelVisible}
+                  circulatingSupply={circulatingSupply}
+                  onRefreshSupply={refetchSupply}
                 />
               </div>
 
@@ -1104,6 +1110,7 @@ export default function TradePage() {
                     limitOrders={activeLimitOrders}
                     onChartMetrics={handleChartMetrics}
                     preloadedData={backgroundOHLCData || undefined}
+                    circulatingSupply={circulatingSupply}
                     tokenAgeSec={(() => {
                       const tokenForAge = correctTokenData || token;
                       const ca = (tokenForAge as any)?.created_at || (tokenForAge as any)?.createdAt || (tokenForAge as any)?.CreatedAt;
@@ -1263,6 +1270,7 @@ export default function TradePage() {
                   liveMarketCapUsd={liveMarketCapForPanel}
                   liveLiquidityUsd={wsTokenInfo?.liquidity_usd}
                   livePriceUsd={validChartMetrics.lastPriceUsd}
+                  circulatingSupply={circulatingSupply}
                 />
               </div>
 
@@ -1332,6 +1340,7 @@ export default function TradePage() {
                 liveMarketCapUsd={liveMarketCapForPanel}
                 liveLiquidityUsd={wsTokenInfo?.liquidity_usd}
                 livePriceUsd={validChartMetrics.lastPriceUsd}
+                circulatingSupply={circulatingSupply}
               />
             </div>
           </div>

@@ -920,6 +920,7 @@ interface TradeActionPanelProps {
   liveMarketCapUsd?: number | null; // Real-time MC from chart/WebSocket (same source as header)
   liveLiquidityUsd?: number | null; // Real-time liquidity from WebSocket (same source as header)
   livePriceUsd?: number | null; // Real-time USD price from chart OHLC data
+  circulatingSupply?: number; // Circulating supply from /v1/supply endpoint
 }
 
 const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
@@ -932,6 +933,7 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
   liveMarketCapUsd,
   liveLiquidityUsd,
   livePriceUsd,
+  circulatingSupply,
 }) => {
   // Live SOL price from Pyth Network (same source as footer)
   const { solPrice: liveSolPrice } = useSolPrice();
@@ -1237,13 +1239,13 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
   const tokenPriceUsdField = Number((token as any)?.price_usd) || 0;
 
   const liveTokenPriceInSol = useMemo(() => {
-    const supply = Number(token?.total_supply) || 0;
+    const supply = circulatingSupply ?? (Number(token?.total_supply) || 0);
     const solUsd = liveSolPrice > 0 ? liveSolPrice : 0;
-    // Best: derive from live market cap + total supply
+    // Best: derive from live market cap + circulating supply
     if (baseMarketCap > 0 && supply > 0 && solUsd > 0) {
       return baseMarketCap / (supply * solUsd);
     }
-    // Strong fallback: live chart price / SOL price (works even without total_supply)
+    // Strong fallback: live chart price / SOL price (works even without supply)
     const chartPrice = typeof livePriceUsd === "number" && Number.isFinite(livePriceUsd) ? livePriceUsd : 0;
     if (chartPrice > 0 && solUsd > 0) {
       return chartPrice / solUsd;
@@ -1255,19 +1257,19 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
     }
     // Last resort: static sol_price (ensure numeric)
     return Number(token?.sol_price) || 0;
-  }, [baseMarketCap, token?.total_supply, token?.usd_price, token?.sol_price, liveSolPrice, livePriceUsd, tokenPriceUsdField]);
+  }, [baseMarketCap, circulatingSupply, token?.total_supply, token?.usd_price, token?.sol_price, liveSolPrice, livePriceUsd, tokenPriceUsdField]);
 
   // Token price in SOL at the limit order's target market cap
   const limitTokenPriceInSol = useMemo(() => {
     if (tab !== "limit") return 0;
-    const supply = Number(token?.total_supply) || 0;
+    const supply = circulatingSupply ?? (Number(token?.total_supply) || 0);
     const solUsd = liveSolPrice > 0 ? liveSolPrice : 0;
     const tmc = Number(targetMC);
     if (tmc > 0 && supply > 0 && solUsd > 0) {
       return tmc / (supply * solUsd);
     }
     return 0;
-  }, [tab, token?.total_supply, liveSolPrice, targetMC]);
+  }, [tab, circulatingSupply, token?.total_supply, liveSolPrice, targetMC]);
 
   // For buy estimates: use target price in limit tab, current price in market tab
   const effectiveBuyTokenPrice = tab === "limit" && limitTokenPriceInSol > 0

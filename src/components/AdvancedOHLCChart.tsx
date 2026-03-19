@@ -70,6 +70,7 @@ export interface AdvancedOHLCChartProps {
     maxMarketCapUsd?: number;
   }) => void;
   tokenAgeSec?: number;
+  circulatingSupply?: number;
 }
 
 const BACKEND_URL = process.env.NEXT_PUBLIC_GO_SERVICE_URL;
@@ -88,7 +89,7 @@ const VALID_INTERVALS: BackendInterval[] = [
   "1d",
   "7d",
 ];
-const MARKET_CAP_MULTIPLIER = 1_000_000_000; // 1B supply for Monad
+const DEFAULT_SUPPLY = 1_000_000_000; // Fallback when circulatingSupply prop is not provided
 const CHART_DEBUG = false; // Set to true only when debugging chart issues
 
 // Map our intervals to TradingView resolution format
@@ -515,7 +516,10 @@ const AdvancedOHLCChart: React.FC<AdvancedOHLCChartProps> = ({
   limitOrders,
   onChartMetrics,
   tokenAgeSec,
+  circulatingSupply,
 }) => {
+  const MARKET_CAP_MULTIPLIER = circulatingSupply && circulatingSupply > 0 ? circulatingSupply : DEFAULT_SUPPLY;
+
   // DEBUG: Confirm component is rendering with latest code
 
   const containerRef = useRef<HTMLDivElement>(null);
@@ -568,16 +572,15 @@ const AdvancedOHLCChart: React.FC<AdvancedOHLCChartProps> = ({
   }, [displayMode]);
 
   // Helper function to transform OHLC values based on display mode (USD vs MC)
-  // MC = USD * 1 billion (both Monad and Solana pump.fun tokens have 1B supply)
+  // MC = USD price * circulating supply (fetched from /v1/supply, defaults to 1B)
   const transformOHLCValue = useCallback(
     (value: number, mode: "USD" | "MC", supportsMcMode: boolean): number => {
       if (!supportsMcMode || mode === "USD") {
         return value;
       }
-      // MC mode: multiply by 1 billion
-      return value * 1_000_000_000;
+      return value * MARKET_CAP_MULTIPLIER;
     },
-    [],
+    [MARKET_CAP_MULTIPLIER],
   );
 
   // Helper function to transform a bar object based on display mode
@@ -598,7 +601,7 @@ const AdvancedOHLCChart: React.FC<AdvancedOHLCChartProps> = ({
       if (!supportsMcMode || mode === "USD") {
         return bar;
       }
-      // MC mode only: multiply by 1 billion
+      // MC mode only: multiply by circulating supply
       return {
         ...bar,
         open: transformOHLCValue(bar.open, mode, supportsMcMode),
@@ -615,7 +618,7 @@ const AdvancedOHLCChart: React.FC<AdvancedOHLCChartProps> = ({
     const currentNetwork = latestParamsRef.current.network;
     if (CHART_DEBUG) console.log("📊 [MAX_MC_COMPUTE] Network:", currentNetwork);
 
-    // Both Monad and Solana support max MC calculation (1B token supply)
+    // Both Monad and Solana support max MC calculation (circulating supply from /v1/supply)
     const data = lastGoodCandlesRef.current || [];
     if (CHART_DEBUG) console.log("📊 [MAX_MC_COMPUTE] Candles available:", data.length);
 
@@ -657,7 +660,7 @@ const AdvancedOHLCChart: React.FC<AdvancedOHLCChartProps> = ({
     });
 
     return result;
-  }, []);
+  }, [MARKET_CAP_MULTIPLIER]);
 
   // Price line management - always clears and redraws to ensure consistency
   const syncPriceLines = useCallback(

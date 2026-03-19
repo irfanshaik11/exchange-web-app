@@ -22,7 +22,7 @@ import {
 	FaTelegram,
 } from "react-icons/fa";
 import { LuCopy } from "react-icons/lu";
-import { LuPill, LuDroplet, LuSearch } from "react-icons/lu";
+import { LuPill, LuDroplet, LuSearch, LuRefreshCw } from "react-icons/lu";
 import Link from "next/link";
 import { CiTrophy } from "react-icons/ci";
 import { FaXTwitter } from "react-icons/fa6";
@@ -446,9 +446,13 @@ interface TradeHeaderProps {
 	onToggleRightPanel?: () => void;
 	/** Whether the right panel is currently visible */
 	isRightPanelVisible?: boolean;
+	/** Circulating supply fetched from /v1/supply endpoint */
+	circulatingSupply?: number;
+	/** Callback to re-fetch circulating supply */
+	onRefreshSupply?: () => void;
 }
 
-const TradeHeader: React.FC<TradeHeaderProps> = ({ token, livePriceUsd, liveMarketCapUsd, wsTokenInfo, wsVolume, holderSummary, onToggleRightPanel, isRightPanelVisible }) => {
+const TradeHeader: React.FC<TradeHeaderProps> = ({ token, livePriceUsd, liveMarketCapUsd, wsTokenInfo, wsVolume, holderSummary, onToggleRightPanel, isRightPanelVisible, circulatingSupply, onRefreshSupply }) => {
 	const coalesceNumber = (...values: any[]): number | null => {
 		for (const v of values) {
 			const n = typeof v === "string" ? parseFloat(v) : v;
@@ -761,7 +765,7 @@ const TradeHeader: React.FC<TradeHeaderProps> = ({ token, livePriceUsd, liveMark
 	const isLiquidityLoading = isSolanaToken
 		? !hasWsLiquidity && !hasTokenLiquidity
 		: !hasWsLiquidity && !hasTokenLiquidity && !wsLiquidityFromMarketData;
-	const supply = (token as any)?.total_supply ?? (token as any)?.supply ?? 1_000_000_000;
+	const supply = circulatingSupply ?? (token as any)?.total_supply ?? (token as any)?.supply ?? 1_000_000_000;
 	const formattedMarketCap = useMemo(() => formatMarketCap(mcap), [mcap]);
 	const isLowLiquidity = Number(liq) < 1000;
 
@@ -786,7 +790,10 @@ const TradeHeader: React.FC<TradeHeaderProps> = ({ token, livePriceUsd, liveMark
 	})();
 
 	/* ---------- canonical protocol resolution ---------- */
-	const columnType = getColumnType(token);
+	// Check both token prop AND wsTokenInfo for migration status
+	const isMigratedViaWs = !!(wsTokenInfo as any)?.is_migrated ||
+		(wsTokenInfo?.graduation_percent != null && wsTokenInfo.graduation_percent >= 100);
+	const columnType = isMigratedViaWs ? "migrated" as const : getColumnType(token);
 	// protocolSource is used for getProtocolBranding below
 	const protocolSource =
 		(token as any)?.launchpad_protocol ||
@@ -1784,7 +1791,21 @@ const TradeHeader: React.FC<TradeHeaderProps> = ({ token, livePriceUsd, liveMark
 								</StatInline>
 							);
 						})()}
-						<StatInline label="Supply">{formatSmartNumber(supply)}</StatInline>
+						<StatInline label="Supply">
+							<span className="inline-flex items-center gap-1">
+								{formatSmartNumber(supply)}
+								{onRefreshSupply && (
+									<button
+										type="button"
+										onClick={onRefreshSupply}
+										className="text-[#9CA3AF] hover:text-white transition-colors cursor-pointer"
+										title="Refresh supply"
+									>
+										<LuRefreshCw size={10} />
+									</button>
+								)}
+							</span>
+						</StatInline>
 						{/* Gas Fees - Commented out per request
           <StatInline label="Gas Fees">
             {formatLamportsToSol(
@@ -1793,7 +1814,7 @@ const TradeHeader: React.FC<TradeHeaderProps> = ({ token, livePriceUsd, liveMark
             )}
           </StatInline>
           */}
-						{columnType !== "migrated" && (
+						{columnType !== "migrated" && curvePct < 100 && (
 							<StatInline label="B. Curve">
 								<div className="flex flex-row items-center gap-1 sm:gap-2">
 									{Number.isFinite(Number(curvePct))
