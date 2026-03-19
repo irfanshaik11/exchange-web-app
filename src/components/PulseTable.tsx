@@ -3865,6 +3865,8 @@ function PulseTable({
       !filters.devPairsCreatedMax &&
       !filters.bundlePercentMin &&
       !filters.bundlePercentMax &&
+      !filters.proTradersMin &&
+      !filters.proTradersMax &&
       !filters.globalFeesPaidMin &&
       !filters.globalFeesPaidMax &&
       !filters.twitterReusesMin &&
@@ -4486,24 +4488,27 @@ function PulseTable({
       });
     }
 
-    // Apply bundle percent filter
-    if (filters.bundlePercentMin) {
-      const minPercent = parseFloat(filters.bundlePercentMin);
+    // Apply bundle percent filter (user input is 0-100, data is 0-100)
+    if (filters.bundlePercentMin || filters.bundlePercentMax) {
+      const minPct = filters.bundlePercentMin ? parseFloat(filters.bundlePercentMin) : NaN;
+      const maxPct = filters.bundlePercentMax ? parseFloat(filters.bundlePercentMax) : NaN;
       filtered = filtered.filter((token) => {
-        const bundlePercent = (token as any).bundle_percent ?? (token as any).bundled_percentage ?? (token as any).bundler_held_percentage ?? 0;
-        // Convert to percentage if stored as decimal
-        const percentValue = bundlePercent > 1 ? bundlePercent : bundlePercent * 100;
-        return percentValue >= minPercent;
+        const pct = (token as any).bundle_percent ?? (token as any).bundled_percentage ?? (token as any).bundler_held_percentage ?? 0;
+        if (!isNaN(minPct) && pct < minPct) return false;
+        if (!isNaN(maxPct) && pct > maxPct) return false;
+        return true;
       });
     }
 
-    if (filters.bundlePercentMax) {
-      const maxPercent = parseFloat(filters.bundlePercentMax);
+    // Apply pro traders filter (count, not percentage)
+    if (filters.proTradersMin || filters.proTradersMax) {
+      const minPro = filters.proTradersMin ? parseFloat(filters.proTradersMin) : NaN;
+      const maxPro = filters.proTradersMax ? parseFloat(filters.proTradersMax) : NaN;
       filtered = filtered.filter((token) => {
-        const bundlePercent = (token as any).bundle_percent ?? (token as any).bundled_percentage ?? (token as any).bundler_held_percentage ?? 0;
-        // Convert to percentage if stored as decimal
-        const percentValue = bundlePercent > 1 ? bundlePercent : bundlePercent * 100;
-        return percentValue <= maxPercent;
+        const pro = (token as any).pro_traders_count ?? (token as any).pro_traders ?? (token as any).smart_money_count ?? 0;
+        if (!isNaN(minPro) && pro < minPro) return false;
+        if (!isNaN(maxPro) && pro > maxPro) return false;
+        return true;
       });
     }
 
@@ -4792,6 +4797,8 @@ function PulseTable({
     filters.devPairsCreatedMax,
     filters.bundlePercentMin,
     filters.bundlePercentMax,
+    filters.proTradersMin,
+    filters.proTradersMax,
     filters.globalFeesPaidMin,
     filters.globalFeesPaidMax,
     filters.twitterReusesMin,
