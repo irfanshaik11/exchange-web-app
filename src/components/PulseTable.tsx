@@ -3835,6 +3835,8 @@ function PulseTable({
       !filters.minAge &&
       !filters.maxAge &&
       !filters.top10HoldersPercent &&
+      !filters.top10HoldersPercentMin &&
+      !filters.top10HoldersPercentMax &&
       !filters.minMarketCap &&
       !filters.maxMarketCap &&
       !filters.minVolume &&
@@ -4767,6 +4769,8 @@ function PulseTable({
     filters.maxAge,
     filters.ageUnit,
     filters.top10HoldersPercent,
+    filters.top10HoldersPercentMin,
+    filters.top10HoldersPercentMax,
     filters.minMarketCap,
     filters.maxMarketCap,
     filters.minVolume,

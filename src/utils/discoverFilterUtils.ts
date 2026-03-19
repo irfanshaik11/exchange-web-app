@@ -217,7 +217,7 @@ export function applyDiscoverFilters(
     const minDM = parseNum(filters.devMigrationsMin);
     const maxDM = parseNum(filters.devMigrationsMax);
     if (minDM !== undefined || maxDM !== undefined) {
-      const dm = Number(token.dev_migrations) || 0;
+      const dm = Number(token.dev_migrations ?? token.dev_tokens_migrated) || 0;
       if (minDM !== undefined && dm < minDM) return false;
       if (maxDM !== undefined && dm > maxDM) return false;
     }
@@ -226,7 +226,7 @@ export function applyDiscoverFilters(
     const minDP = parseNum(filters.devPairsCreatedMin);
     const maxDP = parseNum(filters.devPairsCreatedMax);
     if (minDP !== undefined || maxDP !== undefined) {
-      const dp = Number(token.dev_pairs_created) || 0;
+      const dp = Number(token.dev_pairs_created ?? token.dev_tokens_created) || 0;
       if (minDP !== undefined && dp < minDP) return false;
       if (maxDP !== undefined && dp > maxDP) return false;
     }
@@ -349,6 +349,32 @@ export function applyDiscoverFilters(
       if (!(protocol.includes('pump') && isLive)) return false;
     }
 
+    // ── Global Fees Paid ──
+    const minFees = parseNum(filters.globalFeesPaidMin);
+    const maxFees = parseNum(filters.globalFeesPaidMax);
+    if (minFees !== undefined || maxFees !== undefined) {
+      let feesPaid = Number(token.global_fees_paid ?? token.globalFeesPaid ?? 0) || 0;
+      if (feesPaid === 0) {
+        const lamports = Number(token.total_fees_lamports ?? 0);
+        if (lamports > 0) feesPaid = lamports / 1_000_000_000;
+      }
+      if (minFees !== undefined && feesPaid < minFees) return false;
+      if (maxFees !== undefined && feesPaid > maxFees) return false;
+    }
+
+    // ── X Reuses ──
+    const minReuses = parseNum(filters.twitterReusesMin);
+    const maxReuses = parseNum(filters.twitterReusesMax);
+    if (minReuses !== undefined || maxReuses !== undefined) {
+      const reuses = Number(token.twitter_reuses ?? token.twitterReuses ?? token.twitter_reuse_count ?? 0) || 0;
+      if (minReuses !== undefined && reuses < minReuses) return false;
+      if (maxReuses !== undefined && reuses > maxReuses) return false;
+    }
+
+    // ── Tweet Age ──
+    // Skip for now - tweet age calculation requires ageUnit conversion and tweet_created_at field
+    // which is complex and rarely used
+
     return true;
   });
 }
@@ -378,6 +404,8 @@ export function countActiveFilters(filters: PulseFilters): number {
   if (filters.insidersPercentMin || filters.insidersPercentMax) count++;
   if (filters.bundlePercentMin || filters.bundlePercentMax) count++;
   if (filters.proTradersMin || filters.proTradersMax) count++;
+  if (filters.globalFeesPaidMin || filters.globalFeesPaidMax) count++;
+  if (filters.twitterReusesMin || filters.twitterReusesMax) count++;
   if (filters.hasTwitter || filters.hasWebsite || filters.hasTelegram || filters.atLeastOneSocial) count++;
   if (filters.onlyPumpLive) count++;
   return count;
@@ -427,6 +455,10 @@ export function hasActiveFilters(filters: PulseFilters): boolean {
     !!filters.bundlePercentMax ||
     !!filters.proTradersMin ||
     !!filters.proTradersMax ||
+    !!filters.globalFeesPaidMin ||
+    !!filters.globalFeesPaidMax ||
+    !!filters.twitterReusesMin ||
+    !!filters.twitterReusesMax ||
     !!filters.hasTwitter ||
     !!filters.hasWebsite ||
     !!filters.hasTelegram ||
