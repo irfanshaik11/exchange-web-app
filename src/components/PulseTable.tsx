@@ -2934,6 +2934,46 @@ function PulseTable({
     return getDefaultFilters();
   });
 
+  // Check if any non-default filters are active
+  const hasActiveFilters = useMemo(() => {
+    const d = getDefaultFilters();
+    return (
+      JSON.stringify(filters.protocols) !== JSON.stringify(d.protocols) ||
+      filters.quoteTokens.length > 0 ||
+      !!filters.searchKeywords.trim() ||
+      !!filters.excludeKeywords.trim() ||
+      filters.dexPaid !== d.dexPaid ||
+      filters.caEndsInPump !== d.caEndsInPump ||
+      !!filters.minAge ||
+      !!filters.maxAge ||
+      !!filters.top10HoldersPercent ||
+      !!filters.top10HoldersPercentMin ||
+      !!filters.top10HoldersPercentMax ||
+      !!filters.minMarketCap ||
+      !!filters.maxMarketCap ||
+      !!filters.minVolume ||
+      !!filters.maxVolume ||
+      !!filters.minLiquidity ||
+      !!filters.maxLiquidity ||
+      !!filters.bCurvePercentMin ||
+      !!filters.bCurvePercentMax ||
+      !!filters.txnsMin ||
+      !!filters.txnsMax ||
+      !!filters.holdersMin ||
+      !!filters.holdersMax ||
+      !!filters.devHoldingPercentMin ||
+      !!filters.devHoldingPercentMax ||
+      !!filters.snipersPercentMin ||
+      !!filters.snipersPercentMax ||
+      !!filters.insidersPercentMin ||
+      !!filters.insidersPercentMax ||
+      !!filters.bundlePercentMin ||
+      !!filters.bundlePercentMax ||
+      !!filters.proTradersMin ||
+      !!filters.proTradersMax
+    );
+  }, [filters, getDefaultFilters]);
+
   // Persist filters to localStorage whenever they change
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -5406,43 +5446,31 @@ function PulseTable({
               className="relative flex h-7 w-7 cursor-pointer items-center justify-center rounded-md transition-all duration-300 ease-out z-[9999]"
               style={{
                 backgroundColor: "transparent",
-                color: showFilters ? AX.aiBlue : AX.muted,
+                color: showFilters ? AX.aiBlue : hasActiveFilters ? "#31e3ac" : AX.muted,
               }}
               onMouseEnter={(e) => {
                 if (!showFilters) {
-                  e.currentTarget.style.color = "#E6E7EA";
+                  e.currentTarget.style.color = hasActiveFilters ? "#5eead4" : "#E6E7EA";
                 }
               }}
               onMouseLeave={(e) => {
                 if (!showFilters) {
-                  e.currentTarget.style.color = AX.muted;
+                  e.currentTarget.style.color = hasActiveFilters ? "#31e3ac" : AX.muted;
                 }
               }}
               onClick={() => setShowFilters(!showFilters)}
             >
               <BsSliders2 size={14} />
 
-              {/* Protocol Filter Count Indicator (exclude 'All') */}
-              {/* {filters.protocols.filter((p: string) => p !== "All").length >
-                0 && (
+              {/* Active filter indicator dot */}
+              {hasActiveFilters && (
                 <span
-                  className="absolute -top-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full text-xs font-bold"
-                  style={{ color: "#f0f5f5", fontSize: "10px", backgroundColor: "#31e3ac" }}
-                >
-                  {filters.protocols.filter((p: string) => p !== "All").length}
-                </span>
-              )} */}
-              {filters.protocols.length > 0 && (
-                <span
-                  className="absolute -top-0.5 -right-0.5 flex h-3 w-3 items-center justify-center rounded-full font-bold"
+                  className="absolute -top-0.5 -right-0.5 h-2.5 w-2.5 rounded-full"
                   style={{
                     backgroundColor: "#31e3ac",
-                    color: "#000000",
-                    fontSize: "8px",
+                    boxShadow: "0 0 4px rgba(49, 227, 172, 0.5)",
                   }}
-                >
-                  {filters.protocols.length}
-                </span>
+                />
               )}
             </button>
 
@@ -5519,10 +5547,11 @@ function PulseTable({
                     <button
                       className="mr-2 cursor-pointer rounded p-1 transition-colors hover:bg-gray-700"
                       onClick={handleResetFilters}
+                      title={hasActiveFilters ? "Clear all filters" : "No active filters"}
                     >
                       <BiRefresh
                         className="h-4 w-4"
-                        style={{ color: AX.text }}
+                        style={{ color: hasActiveFilters ? "#ef4444" : AX.muted }}
                       />
                     </button>
                   </div>
@@ -7458,20 +7487,25 @@ function PulseTable({
                       onClick={handleResetFilters}
                       className="mr-2 cursor-pointer rounded-lg px-4 py-2 text-sm font-medium transition-all duration-300 ease-out"
                       style={{
-                        backgroundColor: AX.surface,
-                        color: AX.muted,
-                        border: `1px solid ${AX.border}`,
+                        backgroundColor: hasActiveFilters ? "rgba(239, 68, 68, 0.1)" : AX.surface,
+                        color: hasActiveFilters ? "#ef4444" : AX.muted,
+                        border: `1px solid ${hasActiveFilters ? "rgba(239, 68, 68, 0.3)" : AX.border}`,
                       }}
                       onMouseEnter={(e) => {
-                        e.currentTarget.style.backgroundColor = AX.border;
-                        e.currentTarget.style.color = AX.text;
+                        if (hasActiveFilters) {
+                          e.currentTarget.style.backgroundColor = "rgba(239, 68, 68, 0.2)";
+                          e.currentTarget.style.color = "#f87171";
+                        } else {
+                          e.currentTarget.style.backgroundColor = AX.border;
+                          e.currentTarget.style.color = AX.text;
+                        }
                       }}
                       onMouseLeave={(e) => {
-                        e.currentTarget.style.backgroundColor = AX.surface;
-                        e.currentTarget.style.color = AX.muted;
+                        e.currentTarget.style.backgroundColor = hasActiveFilters ? "rgba(239, 68, 68, 0.1)" : AX.surface;
+                        e.currentTarget.style.color = hasActiveFilters ? "#ef4444" : AX.muted;
                       }}
                     >
-                      Reset
+                      {hasActiveFilters ? "Clear All" : "Reset"}
                     </button>
                     <button
                       className="cursor-pointer rounded-lg px-4 py-2 text-sm font-medium transition-all duration-300 ease-out"
