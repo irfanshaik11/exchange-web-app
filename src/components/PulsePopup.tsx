@@ -172,16 +172,18 @@ const PulsePopup: React.FC<PulsePopupProps> = ({ isOpen, onClose }) => {
       const side = dockedResizeStartRef.current.side;
       const newWidth = side === 'left' ? startWidth + deltaX : startWidth - deltaX;
       const clamped = Math.max(MIN_DOCKED_WIDTH, Math.min(MAX_DOCKED_WIDTH, newWidth));
-      setDockedWidth(clamped);
+      // Direct DOM update for smooth resizing — commit to state on pointer-up
+      dockedWidthRef.current = clamped;
+      if (modalRef.current) modalRef.current.style.width = `${clamped}px`;
       return;
     }
     if (isResizingRef.current) {
       // Handle resize
       if (!modalRef.current) return;
-      
+
       const deltaX = e.clientX - resizeStartRef.current.x;
       const deltaY = e.clientY - resizeStartRef.current.y;
-      
+
       const newWidth = Math.max(600, Math.min(1600, resizeStartRef.current.width + deltaX));
       const newHeight = Math.max(400, Math.min(window.innerHeight - 40, resizeStartRef.current.height + deltaY));
       
@@ -216,6 +218,8 @@ const PulsePopup: React.FC<PulsePopupProps> = ({ isOpen, onClose }) => {
     if (isResizingDockedRef.current) {
       isResizingDockedRef.current = false;
       setIsResizingDocked(false);
+      // Commit final width to state (triggers localStorage persist + context update)
+      setDockedWidth(dockedWidthRef.current);
       if (dockedResizeHandleRef.current && e && dockedResizeHandleRef.current.hasPointerCapture(e.pointerId)) {
         dockedResizeHandleRef.current.releasePointerCapture(e.pointerId);
       }
@@ -390,7 +394,7 @@ const PulsePopup: React.FC<PulsePopupProps> = ({ isOpen, onClose }) => {
         flexDirection: 'column',
         transition: (isDragging || isResizing || isResizingDocked) ? 'none' : 'opacity 0.15s',
         border: '1px solid rgba(255,255,255,0.06)',
-        borderRadius: dockSide === 'left' ? '12px' : '12px',
+        borderRadius: dockSide === 'left' ? '0 12px 12px 0' : '12px 0 0 12px',
         boxShadow: '0 8px 32px rgba(0,0,0,0.3), inset 0 1px 0 rgba(255,255,255,0.06)',
       }
     : {
@@ -420,7 +424,7 @@ const PulsePopup: React.FC<PulsePopupProps> = ({ isOpen, onClose }) => {
     <div className="fixed inset-0 z-[99999] pointer-events-none">
       <div
         ref={modalRef}
-        className="fixed shadow-2xl pointer-events-auto mt-2"
+        className="fixed shadow-2xl pointer-events-auto"
         style={modalStyle}
       >
         {/* Header - Draggable with ::: handle */}
@@ -452,14 +456,7 @@ const PulsePopup: React.FC<PulsePopupProps> = ({ isOpen, onClose }) => {
         {/* Content - Pulse Page */}
         <div
           className="flex-1 overflow-hidden min-h-0"
-          style={{
-            maxWidth: '100%',
-            ...(isDocked
-              ? dockSide === 'left'
-                ? { paddingRight: 0 }
-                : { paddingLeft: 0 }
-              : {}),
-          }}
+          style={{ maxWidth: '100%' }}
         >
           <div className="h-full w-full" style={{ maxWidth: (isDocked ? dockedWidth : size.width) < 1024 ? '100%' : 'none' }}>
             <PulsePopoutContent forceMobileView={isDocked || size.width < 1024} />

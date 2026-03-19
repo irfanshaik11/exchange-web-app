@@ -1090,7 +1090,7 @@ export default function PulsePopoutContent({ forceMobileView = false }: PulsePop
                         : "bg-neutral-800 text-neutral-400"
                     }`}
                   >
-                    {isMonadRoute ? enrichedNewPairsToShow.length : (enrichedNewPairsToShow as any[]).length}
+                    {enrichedNewPairsToShow.length}
                   </span>
                 </div>
               </button>
@@ -1111,7 +1111,7 @@ export default function PulsePopoutContent({ forceMobileView = false }: PulsePop
                         : "bg-neutral-800 text-neutral-400"
                     }`}
                   >
-                    {isMonadRoute ? enrichedFinalStretch.length : (enrichedFinalStretch as any[]).length}
+                    {enrichedFinalStretch.length}
                   </span>
                 </div>
               </button>
@@ -1132,7 +1132,7 @@ export default function PulsePopoutContent({ forceMobileView = false }: PulsePop
                         : "bg-neutral-800 text-neutral-400"
                     }`}
                   >
-                    {isMonadRoute ? enrichedMigrated.length : (enrichedMigrated as any[]).length}
+                    {enrichedMigrated.length}
                   </span>
                 </div>
               </button>
@@ -1181,6 +1181,12 @@ export default function PulsePopoutContent({ forceMobileView = false }: PulsePop
                 <div className="py-6 text-center text-red-400">
                   <div className="mb-2 text-sm font-semibold">Error Loading Launchpad Data</div>
                   <div className="text-xs">{launchpadError?.message || "Unknown error"}</div>
+                  <button
+                    onClick={() => window.location.reload()}
+                    className="mt-3 rounded bg-emerald-600 px-3 py-1.5 text-xs text-white transition-colors hover:bg-emerald-700"
+                  >
+                    Retry
+                  </button>
                 </div>
               ) : (
                 <div className="flex h-full min-h-0 flex-col">

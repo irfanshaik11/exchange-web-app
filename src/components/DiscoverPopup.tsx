@@ -175,16 +175,18 @@ const DiscoverPopup: React.FC<DiscoverPopupProps> = ({ isOpen, onClose }) => {
       const side = dockedResizeStartRef.current.side;
       const newWidth = side === 'left' ? startWidth + deltaX : startWidth - deltaX;
       const clamped = Math.max(MIN_DOCKED_WIDTH, Math.min(MAX_DOCKED_WIDTH, newWidth));
-      setDockedWidth(clamped);
+      // Direct DOM update for smooth resizing — commit to state on pointer-up
+      dockedWidthRef.current = clamped;
+      if (modalRef.current) modalRef.current.style.width = `${clamped}px`;
       return;
     }
     if (isResizingRef.current) {
       // Handle resize
       if (!modalRef.current) return;
-      
+
       const deltaX = e.clientX - resizeStartRef.current.x;
       const deltaY = e.clientY - resizeStartRef.current.y;
-      
+
       const newWidth = Math.max(600, Math.min(1400, resizeStartRef.current.width + deltaX));
       const newHeight = Math.max(400, Math.min(window.innerHeight - 40, resizeStartRef.current.height + deltaY));
       
@@ -219,6 +221,8 @@ const DiscoverPopup: React.FC<DiscoverPopupProps> = ({ isOpen, onClose }) => {
     if (isResizingDockedRef.current) {
       isResizingDockedRef.current = false;
       setIsResizingDocked(false);
+      // Commit final width to state (triggers localStorage persist + context update)
+      setDockedWidth(dockedWidthRef.current);
       if (dockedResizeHandleRef.current && e && dockedResizeHandleRef.current.hasPointerCapture(e.pointerId)) {
         dockedResizeHandleRef.current.releasePointerCapture(e.pointerId);
       }
@@ -431,7 +435,7 @@ const DiscoverPopup: React.FC<DiscoverPopupProps> = ({ isOpen, onClose }) => {
     <div className="fixed inset-0 z-[99999] pointer-events-none">
       <div
         ref={modalRef}
-        className="fixed shadow-2xl pointer-events-auto mt-2"
+        className="fixed shadow-2xl pointer-events-auto"
         style={modalStyle}
       >
         {/* Header - Draggable with ::: handle */}
@@ -461,16 +465,7 @@ const DiscoverPopup: React.FC<DiscoverPopupProps> = ({ isOpen, onClose }) => {
         </div>
 
         {/* Content - same as Discover page so data stays identical */}
-        <div
-          className="flex-1 min-h-0 overflow-y-auto"
-          style={
-            isDocked
-              ? dockSide === "left"
-                ? { paddingRight: 0 }
-                : { paddingLeft: 0 }
-              : undefined
-          }
-        >
+        <div className="flex-1 min-h-0 overflow-y-auto">
           <DiscoverPageContent variant="popup" />
         </div>
 

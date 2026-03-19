@@ -815,6 +815,7 @@ const AdvancedOHLCChart: React.FC<AdvancedOHLCChartProps> = ({
             {
               shape: "horizontal_line",
               text: lineText,
+              lock: true,
               disableSelection: true,
               disableSave: true,
               overrides: {

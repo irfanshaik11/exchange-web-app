@@ -173,16 +173,18 @@ const TwitterTrackerPopup: React.FC<TwitterTrackerPopupProps> = ({ isOpen, onClo
       const side = dockedResizeStartRef.current.side;
       const newWidth = side === 'left' ? startWidth + deltaX : startWidth - deltaX;
       const clamped = Math.max(MIN_DOCKED_WIDTH, Math.min(MAX_DOCKED_WIDTH, newWidth));
-      setDockedWidth(clamped);
+      // Direct DOM update for smooth resizing — commit to state on pointer-up
+      dockedWidthRef.current = clamped;
+      if (modalRef.current) modalRef.current.style.width = `${clamped}px`;
       return;
     }
     if (isResizingRef.current) {
       // Handle resize
       if (!modalRef.current) return;
-      
+
       const deltaX = e.clientX - resizeStartRef.current.x;
       const deltaY = e.clientY - resizeStartRef.current.y;
-      
+
       const newWidth = Math.max(400, Math.min(1200, resizeStartRef.current.width + deltaX));
       const newHeight = Math.max(300, Math.min(window.innerHeight - 40, resizeStartRef.current.height + deltaY));
       
@@ -217,6 +219,8 @@ const TwitterTrackerPopup: React.FC<TwitterTrackerPopupProps> = ({ isOpen, onClo
     if (isResizingDockedRef.current) {
       isResizingDockedRef.current = false;
       setIsResizingDocked(false);
+      // Commit final width to state (triggers localStorage persist + context update)
+      setDockedWidth(dockedWidthRef.current);
       if (dockedResizeHandleRef.current && e && dockedResizeHandleRef.current.hasPointerCapture(e.pointerId)) {
         dockedResizeHandleRef.current.releasePointerCapture(e.pointerId);
       }
@@ -424,7 +428,7 @@ const TwitterTrackerPopup: React.FC<TwitterTrackerPopupProps> = ({ isOpen, onClo
     <div className="fixed inset-0 z-[99999] pointer-events-none">
       <div
         ref={modalRef}
-        className="fixed shadow-2xl pointer-events-auto mt-2"
+        className="fixed shadow-2xl pointer-events-auto"
         style={modalStyle}
       >
         <div
@@ -452,16 +456,7 @@ const TwitterTrackerPopup: React.FC<TwitterTrackerPopupProps> = ({ isOpen, onClo
           </button>
         </div>
 
-        <div
-          className="flex-1 overflow-y-auto min-h-0"
-          style={
-            isDocked
-              ? dockSide === 'left'
-                ? { paddingRight: 0 }
-                : { paddingLeft: 0 }
-              : undefined
-          }
-        >
+        <div className="flex-1 overflow-y-auto min-h-0">
           <TwitterTrackerContent />
         </div>
 
