@@ -30,6 +30,7 @@ import type { PolymarketComment, PolymarketHolder, PolymarketActivity, Polymarke
 import type { ExtendedPredictionMarket } from '~/hooks/useDFlowMarkets';
 import { useUser } from '~/components/UserContext';
 import { useTurnkeySigner } from '~/components/TurnkeySignerContext';
+import PinGate from '~/components/predictions/PinGate';
 import { showEnhancedToast, updateEnhancedToast } from '~/utils/enhancedToast';
 import { SourceBadge, PolygonWalletCard } from '~/components/predictions';
 import {
@@ -2021,7 +2022,7 @@ export default function MarketDetailPage() {
   const pageTitle = `${market.title} | Predictions`;
 
   return (
-    <>
+    <PinGate>
       <Head><title>{pageTitle}</title></Head>
 
       <div
@@ -3472,6 +3473,6 @@ export default function MarketDetailPage() {
         @keyframes slideUp { from { transform: translateY(100%); } to { transform: translateY(0); } }
         @keyframes slideDown { from { transform: translateY(0); } to { transform: translateY(100%); } }
       `}</style>
-    </>
+    </PinGate>
   );
 }

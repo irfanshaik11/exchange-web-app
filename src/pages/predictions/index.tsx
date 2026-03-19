@@ -22,6 +22,7 @@ import {
   type SortOption,
   type MarketFilterState,
 } from '../../components/predictions';
+import PinGate from '../../components/predictions/PinGate';
 import { useUser } from '../../components/UserContext';
 import useUnifiedPredictionMarkets from '~/hooks/useUnifiedPredictionMarkets';
 import usePredictionFavorites from '~/hooks/usePredictionFavorites';
@@ -175,7 +176,7 @@ export default function PredictionsPage() {
   }, [allMarkets]);
 
   return (
-    <>
+    <PinGate>
       <Head>
         <title>Predictions | Interstate</title>
         <meta name="description" content="Trade on real-world prediction markets. Bet on politics, crypto, sports, and more." />
@@ -709,6 +710,6 @@ export default function PredictionsPage() {
           overflow: hidden;
         }
       `}</style>
-    </>
+    </PinGate>
   );
 }

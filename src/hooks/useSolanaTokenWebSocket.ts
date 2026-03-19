@@ -421,10 +421,16 @@ export function useSolanaTokenWebSocket(
               setDevTokens([]);
             }
 
-            // Capture holder_summary from snapshot
+            // Capture holder_summary from snapshot (normalize field names)
             if (message.data.holder_summary) {
-              if (isDev) console.log('[useSolanaTokenWebSocket] Received holder_summary:', message.data.holder_summary);
-              setHolderSummary(message.data.holder_summary);
+              const raw = message.data.holder_summary as any;
+              const normalized = {
+                ...raw,
+                sniper_held_percent: raw.sniper_held_percent ?? raw.sniper_percent ?? 0,
+                top10_held_percent: raw.top10_held_percent ?? raw.top10_holders_pct ?? 0,
+              };
+              if (isDev) console.log('[useSolanaTokenWebSocket] Received holder_summary:', normalized);
+              setHolderSummary(normalized);
             } else {
               setHolderSummary(null);
             }
