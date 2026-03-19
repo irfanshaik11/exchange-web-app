@@ -136,7 +136,7 @@ export function applyPriceUpdate<T extends { mint: string }>(token: T, update: P
     ...(update.total_sells_24h !== undefined && Number(update.total_sells_24h) > 0 &&
         { total_sells_24h: update.total_sells_24h }),
 
-    // Holder percentages - only update with positive values
+    // Holder percentages - only update with positive values (already 0-100 from backend)
     ...(update.insider_percent !== undefined && Number(update.insider_percent) > 0 &&
         { insider_percent: update.insider_percent }),
     ...(update.sniper_percent !== undefined && Number(update.sniper_percent) > 0 &&

@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useState, useCallback, useMemo, type ReactNode } from 'react';
+import { hasActiveFilters as checkActiveFilters } from '~/utils/discoverFilterUtils';
 
 // Filter state interface matching PulseTable's filter structure
 export interface PulseFilters {
@@ -15,7 +16,9 @@ export interface PulseFilters {
   minAge: string;
   maxAge: string;
   ageUnit: string;
-  top10HoldersPercent: string;
+  top10HoldersPercent: string; // legacy: acts as max threshold
+  top10HoldersPercentMin: string;
+  top10HoldersPercentMax: string;
   // New Audit Fields
   devHoldingPercentMin: string;
   devHoldingPercentMax: string;
@@ -80,6 +83,8 @@ export const defaultPulseFilters: PulseFilters = {
   maxAge: "",
   ageUnit: "m",
   top10HoldersPercent: "",
+  top10HoldersPercentMin: "",
+  top10HoldersPercentMax: "",
   devHoldingPercentMin: "",
   devHoldingPercentMax: "",
   snipersPercentMin: "",
@@ -148,51 +153,8 @@ export function PulseFiltersProvider({ children }: PulseFiltersProviderProps) {
     setFilters(defaultPulseFilters);
   }, []);
 
-  // Check if any non-default filters are active (memoized to avoid recomputation)
-  const hasActiveFilters = useMemo(() =>
-    (filters.protocols.length > 0 && !filters.protocols.includes("All")) ||
-    filters.quoteTokens.length > 0 ||
-    !!filters.searchKeywords.trim() ||
-    !!filters.excludeKeywords.trim() ||
-    filters.dexPaid ||
-    filters.caEndsInPump ||
-    !!filters.minAge ||
-    !!filters.maxAge ||
-    !!filters.top10HoldersPercent ||
-    !!filters.minMarketCap ||
-    !!filters.maxMarketCap ||
-    !!filters.minVolume ||
-    !!filters.maxVolume ||
-    !!filters.minLiquidity ||
-    !!filters.maxLiquidity ||
-    !!filters.bCurvePercentMin ||
-    !!filters.bCurvePercentMax ||
-    !!filters.txnsMin ||
-    !!filters.txnsMax ||
-    !!filters.numBuysMin ||
-    !!filters.numBuysMax ||
-    !!filters.numSellsMin ||
-    !!filters.numSellsMax ||
-    !!filters.holdersMin ||
-    !!filters.holdersMax ||
-    !!filters.kolCountMin ||
-    !!filters.kolCountMax ||
-    !!filters.devHoldingPercentMin ||
-    !!filters.devHoldingPercentMax ||
-    !!filters.snipersPercentMin ||
-    !!filters.snipersPercentMax ||
-    !!filters.insidersPercentMin ||
-    !!filters.insidersPercentMax ||
-    !!filters.devMigrationsMin ||
-    !!filters.devMigrationsMax ||
-    !!filters.devPairsCreatedMin ||
-    !!filters.devPairsCreatedMax ||
-    filters.hasWebsite ||
-    filters.hasTwitter ||
-    filters.hasTelegram ||
-    filters.atLeastOneSocial ||
-    filters.onlyPumpLive,
-  [filters]);
+  // Check if any non-default filters are active — single source of truth from discoverFilterUtils
+  const hasActiveFilters = useMemo(() => checkActiveFilters(filters), [filters]);
 
   const value = useMemo(() => ({ filters, setFilters, resetFilters, hasActiveFilters }), [filters, setFilters, resetFilters, hasActiveFilters]);
 

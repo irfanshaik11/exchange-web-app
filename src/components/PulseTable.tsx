@@ -107,6 +107,7 @@ import { mapTradeErrorMessage } from "~/utils/tradeErrorMessages";
 import { dispatchBalanceRefresh } from "~/utils/balanceEvents";
 import { broadcastTradeCompleted, notifyTradePending } from "~/utils/tradeEvents";
 import { listenForTradeEvents, transformToastToError } from "~/utils/createSolanaToastHandler";
+import { hasActiveFilters as checkActiveFilters } from "~/utils/discoverFilterUtils";
 import { TokenAge } from "./TokenAge";
 
 import { preloadTradeChart } from "~/utils/preloadTradeChart";
@@ -2771,6 +2772,7 @@ function PulseTable({
   // Ensures all filter-relevant fields have default values with both field name variants
   const normalizeHttpToken = useCallback((rawToken: any): Token => {
     const holderValue = rawToken.holder_count ?? rawToken.holders ?? rawToken.unique_wallets_24h ?? 0;
+    // Backend already sends percent values in 0-100 format, no conversion needed
     const devPercentValue = rawToken.dev_percent ?? rawToken.dev_held_percentage ?? 0;
     const sniperPercentValue = rawToken.sniper_percent ?? rawToken.sniper_held_percentage ?? 0;
     const insiderPercentValue = rawToken.insider_percent ?? rawToken.insider_held_percentage ?? 0;
@@ -2932,6 +2934,9 @@ function PulseTable({
     }
     return getDefaultFilters();
   });
+
+  // Check if any non-default filters are active — single source of truth from discoverFilterUtils
+  const hasActiveFilters = useMemo(() => checkActiveFilters(filters), [filters]);
 
   // Persist filters to localStorage whenever they change
   useEffect(() => {
@@ -3834,6 +3839,8 @@ function PulseTable({
       !filters.minAge &&
       !filters.maxAge &&
       !filters.top10HoldersPercent &&
+      !filters.top10HoldersPercentMin &&
+      !filters.top10HoldersPercentMax &&
       !filters.minMarketCap &&
       !filters.maxMarketCap &&
       !filters.minVolume &&
@@ -3864,6 +3871,8 @@ function PulseTable({
       !filters.devPairsCreatedMax &&
       !filters.bundlePercentMin &&
       !filters.bundlePercentMax &&
+      !filters.proTradersMin &&
+      !filters.proTradersMax &&
       !filters.globalFeesPaidMin &&
       !filters.globalFeesPaidMax &&
       !filters.twitterReusesMin &&
@@ -4241,14 +4250,15 @@ function PulseTable({
       });
     }
 
-    // Apply top 10 holders percent filter
-    if (filters.top10HoldersPercent) {
-      const threshold = parseFloat(filters.top10HoldersPercent);
+    // Apply top 10 holders percent filter (min/max, user input is 0-100)
+    if (filters.top10HoldersPercentMin || filters.top10HoldersPercentMax || filters.top10HoldersPercent) {
+      const minPct = filters.top10HoldersPercentMin ? parseFloat(filters.top10HoldersPercentMin) : NaN;
+      const maxPct = filters.top10HoldersPercentMax ? parseFloat(filters.top10HoldersPercentMax) : (filters.top10HoldersPercent ? parseFloat(filters.top10HoldersPercent) : NaN);
       filtered = filtered.filter((token) => {
-        // Use top10_holders_pct from WebSocket price_update data
-        const top10Pct = (token as any).top10_holders_pct ?? 0;
-        // Filter tokens where top 10 holders own LESS than the threshold (lower = better distribution)
-        return top10Pct <= threshold;
+        const pct = (token as any).top10_holders_pct ?? 0;
+        if (!isNaN(minPct) && pct < minPct) return false;
+        if (!isNaN(maxPct) && pct > maxPct) return false;
+        return true;
       });
     }
 
@@ -4414,54 +4424,39 @@ function PulseTable({
       });
     }
 
-    // Apply dev holding percent filters (values are decimals 0-1, filter input is percentage 0-100)
-    if (filters.devHoldingPercentMin) {
-      const minPercent = parseFloat(filters.devHoldingPercentMin) / 100;
+    // Apply dev holding percent filters (user input is 0-100)
+    if (filters.devHoldingPercentMin || filters.devHoldingPercentMax) {
+      const minPct = filters.devHoldingPercentMin ? parseFloat(filters.devHoldingPercentMin) : NaN;
+      const maxPct = filters.devHoldingPercentMax ? parseFloat(filters.devHoldingPercentMax) : NaN;
       filtered = filtered.filter((token) => {
-        const devPercent = (token as any).dev_percent ?? (token as any).dev_held_percentage ?? 0;
-        return devPercent >= minPercent;
+        const pct = (token as any).dev_percent ?? (token as any).dev_held_percentage ?? 0;
+        if (!isNaN(minPct) && pct < minPct) return false;
+        if (!isNaN(maxPct) && pct > maxPct) return false;
+        return true;
       });
     }
 
-    if (filters.devHoldingPercentMax) {
-      const maxPercent = parseFloat(filters.devHoldingPercentMax) / 100;
+    // Apply sniper percent filters (user input is 0-100)
+    if (filters.snipersPercentMin || filters.snipersPercentMax) {
+      const minPct = filters.snipersPercentMin ? parseFloat(filters.snipersPercentMin) : NaN;
+      const maxPct = filters.snipersPercentMax ? parseFloat(filters.snipersPercentMax) : NaN;
       filtered = filtered.filter((token) => {
-        const devPercent = (token as any).dev_percent ?? (token as any).dev_held_percentage ?? 0;
-        return devPercent <= maxPercent;
+        const pct = (token as any).sniper_percent ?? (token as any).sniper_held_percentage ?? 0;
+        if (!isNaN(minPct) && pct < minPct) return false;
+        if (!isNaN(maxPct) && pct > maxPct) return false;
+        return true;
       });
     }
 
-    // Apply sniper percent filters (values are decimals 0-1, filter input is percentage 0-100)
-    if (filters.snipersPercentMin) {
-      const minPercent = parseFloat(filters.snipersPercentMin) / 100;
+    // Apply insider percent filters (user input is 0-100)
+    if (filters.insidersPercentMin || filters.insidersPercentMax) {
+      const minPct = filters.insidersPercentMin ? parseFloat(filters.insidersPercentMin) : NaN;
+      const maxPct = filters.insidersPercentMax ? parseFloat(filters.insidersPercentMax) : NaN;
       filtered = filtered.filter((token) => {
-        const sniperPercent = (token as any).sniper_percent ?? (token as any).sniper_held_percentage ?? 0;
-        return sniperPercent >= minPercent;
-      });
-    }
-
-    if (filters.snipersPercentMax) {
-      const maxPercent = parseFloat(filters.snipersPercentMax) / 100;
-      filtered = filtered.filter((token) => {
-        const sniperPercent = (token as any).sniper_percent ?? (token as any).sniper_held_percentage ?? 0;
-        return sniperPercent <= maxPercent;
-      });
-    }
-
-    // Apply insider percent filters (values are decimals 0-1, filter input is percentage 0-100)
-    if (filters.insidersPercentMin) {
-      const minPercent = parseFloat(filters.insidersPercentMin) / 100;
-      filtered = filtered.filter((token) => {
-        const insiderPercent = (token as any).insider_percent ?? (token as any).insider_held_percentage ?? 0;
-        return insiderPercent >= minPercent;
-      });
-    }
-
-    if (filters.insidersPercentMax) {
-      const maxPercent = parseFloat(filters.insidersPercentMax) / 100;
-      filtered = filtered.filter((token) => {
-        const insiderPercent = (token as any).insider_percent ?? (token as any).insider_held_percentage ?? 0;
-        return insiderPercent <= maxPercent;
+        const pct = (token as any).insider_percent ?? (token as any).insider_held_percentage ?? 0;
+        if (!isNaN(minPct) && pct < minPct) return false;
+        if (!isNaN(maxPct) && pct > maxPct) return false;
+        return true;
       });
     }
 
@@ -4499,24 +4494,27 @@ function PulseTable({
       });
     }
 
-    // Apply bundle percent filter
-    if (filters.bundlePercentMin) {
-      const minPercent = parseFloat(filters.bundlePercentMin);
+    // Apply bundle percent filter (user input is 0-100, data is 0-100)
+    if (filters.bundlePercentMin || filters.bundlePercentMax) {
+      const minPct = filters.bundlePercentMin ? parseFloat(filters.bundlePercentMin) : NaN;
+      const maxPct = filters.bundlePercentMax ? parseFloat(filters.bundlePercentMax) : NaN;
       filtered = filtered.filter((token) => {
-        const bundlePercent = (token as any).bundle_percent ?? (token as any).bundled_percentage ?? (token as any).bundler_held_percentage ?? 0;
-        // Convert to percentage if stored as decimal
-        const percentValue = bundlePercent > 1 ? bundlePercent : bundlePercent * 100;
-        return percentValue >= minPercent;
+        const pct = (token as any).bundle_percent ?? (token as any).bundled_percentage ?? (token as any).bundler_held_percentage ?? 0;
+        if (!isNaN(minPct) && pct < minPct) return false;
+        if (!isNaN(maxPct) && pct > maxPct) return false;
+        return true;
       });
     }
 
-    if (filters.bundlePercentMax) {
-      const maxPercent = parseFloat(filters.bundlePercentMax);
+    // Apply pro traders filter (count, not percentage)
+    if (filters.proTradersMin || filters.proTradersMax) {
+      const minPro = filters.proTradersMin ? parseFloat(filters.proTradersMin) : NaN;
+      const maxPro = filters.proTradersMax ? parseFloat(filters.proTradersMax) : NaN;
       filtered = filtered.filter((token) => {
-        const bundlePercent = (token as any).bundle_percent ?? (token as any).bundled_percentage ?? (token as any).bundler_held_percentage ?? 0;
-        // Convert to percentage if stored as decimal
-        const percentValue = bundlePercent > 1 ? bundlePercent : bundlePercent * 100;
-        return percentValue <= maxPercent;
+        const pro = (token as any).pro_traders_count ?? (token as any).pro_traders ?? (token as any).smart_money_count ?? 0;
+        if (!isNaN(minPro) && pro < minPro) return false;
+        if (!isNaN(maxPro) && pro > maxPro) return false;
+        return true;
       });
     }
 
@@ -4775,6 +4773,8 @@ function PulseTable({
     filters.maxAge,
     filters.ageUnit,
     filters.top10HoldersPercent,
+    filters.top10HoldersPercentMin,
+    filters.top10HoldersPercentMax,
     filters.minMarketCap,
     filters.maxMarketCap,
     filters.minVolume,
@@ -4805,6 +4805,8 @@ function PulseTable({
     filters.devPairsCreatedMax,
     filters.bundlePercentMin,
     filters.bundlePercentMax,
+    filters.proTradersMin,
+    filters.proTradersMax,
     filters.globalFeesPaidMin,
     filters.globalFeesPaidMax,
     filters.twitterReusesMin,
@@ -5403,43 +5405,31 @@ function PulseTable({
               className="relative flex h-7 w-7 cursor-pointer items-center justify-center rounded-md transition-all duration-300 ease-out z-[9999]"
               style={{
                 backgroundColor: "transparent",
-                color: showFilters ? AX.aiBlue : AX.muted,
+                color: showFilters ? AX.aiBlue : hasActiveFilters ? "#31e3ac" : AX.muted,
               }}
               onMouseEnter={(e) => {
                 if (!showFilters) {
-                  e.currentTarget.style.color = "#E6E7EA";
+                  e.currentTarget.style.color = hasActiveFilters ? "#5eead4" : "#E6E7EA";
                 }
               }}
               onMouseLeave={(e) => {
                 if (!showFilters) {
-                  e.currentTarget.style.color = AX.muted;
+                  e.currentTarget.style.color = hasActiveFilters ? "#31e3ac" : AX.muted;
                 }
               }}
               onClick={() => setShowFilters(!showFilters)}
             >
               <BsSliders2 size={14} />
 
-              {/* Protocol Filter Count Indicator (exclude 'All') */}
-              {/* {filters.protocols.filter((p: string) => p !== "All").length >
-                0 && (
+              {/* Active filter indicator dot */}
+              {hasActiveFilters && (
                 <span
-                  className="absolute -top-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full text-xs font-bold"
-                  style={{ color: "#f0f5f5", fontSize: "10px", backgroundColor: "#31e3ac" }}
-                >
-                  {filters.protocols.filter((p: string) => p !== "All").length}
-                </span>
-              )} */}
-              {filters.protocols.length > 0 && (
-                <span
-                  className="absolute -top-0.5 -right-0.5 flex h-3 w-3 items-center justify-center rounded-full font-bold"
+                  className="absolute -top-0.5 -right-0.5 h-2.5 w-2.5 rounded-full"
                   style={{
                     backgroundColor: "#31e3ac",
-                    color: "#000000",
-                    fontSize: "8px",
+                    boxShadow: "0 0 4px rgba(49, 227, 172, 0.5)",
                   }}
-                >
-                  {filters.protocols.length}
-                </span>
+                />
               )}
             </button>
 
@@ -5516,10 +5506,11 @@ function PulseTable({
                     <button
                       className="mr-2 cursor-pointer rounded p-1 transition-colors hover:bg-gray-700"
                       onClick={handleResetFilters}
+                      title={hasActiveFilters ? "Clear all filters" : "No active filters"}
                     >
                       <BiRefresh
                         className="h-4 w-4"
-                        style={{ color: AX.text }}
+                        style={{ color: hasActiveFilters ? "#ef4444" : AX.muted }}
                       />
                     </button>
                   </div>
@@ -5860,8 +5851,7 @@ function PulseTable({
                       className="mb-4 flex border-b"
                       style={{ borderColor: AX.border }}
                     >
-                      {/* Socials tab commented out - filters work but rarely used */}
-                      {["Audit", "$ Metrics"].map((tab) => (
+                      {["Audit", "$ Metrics", "Socials"].map((tab) => (
                         <button
                           key={tab}
                           className={`cursor-pointer px-3 py-2 text-sm font-medium transition-colors ${
@@ -5908,8 +5898,8 @@ function PulseTable({
                       <label htmlFor="caEndsInPump" className="text-sm" style={{ color: AX.text }}>CA ends in 'pump'</label>
                     </div> */}
 
-                        {/* Dev Holding % - COMMENTED OUT: Filter not implemented in filter logic */}
-                        {/* <div>
+                        {/* Dev Holding % */}
+                        <div>
                       <label className="block text-sm font-medium mb-2" style={{ color: AX.text }}>Dev Holding %</label>
                       <div className="flex gap-1">
                         <input
@@ -5955,10 +5945,10 @@ function PulseTable({
                           }}
                         />
                       </div>
-                    </div> */}
+                    </div>
 
                         {/* Snipers % */}
-                        {/* <div>
+                        <div>
                       <label className="block text-sm font-medium mb-2" style={{ color: AX.text }}>Snipers %</label>
                       <div className="flex gap-1">
                         <input
@@ -6004,9 +5994,9 @@ function PulseTable({
                           }}
                         />
                       </div>
-                    </div> */}
+                    </div>
                         {/* Insiders % */}
-                        {/* <div>
+                        <div>
                       <label className="block text-sm font-medium mb-2" style={{ color: AX.text }}>Insiders %</label>
                       <div className="flex gap-1">
                         <input
@@ -6052,10 +6042,10 @@ function PulseTable({
                           }}
                         />
                       </div>
-                    </div> */}
+                    </div>
 
                         {/* Bundle % */}
-                        {/* <div>
+                        <div>
                       <label className="block text-sm font-medium mb-2" style={{ color: AX.text }}>Bundle %</label>
                       <div className="flex gap-1">
                         <input
@@ -6101,7 +6091,7 @@ function PulseTable({
                           }}
                         />
                       </div>
-                    </div> */}
+                    </div>
                         {/* Holders */}
                         <div>
                           <label
@@ -6166,7 +6156,7 @@ function PulseTable({
                           </div>
                         </div>
 
-                        {/* Pro Traders - Commented out for now
+                        {/* Pro Traders */}
                         <div>
                           <label
                             className="mb-2 block text-sm font-medium"
@@ -6229,7 +6219,6 @@ function PulseTable({
                             />
                           </div>
                         </div>
-                        */}
                         {/* Dev Migrations */}
                         <div>
                           <label
@@ -6520,31 +6509,55 @@ function PulseTable({
                             </select>
                           </div>
                         </div>
-                        {/* Top 10 Holders % - COMMENTED OUT: Filter not implemented (always returns true) */}
-                        {/* <div>
-                      <label className="block text-sm font-medium mb-2" style={{ color: AX.text }}>Top 10 Holders %</label>
-                      <input
-                        type="number"
-                        placeholder="Enter percentage"
-                        value={pendingFilters.top10HoldersPercent}
-                        onChange={(e) => handlePendingFilterChange(prev => ({ ...prev, top10HoldersPercent: e.target.value }))}
-                          className="w-full px-3 py-2 rounded text-sm border"
-                        style={{
-                            backgroundColor: AX.surface,
-                          borderColor: AX.border,
-                            color: AX.text,
-                            WebkitAppearance: 'none',
-                            MozAppearance: 'textfield',
-                            outline: 'none',
-                            boxShadow: 'none'
-                          }}
-                          onFocus={(e) => {
-                            e.target.style.outline = 'none';
-                            e.target.style.boxShadow = 'none';
-                            e.target.style.borderColor = AX.border;
-                        }}
-                      />
-                    </div> */}
+                        {/* Top 10 Holders % */}
+                        {/* Top 10 Holders % */}
+                        <div>
+                          <label className="mb-2 block text-sm font-medium" style={{ color: AX.text }}>Top 10 Holders %</label>
+                          <div className="flex gap-1">
+                            <input
+                              type="number"
+                              placeholder="Min"
+                              value={pendingFilters.top10HoldersPercentMin}
+                              onChange={(e) => handlePendingFilterChange(prev => ({ ...prev, top10HoldersPercentMin: e.target.value }))}
+                              className="flex-1 rounded border px-3 py-2 text-sm"
+                              style={{
+                                backgroundColor: AX.surface,
+                                borderColor: AX.border,
+                                color: AX.text,
+                                WebkitAppearance: 'none',
+                                MozAppearance: 'textfield',
+                                outline: 'none',
+                                boxShadow: 'none'
+                              }}
+                              onFocus={(e) => {
+                                e.target.style.outline = 'none';
+                                e.target.style.boxShadow = 'none';
+                                e.target.style.borderColor = AX.border;
+                              }}
+                            />
+                            <input
+                              type="number"
+                              placeholder="Max"
+                              value={pendingFilters.top10HoldersPercentMax}
+                              onChange={(e) => handlePendingFilterChange(prev => ({ ...prev, top10HoldersPercentMax: e.target.value }))}
+                              className="flex-1 rounded border px-3 py-2 text-sm"
+                              style={{
+                                backgroundColor: AX.surface,
+                                borderColor: AX.border,
+                                color: AX.text,
+                                WebkitAppearance: 'none',
+                                MozAppearance: 'textfield',
+                                outline: 'none',
+                                boxShadow: 'none'
+                              }}
+                              onFocus={(e) => {
+                                e.target.style.outline = 'none';
+                                e.target.style.boxShadow = 'none';
+                                e.target.style.borderColor = AX.border;
+                              }}
+                            />
+                          </div>
+                        </div>
                       </div>
                     )}
                     {activeCategoryTab === "$ Metrics" && (
@@ -7061,8 +7074,7 @@ function PulseTable({
                         </div>
                       </div>
                     )}
-                    {/* SOCIALS TAB - COMMENTED OUT: Filters work but rarely used */}
-                    {false && activeCategoryTab === "Socials" && (
+                    {activeCategoryTab === "Socials" && (
                       <div className="space-y-3">
                         {/* Twitter Reuses */}
                         <div>
@@ -7070,7 +7082,7 @@ function PulseTable({
                             className="mb-2 block text-sm font-medium"
                             style={{ color: AX.text }}
                           >
-                            Twitter Reuses
+                            X Reuses
                           </label>
                           <div className="flex gap-1">
                             <input
@@ -7249,7 +7261,7 @@ function PulseTable({
                           <label className="flex items-center gap-2">
                             <input
                               type="checkbox"
-                              checked={filters.hasTwitter}
+                              checked={pendingFilters.hasTwitter}
                               onChange={(e) =>
                                 handlePendingFilterChange((prev) => ({
                                   ...prev,
@@ -7265,14 +7277,14 @@ function PulseTable({
                               className="text-sm"
                               style={{ color: AX.text }}
                             >
-                              Twitter
+                              Has X (Twitter)
                             </span>
                           </label>
 
                           <label className="flex items-center gap-2">
                             <input
                               type="checkbox"
-                              checked={filters.hasWebsite}
+                              checked={pendingFilters.hasWebsite}
                               onChange={(e) =>
                                 handlePendingFilterChange((prev) => ({
                                   ...prev,
@@ -7295,7 +7307,7 @@ function PulseTable({
                           <label className="flex items-center gap-2">
                             <input
                               type="checkbox"
-                              checked={filters.hasTelegram}
+                              checked={pendingFilters.hasTelegram}
                               onChange={(e) =>
                                 handlePendingFilterChange((prev) => ({
                                   ...prev,
@@ -7318,7 +7330,7 @@ function PulseTable({
                           <label className="flex items-center gap-2">
                             <input
                               type="checkbox"
-                              checked={filters.atLeastOneSocial}
+                              checked={pendingFilters.atLeastOneSocial}
                               onChange={(e) =>
                                 handlePendingFilterChange((prev) => ({
                                   ...prev,
@@ -7340,7 +7352,7 @@ function PulseTable({
                           <label className="flex items-center gap-2">
                             <input
                               type="checkbox"
-                              checked={filters.onlyPumpLive}
+                              checked={pendingFilters.onlyPumpLive}
                               onChange={(e) =>
                                 handlePendingFilterChange((prev) => ({
                                   ...prev,
@@ -7434,20 +7446,25 @@ function PulseTable({
                       onClick={handleResetFilters}
                       className="mr-2 cursor-pointer rounded-lg px-4 py-2 text-sm font-medium transition-all duration-300 ease-out"
                       style={{
-                        backgroundColor: AX.surface,
-                        color: AX.muted,
-                        border: `1px solid ${AX.border}`,
+                        backgroundColor: hasActiveFilters ? "rgba(239, 68, 68, 0.1)" : AX.surface,
+                        color: hasActiveFilters ? "#ef4444" : AX.muted,
+                        border: `1px solid ${hasActiveFilters ? "rgba(239, 68, 68, 0.3)" : AX.border}`,
                       }}
                       onMouseEnter={(e) => {
-                        e.currentTarget.style.backgroundColor = AX.border;
-                        e.currentTarget.style.color = AX.text;
+                        if (hasActiveFilters) {
+                          e.currentTarget.style.backgroundColor = "rgba(239, 68, 68, 0.2)";
+                          e.currentTarget.style.color = "#f87171";
+                        } else {
+                          e.currentTarget.style.backgroundColor = AX.border;
+                          e.currentTarget.style.color = AX.text;
+                        }
                       }}
                       onMouseLeave={(e) => {
-                        e.currentTarget.style.backgroundColor = AX.surface;
-                        e.currentTarget.style.color = AX.muted;
+                        e.currentTarget.style.backgroundColor = hasActiveFilters ? "rgba(239, 68, 68, 0.1)" : AX.surface;
+                        e.currentTarget.style.color = hasActiveFilters ? "#ef4444" : AX.muted;
                       }}
                     >
-                      Reset
+                      {hasActiveFilters ? "Clear All" : "Reset"}
                     </button>
                     <button
                       className="cursor-pointer rounded-lg px-4 py-2 text-sm font-medium transition-all duration-300 ease-out"
