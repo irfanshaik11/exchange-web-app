@@ -210,32 +210,31 @@ export default function PredictionsPage() {
               <div className="absolute inset-0 bg-gradient-to-r from-black/20 via-transparent to-black/20" />
             </div>
 
-        <main className="relative z-10 flex-1 w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 md:py-8">
-          {/* Geo-restriction Banner */}
-          <div className="mb-4 rounded-xl overflow-hidden relative" style={{
-            background: 'linear-gradient(135deg, rgba(239,68,68,0.15) 0%, rgba(239,68,68,0.08) 50%, rgba(239,68,68,0.15) 100%)',
-            border: '1px solid rgba(239,68,68,0.25)',
-            boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.05), 0 4px 16px rgba(239,68,68,0.1)',
-          }}>
-            {/* Glossy overlay */}
-            <div className="pointer-events-none absolute inset-0" style={{ background: 'linear-gradient(135deg, rgba(255,255,255,0.06) 0%, transparent 50%)' }} />
-            <div className="py-2 overflow-hidden relative">
-              <div className="flex animate-marquee whitespace-nowrap">
-                {[...Array(4)].map((_, i) => (
-                  <span key={i} className="mx-8 text-[13px] font-medium inline-flex items-center gap-2" style={{ color: '#F87171' }}>
-                    <svg className="w-4 h-4 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z" />
-                    </svg>
-                    Trading on prediction markets is not available in your region due to regulatory restrictions
-                    <span className="mx-4 text-red-400/40">•</span>
-                    US users are restricted from trading on Polymarket via Interstate
-                    <span className="mx-4 text-red-400/40">•</span>
-                  </span>
-                ))}
-              </div>
+        {/* Geo-restriction Banner - full width */}
+        <div className="relative z-10 overflow-hidden" style={{
+          background: 'linear-gradient(135deg, rgba(239,68,68,0.15) 0%, rgba(239,68,68,0.08) 50%, rgba(239,68,68,0.15) 100%)',
+          borderBottom: '1px solid rgba(239,68,68,0.25)',
+          boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.05), 0 4px 16px rgba(239,68,68,0.1)',
+        }}>
+          <div className="pointer-events-none absolute inset-0" style={{ background: 'linear-gradient(135deg, rgba(255,255,255,0.06) 0%, transparent 50%)' }} />
+          <div className="py-2 overflow-hidden relative">
+            <div className="flex animate-marquee whitespace-nowrap">
+              {[...Array(4)].map((_, i) => (
+                <span key={i} className="mx-8 text-[13px] font-medium inline-flex items-center gap-2" style={{ color: '#F87171' }}>
+                  <svg className="w-4 h-4 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z" />
+                  </svg>
+                  Trading on prediction markets is not available in your region due to regulatory restrictions
+                  <span className="mx-4 text-red-400/40">•</span>
+                  US users are restricted from trading on Polymarket via Interstate
+                  <span className="mx-4 text-red-400/40">•</span>
+                </span>
+              ))}
             </div>
           </div>
+        </div>
 
+        <main className="relative z-10 flex-1 w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 md:py-8">
           {/* Page Header */}
           <div className="mb-8">
             <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6 mb-6">

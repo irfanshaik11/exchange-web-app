@@ -639,6 +639,7 @@ const TradingViewPredictionChart: React.FC<TradingViewPredictionChartProps> = ({
           'context_menus',
         ],
         theme: 'dark',
+        custom_css_url: '/charting_library/themed.css',
         loading_screen: { backgroundColor: 'transparent' },
         overrides: {
           'paneProperties.background': AX.bg,
@@ -678,6 +679,20 @@ const TradingViewPredictionChart: React.FC<TradingViewPredictionChartProps> = ({
       widget.onChartReady(() => {
         isDev && console.log('[TV] Chart ready - hiding loading');
         setIsLoading(false);
+
+        // Set INTERSTATE.SO watermark - matches trenches chart
+        try {
+          const watermarkApi = widget.watermark();
+          if (watermarkApi) {
+            watermarkApi.setContentProvider(() => [
+              { text: "INTERSTATE.SO", fontSize: 96, lineHeight: 0, vertOffset: 0 },
+            ]);
+            watermarkApi.customVisibility().setValue(true);
+            watermarkApi.color().setValue("rgba(35, 38, 42, 1)");
+          }
+        } catch (e) {
+          // Watermark API may not be available in all versions
+        }
 
         // For multi-series, add comparison symbols using ref for latest config
         const currentConfig = seriesConfigRef.current.length > 0 ? seriesConfigRef.current : initialSeriesConfig;
