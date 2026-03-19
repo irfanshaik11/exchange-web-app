@@ -147,9 +147,9 @@ export default function PredictionCard({
   }, [market.ticker, market.yesPrice, priceChange, market.priceHistory]);
 
   return (
-    <Link href={href}>
+    <Link href={href} className="h-full block">
       <motion.div
-        className="group relative rounded-2xl cursor-pointer overflow-hidden bg-white/[0.05] border border-white/[0.08] backdrop-blur-xl"
+        className="group relative rounded-2xl cursor-pointer overflow-hidden bg-white/[0.05] border border-white/[0.08] backdrop-blur-xl h-full flex flex-col"
         style={{
           opacity: isActive ? 1 : 0.75,
           boxShadow: '0 8px 32px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.06)',
@@ -190,7 +190,7 @@ export default function PredictionCard({
         )}
 
         {/* Card Content */}
-        <div className="p-4">
+        <div className="p-4 flex flex-col flex-1">
           {/* Top Row: Status + Actions */}
           <div className="flex items-center justify-between mb-3">
             <div className="flex items-center gap-2">
@@ -248,7 +248,7 @@ export default function PredictionCard({
 
           {/* Title */}
           <h3
-            className="font-semibold text-sm leading-snug line-clamp-2 mb-3"
+            className="font-semibold text-sm leading-snug line-clamp-2 mb-auto"
             style={{ color: C.text }}
           >
             {market.title}
