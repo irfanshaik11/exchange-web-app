@@ -11,7 +11,7 @@ import {
 } from 'react-icons/hi';
 
 const AX = {
-  bg: "#0a0b0d",
+  bg: "#111214",
   surface: "#12141a",
   surface2: "#1a1d24",
   border: "#1e2028",

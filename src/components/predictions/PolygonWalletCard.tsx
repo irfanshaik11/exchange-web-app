@@ -12,7 +12,7 @@ import { getPolymarketBalance, autoConvertUsdcToUsdce, type PolymarketBalance } 
 
 // Color palette matching the predictions page
 const AX = {
-  bg: "#0a0b0d",
+  bg: "#111214",
   surface: "#12141a",
   surface2: "#0e1012",
   border: "#1e2028",

@@ -60,7 +60,7 @@ const USDC_MINT = 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v';
 
 /* ---------- AXIOM palette (matching token trade page) ---------- */
 const AX = {
-  bg: "#101114",
+  bg: "#111214",
   surface: "#1E1F26",
   surface2: "#17191E",
   border: "#2A2B33",
@@ -456,7 +456,7 @@ const CommentsSection: React.FC<{ comments: PolymarketComment[]; isLoading: bool
 
       {/* Results count if filters active */}
       {hasActiveFilters && (
-        <div className="flex-shrink-0 px-3 py-1.5 text-[10px] flex items-center justify-between" style={{ backgroundColor: AX.surface }}>
+        <div className="flex-shrink-0 px-3 py-1.5 text-[10px] flex items-center justify-between" style={{ backgroundColor: AX.bg }}>
           <span style={{ color: AX.muted }}>{filteredComments.length} results</span>
           <button
             onClick={() => setAuthorFilter('')}
@@ -788,7 +788,7 @@ const ActivitySection: React.FC<{ activities: PolymarketActivity[]; isLoading: b
 
       {/* Results count if filters active */}
       {hasActiveFilters && (
-        <div className="flex-shrink-0 px-3 py-1.5 text-[10px] flex items-center justify-between" style={{ backgroundColor: AX.surface }}>
+        <div className="flex-shrink-0 px-3 py-1.5 text-[10px] flex items-center justify-between" style={{ backgroundColor: AX.bg }}>
           <span style={{ color: AX.muted }}>{filteredActivities.length} results</span>
           <button
             onClick={() => { setTypeFilter('all'); setNameFilter(''); setOutcomeFilter('all'); }}
@@ -987,7 +987,7 @@ const OutcomesSection: React.FC<{
 
       {/* Results count if filters active */}
       {hasActiveFilters && (
-        <div className="flex-shrink-0 px-3 py-1.5 text-[10px] flex items-center justify-between" style={{ backgroundColor: AX.surface }}>
+        <div className="flex-shrink-0 px-3 py-1.5 text-[10px] flex items-center justify-between" style={{ backgroundColor: AX.bg }}>
           <span style={{ color: AX.muted }}>{filteredMarkets.length} of {event.markets.length} outcomes</span>
           <button
             onClick={() => setNameFilter('')}
@@ -1016,8 +1016,8 @@ const OutcomesSection: React.FC<{
             return (
               <div
                 key={market.id}
-                className="flex items-center gap-3 p-2.5 rounded-lg"
-                style={{ backgroundColor: AX.surface }}
+                className="flex items-center gap-3 p-2.5 rounded-lg border border-[#2A2B33]"
+                style={{ backgroundColor: '#111214' }}
               >
                 {/* Outcome image and name */}
                 <div className="flex-1 flex items-center gap-2 min-w-0">
@@ -1057,15 +1057,15 @@ const OutcomesSection: React.FC<{
                 <div className="w-32 flex gap-1.5">
                   <button
                     onClick={() => onSelectOutcome?.(market.id, 'yes')}
-                    className="flex-1 px-2 py-1.5 rounded text-[10px] font-medium transition-all hover:opacity-90"
-                    style={{ backgroundColor: AX.greenBg, color: AX.green }}
+                    className="flex-1 px-2 py-1.5 rounded-md text-[10px] font-semibold transition-all hover:opacity-90 border border-[#2A2B33]"
+                    style={{ backgroundColor: '#111214', color: AX.green }}
                   >
                     Yes {yesPriceCents.toFixed(0)}¢
                   </button>
                   <button
                     onClick={() => onSelectOutcome?.(market.id, 'no')}
-                    className="flex-1 px-2 py-1.5 rounded text-[10px] font-medium transition-all hover:opacity-90"
-                    style={{ backgroundColor: AX.redBg, color: AX.red }}
+                    className="flex-1 px-2 py-1.5 rounded-md text-[10px] font-semibold transition-all hover:opacity-90 border border-[#FF4D7F40]"
+                    style={{ backgroundColor: '#111214', color: AX.red }}
                   >
                     No {noPriceCents.toFixed(0)}¢
                   </button>
@@ -2027,7 +2027,7 @@ export default function MarketDetailPage() {
       <div
         className="min-h-screen w-full flex flex-col overflow-y-auto"
         style={{
-          backgroundColor: "#0f1012",
+          backgroundColor: "#111214",
           color: AX.text,
           fontFamily: "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", \"Inter\", system-ui, sans-serif",
         }}
@@ -2379,151 +2379,94 @@ export default function MarketDetailPage() {
           </div>
 
           {/* RIGHT: Trade Action Panel */}
-          <div className="flex-shrink-0 min-w-[260px] basis-[280px] md:basis-[310px] lg:basis-[330px] hidden lg:flex flex-col">
-            <div className="px-3 py-2 flex-1 overflow-auto">
+          <div className="flex-shrink-0 min-w-[260px] basis-[280px] md:basis-[310px] lg:basis-[330px] hidden lg:flex flex-col text-[12px] leading-tight" style={{ backgroundColor: '#111214' }}>
+            <div className="flex-1 overflow-auto">
               {/* Polymarket Trade Panel */}
               {isPolymarket ? (
                 <div>
                     {/* Selected Outcome Header */}
                     {selectedOutcomeMarket ? (
-                      <div className="flex items-center gap-3 mb-4">
+                      <div className="flex items-center gap-2.5 px-3 py-2 mb-2 border-b border-[#2A2B33]">
                         {(selectedOutcomeMarket.image || selectedOutcomeMarket.icon) ? (
                           <img
                             src={selectedOutcomeMarket.image || selectedOutcomeMarket.icon}
                             alt=""
-                            className="w-12 h-12 rounded-xl object-cover"
+                            className="w-9 h-9 rounded-lg object-cover"
                           />
                         ) : (
                           <div
-                            className="w-12 h-12 rounded-xl flex items-center justify-center text-lg font-bold"
+                            className="w-9 h-9 rounded-lg flex items-center justify-center text-sm font-bold"
                             style={{ backgroundColor: getAvatarColor(selectedOutcomeMarket.groupItemTitle || 'O'), color: '#fff' }}
                           >
                             {(selectedOutcomeMarket.groupItemTitle || 'O').charAt(0).toUpperCase()}
                           </div>
                         )}
                         <div className="flex-1 min-w-0">
-                          <h3 className="font-semibold text-sm truncate" style={{ color: AX.text }}>
+                          <h3 className="font-semibold text-[13px] truncate text-[#E6E7EA]">
                             {selectedOutcomeMarket.groupItemTitle || selectedOutcomeMarket.question || 'Selected Outcome'}
                           </h3>
                           <button
                             onClick={() => setSelectedOutcomeMarket(null)}
-                            className="text-[10px] hover:underline"
-                            style={{ color: AX.muted }}
+                            className="text-[10px] text-[#70E0B0] hover:underline"
                           >
                             Change outcome
                           </button>
                         </div>
                       </div>
                     ) : (
-                      <div className="text-center py-3 mb-4 rounded-lg" style={{ backgroundColor: AX.bg }}>
-                        <p className="text-xs" style={{ color: AX.muted }}>
+                      <div className="text-center py-2.5 mb-2 mx-3 rounded-lg bg-[#1A1B1E] border border-[#2A2B33]">
+                        <p className="text-[11px] text-[#9CA3AF]">
                           Select an outcome from the Outcomes tab
                         </p>
                       </div>
                     )}
 
                     {/* Buy / Sell Toggle + Order Type */}
-                    <div className="mb-4">
+                    <div className="px-3 py-1.5 border-b border-[#2A2B33]">
                       <div className="flex items-center gap-2">
-                        {/* Buy/Sell Toggle */}
-                        <div className="flex-1 relative h-9 rounded-lg overflow-hidden" style={{ backgroundColor: AX.bg, border: `1px solid ${AX.border}` }}>
-                          {/* Sliding highlight */}
+                        {/* Buy/Sell Toggle - matches trenches */}
+                        <div className="flex-1 relative h-9 rounded-lg border border-[#2A2B33] bg-[#1E1F26] overflow-hidden">
                           <div
                             className="absolute top-0 left-0 h-full w-1/2 rounded-md transition-transform duration-200"
                             style={{
                               transform: tradeMode === 'sell' ? 'translateX(100%)' : 'translateX(0%)',
-                              background: tradeMode === 'buy' ? AX.green : AX.red,
+                              background: tradeMode === 'buy' ? '#70E0B0' : '#FF4D7F',
                             }}
                           />
-                          {/* Buttons */}
                           <div className="relative z-10 grid grid-cols-2 h-full">
                             <button
                               onClick={() => setTradeMode('buy')}
-                              className="flex items-center justify-center h-full text-sm font-semibold cursor-pointer select-none transition-colors"
-                              style={{ color: tradeMode === 'buy' ? '#000' : AX.muted }}
+                              className="flex items-center justify-center h-full text-[13px] font-semibold cursor-pointer select-none"
+                              style={{ color: tradeMode === 'buy' ? '#000' : '#C7CBD1' }}
                             >
                               Buy
                             </button>
                             <button
                               onClick={() => setTradeMode('sell')}
-                              className="flex items-center justify-center h-full text-sm font-semibold cursor-pointer select-none transition-colors"
-                              style={{ color: tradeMode === 'sell' ? '#fff' : AX.muted }}
+                              className="flex items-center justify-center h-full text-[13px] font-semibold cursor-pointer select-none"
+                              style={{ color: tradeMode === 'sell' ? '#000' : '#C7CBD1' }}
                             >
                               Sell
                             </button>
                           </div>
                         </div>
-                        {/* Order Type Dropdown */}
-                        <div className="relative">
-                          <button
-                            onClick={() => setShowOrderTypeDropdown(!showOrderTypeDropdown)}
-                            className="h-9 px-3 rounded-lg flex items-center gap-1 text-sm font-medium transition-colors"
-                            style={{
-                              backgroundColor: AX.bg,
-                              border: `1px solid ${AX.border}`,
-                              color: AX.muted,
-                            }}
-                          >
-                            {orderType === 'market' ? 'Market' : 'Limit'}
-                            <svg
-                              className={`w-3.5 h-3.5 transition-transform ${showOrderTypeDropdown ? 'rotate-180' : ''}`}
-                              fill="none"
-                              stroke="currentColor"
-                              viewBox="0 0 24 24"
-                            >
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                            </svg>
-                          </button>
+                      </div>
+                    </div>
 
-                          {/* Dropdown Menu */}
-                          {showOrderTypeDropdown && (
-                            <>
-                              {/* Backdrop to close dropdown */}
-                              <div
-                                className="fixed inset-0 z-40"
-                                onClick={() => setShowOrderTypeDropdown(false)}
-                              />
-                              <div
-                                className="absolute right-0 top-full mt-1 z-50 py-1 rounded-lg shadow-xl min-w-[120px]"
-                                style={{
-                                  backgroundColor: AX.surface,
-                                  border: `1px solid ${AX.border}`,
-                                }}
-                              >
-                                <button
-                                  onClick={() => {
-                                    setOrderType('market');
-                                    setShowOrderTypeDropdown(false);
-                                  }}
-                                  className="w-full px-3 py-2 text-left text-sm flex items-center justify-between hover:bg-white/5 transition-colors"
-                                  style={{ color: orderType === 'market' ? AX.green : AX.text }}
-                                >
-                                  <span>Market</span>
-                                  {orderType === 'market' && (
-                                    <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
-                                      <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
-                                    </svg>
-                                  )}
-                                </button>
-                                <button
-                                  onClick={() => {
-                                    setOrderType('limit');
-                                    setShowOrderTypeDropdown(false);
-                                  }}
-                                  className="w-full px-3 py-2 text-left text-sm flex items-center justify-between hover:bg-white/5 transition-colors"
-                                  style={{ color: orderType === 'limit' ? AX.purple : AX.text }}
-                                >
-                                  <span>Limit</span>
-                                  {orderType === 'limit' && (
-                                    <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
-                                      <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
-                                    </svg>
-                                  )}
-                                </button>
-                              </div>
-                            </>
-                          )}
-                        </div>
+                    {/* MARKET / LIMIT tabs - matches trenches */}
+                    <div className="px-3 pt-1 pb-1.5 border-b border-[#2A2B33]">
+                      <div className="flex items-center gap-6">
+                        {(['market', 'limit'] as const).map((t) => (
+                          <button
+                            key={t}
+                            onClick={() => setOrderType(t)}
+                            className={`pb-1 text-[12px] font-semibold uppercase tracking-wide transition-colors hover:text-[#E6E7EA] ${
+                              orderType === t ? 'text-[#70E0B0] border-b-2 border-[#70E0B0]' : 'text-[#9CA3AF]'
+                            }`}
+                          >
+                            {t === 'market' ? 'MARKET' : 'LIMIT'}
+                          </button>
+                        ))}
                       </div>
                     </div>
 
@@ -2531,15 +2474,12 @@ export default function MarketDetailPage() {
                     {orderType === 'limit' && (
                       <div className="mb-4">
                         <div className="flex items-center justify-between mb-2">
-                          <span className="text-xs" style={{ color: AX.muted }}>Limit Price</span>
-                          <span className="text-xs" style={{ color: AX.muted }}>
+                          <span className="text-[10px] font-semibold text-[#9CA3AF] uppercase tracking-wide">Limit Price</span>
+                          <span className="text-[10px] text-[#9CA3AF]">
                             {tradeMode === 'buy' ? 'Max price to pay' : 'Min price to receive'}
                           </span>
                         </div>
-                        <div
-                          className="flex items-center justify-between rounded-lg px-2"
-                          style={{ backgroundColor: AX.bg, border: `1px solid ${AX.border}` }}
-                        >
+                        <div className="flex items-center justify-between rounded-lg px-2 border border-[#2A2B33] bg-[#25282B]">
                           <button
                             onClick={() => setLimitPriceCents(prev => Math.max(1, prev - 1))}
                             className="w-10 h-10 flex items-center justify-center text-xl font-bold rounded-md transition-colors hover:bg-white/10"
@@ -2565,8 +2505,7 @@ export default function MarketDetailPage() {
                             <button
                               key={delta}
                               onClick={() => setLimitPriceCents(prev => Math.max(1, Math.min(99, prev - delta)))}
-                              className="px-2 py-1 rounded text-xs font-medium transition-colors"
-                              style={{ backgroundColor: AX.bg, color: AX.muted, border: `1px solid ${AX.border}` }}
+                              className="px-2 py-1 rounded text-[11px] font-medium transition-colors border border-[#2A2B33] bg-[#25282B] text-[#9CA3AF] hover:bg-[#1E1F26]"
                             >
                               −{delta}¢
                             </button>
@@ -2575,8 +2514,7 @@ export default function MarketDetailPage() {
                             <button
                               key={delta}
                               onClick={() => setLimitPriceCents(prev => Math.max(1, Math.min(99, prev + delta)))}
-                              className="px-2 py-1 rounded text-xs font-medium transition-colors"
-                              style={{ backgroundColor: AX.bg, color: AX.muted, border: `1px solid ${AX.border}` }}
+                              className="px-2 py-1 rounded text-[11px] font-medium transition-colors border border-[#2A2B33] bg-[#25282B] text-[#9CA3AF] hover:bg-[#1E1F26]"
                             >
                               +{delta}¢
                             </button>
@@ -2585,6 +2523,8 @@ export default function MarketDetailPage() {
                       </div>
                     )}
 
+                    {/* Yes/No + Amount + Trade - wrapped with padding */}
+                    <div className="px-3 pt-2">
                     {/* Yes / No Buttons */}
                     {(() => {
                       // Parse prices from selected outcome - use SAME formula as OutcomesSection
@@ -2601,56 +2541,113 @@ export default function MarketDetailPage() {
                       const yesPriceCents = Math.round(yesPrice * 100 * 10) / 10;
                       const noPriceCents = Math.round(noPrice * 100 * 10) / 10;
                       return (
-                        <div className="grid grid-cols-2 gap-2 mb-4">
+                        <div className="grid grid-cols-2 gap-2 mb-3">
                           <button
                             onClick={() => setSelectedSide('yes')}
-                            className="py-3 rounded-lg flex items-center justify-center gap-2 transition-all"
+                            className="h-9 rounded-lg flex items-center justify-center gap-1.5 text-[12px] font-semibold transition-all"
                             style={{
-                              backgroundColor: selectedSide === 'yes' ? AX.green : AX.bg,
-                              border: `2px solid ${selectedSide === 'yes' ? AX.green : AX.border}`,
-                              color: selectedSide === 'yes' ? '#000' : AX.green,
+                              backgroundColor: selectedSide === 'yes' ? '#70E0B0' : '#1E1F26',
+                              border: `1px solid ${selectedSide === 'yes' ? '#70E0B0' : '#2A2B33'}`,
+                              color: selectedSide === 'yes' ? '#000' : '#70E0B0',
                             }}
                           >
-                            <span className="font-bold">Yes</span>
-                            <span className="text-sm">{yesPriceCents.toFixed(0)}¢</span>
+                            Yes <span className="font-normal">{yesPriceCents.toFixed(0)}¢</span>
                           </button>
                           <button
                             onClick={() => setSelectedSide('no')}
-                            className="py-3 rounded-lg flex items-center justify-center gap-2 transition-all"
+                            className="h-9 rounded-lg flex items-center justify-center gap-1.5 text-[12px] font-semibold transition-all"
                             style={{
-                              backgroundColor: selectedSide === 'no' ? AX.red : AX.bg,
-                              border: `2px solid ${selectedSide === 'no' ? AX.red : AX.border}`,
-                              color: selectedSide === 'no' ? '#fff' : AX.muted,
+                              backgroundColor: selectedSide === 'no' ? '#FF4D7F' : '#1E1F26',
+                              border: `1px solid ${selectedSide === 'no' ? '#FF4D7F' : '#2A2B33'}`,
+                              color: selectedSide === 'no' ? '#000' : '#9CA3AF',
                             }}
                           >
-                            <span className="font-bold">No</span>
-                            <span className="text-sm">{noPriceCents.toFixed(0)}¢</span>
+                            No <span className="font-normal">{noPriceCents.toFixed(0)}¢</span>
                           </button>
                         </div>
                       );
                     })()}
 
-                    {/* Amount Input */}
+                    {/* Amount Input - matches trenches */}
                     <div className="mb-3">
-                      <div className="flex items-center justify-between mb-2">
-                        <span className="text-xs" style={{ color: AX.muted }}>Amount</span>
-                        <span className="text-xl font-bold" style={{ color: AX.text }}>
-                          ${amount || '0'}
-                        </span>
+                      <div className="rounded-lg border border-[#2A2B33] bg-[#25282B]">
+                        <div className="flex items-center justify-between gap-3 px-3 py-1.5">
+                          <div className="flex items-center gap-1">
+                            <span className="text-[10px] font-semibold text-[#9CA3AF] uppercase tracking-wide">Amount</span>
+                            <input
+                              type="text"
+                              inputMode="decimal"
+                              value={amount}
+                              onChange={(e) => { setAmount(e.target.value); setIsSellMax(false); }}
+                              placeholder="0.00"
+                              className="h-8 w-20 bg-transparent border-none text-left pl-2 text-[12px] font-normal text-[#E6E7EA] tabular-nums placeholder:text-[#9CA3AF] focus:outline-none"
+                              style={{ fontFamily: 'ui-monospace, SFMono-Regular, "SF Mono", Consolas, "Liberation Mono", Menlo, monospace' }}
+                            />
+                          </div>
+                          <span className="text-[14px] font-semibold text-[#E6E7EA]">$</span>
+                        </div>
+
+                        {/* Preset buttons grid - matches trenches */}
+                        <div className="border-t border-[#000] rounded-b-lg overflow-hidden">
+                          <div className="grid grid-cols-5">
+                            {tradeMode === 'buy' ? (
+                              <>
+                                {[1, 5, 20, 100].map((qa) => (
+                                  <button
+                                    key={qa}
+                                    onClick={() => setAmount(prev => String((parseFloat(prev) || 0) + qa))}
+                                    className="h-9 border-r border-[#000] last:border-r-0 text-[12px] font-semibold tabular-nums bg-[#25282B] hover:bg-[#1E1F26] text-[#E6E7EA]"
+                                  >
+                                    ${qa}
+                                  </button>
+                                ))}
+                                <button
+                                  onClick={() => polygonBalance && setAmount(Math.floor(polygonBalance.usdc).toString())}
+                                  className="h-9 text-[12px] font-semibold bg-[#25282B] hover:bg-[#1E1F26] text-[#E6E7EA]"
+                                >
+                                  Max
+                                </button>
+                              </>
+                            ) : (
+                              <>
+                                {[25, 50, 75, 100].map((pct) => {
+                                  const tokenValue = userTokenPosition
+                                    ? userTokenPosition.tokenAmount * (selectedSide === 'yes' ? currentYesPrice : currentNoPrice) * (pct / 100)
+                                    : 0;
+                                  return (
+                                    <button
+                                      key={pct}
+                                      onClick={() => { setAmount(tokenValue.toFixed(2)); setIsSellMax(pct === 100); }}
+                                      disabled={!userTokenPosition || userTokenPosition.tokenAmount <= 0}
+                                      className="h-9 border-r border-[#000] last:border-r-0 text-[12px] font-semibold tabular-nums bg-[#25282B] hover:bg-[#1E1F26] text-[#E6E7EA] disabled:opacity-50"
+                                    >
+                                      {pct}%
+                                    </button>
+                                  );
+                                })}
+                                <button
+                                  onClick={() => {
+                                    if (userTokenPosition && userTokenPosition.tokenAmount > 0) {
+                                      const maxValue = userTokenPosition.tokenAmount * (selectedSide === 'yes' ? currentYesPrice : currentNoPrice);
+                                      setAmount(maxValue.toFixed(2));
+                                      setIsSellMax(true);
+                                    }
+                                  }}
+                                  disabled={!userTokenPosition || userTokenPosition.tokenAmount <= 0}
+                                  className="h-9 text-[12px] font-semibold bg-[#25282B] hover:bg-[#1E1F26] text-[#70E0B0] disabled:opacity-50"
+                                >
+                                  Max
+                                </button>
+                              </>
+                            )}
+                          </div>
+                        </div>
                       </div>
-                      <input
-                        type="number"
-                        value={amount}
-                        onChange={(e) => { setAmount(e.target.value); setIsSellMax(false); }}
-                        placeholder="0"
-                        className="w-full px-3 py-3 rounded-lg text-lg font-semibold outline-none text-center"
-                        style={{ backgroundColor: AX.bg, border: `1px solid ${AX.border}`, color: AX.text }}
-                      />
                     </div>
 
                     {/* Position Info for SELL mode */}
                     {tradeMode === 'sell' && (
-                      <div className="mb-3 p-2 rounded-lg" style={{ backgroundColor: AX.bg, border: `1px solid ${AX.border}` }}>
+                      <div className="mb-3 p-2 rounded-lg border border-[#2A2B33] bg-[#1A1B1E]">
                         {userTokenPosition && userTokenPosition.tokenAmount > 0 ? (
                           <div className="flex justify-between items-center text-xs">
                             <span style={{ color: AX.muted }}>Your {selectedSide.toUpperCase()} tokens:</span>
@@ -2666,71 +2663,11 @@ export default function MarketDetailPage() {
                       </div>
                     )}
 
-                    {/* Quick Amount Buttons */}
-                    <div className="flex gap-2 mb-4">
-                      {tradeMode === 'buy' ? (
-                        // BUY mode: show +$1, +$20, +$100, Max
-                        <>
-                          {[1, 20, 100].map((qa) => (
-                            <button
-                              key={qa}
-                              onClick={() => setAmount(prev => String((parseFloat(prev) || 0) + qa))}
-                              className="flex-1 py-2 rounded-lg text-xs font-medium transition-colors"
-                              style={{ backgroundColor: AX.bg, color: AX.text, border: `1px solid ${AX.border}` }}
-                            >
-                              +${qa}
-                            </button>
-                          ))}
-                          <button
-                            onClick={() => polygonBalance && setAmount(Math.floor(polygonBalance.usdc).toString())}
-                            className="flex-1 py-2 rounded-lg text-xs font-medium transition-colors"
-                            style={{ backgroundColor: AX.bg, color: AX.text, border: `1px solid ${AX.border}` }}
-                          >
-                            Max
-                          </button>
-                        </>
-                      ) : (
-                        // SELL mode: show 25%, 50%, 75%, Max based on position
-                        <>
-                          {[25, 50, 75].map((pct) => {
-                            const tokenValue = userTokenPosition
-                              ? userTokenPosition.tokenAmount * (selectedSide === 'yes' ? currentYesPrice : currentNoPrice) * (pct / 100)
-                              : 0;
-                            return (
-                              <button
-                                key={pct}
-                                onClick={() => { setAmount(tokenValue.toFixed(2)); setIsSellMax(false); }}
-                                disabled={!userTokenPosition || userTokenPosition.tokenAmount <= 0}
-                                className="flex-1 py-2 rounded-lg text-xs font-medium transition-colors disabled:opacity-50"
-                                style={{ backgroundColor: AX.bg, color: AX.text, border: `1px solid ${AX.border}` }}
-                              >
-                                {pct}%
-                              </button>
-                            );
-                          })}
-                          <button
-                            onClick={() => {
-                              if (userTokenPosition && userTokenPosition.tokenAmount > 0) {
-                                // Calculate approximate USD value for display
-                                const maxValue = userTokenPosition.tokenAmount * (selectedSide === 'yes' ? currentYesPrice : currentNoPrice);
-                                setAmount(maxValue.toFixed(2));
-                                // Set flag to sell ALL tokens (bypasses price-based calculation in trade handler)
-                                setIsSellMax(true);
-                              }
-                            }}
-                            disabled={!userTokenPosition || userTokenPosition.tokenAmount <= 0}
-                            className="flex-1 py-2 rounded-lg text-xs font-medium transition-colors disabled:opacity-50"
-                            style={{ backgroundColor: AX.mint, color: '#000', border: `1px solid ${AX.mint}` }}
-                          >
-                            Max
-                          </button>
-                        </>
-                      )}
-                    </div>
+                    {/* Quick Amount Buttons now integrated into Amount container above */}
 
                     {/* Quote Display */}
                     {polymarketQuote && parseFloat(amount) > 0 && (
-                      <div className="mb-3 p-3 rounded-lg" style={{ backgroundColor: AX.bg, border: `1px solid ${AX.border}` }}>
+                      <div className="mb-3 p-2.5 rounded-lg border border-[#2A2B33] bg-[#1A1B1E]">
                         <div className="space-y-1.5">
                           {/* Price: Show limit price for limit orders, market price for market orders */}
                           <div className="flex justify-between text-xs">
@@ -2807,7 +2744,7 @@ export default function MarketDetailPage() {
 
                     {/* Polygon Balance Display */}
                     {user?.bearerToken && (
-                      <div className="mb-3 p-2.5 rounded-lg" style={{ backgroundColor: AX.bg, border: `1px solid ${AX.border}` }}>
+                      <div className="mb-3 p-2.5 rounded-lg border border-[#2A2B33] bg-[#1A1B1E]">
                         <div className="flex items-center justify-between">
                           <div className="flex items-center gap-2">
                             <span className="text-xs" style={{ color: AX.muted }}>Polygon Wallet</span>
@@ -2843,7 +2780,7 @@ export default function MarketDetailPage() {
                       </div>
                     )}
 
-                    {/* Trade Button */}
+                    {/* Trade Button - matches trenches */}
                     <button
                       onClick={handlePolymarketTrade}
                       disabled={
@@ -2855,11 +2792,10 @@ export default function MarketDetailPage() {
                         geoblockStatus?.blocked ||
                         !user?.bearerToken
                       }
-                      className="w-full py-3 rounded-lg font-semibold flex items-center justify-center gap-2 transition-all disabled:cursor-not-allowed"
+                      className="w-full h-10 rounded-full text-[14px] font-semibold flex items-center justify-center gap-2 transition-all cursor-pointer disabled:cursor-not-allowed disabled:opacity-50"
                       style={{
-                        backgroundColor: tradeMode === 'buy' ? AX.green : AX.red,
-                        color: tradeMode === 'buy' ? '#000' : '#fff',
-                        opacity: (!selectedOutcomeMarket || !amount || parseFloat(amount) <= 0 || isExecutingTrade || geoblockStatus?.blocked || !user?.bearerToken) ? 0.5 : 1,
+                        backgroundColor: tradeMode === 'buy' ? '#70E0B0' : '#FF4D7F',
+                        color: '#000',
                       }}
                     >
                       {isExecutingTrade ? (
@@ -2879,8 +2815,10 @@ export default function MarketDetailPage() {
                       )}
                     </button>
 
+                    </div>{/* close px-3 pt-2 wrapper */}
+
                     {/* Help Text */}
-                    <p className="text-[10px] mt-3 text-center" style={{ color: AX.muted }}>
+                    <p className="text-[10px] mt-3 text-center px-3" style={{ color: AX.muted }}>
                       {!user?.bearerToken ? (
                         'Log in to trade on Polymarket'
                       ) : !polygonBalance?.hasTradingBalance ? (
@@ -2892,7 +2830,7 @@ export default function MarketDetailPage() {
 
                     {/* Open Orders Section */}
                     {openOrders.length > 0 && (
-                      <div className="mt-4 border-t pt-3" style={{ borderColor: AX.border }}>
+                      <div className="border-t border-[#2A2B33] px-3 pt-3">
                         <div className="flex items-center justify-between mb-2">
                           <span className="text-[10px] font-semibold uppercase tracking-wide" style={{ color: AX.muted }}>
                             Open Orders ({openOrders.length})
@@ -2952,11 +2890,11 @@ export default function MarketDetailPage() {
                       </div>
                     )}
 
-                    {/* Market Stats Section */}
-                    <div className="mt-4 border-t" style={{ borderColor: AX.border }}>
+                    {/* Market Stats Section - matches trenches Token Info */}
+                    <div className="border-t border-[#2A2B33]">
                       <button
                         onClick={() => setShowMarketStats(!showMarketStats)}
-                        className="w-full flex items-center justify-between py-2 hover:opacity-80 transition-opacity"
+                        className="w-full flex items-center justify-between px-3 py-2 hover:opacity-80 transition-opacity"
                       >
                         <span className="text-[10px] font-semibold uppercase tracking-wide" style={{ color: AX.muted }}>
                           Market Stats
@@ -2973,7 +2911,7 @@ export default function MarketDetailPage() {
                         </svg>
                       </button>
                       {showMarketStats && (
-                        <div className="pb-3 space-y-2">
+                        <div className="px-3 pb-3 space-y-2">
                           {/* Volume */}
                           <div className="flex items-center justify-between">
                             <span className="text-[10px] uppercase tracking-wide" style={{ color: AX.muted }}>Volume</span>
@@ -3016,10 +2954,10 @@ export default function MarketDetailPage() {
                     </div>
 
                     {/* About Section */}
-                    <div className="border-t" style={{ borderColor: AX.border }}>
+                    <div className="border-t border-[#2A2B33]">
                       <button
                         onClick={() => setShowAbout(!showAbout)}
-                        className="w-full flex items-center justify-between py-2 hover:opacity-80 transition-opacity"
+                        className="w-full flex items-center justify-between px-3 py-2 hover:opacity-80 transition-opacity"
                       >
                         <span className="text-[10px] font-semibold uppercase tracking-wide" style={{ color: AX.muted }}>
                           About
@@ -3036,7 +2974,7 @@ export default function MarketDetailPage() {
                         </svg>
                       </button>
                       {showAbout && (
-                        <div className="pb-3">
+                        <div className="px-3 pb-3">
                           <p className="text-[11px] leading-relaxed" style={{ color: AX.text }}>
                             {polyEvent?.description || 'No description available.'}
                           </p>
@@ -3045,10 +2983,10 @@ export default function MarketDetailPage() {
                     </div>
 
                     {/* Resolution Section */}
-                    <div className="border-t" style={{ borderColor: AX.border }}>
+                    <div className="border-t border-[#2A2B33]">
                       <button
                         onClick={() => setShowResolution(!showResolution)}
-                        className="w-full flex items-center justify-between py-2 hover:opacity-80 transition-opacity"
+                        className="w-full flex items-center justify-between px-3 py-2 hover:opacity-80 transition-opacity"
                       >
                         <span className="text-[10px] font-semibold uppercase tracking-wide" style={{ color: AX.muted }}>
                           Resolution
@@ -3065,7 +3003,7 @@ export default function MarketDetailPage() {
                         </svg>
                       </button>
                       {showResolution && (
-                        <div className="pb-3 space-y-2">
+                        <div className="px-3 pb-3 space-y-2">
                           {/* Resolver Contract - link to Polygonscan */}
                           {(selectedOutcomeMarket?.resolvedBy || polyEvent?.markets?.[0]?.resolvedBy) && (
                             <div className="flex items-center justify-between">

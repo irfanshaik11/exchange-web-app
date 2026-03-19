@@ -661,7 +661,10 @@ export function usePolymarketComments(
       const response = await fetch(`${API_BASE}/comments?event_id=${encodeURIComponent(eventId)}`);
 
       if (!response.ok) {
-        throw new Error(`API error: ${response.status}`);
+        // Silently handle 422 and other errors - comments are non-critical
+        setComments([]);
+        setIsLoading(false);
+        return;
       }
 
       const json = await response.json();
@@ -669,8 +672,8 @@ export function usePolymarketComments(
       setComments(data.comments || data || []);
       setError(null);
     } catch (err) {
-      console.error('[Polymarket] Failed to fetch comments:', err);
-      setError(err instanceof Error ? err.message : 'Failed to fetch comments');
+      // Silently fail - comments are non-critical
+      setComments([]);
     } finally {
       setIsLoading(false);
     }

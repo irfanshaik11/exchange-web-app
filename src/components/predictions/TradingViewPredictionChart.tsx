@@ -5,7 +5,7 @@ const isDev = process.env.NODE_ENV !== 'production';
 
 /* ---------- AXIOM palette ---------- */
 const AX = {
-  bg: "#101114",
+  bg: "#111214",
   surface: "#1E1F26",
   surface2: "#17191E",
   border: "#2A2B33",
@@ -183,7 +183,7 @@ const InlineOrderBook: React.FC<{
   const maxSize = Math.max(...bids.map(b => b.size), ...asks.map(a => a.size), 1);
 
   return (
-    <div className="flex flex-col h-full" style={{ backgroundColor: AX.surface, borderLeft: `1px solid ${AX.border}`, width: 220, minWidth: 220, flexShrink: 0 }}>
+    <div className="flex flex-col h-full" style={{ backgroundColor: AX.bg, borderLeft: `1px solid ${AX.border}`, width: 220, minWidth: 220, flexShrink: 0 }}>
       {/* Header */}
       <div className="flex items-center justify-between p-2 border-b" style={{ borderColor: AX.border }}>
         <span className="text-xs font-medium" style={{ color: AX.text }}>Order Book</span>
@@ -643,6 +643,8 @@ const TradingViewPredictionChart: React.FC<TradingViewPredictionChartProps> = ({
         overrides: {
           'paneProperties.background': AX.bg,
           'paneProperties.backgroundType': 'solid',
+          'paneProperties.backgroundGradientStartColor': AX.bg,
+          'paneProperties.backgroundGradientEndColor': AX.bg,
           'paneProperties.vertGridProperties.color': AX.border,
           'paneProperties.horzGridProperties.color': AX.border,
           'scalesProperties.textColor': AX.muted,

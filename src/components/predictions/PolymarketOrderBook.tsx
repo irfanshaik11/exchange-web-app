@@ -9,11 +9,11 @@ import usePolymarketOrderBook, {
 
 // Color palette
 const AX = {
-  bg: '#0a0b0d',
-  surface: '#12141a',
-  border: '#1e2028',
-  text: '#f0f0f0',
-  muted: '#6b7280',
+  bg: '#111214',
+  surface: '#1E1F26',
+  border: '#2A2B33',
+  text: '#f0f5f5',
+  muted: '#9CA3AF',
   green: '#4ADE80',
   greenBg: 'rgba(74, 222, 128, 0.15)',
   red: '#F87171',

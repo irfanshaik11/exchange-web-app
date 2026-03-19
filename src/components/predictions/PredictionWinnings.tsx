@@ -21,7 +21,7 @@ import {
 
 // Color palette
 const C = {
-  bg: "#0a0b0d",
+  bg: "#111214",
   surface: "#12141a",
   surfaceHover: "#1a1d24",
   border: "#1e2028",
