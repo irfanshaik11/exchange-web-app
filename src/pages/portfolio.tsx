@@ -386,7 +386,7 @@ const ChainIcon = ({ chain = 'sol', size = 'small' }: { chain?: string; size?: '
 // SOL icon component for inline use (kept for backward compatibility)
 const SolIcon = () => <ChainIcon chain="sol" />;
 
-const spotTabs = ["Active Positions", /* "History", */ "Top 100", "Activity", /* "Predictions" */];
+const spotTabs = ["Active Positions", /* "History", */ "Top 100", "Activity", "Predictions"];
 
 // Token metadata cache interface
 interface TokenMetadataCache extends UnifiedTokenMetadata {
@@ -3804,7 +3804,6 @@ export default function PortfolioPage() {
                       </div>
                     )}
                   </div>
-                  {/* Predictions tab - hidden while feature is disabled
                   {activeSpotTab === 3 && (
                     <div className="w-full space-y-4 pb-16">
                       {user?.bearerToken ? (
@@ -3824,7 +3823,6 @@ export default function PortfolioPage() {
                       )}
                     </div>
                   )}
-                  */}
                 </div>
               </div>
             </div>
