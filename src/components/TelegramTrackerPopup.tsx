@@ -4,14 +4,16 @@ import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { FaTimes } from 'react-icons/fa';
 import TelegramTrackerContent from './TelegramTrackerContent';
-import { useDockedPanel, DOCKED_PANEL_WIDTH } from '../contexts/DockedPanelContext';
+import { useDockedPanel } from '../contexts/DockedPanelContext';
+import { DockedPanelResizeHandle } from './DockedPanelResizeHandle';
 
 const DOCK_THRESHOLD = 60;
-const DOCKED_WIDTH = 400;
+const DOCKED_WIDTH_DEFAULT = 400;
+const MIN_DOCKED_WIDTH = 320;
+const MAX_DOCKED_WIDTH = 900;
 /** Top offset so docked panel sits below navbar + header (matches app chrome) */
 const DOCK_TOP_OFFSET_PX = 80;
-/** Bottom offset so docked panel stops above the fixed footer */
-const DOCK_FOOTER_OFFSET_PX = 56;
+const DOCK_BOTTOM_PX = 28;
 type DockSide = 'none' | 'left' | 'right';
 
 interface TelegramTrackerPopupProps {
@@ -64,21 +66,42 @@ const TelegramTrackerPopup: React.FC<TelegramTrackerPopupProps> = ({ isOpen, onC
     return 'none';
   };
 
+  const getInitialDockedWidth = (): number => {
+    if (typeof window === 'undefined') return DOCKED_WIDTH_DEFAULT;
+    try {
+      const saved = localStorage.getItem('telegram-popup-docked-width');
+      if (saved != null) {
+        const n = parseInt(saved, 10);
+        if (!Number.isNaN(n) && n >= MIN_DOCKED_WIDTH && n <= MAX_DOCKED_WIDTH) return n;
+      }
+    } catch {
+      // Ignore
+    }
+    return DOCKED_WIDTH_DEFAULT;
+  };
+
   const [position, setPosition] = useState(getInitialPosition);
   const [size, setSize] = useState(getInitialSize);
   const [dockSide, setDockSide] = useState<DockSide>(getInitialDock);
+  const [dockedWidth, setDockedWidth] = useState(getInitialDockedWidth);
   const [isDragging, setIsDragging] = useState(false);
   const [isResizing, setIsResizing] = useState(false);
+  const [isResizingDocked, setIsResizingDocked] = useState(false);
+  const [showResizeIndicator, setShowResizeIndicator] = useState(false);
   const modalRef = useRef<HTMLDivElement>(null);
   const headerRef = useRef<HTMLDivElement>(null);
   const resizeHandleRef = useRef<HTMLDivElement>(null);
+  const dockedResizeHandleRef = useRef<HTMLDivElement>(null);
   const dragStartRef = useRef({ x: 0, y: 0 });
   const resizeStartRef = useRef({ x: 0, y: 0, width: 0, height: 0 });
+  const dockedResizeStartRef = useRef({ x: 0, width: 0, side: 'left' as DockSide });
   const isDraggingRef = useRef(false);
   const isResizingRef = useRef(false);
+  const isResizingDockedRef = useRef(false);
   const activePointerIdRef = useRef<number | null>(null);
   const positionRef = useRef(position);
   const sizeRef = useRef(size);
+  const dockedWidthRef = useRef(dockedWidth);
 
   useEffect(() => {
     positionRef.current = position;
@@ -87,6 +110,10 @@ const TelegramTrackerPopup: React.FC<TelegramTrackerPopupProps> = ({ isOpen, onC
   useEffect(() => {
     sizeRef.current = size;
   }, [size]);
+
+  useEffect(() => {
+    dockedWidthRef.current = dockedWidth;
+  }, [dockedWidth]);
 
   // Initialize position in center of screen only if no saved position exists
   useEffect(() => {
@@ -122,18 +149,32 @@ const TelegramTrackerPopup: React.FC<TelegramTrackerPopupProps> = ({ isOpen, onC
     }
   }, [dockSide, isOpen]);
 
+  useEffect(() => {
+    if (typeof window !== 'undefined' && isOpen && dockSide !== 'none') {
+      localStorage.setItem('telegram-popup-docked-width', String(dockedWidth));
+    }
+  }, [dockedWidth, isOpen, dockSide]);
+
   // Notify layout so main content collapses when this popup is docked.
-  // Do NOT include dockCtx in deps: it changes when setDockContrib runs, causing an infinite loop.
   const setDockContribRef = useRef(dockCtx?.setDockContrib);
   setDockContribRef.current = dockCtx?.setDockContrib;
   useEffect(() => {
     const setDockContrib = setDockContribRef.current;
     if (!setDockContrib) return;
-    const w = isOpen && dockSide !== 'none' ? DOCKED_PANEL_WIDTH : 0;
+    const w = isOpen && dockSide !== 'none' ? dockedWidth : 0;
     setDockContrib(POPUP_ID, dockSide === 'left' ? w : 0, dockSide === 'right' ? w : 0);
-  }, [isOpen, dockSide]);
+  }, [isOpen, dockSide, dockedWidth]);
 
   const handlePointerMove = useCallback((e: PointerEvent) => {
+    if (isResizingDockedRef.current) {
+      const deltaX = e.clientX - dockedResizeStartRef.current.x;
+      const startWidth = dockedResizeStartRef.current.width;
+      const side = dockedResizeStartRef.current.side;
+      const newWidth = side === 'left' ? startWidth + deltaX : startWidth - deltaX;
+      const clamped = Math.max(MIN_DOCKED_WIDTH, Math.min(MAX_DOCKED_WIDTH, newWidth));
+      setDockedWidth(clamped);
+      return;
+    }
     if (isResizingRef.current) {
       if (!modalRef.current) return;
       const deltaX = e.clientX - resizeStartRef.current.x;
@@ -158,6 +199,14 @@ const TelegramTrackerPopup: React.FC<TelegramTrackerPopupProps> = ({ isOpen, onC
   }, []);
 
   const handlePointerUp = useCallback((e?: PointerEvent) => {
+    if (isResizingDockedRef.current) {
+      isResizingDockedRef.current = false;
+      setIsResizingDocked(false);
+      if (dockedResizeHandleRef.current && e && dockedResizeHandleRef.current.hasPointerCapture(e.pointerId)) {
+        dockedResizeHandleRef.current.releasePointerCapture(e.pointerId);
+      }
+      return;
+    }
     if (!isDraggingRef.current && !isResizingRef.current) return;
     if (isResizingRef.current) {
       setSize(sizeRef.current);
@@ -202,9 +251,9 @@ const TelegramTrackerPopup: React.FC<TelegramTrackerPopupProps> = ({ isOpen, onC
   }, [handlePointerMove, handlePointerUp]);
 
   useEffect(() => {
-    if (isDragging || isResizing) {
+    if (isDragging || isResizing || isResizingDocked) {
       document.body.style.userSelect = 'none';
-      document.body.style.cursor = isResizing ? 'nwse-resize' : 'grabbing';
+      document.body.style.cursor = isResizingDocked ? 'ew-resize' : isResizing ? 'nwse-resize' : 'grabbing';
     } else {
       document.body.style.userSelect = '';
       document.body.style.cursor = '';
@@ -213,16 +262,30 @@ const TelegramTrackerPopup: React.FC<TelegramTrackerPopupProps> = ({ isOpen, onC
       document.body.style.userSelect = '';
       document.body.style.cursor = '';
     };
-  }, [isDragging, isResizing]);
+  }, [isDragging, isResizing, isResizingDocked]);
 
   const handlePointerDown = useCallback((e: React.PointerEvent) => {
     if (e.button !== 0) return;
     const target = e.target as HTMLElement;
     if (target.closest('button, input')) return;
+    if (dockSide !== 'none' && dockedResizeHandleRef.current?.contains(target)) {
+      e.preventDefault();
+      e.stopPropagation();
+      isResizingDockedRef.current = true;
+      setIsResizingDocked(true);
+      dockedResizeStartRef.current = { x: e.clientX, width: dockedWidthRef.current, side: dockSide };
+      try {
+        dockedResizeHandleRef.current?.setPointerCapture(e.pointerId);
+      } catch {
+        // Ignore
+      }
+      return;
+    }
     if (dockSide !== 'none') {
       const winW = window.innerWidth;
       const offset = dockCtx ? dockCtx.getDockedOffset(POPUP_ID, dockSide) : 0;
-      const newX = dockSide === 'left' ? offset : winW - offset - DOCKED_WIDTH;
+      const w = dockedWidthRef.current;
+      const newX = dockSide === 'left' ? offset : winW - offset - w;
       const newY = DOCK_TOP_OFFSET_PX;
       setPosition({ x: newX, y: newY });
       setDockSide('none');
@@ -270,46 +333,44 @@ const TelegramTrackerPopup: React.FC<TelegramTrackerPopupProps> = ({ isOpen, onC
 
   const isDocked = dockSide !== 'none';
   const dockOffset = dockCtx && isDocked ? dockCtx.getDockedOffset(POPUP_ID, dockSide as 'left' | 'right') : 0;
+  const dockedZIndex = dockCtx && isDocked ? dockCtx.getDockedZIndex(POPUP_ID, dockSide as 'left' | 'right') : 10000;
   const modalStyle: React.CSSProperties = isDocked
     ? {
         ...(dockSide === 'left' ? { left: dockOffset } : { right: dockOffset }),
         top: DOCK_TOP_OFFSET_PX,
-        width: `${DOCKED_WIDTH}px`,
-        height: `calc(100vh - ${DOCK_TOP_OFFSET_PX}px - ${DOCK_FOOTER_OFFSET_PX}px)`,
+        bottom: `calc(${DOCK_BOTTOM_PX}px + env(safe-area-inset-bottom, 0px))`,
+        width: `${dockedWidth}px`,
         maxWidth: 'none',
         maxHeight: 'none',
         minWidth: '320px',
-        minHeight: '300px',
-        backgroundColor: '#050608',
-        opacity: (isDragging || isResizing) ? 0.85 : 1,
+        minHeight: '400px',
+        backgroundColor: '#0a0b0d',
+        opacity: (isDragging || isResizing || isResizingDocked) ? 0.85 : 1,
         cursor: isDragging ? 'grabbing' : 'default',
-        zIndex: 10000,
+        zIndex: dockedZIndex,
         display: 'flex',
         flexDirection: 'column',
-        transition: (isDragging || isResizing) ? 'none' : 'opacity 0.15s',
-        borderLeft: dockSide === 'left' ? '1px solid #2A2B33' : 'none',
-        borderRight: dockSide === 'right' ? '1px solid #2A2B33' : 'none',
-        borderTop: 'none',
-        borderBottom: 'none',
-        borderRadius: dockSide === 'left' ? '0 8px 8px 0' : '8px 0 0 8px',
-        boxShadow: '2px 0 24px rgba(0,0,0,0.4)',
+        transition: (isDragging || isResizing || isResizingDocked) ? 'none' : 'opacity 0.15s',
+        border: '1px solid rgba(255,255,255,0.06)',
+        borderRadius: dockSide === 'left' ? '0 12px 12px 0' : '12px 0 0 12px',
+        boxShadow: '0 8px 32px rgba(0,0,0,0.3), inset 0 1px 0 rgba(255,255,255,0.06)',
       }
     : {
         left: `${position.x}px`,
         top: `${position.y}px`,
         width: `${size.width}px`,
         height: `${size.height}px`,
-        maxWidth: '90vw',
+        // maxWidth: '90vw',
         maxHeight: '90vh',
         minWidth: '400px',
         minHeight: '300px',
         backgroundColor: '#050608',
-        opacity: (isDragging || isResizing) ? 0.85 : 1,
+        opacity: (isDragging || isResizing || isResizingDocked) ? 0.85 : 1,
         cursor: isDragging ? 'grabbing' : 'default',
         zIndex: 10000,
         display: 'flex',
         flexDirection: 'column',
-        transition: (isDragging || isResizing) ? 'none' : 'opacity 0.15s',
+        transition: (isDragging || isResizing || isResizingDocked) ? 'none' : 'opacity 0.15s',
         border: '1px solid #2A2B33',
         borderRadius: '8px',
         boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.5)',
@@ -319,12 +380,12 @@ const TelegramTrackerPopup: React.FC<TelegramTrackerPopupProps> = ({ isOpen, onC
     <div className="fixed inset-0 z-[99999] pointer-events-none">
       <div
         ref={modalRef}
-        className="fixed shadow-2xl pointer-events-auto"
+        className="fixed shadow-2xl pointer-events-auto mt-2"
         style={modalStyle}
       >
         <div
           ref={headerRef}
-          className="flex items-center justify-between px-4 py-3 border-b border-[#2A2B33] select-none flex-shrink-0"
+          className={`flex items-center justify-between px-4 py-3 border-b select-none flex-shrink-0 ${isDocked ? 'border-white/[0.06]' : 'border-[#2A2B33]'}`}
           style={{ cursor: isDragging ? 'grabbing' : 'grab' }}
           onPointerDown={handlePointerDown}
         >
@@ -340,9 +401,30 @@ const TelegramTrackerPopup: React.FC<TelegramTrackerPopupProps> = ({ isOpen, onC
             <FaTimes className="w-4 h-4" />
           </button>
         </div>
-        <div className="flex-1 overflow-y-auto min-h-0">
+        <div
+          className="flex-1 overflow-y-auto min-h-0"
+          style={
+            isDocked
+              ? dockSide === "left"
+                ? { paddingRight: 0 }
+                : { paddingLeft: 0 }
+              : undefined
+          }
+        >
           <TelegramTrackerContent />
         </div>
+        {isDocked && (
+          <DockedPanelResizeHandle
+            handleRef={dockedResizeHandleRef}
+            dockSide={dockSide as 'left' | 'right'}
+            dockedWidth={dockedWidth}
+            showWidthIndicator={showResizeIndicator}
+            isResizingDocked={isResizingDocked}
+            onPointerDown={handlePointerDown}
+            onMouseEnter={() => setShowResizeIndicator(true)}
+            onMouseLeave={() => setShowResizeIndicator(false)}
+          />
+        )}
         {!isDocked && (
           <div
             ref={resizeHandleRef}
