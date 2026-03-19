@@ -333,9 +333,9 @@ export function applyDiscoverFilters(
     // ── Socials ──
     if (filters.hasTwitter || filters.hasWebsite || filters.hasTelegram || filters.atLeastOneSocial) {
       const links = token.links || {};
-      const twitter = links.twitter || links.x || token.twitter_url || '';
-      const website = links.website || token.website_url || '';
-      const telegram = links.telegram || token.telegram_url || '';
+      const twitter = token.twitter || links.twitter || links.x || token.twitter_url || token.x || token.x_url || '';
+      const website = token.website || links.website || token.website_url || '';
+      const telegram = token.telegram || links.telegram || token.telegram_url || '';
       if (filters.hasTwitter && !twitter) return false;
       if (filters.hasWebsite && !website) return false;
       if (filters.hasTelegram && !telegram) return false;

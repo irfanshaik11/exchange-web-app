@@ -7083,7 +7083,7 @@ function PulseTable({
                             className="mb-2 block text-sm font-medium"
                             style={{ color: AX.text }}
                           >
-                            Twitter Reuses
+                            X Reuses
                           </label>
                           <div className="flex gap-1">
                             <input
@@ -7262,7 +7262,7 @@ function PulseTable({
                           <label className="flex items-center gap-2">
                             <input
                               type="checkbox"
-                              checked={filters.hasTwitter}
+                              checked={pendingFilters.hasTwitter}
                               onChange={(e) =>
                                 handlePendingFilterChange((prev) => ({
                                   ...prev,
@@ -7278,14 +7278,14 @@ function PulseTable({
                               className="text-sm"
                               style={{ color: AX.text }}
                             >
-                              Twitter
+                              Has X (Twitter)
                             </span>
                           </label>
 
                           <label className="flex items-center gap-2">
                             <input
                               type="checkbox"
-                              checked={filters.hasWebsite}
+                              checked={pendingFilters.hasWebsite}
                               onChange={(e) =>
                                 handlePendingFilterChange((prev) => ({
                                   ...prev,
@@ -7308,7 +7308,7 @@ function PulseTable({
                           <label className="flex items-center gap-2">
                             <input
                               type="checkbox"
-                              checked={filters.hasTelegram}
+                              checked={pendingFilters.hasTelegram}
                               onChange={(e) =>
                                 handlePendingFilterChange((prev) => ({
                                   ...prev,
@@ -7331,7 +7331,7 @@ function PulseTable({
                           <label className="flex items-center gap-2">
                             <input
                               type="checkbox"
-                              checked={filters.atLeastOneSocial}
+                              checked={pendingFilters.atLeastOneSocial}
                               onChange={(e) =>
                                 handlePendingFilterChange((prev) => ({
                                   ...prev,
@@ -7353,7 +7353,7 @@ function PulseTable({
                           <label className="flex items-center gap-2">
                             <input
                               type="checkbox"
-                              checked={filters.onlyPumpLive}
+                              checked={pendingFilters.onlyPumpLive}
                               onChange={(e) =>
                                 handlePendingFilterChange((prev) => ({
                                   ...prev,
