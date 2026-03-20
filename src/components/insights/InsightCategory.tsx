@@ -13,21 +13,15 @@ interface InsightCategoryProps {
   };
 }
 
-const SENTIMENT_BORDER = {
-  bullish: 'rgba(74, 222, 128, 0.3)',
-  bearish: 'rgba(248, 113, 113, 0.3)',
-  neutral: 'rgba(129, 140, 248, 0.2)',
-} as const;
-
 export function InsightCategory({ label, insight }: InsightCategoryProps) {
   const [open, setOpen] = useState(false);
 
   return (
     <div
-      className="rounded-2xl overflow-hidden transition-all duration-200"
+      className="rounded-2xl overflow-hidden transition-colors duration-200 hover:border-white/[0.12]"
       style={{
-        background: 'rgba(255,255,255,0.03)',
-        border: `1px solid ${open ? 'rgba(255,255,255,0.08)' : 'rgba(255,255,255,0.05)'}`,
+        background: 'rgba(255,255,255,0.04)',
+        border: '1px solid rgba(255,255,255,0.07)',
         backdropFilter: 'blur(12px)',
       }}
     >

@@ -9,10 +9,10 @@ interface NarrativeChipProps {
 export function NarrativeChip({ theme, text, marketCount }: NarrativeChipProps) {
   return (
     <div
-      className="rounded-2xl overflow-hidden"
+      className="rounded-2xl overflow-hidden transition-colors duration-200 hover:border-white/[0.12]"
       style={{
-        background: 'rgba(255,255,255,0.03)',
-        border: '1px solid rgba(255,255,255,0.06)',
+        background: 'rgba(255,255,255,0.04)',
+        border: '1px solid rgba(255,255,255,0.07)',
         backdropFilter: 'blur(12px)',
       }}
     >
@@ -22,9 +22,9 @@ export function NarrativeChip({ theme, text, marketCount }: NarrativeChipProps) 
           <span
             className="text-[9px] font-mono px-1.5 py-0.5 rounded-lg"
             style={{
-              background: 'rgba(129, 140, 248, 0.06)',
-              color: '#818CF8',
-              border: '1px solid rgba(129, 140, 248, 0.1)',
+              background: 'rgba(255,255,255,0.05)',
+              color: 'rgba(255,255,255,0.5)',
+              border: '1px solid rgba(255,255,255,0.07)',
             }}
           >
             {marketCount} market{marketCount !== 1 ? 's' : ''}
