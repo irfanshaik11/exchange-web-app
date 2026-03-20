@@ -201,11 +201,6 @@ export function InsightPanel({ source, marketId }: InsightPanelProps) {
                     >
                       AI Insights
                     </span>
-                    {data?.generatedAt && (
-                      <span className="text-[9px] text-zinc-500 mt-0.5">
-                        Generated {timeAgo(data.generatedAt)}
-                      </span>
-                    )}
                   </div>
                 </div>
                 <HiChevronDown className="w-4 h-4 text-zinc-500" />

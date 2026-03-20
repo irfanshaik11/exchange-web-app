@@ -223,11 +223,6 @@ export function HomepageInsightPanel() {
                         >
                           AI Market Pulse
                         </span>
-                        {data?.generatedAt && (
-                          <span className="text-[9px] text-zinc-500 mt-0.5">
-                            Generated {timeAgo(data.generatedAt)}
-                          </span>
-                        )}
                       </div>
                     </div>
                     <motion.div animate={{ rotate: 180 }} transition={{ duration: 0.2 }}>
