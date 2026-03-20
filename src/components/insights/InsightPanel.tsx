@@ -63,10 +63,13 @@ export function InsightPanel({ source, marketId }: InsightPanelProps) {
       initial={{ opacity: 0, x: 20 }}
       animate={{ opacity: 1, x: 0 }}
       transition={{ duration: 0.3 }}
-      className="flex-shrink-0 hidden xl:flex flex-col bg-white/[0.05] border-l border-white/[0.08] backdrop-blur-xl"
+      className="flex-shrink-0 hidden xl:flex flex-col backdrop-blur-xl"
       style={{
         width: collapsed ? 44 : 320,
         transition: 'width 0.25s cubic-bezier(0.4, 0, 0.2, 1)',
+        background: 'linear-gradient(180deg, rgba(74,222,128,0.03) 0%, rgba(255,255,255,0.04) 30%, rgba(34,211,238,0.03) 60%, rgba(129,140,248,0.03) 100%)',
+        borderLeft: '1px solid rgba(255,255,255,0.08)',
+        boxShadow: 'inset 1px 0 0 rgba(255,255,255,0.04)',
       }}
     >
       {/* Header */}

@@ -53,8 +53,15 @@ export function HomepageInsightPanel() {
       className="hidden xl:block"
       style={{ position: 'fixed', right: '1rem', top: '5rem', width: 330, zIndex: 40 }}
     >
-      {/* Main glass container — matches site's card pattern */}
-      <div className="rounded-2xl overflow-hidden bg-white/[0.05] border border-white/[0.08] backdrop-blur-xl shadow-2xl">
+      {/* Main glass container with iridescent tinge */}
+      <div
+        className="rounded-2xl overflow-hidden backdrop-blur-xl shadow-2xl"
+        style={{
+          background: 'linear-gradient(135deg, rgba(74,222,128,0.04) 0%, rgba(255,255,255,0.05) 25%, rgba(34,211,238,0.04) 50%, rgba(129,140,248,0.04) 75%, rgba(255,255,255,0.05) 100%)',
+          border: '1px solid rgba(255,255,255,0.08)',
+          boxShadow: '0 20px 60px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.06), 0 0 40px rgba(74,222,128,0.03)',
+        }}
+      >
         {/* Header */}
         <button
           onClick={() => setCollapsed(!collapsed)}
