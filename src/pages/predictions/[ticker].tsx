@@ -23,7 +23,8 @@ import { BiWallet, BiCopy } from 'react-icons/bi';
 import Header from '../../components/Header';
 import Footer from '../../components/Footer';
 import { useDFlowMarket, useDFlowTrades, useDFlowOrderBook, useDFlowPriceHistory, useDFlowRealtimePrices, formatVolume, formatOpenInterest, getDFlowQuote, getDFlowSwap } from '~/hooks/useDFlowMarkets';
-import { usePolymarketMarket, usePolymarketOrderBook, usePolymarketPriceHistory, usePolymarketMultiPriceHistory, usePolymarketComments, usePolymarketHolders, usePolymarketActivity, formatPolymarketVolume } from '~/hooks/usePolymarketMarkets';
+import { usePolymarketMarket, usePolymarketPriceHistory, usePolymarketMultiPriceHistory, usePolymarketComments, usePolymarketHolders, usePolymarketActivity, formatPolymarketVolume } from '~/hooks/usePolymarketMarkets';
+import usePolymarketOrderBookWS from '~/hooks/usePolymarketOrderBook';
 import type { ChartSeries } from '~/components/predictions/PolymarketChart';
 import type { ChartSeriesData } from '~/components/predictions/TradingViewPredictionChart';
 import type { PolymarketComment, PolymarketHolder, PolymarketActivity, PolymarketEvent, PolymarketMarket } from '~/hooks/usePolymarketMarkets';
@@ -871,6 +872,7 @@ const OutcomesSection: React.FC<{
   const [nameFilter, setNameFilter] = useState('');
   const [chanceSort, setChanceSort] = useState<'asc' | 'desc'>('desc');
   const [volSort, setVolSort] = useState<'asc' | 'desc' | null>(null);
+  const [showResolved, setShowResolved] = useState(false);
 
   if (isLoading) {
     return (
@@ -888,6 +890,43 @@ const OutcomesSection: React.FC<{
     );
   }
 
+  // Check if prices are real vs fallback (YES + NO should sum to ~1.0)
+  const pricesAreValid = (market: PolymarketMarket): boolean => {
+    try {
+      const prices = JSON.parse(market.outcomePrices).map(Number);
+      const sum = (prices[0] || 0) + (prices[1] || 0);
+      return sum > 0.9 && sum < 1.1 && prices[0] > 0 && prices[1] > 0;
+    } catch {
+      return false;
+    }
+  };
+
+  // Check if a market is fully resolved/closed (no longer tradeable)
+  const isMarketFullyResolved = (market: PolymarketMarket): boolean => {
+    // Explicitly closed and inactive
+    if (market.closed && !market.active) return true;
+    // Resolved + not accepting orders + closed = finalized
+    if (market.resolved && market.acceptingOrders === false && market.closed) return true;
+    // Prices don't sum to 1.0 — stale/invalid data, market is effectively dead
+    // (e.g., YES=0.5 + NO=1.0 = 1.5, or parse failure → 0.5+0.5 but both sides aren't real)
+    if (!pricesAreValid(market) && !market.active) return true;
+    if (!pricesAreValid(market) && market.closed) return true;
+    // Fallback: if prices are completely broken (don't sum to ~1), treat as resolved
+    // even if API flags are ambiguous — invalid prices mean no real trading
+    if (!pricesAreValid(market)) return true;
+    return false;
+  };
+
+  // Check if a market is "In Review" (resolved but in dispute/review period)
+  const isMarketInReview = (market: PolymarketMarket): boolean => {
+    // In Review = resolved but NOT fully closed (still in UMA dispute period)
+    if (market.resolved && !market.closed) return true;
+    if (market.resolved && market.active) return true;
+    // Market has acceptingOrders=false but not formally closed — transitioning state
+    if (market.acceptingOrders === false && !market.closed && !market.resolved && market.active) return true;
+    return false;
+  };
+
   // Parse outcome prices from JSON string
   const parseOutcomePrices = (pricesStr: string): number[] => {
     try {
@@ -897,11 +936,33 @@ const OutcomesSection: React.FC<{
     }
   };
 
-  // Format price as percentage
+  // Check if prices are real vs fallback (YES + NO should be close to 1.0 for real prices)
+  const hasRealPrices = (market: PolymarketMarket): boolean => {
+    try {
+      const prices = JSON.parse(market.outcomePrices).map(Number);
+      const sum = (prices[0] || 0) + (prices[1] || 0);
+      // Real prices sum to ~1.0 (within rounding). Fallback/stale data often doesn't.
+      return sum > 0.9 && sum < 1.1 && prices[0] > 0 && prices[1] > 0;
+    } catch {
+      return false;
+    }
+  };
+
+  // Format price as percentage with 1 decimal precision (matches Polymarket)
   const formatPercent = (price: number): string => {
     const pct = price * 100;
-    if (pct < 1) return '<1%';
+    if (pct < 1 && pct > 0) return '<1%';
+    if (pct === 0) return '0%';
     return `${Math.round(pct)}%`;
+  };
+
+  // Format price in cents with 1 decimal (e.g., 47.9¢ instead of 48¢)
+  const formatCents = (price: number): string => {
+    const cents = price * 100;
+    if (cents < 0.1) return '0.0';
+    if (cents >= 99.9) return '100';
+    // Show 1 decimal for prices between 1¢ and 99¢
+    return cents.toFixed(1);
   };
 
   // Format volume
@@ -913,25 +974,28 @@ const OutcomesSection: React.FC<{
     return `$${v.toFixed(0)}`;
   };
 
-  // Filter and sort markets
-  const filteredMarkets = event.markets
-    .filter(market => {
-      if (!nameFilter) return true;
-      const name = (market.groupItemTitle || market.question || '').toLowerCase();
-      return name.includes(nameFilter.toLowerCase());
-    })
-    .sort((a, b) => {
-      // Volume sort takes priority if active
-      if (volSort) {
-        const volA = parseFloat(a.volume || '0');
-        const volB = parseFloat(b.volume || '0');
-        return volSort === 'desc' ? volB - volA : volA - volB;
-      }
-      // Otherwise sort by chance
-      const pricesA = parseOutcomePrices(a.outcomePrices || '["0.5", "0.5"]');
-      const pricesB = parseOutcomePrices(b.outcomePrices || '["0.5", "0.5"]');
-      return chanceSort === 'desc' ? (pricesB[0] || 0) - (pricesA[0] || 0) : (pricesA[0] || 0) - (pricesB[0] || 0);
-    });
+  // Separate active, in-review, and resolved markets
+  const allFiltered = event.markets.filter(market => {
+    if (!nameFilter) return true;
+    const name = (market.groupItemTitle || market.question || '').toLowerCase();
+    return name.includes(nameFilter.toLowerCase());
+  });
+
+  const activeMarkets = allFiltered.filter(m => !isMarketFullyResolved(m) && !isMarketInReview(m));
+  const inReviewMarkets = allFiltered.filter(m => isMarketInReview(m));
+  const resolvedMarkets = allFiltered.filter(m => isMarketFullyResolved(m) && !isMarketInReview(m));
+
+  // Sort active markets
+  const sortedActiveMarkets = [...activeMarkets].sort((a, b) => {
+    if (volSort) {
+      const volA = parseFloat(a.volume || '0');
+      const volB = parseFloat(b.volume || '0');
+      return volSort === 'desc' ? volB - volA : volA - volB;
+    }
+    const pricesA = parseOutcomePrices(a.outcomePrices || '["0.5", "0.5"]');
+    const pricesB = parseOutcomePrices(b.outcomePrices || '["0.5", "0.5"]');
+    return chanceSort === 'desc' ? (pricesB[0] || 0) - (pricesA[0] || 0) : (pricesA[0] || 0) - (pricesB[0] || 0);
+  });
 
   const hasActiveFilters = nameFilter !== '';
 
@@ -989,7 +1053,9 @@ const OutcomesSection: React.FC<{
       {/* Results count if filters active */}
       {hasActiveFilters && (
         <div className="flex-shrink-0 px-3 py-1.5 text-[10px] flex items-center justify-between" style={{ backgroundColor: AX.bg }}>
-          <span style={{ color: AX.muted }}>{filteredMarkets.length} of {event.markets.length} outcomes</span>
+          <span style={{ color: AX.muted }}>
+            {activeMarkets.length} active{inReviewMarkets.length > 0 ? `, ${inReviewMarkets.length} in review` : ''}{resolvedMarkets.length > 0 ? `, ${resolvedMarkets.length} resolved` : ''} of {event.markets.length}
+          </span>
           <button
             onClick={() => setNameFilter('')}
             className="flex items-center gap-1 hover:underline"
@@ -1002,78 +1068,229 @@ const OutcomesSection: React.FC<{
 
       {/* Scrollable outcome rows */}
       <div className="flex-1 overflow-y-auto p-3 pb-20 space-y-2">
-        {filteredMarkets.length === 0 ? (
+        {sortedActiveMarkets.length === 0 && inReviewMarkets.length === 0 && resolvedMarkets.length === 0 ? (
           <div className="flex items-center justify-center py-8">
             <p className="text-sm" style={{ color: AX.muted }}>No matching outcomes</p>
           </div>
         ) : (
-          filteredMarkets.map((market) => {
-            const prices = parseOutcomePrices(market.outcomePrices || '["0.5", "0.5"]');
-            const yesPrice = prices[0] || 0.5;
-            const noPrice = prices[1] || 0.5;
-            const yesPriceCents = Math.round(yesPrice * 100 * 10) / 10;
-            const noPriceCents = Math.round(noPrice * 100 * 10) / 10;
+          <>
+            {/* Active outcomes */}
+            {sortedActiveMarkets.map((market) => {
+              const realPrices = hasRealPrices(market);
+              const prices = parseOutcomePrices(market.outcomePrices || '["0.5", "0.5"]');
+              const yesPrice = prices[0] || 0.5;
+              const noPrice = prices[1] || 0.5;
 
-            return (
-              <div
-                key={market.id}
-                className="flex items-center gap-3 p-2.5 rounded-lg border border-[#2A2B33]"
-                style={{ backgroundColor: '#111214' }}
-              >
-                {/* Outcome image and name */}
-                <div className="flex-1 flex items-center gap-2 min-w-0">
-                  {(market.image || market.icon) ? (
-                    <img
-                      src={market.image || market.icon}
-                      alt={market.groupItemTitle || 'Outcome'}
-                      className="w-9 h-9 rounded-lg object-cover flex-shrink-0"
-                      onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
-                    />
-                  ) : (
-                    <div
-                      className="w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0 text-sm font-bold"
-                      style={{ backgroundColor: getAvatarColor(market.groupItemTitle || market.id || 'O'), color: '#fff' }}
-                    >
-                      {(market.groupItemTitle || market.question || 'O').charAt(0).toUpperCase()}
-                    </div>
-                  )}
-                  <div className="min-w-0">
-                    <div className="font-medium text-xs truncate" style={{ color: AX.text }}>
-                      {market.groupItemTitle || market.question || 'Outcome'}
-                    </div>
-                    <div className="text-[10px]" style={{ color: AX.muted }}>
-                      {formatVol(market.volume)} Vol.
+              return (
+                <div
+                  key={market.id}
+                  className="flex items-center gap-3 p-2.5 rounded-lg border border-[#2A2B33]"
+                  style={{ backgroundColor: '#111214' }}
+                >
+                  {/* Outcome image and name */}
+                  <div className="flex-1 flex items-center gap-2 min-w-0">
+                    {(market.image || market.icon) ? (
+                      <img
+                        src={market.image || market.icon}
+                        alt={market.groupItemTitle || 'Outcome'}
+                        className="w-9 h-9 rounded-lg object-cover flex-shrink-0"
+                        onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+                      />
+                    ) : (
+                      <div
+                        className="w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0 text-sm font-bold"
+                        style={{ backgroundColor: getAvatarColor(market.groupItemTitle || market.id || 'O'), color: '#fff' }}
+                      >
+                        {(market.groupItemTitle || market.question || 'O').charAt(0).toUpperCase()}
+                      </div>
+                    )}
+                    <div className="min-w-0">
+                      <div className="font-medium text-xs truncate" style={{ color: AX.text }}>
+                        {market.groupItemTitle || market.question || 'Outcome'}
+                      </div>
+                      <div className="text-[10px]" style={{ color: AX.muted }}>
+                        {formatVol(market.volume)} Vol.
+                      </div>
                     </div>
                   </div>
-                </div>
 
-                {/* Percentage chance */}
-                <div className="w-14 text-center">
-                  <span className="text-base font-semibold" style={{ color: AX.text }}>
-                    {formatPercent(yesPrice)}
+                  {/* Percentage chance */}
+                  <div className="w-14 text-center">
+                    <span className="text-base font-semibold" style={{ color: AX.text }}>
+                      {realPrices ? formatPercent(yesPrice) : '--'}
+                    </span>
+                  </div>
+
+                  {/* Buy Yes / Buy No buttons — with decimal precision */}
+                  <div className="w-32 flex gap-1.5">
+                    <button
+                      onClick={() => onSelectOutcome?.(market.id, 'yes')}
+                      className="flex-1 px-2 py-1.5 rounded-md text-[10px] font-semibold transition-all hover:opacity-90 border border-[#2A2B33]"
+                      style={{ backgroundColor: '#111214', color: AX.green }}
+                    >
+                      {realPrices ? `Yes ${formatCents(yesPrice)}¢` : 'Yes'}
+                    </button>
+                    <button
+                      onClick={() => onSelectOutcome?.(market.id, 'no')}
+                      className="flex-1 px-2 py-1.5 rounded-md text-[10px] font-semibold transition-all hover:opacity-90 border border-[#FF4D7F40]"
+                      style={{ backgroundColor: '#111214', color: AX.red }}
+                    >
+                      {realPrices ? `No ${formatCents(noPrice)}¢` : 'No'}
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+
+            {/* In Review outcomes — resolved but in dispute/review period */}
+            {inReviewMarkets.map((market) => {
+              const prices = parseOutcomePrices(market.outcomePrices || '["0","0"]');
+              const yesPrice = prices[0] || 0;
+
+              return (
+                <div
+                  key={market.id}
+                  className="flex items-center gap-3 p-2.5 rounded-lg border"
+                  style={{ backgroundColor: '#111214', borderColor: 'rgba(251,191,36,0.2)' }}
+                >
+                  {/* Outcome image and name */}
+                  <div className="flex-1 flex items-center gap-2 min-w-0">
+                    {(market.image || market.icon) ? (
+                      <img
+                        src={market.image || market.icon}
+                        alt={market.groupItemTitle || 'Outcome'}
+                        className="w-9 h-9 rounded-lg object-cover flex-shrink-0"
+                        onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+                      />
+                    ) : (
+                      <div
+                        className="w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0 text-sm font-bold"
+                        style={{ backgroundColor: getAvatarColor(market.groupItemTitle || market.id || 'O'), color: '#fff' }}
+                      >
+                        {(market.groupItemTitle || market.question || 'O').charAt(0).toUpperCase()}
+                      </div>
+                    )}
+                    <div className="min-w-0">
+                      <div className="font-medium text-xs truncate" style={{ color: AX.text }}>
+                        {market.groupItemTitle || market.question || 'Outcome'}
+                      </div>
+                      <div className="flex items-center gap-1.5 mt-0.5">
+                        <div className="text-[10px]" style={{ color: AX.muted }}>
+                          {formatVol(market.volume)} Vol.
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Percentage + In Review badge */}
+                  <div className="w-14 text-center">
+                    <span className="text-base font-semibold" style={{ color: AX.text }}>
+                      {formatPercent(yesPrice)}
+                    </span>
+                  </div>
+
+                  {/* In Review label instead of trade buttons */}
+                  <div className="w-32 text-center">
+                    <span
+                      className="inline-flex items-center gap-1 px-2 py-1 rounded text-[10px] font-semibold"
+                      style={{ backgroundColor: 'rgba(251,191,36,0.15)', color: '#FBBF24' }}
+                    >
+                      <HiOutlineClock className="w-3 h-3" />
+                      In Review
+                    </span>
+                  </div>
+                </div>
+              );
+            })}
+
+            {/* Resolved outcomes — collapsible section like Polymarket */}
+            {resolvedMarkets.length > 0 && (
+              <>
+                <button
+                  onClick={() => setShowResolved(!showResolved)}
+                  className="w-full flex items-center justify-between px-3 py-2 rounded-lg text-[11px] font-medium transition-colors hover:bg-white/5"
+                  style={{ color: AX.muted, backgroundColor: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)' }}
+                >
+                  <span className="flex items-center gap-1.5">
+                    <HiOutlineCheckCircle className="w-3.5 h-3.5" />
+                    {showResolved ? 'Hide' : 'View'} resolved ({resolvedMarkets.length})
                   </span>
-                </div>
+                  <svg
+                    className={`w-3.5 h-3.5 transition-transform duration-200 ${showResolved ? 'rotate-180' : ''}`}
+                    fill="none" viewBox="0 0 24 24" stroke="currentColor"
+                  >
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                  </svg>
+                </button>
 
-                {/* Buy Yes / Buy No buttons */}
-                <div className="w-32 flex gap-1.5">
-                  <button
-                    onClick={() => onSelectOutcome?.(market.id, 'yes')}
-                    className="flex-1 px-2 py-1.5 rounded-md text-[10px] font-semibold transition-all hover:opacity-90 border border-[#2A2B33]"
-                    style={{ backgroundColor: '#111214', color: AX.green }}
-                  >
-                    Yes {yesPriceCents.toFixed(0)}¢
-                  </button>
-                  <button
-                    onClick={() => onSelectOutcome?.(market.id, 'no')}
-                    className="flex-1 px-2 py-1.5 rounded-md text-[10px] font-semibold transition-all hover:opacity-90 border border-[#FF4D7F40]"
-                    style={{ backgroundColor: '#111214', color: AX.red }}
-                  >
-                    No {noPriceCents.toFixed(0)}¢
-                  </button>
-                </div>
-              </div>
-            );
-          })
+                {showResolved && resolvedMarkets.map((market) => {
+                  // For resolved markets, determine the outcome from prices
+                  // YES won: outcomePrices[0] ≈ 1, NO won: outcomePrices[1] ≈ 1
+                  const prices = parseOutcomePrices(market.outcomePrices || '["0", "0"]');
+                  const yesPrice = prices[0] || 0;
+                  const noPrice = prices[1] || 0;
+                  // Determine result: if YES price > 0.5 → Yes won, else No won
+                  // For fully resolved: one side is ~1.0, other is ~0.0
+                  const yesWon = yesPrice > noPrice && yesPrice > 0.5;
+                  const noWon = noPrice > yesPrice && noPrice > 0.5;
+                  const resultLabel = yesWon ? 'Yes' : noWon ? 'No' : 'No';
+
+                  return (
+                    <div
+                      key={market.id}
+                      className="flex items-center gap-3 p-2.5 rounded-lg border opacity-60"
+                      style={{ backgroundColor: '#0e1012', borderColor: 'rgba(255,255,255,0.04)' }}
+                    >
+                      {/* Outcome image and name */}
+                      <div className="flex-1 flex items-center gap-2 min-w-0">
+                        {(market.image || market.icon) ? (
+                          <img
+                            src={market.image || market.icon}
+                            alt={market.groupItemTitle || 'Outcome'}
+                            className="w-9 h-9 rounded-lg object-cover flex-shrink-0 grayscale"
+                            onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+                          />
+                        ) : (
+                          <div
+                            className="w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0 text-sm font-bold grayscale"
+                            style={{ backgroundColor: getAvatarColor(market.groupItemTitle || market.id || 'O'), color: '#fff' }}
+                          >
+                            {(market.groupItemTitle || market.question || 'O').charAt(0).toUpperCase()}
+                          </div>
+                        )}
+                        <div className="min-w-0">
+                          <div className="font-medium text-xs truncate" style={{ color: AX.muted }}>
+                            {market.groupItemTitle || market.question || 'Outcome'}
+                          </div>
+                          <div className="text-[10px]" style={{ color: AX.muted }}>
+                            {formatVol(market.volume)} Vol.
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Resolution result instead of percentage */}
+                      <div className="w-14 text-center">
+                        <span
+                          className="text-[10px] font-bold px-2 py-1 rounded"
+                          style={{
+                            backgroundColor: yesWon ? 'rgba(74,222,128,0.15)' : 'rgba(248,113,113,0.15)',
+                            color: yesWon ? AX.green : AX.red,
+                          }}
+                        >
+                          {resultLabel}
+                        </span>
+                      </div>
+
+                      {/* No trade buttons for resolved — just show "Resolved" label */}
+                      <div className="w-32 text-center">
+                        <span className="text-[10px]" style={{ color: AX.muted }}>Resolved</span>
+                      </div>
+                    </div>
+                  );
+                })}
+              </>
+            )}
+          </>
         )}
 
         {/* Polymarket link */}
@@ -1322,9 +1539,12 @@ export default function MarketDetailPage() {
     };
   }, [isPolymarket, polyMarket, selectedOutcomeMarket]);
 
-  // Fetch orderbooks for both YES and NO tokens
-  const { orderBook: polyYesOrderBook } = usePolymarketOrderBook(polyTokenIds.yes, { refreshInterval: 5000 });
-  const { orderBook: polyNoOrderBook } = usePolymarketOrderBook(polyTokenIds.no, { refreshInterval: 5000 });
+  // Real-time order book via singleton WS (replaces 2 separate polling hooks)
+  const { yesOrderBook: polyYesOrderBook, noOrderBook: polyNoOrderBook } = usePolymarketOrderBookWS({
+    yesTokenId: polyTokenIds.yes,
+    noTokenId: polyTokenIds.no,
+    enabled: isPolymarket && !!(polyTokenIds.yes || polyTokenIds.no),
+  });
 
   // Polymarket price history for chart (use YES token) - for single-outcome markets
   const { history: polyPriceHistory, isLoading: polyHistoryLoading } = usePolymarketPriceHistory(
@@ -1474,7 +1694,7 @@ export default function MarketDetailPage() {
       });
   }, [isPolymarket, user?.bearerToken, selectedSide, polyTokenIds.yes, polyTokenIds.no]);
 
-  // Polymarket Trading: Fetch quote when amount/token/side changes
+  // Polymarket Trading: Fetch quote when amount/token/side changes (300ms debounce)
   useEffect(() => {
     const amountNum = parseFloat(amount);
     if (!isPolymarket || !amountNum || amountNum <= 0) {
@@ -1489,18 +1709,28 @@ export default function MarketDetailPage() {
       return;
     }
 
-    setIsLoadingQuote(true);
     const side = tradeMode === 'buy' ? 'BUY' : 'SELL';
 
-    getPolymarketQuote({ tokenId, side, amount: amountNum })
-      .then((res) => {
-        if (res.success) setPolymarketQuote(res.data);
-      })
-      .catch((err) => {
-        console.warn('[Polymarket] Quote fetch failed:', err.message);
-        setPolymarketQuote(null);
-      })
-      .finally(() => setIsLoadingQuote(false));
+    // 300ms debounce: typing "1000" fires 1 API call instead of 4
+    // setIsLoadingQuote is set inside the timeout to avoid stuck=true on fast unmount
+    let cancelled = false;
+    const timer = setTimeout(() => {
+      if (cancelled) return;
+      setIsLoadingQuote(true);
+      getPolymarketQuote({ tokenId, side, amount: amountNum })
+        .then((res) => {
+          if (!cancelled && res.success) setPolymarketQuote(res.data);
+        })
+        .catch((err) => {
+          if (!cancelled) {
+            console.warn('[Polymarket] Quote fetch failed:', err.message);
+            setPolymarketQuote(null);
+          }
+        })
+        .finally(() => { if (!cancelled) setIsLoadingQuote(false); });
+    }, 300);
+
+    return () => { cancelled = true; clearTimeout(timer); };
   }, [isPolymarket, amount, selectedSide, tradeMode, polyTokenIds.yes, polyTokenIds.no]);
 
   // Polymarket Trading: Execute trade handler
@@ -1628,6 +1858,7 @@ export default function MarketDetailPage() {
           marketId: polyEvent?.slug || tickerString,
           marketTitle: selectedOutcomeMarket?.question || polyEvent?.title,
           conditionId: selectedOutcomeMarket?.conditionId || selectedOutcomeMarket?.id,
+          outcomeSide: selectedSide === 'yes' ? 'YES' : 'NO',
         },
         user.bearerToken
       );
@@ -1863,17 +2094,21 @@ export default function MarketDetailPage() {
     : historyLoading;
 
   // Transform order book for the chart component
+  // WS hook returns strings (OrderBookLevel), chart expects numbers — parse here
   const orderBookForChart = useMemo(() => {
     if (isPolymarket) {
-      // Use Polymarket orderbook data
-      // Transform from { bids, asks } to { yesBids, yesAsks, noBids, noAsks }
       if (!polyYesOrderBook && !polyNoOrderBook) return null;
 
+      const toNum = (levels: any[]) => levels.map((l: any) => ({
+        price: typeof l.price === 'string' ? parseFloat(l.price) : l.price,
+        size: typeof l.size === 'string' ? parseFloat(l.size) : l.size,
+      }));
+
       return {
-        yesBids: polyYesOrderBook?.bids || [],
-        yesAsks: polyYesOrderBook?.asks || [],
-        noBids: polyNoOrderBook?.bids || [],
-        noAsks: polyNoOrderBook?.asks || [],
+        yesBids: toNum(polyYesOrderBook?.bids || []),
+        yesAsks: toNum(polyYesOrderBook?.asks || []),
+        noBids: toNum(polyNoOrderBook?.bids || []),
+        noAsks: toNum(polyNoOrderBook?.asks || []),
       };
     } else {
       // Use dFlow orderbook

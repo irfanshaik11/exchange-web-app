@@ -1119,6 +1119,7 @@ export const executePolymarketOrder = (
     marketId?: string;
     marketTitle?: string;
     conditionId?: string;
+    outcomeSide?: "YES" | "NO"; // Explicit outcome side (YES/NO token being traded)
   },
   authToken: string
 ) =>
