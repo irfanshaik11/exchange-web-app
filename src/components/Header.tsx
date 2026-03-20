@@ -747,6 +747,9 @@ export default function Header({
         const response = await getPolymarketBalance(user.bearerToken!, false); // Don't auto-convert from header
         if (response.success && response.data) {
           setPolygonBalance(response.data);
+          // Broadcast balance data so predictions page components can use it instantly
+          // instead of waiting for their own separate API call
+          window.dispatchEvent(new CustomEvent('polygon-balance-data', { detail: response.data }));
         }
       } catch (err) {
         console.error("[Header] Error fetching Polygon balance:", err);

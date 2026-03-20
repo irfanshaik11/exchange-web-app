@@ -1,19 +1,44 @@
 // src/services/polymarketOrderBookService.ts
-// Singleton WebSocket service for Polymarket CLOB order book data.
+// Singleton WebSocket service for Polymarket CLOB market data.
 // One WS connection shared across all components — replaces per-instance WebSocket creation.
-// Pattern: follows DFlowWebSocketService from useDFlowMarkets.ts
+// Subscribes with custom_feature_enabled: true to receive all event types:
+//   book, price_change, last_trade_price, best_bid_ask, tick_size_change,
+//   new_market, market_resolved
 
 type BookCallback = (data: any) => void;
 type PriceChangeCallback = (data: any) => void;
+type LastTradePriceCallback = (data: any) => void;
+type BestBidAskCallback = (data: any) => void;
 
 interface Subscription {
   tokenId: string;
   onBook: BookCallback;
   onPriceChange: PriceChangeCallback;
+  onLastTradePrice?: LastTradePriceCallback;
+  onBestBidAsk?: BestBidAskCallback;
+}
+
+// Exported types for consumers
+export interface LastTradePrice {
+  assetId: string;
+  price: number;
+  size: number;
+  side: string;
+  feeRateBps: number;
+  timestamp: number;
+}
+
+export interface BestBidAsk {
+  assetId: string;
+  bestBid: number;
+  bestAsk: number;
+  spread: number;
+  timestamp: number;
 }
 
 const WS_URL = 'wss://ws-subscriptions-clob.polymarket.com/ws/market';
-const KEEPALIVE_MS = 30_000;
+// Polymarket docs: "Send PING every 10 seconds"
+const KEEPALIVE_MS = 10_000;
 const RECONNECT_BASE_MS = 1_000;
 const RECONNECT_MAX_MS = 30_000;
 
@@ -38,15 +63,17 @@ class PolymarketOrderBookService {
   }
 
   /**
-   * Subscribe to order book and price change events for a token.
+   * Subscribe to market events for a token.
    * Returns an unsubscribe function (call on component unmount).
    */
   subscribe(
     tokenId: string,
     onBook: BookCallback,
-    onPriceChange: PriceChangeCallback
+    onPriceChange: PriceChangeCallback,
+    onLastTradePrice?: LastTradePriceCallback,
+    onBestBidAsk?: BestBidAskCallback,
   ): () => void {
-    const sub: Subscription = { tokenId, onBook, onPriceChange };
+    const sub: Subscription = { tokenId, onBook, onPriceChange, onLastTradePrice, onBestBidAsk };
 
     let subs = this.subscriptions.get(tokenId);
     if (!subs) {
@@ -103,14 +130,17 @@ class PolymarketOrderBookService {
           const messages = Array.isArray(data) ? data : [data];
 
           for (const msg of messages) {
-            if (msg.type === 'book' || msg.event_type === 'book') {
+            const eventType = msg.event_type || msg.type;
+
+            if (eventType === 'book') {
               const assetId = msg.asset_id;
               if (!assetId) continue;
               const subs = this.subscriptions.get(assetId);
               if (subs) {
                 for (const sub of subs) sub.onBook(msg);
               }
-            } else if (msg.type === 'price_change' || msg.event_type === 'price_change') {
+
+            } else if (eventType === 'price_change') {
               const priceChanges = msg.price_changes || [];
               for (const change of priceChanges) {
                 const assetId = change.asset_id;
@@ -122,7 +152,39 @@ class PolymarketOrderBookService {
                   }
                 }
               }
+
+            } else if (eventType === 'last_trade_price') {
+              const assetId = msg.asset_id;
+              if (!assetId) continue;
+              const subs = this.subscriptions.get(assetId);
+              if (subs) {
+                const parsed: LastTradePrice = {
+                  assetId,
+                  price: parseFloat(msg.price || '0'),
+                  size: parseFloat(msg.size || '0'),
+                  side: msg.side || '',
+                  feeRateBps: parseInt(msg.fee_rate_bps || '0', 10),
+                  timestamp: parseInt(msg.timestamp || '0', 10),
+                };
+                for (const sub of subs) sub.onLastTradePrice?.(parsed);
+              }
+
+            } else if (eventType === 'best_bid_ask') {
+              const assetId = msg.asset_id;
+              if (!assetId) continue;
+              const subs = this.subscriptions.get(assetId);
+              if (subs) {
+                const parsed: BestBidAsk = {
+                  assetId,
+                  bestBid: parseFloat(msg.best_bid || '0'),
+                  bestAsk: parseFloat(msg.best_ask || '0'),
+                  spread: parseFloat(msg.spread || '0'),
+                  timestamp: parseInt(msg.timestamp || '0', 10),
+                };
+                for (const sub of subs) sub.onBestBidAsk?.(parsed);
+              }
             }
+            // tick_size_change, new_market, market_resolved — not consumed yet
           }
         } catch {
           // Ignore parse errors — non-critical
@@ -177,6 +239,7 @@ class PolymarketOrderBookService {
     this.ws.send(JSON.stringify({
       type: 'market',
       assets_ids: allTokenIds,
+      custom_feature_enabled: true,
     }));
   }
 

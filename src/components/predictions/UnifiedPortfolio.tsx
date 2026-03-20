@@ -523,6 +523,16 @@ export default function UnifiedPortfolio({
     fetchData();
   }, [fetchData]);
 
+  // Pick up balance broadcasts from Header for instant display
+  useEffect(() => {
+    const handleBalanceData = (e: Event) => {
+      const data = (e as CustomEvent).detail;
+      if (data) setBalance(data);
+    };
+    window.addEventListener('polygon-balance-data', handleBalanceData);
+    return () => window.removeEventListener('polygon-balance-data', handleBalanceData);
+  }, []);
+
   // Handlers
   const handleClaim = async (position: ClaimablePosition) => {
     if (!authToken || claimingId) return;

@@ -1439,6 +1439,10 @@ export default function MarketDetailPage() {
   // Ref to track if we've auto-selected best outcome
   const hasAutoSelectedRef = useRef(false);
 
+  // Accumulate live trade prices from WS for real-time chart updates
+  const liveTradePointsRef = useRef<Array<{ time: number; price: number }>>([]);
+  const [liveTradeCount, setLiveTradeCount] = useState(0); // trigger re-render on new trades
+
   // Resizable chart state (matching token trade page)
   const containerRef = useRef<HTMLDivElement | null>(null);
   const MIN_CHART_HEIGHT = 400;
@@ -1539,12 +1543,39 @@ export default function MarketDetailPage() {
     };
   }, [isPolymarket, polyMarket, selectedOutcomeMarket]);
 
-  // Real-time order book via singleton WS (replaces 2 separate polling hooks)
-  const { yesOrderBook: polyYesOrderBook, noOrderBook: polyNoOrderBook } = usePolymarketOrderBookWS({
+  // Real-time order book + live trades via singleton WS (replaces 2 separate polling hooks)
+  const {
+    yesOrderBook: polyYesOrderBook,
+    noOrderBook: polyNoOrderBook,
+    yesLastTrade,
+    noLastTrade,
+  } = usePolymarketOrderBookWS({
     yesTokenId: polyTokenIds.yes,
     noTokenId: polyTokenIds.no,
     enabled: isPolymarket && !!(polyTokenIds.yes || polyTokenIds.no),
   });
+
+  // Accumulate live YES trade prices for real-time chart point appending
+  useEffect(() => {
+    if (!yesLastTrade || !isPolymarket) return;
+    const point = {
+      time: yesLastTrade.timestamp > 1e12 ? yesLastTrade.timestamp : yesLastTrade.timestamp * 1000,
+      price: yesLastTrade.price,
+    };
+    const pts = liveTradePointsRef.current;
+    // Avoid duplicates (same timestamp)
+    if (pts.length > 0 && pts[pts.length - 1].time === point.time) return;
+    pts.push(point);
+    // Cap at 500 points to avoid unbounded growth
+    if (pts.length > 500) pts.splice(0, pts.length - 500);
+    setLiveTradeCount(c => c + 1);
+  }, [yesLastTrade, isPolymarket]);
+
+  // Reset live trade accumulator when token changes
+  useEffect(() => {
+    liveTradePointsRef.current = [];
+    setLiveTradeCount(0);
+  }, [polyTokenIds.yes]);
 
   // Polymarket price history for chart (use YES token) - for single-outcome markets
   const { history: polyPriceHistory, isLoading: polyHistoryLoading } = usePolymarketPriceHistory(
@@ -1617,6 +1648,16 @@ export default function MarketDetailPage() {
       })
       .catch((err) => console.warn('[Polymarket] Balance fetch failed:', err.message));
   }, [isPolymarket, user?.bearerToken]);
+
+  // Listen for balance broadcasts from Header (resolves instantly, no duplicate API call)
+  useEffect(() => {
+    const handleBalanceData = (e: Event) => {
+      const data = (e as CustomEvent).detail;
+      if (data) setPolygonBalance(data);
+    };
+    window.addEventListener('polygon-balance-data', handleBalanceData);
+    return () => window.removeEventListener('polygon-balance-data', handleBalanceData);
+  }, []);
 
   // Polymarket Trading: Fetch open orders for this market
   useEffect(() => {
@@ -2063,17 +2104,27 @@ export default function MarketDetailPage() {
 
   // Transform price history for the chart (use appropriate source based on market type)
   // IMPORTANT: Chart expects timestamps in MILLISECONDS
+  // Merges REST-fetched history with live WS trade prices for real-time updates
   const chartPriceHistory = useMemo(() => {
     if (isPolymarket) {
-      // Use Polymarket price history
+      // Use Polymarket price history + append live trade points from WS
       // Polymarket returns timestamps in SECONDS, convert to milliseconds
-      if (polyPriceHistory.length > 0) {
-        return polyPriceHistory.map(p => ({
-          time: p.timestamp * 1000, // Convert seconds to milliseconds
-          price: p.price,
-        }));
-      }
-      return undefined;
+      const restPoints = polyPriceHistory.length > 0
+        ? polyPriceHistory.map(p => ({
+            time: p.timestamp * 1000,
+            price: p.price,
+          }))
+        : [];
+
+      const livePoints = liveTradePointsRef.current;
+      if (restPoints.length === 0 && livePoints.length === 0) return undefined;
+
+      // Merge: REST points + live points that are newer than the last REST point
+      const lastRestTime = restPoints.length > 0 ? restPoints[restPoints.length - 1].time : 0;
+      const newLivePoints = livePoints.filter(p => p.time > lastRestTime);
+
+      return [...restPoints, ...newLivePoints];
+      // eslint-disable-next-line react-hooks/exhaustive-deps -- liveTradeCount triggers re-merge
     } else {
       // Use dFlow price history (already in correct format)
       if (priceHistory.length > 0) {
@@ -2081,7 +2132,8 @@ export default function MarketDetailPage() {
       }
       return undefined;
     }
-  }, [isPolymarket, polyPriceHistory, priceHistory]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isPolymarket, polyPriceHistory, priceHistory, liveTradeCount]);
 
   // Unified history loading state
   // For multi-outcome markets, use multi-series loading; otherwise use single-series loading

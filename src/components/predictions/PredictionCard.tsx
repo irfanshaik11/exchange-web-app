@@ -88,6 +88,8 @@ interface PredictionCardProps {
   onToggleFavorite?: (market: PredictionMarket) => void;
   onQuickTrade?: (market: PredictionMarket, side: 'yes' | 'no') => void;
   compact?: boolean;
+  /** Live YES price from WS (0-1 scale). Overrides market.yesPrice when present. */
+  liveYesPrice?: number;
 }
 
 const formatVolume = (volume: number): string => {
@@ -120,6 +122,7 @@ export default function PredictionCard({
   onToggleFavorite,
   onQuickTrade,
   compact = false,
+  liveYesPrice,
 }: PredictionCardProps) {
   const [isHovered, setIsHovered] = useState(false);
 
@@ -132,8 +135,12 @@ export default function PredictionCard({
     ? `/predictions/${market.ticker}?source=polymarket`
     : `/predictions/${market.ticker}`;
 
-  const yesPercent = Math.round(market.yesPrice * 100);
-  const noPercent = Math.round(market.noPrice * 100);
+  // Use live WS price if available, otherwise fall back to REST price
+  const effectiveYesPrice = liveYesPrice ?? market.yesPrice;
+  const effectiveNoPrice = liveYesPrice != null ? (1 - liveYesPrice) : market.noPrice;
+  const yesPercent = Math.round(effectiveYesPrice * 100);
+  const noPercent = Math.round(effectiveNoPrice * 100);
+  const hasLivePrice = liveYesPrice != null;
   const priceChange = market.yesPriceChange24h;
   const isPositive = priceChange > 0;
   const isNegative = priceChange < 0;
@@ -279,8 +286,14 @@ export default function PredictionCard({
             <div className="flex items-center gap-3">
               {/* Yes Price */}
               <div>
-                <div className="text-lg font-bold" style={{ color: C.green }}>
+                <div className="flex items-center gap-1.5 text-lg font-bold" style={{ color: C.green }}>
                   {yesPercent}¢
+                  {hasLivePrice && (
+                    <span className="relative flex h-1.5 w-1.5">
+                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full opacity-75" style={{ backgroundColor: C.green }} />
+                      <span className="relative inline-flex rounded-full h-1.5 w-1.5" style={{ backgroundColor: C.green }} />
+                    </span>
+                  )}
                 </div>
                 {priceChange !== 0 && (
                   <div

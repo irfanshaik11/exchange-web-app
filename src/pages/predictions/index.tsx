@@ -2,7 +2,7 @@ import React, { useState, useMemo } from 'react';
 import Head from 'next/head';
 import Image from 'next/image';
 import { motion, AnimatePresence } from 'framer-motion';
-import { HiOutlineSearch, HiOutlineRefresh, HiOutlineTrendingUp, HiOutlineViewGrid, HiOutlineCollection } from 'react-icons/hi';
+import { HiOutlineSearch, HiOutlineRefresh, HiOutlineTrendingUp, HiOutlineViewGrid, HiOutlineCollection, HiOutlineLockClosed } from 'react-icons/hi';
 import Header from '../../components/Header';
 import Footer from '../../components/Footer';
 import {
@@ -25,7 +25,9 @@ import {
 import PinGate from '../../components/predictions/PinGate';
 import { useUser } from '../../components/UserContext';
 import useUnifiedPredictionMarkets from '~/hooks/useUnifiedPredictionMarkets';
+import type { UnifiedPredictionMarket } from '~/hooks/useUnifiedPredictionMarkets';
 import usePredictionFavorites from '~/hooks/usePredictionFavorites';
+import usePolymarketLivePrices from '~/hooks/usePolymarketLivePrices';
 import DataSourceSwitcher, { type PredictionDataSource } from '~/components/predictions/DataSourceSwitcher';
 
 // Vibrant color palette
@@ -71,8 +73,8 @@ export default function PredictionsPage() {
   const [selectedSort, setSelectedSort] = useState<SortOption>('hot');
   const [searchQuery, setSearchQuery] = useState('');
   const [marketFilters, setMarketFilters] = useState<MarketFilterState>(DEFAULT_FILTERS);
-  const [viewMode, setViewMode] = useState<'curated' | 'grid'>('curated');
   const [showPortfolio, setShowPortfolio] = useState(false); // Collapsed by default
+  const [showEndedMarkets, setShowEndedMarkets] = useState(false);
   // TODO: dFlow is disabled for now - only Polymarket is active
   // const [dataSource, setDataSource] = useState<PredictionDataSource>('all');
   const [dataSource, setDataSource] = useState<PredictionDataSource>('polymarket');
@@ -102,6 +104,27 @@ export default function PredictionsPage() {
     if (isLoading) return FALLBACK_MARKETS;
     return [];
   }, [unifiedMarkets, isLoading]);
+
+  // Extract YES token IDs from active Polymarket markets for live WS subscription
+  const activeTokenIds = useMemo(() => {
+    return (allMarkets as UnifiedPredictionMarket[])
+      .filter(m => m.polymarketData?.yesTokenId)
+      .map(m => m.polymarketData!.yesTokenId);
+  }, [allMarkets]);
+
+  // Subscribe to live trade prices for all visible markets via CLOB WS
+  const livePrices = usePolymarketLivePrices(activeTokenIds, activeTokenIds.length > 0);
+
+  // Map ticker → yesTokenId for live price lookup on cards
+  const tokenIdByTicker = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const m of allMarkets as UnifiedPredictionMarket[]) {
+      if (m.polymarketData?.yesTokenId) {
+        map.set(m.ticker, m.polymarketData.yesTokenId);
+      }
+    }
+    return map;
+  }, [allMarkets]);
 
   // Calculate category counts from live data
   const categoryCounts = useMemo(() => {
@@ -163,6 +186,23 @@ export default function PredictionsPage() {
 
     return markets;
   }, [allMarkets, selectedCategory, selectedSort, searchQuery, marketFilters]);
+
+  // Split into active vs ended markets
+  // A market is "ended" if its status is closed/resolved OR its closesAt date has passed
+  // (Polymarket keeps status='active' even after closesAt passes)
+  const activeMarkets = useMemo(() => {
+    const now = Date.now();
+    return filteredMarkets.filter((m) =>
+      m.status === 'active' && new Date(m.closesAt).getTime() > now
+    );
+  }, [filteredMarkets]);
+
+  const endedMarkets = useMemo(() => {
+    const now = Date.now();
+    return filteredMarkets.filter((m) =>
+      m.status !== 'active' || new Date(m.closesAt).getTime() <= now
+    );
+  }, [filteredMarkets]);
 
   // Get featured market (highest volume)
   const featuredMarket = useMemo(() => {
@@ -413,8 +453,8 @@ export default function PredictionsPage() {
             />
           )}
 
-          {/* Curated Sections (when in curated view and no search/filters) */}
-          {viewMode === 'curated' && !searchQuery && selectedCategory === 'all' && allMarkets.length > 0 && (
+          {/* Curated Sections */}
+          {!searchQuery && selectedCategory === 'all' && allMarkets.length > 0 && (
             <div className="mb-8">
               <CuratedSections
                 markets={allMarkets}
@@ -443,7 +483,7 @@ export default function PredictionsPage() {
           */}
 
           {/* Filters - Centered with Horizontally Scrollable Categories/Sort */}
-          <div className="mb-6">
+          <div className="mb-6 relative z-30">
             <div className="flex justify-center items-center gap-2">
               {/* Scrollable filter bar */}
               <div
@@ -477,40 +517,13 @@ export default function PredictionsPage() {
                 />
               </div>
 
-              {/* View Toggle */}
-              <div
-                className="flex-shrink-0 flex items-center gap-1 p-1.5 rounded-2xl bg-white/[0.05] border border-white/[0.08] backdrop-blur-xl"
-              >
-                <button
-                  onClick={() => setViewMode('curated')}
-                  className="p-2 rounded-lg transition-all"
-                  style={{
-                    backgroundColor: viewMode === 'curated' ? `${AX.accent}15` : 'transparent',
-                    color: viewMode === 'curated' ? AX.accent : AX.muted,
-                  }}
-                  title="Curated sections"
-                >
-                  <HiOutlineCollection className="w-4 h-4" />
-                </button>
-                <button
-                  onClick={() => setViewMode('grid')}
-                  className="p-2 rounded-lg transition-all"
-                  style={{
-                    backgroundColor: viewMode === 'grid' ? `${AX.accent}15` : 'transparent',
-                    color: viewMode === 'grid' ? AX.accent : AX.muted,
-                  }}
-                  title="Grid view"
-                >
-                  <HiOutlineViewGrid className="w-4 h-4" />
-                </button>
-              </div>
             </div>
           </div>
 
           {/* Markets Grid */}
           <div className="mb-8">
             {/* Section Header for Grid View */}
-            {(viewMode === 'grid' || searchQuery || selectedCategory !== 'all') && !isLoading && filteredMarkets.length > 0 && (
+            {!isLoading && filteredMarkets.length > 0 && (
               <div className="flex items-center justify-between mb-4">
                 <div className="flex items-center gap-2">
                   <HiOutlineViewGrid className="w-5 h-5" style={{ color: AX.accent }} />
@@ -521,7 +534,7 @@ export default function PredictionsPage() {
                     className="px-2 py-0.5 rounded-full text-xs font-medium"
                     style={{ backgroundColor: `${AX.accent}15`, color: AX.accent }}
                   >
-                    {filteredMarkets.length}
+                    {activeMarkets.length}
                   </span>
                 </div>
               </div>
@@ -576,18 +589,90 @@ export default function PredictionsPage() {
                 )}
               </motion.div>
             ) : (
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 p-1">
-                  {filteredMarkets.map((market, index) => (
-                    <PredictionCard
-                      key={`${market.source || 'dflow'}-${market.ticker}`}
-                      market={market}
-                      index={index}
-                      showSource={dataSource === 'all'}
-                      isFavorite={isFavorite(market.ticker, market.source || 'dflow')}
-                      onToggleFavorite={toggleFavorite}
-                    />
-                  ))}
-                </div>
+              <>
+                {/* Active Markets Grid */}
+                {activeMarkets.length > 0 && (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 p-1">
+                    {activeMarkets.map((market, index) => {
+                      const tokenId = tokenIdByTicker.get(market.ticker);
+                      const liveEntry = tokenId ? livePrices.get(tokenId) : undefined;
+                      return (
+                        <PredictionCard
+                          key={`${market.source || 'dflow'}-${market.ticker}`}
+                          market={market}
+                          index={index}
+                          showSource={dataSource === 'all'}
+                          isFavorite={isFavorite(market.ticker, market.source || 'dflow')}
+                          onToggleFavorite={toggleFavorite}
+                          liveYesPrice={liveEntry?.price}
+                        />
+                      );
+                    })}
+                  </div>
+                )}
+
+                {/* Ended Markets Collapsible Section */}
+                {endedMarkets.length > 0 && (
+                  <div className="mt-6">
+                    <button
+                      onClick={() => setShowEndedMarkets(!showEndedMarkets)}
+                      className="w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-colors hover:bg-white/[0.04]"
+                      style={{
+                        backgroundColor: 'rgba(255,255,255,0.02)',
+                        border: '1px solid rgba(255,255,255,0.06)',
+                      }}
+                    >
+                      <HiOutlineLockClosed className="w-4 h-4" style={{ color: AX.muted }} />
+                      <span className="text-sm font-medium" style={{ color: AX.muted }}>
+                        Ended Events
+                      </span>
+                      <span
+                        className="px-2 py-0.5 rounded-full text-[11px] font-medium"
+                        style={{ backgroundColor: 'rgba(107,114,128,0.15)', color: AX.muted }}
+                      >
+                        {endedMarkets.length}
+                      </span>
+                      <svg
+                        className={`w-4 h-4 ml-auto transition-transform duration-200 ${showEndedMarkets ? 'rotate-180' : ''}`}
+                        fill="none"
+                        viewBox="0 0 24 24"
+                        stroke="currentColor"
+                        style={{ color: AX.muted }}
+                      >
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                      </svg>
+                    </button>
+
+                    <AnimatePresence>
+                      {showEndedMarkets && (
+                        <motion.div
+                          initial={{ height: 0, opacity: 0 }}
+                          animate={{ height: 'auto', opacity: 1 }}
+                          exit={{ height: 0, opacity: 0 }}
+                          transition={{ duration: 0.25, ease: 'easeInOut' }}
+                          className="overflow-hidden"
+                        >
+                          <div
+                            className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 p-1 pt-4"
+                            style={{ opacity: 0.55, filter: 'saturate(0.4)' }}
+                          >
+                            {endedMarkets.map((market, index) => (
+                              <PredictionCard
+                                key={`${market.source || 'dflow'}-${market.ticker}`}
+                                market={market}
+                                index={index}
+                                showSource={dataSource === 'all'}
+                                isFavorite={isFavorite(market.ticker, market.source || 'dflow')}
+                                onToggleFavorite={toggleFavorite}
+                              />
+                            ))}
+                          </div>
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
+                  </div>
+                )}
+              </>
             )}
           </div>
 

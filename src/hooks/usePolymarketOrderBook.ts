@@ -1,5 +1,9 @@
 import { useState, useEffect, useCallback } from 'react';
 import PolymarketOrderBookService from '../services/polymarketOrderBookService';
+import type { LastTradePrice, BestBidAsk } from '../services/polymarketOrderBookService';
+
+// Re-export for consumers
+export type { LastTradePrice, BestBidAsk };
 
 // Polymarket CLOB REST endpoint (for initial snapshot)
 const POLYMARKET_CLOB_API = 'https://clob.polymarket.com';
@@ -44,6 +48,11 @@ export interface UsePolymarketOrderBookResult {
   // Real-time price from WebSocket (updates frequently)
   yesRealtimePrice: RealtimePriceUpdate | null;
   noRealtimePrice: RealtimePriceUpdate | null;
+  // New: live trade prices and best bid/ask from WS
+  yesLastTrade: LastTradePrice | null;
+  noLastTrade: LastTradePrice | null;
+  yesBestBidAsk: BestBidAsk | null;
+  noBestBidAsk: BestBidAsk | null;
 }
 
 /**
@@ -53,6 +62,7 @@ export interface UsePolymarketOrderBookResult {
  * 1. Fetch from REST API for instant data on mount
  * 2. Subscribe to singleton WebSocket service for real-time updates
  *    (all hook instances share one WS connection — saves TCP+TLS overhead)
+ * 3. Expose last_trade_price and best_bid_ask events for chart/card live updates
  */
 export default function usePolymarketOrderBook(
   options: UsePolymarketOrderBookOptions = {}
@@ -68,6 +78,10 @@ export default function usePolymarketOrderBook(
   const [noOrderBook, setNoOrderBook] = useState<OrderBookData | null>(null);
   const [yesRealtimePrice, setYesRealtimePrice] = useState<RealtimePriceUpdate | null>(null);
   const [noRealtimePrice, setNoRealtimePrice] = useState<RealtimePriceUpdate | null>(null);
+  const [yesLastTrade, setYesLastTrade] = useState<LastTradePrice | null>(null);
+  const [noLastTrade, setNoLastTrade] = useState<LastTradePrice | null>(null);
+  const [yesBestBidAsk, setYesBestBidAsk] = useState<BestBidAsk | null>(null);
+  const [noBestBidAsk, setNoBestBidAsk] = useState<BestBidAsk | null>(null);
   const [isConnected, setIsConnected] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -149,7 +163,9 @@ export default function usePolymarketOrderBook(
     if (yesTokenId) {
       unsubs.push(service.subscribe(
         yesTokenId,
+        // onBook
         (data) => setYesOrderBook(processOrderBook(data, yesTokenId)),
+        // onPriceChange
         (change) => {
           const ts = change.timestamp ? parseInt(change.timestamp) : Date.now();
           const priceUpdate: RealtimePriceUpdate = {
@@ -166,14 +182,20 @@ export default function usePolymarketOrderBook(
             spread: priceUpdate.bestAsk - priceUpdate.bestBid,
             timestamp: ts,
           } : prev);
-        }
+        },
+        // onLastTradePrice
+        (trade) => setYesLastTrade(trade),
+        // onBestBidAsk
+        (bba) => setYesBestBidAsk(bba),
       ));
     }
 
     if (noTokenId) {
       unsubs.push(service.subscribe(
         noTokenId,
+        // onBook
         (data) => setNoOrderBook(processOrderBook(data, noTokenId)),
+        // onPriceChange
         (change) => {
           const ts = change.timestamp ? parseInt(change.timestamp) : Date.now();
           const priceUpdate: RealtimePriceUpdate = {
@@ -190,7 +212,11 @@ export default function usePolymarketOrderBook(
             spread: priceUpdate.bestAsk - priceUpdate.bestBid,
             timestamp: ts,
           } : prev);
-        }
+        },
+        // onLastTradePrice
+        (trade) => setNoLastTrade(trade),
+        // onBestBidAsk
+        (bba) => setNoBestBidAsk(bba),
       ));
     }
 
@@ -240,6 +266,10 @@ export default function usePolymarketOrderBook(
     reconnect,
     yesRealtimePrice,
     noRealtimePrice,
+    yesLastTrade,
+    noLastTrade,
+    yesBestBidAsk,
+    noBestBidAsk,
   };
 }
 
