@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { HiChevronDown } from 'react-icons/hi';
 import { useMarketInsights } from '~/hooks/useMarketInsights';
@@ -57,9 +57,12 @@ function AIIcon({ size = 16 }: { size?: number }) {
 export function InsightPanel({ source, marketId }: InsightPanelProps) {
   const { data, isLoading } = useMarketInsights(source, marketId);
   const [collapsed, setCollapsed] = useState(false);
+  const constraintsRef = useRef<HTMLDivElement>(null);
 
   return (
     <>
+      {/* Drag boundary */}
+      <div ref={constraintsRef} className="fixed inset-0 pointer-events-none hidden xl:block" style={{ zIndex: 39 }} />
       <style>{`
         @property --iri-angle-sp {
           syntax: '<angle>';
@@ -140,7 +143,11 @@ export function InsightPanel({ source, marketId }: InsightPanelProps) {
         }
       `}</style>
 
-      <div
+      <motion.div
+        drag
+        dragMomentum={false}
+        dragConstraints={constraintsRef}
+        dragElastic={0.05}
         className="hidden xl:block"
         style={{
           position: 'fixed',
@@ -148,7 +155,9 @@ export function InsightPanel({ source, marketId }: InsightPanelProps) {
           top: '6rem',
           width: collapsed ? 'auto' : 330,
           zIndex: 40,
+          cursor: 'grab',
         }}
+        whileDrag={{ cursor: 'grabbing' }}
       >
         {collapsed ? (
           /* Minimized pill */
@@ -247,7 +256,7 @@ export function InsightPanel({ source, marketId }: InsightPanelProps) {
             </div>
           </div>
         )}
-      </div>
+      </motion.div>
     </>
   );
 }
