@@ -185,10 +185,10 @@ export function HomepageInsightPanel() {
             /* Minimized pill — just sparkle icon + "AI" */
             <motion.div
               key="pill"
-              initial={{ scale: 0.8, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              exit={{ scale: 0.8, opacity: 0 }}
-              transition={{ duration: 0.2 }}
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.15 }}
             >
               <div className="iridescent-pill">
                 <button
@@ -213,10 +213,10 @@ export function HomepageInsightPanel() {
             /* Expanded panel */
             <motion.div
               key="panel"
-              initial={{ scale: 0.95, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              exit={{ scale: 0.95, opacity: 0 }}
-              transition={{ duration: 0.2 }}
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.15 }}
             >
               <div className="iridescent-border-hp">
                 <div className="iridescent-inner overflow-hidden shadow-2xl">
