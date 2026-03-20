@@ -149,10 +149,13 @@ export default function PredictionCard({
   return (
     <Link href={href} className="h-full block">
       <motion.div
-        className="group relative rounded-2xl cursor-pointer overflow-hidden bg-white/[0.05] border border-white/[0.08] backdrop-blur-xl h-full flex flex-col"
+        className="group relative rounded-2xl cursor-pointer overflow-hidden h-full flex flex-col transition-all duration-300"
         style={{
           opacity: isActive ? 1 : 0.75,
-          boxShadow: '0 8px 32px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.06)',
+          background: 'linear-gradient(135deg, rgba(255,255,255,0.06) 0%, rgba(255,255,255,0.03) 50%, rgba(255,255,255,0.05) 100%)',
+          border: '1px solid rgba(255,255,255,0.08)',
+          backdropFilter: 'blur(24px)',
+          boxShadow: '0 8px 32px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.08), inset 0 -1px 0 rgba(255, 255, 255, 0.02)',
         }}
         onMouseEnter={() => setIsHovered(true)}
         onMouseLeave={() => setIsHovered(false)}
@@ -374,14 +377,6 @@ export default function PredictionCard({
           </AnimatePresence>
         </div>
 
-        {/* Volume indicator bar (subtle background) */}
-        <div
-          className="absolute bottom-0 left-0 h-0.5 transition-all duration-500"
-          style={{
-            width: `${Math.min((market.volume24h / 100000) * 100, 100)}%`,
-            backgroundColor: `${C.cyan}40`,
-          }}
-        />
       </motion.div>
     </Link>
   );
