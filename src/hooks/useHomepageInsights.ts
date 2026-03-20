@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { apiFetch } from '../utils/api';
-import { InsightCategory } from './useMarketInsights';
+import type { InsightCategory } from './useMarketInsights';
 
 export interface HomepageInsights {
   generatedAt: string;
@@ -27,7 +27,7 @@ export function useHomepageInsights() {
     queryKey: ['insights', 'homepage'],
     queryFn: async () => {
       try {
-        const res = await apiFetch('/api/prediction/insights/homepage');
+        const res = await apiFetch<{ success: boolean; data: HomepageInsights }>('/api/prediction/insights/homepage');
         return res.data;
       } catch (err: any) {
         if (err?.status === 404) return null;

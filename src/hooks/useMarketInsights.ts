@@ -27,7 +27,7 @@ export function useMarketInsights(source: string, marketId: string) {
     queryKey: ['insights', source, marketId],
     queryFn: async () => {
       try {
-        const res = await apiFetch(`/api/prediction/insights/${source}/${marketId}`);
+        const res = await apiFetch<{ success: boolean; data: MarketInsights }>(`/api/prediction/insights/${source}/${marketId}`);
         return res.data;
       } catch (err: any) {
         if (err?.status === 404) return null;
