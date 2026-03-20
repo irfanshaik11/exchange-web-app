@@ -27,6 +27,7 @@ import { useUser } from '../../components/UserContext';
 import useUnifiedPredictionMarkets from '~/hooks/useUnifiedPredictionMarkets';
 import usePredictionFavorites from '~/hooks/usePredictionFavorites';
 import DataSourceSwitcher, { type PredictionDataSource } from '~/components/predictions/DataSourceSwitcher';
+import { HomepageInsightPanel } from '~/components/insights/HomepageInsightPanel';
 
 // Vibrant color palette
 const AX = {
@@ -670,6 +671,8 @@ export default function PredictionsPage() {
         <Footer />
           </div>
         </div>
+
+        <HomepageInsightPanel />
       </div>
 
       <style jsx global>{`
