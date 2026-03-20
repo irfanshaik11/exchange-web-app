@@ -62,16 +62,23 @@ export function HomepageInsightPanel() {
         >
           <div className="flex items-center gap-2.5">
             <AIIcon size={18} />
-            <span
-              className="text-[11px] font-bold tracking-[0.12em] uppercase"
-              style={{
-                background: 'linear-gradient(135deg, #4ADE80 0%, #22D3EE 100%)',
-                WebkitBackgroundClip: 'text',
-                WebkitTextFillColor: 'transparent',
-              }}
-            >
-              AI Market Pulse
-            </span>
+            <div className="flex flex-col">
+              <span
+                className="text-[11px] font-bold tracking-[0.12em] uppercase"
+                style={{
+                  background: 'linear-gradient(135deg, #4ADE80 0%, #22D3EE 100%)',
+                  WebkitBackgroundClip: 'text',
+                  WebkitTextFillColor: 'transparent',
+                }}
+              >
+                AI Market Pulse
+              </span>
+              {data?.generatedAt && (
+                <span className="text-[9px] text-zinc-500 mt-0.5">
+                  Generated {timeAgo(data.generatedAt)}
+                </span>
+              )}
+            </div>
           </div>
           <motion.div animate={{ rotate: collapsed ? 0 : 180 }} transition={{ duration: 0.2 }}>
             <HiOutlineChevronDown className="w-4 h-4 text-zinc-500" />
@@ -202,14 +209,6 @@ export function HomepageInsightPanel() {
                     </div>
                   )}
 
-                  {/* Timestamp */}
-                  {data.generatedAt && (
-                    <div className="text-center pt-2 pb-1">
-                      <span className="text-[10px] font-mono text-zinc-500 tracking-wide">
-                        Generated {timeAgo(data.generatedAt)}
-                      </span>
-                    </div>
-                  )}
                 </div>
               ) : (
                 <motion.div
