@@ -13,16 +13,10 @@ interface InsightCategoryProps {
   };
 }
 
-const SENTIMENT_ACCENT = {
-  bullish: 'rgba(74, 222, 128, 0.06)',
-  bearish: 'rgba(248, 113, 113, 0.06)',
-  neutral: 'rgba(129, 140, 248, 0.04)',
-} as const;
-
 const SENTIMENT_BORDER = {
-  bullish: 'rgba(74, 222, 128, 0.12)',
-  bearish: 'rgba(248, 113, 113, 0.12)',
-  neutral: 'rgba(255, 255, 255, 0.06)',
+  bullish: 'rgba(74, 222, 128, 0.3)',
+  bearish: 'rgba(248, 113, 113, 0.3)',
+  neutral: 'rgba(129, 140, 248, 0.2)',
 } as const;
 
 export function InsightCategory({ label, insight }: InsightCategoryProps) {
@@ -30,12 +24,11 @@ export function InsightCategory({ label, insight }: InsightCategoryProps) {
 
   return (
     <div
-      className="rounded-xl overflow-hidden transition-all duration-200"
+      className="rounded-2xl overflow-hidden transition-all duration-200"
       style={{
-        background: open
-          ? `linear-gradient(135deg, ${SENTIMENT_ACCENT[insight.sentiment]} 0%, rgba(255,255,255,0.02) 100%)`
-          : 'rgba(255,255,255,0.02)',
-        border: `1px solid ${open ? SENTIMENT_BORDER[insight.sentiment] : 'rgba(255,255,255,0.05)'}`,
+        background: 'rgba(255,255,255,0.03)',
+        border: `1px solid ${open ? 'rgba(255,255,255,0.08)' : 'rgba(255,255,255,0.05)'}`,
+        backdropFilter: 'blur(12px)',
       }}
     >
       <button
@@ -67,16 +60,13 @@ export function InsightCategory({ label, insight }: InsightCategoryProps) {
           >
             <div className="px-3 pb-3 pt-0.5">
               <div
-                className="rounded-lg px-3 py-2.5"
+                className="rounded-xl px-3 py-2.5"
                 style={{
-                  background: 'rgba(0, 0, 0, 0.2)',
-                  borderLeft: `2px solid ${
-                    insight.sentiment === 'bullish' ? '#4ADE80' :
-                    insight.sentiment === 'bearish' ? '#F87171' : '#818CF8'
-                  }`,
+                  background: 'rgba(0, 0, 0, 0.15)',
+                  borderLeft: `2px solid ${SENTIMENT_BORDER[insight.sentiment]}`,
                 }}
               >
-                <p className="text-[11px] text-zinc-400 leading-[1.6]">
+                <p className="text-[11px] text-zinc-400 leading-[1.65]">
                   {insight.text}
                 </p>
               </div>

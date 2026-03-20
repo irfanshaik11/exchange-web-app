@@ -29,33 +29,23 @@ function timeAgo(dateStr: string): string {
   return `${Math.floor(hrs / 24)}d ago`;
 }
 
-// Animated AI sparkle icon
 function AIIcon({ size = 16 }: { size?: number }) {
   return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none">
       <motion.path
         d="M12 2L13.5 8.5L20 10L13.5 11.5L12 18L10.5 11.5L4 10L10.5 8.5L12 2Z"
-        fill="url(#ai-gradient)"
-        initial={{ scale: 0.9, opacity: 0.7 }}
+        fill="url(#ai-g1)"
         animate={{ scale: [0.9, 1.05, 0.9], opacity: [0.7, 1, 0.7] }}
         transition={{ duration: 3, repeat: Infinity, ease: 'easeInOut' }}
       />
       <motion.path
         d="M19 15L19.75 17.25L22 18L19.75 18.75L19 21L18.25 18.75L16 18L18.25 17.25L19 15Z"
-        fill="url(#ai-gradient)"
-        initial={{ scale: 0.8, opacity: 0.5 }}
+        fill="url(#ai-g1)"
         animate={{ scale: [0.8, 1.1, 0.8], opacity: [0.5, 0.9, 0.5] }}
         transition={{ duration: 2.5, repeat: Infinity, ease: 'easeInOut', delay: 0.5 }}
       />
-      <motion.path
-        d="M5 17L5.5 18.5L7 19L5.5 19.5L5 21L4.5 19.5L3 19L4.5 18.5L5 17Z"
-        fill="url(#ai-gradient)"
-        initial={{ scale: 0.8, opacity: 0.5 }}
-        animate={{ scale: [0.8, 1.15, 0.8], opacity: [0.5, 0.85, 0.5] }}
-        transition={{ duration: 2, repeat: Infinity, ease: 'easeInOut', delay: 1 }}
-      />
       <defs>
-        <linearGradient id="ai-gradient" x1="3" y1="2" x2="22" y2="21" gradientUnits="userSpaceOnUse">
+        <linearGradient id="ai-g1" x1="3" y1="2" x2="22" y2="21">
           <stop stopColor="#4ADE80" />
           <stop offset="1" stopColor="#22D3EE" />
         </linearGradient>
@@ -73,14 +63,9 @@ export function InsightPanel({ source, marketId }: InsightPanelProps) {
       initial={{ opacity: 0, x: 20 }}
       animate={{ opacity: 1, x: 0 }}
       transition={{ duration: 0.3 }}
-      className="flex-shrink-0 hidden xl:flex flex-col"
+      className="flex-shrink-0 hidden xl:flex flex-col bg-white/[0.05] border-l border-white/[0.08] backdrop-blur-xl"
       style={{
         width: collapsed ? 44 : 320,
-        borderLeft: '1px solid rgba(255,255,255,0.06)',
-        background: collapsed
-          ? 'rgba(18, 20, 26, 0.95)'
-          : 'linear-gradient(180deg, rgba(18, 20, 26, 0.98) 0%, rgba(14, 16, 18, 0.98) 100%)',
-        backdropFilter: 'blur(20px)',
         transition: 'width 0.25s cubic-bezier(0.4, 0, 0.2, 1)',
       }}
     >
@@ -88,9 +73,6 @@ export function InsightPanel({ source, marketId }: InsightPanelProps) {
       <button
         onClick={() => setCollapsed(!collapsed)}
         className="flex items-center gap-2.5 px-3 py-3.5 border-b border-white/[0.06] hover:bg-white/[0.02] transition-colors w-full"
-        style={!collapsed ? {
-          background: 'linear-gradient(135deg, rgba(74, 222, 128, 0.03) 0%, rgba(34, 211, 238, 0.02) 100%)',
-        } : undefined}
       >
         <AIIcon size={collapsed ? 20 : 16} />
         {!collapsed && (
@@ -109,14 +91,9 @@ export function InsightPanel({ source, marketId }: InsightPanelProps) {
             </div>
             <div className="flex items-center gap-2">
               {data?.generatedAt && (
-                <span className="text-[9px] text-zinc-600 font-mono">
-                  {timeAgo(data.generatedAt)}
-                </span>
+                <span className="text-[9px] text-zinc-600 font-mono">{timeAgo(data.generatedAt)}</span>
               )}
-              <motion.div
-                animate={{ rotate: collapsed ? 0 : 180 }}
-                transition={{ duration: 0.2 }}
-              >
+              <motion.div animate={{ rotate: collapsed ? 0 : 180 }} transition={{ duration: 0.2 }}>
                 <HiChevronLeft className="w-3.5 h-3.5 text-zinc-600" />
               </motion.div>
             </div>
@@ -127,12 +104,9 @@ export function InsightPanel({ source, marketId }: InsightPanelProps) {
       {/* Content */}
       {!collapsed && (
         <div className="flex-1 overflow-y-auto">
-          {/* Subtle top glow line */}
           <div
             className="h-[1px] w-full"
-            style={{
-              background: 'linear-gradient(90deg, transparent 0%, rgba(74,222,128,0.15) 50%, transparent 100%)',
-            }}
+            style={{ background: 'linear-gradient(90deg, transparent, rgba(74,222,128,0.15) 50%, transparent)' }}
           />
           <div className="p-2.5 space-y-1.5">
             {isLoading ? (
@@ -145,10 +119,7 @@ export function InsightPanel({ source, marketId }: InsightPanelProps) {
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ duration: 0.2, delay: i * 0.04 }}
                 >
-                  <InsightCategory
-                    label={CATEGORY_LABELS[key] || key}
-                    insight={insight}
-                  />
+                  <InsightCategory label={CATEGORY_LABELS[key] || key} insight={insight} />
                 </motion.div>
               ))
             ) : (
@@ -157,13 +128,7 @@ export function InsightPanel({ source, marketId }: InsightPanelProps) {
                 animate={{ opacity: 1 }}
                 className="flex flex-col items-center justify-center py-10 text-center"
               >
-                <div
-                  className="w-12 h-12 rounded-2xl flex items-center justify-center mb-4"
-                  style={{
-                    background: 'linear-gradient(135deg, rgba(74,222,128,0.08) 0%, rgba(34,211,238,0.06) 100%)',
-                    border: '1px solid rgba(74,222,128,0.1)',
-                  }}
-                >
+                <div className="w-12 h-12 rounded-2xl flex items-center justify-center mb-4 bg-white/[0.05] border border-white/[0.08]">
                   <AIIcon size={24} />
                 </div>
                 <p className="text-[11px] text-zinc-500 leading-relaxed max-w-[200px]">
