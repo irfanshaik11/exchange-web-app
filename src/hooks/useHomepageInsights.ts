@@ -45,8 +45,8 @@ export function useHomepageInsights() {
         throw err;
       }
     },
-    staleTime: 12 * 60 * 60 * 1000,
-    gcTime: 13 * 60 * 60 * 1000,
+    staleTime: 6 * 60 * 60 * 1000,
+    gcTime: 7 * 60 * 60 * 1000,
     retry: 1,
     refetchOnWindowFocus: false,
   });
