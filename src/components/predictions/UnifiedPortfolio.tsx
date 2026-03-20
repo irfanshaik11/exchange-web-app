@@ -213,28 +213,31 @@ function UnifiedStatsHeader({
 
   return (
     <div
-      className="grid grid-cols-5 gap-2 p-3 rounded-xl"
+      className="grid grid-cols-5 gap-2 p-3 rounded-xl relative overflow-hidden"
       style={{
-        background: `linear-gradient(135deg, ${C.surface} 0%, ${C.purpleBg} 100%)`,
-        border: `1px solid ${C.border}`,
+        background: 'rgba(255, 255, 255, 0.03)',
+        border: '1px solid rgba(255, 255, 255, 0.08)',
+        boxShadow: '0 8px 32px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.06)',
       }}
     >
+      {/* Glossy overlay */}
+      <div className="pointer-events-none absolute inset-0 rounded-xl" style={{ background: 'linear-gradient(135deg, rgba(255,255,255,0.05) 0%, transparent 40%, transparent 60%, rgba(255,255,255,0.02) 100%)' }} />
       {stats.map((stat, index) => (
         <div
           key={stat.label}
-          className="flex flex-col items-center p-2 rounded-lg text-center"
-          style={{ backgroundColor: `${C.bg}80` }}
+          className="relative flex flex-col items-center p-2 rounded-lg text-center overflow-hidden backdrop-blur-sm"
+          style={{
+            backgroundColor: 'rgba(0, 0, 0, 0.3)',
+            border: '1px solid rgba(255, 255, 255, 0.06)',
+            boxShadow: 'inset 0 1px 0 rgba(255, 255, 255, 0.04)',
+          }}
         >
           <div className="flex items-center gap-1 mb-1" style={{ color: C.muted }}>
             {stat.icon}
           </div>
-          {isLoading ? (
-            <div className="w-12 h-5 rounded animate-pulse" style={{ backgroundColor: C.border }} />
-          ) : (
-            <div className="text-sm font-bold" style={{ color: stat.color }}>
-              {stat.value}{stat.suffix}
-            </div>
-          )}
+          <div className="text-sm font-bold" style={{ color: stat.color }}>
+            {stat.value}{stat.suffix}
+          </div>
           <div className="text-[10px] uppercase tracking-wider" style={{ color: C.muted }}>
             {stat.label}
           </div>
@@ -654,16 +657,9 @@ export default function UnifiedPortfolio({
       />
 
       {/* Tab Content */}
-      <AnimatePresence mode="wait">
         {/* Overview Tab */}
         {activeTab === 'overview' && (
-          <motion.div
-            key="overview"
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -10 }}
-            className="space-y-4"
-          >
+          <div className="space-y-4">
             {/* Claimable Winnings */}
             {(readyToClaim.length > 0 || pendingResolution.length > 0) && (
               <div
@@ -792,9 +788,15 @@ export default function UnifiedPortfolio({
             {/* Empty State */}
             {!isLoading && readyToClaim.length === 0 && pendingResolution.length === 0 && claimedHistory.length === 0 && (
               <div
-                className="text-center py-8 rounded-xl"
-                style={{ backgroundColor: C.surface, border: `1px solid ${C.border}` }}
+                className="text-center py-8 rounded-xl relative overflow-hidden"
+                style={{
+                  backgroundColor: 'rgba(255, 255, 255, 0.03)',
+                  border: '1px solid rgba(255, 255, 255, 0.08)',
+                  boxShadow: '0 8px 32px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.06)',
+                }}
               >
+                {/* Glossy overlay */}
+                <div className="pointer-events-none absolute inset-0 rounded-xl" style={{ background: 'linear-gradient(135deg, rgba(255,255,255,0.05) 0%, transparent 40%, transparent 60%, rgba(255,255,255,0.02) 100%)' }} />
                 <div
                   className="w-14 h-14 rounded-xl mx-auto mb-4 flex items-center justify-center"
                   style={{ backgroundColor: C.purpleBg }}
@@ -809,18 +811,12 @@ export default function UnifiedPortfolio({
                 </p>
               </div>
             )}
-          </motion.div>
+          </div>
         )}
 
         {/* Positions Tab */}
         {activeTab === 'positions' && (
-          <motion.div
-            key="positions"
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -10 }}
-            className="space-y-2"
-          >
+          <div className="space-y-2">
             {isLoading ? (
               <LoadingState message="Loading positions..." theme={C} />
             ) : positions.length === 0 ? (
@@ -836,18 +832,12 @@ export default function UnifiedPortfolio({
                 />
               ))
             )}
-          </motion.div>
+          </div>
         )}
 
         {/* Orders Tab */}
         {activeTab === 'orders' && (
-          <motion.div
-            key="orders"
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -10 }}
-            className="space-y-2"
-          >
+          <div className="space-y-2">
             {openOrders.length > 0 && (
               <div className="flex justify-end mb-2">
                 <button
@@ -877,18 +867,12 @@ export default function UnifiedPortfolio({
                 />
               ))
             )}
-          </motion.div>
+          </div>
         )}
 
         {/* History Tab */}
         {activeTab === 'history' && (
-          <motion.div
-            key="history"
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -10 }}
-            className="space-y-2"
-          >
+          <div className="space-y-2">
             {isLoading ? (
               <LoadingState message="Loading trade history..." theme={C} />
             ) : trades.length === 0 ? (
@@ -925,9 +909,8 @@ export default function UnifiedPortfolio({
                 />
               ))
             )}
-          </motion.div>
+          </div>
         )}
-      </AnimatePresence>
 
       {/* Refresh Button */}
       <div className="flex justify-end">

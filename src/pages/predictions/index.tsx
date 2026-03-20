@@ -30,7 +30,7 @@ import DataSourceSwitcher, { type PredictionDataSource } from '~/components/pred
 
 // Vibrant color palette
 const AX = {
-  bg: "#0a0b0d",
+  bg: "#111214",
   surface: "#12141a",
   surface2: "#0e1012",
   border: "#1e2028",
@@ -182,32 +182,72 @@ export default function PredictionsPage() {
         <meta name="description" content="Trade on real-world prediction markets. Bet on politics, crypto, sports, and more." />
       </Head>
 
-      <div
-        className="min-h-screen flex flex-col"
-        style={{ backgroundColor: AX.bg }}
-      >
-        <Header />
+      <div className="min-h-screen flex flex-col bg-[#050608] text-neutral-100">
+        <div className="relative z-[10000]">
+          <Header />
+        </div>
 
-        <main className="flex-1 w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 md:py-8">
+        <div className="p-1 sm:p-1.5">
+          {/* Rounded container with background - matches tracker */}
+          <div className="relative min-h-[calc(100vh-80px)] overflow-hidden rounded-2xl border border-white/[0.06]">
+            {/* Background image - same as tracker */}
+            <div className="pointer-events-none absolute inset-0 overflow-hidden rounded-2xl">
+              <div
+                className="absolute inset-x-0 top-0 h-[80vh] bg-cover bg-top bg-no-repeat"
+                style={{
+                  backgroundImage: "url(/ranks/Background2.png)",
+                  maskImage: "linear-gradient(to bottom, black 50%, transparent 100%)",
+                  WebkitMaskImage: "linear-gradient(to bottom, black 50%, transparent 100%)",
+                }}
+              />
+              <div className="absolute inset-0 bg-black/30" />
+              <div
+                className="absolute inset-0"
+                style={{
+                  background:
+                    "linear-gradient(to bottom, transparent 0%, transparent 20%, rgba(0,0,0,0.1) 30%, rgba(0,0,0,0.3) 45%, rgba(0,0,0,0.6) 60%, rgba(0,0,0,0.85) 75%, black 90%)",
+                }}
+              />
+              <div className="absolute inset-0 bg-gradient-to-r from-black/20 via-transparent to-black/20" />
+            </div>
+
+        {/* Geo-restriction Banner - full width */}
+        <div className="relative z-10 overflow-hidden" style={{
+          background: 'linear-gradient(135deg, rgba(239,68,68,0.15) 0%, rgba(239,68,68,0.08) 50%, rgba(239,68,68,0.15) 100%)',
+          borderBottom: '1px solid rgba(239,68,68,0.25)',
+          boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.05), 0 4px 16px rgba(239,68,68,0.1)',
+        }}>
+          <div className="pointer-events-none absolute inset-0" style={{ background: 'linear-gradient(135deg, rgba(255,255,255,0.06) 0%, transparent 50%)' }} />
+          <div className="py-2 overflow-hidden relative">
+            <div className="flex animate-marquee whitespace-nowrap">
+              {[...Array(4)].map((_, i) => (
+                <span key={i} className="text-[13px] font-medium inline-flex items-center" style={{ color: '#F87171' }}>
+                  <span className="inline-flex items-center gap-2 mx-10">
+                    <svg className="w-4 h-4 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z" />
+                    </svg>
+                    Trading on prediction markets is not available in your region due to regulatory restrictions
+                  </span>
+                  <span className="text-red-400/40">•</span>
+                  <span className="inline-flex items-center gap-2 mx-10">
+                    <svg className="w-4 h-4 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z" />
+                    </svg>
+                    US users are restricted from trading on Polymarket via Interstate
+                  </span>
+                  <span className="text-red-400/40">•</span>
+                </span>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        <main className="relative z-10 flex-1 w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 md:py-8">
           {/* Page Header */}
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.5 }}
-            className="mb-8"
-          >
+          <div className="mb-8">
             <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6 mb-6">
               <div className="flex items-center gap-4">
-                <motion.div
-                  initial={{ scale: 0, rotate: -180 }}
-                  animate={{ scale: 1, rotate: 0 }}
-                  transition={{ type: "spring", bounce: 0.4, delay: 0.1 }}
-                  className="w-12 h-12 rounded-xl flex items-center justify-center overflow-hidden"
-                  style={{
-                    background: `linear-gradient(135deg, ${AX.surface} 0%, ${AX.surface2} 100%)`,
-                    border: `1px solid ${AX.border}`,
-                  }}
-                >
+                <div className="w-12 h-12 rounded-2xl flex items-center justify-center overflow-hidden bg-white/[0.07] border border-white/[0.1] backdrop-blur-xl">
                   <Image
                     src="/interstate/logo.png"
                     alt="Interstate"
@@ -215,16 +255,13 @@ export default function PredictionsPage() {
                     height={32}
                     className="object-contain"
                   />
-                </motion.div>
+                </div>
                 <div>
                   <div className="flex items-center gap-3">
                     <h1 className="text-2xl md:text-3xl font-bold" style={{ color: AX.text }}>
                       Predictions
                     </h1>
-                    <motion.span
-                      initial={{ scale: 0 }}
-                      animate={{ scale: 1 }}
-                      transition={{ type: "spring", bounce: 0.5, delay: 0.3 }}
+                    <span
                       className="px-2.5 py-1 rounded-lg text-[10px] font-bold uppercase tracking-wider"
                       style={{
                         backgroundColor: `${AX.accent}15`,
@@ -233,7 +270,7 @@ export default function PredictionsPage() {
                       }}
                     >
                       Beta
-                    </motion.span>
+                    </span>
                   </div>
                   <div className="mt-1.5">
                     <StatsBar
@@ -252,11 +289,9 @@ export default function PredictionsPage() {
                   placeholder="Search markets..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  className="w-full px-4 py-3 pl-11 rounded-xl text-sm transition-all duration-200 outline-none focus:ring-2 focus:ring-opacity-30"
+                  className="w-full px-4 py-3 pl-11 rounded-2xl text-sm transition-all duration-200 outline-none focus:ring-2 focus:ring-opacity-30 bg-white/[0.05] border border-white/[0.08] backdrop-blur-xl text-white placeholder-neutral-500"
                   style={{
-                    backgroundColor: AX.surface,
-                    border: `1px solid ${AX.border}`,
-                    color: AX.text,
+                    boxShadow: '0 8px 32px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.06)',
                     // @ts-ignore
                     '--tw-ring-color': AX.accent,
                   }}
@@ -306,21 +341,15 @@ export default function PredictionsPage() {
                 </motion.button>
               </motion.div>
             )}
-          </motion.div>
+          </div>
 
           {/* Unified Portfolio Section - Wallet balance, stats, positions, orders, history */}
           {user?.bearerToken && (
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.5, delay: 0.1 }}
-              className="mb-6"
-            >
+            <div className="mb-6">
               <div
-                className="rounded-xl overflow-hidden"
+                className="rounded-2xl overflow-hidden bg-white/[0.05] border border-white/[0.08] backdrop-blur-xl"
                 style={{
-                  backgroundColor: AX.surface,
-                  border: `1px solid ${AX.border}`,
+                  boxShadow: '0 8px 32px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.06)',
                 }}
               >
                 {/* Portfolio Header - Clickable to expand/collapse */}
@@ -334,47 +363,32 @@ export default function PredictionsPage() {
                       My Portfolio
                     </span>
                   </div>
-                  <motion.div
-                    animate={{ rotate: showPortfolio ? 180 : 0 }}
-                    transition={{ duration: 0.2 }}
+                  <svg
+                    className={`w-5 h-5 transition-transform duration-200 ${showPortfolio ? 'rotate-180' : ''}`}
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                    style={{ color: AX.muted }}
                   >
-                    <svg
-                      className="w-5 h-5"
-                      fill="none"
-                      viewBox="0 0 24 24"
-                      stroke="currentColor"
-                      style={{ color: AX.muted }}
-                    >
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                    </svg>
-                  </motion.div>
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                  </svg>
                 </button>
 
                 {/* Portfolio Content */}
-                <AnimatePresence>
-                  {showPortfolio && (
-                    <motion.div
-                      initial={{ height: 0, opacity: 0 }}
-                      animate={{ height: 'auto', opacity: 1 }}
-                      exit={{ height: 0, opacity: 0 }}
-                      transition={{ duration: 0.3 }}
-                      className="overflow-hidden"
-                    >
-                      <div
-                        className="px-4 pb-4 pt-2"
-                        style={{ borderTop: `1px solid ${AX.border}` }}
-                      >
-                        <UnifiedPortfolio
-                          authToken={user.bearerToken}
-                          walletAddress={primaryWalletAddresses?.ethereum}
-                          onClaimSuccess={refetch}
-                        />
-                      </div>
-                    </motion.div>
-                  )}
-                </AnimatePresence>
+                {showPortfolio && (
+                  <div
+                    className="px-4 pb-4 pt-2"
+                    style={{ borderTop: `1px solid ${AX.border}` }}
+                  >
+                    <UnifiedPortfolio
+                      authToken={user.bearerToken}
+                      walletAddress={primaryWalletAddresses?.ethereum}
+                      onClaimSuccess={refetch}
+                    />
+                  </div>
+                )}
               </div>
-            </motion.div>
+            </div>
           )}
 
           {/* Featured Market - Hidden for now
@@ -401,18 +415,13 @@ export default function PredictionsPage() {
 
           {/* Curated Sections (when in curated view and no search/filters) */}
           {viewMode === 'curated' && !searchQuery && selectedCategory === 'all' && allMarkets.length > 0 && (
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.5, delay: 0.15 }}
-              className="mb-8"
-            >
+            <div className="mb-8">
               <CuratedSections
                 markets={allMarkets}
                 onToggleFavorite={toggleFavorite}
                 isFavorite={isFavorite}
               />
-            </motion.div>
+            </div>
           )}
 
           {/* Data Source Switcher */}
@@ -434,19 +443,13 @@ export default function PredictionsPage() {
           */}
 
           {/* Filters - Centered with Horizontally Scrollable Categories/Sort */}
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.5, delay: 0.2 }}
-            className="mb-6"
-          >
+          <div className="mb-6">
             <div className="flex justify-center items-center gap-2">
               {/* Scrollable filter bar */}
               <div
-                className="inline-flex items-center gap-3 p-1.5 rounded-xl overflow-x-auto scrollbar-hide max-w-full"
+                className="inline-flex items-center gap-3 p-1.5 rounded-2xl overflow-x-auto scrollbar-hide max-w-full bg-white/[0.05] border border-white/[0.08] backdrop-blur-xl"
                 style={{
-                  backgroundColor: AX.surface,
-                  border: `1px solid ${AX.border}`,
+                  boxShadow: '0 4px 16px rgba(0, 0, 0, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.04)',
                 }}
               >
                 <CategoryFilter
@@ -466,11 +469,7 @@ export default function PredictionsPage() {
               </div>
               {/* Advanced Filters - Outside scrollable area so popout isn't clipped */}
               <div
-                className="flex-shrink-0 p-1.5 rounded-xl"
-                style={{
-                  backgroundColor: AX.surface,
-                  border: `1px solid ${AX.border}`,
-                }}
+                className="flex-shrink-0 p-1.5 rounded-2xl bg-white/[0.05] border border-white/[0.08] backdrop-blur-xl"
               >
                 <MarketFilters
                   filters={marketFilters}
@@ -480,11 +479,7 @@ export default function PredictionsPage() {
 
               {/* View Toggle */}
               <div
-                className="flex-shrink-0 flex items-center gap-1 p-1.5 rounded-xl"
-                style={{
-                  backgroundColor: AX.surface,
-                  border: `1px solid ${AX.border}`,
-                }}
+                className="flex-shrink-0 flex items-center gap-1 p-1.5 rounded-2xl bg-white/[0.05] border border-white/[0.08] backdrop-blur-xl"
               >
                 <button
                   onClick={() => setViewMode('curated')}
@@ -510,7 +505,7 @@ export default function PredictionsPage() {
                 </button>
               </div>
             </div>
-          </motion.div>
+          </div>
 
           {/* Markets Grid */}
           <div className="mb-8">
@@ -533,7 +528,7 @@ export default function PredictionsPage() {
             )}
 
             {isLoading ? (
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 p-1">
                 {[...Array(8)].map((_, i) => (
                   <PredictionCardSkeleton key={i} />
                 ))}
@@ -542,16 +537,12 @@ export default function PredictionsPage() {
               <motion.div
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
-                className="flex flex-col items-center justify-center py-20 px-6 rounded-2xl"
+                className="flex flex-col items-center justify-center py-20 px-6 rounded-2xl bg-white/[0.05] border border-white/[0.08] backdrop-blur-xl"
                 style={{
-                  background: `linear-gradient(180deg, ${AX.surface} 0%, ${AX.surface2} 100%)`,
-                  border: `1px solid ${AX.border}`,
+                  boxShadow: '0 8px 32px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.06)',
                 }}
               >
-                <motion.div
-                  initial={{ scale: 0 }}
-                  animate={{ scale: 1 }}
-                  transition={{ type: "spring", bounce: 0.5, delay: 0.1 }}
+                <div
                   className="w-20 h-20 rounded-2xl flex items-center justify-center mb-5"
                   style={{
                     background: `linear-gradient(135deg, ${AX.accent}15 0%, ${AX.purple}15 100%)`,
@@ -559,7 +550,7 @@ export default function PredictionsPage() {
                   }}
                 >
                   <HiOutlineSearch className="w-9 h-9" style={{ color: AX.muted }} />
-                </motion.div>
+                </div>
                 <h3 className="text-xl font-bold mb-2" style={{ color: AX.text }}>
                   No markets found
                 </h3>
@@ -585,15 +576,7 @@ export default function PredictionsPage() {
                 )}
               </motion.div>
             ) : (
-              <AnimatePresence mode="wait">
-                <motion.div
-                  key={`${selectedCategory}-${selectedSort}-${dataSource}-${JSON.stringify(marketFilters)}`}
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  exit={{ opacity: 0 }}
-                  transition={{ duration: 0.2 }}
-                  className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4"
-                >
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 p-1">
                   {filteredMarkets.map((market, index) => (
                     <PredictionCard
                       key={`${market.source || 'dflow'}-${market.ticker}`}
@@ -604,20 +587,15 @@ export default function PredictionsPage() {
                       onToggleFavorite={toggleFavorite}
                     />
                   ))}
-                </motion.div>
-              </AnimatePresence>
+                </div>
             )}
           </div>
 
           {/* Footer CTA */}
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.5, delay: 0.4 }}
-            className="relative rounded-2xl p-8 md:p-10 overflow-hidden"
+          <div
+            className="relative rounded-2xl p-8 md:p-10 overflow-hidden bg-white/[0.05] border border-white/[0.08] backdrop-blur-xl"
             style={{
-              background: `linear-gradient(135deg, ${AX.surface} 0%, ${AX.surface2} 100%)`,
-              border: `1px solid ${AX.border}`,
+              boxShadow: '0 8px 32px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.06)',
             }}
           >
             {/* Subtle gradient overlay */}
@@ -683,13 +661,15 @@ export default function PredictionsPage() {
                 </motion.a>
               </div>
             </div>
-          </motion.div>
+          </div>
 
           {/* Bottom padding */}
           <div className="h-16 md:h-20" />
         </main>
 
         <Footer />
+          </div>
+        </div>
       </div>
 
       <style jsx global>{`
@@ -708,6 +688,15 @@ export default function PredictionsPage() {
           -webkit-line-clamp: 2;
           -webkit-box-orient: vertical;
           overflow: hidden;
+        }
+
+        /* Marquee animation */
+        @keyframes marquee {
+          0% { transform: translateX(0); }
+          100% { transform: translateX(-50%); }
+        }
+        .animate-marquee {
+          animation: marquee 30s linear infinite;
         }
       `}</style>
     </PinGate>

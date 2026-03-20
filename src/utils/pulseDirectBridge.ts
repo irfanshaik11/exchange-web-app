@@ -399,7 +399,6 @@ function normalizeToken(raw: any): PulseToken | null {
 
   const liquidityVal = raw.liquidity_usd || raw.liquidity || 0;
   const mcapVal = raw.market_cap_usd || raw.marketCap || raw.market_cap || 0;
-
   return {
     mint,
     mint_address: mint,

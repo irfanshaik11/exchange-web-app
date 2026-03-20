@@ -711,6 +711,7 @@ function normalizeToken(rawToken: any): PulseToken | null {
 
   // Pre-compute common fallback values
   const holderValue = rawToken.holder_count ?? rawToken.holders ?? rawToken.total_holders ?? rawToken.unique_wallets_24h ?? 0;
+  // Backend already sends percent values in 0-100 format, no conversion needed
   const devPercentValue = rawToken.dev_percent ?? rawToken.dev_held_percentage ?? 0;
   const sniperPercentValue = rawToken.sniper_percent ?? rawToken.sniper_held_percentage ?? 0;
   const insiderPercentValue = rawToken.insider_percent ?? rawToken.insider_held_percentage ?? 0;

@@ -13,7 +13,7 @@ import type { PredictionMarket } from './PredictionCard';
 import { categoryConfig } from './PredictionCard';
 
 const C = {
-  bg: "#0a0b0d",
+  bg: "#111214",
   surface: "#12141a",
   surface2: "#1a1d24",
   border: "#1e2028",
@@ -167,16 +167,12 @@ function CuratedSection({
   };
 
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.4 }}
-    >
+    <div>
       {/* Section Header */}
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-3">
           <div
-            className="p-2 rounded-lg"
+            className="p-2 rounded-xl"
             style={{ backgroundColor: `${iconColor}15`, color: iconColor }}
           >
             {icon}
@@ -210,10 +206,15 @@ function CuratedSection({
         </div>
       </div>
 
-      {/* Horizontal Scroll */}
+      {/* Horizontal Scroll with edge fade */}
+      <div className="relative">
+        {/* Left fade */}
+        <div className="pointer-events-none absolute left-0 top-0 bottom-0 w-8 z-10" style={{ background: 'linear-gradient(to right, rgba(5,6,8,0.8), transparent)' }} />
+        {/* Right fade */}
+        <div className="pointer-events-none absolute right-0 top-0 bottom-0 w-16 z-10" style={{ background: 'linear-gradient(to left, rgba(5,6,8,0.9), transparent)' }} />
       <div
         ref={scrollRef}
-        className="flex gap-4 overflow-x-auto pb-2 scrollbar-hide"
+        className="flex gap-3 overflow-x-auto p-2 scrollbar-hide"
         style={{ scrollSnapType: 'x mandatory' }}
       >
         {markets.map((market) => (
@@ -225,8 +226,11 @@ function CuratedSection({
             onToggleFavorite={onToggleFavorite}
           />
         ))}
+        {/* Spacer so last card isn't clipped by fade */}
+        <div className="flex-shrink-0 w-4" />
       </div>
-    </motion.div>
+      </div>
+    </div>
   );
 }
 
@@ -295,87 +299,102 @@ function CompactMarketCard({ market, badgeType, isFavorite, onToggleFavorite }: 
   return (
     <Link href={href}>
       <motion.div
-        className="flex-shrink-0 w-[260px] rounded-xl p-4 cursor-pointer group"
+        className="flex-shrink-0 w-[260px] h-[170px] rounded-2xl p-4 cursor-pointer group relative overflow-hidden backdrop-blur-xl"
         style={{
-          backgroundColor: C.surface,
-          border: `1px solid ${C.border}`,
           scrollSnapAlign: 'start',
+          backgroundColor: 'rgba(255, 255, 255, 0.04)',
+          border: '1px solid rgba(255, 255, 255, 0.08)',
+          boxShadow: '0 8px 32px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.06)',
         }}
-        whileHover={{ y: -2, transition: { duration: 0.15 } }}
+        whileHover={{
+          scale: 1.02,
+          transition: { duration: 0.15 },
+        }}
       >
-        {/* Top row */}
-        <div className="flex items-center justify-between mb-2">
-          <span
-            className="text-[10px] px-2 py-1 rounded-md font-semibold flex items-center gap-1"
-            style={{ backgroundColor: badge.color, color: '#000' }}
-          >
-            {badgeType === 'category' && <CategoryIcon className="w-3 h-3" />}
-            {badge.text}
-          </span>
-          {onToggleFavorite && (
-            <button
-              onClick={(e) => {
-                e.preventDefault();
-                e.stopPropagation();
-                onToggleFavorite(market);
-              }}
-              className="p-1 rounded transition-all hover:scale-110 opacity-0 group-hover:opacity-100"
-              style={{ color: isFavorite ? C.yellow : C.muted }}
+        {/* Glossy highlight overlay */}
+        <div
+          className="pointer-events-none absolute inset-0 rounded-2xl"
+          style={{
+            background: 'linear-gradient(135deg, rgba(255,255,255,0.06) 0%, transparent 40%, transparent 60%, rgba(255,255,255,0.02) 100%)',
+          }}
+        />
+
+        {/* Content wrapper with flex to push prices to bottom */}
+        <div className="relative z-10 flex flex-col h-full">
+          {/* Top row */}
+          <div className="flex items-center justify-between mb-2">
+            <span
+              className="text-[10px] px-2 py-1 rounded-lg font-semibold flex items-center gap-1"
+              style={{ backgroundColor: badge.color, color: '#000' }}
             >
-              {isFavorite ? (
-                <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
-                  <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
-                </svg>
-              ) : (
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z" />
-                </svg>
-              )}
-            </button>
-          )}
-        </div>
+              {badgeType === 'category' && <CategoryIcon className="w-3 h-3" />}
+              {badge.text}
+            </span>
+            {onToggleFavorite && (
+              <button
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  onToggleFavorite(market);
+                }}
+                className="p-1 rounded transition-all hover:scale-110 opacity-0 group-hover:opacity-100"
+                style={{ color: isFavorite ? C.yellow : C.muted }}
+              >
+                {isFavorite ? (
+                  <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                    <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
+                  </svg>
+                ) : (
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z" />
+                  </svg>
+                )}
+              </button>
+            )}
+          </div>
 
-        {/* Title */}
-        <h3
-          className="font-medium text-sm leading-snug line-clamp-2 mb-3"
-          style={{ color: C.text }}
-        >
-          {market.title}
-        </h3>
-
-        {/* Price bar */}
-        <div className="mb-2">
-          <div
-            className="h-1.5 rounded-full overflow-hidden"
-            style={{ backgroundColor: `${C.red}20` }}
+          {/* Title - fixed height area */}
+          <h3
+            className="font-medium text-sm leading-snug line-clamp-2 mb-auto"
+            style={{ color: C.text }}
           >
-            <div
-              className="h-full rounded-full transition-all duration-300"
-              style={{
-                width: `${yesPercent}%`,
-                backgroundColor: C.green,
-              }}
-            />
-          </div>
-        </div>
+            {market.title}
+          </h3>
 
-        {/* Bottom row - Yes/No prices */}
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-1">
-            <span className="text-base font-bold" style={{ color: C.green }}>
-              {yesPercent}¢
-            </span>
-            <span className="text-[10px]" style={{ color: C.muted }}>
-              Yes
-            </span>
+          {/* Price bar */}
+          <div className="mb-2 mt-3">
+            <div
+              className="h-1.5 rounded-full overflow-hidden"
+              style={{ backgroundColor: `${C.red}20` }}
+            >
+              <div
+                className="h-full rounded-full transition-all duration-300"
+                style={{
+                  width: `${yesPercent}%`,
+                  backgroundColor: C.green,
+                }}
+              />
+            </div>
           </div>
-          <div className="flex items-center gap-1">
-            <span className="text-base font-bold" style={{ color: C.red }}>
-              {noPercent}¢
-            </span>
-            <span className="text-[10px]" style={{ color: C.muted }}>
-              No
-            </span>
+
+          {/* Bottom row - Yes/No prices */}
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-1">
+              <span className="text-base font-bold" style={{ color: C.green }}>
+                {yesPercent}¢
+              </span>
+              <span className="text-[10px]" style={{ color: C.muted }}>
+                Yes
+              </span>
+            </div>
+            <div className="flex items-center gap-1">
+              <span className="text-base font-bold" style={{ color: C.red }}>
+                {noPercent}¢
+              </span>
+              <span className="text-[10px]" style={{ color: C.muted }}>
+                No
+              </span>
+            </div>
           </div>
         </div>
       </motion.div>

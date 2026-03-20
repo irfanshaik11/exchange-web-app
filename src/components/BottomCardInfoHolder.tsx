@@ -57,12 +57,9 @@ const calculatePercentValue = (
   const num = typeof val === "string" ? parseFloat(val) : val;
   if (isNaN(num)) return "0.00";
 
-  // Websocket values are decimals (0.35 = 35%), HTTP values are already percentages (74.5)
-  // If websocket field was used and value is <= 1, it's a decimal that needs conversion
-  const isWsFormat = wsVal !== undefined && num <= 1;
-  const percent = isWsFormat ? num * 100 : num;
-
-  return percent.toFixed(2);
+  // Backend always sends percent values in 0-100 format (e.g., 33.59 = 33.59%)
+  // No conversion needed regardless of data source (HTTP or WebSocket)
+  return num.toFixed(2);
 };
 
 interface BottomCardInfoHolderProps {

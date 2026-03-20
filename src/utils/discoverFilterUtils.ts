@@ -217,7 +217,7 @@ export function applyDiscoverFilters(
     const minDM = parseNum(filters.devMigrationsMin);
     const maxDM = parseNum(filters.devMigrationsMax);
     if (minDM !== undefined || maxDM !== undefined) {
-      const dm = Number(token.dev_migrations) || 0;
+      const dm = Number(token.dev_migrations ?? token.dev_tokens_migrated) || 0;
       if (minDM !== undefined && dm < minDM) return false;
       if (maxDM !== undefined && dm > maxDM) return false;
     }
@@ -226,7 +226,7 @@ export function applyDiscoverFilters(
     const minDP = parseNum(filters.devPairsCreatedMin);
     const maxDP = parseNum(filters.devPairsCreatedMax);
     if (minDP !== undefined || maxDP !== undefined) {
-      const dp = Number(token.dev_pairs_created) || 0;
+      const dp = Number(token.dev_pairs_created ?? token.dev_tokens_created) || 0;
       if (minDP !== undefined && dp < minDP) return false;
       if (maxDP !== undefined && dp > maxDP) return false;
     }
@@ -276,6 +276,105 @@ export function applyDiscoverFilters(
       if (maxSells !== undefined && sells > maxSells) return false;
     }
 
+    // ── Top 10 Holders % (min/max) ──
+    const minTop10 = parseNum(filters.top10HoldersPercentMin);
+    const maxTop10 = parseNum(filters.top10HoldersPercentMax) ?? (filters.top10HoldersPercent ? parseNum(filters.top10HoldersPercent) : undefined);
+    if (minTop10 !== undefined || maxTop10 !== undefined) {
+      const pct = Number(token.top10_holders_pct ?? token.top10HoldersPct ?? 0) || 0;
+      if (minTop10 !== undefined && pct < minTop10) return false;
+      if (maxTop10 !== undefined && pct > maxTop10) return false;
+    }
+
+    // ── Dev Holding % ──
+    const minDev = parseNum(filters.devHoldingPercentMin);
+    const maxDev = parseNum(filters.devHoldingPercentMax);
+    if (minDev !== undefined || maxDev !== undefined) {
+      const pct = Number(token.dev_percent ?? token.dev_held_percentage ?? 0) || 0;
+      if (minDev !== undefined && pct < minDev) return false;
+      if (maxDev !== undefined && pct > maxDev) return false;
+    }
+
+    // ── Snipers % ──
+    const minSniper = parseNum(filters.snipersPercentMin);
+    const maxSniper = parseNum(filters.snipersPercentMax);
+    if (minSniper !== undefined || maxSniper !== undefined) {
+      const pct = Number(token.sniper_percent ?? token.sniper_held_percentage ?? 0) || 0;
+      if (minSniper !== undefined && pct < minSniper) return false;
+      if (maxSniper !== undefined && pct > maxSniper) return false;
+    }
+
+    // ── Insiders % ──
+    const minInsider = parseNum(filters.insidersPercentMin);
+    const maxInsider = parseNum(filters.insidersPercentMax);
+    if (minInsider !== undefined || maxInsider !== undefined) {
+      const pct = Number(token.insider_percent ?? token.insider_held_percentage ?? 0) || 0;
+      if (minInsider !== undefined && pct < minInsider) return false;
+      if (maxInsider !== undefined && pct > maxInsider) return false;
+    }
+
+    // ── Bundlers % ──
+    const minBundle = parseNum(filters.bundlePercentMin);
+    const maxBundle = parseNum(filters.bundlePercentMax);
+    if (minBundle !== undefined || maxBundle !== undefined) {
+      const pct = Number(token.bundle_percent ?? token.bundled_percentage ?? token.bundler_held_percentage ?? 0) || 0;
+      if (minBundle !== undefined && pct < minBundle) return false;
+      if (maxBundle !== undefined && pct > maxBundle) return false;
+    }
+
+    // ── Pro Traders ──
+    const minPro = parseNum(filters.proTradersMin);
+    const maxPro = parseNum(filters.proTradersMax);
+    if (minPro !== undefined || maxPro !== undefined) {
+      const pro = Number(token.pro_traders_count ?? token.pro_traders ?? token.smart_money_count ?? 0) || 0;
+      if (minPro !== undefined && pro < minPro) return false;
+      if (maxPro !== undefined && pro > maxPro) return false;
+    }
+
+    // ── Socials ──
+    if (filters.hasTwitter || filters.hasWebsite || filters.hasTelegram || filters.atLeastOneSocial) {
+      const links = token.links || {};
+      const twitter = token.twitter || links.twitter || links.x || token.twitter_url || token.x || token.x_url || '';
+      const website = token.website || links.website || token.website_url || '';
+      const telegram = token.telegram || links.telegram || token.telegram_url || '';
+      if (filters.hasTwitter && !twitter) return false;
+      if (filters.hasWebsite && !website) return false;
+      if (filters.hasTelegram && !telegram) return false;
+      if (filters.atLeastOneSocial && !twitter && !website && !telegram) return false;
+    }
+
+    // ── Only Pump Live ──
+    if (filters.onlyPumpLive) {
+      const protocol = (token.launchpad_protocol || '').toLowerCase();
+      const isLive = token.is_live ?? token.isLive ?? true;
+      if (!(protocol.includes('pump') && isLive)) return false;
+    }
+
+    // ── Global Fees Paid ──
+    const minFees = parseNum(filters.globalFeesPaidMin);
+    const maxFees = parseNum(filters.globalFeesPaidMax);
+    if (minFees !== undefined || maxFees !== undefined) {
+      let feesPaid = Number(token.global_fees_paid ?? token.globalFeesPaid ?? 0) || 0;
+      if (feesPaid === 0) {
+        const lamports = Number(token.total_fees_lamports ?? 0);
+        if (lamports > 0) feesPaid = lamports / 1_000_000_000;
+      }
+      if (minFees !== undefined && feesPaid < minFees) return false;
+      if (maxFees !== undefined && feesPaid > maxFees) return false;
+    }
+
+    // ── X Reuses ──
+    const minReuses = parseNum(filters.twitterReusesMin);
+    const maxReuses = parseNum(filters.twitterReusesMax);
+    if (minReuses !== undefined || maxReuses !== undefined) {
+      const reuses = Number(token.twitter_reuses ?? token.twitterReuses ?? token.twitter_reuse_count ?? 0) || 0;
+      if (minReuses !== undefined && reuses < minReuses) return false;
+      if (maxReuses !== undefined && reuses > maxReuses) return false;
+    }
+
+    // ── Tweet Age ──
+    // Skip for now - tweet age calculation requires ageUnit conversion and tweet_created_at field
+    // which is complex and rarely used
+
     return true;
   });
 }
@@ -299,6 +398,16 @@ export function countActiveFilters(filters: PulseFilters): number {
   if (filters.txnsMin || filters.txnsMax) count++;
   if (filters.numBuysMin || filters.numBuysMax) count++;
   if (filters.numSellsMin || filters.numSellsMax) count++;
+  if (filters.top10HoldersPercent || filters.top10HoldersPercentMin || filters.top10HoldersPercentMax) count++;
+  if (filters.devHoldingPercentMin || filters.devHoldingPercentMax) count++;
+  if (filters.snipersPercentMin || filters.snipersPercentMax) count++;
+  if (filters.insidersPercentMin || filters.insidersPercentMax) count++;
+  if (filters.bundlePercentMin || filters.bundlePercentMax) count++;
+  if (filters.proTradersMin || filters.proTradersMax) count++;
+  if (filters.globalFeesPaidMin || filters.globalFeesPaidMax) count++;
+  if (filters.twitterReusesMin || filters.twitterReusesMax) count++;
+  if (filters.hasTwitter || filters.hasWebsite || filters.hasTelegram || filters.atLeastOneSocial) count++;
+  if (filters.onlyPumpLive) count++;
   return count;
 }
 
@@ -332,6 +441,28 @@ export function hasActiveFilters(filters: PulseFilters): boolean {
     !!filters.numBuysMin ||
     !!filters.numBuysMax ||
     !!filters.numSellsMin ||
-    !!filters.numSellsMax
+    !!filters.numSellsMax ||
+    !!filters.top10HoldersPercent ||
+    !!filters.top10HoldersPercentMin ||
+    !!filters.top10HoldersPercentMax ||
+    !!filters.devHoldingPercentMin ||
+    !!filters.devHoldingPercentMax ||
+    !!filters.snipersPercentMin ||
+    !!filters.snipersPercentMax ||
+    !!filters.insidersPercentMin ||
+    !!filters.insidersPercentMax ||
+    !!filters.bundlePercentMin ||
+    !!filters.bundlePercentMax ||
+    !!filters.proTradersMin ||
+    !!filters.proTradersMax ||
+    !!filters.globalFeesPaidMin ||
+    !!filters.globalFeesPaidMax ||
+    !!filters.twitterReusesMin ||
+    !!filters.twitterReusesMax ||
+    !!filters.hasTwitter ||
+    !!filters.hasWebsite ||
+    !!filters.hasTelegram ||
+    !!filters.atLeastOneSocial ||
+    !!filters.onlyPumpLive
   );
 }

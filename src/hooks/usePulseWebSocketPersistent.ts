@@ -214,6 +214,7 @@ export function usePulseWebSocketPersistent(
   const normalizeToken = useCallback((rawToken: any): PulseToken => {
     // Pre-compute common fallback values to ensure both field name variants are populated
     const holderValue = rawToken.holder_count ?? rawToken.holders ?? rawToken.unique_wallets_24h ?? 0;
+    // Backend already sends percent values in 0-100 format, no conversion needed
     const devPercentValue = rawToken.dev_percent ?? rawToken.dev_held_percentage ?? 0;
     const sniperPercentValue = rawToken.sniper_percent ?? rawToken.sniper_held_percentage ?? 0;
     const insiderPercentValue = rawToken.insider_percent ?? rawToken.insider_held_percentage ?? 0;
