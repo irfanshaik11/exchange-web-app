@@ -65,42 +65,47 @@ export function HomepageInsightPanel() {
         }
         .iridescent-border-hp {
           position: relative;
-          border-radius: 1rem;
+          border-radius: 16px;
           padding: 1.5px;
           background: conic-gradient(
             from var(--iridescent-angle),
-            rgba(255,59,48,0.45),
-            rgba(255,149,0,0.45),
-            rgba(255,214,10,0.45),
-            rgba(52,199,89,0.45),
-            rgba(0,199,190,0.45),
-            rgba(48,176,199,0.45),
-            rgba(88,86,214,0.45),
-            rgba(191,90,242,0.45),
-            rgba(255,55,95,0.45),
-            rgba(255,59,48,0.45)
+            rgba(255,59,48,0.5),
+            rgba(255,149,0,0.5),
+            rgba(255,214,10,0.5),
+            rgba(52,199,89,0.5),
+            rgba(0,199,190,0.5),
+            rgba(48,176,199,0.5),
+            rgba(88,86,214,0.5),
+            rgba(191,90,242,0.5),
+            rgba(255,55,95,0.5),
+            rgba(255,59,48,0.5)
           );
           animation: iridescentRotate 9s linear infinite;
+        }
+        .iridescent-border-hp > .iridescent-inner {
+          border-radius: 14.5px;
+          background: rgba(14, 16, 20, 0.92);
+          backdrop-filter: blur(24px);
         }
         .iridescent-border-hp::before {
           content: '';
           position: absolute;
-          inset: -3px;
-          border-radius: 1.15rem;
+          inset: -4px;
+          border-radius: 20px;
           background: conic-gradient(
             from var(--iridescent-angle),
-            rgba(255,59,48,0.12),
-            rgba(255,149,0,0.12),
-            rgba(255,214,10,0.12),
-            rgba(52,199,89,0.12),
-            rgba(0,199,190,0.12),
-            rgba(48,176,199,0.12),
-            rgba(88,86,214,0.12),
-            rgba(191,90,242,0.12),
-            rgba(255,55,95,0.12),
-            rgba(255,59,48,0.12)
+            rgba(255,59,48,0.15),
+            rgba(255,149,0,0.15),
+            rgba(255,214,10,0.15),
+            rgba(52,199,89,0.15),
+            rgba(0,199,190,0.15),
+            rgba(48,176,199,0.15),
+            rgba(88,86,214,0.15),
+            rgba(191,90,242,0.15),
+            rgba(255,55,95,0.15),
+            rgba(255,59,48,0.15)
           );
-          filter: blur(8px);
+          filter: blur(10px);
           z-index: -1;
           animation: iridescentRotate 9s linear infinite;
         }
@@ -108,13 +113,7 @@ export function HomepageInsightPanel() {
       {/* Iridescent animated border wrapper */}
       <div className="iridescent-border-hp">
       {/* Main glass container */}
-      <div
-        className="rounded-2xl overflow-hidden backdrop-blur-xl shadow-2xl"
-        style={{
-          background: 'linear-gradient(160deg, rgba(74,222,128,0.08) 0%, rgba(18,20,26,0.97) 20%, rgba(34,211,238,0.06) 50%, rgba(18,20,26,0.97) 80%, rgba(129,140,248,0.08) 100%)',
-          boxShadow: '0 20px 60px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.08), 0 0 80px rgba(74,222,128,0.05), 0 0 40px rgba(34,211,238,0.04)',
-        }}
-      >
+      <div className="iridescent-inner overflow-hidden shadow-2xl">
         {/* Header */}
         <button
           onClick={() => setCollapsed(!collapsed)}
