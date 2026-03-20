@@ -47,17 +47,29 @@ export function HomepageInsightPanel() {
   const [collapsed, setCollapsed] = useState(false);
   const [showPicks, setShowPicks] = useState(false);
   const [showNarratives, setShowNarratives] = useState(false);
+  const [isOnLeft, setIsOnLeft] = useState(false);
   const constraintsRef = useRef<HTMLDivElement>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
+
+  const handleDragEnd = () => {
+    if (panelRef.current) {
+      const rect = panelRef.current.getBoundingClientRect();
+      const screenWidth = window.innerWidth;
+      setIsOnLeft(rect.left < screenWidth * 0.1);
+    }
+  };
 
   return (
     <>
-    {/* Drag boundary */}
-    <div ref={constraintsRef} className="fixed pointer-events-none hidden lg:block" style={{ zIndex: 39, top: '5.5rem', left: '10%', right: 0, bottom: 0 }} />
+    {/* Drag boundary — full screen except top navbar */}
+    <div ref={constraintsRef} className="fixed pointer-events-none hidden lg:block" style={{ zIndex: 39, top: '5.5rem', left: 0, right: 0, bottom: 0 }} />
     <motion.div
+      ref={panelRef}
       drag
       dragMomentum={false}
       dragConstraints={constraintsRef}
       dragElastic={0.05}
+      onDragEnd={handleDragEnd}
       className="hidden lg:block"
       role="region"
       aria-label="AI Insights"
