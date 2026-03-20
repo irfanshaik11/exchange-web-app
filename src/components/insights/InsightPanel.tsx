@@ -141,12 +141,18 @@ export function InsightPanel({ source, marketId }: InsightPanelProps) {
       `}</style>
 
       <div
-        className="flex-shrink-0 hidden xl:flex flex-col items-end"
-        style={{ width: collapsed ? 60 : 320 }}
+        className="hidden xl:block"
+        style={{
+          position: 'fixed',
+          right: '1rem',
+          top: '6rem',
+          width: collapsed ? 'auto' : 330,
+          zIndex: 40,
+        }}
       >
         {collapsed ? (
           /* Minimized pill */
-          <div className="iri-pill-sp mt-3 mr-2">
+          <div className="iri-pill-sp">
             <button
               onClick={() => setCollapsed(false)}
               className="pill-inner-sp flex items-center gap-2 px-3.5 py-2.5 hover:bg-white/[0.03] transition-colors"
