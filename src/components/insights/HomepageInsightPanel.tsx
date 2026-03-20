@@ -185,22 +185,19 @@ export function HomepageInsightPanel() {
           <div className="iridescent-pill">
             <button
               onClick={() => setCollapsed(false)}
-              className="pill-inner flex items-center gap-2.5 px-4 py-2.5 hover:bg-white/[0.04] transition-colors"
+              className="pill-inner flex items-center gap-3 px-5 py-3 hover:bg-white/[0.04] transition-colors"
             >
-              <AIIcon size={22} />
-              <div className="flex flex-col items-start">
-                <span
-                  className="text-[13px] font-extrabold tracking-[0.08em]"
-                  style={{
-                    background: 'linear-gradient(135deg, #4ADE80, #22D3EE)',
-                    WebkitBackgroundClip: 'text',
-                    WebkitTextFillColor: 'transparent',
-                  }}
-                >
-                  AI Insights
-                </span>
-                <span className="text-[8px] text-zinc-500 tracking-widest uppercase">tap to open</span>
-              </div>
+              <AIIcon size={24} />
+              <span
+                className="text-[12px] font-bold tracking-[0.08em]"
+                style={{
+                  background: 'linear-gradient(135deg, #4ADE80, #22D3EE)',
+                  WebkitBackgroundClip: 'text',
+                  WebkitTextFillColor: 'transparent',
+                }}
+              >
+                AI Insights
+              </span>
             </button>
           </div>
         ) : (
