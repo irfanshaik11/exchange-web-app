@@ -208,7 +208,7 @@ export function HomepageInsightPanel() {
                   {/* Header */}
                   <button
                     onClick={() => setCollapsed(true)}
-                    className="w-full flex items-center justify-between px-4 py-3 hover:bg-white/[0.02] transition-colors border-b border-white/[0.06]"
+                    className="w-full flex items-center justify-between px-4 py-3 hover:bg-white/[0.02] transition-colors"
                   >
                     <div className="flex items-center gap-2.5">
                       <AIIcon size={18} />

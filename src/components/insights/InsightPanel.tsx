@@ -186,7 +186,7 @@ export function InsightPanel({ source, marketId }: InsightPanelProps) {
               {/* Header */}
               <button
                 onClick={() => setCollapsed(true)}
-                className="flex items-center justify-between px-3 py-3 border-b border-white/[0.06] hover:bg-white/[0.02] transition-colors w-full"
+                className="flex items-center justify-between px-3 py-3 hover:bg-white/[0.02] transition-colors w-full"
               >
                 <div className="flex items-center gap-2.5">
                   <AIIcon size={16} />
