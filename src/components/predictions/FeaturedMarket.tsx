@@ -13,7 +13,7 @@ const buildPredictionUrl = (market: PredictionMarket): string => {
 };
 
 const AX = {
-  bg: "#0a0b0d",
+  bg: "#111214",
   surface: "#12141a",
   surface2: "#0e1012",
   border: "#1e2028",
@@ -45,10 +45,9 @@ export default function FeaturedMarket({ market }: FeaturedMarketProps) {
     >
       <Link href={buildPredictionUrl(market)}>
         <div
-          className="relative rounded-2xl p-6 md:p-8 cursor-pointer overflow-hidden group"
+          className="relative rounded-2xl p-6 md:p-8 cursor-pointer overflow-hidden group bg-white/[0.05] border border-white/[0.08] backdrop-blur-xl"
           style={{
-            background: `linear-gradient(135deg, ${AX.surface} 0%, ${AX.surface2} 100%)`,
-            border: `1px solid ${AX.border}`,
+            boxShadow: '0 8px 32px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.06)',
           }}
         >
           {/* Animated background gradient */}
@@ -149,7 +148,7 @@ export default function FeaturedMarket({ market }: FeaturedMarketProps) {
               {/* YES side */}
               <motion.div
                 whileHover={{ scale: 1.02 }}
-                className="flex-1 rounded-xl p-4 md:p-5 flex items-center justify-between"
+                className="flex-1 rounded-2xl p-4 md:p-5 flex items-center justify-between"
                 style={{
                   backgroundColor: AX.yesBg,
                   border: `1px solid rgba(34, 197, 94, 0.3)`,
@@ -171,7 +170,7 @@ export default function FeaturedMarket({ market }: FeaturedMarketProps) {
               {/* NO side */}
               <motion.div
                 whileHover={{ scale: 1.02 }}
-                className="flex-1 rounded-xl p-4 md:p-5 flex items-center justify-between"
+                className="flex-1 rounded-2xl p-4 md:p-5 flex items-center justify-between"
                 style={{
                   backgroundColor: AX.noBg,
                   border: `1px solid rgba(239, 68, 68, 0.3)`,

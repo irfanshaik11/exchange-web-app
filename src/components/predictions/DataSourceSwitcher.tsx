@@ -12,7 +12,7 @@ interface DataSourceSwitcherProps {
 }
 
 const AX = {
-  bg: "#101114",
+  bg: "#111214",
   surface: "#1E1F26",
   border: "#2A2B33",
   text: "#f0f5f5",

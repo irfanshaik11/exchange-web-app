@@ -13,7 +13,7 @@ import type { ExtendedPredictionMarket } from '~/hooks/useDFlowMarkets';
 
 // Vibrant color palette
 const C = {
-  bg: "#0a0b0d",
+  bg: "#111214",
   surface: "#12141a",
   border: "#1e2028",
   text: "#f0f0f0",

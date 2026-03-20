@@ -26,7 +26,7 @@ import MiniSparkline from './MiniSparkline';
 
 // Vibrant color palette
 const C = {
-  bg: "#0a0b0d",
+  bg: "#111214",
   surface: "#12141a",
   surface2: "#1a1d24",
   border: "#1e2028",
@@ -147,17 +147,16 @@ export default function PredictionCard({
   }, [market.ticker, market.yesPrice, priceChange, market.priceHistory]);
 
   return (
-    <Link href={href}>
+    <Link href={href} className="h-full block">
       <motion.div
-        className="group relative rounded-xl cursor-pointer overflow-hidden"
+        className="group relative rounded-2xl cursor-pointer overflow-hidden bg-white/[0.05] border border-white/[0.08] backdrop-blur-xl h-full flex flex-col"
         style={{
-          backgroundColor: C.surface,
-          border: `1px solid ${C.border}`,
           opacity: isActive ? 1 : 0.75,
+          boxShadow: '0 8px 32px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.06)',
         }}
         onMouseEnter={() => setIsHovered(true)}
         onMouseLeave={() => setIsHovered(false)}
-        whileHover={{ y: -4, transition: { duration: 0.2 } }}
+        whileHover={{ scale: 1.02, transition: { duration: 0.2 } }}
       >
         {/* Image Header (if available) */}
         {market.imageUrl && (
@@ -166,12 +165,12 @@ export default function PredictionCard({
               src={market.imageUrl}
               alt={market.title}
               fill
-              className="object-cover transition-transform duration-300 group-hover:scale-105"
+              className="object-cover"
             />
             <div
               className="absolute inset-0"
               style={{
-                background: `linear-gradient(to top, ${C.surface} 0%, transparent 100%)`,
+                background: `linear-gradient(to top, rgba(0,0,0,0.7) 0%, transparent 100%)`,
               }}
             />
             {/* Category badge on image */}
@@ -191,7 +190,7 @@ export default function PredictionCard({
         )}
 
         {/* Card Content */}
-        <div className="p-4">
+        <div className="p-4 flex flex-col flex-1">
           {/* Top Row: Status + Actions */}
           <div className="flex items-center justify-between mb-3">
             <div className="flex items-center gap-2">
@@ -249,7 +248,7 @@ export default function PredictionCard({
 
           {/* Title */}
           <h3
-            className="font-semibold text-sm leading-snug line-clamp-2 mb-3"
+            className="font-semibold text-sm leading-snug line-clamp-2 mb-auto"
             style={{ color: C.text }}
           >
             {market.title}
@@ -306,8 +305,8 @@ export default function PredictionCard({
 
           {/* Stats Row */}
           <div
-            className="flex items-center justify-between pt-3 text-[11px]"
-            style={{ borderTop: `1px solid ${C.border}`, color: C.muted }}
+            className="flex items-center justify-between pt-3 text-[11px] border-t border-white/[0.06]"
+            style={{ color: C.muted }}
           >
             <div className="flex items-center gap-3">
               {/* Volume */}
@@ -339,7 +338,7 @@ export default function PredictionCard({
                 transition={{ duration: 0.15 }}
                 className="absolute bottom-0 left-0 right-0 p-3 flex gap-2"
                 style={{
-                  background: `linear-gradient(to top, ${C.surface} 80%, transparent)`,
+                  background: `linear-gradient(to top, rgba(0,0,0,0.8) 80%, transparent)`,
                 }}
               >
                 <button
@@ -348,7 +347,7 @@ export default function PredictionCard({
                     e.stopPropagation();
                     onQuickTrade(market, 'yes');
                   }}
-                  className="flex-1 py-2 rounded-lg text-xs font-semibold transition-all hover:scale-[1.02]"
+                  className="flex-1 py-2 rounded-xl text-xs font-semibold transition-all hover:scale-[1.02]"
                   style={{
                     backgroundColor: C.green,
                     color: '#000',
@@ -362,7 +361,7 @@ export default function PredictionCard({
                     e.stopPropagation();
                     onQuickTrade(market, 'no');
                   }}
-                  className="flex-1 py-2 rounded-lg text-xs font-semibold transition-all hover:scale-[1.02]"
+                  className="flex-1 py-2 rounded-xl text-xs font-semibold transition-all hover:scale-[1.02]"
                   style={{
                     backgroundColor: C.red,
                     color: '#fff',
@@ -490,10 +489,9 @@ function generateMockSparkline(currentPrice: number, change: number): number[] {
 export function PredictionCardSkeleton() {
   return (
     <div
-      className="rounded-xl overflow-hidden"
+      className="rounded-2xl overflow-hidden bg-white/[0.05] border border-white/[0.08] backdrop-blur-xl"
       style={{
-        backgroundColor: C.surface,
-        border: `1px solid ${C.border}`,
+        boxShadow: '0 8px 32px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.06)',
       }}
     >
       {/* Image skeleton */}

@@ -3,7 +3,7 @@
 
 export const PredictionTheme = {
   // Base colors
-  bg: "#0a0b0d",
+  bg: "#111214",
   surface: "#12141a",
   surfaceHover: "#1a1d24",
   border: "#1e2028",
@@ -33,7 +33,7 @@ export const PredictionTheme = {
 export const PortfolioTheme = {
   // Base colors - darker than prediction theme
   bg: "#050608",
-  surface: "#101114",
+  surface: "#111214",
   surfaceHover: "#1A1B23",
   border: "#2A2B33",
   text: "#f0f5f5",

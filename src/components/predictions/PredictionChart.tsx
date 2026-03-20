@@ -76,7 +76,7 @@ const PredictionChart: React.FC<PredictionChartProps> = ({
     const height = rect.height;
 
     // Colors
-    const bgColor = '#101114';
+    const bgColor = '#111214';
     const gridColor = '#1E1F26';
     const textColor = '#6B7280';
     const lineColor = '#22C55E';
@@ -224,7 +224,7 @@ const PredictionChart: React.FC<PredictionChartProps> = ({
   return (
     <div
       className={`relative ${className}`}
-      style={{ height, backgroundColor: '#101114', borderRadius: '0 0 12px 12px', overflow: 'hidden' }}
+      style={{ height, backgroundColor: '#111214', borderRadius: '0 0 12px 12px', overflow: 'hidden' }}
     >
       <canvas
         ref={canvasRef}
