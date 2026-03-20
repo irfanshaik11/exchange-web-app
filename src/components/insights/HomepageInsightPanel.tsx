@@ -180,44 +180,29 @@ export function HomepageInsightPanel() {
           }
         `}</style>
 
-        <AnimatePresence mode="wait">
-          {collapsed ? (
-            /* Minimized pill — just sparkle icon + "AI" */
-            <motion.div
-              key="pill"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              transition={{ duration: 0.15 }}
+        {collapsed ? (
+          /* Minimized pill */
+          <div className="iridescent-pill">
+            <button
+              onClick={() => setCollapsed(false)}
+              className="pill-inner flex items-center gap-2 px-3.5 py-2.5 hover:bg-white/[0.03] transition-colors"
             >
-              <div className="iridescent-pill">
-                <button
-                  onClick={() => setCollapsed(false)}
-                  className="pill-inner flex items-center gap-2 px-3.5 py-2.5 hover:bg-white/[0.03] transition-colors"
-                >
-                  <AIIcon size={18} />
-                  <span
-                    className="text-[10px] font-bold tracking-[0.1em] uppercase"
-                    style={{
-                      background: 'linear-gradient(135deg, #4ADE80, #22D3EE)',
-                      WebkitBackgroundClip: 'text',
-                      WebkitTextFillColor: 'transparent',
-                    }}
-                  >
-                    AI
-                  </span>
-                </button>
-              </div>
-            </motion.div>
-          ) : (
-            /* Expanded panel */
-            <motion.div
-              key="panel"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              transition={{ duration: 0.15 }}
-            >
+              <AIIcon size={18} />
+              <span
+                className="text-[10px] font-bold tracking-[0.1em] uppercase"
+                style={{
+                  background: 'linear-gradient(135deg, #4ADE80, #22D3EE)',
+                  WebkitBackgroundClip: 'text',
+                  WebkitTextFillColor: 'transparent',
+                }}
+              >
+                AI
+              </span>
+            </button>
+          </div>
+        ) : (
+          /* Expanded panel */
+          <div>
               <div className="iridescent-border-hp">
                 <div className="iridescent-inner overflow-hidden shadow-2xl">
                   {/* Header */}
@@ -389,9 +374,8 @@ export function HomepageInsightPanel() {
                   )}
                 </div>
               </div>
-            </motion.div>
+            </div>
           )}
-        </AnimatePresence>
       </motion.div>
     </>
   );
