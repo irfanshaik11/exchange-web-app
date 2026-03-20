@@ -9,7 +9,7 @@ interface NarrativeChipProps {
 export function NarrativeChip({ theme, text, marketCount }: NarrativeChipProps) {
   return (
     <div
-      className="rounded-2xl overflow-hidden transition-colors duration-200 hover:border-white/[0.12]"
+      className="rounded-xl overflow-hidden transition-colors duration-200 hover:border-white/[0.12]"
       style={{
         background: 'rgba(255,255,255,0.04)',
         border: '1px solid rgba(255,255,255,0.07)',
@@ -30,7 +30,7 @@ export function NarrativeChip({ theme, text, marketCount }: NarrativeChipProps) 
             {marketCount} market{marketCount !== 1 ? 's' : ''}
           </span>
         </div>
-        <p className="text-[11px] text-zinc-300/80 leading-[1.6]">{text}</p>
+        <p className="text-[12px] text-zinc-300/80 leading-[1.6]">{text}</p>
       </div>
     </div>
   );

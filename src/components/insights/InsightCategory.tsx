@@ -18,7 +18,7 @@ export function InsightCategory({ label, insight }: InsightCategoryProps) {
 
   return (
     <div
-      className="rounded-2xl overflow-hidden transition-colors duration-200 hover:border-white/[0.12]"
+      className="rounded-xl overflow-hidden transition-colors duration-200 hover:border-white/[0.12]"
       style={{
         background: 'rgba(255,255,255,0.04)',
         border: '1px solid rgba(255,255,255,0.07)',
@@ -27,6 +27,7 @@ export function InsightCategory({ label, insight }: InsightCategoryProps) {
     >
       <button
         onClick={() => setOpen(!open)}
+        aria-expanded={open}
         className="w-full flex items-center justify-between px-3 py-2.5 hover:bg-white/[0.02] transition-colors"
       >
         <div className="flex items-center gap-2">
@@ -53,7 +54,7 @@ export function InsightCategory({ label, insight }: InsightCategoryProps) {
             className="overflow-hidden"
           >
             <div className="px-3 pb-3 pt-0.5">
-              <p className="text-[11px] text-zinc-300/80 leading-[1.65]">
+              <p className="text-[12px] text-zinc-300/80 leading-[1.65]">
                 {insight.text}
               </p>
             </div>

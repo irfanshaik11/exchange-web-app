@@ -1,9 +1,10 @@
-import React, { useState, useRef } from 'react';
+import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { HiChevronDown } from 'react-icons/hi';
 import { useMarketInsights } from '~/hooks/useMarketInsights';
 import { InsightCategory } from './InsightCategory';
 import { InsightSkeleton } from './InsightSkeleton';
+import './iridescent.css';
 
 interface InsightPanelProps {
   source: string;
@@ -57,206 +58,116 @@ function AIIcon({ size = 16 }: { size?: number }) {
 export function InsightPanel({ source, marketId }: InsightPanelProps) {
   const { data, isLoading } = useMarketInsights(source, marketId);
   const [collapsed, setCollapsed] = useState(false);
-  const constraintsRef = useRef<HTMLDivElement>(null);
 
   return (
-    <>
-      {/* Drag boundary */}
-      <div ref={constraintsRef} className="fixed inset-0 pointer-events-none hidden xl:block" style={{ zIndex: 39 }} />
-      <style>{`
-        @property --iri-angle-sp {
-          syntax: '<angle>';
-          initial-value: 0deg;
-          inherits: false;
-        }
-        @keyframes iriRotateSP {
-          0% { --iri-angle-sp: 0deg; }
-          100% { --iri-angle-sp: 360deg; }
-        }
-        .iri-border-sp {
-          position: relative;
-          border-radius: 16px;
-          padding: 1.5px;
-          background: conic-gradient(
-            from var(--iri-angle-sp),
-            rgba(255,59,48,0.5), rgba(255,149,0,0.5), rgba(255,214,10,0.5),
-            rgba(52,199,89,0.5), rgba(0,199,190,0.5), rgba(48,176,199,0.5),
-            rgba(88,86,214,0.5), rgba(191,90,242,0.5), rgba(255,55,95,0.5),
-            rgba(255,59,48,0.5)
-          );
-          animation: iriRotateSP 9s linear infinite;
-        }
-        .iri-border-sp > .iri-inner-sp {
-          border-radius: 14.5px;
-          background: rgba(14, 16, 20, 0.85);
-          backdrop-filter: blur(24px);
-        }
-        .iri-border-sp::before {
-          content: '';
-          position: absolute;
-          inset: -4px;
-          border-radius: 20px;
-          background: conic-gradient(
-            from var(--iri-angle-sp),
-            rgba(255,59,48,0.12), rgba(255,149,0,0.12), rgba(255,214,10,0.12),
-            rgba(52,199,89,0.12), rgba(0,199,190,0.12), rgba(48,176,199,0.12),
-            rgba(88,86,214,0.12), rgba(191,90,242,0.12), rgba(255,55,95,0.12),
-            rgba(255,59,48,0.12)
-          );
-          filter: blur(10px);
-          z-index: -1;
-          animation: iriRotateSP 9s linear infinite;
-        }
-        .iri-pill-sp {
-          position: relative;
-          border-radius: 24px;
-          padding: 1.5px;
-          background: conic-gradient(
-            from var(--iri-angle-sp),
-            rgba(255,59,48,0.5), rgba(255,149,0,0.5), rgba(255,214,10,0.5),
-            rgba(52,199,89,0.5), rgba(0,199,190,0.5), rgba(48,176,199,0.5),
-            rgba(88,86,214,0.5), rgba(191,90,242,0.5), rgba(255,55,95,0.5),
-            rgba(255,59,48,0.5)
-          );
-          animation: iriRotateSP 9s linear infinite;
-        }
-        .iri-pill-sp > .pill-inner-sp {
-          border-radius: 22.5px;
-          background: rgba(14, 16, 20, 0.88);
-          backdrop-filter: blur(24px);
-        }
-        .iri-pill-sp::before {
-          content: '';
-          position: absolute;
-          inset: -3px;
-          border-radius: 27px;
-          background: conic-gradient(
-            from var(--iri-angle-sp),
-            rgba(255,59,48,0.12), rgba(255,149,0,0.12), rgba(255,214,10,0.12),
-            rgba(52,199,89,0.12), rgba(0,199,190,0.12), rgba(48,176,199,0.12),
-            rgba(88,86,214,0.12), rgba(191,90,242,0.12), rgba(255,55,95,0.12),
-            rgba(255,59,48,0.12)
-          );
-          filter: blur(8px);
-          z-index: -1;
-          animation: iriRotateSP 9s linear infinite;
-        }
-      `}</style>
-
-      <motion.div
-        drag
-        dragMomentum={false}
-        dragConstraints={constraintsRef}
-        dragElastic={0.05}
-        className="hidden xl:block"
-        style={{
-          position: 'fixed',
-          right: '1rem',
-          top: '6rem',
-          width: collapsed ? 'auto' : 330,
-          zIndex: 40,
-          cursor: 'grab',
-        }}
-        whileDrag={{ cursor: 'grabbing' }}
-      >
-        {collapsed ? (
-          /* Minimized pill */
-          <div className="iri-pill-sp">
-            <button
-              onClick={() => setCollapsed(false)}
-              className="pill-inner-sp flex items-center gap-3 px-5 py-3 hover:bg-white/[0.04] transition-colors"
+    <div
+      className="hidden lg:block"
+      role="region"
+      aria-label="AI Insights"
+      style={{
+        position: 'fixed',
+        right: '1rem',
+        top: '6rem',
+        width: collapsed ? 'auto' : 330,
+        zIndex: 40,
+      }}
+    >
+      {collapsed ? (
+        /* Minimized pill */
+        <div className="iridescent-pill">
+          <button
+            onClick={() => setCollapsed(false)}
+            aria-label="Open AI insights"
+            aria-expanded={false}
+            className="pill-inner flex items-center gap-3 px-5 py-3 hover:bg-white/[0.04] transition-colors focus-visible:ring-2 focus-visible:ring-[#4ADE80]/50 focus-visible:outline-none"
+          >
+            <AIIcon size={24} />
+            <span
+              className="text-[12px] font-bold tracking-[0.08em]"
+              style={{
+                background: 'linear-gradient(135deg, #4ADE80, #22D3EE)',
+                WebkitBackgroundClip: 'text',
+                WebkitTextFillColor: 'transparent',
+              }}
             >
-              <AIIcon size={24} />
-              <span
-                className="text-[12px] font-bold tracking-[0.08em]"
-                style={{
-                  background: 'linear-gradient(135deg, #4ADE80, #22D3EE)',
-                  WebkitBackgroundClip: 'text',
-                  WebkitTextFillColor: 'transparent',
-                }}
-              >
-                AI Insights
-              </span>
+              AI Insights
+            </span>
+          </button>
+        </div>
+      ) : (
+        /* Expanded panel */
+        <div className="iridescent-border w-full">
+          <div className="iridescent-inner overflow-hidden flex flex-col" style={{ maxHeight: 'calc(100vh - 8rem)' }}>
+            {/* Header */}
+            <button
+              onClick={() => setCollapsed(true)}
+              aria-expanded={true}
+              aria-label="Toggle AI insights"
+              className="flex items-center justify-between px-3 py-3 hover:bg-white/[0.02] transition-colors w-full focus-visible:ring-2 focus-visible:ring-[#4ADE80]/50 focus-visible:outline-none"
+            >
+              <div className="flex items-center gap-2.5">
+                <AIIcon size={16} />
+                <div className="flex flex-col">
+                  <span
+                    className="text-[13px] font-bold tracking-[0.12em] uppercase text-[#4ADE80]"
+                  >
+                    AI Insights
+                  </span>
+                </div>
+              </div>
+              <HiChevronDown className="w-4 h-4 text-zinc-500" />
             </button>
-          </div>
-        ) : (
-          /* Expanded panel */
-          <div className="iri-border-sp w-full">
-            <div className="iri-inner-sp overflow-hidden flex flex-col" style={{ maxHeight: 'calc(100vh - 8rem)' }}>
-              {/* Header */}
-              <button
-                onClick={() => setCollapsed(true)}
-                className="flex items-center justify-between px-3 py-3 hover:bg-white/[0.02] transition-colors w-full"
-              >
-                <div className="flex items-center gap-2.5">
-                  <AIIcon size={16} />
-                  <div className="flex flex-col">
-                    <span
-                      className="text-[11px] font-bold tracking-[0.12em] uppercase"
-                      style={{
-                        background: 'linear-gradient(135deg, #4ADE80, #22D3EE)',
-                        WebkitBackgroundClip: 'text',
-                        WebkitTextFillColor: 'transparent',
-                      }}
+
+            {/* Glow line */}
+            <div
+              className="h-[1px] w-full flex-shrink-0"
+              style={{ background: 'linear-gradient(90deg, transparent, rgba(74,222,128,0.15) 50%, transparent)' }}
+            />
+
+            {/* Content */}
+            <div className="flex-1 overflow-y-auto p-2.5 space-y-1.5">
+              {isLoading ? (
+                <InsightSkeleton />
+              ) : data?.insights ? (
+                <>
+                  {Object.entries(data.insights).map(([key, insight], i) => (
+                    <motion.div
+                      key={key}
+                      initial={{ opacity: 0, y: 8 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ duration: 0.2, delay: i * 0.04 }}
                     >
-                      AI Insights
-                    </span>
+                      <InsightCategory label={CATEGORY_LABELS[key] || key} insight={insight} />
+                    </motion.div>
+                  ))}
+                  <p className="text-[9px] text-zinc-600 text-center pt-2 pb-1 leading-relaxed">
+                    AI-generated insights. Not financial advice.
+                  </p>
+                </>
+              ) : (
+                <div className="flex flex-col items-center justify-center py-10 text-center">
+                  <div className="w-12 h-12 rounded-2xl flex items-center justify-center mb-4 bg-white/[0.05] border border-white/[0.08]">
+                    <AIIcon size={24} />
+                  </div>
+                  <p className="text-[11px] text-zinc-500 leading-relaxed max-w-[200px]">
+                    AI insights are being generated for this market
+                  </p>
+                  <div className="flex items-center gap-1 mt-3">
+                    {[0, 1, 2].map(i => (
+                      <motion.div
+                        key={i}
+                        className="w-1 h-1 rounded-full bg-[#4ADE80]"
+                        animate={{ opacity: [0.2, 0.8, 0.2] }}
+                        transition={{ duration: 1.2, repeat: Infinity, delay: i * 0.2 }}
+                      />
+                    ))}
                   </div>
                 </div>
-                <HiChevronDown className="w-4 h-4 text-zinc-500" />
-              </button>
-
-              {/* Glow line */}
-              <div
-                className="h-[1px] w-full flex-shrink-0"
-                style={{ background: 'linear-gradient(90deg, transparent, rgba(74,222,128,0.15) 50%, transparent)' }}
-              />
-
-              {/* Content */}
-              <div className="flex-1 overflow-y-auto p-2.5 space-y-1.5">
-                {isLoading ? (
-                  <InsightSkeleton />
-                ) : data?.insights ? (
-                  <>
-                    {Object.entries(data.insights).map(([key, insight], i) => (
-                      <motion.div
-                        key={key}
-                        initial={{ opacity: 0, y: 8 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        transition={{ duration: 0.2, delay: i * 0.04 }}
-                      >
-                        <InsightCategory label={CATEGORY_LABELS[key] || key} insight={insight} />
-                      </motion.div>
-                    ))}
-                    <p className="text-[8px] text-zinc-600 text-center pt-2 pb-1 leading-relaxed">
-                      AI-generated insights. Not financial advice.
-                    </p>
-                  </>
-                ) : (
-                  <div className="flex flex-col items-center justify-center py-10 text-center">
-                    <div className="w-12 h-12 rounded-2xl flex items-center justify-center mb-4 bg-white/[0.05] border border-white/[0.08]">
-                      <AIIcon size={24} />
-                    </div>
-                    <p className="text-[11px] text-zinc-500 leading-relaxed max-w-[200px]">
-                      AI insights are being generated for this market
-                    </p>
-                    <div className="flex items-center gap-1 mt-3">
-                      {[0, 1, 2].map(i => (
-                        <motion.div
-                          key={i}
-                          className="w-1 h-1 rounded-full bg-[#4ADE80]"
-                          animate={{ opacity: [0.2, 0.8, 0.2] }}
-                          transition={{ duration: 1.2, repeat: Infinity, delay: i * 0.2 }}
-                        />
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </div>
+              )}
             </div>
           </div>
-        )}
-      </motion.div>
-    </>
+        </div>
+      )}
+    </div>
   );
 }
