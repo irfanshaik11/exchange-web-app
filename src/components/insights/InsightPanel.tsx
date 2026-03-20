@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
-import { HiOutlineSparkles, HiChevronDown } from 'react-icons/hi';
+import { motion } from 'framer-motion';
+import { HiChevronLeft } from 'react-icons/hi';
 import { useMarketInsights } from '~/hooks/useMarketInsights';
 import { InsightCategory } from './InsightCategory';
 import { InsightSkeleton } from './InsightSkeleton';
@@ -29,6 +29,41 @@ function timeAgo(dateStr: string): string {
   return `${Math.floor(hrs / 24)}d ago`;
 }
 
+// Animated AI sparkle icon
+function AIIcon({ size = 16 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <motion.path
+        d="M12 2L13.5 8.5L20 10L13.5 11.5L12 18L10.5 11.5L4 10L10.5 8.5L12 2Z"
+        fill="url(#ai-gradient)"
+        initial={{ scale: 0.9, opacity: 0.7 }}
+        animate={{ scale: [0.9, 1.05, 0.9], opacity: [0.7, 1, 0.7] }}
+        transition={{ duration: 3, repeat: Infinity, ease: 'easeInOut' }}
+      />
+      <motion.path
+        d="M19 15L19.75 17.25L22 18L19.75 18.75L19 21L18.25 18.75L16 18L18.25 17.25L19 15Z"
+        fill="url(#ai-gradient)"
+        initial={{ scale: 0.8, opacity: 0.5 }}
+        animate={{ scale: [0.8, 1.1, 0.8], opacity: [0.5, 0.9, 0.5] }}
+        transition={{ duration: 2.5, repeat: Infinity, ease: 'easeInOut', delay: 0.5 }}
+      />
+      <motion.path
+        d="M5 17L5.5 18.5L7 19L5.5 19.5L5 21L4.5 19.5L3 19L4.5 18.5L5 17Z"
+        fill="url(#ai-gradient)"
+        initial={{ scale: 0.8, opacity: 0.5 }}
+        animate={{ scale: [0.8, 1.15, 0.8], opacity: [0.5, 0.85, 0.5] }}
+        transition={{ duration: 2, repeat: Infinity, ease: 'easeInOut', delay: 1 }}
+      />
+      <defs>
+        <linearGradient id="ai-gradient" x1="3" y1="2" x2="22" y2="21" gradientUnits="userSpaceOnUse">
+          <stop stopColor="#4ADE80" />
+          <stop offset="1" stopColor="#22D3EE" />
+        </linearGradient>
+      </defs>
+    </svg>
+  );
+}
+
 export function InsightPanel({ source, marketId }: InsightPanelProps) {
   const { data, isLoading } = useMarketInsights(source, marketId);
   const [collapsed, setCollapsed] = useState(false);
@@ -40,54 +75,113 @@ export function InsightPanel({ source, marketId }: InsightPanelProps) {
       transition={{ duration: 0.3 }}
       className="flex-shrink-0 hidden xl:flex flex-col"
       style={{
-        width: collapsed ? 48 : 320,
-        borderLeft: '1px solid #2A2B33',
-        backgroundColor: '#17191E',
-        transition: 'width 0.2s ease',
+        width: collapsed ? 44 : 320,
+        borderLeft: '1px solid rgba(255,255,255,0.06)',
+        background: collapsed
+          ? 'rgba(18, 20, 26, 0.95)'
+          : 'linear-gradient(180deg, rgba(18, 20, 26, 0.98) 0%, rgba(14, 16, 18, 0.98) 100%)',
+        backdropFilter: 'blur(20px)',
+        transition: 'width 0.25s cubic-bezier(0.4, 0, 0.2, 1)',
       }}
     >
       {/* Header */}
       <button
         onClick={() => setCollapsed(!collapsed)}
-        className="flex items-center justify-between px-3 py-3 border-b border-white/[0.06] hover:bg-white/[0.03] transition-colors w-full"
+        className="flex items-center gap-2.5 px-3 py-3.5 border-b border-white/[0.06] hover:bg-white/[0.02] transition-colors w-full"
+        style={!collapsed ? {
+          background: 'linear-gradient(135deg, rgba(74, 222, 128, 0.03) 0%, rgba(34, 211, 238, 0.02) 100%)',
+        } : undefined}
       >
-        <div className="flex items-center gap-2">
-          <HiOutlineSparkles className="w-4 h-4 text-[#4ADE80] flex-shrink-0" />
-          {!collapsed && <span className="text-sm font-semibold text-zinc-200">AI Insights</span>}
-        </div>
+        <AIIcon size={collapsed ? 20 : 16} />
         {!collapsed && (
-          <div className="flex items-center gap-2">
-            {data?.generatedAt && (
-              <span className="text-[10px] text-zinc-500">
-                Updated {timeAgo(data.generatedAt)}
+          <>
+            <div className="flex-1 text-left">
+              <span
+                className="text-[11px] font-bold tracking-[0.12em] uppercase"
+                style={{
+                  background: 'linear-gradient(135deg, #4ADE80 0%, #22D3EE 100%)',
+                  WebkitBackgroundClip: 'text',
+                  WebkitTextFillColor: 'transparent',
+                }}
+              >
+                AI Insights
               </span>
-            )}
-            <motion.div animate={{ rotate: collapsed ? 90 : 0 }} transition={{ duration: 0.2 }}>
-              <HiChevronDown className="w-3.5 h-3.5 text-zinc-500" />
-            </motion.div>
-          </div>
+            </div>
+            <div className="flex items-center gap-2">
+              {data?.generatedAt && (
+                <span className="text-[9px] text-zinc-600 font-mono">
+                  {timeAgo(data.generatedAt)}
+                </span>
+              )}
+              <motion.div
+                animate={{ rotate: collapsed ? 0 : 180 }}
+                transition={{ duration: 0.2 }}
+              >
+                <HiChevronLeft className="w-3.5 h-3.5 text-zinc-600" />
+              </motion.div>
+            </div>
+          </>
         )}
       </button>
 
       {/* Content */}
       {!collapsed && (
-        <div className="flex-1 overflow-y-auto p-3 space-y-2">
-          {isLoading ? (
-            <InsightSkeleton />
-          ) : data?.insights ? (
-            Object.entries(data.insights).map(([key, insight]) => (
-              <InsightCategory
-                key={key}
-                label={CATEGORY_LABELS[key] || key}
-                insight={insight}
-              />
-            ))
-          ) : (
-            <div className="flex flex-col items-center justify-center py-8 text-center">
-              <HiOutlineSparkles className="w-8 h-8 text-zinc-600 mb-3" />
-              <p className="text-xs text-zinc-500">AI insights are being generated for this market. Check back shortly.</p>
-            </div>
-          )}
+        <div className="flex-1 overflow-y-auto">
+          {/* Subtle top glow line */}
+          <div
+            className="h-[1px] w-full"
+            style={{
+              background: 'linear-gradient(90deg, transparent 0%, rgba(74,222,128,0.15) 50%, transparent 100%)',
+            }}
+          />
+          <div className="p-2.5 space-y-1.5">
+            {isLoading ? (
+              <InsightSkeleton />
+            ) : data?.insights ? (
+              Object.entries(data.insights).map(([key, insight], i) => (
+                <motion.div
+                  key={key}
+                  initial={{ opacity: 0, y: 8 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.2, delay: i * 0.04 }}
+                >
+                  <InsightCategory
+                    label={CATEGORY_LABELS[key] || key}
+                    insight={insight}
+                  />
+                </motion.div>
+              ))
+            ) : (
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                className="flex flex-col items-center justify-center py-10 text-center"
+              >
+                <div
+                  className="w-12 h-12 rounded-2xl flex items-center justify-center mb-4"
+                  style={{
+                    background: 'linear-gradient(135deg, rgba(74,222,128,0.08) 0%, rgba(34,211,238,0.06) 100%)',
+                    border: '1px solid rgba(74,222,128,0.1)',
+                  }}
+                >
+                  <AIIcon size={24} />
+                </div>
+                <p className="text-[11px] text-zinc-500 leading-relaxed max-w-[200px]">
+                  AI insights are being generated for this market
+                </p>
+                <div className="flex items-center gap-1 mt-3">
+                  {[0, 1, 2].map(i => (
+                    <motion.div
+                      key={i}
+                      className="w-1 h-1 rounded-full bg-[#4ADE80]"
+                      animate={{ opacity: [0.2, 0.8, 0.2] }}
+                      transition={{ duration: 1.2, repeat: Infinity, delay: i * 0.2 }}
+                    />
+                  ))}
+                </div>
+              </motion.div>
+            )}
+          </div>
         </div>
       )}
     </motion.div>

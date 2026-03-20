@@ -1,18 +1,44 @@
 import React, { useState } from 'react';
 import { useRouter } from 'next/router';
 import { motion, AnimatePresence } from 'framer-motion';
-import { HiOutlineSparkles, HiOutlineChevronDown, HiOutlineX } from 'react-icons/hi';
+import { HiOutlineChevronDown } from 'react-icons/hi';
 import { useHomepageInsights } from '~/hooks/useHomepageInsights';
 import { SentimentBadge } from './SentimentBadge';
 import { TopPickCard } from './TopPickCard';
 import { NarrativeChip } from './NarrativeChip';
 import { InsightSkeleton } from './InsightSkeleton';
 
+// Animated AI sparkle icon
+function AIIcon({ size = 16 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <motion.path
+        d="M12 2L13.5 8.5L20 10L13.5 11.5L12 18L10.5 11.5L4 10L10.5 8.5L12 2Z"
+        fill="url(#hp-ai-grad)"
+        animate={{ scale: [0.9, 1.05, 0.9], opacity: [0.7, 1, 0.7] }}
+        transition={{ duration: 3, repeat: Infinity, ease: 'easeInOut' }}
+      />
+      <motion.path
+        d="M19 15L19.75 17.25L22 18L19.75 18.75L19 21L18.25 18.75L16 18L18.25 17.25L19 15Z"
+        fill="url(#hp-ai-grad)"
+        animate={{ scale: [0.8, 1.1, 0.8], opacity: [0.5, 0.9, 0.5] }}
+        transition={{ duration: 2.5, repeat: Infinity, ease: 'easeInOut', delay: 0.5 }}
+      />
+      <defs>
+        <linearGradient id="hp-ai-grad" x1="3" y1="2" x2="22" y2="21" gradientUnits="userSpaceOnUse">
+          <stop stopColor="#4ADE80" />
+          <stop offset="1" stopColor="#22D3EE" />
+        </linearGradient>
+      </defs>
+    </svg>
+  );
+}
+
 export function HomepageInsightPanel() {
   const router = useRouter();
   const { data, isLoading } = useHomepageInsights();
   const [collapsed, setCollapsed] = useState(false);
-  const [showPicks, setShowPicks] = useState(false);
+  const [showPicks, setShowPicks] = useState(true);
   const [showNarratives, setShowNarratives] = useState(false);
 
   return (
@@ -22,30 +48,53 @@ export function HomepageInsightPanel() {
         position: 'fixed',
         right: '1rem',
         top: '5rem',
-        width: 320,
+        width: 330,
         zIndex: 40,
       }}
     >
       <div
-        className="rounded-xl overflow-hidden shadow-2xl"
+        className="rounded-2xl overflow-hidden"
         style={{
-          backgroundColor: '#12141a',
-          border: '1px solid #1e2028',
+          background: 'linear-gradient(180deg, rgba(18, 20, 26, 0.95) 0%, rgba(14, 16, 18, 0.97) 100%)',
+          border: '1px solid rgba(255,255,255,0.06)',
+          backdropFilter: 'blur(24px)',
+          boxShadow: '0 20px 60px rgba(0,0,0,0.5), 0 0 1px rgba(74,222,128,0.1)',
         }}
       >
         {/* Header */}
         <button
           onClick={() => setCollapsed(!collapsed)}
-          className="w-full flex items-center justify-between px-4 py-3 hover:bg-white/[0.03] transition-colors"
+          className="w-full flex items-center justify-between px-4 py-3 transition-colors"
+          style={{
+            background: 'linear-gradient(135deg, rgba(74, 222, 128, 0.04) 0%, rgba(34, 211, 238, 0.02) 100%)',
+            borderBottom: '1px solid rgba(255,255,255,0.05)',
+          }}
         >
-          <div className="flex items-center gap-2">
-            <HiOutlineSparkles className="w-4 h-4 text-[#4ADE80]" />
-            <span className="text-sm font-semibold text-zinc-200">AI Market Pulse</span>
+          <div className="flex items-center gap-2.5">
+            <AIIcon size={18} />
+            <span
+              className="text-[11px] font-bold tracking-[0.12em] uppercase"
+              style={{
+                background: 'linear-gradient(135deg, #4ADE80 0%, #22D3EE 100%)',
+                WebkitBackgroundClip: 'text',
+                WebkitTextFillColor: 'transparent',
+              }}
+            >
+              AI Market Pulse
+            </span>
           </div>
           <motion.div animate={{ rotate: collapsed ? 0 : 180 }} transition={{ duration: 0.2 }}>
             <HiOutlineChevronDown className="w-4 h-4 text-zinc-500" />
           </motion.div>
         </button>
+
+        {/* Glow line */}
+        <div
+          className="h-[1px] w-full"
+          style={{
+            background: 'linear-gradient(90deg, transparent 0%, rgba(74,222,128,0.2) 30%, rgba(34,211,238,0.15) 70%, transparent 100%)',
+          }}
+        />
 
         <AnimatePresence>
           {!collapsed && (
@@ -53,34 +102,46 @@ export function HomepageInsightPanel() {
               initial={{ height: 0, opacity: 0 }}
               animate={{ height: 'auto', opacity: 1 }}
               exit={{ height: 0, opacity: 0 }}
-              transition={{ duration: 0.2 }}
+              transition={{ duration: 0.25, ease: 'easeOut' }}
               className="overflow-hidden"
             >
               {isLoading ? (
                 <InsightSkeleton />
               ) : data?.insights ? (
-                <div className="px-3 pb-3 space-y-3 max-h-[calc(100vh-8rem)] overflow-y-auto">
-                  {/* Market Pulse - always expanded */}
-                  <div className="p-3 rounded-lg border border-white/[0.06]">
+                <div className="p-3 space-y-3 max-h-[calc(100vh-8rem)] overflow-y-auto">
+                  {/* Market Pulse — always visible */}
+                  <motion.div
+                    initial={{ opacity: 0, y: 6 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.2 }}
+                    className="rounded-xl p-3"
+                    style={{
+                      background: 'linear-gradient(135deg, rgba(74,222,128,0.04) 0%, rgba(255,255,255,0.02) 100%)',
+                      border: '1px solid rgba(74,222,128,0.08)',
+                    }}
+                  >
                     <div className="flex items-center justify-between mb-2">
-                      <span className="text-xs font-semibold text-zinc-300">Market Pulse</span>
+                      <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-[0.1em]">Market Pulse</span>
                       <SentimentBadge sentiment={data.insights.marketPulse.sentiment} />
                     </div>
-                    <p className="text-[11px] text-zinc-400 leading-relaxed">
+                    <p className="text-[11px] text-zinc-400 leading-[1.65]">
                       {data.insights.marketPulse.text}
                     </p>
-                  </div>
+                  </motion.div>
 
-                  {/* AI Top Picks - collapsible */}
+                  {/* AI Top Picks */}
                   {data.insights.aiTopPicks.length > 0 && (
                     <div>
                       <button
                         onClick={() => setShowPicks(!showPicks)}
-                        className="w-full flex items-center justify-between py-1.5 text-xs font-semibold text-zinc-300"
+                        className="w-full flex items-center justify-between py-1.5 px-1 group"
                       >
-                        AI Top Picks ({data.insights.aiTopPicks.length})
+                        <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-[0.1em] group-hover:text-zinc-300 transition-colors">
+                          Top Picks
+                          <span className="ml-1.5 text-[9px] font-mono text-zinc-600">{data.insights.aiTopPicks.length}</span>
+                        </span>
                         <motion.div animate={{ rotate: showPicks ? 180 : 0 }} transition={{ duration: 0.2 }}>
-                          <HiOutlineChevronDown className="w-3.5 h-3.5 text-zinc-500" />
+                          <HiOutlineChevronDown className="w-3 h-3 text-zinc-600" />
                         </motion.div>
                       </button>
                       <AnimatePresence>
@@ -90,17 +151,23 @@ export function HomepageInsightPanel() {
                             animate={{ height: 'auto', opacity: 1 }}
                             exit={{ height: 0, opacity: 0 }}
                             transition={{ duration: 0.2 }}
-                            className="overflow-hidden space-y-2"
+                            className="overflow-hidden space-y-1.5"
                           >
                             {data.insights.aiTopPicks.map((pick, i) => (
-                              <TopPickCard
+                              <motion.div
                                 key={i}
-                                question={pick.question}
-                                text={pick.text}
-                                sentiment={pick.sentiment}
-                                confidence={pick.confidence}
-                                onClick={() => router.push(`/predictions/${pick.marketId}?source=${pick.source}`)}
-                              />
+                                initial={{ opacity: 0, x: 8 }}
+                                animate={{ opacity: 1, x: 0 }}
+                                transition={{ duration: 0.15, delay: i * 0.05 }}
+                              >
+                                <TopPickCard
+                                  question={pick.question}
+                                  text={pick.text}
+                                  sentiment={pick.sentiment}
+                                  confidence={pick.confidence}
+                                  onClick={() => router.push(`/predictions/${pick.marketId}?source=${pick.source}`)}
+                                />
+                              </motion.div>
                             ))}
                           </motion.div>
                         )}
@@ -108,16 +175,19 @@ export function HomepageInsightPanel() {
                     </div>
                   )}
 
-                  {/* Trending Narratives - collapsible */}
+                  {/* Trending Narratives */}
                   {data.insights.trendingNarratives.length > 0 && (
                     <div>
                       <button
                         onClick={() => setShowNarratives(!showNarratives)}
-                        className="w-full flex items-center justify-between py-1.5 text-xs font-semibold text-zinc-300"
+                        className="w-full flex items-center justify-between py-1.5 px-1 group"
                       >
-                        Trending Narratives ({data.insights.trendingNarratives.length})
+                        <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-[0.1em] group-hover:text-zinc-300 transition-colors">
+                          Narratives
+                          <span className="ml-1.5 text-[9px] font-mono text-zinc-600">{data.insights.trendingNarratives.length}</span>
+                        </span>
                         <motion.div animate={{ rotate: showNarratives ? 180 : 0 }} transition={{ duration: 0.2 }}>
-                          <HiOutlineChevronDown className="w-3.5 h-3.5 text-zinc-500" />
+                          <HiOutlineChevronDown className="w-3 h-3 text-zinc-600" />
                         </motion.div>
                       </button>
                       <AnimatePresence>
@@ -127,27 +197,64 @@ export function HomepageInsightPanel() {
                             animate={{ height: 'auto', opacity: 1 }}
                             exit={{ height: 0, opacity: 0 }}
                             transition={{ duration: 0.2 }}
-                            className="overflow-hidden space-y-2"
+                            className="overflow-hidden space-y-1.5"
                           >
                             {data.insights.trendingNarratives.map((narrative, i) => (
-                              <NarrativeChip
+                              <motion.div
                                 key={i}
-                                theme={narrative.theme}
-                                text={narrative.text}
-                                marketCount={narrative.relatedMarketCount}
-                              />
+                                initial={{ opacity: 0, x: 8 }}
+                                animate={{ opacity: 1, x: 0 }}
+                                transition={{ duration: 0.15, delay: i * 0.05 }}
+                              >
+                                <NarrativeChip
+                                  theme={narrative.theme}
+                                  text={narrative.text}
+                                  marketCount={narrative.relatedMarketCount}
+                                />
+                              </motion.div>
                             ))}
                           </motion.div>
                         )}
                       </AnimatePresence>
                     </div>
                   )}
+
+                  {/* Timestamp */}
+                  {data.generatedAt && (
+                    <div className="text-center pt-1 pb-0.5">
+                      <span className="text-[8px] font-mono text-zinc-700 tracking-wider uppercase">
+                        Updated {new Date(data.generatedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                      </span>
+                    </div>
+                  )}
                 </div>
               ) : (
-                <div className="flex flex-col items-center justify-center py-6 px-3 text-center">
-                  <HiOutlineSparkles className="w-6 h-6 text-zinc-600 mb-2" />
-                  <p className="text-[11px] text-zinc-500">AI insights are being generated. Check back shortly.</p>
-                </div>
+                <motion.div
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  className="flex flex-col items-center justify-center py-8 px-3 text-center"
+                >
+                  <div
+                    className="w-10 h-10 rounded-xl flex items-center justify-center mb-3"
+                    style={{
+                      background: 'linear-gradient(135deg, rgba(74,222,128,0.08) 0%, rgba(34,211,238,0.06) 100%)',
+                      border: '1px solid rgba(74,222,128,0.1)',
+                    }}
+                  >
+                    <AIIcon size={20} />
+                  </div>
+                  <p className="text-[11px] text-zinc-500 leading-relaxed">AI insights are being generated</p>
+                  <div className="flex items-center gap-1 mt-2.5">
+                    {[0, 1, 2].map(i => (
+                      <motion.div
+                        key={i}
+                        className="w-1 h-1 rounded-full bg-[#4ADE80]"
+                        animate={{ opacity: [0.2, 0.8, 0.2] }}
+                        transition={{ duration: 1.2, repeat: Infinity, delay: i * 0.2 }}
+                      />
+                    ))}
+                  </div>
+                </motion.div>
               )}
             </motion.div>
           )}

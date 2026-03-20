@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { HiChevronDown } from 'react-icons/hi';
+import { HiChevronRight } from 'react-icons/hi';
 import { SentimentBadge } from './SentimentBadge';
 import { ConfidenceDot } from './ConfidenceDot';
 
@@ -13,22 +13,47 @@ interface InsightCategoryProps {
   };
 }
 
+const SENTIMENT_ACCENT = {
+  bullish: 'rgba(74, 222, 128, 0.06)',
+  bearish: 'rgba(248, 113, 113, 0.06)',
+  neutral: 'rgba(129, 140, 248, 0.04)',
+} as const;
+
+const SENTIMENT_BORDER = {
+  bullish: 'rgba(74, 222, 128, 0.12)',
+  bearish: 'rgba(248, 113, 113, 0.12)',
+  neutral: 'rgba(255, 255, 255, 0.06)',
+} as const;
+
 export function InsightCategory({ label, insight }: InsightCategoryProps) {
   const [open, setOpen] = useState(false);
 
   return (
-    <div className="border border-white/[0.06] rounded-lg overflow-hidden">
+    <div
+      className="rounded-xl overflow-hidden transition-all duration-200"
+      style={{
+        background: open
+          ? `linear-gradient(135deg, ${SENTIMENT_ACCENT[insight.sentiment]} 0%, rgba(255,255,255,0.02) 100%)`
+          : 'rgba(255,255,255,0.02)',
+        border: `1px solid ${open ? SENTIMENT_BORDER[insight.sentiment] : 'rgba(255,255,255,0.05)'}`,
+      }}
+    >
       <button
         onClick={() => setOpen(!open)}
-        className="w-full flex items-center justify-between px-3 py-2.5 text-sm hover:bg-white/[0.03] transition-colors"
+        className="w-full flex items-center justify-between px-3 py-2.5 hover:bg-white/[0.02] transition-colors"
       >
-        <span className="text-zinc-200 text-xs font-medium">{label}</span>
+        <div className="flex items-center gap-2">
+          <motion.div
+            animate={{ rotate: open ? 90 : 0 }}
+            transition={{ duration: 0.15, ease: 'easeOut' }}
+          >
+            <HiChevronRight className="w-3 h-3 text-zinc-600" />
+          </motion.div>
+          <span className="text-[11px] font-medium text-zinc-300 tracking-wide">{label}</span>
+        </div>
         <div className="flex items-center gap-2">
           <SentimentBadge sentiment={insight.sentiment} />
           <ConfidenceDot confidence={insight.confidence} />
-          <motion.div animate={{ rotate: open ? 180 : 0 }} transition={{ duration: 0.2 }}>
-            <HiChevronDown className="w-3.5 h-3.5 text-zinc-500" />
-          </motion.div>
         </div>
       </button>
       <AnimatePresence>
@@ -37,11 +62,24 @@ export function InsightCategory({ label, insight }: InsightCategoryProps) {
             initial={{ height: 0, opacity: 0 }}
             animate={{ height: 'auto', opacity: 1 }}
             exit={{ height: 0, opacity: 0 }}
-            transition={{ duration: 0.2 }}
+            transition={{ duration: 0.2, ease: 'easeOut' }}
             className="overflow-hidden"
           >
-            <div className="px-3 pb-3 text-xs text-zinc-400 leading-relaxed">
-              {insight.text}
+            <div className="px-3 pb-3 pt-0.5">
+              <div
+                className="rounded-lg px-3 py-2.5"
+                style={{
+                  background: 'rgba(0, 0, 0, 0.2)',
+                  borderLeft: `2px solid ${
+                    insight.sentiment === 'bullish' ? '#4ADE80' :
+                    insight.sentiment === 'bearish' ? '#F87171' : '#818CF8'
+                  }`,
+                }}
+              >
+                <p className="text-[11px] text-zinc-400 leading-[1.6]">
+                  {insight.text}
+                </p>
+              </div>
             </div>
           </motion.div>
         )}
