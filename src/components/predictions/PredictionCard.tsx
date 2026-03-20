@@ -374,14 +374,6 @@ export default function PredictionCard({
           </AnimatePresence>
         </div>
 
-        {/* Volume indicator bar (subtle background) */}
-        <div
-          className="absolute bottom-0 left-0 h-0.5 transition-all duration-500"
-          style={{
-            width: `${Math.min((market.volume24h / 100000) * 100, 100)}%`,
-            backgroundColor: `${C.cyan}40`,
-          }}
-        />
       </motion.div>
     </Link>
   );
