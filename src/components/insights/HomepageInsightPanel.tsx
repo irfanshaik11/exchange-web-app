@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { HiOutlineChevronDown } from 'react-icons/hi';
 import { useHomepageInsights } from '~/hooks/useHomepageInsights';
@@ -47,8 +47,28 @@ export function HomepageInsightPanel() {
   const [collapsed, setCollapsed] = useState(false);
   const [showPicks, setShowPicks] = useState(false);
   const [showNarratives, setShowNarratives] = useState(false);
+  const constraintsRef = useRef<HTMLDivElement>(null);
+
+  // When expanding, reset drag position so panel doesn't open off-screen
+  const handleExpand = () => {
+    setCollapsed(false);
+    // Reset transform by briefly removing and re-adding the element
+    if (panelRef.current) {
+      panelRef.current.style.transform = 'none';
+    }
+  };
+  const panelRef = useRef<HTMLDivElement>(null);
+
   return (
-    <div
+    <>
+    {/* Drag boundary — right 50% of screen, below navbar */}
+    <div ref={constraintsRef} className="fixed pointer-events-none hidden lg:block" style={{ zIndex: 39, top: '5.5rem', left: '50%', right: 0, bottom: 0 }} />
+    <motion.div
+      ref={panelRef}
+      drag={collapsed}
+      dragMomentum={false}
+      dragConstraints={constraintsRef}
+      dragElastic={0.1}
       className="hidden lg:block"
       role="region"
       aria-label="AI Insights"
@@ -58,13 +78,15 @@ export function HomepageInsightPanel() {
         top: '6rem',
         width: collapsed ? 'auto' : 330,
         zIndex: 40,
+        cursor: collapsed ? 'grab' : 'default',
       }}
+      whileDrag={{ cursor: 'grabbing' }}
     >
       {collapsed ? (
         /* Minimized pill */
         <div className="iridescent-pill">
           <button
-            onClick={() => setCollapsed(false)}
+            onClick={handleExpand}
             aria-label="Open AI insights"
             aria-expanded={false}
             className="pill-inner flex items-center gap-3 px-5 py-3 hover:bg-white/[0.04] transition-colors focus-visible:ring-2 focus-visible:ring-[#4ADE80]/50 focus-visible:outline-none"
@@ -257,6 +279,7 @@ export function HomepageInsightPanel() {
             </div>
           </div>
         )}
-    </div>
+    </motion.div>
+    </>
   );
 }
