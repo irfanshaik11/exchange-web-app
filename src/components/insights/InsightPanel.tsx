@@ -67,9 +67,9 @@ export function InsightPanel({ source, marketId }: InsightPanelProps) {
       style={{
         width: collapsed ? 44 : 320,
         transition: 'width 0.25s cubic-bezier(0.4, 0, 0.2, 1)',
-        background: 'linear-gradient(180deg, rgba(74,222,128,0.03) 0%, rgba(255,255,255,0.04) 30%, rgba(34,211,238,0.03) 60%, rgba(129,140,248,0.03) 100%)',
-        borderLeft: '1px solid rgba(255,255,255,0.08)',
-        boxShadow: 'inset 1px 0 0 rgba(255,255,255,0.04)',
+        background: 'linear-gradient(180deg, rgba(74,222,128,0.07) 0%, rgba(18,20,26,0.95) 25%, rgba(34,211,238,0.05) 50%, rgba(18,20,26,0.95) 75%, rgba(129,140,248,0.07) 100%)',
+        borderLeft: '1px solid rgba(255,255,255,0.1)',
+        boxShadow: 'inset 1px 0 0 rgba(255,255,255,0.06), -4px 0 30px rgba(74,222,128,0.04)',
       }}
     >
       {/* Header */}

@@ -57,9 +57,9 @@ export function HomepageInsightPanel() {
       <div
         className="rounded-2xl overflow-hidden backdrop-blur-xl shadow-2xl"
         style={{
-          background: 'linear-gradient(135deg, rgba(74,222,128,0.04) 0%, rgba(255,255,255,0.05) 25%, rgba(34,211,238,0.04) 50%, rgba(129,140,248,0.04) 75%, rgba(255,255,255,0.05) 100%)',
-          border: '1px solid rgba(255,255,255,0.08)',
-          boxShadow: '0 20px 60px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.06), 0 0 40px rgba(74,222,128,0.03)',
+          background: 'linear-gradient(160deg, rgba(74,222,128,0.08) 0%, rgba(18,20,26,0.95) 20%, rgba(34,211,238,0.06) 50%, rgba(18,20,26,0.95) 80%, rgba(129,140,248,0.08) 100%)',
+          border: '1px solid rgba(255,255,255,0.1)',
+          boxShadow: '0 20px 60px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.08), 0 0 80px rgba(74,222,128,0.05), 0 0 40px rgba(34,211,238,0.04)',
         }}
       >
         {/* Header */}
