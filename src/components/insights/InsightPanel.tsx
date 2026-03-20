@@ -232,7 +232,7 @@ export function InsightPanel({ source, marketId }: InsightPanelProps) {
                       </motion.div>
                     ))}
                     <p className="text-[8px] text-zinc-600 text-center pt-2 pb-1 leading-relaxed">
-                      AI-generated insights. Not financial advice. DYOR.
+                      AI-generated insights. Not financial advice.
                     </p>
                   </>
                 ) : (
