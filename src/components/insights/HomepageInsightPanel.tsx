@@ -15,8 +15,6 @@ export function HomepageInsightPanel() {
   const [showPicks, setShowPicks] = useState(false);
   const [showNarratives, setShowNarratives] = useState(false);
 
-  if (!isLoading && !data) return null;
-
   return (
     <div
       className="hidden xl:block"
@@ -145,7 +143,12 @@ export function HomepageInsightPanel() {
                     </div>
                   )}
                 </div>
-              ) : null}
+              ) : (
+                <div className="flex flex-col items-center justify-center py-6 px-3 text-center">
+                  <HiOutlineSparkles className="w-6 h-6 text-zinc-600 mb-2" />
+                  <p className="text-[11px] text-zinc-500">AI insights are being generated. Check back shortly.</p>
+                </div>
+              )}
             </motion.div>
           )}
         </AnimatePresence>

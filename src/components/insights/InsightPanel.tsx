@@ -34,7 +34,6 @@ export function InsightPanel({ source, marketId }: InsightPanelProps) {
   const [visible, setVisible] = useState(true);
 
   if (!visible) return null;
-  if (!isLoading && !data) return null;
 
   return (
     <motion.div
@@ -81,7 +80,12 @@ export function InsightPanel({ source, marketId }: InsightPanelProps) {
               insight={insight}
             />
           ))
-        ) : null}
+        ) : (
+          <div className="flex flex-col items-center justify-center py-8 text-center">
+            <HiOutlineSparkles className="w-8 h-8 text-zinc-600 mb-3" />
+            <p className="text-xs text-zinc-500">AI insights are being generated for this market. Check back shortly.</p>
+          </div>
+        )}
       </div>
     </motion.div>
   );
