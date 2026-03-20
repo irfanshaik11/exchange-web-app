@@ -51,7 +51,7 @@ export function HomepageInsightPanel() {
   return (
     <div
       className="hidden xl:block"
-      style={{ position: 'fixed', right: '1rem', top: '5rem', width: 330, zIndex: 40 }}
+      style={{ position: 'fixed', right: '1rem', top: '6rem', width: 330, zIndex: 40 }}
     >
       <style>{`
         @keyframes iridescentRotate {
@@ -84,7 +84,7 @@ export function HomepageInsightPanel() {
         }
         .iridescent-border-hp > .iridescent-inner {
           border-radius: 14.5px;
-          background: rgba(14, 16, 20, 0.92);
+          background: rgba(14, 16, 20, 0.85);
           backdrop-filter: blur(24px);
         }
         .iridescent-border-hp::before {
