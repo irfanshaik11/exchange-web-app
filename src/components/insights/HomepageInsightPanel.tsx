@@ -32,6 +32,16 @@ function AIIcon({ size = 16 }: { size?: number }) {
   );
 }
 
+function timeAgo(dateStr: string): string {
+  const diff = Date.now() - new Date(dateStr).getTime();
+  const mins = Math.floor(diff / 60000);
+  if (mins < 1) return 'just now';
+  if (mins < 60) return `${mins}m ago`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `${hrs}h ago`;
+  return `${Math.floor(hrs / 24)}d ago`;
+}
+
 export function HomepageInsightPanel() {
   const { data, isLoading } = useHomepageInsights();
   const [collapsed, setCollapsed] = useState(false);
@@ -194,9 +204,9 @@ export function HomepageInsightPanel() {
 
                   {/* Timestamp */}
                   {data.generatedAt && (
-                    <div className="text-center pt-1 pb-0.5">
-                      <span className="text-[8px] font-mono text-zinc-700 tracking-wider uppercase">
-                        Updated {new Date(data.generatedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                    <div className="text-center pt-2 pb-1">
+                      <span className="text-[10px] font-mono text-zinc-500 tracking-wide">
+                        Generated {timeAgo(data.generatedAt)}
                       </span>
                     </div>
                   )}
