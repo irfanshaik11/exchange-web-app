@@ -45,7 +45,7 @@ function timeAgo(dateStr: string): string {
 export function HomepageInsightPanel() {
   const { data, isLoading } = useHomepageInsights();
   const [collapsed, setCollapsed] = useState(false);
-  const [showPicks, setShowPicks] = useState(true);
+  const [showPicks, setShowPicks] = useState(false);
   const [showNarratives, setShowNarratives] = useState(false);
   const dragControls = useDragControls();
   const constraintsRef = useRef<HTMLDivElement>(null);
@@ -187,9 +187,9 @@ export function HomepageInsightPanel() {
               onClick={() => setCollapsed(false)}
               className="pill-inner flex items-center gap-2 px-3.5 py-2.5 hover:bg-white/[0.03] transition-colors"
             >
-              <AIIcon size={18} />
+              <AIIcon size={20} />
               <span
-                className="text-[10px] font-bold tracking-[0.1em] uppercase"
+                className="text-[13px] font-bold tracking-[0.1em] uppercase"
                 style={{
                   background: 'linear-gradient(135deg, #4ADE80, #22D3EE)',
                   WebkitBackgroundClip: 'text',

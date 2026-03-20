@@ -166,9 +166,9 @@ export function InsightPanel({ source, marketId }: InsightPanelProps) {
               onClick={() => setCollapsed(false)}
               className="pill-inner-sp flex items-center gap-2 px-3.5 py-2.5 hover:bg-white/[0.03] transition-colors"
             >
-              <AIIcon size={18} />
+              <AIIcon size={20} />
               <span
-                className="text-[10px] font-bold tracking-[0.1em] uppercase"
+                className="text-[13px] font-bold tracking-[0.1em] uppercase"
                 style={{
                   background: 'linear-gradient(135deg, #4ADE80, #22D3EE)',
                   WebkitBackgroundClip: 'text',

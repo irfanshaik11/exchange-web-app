@@ -73,7 +73,7 @@ export default function PredictionsPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [marketFilters, setMarketFilters] = useState<MarketFilterState>(DEFAULT_FILTERS);
   const [viewMode, setViewMode] = useState<'curated' | 'grid'>('curated');
-  const [showPortfolio, setShowPortfolio] = useState(true); // Default open to show winnings
+  const [showPortfolio, setShowPortfolio] = useState(false); // Default closed
   // TODO: dFlow is disabled for now - only Polymarket is active
   // const [dataSource, setDataSource] = useState<PredictionDataSource>('all');
   const [dataSource, setDataSource] = useState<PredictionDataSource>('polymarket');
