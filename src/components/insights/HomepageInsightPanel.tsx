@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { HiOutlineChevronDown } from 'react-icons/hi';
 import { useHomepageInsights } from '~/hooks/useHomepageInsights';
@@ -47,9 +47,17 @@ export function HomepageInsightPanel() {
   const [collapsed, setCollapsed] = useState(false);
   const [showPicks, setShowPicks] = useState(false);
   const [showNarratives, setShowNarratives] = useState(false);
+  const constraintsRef = useRef<HTMLDivElement>(null);
 
   return (
-    <div
+    <>
+    {/* Drag boundary */}
+    <div ref={constraintsRef} className="fixed inset-0 pointer-events-none hidden lg:block" style={{ zIndex: 39 }} />
+    <motion.div
+      drag
+      dragMomentum={false}
+      dragConstraints={constraintsRef}
+      dragElastic={0.05}
       className="hidden lg:block"
       role="region"
       aria-label="AI Insights"
@@ -59,7 +67,9 @@ export function HomepageInsightPanel() {
         top: '6rem',
         width: collapsed ? 'auto' : 330,
         zIndex: 40,
+        cursor: 'grab',
       }}
+      whileDrag={{ cursor: 'grabbing' }}
     >
       {collapsed ? (
         /* Minimized pill */
@@ -258,6 +268,7 @@ export function HomepageInsightPanel() {
             </div>
           </div>
         )}
-    </div>
+    </motion.div>
+    </>
   );
 }
