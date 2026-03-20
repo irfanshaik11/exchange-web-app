@@ -4,7 +4,6 @@ import { HiChevronDown } from 'react-icons/hi';
 import { useMarketInsights } from '~/hooks/useMarketInsights';
 import { InsightCategory } from './InsightCategory';
 import { InsightSkeleton } from './InsightSkeleton';
-import './iridescent.css';
 
 interface InsightPanelProps {
   source: string;

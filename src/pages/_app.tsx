@@ -1,5 +1,6 @@
 import { type AppType } from "next/app";
 import "~/styles/globals.css";
+import "~/components/insights/iridescent.css";
 import "@rainbow-me/rainbowkit/styles.css";
 import { getDefaultConfig } from "@rainbow-me/rainbowkit";
 import { queryClient } from '../lib/queryClient';

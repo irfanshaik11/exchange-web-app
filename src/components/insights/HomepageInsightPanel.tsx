@@ -6,7 +6,6 @@ import { SentimentBadge } from './SentimentBadge';
 import { TopPickCard } from './TopPickCard';
 import { NarrativeChip } from './NarrativeChip';
 import { InsightSkeleton } from './InsightSkeleton';
-import './iridescent.css';
 
 function AIIcon({ size = 16 }: { size?: number }) {
   return (
