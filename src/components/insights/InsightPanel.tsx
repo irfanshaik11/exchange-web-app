@@ -59,16 +59,82 @@ export function InsightPanel({ source, marketId }: InsightPanelProps) {
   const [collapsed, setCollapsed] = useState(false);
 
   return (
+    <>
+      <style>{`
+        @keyframes iridescentRotateSidebar {
+          0% { --iridescent-angle-sb: 0deg; }
+          100% { --iridescent-angle-sb: 360deg; }
+        }
+        @property --iridescent-angle-sb {
+          syntax: '<angle>';
+          initial-value: 0deg;
+          inherits: false;
+        }
+        .iridescent-sidebar {
+          position: relative;
+        }
+        .iridescent-sidebar::before {
+          content: '';
+          position: absolute;
+          inset: 0;
+          left: -1.5px;
+          width: 3px;
+          background: linear-gradient(
+            180deg,
+            rgba(255,59,48,0.5),
+            rgba(255,149,0,0.5),
+            rgba(255,214,10,0.5),
+            rgba(52,199,89,0.5),
+            rgba(0,199,190,0.5),
+            rgba(48,176,199,0.5),
+            rgba(88,86,214,0.5),
+            rgba(191,90,242,0.5),
+            rgba(255,55,95,0.5),
+            rgba(255,59,48,0.5)
+          );
+          background-size: 100% 200%;
+          animation: iridescentSlideSidebar 9s linear infinite;
+          z-index: 1;
+        }
+        .iridescent-sidebar::after {
+          content: '';
+          position: absolute;
+          inset: 0;
+          left: -6px;
+          width: 12px;
+          background: linear-gradient(
+            180deg,
+            rgba(255,59,48,0.1),
+            rgba(255,149,0,0.1),
+            rgba(255,214,10,0.1),
+            rgba(52,199,89,0.1),
+            rgba(0,199,190,0.1),
+            rgba(48,176,199,0.1),
+            rgba(88,86,214,0.1),
+            rgba(191,90,242,0.1),
+            rgba(255,55,95,0.1),
+            rgba(255,59,48,0.1)
+          );
+          background-size: 100% 200%;
+          animation: iridescentSlideSidebar 9s linear infinite;
+          filter: blur(6px);
+          z-index: 0;
+        }
+        @keyframes iridescentSlideSidebar {
+          0% { background-position: 0% 0%; }
+          100% { background-position: 0% 200%; }
+        }
+      `}</style>
     <motion.div
       initial={{ opacity: 0, x: 20 }}
       animate={{ opacity: 1, x: 0 }}
       transition={{ duration: 0.3 }}
-      className="flex-shrink-0 hidden xl:flex flex-col backdrop-blur-xl"
+      className="flex-shrink-0 hidden xl:flex flex-col backdrop-blur-xl iridescent-sidebar"
       style={{
         width: collapsed ? 44 : 320,
         transition: 'width 0.25s cubic-bezier(0.4, 0, 0.2, 1)',
-        background: 'linear-gradient(180deg, rgba(74,222,128,0.07) 0%, rgba(18,20,26,0.95) 25%, rgba(34,211,238,0.05) 50%, rgba(18,20,26,0.95) 75%, rgba(129,140,248,0.07) 100%)',
-        borderLeft: '1px solid rgba(255,255,255,0.1)',
+        background: 'linear-gradient(180deg, rgba(74,222,128,0.07) 0%, rgba(18,20,26,0.97) 25%, rgba(34,211,238,0.05) 50%, rgba(18,20,26,0.97) 75%, rgba(129,140,248,0.07) 100%)',
+        borderLeft: '1px solid rgba(255,255,255,0.06)',
         boxShadow: 'inset 1px 0 0 rgba(255,255,255,0.06), -4px 0 30px rgba(74,222,128,0.04)',
       }}
     >
@@ -153,5 +219,6 @@ export function InsightPanel({ source, marketId }: InsightPanelProps) {
         </div>
       )}
     </motion.div>
+    </>
   );
 }

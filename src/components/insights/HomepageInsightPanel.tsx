@@ -53,12 +53,65 @@ export function HomepageInsightPanel() {
       className="hidden xl:block"
       style={{ position: 'fixed', right: '1rem', top: '5rem', width: 330, zIndex: 40 }}
     >
-      {/* Main glass container with iridescent tinge */}
+      <style>{`
+        @keyframes iridescentRotate {
+          0% { --iridescent-angle: 0deg; }
+          100% { --iridescent-angle: 360deg; }
+        }
+        @property --iridescent-angle {
+          syntax: '<angle>';
+          initial-value: 0deg;
+          inherits: false;
+        }
+        .iridescent-border-hp {
+          position: relative;
+          border-radius: 1rem;
+          padding: 1.5px;
+          background: conic-gradient(
+            from var(--iridescent-angle),
+            rgba(255,59,48,0.45),
+            rgba(255,149,0,0.45),
+            rgba(255,214,10,0.45),
+            rgba(52,199,89,0.45),
+            rgba(0,199,190,0.45),
+            rgba(48,176,199,0.45),
+            rgba(88,86,214,0.45),
+            rgba(191,90,242,0.45),
+            rgba(255,55,95,0.45),
+            rgba(255,59,48,0.45)
+          );
+          animation: iridescentRotate 9s linear infinite;
+        }
+        .iridescent-border-hp::before {
+          content: '';
+          position: absolute;
+          inset: -3px;
+          border-radius: 1.15rem;
+          background: conic-gradient(
+            from var(--iridescent-angle),
+            rgba(255,59,48,0.12),
+            rgba(255,149,0,0.12),
+            rgba(255,214,10,0.12),
+            rgba(52,199,89,0.12),
+            rgba(0,199,190,0.12),
+            rgba(48,176,199,0.12),
+            rgba(88,86,214,0.12),
+            rgba(191,90,242,0.12),
+            rgba(255,55,95,0.12),
+            rgba(255,59,48,0.12)
+          );
+          filter: blur(8px);
+          z-index: -1;
+          animation: iridescentRotate 9s linear infinite;
+        }
+      `}</style>
+      {/* Iridescent animated border wrapper */}
+      <div className="iridescent-border-hp">
+      {/* Main glass container */}
       <div
         className="rounded-2xl overflow-hidden backdrop-blur-xl shadow-2xl"
         style={{
-          background: 'linear-gradient(160deg, rgba(74,222,128,0.08) 0%, rgba(18,20,26,0.95) 20%, rgba(34,211,238,0.06) 50%, rgba(18,20,26,0.95) 80%, rgba(129,140,248,0.08) 100%)',
-          border: '1px solid rgba(255,255,255,0.1)',
+          background: 'linear-gradient(160deg, rgba(74,222,128,0.08) 0%, rgba(18,20,26,0.97) 20%, rgba(34,211,238,0.06) 50%, rgba(18,20,26,0.97) 80%, rgba(129,140,248,0.08) 100%)',
           boxShadow: '0 20px 60px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.08), 0 0 80px rgba(74,222,128,0.05), 0 0 40px rgba(34,211,238,0.04)',
         }}
       >
@@ -242,6 +295,7 @@ export function HomepageInsightPanel() {
             </motion.div>
           )}
         </AnimatePresence>
+      </div>
       </div>
     </div>
   );
