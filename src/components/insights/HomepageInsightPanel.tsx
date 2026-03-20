@@ -1,5 +1,4 @@
 import React, { useState } from 'react';
-import { useRouter } from 'next/router';
 import { motion, AnimatePresence } from 'framer-motion';
 import { HiOutlineChevronDown } from 'react-icons/hi';
 import { useHomepageInsights } from '~/hooks/useHomepageInsights';
@@ -34,7 +33,6 @@ function AIIcon({ size = 16 }: { size?: number }) {
 }
 
 export function HomepageInsightPanel() {
-  const router = useRouter();
   const { data, isLoading } = useHomepageInsights();
   const [collapsed, setCollapsed] = useState(false);
   const [showPicks, setShowPicks] = useState(true);

@@ -36,7 +36,8 @@ export function useHomepageInsights() {
         // Normalize: API returns flat (marketPulse, aiTopPicks at top level)
         // Frontend expects nested under "insights"
         if (d.marketPulse) {
-          return { generatedAt: d.generatedAt, insights: d } as HomepageInsights;
+          const { generatedAt, model, usage, ...insightData } = d as any;
+          return { generatedAt, insights: insightData } as HomepageInsights;
         }
         return d as unknown as HomepageInsights;
       } catch (err: any) {

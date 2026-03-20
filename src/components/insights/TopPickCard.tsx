@@ -7,7 +7,6 @@ interface TopPickCardProps {
   text: string;
   sentiment: 'bullish' | 'bearish' | 'neutral';
   confidence: 'high' | 'medium' | 'low';
-  onClick?: () => void;
 }
 
 const SENTIMENT_LINE = {
