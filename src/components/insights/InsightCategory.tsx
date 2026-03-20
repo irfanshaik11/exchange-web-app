@@ -59,17 +59,9 @@ export function InsightCategory({ label, insight }: InsightCategoryProps) {
             className="overflow-hidden"
           >
             <div className="px-3 pb-3 pt-0.5">
-              <div
-                className="rounded-xl px-3 py-2.5"
-                style={{
-                  background: 'rgba(0, 0, 0, 0.15)',
-                  borderLeft: `2px solid ${SENTIMENT_BORDER[insight.sentiment]}`,
-                }}
-              >
-                <p className="text-[11px] text-zinc-300/80 leading-[1.65]">
-                  {insight.text}
-                </p>
-              </div>
+              <p className="text-[11px] text-zinc-300/80 leading-[1.65]">
+                {insight.text}
+              </p>
             </div>
           </motion.div>
         )}
