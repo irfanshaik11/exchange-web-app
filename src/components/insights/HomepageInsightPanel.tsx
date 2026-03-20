@@ -52,7 +52,7 @@ export function HomepageInsightPanel() {
   return (
     <>
     {/* Drag boundary */}
-    <div ref={constraintsRef} className="fixed pointer-events-none hidden lg:block" style={{ zIndex: 39, top: '5.5rem', left: '60%', right: 0, bottom: 0 }} />
+    <div ref={constraintsRef} className="fixed pointer-events-none hidden lg:block" style={{ zIndex: 39, top: '5.5rem', left: '40%', right: 0, bottom: 0 }} />
     <motion.div
       drag
       dragMomentum={false}
