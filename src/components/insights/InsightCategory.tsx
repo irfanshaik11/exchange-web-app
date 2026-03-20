@@ -66,7 +66,7 @@ export function InsightCategory({ label, insight }: InsightCategoryProps) {
                   borderLeft: `2px solid ${SENTIMENT_BORDER[insight.sentiment]}`,
                 }}
               >
-                <p className="text-[11px] text-zinc-400 leading-[1.65]">
+                <p className="text-[11px] text-zinc-300/80 leading-[1.65]">
                   {insight.text}
                 </p>
               </div>

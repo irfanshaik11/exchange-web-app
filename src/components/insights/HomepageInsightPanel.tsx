@@ -100,7 +100,7 @@ export function HomepageInsightPanel() {
                       <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-[0.1em]">Market Pulse</span>
                       <SentimentBadge sentiment={data.insights.marketPulse.sentiment} />
                     </div>
-                    <p className="text-[11px] text-zinc-400 leading-[1.65]">
+                    <p className="text-[11px] text-zinc-300/80 leading-[1.65]">
                       {data.insights.marketPulse.text}
                     </p>
                   </motion.div>

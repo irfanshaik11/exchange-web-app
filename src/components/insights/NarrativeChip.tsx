@@ -30,7 +30,7 @@ export function NarrativeChip({ theme, text, marketCount }: NarrativeChipProps) 
             {marketCount} market{marketCount !== 1 ? 's' : ''}
           </span>
         </div>
-        <p className="text-[10px] text-zinc-500 leading-[1.6]">{text}</p>
+        <p className="text-[11px] text-zinc-300/80 leading-[1.6]">{text}</p>
       </div>
     </div>
   );

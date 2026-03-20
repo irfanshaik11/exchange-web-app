@@ -33,7 +33,7 @@ export function TopPickCard({ question, text, sentiment, confidence }: TopPickCa
           <span className="text-[11px] font-medium text-zinc-200 leading-snug">{question}</span>
           <ConfidenceDot confidence={confidence} />
         </div>
-        <p className="text-[10px] text-zinc-500 leading-[1.6] mb-2.5">{text}</p>
+        <p className="text-[11px] text-zinc-300/80 leading-[1.6] mb-2.5">{text}</p>
         <SentimentBadge sentiment={sentiment} />
       </div>
     </div>
