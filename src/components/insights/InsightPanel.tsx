@@ -220,16 +220,21 @@ export function InsightPanel({ source, marketId }: InsightPanelProps) {
                 {isLoading ? (
                   <InsightSkeleton />
                 ) : data?.insights ? (
-                  Object.entries(data.insights).map(([key, insight], i) => (
-                    <motion.div
-                      key={key}
-                      initial={{ opacity: 0, y: 8 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      transition={{ duration: 0.2, delay: i * 0.04 }}
-                    >
-                      <InsightCategory label={CATEGORY_LABELS[key] || key} insight={insight} />
-                    </motion.div>
-                  ))
+                  <>
+                    {Object.entries(data.insights).map(([key, insight], i) => (
+                      <motion.div
+                        key={key}
+                        initial={{ opacity: 0, y: 8 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ duration: 0.2, delay: i * 0.04 }}
+                      >
+                        <InsightCategory label={CATEGORY_LABELS[key] || key} insight={insight} />
+                      </motion.div>
+                    ))}
+                    <p className="text-[8px] text-zinc-600 text-center pt-2 pb-1 leading-relaxed">
+                      AI-generated insights. Not financial advice. DYOR.
+                    </p>
+                  </>
                 ) : (
                   <div className="flex flex-col items-center justify-center py-10 text-center">
                     <div className="w-12 h-12 rounded-2xl flex items-center justify-center mb-4 bg-white/[0.05] border border-white/[0.08]">

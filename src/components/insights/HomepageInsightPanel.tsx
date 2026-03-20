@@ -347,6 +347,11 @@ export function HomepageInsightPanel() {
                           </AnimatePresence>
                         </div>
                       )}
+
+                      {/* Disclaimer */}
+                      <p className="text-[8px] text-zinc-600 text-center pt-2 pb-1 leading-relaxed">
+                        AI-generated insights. Not financial advice. DYOR.
+                      </p>
                     </div>
                   ) : (
                     <motion.div
