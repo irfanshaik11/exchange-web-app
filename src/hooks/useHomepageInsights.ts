@@ -2,24 +2,28 @@ import { useQuery } from '@tanstack/react-query';
 import { apiFetch } from '../utils/api';
 import type { InsightCategory } from './useMarketInsights';
 
+export interface HomepageInsightsData {
+  marketPulse: InsightCategory;
+  aiTopPicks: Array<{
+    marketId: string;
+    source: string;
+    question: string;
+    text: string;
+    sentiment: 'bullish' | 'bearish' | 'neutral';
+    confidence: 'high' | 'medium' | 'low';
+  }>;
+  trendingNarratives: Array<{
+    theme: string;
+    text: string;
+    relatedMarketCount: number;
+  }>;
+  generatedAt?: string;
+  model?: string;
+}
+
 export interface HomepageInsights {
-  generatedAt: string;
-  insights: {
-    marketPulse: InsightCategory;
-    aiTopPicks: Array<{
-      marketId: string;
-      source: string;
-      question: string;
-      text: string;
-      sentiment: 'bullish' | 'bearish' | 'neutral';
-      confidence: 'high' | 'medium' | 'low';
-    }>;
-    trendingNarratives: Array<{
-      theme: string;
-      text: string;
-      relatedMarketCount: number;
-    }>;
-  };
+  generatedAt?: string;
+  insights: HomepageInsightsData;
 }
 
 export function useHomepageInsights() {
@@ -27,8 +31,14 @@ export function useHomepageInsights() {
     queryKey: ['insights', 'homepage'],
     queryFn: async () => {
       try {
-        const res = await apiFetch<{ success: boolean; data: HomepageInsights }>('/api/prediction/insights/homepage');
-        return res.data;
+        const res = await apiFetch<{ success: boolean; data: HomepageInsightsData }>('/api/prediction/insights/homepage');
+        const d = res.data;
+        // Normalize: API returns flat (marketPulse, aiTopPicks at top level)
+        // Frontend expects nested under "insights"
+        if (d.marketPulse) {
+          return { generatedAt: d.generatedAt, insights: d } as HomepageInsights;
+        }
+        return d as unknown as HomepageInsights;
       } catch (err: any) {
         if (err?.status === 404) return null;
         throw err;
