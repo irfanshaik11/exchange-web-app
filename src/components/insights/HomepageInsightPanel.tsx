@@ -62,7 +62,7 @@ export function HomepageInsightPanel() {
   return (
     <>
     {/* Drag boundary — right 50% of screen, below navbar */}
-    <div ref={constraintsRef} className="fixed pointer-events-none hidden lg:block" style={{ zIndex: 39, top: '5.5rem', left: '50%', right: 0, bottom: 0 }} />
+    <div ref={constraintsRef} className="fixed pointer-events-none hidden lg:block" style={{ zIndex: 39, top: '5.5rem', left: 0, right: 0, bottom: 0 }} />
     <motion.div
       ref={panelRef}
       drag
