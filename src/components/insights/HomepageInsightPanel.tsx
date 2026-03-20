@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { HiOutlineChevronDown } from 'react-icons/hi';
 import { useHomepageInsights } from '~/hooks/useHomepageInsights';
@@ -47,28 +47,8 @@ export function HomepageInsightPanel() {
   const [collapsed, setCollapsed] = useState(false);
   const [showPicks, setShowPicks] = useState(false);
   const [showNarratives, setShowNarratives] = useState(false);
-  const constraintsRef = useRef<HTMLDivElement>(null);
-  const [dragPosition, setDragPosition] = useState({ x: 0, y: 0 });
-
-  const handleExpand = () => {
-    // Reset to default position when expanding to avoid off-screen
-    setDragPosition({ x: 0, y: 0 });
-    setCollapsed(false);
-  };
-
   return (
-    <>
-    {/* Drag boundary — full screen except top navbar */}
-    <div ref={constraintsRef} className="fixed pointer-events-none hidden lg:block" style={{ zIndex: 39, top: '5.5rem', left: 0, right: 0, bottom: 0 }} />
-    <motion.div
-      drag={collapsed}
-      dragMomentum={false}
-      dragConstraints={constraintsRef}
-      dragElastic={0.05}
-      animate={dragPosition}
-      onDragEnd={(_e, info) => {
-        setDragPosition({ x: info.offset.x + dragPosition.x, y: info.offset.y + dragPosition.y });
-      }}
+    <div
       className="hidden lg:block"
       role="region"
       aria-label="AI Insights"
@@ -78,15 +58,13 @@ export function HomepageInsightPanel() {
         top: '6rem',
         width: collapsed ? 'auto' : 330,
         zIndex: 40,
-        cursor: collapsed ? 'grab' : 'default',
       }}
-      whileDrag={{ cursor: 'grabbing' }}
     >
       {collapsed ? (
         /* Minimized pill */
         <div className="iridescent-pill">
           <button
-            onClick={handleExpand}
+            onClick={() => setCollapsed(false)}
             aria-label="Open AI insights"
             aria-expanded={false}
             className="pill-inner flex items-center gap-3 px-5 py-3 hover:bg-white/[0.04] transition-colors focus-visible:ring-2 focus-visible:ring-[#4ADE80]/50 focus-visible:outline-none"
@@ -279,7 +257,6 @@ export function HomepageInsightPanel() {
             </div>
           </div>
         )}
-    </motion.div>
-    </>
+    </div>
   );
 }
