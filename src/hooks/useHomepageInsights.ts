@@ -46,8 +46,8 @@ export function useHomepageInsights() {
         throw err;
       }
     },
-    // Poll every 15s while insights are pending (null), stop once we have data
-    refetchInterval: (query) => (query.state.data === null ? 15_000 : false),
+    // Poll every 5s while insights are pending (null), stop once we have data
+    refetchInterval: (query) => (query.state.data === null ? 5_000 : false),
     staleTime: (query) => (query.state.data ? 6 * 60 * 60 * 1000 : 0),
     gcTime: 7 * 60 * 60 * 1000,
     retry: 1,

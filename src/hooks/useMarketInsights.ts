@@ -36,8 +36,8 @@ export function useMarketInsights(source: string, marketId: string) {
       }
     },
     enabled: !!source && !!marketId,
-    // Poll every 15s while insights are pending (null), stop once we have data
-    refetchInterval: (query) => (query.state.data === null ? 15_000 : false),
+    // Poll every 5s while insights are pending (null), stop once we have data
+    refetchInterval: (query) => (query.state.data === null ? 5_000 : false),
     // Cache real data for 6h, but null results stay fresh for re-polling
     staleTime: (query) => (query.state.data ? 6 * 60 * 60 * 1000 : 0),
     gcTime: 7 * 60 * 60 * 1000,
