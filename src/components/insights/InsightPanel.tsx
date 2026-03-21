@@ -55,7 +55,7 @@ function AIIcon({ size = 16 }: { size?: number }) {
 }
 
 export function InsightPanel({ source, marketId }: InsightPanelProps) {
-  const { data, isLoading } = useMarketInsights(source, marketId);
+  const { data, isLoading, timedOut } = useMarketInsights(source, marketId);
   const [collapsed, setCollapsed] = useState(false);
   const constraintsRef = useRef<HTMLDivElement>(null);
 
@@ -152,6 +152,13 @@ export function InsightPanel({ source, marketId }: InsightPanelProps) {
                     AI-generated insights. Not financial advice.
                   </p>
                 </>
+              ) : timedOut ? (
+                <div className="flex flex-col items-center justify-center py-8 px-3 text-center">
+                  <p className="text-[12px] text-zinc-400 leading-relaxed">
+                    AI insights are temporarily unavailable.
+                  </p>
+                  <p className="text-[10px] text-zinc-600 mt-1">Please check back shortly.</p>
+                </div>
               ) : (
                 <div className="flex flex-col items-center justify-center py-10 text-center">
                   <div className="w-12 h-12 rounded-2xl flex items-center justify-center mb-4 bg-white/[0.05] border border-white/[0.08]">

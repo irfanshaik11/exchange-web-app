@@ -1,4 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
+import { useRef, useState, useEffect } from 'react';
 import { apiFetch } from '../utils/api';
 import type { InsightCategory } from './useMarketInsights';
 
@@ -27,11 +28,15 @@ export interface HomepageInsights {
 }
 
 export function useHomepageInsights() {
+  const [timedOut, setTimedOut] = useState(false);
+  const pollingStartRef = useRef<number | null>(null);
+
   const query = useQuery<HomepageInsights | null>({
     queryKey: ['insights', 'homepage'],
     queryFn: async () => {
       try {
-        const res = await apiFetch<{ success: boolean; data: HomepageInsightsData }>('/api/prediction/insights/homepage');
+        const res = await apiFetch<{ success: boolean; data: any }>('/api/prediction/insights/homepage');
+        if (res.data?.unavailable) return null;
         const d = res.data;
         // Normalize: API returns flat (marketPulse, aiTopPicks at top level)
         // Frontend expects nested under "insights"
@@ -47,11 +52,33 @@ export function useHomepageInsights() {
       }
     },
     // Poll every 5s while insights are pending (null), stop once we have data
-    refetchInterval: (query) => (query.state.data === null ? 5_000 : false),
+    refetchInterval: (query) => {
+      const data = query.state.data;
+      if (data !== null) return false;
+      if (timedOut) return false;
+      if (pollingStartRef.current === null) pollingStartRef.current = Date.now();
+      if (Date.now() - pollingStartRef.current > 120_000) {
+        return false;
+      }
+      return 5_000;
+    },
     staleTime: (query) => (query.state.data ? 6 * 60 * 60 * 1000 : 0),
     gcTime: 7 * 60 * 60 * 1000,
     retry: 1,
     refetchOnWindowFocus: false,
   });
-  return query;
+
+  // Check for polling timeout
+  useEffect(() => {
+    if (query.data !== null && query.data !== undefined) {
+      pollingStartRef.current = null;
+      setTimedOut(false);
+      return;
+    }
+    if (pollingStartRef.current && Date.now() - pollingStartRef.current > 120_000) {
+      setTimedOut(true);
+    }
+  }, [query.data, query.dataUpdatedAt]);
+
+  return { ...query, timedOut };
 }

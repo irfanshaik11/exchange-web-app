@@ -43,7 +43,7 @@ function timeAgo(dateStr: string): string {
 }
 
 export function HomepageInsightPanel() {
-  const { data, isLoading } = useHomepageInsights();
+  const { data, isLoading, timedOut } = useHomepageInsights();
   const [collapsed, setCollapsed] = useState(false);
   const [showPicks, setShowPicks] = useState(false);
   const [showNarratives, setShowNarratives] = useState(false);
@@ -252,6 +252,13 @@ export function HomepageInsightPanel() {
                     <p className="text-[9px] text-zinc-600 text-center pt-2 pb-1 leading-relaxed">
                       AI-generated insights. Not financial advice.
                     </p>
+                  </div>
+                ) : timedOut ? (
+                  <div className="flex flex-col items-center justify-center py-8 px-3 text-center">
+                    <p className="text-[12px] text-zinc-400 leading-relaxed">
+                      AI insights are temporarily unavailable.
+                    </p>
+                    <p className="text-[10px] text-zinc-600 mt-1">Please check back shortly.</p>
                   </div>
                 ) : (
                   <motion.div
