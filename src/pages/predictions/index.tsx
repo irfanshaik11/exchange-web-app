@@ -29,6 +29,7 @@ import type { UnifiedPredictionMarket } from '~/hooks/useUnifiedPredictionMarket
 import usePredictionFavorites from '~/hooks/usePredictionFavorites';
 import usePolymarketLivePrices from '~/hooks/usePolymarketLivePrices';
 import DataSourceSwitcher, { type PredictionDataSource } from '~/components/predictions/DataSourceSwitcher';
+import { HomepageInsightPanel } from '~/components/insights/HomepageInsightPanel';
 
 // Vibrant color palette
 const AX = {
@@ -73,7 +74,8 @@ export default function PredictionsPage() {
   const [selectedSort, setSelectedSort] = useState<SortOption>('hot');
   const [searchQuery, setSearchQuery] = useState('');
   const [marketFilters, setMarketFilters] = useState<MarketFilterState>(DEFAULT_FILTERS);
-  const [showPortfolio, setShowPortfolio] = useState(false); // Collapsed by default
+  const [viewMode, setViewMode] = useState<'curated' | 'grid'>('curated');
+  const [showPortfolio, setShowPortfolio] = useState(false); // Default closed
   const [showEndedMarkets, setShowEndedMarkets] = useState(false);
   // TODO: dFlow is disabled for now - only Polymarket is active
   // const [dataSource, setDataSource] = useState<PredictionDataSource>('all');
@@ -755,6 +757,8 @@ export default function PredictionsPage() {
         <Footer />
           </div>
         </div>
+
+        <HomepageInsightPanel />
       </div>
 
       <style jsx global>{`

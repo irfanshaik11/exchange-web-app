@@ -32,6 +32,7 @@ import type { ExtendedPredictionMarket } from '~/hooks/useDFlowMarkets';
 import { useUser } from '~/components/UserContext';
 import { useTurnkeySigner } from '~/components/TurnkeySignerContext';
 import PinGate from '~/components/predictions/PinGate';
+import { InsightPanel } from '~/components/insights/InsightPanel';
 import { showEnhancedToast, updateEnhancedToast } from '~/utils/enhancedToast';
 import { SourceBadge, PolygonWalletCard } from '~/components/predictions';
 import {
@@ -3526,6 +3527,9 @@ export default function MarketDetailPage() {
 
             </div>
           </div>
+
+          {/* AI Insights Panel */}
+          <InsightPanel source={isPolymarket ? 'polymarket' : 'dflow'} marketId={tickerString} />
 
           {/* Trade button for mobile */}
           <div className="fixed bottom-0 left-0 w-full p-4 z-50 lg:hidden mb-10">

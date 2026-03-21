@@ -1,0 +1,37 @@
+import React from 'react';
+
+interface NarrativeChipProps {
+  theme: string;
+  text: string;
+  marketCount: number;
+}
+
+export function NarrativeChip({ theme, text, marketCount }: NarrativeChipProps) {
+  return (
+    <div
+      className="rounded-xl overflow-hidden transition-colors duration-200 hover:border-white/[0.12]"
+      style={{
+        background: 'rgba(255,255,255,0.04)',
+        border: '1px solid rgba(255,255,255,0.07)',
+        backdropFilter: 'blur(12px)',
+      }}
+    >
+      <div className="p-3">
+        <div className="flex items-center justify-between mb-1.5">
+          <span className="text-[11px] font-medium text-zinc-200">{theme}</span>
+          <span
+            className="text-[9px] font-mono px-1.5 py-0.5 rounded-lg"
+            style={{
+              background: 'rgba(255,255,255,0.05)',
+              color: 'rgba(255,255,255,0.5)',
+              border: '1px solid rgba(255,255,255,0.07)',
+            }}
+          >
+            {marketCount} market{marketCount !== 1 ? 's' : ''}
+          </span>
+        </div>
+        <p className="text-[12px] text-zinc-300/80 leading-[1.6]">{text}</p>
+      </div>
+    </div>
+  );
+}
