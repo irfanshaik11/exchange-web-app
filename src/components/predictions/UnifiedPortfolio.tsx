@@ -160,8 +160,8 @@ async function redeemWinnings(conditionId: string, authToken: string): Promise<{
   };
 }
 
-// Theme type
-type Theme = typeof PredictionTheme | typeof PortfolioTheme;
+// Theme type — use Record to avoid `never` from const literal union conflicts
+type Theme = Record<string, string>;
 
 // ── Stats Header ─────────────────────────────────────────────────────────
 
@@ -273,7 +273,7 @@ function TabNavigation({
   counts: { positions: number; orders: number; history: number; claimable: number; settled: number };
   theme: Theme;
 }) {
-  const tabs: { key: TabType; label: string; icon: React.ElementType; count?: number; highlight?: boolean }[] = [
+  const tabs: { key: TabType; label: string; icon: React.ComponentType<{ className?: string }>; count?: number; highlight?: boolean }[] = [
     {
       key: 'overview',
       label: 'Overview',
@@ -290,6 +290,7 @@ function TabNavigation({
     <div className="flex gap-0.5 rounded-lg p-1" style={{ backgroundColor: 'rgba(255,255,255,0.03)' }}>
       {tabs.map(tab => {
         const isActive = activeTab === tab.key;
+        const TabIcon = tab.icon;
         return (
           <button
             key={tab.key}
@@ -300,7 +301,7 @@ function TabNavigation({
               backgroundColor: isActive ? 'rgba(255,255,255,0.08)' : 'transparent',
             }}
           >
-            <tab.icon className="w-4 h-4" />
+            <TabIcon className="w-4 h-4" />
             <span className="hidden sm:inline">{tab.label}</span>
             {tab.count !== undefined && tab.count > 0 && (
               <span
@@ -1101,7 +1102,7 @@ function LoadingState({ message, theme: C }: { message: string; theme: Theme }) 
   );
 }
 
-function EmptyState({ message, icon: Icon, theme: C }: { message: string; icon: React.ElementType; theme: Theme }) {
+function EmptyState({ message, icon: Icon, theme: C }: { message: string; icon: React.ComponentType<{ className?: string; style?: React.CSSProperties }>; theme: Theme }) {
   return (
     <div className="py-10 text-center rounded-xl" style={{
       background: 'rgba(255,255,255,0.02)',

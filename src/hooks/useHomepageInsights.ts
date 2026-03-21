@@ -27,7 +27,7 @@ export interface HomepageInsights {
 }
 
 export function useHomepageInsights() {
-  return useQuery<HomepageInsights | null>({
+  const query = useQuery<HomepageInsights | null>({
     queryKey: ['insights', 'homepage'],
     queryFn: async () => {
       try {
@@ -41,13 +41,17 @@ export function useHomepageInsights() {
         }
         return d as unknown as HomepageInsights;
       } catch (err: any) {
+        // 404 = backend triggered generation, poll until ready
         if (err?.status === 404) return null;
         throw err;
       }
     },
-    staleTime: 6 * 60 * 60 * 1000,
+    // Poll every 15s while insights are pending (null), stop once we have data
+    refetchInterval: (query) => (query.state.data === null ? 15_000 : false),
+    staleTime: (query) => (query.state.data ? 6 * 60 * 60 * 1000 : 0),
     gcTime: 7 * 60 * 60 * 1000,
     retry: 1,
     refetchOnWindowFocus: false,
   });
+  return query;
 }

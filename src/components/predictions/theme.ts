@@ -58,5 +58,36 @@ export const PortfolioTheme = {
   accentGlow: "rgba(112, 224, 176, 0.2)",
 } as const;
 
+// V2 theme — consolidated, used by all prediction V2 components.
+// Every prediction component should import from here instead of defining inline palettes.
+export const T = {
+  // Base
+  bg: "#050608",
+  surface: "rgba(255, 255, 255, 0.025)",
+  surfaceHover: "rgba(255, 255, 255, 0.045)",
+  border: "rgba(255, 255, 255, 0.06)",
+  borderHover: "rgba(255, 255, 255, 0.12)",
+  text: "#f0f5f5",
+  textSecondary: "#9CA3AF",
+  muted: "#6b7280",
+  subtle: "#3a3f4a",
+
+  // Semantic
+  green: "#4ADE80",
+  greenSoft: "rgba(74, 222, 128, 0.10)",
+  red: "#F87171",
+  redSoft: "rgba(248, 113, 113, 0.10)",
+  yellow: "#FBBF24",
+  yellowSoft: "rgba(251, 191, 36, 0.10)",
+  purple: "#818CF8",
+  purpleSoft: "rgba(129, 140, 248, 0.10)",
+  cyan: "#22D3EE",
+  cyanSoft: "rgba(34, 211, 238, 0.08)",
+  orange: "#FB923C",
+
+  // Accent
+  accent: "#4ADE80",
+} as const;
+
 // Type for theme colors
 export type ThemeColor = keyof typeof PredictionTheme;
