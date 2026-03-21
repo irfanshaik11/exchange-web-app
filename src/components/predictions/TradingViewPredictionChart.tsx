@@ -282,28 +282,37 @@ const InlineOrderBook: React.FC<{
   );
 };
 
-// Multi-Series Legend Component
+// Multi-Series Legend Component — shows series names + values, updates on crosshair hover
 const MultiSeriesLegend: React.FC<{
   series: Array<{ label: string; color: string; currentPrice?: number }>;
-}> = ({ series }) => {
+  hoveredValues?: Map<string, number>; // label → price at crosshair
+  isHovering?: boolean;
+}> = ({ series, hoveredValues, isHovering }) => {
   return (
     <div className="flex flex-wrap items-center gap-x-4 gap-y-1 px-3 py-2" style={{ borderBottom: `1px solid ${AX.border}` }}>
-      {series.map((s, idx) => (
-        <div key={idx} className="flex items-center gap-1.5">
-          <div
-            className="w-2.5 h-2.5 rounded-full"
-            style={{ backgroundColor: s.color }}
-          />
-          <span className="text-xs" style={{ color: AX.text }}>
-            {s.label}
-          </span>
-          {s.currentPrice !== undefined && (
-            <span className="text-xs font-medium" style={{ color: s.color }}>
-              {(s.currentPrice * 100).toFixed(1)}%
+      {series.map((s, idx) => {
+        // Use hovered value if available, otherwise current price
+        const displayPrice = isHovering && hoveredValues?.has(s.label)
+          ? hoveredValues.get(s.label)!
+          : s.currentPrice;
+
+        return (
+          <div key={idx} className="flex items-center gap-1.5">
+            <div
+              className="w-2.5 h-2.5 rounded-full flex-shrink-0"
+              style={{ backgroundColor: s.color }}
+            />
+            <span className="text-xs" style={{ color: AX.text }}>
+              {s.label}
             </span>
-          )}
-        </div>
-      ))}
+            {displayPrice !== undefined && (
+              <span className="text-xs font-bold tabular-nums" style={{ color: s.color }}>
+                {(displayPrice * 100).toFixed(1)}%
+              </span>
+            )}
+          </div>
+        );
+      })}
     </div>
   );
 };
@@ -338,6 +347,10 @@ const TradingViewPredictionChart: React.FC<TradingViewPredictionChartProps> = ({
   const [libraryLoaded, setLibraryLoaded] = useState(false);
   const [loadingTimedOut, setLoadingTimedOut] = useState(false);
   const loadingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Crosshair hover state for multi-series legend
+  const [hoveredValues, setHoveredValues] = useState<Map<string, number>>(new Map());
+  const [isHoveringChart, setIsHoveringChart] = useState(false);
 
   // Track mounted state to prevent cleanup errors
   useEffect(() => {
@@ -637,6 +650,8 @@ const TradingViewPredictionChart: React.FC<TradingViewPredictionChartProps> = ({
           'left_toolbar',
           'control_bar',
           'context_menus',
+          // Multi-series: show study names in legend for outcome identification
+          ...(isMultiSeries ? ['always_show_study_symbol_input_values_in_legend'] : []),
         ],
         theme: 'dark',
         custom_css_url: '/charting_library/themed.css',
@@ -665,8 +680,17 @@ const TradingViewPredictionChart: React.FC<TradingViewPredictionChartProps> = ({
             'mainSeriesProperties.candleStyle.drawWick': true,
             'mainSeriesProperties.candleStyle.drawBorder': true,
           }),
-          'paneProperties.legendProperties.showLegend': !isMultiSeries && !useLineChart,
+          // Legend: show for all modes, but hide OHLC for line/multi-series (not meaningful for probabilities)
+          'paneProperties.legendProperties.showLegend': true,
           'paneProperties.legendProperties.showSeriesOHLC': !isMultiSeries && !useLineChart,
+          // Study labels on price scale — shows colored labels for each Compare series on Y-axis
+          'scalesProperties.showStudyLastValue': isMultiSeries,
+          'scalesProperties.showStudyPlotLabels': isMultiSeries,
+          'scalesProperties.showSeriesLastValue': true,
+          // Crosshair labels on both axes for precise hover reading
+          'scalesProperties.showPriceScaleCrosshairLabel': true,
+          'scalesProperties.showTimeScaleCrosshairLabel': true,
+          'scalesProperties.crosshairLabelBgColorDark': '#2A2B33',
         },
         // Custom price formatter for percentage
         custom_formatters: {
@@ -719,6 +743,63 @@ const TradingViewPredictionChart: React.FC<TradingViewPredictionChartProps> = ({
               console.warn('[TradingViewPredictionChart] Failed to add comparison series:', seriesItem.label, e);
             }
           });
+
+          // Subscribe to crosshair move to update our custom legend with hovered values
+          try {
+            chart.crossHairMoved().subscribe(null, (params: any) => {
+              if (!isMountedRef.current) return;
+
+              if (!params || params.time === undefined) {
+                // Crosshair left the chart
+                setIsHoveringChart(false);
+                return;
+              }
+
+              setIsHoveringChart(true);
+
+              // Extract series/study values from the crosshair event (available since TV v26)
+              // The values match what's shown in the data window
+              try {
+                const values = new Map<string, number>();
+                const config = seriesConfigRef.current.length > 0 ? seriesConfigRef.current : initialSeriesConfig;
+
+                // Main series value (first outcome)
+                if (config.length > 0 && params.price !== undefined) {
+                  values.set(config[0].label, params.price / 100); // Convert from percentage back to 0-1
+                }
+
+                // Study values from the event (Compare studies)
+                if (params.studies) {
+                  const studyEntries = Object.entries(params.studies);
+                  // Map study values back to our series config by index
+                  studyEntries.forEach(([studyId, studyData]: [string, any]) => {
+                    if (!studyData || !studyData.plots) return;
+                    // Find the matching series config — studies are added in order
+                    const plotValues = Object.values(studyData.plots);
+                    if (plotValues.length > 0) {
+                      const plotValue = plotValues[0] as any;
+                      if (plotValue?.value !== undefined) {
+                        // Try to match by study index
+                        const idx = studyEntries.indexOf([studyId, studyData]);
+                        const configIdx = idx + 1; // +1 because main series is index 0
+                        if (configIdx < config.length) {
+                          values.set(config[configIdx].label, plotValue.value / 100);
+                        }
+                      }
+                    }
+                  });
+                }
+
+                if (values.size > 0) {
+                  setHoveredValues(values);
+                }
+              } catch {
+                // Non-critical — legend falls back to current price
+              }
+            });
+          } catch (e) {
+            isDev && console.warn('[TradingViewPredictionChart] crossHairMoved subscription failed:', e);
+          }
         }
       });
 
@@ -750,7 +831,7 @@ const TradingViewPredictionChart: React.FC<TradingViewPredictionChartProps> = ({
 
   return (
     <div className={`flex flex-col h-full ${className}`} style={{ width, height, backgroundColor: AX.bg }}>
-      {/* Multi-series legend */}
+      {/* Multi-series legend — updates on crosshair hover */}
       {isMultiSeries && coloredSeries.length > 0 && (
         <MultiSeriesLegend
           series={coloredSeries.map(s => ({
@@ -758,6 +839,8 @@ const TradingViewPredictionChart: React.FC<TradingViewPredictionChartProps> = ({
             color: s.color!,
             currentPrice: s.currentPrice,
           }))}
+          hoveredValues={hoveredValues}
+          isHovering={isHoveringChart}
         />
       )}
 

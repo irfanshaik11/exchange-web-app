@@ -23,21 +23,26 @@ export interface MarketInsights {
 }
 
 export function useMarketInsights(source: string, marketId: string) {
-  return useQuery<MarketInsights | null>({
+  const query = useQuery<MarketInsights | null>({
     queryKey: ['insights', source, marketId],
     queryFn: async () => {
       try {
         const res = await apiFetch<{ success: boolean; data: MarketInsights }>(`/api/prediction/insights/${source}/${marketId}`);
         return res.data;
       } catch (err: any) {
+        // 404 = backend triggered generation, poll until ready
         if (err?.status === 404) return null;
         throw err;
       }
     },
     enabled: !!source && !!marketId,
-    staleTime: 6 * 60 * 60 * 1000,
+    // Poll every 15s while insights are pending (null), stop once we have data
+    refetchInterval: (query) => (query.state.data === null ? 15_000 : false),
+    // Cache real data for 6h, but null results stay fresh for re-polling
+    staleTime: (query) => (query.state.data ? 6 * 60 * 60 * 1000 : 0),
     gcTime: 7 * 60 * 60 * 1000,
     retry: 1,
     refetchOnWindowFocus: false,
   });
+  return query;
 }

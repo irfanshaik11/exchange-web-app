@@ -1,7 +1,8 @@
 // src/components/predictions/UnifiedPortfolio.tsx
 // Unified portfolio component with gamified stats, tabs for Overview/Positions/Orders/History
+// Enhanced with auto-settlement status display and polished UI
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useRouter } from 'next/router';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
@@ -19,6 +20,9 @@ import {
   HiOutlineCollection,
   HiOutlineClipboardList,
   HiOutlineBadgeCheck,
+  HiOutlineSparkles,
+  HiOutlineShieldCheck,
+  HiOutlineLightningBolt,
 } from 'react-icons/hi';
 import {
   getUserPredictionPositions,
@@ -156,16 +160,18 @@ async function redeemWinnings(conditionId: string, authToken: string): Promise<{
   };
 }
 
-// Theme type
-type Theme = typeof PredictionTheme | typeof PortfolioTheme;
+// Theme type — use Record to avoid `never` from const literal union conflicts
+type Theme = Record<string, string>;
 
-// Unified Stats Header Component
-function UnifiedStatsHeader({
+// ── Stats Header ─────────────────────────────────────────────────────────
+
+function StatsHeader({
   balance,
   netPnl,
   winRate,
   streak,
   positionsValue,
+  settledCount,
   isLoading,
   theme: C,
 }: {
@@ -174,80 +180,88 @@ function UnifiedStatsHeader({
   winRate: number;
   streak: number;
   positionsValue: number;
+  settledCount: number;
   isLoading: boolean;
   theme: Theme;
 }) {
-  const stats = [
-    {
-      icon: <HiOutlineCash className="w-4 h-4" />,
-      label: 'Balance',
-      value: `$${balance.toFixed(2)}`,
-      color: C.text,
-    },
-    {
-      icon: <HiOutlineChartBar className="w-4 h-4" />,
-      label: 'Net P&L',
-      value: `${netPnl >= 0 ? '+' : ''}$${netPnl.toFixed(2)}`,
-      color: netPnl >= 0 ? C.green : C.red,
-    },
-    {
-      icon: <HiOutlineStar className="w-4 h-4" />,
-      label: 'Win Rate',
-      value: `${winRate.toFixed(0)}%`,
-      color: winRate >= 50 ? C.green : C.text,
-    },
-    {
-      icon: <HiOutlineFire className="w-4 h-4" style={{ color: streak > 0 ? C.yellow : C.muted }} />,
-      label: 'Streak',
-      value: streak > 0 ? `${streak}` : '0',
-      color: streak > 0 ? C.yellow : C.text,
-      suffix: streak > 0 ? '🔥' : '',
-    },
-    {
-      icon: <HiOutlineCollection className="w-4 h-4" />,
-      label: 'Positions',
-      value: `$${positionsValue.toFixed(2)}`,
-      color: C.text,
-    },
-  ];
-
   return (
-    <div
-      className="grid grid-cols-5 gap-2 p-3 rounded-xl relative overflow-hidden"
-      style={{
-        background: 'rgba(255, 255, 255, 0.03)',
-        border: '1px solid rgba(255, 255, 255, 0.08)',
-        boxShadow: '0 8px 32px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.06)',
-      }}
-    >
-      {/* Glossy overlay */}
-      <div className="pointer-events-none absolute inset-0 rounded-xl" style={{ background: 'linear-gradient(135deg, rgba(255,255,255,0.05) 0%, transparent 40%, transparent 60%, rgba(255,255,255,0.02) 100%)' }} />
-      {stats.map((stat, index) => (
-        <div
-          key={stat.label}
-          className="relative flex flex-col items-center p-2 rounded-lg text-center overflow-hidden backdrop-blur-sm"
-          style={{
-            backgroundColor: 'rgba(0, 0, 0, 0.3)',
-            border: '1px solid rgba(255, 255, 255, 0.06)',
-            boxShadow: 'inset 0 1px 0 rgba(255, 255, 255, 0.04)',
-          }}
-        >
-          <div className="flex items-center gap-1 mb-1" style={{ color: C.muted }}>
-            {stat.icon}
+    <div className="relative overflow-hidden rounded-xl" style={{
+      background: 'linear-gradient(135deg, rgba(255,255,255,0.04) 0%, rgba(255,255,255,0.01) 100%)',
+      border: '1px solid rgba(255,255,255,0.08)',
+    }}>
+      {/* Animated gradient accent line */}
+      <div className="absolute top-0 inset-x-0 h-[2px]" style={{
+        background: `linear-gradient(90deg, ${C.green}00, ${C.green}, ${C.purple}, ${C.green}00)`,
+      }} />
+
+      <div className="grid grid-cols-3 sm:grid-cols-5 gap-px" style={{ backgroundColor: 'rgba(255,255,255,0.04)' }}>
+        {/* Balance */}
+        <div className="p-3 sm:p-4 text-center" style={{ backgroundColor: C.surface }}>
+          <div className="flex items-center justify-center gap-1.5 mb-1">
+            <HiOutlineCash className="w-3.5 h-3.5" style={{ color: C.muted }} />
+            <span className="text-[10px] uppercase tracking-wider font-medium" style={{ color: C.muted }}>Balance</span>
           </div>
-          <div className="text-sm font-bold" style={{ color: stat.color }}>
-            {stat.value}{stat.suffix}
-          </div>
-          <div className="text-[10px] uppercase tracking-wider" style={{ color: C.muted }}>
-            {stat.label}
+          <div className="text-lg sm:text-xl font-bold tabular-nums" style={{ color: C.text }}>
+            ${balance.toFixed(2)}
           </div>
         </div>
-      ))}
+
+        {/* Net P&L */}
+        <div className="p-3 sm:p-4 text-center" style={{ backgroundColor: C.surface }}>
+          <div className="flex items-center justify-center gap-1.5 mb-1">
+            <HiOutlineChartBar className="w-3.5 h-3.5" style={{ color: C.muted }} />
+            <span className="text-[10px] uppercase tracking-wider font-medium" style={{ color: C.muted }}>Net P&L</span>
+          </div>
+          <div className="text-lg sm:text-xl font-bold tabular-nums" style={{ color: netPnl >= 0 ? C.green : C.red }}>
+            {netPnl >= 0 ? '+' : ''}${netPnl.toFixed(2)}
+          </div>
+        </div>
+
+        {/* Positions Value */}
+        <div className="p-3 sm:p-4 text-center" style={{ backgroundColor: C.surface }}>
+          <div className="flex items-center justify-center gap-1.5 mb-1">
+            <HiOutlineCollection className="w-3.5 h-3.5" style={{ color: C.muted }} />
+            <span className="text-[10px] uppercase tracking-wider font-medium" style={{ color: C.muted }}>Positions</span>
+          </div>
+          <div className="text-lg sm:text-xl font-bold tabular-nums" style={{ color: C.text }}>
+            ${positionsValue.toFixed(2)}
+          </div>
+        </div>
+
+        {/* Win Rate */}
+        <div className="hidden sm:block p-3 sm:p-4 text-center" style={{ backgroundColor: C.surface }}>
+          <div className="flex items-center justify-center gap-1.5 mb-1">
+            <HiOutlineStar className="w-3.5 h-3.5" style={{ color: C.muted }} />
+            <span className="text-[10px] uppercase tracking-wider font-medium" style={{ color: C.muted }}>Win Rate</span>
+          </div>
+          <div className="text-lg sm:text-xl font-bold tabular-nums" style={{ color: winRate >= 50 ? C.green : C.text }}>
+            {winRate.toFixed(0)}%
+          </div>
+        </div>
+
+        {/* Streak / Settled */}
+        <div className="hidden sm:block p-3 sm:p-4 text-center" style={{ backgroundColor: C.surface }}>
+          <div className="flex items-center justify-center gap-1.5 mb-1">
+            {settledCount > 0 ? (
+              <HiOutlineShieldCheck className="w-3.5 h-3.5" style={{ color: C.green }} />
+            ) : (
+              <HiOutlineFire className="w-3.5 h-3.5" style={{ color: streak > 0 ? '#FBBF24' : C.muted }} />
+            )}
+            <span className="text-[10px] uppercase tracking-wider font-medium" style={{ color: C.muted }}>
+              {settledCount > 0 ? 'Settled' : 'Streak'}
+            </span>
+          </div>
+          <div className="text-lg sm:text-xl font-bold tabular-nums" style={{ color: settledCount > 0 ? C.green : (streak > 0 ? '#FBBF24' : C.text) }}>
+            {settledCount > 0 ? settledCount : streak}
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
 
-// Tab Navigation Component
+// ── Tab Navigation ───────────────────────────────────────────────────────
+
 function TabNavigation({
   activeTab,
   onChange,
@@ -256,48 +270,59 @@ function TabNavigation({
 }: {
   activeTab: TabType;
   onChange: (tab: TabType) => void;
-  counts: { positions: number; orders: number; history: number; claimable: number };
+  counts: { positions: number; orders: number; history: number; claimable: number; settled: number };
   theme: Theme;
 }) {
-  const tabs: { key: TabType; label: string; icon: React.ElementType; count?: number }[] = [
-    { key: 'overview', label: 'Overview', icon: HiOutlineBadgeCheck, count: counts.claimable > 0 ? counts.claimable : undefined },
+  const tabs: { key: TabType; label: string; icon: React.ComponentType<{ className?: string }>; count?: number; highlight?: boolean }[] = [
+    {
+      key: 'overview',
+      label: 'Overview',
+      icon: HiOutlineBadgeCheck,
+      count: (counts.claimable + counts.settled) > 0 ? counts.claimable + counts.settled : undefined,
+      highlight: counts.claimable > 0,
+    },
     { key: 'positions', label: 'Positions', icon: HiOutlineCollection, count: counts.positions },
     { key: 'orders', label: 'Orders', icon: HiOutlineClipboardList, count: counts.orders },
     { key: 'history', label: 'History', icon: HiOutlineChartBar, count: counts.history > 0 ? counts.history : undefined },
   ];
 
   return (
-    <div className="flex gap-1 border-b" style={{ borderColor: C.border }}>
-      {tabs.map(tab => (
-        <button
-          key={tab.key}
-          onClick={() => onChange(tab.key)}
-          className="flex items-center gap-1.5 px-3 py-2.5 text-sm font-medium transition-colors border-b-2 -mb-px"
-          style={{
-            color: activeTab === tab.key ? C.text : C.muted,
-            borderColor: activeTab === tab.key ? C.green : 'transparent',
-          }}
-        >
-          <tab.icon className="w-4 h-4" />
-          {tab.label}
-          {tab.count !== undefined && tab.count > 0 && (
-            <span
-              className="px-1.5 py-0.5 rounded-full text-xs"
-              style={{
-                backgroundColor: activeTab === tab.key ? C.greenBg : C.surface,
-                color: activeTab === tab.key ? C.green : C.muted,
-              }}
-            >
-              {tab.count}
-            </span>
-          )}
-        </button>
-      ))}
+    <div className="flex gap-0.5 rounded-lg p-1" style={{ backgroundColor: 'rgba(255,255,255,0.03)' }}>
+      {tabs.map(tab => {
+        const isActive = activeTab === tab.key;
+        const TabIcon = tab.icon;
+        return (
+          <button
+            key={tab.key}
+            onClick={() => onChange(tab.key)}
+            className="relative flex items-center gap-1.5 px-3 py-2 text-sm font-medium transition-all rounded-md flex-1 justify-center"
+            style={{
+              color: isActive ? C.text : C.muted,
+              backgroundColor: isActive ? 'rgba(255,255,255,0.08)' : 'transparent',
+            }}
+          >
+            <TabIcon className="w-4 h-4" />
+            <span className="hidden sm:inline">{tab.label}</span>
+            {tab.count !== undefined && tab.count > 0 && (
+              <span
+                className="px-1.5 py-0.5 rounded-full text-[10px] font-bold min-w-[18px] text-center"
+                style={{
+                  backgroundColor: tab.highlight ? C.green : (isActive ? 'rgba(255,255,255,0.12)' : 'rgba(255,255,255,0.06)'),
+                  color: tab.highlight ? '#000' : (isActive ? C.text : C.muted),
+                }}
+              >
+                {tab.count}
+              </span>
+            )}
+          </button>
+        );
+      })}
     </div>
   );
 }
 
-// Main UnifiedPortfolio Component
+// ── Main Component ───────────────────────────────────────────────────────
+
 export default function UnifiedPortfolio({
   authToken,
   walletAddress,
@@ -312,6 +337,7 @@ export default function UnifiedPortfolio({
 
   // Portfolio data state
   const [positions, setPositions] = useState<PredictionPosition[]>([]);
+  const [settledPositions, setSettledPositions] = useState<PredictionPosition[]>([]);
   const [openOrders, setOpenOrders] = useState<PolymarketOpenOrder[]>([]);
   const [trades, setTrades] = useState<PredictionTrade[]>([]);
   const [balance, setBalance] = useState<PolymarketBalance | null>(null);
@@ -335,6 +361,7 @@ export default function UnifiedPortfolio({
   const [claimingId, setClaimingId] = useState<string | null>(null);
   const [claimResult, setClaimResult] = useState<{ success: boolean; message: string } | null>(null);
   const [cancellingOrderId, setCancellingOrderId] = useState<string | null>(null);
+  const [showConfetti, setShowConfetti] = useState(false);
 
   // Load claimed history on mount
   useEffect(() => {
@@ -412,9 +439,10 @@ export default function UnifiedPortfolio({
     setError(null);
 
     try {
-      // Fetch all data in parallel
-      const [positionsRes, ordersRes, tradesRes, balanceRes] = await Promise.all([
+      // Fetch all data in parallel — include settled positions too
+      const [positionsRes, settledRes, ordersRes, tradesRes, balanceRes] = await Promise.all([
         getUserPredictionPositions(authToken, 'polymarket', 'active').catch(() => null),
+        getUserPredictionPositions(authToken, 'polymarket', 'settled').catch(() => null),
         getPolymarketOpenOrders(authToken).catch(() => null),
         getUserPredictionTrades(authToken, 'polymarket', 20).catch(() => null),
         getPolymarketBalance(authToken).catch(() => null),
@@ -427,6 +455,11 @@ export default function UnifiedPortfolio({
           (p: PredictionPosition) => !p.conditionId || !claimedConditionIds.has(p.conditionId)
         );
         setPositions(activePositions);
+      }
+
+      // Store settled positions (auto-settled by backend monitor)
+      if (settledRes?.success && settledRes.data) {
+        setSettledPositions(settledRes.data);
       }
 
       if (ordersRes?.success && ordersRes.data) {
@@ -442,7 +475,6 @@ export default function UnifiedPortfolio({
       }
 
       // Check for claimable winnings from user's REAL positions
-      // Convert active positions to claimable position format
       const userPositionsForClaim: ClaimablePosition[] = (positionsRes?.data || [])
         .filter((p: PredictionPosition) => p.conditionId && !claimedConditionIds.has(p.conditionId))
         .map((p: PredictionPosition) => ({
@@ -492,6 +524,16 @@ export default function UnifiedPortfolio({
     fetchData();
   }, [fetchData]);
 
+  // Pick up balance broadcasts from Header for instant display
+  useEffect(() => {
+    const handleBalanceData = (e: Event) => {
+      const data = (e as CustomEvent).detail;
+      if (data) setBalance(data);
+    };
+    window.addEventListener('polygon-balance-data', handleBalanceData);
+    return () => window.removeEventListener('polygon-balance-data', handleBalanceData);
+  }, []);
+
   // Handlers
   const handleClaim = async (position: ClaimablePosition) => {
     if (!authToken || claimingId) return;
@@ -503,9 +545,12 @@ export default function UnifiedPortfolio({
       const result = await redeemWinnings(position.conditionId, authToken);
 
       if (result.success && result.txHash) {
+        setShowConfetti(true);
+        setTimeout(() => setShowConfetti(false), 3000);
+
         setClaimResult({
           success: true,
-          message: `Claimed $${position.claimableAmount.toFixed(2)}! Tx: ${result.txHash.slice(0, 10)}...`,
+          message: `Claimed $${position.claimableAmount.toFixed(2)}!`,
         });
 
         const newClaim: ClaimedWinning = {
@@ -610,6 +655,14 @@ export default function UnifiedPortfolio({
   const readyToClaim = claimablePositions.filter(p => p.isWinner && p.claimableAmount > 0);
   const pendingResolution = claimablePositions.filter(p => !p.resolved);
 
+  // Auto-settled positions that the user won (redeemed by backend)
+  const autoSettledWins = settledPositions.filter(p =>
+    p.resolution && p.side?.toUpperCase() === p.resolution.toUpperCase() && Number(p.settlementAmount) > 0
+  );
+  const autoSettledLosses = settledPositions.filter(p =>
+    p.resolution && p.side?.toUpperCase() !== p.resolution.toUpperCase()
+  );
+
   // Not logged in state
   if (!authToken) {
     return (
@@ -631,14 +684,15 @@ export default function UnifiedPortfolio({
   }
 
   return (
-    <div className="space-y-4">
-      {/* Unified Stats Header */}
-      <UnifiedStatsHeader
+    <div className="space-y-3">
+      {/* Stats Header */}
+      <StatsHeader
         balance={balance?.usdc || 0}
         netPnl={stats.netProfit}
         winRate={stats.winRate}
         streak={stats.winStreak}
         positionsValue={totalPositionValue}
+        settledCount={settledPositions.length}
         isLoading={isLoading}
         theme={C}
       />
@@ -652,83 +706,100 @@ export default function UnifiedPortfolio({
           orders: openOrders.length,
           history: trades.length,
           claimable: readyToClaim.length,
+          settled: autoSettledWins.length,
         }}
         theme={C}
       />
 
       {/* Tab Content */}
-        {/* Overview Tab */}
+      <AnimatePresence mode="wait">
+        {/* ── Overview Tab ── */}
         {activeTab === 'overview' && (
-          <div className="space-y-4">
-            {/* Claimable Winnings */}
-            {(readyToClaim.length > 0 || pendingResolution.length > 0) && (
-              <div
-                className="rounded-xl overflow-hidden"
-                style={{ backgroundColor: C.surface, border: `1px solid ${C.border}` }}
-              >
-                <div
-                  className="flex items-center justify-between px-4 py-3"
-                  style={{ borderBottom: `1px solid ${C.border}` }}
-                >
-                  <div className="flex items-center gap-2">
-                    <div
-                      className="w-8 h-8 rounded-lg flex items-center justify-center"
-                      style={{ backgroundColor: C.goldBg }}
-                    >
-                      <HiOutlineCash className="w-4 h-4" style={{ color: C.gold }} />
+          <motion.div
+            key="overview"
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -8 }}
+            transition={{ duration: 0.15 }}
+            className="space-y-3"
+          >
+            {/* Auto-Settlement Banner */}
+            <div className="flex items-center gap-2 px-3 py-2 rounded-lg" style={{
+              background: `linear-gradient(135deg, ${C.green}08, ${C.purple}08)`,
+              border: `1px solid ${C.green}15`,
+            }}>
+              <HiOutlineShieldCheck className="w-4 h-4 flex-shrink-0" style={{ color: C.green }} />
+              <span className="text-xs" style={{ color: C.muted }}>
+                Markets are auto-settled when they resolve. Winning tokens are redeemed automatically.
+              </span>
+            </div>
+
+            {/* Claimable Winnings (manual claims still pending) */}
+            {readyToClaim.length > 0 && (
+              <div className="rounded-xl overflow-hidden relative" style={{
+                border: `1px solid ${C.green}40`,
+                background: `linear-gradient(135deg, ${C.green}06, transparent)`,
+              }}>
+                {/* Glow effect */}
+                <div className="absolute inset-0 pointer-events-none" style={{
+                  boxShadow: `inset 0 0 40px ${C.green}08`,
+                }} />
+
+                <div className="flex items-center justify-between px-4 py-3 relative" style={{
+                  borderBottom: `1px solid ${C.green}20`,
+                }}>
+                  <div className="flex items-center gap-2.5">
+                    <div className="relative">
+                      <div className="w-9 h-9 rounded-lg flex items-center justify-center" style={{
+                        background: `linear-gradient(135deg, ${C.green}, #22C55E)`,
+                      }}>
+                        <HiOutlineSparkles className="w-4.5 h-4.5 text-black" />
+                      </div>
+                      {/* Pulse dot */}
+                      <div className="absolute -top-0.5 -right-0.5 w-2.5 h-2.5 rounded-full animate-pulse" style={{
+                        backgroundColor: C.green,
+                        boxShadow: `0 0 8px ${C.green}`,
+                      }} />
                     </div>
                     <div>
-                      <h4 className="font-semibold" style={{ color: C.text }}>Winnings</h4>
-                      <p className="text-xs" style={{ color: C.muted }}>
-                        {readyToClaim.length > 0 ? 'Ready to claim!' : 'Waiting for resolution...'}
+                      <h4 className="text-sm font-semibold" style={{ color: C.text }}>Ready to Claim</h4>
+                      <p className="text-[11px]" style={{ color: C.muted }}>
+                        {readyToClaim.length} winning {readyToClaim.length === 1 ? 'position' : 'positions'}
                       </p>
                     </div>
                   </div>
-                  {readyToClaim.length > 0 && (
-                    <div
-                      className="px-3 py-1.5 rounded-lg text-sm font-bold"
-                      style={{ backgroundColor: C.greenBg, color: C.green }}
-                    >
-                      ${readyToClaim.reduce((sum, p) => sum + p.claimableAmount, 0).toFixed(2)} available
-                    </div>
-                  )}
+                  <div className="px-3 py-1.5 rounded-lg text-sm font-bold" style={{
+                    background: `linear-gradient(135deg, ${C.green}20, ${C.green}10)`,
+                    color: C.green,
+                    border: `1px solid ${C.green}30`,
+                  }}>
+                    ${readyToClaim.reduce((sum, p) => sum + p.claimableAmount, 0).toFixed(2)}
+                  </div>
                 </div>
 
-                <div className="divide-y" style={{ borderColor: C.border }}>
-                  {isLoading ? (
-                    <div className="flex items-center justify-center py-8 gap-2">
-                      <HiOutlineRefresh className="w-5 h-5 animate-spin" style={{ color: C.muted }} />
-                      <span style={{ color: C.muted }}>Checking markets...</span>
-                    </div>
-                  ) : (
-                    <>
-                      {readyToClaim.map((position) => (
-                        <ClaimableRow
-                          key={position.conditionId}
-                          position={position}
-                          onClaim={handleClaim}
-                          isClaiming={claimingId === position.conditionId}
-                          theme={C}
-                        />
-                      ))}
-                      {pendingResolution.map((position) => (
-                        <PendingRow key={position.conditionId} position={position} theme={C} />
-                      ))}
-                    </>
-                  )}
+                <div className="divide-y" style={{ borderColor: `${C.green}15` }}>
+                  {readyToClaim.map((position) => (
+                    <ClaimableRow
+                      key={position.conditionId}
+                      position={position}
+                      onClaim={handleClaim}
+                      isClaiming={claimingId === position.conditionId}
+                      theme={C}
+                    />
+                  ))}
                 </div>
 
                 {/* Claim Result Toast */}
                 <AnimatePresence>
                   {claimResult && (
                     <motion.div
-                      initial={{ opacity: 0, y: 20 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      exit={{ opacity: 0, y: -20 }}
+                      initial={{ opacity: 0, y: 20, scale: 0.95 }}
+                      animate={{ opacity: 1, y: 0, scale: 1 }}
+                      exit={{ opacity: 0, y: -20, scale: 0.95 }}
                       className="mx-4 mb-4 p-3 rounded-lg flex items-center gap-2"
                       style={{
-                        backgroundColor: claimResult.success ? C.greenBg : C.redBg,
-                        border: `1px solid ${claimResult.success ? C.green : C.red}`,
+                        backgroundColor: claimResult.success ? `${C.green}15` : `${C.red}15`,
+                        border: `1px solid ${claimResult.success ? C.green : C.red}40`,
                       }}
                     >
                       {claimResult.success ? (
@@ -736,7 +807,7 @@ export default function UnifiedPortfolio({
                       ) : (
                         <HiOutlineExclamationCircle className="w-5 h-5 flex-shrink-0" style={{ color: C.red }} />
                       )}
-                      <span className="text-sm" style={{ color: claimResult.success ? C.green : C.red }}>
+                      <span className="text-sm font-medium" style={{ color: claimResult.success ? C.green : C.red }}>
                         {claimResult.message}
                       </span>
                     </motion.div>
@@ -745,34 +816,105 @@ export default function UnifiedPortfolio({
               </div>
             )}
 
-            {/* Claimed History */}
-            {claimedHistory.length > 0 && (
-              <div
-                className="rounded-xl overflow-hidden"
-                style={{ backgroundColor: C.surface, border: `1px solid ${C.border}` }}
-              >
-                <div
-                  className="flex items-center justify-between px-4 py-3"
-                  style={{ borderBottom: `1px solid ${C.border}` }}
-                >
-                  <div className="flex items-center gap-2">
-                    <div
-                      className="w-8 h-8 rounded-lg flex items-center justify-center"
-                      style={{ backgroundColor: C.greenBg }}
-                    >
-                      <HiOutlineBadgeCheck className="w-4 h-4" style={{ color: C.green }} />
+            {/* Pending Resolution */}
+            {pendingResolution.length > 0 && (
+              <div className="rounded-xl overflow-hidden" style={{
+                backgroundColor: C.surface,
+                border: `1px solid ${C.border}`,
+              }}>
+                <div className="flex items-center justify-between px-4 py-3" style={{
+                  borderBottom: `1px solid ${C.border}`,
+                }}>
+                  <div className="flex items-center gap-2.5">
+                    <div className="w-9 h-9 rounded-lg flex items-center justify-center" style={{
+                      backgroundColor: '#FBBF2420',
+                    }}>
+                      <HiOutlineClock className="w-4.5 h-4.5" style={{ color: '#FBBF24' }} />
                     </div>
                     <div>
-                      <h4 className="font-semibold" style={{ color: C.text }}>Claimed History</h4>
-                      <p className="text-xs" style={{ color: C.muted }}>
-                        {claimedHistory.length} successful {claimedHistory.length === 1 ? 'redemption' : 'redemptions'}
+                      <h4 className="text-sm font-semibold" style={{ color: C.text }}>Pending Resolution</h4>
+                      <p className="text-[11px]" style={{ color: C.muted }}>
+                        Waiting for market outcome
                       </p>
                     </div>
                   </div>
-                  <div
-                    className="px-3 py-1.5 rounded-lg text-sm font-bold"
-                    style={{ backgroundColor: C.greenBg, color: C.green }}
-                  >
+                </div>
+
+                <div className="divide-y" style={{ borderColor: C.border }}>
+                  {pendingResolution.map((position) => (
+                    <PendingRow key={position.conditionId} position={position} theme={C} />
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Auto-Settled Results */}
+            {(autoSettledWins.length > 0 || autoSettledLosses.length > 0) && (
+              <div className="rounded-xl overflow-hidden" style={{
+                backgroundColor: C.surface,
+                border: `1px solid ${C.border}`,
+              }}>
+                <div className="flex items-center justify-between px-4 py-3" style={{
+                  borderBottom: `1px solid ${C.border}`,
+                }}>
+                  <div className="flex items-center gap-2.5">
+                    <div className="w-9 h-9 rounded-lg flex items-center justify-center" style={{
+                      background: `linear-gradient(135deg, ${C.green}20, ${C.purple}20)`,
+                    }}>
+                      <HiOutlineLightningBolt className="w-4.5 h-4.5" style={{ color: C.green }} />
+                    </div>
+                    <div>
+                      <h4 className="text-sm font-semibold" style={{ color: C.text }}>Auto-Settled</h4>
+                      <p className="text-[11px]" style={{ color: C.muted }}>
+                        {autoSettledWins.length} won, {autoSettledLosses.length} lost
+                      </p>
+                    </div>
+                  </div>
+                  {autoSettledWins.length > 0 && (
+                    <div className="px-3 py-1.5 rounded-lg text-sm font-bold" style={{
+                      backgroundColor: C.greenBg, color: C.green,
+                    }}>
+                      +${autoSettledWins.reduce((s, p) => s + (Number(p.settlementAmount) || 0), 0).toFixed(2)}
+                    </div>
+                  )}
+                </div>
+
+                <div className="divide-y" style={{ borderColor: C.border }}>
+                  {autoSettledWins.map((pos) => (
+                    <SettledRow key={pos.id} position={pos} isWinner={true} theme={C} />
+                  ))}
+                  {autoSettledLosses.map((pos) => (
+                    <SettledRow key={pos.id} position={pos} isWinner={false} theme={C} />
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Claimed History */}
+            {claimedHistory.length > 0 && (
+              <div className="rounded-xl overflow-hidden" style={{
+                backgroundColor: C.surface,
+                border: `1px solid ${C.border}`,
+              }}>
+                <div className="flex items-center justify-between px-4 py-3" style={{
+                  borderBottom: `1px solid ${C.border}`,
+                }}>
+                  <div className="flex items-center gap-2.5">
+                    <div className="w-9 h-9 rounded-lg flex items-center justify-center" style={{
+                      backgroundColor: C.greenBg,
+                    }}>
+                      <HiOutlineBadgeCheck className="w-4.5 h-4.5" style={{ color: C.green }} />
+                    </div>
+                    <div>
+                      <h4 className="text-sm font-semibold" style={{ color: C.text }}>Claimed History</h4>
+                      <p className="text-[11px]" style={{ color: C.muted }}>
+                        {claimedHistory.length} {claimedHistory.length === 1 ? 'redemption' : 'redemptions'}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="px-3 py-1.5 rounded-lg text-sm font-bold" style={{
+                    backgroundColor: C.greenBg, color: C.green,
+                  }}>
                     ${claimedHistory.reduce((sum, c) => sum + c.amount, 0).toFixed(2)} total
                   </div>
                 </div>
@@ -786,37 +928,39 @@ export default function UnifiedPortfolio({
             )}
 
             {/* Empty State */}
-            {!isLoading && readyToClaim.length === 0 && pendingResolution.length === 0 && claimedHistory.length === 0 && (
-              <div
-                className="text-center py-8 rounded-xl relative overflow-hidden"
-                style={{
-                  backgroundColor: 'rgba(255, 255, 255, 0.03)',
-                  border: '1px solid rgba(255, 255, 255, 0.08)',
-                  boxShadow: '0 8px 32px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.06)',
-                }}
-              >
-                {/* Glossy overlay */}
-                <div className="pointer-events-none absolute inset-0 rounded-xl" style={{ background: 'linear-gradient(135deg, rgba(255,255,255,0.05) 0%, transparent 40%, transparent 60%, rgba(255,255,255,0.02) 100%)' }} />
-                <div
-                  className="w-14 h-14 rounded-xl mx-auto mb-4 flex items-center justify-center"
-                  style={{ backgroundColor: C.purpleBg }}
-                >
-                  <HiOutlineStar className="w-7 h-7" style={{ color: C.purple }} />
+            {!isLoading && readyToClaim.length === 0 && pendingResolution.length === 0 &&
+             claimedHistory.length === 0 && autoSettledWins.length === 0 && autoSettledLosses.length === 0 && (
+              <div className="text-center py-10 rounded-xl relative overflow-hidden" style={{
+                background: 'linear-gradient(135deg, rgba(255,255,255,0.03) 0%, rgba(255,255,255,0.01) 100%)',
+                border: '1px solid rgba(255,255,255,0.06)',
+              }}>
+                <div className="w-16 h-16 rounded-2xl mx-auto mb-4 flex items-center justify-center" style={{
+                  background: `linear-gradient(135deg, ${C.purple}15, ${C.green}15)`,
+                  border: `1px solid ${C.purple}20`,
+                }}>
+                  <HiOutlineSparkles className="w-8 h-8" style={{ color: C.purple }} />
                 </div>
-                <h3 className="text-lg font-medium mb-2" style={{ color: C.text }}>
+                <h3 className="text-base font-semibold mb-1.5" style={{ color: C.text }}>
                   No Winnings Yet
                 </h3>
-                <p className="text-sm max-w-md mx-auto" style={{ color: C.muted }}>
-                  Make predictions and win to see your claimable winnings here!
+                <p className="text-sm max-w-sm mx-auto" style={{ color: C.muted }}>
+                  Make predictions to see your results here. Winning positions are auto-settled when markets resolve.
                 </p>
               </div>
             )}
-          </div>
+          </motion.div>
         )}
 
-        {/* Positions Tab */}
+        {/* ── Positions Tab ── */}
         {activeTab === 'positions' && (
-          <div className="space-y-2">
+          <motion.div
+            key="positions"
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -8 }}
+            transition={{ duration: 0.15 }}
+            className="space-y-2"
+          >
             {isLoading ? (
               <LoadingState message="Loading positions..." theme={C} />
             ) : positions.length === 0 ? (
@@ -832,14 +976,21 @@ export default function UnifiedPortfolio({
                 />
               ))
             )}
-          </div>
+          </motion.div>
         )}
 
-        {/* Orders Tab */}
+        {/* ── Orders Tab ── */}
         {activeTab === 'orders' && (
-          <div className="space-y-2">
+          <motion.div
+            key="orders"
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -8 }}
+            transition={{ duration: 0.15 }}
+            className="space-y-2"
+          >
             {openOrders.length > 0 && (
-              <div className="flex justify-end mb-2">
+              <div className="flex justify-end mb-1">
                 <button
                   onClick={handleCancelAllOrders}
                   disabled={cancellingOrderId !== null}
@@ -867,12 +1018,19 @@ export default function UnifiedPortfolio({
                 />
               ))
             )}
-          </div>
+          </motion.div>
         )}
 
-        {/* History Tab */}
+        {/* ── History Tab ── */}
         {activeTab === 'history' && (
-          <div className="space-y-2">
+          <motion.div
+            key="history"
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -8 }}
+            transition={{ duration: 0.15 }}
+            className="space-y-2"
+          >
             {isLoading ? (
               <LoadingState message="Loading trade history..." theme={C} />
             ) : trades.length === 0 ? (
@@ -909,18 +1067,19 @@ export default function UnifiedPortfolio({
                 />
               ))
             )}
-          </div>
+          </motion.div>
         )}
+      </AnimatePresence>
 
       {/* Refresh Button */}
-      <div className="flex justify-end">
+      <div className="flex justify-end pt-1">
         <button
           onClick={fetchData}
           disabled={isLoading}
-          className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors"
-          style={{ backgroundColor: C.surface, color: C.muted, border: `1px solid ${C.border}` }}
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all hover:bg-white/5"
+          style={{ color: C.muted, border: `1px solid ${C.border}` }}
         >
-          <HiOutlineRefresh className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} />
+          <HiOutlineRefresh className={`w-3.5 h-3.5 ${isLoading ? 'animate-spin' : ''}`} />
           Refresh
         </button>
       </div>
@@ -928,22 +1087,29 @@ export default function UnifiedPortfolio({
   );
 }
 
-// Sub-components
+// ── Sub-components ──────────────────────────────────────────────────────
 
 function LoadingState({ message, theme: C }: { message: string; theme: Theme }) {
   return (
-    <div className="py-8 flex flex-col items-center justify-center gap-3">
-      <HiOutlineRefresh className="w-6 h-6 animate-spin" style={{ color: C.muted }} />
+    <div className="py-10 flex flex-col items-center justify-center gap-3">
+      <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{
+        backgroundColor: 'rgba(255,255,255,0.05)',
+      }}>
+        <HiOutlineRefresh className="w-5 h-5 animate-spin" style={{ color: C.muted }} />
+      </div>
       <span className="text-sm" style={{ color: C.muted }}>{message}</span>
     </div>
   );
 }
 
-function EmptyState({ message, icon: Icon, theme: C }: { message: string; icon: React.ElementType; theme: Theme }) {
+function EmptyState({ message, icon: Icon, theme: C }: { message: string; icon: React.ComponentType<{ className?: string; style?: React.CSSProperties }>; theme: Theme }) {
   return (
-    <div className="py-8 text-center" style={{ color: C.muted }}>
-      <Icon className="w-8 h-8 mx-auto mb-2 opacity-50" />
-      {message}
+    <div className="py-10 text-center rounded-xl" style={{
+      background: 'rgba(255,255,255,0.02)',
+      border: '1px solid rgba(255,255,255,0.05)',
+    }}>
+      <Icon className="w-8 h-8 mx-auto mb-2" style={{ color: C.muted, opacity: 0.4 }} />
+      <span className="text-sm" style={{ color: C.muted }}>{message}</span>
     </div>
   );
 }
@@ -961,43 +1127,45 @@ function ClaimableRow({
 }) {
   return (
     <motion.div
-      initial={{ opacity: 0, y: 10 }}
-      animate={{ opacity: 1, y: 0 }}
+      initial={{ opacity: 0, x: -10 }}
+      animate={{ opacity: 1, x: 0 }}
       className="flex items-center justify-between p-4"
     >
-      <div className="flex items-center gap-3">
-        <div
-          className="w-10 h-10 rounded-full flex items-center justify-center"
-          style={{ backgroundColor: C.greenBg }}
-        >
+      <div className="flex items-center gap-3 flex-1 min-w-0">
+        <div className="w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0" style={{
+          background: `linear-gradient(135deg, ${C.green}25, ${C.green}10)`,
+        }}>
           <HiOutlineCheckCircle className="w-5 h-5" style={{ color: C.green }} />
         </div>
-        <div>
-          <div className="font-medium" style={{ color: C.text }}>
+        <div className="min-w-0">
+          <div className="text-sm font-medium truncate" style={{ color: C.text }}>
             {position.marketTitle}
           </div>
           <div className="flex items-center gap-2 mt-0.5">
-            <span
-              className="text-xs font-bold px-1.5 py-0.5 rounded"
-              style={{ backgroundColor: C.greenBg, color: C.green }}
-            >
+            <span className="text-[10px] font-bold px-1.5 py-0.5 rounded" style={{
+              background: `linear-gradient(135deg, ${C.green}30, ${C.green}15)`,
+              color: C.green,
+            }}>
               {position.side} WON
             </span>
-            <span className="text-xs" style={{ color: C.muted }}>
+            <span className="text-[11px]" style={{ color: C.muted }}>
               {position.tokenAmount.toFixed(2)} tokens
             </span>
           </div>
         </div>
       </div>
 
-      <button
+      <motion.button
+        whileHover={{ scale: 1.03 }}
+        whileTap={{ scale: 0.97 }}
         onClick={() => onClaim(position)}
         disabled={isClaiming}
-        className="flex items-center gap-2 px-4 py-2 rounded-lg font-semibold transition-all hover:scale-105"
+        className="flex items-center gap-2 px-4 py-2 rounded-lg font-semibold text-sm transition-all ml-3 flex-shrink-0"
         style={{
-          background: `linear-gradient(135deg, ${C.green} 0%, #22C55E 100%)`,
+          background: isClaiming ? C.muted : `linear-gradient(135deg, ${C.green}, #22C55E)`,
           color: '#000',
-          opacity: isClaiming ? 0.7 : 1,
+          opacity: isClaiming ? 0.6 : 1,
+          boxShadow: isClaiming ? 'none' : `0 4px 12px ${C.green}30`,
         }}
       >
         {isClaiming ? (
@@ -1011,111 +1179,156 @@ function ClaimableRow({
             Claim ${position.claimableAmount.toFixed(2)}
           </>
         )}
-      </button>
+      </motion.button>
     </motion.div>
   );
 }
 
 function PendingRow({ position, theme: C }: { position: ClaimablePosition; theme: Theme }) {
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 10 }}
-      animate={{ opacity: 1, y: 0 }}
-      className="flex items-center justify-between p-4 opacity-70"
-    >
-      <div className="flex items-center gap-3">
-        <div
-          className="w-10 h-10 rounded-full flex items-center justify-center"
-          style={{ backgroundColor: C.yellowBg }}
-        >
-          <HiOutlineClock className="w-5 h-5" style={{ color: C.yellow }} />
+    <div className="flex items-center justify-between p-4">
+      <div className="flex items-center gap-3 flex-1 min-w-0">
+        <div className="w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0 relative" style={{
+          backgroundColor: '#FBBF2415',
+        }}>
+          <HiOutlineClock className="w-5 h-5" style={{ color: '#FBBF24' }} />
         </div>
-        <div>
-          <div className="font-medium" style={{ color: C.text }}>
+        <div className="min-w-0">
+          <div className="text-sm font-medium truncate" style={{ color: C.text }}>
             {position.marketTitle}
           </div>
           <div className="flex items-center gap-2 mt-0.5">
-            <span
-              className="text-xs font-bold px-1.5 py-0.5 rounded"
-              style={{ backgroundColor: C.yellowBg, color: C.yellow }}
-            >
+            <span className="text-[10px] font-bold px-1.5 py-0.5 rounded" style={{
+              backgroundColor: '#FBBF2415',
+              color: '#FBBF24',
+            }}>
               {position.side}
             </span>
-            <span className="text-xs" style={{ color: C.muted }}>
-              {position.tokenAmount.toFixed(2)} tokens - Awaiting resolution
+            <span className="text-[11px]" style={{ color: C.muted }}>
+              {position.tokenAmount.toFixed(2)} tokens
             </span>
           </div>
         </div>
       </div>
 
-      <div
-        className="px-3 py-2 rounded-lg text-sm"
-        style={{ backgroundColor: C.yellowBg, color: C.yellow }}
-      >
+      <div className="px-3 py-1.5 rounded-lg text-xs font-medium flex-shrink-0 ml-3" style={{
+        backgroundColor: '#FBBF2410',
+        color: '#FBBF24',
+        border: '1px solid #FBBF2420',
+      }}>
         ~${position.tokenAmount.toFixed(2)} if won
       </div>
-    </motion.div>
+    </div>
+  );
+}
+
+function SettledRow({
+  position,
+  isWinner,
+  theme: C,
+}: {
+  position: PredictionPosition;
+  isWinner: boolean;
+  theme: Theme;
+}) {
+  const amount = Number(position.settlementAmount) || 0;
+  const costBasis = Number(position.costBasis) || 0;
+
+  return (
+    <div className="flex items-center justify-between p-4">
+      <div className="flex items-center gap-3 flex-1 min-w-0">
+        <div className="w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0" style={{
+          backgroundColor: isWinner ? C.greenBg : C.redBg,
+        }}>
+          {isWinner ? (
+            <HiOutlineCheckCircle className="w-5 h-5" style={{ color: C.green }} />
+          ) : (
+            <HiOutlineXCircle className="w-5 h-5" style={{ color: C.red }} />
+          )}
+        </div>
+        <div className="min-w-0">
+          <div className="text-sm font-medium truncate" style={{ color: C.text }}>
+            {position.marketTitle || position.marketId}
+          </div>
+          <div className="flex items-center gap-2 mt-0.5">
+            <span className="text-[10px] font-bold px-1.5 py-0.5 rounded" style={{
+              backgroundColor: isWinner ? C.greenBg : C.redBg,
+              color: isWinner ? C.green : C.red,
+            }}>
+              {position.side} {isWinner ? 'WON' : 'LOST'}
+            </span>
+            <span className="text-[10px] px-1.5 py-0.5 rounded flex items-center gap-1" style={{
+              backgroundColor: 'rgba(255,255,255,0.05)',
+              color: C.muted,
+            }}>
+              <HiOutlineLightningBolt className="w-3 h-3" />
+              Auto-settled
+            </span>
+          </div>
+        </div>
+      </div>
+
+      <div className="text-right ml-3 flex-shrink-0">
+        {isWinner ? (
+          <div className="text-sm font-bold" style={{ color: C.green }}>
+            +${amount.toFixed(2)}
+          </div>
+        ) : (
+          <div className="text-sm font-bold" style={{ color: C.red }}>
+            -${costBasis.toFixed(2)}
+          </div>
+        )}
+      </div>
+    </div>
   );
 }
 
 function ClaimedRow({ claim, theme: C }: { claim: ClaimedWinning; theme: Theme }) {
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 10 }}
-      animate={{ opacity: 1, y: 0 }}
-      className="flex items-center justify-between p-4"
-    >
-      <div className="flex items-center gap-3">
-        <div
-          className="w-10 h-10 rounded-full flex items-center justify-center"
-          style={{ backgroundColor: C.greenBg }}
-        >
-          <HiOutlineCheckCircle className="w-5 h-5" style={{ color: C.green }} />
+    <div className="flex items-center justify-between p-4">
+      <div className="flex items-center gap-3 flex-1 min-w-0">
+        <div className="w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0" style={{
+          backgroundColor: C.greenBg,
+        }}>
+          <HiOutlineBadgeCheck className="w-5 h-5" style={{ color: C.green }} />
         </div>
-        <div>
-          <div className="font-medium" style={{ color: C.text }}>
+        <div className="min-w-0">
+          <div className="text-sm font-medium truncate" style={{ color: C.text }}>
             {claim.marketTitle}
           </div>
           <div className="flex items-center gap-2 mt-0.5">
-            <span
-              className="text-xs font-bold px-1.5 py-0.5 rounded"
-              style={{ backgroundColor: C.greenBg, color: C.green }}
-            >
+            <span className="text-[10px] font-bold px-1.5 py-0.5 rounded" style={{
+              backgroundColor: C.greenBg,
+              color: C.green,
+            }}>
               {claim.side} WON
             </span>
-            <span className="text-xs" style={{ color: C.muted }}>
+            <span className="text-[11px]" style={{ color: C.muted }}>
               {new Date(claim.claimedAt).toLocaleDateString('en-US', {
                 month: 'short',
                 day: 'numeric',
-                year: 'numeric',
               })}
             </span>
           </div>
         </div>
       </div>
 
-      <div className="flex items-center gap-3">
-        <div className="text-right">
-          <div className="font-bold" style={{ color: C.green }}>
-            +${claim.amount.toFixed(2)}
-          </div>
+      <div className="flex items-center gap-2.5 ml-3 flex-shrink-0">
+        <div className="font-bold text-sm" style={{ color: C.green }}>
+          +${claim.amount.toFixed(2)}
         </div>
         <a
           href={`https://polygonscan.com/tx/${claim.txHash}`}
           target="_blank"
           rel="noopener noreferrer"
-          className="flex items-center gap-1.5 px-2 py-1.5 rounded-lg text-xs transition-colors hover:opacity-80"
+          className="flex items-center gap-1 px-2 py-1 rounded-md text-[10px] font-medium transition-opacity hover:opacity-80"
           style={{ backgroundColor: C.purpleBg, color: C.purple }}
         >
-          <img
-            src="https://polygonscan.com/assets/poly/images/svg/logos/chain-dim.svg?v=26.1.4.2"
-            alt="Polygonscan"
-            className="w-3.5 h-3.5"
-          />
-          View Tx
+          <HiOutlineExternalLink className="w-3 h-3" />
+          Tx
         </a>
       </div>
-    </motion.div>
+    </div>
   );
 }
 
@@ -1140,18 +1353,21 @@ function PositionRow({
 
   return (
     <motion.div
-      initial={{ opacity: 0, y: 10 }}
+      initial={{ opacity: 0, y: 8 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ delay: index * 0.03 }}
-      className="flex items-center justify-between p-4 rounded-lg transition-colors cursor-pointer hover:bg-white/5"
-      style={{ backgroundColor: C.surface, border: `1px solid ${C.border}` }}
+      className="flex items-center justify-between p-3.5 rounded-xl transition-colors cursor-pointer group"
+      style={{
+        backgroundColor: C.surface,
+        border: `1px solid ${C.border}`,
+      }}
       onClick={onClick}
+      whileHover={{ backgroundColor: 'rgba(255,255,255,0.04)' }}
     >
       <div className="flex items-center gap-3 flex-1 min-w-0">
-        <div
-          className="w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0"
-          style={{ backgroundColor: isYes ? C.greenBg : C.redBg }}
-        >
+        <div className="w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0" style={{
+          backgroundColor: isYes ? C.greenBg : C.redBg,
+        }}>
           {isYes ? (
             <HiOutlineCheckCircle className="w-5 h-5" style={{ color: C.green }} />
           ) : (
@@ -1164,28 +1380,22 @@ function PositionRow({
             {position.marketTitle || position.marketId}
           </div>
           <div className="flex items-center gap-2 mt-0.5">
-            <span
-              className="text-xs font-bold uppercase"
-              style={{ color: isYes ? C.green : C.red }}
-            >
+            <span className="text-[10px] font-bold uppercase" style={{ color: isYes ? C.green : C.red }}>
               {position.side}
             </span>
-            <span className="text-xs" style={{ color: C.muted }}>
-              {tokenAmount.toFixed(2)} shares @ {(avgEntryPrice * 100).toFixed(0)}c
+            <span className="text-[11px]" style={{ color: C.muted }}>
+              {tokenAmount.toFixed(2)} @ {(avgEntryPrice * 100).toFixed(0)}c
             </span>
           </div>
         </div>
       </div>
 
       <div className="text-right ml-4">
-        <div className="text-sm font-bold" style={{ color: C.text }}>
+        <div className="text-sm font-bold tabular-nums" style={{ color: C.text }}>
           ${currentValue.toFixed(2)}
         </div>
         {unrealizedPnl !== 0 && (
-          <div
-            className="text-xs"
-            style={{ color: unrealizedPnl >= 0 ? C.green : C.red }}
-          >
+          <div className="text-[11px] tabular-nums" style={{ color: unrealizedPnl >= 0 ? C.green : C.red }}>
             {unrealizedPnl >= 0 ? '+' : ''}${unrealizedPnl.toFixed(2)} ({pnlPercent >= 0 ? '+' : ''}{pnlPercent.toFixed(1)}%)
           </div>
         )}
@@ -1215,46 +1425,39 @@ function OpenOrderRow({
 
   return (
     <motion.div
-      initial={{ opacity: 0, y: 10 }}
+      initial={{ opacity: 0, y: 8 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ delay: index * 0.03 }}
-      className="flex items-center justify-between p-4 rounded-lg"
+      className="flex items-center justify-between p-3.5 rounded-xl"
       style={{ backgroundColor: C.surface, border: `1px solid ${C.border}` }}
     >
       <div className="flex items-center gap-3 flex-1 min-w-0">
-        <div
-          className="w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0"
-          style={{ backgroundColor: isBuy ? C.greenBg : C.redBg }}
-        >
-          <span
-            className="text-xs font-bold"
-            style={{ color: isBuy ? C.green : C.red }}
-          >
+        <div className="w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0" style={{
+          backgroundColor: isBuy ? C.greenBg : C.redBg,
+        }}>
+          <span className="text-[10px] font-bold" style={{ color: isBuy ? C.green : C.red }}>
             {isBuy ? 'BUY' : 'SELL'}
           </span>
         </div>
 
         <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2">
-            <span
-              className="text-xs font-bold uppercase px-1.5 py-0.5 rounded"
-              style={{
-                backgroundColor: isYesOutcome ? C.greenBg : C.redBg,
-                color: isYesOutcome ? C.green : C.red,
-              }}
-            >
+          <div className="flex items-center gap-1.5">
+            <span className="text-[10px] font-bold uppercase px-1.5 py-0.5 rounded" style={{
+              backgroundColor: isYesOutcome ? C.greenBg : C.redBg,
+              color: isYesOutcome ? C.green : C.red,
+            }}>
               {order.outcome || 'YES'}
             </span>
-            <span className="text-xs px-1.5 py-0.5 rounded" style={{ backgroundColor: C.yellowBg, color: C.yellow }}>
+            <span className="text-[10px] px-1.5 py-0.5 rounded" style={{
+              backgroundColor: '#FBBF2415',
+              color: '#FBBF24',
+            }}>
               {order.type}
             </span>
           </div>
           <div className="flex items-center gap-2 mt-1">
-            <span className="text-xs" style={{ color: C.muted }}>
-              {size.toFixed(2)} @ {(price * 100).toFixed(0)}c
-            </span>
-            <span className="text-xs" style={{ color: C.muted }}>
-              = ${value.toFixed(2)}
+            <span className="text-[11px]" style={{ color: C.muted }}>
+              {size.toFixed(2)} @ {(price * 100).toFixed(0)}c = ${value.toFixed(2)}
             </span>
           </div>
         </div>
@@ -1266,15 +1469,18 @@ function OpenOrderRow({
           onCancel(order.id);
         }}
         disabled={isCancelling}
-        className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ml-4"
-        style={{ backgroundColor: C.border, color: isCancelling ? C.muted : C.red }}
+        className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ml-3 flex-shrink-0"
+        style={{
+          backgroundColor: C.border,
+          color: isCancelling ? C.muted : C.red,
+        }}
       >
         {isCancelling ? (
           <HiOutlineRefresh className="w-3.5 h-3.5 animate-spin" />
         ) : (
           <HiOutlineTrash className="w-3.5 h-3.5" />
         )}
-        {isCancelling ? 'Cancelling...' : 'Cancel'}
+        {isCancelling ? '...' : 'Cancel'}
       </button>
     </motion.div>
   );
@@ -1301,28 +1507,24 @@ function TradeRow({
     day: 'numeric',
     hour: '2-digit',
     minute: '2-digit',
-  }) : 'Unknown';
+  }) : '';
 
   const txHash = (trade as any).transactionHash;
 
   return (
     <motion.div
-      initial={{ opacity: 0, y: 10 }}
+      initial={{ opacity: 0, y: 8 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ delay: index * 0.03 }}
-      className="flex items-center justify-between p-4 rounded-lg cursor-pointer hover:bg-white/5 transition-colors"
+      className="flex items-center justify-between p-3.5 rounded-xl cursor-pointer transition-colors"
       style={{ backgroundColor: C.surface, border: `1px solid ${C.border}` }}
       onClick={onClick}
     >
       <div className="flex items-center gap-3 flex-1 min-w-0">
-        <div
-          className="w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0"
-          style={{ backgroundColor: isBuy ? C.greenBg : C.redBg }}
-        >
-          <span
-            className="text-xs font-bold"
-            style={{ color: isBuy ? C.green : C.red }}
-          >
+        <div className="w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0" style={{
+          backgroundColor: isBuy ? C.greenBg : C.redBg,
+        }}>
+          <span className="text-[10px] font-bold" style={{ color: isBuy ? C.green : C.red }}>
             {isBuy ? 'BUY' : 'SELL'}
           </span>
         </div>
@@ -1332,56 +1534,46 @@ function TradeRow({
             {trade.marketTitle || trade.marketId}
           </div>
           <div className="flex items-center gap-2 mt-0.5">
-            <span
-              className="text-xs font-bold uppercase"
-              style={{ color: isYes ? C.green : C.red }}
-            >
+            <span className="text-[10px] font-bold uppercase" style={{ color: isYes ? C.green : C.red }}>
               {trade.side}
             </span>
-            <span className="text-xs" style={{ color: C.muted }}>
+            <span className="text-[11px]" style={{ color: C.muted }}>
               {tokenAmount.toFixed(2)} @ {(pricePerToken * 100).toFixed(0)}c
             </span>
           </div>
         </div>
       </div>
 
-      <div className="text-right ml-4">
-        <div className="text-sm font-bold" style={{ color: C.text }}>
-          ${usdValue.toFixed(2)}
+      <div className="flex items-center gap-3 ml-3 flex-shrink-0">
+        <div className="text-right">
+          <div className="text-sm font-bold tabular-nums" style={{ color: C.text }}>
+            ${usdValue.toFixed(2)}
+          </div>
+          <div className="text-[10px]" style={{ color: C.muted }}>
+            {timestamp}
+          </div>
         </div>
-        <div className="text-xs" style={{ color: C.muted }}>
-          {timestamp}
-        </div>
-      </div>
 
-      <div className="flex items-center gap-2 ml-4">
-        <span
-          className="text-xs px-2 py-1 rounded-full"
-          style={{
-            backgroundColor: trade.status === 'confirmed' ? C.greenBg :
-                           trade.status === 'pending' ? C.yellowBg : C.redBg,
-            color: trade.status === 'confirmed' ? C.green :
-                   trade.status === 'pending' ? C.yellow : C.red,
-          }}
-        >
+        <span className="text-[10px] px-2 py-1 rounded-full font-medium" style={{
+          backgroundColor: trade.status === 'confirmed' ? C.greenBg :
+                         trade.status === 'pending' ? '#FBBF2415' : C.redBg,
+          color: trade.status === 'confirmed' ? C.green :
+                 trade.status === 'pending' ? '#FBBF24' : C.red,
+        }}>
           {trade.status || 'unknown'}
         </span>
+
         {txHash && (
           <a
             href={`https://polygonscan.com/tx/${txHash}`}
             target="_blank"
             rel="noopener noreferrer"
             onClick={(e) => e.stopPropagation()}
-            className="flex items-center gap-1.5 px-2 py-1 rounded-lg text-xs transition-colors hover:opacity-80"
+            className="flex items-center gap-1 px-1.5 py-1 rounded-md text-[10px] transition-opacity hover:opacity-80"
             style={{ backgroundColor: C.purpleBg, color: C.purple }}
             title="View on Polygonscan"
           >
-            <img
-              src="https://polygonscan.com/assets/poly/images/svg/logos/chain-dim.svg?v=26.1.4.2"
-              alt="Polygonscan"
-              className="w-3.5 h-3.5"
-            />
-            Tx
+            <HiOutlineExternalLink className="w-3 h-3" />
           </a>
         )}
       </div>

@@ -36,8 +36,10 @@ interface CuratedSectionsProps {
 export default function CuratedSections({ markets, onToggleFavorite, isFavorite }: CuratedSectionsProps) {
   // Filter and sort markets for each section
   const sections = useMemo(() => {
-    const activeMarkets = markets.filter((m) => m.status === 'active');
     const now = Date.now();
+    const activeMarkets = markets.filter((m) =>
+      m.status === 'active' && new Date(m.closesAt).getTime() > now
+    );
 
     // Ending Soon: Markets closing within 48 hours
     const endingSoon = activeMarkets
@@ -206,12 +208,8 @@ function CuratedSection({
         </div>
       </div>
 
-      {/* Horizontal Scroll with edge fade */}
+      {/* Horizontal Scroll */}
       <div className="relative">
-        {/* Left fade */}
-        <div className="pointer-events-none absolute left-0 top-0 bottom-0 w-8 z-10" style={{ background: 'linear-gradient(to right, rgba(5,6,8,0.8), transparent)' }} />
-        {/* Right fade */}
-        <div className="pointer-events-none absolute right-0 top-0 bottom-0 w-16 z-10" style={{ background: 'linear-gradient(to left, rgba(5,6,8,0.9), transparent)' }} />
       <div
         ref={scrollRef}
         className="flex gap-3 overflow-x-auto p-2 scrollbar-hide"
@@ -304,7 +302,7 @@ function CompactMarketCard({ market, badgeType, isFavorite, onToggleFavorite }: 
           scrollSnapAlign: 'start',
           backgroundColor: 'rgba(255, 255, 255, 0.04)',
           border: '1px solid rgba(255, 255, 255, 0.08)',
-          boxShadow: '0 8px 32px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.06)',
+          boxShadow: '0 4px 16px rgba(0, 0, 0, 0.15), inset 0 1px 0 rgba(255, 255, 255, 0.06)',
         }}
         whileHover={{
           scale: 1.02,

@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import type { ExtendedPredictionMarket } from './useDFlowMarkets';
 import { env } from '~/env';
@@ -40,6 +40,8 @@ export interface PolymarketMarket {
   active: boolean;
   resolved?: boolean;
   resolvedBy?: string; // UMA resolver contract address
+  acceptingOrders?: boolean; // Whether CLOB is accepting new orders
+  enableOrderBook?: boolean; // Whether order book is active
   groupItemTitle?: string; // Label for multi-outcome markets
   groupItemThreshold?: string; // Threshold for ordering multi-outcome markets
   image?: string;
@@ -106,10 +108,14 @@ const transformToUnified = (event: PolymarketEvent): ExtendedPredictionMarket[] 
   const isMultiOutcome = event.markets.length > 1;
 
   // Find the market with highest YES probability to feature on the card
-  let primaryMarket = event.markets[0];
+  // Skip resolved/closed sub-markets — their prices are stale (fallback to 0.5)
+  const activeMarkets = event.markets.filter(m => !m.resolved && !m.closed && m.active !== false);
+  const candidateMarkets = activeMarkets.length > 0 ? activeMarkets : event.markets;
+
+  let primaryMarket = candidateMarkets[0];
   let highestYesPrice = 0;
 
-  for (const market of event.markets) {
+  for (const market of candidateMarkets) {
     const prices = safeJsonParse<string[]>(market.outcomePrices, ['0.5', '0.5']).map(Number);
     const yesPrice = prices[0] || 0;
     if (yesPrice > highestYesPrice) {
@@ -166,7 +172,7 @@ const transformToUnified = (event: PolymarketEvent): ExtendedPredictionMarket[] 
     marketType: isMultiOutcome ? 'multi' : 'binary',
     subtitle: leadingOutcome,
     eventTicker: event.slug,
-    outcomeCount: event.markets.length, // Number of outcomes in multi-outcome market
+    outcomeCount: activeMarkets.length || event.markets.length, // Number of active outcomes
 
     // Timing
     openTime: new Date(event.startDate).getTime() / 1000,
@@ -295,60 +301,35 @@ export default function usePolymarketMarkets(options: UsePolymarketMarketsOption
   };
 }
 
-// Hook to fetch orderbook for a Polymarket token
+// Hook to fetch orderbook for a Polymarket token (React Query)
 export function usePolymarketOrderBook(tokenId: string | undefined, options: { refreshInterval?: number } = {}) {
   const { refreshInterval = 10000 } = options;
-  const [orderBook, setOrderBook] = useState<{
-    bids: Array<{ price: number; size: number }>;
-    asks: Array<{ price: number; size: number }>;
-  } | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
 
-  const fetchOrderBook = useCallback(async () => {
-    if (!tokenId) return;
-
-    try {
-      const response = await fetch(`${API_BASE}/orderbook?token_id=${encodeURIComponent(tokenId)}`);
-
-      if (!response.ok) {
-        throw new Error(`Orderbook API error: ${response.status}`);
-      }
-
+  const { data: orderBook, isLoading, error, refetch } = useQuery({
+    queryKey: ['polymarket', 'orderbook', tokenId],
+    queryFn: async () => {
+      const response = await fetch(`${API_BASE}/orderbook?token_id=${encodeURIComponent(tokenId!)}`);
+      if (!response.ok) throw new Error(`Orderbook API error: ${response.status}`);
       const json = await response.json();
       const data = json.data || json;
+      return {
+        bids: (data.bids || []).map((b: any) => ({ price: parseFloat(b.price), size: parseFloat(b.size) })),
+        asks: (data.asks || []).map((a: any) => ({ price: parseFloat(a.price), size: parseFloat(a.size) })),
+      };
+    },
+    enabled: !!tokenId,
+    staleTime: STALE_TIME,
+    gcTime: CACHE_TIME,
+    refetchInterval: refreshInterval,
+    placeholderData: (prev: any) => prev,
+  });
 
-      setOrderBook({
-        bids: (data.bids || []).map((b: any) => ({
-          price: parseFloat(b.price),
-          size: parseFloat(b.size),
-        })),
-        asks: (data.asks || []).map((a: any) => ({
-          price: parseFloat(a.price),
-          size: parseFloat(a.size),
-        })),
-      });
-      setError(null);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to fetch orderbook');
-    } finally {
-      setIsLoading(false);
-    }
-  }, [tokenId]);
-
-  useEffect(() => {
-    if (!tokenId) {
-      setOrderBook(null);
-      setIsLoading(false);
-      return;
-    }
-
-    fetchOrderBook();
-    const interval = setInterval(fetchOrderBook, refreshInterval);
-    return () => clearInterval(interval);
-  }, [tokenId, fetchOrderBook, refreshInterval]);
-
-  return { orderBook, isLoading, error, refetch: fetchOrderBook };
+  return {
+    orderBook: orderBook ?? null,
+    isLoading: isLoading && !orderBook,
+    error: error ? (error instanceof Error ? error.message : 'Failed to fetch orderbook') : null,
+    refetch: async () => { await refetch(); },
+  };
 }
 
 // Helper to format volume
@@ -359,90 +340,44 @@ export function formatPolymarketVolume(volume: number): string {
   return `$${volume.toFixed(0)}`;
 }
 
-// Hook to fetch a single Polymarket market by slug
+// Hook to fetch a single Polymarket market by slug (React Query)
 export function usePolymarketMarket(
   slug: string | undefined,
   options: { enabled?: boolean; refreshInterval?: number } = {}
 ) {
   const { enabled = true, refreshInterval = 30000 } = options;
 
-  const [market, setMarket] = useState<ExtendedPredictionMarket | null>(null);
-  const [event, setEvent] = useState<PolymarketEvent | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
-  const fetchMarket = useCallback(async () => {
-    if (!slug || !enabled) {
-      return;
-    }
-
-    try {
-      const response = await fetch(`${API_BASE}/market?slug=${encodeURIComponent(slug)}`);
-
+  const { data, isLoading, error, refetch } = useQuery({
+    queryKey: ['polymarket', 'market', slug],
+    queryFn: async () => {
+      const response = await fetch(`${API_BASE}/market?slug=${encodeURIComponent(slug!)}`);
       if (!response.ok) {
-        if (response.status === 404) {
-          setError('Market not found');
-        } else {
-          throw new Error(`API error: ${response.status}`);
-        }
-        return;
+        if (response.status === 404) throw new Error('Market not found');
+        throw new Error(`API error: ${response.status}`);
       }
-
       const json = await response.json();
-      // Backend returns { success: true, data: {...event} }
       const eventData: PolymarketEvent = json.data || json.event;
+      if (!eventData) throw new Error('Market not found');
 
-      if (!eventData) {
-        setError('Market not found');
-        return;
-      }
-
-      setEvent(eventData);
-
-      // Transform to unified format
       const transformed = transformToUnified(eventData);
-      if (transformed.length > 0) {
-        setMarket(transformed[0]);
-      }
-      setError(null);
-    } catch (err) {
-      console.error('[Polymarket] Failed to fetch market:', err);
-      setError(err instanceof Error ? err.message : 'Failed to fetch market');
-    } finally {
-      setIsLoading(false);
-    }
-  }, [slug, enabled]);
-
-  useEffect(() => {
-    // If not enabled or no slug, reset state but keep loading true
-    // The parent component should handle showing loading based on router.isReady
-    if (!enabled) {
-      setMarket(null);
-      setIsLoading(false);
-      return;
-    }
-
-    if (!slug) {
-      // No slug yet (router still initializing) - keep loading true
-      setIsLoading(true);
-      return;
-    }
-
-    setIsLoading(true);
-    fetchMarket();
-
-    if (refreshInterval > 0) {
-      const interval = setInterval(fetchMarket, refreshInterval);
-      return () => clearInterval(interval);
-    }
-  }, [slug, enabled, fetchMarket, refreshInterval]);
+      return {
+        market: transformed.length > 0 ? transformed[0] : null,
+        event: eventData,
+      };
+    },
+    enabled: enabled && !!slug,
+    staleTime: STALE_TIME,
+    gcTime: CACHE_TIME,
+    refetchInterval: refreshInterval > 0 ? refreshInterval : false,
+    placeholderData: (prev: any) => prev,
+  });
 
   return {
-    market,
-    event,
-    isLoading,
-    error,
-    refetch: fetchMarket,
+    market: data?.market ?? null,
+    event: data?.event ?? null,
+    isLoading: enabled && !slug ? true : (isLoading && !data),
+    error: error ? (error instanceof Error ? error.message : 'Failed to fetch market') : null,
+    refetch: async () => { await refetch(); },
   };
 }
 
@@ -452,7 +387,7 @@ export interface PolymarketPricePoint {
   price: number;
 }
 
-// Hook to fetch Polymarket price history for charting
+// Hook to fetch Polymarket price history for charting (React Query)
 export function usePolymarketPriceHistory(
   tokenId: string | undefined,
   options: {
@@ -469,62 +404,34 @@ export function usePolymarketPriceHistory(
     enabled = true,
   } = options;
 
-  const [history, setHistory] = useState<PolymarketPricePoint[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
-  const fetchHistory = useCallback(async () => {
-    if (!tokenId || !enabled) {
-      return;
-    }
-
-    try {
+  const { data: history, isLoading, error, refetch } = useQuery({
+    queryKey: ['polymarket', 'priceHistory', tokenId, interval, fidelity],
+    queryFn: async () => {
       const params = new URLSearchParams();
-      params.set('market', tokenId);
+      params.set('market', tokenId!);
       params.set('interval', interval);
       params.set('fidelity', fidelity.toString());
 
       const response = await fetch(`${API_BASE}/prices-history?${params}`);
-
-      if (!response.ok) {
-        throw new Error(`API error: ${response.status}`);
-      }
+      if (!response.ok) throw new Error(`API error: ${response.status}`);
 
       const json = await response.json();
       const data = json.data || json;
-      setHistory(data.history || []);
-      setError(null);
-
-      isDev && console.log(`[usePolymarketPriceHistory] Fetched ${data.history?.length || 0} price points for token ${tokenId.slice(0, 8)}...`);
-    } catch (err) {
-      console.error('[Polymarket] Failed to fetch price history:', err);
-      setError(err instanceof Error ? err.message : 'Failed to fetch price history');
-    } finally {
-      setIsLoading(false);
-    }
-  }, [tokenId, interval, fidelity, enabled]);
-
-  useEffect(() => {
-    if (!tokenId || !enabled) {
-      setHistory([]);
-      setIsLoading(false);
-      return;
-    }
-
-    setIsLoading(true);
-    fetchHistory();
-
-    if (refreshInterval > 0) {
-      const intervalId = setInterval(fetchHistory, refreshInterval);
-      return () => clearInterval(intervalId);
-    }
-  }, [tokenId, enabled, fetchHistory, refreshInterval]);
+      isDev && console.log(`[usePolymarketPriceHistory] Fetched ${data.history?.length || 0} price points for token ${tokenId!.slice(0, 8)}...`);
+      return (data.history || []) as PolymarketPricePoint[];
+    },
+    enabled: enabled && !!tokenId,
+    staleTime: STALE_TIME,
+    gcTime: CACHE_TIME,
+    refetchInterval: refreshInterval > 0 ? refreshInterval : false,
+    placeholderData: (prev: any) => prev,
+  });
 
   return {
-    history,
-    isLoading,
-    error,
-    refetch: fetchHistory,
+    history: history ?? [],
+    isLoading: isLoading && !history,
+    error: error ? (error instanceof Error ? error.message : 'Failed to fetch price history') : null,
+    refetch: async () => { await refetch(); },
   };
 }
 
@@ -537,7 +444,7 @@ export interface MultiSeriesPriceHistory {
   currentPrice?: number;
 }
 
-// Hook to fetch price history for multiple tokens (for multi-outcome markets)
+// Hook to fetch price history for multiple tokens (for multi-outcome markets) (React Query)
 export function usePolymarketMultiPriceHistory(
   markets: Array<{ id: string; label: string; tokenId: string; currentPrice?: number }> | undefined,
   options: {
@@ -554,19 +461,17 @@ export function usePolymarketMultiPriceHistory(
     enabled = true,
   } = options;
 
-  const [seriesData, setSeriesData] = useState<MultiSeriesPriceHistory[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  // Stable key from market token IDs
+  const marketsKey = useMemo(
+    () => markets?.map(m => m.tokenId).join(',') || '',
+    [markets]
+  );
 
-  const fetchAllHistories = useCallback(async () => {
-    if (!markets || markets.length === 0 || !enabled) {
-      return;
-    }
-
-    try {
-      // Fetch all token histories in parallel
+  const { data: seriesData, isLoading, error, refetch } = useQuery({
+    queryKey: ['polymarket', 'multiPriceHistory', marketsKey, interval, fidelity],
+    queryFn: async () => {
       const results = await Promise.all(
-        markets.map(async (market) => {
+        (markets || []).map(async (market) => {
           try {
             const params = new URLSearchParams();
             params.set('market', market.tokenId);
@@ -574,10 +479,7 @@ export function usePolymarketMultiPriceHistory(
             params.set('fidelity', fidelity.toString());
 
             const response = await fetch(`${API_BASE}/prices-history?${params}`);
-
-            if (!response.ok) {
-              return { ...market, history: [] };
-            }
+            if (!response.ok) return { ...market, history: [] };
 
             const json = await response.json();
             const data = json.data || json;
@@ -588,43 +490,25 @@ export function usePolymarketMultiPriceHistory(
               history: data.history || [],
               currentPrice: market.currentPrice,
             };
-          } catch (err) {
+          } catch {
             return { ...market, history: [] };
           }
         })
       );
-
-      setSeriesData(results);
-      setError(null);
-    } catch (err) {
-      console.error('[usePolymarketMultiPriceHistory] Failed to fetch histories:', err);
-      setError(err instanceof Error ? err.message : 'Failed to fetch price histories');
-    } finally {
-      setIsLoading(false);
-    }
-  }, [markets, interval, fidelity, enabled]);
-
-  useEffect(() => {
-    if (!markets || markets.length === 0 || !enabled) {
-      setSeriesData([]);
-      setIsLoading(false);
-      return;
-    }
-
-    setIsLoading(true);
-    fetchAllHistories();
-
-    if (refreshInterval > 0) {
-      const intervalId = setInterval(fetchAllHistories, refreshInterval);
-      return () => clearInterval(intervalId);
-    }
-  }, [markets?.length, enabled, fetchAllHistories, refreshInterval]);
+      return results as MultiSeriesPriceHistory[];
+    },
+    enabled: enabled && !!markets && markets.length > 0,
+    staleTime: STALE_TIME,
+    gcTime: CACHE_TIME,
+    refetchInterval: refreshInterval > 0 ? refreshInterval : false,
+    placeholderData: (prev: any) => prev,
+  });
 
   return {
-    seriesData,
-    isLoading,
-    error,
-    refetch: fetchAllHistories,
+    seriesData: seriesData ?? [],
+    isLoading: isLoading && !seriesData,
+    error: error ? (error instanceof Error ? error.message : 'Failed to fetch price histories') : null,
+    refetch: async () => { await refetch(); },
   };
 }
 
@@ -643,59 +527,36 @@ export interface PolymarketComment {
   parentCommentID?: string;
 }
 
-// Hook to fetch Polymarket comments
+// Hook to fetch Polymarket comments (React Query — no auto-refresh, manual only)
 export function usePolymarketComments(
   eventId: string | undefined,
   options: { refreshInterval?: number; enabled?: boolean } = {}
 ) {
   const { refreshInterval = 0, enabled = true } = options;
 
-  const [comments, setComments] = useState<PolymarketComment[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
-  const fetchComments = useCallback(async () => {
-    if (!eventId || !enabled) return;
-
-    try {
-      const response = await fetch(`${API_BASE}/comments?event_id=${encodeURIComponent(eventId)}`);
-
-      if (!response.ok) {
-        // Silently handle 422 and other errors - comments are non-critical
-        setComments([]);
-        setIsLoading(false);
-        return;
-      }
-
+  const { data: comments, isLoading, error, refetch } = useQuery({
+    queryKey: ['polymarket', 'comments', eventId],
+    queryFn: async () => {
+      const response = await fetch(`${API_BASE}/comments?event_id=${encodeURIComponent(eventId!)}`);
+      if (!response.ok) return [] as PolymarketComment[];
       const json = await response.json();
       const data = json.data || json;
-      setComments(data.comments || data || []);
-      setError(null);
-    } catch (err) {
-      // Silently fail - comments are non-critical
-      setComments([]);
-    } finally {
-      setIsLoading(false);
-    }
-  }, [eventId, enabled]);
+      return (data.comments || data || []) as PolymarketComment[];
+    },
+    enabled: enabled && !!eventId,
+    staleTime: STALE_TIME,
+    gcTime: CACHE_TIME,
+    refetchInterval: refreshInterval > 0 ? refreshInterval : false,
+    placeholderData: (prev: any) => prev,
+    retry: 1,
+  });
 
-  useEffect(() => {
-    if (!eventId || !enabled) {
-      setComments([]);
-      setIsLoading(false);
-      return;
-    }
-
-    setIsLoading(true);
-    fetchComments();
-
-    if (refreshInterval > 0) {
-      const intervalId = setInterval(fetchComments, refreshInterval);
-      return () => clearInterval(intervalId);
-    }
-  }, [eventId, enabled, fetchComments, refreshInterval]);
-
-  return { comments, isLoading, error, refetch: fetchComments };
+  return {
+    comments: comments ?? [],
+    isLoading: isLoading && !comments,
+    error: error ? (error instanceof Error ? error.message : 'Failed to fetch comments') : null,
+    refetch: async () => { await refetch(); },
+  };
 }
 
 // Holder type
@@ -708,51 +569,34 @@ export interface PolymarketHolder {
   outcome: 'yes' | 'no';
 }
 
-// Hook to fetch Polymarket top holders
+// Hook to fetch Polymarket top holders (React Query — fetch once, no auto-refresh)
 export function usePolymarketHolders(
   conditionId: string | undefined,
   options: { limit?: number; enabled?: boolean } = {}
 ) {
   const { limit = 20, enabled = true } = options;
 
-  const [holders, setHolders] = useState<PolymarketHolder[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
-  const fetchHolders = useCallback(async () => {
-    if (!conditionId || !enabled) return;
-
-    try {
-      const response = await fetch(`${API_BASE}/holders?market=${encodeURIComponent(conditionId)}&limit=${limit}`);
-
-      if (!response.ok) {
-        throw new Error(`API error: ${response.status}`);
-      }
-
+  const { data: holders, isLoading, error, refetch } = useQuery({
+    queryKey: ['polymarket', 'holders', conditionId, limit],
+    queryFn: async () => {
+      const response = await fetch(`${API_BASE}/holders?market=${encodeURIComponent(conditionId!)}&limit=${limit}`);
+      if (!response.ok) throw new Error(`API error: ${response.status}`);
       const json = await response.json();
       const data = json.data || json;
-      setHolders(data.holders || data || []);
-      setError(null);
-    } catch (err) {
-      console.error('[Polymarket] Failed to fetch holders:', err);
-      setError(err instanceof Error ? err.message : 'Failed to fetch holders');
-    } finally {
-      setIsLoading(false);
-    }
-  }, [conditionId, limit, enabled]);
+      return (data.holders || data || []) as PolymarketHolder[];
+    },
+    enabled: enabled && !!conditionId,
+    staleTime: STALE_TIME,
+    gcTime: CACHE_TIME,
+    placeholderData: (prev: any) => prev,
+  });
 
-  useEffect(() => {
-    if (!conditionId || !enabled) {
-      setHolders([]);
-      setIsLoading(false);
-      return;
-    }
-
-    setIsLoading(true);
-    fetchHolders();
-  }, [conditionId, enabled, fetchHolders]);
-
-  return { holders, isLoading, error, refetch: fetchHolders };
+  return {
+    holders: holders ?? [],
+    isLoading: isLoading && !holders,
+    error: error ? (error instanceof Error ? error.message : 'Failed to fetch holders') : null,
+    refetch: async () => { await refetch(); },
+  };
 }
 
 // Activity type
@@ -774,58 +618,38 @@ export interface PolymarketActivity {
   transactionHash?: string;
 }
 
-// Hook to fetch Polymarket activity
+// Hook to fetch Polymarket activity (React Query)
 export function usePolymarketActivity(
   conditionId: string | undefined,
   options: { limit?: number; refreshInterval?: number; enabled?: boolean } = {}
 ) {
   const { limit = 50, refreshInterval = 30000, enabled = true } = options;
 
-  const [activities, setActivities] = useState<PolymarketActivity[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
-  const fetchActivity = useCallback(async () => {
-    if (!conditionId || !enabled) return;
-
-    try {
+  const { data: activities, isLoading, error, refetch } = useQuery({
+    queryKey: ['polymarket', 'activity', conditionId, limit],
+    queryFn: async () => {
       const params = new URLSearchParams();
-      params.set('market', conditionId);
+      params.set('market', conditionId!);
       params.set('limit', limit.toString());
 
       const response = await fetch(`${API_BASE}/activity?${params}`);
-
-      if (!response.ok) {
-        throw new Error(`API error: ${response.status}`);
-      }
+      if (!response.ok) throw new Error(`API error: ${response.status}`);
 
       const json = await response.json();
       const data = json.data || json;
-      setActivities(data.activities || data || []);
-      setError(null);
-    } catch (err) {
-      console.error('[Polymarket] Failed to fetch activity:', err);
-      setError(err instanceof Error ? err.message : 'Failed to fetch activity');
-    } finally {
-      setIsLoading(false);
-    }
-  }, [conditionId, limit, enabled]);
+      return (data.activities || data || []) as PolymarketActivity[];
+    },
+    enabled: enabled && !!conditionId,
+    staleTime: STALE_TIME,
+    gcTime: CACHE_TIME,
+    refetchInterval: refreshInterval > 0 ? refreshInterval : false,
+    placeholderData: (prev: any) => prev,
+  });
 
-  useEffect(() => {
-    if (!conditionId || !enabled) {
-      setActivities([]);
-      setIsLoading(false);
-      return;
-    }
-
-    setIsLoading(true);
-    fetchActivity();
-
-    if (refreshInterval > 0) {
-      const intervalId = setInterval(fetchActivity, refreshInterval);
-      return () => clearInterval(intervalId);
-    }
-  }, [conditionId, enabled, fetchActivity, refreshInterval]);
-
-  return { activities, isLoading, error, refetch: fetchActivity };
+  return {
+    activities: activities ?? [],
+    isLoading: isLoading && !activities,
+    error: error ? (error instanceof Error ? error.message : 'Failed to fetch activity') : null,
+    refetch: async () => { await refetch(); },
+  };
 }
