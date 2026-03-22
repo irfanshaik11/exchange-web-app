@@ -44,7 +44,8 @@ function timeAgo(dateStr: string): string {
 
 export function HomepageInsightPanel() {
   const { data, isLoading, timedOut } = useHomepageInsights();
-  const [collapsed, setCollapsed] = useState(true);
+  // Start collapsed on mobile, expanded on desktop
+  const [collapsed, setCollapsed] = useState(typeof window !== 'undefined' && window.innerWidth < 1024);
   const [showPicks, setShowPicks] = useState(false);
   const [showNarratives, setShowNarratives] = useState(false);
   const constraintsRef = useRef<HTMLDivElement>(null);
@@ -185,7 +186,7 @@ export function HomepageInsightPanel() {
             aria-expanded={false}
             className="pill-inner flex items-center gap-3 px-5 py-3 hover:bg-white/[0.04] transition-colors focus-visible:ring-2 focus-visible:ring-[#4ADE80]/50 focus-visible:outline-none"
           >
-            <AIIcon size={24} />
+            <span className="flex-shrink-0"><AIIcon size={24} /></span>
             <span
               className="text-[12px] font-bold tracking-[0.08em]"
               style={{
