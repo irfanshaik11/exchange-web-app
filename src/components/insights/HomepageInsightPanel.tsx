@@ -7,23 +7,25 @@ import { TopPickCard } from './TopPickCard';
 import { NarrativeChip } from './NarrativeChip';
 import { InsightSkeleton } from './InsightSkeleton';
 
+let aiIconCounter = 0;
 function AIIcon({ size = 16 }: { size?: number }) {
+  const id = `ai-grad-hp-${++aiIconCounter}`;
   return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" className="flex-shrink-0">
       <motion.path
         d="M12 2L13.5 8.5L20 10L13.5 11.5L12 18L10.5 11.5L4 10L10.5 8.5L12 2Z"
-        fill="url(#hp-g1)"
+        fill={`url(#${id})`}
         animate={{ scale: [0.9, 1.05, 0.9], opacity: [0.7, 1, 0.7] }}
         transition={{ duration: 3, repeat: Infinity, ease: 'easeInOut' }}
       />
       <motion.path
         d="M19 15L19.75 17.25L22 18L19.75 18.75L19 21L18.25 18.75L16 18L18.25 17.25L19 15Z"
-        fill="url(#hp-g1)"
+        fill={`url(#${id})`}
         animate={{ scale: [0.8, 1.1, 0.8], opacity: [0.5, 0.9, 0.5] }}
         transition={{ duration: 2.5, repeat: Infinity, ease: 'easeInOut', delay: 0.5 }}
       />
       <defs>
-        <linearGradient id="hp-g1" x1="3" y1="2" x2="22" y2="21">
+        <linearGradient id={id} x1="3" y1="2" x2="22" y2="21">
           <stop stopColor="#4ADE80" />
           <stop offset="1" stopColor="#22D3EE" />
         </linearGradient>
@@ -44,8 +46,7 @@ function timeAgo(dateStr: string): string {
 
 export function HomepageInsightPanel() {
   const { data, isLoading, timedOut } = useHomepageInsights();
-  // Start collapsed on mobile, expanded on desktop
-  const [collapsed, setCollapsed] = useState(typeof window !== 'undefined' && window.innerWidth < 1024);
+  const [collapsed, setCollapsed] = useState(false);
   const [showPicks, setShowPicks] = useState(false);
   const [showNarratives, setShowNarratives] = useState(false);
   const constraintsRef = useRef<HTMLDivElement>(null);
@@ -186,7 +187,7 @@ export function HomepageInsightPanel() {
             aria-expanded={false}
             className="pill-inner flex items-center gap-3 px-5 py-3 hover:bg-white/[0.04] transition-colors focus-visible:ring-2 focus-visible:ring-[#4ADE80]/50 focus-visible:outline-none"
           >
-            <span className="flex-shrink-0"><AIIcon size={24} /></span>
+            <AIIcon size={24} />
             <span
               className="text-[12px] font-bold tracking-[0.08em]"
               style={{
