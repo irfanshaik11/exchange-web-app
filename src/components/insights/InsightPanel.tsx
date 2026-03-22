@@ -56,12 +56,86 @@ function AIIcon({ size = 16 }: { size?: number }) {
 
 export function InsightPanel({ source, marketId }: InsightPanelProps) {
   const { data, isLoading, timedOut } = useMarketInsights(source, marketId);
-  const [collapsed, setCollapsed] = useState(false);
+  const [collapsed, setCollapsed] = useState(true); // Start collapsed on all screens
   const constraintsRef = useRef<HTMLDivElement>(null);
 
   return (
     <>
+    {/* Drag boundary — desktop only */}
     <div ref={constraintsRef} className="fixed pointer-events-none hidden lg:block" style={{ zIndex: 39, top: '5.5rem', left: 0, right: 0, bottom: 0 }} />
+
+    {/* Mobile: small circular button, always visible */}
+    {collapsed && (
+      <div className="lg:hidden fixed z-40" style={{ right: '0.75rem', bottom: '5rem' }}>
+        <div className="iridescent-pill">
+          <button
+            onClick={() => setCollapsed(false)}
+            aria-label="Open AI insights"
+            className="pill-inner flex items-center justify-center w-12 h-12 hover:bg-white/[0.04] transition-colors"
+          >
+            <AIIcon size={24} />
+          </button>
+        </div>
+      </div>
+    )}
+
+    {/* Mobile: full-screen modal when expanded */}
+    {!collapsed && (
+      <div className="lg:hidden fixed inset-0 z-50 flex flex-col" style={{ background: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(8px)' }}>
+        <div className="flex-1 overflow-y-auto p-4 pt-16">
+          <div className="iridescent-border max-w-md mx-auto">
+            <div className="iridescent-inner overflow-hidden">
+              {/* Header */}
+              <button
+                onClick={() => setCollapsed(true)}
+                className="w-full flex items-center justify-between px-4 py-3.5 hover:bg-white/[0.02] transition-colors"
+              >
+                <div className="flex items-center gap-2.5">
+                  <AIIcon size={18} />
+                  <span className="text-[13px] font-bold tracking-[0.12em] uppercase text-[#4ADE80]">AI Insights</span>
+                </div>
+                <span className="text-zinc-500 text-sm">✕</span>
+              </button>
+              <div className="h-[1px] w-full" style={{ background: 'linear-gradient(90deg, transparent, rgba(74,222,128,0.15) 50%, transparent)' }} />
+              {/* Content */}
+              <div className="p-3 space-y-1.5">
+                {isLoading ? (
+                  <InsightSkeleton />
+                ) : data?.insights ? (
+                  <>
+                    {Object.entries(data.insights).map(([key, insight], i) => (
+                      <InsightCategory key={key} label={CATEGORY_LABELS[key] || key} insight={insight} />
+                    ))}
+                    <p className="text-[9px] text-zinc-600 text-center pt-2 pb-1 leading-relaxed">
+                      AI-generated insights. Not financial advice.
+                    </p>
+                  </>
+                ) : timedOut ? (
+                  <div className="flex flex-col items-center justify-center py-8 px-3 text-center">
+                    <p className="text-[12px] text-zinc-400">AI insights are temporarily unavailable.</p>
+                    <p className="text-[10px] text-zinc-600 mt-1">Please check back shortly.</p>
+                  </div>
+                ) : (
+                  <div className="flex flex-col items-center justify-center py-10 text-center">
+                    <div className="w-12 h-12 rounded-2xl flex items-center justify-center mb-4 bg-white/[0.05] border border-white/[0.08]">
+                      <AIIcon size={24} />
+                    </div>
+                    <p className="text-[11px] text-zinc-500">AI insights are being generated for this market</p>
+                    <div className="flex items-center gap-1 mt-3">
+                      {[0, 1, 2].map(i => (
+                        <motion.div key={i} className="w-1 h-1 rounded-full bg-[#4ADE80]" animate={{ opacity: [0.2, 0.8, 0.2] }} transition={{ duration: 1.2, repeat: Infinity, delay: i * 0.2 }} />
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    )}
+
+    {/* Desktop: existing floating panel */}
     <motion.div
       drag
       dragMomentum={false}
