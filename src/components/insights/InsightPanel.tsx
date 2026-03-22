@@ -81,8 +81,8 @@ export function InsightPanel({ source, marketId }: InsightPanelProps) {
 
     {/* Mobile: full-screen modal when expanded */}
     {!collapsed && (
-      <div className="lg:hidden fixed inset-0 z-50 flex flex-col" style={{ background: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(8px)' }}>
-        <div className="flex-1 overflow-y-auto p-4 pt-16">
+      <div className="lg:hidden fixed inset-0 z-50 flex flex-col" style={{ background: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(8px)' }} onClick={() => setCollapsed(true)}>
+        <div className="flex-1 overflow-y-auto p-4 pt-16" onClick={(e) => e.stopPropagation()}>
           <div className="iridescent-border max-w-md mx-auto">
             <div className="iridescent-inner overflow-hidden">
               {/* Header */}
@@ -163,7 +163,7 @@ export function InsightPanel({ source, marketId }: InsightPanelProps) {
             aria-expanded={false}
             className="pill-inner flex items-center gap-3 px-5 py-3 hover:bg-white/[0.04] transition-colors focus-visible:ring-2 focus-visible:ring-[#4ADE80]/50 focus-visible:outline-none"
           >
-            <AIIcon size={24} />
+            <span className="flex-shrink-0"><AIIcon size={24} /></span>
             <span
               className="text-[12px] font-bold tracking-[0.08em]"
               style={{

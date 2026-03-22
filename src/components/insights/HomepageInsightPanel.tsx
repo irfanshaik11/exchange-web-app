@@ -44,7 +44,7 @@ function timeAgo(dateStr: string): string {
 
 export function HomepageInsightPanel() {
   const { data, isLoading, timedOut } = useHomepageInsights();
-  const [collapsed, setCollapsed] = useState(false);
+  const [collapsed, setCollapsed] = useState(true);
   const [showPicks, setShowPicks] = useState(false);
   const [showNarratives, setShowNarratives] = useState(false);
   const constraintsRef = useRef<HTMLDivElement>(null);
@@ -78,8 +78,8 @@ export function HomepageInsightPanel() {
 
     {/* Mobile: full-screen modal when expanded */}
     {!collapsed && (
-      <div className="lg:hidden fixed inset-0 z-50 flex flex-col" style={{ background: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(8px)' }}>
-        <div className="flex-1 overflow-y-auto p-4 pt-16">
+      <div className="lg:hidden fixed inset-0 z-50 flex flex-col" style={{ background: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(8px)' }} onClick={() => setCollapsed(true)}>
+        <div className="flex-1 overflow-y-auto p-4 pt-16" onClick={(e) => e.stopPropagation()}>
           <div className="iridescent-border max-w-md mx-auto">
             <div className="iridescent-inner overflow-hidden">
               <button
