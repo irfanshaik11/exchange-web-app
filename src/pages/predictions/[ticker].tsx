@@ -34,6 +34,7 @@ import { useTurnkeySigner } from '~/components/TurnkeySignerContext';
 import PinGate from '~/components/predictions/PinGate';
 import { InsightPanel } from '~/components/insights/InsightPanel';
 import { showEnhancedToast, updateEnhancedToast } from '~/utils/enhancedToast';
+import { createPolymarketTradeToast, showPolymarketToast } from '~/utils/tradeToast';
 import { SourceBadge, PolygonWalletCard } from '~/components/predictions';
 import {
   getPolymarketQuote,
@@ -46,6 +47,7 @@ import {
   getPolymarketTokenBalance,
   getPolymarketOpenOrders,
   cancelPolymarketOrder,
+  warmPolymarketCaches,
   type PolymarketQuote,
   type PolymarketBalance,
   type PolymarketGeoblock,
@@ -1640,7 +1642,7 @@ export default function MarketDetailPage() {
       .catch((err) => console.warn('[Polymarket] Geoblock check failed:', err.message));
   }, [isPolymarket]);
 
-  // Polymarket Trading: Fetch Polygon balance when user is authenticated
+  // Polymarket Trading: Fetch Polygon balance + pre-warm trade caches on page load
   useEffect(() => {
     if (!isPolymarket || !user?.bearerToken) return;
     getPolymarketBalance(user.bearerToken)
@@ -1648,6 +1650,8 @@ export default function MarketDetailPage() {
         if (res.success) setPolygonBalance(res.data);
       })
       .catch((err) => console.warn('[Polymarket] Balance fetch failed:', err.message));
+    // Fire-and-forget: pre-build signer + CLOB client + check approvals
+    warmPolymarketCaches(user.bearerToken);
   }, [isPolymarket, user?.bearerToken]);
 
   // Listen for balance broadcasts from Header (resolves instantly, no duplicate API call)
@@ -1678,20 +1682,23 @@ export default function MarketDetailPage() {
     if (!user?.bearerToken || cancellingOrderId) return;
 
     setCancellingOrderId(orderId);
-    const toastId = showEnhancedToast('loading', 'Cancelling order...');
+    const cancelToast = createPolymarketTradeToast({
+      label: 'Cancelling order...',
+      tokenImage: selectedOutcomeMarket?.image || polyEvent?.image,
+      tokenName: polyEvent?.title || tickerString,
+    });
 
     try {
       const result = await cancelPolymarketOrder(orderId, user.bearerToken);
       if (result?.success) {
         setOpenOrders(prev => prev.filter(o => o.id !== orderId));
-        updateEnhancedToast(toastId, 'success', 'Order cancelled!');
-        // Refresh balance after cancel
+        cancelToast.complete('Order cancelled');
         window.dispatchEvent(new CustomEvent('polygon-balance-refresh'));
       } else {
         throw new Error('Cancel failed');
       }
     } catch (err: any) {
-      updateEnhancedToast(toastId, 'error', err.message || 'Failed to cancel order');
+      cancelToast.error(err.message || 'Failed to cancel order');
     } finally {
       setCancellingOrderId(null);
     }
@@ -1778,26 +1785,26 @@ export default function MarketDetailPage() {
   // Polymarket Trading: Execute trade handler
   const handlePolymarketTrade = useCallback(async () => {
     if (!user?.bearerToken) {
-      showEnhancedToast('error', 'Please log in to trade');
+      showPolymarketToast('Please log in to trade');
       return;
     }
 
     const amountNum = parseFloat(amount);
     if (!amountNum || amountNum <= 0) {
-      showEnhancedToast('error', 'Please enter a valid amount');
+      showPolymarketToast('Please enter a valid amount');
       return;
     }
 
     // Check geoblock
     if (geoblockStatus?.blocked) {
-      showEnhancedToast('error', `Trading not available in ${geoblockStatus.country}`);
+      showPolymarketToast(`Trading not available in ${geoblockStatus.country}`);
       return;
     }
 
     // Get token ID
     const tokenId = selectedSide === 'yes' ? polyTokenIds.yes : polyTokenIds.no;
     if (!tokenId) {
-      showEnhancedToast('error', 'Please select an outcome');
+      showPolymarketToast('Please select an outcome');
       return;
     }
 
@@ -1818,7 +1825,7 @@ export default function MarketDetailPage() {
     let tokensToSell: number | undefined;
     if (tradeMode === 'sell') {
       if (!userTokenPosition || userTokenPosition.tokenAmount <= 0) {
-        showEnhancedToast('error', `You don't own any ${selectedSide.toUpperCase()} tokens to sell`);
+        showPolymarketToast(`You don't own any ${selectedSide.toUpperCase()} tokens to sell`);
         return;
       }
 
@@ -1833,7 +1840,7 @@ export default function MarketDetailPage() {
         // Validate user has enough tokens (with small buffer for rounding)
         if (tokensToSell > userTokenPosition.tokenAmount * 1.001) {
           const maxUsdValue = (userTokenPosition.tokenAmount * currentPrice).toFixed(2);
-          showEnhancedToast('error', `You only have ${userTokenPosition.tokenAmount.toFixed(2)} tokens (≈$${maxUsdValue}). Use "Max" to sell all.`);
+          showPolymarketToast(`You only have ${userTokenPosition.tokenAmount.toFixed(2)} tokens (≈$${maxUsdValue}). Use "Max" to sell all.`);
           return;
         }
 
@@ -1843,60 +1850,56 @@ export default function MarketDetailPage() {
     } else {
       // BUY order: Check USDC balance
       if (polygonBalance && amountNum > polygonBalance.usdc) {
-        showEnhancedToast('error', `Insufficient balance. You have ${polygonBalance.usdcFormatted}`);
+        showPolymarketToast(`Insufficient balance. You have ${polygonBalance.usdcFormatted}`);
         return;
       }
     }
 
     setIsExecutingTrade(true);
-    const toastId = showEnhancedToast(
-      'loading',
-      'Checking allowance...'
-    );
+    const isLimitOrder = orderType === 'limit';
+    const initialLabel = tradeMode === 'sell'
+      ? `Selling ${tokensToSell?.toFixed(2)} ${selectedSide.toUpperCase()} tokens...`
+      : `Buying $${amountNum} ${selectedSide.toUpperCase()}...`;
+
+    const tradeToast = createPolymarketTradeToast({
+      label: initialLabel,
+      tokenImage: selectedOutcomeMarket?.image || polyEvent?.image,
+      tokenName: polyEvent?.title || tickerString,
+    });
 
     try {
       // Check if USDC allowance is set for Polymarket contracts (for BUY orders)
       if (tradeMode === 'buy') {
         const allowanceResult = await getPolymarketAllowance(user.bearerToken);
 
-        // If allowance is 0 or too low, we need to approve first
         const currentAllowance = parseFloat(allowanceResult?.data?.allowance || '0');
-        if (currentAllowance < amountNum * 1_000_000) { // USDC has 6 decimals
-          updateEnhancedToast(toastId, 'loading', 'Approving USDC spending (one-time)...');
+        if (currentAllowance < amountNum * 1_000_000) {
+          tradeToast.updateLabel('Approving USDC spending (one-time)...');
 
           const approvalResult = await approvePolymarketSpending(user.bearerToken);
 
           if (!approvalResult.success) {
             throw new Error(approvalResult.data?.message || 'Failed to approve USDC spending');
           }
-
-          if (!approvalResult.data.alreadyApproved) {
-            updateEnhancedToast(toastId, 'loading', 'Approval confirmed! Placing order...');
-          }
         }
       }
 
-      const isLimitOrder = orderType === 'limit';
       const orderTypeLabel = isLimitOrder ? 'limit' : 'market';
-      const orderLabel = tradeMode === 'sell'
-        ? `Placing ${orderTypeLabel} sell for ${tokensToSell?.toFixed(2)} tokens...`
-        : `Placing ${orderTypeLabel} ${tradeMode.toUpperCase()} order for $${amountNum}...`;
-      updateEnhancedToast(toastId, 'loading', orderLabel);
+      tradeToast.updateLabel(
+        tradeMode === 'sell'
+          ? `Placing ${orderTypeLabel} sell...`
+          : `Placing ${orderTypeLabel} buy for $${amountNum}...`
+      );
 
       const result = await executePolymarketOrder(
         {
           tokenId,
           side: tradeMode === 'buy' ? 'BUY' : 'SELL',
-          // For BUY: use amountUSDC, for SELL: use amountTokens
           ...(tradeMode === 'buy'
             ? { amountUSDC: amountNum }
             : { amountTokens: tokensToSell }),
-          // FOK = Fill Or Kill (market order - fills immediately or cancels)
-          // GTC = Good Til Cancelled (limit order - stays on book until filled or cancelled)
           orderType: isLimitOrder ? 'GTC' : 'FOK',
-          // Include limit price for GTC orders (price in decimal, e.g., 0.50 for 50 cents)
           ...(isLimitOrder && { price: limitPriceCents / 100 }),
-          // Use event slug as marketId for navigation (human-readable URL)
           marketId: polyEvent?.slug || tickerString,
           marketTitle: selectedOutcomeMarket?.question || polyEvent?.title,
           conditionId: selectedOutcomeMarket?.conditionId || selectedOutcomeMarket?.id,
@@ -1906,19 +1909,29 @@ export default function MarketDetailPage() {
       );
 
       if (result.success) {
-        let successMessage: string;
-        if (isLimitOrder) {
-          // Limit order placed - it may not fill immediately
-          successMessage = tradeMode === 'sell'
+        const txHash = result.data?.transactionHashes?.[0] || null;
+        const wasMatched = result.data?.status === 'matched' || result.data?.status === 'filled';
+
+        // Build success label
+        let successLabel: string;
+        if (isLimitOrder && !wasMatched) {
+          // Limit order placed on book (not filled yet)
+          successLabel = tradeMode === 'sell'
             ? `Limit sell placed: ${tokensToSell?.toFixed(2)} ${selectedSide.toUpperCase()} @ ${limitPriceCents}¢`
             : `Limit buy placed: $${amountNum} ${selectedSide.toUpperCase()} @ ${limitPriceCents}¢`;
+        } else if (isLimitOrder && wasMatched) {
+          // Limit order filled immediately
+          successLabel = tradeMode === 'sell'
+            ? `Limit sell filled: ${tokensToSell?.toFixed(2)} ${selectedSide.toUpperCase()} @ ${limitPriceCents}¢`
+            : `Limit buy filled: $${amountNum} ${selectedSide.toUpperCase()} @ ${limitPriceCents}¢`;
         } else {
-          // Market order - filled immediately
-          successMessage = tradeMode === 'sell'
-            ? `Sold ${tokensToSell?.toFixed(2)} ${selectedSide.toUpperCase()} tokens!`
-            : `Bought ${polymarketQuote?.expectedTokens?.toFixed(2) || ''} ${selectedSide.toUpperCase()} shares!`;
+          // Market order
+          successLabel = tradeMode === 'sell'
+            ? `Sold ${tokensToSell?.toFixed(2)} ${selectedSide.toUpperCase()} tokens`
+            : `Bought ${result.data?.takingAmount ? parseFloat(result.data.takingAmount).toFixed(2) : (polymarketQuote?.expectedTokens?.toFixed(2) || '')} ${selectedSide.toUpperCase()} shares`;
         }
-        updateEnhancedToast(toastId, 'success', successMessage);
+
+        tradeToast.complete(successLabel, txHash);
         setAmount('');
         setPolymarketQuote(null);
         setIsSellMax(false); // Reset max flag
@@ -1968,7 +1981,7 @@ export default function MarketDetailPage() {
         throw new Error('Order failed');
       }
     } catch (err: any) {
-      updateEnhancedToast(toastId, 'error', err.message || 'Trade failed');
+      tradeToast.error(err.message || 'Trade failed');
     } finally {
       setIsExecutingTrade(false);
     }
@@ -2761,7 +2774,7 @@ export default function MarketDetailPage() {
 
                     {/* Limit Price Input (only shown for limit orders) */}
                     {orderType === 'limit' && (
-                      <div className="mb-4">
+                      <div className="px-3 pt-2 mb-2">
                         <div className="flex items-center justify-between mb-2">
                           <span className="text-[10px] font-semibold text-[#9CA3AF] uppercase tracking-wide">Limit Price</span>
                           <span className="text-[10px] text-[#9CA3AF]">
@@ -3525,11 +3538,12 @@ export default function MarketDetailPage() {
                   </>
                 )}
 
+              {/* AI Insights — docked below trade panel */}
+              <div className="border-t border-[#2A2B33]">
+                <InsightPanel source={isPolymarket ? 'polymarket' : 'dflow'} marketId={tickerString} docked />
+              </div>
             </div>
           </div>
-
-          {/* AI Insights Panel */}
-          <InsightPanel source={isPolymarket ? 'polymarket' : 'dflow'} marketId={tickerString} />
 
           {/* Trade button for mobile */}
           <div className="fixed bottom-0 left-0 w-full p-4 z-50 lg:hidden mb-10">

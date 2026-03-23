@@ -1076,6 +1076,16 @@ export const getPolymarketBalance = (
   );
 
 /**
+ * Pre-warm Polymarket caches (signer, CLOB client, approvals).
+ * Fire-and-forget on page load so trade placement is near-instant.
+ */
+export const warmPolymarketCaches = (authToken: string) =>
+  apiFetch<{ success: boolean }>(
+    '/api/prediction/polymarket/warm',
+    { method: 'POST', authToken }
+  ).catch(() => {}); // fire-and-forget, never throw
+
+/**
  * Manually trigger conversion of native USDC to USDC.e
  * @param authToken - User's bearer token
  * @param amount - Optional specific amount to convert (in USDC). If not provided, converts all.

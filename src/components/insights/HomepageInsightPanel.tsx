@@ -42,76 +42,29 @@ function timeAgo(dateStr: string): string {
   return `${Math.floor(hrs / 24)}d ago`;
 }
 
-export function HomepageInsightPanel() {
+export function HomepageInsightPanel({ docked = false }: { docked?: boolean }) {
   const { data, isLoading } = useHomepageInsights();
   const [collapsed, setCollapsed] = useState(false);
-  const [showPicks, setShowPicks] = useState(false);
-  const [showNarratives, setShowNarratives] = useState(false);
+  const [showPicks, setShowPicks] = useState(true);
+  const [showNarratives, setShowNarratives] = useState(true);
   const constraintsRef = useRef<HTMLDivElement>(null);
 
-  // When expanding, reset drag position so panel doesn't open off-screen
   const handleExpand = () => {
     setCollapsed(false);
-    // Reset transform by briefly removing and re-adding the element
     if (panelRef.current) {
       panelRef.current.style.transform = 'none';
     }
   };
   const panelRef = useRef<HTMLDivElement>(null);
 
-  return (
-    <>
-    {/* Drag boundary — right 50% of screen, below navbar */}
-    <div ref={constraintsRef} className="fixed pointer-events-none hidden lg:block" style={{ zIndex: 39, top: '5.5rem', left: 0, right: 0, bottom: 0 }} />
-    <motion.div
-      ref={panelRef}
-      drag
-      dragMomentum={false}
-      dragConstraints={constraintsRef}
-      dragElastic={0.1}
-      className="hidden lg:block"
-      role="region"
-      aria-label="AI Insights"
-      style={{
-        position: 'fixed',
-        right: '1rem',
-        top: '6rem',
-        width: collapsed ? 'auto' : 330,
-        zIndex: 40,
-        cursor: 'grab',
-      }}
-      whileDrag={{ cursor: 'grabbing' }}
-    >
-      {collapsed ? (
-        /* Minimized pill */
-        <div className="iridescent-pill">
-          <button
-            onClick={handleExpand}
-            aria-label="Open AI insights"
-            aria-expanded={false}
-            className="pill-inner flex items-center gap-3 px-5 py-3 hover:bg-white/[0.04] transition-colors focus-visible:ring-2 focus-visible:ring-[#4ADE80]/50 focus-visible:outline-none"
-          >
-            <AIIcon size={24} />
-            <span
-              className="text-[12px] font-bold tracking-[0.08em]"
-              style={{
-                background: 'linear-gradient(135deg, #4ADE80, #22D3EE)',
-                WebkitBackgroundClip: 'text',
-                WebkitTextFillColor: 'transparent',
-              }}
-            >
-              AI Insights
-            </span>
-          </button>
-        </div>
-      ) : (
-        /* Expanded panel */
-        <div>
+  // ── Expanded panel content (shared between docked and floating) ──
+  const expandedPanel = (
+    <div>
             <div className="iridescent-border">
               <div className="iridescent-inner overflow-hidden shadow-2xl">
                 {/* Header */}
                 <button
-                  onClick={() => setCollapsed(true)}
+                  onClick={() => setCollapsed(c => !c)}
                   aria-expanded={true}
                   aria-label="Toggle AI insights"
                   className="w-full flex items-center justify-between px-4 py-3 hover:bg-white/[0.02] transition-colors focus-visible:ring-2 focus-visible:ring-[#4ADE80]/50 focus-visible:outline-none"
@@ -126,11 +79,12 @@ export function HomepageInsightPanel() {
                       </span>
                     </div>
                   </div>
-                  <motion.div animate={{ rotate: 180 }} transition={{ duration: 0.2 }}>
+                  <motion.div animate={{ rotate: collapsed ? 0 : 180 }} transition={{ duration: 0.2 }}>
                     <HiOutlineChevronDown className="w-4 h-4 text-zinc-500" />
                   </motion.div>
                 </button>
 
+                {!collapsed && <>
                 {/* Glow line */}
                 <div
                   className="h-[1px] w-full"
@@ -275,10 +229,68 @@ export function HomepageInsightPanel() {
                     </div>
                   </motion.div>
                 )}
+                </>}
               </div>
             </div>
           </div>
-        )}
+  );
+
+  // ── Docked mode: inline in sidebar, always expanded ──
+  if (docked) {
+    return (
+      <div className="w-full" role="region" aria-label="AI Insights">
+        {expandedPanel}
+      </div>
+    );
+  }
+
+  // ── Floating mode: fixed position, draggable, collapsible ──
+  return (
+    <>
+    <div ref={constraintsRef} className="fixed pointer-events-none hidden lg:block" style={{ zIndex: 39, top: '5.5rem', left: 0, right: 0, bottom: 0 }} />
+    <motion.div
+      ref={panelRef}
+      drag
+      dragMomentum={false}
+      dragConstraints={constraintsRef}
+      dragElastic={0.1}
+      className="hidden md:block xl:hidden"
+      role="region"
+      aria-label="AI Insights"
+      style={{
+        position: 'fixed',
+        right: '1rem',
+        top: '6rem',
+        width: collapsed ? 'auto' : 330,
+        zIndex: 40,
+        cursor: 'grab',
+      }}
+      whileDrag={{ cursor: 'grabbing' }}
+    >
+      {collapsed ? (
+        <div className="iridescent-pill">
+          <button
+            onClick={handleExpand}
+            aria-label="Open AI insights"
+            aria-expanded={false}
+            className="pill-inner flex items-center gap-3 px-5 py-3 hover:bg-white/[0.04] transition-colors focus-visible:ring-2 focus-visible:ring-[#4ADE80]/50 focus-visible:outline-none"
+          >
+            <AIIcon size={24} />
+            <span
+              className="text-[12px] font-bold tracking-[0.08em]"
+              style={{
+                background: 'linear-gradient(135deg, #4ADE80, #22D3EE)',
+                WebkitBackgroundClip: 'text',
+                WebkitTextFillColor: 'transparent',
+              }}
+            >
+              AI Insights
+            </span>
+          </button>
+        </div>
+      ) : (
+        expandedPanel
+      )}
     </motion.div>
     </>
   );

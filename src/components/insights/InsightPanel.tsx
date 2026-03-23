@@ -8,6 +8,7 @@ import { InsightSkeleton } from './InsightSkeleton';
 interface InsightPanelProps {
   source: string;
   marketId: string;
+  docked?: boolean;
 }
 
 const CATEGORY_LABELS: Record<string, string> = {
@@ -54,52 +55,17 @@ function AIIcon({ size = 16 }: { size?: number }) {
   );
 }
 
-export function InsightPanel({ source, marketId }: InsightPanelProps) {
+export function InsightPanel({ source, marketId, docked = false }: InsightPanelProps) {
   const { data, isLoading } = useMarketInsights(source, marketId);
   const [collapsed, setCollapsed] = useState(false);
 
-  return (
-    <div
-      className="hidden lg:block"
-      role="region"
-      aria-label="AI Insights"
-      style={{
-        position: 'fixed',
-        right: '1rem',
-        top: '6rem',
-        width: collapsed ? 'auto' : 330,
-        zIndex: 40,
-      }}
-    >
-      {collapsed ? (
-        /* Minimized pill */
-        <div className="iridescent-pill">
-          <button
-            onClick={() => setCollapsed(false)}
-            aria-label="Open AI insights"
-            aria-expanded={false}
-            className="pill-inner flex items-center gap-3 px-5 py-3 hover:bg-white/[0.04] transition-colors focus-visible:ring-2 focus-visible:ring-[#4ADE80]/50 focus-visible:outline-none"
-          >
-            <AIIcon size={24} />
-            <span
-              className="text-[12px] font-bold tracking-[0.08em]"
-              style={{
-                background: 'linear-gradient(135deg, #4ADE80, #22D3EE)',
-                WebkitBackgroundClip: 'text',
-                WebkitTextFillColor: 'transparent',
-              }}
-            >
-              AI Insights
-            </span>
-          </button>
-        </div>
-      ) : (
-        /* Expanded panel */
-        <div className="iridescent-border w-full">
-          <div className="iridescent-inner overflow-hidden flex flex-col" style={{ maxHeight: 'calc(100vh - 8rem)' }}>
-            {/* Header */}
-            <button
-              onClick={() => setCollapsed(true)}
+  // ── Shared expanded content ──
+  const expandedContent = (
+    <div className={docked ? 'w-full' : 'iridescent-border w-full'}>
+      <div className={`${docked ? '' : 'iridescent-inner'} overflow-hidden flex flex-col`} style={docked ? undefined : { maxHeight: 'calc(100vh - 8rem)' }}>
+        {/* Header */}
+        <button
+          onClick={() => setCollapsed(c => !c)}
               aria-expanded={true}
               aria-label="Toggle AI insights"
               className="flex items-center justify-between px-3 py-3 hover:bg-white/[0.02] transition-colors w-full focus-visible:ring-2 focus-visible:ring-[#4ADE80]/50 focus-visible:outline-none"
@@ -114,9 +80,10 @@ export function InsightPanel({ source, marketId }: InsightPanelProps) {
                   </span>
                 </div>
               </div>
-              <HiChevronDown className="w-4 h-4 text-zinc-500" />
+              <HiChevronDown className={`w-4 h-4 text-zinc-500 transition-transform ${collapsed ? '' : 'rotate-180'}`} />
             </button>
 
+            {!collapsed && <>
             {/* Glow line */}
             <div
               className="h-[1px] w-full flex-shrink-0"
@@ -164,9 +131,55 @@ export function InsightPanel({ source, marketId }: InsightPanelProps) {
                 </div>
               )}
             </div>
+            </>}
           </div>
         </div>
-      )}
+  );
+
+  // ── Docked mode: inline in right column ──
+  if (docked) {
+    return (
+      <div role="region" aria-label="AI Insights">
+        {expandedContent}
+      </div>
+    );
+  }
+
+  // ── Floating mode (not used when docked in trade page) ──
+  return (
+    <div
+      className="hidden lg:block"
+      role="region"
+      aria-label="AI Insights"
+      style={{
+        position: 'fixed',
+        right: '1rem',
+        top: '6rem',
+        width: collapsed ? 'auto' : 330,
+        zIndex: 40,
+      }}
+    >
+      {collapsed ? (
+        <div className="iridescent-pill">
+          <button
+            onClick={() => setCollapsed(false)}
+            aria-label="Open AI insights"
+            className="pill-inner flex items-center gap-3 px-5 py-3 hover:bg-white/[0.04] transition-colors"
+          >
+            <AIIcon size={24} />
+            <span
+              className="text-[12px] font-bold tracking-[0.08em]"
+              style={{
+                background: 'linear-gradient(135deg, #4ADE80, #22D3EE)',
+                WebkitBackgroundClip: 'text',
+                WebkitTextFillColor: 'transparent',
+              }}
+            >
+              AI Insights
+            </span>
+          </button>
+        </div>
+      ) : expandedContent}
     </div>
   );
 }

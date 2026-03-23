@@ -4,11 +4,16 @@ import toast from "react-hot-toast";
 export const SOLANA_LOGO_URL =
   "https://avatars.githubusercontent.com/u/92743431?s=200&v=4";
 
+export const POLYGON_LOGO_URL =
+  "https://polygonscan.com/assets/poly/images/svg/logos/token-light.svg?v=26.3.2.0";
+
 export const ORDER_TOAST_STYLE: React.CSSProperties = {
   background: "#1a1a1a",
   border: "1px solid #333",
   borderRadius: "8px",
   padding: "12px",
+  maxWidth: "380px",
+  overflow: "hidden",
 };
 
 /**
@@ -177,6 +182,147 @@ export function showOrderToast(opts: {
   );
 
   return id;
+}
+
+/**
+ * Simple error/success/info toast in the Polymarket style (dark, compact, Polygon logo).
+ * Used for pre-validation errors and order cancellation messages.
+ */
+export function showPolymarketToast(
+  message: string,
+  type: 'error' | 'success' | 'info' = 'error'
+): string {
+  const id = `poly-msg-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+  const color = type === 'error' ? '#ff6b6b' : type === 'success' ? '#70E0B0' : '#E6E7EA';
+
+  toast(
+    (_t) => (
+      <div className="flex items-center gap-3" style={{ maxWidth: 340 }}>
+        <img
+          src={POLYGON_LOGO_URL}
+          alt="Polygon"
+          className="w-5 h-5 rounded-full flex-shrink-0"
+          style={{ opacity: type === 'error' ? 0.6 : 1 }}
+        />
+        <span className="text-sm" style={{ color, wordBreak: 'break-word' }}>
+          {message}
+        </span>
+      </div>
+    ),
+    { id, duration: type === 'error' ? 5000 : 3000, style: ORDER_TOAST_STYLE }
+  );
+
+  return id;
+}
+
+/**
+ * Polymarket trade toast — same visual style as Solana trade toasts.
+ * No timer — just token image + label + Polygon logo.
+ * Returns control methods to update label, complete with Polygonscan link, or show error.
+ * All updates happen in-place via direct DOM writes.
+ */
+export function createPolymarketTradeToast(opts: {
+  label: string;
+  tokenImage?: string | null;
+  tokenName: string;
+}) {
+  const id = `poly-trade-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+  let dismissed = false;
+  let autoDismissTimer: ReturnType<typeof setTimeout> | null = null;
+
+  toast(
+    (_t) => (
+      <div className="flex items-center gap-3" style={{ maxWidth: 340 }}>
+        {opts.tokenImage && (
+          <img
+            src={opts.tokenImage}
+            alt={opts.tokenName}
+            className="w-6 h-6 rounded-full flex-shrink-0"
+            onError={(e) => {
+              (e.target as HTMLImageElement).style.display = "none";
+            }}
+          />
+        )}
+        <div className="flex items-center gap-2 flex-1 min-w-0">
+          <span
+            id={`label-${id}`}
+            className="text-sm text-neutral-200"
+            style={{ wordBreak: 'break-word' }}
+          >
+            {opts.label}
+          </span>
+          <span
+            id={`check-${id}`}
+            className="text-green-400 flex-shrink-0"
+            style={{ display: "none" }}
+          >
+            ✓
+          </span>
+          <span
+            id={`link-${id}`}
+            className="flex-shrink-0"
+            style={{ display: "inline-flex" }}
+          >
+            <img
+              src={POLYGON_LOGO_URL}
+              alt="Polygon"
+              className="w-4 h-4 rounded-full opacity-40"
+              style={{ cursor: "default" }}
+            />
+          </span>
+        </div>
+      </div>
+    ),
+    { id, duration: Infinity, style: ORDER_TOAST_STYLE }
+  );
+
+  return {
+    id,
+
+    /** Update the label text in-place */
+    updateLabel(newLabel: string) {
+      const el = document.getElementById(`label-${id}`);
+      if (el) el.textContent = newLabel;
+    },
+
+    /** Trade succeeded — show checkmark + clickable Polygonscan link (if txHash), auto-dismiss 10s */
+    complete(newLabel: string, txHash?: string | null) {
+      const labelEl = document.getElementById(`label-${id}`);
+      const checkEl = document.getElementById(`check-${id}`);
+      const linkEl = document.getElementById(`link-${id}`);
+
+      if (labelEl) labelEl.textContent = newLabel;
+      if (checkEl) checkEl.style.display = "inline";
+
+      if (linkEl) {
+        if (txHash) {
+          linkEl.innerHTML = `<a href="https://polygonscan.com/tx/${txHash}" target="_blank" rel="noopener noreferrer" class="hover:opacity-80 transition-opacity"><img src="${POLYGON_LOGO_URL}" alt="Polygon" class="w-4 h-4 rounded-full" style="cursor:pointer" /></a>`;
+        } else {
+          // No tx hash (limit order on book) — just brighten the logo
+          linkEl.innerHTML = `<img src="${POLYGON_LOGO_URL}" alt="Polygon" class="w-4 h-4 rounded-full" style="cursor:default" />`;
+        }
+      }
+
+      autoDismissTimer = setTimeout(() => { toast.dismiss(id); dismissed = true; }, 10_000);
+    },
+
+    /** Trade failed — show error in red, auto-dismiss 6s */
+    error(message: string) {
+      const labelEl = document.getElementById(`label-${id}`);
+      const linkEl = document.getElementById(`link-${id}`);
+
+      if (labelEl) { labelEl.textContent = message; labelEl.style.color = '#ff6b6b'; }
+      if (linkEl) linkEl.style.display = 'none';
+
+      autoDismissTimer = setTimeout(() => { toast.dismiss(id); dismissed = true; }, 6_000);
+    },
+
+    dismiss() {
+      if (autoDismissTimer) clearTimeout(autoDismissTimer);
+      toast.dismiss(id);
+      dismissed = true;
+    },
+  };
 }
 
 /**
