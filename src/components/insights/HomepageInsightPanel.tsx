@@ -228,7 +228,7 @@ export function HomepageInsightPanel({ docked = false }: { docked?: boolean }) {
     <>
     {/* Mobile: small circular button */}
     {collapsed && (
-      <div className="md:hidden fixed z-40" style={{ right: '0.75rem', bottom: '5rem' }}>
+      <div className="md:hidden fixed" style={{ right: '0.75rem', bottom: '5rem', zIndex: 9999 }}>
         <div className="iridescent-pill">
           <button
             onClick={() => setCollapsed(false)}
@@ -243,8 +243,8 @@ export function HomepageInsightPanel({ docked = false }: { docked?: boolean }) {
 
     {/* Mobile: full-screen modal when expanded */}
     {!collapsed && (
-      <div className="md:hidden fixed inset-0 z-50 flex flex-col" style={{ background: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(8px)' }} onClick={() => setCollapsed(true)}>
-        <div className="flex-1 overflow-y-auto p-4 pt-16" onClick={(e) => e.stopPropagation()}>
+      <div className="md:hidden fixed inset-0 flex flex-col" style={{ background: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(8px)', zIndex: 99999 }} onClick={() => setCollapsed(true)}>
+        <div className="flex-1 overflow-y-auto p-4 pt-24" onClick={(e) => e.stopPropagation()}>
           <div className="iridescent-border max-w-md mx-auto">
             <div className="iridescent-inner overflow-hidden">
               <button onClick={() => setCollapsed(true)} className="w-full flex items-center justify-between px-4 py-3.5 hover:bg-white/[0.02] transition-colors">
