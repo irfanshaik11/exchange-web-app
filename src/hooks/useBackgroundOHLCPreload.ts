@@ -35,7 +35,7 @@ const cleanupCache = () => {
 // Run cleanup every 60 seconds (entries persist up to 5 minutes)
 setInterval(cleanupCache, 60000);
 
-export default function useBackgroundOHLCPreload(interval: string = '1h', timeframe: string = '30d'): UseBackgroundOHLCPreloadResult {
+export default function useBackgroundOHLCPreload(interval: string = '1s', timeframe: string = '30d'): UseBackgroundOHLCPreloadResult {
   const router = useRouter();
   const [backgroundData, setBackgroundData] = useState<OHLCData[] | null>(null);
   const [isPreloading, setIsPreloading] = useState(false);
@@ -225,7 +225,7 @@ export default function useBackgroundOHLCPreload(interval: string = '1h', timefr
  * Best-effort: silent fail on errors.
  */
 export function prefetchOHLC(mint: string, chain: 'sol' | 'monad' = 'sol'): void {
-  const interval = '1h';
+  const interval = '1s';
   const timeframe = '30d';
   const cacheKey = `${mint}:${interval}:${timeframe}`;
 
