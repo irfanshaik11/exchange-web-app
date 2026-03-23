@@ -47,7 +47,8 @@ export function useHomepageInsights() {
         return d as unknown as HomepageInsights;
       } catch (err: any) {
         // 404 = backend triggered generation, poll until ready
-        if (err?.status === 404) return null;
+        // 503 = backend temporarily unavailable
+        if (err?.status === 404 || err?.status === 503) return null;
         throw err;
       }
     },
