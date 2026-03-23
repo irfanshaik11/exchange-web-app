@@ -291,7 +291,9 @@ export default function PredictionsPage() {
           </div>
         </div>
 
-        <main className="relative z-10 flex-1 w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 md:py-10">
+        {/* Two-column layout: main content + AI sidebar on large screens */}
+        <div className="relative z-10 flex-1 w-full max-w-[1800px] mx-auto px-4 sm:px-6 lg:px-8 py-8 md:py-10 flex gap-6">
+        <main className="flex-1 min-w-0">
           {/* Page Header — clean, Apple-style */}
           <motion.div
             initial={{ opacity: 0, y: -12 }}
@@ -334,9 +336,9 @@ export default function PredictionsPage() {
                   placeholder="Search markets..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  className="w-full px-4 py-2.5 pl-10 rounded-xl text-sm transition-all duration-200 outline-none focus:ring-1 text-white placeholder-neutral-500"
+                  className="w-full px-4 py-2.5 pl-10 rounded-xl text-sm transition-all duration-200 outline-none focus:ring-1 text-white placeholder-neutral-500 backdrop-blur-xl"
                   style={{
-                    backgroundColor: T.surface,
+                    backgroundColor: 'rgba(12, 14, 18, 0.75)',
                     border: `1px solid ${T.border}`,
                     // @ts-ignore
                     '--tw-ring-color': T.accent,
@@ -393,9 +395,9 @@ export default function PredictionsPage() {
           {user?.bearerToken && (
             <div className="mb-6">
               <div
-                className="rounded-2xl overflow-hidden"
+                className="rounded-2xl overflow-hidden backdrop-blur-xl"
                 style={{
-                  backgroundColor: T.surface,
+                  backgroundColor: 'rgba(12, 14, 18, 0.75)',
                   border: `1px solid ${T.border}`,
                 }}
               >
@@ -495,9 +497,9 @@ export default function PredictionsPage() {
           <div className="mb-8 relative z-30">
             <div className="flex justify-center items-center gap-2">
               <div
-                className="inline-flex items-center gap-3 p-1.5 rounded-xl overflow-x-auto scrollbar-hide max-w-full"
+                className="inline-flex items-center gap-3 p-1.5 rounded-xl overflow-x-auto scrollbar-hide max-w-full backdrop-blur-xl"
                 style={{
-                  backgroundColor: T.surface,
+                  backgroundColor: 'rgba(12, 14, 18, 0.75)',
                   border: `1px solid ${T.border}`,
                 }}
               >
@@ -518,9 +520,9 @@ export default function PredictionsPage() {
               </div>
               {/* Advanced Filters */}
               <div
-                className="flex-shrink-0 p-1.5 rounded-xl"
+                className="flex-shrink-0 p-1.5 rounded-xl backdrop-blur-xl"
                 style={{
-                  backgroundColor: T.surface,
+                  backgroundColor: 'rgba(12, 14, 18, 0.75)',
                   border: `1px solid ${T.border}`,
                 }}
               >
@@ -742,11 +744,18 @@ export default function PredictionsPage() {
           <div className="h-16 md:h-20" />
         </main>
 
+        {/* Docked AI Insights sidebar — visible on xl+ screens */}
+        <aside className="hidden xl:block w-[340px] flex-shrink-0 sticky top-24 self-start max-h-[calc(100vh-7rem)]">
+          <HomepageInsightPanel docked />
+        </aside>
+        </div>
+
+        {/* Floating AI panel for lg screens where sidebar isn't shown */}
+        <HomepageInsightPanel />
+
         <Footer />
           </div>
         </div>
-
-        <HomepageInsightPanel />
       </div>
 
       <style jsx global>{`

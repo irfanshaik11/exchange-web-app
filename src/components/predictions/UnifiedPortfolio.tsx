@@ -184,77 +184,33 @@ function StatsHeader({
   isLoading: boolean;
   theme: Theme;
 }) {
+  const stats = [
+    { label: 'Balance', icon: HiOutlineCash, value: `$${balance.toFixed(2)}`, color: C.text },
+    { label: 'Net P&L', icon: HiOutlineChartBar, value: `${netPnl >= 0 ? '+' : ''}$${netPnl.toFixed(2)}`, color: netPnl >= 0 ? C.green : C.red },
+    { label: 'Positions', icon: HiOutlineCollection, value: `$${positionsValue.toFixed(2)}`, color: C.text },
+    { label: 'Win Rate', icon: HiOutlineStar, value: `${winRate.toFixed(0)}%`, color: winRate >= 50 ? C.green : C.text, hideMobile: true },
+    { label: settledCount > 0 ? 'Settled' : 'Streak', icon: settledCount > 0 ? HiOutlineShieldCheck : HiOutlineFire, value: `${settledCount > 0 ? settledCount : streak}`, color: settledCount > 0 ? C.green : (streak > 0 ? '#FBBF24' : C.text), hideMobile: true },
+  ];
+
   return (
-    <div className="relative overflow-hidden rounded-xl" style={{
-      background: 'linear-gradient(135deg, rgba(255,255,255,0.04) 0%, rgba(255,255,255,0.01) 100%)',
-      border: '1px solid rgba(255,255,255,0.08)',
-    }}>
-      {/* Animated gradient accent line */}
-      <div className="absolute top-0 inset-x-0 h-[2px]" style={{
-        background: `linear-gradient(90deg, ${C.green}00, ${C.green}, ${C.purple}, ${C.green}00)`,
-      }} />
-
-      <div className="grid grid-cols-3 sm:grid-cols-5 gap-px" style={{ backgroundColor: 'rgba(255,255,255,0.04)' }}>
-        {/* Balance */}
-        <div className="p-3 sm:p-4 text-center" style={{ backgroundColor: C.surface }}>
-          <div className="flex items-center justify-center gap-1.5 mb-1">
-            <HiOutlineCash className="w-3.5 h-3.5" style={{ color: C.muted }} />
-            <span className="text-[10px] uppercase tracking-wider font-medium" style={{ color: C.muted }}>Balance</span>
-          </div>
-          <div className="text-lg sm:text-xl font-bold tabular-nums" style={{ color: C.text }}>
-            ${balance.toFixed(2)}
-          </div>
-        </div>
-
-        {/* Net P&L */}
-        <div className="p-3 sm:p-4 text-center" style={{ backgroundColor: C.surface }}>
-          <div className="flex items-center justify-center gap-1.5 mb-1">
-            <HiOutlineChartBar className="w-3.5 h-3.5" style={{ color: C.muted }} />
-            <span className="text-[10px] uppercase tracking-wider font-medium" style={{ color: C.muted }}>Net P&L</span>
-          </div>
-          <div className="text-lg sm:text-xl font-bold tabular-nums" style={{ color: netPnl >= 0 ? C.green : C.red }}>
-            {netPnl >= 0 ? '+' : ''}${netPnl.toFixed(2)}
-          </div>
-        </div>
-
-        {/* Positions Value */}
-        <div className="p-3 sm:p-4 text-center" style={{ backgroundColor: C.surface }}>
-          <div className="flex items-center justify-center gap-1.5 mb-1">
-            <HiOutlineCollection className="w-3.5 h-3.5" style={{ color: C.muted }} />
-            <span className="text-[10px] uppercase tracking-wider font-medium" style={{ color: C.muted }}>Positions</span>
-          </div>
-          <div className="text-lg sm:text-xl font-bold tabular-nums" style={{ color: C.text }}>
-            ${positionsValue.toFixed(2)}
-          </div>
-        </div>
-
-        {/* Win Rate */}
-        <div className="hidden sm:block p-3 sm:p-4 text-center" style={{ backgroundColor: C.surface }}>
-          <div className="flex items-center justify-center gap-1.5 mb-1">
-            <HiOutlineStar className="w-3.5 h-3.5" style={{ color: C.muted }} />
-            <span className="text-[10px] uppercase tracking-wider font-medium" style={{ color: C.muted }}>Win Rate</span>
-          </div>
-          <div className="text-lg sm:text-xl font-bold tabular-nums" style={{ color: winRate >= 50 ? C.green : C.text }}>
-            {winRate.toFixed(0)}%
-          </div>
-        </div>
-
-        {/* Streak / Settled */}
-        <div className="hidden sm:block p-3 sm:p-4 text-center" style={{ backgroundColor: C.surface }}>
-          <div className="flex items-center justify-center gap-1.5 mb-1">
-            {settledCount > 0 ? (
-              <HiOutlineShieldCheck className="w-3.5 h-3.5" style={{ color: C.green }} />
-            ) : (
-              <HiOutlineFire className="w-3.5 h-3.5" style={{ color: streak > 0 ? '#FBBF24' : C.muted }} />
-            )}
-            <span className="text-[10px] uppercase tracking-wider font-medium" style={{ color: C.muted }}>
-              {settledCount > 0 ? 'Settled' : 'Streak'}
-            </span>
-          </div>
-          <div className="text-lg sm:text-xl font-bold tabular-nums" style={{ color: settledCount > 0 ? C.green : (streak > 0 ? '#FBBF24' : C.text) }}>
-            {settledCount > 0 ? settledCount : streak}
-          </div>
-        </div>
+    <div className="rounded-xl overflow-hidden" style={{ backgroundColor: C.surface, border: `1px solid ${C.border}` }}>
+      <div className="grid grid-cols-3 sm:grid-cols-5">
+        {stats.map((s, i) => {
+          const Icon = s.icon;
+          return (
+            <div
+              key={s.label}
+              className={`px-3 py-3 text-center ${s.hideMobile ? 'hidden sm:block' : ''}`}
+              style={{ borderRight: i < stats.length - 1 ? `1px solid ${C.border}` : undefined }}
+            >
+              <div className="flex items-center justify-center gap-1 mb-0.5">
+                <Icon className="w-3 h-3" style={{ color: C.muted }} />
+                <span className="text-[10px] uppercase tracking-wider font-medium" style={{ color: C.muted }}>{s.label}</span>
+              </div>
+              <div className="text-base sm:text-lg font-bold tabular-nums" style={{ color: s.color }}>{s.value}</div>
+            </div>
+          );
+        })}
       </div>
     </div>
   );
@@ -287,7 +243,7 @@ function TabNavigation({
   ];
 
   return (
-    <div className="flex gap-0.5 rounded-lg p-1" style={{ backgroundColor: 'rgba(255,255,255,0.03)' }}>
+    <div className="flex gap-0.5 rounded-xl p-1" style={{ backgroundColor: C.surface, border: `1px solid ${C.border}` }}>
       {tabs.map(tab => {
         const isActive = activeTab === tab.key;
         const TabIcon = tab.icon;
@@ -332,20 +288,56 @@ export default function UnifiedPortfolio({
   const router = useRouter();
   const [activeTab, setActiveTab] = useState<TabType>('overview');
 
-  // Select theme based on variant
-  const C = variant === 'portfolio' ? PortfolioTheme : PredictionTheme;
+  // Select theme based on variant, with glass-style overrides for uniform look
+  const baseTheme = variant === 'portfolio' ? PortfolioTheme : PredictionTheme;
+  const C = {
+    ...baseTheme,
+    // Use transparent surfaces so inner cards blend with the parent glassy container
+    surface: 'rgba(255,255,255,0.02)',
+    border: 'rgba(255,255,255,0.07)',
+  };
 
-  // Portfolio data state
-  const [positions, setPositions] = useState<PredictionPosition[]>([]);
-  const [settledPositions, setSettledPositions] = useState<PredictionPosition[]>([]);
-  const [openOrders, setOpenOrders] = useState<PolymarketOpenOrder[]>([]);
-  const [trades, setTrades] = useState<PredictionTrade[]>([]);
-  const [balance, setBalance] = useState<PolymarketBalance | null>(null);
+  // ── localStorage snapshot for instant hydration ──
+  const SNAPSHOT_KEY = 'polymarket_portfolio_snapshot';
+
+  const loadSnapshot = (): any => {
+    try {
+      const raw = localStorage.getItem(SNAPSHOT_KEY);
+      if (!raw) return null;
+      const snap = JSON.parse(raw);
+      // Expire after 10 minutes
+      if (Date.now() - (snap._ts || 0) > 10 * 60_000) return null;
+      return snap;
+    } catch { return null; }
+  };
+
+  const saveSnapshot = (data: {
+    positions: PredictionPosition[];
+    settledPositions: PredictionPosition[];
+    openOrders: PolymarketOpenOrder[];
+    trades: PredictionTrade[];
+    balance: PolymarketBalance | null;
+    stats: WinningsStats;
+  }) => {
+    try {
+      localStorage.setItem(SNAPSHOT_KEY, JSON.stringify({ ...data, _ts: Date.now() }));
+    } catch {}
+  };
+
+  // Hydrate from snapshot (instant) or start empty
+  const snapshot = useRef(loadSnapshot()).current;
+
+  // Portfolio data state — initialize from snapshot if available
+  const [positions, setPositions] = useState<PredictionPosition[]>(snapshot?.positions || []);
+  const [settledPositions, setSettledPositions] = useState<PredictionPosition[]>(snapshot?.settledPositions || []);
+  const [openOrders, setOpenOrders] = useState<PolymarketOpenOrder[]>(snapshot?.openOrders || []);
+  const [trades, setTrades] = useState<PredictionTrade[]>(snapshot?.trades || []);
+  const [balance, setBalance] = useState<PolymarketBalance | null>(snapshot?.balance || null);
 
   // Winnings state
   const [claimablePositions, setClaimablePositions] = useState<ClaimablePosition[]>([]);
   const [claimedHistory, setClaimedHistory] = useState<ClaimedWinning[]>([]);
-  const [stats, setStats] = useState<WinningsStats>({
+  const [stats, setStats] = useState<WinningsStats>(snapshot?.stats || {
     totalWinnings: 0,
     totalLosses: 0,
     netProfit: 0,
@@ -355,8 +347,8 @@ export default function UnifiedPortfolio({
     bestWin: 0,
   });
 
-  // UI state
-  const [isLoading, setIsLoading] = useState(true);
+  // UI state — skip loading spinner if we have a snapshot
+  const [isLoading, setIsLoading] = useState(!snapshot);
   const [error, setError] = useState<string | null>(null);
   const [claimingId, setClaimingId] = useState<string | null>(null);
   const [claimResult, setClaimResult] = useState<{ success: boolean; message: string } | null>(null);
@@ -450,29 +442,19 @@ export default function UnifiedPortfolio({
 
       const claimedConditionIds = getClaimedConditionIds();
 
-      if (positionsRes?.success && positionsRes.data) {
-        const activePositions = positionsRes.data.filter(
-          (p: PredictionPosition) => !p.conditionId || !claimedConditionIds.has(p.conditionId)
-        );
-        setPositions(activePositions);
-      }
+      const freshPositions = positionsRes?.success && positionsRes.data
+        ? positionsRes.data.filter((p: PredictionPosition) => !p.conditionId || !claimedConditionIds.has(p.conditionId))
+        : positions;
+      const freshSettled = settledRes?.success && settledRes.data ? settledRes.data : settledPositions;
+      const freshOrders = ordersRes?.success && ordersRes.data ? ordersRes.data : openOrders;
+      const freshTrades = tradesRes?.success && tradesRes.data ? tradesRes.data : trades;
+      const freshBalance = balanceRes?.success && balanceRes.data ? balanceRes.data : balance;
 
-      // Store settled positions (auto-settled by backend monitor)
-      if (settledRes?.success && settledRes.data) {
-        setSettledPositions(settledRes.data);
-      }
-
-      if (ordersRes?.success && ordersRes.data) {
-        setOpenOrders(ordersRes.data);
-      }
-
-      if (tradesRes?.success && tradesRes.data) {
-        setTrades(tradesRes.data);
-      }
-
-      if (balanceRes?.success && balanceRes.data) {
-        setBalance(balanceRes.data);
-      }
+      setPositions(freshPositions);
+      setSettledPositions(freshSettled);
+      setOpenOrders(freshOrders);
+      setTrades(freshTrades);
+      setBalance(freshBalance);
 
       // Check for claimable winnings from user's REAL positions
       const userPositionsForClaim: ClaimablePosition[] = (positionsRes?.data || [])
@@ -513,6 +495,15 @@ export default function UnifiedPortfolio({
         setClaimablePositions([]);
         calculateStats([], claimedHistory);
       }
+      // Save snapshot for instant hydration on next visit
+      saveSnapshot({
+        positions: freshPositions,
+        settledPositions: freshSettled,
+        openOrders: freshOrders,
+        trades: freshTrades,
+        balance: freshBalance,
+        stats,
+      });
     } catch (err: any) {
       setError(err.message || 'Failed to load portfolio data');
     } finally {
@@ -523,6 +514,22 @@ export default function UnifiedPortfolio({
   useEffect(() => {
     fetchData();
   }, [fetchData]);
+
+  // Auto-refresh portfolio every 30s to prevent stale data
+  useEffect(() => {
+    if (!authToken) return;
+    const interval = setInterval(fetchData, 30_000);
+    return () => clearInterval(interval);
+  }, [authToken, fetchData]);
+
+  // Also refresh when the tab becomes visible (user switches back to the tab)
+  useEffect(() => {
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible' && authToken) fetchData();
+    };
+    document.addEventListener('visibilitychange', handleVisibility);
+    return () => document.removeEventListener('visibilitychange', handleVisibility);
+  }, [authToken, fetchData]);
 
   // Pick up balance broadcasts from Header for instant display
   useEffect(() => {
@@ -684,7 +691,7 @@ export default function UnifiedPortfolio({
   }
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-2">
       {/* Stats Header */}
       <StatsHeader
         balance={balance?.usdc || 0}
@@ -721,15 +728,15 @@ export default function UnifiedPortfolio({
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -8 }}
             transition={{ duration: 0.15 }}
-            className="space-y-3"
+            className="space-y-2"
           >
             {/* Auto-Settlement Banner */}
-            <div className="flex items-center gap-2 px-3 py-2 rounded-lg" style={{
-              background: `linear-gradient(135deg, ${C.green}08, ${C.purple}08)`,
-              border: `1px solid ${C.green}15`,
+            <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg" style={{
+              backgroundColor: C.surface,
+              border: `1px solid ${C.border}`,
             }}>
-              <HiOutlineShieldCheck className="w-4 h-4 flex-shrink-0" style={{ color: C.green }} />
-              <span className="text-xs" style={{ color: C.muted }}>
+              <HiOutlineShieldCheck className="w-3.5 h-3.5 flex-shrink-0" style={{ color: C.green }} />
+              <span className="text-[11px]" style={{ color: C.muted }}>
                 Markets are auto-settled when they resolve. Winning tokens are redeemed automatically.
               </span>
             </div>
@@ -822,22 +829,14 @@ export default function UnifiedPortfolio({
                 backgroundColor: C.surface,
                 border: `1px solid ${C.border}`,
               }}>
-                <div className="flex items-center justify-between px-4 py-3" style={{
+                <div className="flex items-center gap-2.5 px-4 py-2.5" style={{
                   borderBottom: `1px solid ${C.border}`,
                 }}>
-                  <div className="flex items-center gap-2.5">
-                    <div className="w-9 h-9 rounded-lg flex items-center justify-center" style={{
-                      backgroundColor: '#FBBF2420',
-                    }}>
-                      <HiOutlineClock className="w-4.5 h-4.5" style={{ color: '#FBBF24' }} />
-                    </div>
-                    <div>
-                      <h4 className="text-sm font-semibold" style={{ color: C.text }}>Pending Resolution</h4>
-                      <p className="text-[11px]" style={{ color: C.muted }}>
-                        Waiting for market outcome
-                      </p>
-                    </div>
-                  </div>
+                  <HiOutlineClock className="w-4 h-4 flex-shrink-0" style={{ color: '#FBBF24' }} />
+                  <h4 className="text-[13px] font-semibold" style={{ color: C.text }}>Pending Resolution</h4>
+                  <span className="text-[11px]" style={{ color: C.muted }}>
+                    {pendingResolution.length} position{pendingResolution.length !== 1 ? 's' : ''}
+                  </span>
                 </div>
 
                 <div className="divide-y" style={{ borderColor: C.border }}>
@@ -1185,22 +1184,19 @@ function ClaimableRow({
 }
 
 function PendingRow({ position, theme: C }: { position: ClaimablePosition; theme: Theme }) {
+  const sideColor = position.side === 'YES' ? C.green : C.red;
   return (
-    <div className="flex items-center justify-between p-4">
-      <div className="flex items-center gap-3 flex-1 min-w-0">
-        <div className="w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0 relative" style={{
-          backgroundColor: '#FBBF2415',
-        }}>
-          <HiOutlineClock className="w-5 h-5" style={{ color: '#FBBF24' }} />
-        </div>
+    <div className="flex items-center justify-between px-4 py-3">
+      <div className="flex items-center gap-2.5 flex-1 min-w-0">
+        <HiOutlineClock className="w-4 h-4 flex-shrink-0" style={{ color: '#FBBF24' }} />
         <div className="min-w-0">
-          <div className="text-sm font-medium truncate" style={{ color: C.text }}>
+          <div className="text-[13px] font-medium truncate" style={{ color: C.text }}>
             {position.marketTitle}
           </div>
-          <div className="flex items-center gap-2 mt-0.5">
-            <span className="text-[10px] font-bold px-1.5 py-0.5 rounded" style={{
-              backgroundColor: '#FBBF2415',
-              color: '#FBBF24',
+          <div className="flex items-center gap-1.5 mt-0.5">
+            <span className="text-[10px] font-bold px-1.5 py-px rounded" style={{
+              backgroundColor: `${sideColor}15`,
+              color: sideColor,
             }}>
               {position.side}
             </span>
@@ -1211,10 +1207,10 @@ function PendingRow({ position, theme: C }: { position: ClaimablePosition; theme
         </div>
       </div>
 
-      <div className="px-3 py-1.5 rounded-lg text-xs font-medium flex-shrink-0 ml-3" style={{
-        backgroundColor: '#FBBF2410',
-        color: '#FBBF24',
-        border: '1px solid #FBBF2420',
+      <div className="px-2.5 py-1 rounded-lg text-[11px] font-semibold flex-shrink-0 ml-3 tabular-nums" style={{
+        backgroundColor: `${C.green}10`,
+        color: C.green,
+        border: `1px solid ${C.green}20`,
       }}>
         ~${position.tokenAmount.toFixed(2)} if won
       </div>
