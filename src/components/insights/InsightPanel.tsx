@@ -136,7 +136,7 @@ export function InsightPanel({ source, marketId, docked = false }: InsightPanelP
 
     {/* Mobile: small circular button */}
     {collapsed && (
-      <div className="lg:hidden fixed" style={{ right: '0.75rem', bottom: '5rem', zIndex: 9999 }}>
+      <div className="lg:hidden fixed" style={{ right: '0.75rem', bottom: '8rem', zIndex: 9999 }}>
         <div className="iridescent-pill">
           <button
             onClick={() => setCollapsed(false)}

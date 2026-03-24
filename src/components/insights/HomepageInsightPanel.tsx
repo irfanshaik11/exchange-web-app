@@ -46,7 +46,10 @@ function timeAgo(dateStr: string): string {
 
 export function HomepageInsightPanel({ docked = false }: { docked?: boolean }) {
   const { data, isLoading, timedOut } = useHomepageInsights();
-  const [collapsed, setCollapsed] = useState(false);
+  // Desktop starts expanded, mobile starts collapsed (pill only)
+  const [collapsed, setCollapsed] = useState(
+    typeof window !== 'undefined' ? window.innerWidth < 768 : false
+  );
   const [showPicks, setShowPicks] = useState(true);
   const [showNarratives, setShowNarratives] = useState(true);
   const constraintsRef = useRef<HTMLDivElement>(null);
