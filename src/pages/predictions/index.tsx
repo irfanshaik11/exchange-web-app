@@ -27,6 +27,7 @@ import {
   UnifiedPortfolio,
   AuroraBackground,
   SkeletonShimmer,
+  TalarionCreate,
   T,
   type PredictionMarket,
   type SortOption,
@@ -73,6 +74,7 @@ export default function PredictionsPage() {
   // TODO: dFlow is disabled for now - only Polymarket is active
   // const [dataSource, setDataSource] = useState<PredictionDataSource>('all');
   const [dataSource, setDataSource] = useState<PredictionDataSource>('polymarket');
+  const [pageMode, setPageMode] = useState<'browse' | 'create'>('browse');
 
   // Fetch markets from unified hook (dFlow + Polymarket)
   const {
@@ -320,44 +322,108 @@ export default function PredictionsPage() {
                     Beta
                   </span>
                 </div>
-                <div className="mt-2">
-                  <StatsBar
-                    totalMarkets={allMarkets.length}
-                    totalVolume={totalVolume}
-                    activeTraders={12_450}
-                  />
-                </div>
-              </div>
 
-              {/* Search */}
-              <div className="relative w-full lg:w-80">
-                <input
-                  type="text"
-                  placeholder="Search markets..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="w-full px-4 py-2.5 pl-10 rounded-xl text-sm transition-all duration-200 outline-none focus:ring-1 text-white placeholder-neutral-500 backdrop-blur-xl"
+                {/* Mode Toggle: Browse / Create */}
+                <div
+                  className="inline-flex items-center rounded-xl p-1 mt-3 mb-1"
                   style={{
-                    backgroundColor: 'rgba(12, 14, 18, 0.75)',
-                    border: `1px solid ${T.border}`,
-                    // @ts-ignore
-                    '--tw-ring-color': T.accent,
+                    backgroundColor: 'rgba(12, 14, 18, 0.8)',
+                    border: `1px solid ${T.borderHover}`,
                   }}
-                />
-                <HiOutlineSearch
-                  className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 transition-colors"
-                  style={{ color: searchQuery ? T.accent : T.muted }}
-                />
-                {searchQuery && (
-                  <button
-                    onClick={() => setSearchQuery('')}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 w-5 h-5 flex items-center justify-center rounded-full hover:bg-white/10 transition-colors"
-                    style={{ color: T.muted }}
-                  >
-                    ×
-                  </button>
+                >
+                  {([
+                    { key: 'browse' as const, label: 'Markets' },
+                    { key: 'create' as const, label: 'Create with AI' },
+                  ]).map((tab) => {
+                    const isActive = pageMode === tab.key;
+                    const isAI = tab.key === 'create';
+                    return (
+                      <button
+                        key={tab.key}
+                        onClick={() => setPageMode(tab.key)}
+                        className="relative px-5 py-2 rounded-lg text-[13px] font-semibold transition-all duration-200 outline-none focus-visible:ring-1"
+                        style={{
+                          color: isActive ? T.text : T.muted,
+                          backgroundColor: isActive
+                            ? isAI ? 'rgba(255,255,255,0.04)' : 'rgba(255,255,255,0.08)'
+                            : 'transparent',
+                          border: isActive && isAI
+                            ? '1px solid transparent'
+                            : '1px solid transparent',
+                          backgroundImage: isActive && isAI
+                            ? 'linear-gradient(rgba(14,16,20,0.9), rgba(14,16,20,0.9)), linear-gradient(135deg, #FF3B30, #FFD60A, #34C759, #00C7BE, #5856D6, #BF5AF2)'
+                            : undefined,
+                          backgroundOrigin: isActive && isAI ? 'border-box' : undefined,
+                          backgroundClip: isActive && isAI ? 'padding-box, border-box' : undefined,
+                        }}
+                      >
+                        <span className="relative z-10 flex items-center gap-1.5">
+                          {isAI && (
+                            <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                              <defs>
+                                <linearGradient id="ai-sparkle-rainbow" x1="0" y1="0" x2="16" y2="16" gradientUnits="userSpaceOnUse">
+                                  <stop offset="0%" stopColor="#FF3B30" />
+                                  <stop offset="25%" stopColor="#FFD60A" />
+                                  <stop offset="50%" stopColor="#34C759" />
+                                  <stop offset="75%" stopColor="#00C7BE" />
+                                  <stop offset="100%" stopColor="#BF5AF2" />
+                                </linearGradient>
+                              </defs>
+                              <path
+                                d="M8 1l1.5 4.5L14 7l-4.5 1.5L8 13l-1.5-4.5L2 7l4.5-1.5L8 1z"
+                                fill={isActive ? 'url(#ai-sparkle-rainbow)' : 'currentColor'}
+                              />
+                            </svg>
+                          )}
+                          {tab.label}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+
+                {pageMode === 'browse' && (
+                  <div className="mt-2">
+                    <StatsBar
+                      totalMarkets={allMarkets.length}
+                      totalVolume={totalVolume}
+                      activeTraders={12_450}
+                    />
+                  </div>
                 )}
               </div>
+
+              {/* Search — only in browse mode */}
+              {pageMode === 'browse' && (
+                <div className="relative w-full lg:w-80">
+                  <input
+                    type="text"
+                    placeholder="Search markets..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    className="w-full px-4 py-2.5 pl-10 rounded-xl text-sm transition-all duration-200 outline-none focus:ring-1 text-white placeholder-neutral-500 backdrop-blur-xl"
+                    style={{
+                      backgroundColor: 'rgba(12, 14, 18, 0.75)',
+                      border: `1px solid ${T.border}`,
+                      // @ts-ignore
+                      '--tw-ring-color': T.accent,
+                    }}
+                  />
+                  <HiOutlineSearch
+                    className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 transition-colors"
+                    style={{ color: searchQuery ? T.accent : T.muted }}
+                  />
+                  {searchQuery && (
+                    <button
+                      onClick={() => setSearchQuery('')}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 w-5 h-5 flex items-center justify-center rounded-full hover:bg-white/10 transition-colors"
+                      style={{ color: T.muted }}
+                    >
+                      ×
+                    </button>
+                  )}
+                </div>
+              )}
             </div>
 
             {/* Error display with refresh button */}
@@ -390,6 +456,29 @@ export default function PredictionsPage() {
               </motion.div>
             )}
           </motion.div>
+
+          {/* ====== MODE SWITCH: Browse vs Create ====== */}
+          <AnimatePresence mode="wait">
+            {pageMode === 'create' ? (
+              <motion.div
+                key="create-mode"
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -12 }}
+                transition={{ duration: 0.35, ease: [0.16, 1, 0.3, 1] }}
+              >
+                <TalarionCreate
+                  authToken={user?.bearerToken}
+                />
+              </motion.div>
+            ) : (
+              <motion.div
+                key="browse-mode"
+                initial={{ opacity: 0, y: 12 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -12 }}
+                transition={{ duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
+              >
 
           {/* Unified Portfolio Section - Wallet balance, stats, positions, orders, history */}
           {user?.bearerToken && (
@@ -686,7 +775,13 @@ export default function PredictionsPage() {
             )}
           </div>
 
-          {/* Footer CTA — clean, minimal */}
+          {/* End of browse-mode content */}
+              </motion.div>
+            )}
+          </AnimatePresence>
+
+          {/* Footer CTA — only in browse mode */}
+          {pageMode === 'browse' && (
           <div
             className="relative rounded-2xl p-8 md:p-10 overflow-hidden"
             style={{
@@ -739,6 +834,7 @@ export default function PredictionsPage() {
               </div>
             </div>
           </div>
+          )}
 
           {/* Bottom padding */}
           <div className="h-16 md:h-20" />

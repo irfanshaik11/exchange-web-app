@@ -27,3 +27,7 @@ export { default as AnimatedValue } from './AnimatedValue';
 
 // Deprecated - use UnifiedPortfolio instead
 export { default as PolymarketPortfolio } from './PolymarketPortfolio';
+
+// Talarion AI market creation
+export { default as TalarionCreate } from './TalarionCreate';
+export { default as TalarionMarketCard } from './TalarionMarketCard';

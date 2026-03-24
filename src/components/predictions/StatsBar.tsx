@@ -29,41 +29,41 @@ export default function StatsBar({ totalMarkets, totalVolume, activeTraders = 0 
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       transition={{ duration: 0.4 }}
-      className="flex flex-wrap items-center gap-x-4 gap-y-2 text-xs"
+      className="flex flex-wrap items-center gap-x-5 gap-y-2 text-[13px]"
     >
       {/* Live indicator */}
       <div className="flex items-center gap-2">
-        <span className="relative flex h-1.5 w-1.5">
+        <span className="relative flex h-2 w-2">
           <span
             className="animate-ping absolute inline-flex h-full w-full rounded-full opacity-75"
             style={{ backgroundColor: C.green }}
           />
           <span
-            className="relative inline-flex rounded-full h-1.5 w-1.5"
+            className="relative inline-flex rounded-full h-2 w-2"
             style={{ backgroundColor: C.green }}
           />
         </span>
         <span style={{ color: C.muted }}>
-          <span className="font-semibold" style={{ color: C.text }}>{totalMarkets}</span> markets live
+          <span className="font-bold" style={{ color: C.text }}>{totalMarkets}+</span> markets live
         </span>
       </div>
 
-      <span style={{ color: C.muted }}>•</span>
+      <span style={{ color: 'rgba(255,255,255,0.15)' }}>•</span>
 
       {/* Volume */}
       <div className="flex items-center gap-1.5">
         <HiOutlineTrendingUp className="w-4 h-4" style={{ color: C.green }} />
         <span style={{ color: C.muted }}>
-          <span className="font-semibold" style={{ color: C.green }}>${formatNumber(totalVolume)}</span> 24h volume
+          <span className="font-bold" style={{ color: C.green }}>${formatNumber(totalVolume)}</span> 24h volume
         </span>
       </div>
 
-      <span style={{ color: C.muted }}>•</span>
+      <span style={{ color: 'rgba(255,255,255,0.15)' }}>•</span>
 
       {/* Traders */}
       <div className="flex items-center gap-1.5">
         <span style={{ color: C.muted }}>
-          <span className="font-semibold" style={{ color: C.text }}>{formatNumber(activeTraders)}</span> traders
+          <span className="font-bold" style={{ color: C.text }}>{formatNumber(activeTraders)}</span> traders
         </span>
       </div>
     </motion.div>
