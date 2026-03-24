@@ -3538,12 +3538,11 @@ export default function MarketDetailPage() {
                   </>
                 )}
 
-              {/* AI Insights — docked below trade panel */}
-              <div className="border-t border-[#2A2B33]">
-                <InsightPanel source={isPolymarket ? 'polymarket' : 'dflow'} marketId={tickerString} docked />
-              </div>
             </div>
           </div>
+
+          {/* AI Insights — floating panel */}
+          <InsightPanel source={isPolymarket ? 'polymarket' : 'dflow'} marketId={tickerString} />
 
           {/* Trade button for mobile */}
           <div className="fixed bottom-0 left-0 w-full p-4 z-50 lg:hidden mb-10">
