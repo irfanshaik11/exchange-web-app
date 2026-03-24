@@ -291,9 +291,7 @@ export default function PredictionsPage() {
           </div>
         </div>
 
-        {/* Two-column layout: main content + AI sidebar on large screens */}
-        <div className="relative z-10 flex-1 w-full max-w-[1800px] mx-auto px-4 sm:px-6 lg:px-8 py-8 md:py-10 flex gap-6">
-        <main className="flex-1 min-w-0">
+        <main className="relative z-10 flex-1 w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 md:py-10">
           {/* Page Header — clean, Apple-style */}
           <motion.div
             initial={{ opacity: 0, y: -12 }}
@@ -744,13 +742,6 @@ export default function PredictionsPage() {
           <div className="h-16 md:h-20" />
         </main>
 
-        {/* Docked AI Insights sidebar — visible on xl+ screens */}
-        <aside className="hidden xl:block w-[340px] flex-shrink-0 sticky top-24 self-start max-h-[calc(100vh-7rem)]">
-          <HomepageInsightPanel docked />
-        </aside>
-        </div>
-
-        {/* Floating AI panel for lg screens where sidebar isn't shown */}
         <HomepageInsightPanel />
 
         <Footer />
