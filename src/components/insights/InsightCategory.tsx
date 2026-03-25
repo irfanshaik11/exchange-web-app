@@ -14,7 +14,7 @@ interface InsightCategoryProps {
 }
 
 export function InsightCategory({ label, insight }: InsightCategoryProps) {
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(true);
 
   return (
     <div
@@ -44,7 +44,7 @@ export function InsightCategory({ label, insight }: InsightCategoryProps) {
           <ConfidenceDot confidence={insight.confidence} />
         </div>
       </button>
-      <AnimatePresence>
+      <AnimatePresence initial={false}>
         {open && (
           <motion.div
             initial={{ height: 0, opacity: 0 }}

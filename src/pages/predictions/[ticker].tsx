@@ -349,25 +349,6 @@ const PredictionHeader: React.FC<{
         </div>
       </div>
 
-      {/* Right side - Prices (hidden for multi-outcome markets) */}
-      {!isMultiOutcome && (
-        <div className="flex items-center gap-4">
-          <div className="flex items-center gap-2">
-            <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg" style={{ backgroundColor: AX.greenBg, border: `1px solid ${AX.greenBorder}` }}>
-              <HiOutlineCheckCircle className="w-4 h-4" style={{ color: AX.green }} />
-              <span className="text-sm font-bold" style={{ color: AX.green }}>
-                YES {Math.round(yesPrice * 100)}¢
-              </span>
-            </div>
-            <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg" style={{ backgroundColor: AX.redBg, border: `1px solid ${AX.redBorder}` }}>
-              <HiOutlineXCircle className="w-4 h-4" style={{ color: AX.red }} />
-              <span className="text-sm font-bold" style={{ color: AX.red }}>
-                NO {Math.round(noPrice * 100)}¢
-              </span>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 };
@@ -636,6 +617,21 @@ const HoldersSection: React.FC<{ holders: PolymarketHolder[]; isLoading: boolean
                       <span style={{ color: AX.text }}>
                         {holder.name || holder.pseudonym || `${holder.proxyWallet.slice(0, 6)}...`}
                       </span>
+                      {holder.proxyWallet && (
+                        <a
+                          href={`https://polygonscan.com/address/${holder.proxyWallet}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="flex-shrink-0 opacity-50 hover:opacity-100 transition-opacity"
+                          title="View on Polygonscan"
+                        >
+                          <img
+                            src="https://polygonscan.com/assets/poly/images/svg/logos/chain-dim.svg?v=26.1.4.2"
+                            alt="Polygonscan"
+                            className="w-3.5 h-3.5"
+                          />
+                        </a>
+                      )}
                     </div>
                   </td>
                   <td className="py-2 px-3 text-right" style={{ color: selectedOutcome === 'yes' ? AX.green : AX.red }}>
@@ -651,7 +647,7 @@ const HoldersSection: React.FC<{ holders: PolymarketHolder[]; isLoading: boolean
   );
 };
 
-// Activity Component for Polymarket - with inline column filters
+// Activity Component for Polymarket - table layout matching HoldersSection
 const ActivitySection: React.FC<{ activities: PolymarketActivity[]; isLoading: boolean }> = ({ activities, isLoading }) => {
   const [typeFilter, setTypeFilter] = useState<string>('all');
   const [nameFilter, setNameFilter] = useState('');
@@ -677,28 +673,24 @@ const ActivitySection: React.FC<{ activities: PolymarketActivity[]; isLoading: b
   // Filter and sort activities
   const filteredActivities = activities
     .filter(activity => {
-      // Type filter (buy/sell)
       if (typeFilter !== 'all') {
         const side = activity.side?.toLowerCase() || '';
         const type = activity.type?.toLowerCase() || '';
         if (typeFilter === 'buy' && !(side === 'buy' || type === 'buy')) return false;
         if (typeFilter === 'sell' && !(side === 'sell' || type === 'sell')) return false;
       }
-      // Name filter
       if (nameFilter) {
         const name = (activity.name || activity.pseudonym || activity.proxyWallet || '').toLowerCase();
         if (!name.includes(nameFilter.toLowerCase())) return false;
       }
-      // Outcome filter
       if (outcomeFilter !== 'all') {
         if (activity.outcome?.toLowerCase() !== outcomeFilter) return false;
       }
       return true;
     })
     .sort((a, b) => {
-      const timeA = new Date(a.timestamp).getTime();
-      const timeB = new Date(b.timestamp).getTime();
-      return sortDir === 'desc' ? timeB - timeA : timeA - timeB;
+      const parseTs = (ts: string | number) => { let v = Number(ts); if (v > 0 && v < 1e12) v *= 1000; return v || 0; };
+      return sortDir === 'desc' ? parseTs(b.timestamp) - parseTs(a.timestamp) : parseTs(a.timestamp) - parseTs(b.timestamp);
     });
 
   const formatAmount = (amount: number | undefined): string => {
@@ -708,158 +700,171 @@ const ActivitySection: React.FC<{ activities: PolymarketActivity[]; isLoading: b
     return `$${amount.toFixed(2)}`;
   };
 
-  const formatTime = (timestamp: string): string => {
-    const date = new Date(timestamp);
+  const formatTime = (timestamp: string | number): string => {
+    let ms = typeof timestamp === 'number' ? timestamp : Number(timestamp);
+    if (ms > 0 && ms < 1e12) ms *= 1000;
+    const date = new Date(ms);
+    if (isNaN(date.getTime()) || date.getFullYear() < 2000) return '';
     const now = new Date();
     const diffMs = now.getTime() - date.getTime();
     const diffMins = Math.floor(diffMs / 60000);
     const diffHours = Math.floor(diffMs / 3600000);
     const diffDays = Math.floor(diffMs / 86400000);
-
     if (diffMins < 1) return 'Just now';
     if (diffMins < 60) return `${diffMins}m`;
     if (diffHours < 24) return `${diffHours}h`;
     if (diffDays < 7) return `${diffDays}d`;
-    return date.toLocaleDateString();
-  };
-
-  // Get user avatar (profile image or colored circle with initial)
-  const getUserAvatar = (activity: PolymarketActivity) => {
-    const name = activity.name || activity.pseudonym || activity.proxyWallet || 'A';
-    const initial = name.charAt(0).toUpperCase();
-
-    if (activity.profileImage) {
-      return <img src={activity.profileImage} alt="" className="w-8 h-8 rounded-full object-cover flex-shrink-0" />;
-    }
-
-    return (
-      <div
-        className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-semibold flex-shrink-0"
-        style={{ backgroundColor: getAvatarColor(activity.proxyWallet || name), color: '#fff' }}
-      >
-        {initial}
-      </div>
-    );
+    return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
   };
 
   const hasActiveFilters = typeFilter !== 'all' || nameFilter || outcomeFilter !== 'all';
 
   return (
     <div className="h-full flex flex-col">
-      {/* Compact header with column filters */}
-      <div className="flex-shrink-0 flex items-center gap-4 px-3 py-2 text-[10px] border-b" style={{ borderColor: AX.border, color: AX.muted }}>
-        <div className="w-8"></div>
-        <div className="flex-1">
-          <span className="inline-flex items-center gap-1">
-            Trader
-            <SearchFilter value={nameFilter} onChange={setNameFilter} placeholder="Search..." />
-          </span>
-        </div>
-        <div className="w-14">
-          <span className="inline-flex items-center gap-0.5">
-            Type
-            <SelectFilter
-              options={[
-                { value: 'all', label: 'All' },
-                { value: 'buy', label: 'Buy' },
-                { value: 'sell', label: 'Sell' },
-              ]}
-              value={typeFilter}
-              onChange={setTypeFilter}
-            />
-          </span>
-        </div>
-        <div className="w-12">
-          <span className="inline-flex items-center gap-0.5">
-            Side
-            <SelectFilter
-              options={[
-                { value: 'all', label: 'All' },
-                { value: 'yes', label: 'YES' },
-                { value: 'no', label: 'NO' },
-              ]}
-              value={outcomeFilter}
-              onChange={setOutcomeFilter}
-            />
-          </span>
-        </div>
-        <div className="w-14 text-right">
-          <span className="inline-flex items-center gap-1">
-            Time
-            <SortToggle direction={sortDir} onToggle={() => setSortDir(d => d === 'desc' ? 'asc' : 'desc')} />
-          </span>
-        </div>
-      </div>
-
-      {/* Results count if filters active */}
-      {hasActiveFilters && (
-        <div className="flex-shrink-0 px-3 py-1.5 text-[10px] flex items-center justify-between" style={{ backgroundColor: AX.bg }}>
-          <span style={{ color: AX.muted }}>{filteredActivities.length} results</span>
+      {/* Filter bar - matching holders YES/NO toggle style */}
+      <div className="flex-shrink-0 flex items-center gap-2 px-3 py-2 border-b" style={{ borderColor: AX.border }}>
+        {(['all', 'buy', 'sell'] as const).map((side) => (
+          <button
+            key={side}
+            onClick={() => setTypeFilter(side)}
+            className="flex items-center gap-1 px-2 py-1 rounded text-[10px] font-medium transition-all"
+            style={{
+              backgroundColor: typeFilter === side
+                ? (side === 'buy' ? AX.greenBg : side === 'sell' ? AX.redBg : `${AX.muted}20`)
+                : 'transparent',
+              color: typeFilter === side
+                ? (side === 'buy' ? AX.green : side === 'sell' ? AX.red : AX.text)
+                : AX.muted,
+            }}
+          >
+            {side === 'all' ? 'ALL' : side.toUpperCase()} ({side === 'all' ? activities.length : activities.filter(a => (a.side?.toLowerCase() || a.type?.toLowerCase()) === side).length})
+          </button>
+        ))}
+        {hasActiveFilters && (
           <button
             onClick={() => { setTypeFilter('all'); setNameFilter(''); setOutcomeFilter('all'); }}
-            className="flex items-center gap-1 hover:underline"
+            className="ml-auto flex items-center gap-1 text-[10px] hover:underline"
             style={{ color: AX.mint }}
           >
-            <HiOutlineX className="w-3 h-3" /> Clear filters
+            <HiOutlineX className="w-3 h-3" /> Clear
           </button>
-        </div>
-      )}
+        )}
+      </div>
 
-      {/* Scrollable activity list */}
-      <div className="flex-1 overflow-y-auto px-3 py-2 pb-20 space-y-1.5">
+      {/* Scrollable table */}
+      <div className="flex-1 overflow-y-auto pb-20">
         {filteredActivities.length === 0 ? (
-          <div className="flex items-center justify-center py-8">
-            <p className="text-sm" style={{ color: AX.muted }}>No matching activities</p>
+          <div className="flex items-center justify-center py-12">
+            <p className="text-sm" style={{ color: AX.muted }}>
+              {hasActiveFilters ? 'No matching activities' : 'No recent activity'}
+            </p>
           </div>
         ) : (
-          filteredActivities.map((activity, idx) => {
-            const side = activity.side?.toLowerCase() || activity.type?.toLowerCase() || '';
-            const isBuy = side === 'buy';
-            return (
-              <div
-                key={activity.id || idx}
-                className="flex items-center gap-2 px-2 py-2 rounded-lg"
-                style={{ backgroundColor: AX.surface }}
-              >
-                {getUserAvatar(activity)}
-                <div className="flex-1 min-w-0">
-                  <span className="text-xs font-medium truncate block" style={{ color: AX.text }}>
-                    {activity.name || activity.pseudonym || activity.proxyWallet?.slice(0, 8) || 'Anon'}
+          <table className="w-full text-xs">
+            <thead className="sticky top-0" style={{ backgroundColor: AX.bg }}>
+              <tr style={{ borderBottom: `1px solid ${AX.border}` }}>
+                <th className="text-left py-2 px-3 font-medium w-8" style={{ color: AX.muted }}>#</th>
+                <th className="text-left py-2 px-3 font-medium" style={{ color: AX.muted }}>
+                  <span className="inline-flex items-center gap-1">
+                    Trader
+                    <SearchFilter value={nameFilter} onChange={setNameFilter} placeholder="Search..." />
                   </span>
-                  <span className="text-[10px]" style={{ color: AX.muted }}>
-                    {activity.size?.toLocaleString() || '-'} @ {activity.price ? `${(activity.price * 100).toFixed(1)}¢` : '-'}
+                </th>
+                <th className="text-center py-2 px-3 font-medium" style={{ color: AX.muted }}>
+                  <span className="inline-flex items-center gap-0.5">
+                    Side
+                    <SelectFilter
+                      options={[
+                        { value: 'all', label: 'All' },
+                        { value: 'yes', label: 'YES' },
+                        { value: 'no', label: 'NO' },
+                      ]}
+                      value={outcomeFilter}
+                      onChange={setOutcomeFilter}
+                    />
                   </span>
-                </div>
-                <div className="text-center w-14">
-                  <span
-                    className="text-[10px] px-1.5 py-0.5 rounded font-medium"
-                    style={{
-                      backgroundColor: isBuy ? AX.greenBg : AX.redBg,
-                      color: isBuy ? AX.green : AX.red,
-                    }}
-                  >
-                    {isBuy ? 'BUY' : 'SELL'}
+                </th>
+                <th className="text-right py-2 px-3 font-medium" style={{ color: AX.muted }}>Amount</th>
+                <th className="text-right py-2 px-3 font-medium" style={{ color: AX.muted }}>
+                  <span className="inline-flex items-center gap-1">
+                    Time
+                    <SortToggle direction={sortDir} onToggle={() => setSortDir(d => d === 'desc' ? 'asc' : 'desc')} />
                   </span>
-                </div>
-                <div className="text-center w-12">
-                  <span
-                    className="text-[10px] font-medium"
-                    style={{ color: activity.outcome?.toLowerCase() === 'yes' ? AX.green : AX.red }}
-                  >
-                    {activity.outcome?.toUpperCase() || '-'}
-                  </span>
-                </div>
-                <div className="text-right w-14">
-                  <div className="text-xs font-medium" style={{ color: AX.text }}>
-                    {formatAmount(activity.amount)}
-                  </div>
-                  <div className="text-[10px]" style={{ color: AX.muted }}>
-                    {formatTime(activity.timestamp)}
-                  </div>
-                </div>
-              </div>
-            );
-          })
+                </th>
+                <th className="w-6"></th>
+              </tr>
+            </thead>
+            <tbody>
+              {filteredActivities.map((activity, idx) => {
+                const side = activity.side?.toLowerCase() || activity.type?.toLowerCase() || '';
+                const isBuy = side === 'buy';
+                return (
+                  <tr key={activity.id || idx} style={{ borderBottom: `1px solid ${AX.border}` }}>
+                    <td className="py-2 px-3" style={{ color: AX.muted }}>{idx + 1}</td>
+                    <td className="py-2 px-3">
+                      <div className="flex items-center gap-2">
+                        {activity.profileImage ? (
+                          <img src={activity.profileImage} alt="" className="w-7 h-7 rounded-full object-cover" />
+                        ) : (
+                          <div
+                            className="w-7 h-7 rounded-full flex items-center justify-center text-xs font-semibold"
+                            style={{
+                              backgroundColor: getAvatarColor(activity.proxyWallet || activity.name || 'A'),
+                              color: '#fff',
+                            }}
+                          >
+                            {(activity.name || activity.pseudonym || 'A').charAt(0).toUpperCase()}
+                          </div>
+                        )}
+                        <div className="min-w-0">
+                          <span className="block truncate" style={{ color: AX.text }}>
+                            {activity.name || activity.pseudonym || activity.proxyWallet?.slice(0, 8) || 'Anon'}
+                          </span>
+                          <span className="text-[10px]" style={{ color: AX.muted }}>
+                            {activity.size?.toLocaleString() || '-'} @ {activity.price ? `${(activity.price * 100).toFixed(1)}¢` : '-'}
+                          </span>
+                        </div>
+                      </div>
+                    </td>
+                    <td className="py-2 px-3 text-center">
+                      <span
+                        className="text-[10px] px-1.5 py-0.5 rounded font-medium"
+                        style={{
+                          backgroundColor: isBuy ? AX.greenBg : AX.redBg,
+                          color: isBuy ? AX.green : AX.red,
+                        }}
+                      >
+                        {isBuy ? 'BUY' : 'SELL'}
+                      </span>
+                    </td>
+                    <td className="py-2 px-3 text-right" style={{ color: AX.text }}>
+                      {formatAmount(activity.amount)}
+                    </td>
+                    <td className="py-2 px-3 text-right" style={{ color: AX.muted }}>
+                      {formatTime(activity.timestamp)}
+                    </td>
+                    <td className="py-1 px-1">
+                      {(activity.transactionHash || activity.proxyWallet) && (
+                        <a
+                          href={`https://polygonscan.com/${activity.transactionHash ? `tx/${activity.transactionHash}` : `address/${activity.proxyWallet}`}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="opacity-50 hover:opacity-100 transition-opacity"
+                          title={activity.transactionHash ? 'View tx on Polygonscan' : 'View on Polygonscan'}
+                        >
+                          <img
+                            src="https://polygonscan.com/assets/poly/images/svg/logos/chain-dim.svg?v=26.1.4.2"
+                            alt="Polygonscan"
+                            className="w-3.5 h-3.5"
+                          />
+                        </a>
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
         )}
       </div>
     </div>
@@ -1603,6 +1608,9 @@ export default function MarketDetailPage() {
 
     for (const market of polyEvent.markets) {
       try {
+        // Skip closed/resolved outcomes — nothing left to trade
+        if (market.closed || market.resolved) continue;
+
         // Skip outcomes with no prices (null/undefined means placeholder)
         if (!market.outcomePrices) continue;
 
@@ -2085,15 +2093,89 @@ export default function MarketDetailPage() {
   }, [isPolymarket, polyMarket]);
 
   const polyConditionId = useMemo(() => {
-    if (!isPolymarket || !polyMarket) return undefined;
+    if (!isPolymarket) return undefined;
+    // For multi-outcome markets, use the selected outcome's conditionId
+    if (selectedOutcomeMarket?.conditionId) return selectedOutcomeMarket.conditionId;
+    // Fallback to the default market's conditionId (binary markets)
+    if (!polyMarket) return undefined;
     const polyData = (polyMarket as any).polymarketData;
     return polyData?.conditionId;
-  }, [isPolymarket, polyMarket]);
+  }, [isPolymarket, polyMarket, selectedOutcomeMarket]);
 
   // Polymarket comments, holders, and activity
   const { comments, isLoading: commentsLoading } = usePolymarketComments(polyEventId, { enabled: isPolymarket });
-  const { holders, isLoading: holdersLoading } = usePolymarketHolders(polyConditionId, { limit: 100, enabled: isPolymarket });
-  const { activities, isLoading: activityLoading } = usePolymarketActivity(polyConditionId, { limit: 50, enabled: isPolymarket });
+  const { holders, isLoading: holdersLoading } = usePolymarketHolders(polyConditionId, { enabled: isPolymarket });
+  const { activities: restActivities, isLoading: activityLoading } = usePolymarketActivity(polyConditionId, { limit: 50, enabled: isPolymarket });
+
+  // Live activity from WebSocket last_trade_price events — prepended to REST data.
+  // These appear instantly; REST poll catches up on the next 30s cycle and deduplicates.
+  const [wsActivities, setWsActivities] = useState<PolymarketActivity[]>([]);
+  const wsActivityIdsRef = useRef(new Set<string>());
+
+  // Reset WS activities on market change
+  useEffect(() => {
+    setWsActivities([]);
+    wsActivityIdsRef.current.clear();
+  }, [polyConditionId]);
+
+  // Convert yesLastTrade → activity entry
+  useEffect(() => {
+    if (!yesLastTrade || !isPolymarket) return;
+    const id = `ws-yes-${yesLastTrade.timestamp}-${yesLastTrade.price}-${yesLastTrade.size}`;
+    if (wsActivityIdsRef.current.has(id)) return;
+    wsActivityIdsRef.current.add(id);
+
+    const entry: PolymarketActivity = {
+      id,
+      type: 'trade',
+      timestamp: String(yesLastTrade.timestamp > 1e12 ? yesLastTrade.timestamp : yesLastTrade.timestamp * 1000),
+      side: yesLastTrade.side?.toLowerCase() as 'buy' | 'sell',
+      outcome: 'Yes',
+      price: yesLastTrade.price,
+      size: yesLastTrade.size,
+      amount: yesLastTrade.price * yesLastTrade.size,
+    };
+
+    setWsActivities(prev => {
+      const next = [entry, ...prev];
+      return next.length > 20 ? next.slice(0, 20) : next; // Cap WS buffer
+    });
+  }, [yesLastTrade, isPolymarket]);
+
+  // Convert noLastTrade → activity entry
+  useEffect(() => {
+    if (!noLastTrade || !isPolymarket) return;
+    const id = `ws-no-${noLastTrade.timestamp}-${noLastTrade.price}-${noLastTrade.size}`;
+    if (wsActivityIdsRef.current.has(id)) return;
+    wsActivityIdsRef.current.add(id);
+
+    const entry: PolymarketActivity = {
+      id,
+      type: 'trade',
+      timestamp: String(noLastTrade.timestamp > 1e12 ? noLastTrade.timestamp : noLastTrade.timestamp * 1000),
+      side: noLastTrade.side?.toLowerCase() as 'buy' | 'sell',
+      outcome: 'No',
+      price: noLastTrade.price,
+      size: noLastTrade.size,
+      amount: noLastTrade.price * noLastTrade.size,
+    };
+
+    setWsActivities(prev => {
+      const next = [entry, ...prev];
+      return next.length > 20 ? next.slice(0, 20) : next;
+    });
+  }, [noLastTrade, isPolymarket]);
+
+  // Merge: WS live trades + REST historical, deduplicated by timestamp+price+size
+  const activities = useMemo(() => {
+    if (!restActivities?.length && !wsActivities.length) return restActivities || [];
+    const restSet = new Set(
+      (restActivities || []).map(a => `${a.timestamp}-${a.price}-${a.size}`)
+    );
+    // Only include WS entries not already in REST data
+    const uniqueWs = wsActivities.filter(a => !restSet.has(`${a.timestamp}-${a.price}-${a.size}`));
+    return [...uniqueWs, ...(restActivities || [])];
+  }, [restActivities, wsActivities]);
 
   // Unified market/loading/refetch
   const market = isPolymarket ? polyMarket : dflowMarket;
@@ -2444,6 +2526,7 @@ export default function MarketDetailPage() {
                     noTokenId={polyTokenIds.no}
                     marketTitle={market.title}
                     defaultOpen={true}
+                    isMultiOutcome={isMultiOutcomeMarket}
                   />
                 )}
               </div>

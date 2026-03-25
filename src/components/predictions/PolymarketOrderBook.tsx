@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { AnimatePresence, motion } from 'framer-motion';
 import { HiOutlineChevronRight, HiOutlineChevronLeft, HiOutlineRefresh } from 'react-icons/hi';
 import usePolymarketOrderBook, {
   formatOrderBookPrice,
@@ -21,12 +21,16 @@ const AX = {
   blue: '#60A5FA',
 };
 
+const ASK_RGB = '248, 113, 113';
+const BID_RGB = '74, 222, 128';
+
 interface PolymarketOrderBookProps {
   yesTokenId?: string;
   noTokenId?: string;
   marketTitle?: string;
   defaultOpen?: boolean;
   className?: string;
+  isMultiOutcome?: boolean;
 }
 
 // Single side order book display
@@ -88,32 +92,37 @@ const OrderBookSide: React.FC<{
       </div>
 
       {/* Asks (sell orders) - displayed in reverse, takes half the remaining space */}
-      <div className="flex-1 overflow-y-auto flex flex-col justify-end">
-        {data.asks.slice().reverse().map((ask, idx) => {
+      <div className="flex-1 overflow-y-auto flex flex-col-reverse">
+        {data.asks.map((ask, idx) => {
           const size = parseFloat(ask.size);
-          const widthPercent = (size / maxAskSize) * 100;
+          const ratio = size / maxAskSize;
+          const intensity = 0.05 + ratio * 0.33;
 
           return (
             <div
               key={`ask-${idx}`}
-              className="relative flex items-center px-3 py-1 text-xs flex-shrink-0"
+              className="relative flex items-center px-3 py-[3px] text-xs flex-shrink-0 hover:bg-white/[0.04]"
             >
-              {/* Background bar */}
               <div
-                className="absolute right-0 top-0 bottom-0"
+                className="absolute right-0 top-0 bottom-0 pointer-events-none"
                 style={{
-                  width: `${widthPercent}%`,
-                  backgroundColor: AX.redBg,
+                  width: `${ratio * 100}%`,
+                  background: `linear-gradient(to left, rgba(${ASK_RGB}, ${intensity}), rgba(${ASK_RGB}, ${intensity * 0.08}))`,
                 }}
               />
-              {/* Content */}
-              <span className="relative w-16" style={{ color: AX.red }}>
+              {ratio > 0.35 && (
+                <div
+                  className="absolute left-0 top-[2px] bottom-[2px] w-[2px] rounded-full pointer-events-none"
+                  style={{ backgroundColor: `rgba(${ASK_RGB}, ${0.35 + ratio * 0.55})` }}
+                />
+              )}
+              <span className="relative w-16 truncate" style={{ color: AX.red }}>
                 {formatOrderBookPrice(ask.price)}
               </span>
-              <span className="relative flex-1 text-right" style={{ color: AX.text }}>
+              <span className="relative flex-1 text-right truncate" style={{ color: AX.text }}>
                 {formatOrderBookSize(ask.size)}
               </span>
-              <span className="relative w-16 text-right" style={{ color: AX.muted }}>
+              <span className="relative w-16 text-right truncate" style={{ color: AX.muted }}>
                 ${(parseFloat(ask.price) * size).toFixed(0)}
               </span>
             </div>
@@ -129,7 +138,7 @@ const OrderBookSide: React.FC<{
         >
           <span style={{ color: AX.muted }}>Spread: </span>
           <span className="ml-1 font-medium" style={{ color: AX.text }}>
-            {(data.spread * 100).toFixed(2)}¢
+            {(data.spread * 100).toFixed(2)}&cent;
           </span>
         </div>
       )}
@@ -138,29 +147,34 @@ const OrderBookSide: React.FC<{
       <div className="flex-1 overflow-y-auto">
         {data.bids.map((bid, idx) => {
           const size = parseFloat(bid.size);
-          const widthPercent = (size / maxBidSize) * 100;
+          const ratio = size / maxBidSize;
+          const intensity = 0.05 + ratio * 0.33;
 
           return (
             <div
               key={`bid-${idx}`}
-              className="relative flex items-center px-3 py-1 text-xs flex-shrink-0"
+              className="relative flex items-center px-3 py-[3px] text-xs flex-shrink-0 hover:bg-white/[0.04]"
             >
-              {/* Background bar */}
               <div
-                className="absolute right-0 top-0 bottom-0"
+                className="absolute right-0 top-0 bottom-0 pointer-events-none"
                 style={{
-                  width: `${widthPercent}%`,
-                  backgroundColor: AX.greenBg,
+                  width: `${ratio * 100}%`,
+                  background: `linear-gradient(to left, rgba(${BID_RGB}, ${intensity}), rgba(${BID_RGB}, ${intensity * 0.08}))`,
                 }}
               />
-              {/* Content */}
-              <span className="relative w-16" style={{ color: AX.green }}>
+              {ratio > 0.35 && (
+                <div
+                  className="absolute left-0 top-[2px] bottom-[2px] w-[2px] rounded-full pointer-events-none"
+                  style={{ backgroundColor: `rgba(${BID_RGB}, ${0.35 + ratio * 0.55})` }}
+                />
+              )}
+              <span className="relative w-16 truncate" style={{ color: AX.green }}>
                 {formatOrderBookPrice(bid.price)}
               </span>
-              <span className="relative flex-1 text-right" style={{ color: AX.text }}>
+              <span className="relative flex-1 text-right truncate" style={{ color: AX.text }}>
                 {formatOrderBookSize(bid.size)}
               </span>
-              <span className="relative w-16 text-right" style={{ color: AX.muted }}>
+              <span className="relative w-16 text-right truncate" style={{ color: AX.muted }}>
                 ${(parseFloat(bid.price) * size).toFixed(0)}
               </span>
             </div>
@@ -177,9 +191,10 @@ const PolymarketOrderBook: React.FC<PolymarketOrderBookProps> = ({
   marketTitle,
   defaultOpen = false,
   className = '',
+  isMultiOutcome = false,
 }) => {
   const [isOpen, setIsOpen] = useState(defaultOpen);
-  const [selectedSide, setSelectedSide] = useState<'yes' | 'no' | 'both'>('both');
+  const [selectedSide, setSelectedSide] = useState<'yes' | 'no' | 'both'>(isMultiOutcome ? 'both' : 'yes');
 
   const {
     yesOrderBook,
