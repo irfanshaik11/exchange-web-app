@@ -13,7 +13,7 @@ interface InsightPanelProps {
 
 const CATEGORY_LABELS: Record<string, string> = {
   probabilityAnalysis: 'Probability Analysis',
-  smartMoneySignal: 'Smart Money Signal',
+  smartMoneySignal: 'Flow Analysis',
   volumeLiquidityAnalysis: 'Volume & Liquidity',
   riskAssessment: 'Risk Assessment',
   priceMomentum: 'Price Momentum',
