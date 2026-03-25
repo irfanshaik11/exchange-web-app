@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import PolymarketOrderBookService from '../services/polymarketOrderBookService';
 import type { LastTradePrice, BestBidAsk } from '../services/polymarketOrderBookService';
 
@@ -22,11 +22,36 @@ export interface OrderBookData {
   midPrice?: number;
 }
 
+// ── Order book delta helpers ──────────────────────────────────────────────────
+// Apply a price_change to the local order book levels.
+// Per Polymarket docs: size="0" removes the level, otherwise insert/update.
+
+function applyDeltaToLevels(
+  levels: OrderBookLevel[],
+  price: string,
+  size: string,
+  sortDescending: boolean, // true for bids, false for asks
+): OrderBookLevel[] {
+  const updated = levels.filter(l => l.price !== price);
+
+  if (size !== '0' && parseFloat(size) > 0) {
+    updated.push({ price, size });
+  }
+
+  // Sort: bids descending (highest first), asks ascending (lowest first)
+  updated.sort((a, b) => {
+    const diff = parseFloat(a.price) - parseFloat(b.price);
+    return sortDescending ? -diff : diff;
+  });
+
+  return updated;
+}
+
 export interface UsePolymarketOrderBookOptions {
   yesTokenId?: string;
   noTokenId?: string;
   enabled?: boolean;
-  maxLevels?: number; // Max number of price levels to show
+  maxLevels?: number;
 }
 
 // Real-time price update from WebSocket
@@ -71,7 +96,6 @@ export default function usePolymarketOrderBook(
     yesTokenId,
     noTokenId,
     enabled = true,
-    maxLevels = 10,
   } = options;
 
   const [yesOrderBook, setYesOrderBook] = useState<OrderBookData | null>(null);
@@ -86,17 +110,15 @@ export default function usePolymarketOrderBook(
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // Process order book data from either REST or WebSocket
+  // Process order book data from either REST or WebSocket — no truncation, show all levels
   const processOrderBook = useCallback((data: any, assetId: string): OrderBookData => {
     const bids = (data.bids || [])
-      .slice(0, maxLevels)
       .map((bid: any) => ({
         price: bid.price || bid[0],
         size: bid.size || bid[1],
       }));
 
     const asks = (data.asks || [])
-      .slice(0, maxLevels)
       .map((ask: any) => ({
         price: ask.price || ask[0],
         size: ask.size || ask[1],
@@ -116,7 +138,7 @@ export default function usePolymarketOrderBook(
       spread,
       midPrice,
     };
-  }, [maxLevels]);
+  }, []);
 
   // Initial REST API fetch for instant data
   useEffect(() => {
@@ -153,9 +175,32 @@ export default function usePolymarketOrderBook(
     fetchInitial();
   }, [enabled, yesTokenId, noTokenId, processOrderBook]);
 
+  // ── Book throttle refs ───────────────────────────────────────────────────
+  // After a price_change delta, the server often sends a `book` snapshot ~50ms later.
+  // Accepting both causes a double re-render (flicker). Strategy:
+  // - Always accept the first book (initial snapshot)
+  // - After a delta, skip books for 500ms (same data, prevents flicker)
+  // - Always accept a book if >5s since last accepted book (resync safety net)
+  const BOOK_SKIP_AFTER_DELTA_MS = 500;
+  const BOOK_FORCE_ACCEPT_MS = 5000;
+  const yesLastDeltaAt = useRef(0);
+  const noLastDeltaAt = useRef(0);
+  const yesLastBookAt = useRef(0);
+  const noLastBookAt = useRef(0);
+  const yesHasBook = useRef(false);
+  const noHasBook = useRef(false);
+
   // Subscribe to singleton WS service for real-time updates
   useEffect(() => {
     if (!enabled) return;
+
+    // Reset throttle on token change
+    yesHasBook.current = false;
+    noHasBook.current = false;
+    yesLastDeltaAt.current = 0;
+    noLastDeltaAt.current = 0;
+    yesLastBookAt.current = 0;
+    noLastBookAt.current = 0;
 
     const service = PolymarketOrderBookService.getInstance();
     const unsubs: (() => void)[] = [];
@@ -163,10 +208,26 @@ export default function usePolymarketOrderBook(
     if (yesTokenId) {
       unsubs.push(service.subscribe(
         yesTokenId,
-        // onBook
-        (data) => setYesOrderBook(processOrderBook(data, yesTokenId)),
-        // onPriceChange
+        // onBook — full snapshot (throttled to prevent flicker)
+        (data) => {
+          const now = Date.now();
+          // Always accept first book
+          if (!yesHasBook.current) {
+            yesHasBook.current = true;
+            yesLastBookAt.current = now;
+            setYesOrderBook(processOrderBook(data, yesTokenId));
+            return;
+          }
+          // Skip if a delta just arrived (same data, prevents double render)
+          if (now - yesLastDeltaAt.current < BOOK_SKIP_AFTER_DELTA_MS) return;
+          // Force accept for resync if it's been a while
+          if (now - yesLastBookAt.current < BOOK_FORCE_ACCEPT_MS) return;
+          yesLastBookAt.current = now;
+          setYesOrderBook(processOrderBook(data, yesTokenId));
+        },
+        // onPriceChange — apply delta to order book levels + update summary
         (change) => {
+          yesLastDeltaAt.current = Date.now();
           const ts = change.timestamp ? parseInt(change.timestamp) : Date.now();
           const priceUpdate: RealtimePriceUpdate = {
             assetId: yesTokenId,
@@ -176,12 +237,25 @@ export default function usePolymarketOrderBook(
             timestamp: ts,
           };
           setYesRealtimePrice(priceUpdate);
-          setYesOrderBook(prev => prev ? {
-            ...prev,
-            midPrice: (priceUpdate.bestBid + priceUpdate.bestAsk) / 2,
-            spread: priceUpdate.bestAsk - priceUpdate.bestBid,
-            timestamp: ts,
-          } : prev);
+          setYesOrderBook(prev => {
+            if (!prev) return prev;
+            const side = (change.side || '').toUpperCase();
+            let newBids = prev.bids;
+            let newAsks = prev.asks;
+
+            if (side === 'BUY') {
+              newBids = applyDeltaToLevels(prev.bids, change.price, change.size, true);
+            } else if (side === 'SELL') {
+              newAsks = applyDeltaToLevels(prev.asks, change.price, change.size, false);
+            }
+
+            const bestBid = newBids.length > 0 ? parseFloat(newBids[0].price) : 0;
+            const bestAsk = newAsks.length > 0 ? parseFloat(newAsks[0].price) : 0;
+            const spread = bestAsk > 0 && bestBid > 0 ? bestAsk - bestBid : undefined;
+            const midPrice = spread !== undefined ? (bestBid + bestAsk) / 2 : undefined;
+
+            return { ...prev, bids: newBids, asks: newAsks, spread, midPrice, timestamp: ts };
+          });
         },
         // onLastTradePrice
         (trade) => setYesLastTrade(trade),
@@ -193,10 +267,23 @@ export default function usePolymarketOrderBook(
     if (noTokenId) {
       unsubs.push(service.subscribe(
         noTokenId,
-        // onBook
-        (data) => setNoOrderBook(processOrderBook(data, noTokenId)),
-        // onPriceChange
+        // onBook — full snapshot (throttled to prevent flicker)
+        (data) => {
+          const now = Date.now();
+          if (!noHasBook.current) {
+            noHasBook.current = true;
+            noLastBookAt.current = now;
+            setNoOrderBook(processOrderBook(data, noTokenId));
+            return;
+          }
+          if (now - noLastDeltaAt.current < BOOK_SKIP_AFTER_DELTA_MS) return;
+          if (now - noLastBookAt.current < BOOK_FORCE_ACCEPT_MS) return;
+          noLastBookAt.current = now;
+          setNoOrderBook(processOrderBook(data, noTokenId));
+        },
+        // onPriceChange — apply delta to order book levels + update summary
         (change) => {
+          noLastDeltaAt.current = Date.now();
           const ts = change.timestamp ? parseInt(change.timestamp) : Date.now();
           const priceUpdate: RealtimePriceUpdate = {
             assetId: noTokenId,
@@ -206,12 +293,25 @@ export default function usePolymarketOrderBook(
             timestamp: ts,
           };
           setNoRealtimePrice(priceUpdate);
-          setNoOrderBook(prev => prev ? {
-            ...prev,
-            midPrice: (priceUpdate.bestBid + priceUpdate.bestAsk) / 2,
-            spread: priceUpdate.bestAsk - priceUpdate.bestBid,
-            timestamp: ts,
-          } : prev);
+          setNoOrderBook(prev => {
+            if (!prev) return prev;
+            const side = (change.side || '').toUpperCase();
+            let newBids = prev.bids;
+            let newAsks = prev.asks;
+
+            if (side === 'BUY') {
+              newBids = applyDeltaToLevels(prev.bids, change.price, change.size, true);
+            } else if (side === 'SELL') {
+              newAsks = applyDeltaToLevels(prev.asks, change.price, change.size, false);
+            }
+
+            const bestBid = newBids.length > 0 ? parseFloat(newBids[0].price) : 0;
+            const bestAsk = newAsks.length > 0 ? parseFloat(newAsks[0].price) : 0;
+            const spread = bestAsk > 0 && bestBid > 0 ? bestAsk - bestBid : undefined;
+            const midPrice = spread !== undefined ? (bestBid + bestAsk) / 2 : undefined;
+
+            return { ...prev, bids: newBids, asks: newAsks, spread, midPrice, timestamp: ts };
+          });
         },
         // onLastTradePrice
         (trade) => setNoLastTrade(trade),
@@ -220,9 +320,10 @@ export default function usePolymarketOrderBook(
       ));
     }
 
-    // Poll connection status from the singleton
+    // Poll connection status — only update state when value actually changes
     const statusInterval = setInterval(() => {
-      setIsConnected(service.isConnected);
+      const connected = service.isConnected;
+      setIsConnected(prev => prev === connected ? prev : connected);
     }, 2000);
 
     return () => {

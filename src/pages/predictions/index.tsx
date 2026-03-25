@@ -67,6 +67,7 @@ export default function PredictionsPage() {
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [selectedSort, setSelectedSort] = useState<SortOption>('hot');
   const [searchQuery, setSearchQuery] = useState('');
+  const [serverSearchResults, setServerSearchResults] = useState<UnifiedPredictionMarket[]>([]);
   const [marketFilters, setMarketFilters] = useState<MarketFilterState>(DEFAULT_FILTERS);
   const [viewMode, setViewMode] = useState<'curated' | 'grid'>('curated');
   const [showPortfolio, setShowPortfolio] = useState(false); // Default closed
@@ -86,9 +87,13 @@ export default function PredictionsPage() {
     totalMarkets,
     dflowCount,
     polymarketCount,
+    totalAvailable,
+    hasMore,
+    loadMore,
+    isFetchingMore,
   } = useUnifiedPredictionMarkets({
     source: dataSource,
-    limit: 100,
+    limit: 500,
     refreshInterval: 30000, // Refresh every 30 seconds
   });
 
@@ -107,7 +112,8 @@ export default function PredictionsPage() {
 
   // Use API markets or fallback
   const allMarkets = useMemo(() => {
-    if (unifiedMarkets.length > 0) return unifiedMarkets;
+    const markets = unifiedMarkets || [];
+    if (markets.length > 0) return markets;
     if (isLoading) return FALLBACK_MARKETS;
     return [];
   }, [unifiedMarkets, isLoading]);
@@ -194,20 +200,93 @@ export default function PredictionsPage() {
     return markets;
   }, [allMarkets, selectedCategory, selectedSort, searchQuery, marketFilters]);
 
+  // Server-side search alongside client-side for best coverage
+  useEffect(() => {
+    if (!searchQuery || searchQuery.length < 2) {
+      setServerSearchResults([]);
+      return;
+    }
+    const timer = setTimeout(() => {
+      try {
+        const backendUrl = typeof window !== 'undefined'
+          ? ((window as any).__NEXT_DATA__?.runtimeConfig?.NEXT_PUBLIC_BACKEND_URL || process.env.NEXT_PUBLIC_BACKEND_URL || '')
+          : '';
+        if (!backendUrl) return;
+        fetch(`${backendUrl}/api/prediction/polymarket/search?q=${encodeURIComponent(searchQuery)}&limit=20`)
+          .then(r => r.ok ? r.json() : null)
+          .then(json => {
+            if (!json?.data || !Array.isArray(json.data)) return;
+            const events = json.data;
+            const markets: UnifiedPredictionMarket[] = [];
+            for (const evt of events) {
+              if (!evt?.title) continue;
+              const market = (evt.markets || [])[0];
+              if (!market) continue;
+              let yesPrice = 0.5;
+              try {
+                const prices = JSON.parse(market.outcomePrices || '[]');
+                yesPrice = parseFloat(prices[0]) || 0.5;
+              } catch {}
+              let clobTokenIds: string[] = [];
+              try { clobTokenIds = JSON.parse(market.clobTokenIds || '[]'); } catch {}
+              markets.push({
+                ticker: evt.slug || market.slug || `poly-${market.id || ''}`,
+                title: evt.title,
+                category: 'other',
+                yesPrice,
+                noPrice: 1 - yesPrice,
+                yesPriceChange24h: 0,
+                noPriceChange24h: 0,
+                volume24h: evt.volume24hr || 0,
+                totalVolume: parseFloat(evt.volume) || 0,
+                closesAt: evt.endDate || market.endDate || new Date(Date.now() + 30 * 86400000).toISOString(),
+                status: 'active',
+                source: 'polymarket',
+                marketType: 'binary',
+                polymarketData: market.conditionId ? {
+                  eventId: evt.id || '',
+                  marketId: market.id || '',
+                  conditionId: market.conditionId,
+                  yesTokenId: clobTokenIds[0] || '',
+                  noTokenId: clobTokenIds[1] || '',
+                  tickSize: market.tickSize || '0.01',
+                  negRisk: market.negRisk || false,
+                } : undefined,
+              } as any);
+            }
+            setServerSearchResults(markets);
+          })
+          .catch(() => setServerSearchResults([]));
+      } catch {
+        setServerSearchResults([]);
+      }
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [searchQuery]);
+
+  // Merge client-side + server-side results (deduplicate by ticker)
+  const mergedFilteredMarkets = useMemo(() => {
+    const base = filteredMarkets || [];
+    const server = serverSearchResults || [];
+    if (server.length === 0) return base;
+    const seen = new Set(base.map(m => m.ticker));
+    const extra = server.filter(m => m?.ticker && !seen.has(m.ticker));
+    return [...base, ...extra];
+  }, [filteredMarkets, serverSearchResults]);
+
   // Split into active vs ended markets
   // A market is "ended" if its status is closed/resolved OR its closesAt date has passed
-  // (Polymarket keeps status='active' even after closesAt passes)
   const activeMarkets = useMemo(() => {
     const now = Date.now();
-    return filteredMarkets.filter((m) =>
-      m.status === 'active' && new Date(m.closesAt).getTime() > now
+    return (mergedFilteredMarkets || []).filter((m) =>
+      m && m.status === 'active' && new Date(m.closesAt).getTime() > now
     );
-  }, [filteredMarkets]);
+  }, [mergedFilteredMarkets]);
 
   const endedMarkets = useMemo(() => {
     const now = Date.now();
-    return filteredMarkets.filter((m) =>
-      m.status !== 'active' || new Date(m.closesAt).getTime() <= now
+    return (mergedFilteredMarkets || []).filter((m) =>
+      m && (m.status !== 'active' || new Date(m.closesAt).getTime() <= now)
     );
   }, [filteredMarkets]);
 
@@ -385,7 +464,7 @@ export default function PredictionsPage() {
                 {pageMode === 'browse' && (
                   <div className="mt-2">
                     <StatsBar
-                      totalMarkets={allMarkets.length}
+                      totalMarkets={totalAvailable > 0 ? totalAvailable : allMarkets.length}
                       totalVolume={totalVolume}
                       activeTraders={12_450}
                     />
@@ -596,6 +675,7 @@ export default function PredictionsPage() {
                   selectedCategory={selectedCategory}
                   onSelectCategory={setSelectedCategory}
                   categoryCounts={categoryCounts}
+                  totalAvailable={totalAvailable}
                 />
                 {/* Divider */}
                 <div
@@ -627,7 +707,7 @@ export default function PredictionsPage() {
           {/* Markets Grid */}
           <div className="mb-8">
             {/* Section Header for Grid View */}
-            {!isLoading && filteredMarkets.length > 0 && (
+            {!isLoading && mergedFilteredMarkets.length > 0 && (
               <div className="flex items-center justify-between mb-4">
                 <div className="flex items-center gap-2">
                   <HiOutlineViewGrid className="w-5 h-5" style={{ color: AX.accent }} />
@@ -638,7 +718,10 @@ export default function PredictionsPage() {
                     className="px-2 py-0.5 rounded-full text-xs font-medium"
                     style={{ backgroundColor: `${AX.accent}15`, color: AX.accent }}
                   >
-                    {activeMarkets.length}
+                    {selectedCategory === 'all'
+                      ? (totalAvailable > 0 ? totalAvailable.toLocaleString() : activeMarkets.length)
+                      : activeMarkets.length.toLocaleString()
+                    }
                   </span>
                 </div>
               </div>
@@ -650,7 +733,7 @@ export default function PredictionsPage() {
                   <SkeletonShimmer key={i} />
                 ))}
               </div>
-            ) : filteredMarkets.length === 0 ? (
+            ) : mergedFilteredMarkets.length === 0 ? (
               <motion.div
                 initial={{ opacity: 0, y: 16 }}
                 animate={{ opacity: 1, y: 0 }}
@@ -707,6 +790,40 @@ export default function PredictionsPage() {
                         />
                       );
                     })}
+                  </div>
+                )}
+
+                {/* Load More Markets */}
+                {hasMore && !searchQuery && (
+                  <div className="flex flex-col items-center gap-2 mt-6">
+                    <button
+                      onClick={loadMore}
+                      disabled={isFetchingMore}
+                      className="px-6 py-2.5 rounded-xl text-sm font-medium transition-all duration-200 hover:scale-[1.02] active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed"
+                      style={{
+                        background: 'linear-gradient(135deg, rgba(99,102,241,0.15), rgba(139,92,246,0.15))',
+                        border: '1px solid rgba(99,102,241,0.25)',
+                        color: '#a5b4fc',
+                      }}
+                    >
+                      {isFetchingMore ? (
+                        <span className="flex items-center gap-2">
+                          <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24" fill="none">
+                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                          </svg>
+                          Loading...
+                        </span>
+                      ) : (
+                        `Load More Markets`
+                      )}
+                    </button>
+                    <span className="text-xs" style={{ color: AX.muted }}>
+                      {selectedCategory === 'all'
+                        ? `Showing ${(activeMarkets.length + endedMarkets.length).toLocaleString()} of ${totalAvailable.toLocaleString()} markets`
+                        : `Showing ${activeMarkets.length.toLocaleString()} ${selectedCategory} markets — load more to discover more`
+                      }
+                    </span>
                   </div>
                 )}
 

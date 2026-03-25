@@ -29,7 +29,11 @@ export default function StatsBar({ totalMarkets, totalVolume, activeTraders = 0 
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       transition={{ duration: 0.4 }}
-      className="flex flex-wrap items-center gap-x-5 gap-y-2 text-[13px]"
+      className="inline-flex flex-wrap items-center gap-x-5 gap-y-2 text-[13px] px-4 py-2 rounded-xl"
+      style={{
+        backgroundColor: 'rgba(12, 14, 18, 0.75)',
+        border: '1px solid rgba(255,255,255,0.06)',
+      }}
     >
       {/* Live indicator */}
       <div className="flex items-center gap-2">

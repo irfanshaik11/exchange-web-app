@@ -36,6 +36,11 @@ interface UseUnifiedPredictionMarketsResult {
   totalMarkets: number;
   dflowCount: number;
   polymarketCount: number;
+  // Pagination (from Polymarket infinite query)
+  totalAvailable: number;
+  hasMore: boolean;
+  loadMore: () => void;
+  isFetchingMore: boolean;
 }
 
 export default function useUnifiedPredictionMarkets(
@@ -73,6 +78,10 @@ export default function useUnifiedPredictionMarkets(
     error: polymarketError,
     refetch: polymarketRefetch,
     totalVolume: polymarketVolume,
+    totalAvailable: polymarketTotalAvailable,
+    hasMore: polymarketHasMore,
+    loadMore: polymarketLoadMore,
+    isFetchingMore: polymarketIsFetchingMore,
   } = usePolymarketMarkets({
     enabled: source === 'all' || source === 'polymarket',
     limit,
@@ -138,5 +147,10 @@ export default function useUnifiedPredictionMarkets(
     totalMarkets: combinedMarkets.length,
     dflowCount: dflowMarkets.length,
     polymarketCount: polymarketMarkets.length,
+    // Pagination (Polymarket)
+    totalAvailable: polymarketTotalAvailable,
+    hasMore: polymarketHasMore,
+    loadMore: polymarketLoadMore,
+    isFetchingMore: polymarketIsFetchingMore,
   };
 }

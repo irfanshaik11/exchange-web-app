@@ -1,5 +1,5 @@
-import { useMemo } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useMemo, useCallback } from 'react';
+import { useQuery, useInfiniteQuery } from '@tanstack/react-query';
 import type { ExtendedPredictionMarket } from './useDFlowMarkets';
 import { env } from '~/env';
 
@@ -77,22 +77,33 @@ const safeJsonParse = <T>(str: string, fallback: T): T => {
 };
 
 // Map Polymarket tags to our category system
+// Based on actual Polymarket tag distribution: Sports (177), Games (141), Politics (126),
+// Geopolitics (74), Esports (64), Weather (57), Crypto (55), Culture (30), Finance (31), etc.
+const CATEGORY_TAG_MAP: Record<string, string[]> = {
+  politics: ['politics', 'elections', 'global elections', 'world elections', 'congress', 'president', 'senate', 'geopolitics', 'trump', 'world', 'iran', 'israel', 'middle east'],
+  sports: ['sports', 'nfl', 'nba', 'mlb', 'soccer', 'football', 'basketball', 'tennis', 'baseball', 'hockey', 'mma', 'boxing', 'cricket', 'f1', 'golf', 'rugby'],
+  crypto: ['crypto', 'bitcoin', 'ethereum', 'blockchain', 'crypto prices', 'defi', 'solana', 'altcoins'],
+  economics: ['finance', 'economy', 'fed', 'interest rates', 'stocks', 'markets', 'gdp', 'inflation', 'tariffs'],
+  entertainment: ['entertainment', 'movies', 'oscars', 'music', 'culture', 'tv', 'celebrity', 'games', 'esports', 'counter strike 2', 'gaming', 'eurovision', 'awards'],
+  science: ['science', 'tech', 'ai', 'space', 'weather', 'daily temperature', 'climate', 'health'],
+};
+
 const mapPolymarketCategory = (tags: PolymarketTag[], title: string): string => {
   const tagLabels = tags.map(t => t.label.toLowerCase());
   const titleLower = title.toLowerCase();
 
-  // Check tags first
-  if (tagLabels.some(t => ['politics', 'election', 'congress', 'president', 'senate'].includes(t))) return 'politics';
-  if (tagLabels.some(t => ['sports', 'nfl', 'nba', 'mlb', 'soccer', 'football'].includes(t))) return 'sports';
-  if (tagLabels.some(t => ['crypto', 'bitcoin', 'ethereum', 'blockchain'].includes(t))) return 'crypto';
-  if (tagLabels.some(t => ['finance', 'economy', 'fed', 'interest rates'].includes(t))) return 'economics';
-  if (tagLabels.some(t => ['entertainment', 'movies', 'oscars', 'music'].includes(t))) return 'entertainment';
-  if (tagLabels.some(t => ['science', 'tech', 'ai', 'space'].includes(t))) return 'science';
+  // Check tags against category map
+  for (const [category, keywords] of Object.entries(CATEGORY_TAG_MAP)) {
+    if (tagLabels.some(t => keywords.includes(t))) return category;
+  }
 
-  // Fallback to title analysis
-  if (titleLower.includes('trump') || titleLower.includes('biden') || titleLower.includes('election')) return 'politics';
-  if (titleLower.includes('bitcoin') || titleLower.includes('eth') || titleLower.includes('crypto')) return 'crypto';
-  if (titleLower.includes('fed') || titleLower.includes('interest rate')) return 'economics';
+  // Fallback to title keyword analysis
+  if (/trump|biden|election|senate|congress|vote|republican|democrat|governor/i.test(titleLower)) return 'politics';
+  if (/bitcoin|btc|eth|crypto|solana|sol price/i.test(titleLower)) return 'crypto';
+  if (/fed |interest rate|gdp|inflation|stock|s&p|nasdaq|tariff/i.test(titleLower)) return 'economics';
+  if (/nba|nfl|mlb|premier league|champions league|world cup|tennis|boxing|ufc/i.test(titleLower)) return 'sports';
+  if (/movie|oscars|grammy|emmy|eurovision|netflix|game|esport/i.test(titleLower)) return 'entertainment';
+  if (/ai |openai|gpt|spacex|nasa|temperature|weather/i.test(titleLower)) return 'science';
 
   return 'other';
 };
@@ -100,8 +111,8 @@ const mapPolymarketCategory = (tags: PolymarketTag[], title: string): string => 
 // Transform Polymarket event to a SINGLE ExtendedPredictionMarket
 // Multi-outcome events (like "Who will Trump nominate?") should show as ONE card, not one per outcome
 const transformToUnified = (event: PolymarketEvent): ExtendedPredictionMarket[] => {
-  // Always return ONE card per event
-  if (event.markets.length === 0) return [];
+  // Guard: skip events with no markets or malformed data
+  if (!event?.markets || !Array.isArray(event.markets) || event.markets.length === 0) return [];
 
   // For multi-outcome markets, find the leading outcome (highest YES probability)
   // For simple Yes/No markets, just use the first market
@@ -215,89 +226,143 @@ interface UsePolymarketMarketsResult {
   refetch: () => Promise<void>;
   totalVolume: number;
   totalMarkets: number;
+  // Pagination
+  totalAvailable: number;  // Total events available on Polymarket
+  hasMore: boolean;        // Whether more pages can be loaded
+  loadMore: () => void;    // Fetch the next page
+  isFetchingMore: boolean; // True when loading next page
 }
 
-// Fetch function for React Query
-async function fetchPolymarketEvents(limit: number): Promise<{
-  events: PolymarketEvent[];
-  markets: ExtendedPredictionMarket[];
-  totalVolume: number;
-}> {
-  const params = new URLSearchParams();
-  params.set('limit', limit.toString());
-  params.set('active', 'true');
-  params.set('closed', 'false');
-  params.set('order', 'volume24hr');
-  params.set('ascending', 'false');
+// Catalog page response shape from our backend
+interface CatalogPageResponse {
+  success: boolean;
+  data: PolymarketEvent[];
+  page: number;
+  pageSize: number;
+  total: number;
+  hasMore: boolean;
+  count: number;
+}
 
-  const response = await fetch(`${API_BASE}/events?${params}`);
+// Fetch a single page from our paginated /catalog endpoint
+async function fetchCatalogPage(page: number, pageSize: number): Promise<CatalogPageResponse> {
+  const params = new URLSearchParams();
+  params.set('page', page.toString());
+  params.set('pageSize', pageSize.toString());
+
+  const response = await fetch(`${API_BASE}/catalog?${params}`);
 
   if (!response.ok) {
     throw new Error(`Polymarket API error: ${response.status}`);
   }
 
   const json = await response.json();
-  const eventsData: PolymarketEvent[] = json.data || json.events || [];
-
-  // Transform all events to unified market format
-  const allMarkets: ExtendedPredictionMarket[] = [];
-  for (const event of eventsData) {
-    const transformed = transformToUnified(event);
-    allMarkets.push(...transformed);
-  }
-
-  const totalVolume = allMarkets.reduce((sum, m) => sum + (m.volume24h || 0), 0);
-
-  isDev && console.log(`[Polymarket] Fetched ${allMarkets.length} markets from ${eventsData.length} events`);
-
-  return { events: eventsData, markets: allMarkets, totalVolume };
+  // Ensure response has required shape (guard against malformed responses)
+  return {
+    success: json.success ?? true,
+    data: Array.isArray(json.data) ? json.data : [],
+    page: json.page ?? page,
+    pageSize: json.pageSize ?? pageSize,
+    total: json.total ?? 0,
+    hasMore: json.hasMore ?? false,
+    count: json.count ?? 0,
+  };
 }
 
 export default function usePolymarketMarkets(options: UsePolymarketMarketsOptions = {}): UsePolymarketMarketsResult {
   const {
     enabled = true,
-    limit = 50,
+    limit = 500,
     category,
     refreshInterval = 60000,
   } = options;
 
-  // Use React Query for instant loading + always fresh data
+  // Each page loads 500 events (max Gamma API batch) — the backend serves
+  // these as slices from a cached catalog so the cost is minimal.
+  const pageSize = Math.min(limit, 500);
+
+  // Use infinite query for paginated loading from /catalog
   const {
     data,
     isLoading,
     isFetching,
+    isFetchingNextPage,
     error,
     refetch,
-  } = useQuery({
-    queryKey: ['polymarket', 'events', limit],
-    queryFn: () => fetchPolymarketEvents(limit),
+    fetchNextPage,
+    hasNextPage,
+  } = useInfiniteQuery({
+    queryKey: ['polymarket', 'catalog', pageSize],
+    queryFn: ({ pageParam = 1 }) => fetchCatalogPage(pageParam, pageSize),
+    initialPageParam: 1,
+    getNextPageParam: (lastPage) => lastPage.hasMore ? lastPage.page + 1 : undefined,
     enabled,
-    staleTime: STALE_TIME,           // 0 = always refetch fresh data
-    gcTime: CACHE_TIME,              // Keep in cache for instant placeholder
-    refetchInterval: refreshInterval, // Background refresh every 60s
-    refetchOnWindowFocus: true,      // Refresh when user comes back to tab
-    refetchOnMount: true,            // Always fetch on mount
-    retry: 2,                        // Retry failed requests twice
-    // Show cached data instantly while fetching fresh
-    placeholderData: (previousData) => previousData,
+    staleTime: STALE_TIME,
+    gcTime: CACHE_TIME,
+    refetchInterval: refreshInterval,
+    refetchOnWindowFocus: true,
+    refetchOnMount: true,
+    retry: 2,
   });
+
+  // Flatten all pages into a single events + markets array
+  const { allEvents, allMarkets, totalVolume, totalAvailable } = useMemo(() => {
+    if (!data?.pages) return { allEvents: [] as PolymarketEvent[], allMarkets: [] as ExtendedPredictionMarket[], totalVolume: 0, totalAvailable: 0 };
+
+    const events: PolymarketEvent[] = [];
+    const markets: ExtendedPredictionMarket[] = [];
+    let volume = 0;
+    let total = 0;
+
+    for (const page of data.pages) {
+      if (!page) continue;
+      const pageEvents = Array.isArray(page.data) ? page.data : [];
+      events.push(...pageEvents);
+      total = page.total || total; // Use latest total from backend
+
+      for (const event of pageEvents) {
+        if (!event) continue;
+        try {
+          const transformed = transformToUnified(event);
+          markets.push(...transformed);
+        } catch {
+          // Skip malformed events
+        }
+      }
+    }
+
+    volume = markets.reduce((sum, m) => sum + (m.volume24h || 0), 0);
+    isDev && console.log(`[Polymarket] ${markets.length} markets from ${events.length} events (${total} total available)`);
+
+    return { allEvents: events, allMarkets: markets, totalVolume: volume, totalAvailable: total };
+  }, [data?.pages]);
 
   // Filter by category (applied client-side for instant filtering)
   const filteredMarkets = useMemo(() => {
-    if (!data?.markets) return [];
-    if (!category || category === 'all') return data.markets;
-    return data.markets.filter(m => m.category === category);
-  }, [data?.markets, category]);
+    if (!category || category === 'all') return allMarkets;
+    return allMarkets.filter(m => m.category === category);
+  }, [allMarkets, category]);
+
+  const loadMore = useCallback(() => {
+    if (hasNextPage && !isFetchingNextPage) {
+      fetchNextPage();
+    }
+  }, [hasNextPage, isFetchingNextPage, fetchNextPage]);
 
   return {
     markets: filteredMarkets,
-    events: data?.events || [],
-    isLoading: isLoading && !data,  // Only true on first load (no cached data)
-    isRefreshing: isFetching && !!data, // True when refreshing with cached data shown
+    events: allEvents,
+    isLoading: isLoading && !data,
+    isRefreshing: isFetching && !!data && !isFetchingNextPage,
     error: error ? (error instanceof Error ? error.message : 'Failed to fetch Polymarket data') : null,
     refetch: async () => { await refetch(); },
-    totalVolume: data?.totalVolume || 0,
+    totalVolume,
     totalMarkets: filteredMarkets.length,
+    // Pagination
+    totalAvailable,
+    hasMore: !!hasNextPage,
+    loadMore,
+    isFetchingMore: isFetchingNextPage,
   };
 }
 
@@ -572,14 +637,16 @@ export interface PolymarketHolder {
 // Hook to fetch Polymarket top holders (React Query — fetch once, no auto-refresh)
 export function usePolymarketHolders(
   conditionId: string | undefined,
-  options: { limit?: number; enabled?: boolean } = {}
+  options: { limit?: number; refreshInterval?: number; enabled?: boolean } = {}
 ) {
-  const { limit = 20, enabled = true } = options;
+  const { limit, refreshInterval = 60000, enabled = true } = options;
 
   const { data: holders, isLoading, error, refetch } = useQuery({
     queryKey: ['polymarket', 'holders', conditionId, limit],
     queryFn: async () => {
-      const response = await fetch(`${API_BASE}/holders?market=${encodeURIComponent(conditionId!)}&limit=${limit}`);
+      const params = new URLSearchParams({ market: conditionId! });
+      if (limit) params.set('limit', limit.toString());
+      const response = await fetch(`${API_BASE}/holders?${params}`);
       if (!response.ok) throw new Error(`API error: ${response.status}`);
       const json = await response.json();
       const data = json.data || json;
@@ -588,6 +655,7 @@ export function usePolymarketHolders(
     enabled: enabled && !!conditionId,
     staleTime: STALE_TIME,
     gcTime: CACHE_TIME,
+    refetchInterval: refreshInterval > 0 ? refreshInterval : false,
     placeholderData: (prev: any) => prev,
   });
 

@@ -103,6 +103,43 @@ function SectionDivider({ label }: { label: string }) {
   );
 }
 
+/** Skeleton placeholder card for AI markets while generating */
+function AICardSkeleton({ index }: { index: number }) {
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 12 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.35, delay: index * 0.1, ease: EASE_ENTRANCE }}
+      className="rounded-2xl overflow-hidden"
+      style={{
+        backgroundColor: 'rgba(12, 14, 18, 0.75)',
+        border: `1px solid ${T.border}`,
+      }}
+    >
+      <div className="p-4 flex flex-col gap-3">
+        {/* Top row skeleton */}
+        <div className="flex items-center justify-between">
+          <div className="h-5 w-10 rounded shimmer-bg" />
+          <div className="h-4 w-16 rounded shimmer-bg" />
+        </div>
+        {/* Title skeleton — two lines */}
+        <div className="flex flex-col gap-1.5">
+          <div className="h-4 w-full rounded shimmer-bg" />
+          <div className="h-4 w-3/4 rounded shimmer-bg" />
+        </div>
+        {/* Rules skeleton */}
+        <div className="h-3 w-5/6 rounded shimmer-bg" />
+        {/* Price bar skeleton */}
+        <div className="flex items-center justify-between">
+          <div className="h-4 w-14 rounded shimmer-bg" />
+          <div className="h-4 w-14 rounded shimmer-bg" />
+        </div>
+        <div className="h-[3px] w-full rounded-full shimmer-bg" />
+      </div>
+    </motion.div>
+  );
+}
+
 // ---------------------------------------------------------------------------
 // Main component
 // ---------------------------------------------------------------------------
@@ -251,7 +288,7 @@ export default function TalarionCreate({ onMarketClick, authToken }: TalarionCre
   }, [charCount]);
 
   const canSubmit = query.trim().length > 0 && !isGenerating;
-  const showSuggestions = generatedMarkets.length === 0 && !isGenerating;
+  const showSuggestions = generatedMarkets.length === 0 && !isGenerating && !isTrading;
 
   return (
     <div
@@ -473,16 +510,11 @@ export default function TalarionCreate({ onMarketClick, authToken }: TalarionCre
         )}
       </AnimatePresence>
 
-      {/* Loading state */}
-      <AnimatePresence mode="wait">
-        {isGenerating && <GeneratingIndicator key="generating" />}
-      </AnimatePresence>
-
       </div>{/* End centered inner column */}
 
-      {/* Generated markets — full width */}
+      {/* AI Generated Markets — skeleton placeholders + real cards as they stream in */}
       <AnimatePresence>
-        {generatedMarkets.length > 0 && (
+        {(isGenerating || generatedMarkets.length > 0) && (
           <motion.div
             key="results"
             ref={resultsRef}
@@ -495,7 +527,7 @@ export default function TalarionCreate({ onMarketClick, authToken }: TalarionCre
             </div>
 
             {/* Clear button */}
-            {generatedMarkets.length > 2 && (
+            {generatedMarkets.length > 2 && !isGenerating && (
               <div className="flex justify-end mb-3">
                 <button
                   onClick={clearMarkets}
@@ -513,9 +545,11 @@ export default function TalarionCreate({ onMarketClick, authToken }: TalarionCre
               </div>
             )}
 
-            {/* Cards grid */}
+            {/* Cards grid — real cards + skeleton placeholders */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {generatedMarkets.map((instrument, i) => (
+              {(generatedMarkets || [])
+                .filter((inst): inst is TalarionInstrument => Boolean(inst?.instrument_id && inst?.title))
+                .map((instrument, i) => (
                 <TalarionMarketCard
                   key={instrument.instrument_id}
                   instrument={instrument}
@@ -525,12 +559,19 @@ export default function TalarionCreate({ onMarketClick, authToken }: TalarionCre
                     if (onMarketClick) {
                       onMarketClick(id);
                     } else {
-                      // Default: open trade panel on YES side
                       handleTrade(id, 'yes');
                     }
                   }}
                 />
               ))}
+              {/* Skeleton placeholders for remaining cards while generating */}
+              {isGenerating && (() => {
+                const validCount = (generatedMarkets || []).filter(m => m?.instrument_id && m?.title).length;
+                const remaining = Math.max(0, 3 - validCount);
+                return Array.from({ length: remaining }, (_, i) =>
+                  <AICardSkeleton key={`skel-${i}`} index={validCount + i} />
+                );
+              })()}
             </div>
           </motion.div>
         )}
@@ -549,7 +590,7 @@ export default function TalarionCreate({ onMarketClick, authToken }: TalarionCre
             <SectionDivider label="Public Markets" />
 
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 mt-3">
-              {matchingPublicMarkets.map((market, i) => {
+              {(matchingPublicMarkets || []).filter(Boolean).map((market, i) => {
                 const yesCents = Math.round(market.yesPrice * 100);
                 const noCents = Math.round(market.noPrice * 100);
                 const vol = parseFloat(market.volume);
@@ -738,6 +779,22 @@ export default function TalarionCreate({ onMarketClick, authToken }: TalarionCre
       <style jsx>{`
         input::placeholder {
           color: ${T.subtle};
+        }
+
+        .shimmer-bg {
+          background: linear-gradient(
+            110deg,
+            rgba(255, 255, 255, 0.02) 30%,
+            rgba(255, 255, 255, 0.06) 50%,
+            rgba(255, 255, 255, 0.02) 70%
+          );
+          background-size: 200% 100%;
+          animation: shimmer 1.8s ease-in-out infinite;
+        }
+
+        @keyframes shimmer {
+          0% { background-position: 200% 0; }
+          100% { background-position: -200% 0; }
         }
 
         @media (prefers-reduced-motion: reduce) {

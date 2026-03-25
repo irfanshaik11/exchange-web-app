@@ -138,6 +138,105 @@ export default function useTalarion(authToken?: string): UseTalarionResult {
     return headers;
   }, [authToken]);
 
+  /**
+   * Parse an SSE stream and call onInstrument for each instrument event.
+   * Returns the collected instruments array.
+   */
+  const consumeSSEStream = async (
+    response: globalThis.Response,
+    onInstrument: (inst: TalarionInstrument) => void,
+    signal: AbortSignal,
+  ): Promise<TalarionInstrument[]> => {
+    const allInstruments: TalarionInstrument[] = [];
+    const reader = response.body?.getReader();
+    if (!reader) return allInstruments;
+
+    const decoder = new TextDecoder();
+    let buffer = '';
+    // Persist across chunks — an event may span multiple reader.read() calls
+    let currentEvent = '';
+    let currentData = '';
+
+    try {
+      while (true) {
+        if (signal.aborted) break;
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+
+        // Parse complete SSE events from buffer
+        const lines = buffer.split('\n');
+        buffer = lines.pop() ?? ''; // Keep incomplete last line in buffer
+
+        for (const line of lines) {
+          if (line.startsWith('event: ')) {
+            currentEvent = line.slice(7).trim();
+          } else if (line.startsWith('data: ')) {
+            currentData = line.slice(6);
+          } else if (line === '' && currentData) {
+            // Empty line = end of SSE event
+            if (currentEvent === 'instrument') {
+              try {
+                const inst: TalarionInstrument = JSON.parse(currentData);
+                if (inst?.instrument_id && inst?.title) {
+                  // Keep price as-is (null = card shows loading dots, real = card shows buttons)
+                  allInstruments.push(inst);
+                  onInstrument(inst);
+                }
+              } catch (e) {
+                console.warn('[useTalarion] SSE parse error:', e);
+              }
+            }
+            // Reset for next event
+            currentEvent = '';
+            currentData = '';
+          }
+        }
+      }
+    } catch (e) {
+      console.warn('[useTalarion] SSE stream read error:', e);
+    } finally {
+      reader.releaseLock();
+    }
+
+    return allInstruments;
+  };
+
+  /** Fire background quote fetches for instruments missing a price, retry until Talarion delivers */
+  const fetchMissingQuotes = (instruments: TalarionInstrument[]) => {
+    const updatePrice = (instrumentId: string, price: number) => {
+      setGeneratedMarkets((prev) =>
+        prev.filter(Boolean).map((m) =>
+          m.instrument_id === instrumentId ? { ...m, price } : m
+        )
+      );
+    };
+
+    const isValidPrice = (p: number | undefined | null): p is number =>
+      p != null && p > 0.01 && p < 0.99;
+
+    for (const inst of instruments) {
+      if (isValidPrice(inst.price)) continue;
+
+      const fetchUntilPriced = async () => {
+        const delays = [0, 1500, 3000, 5000, 8000]; // escalating waits
+        for (const delay of delays) {
+          if (delay > 0) await new Promise(r => setTimeout(r, delay));
+          try {
+            const q = await getQuote(inst.instrument_id, true, 10);
+            if (isValidPrice(q.price)) {
+              updatePrice(inst.instrument_id, q.price);
+              return;
+            }
+          } catch { /* retry */ }
+        }
+      };
+
+      fetchUntilPriced();
+    }
+  };
+
   const generateMarkets = useCallback(
     async (query: string, resolutionTime: string): Promise<TalarionInstrument[]> => {
       // Cancel any in-flight request
@@ -150,28 +249,76 @@ export default function useTalarion(authToken?: string): UseTalarionResult {
       setIsGenerating(true);
       setError(null);
 
+      // Clear previous results for fresh search
+      setGeneratedMarkets([]);
+      setMatchingPublicMarkets([]);
+
+      // Fire Polymarket search IMMEDIATELY — don't wait for AI generation
+      searchPolymarketForQuery(query);
+
       try {
-        const res = await fetch(`${API_BASE}/generate`, {
+        // Try SSE stream first (single connection, results stream as they arrive)
+        const sseRes = await fetch(`${API_BASE}/generate-stream`, {
           method: 'POST',
           headers: getHeaders(),
           body: JSON.stringify({ query, resolution_time: resolutionTime }),
           signal: controller.signal,
         });
 
-        if (!res.ok) {
-          throw new Error(`Generation failed (${res.status})`);
+        // If SSE endpoint works, consume the stream
+        if (sseRes.ok && sseRes.headers.get('content-type')?.includes('text/event-stream')) {
+          const allInstruments = await consumeSSEStream(
+            sseRes,
+            (inst) => {
+              // Each instrument appears immediately as it arrives (price may be null → loading dots)
+              setGeneratedMarkets((prev) => [...prev.filter(Boolean), inst].slice(0, 20));
+            },
+            controller.signal,
+          );
+
+          // Background: fetch quotes for any instruments that arrived without a price
+          fetchMissingQuotes(allInstruments);
+
+          return allInstruments;
         }
 
-        const json = await res.json();
-        // Backend returns { success, instruments: [...] } — handle both shapes defensively
-        const instruments: TalarionInstrument[] = json.instruments ?? json.data?.instruments ?? json.data ?? [];
+        // Fallback: SSE not available — use parallel generate calls
+        console.warn('[useTalarion] SSE stream unavailable, falling back to parallel fetches');
+        const tags = ['trend', 'policy', 'person', 'crypto', 'macro'];
+        const allInstruments: TalarionInstrument[] = [];
+        const seenTitles = new Set<string>();
 
-        setGeneratedMarkets((prev) => [...instruments, ...prev].slice(0, 20));
+        const singleGenerate = async (tag: string) => {
+          const res = await fetch(`${API_BASE}/generate`, {
+            method: 'POST',
+            headers: getHeaders(),
+            body: JSON.stringify({ query, resolution_time: resolutionTime, tag }),
+            signal: controller.signal,
+          });
+          if (!res.ok) return null;
+          const json = await res.json();
+          let instruments: TalarionInstrument[] = json.instruments ?? json.data?.instruments ?? json.data ?? [];
+          if (!Array.isArray(instruments)) instruments = [instruments].filter(Boolean);
 
-        // In parallel: search existing Polymarket markets for related results
-        searchPolymarketForQuery(query);
+          const inst = instruments[0];
+          if (!inst?.instrument_id || !inst.title) return null;
 
-        return instruments;
+          const titleKey = inst.title.toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 40);
+          if (seenTitles.has(titleKey)) return null;
+          seenTitles.add(titleKey);
+
+          // Don't set default price — let card show loading dots if price is null
+          allInstruments.push(inst);
+          setGeneratedMarkets((prev) => [...prev.filter(Boolean), inst].slice(0, 20));
+          return inst;
+        };
+
+        await Promise.allSettled(tags.map((tag) => singleGenerate(tag).catch(() => null)));
+
+        // Background: fetch quotes for instruments without price
+        fetchMissingQuotes(allInstruments);
+
+        return allInstruments;
       } catch (err: unknown) {
         if (err instanceof DOMException && err.name === 'AbortError') {
           return [];
@@ -180,7 +327,6 @@ export default function useTalarion(authToken?: string): UseTalarionResult {
         const msg = err instanceof Error ? err.message : 'Unknown error';
 
         // Only fallback to mock on network errors (fetch failed entirely)
-        // For HTTP errors (400, 401, 500 etc.), propagate the real error
         const isNetworkError = err instanceof TypeError && (
           msg.includes('fetch') || msg.includes('Failed to fetch') || msg.includes('NetworkError')
         );
@@ -189,8 +335,10 @@ export default function useTalarion(authToken?: string): UseTalarionResult {
           console.warn('[useTalarion] Backend unreachable, using mock:', msg);
           try {
             const mocked = await mockGenerateMarkets(query, resolutionTime);
-            setGeneratedMarkets((prev) => [...mocked, ...prev].slice(0, 20));
-            searchPolymarketForQuery(query);
+            for (const inst of mocked) {
+              setGeneratedMarkets((prev) => [...prev, inst].slice(0, 20));
+              await new Promise(r => setTimeout(r, 300));
+            }
             return mocked;
           } catch {
             setError('Failed to generate markets. Please try again.');
@@ -198,7 +346,6 @@ export default function useTalarion(authToken?: string): UseTalarionResult {
           }
         }
 
-        // HTTP error — show real error message
         setError(msg);
         return [];
       } finally {
@@ -238,36 +385,20 @@ export default function useTalarion(authToken?: string): UseTalarionResult {
   );
 
   /**
-   * Search existing Polymarket markets for query matches (fire-and-forget, non-blocking)
+   * Search Polymarket via backend — searches across all 8000+ cached events
+   * plus Polymarket's own relevance-ranked search (results are merged & deduped)
    */
   const searchPolymarketForQuery = useCallback((query: string) => {
     const POLYMARKET_API = `${env.NEXT_PUBLIC_BACKEND_URL}/api/prediction/polymarket`;
-    fetch(`${POLYMARKET_API}/events?active=true&closed=false&limit=100&order=volume24hr&ascending=false`)
+    fetch(`${POLYMARKET_API}/search?q=${encodeURIComponent(query)}&limit=20`)
       .then(r => r.ok ? r.json() : null)
       .then(json => {
         if (!json) return;
-        // Backend returns { success, data: [...events], count }
-        const events = (json.data || json) as Array<any>;
-        if (!Array.isArray(events) || events.length === 0) return;
-
-        // Client-side fuzzy search — match query words against event titles + market questions
-        const queryWords = query.toLowerCase().split(/\s+/).filter(w => w.length >= 2);
-        if (queryWords.length === 0) return;
+        const events = (json.data || []) as Array<any>;
 
         const matches: PolymarketMatch[] = [];
-
         for (const evt of events) {
           if (!evt.title) continue;
-          const titleLower = evt.title.toLowerCase();
-
-          // Also check individual market questions for broader matching
-          const marketQuestions = (evt.markets || []).map((m: any) => (m.question || '').toLowerCase()).join(' ');
-          const searchText = `${titleLower} ${marketQuestions}`;
-
-          const matchCount = queryWords.filter(w => searchText.includes(w)).length;
-          if (matchCount === 0) continue;
-
-          // Get first active market's prices
           const markets = evt.markets || [];
           const activeMarket = markets.find((m: any) => m.active !== false && !m.closed && !m.resolved) || markets[0];
           if (!activeMarket) continue;
@@ -295,15 +426,7 @@ export default function useTalarion(authToken?: string): UseTalarionResult {
           });
         }
 
-        // Sort by match relevance (more matching words = higher), then volume
-        matches.sort((a, b) => {
-          const aScore = queryWords.filter(w => a.title.toLowerCase().includes(w)).length;
-          const bScore = queryWords.filter(w => b.title.toLowerCase().includes(w)).length;
-          if (bScore !== aScore) return bScore - aScore;
-          return parseFloat(b.volume) - parseFloat(a.volume);
-        });
-
-        setMatchingPublicMarkets(matches.slice(0, 10));
+        setMatchingPublicMarkets(matches);
       })
       .catch((err) => {
         console.warn('[useTalarion] Polymarket search failed:', err);

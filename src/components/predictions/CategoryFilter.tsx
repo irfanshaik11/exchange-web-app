@@ -50,19 +50,22 @@ interface CategoryFilterProps {
   selectedCategory: string;
   onSelectCategory: (category: string) => void;
   categoryCounts?: Record<string, number>;
+  totalAvailable?: number; // Total markets from API (not just loaded)
 }
 
 export default function CategoryFilter({
   selectedCategory,
   onSelectCategory,
   categoryCounts = {},
+  totalAvailable = 0,
 }: CategoryFilterProps) {
   return (
     <div className="flex gap-1 flex-shrink-0">
         {categories.map((category) => {
           const isActive = selectedCategory === category.id;
+          const loadedSum = Object.values(categoryCounts).reduce((a, b) => a + b, 0);
           const count = category.id === 'all'
-            ? Object.values(categoryCounts).reduce((a, b) => a + b, 0)
+            ? (totalAvailable > 0 ? totalAvailable : loadedSum)
             : categoryCounts[category.id] || 0;
           const IconComponent = category.icon;
 
@@ -103,7 +106,7 @@ export default function CategoryFilter({
                     color: isActive ? category.color : AX.muted,
                   }}
                 >
-                  {count}
+                  {count.toLocaleString()}
                 </span>
               )}
             </motion.button>

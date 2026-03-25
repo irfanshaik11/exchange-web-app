@@ -91,7 +91,8 @@ export default React.memo(function TalarionMarketCard({
 }: TalarionMarketCardProps) {
   const [isHovered, setIsHovered] = useState(false);
 
-  const yesPrice = instrument.price ?? 0.5;
+  const hasPriceLoaded = instrument.price != null && instrument.price > 0.01 && instrument.price < 0.99;
+  const yesPrice = hasPriceLoaded ? instrument.price! : 0.5;
   const noPrice = 1 - yesPrice;
   const yesCents = Math.round(yesPrice * 100);
   const noCents = Math.round(noPrice * 100);
@@ -119,158 +120,186 @@ export default React.memo(function TalarionMarketCard({
       }}
       className="relative"
     >
+      {/* Rainbow gradient border wrapper */}
       <div
-        role="button"
-        tabIndex={0}
-        className="group relative rounded-2xl overflow-hidden flex flex-col cursor-pointer outline-none focus-visible:ring-1"
+        className="rounded-2xl p-[1px] transition-opacity duration-300"
         style={{
-          backgroundColor: 'rgba(12, 14, 18, 0.75)',
-          border: `1px solid ${T.border}`,
-          transition: 'border-color 280ms ease, background-color 280ms ease',
-          ...(isHovered
-            ? { borderColor: T.borderHover, backgroundColor: 'rgba(12, 14, 18, 0.85)' }
-            : {}),
-        }}
-        onMouseEnter={() => setIsHovered(true)}
-        onMouseLeave={() => setIsHovered(false)}
-        onClick={() => onClick?.(instrument.instrument_id)}
-        onKeyDown={(e) => {
-          if (e.key === 'Enter' || e.key === ' ') {
-            e.preventDefault();
-            onClick?.(instrument.instrument_id);
-          }
+          background: isHovered
+            ? 'linear-gradient(135deg, rgba(255,59,48,0.5), rgba(255,214,10,0.5), rgba(52,199,89,0.5), rgba(0,199,190,0.5), rgba(88,86,214,0.5), rgba(191,90,242,0.5))'
+            : 'linear-gradient(135deg, rgba(255,59,48,0.2), rgba(255,214,10,0.2), rgba(52,199,89,0.2), rgba(0,199,190,0.2), rgba(88,86,214,0.2), rgba(191,90,242,0.2))',
         }}
       >
-        {/* Content */}
-        <div className="p-4 flex flex-col gap-3">
-          {/* Top row: AI badge + resolution time */}
-          <div className="flex items-center justify-between">
-            <span
-              className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold uppercase tracking-wider"
-              style={{
-                backgroundColor: T.purpleSoft,
-                color: T.purple,
-              }}
-            >
-              <svg
-                width="10"
-                height="10"
-                viewBox="0 0 16 16"
-                fill="none"
-                aria-hidden="true"
-              >
-                <path
-                  d="M8 1l1.5 4.5L14 7l-4.5 1.5L8 13l-1.5-4.5L2 7l4.5-1.5L8 1z"
-                  fill="currentColor"
-                />
-              </svg>
-              AI
-            </span>
-
-            <span
-              className="flex items-center gap-1 text-[10px] font-medium"
-              style={{ color: timeInfo.isUrgent ? T.red : T.muted }}
-            >
-              <HiOutlineClock className="w-3 h-3" />
-              {timeInfo.text}
-            </span>
-          </div>
-
-          {/* Title */}
-          <h3
-            className="font-semibold text-[14px] leading-[1.45] line-clamp-2"
-            style={{ color: T.text }}
-          >
-            {instrument.title}
-          </h3>
-
-          {/* Rules */}
-          <p
-            className="text-[12px] leading-[1.5] line-clamp-2"
-            style={{ color: T.muted }}
-          >
-            {instrument.rules}
-          </p>
-
-          {/* Probability bar */}
-          <div>
-            <div className="flex items-baseline justify-between mb-1.5">
+        <div
+          role="button"
+          tabIndex={0}
+          className="group relative rounded-[15px] overflow-hidden flex flex-col cursor-pointer outline-none focus-visible:ring-1"
+          style={{
+            backgroundColor: 'rgba(10, 12, 16, 0.92)',
+            transition: 'background-color 280ms ease',
+            ...(isHovered ? { backgroundColor: 'rgba(14, 16, 22, 0.95)' } : {}),
+          }}
+          onMouseEnter={() => setIsHovered(true)}
+          onMouseLeave={() => setIsHovered(false)}
+          onClick={() => onClick?.(instrument.instrument_id)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+              e.preventDefault();
+              onClick?.(instrument.instrument_id);
+            }
+          }}
+        >
+          {/* Content */}
+          <div className="p-5 flex flex-col gap-3.5">
+            {/* Top row: AI badge + resolution time */}
+            <div className="flex items-center justify-between">
               <span
-                className="text-xs font-semibold"
-                style={{ color: T.green, fontVariantNumeric: 'tabular-nums' }}
+                className="inline-flex items-center gap-1.5 px-2 py-1 rounded-lg text-[10px] font-bold uppercase tracking-wider"
+                style={{
+                  background: 'linear-gradient(135deg, rgba(255,59,48,0.08), rgba(52,199,89,0.08), rgba(88,86,214,0.08))',
+                  border: '1px solid rgba(255,255,255,0.06)',
+                }}
               >
-                {yesCents}
-                <span style={{ fontSize: '10px' }}>&cent;</span>
-                <span
-                  className="font-normal ml-1"
-                  style={{ color: T.textSecondary, fontSize: '10px' }}
-                >
-                  Yes
-                </span>
+                <svg width="11" height="11" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                  <defs>
+                    <linearGradient id={`sparkle-${instrument.instrument_id.slice(0, 8)}`} x1="0" y1="0" x2="16" y2="16" gradientUnits="userSpaceOnUse">
+                      <stop offset="0%" stopColor="#FF3B30" />
+                      <stop offset="33%" stopColor="#34C759" />
+                      <stop offset="66%" stopColor="#00C7BE" />
+                      <stop offset="100%" stopColor="#BF5AF2" />
+                    </linearGradient>
+                  </defs>
+                  <path
+                    d="M8 1l1.5 4.5L14 7l-4.5 1.5L8 13l-1.5-4.5L2 7l4.5-1.5L8 1z"
+                    fill={`url(#sparkle-${instrument.instrument_id.slice(0, 8)})`}
+                  />
+                </svg>
+                <span style={{ color: T.textSecondary }}>AI</span>
               </span>
+
               <span
-                className="text-xs font-semibold"
-                style={{ color: T.red, fontVariantNumeric: 'tabular-nums' }}
+                className="flex items-center gap-1 text-[10px] font-medium"
+                style={{ color: timeInfo.isUrgent ? T.red : T.muted }}
               >
-                {noCents}
-                <span style={{ fontSize: '10px' }}>&cent;</span>
-                <span
-                  className="font-normal ml-1"
-                  style={{ color: T.textSecondary, fontSize: '10px' }}
-                >
-                  No
-                </span>
+                <HiOutlineClock className="w-3 h-3" />
+                {timeInfo.text}
               </span>
             </div>
-            <div
-              className="h-[3px] rounded-full overflow-hidden"
-              style={{ backgroundColor: T.redSoft }}
+
+            {/* Title */}
+            <h3
+              className="font-semibold text-[15px] leading-[1.4] line-clamp-2"
+              style={{ color: T.text }}
             >
-              <motion.div
-                className="h-full rounded-full"
-                style={{ backgroundColor: T.green }}
-                initial={{ width: 0 }}
-                animate={{ width: `${yesCents}%` }}
-                transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1] }}
-              />
+              {instrument.title}
+            </h3>
+
+            {/* Rules */}
+            <p
+              className="text-[11px] leading-[1.5] line-clamp-2"
+              style={{ color: T.muted }}
+            >
+              {instrument.rules}
+            </p>
+
+            {/* Trade price buttons */}
+            <div className="pt-1">
+              {hasPriceLoaded ? (
+                <>
+                  <div className="flex gap-2 mb-3">
+                    <motion.button
+                      initial={{ opacity: 0, scale: 0.95 }}
+                      animate={{ opacity: 1, scale: 1 }}
+                      transition={{ duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
+                      className="flex-1 py-2.5 rounded-xl text-center transition-all duration-150 active:scale-[0.97] outline-none focus-visible:ring-1"
+                      style={{ backgroundColor: T.greenSoft, border: `1px solid rgba(74, 222, 128, 0.15)` }}
+                      onClick={(e) => { e.stopPropagation(); onTrade?.(instrument.instrument_id, 'yes'); }}
+                    >
+                      <span
+                        className="text-[16px] font-bold"
+                        style={{ color: T.green, fontVariantNumeric: 'tabular-nums' }}
+                      >
+                        {yesCents}<span className="text-[11px]">&cent;</span>
+                      </span>
+                      <span className="text-[10px] font-medium ml-1.5" style={{ color: T.textSecondary }}>Yes</span>
+                    </motion.button>
+                    <motion.button
+                      initial={{ opacity: 0, scale: 0.95 }}
+                      animate={{ opacity: 1, scale: 1 }}
+                      transition={{ duration: 0.3, delay: 0.05, ease: [0.16, 1, 0.3, 1] }}
+                      className="flex-1 py-2.5 rounded-xl text-center transition-all duration-150 active:scale-[0.97] outline-none focus-visible:ring-1"
+                      style={{ backgroundColor: T.redSoft, border: `1px solid rgba(248, 113, 113, 0.15)` }}
+                      onClick={(e) => { e.stopPropagation(); onTrade?.(instrument.instrument_id, 'no'); }}
+                    >
+                      <span
+                        className="text-[16px] font-bold"
+                        style={{ color: T.red, fontVariantNumeric: 'tabular-nums' }}
+                      >
+                        {noCents}<span className="text-[11px]">&cent;</span>
+                      </span>
+                      <span className="text-[10px] font-medium ml-1.5" style={{ color: T.textSecondary }}>No</span>
+                    </motion.button>
+                  </div>
+                  {/* Probability bar */}
+                  <motion.div
+                    className="h-[3px] rounded-full overflow-hidden"
+                    style={{ backgroundColor: T.redSoft }}
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    transition={{ duration: 0.3 }}
+                  >
+                    <motion.div
+                      className="h-full rounded-full"
+                      style={{ backgroundColor: T.green }}
+                      initial={{ width: 0 }}
+                      animate={{ width: `${yesCents}%` }}
+                      transition={{ duration: 0.8, ease: [0.16, 1, 0.3, 1] }}
+                    />
+                  </motion.div>
+                </>
+              ) : (
+                /* Price loading state */
+                <div className="flex gap-2 mb-3">
+                  <div
+                    className="flex-1 py-3 rounded-xl overflow-hidden"
+                    style={{ backgroundColor: 'rgba(255,255,255,0.03)', border: `1px solid ${T.border}` }}
+                  >
+                    <div className="flex items-center justify-center gap-1.5">
+                      {[0, 1, 2].map((i) => (
+                        <motion.span
+                          key={i}
+                          className="block w-1 h-1 rounded-full"
+                          style={{ backgroundColor: T.green }}
+                          animate={{ opacity: [0.2, 0.8, 0.2] }}
+                          transition={{ duration: 1, repeat: Infinity, delay: i * 0.15 }}
+                        />
+                      ))}
+                      <span className="text-[10px] font-medium ml-1" style={{ color: T.muted }}>Yes</span>
+                    </div>
+                  </div>
+                  <div
+                    className="flex-1 py-3 rounded-xl overflow-hidden"
+                    style={{ backgroundColor: 'rgba(255,255,255,0.03)', border: `1px solid ${T.border}` }}
+                  >
+                    <div className="flex items-center justify-center gap-1.5">
+                      {[0, 1, 2].map((i) => (
+                        <motion.span
+                          key={i}
+                          className="block w-1 h-1 rounded-full"
+                          style={{ backgroundColor: T.red }}
+                          animate={{ opacity: [0.2, 0.8, 0.2] }}
+                          transition={{ duration: 1, repeat: Infinity, delay: i * 0.15 }}
+                        />
+                      ))}
+                      <span className="text-[10px] font-medium ml-1" style={{ color: T.muted }}>No</span>
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
 
-          {/* Trade buttons — always visible on mobile */}
-          {onTrade && (
-            <div className="md:hidden pt-1">
-              <TradeButtons
-                instrumentId={instrument.instrument_id}
-                yesCents={yesCents}
-                noCents={noCents}
-                onTrade={onTrade}
-              />
-            </div>
-          )}
+          {/* No separate hover overlay needed — price pills are the trade buttons */}
         </div>
-
-        {/* Desktop hover overlay trade buttons */}
-        <AnimatePresence>
-          {isHovered && onTrade && (
-            <motion.div
-              initial={{ opacity: 0, y: 8 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: 8 }}
-              transition={{ duration: 0.15 }}
-              className="absolute bottom-0 left-0 right-0 p-3 hidden md:block"
-              style={{
-                background: 'linear-gradient(to top, rgba(5,6,8,0.92) 70%, transparent)',
-              }}
-            >
-              <TradeButtons
-                instrumentId={instrument.instrument_id}
-                yesCents={yesCents}
-                noCents={noCents}
-                onTrade={onTrade}
-              />
-            </motion.div>
-          )}
-        </AnimatePresence>
       </div>
     </motion.div>
   );
