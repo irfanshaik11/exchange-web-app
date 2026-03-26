@@ -8,6 +8,8 @@ interface AnimatedValueProps {
   duration?: number;
   className?: string;
   style?: React.CSSProperties;
+  /** Skip RAF animation — just display the value directly (for large card grids) */
+  instant?: boolean;
 }
 
 /**
@@ -22,6 +24,7 @@ export default function AnimatedValue({
   duration = 400,
   className,
   style,
+  instant = false,
 }: AnimatedValueProps) {
   const [display, setDisplay] = useState(value);
   const prevValue = useRef(value);
@@ -35,8 +38,14 @@ export default function AnimatedValue({
     const to = value;
     prevValue.current = value;
 
+    // Instant mode: skip RAF animation entirely (for large card grids)
+    if (instant) {
+      setDisplay(to);
+      return;
+    }
+
     // Check for reduced motion preference
-    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+    if (typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
       setDisplay(to);
       return;
     }
@@ -63,7 +72,7 @@ export default function AnimatedValue({
 
     rafId.current = requestAnimationFrame(animate);
     return () => cancelAnimationFrame(rafId.current);
-  }, [value, duration]);
+  }, [value, duration, instant]);
 
   return (
     <span

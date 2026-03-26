@@ -12,17 +12,18 @@ function AIIcon({ size = 16 }: { size?: number }) {
   const id = `ai-grad-hp-${++aiIconCounter}`;
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" fill="none" className="flex-shrink-0">
-      <motion.path
+      {/* Static SVG paths — replaced infinite Framer Motion animations to save CPU */}
+      <path
         d="M12 2L13.5 8.5L20 10L13.5 11.5L12 18L10.5 11.5L4 10L10.5 8.5L12 2Z"
         fill={`url(#${id})`}
-        animate={{ scale: [0.9, 1.05, 0.9], opacity: [0.7, 1, 0.7] }}
-        transition={{ duration: 3, repeat: Infinity, ease: 'easeInOut' }}
+        className="animate-pulse"
+        style={{ animationDuration: '3s' }}
       />
-      <motion.path
+      <path
         d="M19 15L19.75 17.25L22 18L19.75 18.75L19 21L18.25 18.75L16 18L18.25 17.25L19 15Z"
         fill={`url(#${id})`}
-        animate={{ scale: [0.8, 1.1, 0.8], opacity: [0.5, 0.9, 0.5] }}
-        transition={{ duration: 2.5, repeat: Infinity, ease: 'easeInOut', delay: 0.5 }}
+        className="animate-pulse"
+        style={{ animationDuration: '2.5s', animationDelay: '0.5s' }}
       />
       <defs>
         <linearGradient id={id} x1="3" y1="2" x2="22" y2="21">

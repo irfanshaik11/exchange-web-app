@@ -18,6 +18,7 @@ import type { PredictionMarket } from './PredictionCard';
 import MiniSparkline from './MiniSparkline';
 import AnimatedValue from './AnimatedValue';
 import useTiltEffect from '~/hooks/useTiltEffect';
+import usePolymarketLivePrice from '~/hooks/usePolymarketLivePrice';
 
 // Generate sparkline data from price + change when real history isn't available
 function generateMockSparkline(currentPrice: number, change: number): number[] {
@@ -40,7 +41,12 @@ interface PredictionCardV2Props {
   isFavorite?: boolean;
   onToggleFavorite?: (market: PredictionMarket) => void;
   onQuickTrade?: (market: PredictionMarket, side: 'yes' | 'no') => void;
+  /** @deprecated Use tokenId prop instead — card subscribes internally */
   liveYesPrice?: number;
+  /** YES token CLOB ID — card subscribes to live prices via useSyncExternalStore */
+  tokenId?: string;
+  /** Skip Framer Motion mount animation for off-screen cards */
+  disableAnimation?: boolean;
 }
 
 const formatVolume = (volume: number): string => {
@@ -65,16 +71,23 @@ const formatTimeRemaining = (closesAt: string): { text: string; isUrgent: boolea
   return { text, isUrgent };
 };
 
-export default function PredictionCardV2({
+const PredictionCardV2 = React.memo(function PredictionCardV2({
   market,
   index,
   isFavorite = false,
   onToggleFavorite,
   onQuickTrade,
-  liveYesPrice,
+  liveYesPrice: liveYesPriceProp,
+  tokenId,
+  disableAnimation,
 }: PredictionCardV2Props) {
-  const tiltRef = useTiltEffect<HTMLDivElement>({ max: 2, perspective: 1200, scale: 1.01 });
+  const tiltRef = useTiltEffect<HTMLDivElement>({ max: 2, perspective: 1200, scale: 1.01, disabled: !!disableAnimation });
+  const observeRef = useRef<HTMLDivElement>(null);
   const [isHovered, setIsHovered] = React.useState(false);
+
+  // Per-card live price via useSyncExternalStore (only subscribes when visible)
+  const livePriceEntry = usePolymarketLivePrice(tokenId, observeRef);
+  const liveYesPrice = livePriceEntry?.price ?? liveYesPriceProp;
 
   // Flash effect on price change
   const prevPrice = useRef(liveYesPrice);
@@ -115,18 +128,9 @@ export default function PredictionCardV2({
   // Sparkline data — use real price history if available, otherwise generate from price + change
   const sparklineData = useMemo(() => {
     return market.priceHistory || generateMockSparkline(market.yesPrice, priceChange);
-  }, [market.ticker, market.yesPrice, priceChange, market.priceHistory]);
+  }, [market.ticker, market.priceHistory]);
 
-  return (
-    <motion.div
-      initial={{ opacity: 0, y: 16 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{
-        duration: 0.4,
-        delay: Math.min(index * 0.04, 0.32),
-        ease: [0.16, 1, 0.3, 1],
-      }}
-    >
+  const cardContent = (
       <Link href={href} className="block h-full">
         <div
           ref={tiltRef}
@@ -221,7 +225,7 @@ export default function PredictionCardV2({
                     transition: 'opacity 0.3s',
                   }}
                 >
-                  <AnimatedValue value={yesPercent} suffix="%" decimals={0} />
+                  <AnimatedValue value={yesPercent} suffix="%" decimals={0} instant={!!disableAnimation} />
                   <span className="font-normal ml-1" style={{ color: T.textSecondary, fontSize: '10px' }}>Yes</span>
                 </span>
                 <span
@@ -230,7 +234,7 @@ export default function PredictionCardV2({
                     color: T.red,
                   }}
                 >
-                  <AnimatedValue value={noPercent} suffix="%" decimals={0} />
+                  <AnimatedValue value={noPercent} suffix="%" decimals={0} instant={!!disableAnimation} />
                   <span className="font-normal ml-1" style={{ color: T.textSecondary, fontSize: '10px' }}>No</span>
                 </span>
               </div>
@@ -301,6 +305,7 @@ export default function PredictionCardV2({
                 width={70}
                 height={28}
                 color={isPositive ? T.green : isNegative ? T.red : T.muted}
+                id={market.ticker}
               />
             </div>
 
@@ -353,9 +358,29 @@ export default function PredictionCardV2({
           </div>
         </div>
       </Link>
+  );
+
+  if (disableAnimation) {
+    return <div ref={observeRef}>{cardContent}</div>;
+  }
+
+  return (
+    <motion.div
+      ref={observeRef}
+      initial={{ opacity: 0, y: 16 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{
+        duration: 0.4,
+        delay: Math.min(index * 0.04, 0.32),
+        ease: [0.16, 1, 0.3, 1],
+      }}
+    >
+      {cardContent}
     </motion.div>
   );
-}
+});
+
+export default PredictionCardV2;
 
 // --- Sub-components ---
 

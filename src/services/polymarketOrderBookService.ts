@@ -103,6 +103,7 @@ class PolymarketOrderBookService {
   private _connected = false;
   private intentionalDisconnect = false;
   private lastPongAt = 0;
+  private connectionListeners = new Set<(connected: boolean) => void>();
 
   private constructor() {}
 
@@ -111,6 +112,21 @@ class PolymarketOrderBookService {
       PolymarketOrderBookService.instance = new PolymarketOrderBookService();
     }
     return PolymarketOrderBookService.instance;
+  }
+
+  /**
+   * Listen for connection status changes (event-driven, replaces polling).
+   * Returns an unsubscribe function.
+   */
+  onConnectionChange(listener: (connected: boolean) => void): () => void {
+    this.connectionListeners.add(listener);
+    // Immediately notify with current state
+    listener(this._connected);
+    return () => { this.connectionListeners.delete(listener); };
+  }
+
+  private notifyConnectionChange(connected: boolean): void {
+    for (const listener of this.connectionListeners) listener(connected);
   }
 
   /**
@@ -185,6 +201,7 @@ class PolymarketOrderBookService {
         // Send full subscription on fresh connection
         this.sendFullSubscribe();
         this.startKeepalive();
+        this.notifyConnectionChange(true);
       };
 
       this.ws.onmessage = (event) => {
@@ -217,6 +234,7 @@ class PolymarketOrderBookService {
         this.stopKeepalive();
         this.ws = null;
         this.serverSubscribedIds.clear();
+        this.notifyConnectionChange(false);
 
         // Only reconnect if disconnect was not intentional and we still have subscribers
         if (!this.intentionalDisconnect && this.subscriptions.size > 0) {

@@ -66,7 +66,6 @@ export default function AuroraBackground() {
           border-radius: 50%;
           filter: blur(80px);
           animation: aurora-drift linear infinite;
-          will-change: transform;
         }
 
         @keyframes aurora-drift {

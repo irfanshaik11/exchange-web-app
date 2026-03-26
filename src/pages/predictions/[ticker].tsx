@@ -375,9 +375,24 @@ const PredictionTabs: React.FC<{
 };
 
 // Comments Component for Polymarket - with inline filters
-const CommentsSection: React.FC<{ comments: PolymarketComment[]; isLoading: boolean; eventSlug?: string }> = ({ comments, isLoading, eventSlug }) => {
+const CommentsSection: React.FC<{ comments: PolymarketComment[]; isLoading: boolean; eventSlug?: string }> = React.memo(({ comments, isLoading, eventSlug }) => {
   const [authorFilter, setAuthorFilter] = useState('');
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
+
+  // Hooks MUST be called before any early returns (Rules of Hooks)
+  const filteredComments = useMemo(() => (comments || [])
+    .filter(comment => {
+      if (!authorFilter) return true;
+      const author = (comment.profile?.name || comment.profile?.pseudonym || comment.userAddress || '').toLowerCase();
+      return author.includes(authorFilter.toLowerCase());
+    })
+    .sort((a, b) => {
+      const timeA = new Date(a.createdAt).getTime();
+      const timeB = new Date(b.createdAt).getTime();
+      return sortDir === 'desc' ? timeB - timeA : timeA - timeB;
+    }), [comments, authorFilter, sortDir]);
+
+  const hasActiveFilters = authorFilter !== '';
 
   if (isLoading) {
     return (
@@ -406,21 +421,6 @@ const CommentsSection: React.FC<{ comments: PolymarketComment[]; isLoading: bool
       </div>
     );
   }
-
-  // Filter and sort comments
-  const filteredComments = comments
-    .filter(comment => {
-      if (!authorFilter) return true;
-      const author = (comment.profile?.name || comment.profile?.pseudonym || comment.userAddress || '').toLowerCase();
-      return author.includes(authorFilter.toLowerCase());
-    })
-    .sort((a, b) => {
-      const timeA = new Date(a.createdAt).getTime();
-      const timeB = new Date(b.createdAt).getTime();
-      return sortDir === 'desc' ? timeB - timeA : timeA - timeB;
-    });
-
-  const hasActiveFilters = authorFilter !== '';
 
   return (
     <div className="h-full flex flex-col">
@@ -497,13 +497,37 @@ const CommentsSection: React.FC<{ comments: PolymarketComment[]; isLoading: bool
       </div>
     </div>
   );
-};
+});
 
 // Holders Component for Polymarket - with YES/NO tabs and column filters
-const HoldersSection: React.FC<{ holders: PolymarketHolder[]; isLoading: boolean }> = ({ holders, isLoading }) => {
+const HoldersSection: React.FC<{ holders: PolymarketHolder[]; isLoading: boolean }> = React.memo(({ holders, isLoading }) => {
   const [selectedOutcome, setSelectedOutcome] = useState<'yes' | 'no'>('yes');
   const [nameFilter, setNameFilter] = useState('');
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
+
+  const formatAmount = (amount: number): string => {
+    if (amount >= 1_000_000) return `${(amount / 1_000_000).toFixed(2)}M`;
+    if (amount >= 1_000) return `${(amount / 1_000).toFixed(1)}K`;
+    return amount.toFixed(0);
+  };
+
+  // Hooks MUST be called before any early returns (Rules of Hooks)
+  const { yesHolders, noHolders } = useMemo(() => ({
+    yesHolders: (holders || []).filter(h => h.outcome === 'yes'),
+    noHolders: (holders || []).filter(h => h.outcome === 'no'),
+  }), [holders]);
+
+  const displayHolders = useMemo(() => {
+    const list = selectedOutcome === 'yes' ? yesHolders : noHolders;
+    let filtered = list;
+    if (nameFilter) {
+      const q = nameFilter.toLowerCase();
+      filtered = list.filter(h =>
+        (h.name || h.pseudonym || h.proxyWallet || '').toLowerCase().includes(q)
+      );
+    }
+    return filtered.sort((a, b) => sortDir === 'desc' ? b.amount - a.amount : a.amount - b.amount);
+  }, [yesHolders, noHolders, selectedOutcome, nameFilter, sortDir]);
 
   if (isLoading) {
     return (
@@ -520,28 +544,6 @@ const HoldersSection: React.FC<{ holders: PolymarketHolder[]; isLoading: boolean
       </div>
     );
   }
-
-  const formatAmount = (amount: number): string => {
-    if (amount >= 1_000_000) return `${(amount / 1_000_000).toFixed(2)}M`;
-    if (amount >= 1_000) return `${(amount / 1_000).toFixed(1)}K`;
-    return amount.toFixed(0);
-  };
-
-  // Separate holders by outcome, filter by name, and sort
-  const filterAndSort = (list: PolymarketHolder[]) => {
-    let filtered = list;
-    if (nameFilter) {
-      const q = nameFilter.toLowerCase();
-      filtered = list.filter(h =>
-        (h.name || h.pseudonym || h.proxyWallet || '').toLowerCase().includes(q)
-      );
-    }
-    return filtered.sort((a, b) => sortDir === 'desc' ? b.amount - a.amount : a.amount - b.amount);
-  };
-
-  const yesHolders = holders.filter(h => h.outcome === 'yes');
-  const noHolders = holders.filter(h => h.outcome === 'no');
-  const displayHolders = filterAndSort(selectedOutcome === 'yes' ? yesHolders : noHolders);
 
   return (
     <div className="h-full flex flex-col">
@@ -645,14 +647,37 @@ const HoldersSection: React.FC<{ holders: PolymarketHolder[]; isLoading: boolean
       </div>
     </div>
   );
-};
+});
 
 // Activity Component for Polymarket - table layout matching HoldersSection
-const ActivitySection: React.FC<{ activities: PolymarketActivity[]; isLoading: boolean }> = ({ activities, isLoading }) => {
+const ActivitySection: React.FC<{ activities: PolymarketActivity[]; isLoading: boolean }> = React.memo(({ activities, isLoading }) => {
   const [typeFilter, setTypeFilter] = useState<string>('all');
   const [nameFilter, setNameFilter] = useState('');
   const [outcomeFilter, setOutcomeFilter] = useState<string>('all');
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc'); // newest first
+
+  // Hooks MUST be called before any early returns (Rules of Hooks)
+  const filteredActivities = useMemo(() => {
+    const parseTs = (ts: string | number) => { let v = Number(ts); if (v > 0 && v < 1e12) v *= 1000; return v || 0; };
+    return activities
+      .filter(activity => {
+        if (typeFilter !== 'all') {
+          const side = activity.side?.toLowerCase() || '';
+          const type = activity.type?.toLowerCase() || '';
+          if (typeFilter === 'buy' && !(side === 'buy' || type === 'buy')) return false;
+          if (typeFilter === 'sell' && !(side === 'sell' || type === 'sell')) return false;
+        }
+        if (nameFilter) {
+          const name = (activity.name || activity.pseudonym || activity.proxyWallet || '').toLowerCase();
+          if (!name.includes(nameFilter.toLowerCase())) return false;
+        }
+        if (outcomeFilter !== 'all') {
+          if (activity.outcome?.toLowerCase() !== outcomeFilter) return false;
+        }
+        return true;
+      })
+      .sort((a, b) => sortDir === 'desc' ? parseTs(b.timestamp) - parseTs(a.timestamp) : parseTs(a.timestamp) - parseTs(b.timestamp));
+  }, [activities, typeFilter, nameFilter, outcomeFilter, sortDir]);
 
   if (isLoading) {
     return (
@@ -669,29 +694,6 @@ const ActivitySection: React.FC<{ activities: PolymarketActivity[]; isLoading: b
       </div>
     );
   }
-
-  // Filter and sort activities
-  const filteredActivities = activities
-    .filter(activity => {
-      if (typeFilter !== 'all') {
-        const side = activity.side?.toLowerCase() || '';
-        const type = activity.type?.toLowerCase() || '';
-        if (typeFilter === 'buy' && !(side === 'buy' || type === 'buy')) return false;
-        if (typeFilter === 'sell' && !(side === 'sell' || type === 'sell')) return false;
-      }
-      if (nameFilter) {
-        const name = (activity.name || activity.pseudonym || activity.proxyWallet || '').toLowerCase();
-        if (!name.includes(nameFilter.toLowerCase())) return false;
-      }
-      if (outcomeFilter !== 'all') {
-        if (activity.outcome?.toLowerCase() !== outcomeFilter) return false;
-      }
-      return true;
-    })
-    .sort((a, b) => {
-      const parseTs = (ts: string | number) => { let v = Number(ts); if (v > 0 && v < 1e12) v *= 1000; return v || 0; };
-      return sortDir === 'desc' ? parseTs(b.timestamp) - parseTs(a.timestamp) : parseTs(a.timestamp) - parseTs(b.timestamp);
-    });
 
   const formatAmount = (amount: number | undefined): string => {
     if (!amount) return '-';
@@ -869,18 +871,96 @@ const ActivitySection: React.FC<{ activities: PolymarketActivity[]; isLoading: b
       </div>
     </div>
   );
-};
+});
 
 // Outcomes Component for Polymarket multi-outcome markets - with inline column filters
 const OutcomesSection: React.FC<{
   event: PolymarketEvent | null;
   isLoading: boolean;
   onSelectOutcome?: (marketId: string, side: 'yes' | 'no') => void;
-}> = ({ event, isLoading, onSelectOutcome }) => {
+}> = React.memo(({ event, isLoading, onSelectOutcome }) => {
   const [nameFilter, setNameFilter] = useState('');
   const [chanceSort, setChanceSort] = useState<'asc' | 'desc'>('desc');
   const [volSort, setVolSort] = useState<'asc' | 'desc' | null>(null);
   const [showResolved, setShowResolved] = useState(false);
+
+  // Hooks MUST be called before any early returns (Rules of Hooks)
+  // Pre-parse JSON once per market (avoids 4x JSON.parse per market per render)
+  type ParsedMarket = PolymarketMarket & { _prices: number[]; _pricesValid: boolean };
+  const parsedMarkets: ParsedMarket[] = useMemo(() => {
+    if (!event?.markets) return [];
+    return event.markets.map(m => {
+      let prices = [0.5, 0.5];
+      try { prices = JSON.parse(m.outcomePrices).map(Number); } catch {}
+      const sum = (prices[0] || 0) + (prices[1] || 0);
+      const valid = sum > 0.9 && sum < 1.1 && prices[0] > 0 && prices[1] > 0;
+      return { ...m, _prices: prices, _pricesValid: valid };
+    });
+  }, [event]);
+
+  // Predicate functions use pre-parsed data (no JSON.parse)
+  const isMarketFullyResolved = (market: ParsedMarket): boolean => {
+    if (market.closed && !market.active) return true;
+    if (market.resolved && market.acceptingOrders === false && market.closed) return true;
+    if (!market._pricesValid && !market.active) return true;
+    if (!market._pricesValid && market.closed) return true;
+    if (!market._pricesValid) return true;
+    return false;
+  };
+
+  const isMarketInReview = (market: ParsedMarket): boolean => {
+    if (market.resolved && !market.closed) return true;
+    if (market.resolved && market.active) return true;
+    if (market.acceptingOrders === false && !market.closed && !market.resolved && market.active) return true;
+    return false;
+  };
+
+  // Format helpers
+  const formatPercent = (price: number): string => {
+    const pct = price * 100;
+    if (pct < 1 && pct > 0) return '<1%';
+    if (pct === 0) return '0%';
+    return `${Math.round(pct)}%`;
+  };
+
+  const formatCents = (price: number): string => {
+    const cents = price * 100;
+    if (cents < 0.1) return '0.0';
+    if (cents >= 99.9) return '100';
+    return cents.toFixed(1);
+  };
+
+  const formatVol = (vol: number | string | undefined): string => {
+    const v = typeof vol === 'string' ? parseFloat(vol) : vol;
+    if (!v) return '$0';
+    if (v >= 1_000_000) return `$${(v / 1_000_000).toFixed(1)}M`;
+    if (v >= 1_000) return `$${(v / 1_000).toFixed(0)}K`;
+    return `$${v.toFixed(0)}`;
+  };
+
+  // Separate active, in-review, and resolved markets (memoized with pre-parsed data)
+  const { activeMarkets, inReviewMarkets, resolvedMarkets, sortedActiveMarkets, hasActiveFilters } = useMemo(() => {
+    const allFiltered = parsedMarkets.filter(market => {
+      if (!nameFilter) return true;
+      const name = (market.groupItemTitle || market.question || '').toLowerCase();
+      return name.includes(nameFilter.toLowerCase());
+    });
+
+    const active = allFiltered.filter(m => !isMarketFullyResolved(m) && !isMarketInReview(m));
+    const inReview = allFiltered.filter(m => isMarketInReview(m));
+    const resolved = allFiltered.filter(m => isMarketFullyResolved(m) && !isMarketInReview(m));
+
+    const sorted = [...active].sort((a, b) => {
+      if (volSort) {
+        const volA = parseFloat(a.volume || '0');
+        const volB = parseFloat(b.volume || '0');
+        return volSort === 'desc' ? volB - volA : volA - volB;
+      }
+      return chanceSort === 'desc' ? (b._prices[0] || 0) - (a._prices[0] || 0) : (a._prices[0] || 0) - (b._prices[0] || 0);
+    });
+
+    return { activeMarkets: active, inReviewMarkets: inReview, resolvedMarkets: resolved, sortedActiveMarkets: sorted, hasActiveFilters: nameFilter !== '' };
+  }, [parsedMarkets, nameFilter, volSort, chanceSort]);
 
   if (isLoading) {
     return (
@@ -897,115 +977,6 @@ const OutcomesSection: React.FC<{
       </div>
     );
   }
-
-  // Check if prices are real vs fallback (YES + NO should sum to ~1.0)
-  const pricesAreValid = (market: PolymarketMarket): boolean => {
-    try {
-      const prices = JSON.parse(market.outcomePrices).map(Number);
-      const sum = (prices[0] || 0) + (prices[1] || 0);
-      return sum > 0.9 && sum < 1.1 && prices[0] > 0 && prices[1] > 0;
-    } catch {
-      return false;
-    }
-  };
-
-  // Check if a market is fully resolved/closed (no longer tradeable)
-  const isMarketFullyResolved = (market: PolymarketMarket): boolean => {
-    // Explicitly closed and inactive
-    if (market.closed && !market.active) return true;
-    // Resolved + not accepting orders + closed = finalized
-    if (market.resolved && market.acceptingOrders === false && market.closed) return true;
-    // Prices don't sum to 1.0 — stale/invalid data, market is effectively dead
-    // (e.g., YES=0.5 + NO=1.0 = 1.5, or parse failure → 0.5+0.5 but both sides aren't real)
-    if (!pricesAreValid(market) && !market.active) return true;
-    if (!pricesAreValid(market) && market.closed) return true;
-    // Fallback: if prices are completely broken (don't sum to ~1), treat as resolved
-    // even if API flags are ambiguous — invalid prices mean no real trading
-    if (!pricesAreValid(market)) return true;
-    return false;
-  };
-
-  // Check if a market is "In Review" (resolved but in dispute/review period)
-  const isMarketInReview = (market: PolymarketMarket): boolean => {
-    // In Review = resolved but NOT fully closed (still in UMA dispute period)
-    if (market.resolved && !market.closed) return true;
-    if (market.resolved && market.active) return true;
-    // Market has acceptingOrders=false but not formally closed — transitioning state
-    if (market.acceptingOrders === false && !market.closed && !market.resolved && market.active) return true;
-    return false;
-  };
-
-  // Parse outcome prices from JSON string
-  const parseOutcomePrices = (pricesStr: string): number[] => {
-    try {
-      return JSON.parse(pricesStr).map(Number);
-    } catch {
-      return [0.5, 0.5];
-    }
-  };
-
-  // Check if prices are real vs fallback (YES + NO should be close to 1.0 for real prices)
-  const hasRealPrices = (market: PolymarketMarket): boolean => {
-    try {
-      const prices = JSON.parse(market.outcomePrices).map(Number);
-      const sum = (prices[0] || 0) + (prices[1] || 0);
-      // Real prices sum to ~1.0 (within rounding). Fallback/stale data often doesn't.
-      return sum > 0.9 && sum < 1.1 && prices[0] > 0 && prices[1] > 0;
-    } catch {
-      return false;
-    }
-  };
-
-  // Format price as percentage with 1 decimal precision (matches Polymarket)
-  const formatPercent = (price: number): string => {
-    const pct = price * 100;
-    if (pct < 1 && pct > 0) return '<1%';
-    if (pct === 0) return '0%';
-    return `${Math.round(pct)}%`;
-  };
-
-  // Format price in cents with 1 decimal (e.g., 47.9¢ instead of 48¢)
-  const formatCents = (price: number): string => {
-    const cents = price * 100;
-    if (cents < 0.1) return '0.0';
-    if (cents >= 99.9) return '100';
-    // Show 1 decimal for prices between 1¢ and 99¢
-    return cents.toFixed(1);
-  };
-
-  // Format volume
-  const formatVol = (vol: number | string | undefined): string => {
-    const v = typeof vol === 'string' ? parseFloat(vol) : vol;
-    if (!v) return '$0';
-    if (v >= 1_000_000) return `$${(v / 1_000_000).toFixed(1)}M`;
-    if (v >= 1_000) return `$${(v / 1_000).toFixed(0)}K`;
-    return `$${v.toFixed(0)}`;
-  };
-
-  // Separate active, in-review, and resolved markets
-  const allFiltered = event.markets.filter(market => {
-    if (!nameFilter) return true;
-    const name = (market.groupItemTitle || market.question || '').toLowerCase();
-    return name.includes(nameFilter.toLowerCase());
-  });
-
-  const activeMarkets = allFiltered.filter(m => !isMarketFullyResolved(m) && !isMarketInReview(m));
-  const inReviewMarkets = allFiltered.filter(m => isMarketInReview(m));
-  const resolvedMarkets = allFiltered.filter(m => isMarketFullyResolved(m) && !isMarketInReview(m));
-
-  // Sort active markets
-  const sortedActiveMarkets = [...activeMarkets].sort((a, b) => {
-    if (volSort) {
-      const volA = parseFloat(a.volume || '0');
-      const volB = parseFloat(b.volume || '0');
-      return volSort === 'desc' ? volB - volA : volA - volB;
-    }
-    const pricesA = parseOutcomePrices(a.outcomePrices || '["0.5", "0.5"]');
-    const pricesB = parseOutcomePrices(b.outcomePrices || '["0.5", "0.5"]');
-    return chanceSort === 'desc' ? (pricesB[0] || 0) - (pricesA[0] || 0) : (pricesA[0] || 0) - (pricesB[0] || 0);
-  });
-
-  const hasActiveFilters = nameFilter !== '';
 
   return (
     <div className="h-full flex flex-col">
@@ -1084,8 +1055,8 @@ const OutcomesSection: React.FC<{
           <>
             {/* Active outcomes */}
             {sortedActiveMarkets.map((market) => {
-              const realPrices = hasRealPrices(market);
-              const prices = parseOutcomePrices(market.outcomePrices || '["0.5", "0.5"]');
+              const realPrices = market._pricesValid;
+              const prices = market._prices;
               const yesPrice = prices[0] || 0.5;
               const noPrice = prices[1] || 0.5;
 
@@ -1152,7 +1123,7 @@ const OutcomesSection: React.FC<{
 
             {/* In Review outcomes — resolved but in dispute/review period */}
             {inReviewMarkets.map((market) => {
-              const prices = parseOutcomePrices(market.outcomePrices || '["0","0"]');
+              const prices = market._prices;
               const yesPrice = prices[0] || 0;
 
               return (
@@ -1234,7 +1205,7 @@ const OutcomesSection: React.FC<{
                 {showResolved && resolvedMarkets.map((market) => {
                   // For resolved markets, determine the outcome from prices
                   // YES won: outcomePrices[0] ≈ 1, NO won: outcomePrices[1] ≈ 1
-                  const prices = parseOutcomePrices(market.outcomePrices || '["0", "0"]');
+                  const prices = market._prices;
                   const yesPrice = prices[0] || 0;
                   const noPrice = prices[1] || 0;
                   // Determine result: if YES price > 0.5 → Yes won, else No won
@@ -1317,7 +1288,7 @@ const OutcomesSection: React.FC<{
       </div>
     </div>
   );
-};
+});
 
 // Trades Table Component
 const TradesTable: React.FC<{ trades: any[]; isLoading: boolean }> = ({ trades, isLoading }) => {
@@ -2108,24 +2079,58 @@ export default function MarketDetailPage() {
   const { activities: restActivities, isLoading: activityLoading } = usePolymarketActivity(polyConditionId, { limit: 50, enabled: isPolymarket });
 
   // Live activity from WebSocket last_trade_price events — prepended to REST data.
-  // These appear instantly; REST poll catches up on the next 30s cycle and deduplicates.
+  // Buffered: trades accumulate in a ref, flushed to state every 500ms to reduce re-renders.
   const [wsActivities, setWsActivities] = useState<PolymarketActivity[]>([]);
   const wsActivityIdsRef = useRef(new Set<string>());
+  const wsActivityBufferRef = useRef<PolymarketActivity[]>([]);
+  const wsFlushTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Flush buffer to state (called on timer)
+  const flushWsActivities = useCallback(() => {
+    const buffer = wsActivityBufferRef.current;
+    if (buffer.length > 0) {
+      setWsActivities(prev => {
+        const next = [...buffer, ...prev];
+        return next.length > 20 ? next.slice(0, 20) : next;
+      });
+      wsActivityBufferRef.current = [];
+    }
+    wsFlushTimerRef.current = null;
+  }, []);
+
+  // Schedule a flush if not already scheduled
+  const scheduleFlush = useCallback(() => {
+    if (!wsFlushTimerRef.current) {
+      wsFlushTimerRef.current = setTimeout(flushWsActivities, 500);
+    }
+  }, [flushWsActivities]);
 
   // Reset WS activities on market change
   useEffect(() => {
     setWsActivities([]);
     wsActivityIdsRef.current.clear();
+    wsActivityBufferRef.current = [];
+    if (wsFlushTimerRef.current) {
+      clearTimeout(wsFlushTimerRef.current);
+      wsFlushTimerRef.current = null;
+    }
   }, [polyConditionId]);
 
-  // Convert yesLastTrade → activity entry
+  // Cleanup flush timer on unmount
+  useEffect(() => {
+    return () => {
+      if (wsFlushTimerRef.current) clearTimeout(wsFlushTimerRef.current);
+    };
+  }, []);
+
+  // Convert yesLastTrade → activity entry (buffered, no direct setState)
   useEffect(() => {
     if (!yesLastTrade || !isPolymarket) return;
     const id = `ws-yes-${yesLastTrade.timestamp}-${yesLastTrade.price}-${yesLastTrade.size}`;
     if (wsActivityIdsRef.current.has(id)) return;
     wsActivityIdsRef.current.add(id);
 
-    const entry: PolymarketActivity = {
+    wsActivityBufferRef.current.push({
       id,
       type: 'trade',
       timestamp: String(yesLastTrade.timestamp > 1e12 ? yesLastTrade.timestamp : yesLastTrade.timestamp * 1000),
@@ -2134,22 +2139,18 @@ export default function MarketDetailPage() {
       price: yesLastTrade.price,
       size: yesLastTrade.size,
       amount: yesLastTrade.price * yesLastTrade.size,
-    };
-
-    setWsActivities(prev => {
-      const next = [entry, ...prev];
-      return next.length > 20 ? next.slice(0, 20) : next; // Cap WS buffer
     });
-  }, [yesLastTrade, isPolymarket]);
+    scheduleFlush();
+  }, [yesLastTrade, isPolymarket, scheduleFlush]);
 
-  // Convert noLastTrade → activity entry
+  // Convert noLastTrade → activity entry (buffered, no direct setState)
   useEffect(() => {
     if (!noLastTrade || !isPolymarket) return;
     const id = `ws-no-${noLastTrade.timestamp}-${noLastTrade.price}-${noLastTrade.size}`;
     if (wsActivityIdsRef.current.has(id)) return;
     wsActivityIdsRef.current.add(id);
 
-    const entry: PolymarketActivity = {
+    wsActivityBufferRef.current.push({
       id,
       type: 'trade',
       timestamp: String(noLastTrade.timestamp > 1e12 ? noLastTrade.timestamp : noLastTrade.timestamp * 1000),
@@ -2158,13 +2159,9 @@ export default function MarketDetailPage() {
       price: noLastTrade.price,
       size: noLastTrade.size,
       amount: noLastTrade.price * noLastTrade.size,
-    };
-
-    setWsActivities(prev => {
-      const next = [entry, ...prev];
-      return next.length > 20 ? next.slice(0, 20) : next;
     });
-  }, [noLastTrade, isPolymarket]);
+    scheduleFlush();
+  }, [noLastTrade, isPolymarket, scheduleFlush]);
 
   // Merge: WS live trades + REST historical, deduplicated by timestamp+price+size
   const activities = useMemo(() => {
@@ -2200,36 +2197,32 @@ export default function MarketDetailPage() {
 
   // Transform price history for the chart (use appropriate source based on market type)
   // IMPORTANT: Chart expects timestamps in MILLISECONDS
-  // Merges REST-fetched history with live WS trade prices for real-time updates
+  // Split into two memos: expensive REST mapping (runs on refetch) + cheap live merge (runs per trade)
+
+  // Expensive: convert REST timestamps from seconds → ms. Only recomputes on REST refetch (~60s).
+  const restChartPoints = useMemo(() => {
+    if (isPolymarket) {
+      return polyPriceHistory.length > 0
+        ? polyPriceHistory.map(p => ({ time: p.timestamp * 1000, price: p.price }))
+        : [];
+    }
+    return priceHistory.length > 0
+      ? priceHistory.map(p => ({ time: p.timestamp, price: p.yesPrice }))
+      : [];
+  }, [isPolymarket, polyPriceHistory, priceHistory]);
+
+  // Cheap: merge rest + live points. Runs on each trade but only spreads arrays + filters 0-20 live items.
   const chartPriceHistory = useMemo(() => {
     if (isPolymarket) {
-      // Use Polymarket price history + append live trade points from WS
-      // Polymarket returns timestamps in SECONDS, convert to milliseconds
-      const restPoints = polyPriceHistory.length > 0
-        ? polyPriceHistory.map(p => ({
-            time: p.timestamp * 1000,
-            price: p.price,
-          }))
-        : [];
-
       const livePoints = liveTradePointsRef.current;
-      if (restPoints.length === 0 && livePoints.length === 0) return undefined;
-
-      // Merge: REST points + live points that are newer than the last REST point
-      const lastRestTime = restPoints.length > 0 ? restPoints[restPoints.length - 1].time : 0;
+      if (restChartPoints.length === 0 && livePoints.length === 0) return undefined;
+      const lastRestTime = restChartPoints.length > 0 ? restChartPoints[restChartPoints.length - 1].time : 0;
       const newLivePoints = livePoints.filter(p => p.time > lastRestTime);
-
-      return [...restPoints, ...newLivePoints];
-      // eslint-disable-next-line react-hooks/exhaustive-deps -- liveTradeCount triggers re-merge
-    } else {
-      // Use dFlow price history (already in correct format)
-      if (priceHistory.length > 0) {
-        return priceHistory.map(p => ({ time: p.timestamp, price: p.yesPrice }));
-      }
-      return undefined;
+      return [...restChartPoints, ...newLivePoints];
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isPolymarket, polyPriceHistory, priceHistory, liveTradeCount]);
+    return restChartPoints.length > 0 ? restChartPoints : undefined;
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- liveTradeCount triggers re-merge of live points
+  }, [isPolymarket, restChartPoints, liveTradeCount]);
 
   // Unified history loading state
   // For multi-outcome markets, use multi-series loading; otherwise use single-series loading
@@ -2593,40 +2586,51 @@ export default function MarketDetailPage() {
               </div>
               <div className="flex-1 min-h-[300px] overflow-auto pb-20">
                 {/* dFlow: Trades tab */}
-                <div className={`flex flex-col h-full ${selectedTab === "Trades" ? "" : "hidden"}`}>
-                  <TradesTable trades={trades || []} isLoading={tradesLoading} />
-                </div>
+                {selectedTab === "Trades" && (
+                  <div className="flex flex-col h-full">
+                    <TradesTable trades={trades || []} isLoading={tradesLoading} />
+                  </div>
+                )}
                 {/* Polymarket: Activity tab */}
-                <div className={`flex flex-col h-full ${selectedTab === "Activity" ? "" : "hidden"}`}>
-                  <ActivitySection activities={activities || []} isLoading={activityLoading} />
-                </div>
+                {selectedTab === "Activity" && (
+                  <div className="flex flex-col h-full">
+                    <ActivitySection activities={activities || []} isLoading={activityLoading} />
+                  </div>
+                )}
                 {/* Polymarket: Outcomes tab (for multi-outcome markets) */}
-                <div className={`flex flex-col h-full ${selectedTab === "Outcomes" ? "" : "hidden"}`}>
-                  <OutcomesSection
-                    event={polyEvent || null}
-                    isLoading={polyLoading}
-                    onSelectOutcome={(marketId, side) => {
-                      // Find the market by ID and set it as selected
-                      const selectedMkt = polyEvent?.markets?.find(m => m.id === marketId);
-                      if (selectedMkt) {
-                        setSelectedOutcomeMarket(selectedMkt);
-                        setSelectedSide(side);
-                        setTradeMode('buy');
-                        setAmount('');
-                      }
-                    }}
-                  />
-                </div>
+                {selectedTab === "Outcomes" && (
+                  <div className="flex flex-col h-full">
+                    <OutcomesSection
+                      event={polyEvent || null}
+                      isLoading={polyLoading}
+                      onSelectOutcome={(marketId, side) => {
+                        // Find the market by ID and set it as selected
+                        const selectedMkt = polyEvent?.markets?.find(m => m.id === marketId);
+                        if (selectedMkt) {
+                          setSelectedOutcomeMarket(selectedMkt);
+                          setSelectedSide(side);
+                          setTradeMode('buy');
+                          setAmount('');
+                        }
+                      }}
+                    />
+                  </div>
+                )}
                 {/* Polymarket: Comments tab */}
-                <div className={`flex flex-col h-full ${selectedTab === "Comments" ? "" : "hidden"}`}>
-                  <CommentsSection comments={comments || []} isLoading={commentsLoading} eventSlug={tickerString} />
-                </div>
+                {selectedTab === "Comments" && (
+                  <div className="flex flex-col h-full">
+                    <CommentsSection comments={comments || []} isLoading={commentsLoading} eventSlug={tickerString} />
+                  </div>
+                )}
                 {/* Polymarket: Holders tab */}
-                <div className={`flex flex-col h-full ${selectedTab === "Holders" ? "" : "hidden"}`}>
-                  <HoldersSection holders={holders || []} isLoading={holdersLoading} />
-                </div>
+                {selectedTab === "Holders" && (
+                  <div className="flex flex-col h-full">
+                    <HoldersSection holders={holders || []} isLoading={holdersLoading} />
+                  </div>
+                )}
                 {/* Orders tab - Active limit orders */}
-                <div className={`flex flex-col h-full ${selectedTab === "Orders" ? "" : "hidden"}`}>
+                {selectedTab === "Orders" && (
+                <div className="flex flex-col h-full">
                   {!user?.bearerToken ? (
                     <div className="flex flex-col items-center justify-center h-full py-12">
                       <div className="w-12 h-12 rounded-xl mb-3 flex items-center justify-center" style={{ backgroundColor: AX.surface2 }}>
@@ -2745,8 +2749,10 @@ export default function MarketDetailPage() {
                     </div>
                   )}
                 </div>
+                )}
                 {/* Both: Positions tab */}
-                <div className={`flex flex-col h-full ${selectedTab === "Positions" ? "" : "hidden"}`}>
+                {selectedTab === "Positions" && (
+                <div className="flex flex-col h-full">
                   <React.Suspense fallback={<div className="flex items-center justify-center h-full"><HiOutlineRefresh className="w-5 h-5 animate-spin" style={{ color: AX.muted }} /></div>}>
                     {user?.bearerToken ? (
                       <UnifiedPortfolio
@@ -2759,6 +2765,7 @@ export default function MarketDetailPage() {
                     )}
                   </React.Suspense>
                 </div>
+                )}
               </div>
             </div>
           </div>

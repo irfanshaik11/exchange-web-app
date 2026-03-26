@@ -11,7 +11,7 @@ const API_BASE = `${env.NEXT_PUBLIC_BACKEND_URL}/api/prediction/polymarket`;
 
 // Cache configuration for React Query
 // Show cached data INSTANTLY, but ALWAYS fetch fresh data in background
-const STALE_TIME = 0;             // Always refetch (data is never "fresh enough")
+const STALE_TIME = 30_000;        // 30s — matches refetchInterval; avoids redundant refetch on focus/mount
 const CACHE_TIME = 5 * 60 * 1000; // Keep in cache for 5 minutes (for instant placeholder)
 
 // Polymarket API response types

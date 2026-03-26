@@ -167,6 +167,11 @@ const WithdrawModal = dynamic(() => import("./WithdrawModal"), {
   ssr: false,
 });
 
+const PolygonWithdrawModal = dynamic(
+  () => import("./predictions/PolygonWithdrawModal"),
+  { ssr: false },
+);
+
 const WatchlistModal = dynamic(() => import("./WatchlistModal"), {
   ssr: false,
 });
@@ -693,6 +698,7 @@ export default function Header({
   const [polygonConverting, setPolygonConverting] = useState(false);
   const [polygonConvertSuccess, setPolygonConvertSuccess] = useState(false);
   const [showPolygonQR, setShowPolygonQR] = useState(false);
+  const [showPolygonWithdraw, setShowPolygonWithdraw] = useState(false);
 
   // Copy Polygon address handler
   const handleCopyPolygonAddress = useCallback(() => {
@@ -2537,11 +2543,11 @@ export default function Header({
 
                         {/* Action Buttons - Conditional for Predictions */}
                         {isPredictionsPage ? (
-                          <div>
-                            {/* Deposit Button - Opens QR - Full Width */}
+                          <div className="flex gap-2">
+                            {/* Deposit Button - Opens QR */}
                             <button
                               onClick={() => setShowPolygonQR(true)}
-                              className="flex w-full items-center justify-center gap-1.5 rounded-lg px-3 py-2.5 text-sm font-medium transition-all"
+                              className="flex flex-1 items-center justify-center gap-1.5 rounded-lg px-3 py-2.5 text-sm font-medium transition-all"
                               style={{
                                 backgroundColor: "#8247E5",
                                 color: "#fff",
@@ -2557,6 +2563,29 @@ export default function Header({
                             >
                               <HiOutlineQrcode className="h-4 w-4" />
                               Deposit
+                            </button>
+                            {/* Withdraw Button */}
+                            <button
+                              onClick={() => {
+                                setProfileMenuOpen(false);
+                                setShowPolygonWithdraw(true);
+                              }}
+                              className="flex flex-1 items-center justify-center gap-1.5 rounded-lg px-3 py-2.5 text-sm font-medium transition-all"
+                              style={{
+                                backgroundColor: "#0f1012",
+                                color: "#ffffff",
+                                border: "1px solid #2A2B33",
+                              }}
+                              onMouseEnter={(e) => {
+                                e.currentTarget.style.backgroundColor =
+                                  "#1A1B1F";
+                              }}
+                              onMouseLeave={(e) => {
+                                e.currentTarget.style.backgroundColor =
+                                  "#0f1012";
+                              }}
+                            >
+                              Withdraw
                             </button>
                           </div>
                         ) : (
@@ -3313,6 +3342,12 @@ export default function Header({
       <WithdrawModal
         isOpen={withdrawOpen}
         onClose={() => setWithdrawOpen(false)}
+      />
+      <PolygonWithdrawModal
+        open={showPolygonWithdraw}
+        onClose={() => setShowPolygonWithdraw(false)}
+        balance={polygonBalance}
+        onBalanceUpdate={(updated) => setPolygonBalance(updated)}
       />
       <WatchlistModal
         open={watchlistOpen}
