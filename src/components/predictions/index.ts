@@ -31,3 +31,10 @@ export { default as PolymarketPortfolio } from './PolymarketPortfolio';
 // Talarion AI market creation
 export { default as TalarionCreate } from './TalarionCreate';
 export { default as TalarionMarketCard } from './TalarionMarketCard';
+
+// V3 dashboard components
+export { default as PredictionsSidebar } from './PredictionsSidebar';
+export { default as MarketRow } from './MarketRow';
+export { default as FeaturedHero } from './FeaturedHero';
+export { default as MarketCard } from './MarketCard';
+export { default as CategoryGraphic } from './CategoryGraphics';
