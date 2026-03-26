@@ -1135,6 +1135,27 @@ export const withdrawPolygonUsdce = (
   });
 
 /**
+ * Withdraw native MATIC (POL) from Polygon wallet to an external address
+ */
+export const withdrawPolygonMatic = (
+  params: { destinationAddress: string; amount: number },
+  authToken: string,
+) =>
+  apiFetch<{
+    message: string;
+    txHash: string;
+    txSignature: string;
+    amount: number;
+    destinationAddress: string;
+    transactionId: number;
+    explorerUrl: string;
+  }>("/api/users/withdraw", {
+    method: "POST",
+    body: { ...params, chain: "MATIC" },
+    authToken,
+  });
+
+/**
  * Get USDC.e withdrawal history for the authenticated user
  */
 export interface PolygonWithdrawalRecord {
