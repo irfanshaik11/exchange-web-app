@@ -5,8 +5,14 @@ const STORAGE_KEY = 'prediction_favorites';
 export interface PredictionFavorite {
   ticker: string;
   title: string;
-  source: 'dflow' | 'polymarket';
+  source: 'dflow' | 'polymarket' | 'talarion';
   addedAt: number;
+  /** Talarion-specific: market resolution rules */
+  rules?: string;
+  /** Talarion-specific: resolution time ISO string */
+  resolutionTime?: string;
+  /** Talarion-specific: last known YES price (0-1) */
+  price?: number;
 }
 
 export default function usePredictionFavorites() {
@@ -38,7 +44,7 @@ export default function usePredictionFavorites() {
     }
   }, [favorites, isLoaded]);
 
-  const addFavorite = useCallback((market: { ticker: string; title: string; source?: 'dflow' | 'polymarket' }) => {
+  const addFavorite = useCallback((market: { ticker: string; title: string; source?: 'dflow' | 'polymarket' | 'talarion'; rules?: string; resolutionTime?: string; price?: number }) => {
     setFavorites((prev) => {
       // Check if already exists
       if (prev.some((f) => f.ticker === market.ticker && f.source === (market.source || 'dflow'))) {
@@ -51,16 +57,19 @@ export default function usePredictionFavorites() {
           title: market.title,
           source: market.source || 'dflow',
           addedAt: Date.now(),
+          ...(market.rules && { rules: market.rules }),
+          ...(market.resolutionTime && { resolutionTime: market.resolutionTime }),
+          ...(market.price != null && { price: market.price }),
         },
       ];
     });
   }, []);
 
-  const removeFavorite = useCallback((ticker: string, source: 'dflow' | 'polymarket' = 'dflow') => {
+  const removeFavorite = useCallback((ticker: string, source: 'dflow' | 'polymarket' | 'talarion' = 'dflow') => {
     setFavorites((prev) => prev.filter((f) => !(f.ticker === ticker && f.source === source)));
   }, []);
 
-  const toggleFavorite = useCallback((market: { ticker: string; title: string; source?: 'dflow' | 'polymarket' }) => {
+  const toggleFavorite = useCallback((market: { ticker: string; title: string; source?: 'dflow' | 'polymarket' | 'talarion'; rules?: string; resolutionTime?: string; price?: number }) => {
     const source = market.source || 'dflow';
     const exists = favorites.some((f) => f.ticker === market.ticker && f.source === source);
     if (exists) {
@@ -70,7 +79,7 @@ export default function usePredictionFavorites() {
     }
   }, [favorites, addFavorite, removeFavorite]);
 
-  const isFavorite = useCallback((ticker: string, source: 'dflow' | 'polymarket' = 'dflow') => {
+  const isFavorite = useCallback((ticker: string, source: 'dflow' | 'polymarket' | 'talarion' = 'dflow') => {
     return favorites.some((f) => f.ticker === ticker && f.source === source);
   }, [favorites]);
 

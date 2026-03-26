@@ -141,11 +141,11 @@ const PLATFORM_UPDATES = [
 
 const navLinks = [
   { name: "Trenches", href: "/pulse" },
-  { name: "Portfolio", href: "/portfolio" },
   { name: "Trending", href: "/discover" },
-  { name: "Trackers", href: "/trackers" },
-  { name: "Rewards", href: "/outpost" },
   { name: "Predictions", href: "/predictions" },
+  { name: "Rewards", href: "/outpost" },
+  { name: "Portfolio", href: "/portfolio" },
+  // { name: "Trackers", href: "/trackers" },
   // { name: "Perpetuals", href: "/perpetuals" },
   // { name: "Yield", href: "/construction" },
 ];

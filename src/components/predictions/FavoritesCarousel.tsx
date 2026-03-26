@@ -28,9 +28,9 @@ const C = {
 };
 
 interface FavoritesCarouselProps {
-  favorites: { ticker: string; title: string; source: 'dflow' | 'polymarket' }[];
+  favorites: { ticker: string; title: string; source: 'dflow' | 'polymarket' | 'talarion' }[];
   markets: PredictionMarket[];
-  onRemoveFavorite: (ticker: string, source: 'dflow' | 'polymarket') => void;
+  onRemoveFavorite: (ticker: string, source: 'dflow' | 'polymarket' | 'talarion') => void;
 }
 
 const formatVolume = (volume: number): string => {

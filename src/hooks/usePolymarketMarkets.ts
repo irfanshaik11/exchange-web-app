@@ -77,15 +77,21 @@ const safeJsonParse = <T>(str: string, fallback: T): T => {
 };
 
 // Map Polymarket tags to our category system
-// Based on actual Polymarket tag distribution: Sports (177), Games (141), Politics (126),
-// Geopolitics (74), Esports (64), Weather (57), Crypto (55), Culture (30), Finance (31), etc.
+// Expanded categories based on Polymarket's actual tag distribution:
+// Sports (177), Games (141), Politics (126), Geopolitics (74), Esports (64),
+// Weather (57), Crypto (55), Culture (30), Finance (31), etc.
 const CATEGORY_TAG_MAP: Record<string, string[]> = {
-  politics: ['politics', 'elections', 'global elections', 'world elections', 'congress', 'president', 'senate', 'geopolitics', 'trump', 'world', 'iran', 'israel', 'middle east'],
-  sports: ['sports', 'nfl', 'nba', 'mlb', 'soccer', 'football', 'basketball', 'tennis', 'baseball', 'hockey', 'mma', 'boxing', 'cricket', 'f1', 'golf', 'rugby'],
-  crypto: ['crypto', 'bitcoin', 'ethereum', 'blockchain', 'crypto prices', 'defi', 'solana', 'altcoins'],
-  economics: ['finance', 'economy', 'fed', 'interest rates', 'stocks', 'markets', 'gdp', 'inflation', 'tariffs'],
-  entertainment: ['entertainment', 'movies', 'oscars', 'music', 'culture', 'tv', 'celebrity', 'games', 'esports', 'counter strike 2', 'gaming', 'eurovision', 'awards'],
-  science: ['science', 'tech', 'ai', 'space', 'weather', 'daily temperature', 'climate', 'health'],
+  politics: ['politics', 'elections', 'global elections', 'world elections', 'congress', 'president', 'senate', 'trump', 'democrat', 'republican'],
+  sports: ['sports', 'nfl', 'nba', 'mlb', 'soccer', 'football', 'basketball', 'tennis', 'baseball', 'hockey', 'mma', 'boxing', 'cricket', 'f1', 'golf', 'rugby', 'formula 1'],
+  crypto: ['crypto', 'bitcoin', 'ethereum', 'blockchain', 'crypto prices', 'defi', 'solana', 'altcoins', 'altcoin', 'strategic bitcoin reserve'],
+  esports: ['esports', 'counter strike 2', 'valorant', 'gaming', 'honor of kings', 'games'],
+  finance: ['finance', 'fed', 'interest rates', 'stocks', 'markets', 'commodities', 'oil', 'gold', 'tariffs', 'fed rates', 'fomc'],
+  geopolitics: ['geopolitics', 'iran', 'israel', 'middle east', 'russia', 'ukraine', 'world', 'china', 'sanctions', 'military strikes'],
+  tech: ['tech', 'ai', 'openai', 'robotaxi', 'technology', 'intel', 'nvidia'],
+  culture: ['entertainment', 'movies', 'oscars', 'music', 'culture', 'tv', 'celebrity', 'eurovision', 'awards', 'grammy', 'emmy'],
+  economy: ['economy', 'gdp', 'inflation', 'unemployment', 'jobs', 'economic policy', 'debt', 'macro', 'macro indicators'],
+  weather: ['weather', 'daily temperature', 'climate', 'temperature', 'global warming'],
+  science: ['science', 'space', 'nasa', 'health', 'cdc'],
 };
 
 const mapPolymarketCategory = (tags: PolymarketTag[], title: string): string => {
@@ -100,10 +106,15 @@ const mapPolymarketCategory = (tags: PolymarketTag[], title: string): string => 
   // Fallback to title keyword analysis
   if (/trump|biden|election|senate|congress|vote|republican|democrat|governor/i.test(titleLower)) return 'politics';
   if (/bitcoin|btc|eth|crypto|solana|sol price/i.test(titleLower)) return 'crypto';
-  if (/fed |interest rate|gdp|inflation|stock|s&p|nasdaq|tariff/i.test(titleLower)) return 'economics';
   if (/nba|nfl|mlb|premier league|champions league|world cup|tennis|boxing|ufc/i.test(titleLower)) return 'sports';
-  if (/movie|oscars|grammy|emmy|eurovision|netflix|game|esport/i.test(titleLower)) return 'entertainment';
-  if (/ai |openai|gpt|spacex|nasa|temperature|weather/i.test(titleLower)) return 'science';
+  if (/valorant|counter.?strike|esport|gaming/i.test(titleLower)) return 'esports';
+  if (/fed |interest rate|stock|s&p|nasdaq|tariff|oil price|gold price/i.test(titleLower)) return 'finance';
+  if (/iran|israel|russia|ukraine|middle east|geopolit/i.test(titleLower)) return 'geopolitics';
+  if (/ai |openai|gpt|robotaxi|nvidia|intel/i.test(titleLower)) return 'tech';
+  if (/movie|oscars|grammy|emmy|eurovision|netflix|celebrity/i.test(titleLower)) return 'culture';
+  if (/gdp|inflation|unemploy|jobs report|economic/i.test(titleLower)) return 'economy';
+  if (/temperature|weather|climate|tornado|hurricane/i.test(titleLower)) return 'weather';
+  if (/spacex|nasa|space|health|cdc/i.test(titleLower)) return 'science';
 
   return 'other';
 };

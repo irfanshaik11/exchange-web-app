@@ -1,24 +1,23 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import Head from 'next/head';
-import Image from 'next/image';
-import dynamic from 'next/dynamic';
+// import Image from 'next/image';
+// import dynamic from 'next/dynamic';
 import { motion, AnimatePresence } from 'framer-motion';
 
 // Lazy-load 3D scene — client only, no SSR for WebGL
-const HeroScene = dynamic(() => import('../../components/predictions/HeroScene'), {
-  ssr: false,
-  loading: () => null,
-});
-import { HiOutlineSearch, HiOutlineRefresh, HiOutlineTrendingUp, HiOutlineViewGrid, HiOutlineCollection, HiOutlineLockClosed } from 'react-icons/hi';
+// COMMENTED OUT: 3D torus ring temporarily disabled
+// const HeroScene = dynamic(() => import('../../components/predictions/HeroScene'), {
+//   ssr: false,
+//   loading: () => null,
+// });
+import { HiOutlineSearch, HiOutlineRefresh, HiOutlineViewGrid, HiOutlineCollection, HiOutlineLockClosed } from 'react-icons/hi';
 import Header from '../../components/Header';
 import Footer from '../../components/Footer';
 import {
   PredictionCard,
   PredictionCardV2,
   CategoryFilter,
-  SortFilter,
   HeroMarket,
-  StatsBar,
   MarketFilters,
   applyMarketFilters,
   DEFAULT_FILTERS,
@@ -75,7 +74,7 @@ export default function PredictionsPage() {
   // TODO: dFlow is disabled for now - only Polymarket is active
   // const [dataSource, setDataSource] = useState<PredictionDataSource>('all');
   const [dataSource, setDataSource] = useState<PredictionDataSource>('polymarket');
-  const [pageMode, setPageMode] = useState<'browse' | 'create'>('browse');
+  const [showFullCreator, setShowFullCreator] = useState(false);
 
   // Fetch markets from unified hook (dFlow + Polymarket)
   const {
@@ -313,6 +312,49 @@ export default function PredictionsPage() {
           <Header />
         </div>
 
+        {/* Category + Sort Nav Bar — single flat row, matches watchlist bar */}
+        <div
+          className="relative z-[9999] bg-[#0C0C0F] px-2 py-1 sm:px-3 sm:py-0.5"
+        >
+          <CategoryFilter
+            selectedCategory={selectedCategory}
+            onSelectCategory={setSelectedCategory}
+            selectedSort={selectedSort}
+            onSelectSort={setSelectedSort}
+            rightSlot={
+              <div className="flex items-center gap-1.5">
+                {/* Inline search — minimal, blends with nav */}
+                <div className="relative hidden sm:flex items-center">
+                  <HiOutlineSearch
+                    className="w-3.5 h-3.5 flex-shrink-0"
+                    style={{ color: searchQuery ? '#18c48c' : '#9ca3af' }}
+                  />
+                  <input
+                    type="text"
+                    placeholder="Search"
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    className="w-24 focus:w-40 lg:w-28 lg:focus:w-48 bg-transparent px-2 py-1 text-sm font-medium outline-none text-white placeholder-neutral-500 transition-all duration-200"
+                  />
+                  {searchQuery && (
+                    <button
+                      onClick={() => setSearchQuery('')}
+                      className="w-4 h-4 flex items-center justify-center rounded-full hover:bg-white/10 text-[11px] flex-shrink-0"
+                      style={{ color: '#9ca3af' }}
+                    >
+                      ×
+                    </button>
+                  )}
+                </div>
+                <MarketFilters
+                  filters={marketFilters}
+                  onFiltersChange={setMarketFilters}
+                />
+              </div>
+            }
+          />
+        </div>
+
         <div className="p-1 sm:p-1.5">
           {/* Rounded container with background - matches tracker */}
           <div className="relative min-h-[calc(100vh-80px)] overflow-hidden rounded-2xl border border-white/[0.06]">
@@ -338,277 +380,93 @@ export default function PredictionsPage() {
             </div>
             <AuroraBackground />
 
-            {/* 3D ring background */}
-            <div className="pointer-events-none fixed inset-0 overflow-hidden" style={{ zIndex: 0 }}>
+            {/* 3D ring background — COMMENTED OUT: temporarily disabled */}
+            {/* <div className="pointer-events-none fixed inset-0 overflow-hidden" style={{ zIndex: 0 }}>
               <HeroScene probability={0.5} scrollRef={scrollRef} />
-            </div>
+            </div> */}
 
-        {/* Geo-restriction Banner — clean, minimal */}
+        {/* Geo-restriction Banner — single-line static */}
         <div
-          className="relative z-10 overflow-hidden"
+          className="relative z-10 flex items-center justify-center gap-2 py-1.5"
           style={{
             backgroundColor: 'rgba(248, 113, 113, 0.06)',
-            borderBottom: `1px solid rgba(248, 113, 113, 0.12)`,
+            borderBottom: '1px solid rgba(248, 113, 113, 0.12)',
           }}
         >
-          <div className="py-2 overflow-hidden">
-            <div className="flex animate-marquee whitespace-nowrap">
-              {[...Array(3)].map((_, i) => (
-                <span key={i} className="text-[12px] font-medium inline-flex items-center" style={{ color: T.red }}>
-                  <span className="inline-flex items-center gap-2 mx-12">
-                    <svg className="w-3.5 h-3.5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z" />
-                    </svg>
-                    Trading on prediction markets is not available in your region due to regulatory restrictions
-                  </span>
-                  <span style={{ color: 'rgba(248,113,113,0.25)' }}>|</span>
-                  <span className="inline-flex items-center gap-2 mx-12">
-                    US users are restricted from trading on Polymarket via Interstate
-                  </span>
-                  <span style={{ color: 'rgba(248,113,113,0.25)' }}>|</span>
-                </span>
-              ))}
+          <svg className="w-3 h-3 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" style={{ color: T.red }}>
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z" />
+          </svg>
+          <span className="text-[11px] font-medium" style={{ color: T.red }}>
+            Prediction market trading unavailable in restricted regions
+          </span>
+        </div>
+
+        {/* Full-width section above the two-column layout */}
+        <div className="relative z-10 w-full max-w-[1800px] mx-auto px-4 sm:px-6 lg:px-8 pt-4 md:pt-6">
+          {/* Error display */}
+          {error && (
+            <motion.div
+              initial={{ opacity: 0, y: -10 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="mb-4 flex items-center justify-center gap-3 p-3 rounded-xl"
+              style={{
+                backgroundColor: 'rgba(239, 68, 68, 0.1)',
+                border: '1px solid rgba(239, 68, 68, 0.3)',
+              }}
+            >
+              <span className="text-sm" style={{ color: '#EF4444' }}>
+                {error}
+              </span>
+              <motion.button
+                whileHover={{ scale: 1.05 }}
+                whileTap={{ scale: 0.95 }}
+                onClick={() => refetch()}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium"
+                style={{
+                  backgroundColor: AX.accent,
+                  color: '#fff',
+                }}
+              >
+                <HiOutlineRefresh className="w-4 h-4" />
+                Retry
+              </motion.button>
+            </motion.div>
+          )}
+
+          {/* Page heading */}
+          <div className="flex items-center gap-3 mb-4">
+            <h1
+              className="text-2xl md:text-3xl font-bold tracking-tight"
+              style={{ color: T.text, letterSpacing: '-0.03em' }}
+            >
+              Predictions
+            </h1>
+            <span
+              className="px-2 py-0.5 rounded-md text-[9px] font-bold uppercase tracking-widest"
+              style={{ backgroundColor: T.greenSoft, color: T.accent }}
+            >
+              Beta
+            </span>
+          </div>
+
+          {/* AI Creator + Insights Panel — side by side on xl */}
+          <div className="flex gap-6 mb-4 items-start">
+            <div className="flex-1 min-w-0">
+              <TalarionCreate authToken={user?.bearerToken} />
+            </div>
+            <div className="hidden xl:block w-[340px] flex-shrink-0">
+              <HomepageInsightPanel docked />
             </div>
           </div>
         </div>
 
-        <main className="relative z-10 flex-1 w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 md:py-10">
-          {/* Page Header — clean, Apple-style */}
-          <motion.div
-            initial={{ opacity: 0, y: -12 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
-            className="mb-10"
-          >
-            <div className="flex flex-col lg:flex-row lg:items-end lg:justify-between gap-6 mb-6">
-              <div>
-                <div className="flex items-center gap-3 mb-2">
-                  <h1
-                    className="text-3xl md:text-4xl font-bold tracking-tight"
-                    style={{ color: T.text, letterSpacing: '-0.03em' }}
-                  >
-                    Prediction Markets
-                  </h1>
-                  <span
-                    className="px-2 py-0.5 rounded-md text-[9px] font-bold uppercase tracking-widest"
-                    style={{
-                      backgroundColor: T.greenSoft,
-                      color: T.accent,
-                    }}
-                  >
-                    Beta
-                  </span>
-                </div>
+        {/* Two-column layout: main content (no sidebar — it's above now) */}
+        <div className="relative z-10 flex-1 w-full max-w-[1800px] mx-auto px-4 sm:px-6 lg:px-8 pb-4 md:pb-6">
+        <main className="flex-1 min-w-0">
 
-                {/* Mode Toggle: Browse / Create */}
-                <div
-                  className="inline-flex items-center rounded-xl p-1 mt-3 mb-1"
-                  style={{
-                    backgroundColor: 'rgba(12, 14, 18, 0.8)',
-                    border: `1px solid ${T.borderHover}`,
-                  }}
-                >
-                  {([
-                    { key: 'browse' as const, label: 'Markets' },
-                    { key: 'create' as const, label: 'Create with AI' },
-                  ]).map((tab) => {
-                    const isActive = pageMode === tab.key;
-                    const isAI = tab.key === 'create';
-                    return (
-                      <button
-                        key={tab.key}
-                        onClick={() => setPageMode(tab.key)}
-                        className="relative px-5 py-2 rounded-lg text-[13px] font-semibold transition-all duration-200 outline-none focus-visible:ring-1"
-                        style={{
-                          color: isActive ? T.text : T.muted,
-                          backgroundColor: isActive
-                            ? isAI ? 'rgba(255,255,255,0.04)' : 'rgba(255,255,255,0.08)'
-                            : 'transparent',
-                          border: isActive && isAI
-                            ? '1px solid transparent'
-                            : '1px solid transparent',
-                          backgroundImage: isActive && isAI
-                            ? 'linear-gradient(rgba(14,16,20,0.9), rgba(14,16,20,0.9)), linear-gradient(135deg, #FF3B30, #FFD60A, #34C759, #00C7BE, #5856D6, #BF5AF2)'
-                            : undefined,
-                          backgroundOrigin: isActive && isAI ? 'border-box' : undefined,
-                          backgroundClip: isActive && isAI ? 'padding-box, border-box' : undefined,
-                        }}
-                      >
-                        <span className="relative z-10 flex items-center gap-1.5">
-                          {isAI && (
-                            <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-                              <defs>
-                                <linearGradient id="ai-sparkle-rainbow" x1="0" y1="0" x2="16" y2="16" gradientUnits="userSpaceOnUse">
-                                  <stop offset="0%" stopColor="#FF3B30" />
-                                  <stop offset="25%" stopColor="#FFD60A" />
-                                  <stop offset="50%" stopColor="#34C759" />
-                                  <stop offset="75%" stopColor="#00C7BE" />
-                                  <stop offset="100%" stopColor="#BF5AF2" />
-                                </linearGradient>
-                              </defs>
-                              <path
-                                d="M8 1l1.5 4.5L14 7l-4.5 1.5L8 13l-1.5-4.5L2 7l4.5-1.5L8 1z"
-                                fill={isActive ? 'url(#ai-sparkle-rainbow)' : 'currentColor'}
-                              />
-                            </svg>
-                          )}
-                          {tab.label}
-                        </span>
-                      </button>
-                    );
-                  })}
-                </div>
-
-                {pageMode === 'browse' && (
-                  <div className="mt-2">
-                    <StatsBar
-                      totalMarkets={totalAvailable > 0 ? totalAvailable : allMarkets.length}
-                      totalVolume={totalVolume}
-                      activeTraders={12_450}
-                    />
-                  </div>
-                )}
-              </div>
-
-              {/* Search — only in browse mode */}
-              {pageMode === 'browse' && (
-                <div className="relative w-full lg:w-80">
-                  <input
-                    type="text"
-                    placeholder="Search markets..."
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    className="w-full px-4 py-2.5 pl-10 rounded-xl text-sm transition-all duration-200 outline-none focus:ring-1 text-white placeholder-neutral-500 backdrop-blur-xl"
-                    style={{
-                      backgroundColor: 'rgba(12, 14, 18, 0.75)',
-                      border: `1px solid ${T.border}`,
-                      // @ts-ignore
-                      '--tw-ring-color': T.accent,
-                    }}
-                  />
-                  <HiOutlineSearch
-                    className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 transition-colors"
-                    style={{ color: searchQuery ? T.accent : T.muted }}
-                  />
-                  {searchQuery && (
-                    <button
-                      onClick={() => setSearchQuery('')}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 w-5 h-5 flex items-center justify-center rounded-full hover:bg-white/10 transition-colors"
-                      style={{ color: T.muted }}
-                    >
-                      ×
-                    </button>
-                  )}
-                </div>
-              )}
-            </div>
-
-            {/* Error display with refresh button */}
-            {error && (
-              <motion.div
-                initial={{ opacity: 0, y: -10 }}
-                animate={{ opacity: 1, y: 0 }}
-                className="mt-4 flex items-center justify-center gap-3 p-3 rounded-xl"
-                style={{
-                  backgroundColor: 'rgba(239, 68, 68, 0.1)',
-                  border: '1px solid rgba(239, 68, 68, 0.3)',
-                }}
-              >
-                <span className="text-sm" style={{ color: '#EF4444' }}>
-                  {error}
-                </span>
-                <motion.button
-                  whileHover={{ scale: 1.05 }}
-                  whileTap={{ scale: 0.95 }}
-                  onClick={() => refetch()}
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium"
-                  style={{
-                    backgroundColor: AX.accent,
-                    color: '#fff',
-                  }}
-                >
-                  <HiOutlineRefresh className="w-4 h-4" />
-                  Retry
-                </motion.button>
-              </motion.div>
-            )}
-          </motion.div>
-
-          {/* ====== MODE SWITCH: Browse vs Create ====== */}
-          <AnimatePresence mode="wait">
-            {pageMode === 'create' ? (
-              <motion.div
-                key="create-mode"
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -12 }}
-                transition={{ duration: 0.35, ease: [0.16, 1, 0.3, 1] }}
-              >
-                <TalarionCreate
-                  authToken={user?.bearerToken}
-                />
-              </motion.div>
-            ) : (
-              <motion.div
-                key="browse-mode"
-                initial={{ opacity: 0, y: 12 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -12 }}
-                transition={{ duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
-              >
-
-          {/* Unified Portfolio Section - Wallet balance, stats, positions, orders, history */}
-          {user?.bearerToken && (
-            <div className="mb-6">
-              <div
-                className="rounded-2xl overflow-hidden backdrop-blur-xl"
-                style={{
-                  backgroundColor: 'rgba(12, 14, 18, 0.75)',
-                  border: `1px solid ${T.border}`,
-                }}
-              >
-                {/* Portfolio Header - Clickable to expand/collapse */}
-                <button
-                  onClick={() => setShowPortfolio(!showPortfolio)}
-                  className="w-full flex items-center justify-between px-4 py-3 transition-colors hover:bg-white/5"
-                >
-                  <div className="flex items-center gap-2">
-                    <HiOutlineCollection className="w-5 h-5" style={{ color: AX.accent }} />
-                    <span className="text-sm font-medium" style={{ color: AX.text }}>
-                      My Portfolio
-                    </span>
-                  </div>
-                  <svg
-                    className={`w-5 h-5 transition-transform duration-200 ${showPortfolio ? 'rotate-180' : ''}`}
-                    fill="none"
-                    viewBox="0 0 24 24"
-                    stroke="currentColor"
-                    style={{ color: AX.muted }}
-                  >
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                  </svg>
-                </button>
-
-                {/* Portfolio Content */}
-                {showPortfolio && (
-                  <div
-                    className="px-4 pb-4 pt-2"
-                    style={{ borderTop: `1px solid ${AX.border}` }}
-                  >
-                    <UnifiedPortfolio
-                      authToken={user.bearerToken}
-                      walletAddress={primaryWalletAddresses?.ethereum}
-                      onClaimSuccess={refetch}
-                    />
-                  </div>
-                )}
-              </div>
-            </div>
-          )}
-
-          {/* Featured Market Hero */}
+          {/* Featured Market Hero — COMMENTED OUT for now
           {featuredMarket && !searchQuery && (
-            <div className="mb-8">
+            <div className="mb-6">
               <HeroMarket
                 market={featuredMarket}
                 liveYesPrice={
@@ -620,6 +478,7 @@ export default function PredictionsPage() {
               />
             </div>
           )}
+          */}
 
           {/* Favorites Carousel */}
           {favorites.length > 0 && allMarkets.length > 0 && (
@@ -629,78 +488,6 @@ export default function PredictionsPage() {
               onRemoveFavorite={removeFavorite}
             />
           )}
-
-          {/* Curated Sections */}
-          {!searchQuery && selectedCategory === 'all' && allMarkets.length > 0 && (
-            <div className="mb-8">
-              <CuratedSections
-                markets={allMarkets}
-                onToggleFavorite={toggleFavorite}
-                isFavorite={isFavorite}
-              />
-            </div>
-          )}
-
-          {/* Data Source Switcher */}
-          {/* TODO: DataSourceSwitcher hidden - dFlow disabled for now
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.5, delay: 0.15 }}
-            className="mb-4 flex justify-center"
-          >
-            <DataSourceSwitcher
-              source={dataSource}
-              onSourceChange={setDataSource}
-              dflowCount={dflowCount}
-              polymarketCount={polymarketCount}
-              showCounts={true}
-            />
-          </motion.div>
-          */}
-
-          {/* Filters */}
-          <div className="mb-8 relative z-30">
-            <div className="flex justify-center items-center gap-2">
-              <div
-                className="inline-flex items-center gap-3 p-1.5 rounded-xl overflow-x-auto scrollbar-hide max-w-full backdrop-blur-xl"
-                style={{
-                  backgroundColor: 'rgba(12, 14, 18, 0.75)',
-                  border: `1px solid ${T.border}`,
-                }}
-              >
-                <CategoryFilter
-                  selectedCategory={selectedCategory}
-                  onSelectCategory={setSelectedCategory}
-                  categoryCounts={categoryCounts}
-                  totalAvailable={totalAvailable}
-                />
-                {/* Divider */}
-                <div
-                  className="w-px h-8 flex-shrink-0"
-                  style={{ backgroundColor: AX.border }}
-                />
-                <SortFilter
-                  selectedSort={selectedSort}
-                  onSelectSort={setSelectedSort}
-                />
-              </div>
-              {/* Advanced Filters */}
-              <div
-                className="flex-shrink-0 p-1.5 rounded-xl backdrop-blur-xl"
-                style={{
-                  backgroundColor: 'rgba(12, 14, 18, 0.75)',
-                  border: `1px solid ${T.border}`,
-                }}
-              >
-                <MarketFilters
-                  filters={marketFilters}
-                  onFiltersChange={setMarketFilters}
-                />
-              </div>
-
-            </div>
-          </div>
 
           {/* Markets Grid */}
           <div className="mb-8">
@@ -890,13 +677,65 @@ export default function PredictionsPage() {
             )}
           </div>
 
-          {/* End of browse-mode content */}
-              </motion.div>
-            )}
-          </AnimatePresence>
+          {/* Curated Sections — below the grid for discovery */}
+          {!searchQuery && selectedCategory === 'all' && allMarkets.length > 0 && (
+            <div className="mb-8">
+              <CuratedSections
+                markets={allMarkets}
+                onToggleFavorite={toggleFavorite}
+                isFavorite={isFavorite}
+              />
+            </div>
+          )}
 
-          {/* Footer CTA — only in browse mode */}
-          {pageMode === 'browse' && (
+          {/* Portfolio Section — COMMENTED OUT for now
+          {user?.bearerToken && (
+            <div className="mb-6">
+              <div
+                className="rounded-2xl overflow-hidden backdrop-blur-xl"
+                style={{
+                  backgroundColor: 'rgba(12, 14, 18, 0.75)',
+                  border: `1px solid ${T.border}`,
+                }}
+              >
+                <button
+                  onClick={() => setShowPortfolio(!showPortfolio)}
+                  className="w-full flex items-center justify-between px-4 py-3 transition-colors hover:bg-white/5"
+                >
+                  <div className="flex items-center gap-2">
+                    <HiOutlineCollection className="w-5 h-5" style={{ color: AX.accent }} />
+                    <span className="text-sm font-medium" style={{ color: AX.text }}>
+                      My Portfolio
+                    </span>
+                  </div>
+                  <svg
+                    className={`w-5 h-5 transition-transform duration-200 ${showPortfolio ? 'rotate-180' : ''}`}
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                    style={{ color: AX.muted }}
+                  >
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                  </svg>
+                </button>
+                {showPortfolio && (
+                  <div
+                    className="px-4 pb-4 pt-2"
+                    style={{ borderTop: `1px solid ${AX.border}` }}
+                  >
+                    <UnifiedPortfolio
+                      authToken={user.bearerToken}
+                      walletAddress={primaryWalletAddresses?.ethereum}
+                      onClaimSuccess={refetch}
+                    />
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+          */}
+
+          {/* Footer CTA */}
           <div
             className="relative rounded-2xl p-8 md:p-10 overflow-hidden"
             style={{
@@ -949,12 +788,15 @@ export default function PredictionsPage() {
               </div>
             </div>
           </div>
-          )}
 
           {/* Bottom padding */}
           <div className="h-16 md:h-20" />
         </main>
 
+        {/* AI Insights sidebar moved to top section alongside TalarionCreate */}
+        </div>
+
+        {/* Floating AI panel for lg screens where sidebar isn't shown */}
         <HomepageInsightPanel />
 
         <Footer />
@@ -980,13 +822,19 @@ export default function PredictionsPage() {
           overflow: hidden;
         }
 
-        /* Marquee animation */
-        @keyframes marquee {
-          0% { transform: translateX(0); }
-          100% { transform: translateX(-50%); }
+        /* AI compact bar shimmer */
+        @keyframes shimmer-ai {
+          0% { background-position: 200% 0; }
+          50% { background-position: 0% 0; }
+          100% { background-position: 200% 0; }
         }
-        .animate-marquee {
-          animation: marquee 30s linear infinite;
+
+        /* Nebula drift — slow floating motion */
+        @keyframes nebula-drift {
+          0% { transform: translateX(-50%) translateY(0) scale(1); }
+          33% { transform: translateX(-48%) translateY(8px) scale(1.03); }
+          66% { transform: translateX(-52%) translateY(-5px) scale(0.97); }
+          100% { transform: translateX(-50%) translateY(0) scale(1); }
         }
       `}</style>
     </PinGate>
