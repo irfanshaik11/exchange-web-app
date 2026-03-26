@@ -1,5 +1,5 @@
 // src/components/predictions/PolygonWithdrawModal.tsx
-// Modal for withdrawing USDC.e from Polygon wallet with history tab
+// Modal for withdrawing USDC.e or MATIC from Polygon wallet with history tab
 
 import React, { useState, useCallback, useEffect } from 'react';
 import { BiX, BiLinkExternal, BiTime, BiCheck, BiError } from 'react-icons/bi';
@@ -8,6 +8,7 @@ import toast from 'react-hot-toast';
 import { useUser } from '../UserContext';
 import {
   withdrawPolygonUsdce,
+  withdrawPolygonMatic,
   getPolygonWithdrawalHistory,
   type PolymarketBalance,
   type PolygonWithdrawalRecord,
@@ -15,6 +16,7 @@ import {
 import { createPolymarketTradeToast } from '~/utils/tradeToast';
 
 type Tab = 'withdraw' | 'history';
+type Asset = 'usdc' | 'matic';
 
 interface PolygonWithdrawModalProps {
   open: boolean;
@@ -46,6 +48,7 @@ export default function PolygonWithdrawModal({
 }: PolygonWithdrawModalProps) {
   const { user } = useUser();
   const [tab, setTab] = useState<Tab>('withdraw');
+  const [asset, setAsset] = useState<Asset>('usdc');
   const [destinationAddress, setDestinationAddress] = useState('');
   const [amount, setAmount] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -54,14 +57,25 @@ export default function PolygonWithdrawModal({
   const [history, setHistory] = useState<PolygonWithdrawalRecord[]>([]);
   const [historyLoading, setHistoryLoading] = useState(false);
 
-  const availableBalance = balance?.usdcBridged ?? 0;
+  const availableBalance = asset === 'usdc'
+    ? (balance?.usdcBridged ?? 0)
+    : (balance?.matic ?? 0);
+
+  const minWithdrawal = asset === 'usdc' ? 0.5 : 0.001;
+  const assetLabel = asset === 'usdc' ? 'USDC.e' : 'MATIC';
+  const assetDecimals = asset === 'usdc' ? 2 : 4;
 
   const isValidAddress = /^0x[a-fA-F0-9]{40}$/.test(destinationAddress);
   const parsedAmount = parseFloat(amount);
   const isValidAmount =
-    !isNaN(parsedAmount) && parsedAmount >= 0.5 && parsedAmount <= availableBalance;
+    !isNaN(parsedAmount) && parsedAmount >= minWithdrawal && parsedAmount <= availableBalance;
 
   const canSubmit = isValidAddress && isValidAmount && !isSubmitting;
+
+  // Reset amount when switching assets
+  useEffect(() => {
+    setAmount('');
+  }, [asset]);
 
   // Fetch history when switching to history tab
   useEffect(() => {
@@ -77,8 +91,15 @@ export default function PolygonWithdrawModal({
   }, [tab, open, user?.bearerToken]);
 
   const handleMaxClick = useCallback(() => {
-    setAmount(availableBalance.toFixed(2));
-  }, [availableBalance]);
+    if (asset === 'matic') {
+      // Reserve a small amount for gas if withdrawing MATIC
+      const reserved = 0.01;
+      const max = Math.max(0, availableBalance - reserved);
+      setAmount(max.toFixed(assetDecimals));
+    } else {
+      setAmount(availableBalance.toFixed(assetDecimals));
+    }
+  }, [availableBalance, asset, assetDecimals]);
 
   const handleSubmit = async () => {
     if (!user?.bearerToken || !canSubmit) return;
@@ -87,28 +108,45 @@ export default function PolygonWithdrawModal({
     setIsSubmitting(true);
 
     const tradeToast = createPolymarketTradeToast({
-      label: `Withdrawing $${withdrawAmt.toFixed(2)} USDC.e...`,
-      tokenName: 'USDC.e',
+      label: asset === 'usdc'
+        ? `Withdrawing $${withdrawAmt.toFixed(2)} USDC.e...`
+        : `Withdrawing ${withdrawAmt.toFixed(assetDecimals)} MATIC...`,
+      tokenName: assetLabel,
     });
 
     try {
-      const result = await withdrawPolygonUsdce(
-        { destinationAddress, amount: withdrawAmt },
-        user.bearerToken,
-      );
-
-      if (result.success) {
-        if (result.data.balances && onBalanceUpdate) {
-          onBalanceUpdate(result.data.balances);
-        }
-        setDestinationAddress('');
-        setAmount('');
-
-        tradeToast.complete(
-          `Withdrew $${withdrawAmt.toFixed(2)} USDC.e`,
-          result.data.txHash,
+      if (asset === 'usdc') {
+        const result = await withdrawPolygonUsdce(
+          { destinationAddress, amount: withdrawAmt },
+          user.bearerToken,
         );
 
+        if (result.success) {
+          if (result.data.balances && onBalanceUpdate) {
+            onBalanceUpdate(result.data.balances);
+          }
+          setDestinationAddress('');
+          setAmount('');
+          tradeToast.complete(
+            `Withdrew $${withdrawAmt.toFixed(2)} USDC.e`,
+            result.data.txHash,
+          );
+          onClose();
+        }
+      } else {
+        const result = await withdrawPolygonMatic(
+          { destinationAddress, amount: withdrawAmt },
+          user.bearerToken,
+        );
+
+        setDestinationAddress('');
+        setAmount('');
+        tradeToast.complete(
+          `Withdrew ${withdrawAmt.toFixed(assetDecimals)} MATIC`,
+          result.txHash,
+        );
+        // Trigger a balance refresh event so the header picks it up
+        window.dispatchEvent(new Event('polygon-balance-refresh'));
         onClose();
       }
     } catch (error: any) {
@@ -207,6 +245,45 @@ export default function PolygonWithdrawModal({
           {tab === 'withdraw' && (
             <>
               <div className="space-y-4">
+                  {/* Asset Selector */}
+                  <div
+                    className="flex gap-1 rounded-xl p-1"
+                    style={{ background: 'rgba(255,255,255,0.04)' }}
+                  >
+                    <button
+                      onClick={() => setAsset('usdc')}
+                      className="flex flex-1 items-center justify-center gap-1.5 rounded-lg py-2 text-xs font-medium transition-all"
+                      style={{
+                        background: asset === 'usdc'
+                          ? 'rgba(130, 71, 229, 0.2)'
+                          : 'transparent',
+                        color: asset === 'usdc' ? '#a78bfa' : '#6b7280',
+                        border: asset === 'usdc'
+                          ? '1px solid rgba(130, 71, 229, 0.3)'
+                          : '1px solid transparent',
+                      }}
+                    >
+                      <span style={{ fontSize: '10px' }}>$</span>
+                      USDC.e
+                    </button>
+                    <button
+                      onClick={() => setAsset('matic')}
+                      className="flex flex-1 items-center justify-center gap-1.5 rounded-lg py-2 text-xs font-medium transition-all"
+                      style={{
+                        background: asset === 'matic'
+                          ? 'rgba(130, 71, 229, 0.2)'
+                          : 'transparent',
+                        color: asset === 'matic' ? '#a78bfa' : '#6b7280',
+                        border: asset === 'matic'
+                          ? '1px solid rgba(130, 71, 229, 0.3)'
+                          : '1px solid transparent',
+                      }}
+                    >
+                      <SiPolygon className="h-3 w-3" />
+                      MATIC
+                    </button>
+                  </div>
+
                   {/* Balance Card */}
                   <div
                     className="rounded-xl p-4"
@@ -221,14 +298,14 @@ export default function PolygonWithdrawModal({
                           Available
                         </p>
                         <p className="text-2xl font-bold text-white">
-                          ${availableBalance.toFixed(2)}
+                          {asset === 'usdc' ? '$' : ''}{availableBalance.toFixed(assetDecimals)}
                         </p>
                       </div>
                       <div
                         className="rounded-lg px-2.5 py-1 text-[11px] font-semibold"
                         style={{ background: 'rgba(130, 71, 229, 0.15)', color: '#a78bfa' }}
                       >
-                        USDC.e
+                        {assetLabel}
                       </div>
                     </div>
                   </div>
@@ -278,19 +355,22 @@ export default function PolygonWithdrawModal({
                       Amount
                     </label>
                     <div className="relative">
-                      <div className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-sm text-neutral-500">
-                        $
-                      </div>
+                      {asset === 'usdc' && (
+                        <div className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-sm text-neutral-500">
+                          $
+                        </div>
+                      )}
                       <input
                         type="number"
                         value={amount}
                         onChange={(e) => setAmount(e.target.value)}
                         placeholder="0.00"
-                        min="0.50"
-                        step="0.01"
+                        min={String(minWithdrawal)}
+                        step={asset === 'usdc' ? '0.01' : '0.001'}
                         disabled={isSubmitting}
-                        className="w-full rounded-xl py-3 pl-8 pr-20 text-sm text-white placeholder-neutral-600 outline-none transition-all"
+                        className="w-full rounded-xl py-3 pr-20 text-sm text-white placeholder-neutral-600 outline-none transition-all"
                         style={{
+                          paddingLeft: asset === 'usdc' ? '2rem' : '1rem',
                           background: 'rgba(255,255,255,0.04)',
                           border: '1px solid rgba(255,255,255,0.06)',
                         }}
@@ -314,8 +394,8 @@ export default function PolygonWithdrawModal({
                     </div>
                     {amount && !isValidAmount && (
                       <p className="mt-1.5 text-[11px] text-red-400">
-                        {parsedAmount < 0.5
-                          ? 'Minimum withdrawal is $0.50'
+                        {parsedAmount < minWithdrawal
+                          ? `Minimum withdrawal is ${asset === 'usdc' ? '$' : ''}${minWithdrawal} ${assetLabel}`
                           : parsedAmount > availableBalance
                             ? 'Exceeds available balance'
                             : 'Enter a valid amount'}
@@ -323,8 +403,8 @@ export default function PolygonWithdrawModal({
                     )}
                   </div>
 
-                  {/* Gas Warning */}
-                  {balance && !balance.hasGasBalance && (
+                  {/* Gas Warning — only for USDC.e (MATIC withdrawals are the gas token itself) */}
+                  {asset === 'usdc' && balance && !balance.hasGasBalance && (
                     <div
                       className="flex items-center gap-2 rounded-lg px-3 py-2.5 text-[11px]"
                       style={{
@@ -335,6 +415,21 @@ export default function PolygonWithdrawModal({
                     >
                       <BiError className="h-3.5 w-3.5 shrink-0" />
                       Low MATIC balance — you need MATIC for gas fees
+                    </div>
+                  )}
+
+                  {/* MATIC reserve note */}
+                  {asset === 'matic' && (
+                    <div
+                      className="flex items-center gap-2 rounded-lg px-3 py-2.5 text-[11px]"
+                      style={{
+                        background: 'rgba(130, 71, 229, 0.06)',
+                        border: '1px solid rgba(130, 71, 229, 0.12)',
+                        color: '#9ca3af',
+                      }}
+                    >
+                      <SiPolygon className="h-3 w-3 shrink-0" style={{ color: '#8247E5' }} />
+                      Max reserves 0.01 MATIC for gas fees
                     </div>
                   )}
 
@@ -365,12 +460,12 @@ export default function PolygonWithdrawModal({
                         Withdrawing...
                       </>
                     ) : (
-                      'Withdraw USDC.e'
+                      `Withdraw ${assetLabel}`
                     )}
                   </button>
 
                   <p className="text-center text-[10px] text-neutral-600">
-                    Polygon network &middot; Min $0.50 &middot; Gas paid in MATIC
+                    Polygon network &middot; Min {asset === 'usdc' ? '$0.50' : '0.001 MATIC'} &middot; Gas paid in MATIC
                   </p>
                 </div>
             </>
