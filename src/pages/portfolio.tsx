@@ -386,7 +386,7 @@ const ChainIcon = ({ chain = 'sol', size = 'small' }: { chain?: string; size?: '
 // SOL icon component for inline use (kept for backward compatibility)
 const SolIcon = () => <ChainIcon chain="sol" />;
 
-const spotTabs = ["Active Positions", /* "History", */ "Top 100", "Activity", "Predictions"];
+const spotTabs = ["Active Positions", /* "History", */ "Top 100", "Activity"];
 
 // Token metadata cache interface
 interface TokenMetadataCache extends UnifiedTokenMetadata {
@@ -470,7 +470,7 @@ const CACHE_TTL = 5 * 60 * 1000; // 5 minutes in milliseconds
 const CACHE_KEY = "tokenMetadataCache";
 
 export default function PortfolioPage() {
-  const [activeSection, setActiveSection] = useState<"spot" | "wallet" | "perpetuals">("spot");
+  const [activeSection, setActiveSection] = useState<"spot" | "predictions" | "wallet" | "perpetuals">("spot");
   const [activeSpotTab, setActiveSpotTab] = useState(0);
   const [activePerpetualsTab, setActivePerpetualsTab] = useState(0);
   const { user, loading: userLoading, solBalance, usdcBalance, refreshBalance, refreshAllBalances, chainBalances, primaryWalletAddresses, walletBalances: contextWalletBalances, walletList: contextWalletList, walletListLoading, refreshWalletList, refreshUser, selectedWalletIds, selectAllWalletsForChain, selectWalletsWithFunds, clearSelectedWallets, setSelectedWalletsForChain } = useUser();
@@ -3112,6 +3112,16 @@ export default function PortfolioPage() {
               </button>
               <button
                 className={`text-xl font-medium transition cursor-pointer ${
+                  activeSection === "predictions"
+                    ? "text-white"
+                    : "text-[#6B7280] hover:text-white"
+                }`}
+                onClick={() => setActiveSection("predictions")}
+              >
+                Predictions
+              </button>
+              <button
+                className={`text-xl font-medium transition cursor-pointer ${
                   activeSection === "wallet"
                     ? "text-white"
                     : "text-[#6B7280] hover:text-white"
@@ -3804,24 +3814,35 @@ export default function PortfolioPage() {
                       </div>
                     )}
                   </div>
-                  {activeSpotTab === 3 && (
-                    <div className="w-full space-y-4 pb-16">
-                      {user?.bearerToken ? (
-                        <>
-                          <PolygonWalletCard variant="compact" />
-                          <UnifiedPortfolio
-                            authToken={user.bearerToken}
-                            walletAddress={primaryWalletAddresses?.ethereum}
-                            variant="portfolio"
-                          />
-                        </>
-                      ) : (
-                        <PredictionPositions
-                          userPublicKey={user?.publicKey}
-                          showEmptyState={!!user?.id}
-                        />
-                      )}
-                    </div>
+                  {/* Predictions sub-tab removed — now a top-level section */}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Predictions Section */}
+          {activeSection === "predictions" && (
+            <div className="space-y-4 sm:space-y-6">
+              {/* Polygon Wallet */}
+              <PolygonWalletCard variant="compact" />
+
+              {/* Positions */}
+              <div className="rounded-xl border border-white/[0.08] bg-white/[0.05] overflow-hidden backdrop-blur-xl" style={{ boxShadow: '0 8px 32px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.06)' }}>
+                <div className="border-b border-white/[0.06] px-4 py-3">
+                  <span className="text-sm font-medium text-white">Positions & History</span>
+                </div>
+                <div className="p-4" style={{ minHeight: '200px' }}>
+                  {user?.bearerToken ? (
+                    <UnifiedPortfolio
+                      authToken={user.bearerToken}
+                      walletAddress={primaryWalletAddresses?.ethereum}
+                      variant="portfolio"
+                    />
+                  ) : (
+                    <PredictionPositions
+                      userPublicKey={user?.publicKey}
+                      showEmptyState={!!user?.id}
+                    />
                   )}
                 </div>
               </div>

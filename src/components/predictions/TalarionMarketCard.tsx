@@ -13,6 +13,10 @@ interface TalarionMarketCardProps {
   index: number;
   onTrade?: (instrumentId: string, side: 'yes' | 'no') => void;
   onClick?: (instrumentId: string) => void;
+  /** Whether this market is saved/bookmarked */
+  isSaved?: boolean;
+  /** Toggle save/bookmark */
+  onToggleSave?: (instrument: TalarionInstrument) => void;
 }
 
 // ---------------------------------------------------------------------------
@@ -88,6 +92,8 @@ export default React.memo(function TalarionMarketCard({
   index,
   onTrade,
   onClick,
+  isSaved,
+  onToggleSave,
 }: TalarionMarketCardProps) {
   const [isHovered, setIsHovered] = useState(false);
 
@@ -176,13 +182,26 @@ export default React.memo(function TalarionMarketCard({
                 <span style={{ color: T.textSecondary }}>AI</span>
               </span>
 
-              <span
-                className="flex items-center gap-1 text-[10px] font-medium"
-                style={{ color: timeInfo.isUrgent ? T.red : T.muted }}
-              >
-                <HiOutlineClock className="w-3 h-3" />
-                {timeInfo.text}
-              </span>
+              <div className="flex items-center gap-2">
+                <span
+                  className="flex items-center gap-1 text-[10px] font-medium"
+                  style={{ color: timeInfo.isUrgent ? T.red : T.muted }}
+                >
+                  <HiOutlineClock className="w-3 h-3" />
+                  {timeInfo.text}
+                </span>
+                {onToggleSave && (
+                  <button
+                    onClick={(e) => { e.stopPropagation(); onToggleSave(instrument); }}
+                    className="p-1 rounded-md transition-colors hover:bg-white/10"
+                    title={isSaved ? 'Remove from saved' : 'Save for later'}
+                  >
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill={isSaved ? '#4ADE80' : 'none'} stroke={isSaved ? '#4ADE80' : '#6b7280'} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z" />
+                    </svg>
+                  </button>
+                )}
+              </div>
             </div>
 
             {/* Title */}

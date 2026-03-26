@@ -193,7 +193,7 @@ function StatsHeader({
   ];
 
   return (
-    <div className="rounded-xl overflow-hidden" style={{ backgroundColor: C.surface, border: `1px solid ${C.border}` }}>
+    <div className="rounded-xl overflow-hidden" style={{ backgroundColor: 'rgba(0,0,0,0.3)', border: `1px solid ${C.border}` }}>
       <div className="grid grid-cols-3 sm:grid-cols-5">
         {stats.map((s, i) => {
           const Icon = s.icon;
@@ -878,7 +878,7 @@ export default function UnifiedPortfolio({
                   )}
                 </div>
 
-                <div className="divide-y" style={{ borderColor: C.border }}>
+                <div className="space-y-0.5 p-1">
                   {autoSettledWins.map((pos) => (
                     <SettledRow key={pos.id} position={pos} isWinner={true} theme={C} />
                   ))}
@@ -918,7 +918,7 @@ export default function UnifiedPortfolio({
                   </div>
                 </div>
 
-                <div className="divide-y" style={{ borderColor: C.border }}>
+                <div className="space-y-0.5 p-1">
                   {claimedHistory.map((claim) => (
                     <ClaimedRow key={claim.txHash} claim={claim} theme={C} />
                   ))}

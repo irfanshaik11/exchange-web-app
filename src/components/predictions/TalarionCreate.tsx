@@ -1,12 +1,13 @@
 import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { useRouter } from 'next/router';
 import { motion, AnimatePresence } from 'framer-motion';
-import { HiOutlineChartBar, HiOutlineExternalLink } from 'react-icons/hi';
+import { HiOutlineChartBar, HiOutlineExternalLink, HiOutlineClock } from 'react-icons/hi';
 import { createPolymarketTradeToast, showPolymarketToast, POLYGON_LOGO_URL } from '~/utils/tradeToast';
 import { T } from './theme';
 import TalarionMarketCard from './TalarionMarketCard';
 import useTalarion from '~/hooks/useTalarion';
 import type { TalarionInstrument, PolymarketMatch } from '~/hooks/useTalarion';
+import usePredictionFavorites from '~/hooks/usePredictionFavorites';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -15,6 +16,10 @@ import type { TalarionInstrument, PolymarketMatch } from '~/hooks/useTalarion';
 interface TalarionCreateProps {
   onMarketClick?: (instrumentId: string) => void;
   authToken?: string;
+  /** When true, renders a compact single-row input bar (~48px) instead of the full hero */
+  compact?: boolean;
+  /** Called when compact bar is expanded (user starts typing or clicks) */
+  onExpand?: () => void;
 }
 
 // ---------------------------------------------------------------------------
@@ -144,13 +149,31 @@ function AICardSkeleton({ index }: { index: number }) {
 // Main component
 // ---------------------------------------------------------------------------
 
-export default function TalarionCreate({ onMarketClick, authToken }: TalarionCreateProps) {
+export default function TalarionCreate({ onMarketClick, authToken, compact, onExpand }: TalarionCreateProps) {
   // --- State ---
   const router = useRouter();
   const [query, setQuery] = useState('');
   const [settlement, setSettlement] = useState<string>('1m');
   const inputRef = useRef<HTMLInputElement>(null);
   const resultsRef = useRef<HTMLDivElement>(null);
+
+  // Save/bookmark for Talarion markets
+  const { favorites, isFavorite, toggleFavorite, removeFavorite } = usePredictionFavorites();
+  const [showSaved, setShowSaved] = useState(false);
+  const savedTalarionMarkets = useMemo(
+    () => favorites.filter(f => f.source === 'talarion'),
+    [favorites],
+  );
+  const handleToggleSave = useCallback((instrument: TalarionInstrument) => {
+    toggleFavorite({
+      ticker: instrument.instrument_id,
+      title: instrument.title,
+      source: 'talarion',
+      rules: instrument.rules,
+      resolutionTime: instrument.resolution_time,
+      price: instrument.price,
+    });
+  }, [toggleFavorite]);
 
   const {
     generateMarkets,
@@ -174,7 +197,7 @@ export default function TalarionCreate({ onMarketClick, authToken }: TalarionCre
   const prevCountRef = useRef(generatedMarkets.length);
   useEffect(() => {
     if (generatedMarkets.length > prevCountRef.current && resultsRef.current) {
-      resultsRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      resultsRef.current.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
     }
     prevCountRef.current = generatedMarkets.length;
   }, [generatedMarkets.length]);
@@ -237,12 +260,26 @@ export default function TalarionCreate({ onMarketClick, authToken }: TalarionCre
 
   const handleTrade = useCallback(
     (instrumentId: string, side: 'yes' | 'no') => {
-      const instrument = generatedMarkets.find(m => m.instrument_id === instrumentId);
+      // Check generated markets first, then fall back to saved markets
+      let instrument = generatedMarkets.find(m => m.instrument_id === instrumentId);
+      if (!instrument) {
+        const saved = savedTalarionMarkets.find(f => f.ticker === instrumentId);
+        if (saved) {
+          instrument = {
+            instrument_id: saved.ticker,
+            title: saved.title,
+            rules: saved.rules || '',
+            start_time: new Date().toISOString(),
+            resolution_time: saved.resolutionTime || new Date(Date.now() + 30 * 86400000).toISOString(),
+            price: saved.price,
+          };
+        }
+      }
       if (!instrument) return;
       setActiveTrade({ instrument, side });
       setTradeAmount('10');
     },
-    [generatedMarkets],
+    [generatedMarkets, savedTalarionMarkets],
   );
 
   const handleConfirmTrade = useCallback(async () => {
@@ -290,33 +327,218 @@ export default function TalarionCreate({ onMarketClick, authToken }: TalarionCre
   const canSubmit = query.trim().length > 0 && !isGenerating;
   const showSuggestions = generatedMarkets.length === 0 && !isGenerating && !isTrading;
 
+  // ── Compact mode: Predictions AI bar ─────────────────────────────
+  if (compact) {
+    return (
+      <div
+        className="w-full rounded-xl overflow-hidden relative"
+        style={{
+          background: 'linear-gradient(135deg, rgba(139,92,246,0.08) 0%, rgba(59,130,246,0.06) 40%, rgba(16,185,129,0.06) 70%, rgba(139,92,246,0.04) 100%)',
+          border: '1px solid rgba(139,92,246,0.18)',
+        }}
+      >
+        {/* Subtle animated gradient shimmer */}
+        <div
+          className="absolute inset-0 opacity-30 pointer-events-none"
+          style={{
+            background: 'linear-gradient(90deg, transparent 0%, rgba(139,92,246,0.08) 20%, rgba(59,130,246,0.06) 40%, rgba(16,185,129,0.08) 60%, rgba(139,92,246,0.06) 80%, transparent 100%)',
+            backgroundSize: '200% 100%',
+            animation: 'shimmer-ai 8s ease-in-out infinite',
+          }}
+        />
+
+        <div className="relative flex items-center gap-3 px-4 py-2.5">
+          {/* Predictions label with sparkle */}
+          <div className="flex items-center gap-1.5 flex-shrink-0">
+            <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+              <defs>
+                <linearGradient id="ai-compact-sparkle" x1="0" y1="0" x2="16" y2="16" gradientUnits="userSpaceOnUse">
+                  <stop offset="0%" stopColor="#8B5CF6" />
+                  <stop offset="50%" stopColor="#3B82F6" />
+                  <stop offset="100%" stopColor="#10B981" />
+                </linearGradient>
+              </defs>
+              <path d="M8 1l1.5 4.5L14 7l-4.5 1.5L8 13l-1.5-4.5L2 7l4.5-1.5L8 1z" fill="url(#ai-compact-sparkle)" />
+            </svg>
+            <span
+              className="text-[13px] font-semibold tracking-tight"
+              style={{
+                background: 'linear-gradient(135deg, #8B5CF6, #3B82F6, #10B981)',
+                WebkitBackgroundClip: 'text',
+                WebkitTextFillColor: 'transparent',
+              }}
+            >
+              Predictions
+            </span>
+            <span
+              className="text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded"
+              style={{
+                background: 'linear-gradient(135deg, rgba(139,92,246,0.2), rgba(59,130,246,0.2))',
+                color: '#a78bfa',
+              }}
+            >
+              AI
+            </span>
+          </div>
+
+          {/* Divider */}
+          <div className="w-px h-4 flex-shrink-0" style={{ backgroundColor: 'rgba(139,92,246,0.2)' }} />
+
+          {/* Input */}
+          <input
+            ref={inputRef}
+            type="text"
+            value={query}
+            onChange={handleInputChange}
+            onKeyDown={handleKeyDown}
+            onFocus={() => onExpand?.()}
+            placeholder="What do you think will happen?"
+            maxLength={MAX_CHARS}
+            className="flex-1 bg-transparent text-sm outline-none placeholder-neutral-500"
+            style={{ color: T.text }}
+            autoComplete="off"
+            spellCheck={false}
+          />
+
+          {/* Submit */}
+          <button
+            onClick={handleSubmit}
+            disabled={!canSubmit}
+            className="p-1.5 rounded-md transition-all duration-150"
+            style={{
+              background: canSubmit ? 'linear-gradient(135deg, #8B5CF6, #3B82F6)' : 'transparent',
+              color: canSubmit ? '#fff' : T.subtle,
+              opacity: canSubmit ? 1 : 0.4,
+            }}
+          >
+            <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+              <path d="M2.5 8h11M9 3.5L13.5 8 9 12.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div
-      className="w-full rounded-2xl backdrop-blur-xl px-6 md:px-10 py-10 md:py-14 min-h-[60vh] flex flex-col"
+      className="w-full rounded-2xl px-6 md:px-10 py-8 md:py-10 flex flex-col relative overflow-hidden"
       style={{
         color: T.text,
-        backgroundColor: 'rgba(8, 10, 14, 0.88)',
-        border: `1px solid ${T.border}`,
+        backgroundColor: '#06080a',
+        border: '1px solid rgba(74,222,128,0.08)',
+        boxShadow: '0 0 60px rgba(74,222,128,0.03), 0 0 120px rgba(0,0,0,0.5)',
       }}
     >
+      {/* ── Cosmic green nebula effects ── */}
+
+      {/* Large nebula — top center, drifting */}
+      <div
+        className="absolute -top-32 left-1/2 -translate-x-1/2 w-[600px] h-[400px] pointer-events-none"
+        style={{
+          background: 'radial-gradient(ellipse 70% 50%, rgba(74,222,128,0.06) 0%, rgba(24,196,140,0.03) 30%, transparent 60%)',
+          animation: 'nebula-drift 20s ease-in-out infinite',
+        }}
+      />
+
+      {/* Deep space green glow — bottom right */}
+      <div
+        className="absolute -bottom-24 -right-16 w-80 h-80 rounded-full pointer-events-none"
+        style={{
+          background: 'radial-gradient(circle, rgba(74,222,128,0.04) 0%, rgba(16,185,129,0.02) 40%, transparent 65%)',
+          animation: 'nebula-drift 25s ease-in-out infinite reverse',
+        }}
+      />
+
+      {/* Star field — tiny scattered dots */}
+      <div className="absolute inset-0 pointer-events-none overflow-hidden">
+        <div className="absolute w-[1px] h-[1px] rounded-full" style={{ backgroundColor: 'rgba(74,222,128,0.6)', top: '12%', left: '18%', boxShadow: '0 0 3px rgba(74,222,128,0.4)' }} />
+        <div className="absolute w-[1px] h-[1px] rounded-full" style={{ backgroundColor: 'rgba(255,255,255,0.4)', top: '25%', left: '72%' }} />
+        <div className="absolute w-[1px] h-[1px] rounded-full" style={{ backgroundColor: 'rgba(74,222,128,0.5)', top: '68%', left: '85%', boxShadow: '0 0 4px rgba(74,222,128,0.3)' }} />
+        <div className="absolute w-[1px] h-[1px] rounded-full" style={{ backgroundColor: 'rgba(255,255,255,0.3)', top: '45%', left: '8%' }} />
+        <div className="absolute w-[1px] h-[1px] rounded-full" style={{ backgroundColor: 'rgba(74,222,128,0.4)', top: '82%', left: '35%', boxShadow: '0 0 3px rgba(74,222,128,0.2)' }} />
+        <div className="absolute w-[1px] h-[1px] rounded-full" style={{ backgroundColor: 'rgba(255,255,255,0.25)', top: '8%', left: '55%' }} />
+        <div className="absolute w-[1px] h-[1px] rounded-full" style={{ backgroundColor: 'rgba(74,222,128,0.3)', top: '55%', left: '42%', boxShadow: '0 0 2px rgba(74,222,128,0.2)' }} />
+        <div className="absolute w-[1px] h-[1px] rounded-full" style={{ backgroundColor: 'rgba(255,255,255,0.35)', top: '35%', left: '92%' }} />
+      </div>
+
+      {/* Green edge glow — top */}
+      <div
+        className="absolute top-0 left-0 right-0 h-px pointer-events-none"
+        style={{ background: 'linear-gradient(90deg, transparent 5%, rgba(74,222,128,0.15) 35%, rgba(74,222,128,0.25) 50%, rgba(74,222,128,0.15) 65%, transparent 95%)' }}
+      />
+
+      {/* Geometric lines — SVG overlay, lines only */}
+      <svg className="absolute inset-0 w-full h-full pointer-events-none" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 500" preserveAspectRatio="none">
+        {/* Radiating from top-left */}
+        <line x1="0" y1="0" x2="400" y2="500" stroke="rgba(74,222,128,0.08)" strokeWidth="0.5" />
+        <line x1="0" y1="0" x2="600" y2="500" stroke="rgba(74,222,128,0.06)" strokeWidth="0.5" />
+        <line x1="0" y1="0" x2="800" y2="500" stroke="rgba(74,222,128,0.04)" strokeWidth="0.5" />
+        <line x1="0" y1="0" x2="1000" y2="350" stroke="rgba(74,222,128,0.03)" strokeWidth="0.5" />
+        {/* Radiating from top-right */}
+        <line x1="1000" y1="0" x2="600" y2="500" stroke="rgba(74,222,128,0.08)" strokeWidth="0.5" />
+        <line x1="1000" y1="0" x2="400" y2="500" stroke="rgba(74,222,128,0.06)" strokeWidth="0.5" />
+        <line x1="1000" y1="0" x2="200" y2="500" stroke="rgba(74,222,128,0.04)" strokeWidth="0.5" />
+        <line x1="1000" y1="0" x2="0" y2="350" stroke="rgba(74,222,128,0.03)" strokeWidth="0.5" />
+        {/* Rising from bottom corners */}
+        <line x1="0" y1="500" x2="350" y2="0" stroke="rgba(74,222,128,0.06)" strokeWidth="0.5" />
+        <line x1="0" y1="500" x2="700" y2="0" stroke="rgba(74,222,128,0.03)" strokeWidth="0.5" />
+        <line x1="1000" y1="500" x2="650" y2="0" stroke="rgba(74,222,128,0.06)" strokeWidth="0.5" />
+        <line x1="1000" y1="500" x2="300" y2="0" stroke="rgba(74,222,128,0.03)" strokeWidth="0.5" />
+        {/* Edge diagonals */}
+        <line x1="0" y1="120" x2="250" y2="0" stroke="rgba(74,222,128,0.05)" strokeWidth="0.5" />
+        <line x1="0" y1="300" x2="150" y2="500" stroke="rgba(74,222,128,0.04)" strokeWidth="0.5" />
+        <line x1="1000" y1="120" x2="750" y2="0" stroke="rgba(74,222,128,0.05)" strokeWidth="0.5" />
+        <line x1="1000" y1="300" x2="850" y2="500" stroke="rgba(74,222,128,0.04)" strokeWidth="0.5" />
+        {/* Mid-height cross lines */}
+        <line x1="0" y1="250" x2="500" y2="100" stroke="rgba(74,222,128,0.03)" strokeWidth="0.5" />
+        <line x1="1000" y1="250" x2="500" y2="100" stroke="rgba(74,222,128,0.03)" strokeWidth="0.5" />
+        <line x1="0" y1="400" x2="500" y2="480" stroke="rgba(74,222,128,0.025)" strokeWidth="0.5" />
+        <line x1="1000" y1="400" x2="500" y2="480" stroke="rgba(74,222,128,0.025)" strokeWidth="0.5" />
+      </svg>
+
       {/* Centered inner column for header + input + suggestions */}
-      <div className="w-full max-w-2xl mx-auto flex-1 flex flex-col">
+      <div className="relative w-full max-w-2xl mx-auto flex-1 flex flex-col">
 
       {/* Header */}
       <motion.div
         initial={{ opacity: 0, y: 12 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.5, ease: EASE_ENTRANCE }}
-        className="mb-10 text-center"
+        className="mb-8 text-center"
       >
+        {/* Predictions AI badge */}
+        <div className="flex items-center justify-center gap-2 mb-4">
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+            <defs>
+              <linearGradient id="ai-full-sparkle" x1="0" y1="0" x2="16" y2="16" gradientUnits="userSpaceOnUse">
+                <stop offset="0%" stopColor="#18c48c" />
+                <stop offset="50%" stopColor="#4ADE80" />
+                <stop offset="100%" stopColor="#22D3EE" />
+              </linearGradient>
+            </defs>
+            <path d="M8 1l1.5 4.5L14 7l-4.5 1.5L8 13l-1.5-4.5L2 7l4.5-1.5L8 1z" fill="url(#ai-full-sparkle)" />
+          </svg>
+          <span
+            className="text-xs font-semibold uppercase tracking-[0.1em]"
+            style={{
+              background: 'linear-gradient(135deg, #18c48c, #4ADE80, #22D3EE)',
+              WebkitBackgroundClip: 'text',
+              WebkitTextFillColor: 'transparent',
+            }}
+          >
+            Predictions AI
+          </span>
+        </div>
+
         <h1
-          className="text-[32px] md:text-[40px] font-bold leading-[1.1] tracking-[-0.03em]"
-          style={{ color: T.text }}
+          className="text-[28px] md:text-[36px] font-bold leading-[1.1] tracking-[-0.03em]"
+          style={{ color: '#f0f0f0' }}
         >
-          Trade What You Know
+          Predict Anything
         </h1>
         <p
-          className="mt-3 text-[14px] md:text-[15px] leading-relaxed"
+          className="mt-2 text-[13px] md:text-[14px] leading-relaxed"
           style={{ color: T.muted }}
         >
           Describe any event. AI turns it into a tradeable market.
@@ -333,8 +555,8 @@ export default function TalarionCreate({ onMarketClick, authToken }: TalarionCre
         <div
           className="relative flex items-center rounded-xl overflow-hidden transition-all duration-200"
           style={{
-            backgroundColor: 'rgba(12, 14, 18, 0.85)',
-            border: `1px solid ${T.borderHover}`,
+            backgroundColor: 'rgba(0, 0, 0, 0.35)',
+            border: '1px solid rgba(255, 255, 255, 0.12)',
           }}
           // Elevate border on focus-within
           onFocus={(e) => {
@@ -356,10 +578,9 @@ export default function TalarionCreate({ onMarketClick, authToken }: TalarionCre
             placeholder="What do you think will happen?"
             maxLength={MAX_CHARS}
             aria-label="Market prediction query"
-            className="flex-1 bg-transparent py-4 px-5 text-[15px] placeholder-current outline-none"
+            className="flex-1 bg-transparent py-4 px-5 text-[15px] placeholder-neutral-400 outline-none"
             style={{
               color: T.text,
-              // Use ::placeholder pseudo-element color via inline workaround
             }}
             autoComplete="off"
             spellCheck={false}
@@ -468,9 +689,9 @@ export default function TalarionCreate({ onMarketClick, authToken }: TalarionCre
                   onClick={() => handleSuggestionClick(s)}
                   className="px-3 py-1.5 rounded-full text-[12px] font-medium transition-all duration-150 outline-none focus-visible:ring-1 active:scale-[0.97]"
                   style={{
-                    backgroundColor: 'rgba(12, 14, 18, 0.75)',
+                    backgroundColor: 'rgba(0, 0, 0, 0.3)',
                     color: T.textSecondary,
-                    border: `1px solid ${T.borderHover}`,
+                    border: '1px solid rgba(255, 255, 255, 0.1)',
                   }}
                   onMouseEnter={(e) => {
                     (e.currentTarget as HTMLButtonElement).style.borderColor = T.borderHover;
@@ -488,6 +709,26 @@ export default function TalarionCreate({ onMarketClick, authToken }: TalarionCre
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* Saved markets toggle — always visible when there are saved markets */}
+      {savedTalarionMarkets.length > 0 && (
+        <div className="flex justify-center mb-4">
+          <button
+            onClick={() => setShowSaved(!showSaved)}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[12px] font-medium transition-colors"
+            style={{
+              backgroundColor: showSaved ? 'rgba(74,222,128,0.12)' : 'rgba(255,255,255,0.05)',
+              color: showSaved ? '#4ADE80' : '#9ca3af',
+              border: `1px solid ${showSaved ? 'rgba(74,222,128,0.2)' : 'rgba(255,255,255,0.06)'}`,
+            }}
+          >
+            <svg width="12" height="12" viewBox="0 0 24 24" fill={showSaved ? '#4ADE80' : 'none'} stroke={showSaved ? '#4ADE80' : 'currentColor'} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z" />
+            </svg>
+            Saved Markets ({savedTalarionMarkets.length})
+          </button>
+        </div>
+      )}
 
       {/* Error state */}
       <AnimatePresence>
@@ -526,22 +767,42 @@ export default function TalarionCreate({ onMarketClick, authToken }: TalarionCre
               <SectionDivider label="AI Generated Markets" />
             </div>
 
-            {/* Clear button */}
-            {generatedMarkets.length > 2 && !isGenerating && (
-              <div className="flex justify-end mb-3">
-                <button
-                  onClick={clearMarkets}
-                  className="text-[11px] font-medium transition-colors duration-150 outline-none focus-visible:underline"
-                  style={{ color: T.muted }}
-                  onMouseEnter={(e) => {
-                    (e.currentTarget as HTMLButtonElement).style.color = T.textSecondary;
-                  }}
-                  onMouseLeave={(e) => {
-                    (e.currentTarget as HTMLButtonElement).style.color = T.muted;
-                  }}
-                >
-                  Clear all
-                </button>
+            {/* Action buttons: Saved + Clear all */}
+            {(savedTalarionMarkets.length > 0 || (generatedMarkets.length > 2 && !isGenerating)) && (
+              <div className="flex items-center justify-between mb-3">
+                {/* Saved toggle */}
+                {savedTalarionMarkets.length > 0 ? (
+                  <button
+                    onClick={() => setShowSaved(!showSaved)}
+                    className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-medium transition-colors"
+                    style={{
+                      backgroundColor: showSaved ? 'rgba(74,222,128,0.12)' : 'rgba(255,255,255,0.05)',
+                      color: showSaved ? '#4ADE80' : '#9ca3af',
+                      border: `1px solid ${showSaved ? 'rgba(74,222,128,0.2)' : 'rgba(255,255,255,0.06)'}`,
+                    }}
+                  >
+                    <svg width="11" height="11" viewBox="0 0 24 24" fill={showSaved ? '#4ADE80' : 'none'} stroke={showSaved ? '#4ADE80' : 'currentColor'} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z" />
+                    </svg>
+                    Saved {savedTalarionMarkets.length}
+                  </button>
+                ) : <div />}
+                {/* Clear all */}
+                {generatedMarkets.length > 2 && !isGenerating && (
+                  <button
+                    onClick={clearMarkets}
+                    className="text-[11px] font-medium transition-colors duration-150 outline-none focus-visible:underline"
+                    style={{ color: T.muted }}
+                    onMouseEnter={(e) => {
+                      (e.currentTarget as HTMLButtonElement).style.color = T.textSecondary;
+                    }}
+                    onMouseLeave={(e) => {
+                      (e.currentTarget as HTMLButtonElement).style.color = T.muted;
+                    }}
+                  >
+                    Clear all
+                  </button>
+                )}
               </div>
             )}
 
@@ -555,6 +816,8 @@ export default function TalarionCreate({ onMarketClick, authToken }: TalarionCre
                   instrument={instrument}
                   index={i}
                   onTrade={handleTrade}
+                  isSaved={isFavorite(instrument.instrument_id, 'talarion')}
+                  onToggleSave={handleToggleSave}
                   onClick={(id) => {
                     if (onMarketClick) {
                       onMarketClick(id);
@@ -651,6 +914,101 @@ export default function TalarionCreate({ onMarketClick, authToken }: TalarionCre
                       </div>
                     </div>
                   </motion.div>
+                );
+              })}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Saved Markets */}
+      <AnimatePresence>
+        {showSaved && savedTalarionMarkets.length > 0 && (
+          <motion.div
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -4 }}
+            transition={{ duration: 0.3 }}
+          >
+            <SectionDivider label="Saved Markets" />
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+              {savedTalarionMarkets.map((saved) => {
+                const yesPrice = saved.price ?? 0.5;
+                const noPrice = 1 - yesPrice;
+                const yesCents = Math.round(yesPrice * 100);
+                const noCents = Math.round(noPrice * 100);
+                const timeLeft = saved.resolutionTime
+                  ? (() => {
+                      const diff = new Date(saved.resolutionTime).getTime() - Date.now();
+                      if (diff <= 0) return 'Ended';
+                      const days = Math.floor(diff / 86_400_000);
+                      const hours = Math.floor((diff % 86_400_000) / 3_600_000);
+                      if (days > 30) return `${Math.round(days / 30)}mo`;
+                      if (days > 0) return `${days}d ${hours}h`;
+                      return `${hours}h`;
+                    })()
+                  : null;
+
+                return (
+                  <div
+                    key={saved.ticker}
+                    className="rounded-xl p-4 flex flex-col gap-3 transition-colors"
+                    style={{
+                      backgroundColor: 'rgba(0,0,0,0.3)',
+                      border: '1px solid rgba(255,255,255,0.06)',
+                    }}
+                  >
+                    {/* Top row: bookmark + time */}
+                    <div className="flex items-center justify-between">
+                      <span className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider" style={{ color: '#4ADE80' }}>
+                        <svg width="10" height="10" viewBox="0 0 24 24" fill="#4ADE80" stroke="#4ADE80" strokeWidth="2">
+                          <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z" />
+                        </svg>
+                        Saved
+                      </span>
+                      <div className="flex items-center gap-2">
+                        {timeLeft && (
+                          <span className="flex items-center gap-1 text-[10px] font-medium" style={{ color: T.muted }}>
+                            <HiOutlineClock className="w-3 h-3" />
+                            {timeLeft}
+                          </span>
+                        )}
+                        <button
+                          onClick={() => removeFavorite(saved.ticker, 'talarion')}
+                          className="p-0.5 rounded hover:bg-white/10 transition-colors"
+                          title="Remove"
+                        >
+                          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#6b7280" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                            <line x1="18" y1="6" x2="6" y2="18" />
+                            <line x1="6" y1="6" x2="18" y2="18" />
+                          </svg>
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Title */}
+                    <h4 className="font-semibold text-[13px] leading-[1.4] line-clamp-2" style={{ color: T.text }}>
+                      {saved.title}
+                    </h4>
+
+                    {/* YES / NO trade buttons */}
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => handleTrade(saved.ticker, 'yes')}
+                        className="flex-1 py-2 rounded-lg text-center text-[12px] font-semibold transition-colors hover:brightness-110 cursor-pointer"
+                        style={{ backgroundColor: T.greenSoft, color: T.green }}
+                      >
+                        {yesCents}&cent; Yes
+                      </button>
+                      <button
+                        onClick={() => handleTrade(saved.ticker, 'no')}
+                        className="flex-1 py-2 rounded-lg text-center text-[12px] font-semibold transition-colors hover:brightness-110 cursor-pointer"
+                        style={{ backgroundColor: T.redSoft, color: T.red }}
+                      >
+                        {noCents}&cent; No
+                      </button>
+                    </div>
+                  </div>
                 );
               })}
             </div>
