@@ -839,7 +839,7 @@ export default function UnifiedPortfolio({
                   </span>
                 </div>
 
-                <div className="divide-y" style={{ borderColor: C.border }}>
+                <div>
                   {pendingResolution.map((position) => (
                     <PendingRow key={position.conditionId} position={position} theme={C} />
                   ))}
