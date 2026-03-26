@@ -44,7 +44,6 @@ export default function HeroMarket({ market, liveYesPrice }: HeroMarketProps) {
             backgroundColor: T.surface,
             border: `1px solid ${T.border}`,
             transition: 'border-color 300ms ease',
-            minHeight: '280px',
           }}
           onMouseEnter={(e) => { e.currentTarget.style.borderColor = T.borderHover; }}
           onMouseLeave={(e) => { e.currentTarget.style.borderColor = T.border; }}
@@ -67,161 +66,91 @@ export default function HeroMarket({ market, liveYesPrice }: HeroMarketProps) {
             </div>
           )}
 
-          <div className="relative z-10 p-6 md:p-8 lg:p-10">
-            {/* Top row: Category + Live badge */}
-            <div className="flex items-center gap-3 mb-5">
-              <span
-                className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-semibold"
-                style={{
-                  backgroundColor: `${categoryInfo.color}12`,
-                  color: categoryInfo.color,
-                }}
-              >
-                <categoryInfo.Icon className="w-3.5 h-3.5" />
-                {categoryInfo.label}
-              </span>
-
-              {hasLivePrice && (
-                <span
-                  className="inline-flex items-center gap-1.5 px-2 py-1 rounded-lg text-[10px] font-semibold uppercase tracking-wider"
-                  style={{ backgroundColor: T.greenSoft, color: T.green }}
-                >
-                  <span className="relative flex h-[5px] w-[5px]">
-                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full opacity-60" style={{ backgroundColor: T.green }} />
-                    <span className="relative inline-flex rounded-full h-[5px] w-[5px]" style={{ backgroundColor: T.green }} />
-                  </span>
-                  Live
-                </span>
-              )}
-            </div>
-
-            {/* Title */}
-            <h2
-              className="text-xl md:text-2xl lg:text-3xl font-bold leading-tight max-w-2xl mb-8"
-              style={{ color: T.text, letterSpacing: '-0.02em' }}
-            >
-              {market.title}
-            </h2>
-
-            {/* Probability display — dramatic, clean */}
-            <div className="flex flex-col sm:flex-row gap-3 mb-6">
-              {/* YES */}
-              <div
-                className="flex-1 rounded-xl p-4 md:p-5 flex items-center justify-between transition-colors duration-200"
-                style={{
-                  backgroundColor: T.greenSoft,
-                  border: `1px solid rgba(74, 222, 128, 0.12)`,
-                }}
-              >
-                <div>
-                  <div
-                    className="text-[10px] font-semibold uppercase tracking-widest mb-0.5"
-                    style={{ color: T.textSecondary }}
+          <div className="relative z-10 p-4 md:p-5">
+            {/* Top row: Category + Live badge + Title */}
+            <div className="flex items-start gap-3 mb-3">
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2 mb-2">
+                  <span
+                    className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-semibold"
+                    style={{
+                      backgroundColor: `${categoryInfo.color}12`,
+                      color: categoryInfo.color,
+                    }}
                   >
-                    Yes
-                  </div>
-                  <div className="text-xs" style={{ color: T.muted }}>
-                    Probability
-                  </div>
-                </div>
-                <div
-                  className="text-3xl md:text-4xl font-bold"
-                  style={{
-                    color: T.green,
-                    fontFamily: "'Orbitron', sans-serif",
-                    fontVariantNumeric: 'tabular-nums',
-                    letterSpacing: '-0.02em',
-                  }}
-                >
-                  <AnimatedValue value={yesPercent} suffix="%" />
-                </div>
-              </div>
-
-              {/* NO */}
-              <div
-                className="flex-1 rounded-xl p-4 md:p-5 flex items-center justify-between transition-colors duration-200"
-                style={{
-                  backgroundColor: T.redSoft,
-                  border: `1px solid rgba(248, 113, 113, 0.12)`,
-                }}
-              >
-                <div>
-                  <div
-                    className="text-[10px] font-semibold uppercase tracking-widest mb-0.5"
-                    style={{ color: T.textSecondary }}
-                  >
-                    No
-                  </div>
-                  <div className="text-xs" style={{ color: T.muted }}>
-                    Probability
-                  </div>
-                </div>
-                <div
-                  className="text-3xl md:text-4xl font-bold"
-                  style={{
-                    color: T.red,
-                    fontFamily: "'Orbitron', sans-serif",
-                    fontVariantNumeric: 'tabular-nums',
-                    letterSpacing: '-0.02em',
-                  }}
-                >
-                  <AnimatedValue value={noPercent} suffix="%" />
-                </div>
-              </div>
-            </div>
-
-            {/* Probability bar — full width, thin */}
-            <div className="mb-6">
-              <div
-                className="h-[3px] rounded-full overflow-hidden"
-                style={{ backgroundColor: T.redSoft }}
-              >
-                <motion.div
-                  className="h-full rounded-full"
-                  style={{ backgroundColor: T.green }}
-                  initial={{ width: 0 }}
-                  animate={{ width: `${yesPercent}%` }}
-                  transition={{ duration: 0.8, ease: [0.16, 1, 0.3, 1], delay: 0.3 }}
-                />
-              </div>
-            </div>
-
-            {/* Bottom row: Stats + CTA */}
-            <div className="flex flex-wrap items-center gap-4 md:gap-6">
-              <div className="flex items-center gap-1.5 text-sm" style={{ color: T.muted }}>
-                <HiOutlineTrendingUp className="w-4 h-4" />
-                <span>
-                  Volume:{' '}
-                  <span style={{ color: T.text, fontWeight: 500 }}>
-                    ${(market.totalVolume / 1_000_000).toFixed(1)}M
+                    <categoryInfo.Icon className="w-3 h-3" />
+                    {categoryInfo.label}
                   </span>
-                </span>
+                  {hasLivePrice && (
+                    <span
+                      className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[9px] font-semibold uppercase tracking-wider"
+                      style={{ backgroundColor: T.greenSoft, color: T.green }}
+                    >
+                      <span className="relative flex h-[4px] w-[4px]">
+                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full opacity-60" style={{ backgroundColor: T.green }} />
+                        <span className="relative inline-flex rounded-full h-[4px] w-[4px]" style={{ backgroundColor: T.green }} />
+                      </span>
+                      Live
+                    </span>
+                  )}
+                </div>
+                <h2
+                  className="text-lg md:text-xl font-bold leading-snug"
+                  style={{ color: T.text, letterSpacing: '-0.02em' }}
+                >
+                  {market.title}
+                </h2>
               </div>
 
-              <div className="flex items-center gap-1.5 text-sm" style={{ color: T.muted }}>
-                <HiOutlineClock className="w-4 h-4" />
-                <span>
-                  Closes:{' '}
-                  <span style={{ color: T.text, fontWeight: 500 }}>
-                    {new Date(market.closesAt).toLocaleDateString('en-US', {
-                      month: 'short',
-                      day: 'numeric',
-                      year: 'numeric',
-                    })}
-                  </span>
-                </span>
-              </div>
-
+              {/* Trade Now button — top right */}
               <span
-                className="ml-auto inline-flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-semibold transition-all duration-200 group-hover:translate-x-0.5"
-                style={{
-                  backgroundColor: T.accent,
-                  color: '#000',
-                }}
+                className="flex-shrink-0 inline-flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-semibold transition-all duration-200 group-hover:translate-x-0.5"
+                style={{ backgroundColor: T.accent, color: '#000' }}
               >
-                Trade Now
-                <HiOutlineArrowRight className="w-4 h-4 transition-transform duration-200 group-hover:translate-x-0.5" />
+                Trade
+                <HiOutlineArrowRight className="w-3.5 h-3.5" />
               </span>
+            </div>
+
+            {/* Inline probability + bar + stats */}
+            <div className="flex items-center gap-4">
+              {/* YES/NO values */}
+              <div className="flex items-center gap-3">
+                <span className="text-sm font-bold" style={{ color: T.green }}>
+                  Yes <AnimatedValue value={yesPercent} suffix="%" />
+                </span>
+                <span className="text-sm font-bold" style={{ color: T.red }}>
+                  No <AnimatedValue value={noPercent} suffix="%" />
+                </span>
+              </div>
+
+              {/* Probability bar — inline, thin */}
+              <div className="flex-1 min-w-[80px]">
+                <div
+                  className="h-[3px] rounded-full overflow-hidden"
+                  style={{ backgroundColor: T.redSoft }}
+                >
+                  <motion.div
+                    className="h-full rounded-full"
+                    style={{ backgroundColor: T.green }}
+                    initial={{ width: 0 }}
+                    animate={{ width: `${yesPercent}%` }}
+                    transition={{ duration: 0.8, ease: [0.16, 1, 0.3, 1], delay: 0.3 }}
+                  />
+                </div>
+              </div>
+
+              {/* Stats */}
+              <div className="hidden sm:flex items-center gap-3 text-xs" style={{ color: T.muted }}>
+                <span className="flex items-center gap-1">
+                  <HiOutlineTrendingUp className="w-3.5 h-3.5" />
+                  ${(market.totalVolume / 1_000_000).toFixed(1)}M
+                </span>
+                <span className="flex items-center gap-1">
+                  <HiOutlineClock className="w-3.5 h-3.5" />
+                  {new Date(market.closesAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                </span>
+              </div>
             </div>
           </div>
         </div>

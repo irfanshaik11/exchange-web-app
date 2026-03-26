@@ -58,7 +58,7 @@ export default function PolygonWalletCard({
   const [balance, setBalance] = useState<PolymarketBalance | null>(initialBalance);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [isExpanded, setIsExpanded] = useState(variant === 'expanded');
+  const [isExpanded, setIsExpanded] = useState(true); // Always expanded
   const [copied, setCopied] = useState(false);
   const [conversionStatus, setConversionStatus] = useState<ConversionStatus | null>(null);
 
@@ -291,10 +291,11 @@ export default function PolygonWalletCard({
     <motion.div
       initial={{ opacity: 0, y: -10 }}
       animate={{ opacity: 1, y: 0 }}
-      className={`rounded-xl overflow-hidden ${className}`}
+      className={`rounded-xl overflow-hidden backdrop-blur-xl ${className}`}
       style={{
-        backgroundColor: AX.surface,
-        border: `1px solid ${AX.border}`,
+        backgroundColor: 'rgba(255,255,255,0.05)',
+        border: '1px solid rgba(255,255,255,0.08)',
+        boxShadow: '0 8px 32px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.06)',
       }}
     >
       {/* Main Card Content */}
@@ -364,17 +365,7 @@ export default function PolygonWalletCard({
               />
             </button>
 
-            <button
-              onClick={() => setIsExpanded(!isExpanded)}
-              className="p-2 rounded-lg hover:bg-white/10 transition-colors"
-              title={isExpanded ? 'Collapse' : 'Expand'}
-            >
-              {isExpanded ? (
-                <BiChevronUp className="w-4 h-4" style={{ color: AX.muted }} />
-              ) : (
-                <BiChevronDown className="w-4 h-4" style={{ color: AX.muted }} />
-              )}
-            </button>
+            {/* Chevron toggle removed — always expanded */}
           </div>
         </div>
 
@@ -508,7 +499,7 @@ export default function PolygonWalletCard({
                   <div
                     className="flex items-center gap-2 p-2.5 rounded-lg"
                     style={{
-                      backgroundColor: AX.bg,
+                      backgroundColor: 'rgba(0,0,0,0.3)',
                       border: `1px solid ${AX.border}`,
                     }}
                   >

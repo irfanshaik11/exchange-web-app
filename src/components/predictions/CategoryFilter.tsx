@@ -1,171 +1,184 @@
-import React from 'react';
-import { motion } from 'framer-motion';
-import {
-  HiOutlineGlobeAlt,
-  HiOutlineScale,
-  HiOutlineCurrencyDollar,
-  HiOutlineTrendingUp,
-  HiOutlineFilm,
-  HiOutlineBeaker,
-  HiOutlineLightningBolt,
-  HiOutlineClock,
-  HiOutlineChartBar,
-  HiOutlineSparkles
-} from 'react-icons/hi';
-import { BiFootball, BiBitcoin } from 'react-icons/bi';
-import type { IconType } from 'react-icons';
+import React, { useRef, useState, useEffect } from 'react';
+import { HiOutlineTrendingUp } from 'react-icons/hi';
 
-const AX = {
-  bg: "#111214",
-  surface: "#12141a",
-  surface2: "#0e1012",
-  border: "#1e2028",
-  text: "#f0f0f0",
-  muted: "#6b7280",
-  // Vibrant accent
-  accent: "#4ADE80",
-  accentGlow: "rgba(74, 222, 128, 0.3)",
-};
+// Sort options component — still exported for type compatibility
+export type SortOption = 'hot' | 'new' | 'ending' | 'volume';
 
 export interface Category {
   id: string;
   label: string;
-  icon: IconType;
   color: string;
   count?: number;
 }
 
-// Vibrant category colors
-const categories: Category[] = [
-  { id: 'all', label: 'All Markets', icon: HiOutlineGlobeAlt, color: '#4ADE80' },
-  { id: 'politics', label: 'Politics', icon: HiOutlineScale, color: '#818CF8' },
-  { id: 'crypto', label: 'Crypto', icon: BiBitcoin, color: '#FBBF24' },
-  { id: 'sports', label: 'Sports', icon: BiFootball, color: '#4ADE80' },
-  { id: 'economics', label: 'Economics', icon: HiOutlineTrendingUp, color: '#22D3EE' },
-  { id: 'entertainment', label: 'Entertainment', icon: HiOutlineFilm, color: '#F472B6' },
-  { id: 'science', label: 'Science', icon: HiOutlineBeaker, color: '#FB923C' },
+// ─── Unified nav items ────────────────────────────────────────────
+
+interface NavItem {
+  id: string;
+  label: string;
+  type: 'sort' | 'category';
+  sortValue?: SortOption;
+}
+
+const NAV_ITEMS: NavItem[] = [
+  // Sort presets
+  { id: 'sort-hot',    label: 'Trending',    type: 'sort', sortValue: 'hot' },
+  { id: 'sort-new',    label: 'New',         type: 'sort', sortValue: 'new' },
+  { id: 'sort-ending', label: 'Ending Soon', type: 'sort', sortValue: 'ending' },
+  // Category filters
+  { id: 'all',         label: 'All',         type: 'category' },
+  { id: 'politics',    label: 'Politics',    type: 'category' },
+  { id: 'sports',      label: 'Sports',      type: 'category' },
+  { id: 'crypto',      label: 'Crypto',      type: 'category' },
+  { id: 'esports',     label: 'Esports',     type: 'category' },
+  { id: 'finance',     label: 'Finance',     type: 'category' },
+  { id: 'geopolitics', label: 'Geopolitics', type: 'category' },
+  { id: 'tech',        label: 'Tech',        type: 'category' },
+  { id: 'culture',     label: 'Culture',     type: 'category' },
+  { id: 'economy',     label: 'Economy',     type: 'category' },
+  { id: 'weather',     label: 'Weather',     type: 'category' },
+  { id: 'science',     label: 'Science',     type: 'category' },
 ];
 
-interface CategoryFilterProps {
+// ─── Component ────────────────────────────────────────────────────
+
+interface MarketNavBarProps {
   selectedCategory: string;
   onSelectCategory: (category: string) => void;
-  categoryCounts?: Record<string, number>;
-  totalAvailable?: number; // Total markets from API (not just loaded)
+  selectedSort: SortOption;
+  onSelectSort: (sort: SortOption) => void;
+  /** Slot for right-aligned content (e.g. Filters button) */
+  rightSlot?: React.ReactNode;
 }
 
 export default function CategoryFilter({
   selectedCategory,
   onSelectCategory,
-  categoryCounts = {},
-  totalAvailable = 0,
-}: CategoryFilterProps) {
+  selectedSort,
+  onSelectSort,
+  rightSlot,
+}: MarketNavBarProps) {
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const [showLeftFade, setShowLeftFade] = useState(false);
+  const [showRightFade, setShowRightFade] = useState(false);
+
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    const check = () => {
+      setShowLeftFade(el.scrollLeft > 8);
+      setShowRightFade(el.scrollLeft < el.scrollWidth - el.clientWidth - 8);
+    };
+    check();
+    el.addEventListener('scroll', check, { passive: true });
+    window.addEventListener('resize', check);
+    return () => {
+      el.removeEventListener('scroll', check);
+      window.removeEventListener('resize', check);
+    };
+  }, []);
+
+  const handleClick = (item: NavItem) => {
+    if (item.type === 'sort' && item.sortValue) {
+      onSelectSort(item.sortValue);
+    } else if (item.type === 'category') {
+      onSelectCategory(item.id);
+    }
+  };
+
+  const isActive = (item: NavItem) => {
+    if (item.type === 'sort') return selectedSort === item.sortValue;
+    return selectedCategory === item.id;
+  };
+
+  const sortItems = NAV_ITEMS.filter(i => i.type === 'sort');
+  const categoryItems = NAV_ITEMS.filter(i => i.type === 'category');
+
   return (
-    <div className="flex gap-1 flex-shrink-0">
-        {categories.map((category) => {
-          const isActive = selectedCategory === category.id;
-          const loadedSum = Object.values(categoryCounts).reduce((a, b) => a + b, 0);
-          const count = category.id === 'all'
-            ? (totalAvailable > 0 ? totalAvailable : loadedSum)
-            : categoryCounts[category.id] || 0;
-          const IconComponent = category.icon;
+    <div className="flex items-center">
+      {/* Scrollable nav items */}
+      <div className="relative flex-1 min-w-0">
+        {/* Left fade */}
+        {showLeftFade && (
+          <div className="pointer-events-none absolute left-0 top-0 bottom-0 w-8 z-10"
+            style={{ background: 'linear-gradient(to right, #0C0C0F 0%, transparent 100%)' }}
+          />
+        )}
+        {/* Right fade */}
+        {showRightFade && (
+          <div className="pointer-events-none absolute right-0 top-0 bottom-0 w-8 z-10"
+            style={{ background: 'linear-gradient(to left, #0C0C0F 0%, transparent 100%)' }}
+          />
+        )}
 
-          return (
-            <motion.button
-              key={category.id}
-              onClick={() => onSelectCategory(category.id)}
-              whileHover={{ scale: 1.02 }}
-              whileTap={{ scale: 0.98 }}
-              className="relative flex-shrink-0 flex items-center gap-1.5 px-3 py-2 rounded-lg font-medium text-sm transition-all duration-200 cursor-pointer"
-              style={{
-                backgroundColor: isActive ? `${category.color}15` : 'transparent',
-                color: isActive ? category.color : AX.muted,
-                border: isActive ? `1px solid ${category.color}30` : '1px solid transparent',
-              }}
-            >
-              {/* Active indicator glow */}
-              {isActive && (
-                <motion.div
-                  layoutId="activeCategory"
-                  className="absolute inset-0 rounded-lg"
-                  style={{
-                    background: `radial-gradient(ellipse at center, ${category.color}10 0%, transparent 70%)`,
-                  }}
-                  transition={{ type: "spring", bounce: 0.2, duration: 0.6 }}
-                />
-              )}
+        <div
+          ref={scrollRef}
+          className="flex items-center overflow-x-auto scrollbar-hide"
+        >
+          {/* Sort presets */}
+          {sortItems.map((item, i) => {
+            const active = isActive(item);
+            return (
+              <button
+                key={item.id}
+                onClick={() => handleClick(item)}
+                className="relative flex-shrink-0 flex items-center gap-1.5 px-2.5 py-2 text-sm font-medium transition-colors duration-150 cursor-pointer whitespace-nowrap sm:px-3 sm:py-1"
+                style={{ color: active ? '#18c48c' : '#9ca3af' }}
+              >
+                {i === 0 && (
+                  <HiOutlineTrendingUp
+                    className="w-3.5 h-3.5"
+                    style={{ color: active ? '#18c48c' : '#9ca3af' }}
+                  />
+                )}
+                {item.label}
+                {active && (
+                  <span
+                    className="absolute bottom-0 left-2.5 right-2.5 h-[2px] rounded-full sm:left-3 sm:right-3"
+                    style={{ backgroundColor: '#18c48c' }}
+                  />
+                )}
+              </button>
+            );
+          })}
 
-              <IconComponent className="relative z-10 w-4 h-4" />
-              <span className="relative z-10 whitespace-nowrap hidden sm:inline">{category.label}</span>
+          {/* Spacer gap between sorts and categories */}
+          <div className="flex-shrink-0 w-3" />
 
-              {/* Count badge */}
-              {count > 0 && (
-                <span
-                  className="relative z-10 px-1.5 py-0.5 rounded-full text-[10px] font-semibold hidden md:inline"
-                  style={{
-                    backgroundColor: isActive ? `${category.color}25` : AX.surface2,
-                    color: isActive ? category.color : AX.muted,
-                  }}
-                >
-                  {count.toLocaleString()}
-                </span>
-              )}
-            </motion.button>
-          );
-        })}
+          {/* Category filters */}
+          {categoryItems.map((item) => {
+            const active = isActive(item);
+            return (
+              <button
+                key={item.id}
+                onClick={() => handleClick(item)}
+                className="relative flex-shrink-0 px-2.5 py-2 text-sm font-medium transition-colors duration-150 cursor-pointer whitespace-nowrap sm:px-3 sm:py-1"
+                style={{ color: active ? '#18c48c' : '#9ca3af' }}
+              >
+                {item.label}
+                {active && (
+                  <span
+                    className="absolute bottom-0 left-2.5 right-2.5 h-[2px] rounded-full sm:left-3 sm:right-3"
+                    style={{ backgroundColor: '#18c48c' }}
+                  />
+                )}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Right slot (Filters button) — always visible, pushed right */}
+      {rightSlot && (
+        <div className="flex-shrink-0 ml-2">
+          {rightSlot}
+        </div>
+      )}
     </div>
   );
 }
 
-// Sort options component
-export type SortOption = 'hot' | 'new' | 'ending' | 'volume';
-
-interface SortFilterProps {
-  selectedSort: SortOption;
-  onSelectSort: (sort: SortOption) => void;
-}
-
-const sortOptions: { id: SortOption; label: string; icon: IconType }[] = [
-  { id: 'hot', label: 'Hot', icon: HiOutlineLightningBolt },
-  { id: 'new', label: 'New', icon: HiOutlineSparkles },
-  { id: 'ending', label: 'Ending Soon', icon: HiOutlineClock },
-  { id: 'volume', label: 'Volume', icon: HiOutlineChartBar },
-];
-
-export function SortFilter({ selectedSort, onSelectSort }: SortFilterProps) {
-  return (
-    <div className="flex items-center gap-1 flex-shrink-0">
-      {sortOptions.map((option) => {
-        const isActive = selectedSort === option.id;
-        const IconComponent = option.icon;
-
-        return (
-          <motion.button
-            key={option.id}
-            onClick={() => onSelectSort(option.id)}
-            whileHover={{ scale: 1.02 }}
-            whileTap={{ scale: 0.98 }}
-            className="relative px-3 py-2 rounded-lg text-xs font-medium transition-all duration-200 cursor-pointer"
-            style={{
-              backgroundColor: isActive ? AX.accent + '20' : 'transparent',
-              color: isActive ? AX.accent : AX.muted,
-              border: isActive ? `1px solid ${AX.accent}30` : '1px solid transparent',
-            }}
-          >
-            {isActive && (
-              <motion.div
-                layoutId="activeSort"
-                className="absolute inset-0 rounded-lg"
-                style={{ backgroundColor: AX.accent + '10' }}
-                transition={{ type: "spring", bounce: 0.2, duration: 0.4 }}
-              />
-            )}
-            <span className="relative z-10 flex items-center gap-1.5">
-              <IconComponent className="w-4 h-4" />
-              <span className="hidden sm:inline">{option.label}</span>
-            </span>
-          </motion.button>
-        );
-      })}
-    </div>
-  );
+// Legacy SortFilter export — kept for backward compatibility but no longer rendered separately
+export function SortFilter({ selectedSort, onSelectSort }: { selectedSort: SortOption; onSelectSort: (sort: SortOption) => void }) {
+  return null;
 }

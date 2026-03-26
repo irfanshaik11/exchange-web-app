@@ -167,30 +167,27 @@ export default function MarketFilters({ filters, onFiltersChange }: MarketFilter
 
   return (
     <div className="relative">
-      {/* Filter Button */}
-      <motion.button
+      {/* Filter Button — matches nav item styling */}
+      <button
         ref={buttonRef}
         onClick={() => setIsOpen(!isOpen)}
-        whileHover={{ scale: 1.02 }}
-        whileTap={{ scale: 0.98 }}
-        className="relative flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium transition-all duration-200"
+        className="relative flex items-center gap-1.5 px-2.5 py-2 rounded-md text-sm font-medium transition-colors duration-150 cursor-pointer whitespace-nowrap sm:px-3 sm:py-1"
         style={{
-          backgroundColor: isOpen || activeFilterCount > 0 ? `${AX.accent}15` : 'transparent',
-          color: isOpen || activeFilterCount > 0 ? AX.accent : AX.muted,
-          border: `1px solid ${isOpen || activeFilterCount > 0 ? `${AX.accent}30` : 'transparent'}`,
+          backgroundColor: isOpen || activeFilterCount > 0 ? 'rgba(24, 196, 140, 0.1)' : 'transparent',
+          color: isOpen || activeFilterCount > 0 ? '#18c48c' : '#9ca3af',
         }}
       >
-        <HiOutlineFilter className="w-4 h-4" />
+        <HiOutlineFilter className="w-3.5 h-3.5" />
         <span className="hidden sm:inline">Filters</span>
         {activeFilterCount > 0 && (
           <span
-            className="flex items-center justify-center w-4 h-4 rounded-full text-[10px] font-bold"
-            style={{ backgroundColor: AX.accent, color: AX.bg }}
+            className="flex items-center justify-center min-w-[16px] h-4 px-1 rounded-full text-[10px] font-bold"
+            style={{ backgroundColor: '#18c48c', color: '#0C0C0F' }}
           >
             {activeFilterCount}
           </span>
         )}
-      </motion.button>
+      </button>
 
       {/* Popout */}
       <AnimatePresence>
