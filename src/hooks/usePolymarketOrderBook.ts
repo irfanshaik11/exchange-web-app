@@ -32,18 +32,27 @@ function applyDeltaToLevels(
   size: string,
   sortDescending: boolean, // true for bids, false for asks
 ): OrderBookLevel[] {
+  // Remove existing level at this price
   const updated = levels.filter(l => l.price !== price);
 
-  if (size !== '0' && parseFloat(size) > 0) {
-    updated.push({ price, size });
+  // If size is 0, just return the filtered array (level removed)
+  if (size === '0' || parseFloat(size) <= 0) {
+    return updated;
   }
 
-  // Sort: bids descending (highest first), asks ascending (lowest first)
-  updated.sort((a, b) => {
-    const diff = parseFloat(a.price) - parseFloat(b.price);
-    return sortDescending ? -diff : diff;
-  });
-
+  // Binary search insertion into already-sorted array (O(n) vs O(n log n) full sort)
+  const newPrice = parseFloat(price);
+  const newLevel: OrderBookLevel = { price, size };
+  let lo = 0;
+  let hi = updated.length;
+  while (lo < hi) {
+    const mid = (lo + hi) >>> 1;
+    const midPrice = parseFloat(updated[mid].price);
+    const cmp = sortDescending ? midPrice - newPrice : newPrice - midPrice;
+    if (cmp < 0) lo = mid + 1;
+    else hi = mid;
+  }
+  updated.splice(lo, 0, newLevel);
   return updated;
 }
 
@@ -320,15 +329,12 @@ export default function usePolymarketOrderBook(
       ));
     }
 
-    // Poll connection status — only update state when value actually changes
-    const statusInterval = setInterval(() => {
-      const connected = service.isConnected;
-      setIsConnected(prev => prev === connected ? prev : connected);
-    }, 2000);
+    // Event-driven connection status (replaces 2s polling interval)
+    const unsubConnection = service.onConnectionChange(setIsConnected);
 
     return () => {
       unsubs.forEach(fn => fn());
-      clearInterval(statusInterval);
+      unsubConnection();
     };
   }, [enabled, yesTokenId, noTokenId, processOrderBook]);
 

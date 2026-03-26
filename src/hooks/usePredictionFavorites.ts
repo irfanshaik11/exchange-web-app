@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 
 const STORAGE_KEY = 'prediction_favorites';
 
@@ -79,9 +79,15 @@ export default function usePredictionFavorites() {
     }
   }, [favorites, addFavorite, removeFavorite]);
 
+  // O(1) lookup set — avoids O(N) Array.some per card in the grid
+  const favoriteSet = useMemo(
+    () => new Set(favorites.map(f => `${f.ticker}-${f.source}`)),
+    [favorites],
+  );
+
   const isFavorite = useCallback((ticker: string, source: 'dflow' | 'polymarket' | 'talarion' = 'dflow') => {
-    return favorites.some((f) => f.ticker === ticker && f.source === source);
-  }, [favorites]);
+    return favoriteSet.has(`${ticker}-${source}`);
+  }, [favoriteSet]);
 
   const clearAll = useCallback(() => {
     setFavorites([]);

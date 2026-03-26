@@ -3,11 +3,12 @@ import PolymarketOrderBookService from '../services/polymarketOrderBookService';
 import type { LastTradePrice } from '../services/polymarketOrderBookService';
 
 /**
+ * @deprecated Use usePolymarketLivePrice (singular) instead.
+ * That hook uses useSyncExternalStore for per-card subscriptions,
+ * avoiding full-page re-renders when any token trades.
+ *
  * Lightweight hook that subscribes to Polymarket CLOB WS for multiple token IDs
  * and returns a map of assetId → latest trade price.
- *
- * Designed for the main predictions page to show live price updates on cards
- * without the overhead of full order book tracking per market.
  */
 
 export interface LivePriceEntry {

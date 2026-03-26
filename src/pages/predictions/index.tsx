@@ -37,7 +37,6 @@ import { useUser } from '../../components/UserContext';
 import useUnifiedPredictionMarkets from '~/hooks/useUnifiedPredictionMarkets';
 import type { UnifiedPredictionMarket } from '~/hooks/useUnifiedPredictionMarkets';
 import usePredictionFavorites from '~/hooks/usePredictionFavorites';
-import usePolymarketLivePrices from '~/hooks/usePolymarketLivePrices';
 import DataSourceSwitcher, { type PredictionDataSource } from '~/components/predictions/DataSourceSwitcher';
 import { HomepageInsightPanel } from '~/components/insights/HomepageInsightPanel';
 
@@ -75,6 +74,7 @@ export default function PredictionsPage() {
   // const [dataSource, setDataSource] = useState<PredictionDataSource>('all');
   const [dataSource, setDataSource] = useState<PredictionDataSource>('polymarket');
   const [showFullCreator, setShowFullCreator] = useState(false);
+  const [visibleCardCount, setVisibleCardCount] = useState(24); // Render 24 cards initially, load more on demand
 
   // Fetch markets from unified hook (dFlow + Polymarket)
   const {
@@ -99,6 +99,9 @@ export default function PredictionsPage() {
   // Favorites management
   const { favorites, isFavorite, toggleFavorite, removeFavorite } = usePredictionFavorites();
 
+  // Reset visible card count when filters change
+  useEffect(() => { setVisibleCardCount(24); }, [selectedCategory, selectedSort, searchQuery]);
+
   // Scroll ref for 3D scene — no re-renders, read directly in animation loop
   const scrollRef = useRef(0);
   useEffect(() => {
@@ -117,26 +120,8 @@ export default function PredictionsPage() {
     return [];
   }, [unifiedMarkets, isLoading]);
 
-  // Extract YES token IDs from active Polymarket markets for live WS subscription
-  const activeTokenIds = useMemo(() => {
-    return (allMarkets as UnifiedPredictionMarket[])
-      .filter(m => m.polymarketData?.yesTokenId)
-      .map(m => m.polymarketData!.yesTokenId);
-  }, [allMarkets]);
-
-  // Subscribe to live trade prices for all visible markets via CLOB WS
-  const livePrices = usePolymarketLivePrices(activeTokenIds, activeTokenIds.length > 0);
-
-  // Map ticker → yesTokenId for live price lookup on cards
-  const tokenIdByTicker = useMemo(() => {
-    const map = new Map<string, string>();
-    for (const m of allMarkets as UnifiedPredictionMarket[]) {
-      if (m.polymarketData?.yesTokenId) {
-        map.set(m.ticker, m.polymarketData.yesTokenId);
-      }
-    }
-    return map;
-  }, [allMarkets]);
+  // Live prices are now handled per-card via usePolymarketLivePrice + useSyncExternalStore
+  // Each PredictionCardV2 subscribes to its own tokenId when visible (IntersectionObserver gated)
 
   // Calculate category counts from live data
   const categoryCounts = useMemo(() => {
@@ -287,7 +272,7 @@ export default function PredictionsPage() {
     return (mergedFilteredMarkets || []).filter((m) =>
       m && (m.status !== 'active' || new Date(m.closesAt).getTime() <= now)
     );
-  }, [filteredMarkets]);
+  }, [mergedFilteredMarkets]);
 
   // Get featured market (highest volume)
   const featuredMarket = useMemo(() => {
@@ -559,30 +544,29 @@ export default function PredictionsPage() {
               <>
                 {/* Active Markets Grid */}
                 {activeMarkets.length > 0 && (
-                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 p-1">
-                    {activeMarkets.map((market, index) => {
-                      const tokenId = tokenIdByTicker.get(market.ticker);
-                      const liveEntry = tokenId ? livePrices.get(tokenId) : undefined;
-                      return (
-                        <PredictionCardV2
-                          key={`${market.source || 'dflow'}-${market.ticker}`}
-                          market={market}
-                          index={index}
-                          showSource={dataSource === 'all'}
-                          isFavorite={isFavorite(market.ticker, market.source || 'dflow')}
-                          onToggleFavorite={toggleFavorite}
-                          liveYesPrice={liveEntry?.price}
-                        />
-                      );
-                    })}
-                  </div>
+                  <>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 p-1">
+                      {activeMarkets.slice(0, visibleCardCount).map((market, index) => (
+                          <PredictionCardV2
+                            key={`${market.source || 'dflow'}-${market.ticker}`}
+                            market={market}
+                            index={index}
+                            showSource={dataSource === 'all'}
+                            isFavorite={isFavorite(market.ticker, market.source || 'dflow')}
+                            onToggleFavorite={toggleFavorite}
+                            tokenId={(market as UnifiedPredictionMarket).polymarketData?.yesTokenId}
+                            disableAnimation={index >= 8}
+                          />
+                      ))}
+                    </div>
+                  </>
                 )}
 
                 {/* Load More Markets */}
                 {hasMore && !searchQuery && (
                   <div className="flex flex-col items-center gap-2 mt-6">
                     <button
-                      onClick={loadMore}
+                      onClick={() => { setVisibleCardCount(prev => prev + 24); loadMore(); }}
                       disabled={isFetchingMore}
                       className="px-6 py-2.5 rounded-xl text-sm font-medium transition-all duration-200 hover:scale-[1.02] active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed"
                       style={{

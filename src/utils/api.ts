@@ -1114,6 +1114,47 @@ export const autoConvertUsdcToUsdce = (
   );
 
 /**
+ * Withdraw USDC.e from Polygon wallet to an external address
+ */
+export const withdrawPolygonUsdce = (
+  params: { destinationAddress: string; amount: number },
+  authToken: string,
+) =>
+  apiFetch<{
+    success: boolean;
+    data: {
+      txHash: string;
+      amount: number;
+      destinationAddress: string;
+      balances: PolymarketBalance;
+    };
+  }>("/api/prediction/polymarket/withdraw", {
+    method: "POST",
+    body: params,
+    authToken,
+  });
+
+/**
+ * Get USDC.e withdrawal history for the authenticated user
+ */
+export interface PolygonWithdrawalRecord {
+  id: number;
+  amount: number;
+  destinationAddress: string;
+  txHash: string | null;
+  status: 'pending' | 'completed' | 'failed';
+  errorMessage?: string;
+  createdAt: string;
+  completedAt?: string;
+}
+
+export const getPolygonWithdrawalHistory = (authToken: string) =>
+  apiFetch<{ success: boolean; data: PolygonWithdrawalRecord[] }>(
+    "/api/prediction/polymarket/withdrawal-history",
+    { method: "GET", authToken },
+  );
+
+/**
  * Execute a Polymarket trade
  */
 export const executePolymarketOrder = (

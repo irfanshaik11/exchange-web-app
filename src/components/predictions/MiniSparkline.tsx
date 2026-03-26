@@ -6,6 +6,8 @@ interface MiniSparklineProps {
   height?: number;
   color?: string;
   showGradient?: boolean;
+  /** Stable ID for SVG gradient (avoids Math.random() on every render) */
+  id?: string;
 }
 
 export default function MiniSparkline({
@@ -14,6 +16,7 @@ export default function MiniSparkline({
   height = 24,
   color,
   showGradient = true,
+  id,
 }: MiniSparklineProps) {
   const { path, gradientPath, isPositive, changePercent } = useMemo(() => {
     if (!data || data.length < 2) {
@@ -68,7 +71,10 @@ export default function MiniSparkline({
   }
 
   const lineColor = color || (isPositive ? '#4ADE80' : '#F87171');
-  const gradientId = `sparkline-gradient-${Math.random().toString(36).substr(2, 9)}`;
+  const gradientId = useMemo(
+    () => `sparkline-grad-${id || Math.random().toString(36).substr(2, 9)}`,
+    [id],
+  );
 
   return (
     <svg width={width} height={height} className="overflow-visible">

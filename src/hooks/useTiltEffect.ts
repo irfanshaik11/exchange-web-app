@@ -5,6 +5,7 @@ interface TiltOptions {
   perspective?: number; // CSS perspective value in px (default: 1200)
   speed?: number;       // Transition speed in ms for reset (default: 400)
   scale?: number;       // Scale on hover (default: 1.0 — no scale)
+  disabled?: boolean;  // Skip all listeners + GPU layer allocation (for large grids)
 }
 
 /**
@@ -18,6 +19,7 @@ export default function useTiltEffect<T extends HTMLElement>(options: TiltOption
     perspective = 1200,
     speed = 400,
     scale = 1.0,
+    disabled = false,
   } = options;
 
   const ref = useRef<T>(null);
@@ -58,7 +60,7 @@ export default function useTiltEffect<T extends HTMLElement>(options: TiltOption
 
   useEffect(() => {
     const el = ref.current;
-    if (!el) return;
+    if (!el || disabled) return;
 
     el.style.willChange = 'transform';
     el.style.transformStyle = 'preserve-3d';
@@ -70,8 +72,10 @@ export default function useTiltEffect<T extends HTMLElement>(options: TiltOption
       cancelAnimationFrame(rafId.current);
       el.removeEventListener('mousemove', handleMouseMove);
       el.removeEventListener('mouseleave', handleMouseLeave);
+      el.style.willChange = '';
+      el.style.transformStyle = '';
     };
-  }, [handleMouseMove, handleMouseLeave]);
+  }, [handleMouseMove, handleMouseLeave, disabled]);
 
   return ref;
 }

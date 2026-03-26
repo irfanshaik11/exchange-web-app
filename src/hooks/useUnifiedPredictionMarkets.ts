@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useMemo, useCallback } from 'react';
 import useDFlowMarkets from './useDFlowMarkets';
 import type { ExtendedPredictionMarket } from './useDFlowMarkets';
 import usePolymarketMarkets from './usePolymarketMarkets';
@@ -130,13 +130,13 @@ export default function useUnifiedPredictionMarkets(
     ? `dFlow: ${dflowError}, Polymarket: ${polymarketError}`
     : dflowError || polymarketError || null;
 
-  // Combined refetch
-  const refetch = async () => {
+  // Combined refetch (stable reference via useCallback)
+  const refetch = useCallback(async () => {
     const promises: Promise<void>[] = [];
     if (source === 'all' || source === 'dflow') promises.push(dflowRefetch());
     if (source === 'all' || source === 'polymarket') promises.push(polymarketRefetch());
     await Promise.all(promises);
-  };
+  }, [source, dflowRefetch, polymarketRefetch]);
 
   return {
     markets: combinedMarkets,
