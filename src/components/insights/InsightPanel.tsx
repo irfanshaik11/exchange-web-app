@@ -58,8 +58,9 @@ function AIIcon({ size = 16 }: { size?: number }) {
 }
 
 export function InsightPanel({ source, marketId, docked = false }: InsightPanelProps) {
-  const { data, isLoading, timedOut } = useMarketInsights(source, marketId);
   const [collapsed, setCollapsed] = useState(!docked); // docked starts open, floating starts collapsed
+  const [opened, setOpened] = useState(!collapsed); // tracks if user has ever opened the panel
+  const { data, isLoading, timedOut } = useMarketInsights(source, marketId, opened);
   const constraintsRef = useRef<HTMLDivElement>(null);
 
   // ── Insight content (shared across all modes) ──
@@ -139,7 +140,7 @@ export function InsightPanel({ source, marketId, docked = false }: InsightPanelP
       <div className="lg:hidden fixed" style={{ right: '0.75rem', bottom: '8rem', zIndex: 9999 }}>
         <div className="iridescent-pill">
           <button
-            onClick={() => setCollapsed(false)}
+            onClick={() => { setCollapsed(false); setOpened(true); }}
             aria-label="Open AI insights"
             className="pill-inner flex items-center justify-center w-12 h-12 hover:bg-white/[0.04] transition-colors"
           >
@@ -192,7 +193,7 @@ export function InsightPanel({ source, marketId, docked = false }: InsightPanelP
       {collapsed ? (
         <div className="iridescent-pill">
           <button
-            onClick={() => setCollapsed(false)}
+            onClick={() => { setCollapsed(false); setOpened(true); }}
             aria-label="Open AI insights"
             className="pill-inner flex items-center gap-3 px-5 py-3 hover:bg-white/[0.04] transition-colors"
           >
