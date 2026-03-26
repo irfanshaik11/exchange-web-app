@@ -796,8 +796,10 @@ export default function PredictionsPage() {
         {/* AI Insights sidebar moved to top section alongside TalarionCreate */}
         </div>
 
-        {/* Floating AI panel for lg screens where sidebar isn't shown */}
-        <HomepageInsightPanel />
+        {/* Floating AI panel — hidden on xl+ where docked version is shown */}
+        <div className="xl:hidden">
+          <HomepageInsightPanel />
+        </div>
 
         <Footer />
           </div>
