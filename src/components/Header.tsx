@@ -2335,7 +2335,7 @@ export default function Header({
                         position: "fixed",
                         top: profileDropdownPosition.top,
                         right: profileDropdownPosition.right,
-                        zIndex: 10002,
+                        zIndex: 99999,
                       }}
                     >
                       <div className="p-4">

@@ -900,7 +900,7 @@ export default function Footer() {
                   style={{
                     bottom: `${modalPosition.bottom}px`,
                     right: `${modalPosition.right}px`,
-                    zIndex: 9999,
+                    zIndex: 99999,
                   }}
                   onClick={(e) => e.stopPropagation()}
                 >
