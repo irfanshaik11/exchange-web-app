@@ -16,38 +16,7 @@ import { categoryConfig } from './PredictionCard';
 import type { PredictionMarket } from './PredictionCard';
 import MiniSparkline from './MiniSparkline';
 import usePolymarketLivePrice from '~/hooks/usePolymarketLivePrice';
-
-function generateMockSparkline(currentPrice: number, change: number): number[] {
-  const points = 12;
-  const data: number[] = [];
-  const startPrice = currentPrice / (1 + change);
-  for (let i = 0; i < points; i++) {
-    const progress = i / (points - 1);
-    const noise = (Math.random() - 0.5) * 0.02;
-    const value = startPrice + (currentPrice - startPrice) * progress + noise;
-    data.push(Math.max(0, Math.min(1, value)));
-  }
-  return data;
-}
-
-const formatVolume = (volume: number): string => {
-  if (volume >= 1_000_000) return `$${(volume / 1_000_000).toFixed(1)}M`;
-  if (volume >= 1_000) return `$${(volume / 1_000).toFixed(0)}K`;
-  return `$${volume.toFixed(0)}`;
-};
-
-const formatTimeRemaining = (closesAt: string): { text: string; isUrgent: boolean } => {
-  const diff = new Date(closesAt).getTime() - Date.now();
-  if (diff <= 0) return { text: 'Ended', isUrgent: false };
-  const days = Math.floor(diff / 86400000);
-  const hours = Math.floor((diff % 86400000) / 3600000);
-  const isUrgent = diff <= 86400000;
-  let text = '';
-  if (days > 0) text = `${days}d`;
-  else if (hours > 0) text = `${hours}h`;
-  else text = '<1h';
-  return { text, isUrgent };
-};
+import { generateMockSparkline, formatVolume, formatTimeRemaining } from './utils';
 
 interface MarketRowProps {
   market: PredictionMarket;
@@ -105,7 +74,7 @@ const MarketRow = React.memo(function MarketRow({
   const CategoryIcon = categoryInfo.Icon;
 
   const sparklineData = useMemo(() => {
-    return market.priceHistory || generateMockSparkline(market.yesPrice, priceChange);
+    return market.priceHistory || generateMockSparkline(market.ticker, market.yesPrice, priceChange);
   }, [market.ticker, market.priceHistory]);
 
   return (
@@ -216,7 +185,7 @@ const MarketRow = React.memo(function MarketRow({
             <div
               className="px-3 py-1 rounded-md text-center transition-colors duration-300"
               style={{
-                backgroundColor: flash === 'up' ? T.greenSoft : T.greenSoft,
+                backgroundColor: flash === 'up' ? T.greenSoft : T.surface,
                 border: `1px solid ${T.greenBorder}`,
                 minWidth: 48,
               }}
@@ -232,7 +201,7 @@ const MarketRow = React.memo(function MarketRow({
             <div
               className="px-3 py-1 rounded-md text-center transition-colors duration-300"
               style={{
-                backgroundColor: flash === 'down' ? T.redSoft : T.redSoft,
+                backgroundColor: flash === 'down' ? T.redSoft : T.surface,
                 border: `1px solid ${T.redBorder}`,
                 minWidth: 48,
               }}

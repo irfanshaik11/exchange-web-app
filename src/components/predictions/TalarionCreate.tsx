@@ -439,6 +439,7 @@ export default function TalarionCreate({ onMarketClick, authToken, compact, onEx
       {/* Collapsed bar — click to expand */}
       <button
         onClick={() => setIsCollapsed(!isCollapsed)}
+        aria-label="Toggle AI Predictions"
         className="w-full flex items-center justify-center px-5 py-3.5 hover:bg-white/[0.02] transition-colors relative"
       >
         <div className="flex items-center gap-2.5">

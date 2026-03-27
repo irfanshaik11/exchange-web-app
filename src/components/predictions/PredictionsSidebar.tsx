@@ -67,7 +67,7 @@ export default function PredictionsSidebar({
       onMouseLeave={() => setIsExpanded(false)}
       animate={{ width: isExpanded ? T.sidebarExpandedWidth : T.sidebarWidth }}
       transition={{ duration: 0.2, ease: 'easeOut' }}
-      className="fixed left-0 top-0 bottom-0 z-[9998] flex flex-col"
+      className="fixed left-0 top-0 bottom-0 z-[9998] hidden md:flex flex-col"
       style={{
         backgroundColor: T.bg,
         borderRight: `1px solid ${T.border}`,

@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useId } from 'react';
 import { categoryConfig } from './PredictionCard';
 
 /**
@@ -24,7 +24,7 @@ function Dots({ points, color, r = 1.5 }: { points: [number, number][]; color: s
           cy={cy}
           r={r}
           fill={color}
-          opacity={0.4 + Math.random() * 0.6}
+          opacity={0.4 + ((cx * 13 + cy * 7) % 100) / 100 * 0.6}
         />
       ))}
     </>
@@ -611,7 +611,8 @@ export default function CategoryGraphic({
   const catKey = category.toLowerCase();
   const resolvedColor = color || categoryConfig[catKey]?.color || '#6B7280';
   const Graphic = graphicMap[catKey] || DefaultGraphic;
-  const filterId = `neon-glow-${catKey}`;
+  const uid = useId();
+  const filterId = `neon-glow-${catKey}-${uid}`;
 
   return (
     <svg
@@ -624,7 +625,7 @@ export default function CategoryGraphic({
     >
       <defs>
         {/* Stronger ambient radial glow */}
-        <radialGradient id={`glow-${catKey}`} cx="50%" cy="50%" r="50%">
+        <radialGradient id={`glow-${catKey}-${uid}`} cx="50%" cy="50%" r="50%">
           <stop offset="0%" stopColor={resolvedColor} stopOpacity="0.25" />
           <stop offset="50%" stopColor={resolvedColor} stopOpacity="0.08" />
           <stop offset="100%" stopColor={resolvedColor} stopOpacity="0" />
@@ -633,7 +634,7 @@ export default function CategoryGraphic({
         <GlowFilter id={filterId} color={resolvedColor} />
       </defs>
       {/* Ambient glow — larger, stronger */}
-      <circle cx="100" cy="100" r="95" fill={`url(#glow-${catKey})`} />
+      <circle cx="100" cy="100" r="95" fill={`url(#glow-${catKey}-${uid})`} />
       <Graphic color={resolvedColor} filterId={filterId} />
     </svg>
   );

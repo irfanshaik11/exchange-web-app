@@ -224,8 +224,8 @@ export default function PredictionsPage() {
 
         {/* Main Content — offset by sidebar width */}
         <div
-          className="flex-1 flex"
-          style={{ marginLeft: T.sidebarWidth, paddingTop: 0 }}
+          className="flex-1 flex md:ml-[56px]"
+          style={{ paddingTop: 0 }}
         >
           {/* Left: All market content */}
           <div className="flex-1 min-w-0 flex flex-col">

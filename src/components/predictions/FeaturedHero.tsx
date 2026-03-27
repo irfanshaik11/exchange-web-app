@@ -1,4 +1,4 @@
-import React, { useMemo, useState, useEffect, useCallback } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
 import Link from 'next/link';
 import { motion, AnimatePresence } from 'framer-motion';
 import { T } from './theme';
@@ -6,6 +6,7 @@ import { categoryConfig } from './PredictionCard';
 import type { PredictionMarket } from './PredictionCard';
 import MiniSparkline from './MiniSparkline';
 import { getCategoryImages } from './categoryImages';
+import { generateMockSparkline, formatVolume } from './utils';
 
 interface FeaturedHeroProps {
   market?: PredictionMarket;
@@ -13,25 +14,6 @@ interface FeaturedHeroProps {
   /** Rotation interval in ms (default: 6000) */
   rotateInterval?: number;
 }
-
-function generateMockSparkline(currentPrice: number, change: number): number[] {
-  const points = 20;
-  const data: number[] = [];
-  const startPrice = currentPrice / (1 + change);
-  for (let i = 0; i < points; i++) {
-    const progress = i / (points - 1);
-    const noise = (Math.random() - 0.5) * 0.015;
-    const value = startPrice + (currentPrice - startPrice) * progress + noise;
-    data.push(Math.max(0, Math.min(1, value)));
-  }
-  return data;
-}
-
-const formatVolume = (volume: number): string => {
-  if (volume >= 1_000_000) return `$${(volume / 1_000_000).toFixed(1)}M`;
-  if (volume >= 1_000) return `$${(volume / 1_000).toFixed(0)}K`;
-  return `$${volume.toFixed(0)}`;
-};
 
 export default function FeaturedHero({ market: singleMarket, markets: marketsProp, rotateInterval = 6000 }: FeaturedHeroProps) {
   // Build the rotation list: pick one top market per unique category
@@ -76,7 +58,7 @@ export default function FeaturedHero({ market: singleMarket, markets: marketsPro
     : `/predictions/${market.ticker}`;
 
   const sparklineData = useMemo(() => {
-    return market.priceHistory || generateMockSparkline(market.yesPrice, market.yesPriceChange24h);
+    return market.priceHistory || generateMockSparkline(market.ticker, market.yesPrice, market.yesPriceChange24h);
   }, [market.ticker]);
 
   const images = getCategoryImages(market.category);
@@ -315,7 +297,7 @@ export default function FeaturedHero({ market: singleMarket, markets: marketsPro
                     color: '#000',
                     boxShadow: `0 0 24px ${categoryInfo.color}30`,
                   }}
-                  onClick={(e) => e.stopPropagation()}
+                  onClick={(e) => { e.preventDefault(); e.stopPropagation(); }}
                 >
                   Explore Outcomes
                 </button>
@@ -403,7 +385,7 @@ export default function FeaturedHero({ market: singleMarket, markets: marketsPro
                     color: '#000',
                     boxShadow: `0 0 24px ${T.green}30`,
                   }}
-                  onClick={(e) => e.stopPropagation()}
+                  onClick={(e) => { e.preventDefault(); e.stopPropagation(); }}
                 >
                   Yes — {yesPercent}¢
                 </button>
@@ -414,7 +396,7 @@ export default function FeaturedHero({ market: singleMarket, markets: marketsPro
                     color: '#fff',
                     boxShadow: `0 0 24px ${T.red}30`,
                   }}
-                  onClick={(e) => e.stopPropagation()}
+                  onClick={(e) => { e.preventDefault(); e.stopPropagation(); }}
                 >
                   No — {noPercent}¢
                 </button>
@@ -455,6 +437,7 @@ export default function FeaturedHero({ market: singleMarket, markets: marketsPro
               <button
                 key={m.ticker}
                 onClick={(e) => { e.preventDefault(); e.stopPropagation(); setActiveIndex(i); }}
+                aria-label={`Show ${cat.label} market`}
                 className="transition-all duration-300"
                 style={{
                   width: i === activeIndex ? 20 : 6,
