@@ -59,7 +59,7 @@ export default function FeaturedHero({ market: singleMarket, markets: marketsPro
 
   const sparklineData = useMemo(() => {
     return market.priceHistory || generateMockSparkline(market.ticker, market.yesPrice, market.yesPriceChange24h);
-  }, [market.ticker]);
+  }, [market.ticker, market.priceHistory]);
 
   const images = getCategoryImages(market.category);
   const isActive = market.status === 'active';
