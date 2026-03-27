@@ -71,11 +71,11 @@ export default function PredictionsSidebar({
       style={{
         backgroundColor: T.bg,
         borderRight: `1px solid ${T.border}`,
-        paddingTop: 64, // below header
+        paddingTop: 72, // below header + breathing room
       }}
     >
       {/* Category Navigation */}
-      <nav className="flex-1 flex flex-col gap-1 px-2 py-3 overflow-y-auto overflow-x-hidden">
+      <nav className="flex-1 flex flex-col gap-1 px-2 pt-4 pb-3 overflow-y-auto overflow-x-hidden">
         {CATEGORIES.map((cat) => {
           const isActive = selectedCategory === cat.id;
           const Icon = cat.icon;
@@ -151,7 +151,7 @@ export default function PredictionsSidebar({
         </button>
       </nav>
 
-      {/* Portfolio Widget */}
+      {/* Portfolio Widget — commented out, re-enable when portfolio data is wired up
       <div
         className="mx-2 mb-3 rounded-xl overflow-hidden"
         style={{
@@ -180,7 +180,6 @@ export default function PredictionsSidebar({
                 {pnlPositive ? '+' : ''}{portfolioPnL?.toFixed(2)} today
               </div>
             )}
-            {/* Win/Loss bar */}
             {(winCount > 0 || lossCount > 0) && (
               <>
                 <div className="flex gap-1 mt-2">
@@ -223,6 +222,7 @@ export default function PredictionsSidebar({
           </div>
         )}
       </div>
+      */}
     </motion.aside>
   );
 }
