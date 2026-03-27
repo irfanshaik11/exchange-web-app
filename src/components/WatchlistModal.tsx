@@ -847,7 +847,7 @@ export default function WatchlistModal({ open, onClose }: WatchlistModalProps) {
   };
 
   return (
-    <InterstatePopout open={open} onClose={onClose} align="center" zIndex={9999} className="bg-[#111214] rounded-xl shadow-2xl w-full max-w-4xl max-h-[80vh] flex flex-col p-6 relative text-neutral-100">
+    <InterstatePopout open={open} onClose={onClose} align="center" zIndex={99999} className="bg-[#111214] rounded-xl shadow-2xl w-full max-w-4xl max-h-[80vh] flex flex-col p-6 relative text-neutral-100">
       <InterstateButton variant="icon" size="sm" onClick={onClose} className="absolute top-3 right-3 text-xl"><span>×</span></InterstateButton>
       <div className="flex items-center justify-between mb-4 pr-12">
         <div className="text-lg font-bold">Watchlist</div>

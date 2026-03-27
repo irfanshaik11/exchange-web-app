@@ -146,7 +146,7 @@ const FilterPopout: React.FC<FilterPopoutProps> = ({
       onClose={onClose}
       align="center"
       className="relative flex h-[85vh] max-h-[calc(100vh-60px)] w-full flex-col rounded-xl border border-[#2a2b33] bg-[#0f1110] text-[#E6E7EA] sm:max-w-2xl"
-      zIndex={200}
+      zIndex={99999}
     >
       <div 
         className="relative flex h-full w-full flex-col"

@@ -1082,7 +1082,7 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({
       open={true}
       onClose={onClose}
       align="center"
-      zIndex={9999}
+      zIndex={99999}
       className="h-[calc(100vh-120px)] w-[90%] bg-transparent p-0 shadow-none md:w-[80%]"
     >
       <div className="relative flex h-[calc(100vh-120px)] w-full flex-col border border-neutral-700 bg-black shadow-2xl">

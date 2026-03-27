@@ -8,6 +8,7 @@ import { formatSmartNumber, formatSmallPrice } from '~/utils/db';
 import type { PositionRow, TradeRow } from '~/utils/functions';
 import { SiSolana } from 'react-icons/si';
 import { FaTimes, FaChartLine } from 'react-icons/fa';
+import RealizedPnlChart, { type PnlChartDataPoint } from "~/components/charts/RealizedPnlChart";
 
 // Official Solana logo component
 const SolanaIcon = ({ size = 16 }: { size?: number }) => (
@@ -62,7 +63,7 @@ export default function PnLModal({ isOpen, onClose, chain }: PnLModalProps) {
     winningTrades: 0,
     losingTrades: 0,
   });
-  const [chartData, setChartData] = useState<{ x: number; y: number }[]>([]);
+  const [pnlChartData, setPnlChartData] = useState<PnlChartDataPoint[]>([]);
   
   // Draggable state
   const [position, setPosition] = useState({ x: 0, y: 0 });
@@ -155,6 +156,9 @@ export default function PnLModal({ isOpen, onClose, chain }: PnLModalProps) {
             costBasis: number;
             realizedPnl: number;
             source: string;
+            timestamp: number;
+            tokenSymbol: string;
+            tokenName: string;
           }> = [];
           
           // 1. Calculate from TRADE HISTORY (most accurate - actual sell transactions)
@@ -306,6 +310,9 @@ export default function PnLModal({ isOpen, onClose, chain }: PnLModalProps) {
               costBasis: totalCostBasis,
               realizedPnl: saleRealizedPnl,
               source: storedRealizedPnl !== null ? 'trade_history_stored' : 'trade_history',
+              timestamp: new Date(sell.tradeTime || sell.createdAt || Date.now()).getTime(),
+              tokenSymbol: sell.tokenSymbol || '',
+              tokenName: sell.tokenName || '',
             });
           });
           
@@ -335,6 +342,9 @@ export default function PnLModal({ isOpen, onClose, chain }: PnLModalProps) {
                 costBasis: costBasisOfSold,
                 realizedPnl: saleRealizedPnl,
                 source: 'backend',
+                timestamp: Date.now(),
+                tokenSymbol: pos.tokenSymbol || '',
+                tokenName: pos.tokenName || '',
               });
             }
           });
@@ -372,8 +382,43 @@ export default function PnLModal({ isOpen, onClose, chain }: PnLModalProps) {
           const totalUsdValue = (chainBalance || 0) * solPrice + (usdcBalance || 0) + totalRemainingValue;
           setTotalValue(totalUsdValue);
 
-          // Generate chart data from realized PNL
-          setChartData([{ x: 0, y: 0 }, { x: 1, y: totalRealizedPnl }]);
+          // Generate realized PNL chart data (same style as portfolio page)
+          if (salesDetected.length > 0) {
+            const sorted = [...salesDetected].sort((a, b) => a.timestamp - b.timestamp);
+            let cumulative = 0;
+            const chartPoints: PnlChartDataPoint[] = [];
+            const firstDate = new Date(sorted[0].timestamp);
+            chartPoints.push({
+              time: firstDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+              date: 'Start',
+              cumulativePnl: 0,
+              tradePnl: 0,
+              tokenSymbol: '',
+              tokenName: '',
+              index: 0,
+            });
+            sorted.forEach((sale, i) => {
+              const tradeDate = new Date(sale.timestamp);
+              const timeLabel = tradeDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+              const dateLabel =
+                timeLabel +
+                ', ' +
+                tradeDate.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+              cumulative += sale.realizedPnl;
+              chartPoints.push({
+                time: timeLabel,
+                date: dateLabel,
+                cumulativePnl: Math.round(cumulative * 1e6) / 1e6,
+                tradePnl: Math.round(sale.realizedPnl * 1e6) / 1e6,
+                tokenSymbol: sale.tokenSymbol,
+                tokenName: sale.tokenName,
+                index: i + 1,
+              });
+            });
+            setPnlChartData(chartPoints);
+          } else {
+            setPnlChartData([]);
+          }
 
         } catch (error) {
           console.error('Error fetching position data:', error);
@@ -390,7 +435,7 @@ export default function PnLModal({ isOpen, onClose, chain }: PnLModalProps) {
 
   const modalContent = (
     <div 
-      className="fixed z-[99999] w-96"
+      className="fixed z-[99999] w-[450px]"
       style={{
         background: 'linear-gradient(135deg, #0a0a0a 0%, #1a1a1a 50%, #0f0f0f 100%)',
         border: '1px solid #2a2a2a',
@@ -490,76 +535,15 @@ export default function PnLModal({ isOpen, onClose, chain }: PnLModalProps) {
 
       {/* Chart Section */}
       <div className="p-6">
-        <div className="h-24 bg-gradient-to-r from-gray-900 to-gray-800 rounded-lg p-4 relative overflow-hidden">
-          {/* Real PnL chart with same logic as portfolio */}
-          <svg className="w-full h-full" viewBox="0 0 300 80" preserveAspectRatio="none">
-            {/* Horizontal reference line (neutral/zero) */}
-            <line 
-              x1="0" 
-              y1="40" 
-              x2="300" 
-              y2="40" 
-              stroke="#2A2B33" 
-              strokeWidth="1"
-            />
-            
-            {/* Dashed reference lines for visual context */}
-            <line 
-              x1="0" 
-              y1="20" 
-              x2="300" 
-              y2="20" 
-              stroke="#4A4B53" 
-              strokeWidth="1"
-              strokeDasharray="4,3"
-              opacity="0.7"
-            />
-            <line 
-              x1="0" 
-              y1="60" 
-              x2="300" 
-              y2="60" 
-              stroke="#4A4B53" 
-              strokeWidth="1"
-              strokeDasharray="4,3"
-              opacity="0.7"
-            />
-            
-            {/* Dynamic PNL line */}
-            <path
-              d={(() => {
-                const pnl = timeframeMetrics.realizedPnl;
-                
-                // More aggressive scaling for small values to make slope visible
-                let normalizedPnl;
-                if (Math.abs(pnl) < 0.01) {
-                  // For very small values, use much more aggressive scaling
-                  normalizedPnl = Math.max(-1, Math.min(1, pnl * 5000)); // Scale up by 5000x
-                } else if (Math.abs(pnl) < 1) {
-                  // For small-medium values, moderate scaling
-                  normalizedPnl = Math.max(-1, Math.min(1, pnl * 100)); // Scale up by 100x
-                } else {
-                  // For larger values, use the original logic
-                  const absMaxPnl = Math.max(Math.abs(pnl), 100);
-                  normalizedPnl = Math.max(-1, Math.min(1, pnl / absMaxPnl));
-                }
-                
-                const endY = 40 - (normalizedPnl * 30);
-                
-                // Create a more dramatic line that trends up/down based on PNL
-                return `M 0 40 L 60 ${40 - (normalizedPnl * 12)} L 120 ${40 - (normalizedPnl * 18)} L 180 ${40 - (normalizedPnl * 24)} L 240 ${40 - (normalizedPnl * 27)} L 300 ${endY}`;
-              })()}
-              stroke={timeframeMetrics.realizedPnl >= 0 ? '#70E0B0' : '#FF4D7F'}
-              strokeWidth="2.5"
-              fill="none"
-              style={{ transition: 'all 0.3s ease' }}
-            />
-            
-            {/* Start and end points for clarity */}
-            <circle cx="0" cy="40" r="2" fill={timeframeMetrics.realizedPnl >= 0 ? '#70E0B0' : '#FF4D7F'} />
-            <circle cx="300" cy={40 - (Math.max(-1, Math.min(1, timeframeMetrics.realizedPnl * (Math.abs(timeframeMetrics.realizedPnl) < 0.01 ? 5000 : Math.abs(timeframeMetrics.realizedPnl) < 1 ? 100 : 1)))) * 30} r="2" fill={timeframeMetrics.realizedPnl >= 0 ? '#70E0B0' : '#FF4D7F'} />
-          </svg>
-        </div>
+        {pnlChartData.length > 1 ? (
+          <div className="h-40 sm:h-48 w-full">
+            <RealizedPnlChart data={pnlChartData} />
+          </div>
+        ) : (
+          <div className="h-40 sm:h-48 w-full flex items-center justify-center">
+            <p className="text-[#6B7280] text-xs">No realized trades yet</p>
+          </div>
+        )}
       </div>
     </div>
   );

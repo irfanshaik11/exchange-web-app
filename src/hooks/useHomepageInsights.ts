@@ -61,7 +61,7 @@ export function useHomepageInsights() {
       if (Date.now() - pollingStartRef.current > 120_000) {
         return false;
       }
-      return 5_000;
+      return 500;
     },
     staleTime: (query) => (query.state.data ? 6 * 60 * 60 * 1000 : 0),
     gcTime: 7 * 60 * 60 * 1000,
