@@ -554,6 +554,7 @@ export default function useTalarion(authToken?: string): UseTalarionResult {
             amount: dollars / 0.5,
             price: 0.5,
             dollars,
+            fee: 0,
             txHash: null,
             relaySuccessful: true,
           };

@@ -342,7 +342,7 @@ export default function TalarionCreate({ onMarketClick, authToken, compact, onEx
 
   const handleConfirmSell = useCallback(async () => {
     if (!activeSell || isSelling) return;
-    const { position, percentage } = activeSell;
+    const { position } = activeSell;
 
     const sellToast = createPolymarketTradeToast({
       label: `Sell ${position.side} — ${((position.marketTitle && !position.marketTitle.startsWith('0x')) ? position.marketTitle : 'AI Market').slice(0, 35)}`,
