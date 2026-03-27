@@ -470,7 +470,12 @@ const CACHE_TTL = 5 * 60 * 1000; // 5 minutes in milliseconds
 const CACHE_KEY = "tokenMetadataCache";
 
 export default function PortfolioPage() {
-  const [activeSection, setActiveSection] = useState<"spot" | "predictions" | "wallet" | "perpetuals">("spot");
+  const [activeSection, setActiveSectionState] = useState<"spot" | "predictions" | "wallet" | "perpetuals">("spot");
+  const setActiveSection = (section: "spot" | "predictions" | "wallet" | "perpetuals") => {
+    setActiveSectionState(section);
+    // Notify Header about section change so it can toggle prediction balance display
+    window.dispatchEvent(new CustomEvent('portfolio-section-change', { detail: { section } }));
+  };
   const [activeSpotTab, setActiveSpotTab] = useState(0);
   const [activePerpetualsTab, setActivePerpetualsTab] = useState(0);
   const { user, loading: userLoading, solBalance, usdcBalance, refreshBalance, refreshAllBalances, chainBalances, primaryWalletAddresses, walletBalances: contextWalletBalances, walletList: contextWalletList, walletListLoading, refreshWalletList, refreshUser, selectedWalletIds, selectAllWalletsForChain, selectWalletsWithFunds, clearSelectedWallets, setSelectedWalletsForChain } = useUser();

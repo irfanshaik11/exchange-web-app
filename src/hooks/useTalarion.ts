@@ -41,16 +41,88 @@ export interface TalarionTradeResult {
   amount: number;
   price: number;
   dollars: number;
+  fee: number;
+  txHash: string | null;
+  feeTransactionHash?: string;
+  eoaFlow?: boolean;
+  relaySuccessful: boolean;
+  warning?: string;
+  failedOperations?: string[];
+}
+
+export interface TalarionSellResult {
+  trade_id: string;
+  instrument_id: string;
+  side: 'YES' | 'NO';
+  tradeType: 'SELL';
+  amount: number;
+  price: number;
+  proceeds: number;
+  remainingPosition: number;
+  positionClosed: boolean;
   txHash: string | null;
   relaySuccessful: boolean;
+  warning?: string;
+}
+
+export interface TalarionPosition {
+  id: number;
+  marketId: string;
+  ticker: string;
+  marketTitle: string;
+  side: 'YES' | 'NO';
+  tokenAmount: number;
+  avgEntryPrice: number;
+  costBasis: number;
+  currentValue?: number;
+  unrealizedPnl?: number;
+  status: 'active' | 'closed' | 'settled';
+  resolution?: string;
+  settlementAmount?: number;
+  source: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface TalarionBalance {
+  walletAddress: string;
+  nativeUsdc: number;
+  bridgedUsdc: number;
+  totalUsdc: number;
+  escrowApproved: boolean;
+  escrowAllowance: string;
+  maticBalance: number;
+  hasGasBalance: boolean;
+  hasTradingBalance: boolean;
+}
+
+export interface TalarionReconcileResult {
+  settled: Array<{
+    instrumentId: string;
+    side: string;
+    resolution: string;
+    isWinner: boolean;
+    settlementAmount: number;
+    pnl: number;
+  }>;
+  unchanged: number;
+  totalChecked: number;
 }
 
 interface UseTalarionResult {
   generateMarkets: (query: string, resolutionTime: string) => Promise<TalarionInstrument[]>;
   getQuote: (instrumentId: string, buyYes: boolean, dollars: number) => Promise<TalarionQuote>;
   executeTrade: (instrumentId: string, buyYes: boolean, dollars: number) => Promise<TalarionTradeResult>;
+  sellPosition: (instrumentId: string, side: 'YES' | 'NO') => Promise<TalarionSellResult>;
+  fetchPositions: () => Promise<TalarionPosition[]>;
+  fetchBalance: () => Promise<TalarionBalance | null>;
+  reconcileSettlements: () => Promise<TalarionReconcileResult>;
+  positions: TalarionPosition[];
+  balance: TalarionBalance | null;
   isGenerating: boolean;
   isTrading: boolean;
+  isSelling: boolean;
+  isReconciling: boolean;
   generatedMarkets: TalarionInstrument[];
   matchingPublicMarkets: PolymarketMatch[];
   error: string | null;
@@ -122,8 +194,12 @@ const API_BASE = `${env.NEXT_PUBLIC_BACKEND_URL}/api/prediction/talarion`;
 export default function useTalarion(authToken?: string): UseTalarionResult {
   const [isGenerating, setIsGenerating] = useState(false);
   const [isTrading, setIsTrading] = useState(false);
+  const [isSelling, setIsSelling] = useState(false);
+  const [isReconciling, setIsReconciling] = useState(false);
   const [generatedMarkets, setGeneratedMarkets] = useState<TalarionInstrument[]>([]);
   const [matchingPublicMarkets, setMatchingPublicMarkets] = useState<PolymarketMatch[]>([]);
+  const [positions, setPositions] = useState<TalarionPosition[]>([]);
+  const [balance, setBalance] = useState<TalarionBalance | null>(null);
   const [error, setError] = useState<string | null>(null);
   const abortRef = useRef<AbortController | null>(null);
 
@@ -491,6 +567,142 @@ export default function useTalarion(authToken?: string): UseTalarionResult {
     [getHeaders],
   );
 
+  /**
+   * Exit an existing Talarion position by canceling the original trade on the Escrow.
+   * This returns the locked margin to the user's wallet.
+   * Only full exit is supported (100% of position).
+   */
+  const sellPosition = useCallback(
+    async (
+      instrumentId: string,
+      side: 'YES' | 'NO',
+    ): Promise<TalarionSellResult> => {
+      setIsSelling(true);
+      setError(null);
+
+      try {
+        const res = await fetch(`${API_BASE}/sell`, {
+          method: 'POST',
+          headers: getHeaders(),
+          body: JSON.stringify({
+            instrument_id: instrumentId,
+            side,
+          }),
+        });
+
+        if (!res.ok) {
+          const errJson = await res.json().catch(() => ({}));
+          throw new Error(errJson.error || `Sell failed (${res.status})`);
+        }
+
+        const json = await res.json();
+        const result = (json.data ?? json) as TalarionSellResult;
+
+        // Refresh positions after successful sell
+        fetchPositions().catch(() => {});
+
+        return result;
+      } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : 'Sell execution failed';
+        throw new Error(msg);
+      } finally {
+        setIsSelling(false);
+      }
+    },
+    [getHeaders],
+  );
+
+  /**
+   * Fetch the user's active Talarion positions from the backend.
+   */
+  const fetchPositions = useCallback(
+    async (): Promise<TalarionPosition[]> => {
+      try {
+        const POSITIONS_API = `${env.NEXT_PUBLIC_BACKEND_URL}/api/prediction/positions`;
+        const res = await fetch(`${POSITIONS_API}?source=talarion&status=active`, {
+          headers: getHeaders(),
+        });
+
+        if (!res.ok) return [];
+
+        const json = await res.json();
+        // Defensive: ensure numeric fields are numbers (TypeORM numeric columns may arrive as strings)
+        const data = ((json.data ?? []) as TalarionPosition[]).map(p => ({
+          ...p,
+          tokenAmount: Number(p.tokenAmount) || 0,
+          avgEntryPrice: Number(p.avgEntryPrice) || 0,
+          costBasis: Number(p.costBasis) || 0,
+          currentValue: p.currentValue != null ? Number(p.currentValue) : undefined,
+          unrealizedPnl: p.unrealizedPnl != null ? Number(p.unrealizedPnl) : undefined,
+          settlementAmount: p.settlementAmount != null ? Number(p.settlementAmount) : undefined,
+        }));
+        setPositions(data);
+        return data;
+      } catch {
+        return [];
+      }
+    },
+    [getHeaders],
+  );
+
+  /**
+   * Fetch the user's Talarion trading balance (native USDC, USDC.e, approval status).
+   */
+  const fetchBalance = useCallback(
+    async (): Promise<TalarionBalance | null> => {
+      try {
+        const res = await fetch(`${API_BASE}/balance`, {
+          headers: getHeaders(),
+        });
+        if (!res.ok) return null;
+        const json = await res.json();
+        const data = (json.data ?? null) as TalarionBalance | null;
+        setBalance(data);
+        return data;
+      } catch {
+        return null;
+      }
+    },
+    [getHeaders],
+  );
+
+  /**
+   * Reconcile settlements — check all active positions against Talarion settlement API.
+   * Resolves any markets that have settled since last check.
+   */
+  const reconcileSettlements = useCallback(
+    async (): Promise<TalarionReconcileResult> => {
+      setIsReconciling(true);
+      try {
+        const res = await fetch(`${API_BASE}/reconcile`, {
+          method: 'POST',
+          headers: getHeaders(),
+        });
+
+        if (!res.ok) {
+          const errJson = await res.json().catch(() => ({}));
+          throw new Error(errJson.error || `Reconciliation failed (${res.status})`);
+        }
+
+        const json = await res.json();
+        const result = (json.data ?? json) as TalarionReconcileResult;
+
+        // Refresh positions if anything was settled
+        if (result.settled.length > 0) {
+          fetchPositions().catch(() => {});
+        }
+
+        return result;
+      } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : 'Reconciliation failed';
+        throw new Error(msg);
+      } finally {
+        setIsReconciling(false);
+      }
+    },
+    [getHeaders, fetchPositions],
+  );
+
   const clearMarkets = useCallback(() => {
     setGeneratedMarkets([]);
     setMatchingPublicMarkets([]);
@@ -501,8 +713,16 @@ export default function useTalarion(authToken?: string): UseTalarionResult {
     generateMarkets,
     getQuote,
     executeTrade,
+    sellPosition,
+    fetchPositions,
+    fetchBalance,
+    reconcileSettlements,
+    positions,
+    balance,
     isGenerating,
     isTrading,
+    isSelling,
+    isReconciling,
     generatedMarkets,
     matchingPublicMarkets,
     error,

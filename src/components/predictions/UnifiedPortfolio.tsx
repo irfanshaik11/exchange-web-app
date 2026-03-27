@@ -31,12 +31,14 @@ import {
   getPolymarketBalance,
   cancelPolymarketOrder,
   cancelAllPolymarketOrders,
+  sellTalarionPosition,
   type PredictionPosition,
   type PredictionTrade,
   type PolymarketOpenOrder,
   type PolymarketBalance,
 } from '~/utils/api';
 import { PredictionTheme, PortfolioTheme } from './theme';
+import { createPolymarketTradeToast } from '~/utils/tradeToast';
 
 // Types
 type TabType = 'overview' | 'positions' | 'orders' | 'history';
@@ -334,6 +336,12 @@ export default function UnifiedPortfolio({
   const [trades, setTrades] = useState<PredictionTrade[]>(snapshot?.trades || []);
   const [balance, setBalance] = useState<PolymarketBalance | null>(snapshot?.balance || null);
 
+  // Talarion positions (AI Markets)
+  const [talarionPositions, setTalarionPositions] = useState<PredictionPosition[]>([]);
+  const [talarionTrades, setTalarionTrades] = useState<PredictionTrade[]>([]);
+  const [sellingPositionId, setSellingPositionId] = useState<number | null>(null);
+  const [sellConfirm, setSellConfirm] = useState<{ position: PredictionPosition } | null>(null);
+
   // Winnings state
   const [claimablePositions, setClaimablePositions] = useState<ClaimablePosition[]>([]);
   const [claimedHistory, setClaimedHistory] = useState<ClaimedWinning[]>([]);
@@ -431,13 +439,16 @@ export default function UnifiedPortfolio({
     setError(null);
 
     try {
-      // Fetch all data in parallel — include settled positions too
-      const [positionsRes, settledRes, ordersRes, tradesRes, balanceRes] = await Promise.all([
+      // Fetch all data in parallel — include settled positions and Talarion positions
+      const [positionsRes, settledRes, ordersRes, tradesRes, balanceRes, talarionActiveRes, talarionSettledRes, talarionTradesRes] = await Promise.all([
         getUserPredictionPositions(authToken, 'polymarket', 'active').catch(() => null),
         getUserPredictionPositions(authToken, 'polymarket', 'settled').catch(() => null),
         getPolymarketOpenOrders(authToken).catch(() => null),
         getUserPredictionTrades(authToken, 'polymarket', 20).catch(() => null),
         getPolymarketBalance(authToken).catch(() => null),
+        getUserPredictionPositions(authToken, 'talarion', 'active').catch(() => null),
+        getUserPredictionPositions(authToken, 'talarion', 'settled').catch(() => null),
+        getUserPredictionTrades(authToken, 'talarion', 20).catch(() => null),
       ]);
 
       const claimedConditionIds = getClaimedConditionIds();
@@ -450,11 +461,35 @@ export default function UnifiedPortfolio({
       const freshTrades = tradesRes?.success && tradesRes.data ? tradesRes.data : trades;
       const freshBalance = balanceRes?.success && balanceRes.data ? balanceRes.data : balance;
 
+      // Talarion positions — normalize numeric fields (TypeORM returns strings)
+      const normalizeTalarionPositions = (data: PredictionPosition[]) =>
+        data.map(p => ({
+          ...p,
+          tokenAmount: Number(p.tokenAmount) || 0,
+          avgEntryPrice: Number(p.avgEntryPrice) || 0,
+          costBasis: Number(p.costBasis) || 0,
+          currentValue: p.currentValue != null ? Number(p.currentValue) : undefined,
+          unrealizedPnl: p.unrealizedPnl != null ? Number(p.unrealizedPnl) : undefined,
+          settlementAmount: p.settlementAmount != null ? Number(p.settlementAmount) : undefined,
+        }));
+
+      const freshTalarionActive = talarionActiveRes?.success && talarionActiveRes.data
+        ? normalizeTalarionPositions(talarionActiveRes.data.filter((p: PredictionPosition) => (Number(p.tokenAmount) || 0) > 0.001))
+        : talarionPositions;
+      const freshTalarionSettled = talarionSettledRes?.success && talarionSettledRes.data
+        ? normalizeTalarionPositions(talarionSettledRes.data)
+        : [];
+      const freshTalarionTrades = talarionTradesRes?.success && talarionTradesRes.data
+        ? talarionTradesRes.data
+        : talarionTrades;
+
       setPositions(freshPositions);
-      setSettledPositions(freshSettled);
+      setSettledPositions([...freshSettled, ...freshTalarionSettled]);
       setOpenOrders(freshOrders);
       setTrades(freshTrades);
       setBalance(freshBalance);
+      setTalarionPositions(freshTalarionActive);
+      setTalarionTrades(freshTalarionTrades);
 
       // Check for claimable winnings from user's REAL positions
       const userPositionsForClaim: ClaimablePosition[] = (positionsRes?.data || [])
@@ -653,8 +688,53 @@ export default function UnifiedPortfolio({
     }
   };
 
+  // Talarion sell handler
+  const handleTalarionSell = async (position: PredictionPosition) => {
+    if (!authToken || sellingPositionId) return;
+    setSellingPositionId(position.id);
+
+    const title = (position.marketTitle && !position.marketTitle.startsWith('0x'))
+      ? position.marketTitle : 'AI Market';
+    const sellToast = createPolymarketTradeToast({
+      label: `Sell ${position.side} — ${title.slice(0, 35)}`,
+      tokenName: title,
+    });
+
+    try {
+      const result = await sellTalarionPosition(
+        authToken,
+        position.marketId,
+        (position.side?.toUpperCase() || 'YES') as 'YES' | 'NO',
+        {},
+      );
+      if (result?.success) {
+        const data = result.data;
+        sellToast.complete(
+          `Position closed — $${data.proceeds.toFixed(2)} margin returned`,
+          data.txHash,
+        );
+        // Refresh positions
+        const freshRes = await getUserPredictionPositions(authToken, 'talarion', 'active').catch(() => null);
+        if (freshRes?.success && freshRes.data) {
+          setTalarionPositions(freshRes.data.filter((p: PredictionPosition) => (Number(p.tokenAmount) || 0) > 0.001).map(p => ({
+            ...p,
+            tokenAmount: Number(p.tokenAmount) || 0,
+            avgEntryPrice: Number(p.avgEntryPrice) || 0,
+            costBasis: Number(p.costBasis) || 0,
+          })));
+        }
+        setSellConfirm(null);
+      }
+    } catch (err: any) {
+      console.error('[Talarion Sell] Error:', err.message);
+      sellToast.error(err.message || 'Sell failed');
+    } finally {
+      setSellingPositionId(null);
+    }
+  };
+
   // Calculated values
-  const totalPositionValue = positions.reduce((sum, p) => {
+  const totalPositionValue = [...positions, ...talarionPositions].reduce((sum, p) => {
     const value = Number(p.currentValue) || Number(p.costBasis) || 0;
     return sum + value;
   }, 0);
@@ -709,9 +789,9 @@ export default function UnifiedPortfolio({
         activeTab={activeTab}
         onChange={setActiveTab}
         counts={{
-          positions: positions.length,
+          positions: positions.length + talarionPositions.length,
           orders: openOrders.length,
-          history: trades.length,
+          history: trades.length + talarionTrades.length,
           claimable: readyToClaim.length,
           settled: autoSettledWins.length,
         }}
@@ -962,18 +1042,47 @@ export default function UnifiedPortfolio({
           >
             {isLoading ? (
               <LoadingState message="Loading positions..." theme={C} />
-            ) : positions.length === 0 ? (
+            ) : (positions.length === 0 && talarionPositions.length === 0) ? (
               <EmptyState message="No open positions" icon={HiOutlineCollection} theme={C} />
             ) : (
-              positions.map((position, index) => (
-                <PositionRow
-                  key={position.id}
-                  position={position}
-                  index={index}
-                  onClick={() => handleNavigateToMarket(position)}
-                  theme={C}
-                />
-              ))
+              <>
+                {/* Polymarket Positions */}
+                {positions.length > 0 && talarionPositions.length > 0 && (
+                  <div className="flex items-center gap-2 pb-1">
+                    <span className="text-[10px] font-bold uppercase tracking-wider" style={{ color: C.muted }}>Polymarket</span>
+                    <div className="flex-1 h-px" style={{ backgroundColor: C.border }} />
+                  </div>
+                )}
+                {positions.map((position, index) => (
+                  <PositionRow
+                    key={position.id}
+                    position={position}
+                    index={index}
+                    onClick={() => handleNavigateToMarket(position)}
+                    theme={C}
+                  />
+                ))}
+
+                {/* Talarion AI Market Positions */}
+                {talarionPositions.length > 0 && (
+                  <>
+                    <div className="flex items-center gap-2 pt-2 pb-1">
+                      <span className="text-[10px] font-bold uppercase tracking-wider" style={{ color: C.purple }}>Predictions</span>
+                      <div className="flex-1 h-px" style={{ backgroundColor: C.border }} />
+                    </div>
+                    {talarionPositions.map((position, index) => (
+                      <TalarionPositionRow
+                        key={position.id}
+                        position={position}
+                        index={index}
+                        isSelling={sellingPositionId === position.id}
+                        onSell={() => setSellConfirm({ position })}
+                        theme={C}
+                      />
+                    ))}
+                  </>
+                )}
+              </>
             )}
           </motion.div>
         )}
@@ -1032,15 +1141,17 @@ export default function UnifiedPortfolio({
           >
             {isLoading ? (
               <LoadingState message="Loading trade history..." theme={C} />
-            ) : trades.length === 0 ? (
+            ) : (trades.length === 0 && talarionTrades.length === 0) ? (
               <EmptyState message="No trade history" icon={HiOutlineChartBar} theme={C} />
             ) : (
-              trades.map((trade, index) => (
+              [...trades, ...talarionTrades]
+                .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+                .map((trade, index) => (
                 <TradeRow
                   key={trade.id}
                   trade={trade}
                   index={index}
-                  onClick={() => {
+                  onClick={trade.source === 'talarion' ? undefined : () => {
                     const isReadableSlug = (str: string | undefined): boolean => {
                       if (!str) return false;
                       if (str.startsWith('0x')) return false;
@@ -1066,6 +1177,77 @@ export default function UnifiedPortfolio({
                 />
               ))
             )}
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Talarion Sell Confirmation Modal */}
+      <AnimatePresence>
+        {sellConfirm && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 flex items-center justify-center px-4"
+            style={{ backgroundColor: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)' }}
+            onClick={() => setSellConfirm(null)}
+          >
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              className="w-full max-w-sm rounded-2xl p-5"
+              style={{ backgroundColor: 'rgba(12, 14, 18, 0.95)', border: `1px solid ${C.border}` }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="flex items-center justify-between mb-4">
+                <span className="text-[13px] font-semibold" style={{ color: C.red }}>
+                  Sell {sellConfirm.position.side} Position
+                </span>
+                <button onClick={() => setSellConfirm(null)} className="text-sm p-1 rounded-lg hover:bg-white/5" style={{ color: C.muted }}>
+                  &times;
+                </button>
+              </div>
+
+              <p className="text-[13px] font-medium mb-3 line-clamp-2" style={{ color: C.text }}>
+                {(sellConfirm.position.marketTitle && !sellConfirm.position.marketTitle.startsWith('Talarion: 0x'))
+                  ? sellConfirm.position.marketTitle
+                  : 'AI Prediction Market'}
+              </p>
+
+              <div className="flex flex-col gap-1.5 px-3 py-2 rounded-lg mb-4" style={{ backgroundColor: 'rgba(255,255,255,0.04)' }}>
+                <div className="flex justify-between text-[11px]">
+                  <span style={{ color: C.muted }}>Shares</span>
+                  <span style={{ color: C.text }}>{(Number(sellConfirm.position.tokenAmount) || 0).toFixed(2)}</span>
+                </div>
+                <div className="flex justify-between text-[11px]">
+                  <span style={{ color: C.muted }}>Cost basis</span>
+                  <span style={{ color: C.text }}>${(Number(sellConfirm.position.costBasis) || 0).toFixed(2)}</span>
+                </div>
+              </div>
+
+              <p className="text-[11px] mb-4" style={{ color: C.muted }}>
+                This will cancel the trade on the Escrow contract and return your ${(Number(sellConfirm.position.costBasis) || 0).toFixed(2)} margin to your wallet.
+              </p>
+
+              <div className="flex gap-2">
+                <button
+                  onClick={() => setSellConfirm(null)}
+                  className="flex-1 py-2.5 rounded-xl text-[13px] font-semibold"
+                  style={{ backgroundColor: 'rgba(255,255,255,0.06)', color: C.muted, border: `1px solid ${C.border}` }}
+                >
+                  Keep Position
+                </button>
+                <button
+                  onClick={() => handleTalarionSell(sellConfirm.position)}
+                  disabled={sellingPositionId !== null}
+                  className="flex-1 py-2.5 rounded-xl text-[13px] font-semibold transition-all active:scale-[0.97]"
+                  style={{ backgroundColor: C.red, color: '#fff', opacity: sellingPositionId ? 0.6 : 1 }}
+                >
+                  {sellingPositionId ? 'Exiting...' : 'Exit Position'}
+                </button>
+              </div>
+            </motion.div>
           </motion.div>
         )}
       </AnimatePresence>
@@ -1400,6 +1582,93 @@ function PositionRow({
   );
 }
 
+function TalarionPositionRow({
+  position,
+  index,
+  isSelling,
+  onSell,
+  theme: C,
+}: {
+  position: PredictionPosition;
+  index: number;
+  isSelling: boolean;
+  onSell: () => void;
+  theme: Theme;
+}) {
+  const isYes = position.side?.toUpperCase() === 'YES';
+  const costBasis = Number(position.costBasis) || 0;
+  const tokenAmount = Number(position.tokenAmount) || 0;
+  const avgEntryPrice = Number(position.avgEntryPrice) || 0;
+  const currentValue = Number(position.currentValue) || costBasis;
+
+  // Clean up the market title — show readable name, never raw hex
+  let title = position.marketTitle || '';
+  const isHexTitle = !title || title.startsWith('Talarion: 0x') || title.startsWith('0x');
+  if (isHexTitle) {
+    title = 'AI Prediction Market';
+  }
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 8 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ delay: index * 0.03 }}
+      className="flex items-center justify-between p-3.5 rounded-xl transition-colors"
+      style={{
+        backgroundColor: C.surface,
+        border: `1px solid ${C.border}`,
+      }}
+    >
+      <div className="flex items-center gap-3 flex-1 min-w-0">
+        <div className="w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0" style={{
+          backgroundColor: isYes ? C.greenBg : C.redBg,
+        }}>
+          {isYes ? (
+            <HiOutlineCheckCircle className="w-5 h-5" style={{ color: C.green }} />
+          ) : (
+            <HiOutlineXCircle className="w-5 h-5" style={{ color: C.red }} />
+          )}
+        </div>
+
+        <div className="flex-1 min-w-0">
+          <div className="text-sm font-medium truncate" style={{ color: C.text }}>
+            {title}
+          </div>
+          <div className="flex items-center gap-2 mt-0.5">
+            <span className="text-[10px] font-bold uppercase" style={{ color: isYes ? C.green : C.red }}>
+              {position.side}
+            </span>
+            <span className="text-[11px]" style={{ color: C.muted }}>
+              {tokenAmount.toFixed(2)} @ {(avgEntryPrice * 100).toFixed(0)}c
+            </span>
+          </div>
+        </div>
+      </div>
+
+      <div className="flex items-center gap-3 ml-4">
+        <div className="text-right">
+          <div className="text-sm font-bold tabular-nums" style={{ color: C.text }}>
+            ${currentValue.toFixed(2)}
+          </div>
+        </div>
+        <button
+          onClick={(e) => { e.stopPropagation(); onSell(); }}
+          disabled={isSelling}
+          className="px-3 py-1.5 rounded-lg text-[11px] font-semibold transition-all flex-shrink-0"
+          style={{
+            backgroundColor: C.redBg || 'rgba(248,113,113,0.15)',
+            color: C.red,
+            border: `1px solid rgba(248,113,113,0.2)`,
+            opacity: isSelling ? 0.5 : 1,
+          }}
+        >
+          {isSelling ? '...' : 'Exit'}
+        </button>
+      </div>
+    </motion.div>
+  );
+}
+
 function OpenOrderRow({
   order,
   index,
@@ -1512,7 +1781,7 @@ function TradeRow({
       initial={{ opacity: 0, y: 8 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ delay: index * 0.03 }}
-      className="flex items-center justify-between p-3.5 rounded-xl cursor-pointer transition-colors"
+      className={`flex items-center justify-between p-3.5 rounded-xl transition-colors ${onClick ? 'cursor-pointer' : ''}`}
       style={{ backgroundColor: C.surface, border: `1px solid ${C.border}` }}
       onClick={onClick}
     >
@@ -1527,7 +1796,9 @@ function TradeRow({
 
         <div className="flex-1 min-w-0">
           <div className="text-sm font-medium truncate" style={{ color: C.text }}>
-            {trade.marketTitle || trade.marketId}
+            {(trade.marketTitle && !trade.marketTitle.startsWith('0x') && !trade.marketTitle.startsWith('Talarion: 0x'))
+              ? trade.marketTitle
+              : (trade.source === 'talarion' ? 'AI Prediction Market' : trade.marketId)}
           </div>
           <div className="flex items-center gap-2 mt-0.5">
             <span className="text-[10px] font-bold uppercase" style={{ color: isYes ? C.green : C.red }}>

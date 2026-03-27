@@ -6,7 +6,7 @@ import { createPolymarketTradeToast, showPolymarketToast, POLYGON_LOGO_URL } fro
 import { T } from './theme';
 import TalarionMarketCard from './TalarionMarketCard';
 import useTalarion from '~/hooks/useTalarion';
-import type { TalarionInstrument, PolymarketMatch } from '~/hooks/useTalarion';
+import type { TalarionInstrument, TalarionPosition, TalarionBalance, PolymarketMatch } from '~/hooks/useTalarion';
 import usePredictionFavorites from '~/hooks/usePredictionFavorites';
 
 // ---------------------------------------------------------------------------
@@ -179,8 +179,16 @@ export default function TalarionCreate({ onMarketClick, authToken, compact, onEx
     generateMarkets,
     getQuote,
     executeTrade,
+    sellPosition,
+    fetchPositions,
+    fetchBalance,
+    reconcileSettlements,
+    positions,
+    balance,
     isGenerating,
     isTrading,
+    isSelling,
+    isReconciling,
     generatedMarkets,
     matchingPublicMarkets,
     error,
@@ -292,20 +300,30 @@ export default function TalarionCreate({ onMarketClick, authToken, compact, onEx
     }
 
     const tradeToast = createPolymarketTradeToast({
-      label: `${side === 'yes' ? 'Buy Yes' : 'Buy No'} — ${instrument.title.slice(0, 35)}…`,
+      label: `${side === 'yes' ? 'Buy Yes' : 'Buy No'} — ${instrument.title.slice(0, 35)}`,
       tokenName: instrument.title,
     });
 
+    // Progress feedback — update toast label during slow steps
+    const swapTimer = setTimeout(() => tradeToast.updateLabel('Preparing on-chain transaction...'), 3000);
+    const chainTimer = setTimeout(() => tradeToast.updateLabel('Confirming on Polygon...'), 8000);
+
     try {
-      // Full pipeline: quote → submit → sign (Turnkey server-side) → relay
       const result = await executeTrade(instrument.instrument_id, side === 'yes', dollars);
+      clearTimeout(swapTimer);
+      clearTimeout(chainTimer);
       const price = Math.round(result.price * 100);
+      const explorerHash = result.txHash || result.feeTransactionHash || null;
       tradeToast.complete(
         `${result.side} @ ${price}¢ — $${dollars.toFixed(2)}`,
-        result.txHash,
+        explorerHash,
       );
       setActiveTrade(null);
+      fetchPositions().catch(() => {});
+      fetchBalance().catch(() => {});
     } catch (err: unknown) {
+      clearTimeout(swapTimer);
+      clearTimeout(chainTimer);
       const msg = err instanceof Error ? err.message : 'Trade failed';
       tradeToast.error(msg);
     }
@@ -314,6 +332,67 @@ export default function TalarionCreate({ onMarketClick, authToken, compact, onEx
   const handleCancelTrade = useCallback(() => {
     setActiveTrade(null);
   }, []);
+
+  // --- Sell position state ---
+  const [activeSell, setActiveSell] = useState<{ position: TalarionPosition } | null>(null);
+
+  const handleSellClick = useCallback((position: TalarionPosition) => {
+    setActiveSell({ position });
+  }, []);
+
+  const handleConfirmSell = useCallback(async () => {
+    if (!activeSell || isSelling) return;
+    const { position, percentage } = activeSell;
+
+    const sellToast = createPolymarketTradeToast({
+      label: `Sell ${position.side} — ${((position.marketTitle && !position.marketTitle.startsWith('0x')) ? position.marketTitle : 'AI Market').slice(0, 35)}`,
+      tokenName: (position.marketTitle && !position.marketTitle.startsWith('0x')) ? position.marketTitle : 'AI Market',
+    });
+
+    try {
+      const result = await sellPosition(
+        position.marketId,
+        position.side as 'YES' | 'NO',
+      );
+      sellToast.complete(
+        `Position closed — $${result.proceeds.toFixed(2)} margin returned`,
+        result.txHash,
+      );
+      setActiveSell(null);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Sell failed';
+      sellToast.error(msg);
+    }
+  }, [activeSell, isSelling, sellPosition]);
+
+  const handleCancelSell = useCallback(() => {
+    setActiveSell(null);
+  }, []);
+
+  // Fetch positions and balance when authToken becomes available
+  useEffect(() => {
+    if (authToken) {
+      fetchPositions();
+      fetchBalance();
+    }
+  // Only re-run when authToken changes (not on every render)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [authToken]);
+
+  // Reconcile settlements once after positions load (check for resolved markets)
+  const hasReconciled = useRef(false);
+  useEffect(() => {
+    if (authToken && positions.length > 0 && !hasReconciled.current) {
+      hasReconciled.current = true;
+      reconcileSettlements().catch(() => {});
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [authToken, positions.length]);
+
+  const activePositions = useMemo(
+    () => positions.filter(p => p.status === 'active' && p.tokenAmount > 0.001),
+    [positions],
+  );
 
   // --- Derived ---
 
@@ -818,13 +897,7 @@ export default function TalarionCreate({ onMarketClick, authToken, compact, onEx
                   onTrade={handleTrade}
                   isSaved={isFavorite(instrument.instrument_id, 'talarion')}
                   onToggleSave={handleToggleSave}
-                  onClick={(id) => {
-                    if (onMarketClick) {
-                      onMarketClick(id);
-                    } else {
-                      handleTrade(id, 'yes');
-                    }
-                  }}
+                  onClick={onMarketClick ? (id) => onMarketClick(id) : undefined}
                 />
               ))}
               {/* Skeleton placeholders for remaining cards while generating */}
@@ -1016,6 +1089,203 @@ export default function TalarionCreate({ onMarketClick, authToken, compact, onEx
         )}
       </AnimatePresence>
 
+      {/* Your Positions — show active Talarion positions with sell buttons */}
+      <AnimatePresence>
+        {activePositions.length > 0 && (
+          <motion.div
+            key="positions"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ duration: 0.4, ease: EASE_ENTRANCE }}
+            className="mt-6"
+          >
+            <SectionDivider label="Your Positions" />
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 mt-3">
+              {activePositions.map((pos) => {
+                const entryPriceCents = Math.round(pos.avgEntryPrice * 100);
+                const pnlValue = pos.unrealizedPnl ?? 0;
+                const pnlColor = pnlValue >= 0 ? T.green : T.red;
+
+                return (
+                  <motion.div
+                    key={pos.id}
+                    initial={{ opacity: 0, y: 12 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.35, ease: EASE_ENTRANCE }}
+                    className="rounded-2xl p-4 flex flex-col gap-3"
+                    style={{
+                      backgroundColor: 'rgba(12, 14, 18, 0.75)',
+                      border: `1px solid ${T.border}`,
+                    }}
+                  >
+                    {/* Top: side badge + entry price */}
+                    <div className="flex items-center justify-between">
+                      <span
+                        className="px-2 py-0.5 rounded-md text-[10px] font-bold uppercase"
+                        style={{
+                          backgroundColor: pos.side === 'YES' ? T.greenSoft : T.redSoft,
+                          color: pos.side === 'YES' ? T.green : T.red,
+                        }}
+                      >
+                        {pos.side}
+                      </span>
+                      <span className="text-[10px] font-medium" style={{ color: T.muted }}>
+                        Entry {entryPriceCents}&cent;
+                      </span>
+                    </div>
+
+                    {/* Title */}
+                    <h4
+                      className="font-semibold text-[13px] leading-[1.4] line-clamp-2"
+                      style={{ color: T.text }}
+                    >
+                      {(pos.marketTitle && !pos.marketTitle.startsWith('Talarion: 0x') && !pos.marketTitle.startsWith('0x'))
+                        ? pos.marketTitle
+                        : 'AI Prediction Market'}
+                    </h4>
+
+                    {/* Stats */}
+                    <div className="flex items-center justify-between text-[11px]" style={{ color: T.muted }}>
+                      <span>
+                        Shares <span style={{ color: T.textSecondary }}>{pos.tokenAmount.toFixed(1)}</span>
+                      </span>
+                      <span>
+                        Cost <span style={{ color: T.textSecondary }}>${pos.costBasis.toFixed(2)}</span>
+                      </span>
+                      <span style={{ color: pnlColor, fontWeight: 600 }}>
+                        {pnlValue >= 0 ? '+' : ''}{pnlValue.toFixed(2)}
+                      </span>
+                    </div>
+
+                    {/* Sell button */}
+                    <button
+                      onClick={() => handleSellClick(pos)}
+                      disabled={isSelling}
+                      className="w-full py-2 rounded-xl text-[12px] font-semibold transition-all duration-150 active:scale-[0.97] outline-none focus-visible:ring-1"
+                      style={{
+                        backgroundColor: T.redSoft,
+                        color: T.red,
+                        border: `1px solid rgba(248, 113, 113, 0.15)`,
+                        opacity: isSelling ? 0.5 : 1,
+                      }}
+                    >
+                      {isSelling ? 'Exiting...' : 'Exit Position'}
+                    </button>
+                  </motion.div>
+                );
+              })}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Sell Confirmation Modal */}
+      <AnimatePresence>
+        {activeSell && (
+          <motion.div
+            key="sell-panel"
+            initial={{ opacity: 0, y: 12 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 8 }}
+            transition={{ duration: 0.2, ease: EASE_ENTRANCE }}
+            className="fixed inset-0 z-50 flex items-center justify-center px-4"
+            style={{ backgroundColor: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)' }}
+            onClick={handleCancelSell}
+          >
+            <motion.div
+              initial={{ scale: 0.95 }}
+              animate={{ scale: 1 }}
+              exit={{ scale: 0.95 }}
+              transition={{ duration: 0.2 }}
+              className="w-full max-w-sm rounded-2xl p-5"
+              style={{
+                backgroundColor: 'rgba(12, 14, 18, 0.95)',
+                border: `1px solid ${T.borderHover}`,
+              }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              {/* Header */}
+              <div className="flex items-center justify-between mb-4">
+                <span className="text-[13px] font-semibold" style={{ color: T.red }}>
+                  Sell {activeSell.position.side} Position
+                </span>
+                <button
+                  onClick={handleCancelSell}
+                  className="text-sm p-1 rounded-lg transition-colors hover:bg-white/5"
+                  style={{ color: T.muted }}
+                >
+                  &times;
+                </button>
+              </div>
+
+              {/* Market title */}
+              <p className="text-[13px] font-medium mb-4 line-clamp-2" style={{ color: T.text }}>
+                {(activeSell.position.marketTitle && !activeSell.position.marketTitle.startsWith('Talarion: 0x'))
+                  ? activeSell.position.marketTitle
+                  : 'AI Prediction Market'}
+              </p>
+
+              {/* Position info */}
+              <div
+                className="flex flex-col gap-2 px-3 py-2.5 rounded-lg mb-4"
+                style={{ backgroundColor: 'rgba(255,255,255,0.04)' }}
+              >
+                <div className="flex items-center justify-between text-[11px]">
+                  <span style={{ color: T.muted }}>Shares</span>
+                  <span style={{ color: T.text, fontVariantNumeric: 'tabular-nums' }}>
+                    {activeSell.position.tokenAmount.toFixed(2)}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between text-[11px]">
+                  <span style={{ color: T.muted }}>Avg entry</span>
+                  <span style={{ color: T.text, fontVariantNumeric: 'tabular-nums' }}>
+                    {Math.round(activeSell.position.avgEntryPrice * 100)}&cent;
+                  </span>
+                </div>
+                <div className="flex items-center justify-between text-[11px]">
+                  <span style={{ color: T.muted }}>Cost basis</span>
+                  <span style={{ color: T.text, fontVariantNumeric: 'tabular-nums' }}>
+                    ${activeSell.position.costBasis.toFixed(2)}
+                  </span>
+                </div>
+              </div>
+
+              {/* Info */}
+              <p className="text-[11px] mb-4" style={{ color: T.muted }}>
+                This will cancel the trade on the Escrow contract and return your ${activeSell.position.costBasis.toFixed(2)} margin to your wallet.
+              </p>
+
+              {/* Action buttons */}
+              <div className="flex gap-2">
+                <button
+                  onClick={handleCancelSell}
+                  className="flex-1 py-2.5 rounded-xl text-[13px] font-semibold transition-colors"
+                  style={{
+                    backgroundColor: 'rgba(255,255,255,0.06)',
+                    color: T.textSecondary,
+                    border: `1px solid ${T.border}`,
+                  }}
+                >
+                  Keep Position
+                </button>
+                <button
+                  onClick={handleConfirmSell}
+                  disabled={isSelling}
+                  className="flex-1 py-2.5 rounded-xl text-[13px] font-semibold transition-all active:scale-[0.97]"
+                  style={{
+                    backgroundColor: T.red,
+                    color: '#fff',
+                    opacity: isSelling ? 0.6 : 1,
+                  }}
+                >
+                  {isSelling ? 'Exiting...' : 'Exit Position'}
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {/* Inline Trade Panel */}
       <AnimatePresence>
         {activeTrade && (
@@ -1104,6 +1374,34 @@ export default function TalarionCreate({ onMarketClick, authToken, compact, onEx
                 />
               </div>
 
+              {/* Balance info */}
+              {balance && (
+                <div className="mb-4 flex items-center justify-between text-[11px]" style={{ color: T.muted }}>
+                  <span>
+                    Balance: <span style={{ color: T.text, fontVariantNumeric: 'tabular-nums' }}>
+                      ${balance.nativeUsdc.toFixed(2)}
+                    </span>
+                    <span style={{ color: T.subtle }}> USDC</span>
+                    {balance.bridgedUsdc > 0.01 && (
+                      <span style={{ color: T.subtle }}> + ${balance.bridgedUsdc.toFixed(2)} USDC.e</span>
+                    )}
+                  </span>
+                  {balance.escrowApproved && (
+                    <span style={{ color: T.green, fontSize: '10px' }}>Approved</span>
+                  )}
+                </div>
+              )}
+
+              {/* Insufficient balance warning */}
+              {balance && balance.totalUsdc < parseFloat(tradeAmount || '0') && parseFloat(tradeAmount || '0') > 0 && (
+                <div
+                  className="mb-3 px-3 py-2 rounded-lg text-[11px]"
+                  style={{ backgroundColor: T.redSoft, color: T.red, border: '1px solid rgba(248,113,113,0.15)' }}
+                >
+                  Insufficient balance. Need ${parseFloat(tradeAmount).toFixed(2)} but have ${balance.totalUsdc.toFixed(2)} total.
+                </div>
+              )}
+
               {/* Action buttons */}
               <div className="flex gap-2">
                 <button
@@ -1119,6 +1417,7 @@ export default function TalarionCreate({ onMarketClick, authToken, compact, onEx
                 </button>
                 <button
                   onClick={handleConfirmTrade}
+                  disabled={isTrading || (balance != null && balance.totalUsdc < parseFloat(tradeAmount || '0'))}
                   className="flex-1 py-2.5 rounded-xl text-[13px] font-semibold transition-all active:scale-[0.97]"
                   style={{
                     backgroundColor: activeTrade.side === 'yes' ? T.green : T.red,
