@@ -19,6 +19,7 @@ import {
   HiOutlineBriefcase,
   HiOutlineTag,
   HiOutlineGlobeAlt,
+  HiOutlineChip,
 } from 'react-icons/hi';
 import { BiFootball, BiBitcoin } from 'react-icons/bi';
 import type { IconType } from 'react-icons';
@@ -47,16 +48,22 @@ const C = {
 
 // Category icons and colors
 export const categoryConfig: Record<string, { Icon: IconType; label: string; color: string }> = {
-  politics: { Icon: HiOutlineScale, label: "Politics", color: "#818CF8" },
-  crypto: { Icon: BiBitcoin, label: "Crypto", color: "#FBBF24" },
-  sports: { Icon: BiFootball, label: "Sports", color: "#4ADE80" },
-  economics: { Icon: HiOutlineTrendingUp, label: "Economics", color: "#22D3EE" },
-  entertainment: { Icon: HiOutlineFilm, label: "Entertainment", color: "#F472B6" },
-  science: { Icon: HiOutlineBeaker, label: "Science", color: "#FB923C" },
-  weather: { Icon: HiOutlineCloud, label: "Weather", color: "#38BDF8" },
-  pop_culture: { Icon: HiOutlineGlobeAlt, label: "Culture", color: "#F472B6" },
-  business: { Icon: HiOutlineBriefcase, label: "Business", color: "#22D3EE" },
-  other: { Icon: HiOutlineTag, label: "Other", color: "#6B7280" },
+  politics: { Icon: HiOutlineScale, label: "Politics", color: "#818CF8" },       // Indigo
+  crypto: { Icon: BiBitcoin, label: "Crypto", color: "#FBBF24" },               // Amber
+  sports: { Icon: BiFootball, label: "Sports", color: "#4ADE80" },               // Green
+  economics: { Icon: HiOutlineTrendingUp, label: "Economics", color: "#60A5FA" },// Blue
+  finance: { Icon: HiOutlineTrendingUp, label: "Finance", color: "#60A5FA" },    // Blue (same as economics)
+  economy: { Icon: HiOutlineTrendingUp, label: "Economy", color: "#60A5FA" },    // Blue (same as economics)
+  business: { Icon: HiOutlineBriefcase, label: "Business", color: "#60A5FA" },   // Blue
+  tech: { Icon: HiOutlineChip, label: "AI & Tech", color: "#A78BFA" },           // Purple
+  entertainment: { Icon: HiOutlineFilm, label: "Entertainment", color: "#F472B6" },// Pink
+  culture: { Icon: HiOutlineFilm, label: "Culture", color: "#F472B6" },          // Pink (same as entertainment)
+  pop_culture: { Icon: HiOutlineFilm, label: "Culture", color: "#F472B6" },      // Pink
+  science: { Icon: HiOutlineBeaker, label: "Science", color: "#FB923C" },        // Orange
+  weather: { Icon: HiOutlineCloud, label: "Weather", color: "#38BDF8" },         // Sky blue
+  geopolitics: { Icon: HiOutlineGlobeAlt, label: "Geopolitics", color: "#F97316" },// Deep orange
+  esports: { Icon: BiFootball, label: "Esports", color: "#E879F9" },             // Fuchsia
+  other: { Icon: HiOutlineTag, label: "Other", color: "#6B7280" },               // Gray
 };
 
 export interface PredictionMarket {
