@@ -6,6 +6,8 @@ export const DOCKED_PANEL_WIDTH = 400;
 
 /** Gap between docked panels so the resize handle is visible and not covered. */
 export const DOCKED_PANEL_GAP = 10;
+/** Outer gutter between viewport edge and first docked panel. */
+export const DOCKED_PANEL_OUTER_GUTTER = 10;
 
 /** Breakpoint below which main content uses mobile layout (e.g. when docked panels shrink the area) */
 export const CONTENT_NARROW_BREAKPOINT = 1024;
@@ -38,16 +40,17 @@ const DockedPanelContext = createContext<DockedPanelContextValue | null>(null);
 function totalWidth(panels: PanelSlot[]): number {
   if (panels.length === 0) return 0;
   const sum = panels.reduce((s, p) => s + p.width, 0);
-  return sum + (panels.length - 1) * DOCKED_PANEL_GAP;
+  return sum + (panels.length - 1) * DOCKED_PANEL_GAP + DOCKED_PANEL_OUTER_GUTTER;
 }
 
 function offsetForId(panels: PanelSlot[], id: string): number {
-  let offset = 0;
+  if (panels.length === 0) return 0;
+  let offset = DOCKED_PANEL_OUTER_GUTTER;
   for (const p of panels) {
     if (p.id === id) return offset;
     offset += p.width + DOCKED_PANEL_GAP;
   }
-  return 0;
+  return DOCKED_PANEL_OUTER_GUTTER;
 }
 
 function indexOfId(panels: PanelSlot[], id: string): number {

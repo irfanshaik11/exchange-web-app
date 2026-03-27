@@ -6,7 +6,7 @@ import { FaChevronDown } from 'react-icons/fa';
 const isDev = process.env.NODE_ENV !== 'production';
 
 // Above header UI but below mobile menu panel so dropdown opens *above* the trigger inside the panel
-const DROPDOWN_Z_INDEX = 10005;
+const DROPDOWN_Z_INDEX = 99999;
 
 interface Blockchain {
   id: string;

@@ -1470,6 +1470,7 @@ const SearchModalContent = React.memo(function SearchModalContent({
         open={open}
         onClose={onClose}
         align="center"
+        zIndex={99999}
         className="mx-auto w-full max-w-[94vw] rounded-xl bg-[#080808] shadow-sm transition-all duration-200 sm:w-[600px] md:w-[800px]"
         disableClickOutside={false}
       >

@@ -416,7 +416,7 @@ export default function Footer() {
     // { name: "Twitter", href: "/twitter", icon: XIcon, hasNotification: true },
     { name: "Discover", href: "/", icon: FaCompass, hasNotification: true },
     { name: "Pulse", href: "/pulse", icon: FaChartLine, hasNotification: true },
-    { name: "Telegram", href: "/trackers", icon: FaTelegram },
+    // { name: "Telegram", href: "/trackers", icon: FaTelegram },
     // { name: "PnL", href: "/pnl", icon: FaChartBar }, // Disabled: 404 route not available
   ];
 
@@ -900,7 +900,7 @@ export default function Footer() {
                   style={{
                     bottom: `${modalPosition.bottom}px`,
                     right: `${modalPosition.right}px`,
-                    zIndex: 9999,
+                    zIndex: 99999,
                   }}
                   onClick={(e) => e.stopPropagation()}
                 >

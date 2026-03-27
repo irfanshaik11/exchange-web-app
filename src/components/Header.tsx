@@ -20,7 +20,7 @@ import { HiLightningBolt } from "react-icons/hi";
 import { IoShieldCheckmarkOutline } from "react-icons/io5";
 import { SiPolygon } from "react-icons/si";
 import { BiCopy, BiCheck } from "react-icons/bi";
-import { HiOutlineQrcode } from "react-icons/hi";
+import { HiOutlineQrcode, HiOutlineSwitchVertical } from "react-icons/hi";
 import {
   getPolymarketBalance,
   autoConvertUsdcToUsdce,
@@ -169,6 +169,10 @@ const WithdrawModal = dynamic(() => import("./WithdrawModal"), {
 
 const PolygonWithdrawModal = dynamic(
   () => import("./predictions/PolygonWithdrawModal"),
+  { ssr: false },
+);
+const PolygonSwapModal = dynamic(
+  () => import("./predictions/PolygonSwapModal"),
   { ssr: false },
 );
 
@@ -355,7 +359,21 @@ export default function Header({
   }, []);
   const router = useRouter();
   const isDiscover = router.pathname === "/";
-  const isPredictionsPage = router.pathname.startsWith("/predictions");
+  // Track if we should show Polygon prediction balance
+  // On /predictions pages: always. On /portfolio: only when the Predictions tab is active.
+  const [portfolioPredictionsActive, setPortfolioPredictionsActive] = useState(false);
+  useEffect(() => {
+    const handleSectionChange = (e: Event) => {
+      const section = (e as CustomEvent).detail?.section;
+      setPortfolioPredictionsActive(section === 'predictions');
+    };
+    window.addEventListener('portfolio-section-change', handleSectionChange);
+    // Reset when navigating away from portfolio
+    if (router.pathname !== '/portfolio') setPortfolioPredictionsActive(false);
+    return () => window.removeEventListener('portfolio-section-change', handleSectionChange);
+  }, [router.pathname]);
+
+  const isPredictionsPage = router.pathname.startsWith("/predictions") || (router.pathname === "/portfolio" && portfolioPredictionsActive);
   const {
     user,
     loading: userLoading,
@@ -699,6 +717,7 @@ export default function Header({
   const [polygonConvertSuccess, setPolygonConvertSuccess] = useState(false);
   const [showPolygonQR, setShowPolygonQR] = useState(false);
   const [showPolygonWithdraw, setShowPolygonWithdraw] = useState(false);
+  const [showPolygonSwap, setShowPolygonSwap] = useState(false);
 
   // Copy Polygon address handler
   const handleCopyPolygonAddress = useCallback(() => {
@@ -2335,7 +2354,7 @@ export default function Header({
                         position: "fixed",
                         top: profileDropdownPosition.top,
                         right: profileDropdownPosition.right,
-                        zIndex: 10002,
+                        zIndex: 99999,
                       }}
                     >
                       <div className="p-4">
@@ -2370,7 +2389,7 @@ export default function Header({
                               <div className="text-2xl font-bold text-white">
                                 ${formatCurrency(polygonBalance?.usdc ?? 0)}
                               </div>
-                              <div className="mt-1 flex items-center gap-3 text-xs text-neutral-400">
+                              <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-neutral-400">
                                 <span className="flex items-center gap-1">
                                   <span className="h-2 w-2 rounded-full bg-emerald-400"></span>
                                   $
@@ -2380,6 +2399,17 @@ export default function Header({
                                   )}{" "}
                                   USDC.e
                                 </span>
+                                {(polygonBalance?.usdcNative ?? 0) >= 0.01 && (
+                                  <span className="flex items-center gap-1">
+                                    <span className="h-2 w-2 rounded-full bg-blue-400"></span>
+                                    $
+                                    {formatBalance(
+                                      polygonBalance?.usdcNative ?? 0,
+                                      2,
+                                    )}{" "}
+                                    USDC
+                                  </span>
+                                )}
                                 <span className="flex items-center gap-1">
                                   <SiPolygon
                                     className="h-3 w-3"
@@ -2428,44 +2458,21 @@ export default function Header({
                               </div>
                             </div>
 
-                            {/* Convert button if needed */}
-                            {(polygonBalance?.usdcNative ?? 0) >= 0.1 && (
-                              <button
-                                onClick={handleConvertUsdcToUsdce}
-                                disabled={polygonConverting}
-                                className="mb-3 flex w-full items-center justify-center gap-2 rounded-lg px-3 py-2 text-xs font-medium transition-all"
-                                style={{
-                                  backgroundColor: polygonConvertSuccess
-                                    ? "rgba(74, 222, 128, 0.15)"
-                                    : "rgba(251, 191, 36, 0.15)",
-                                  color: polygonConvertSuccess
-                                    ? "#4ADE80"
-                                    : "#FBBF24",
-                                  opacity: polygonConverting ? 0.7 : 1,
-                                }}
-                              >
-                                {polygonConverting ? (
-                                  <>
-                                    <FaSync className="h-3 w-3 animate-spin" />
-                                    Converting...
-                                  </>
-                                ) : polygonConvertSuccess ? (
-                                  <>
-                                    <BiCheck className="h-4 w-4" />
-                                    Converted!
-                                  </>
-                                ) : (
-                                  <>
-                                    Convert $
-                                    {formatBalance(
-                                      polygonBalance?.usdcNative ?? 0,
-                                      2,
-                                    )}{" "}
-                                    USDC → USDC.e
-                                  </>
-                                )}
-                              </button>
-                            )}
+                            {/* Swap button — opens swap modal */}
+                            <button
+                              onClick={() => {
+                                setProfileMenuOpen(false);
+                                setShowPolygonSwap(true);
+                              }}
+                              className="mb-3 flex w-full items-center justify-center gap-2 rounded-lg px-3 py-2.5 text-xs font-medium transition-all hover:brightness-110"
+                              style={{
+                                backgroundColor: "rgba(130, 71, 229, 0.15)",
+                                color: "#A78BFA",
+                              }}
+                            >
+                              <HiOutlineSwitchVertical className="h-3.5 w-3.5" />
+                              Swap Tokens
+                            </button>
                           </>
                         ) : (
                           <>
@@ -3347,6 +3354,13 @@ export default function Header({
         open={showPolygonWithdraw}
         onClose={() => setShowPolygonWithdraw(false)}
         balance={polygonBalance}
+        onBalanceUpdate={(updated) => setPolygonBalance(updated)}
+      />
+      <PolygonSwapModal
+        open={showPolygonSwap}
+        onClose={() => setShowPolygonSwap(false)}
+        balance={polygonBalance}
+        authToken={user?.bearerToken}
         onBalanceUpdate={(updated) => setPolygonBalance(updated)}
       />
       <WatchlistModal

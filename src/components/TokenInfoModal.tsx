@@ -58,7 +58,7 @@ const TokenInfoModal: React.FC<TokenInfoModalProps> = ({ open, onClose, token, s
   if (!token) return null;
   const { meta, loading, showInitial } = useTokenMetadata(token.uri);
   return (
-    <InterstatePopout open={open} onClose={onClose} align="center" zIndex={9999} className="bg-neutral-900 rounded-xl shadow-2xl w-full max-w-md p-6 relative text-neutral-100">
+    <InterstatePopout open={open} onClose={onClose} align="center" zIndex={99999} className="bg-neutral-900 rounded-xl shadow-2xl w-full max-w-md p-6 relative text-neutral-100">
       <button className="absolute top-3 right-3 text-neutral-400 hover:text-white text-xl" onClick={onClose} type="button">×</button>
       <div className="flex flex-col items-center">
         {/* Enlarged Picture */}

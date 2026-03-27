@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 
 interface InterstatePopoutProps {
   open: boolean;
@@ -19,7 +20,8 @@ export default function InterstatePopout({
   className = "",
   overlayClassName = "",
   disableClickOutside = false,
-  zIndex = 50,
+  // Default to very high zIndex so portaled popouts aren't hidden behind docked panels.
+  zIndex = 99999,
 }: InterstatePopoutProps) {
   const [render, setRender] = useState(false);
   const [isVisible, setIsVisible] = useState(false);
@@ -67,7 +69,7 @@ export default function InterstatePopout({
     "flex items-start justify-end bg-black/60";
 
   // Double-check: if not visible, ensure pointer-events are disabled via inline style too
-  return (
+  const popoutContent = (
     <div
       className={`${overlayBase} ${align === "center" ? overlayCenter : overlayTopRight} ${isVisible ? "visible" : ""} ${isVisible ? "pointer-events-auto" : "pointer-events-none"} ${overlayClassName}`}
       style={{ zIndex, pointerEvents: isVisible ? 'auto' : 'none' }}
@@ -90,4 +92,10 @@ export default function InterstatePopout({
       </div>
     </div>
   );
+
+  if (typeof document === "undefined") {
+    return popoutContent;
+  }
+
+  return createPortal(popoutContent, document.body);
 }

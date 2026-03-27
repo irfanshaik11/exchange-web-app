@@ -1114,6 +1114,33 @@ export const autoConvertUsdcToUsdce = (
   );
 
 /**
+ * General Polygon token swap: USDC ↔ USDC.e ↔ MATIC
+ */
+export type PolygonSwapToken = 'usdc' | 'usdce' | 'matic';
+
+export const polygonSwap = (
+  authToken: string,
+  fromToken: PolygonSwapToken,
+  toToken: PolygonSwapToken,
+  amount: number,
+) =>
+  apiFetch<{
+    success: boolean;
+    data: {
+      txHash: string;
+      amountIn: string;
+      amountOut: string;
+      amountInFormatted: string;
+      amountOutFormatted: string;
+      balances: PolymarketBalance;
+    };
+  }>("/api/prediction/polygon/swap", {
+    method: "POST",
+    body: { fromToken, toToken, amount },
+    authToken,
+  });
+
+/**
  * Withdraw USDC.e from Polygon wallet to an external address
  */
 export const withdrawPolygonUsdce = (
@@ -1490,6 +1517,41 @@ export const getUserPredictionTrades = (
     }
   );
 };
+
+/**
+ * Sell (exit) a Talarion prediction market position
+ */
+export const sellTalarionPosition = (
+  authToken: string,
+  instrumentId: string,
+  side: 'YES' | 'NO',
+  opts: { amount?: number; percentage?: number }
+) =>
+  apiFetch<{
+    success: boolean;
+    data: {
+      trade_id: string;
+      instrument_id: string;
+      side: string;
+      tradeType: string;
+      amount: number;
+      price: number;
+      proceeds: number;
+      remainingPosition: number;
+      positionClosed: boolean;
+      txHash: string | null;
+      relaySuccessful: boolean;
+    };
+  }>("/api/prediction/talarion/sell", {
+    method: "POST",
+    authToken,
+    body: {
+      instrument_id: instrumentId,
+      side,
+      ...(opts.amount != null ? { amount: opts.amount } : {}),
+      ...(opts.percentage != null ? { percentage: opts.percentage } : {}),
+    },
+  });
 
 /* -------------------------------------------------------------------------- */
 /*                          Pool Resolution (Cached)                           */
