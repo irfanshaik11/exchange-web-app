@@ -1,4 +1,4 @@
-import React, { useRef } from 'react';
+import React, { useRef, useMemo } from 'react';
 import Link from 'next/link';
 import { motion } from 'framer-motion';
 import {
@@ -10,13 +10,28 @@ import {
 import { T } from './theme';
 import { categoryConfig } from './PredictionCard';
 import type { PredictionMarket } from './PredictionCard';
+import MiniSparkline from './MiniSparkline';
 import usePolymarketLivePrice from '~/hooks/usePolymarketLivePrice';
+
+function generateMockSparkline(currentPrice: number, change: number): number[] {
+  const points = 16;
+  const data: number[] = [];
+  const startPrice = currentPrice / (1 + change);
+  for (let i = 0; i < points; i++) {
+    const progress = i / (points - 1);
+    const noise = (Math.random() - 0.5) * 0.02;
+    const value = startPrice + (currentPrice - startPrice) * progress + noise;
+    data.push(Math.max(0, Math.min(1, value)));
+  }
+  return data;
+}
 
 // Extended market fields that come from unified hook
 interface ExtendedMarket extends PredictionMarket {
   marketType?: 'binary' | 'multi';
   subtitle?: string;
   outcomeCount?: number;
+  topOutcomes?: { name: string; probability: number }[];
 }
 
 const formatVolume = (volume: number): string => {
@@ -81,6 +96,10 @@ const MarketCard = React.memo(function MarketCard({
   const categoryInfo = categoryConfig[market.category] || categoryConfig.other;
   const CategoryIcon = categoryInfo.Icon;
   const catColor = categoryInfo.color;
+
+  const sparklineData = useMemo(() => {
+    return market.priceHistory || generateMockSparkline(market.yesPrice, priceChange);
+  }, [market.ticker, market.priceHistory]);
 
   return (
     <motion.div
@@ -182,81 +201,104 @@ const MarketCard = React.memo(function MarketCard({
               </div>
             </div>
 
-            {/* Title */}
-            <h3
-              className="text-[15px] font-semibold leading-snug mb-4"
-              style={{
-                color: T.text,
-                display: '-webkit-box',
-                WebkitLineClamp: 2,
-                WebkitBoxOrient: 'vertical',
-                overflow: 'hidden',
-                letterSpacing: '-0.01em',
-                minHeight: '2.6em',
-              }}
-            >
-              {market.title}
-            </h3>
+            {/* Title with optional image */}
+            <div className="flex items-start gap-2.5 mb-4">
+              {market.imageUrl && (
+                <div
+                  className="w-8 h-8 rounded-lg overflow-hidden flex-shrink-0 mt-0.5"
+                  style={{ border: '1px solid rgba(255,255,255,0.08)' }}
+                >
+                  <img
+                    src={market.imageUrl}
+                    alt=""
+                    className="w-full h-full object-cover"
+                  />
+                </div>
+              )}
+              <h3
+                className="text-[15px] font-semibold leading-snug"
+                style={{
+                  color: T.text,
+                  display: '-webkit-box',
+                  WebkitLineClamp: 2,
+                  WebkitBoxOrient: 'vertical',
+                  overflow: 'hidden',
+                  letterSpacing: '-0.01em',
+                  minHeight: '2.6em',
+                }}
+              >
+                {market.title}
+              </h3>
+            </div>
+
+            {/* Mini chart */}
+            <div className="mb-3 -mx-1 opacity-50">
+              <MiniSparkline
+                data={sparklineData}
+                width={280}
+                height={32}
+                color={isMulti ? catColor : (isPositive ? T.green : priceChange < 0 ? T.red : T.muted)}
+                id={`card-${market.ticker}`}
+              />
+            </div>
 
             {/* Spacer */}
             <div className="flex-1" />
 
             {/* Outcome rows */}
             <div className="flex flex-col gap-2 mb-4">
-              {isMulti && leadingName ? (
-                <>
-                  {/* Multi-outcome: show leading outcome */}
-                  <div
-                    className="flex items-center justify-between px-3 py-2.5 rounded-lg"
-                    style={{
-                      backgroundColor: `${catColor}08`,
-                      border: `1px solid ${catColor}18`,
-                    }}
-                  >
-                    <div className="flex items-center gap-2 min-w-0">
-                      {/* Colored dot */}
-                      <span
-                        className="w-2.5 h-2.5 rounded-full flex-shrink-0"
-                        style={{ backgroundColor: catColor }}
-                      />
-                      <span
-                        className="text-[13px] font-medium truncate"
-                        style={{ color: T.text }}
+              {isMulti && ext.topOutcomes && ext.topOutcomes.length > 0 ? (
+                <div
+                  className="flex flex-col gap-1.5 overflow-y-auto pr-1"
+                  style={{ maxHeight: '140px' }}
+                >
+                  {ext.topOutcomes.map((outcome, i) => {
+                    const pct = Math.round(outcome.probability * 100);
+                    const isFirst = i === 0;
+                    return (
+                      <div
+                        key={outcome.name}
+                        className="flex items-center justify-between px-3 py-2 rounded-lg"
+                        style={{
+                          backgroundColor: isFirst ? `${catColor}08` : 'rgba(255,255,255,0.02)',
+                          border: `1px solid ${isFirst ? `${catColor}18` : 'rgba(255,255,255,0.04)'}`,
+                        }}
                       >
-                        {leadingName}
+                        <div className="flex items-center gap-2 min-w-0">
+                          <span
+                            className="w-2 h-2 rounded-full flex-shrink-0"
+                            style={{
+                              backgroundColor: isFirst ? catColor : T.muted,
+                              opacity: isFirst ? 1 : 0.5,
+                            }}
+                          />
+                          <span
+                            className="text-[12px] font-medium truncate"
+                            style={{ color: isFirst ? T.text : T.muted }}
+                          >
+                            {outcome.name}
+                          </span>
+                        </div>
+                        <span
+                          className="text-[14px] font-bold flex-shrink-0 ml-2"
+                          style={{
+                            color: isFirst ? T.text : T.muted,
+                            fontVariantNumeric: 'tabular-nums',
+                          }}
+                        >
+                          {pct}%
+                        </span>
+                      </div>
+                    );
+                  })}
+                  {(ext.outcomeCount || 0) > 5 && (
+                    <div className="px-3 py-1">
+                      <span className="text-[11px]" style={{ color: T.muted }}>
+                        + {(ext.outcomeCount || 0) - 5} more outcomes
                       </span>
                     </div>
-                    <span
-                      className="text-[18px] font-bold flex-shrink-0 ml-3"
-                      style={{
-                        color: T.text,
-                        fontVariantNumeric: 'tabular-nums',
-                        letterSpacing: '-0.03em',
-                      }}
-                    >
-                      {yesPercent}%
-                    </span>
-                  </div>
-
-                  {/* Second outcome hint — shows "no" side or runner-up */}
-                  <div
-                    className="flex items-center justify-between px-3 py-2 rounded-lg"
-                    style={{
-                      backgroundColor: 'rgba(255,255,255,0.02)',
-                      border: `1px solid rgba(255,255,255,0.04)`,
-                    }}
-                  >
-                    <div className="flex items-center gap-2">
-                      <span
-                        className="w-2.5 h-2.5 rounded-full flex-shrink-0"
-                        style={{ backgroundColor: T.muted, opacity: 0.5 }}
-                      />
-                      <span className="text-[12px]" style={{ color: T.muted }}>
-                        + {(ext.outcomeCount || 2) - 1} more outcomes
-                      </span>
-                    </div>
-                  </div>
-                </>
+                  )}
+                </div>
               ) : (
                 <>
                   {/* Binary: YES row */}

@@ -422,79 +422,85 @@ export default function TalarionCreate({ onMarketClick, authToken, compact, onEx
 
   return (
     <div
-      className="w-full rounded-2xl px-6 md:px-10 py-8 md:py-10 flex flex-col relative overflow-hidden"
+      className="w-full rounded-2xl px-6 md:px-8 py-6 md:py-7 flex flex-col relative overflow-hidden"
       style={{
         color: T.text,
         backgroundColor: '#06080a',
         border: '1px solid rgba(74,222,128,0.08)',
-        boxShadow: '0 0 60px rgba(74,222,128,0.03), 0 0 120px rgba(0,0,0,0.5)',
+        boxShadow: '0 0 40px rgba(74,222,128,0.02)',
       }}
     >
-      {/* ── Cosmic green nebula effects ── */}
-
-      {/* Large nebula — top center, drifting */}
+      {/* Subtle radial glow — top center */}
       <div
-        className="absolute -top-32 left-1/2 -translate-x-1/2 w-[600px] h-[400px] pointer-events-none"
+        className="absolute -top-20 left-1/2 -translate-x-1/2 w-[500px] h-[300px] pointer-events-none"
         style={{
-          background: 'radial-gradient(ellipse 70% 50%, rgba(74,222,128,0.06) 0%, rgba(24,196,140,0.03) 30%, transparent 60%)',
-          animation: 'nebula-drift 20s ease-in-out infinite',
+          background: 'radial-gradient(ellipse 60% 50%, rgba(74,222,128,0.05) 0%, transparent 60%)',
         }}
       />
-
-      {/* Deep space green glow — bottom right */}
-      <div
-        className="absolute -bottom-24 -right-16 w-80 h-80 rounded-full pointer-events-none"
-        style={{
-          background: 'radial-gradient(circle, rgba(74,222,128,0.04) 0%, rgba(16,185,129,0.02) 40%, transparent 65%)',
-          animation: 'nebula-drift 25s ease-in-out infinite reverse',
-        }}
-      />
-
-      {/* Star field — tiny scattered dots */}
-      <div className="absolute inset-0 pointer-events-none overflow-hidden">
-        <div className="absolute w-[1px] h-[1px] rounded-full" style={{ backgroundColor: 'rgba(74,222,128,0.6)', top: '12%', left: '18%', boxShadow: '0 0 3px rgba(74,222,128,0.4)' }} />
-        <div className="absolute w-[1px] h-[1px] rounded-full" style={{ backgroundColor: 'rgba(255,255,255,0.4)', top: '25%', left: '72%' }} />
-        <div className="absolute w-[1px] h-[1px] rounded-full" style={{ backgroundColor: 'rgba(74,222,128,0.5)', top: '68%', left: '85%', boxShadow: '0 0 4px rgba(74,222,128,0.3)' }} />
-        <div className="absolute w-[1px] h-[1px] rounded-full" style={{ backgroundColor: 'rgba(255,255,255,0.3)', top: '45%', left: '8%' }} />
-        <div className="absolute w-[1px] h-[1px] rounded-full" style={{ backgroundColor: 'rgba(74,222,128,0.4)', top: '82%', left: '35%', boxShadow: '0 0 3px rgba(74,222,128,0.2)' }} />
-        <div className="absolute w-[1px] h-[1px] rounded-full" style={{ backgroundColor: 'rgba(255,255,255,0.25)', top: '8%', left: '55%' }} />
-        <div className="absolute w-[1px] h-[1px] rounded-full" style={{ backgroundColor: 'rgba(74,222,128,0.3)', top: '55%', left: '42%', boxShadow: '0 0 2px rgba(74,222,128,0.2)' }} />
-        <div className="absolute w-[1px] h-[1px] rounded-full" style={{ backgroundColor: 'rgba(255,255,255,0.35)', top: '35%', left: '92%' }} />
-      </div>
 
       {/* Green edge glow — top */}
       <div
         className="absolute top-0 left-0 right-0 h-px pointer-events-none"
-        style={{ background: 'linear-gradient(90deg, transparent 5%, rgba(74,222,128,0.15) 35%, rgba(74,222,128,0.25) 50%, rgba(74,222,128,0.15) 65%, transparent 95%)' }}
+        style={{ background: 'linear-gradient(90deg, transparent 10%, rgba(74,222,128,0.2) 50%, transparent 90%)' }}
       />
 
-      {/* Geometric lines — SVG overlay, lines only */}
+      {/* Geometric lines — glowing green wireframe with travelling light pulses */}
       <svg className="absolute inset-0 w-full h-full pointer-events-none" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 500" preserveAspectRatio="none">
-        {/* Radiating from top-left */}
-        <line x1="0" y1="0" x2="400" y2="500" stroke="rgba(74,222,128,0.08)" strokeWidth="0.5" />
-        <line x1="0" y1="0" x2="600" y2="500" stroke="rgba(74,222,128,0.06)" strokeWidth="0.5" />
+        <defs>
+          <filter id="geo-glow">
+            <feGaussianBlur in="SourceGraphic" stdDeviation="1.5" result="blur" />
+            <feMerge>
+              <feMergeNode in="blur" />
+              <feMergeNode in="SourceGraphic" />
+            </feMerge>
+          </filter>
+          <filter id="pulse-glow">
+            <feGaussianBlur in="SourceGraphic" stdDeviation="4" result="blur" />
+            <feMerge>
+              <feMergeNode in="blur" />
+              <feMergeNode in="blur" />
+              <feMergeNode in="SourceGraphic" />
+            </feMerge>
+          </filter>
+        </defs>
+
+        {/* Static dim lines — no glow filter, always visible at low opacity */}
+        <line x1="0" y1="0" x2="400" y2="500" stroke="rgba(74,222,128,0.06)" strokeWidth="0.5" />
+        <line x1="0" y1="0" x2="600" y2="500" stroke="rgba(74,222,128,0.05)" strokeWidth="0.5" />
         <line x1="0" y1="0" x2="800" y2="500" stroke="rgba(74,222,128,0.04)" strokeWidth="0.5" />
         <line x1="0" y1="0" x2="1000" y2="350" stroke="rgba(74,222,128,0.03)" strokeWidth="0.5" />
-        {/* Radiating from top-right */}
-        <line x1="1000" y1="0" x2="600" y2="500" stroke="rgba(74,222,128,0.08)" strokeWidth="0.5" />
-        <line x1="1000" y1="0" x2="400" y2="500" stroke="rgba(74,222,128,0.06)" strokeWidth="0.5" />
+        <line x1="1000" y1="0" x2="600" y2="500" stroke="rgba(74,222,128,0.06)" strokeWidth="0.5" />
+        <line x1="1000" y1="0" x2="400" y2="500" stroke="rgba(74,222,128,0.05)" strokeWidth="0.5" />
         <line x1="1000" y1="0" x2="200" y2="500" stroke="rgba(74,222,128,0.04)" strokeWidth="0.5" />
         <line x1="1000" y1="0" x2="0" y2="350" stroke="rgba(74,222,128,0.03)" strokeWidth="0.5" />
-        {/* Rising from bottom corners */}
-        <line x1="0" y1="500" x2="350" y2="0" stroke="rgba(74,222,128,0.06)" strokeWidth="0.5" />
+        <line x1="0" y1="500" x2="350" y2="0" stroke="rgba(74,222,128,0.05)" strokeWidth="0.5" />
         <line x1="0" y1="500" x2="700" y2="0" stroke="rgba(74,222,128,0.03)" strokeWidth="0.5" />
-        <line x1="1000" y1="500" x2="650" y2="0" stroke="rgba(74,222,128,0.06)" strokeWidth="0.5" />
+        <line x1="1000" y1="500" x2="650" y2="0" stroke="rgba(74,222,128,0.05)" strokeWidth="0.5" />
         <line x1="1000" y1="500" x2="300" y2="0" stroke="rgba(74,222,128,0.03)" strokeWidth="0.5" />
-        {/* Edge diagonals */}
-        <line x1="0" y1="120" x2="250" y2="0" stroke="rgba(74,222,128,0.05)" strokeWidth="0.5" />
-        <line x1="0" y1="300" x2="150" y2="500" stroke="rgba(74,222,128,0.04)" strokeWidth="0.5" />
-        <line x1="1000" y1="120" x2="750" y2="0" stroke="rgba(74,222,128,0.05)" strokeWidth="0.5" />
-        <line x1="1000" y1="300" x2="850" y2="500" stroke="rgba(74,222,128,0.04)" strokeWidth="0.5" />
-        {/* Mid-height cross lines */}
+        <line x1="0" y1="120" x2="250" y2="0" stroke="rgba(74,222,128,0.04)" strokeWidth="0.5" />
+        <line x1="1000" y1="120" x2="750" y2="0" stroke="rgba(74,222,128,0.04)" strokeWidth="0.5" />
         <line x1="0" y1="250" x2="500" y2="100" stroke="rgba(74,222,128,0.03)" strokeWidth="0.5" />
         <line x1="1000" y1="250" x2="500" y2="100" stroke="rgba(74,222,128,0.03)" strokeWidth="0.5" />
-        <line x1="0" y1="400" x2="500" y2="480" stroke="rgba(74,222,128,0.025)" strokeWidth="0.5" />
-        <line x1="1000" y1="400" x2="500" y2="480" stroke="rgba(74,222,128,0.025)" strokeWidth="0.5" />
+
+        {/* ── Light wave passing through lines — starts at 0, slowly glows, fades back ── */}
+        <line x1="0" y1="0" x2="400" y2="500" stroke="rgba(74,222,128,0.35)" strokeWidth="1.2" filter="url(#pulse-glow)" opacity="0">
+          <animate attributeName="opacity" values="0;0;0.35;0.1;0" dur="8s" repeatCount="indefinite" begin="2s" />
+        </line>
+        <line x1="1000" y1="0" x2="600" y2="500" stroke="rgba(74,222,128,0.35)" strokeWidth="1.2" filter="url(#pulse-glow)" opacity="0">
+          <animate attributeName="opacity" values="0;0;0.35;0.1;0" dur="9s" repeatCount="indefinite" begin="5s" />
+        </line>
+        <line x1="0" y1="0" x2="600" y2="500" stroke="rgba(74,222,128,0.25)" strokeWidth="1" filter="url(#pulse-glow)" opacity="0">
+          <animate attributeName="opacity" values="0;0;0.25;0.08;0" dur="7s" repeatCount="indefinite" begin="8s" />
+        </line>
+        <line x1="1000" y1="0" x2="400" y2="500" stroke="rgba(74,222,128,0.25)" strokeWidth="1" filter="url(#pulse-glow)" opacity="0">
+          <animate attributeName="opacity" values="0;0;0.25;0.08;0" dur="10s" repeatCount="indefinite" begin="3s" />
+        </line>
+        <line x1="0" y1="500" x2="350" y2="0" stroke="rgba(74,222,128,0.2)" strokeWidth="0.8" filter="url(#pulse-glow)" opacity="0">
+          <animate attributeName="opacity" values="0;0;0.2;0.06;0" dur="11s" repeatCount="indefinite" begin="6s" />
+        </line>
+        <line x1="1000" y1="500" x2="650" y2="0" stroke="rgba(74,222,128,0.2)" strokeWidth="0.8" filter="url(#pulse-glow)" opacity="0">
+          <animate attributeName="opacity" values="0;0;0.2;0.06;0" dur="9s" repeatCount="indefinite" begin="10s" />
+        </line>
       </svg>
 
       {/* Centered inner column for header + input + suggestions */}
@@ -505,10 +511,10 @@ export default function TalarionCreate({ onMarketClick, authToken, compact, onEx
         initial={{ opacity: 0, y: 12 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.5, ease: EASE_ENTRANCE }}
-        className="mb-8 text-center"
+        className="mb-5 text-center"
       >
         {/* Predictions AI badge */}
-        <div className="flex items-center justify-center gap-2 mb-4">
+        <div className="flex items-center justify-center gap-2 mb-3">
           <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
             <defs>
               <linearGradient id="ai-full-sparkle" x1="0" y1="0" x2="16" y2="16" gradientUnits="userSpaceOnUse">
@@ -532,7 +538,7 @@ export default function TalarionCreate({ onMarketClick, authToken, compact, onEx
         </div>
 
         <h1
-          className="text-[28px] md:text-[36px] font-bold leading-[1.1] tracking-[-0.03em]"
+          className="text-[24px] md:text-[30px] font-bold leading-[1.1] tracking-[-0.03em]"
           style={{ color: '#f0f0f0' }}
         >
           Predict Anything
@@ -550,7 +556,7 @@ export default function TalarionCreate({ onMarketClick, authToken, compact, onEx
         initial={{ opacity: 0, y: 12 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.5, delay: 0.06, ease: EASE_ENTRANCE }}
-        className="mb-8"
+        className="mb-5"
       >
         <div
           className="relative flex items-center rounded-xl overflow-hidden transition-all duration-200"
@@ -578,7 +584,7 @@ export default function TalarionCreate({ onMarketClick, authToken, compact, onEx
             placeholder="What do you think will happen?"
             maxLength={MAX_CHARS}
             aria-label="Market prediction query"
-            className="flex-1 bg-transparent py-4 px-5 text-[15px] placeholder-neutral-400 outline-none"
+            className="flex-1 bg-transparent py-3 px-4 text-[14px] placeholder-neutral-500 outline-none"
             style={{
               color: T.text,
             }}
@@ -618,7 +624,7 @@ export default function TalarionCreate({ onMarketClick, authToken, compact, onEx
         </div>
 
         {/* Meta row: char count + settlement pills */}
-        <div className="flex items-center justify-between mt-4 gap-4">
+        <div className="flex items-center justify-between mt-3 gap-4">
           {/* Character counter */}
           <span
             className="text-[11px] font-medium tabular-nums"
@@ -666,10 +672,10 @@ export default function TalarionCreate({ onMarketClick, authToken, compact, onEx
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -4 }}
             transition={{ duration: 0.3, ease: EASE_ENTRANCE }}
-            className="mb-8"
+            className="mb-4"
           >
             <p
-              className="text-[12px] font-medium mb-3 flex items-center justify-center gap-1.5"
+              className="text-[11px] font-medium mb-2 flex items-center justify-center gap-1.5"
               style={{ color: T.muted }}
             >
               <svg width="12" height="12" viewBox="0 0 16 16" fill="none" aria-hidden="true">

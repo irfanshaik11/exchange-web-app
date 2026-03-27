@@ -224,9 +224,11 @@ export default function PredictionsPage() {
 
         {/* Main Content — offset by sidebar width */}
         <div
-          className="flex-1 flex flex-col"
+          className="flex-1 flex"
           style={{ marginLeft: T.sidebarWidth, paddingTop: 0 }}
         >
+          {/* Left: All market content */}
+          <div className="flex-1 min-w-0 flex flex-col">
           {/* Header Strip */}
           <div
             className="flex items-center justify-between px-6 h-12"
@@ -383,9 +385,15 @@ export default function PredictionsPage() {
               </motion.div>
             )}
 
-            {/* Featured Hero — highest volume market */}
-            {!isLoading && activeMarkets.length > 0 && (
-              <div className="mb-6">
+            {/* AI Creator — full width, first thing user sees */}
+            <div id="ai-predictions-section" className="mb-6">
+              <TalarionCreate authToken={user?.bearerToken} />
+            </div>
+
+            {/* Featured Hero + AI Insights side by side on xl+ */}
+            <div className="flex gap-4 mb-6 items-stretch">
+              {/* Featured Hero — takes remaining space */}
+              <div className="flex-1 min-w-0 flex flex-col">
                 <div className="flex items-center gap-2 mb-3">
                   <span
                     className="text-[10px] font-bold tracking-[0.14em] uppercase"
@@ -395,18 +403,35 @@ export default function PredictionsPage() {
                   </span>
                   <div className="flex-1 h-px" style={{ background: `linear-gradient(90deg, ${T.border}, transparent)` }} />
                 </div>
-                <FeaturedHero market={activeMarkets[0]} />
+                {!isLoading && activeMarkets.length > 0 && (
+                  <div className="flex-1">
+                    <FeaturedHero markets={activeMarkets} rotateInterval={6000} />
+                  </div>
+                )}
               </div>
-            )}
 
-            {/* AI Creator + Insights */}
-            <div className="flex gap-6 mb-6 items-start">
-              <div className="flex-1 min-w-0">
-                <TalarionCreate authToken={user?.bearerToken} />
+              {/* AI Insights — right column on xl+, height matches hero */}
+              <div className="hidden xl:flex xl:flex-col w-[360px] flex-shrink-0">
+                <div className="flex items-center gap-2 mb-3">
+                  <span
+                    className="text-[10px] font-bold tracking-[0.14em] uppercase"
+                    style={{ color: T.muted }}
+                  >
+                    AI Market Pulse
+                  </span>
+                  <div className="flex-1 h-px" style={{ background: `linear-gradient(90deg, ${T.border}, transparent)` }} />
+                </div>
+                <div className="flex-1 overflow-hidden rounded-xl" style={{ border: `1px solid ${T.border}` }}>
+                  <div className="h-full overflow-y-auto scrollbar-hide">
+                    <HomepageInsightPanel docked />
+                  </div>
+                </div>
               </div>
-              <div className="hidden xl:block w-[340px] flex-shrink-0">
-                <HomepageInsightPanel docked />
-              </div>
+            </div>
+
+            {/* AI Insights — full width on smaller screens */}
+            <div className="xl:hidden mb-6">
+              <HomepageInsightPanel docked />
             </div>
 
             {/* Loading State */}
@@ -598,12 +623,9 @@ export default function PredictionsPage() {
             <div className="h-8" />
           </div>
 
-          {/* Floating AI panel — hidden on xl+ where docked version is shown */}
-          <div className="xl:hidden">
-            <HomepageInsightPanel />
+          <Footer />
           </div>
 
-          <Footer />
         </div>
       </div>
 

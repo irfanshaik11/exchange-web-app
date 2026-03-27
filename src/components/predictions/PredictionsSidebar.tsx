@@ -1,5 +1,4 @@
 import React, { useState } from 'react';
-import Link from 'next/link';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   HiOutlineTrendingUp,
@@ -10,7 +9,7 @@ import {
   HiOutlineBriefcase,
   HiOutlineGlobeAlt,
   HiOutlineChartBar,
-  HiOutlineLightningBolt,
+  HiOutlineChip,
   HiOutlineSparkles,
   HiOutlineCog,
   HiOutlineHome,
@@ -27,15 +26,15 @@ interface SidebarCategory {
 
 const CATEGORIES: SidebarCategory[] = [
   { id: 'all', label: 'All Markets', icon: HiOutlineHome, color: T.accent },
-  { id: 'politics', label: 'Politics', icon: HiOutlineScale, color: T.purple },
-  { id: 'crypto', label: 'Crypto', icon: BiBitcoin, color: T.yellow },
-  { id: 'sports', label: 'Sports', icon: BiFootball, color: T.green },
-  { id: 'finance', label: 'Finance', icon: HiOutlineTrendingUp, color: T.cyan },
-  { id: 'tech', label: 'AI & Tech', icon: HiOutlineLightningBolt, color: T.orange },
-  { id: 'entertainment', label: 'Entertainment', icon: HiOutlineFilm, color: '#F472B6' },
-  { id: 'science', label: 'Science', icon: HiOutlineBeaker, color: T.orange },
-  { id: 'weather', label: 'Weather', icon: HiOutlineCloud, color: '#38BDF8' },
-  { id: 'geopolitics', label: 'Geopolitics', icon: HiOutlineGlobeAlt, color: T.purple },
+  { id: 'politics', label: 'Politics', icon: HiOutlineScale, color: '#818CF8' },      // Indigo
+  { id: 'crypto', label: 'Crypto', icon: BiBitcoin, color: '#FBBF24' },               // Amber
+  { id: 'sports', label: 'Sports', icon: BiFootball, color: '#4ADE80' },               // Green
+  { id: 'finance', label: 'Finance', icon: HiOutlineTrendingUp, color: '#60A5FA' },   // Blue
+  { id: 'tech', label: 'AI & Tech', icon: HiOutlineChip, color: '#A78BFA' },          // Purple
+  { id: 'entertainment', label: 'Entertainment', icon: HiOutlineFilm, color: '#F472B6' }, // Pink
+  { id: 'science', label: 'Science', icon: HiOutlineBeaker, color: '#FB923C' },       // Orange
+  { id: 'weather', label: 'Weather', icon: HiOutlineCloud, color: '#38BDF8' },        // Sky blue
+  { id: 'geopolitics', label: 'Geopolitics', icon: HiOutlineGlobeAlt, color: '#F97316' }, // Deep orange
 ];
 
 interface PredictionsSidebarProps {
@@ -123,10 +122,13 @@ export default function PredictionsSidebar({
         {/* Divider */}
         <div className="my-2 mx-2" style={{ borderTop: `1px solid ${T.border}` }} />
 
-        {/* AI Predictions Link */}
-        <Link
-          href="/predictions?view=ai"
-          className="flex items-center gap-3 rounded-lg transition-colors duration-150"
+        {/* AI Predictions — scroll to section */}
+        <button
+          onClick={() => {
+            const el = document.getElementById('ai-predictions-section');
+            el?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+          }}
+          className="flex items-center gap-3 rounded-lg w-full text-left"
           style={{
             padding: '8px 10px',
             color: T.purple,
@@ -146,7 +148,7 @@ export default function PredictionsSidebar({
               </motion.span>
             )}
           </AnimatePresence>
-        </Link>
+        </button>
       </nav>
 
       {/* Portfolio Widget */}
