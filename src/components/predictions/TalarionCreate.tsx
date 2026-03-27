@@ -154,6 +154,7 @@ export default function TalarionCreate({ onMarketClick, authToken, compact, onEx
   const router = useRouter();
   const [query, setQuery] = useState('');
   const [settlement, setSettlement] = useState<string>('1m');
+  const [isCollapsed, setIsCollapsed] = useState(true);
   const inputRef = useRef<HTMLInputElement>(null);
   const resultsRef = useRef<HTMLDivElement>(null);
 
@@ -201,6 +202,13 @@ export default function TalarionCreate({ onMarketClick, authToken, compact, onEx
     }
     prevCountRef.current = generatedMarkets.length;
   }, [generatedMarkets.length]);
+
+  // Auto-expand when generating or results appear
+  useEffect(() => {
+    if (isGenerating || generatedMarkets.length > 0) {
+      setIsCollapsed(false);
+    }
+  }, [isGenerating, generatedMarkets.length]);
 
   // --- Handlers ---
 
@@ -421,135 +429,103 @@ export default function TalarionCreate({ onMarketClick, authToken, compact, onEx
   }
 
   return (
+    <div className="iridescent-border">
     <div
-      className="w-full rounded-2xl px-6 md:px-8 py-6 md:py-7 flex flex-col relative overflow-hidden"
+      className="iridescent-inner w-full rounded-2xl flex flex-col relative overflow-hidden"
       style={{
         color: T.text,
-        backgroundColor: '#06080a',
-        border: '1px solid rgba(74,222,128,0.08)',
-        boxShadow: '0 0 40px rgba(74,222,128,0.02)',
       }}
     >
-      {/* Subtle radial glow — top center */}
-      <div
-        className="absolute -top-20 left-1/2 -translate-x-1/2 w-[500px] h-[300px] pointer-events-none"
-        style={{
-          background: 'radial-gradient(ellipse 60% 50%, rgba(74,222,128,0.05) 0%, transparent 60%)',
-        }}
-      />
-
-      {/* Green edge glow — top */}
-      <div
-        className="absolute top-0 left-0 right-0 h-px pointer-events-none"
-        style={{ background: 'linear-gradient(90deg, transparent 10%, rgba(74,222,128,0.2) 50%, transparent 90%)' }}
-      />
-
-      {/* Geometric lines — glowing green wireframe with travelling light pulses */}
-      <svg className="absolute inset-0 w-full h-full pointer-events-none" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 500" preserveAspectRatio="none">
-        <defs>
-          <filter id="geo-glow">
-            <feGaussianBlur in="SourceGraphic" stdDeviation="1.5" result="blur" />
-            <feMerge>
-              <feMergeNode in="blur" />
-              <feMergeNode in="SourceGraphic" />
-            </feMerge>
-          </filter>
-          <filter id="pulse-glow">
-            <feGaussianBlur in="SourceGraphic" stdDeviation="4" result="blur" />
-            <feMerge>
-              <feMergeNode in="blur" />
-              <feMergeNode in="blur" />
-              <feMergeNode in="SourceGraphic" />
-            </feMerge>
-          </filter>
-        </defs>
-
-        {/* Static dim lines — no glow filter, always visible at low opacity */}
-        <line x1="0" y1="0" x2="400" y2="500" stroke="rgba(74,222,128,0.06)" strokeWidth="0.5" />
-        <line x1="0" y1="0" x2="600" y2="500" stroke="rgba(74,222,128,0.05)" strokeWidth="0.5" />
-        <line x1="0" y1="0" x2="800" y2="500" stroke="rgba(74,222,128,0.04)" strokeWidth="0.5" />
-        <line x1="0" y1="0" x2="1000" y2="350" stroke="rgba(74,222,128,0.03)" strokeWidth="0.5" />
-        <line x1="1000" y1="0" x2="600" y2="500" stroke="rgba(74,222,128,0.06)" strokeWidth="0.5" />
-        <line x1="1000" y1="0" x2="400" y2="500" stroke="rgba(74,222,128,0.05)" strokeWidth="0.5" />
-        <line x1="1000" y1="0" x2="200" y2="500" stroke="rgba(74,222,128,0.04)" strokeWidth="0.5" />
-        <line x1="1000" y1="0" x2="0" y2="350" stroke="rgba(74,222,128,0.03)" strokeWidth="0.5" />
-        <line x1="0" y1="500" x2="350" y2="0" stroke="rgba(74,222,128,0.05)" strokeWidth="0.5" />
-        <line x1="0" y1="500" x2="700" y2="0" stroke="rgba(74,222,128,0.03)" strokeWidth="0.5" />
-        <line x1="1000" y1="500" x2="650" y2="0" stroke="rgba(74,222,128,0.05)" strokeWidth="0.5" />
-        <line x1="1000" y1="500" x2="300" y2="0" stroke="rgba(74,222,128,0.03)" strokeWidth="0.5" />
-        <line x1="0" y1="120" x2="250" y2="0" stroke="rgba(74,222,128,0.04)" strokeWidth="0.5" />
-        <line x1="1000" y1="120" x2="750" y2="0" stroke="rgba(74,222,128,0.04)" strokeWidth="0.5" />
-        <line x1="0" y1="250" x2="500" y2="100" stroke="rgba(74,222,128,0.03)" strokeWidth="0.5" />
-        <line x1="1000" y1="250" x2="500" y2="100" stroke="rgba(74,222,128,0.03)" strokeWidth="0.5" />
-
-        {/* ── Light wave passing through lines — starts at 0, slowly glows, fades back ── */}
-        <line x1="0" y1="0" x2="400" y2="500" stroke="rgba(74,222,128,0.35)" strokeWidth="1.2" filter="url(#pulse-glow)" opacity="0">
-          <animate attributeName="opacity" values="0;0;0.35;0.1;0" dur="8s" repeatCount="indefinite" begin="2s" />
-        </line>
-        <line x1="1000" y1="0" x2="600" y2="500" stroke="rgba(74,222,128,0.35)" strokeWidth="1.2" filter="url(#pulse-glow)" opacity="0">
-          <animate attributeName="opacity" values="0;0;0.35;0.1;0" dur="9s" repeatCount="indefinite" begin="5s" />
-        </line>
-        <line x1="0" y1="0" x2="600" y2="500" stroke="rgba(74,222,128,0.25)" strokeWidth="1" filter="url(#pulse-glow)" opacity="0">
-          <animate attributeName="opacity" values="0;0;0.25;0.08;0" dur="7s" repeatCount="indefinite" begin="8s" />
-        </line>
-        <line x1="1000" y1="0" x2="400" y2="500" stroke="rgba(74,222,128,0.25)" strokeWidth="1" filter="url(#pulse-glow)" opacity="0">
-          <animate attributeName="opacity" values="0;0;0.25;0.08;0" dur="10s" repeatCount="indefinite" begin="3s" />
-        </line>
-        <line x1="0" y1="500" x2="350" y2="0" stroke="rgba(74,222,128,0.2)" strokeWidth="0.8" filter="url(#pulse-glow)" opacity="0">
-          <animate attributeName="opacity" values="0;0;0.2;0.06;0" dur="11s" repeatCount="indefinite" begin="6s" />
-        </line>
-        <line x1="1000" y1="500" x2="650" y2="0" stroke="rgba(74,222,128,0.2)" strokeWidth="0.8" filter="url(#pulse-glow)" opacity="0">
-          <animate attributeName="opacity" values="0;0;0.2;0.06;0" dur="9s" repeatCount="indefinite" begin="10s" />
-        </line>
-      </svg>
-
-      {/* Centered inner column for header + input + suggestions */}
-      <div className="relative w-full max-w-2xl mx-auto flex-1 flex flex-col">
-
-      {/* Header */}
-      <motion.div
-        initial={{ opacity: 0, y: 12 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.5, ease: EASE_ENTRANCE }}
-        className="mb-5 text-center"
+      {/* Collapsed bar — click to expand */}
+      <button
+        onClick={() => setIsCollapsed(!isCollapsed)}
+        className="w-full flex items-center justify-center px-5 py-3.5 hover:bg-white/[0.02] transition-colors relative"
       >
-        {/* Predictions AI badge */}
-        <div className="flex items-center justify-center gap-2 mb-3">
-          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+        <div className="flex items-center gap-2.5">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" className="flex-shrink-0">
             <defs>
-              <linearGradient id="ai-full-sparkle" x1="0" y1="0" x2="16" y2="16" gradientUnits="userSpaceOnUse">
-                <stop offset="0%" stopColor="#18c48c" />
-                <stop offset="50%" stopColor="#4ADE80" />
-                <stop offset="100%" stopColor="#22D3EE" />
+              <linearGradient id="ai-talarion-sparkle" x1="3" y1="2" x2="22" y2="21">
+                <stop stopColor="#8B5CF6" />
+                <stop offset="0.5" stopColor="#3B82F6" />
+                <stop offset="1" stopColor="#10B981" />
               </linearGradient>
             </defs>
-            <path d="M8 1l1.5 4.5L14 7l-4.5 1.5L8 13l-1.5-4.5L2 7l4.5-1.5L8 1z" fill="url(#ai-full-sparkle)" />
+            <path
+              d="M12 2L13.5 8.5L20 10L13.5 11.5L12 18L10.5 11.5L4 10L10.5 8.5L12 2Z"
+              fill="url(#ai-talarion-sparkle)"
+              className="animate-pulse"
+              style={{ animationDuration: '3s' }}
+            />
+            <path
+              d="M19 15L19.75 17.25L22 18L19.75 18.75L19 21L18.25 18.75L16 18L18.25 17.25L19 15Z"
+              fill="url(#ai-talarion-sparkle)"
+              className="animate-pulse"
+              style={{ animationDuration: '2.5s', animationDelay: '0.5s' }}
+            />
           </svg>
           <span
-            className="text-xs font-semibold uppercase tracking-[0.1em]"
+            className="text-[13px] font-bold tracking-[0.12em] uppercase"
             style={{
-              background: 'linear-gradient(135deg, #18c48c, #4ADE80, #22D3EE)',
+              background: 'linear-gradient(135deg, #8B5CF6, #3B82F6, #10B981)',
               WebkitBackgroundClip: 'text',
               WebkitTextFillColor: 'transparent',
             }}
           >
             Predictions AI
           </span>
+          <span
+            className="text-[10px] font-medium px-2 py-0.5 rounded-full"
+            style={{
+              background: 'linear-gradient(135deg, rgba(139,92,246,0.15), rgba(59,130,246,0.15))',
+              color: '#a78bfa',
+            }}
+          >
+            Predict Anything
+          </span>
         </div>
-
-        <h1
-          className="text-[24px] md:text-[30px] font-bold leading-[1.1] tracking-[-0.03em]"
-          style={{ color: '#f0f0f0' }}
+        <motion.div
+          className="absolute right-5"
+          animate={{ rotate: isCollapsed ? 0 : 180 }}
+          transition={{ duration: 0.2 }}
         >
-          Predict Anything
-        </h1>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={T.muted} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <polyline points="6 9 12 15 18 9" />
+          </svg>
+        </motion.div>
+      </button>
+
+      {/* Expandable content */}
+      <AnimatePresence>
+      {!isCollapsed && (
+      <motion.div
+        initial={{ height: 0, opacity: 0 }}
+        animate={{ height: 'auto', opacity: 1 }}
+        exit={{ height: 0, opacity: 0 }}
+        transition={{ duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
+        className="overflow-hidden"
+      >
+      <div className="px-6 md:px-8 pb-6 md:pb-7 pt-2 flex flex-col relative">
+
+      {/* Subtle radial glow — top center */}
+      <div
+        className="absolute -top-20 left-1/2 -translate-x-1/2 w-[500px] h-[300px] pointer-events-none"
+        style={{
+          background: 'radial-gradient(ellipse 60% 50%, rgba(139,92,246,0.05) 0%, transparent 60%)',
+        }}
+      />
+
+      {/* Centered inner column for header + input + suggestions */}
+      <div className="relative w-full max-w-2xl mx-auto flex-1 flex flex-col">
+
+      {/* Header */}
+      <div className="mb-4 text-center">
         <p
-          className="mt-2 text-[13px] md:text-[14px] leading-relaxed"
+          className="text-[13px] leading-relaxed"
           style={{ color: T.muted }}
         >
           Describe any event. AI turns it into a tradeable market.
         </p>
-      </motion.div>
+      </div>
 
       {/* Input area */}
       <motion.div
@@ -1139,6 +1115,11 @@ export default function TalarionCreate({ onMarketClick, authToken, compact, onEx
         )}
       </AnimatePresence>
 
+      </div>
+      </motion.div>
+      )}
+      </AnimatePresence>
+
       {/* Placeholder text style for the input */}
       <style jsx>{`
         input::placeholder {
@@ -1168,6 +1149,7 @@ export default function TalarionCreate({ onMarketClick, authToken, compact, onEx
           }
         }
       `}</style>
+    </div>
     </div>
   );
 }
