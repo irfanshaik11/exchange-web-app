@@ -148,6 +148,17 @@ async function apiFetch<T = unknown>(
     const data = await res.json().catch(() => undefined);
 
     if (!res.ok) {
+      // Cloud Armor geo-block: returns 403 with HTML body (not JSON)
+      if (res.status === 403 && !data) {
+        throw new ApiError(
+          'Trading is not available in your region. Use a VPN in a supported country to place orders.',
+          'GEO_BLOCKED',
+          undefined,
+          ['Connect to a VPN in a supported region', 'Market browsing and withdrawals are still available'],
+          403
+        );
+      }
+
       // Check if backend returned a structured error
       if (data && typeof data === 'object') {
         const message = data.message || data.error || res.statusText;
@@ -168,7 +179,7 @@ async function apiFetch<T = unknown>(
         const EXPECTED_ERROR_CODES = [
           'NO_HOLDINGS', 'INSUFFICIENT_BALANCE', 'VALIDATION_ERROR',
           'AMOUNT_TOO_SMALL', 'POOL_UNAVAILABLE', 'TX_FAILED', 'POOL_GRADUATED', 'METEORA_NO_LIQUIDITY', 'NO_LIQUIDITY', 'NO_ROUTE', 'BUY_FAILED', 'PUMPAMM_SELL_FAILED', 'BONKSWAP_TRADE_FAILED', 'INVALID_POOL_TYPE', 'TURNKEY_NOT_SUPPORTED', 'TOKEN_NOT_SUPPORTED',
-          'INVALID_TOKEN', 'TOKEN_EXPIRED', 'UNAUTHORIZED'
+          'INVALID_TOKEN', 'TOKEN_EXPIRED', 'UNAUTHORIZED', 'GEO_BLOCKED'
         ];
         if (EXPECTED_ERROR_CODES.includes(code)) {
           // Mark as expected error (won't trigger Next.js error overlay in dev)

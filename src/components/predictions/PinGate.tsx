@@ -1,3 +1,17 @@
+import React from 'react';
+// import { useState, useCallback, useEffect } from 'react';
+// import { motion, AnimatePresence } from 'framer-motion';
+
+// --- PIN GATE TEMPORARILY DISABLED ---
+// To re-enable, restore the original implementation from the block comment below.
+
+export default function PinGate({ children }: { children: React.ReactNode }) {
+  // Temporarily bypass — render children directly
+  return <>{children}</>;
+}
+
+/* === ORIGINAL PIN GATE IMPLEMENTATION (commented out for re-enable) ===
+
 import React, { useState, useCallback, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 
@@ -79,7 +93,7 @@ export default function PinGate({ children }: { children: React.ReactNode }) {
         WebkitUserSelect: 'none',
       }}
     >
-      {/* Lock icon */}
+      {/* Lock icon *\/}
       <motion.div
         initial={{ scale: 0, opacity: 0 }}
         animate={{ scale: 1, opacity: 1 }}
@@ -102,7 +116,7 @@ export default function PinGate({ children }: { children: React.ReactNode }) {
         </svg>
       </motion.div>
 
-      {/* Title */}
+      {/* Title *\/}
       <motion.p
         initial={{ opacity: 0, y: 10 }}
         animate={{ opacity: 1, y: 0 }}
@@ -133,7 +147,7 @@ export default function PinGate({ children }: { children: React.ReactNode }) {
         Predictions is in private beta
       </motion.p>
 
-      {/* Dots */}
+      {/* Dots *\/}
       <motion.div
         animate={error ? { x: [0, -12, 12, -8, 8, -4, 4, 0] } : {}}
         transition={{ duration: 0.5 }}
@@ -178,7 +192,7 @@ export default function PinGate({ children }: { children: React.ReactNode }) {
         })}
       </motion.div>
 
-      {/* Number pad */}
+      {/* Number pad *\/}
       <div
         style={{
           display: 'grid',
@@ -241,3 +255,5 @@ export default function PinGate({ children }: { children: React.ReactNode }) {
     </div>
   );
 }
+
+=== END ORIGINAL IMPLEMENTATION === */
