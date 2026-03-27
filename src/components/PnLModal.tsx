@@ -310,7 +310,7 @@ export default function PnLModal({ isOpen, onClose, chain }: PnLModalProps) {
               costBasis: totalCostBasis,
               realizedPnl: saleRealizedPnl,
               source: storedRealizedPnl !== null ? 'trade_history_stored' : 'trade_history',
-              timestamp: new Date(sell.tradeTime || sell.createdAt || Date.now()).getTime(),
+              timestamp: new Date(sell.createdAt || Date.now()).getTime(),
               tokenSymbol: sell.tokenSymbol || '',
               tokenName: sell.tokenName || '',
             });
