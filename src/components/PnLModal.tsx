@@ -440,6 +440,7 @@ export default function PnLModal({ isOpen, onClose, chain }: PnLModalProps) {
         background: 'linear-gradient(135deg, #0a0a0a 0%, #1a1a1a 50%, #0f0f0f 100%)',
         border: '1px solid #2a2a2a',
         borderRadius: '12px',
+        overflow: 'hidden',
         boxShadow: '0 20px 40px rgba(0, 0, 0, 0.5)',
         left: `${position.x}px`,
         top: `${position.y}px`,
