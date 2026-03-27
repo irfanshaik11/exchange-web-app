@@ -20,7 +20,7 @@ import { T } from './theme';
 interface SidebarCategory {
   id: string;
   label: string;
-  icon: React.ElementType;
+  icon: React.ComponentType<{ className?: string }>;
   color: string;
 }
 
@@ -100,7 +100,7 @@ export default function PredictionsSidebar({
                 />
               )}
               <span className="w-5 h-5 flex-shrink-0 flex items-center justify-center" style={{ color: isActive ? cat.color : T.muted }}>
-                {React.createElement(Icon as any, { className: "w-5 h-5" })}
+                <Icon className="w-5 h-5" />
               </span>
               <AnimatePresence>
                 {isExpanded && (

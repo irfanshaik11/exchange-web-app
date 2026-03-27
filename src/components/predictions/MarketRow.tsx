@@ -75,7 +75,7 @@ const MarketRow = React.memo(function MarketRow({
 
   const sparklineData = useMemo(() => {
     return market.priceHistory || generateMockSparkline(market.ticker, market.yesPrice, priceChange);
-  }, [market.ticker, market.priceHistory]);
+  }, [market.ticker, market.priceHistory, market.yesPrice, priceChange]);
 
   return (
     <motion.div

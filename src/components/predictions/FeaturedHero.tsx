@@ -1,4 +1,4 @@
-import React, { useMemo, useState, useEffect } from 'react';
+import React, { useMemo, useState, useEffect, useCallback, useRef } from 'react';
 import Link from 'next/link';
 import { motion, AnimatePresence } from 'framer-motion';
 import { T } from './theme';
@@ -7,6 +7,14 @@ import type { PredictionMarket } from './PredictionCard';
 import MiniSparkline from './MiniSparkline';
 import { getCategoryImages } from './categoryImages';
 import { generateMockSparkline, formatVolume } from './utils';
+
+// Extended market fields from unified hooks
+interface ExtendedMarket extends PredictionMarket {
+  marketType?: 'binary' | 'multi';
+  subtitle?: string;
+  outcomeCount?: number;
+  topOutcomes?: { name: string; probability: number }[];
+}
 
 interface FeaturedHeroProps {
   market?: PredictionMarket;
@@ -35,15 +43,22 @@ export default function FeaturedHero({ market: singleMarket, markets: marketsPro
   }, [marketsProp, singleMarket]);
 
   const [activeIndex, setActiveIndex] = useState(0);
+  const manualSelectEpoch = useRef(0);
 
-  // Auto-rotate
+  // Reset timer when user manually clicks a dot
+  const selectIndex = useCallback((i: number) => {
+    setActiveIndex(i);
+    manualSelectEpoch.current += 1;
+  }, []);
+
+  // Auto-rotate — restarts whenever user manually selects a dot
   useEffect(() => {
     if (rotationMarkets.length <= 1) return;
     const timer = setInterval(() => {
       setActiveIndex((prev) => (prev + 1) % rotationMarkets.length);
     }, rotateInterval);
     return () => clearInterval(timer);
-  }, [rotationMarkets.length, rotateInterval]);
+  }, [rotationMarkets.length, rotateInterval, manualSelectEpoch.current]);
 
   const market = rotationMarkets[activeIndex] || rotationMarkets[0];
   if (!market) return null;
@@ -59,13 +74,13 @@ export default function FeaturedHero({ market: singleMarket, markets: marketsPro
 
   const sparklineData = useMemo(() => {
     return market.priceHistory || generateMockSparkline(market.ticker, market.yesPrice, market.yesPriceChange24h);
-  }, [market.ticker, market.priceHistory]);
+  }, [market.ticker, market.priceHistory, market.yesPrice, market.yesPriceChange24h]);
 
   const images = getCategoryImages(market.category);
   const isActive = market.status === 'active';
 
   // Multi-outcome detection
-  const ext = market as any;
+  const ext = market as ExtendedMarket;
   const isMulti = ext.marketType === 'multi' && (ext.outcomeCount || 0) > 2;
   const leadingName = ext.subtitle?.replace(/^Leading:\s*/, '').replace(/\s*\(\d+%\)$/, '') || null;
 
@@ -436,7 +451,7 @@ export default function FeaturedHero({ market: singleMarket, markets: marketsPro
             return (
               <button
                 key={m.ticker}
-                onClick={(e) => { e.preventDefault(); e.stopPropagation(); setActiveIndex(i); }}
+                onClick={(e) => { e.preventDefault(); e.stopPropagation(); selectIndex(i); }}
                 aria-label={`Show ${cat.label} market`}
                 className="transition-all duration-300"
                 style={{
