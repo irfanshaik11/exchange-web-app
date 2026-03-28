@@ -258,14 +258,6 @@ export default function PredictionsPage() {
                   )}
                 </button>
               ))}
-              {!isLoading && (
-                <span
-                  className="text-[10px] px-2 py-0.5 rounded-full font-medium ml-2"
-                  style={{ backgroundColor: T.greenSoft, color: T.accent }}
-                >
-                  {totalAvailable > 0 ? totalAvailable.toLocaleString() : activeMarkets.length}
-                </span>
-              )}
             </div>
 
             {/* Right: search */}
