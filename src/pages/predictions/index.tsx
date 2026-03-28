@@ -5,14 +5,11 @@ import {
   HiOutlineSearch,
   HiOutlineRefresh,
   HiOutlineLockClosed,
-  HiOutlineFilter,
-  HiOutlineViewGrid,
 } from 'react-icons/hi';
 import Header from '../../components/Header';
 import Footer from '../../components/Footer';
 import {
   PredictionCard,
-  MarketFilters,
   applyMarketFilters,
   DEFAULT_FILTERS,
   SkeletonShimmer,
@@ -54,7 +51,6 @@ export default function PredictionsPage() {
   const [dataSource] = useState<PredictionDataSource>('polymarket');
   const [visibleCardCount, setVisibleCardCount] = useState(24);
   const [showAiPanel, setShowAiPanel] = useState(false);
-  const [showFilters, setShowFilters] = useState(false);
 
   // Fetch markets
   const {
@@ -206,7 +202,7 @@ export default function PredictionsPage() {
   return (
     <PinGate>
       <Head>
-        <title>Predictions | Interstate</title>
+        <title>Prediction Markets | Interstate</title>
         <meta name="description" content="Trade on real-world prediction markets." />
       </Head>
 
@@ -229,24 +225,42 @@ export default function PredictionsPage() {
         >
           {/* Left: All market content */}
           <div className="flex-1 min-w-0 flex flex-col">
-          {/* Header Strip */}
+          {/* Combined nav bar: sort tabs left, search right */}
           <div
-            className="flex items-center justify-between px-6 h-12"
-            style={{
-              backgroundColor: T.bg,
-              borderBottom: `1px solid ${T.border}`,
-            }}
+            className="flex items-center justify-between px-6"
+            style={{ borderBottom: `1px solid ${T.border}` }}
           >
-            <div className="flex items-center gap-4">
-              <h1
-                className="text-[18px] font-semibold"
-                style={{ color: T.text, letterSpacing: '-0.3px' }}
+            {/* Left: title + sort tabs */}
+            <div className="flex items-center gap-0">
+              <span
+                className="text-[13px] font-semibold pr-4 mr-1"
+                style={{ color: T.text, borderRight: `1px solid ${T.border}` }}
               >
-                Markets
-              </h1>
+                Prediction Markets
+              </span>
+              {SORT_TABS.map((tab) => (
+                <button
+                  key={tab.id}
+                  onClick={() => setSelectedSort(tab.id)}
+                  className="relative px-4 py-3 text-[12px] font-medium"
+                  style={{
+                    color: selectedSort === tab.id ? T.text : T.muted,
+                  }}
+                >
+                  {tab.label}
+                  {selectedSort === tab.id && (
+                    <motion.div
+                      layoutId="sort-tab-underline"
+                      className="absolute bottom-0 left-2 right-2 h-[2px] rounded-full"
+                      style={{ backgroundColor: T.accent }}
+                      transition={{ type: 'spring', stiffness: 400, damping: 30 }}
+                    />
+                  )}
+                </button>
+              ))}
               {!isLoading && (
                 <span
-                  className="text-[11px] px-2 py-0.5 rounded-full font-medium"
+                  className="text-[10px] px-2 py-0.5 rounded-full font-medium ml-2"
                   style={{ backgroundColor: T.greenSoft, color: T.accent }}
                 >
                   {totalAvailable > 0 ? totalAvailable.toLocaleString() : activeMarkets.length}
@@ -254,97 +268,33 @@ export default function PredictionsPage() {
               )}
             </div>
 
-            <div className="flex items-center gap-3">
-              {/* Search */}
-              <div
-                className="flex items-center gap-2 px-3 py-1.5 rounded-full"
-                style={{
-                  backgroundColor: 'rgba(255,255,255,0.03)',
-                  border: `1px solid ${T.border}`,
-                }}
-              >
-                <HiOutlineSearch className="w-3.5 h-3.5" style={{ color: searchQuery ? T.accent : T.muted }} />
-                <input
-                  type="text"
-                  placeholder="Search markets..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="bg-transparent text-[12px] outline-none placeholder-neutral-500 w-32 focus:w-48"
-                  style={{ color: T.text }}
-                />
-                {searchQuery && (
-                  <button
-                    onClick={() => setSearchQuery('')}
-                    className="text-[11px]"
-                    style={{ color: T.muted }}
-                  >
-                    ×
-                  </button>
-                )}
-              </div>
-              {/* Filter button */}
-              <button
-                onClick={() => setShowFilters(!showFilters)}
-                className="p-1.5 rounded-lg"
-                style={{
-                  backgroundColor: showFilters ? 'rgba(255,255,255,0.06)' : 'transparent',
-                  color: T.muted,
-                }}
-              >
-                <HiOutlineFilter className="w-4 h-4" />
-              </button>
+            {/* Right: search */}
+            <div
+              className="flex items-center gap-2 px-3 py-1.5 rounded-full"
+              style={{
+                backgroundColor: 'rgba(255,255,255,0.03)',
+                border: `1px solid ${T.border}`,
+              }}
+            >
+              <HiOutlineSearch className="w-3.5 h-3.5" style={{ color: searchQuery ? T.accent : T.muted }} />
+              <input
+                type="text"
+                placeholder="Search markets..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="bg-transparent text-[12px] outline-none placeholder-neutral-500 w-28 focus:w-44 transition-all duration-200"
+                style={{ color: T.text }}
+              />
+              {searchQuery && (
+                <button
+                  onClick={() => setSearchQuery('')}
+                  className="text-[11px]"
+                  style={{ color: T.muted }}
+                >
+                  ×
+                </button>
+              )}
             </div>
-          </div>
-
-          {/* Advanced filters dropdown */}
-          <AnimatePresence>
-            {showFilters && (
-              <motion.div
-                initial={{ height: 0, opacity: 0 }}
-                animate={{ height: 'auto', opacity: 1 }}
-                exit={{ height: 0, opacity: 0 }}
-                transition={{ duration: 0.2 }}
-                className="overflow-hidden border-b"
-                style={{
-                  backgroundColor: 'rgba(255,255,255,0.015)',
-                  borderColor: T.border,
-                }}
-              >
-                <div className="px-6 py-3">
-                  <MarketFilters
-                    filters={marketFilters}
-                    onFiltersChange={setMarketFilters}
-                  />
-                </div>
-              </motion.div>
-            )}
-          </AnimatePresence>
-
-          {/* Sort Tabs */}
-          <div
-            className="flex items-center gap-0 px-6"
-            style={{ borderBottom: `1px solid ${T.border}` }}
-          >
-            {SORT_TABS.map((tab) => (
-              <button
-                key={tab.id}
-                onClick={() => setSelectedSort(tab.id)}
-                className="relative px-4 py-3 text-[12px] font-medium"
-                style={{
-                  color: selectedSort === tab.id ? T.text : T.muted,
-                }}
-              >
-                {tab.label}
-                {selectedSort === tab.id && (
-                  <motion.div
-                    layoutId="sort-tab-underline"
-                    className="absolute bottom-0 left-2 right-2 h-[2px] rounded-full"
-                    style={{ backgroundColor: T.accent }}
-                    transition={{ type: 'spring', stiffness: 400, damping: 30 }}
-                  />
-                )}
-              </button>
-            ))}
           </div>
 
           {/* Content Area — subtle gradient from category color to black */}
