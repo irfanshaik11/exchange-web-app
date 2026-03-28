@@ -5,11 +5,13 @@ import {
   HiOutlineSearch,
   HiOutlineRefresh,
   HiOutlineLockClosed,
+  HiOutlineFilter,
 } from 'react-icons/hi';
 import Header from '../../components/Header';
 import Footer from '../../components/Footer';
 import {
   PredictionCard,
+  MarketFilters,
   applyMarketFilters,
   DEFAULT_FILTERS,
   SkeletonShimmer,
@@ -51,6 +53,7 @@ export default function PredictionsPage() {
   const [dataSource] = useState<PredictionDataSource>('polymarket');
   const [visibleCardCount, setVisibleCardCount] = useState(24);
   const [showAiPanel, setShowAiPanel] = useState(false);
+  const [showFilters, setShowFilters] = useState(false);
 
   // Fetch markets
   const {
@@ -287,7 +290,42 @@ export default function PredictionsPage() {
                 </button>
               )}
             </div>
+              {/* Filter button */}
+              <button
+                onClick={() => setShowFilters(!showFilters)}
+                className="p-1.5 rounded-lg"
+                style={{
+                  backgroundColor: showFilters ? 'rgba(255,255,255,0.06)' : 'transparent',
+                  color: T.muted,
+                }}
+              >
+                <HiOutlineFilter className="w-4 h-4" />
+              </button>
           </div>
+
+          {/* Advanced filters dropdown */}
+          <AnimatePresence>
+            {showFilters && (
+              <motion.div
+                initial={{ height: 0, opacity: 0 }}
+                animate={{ height: 'auto', opacity: 1 }}
+                exit={{ height: 0, opacity: 0 }}
+                transition={{ duration: 0.2 }}
+                className="overflow-hidden"
+                style={{
+                  backgroundColor: 'rgba(255,255,255,0.015)',
+                  borderBottom: `1px solid ${T.border}`,
+                }}
+              >
+                <div className="px-6 py-3">
+                  <MarketFilters
+                    filters={marketFilters}
+                    onFiltersChange={setMarketFilters}
+                  />
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
 
           {/* Restricted regions — flush banner */}
           <div
