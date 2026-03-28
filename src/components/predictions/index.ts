@@ -38,3 +38,4 @@ export { default as MarketRow } from './MarketRow';
 export { default as FeaturedHero } from './FeaturedHero';
 export { default as MarketCard } from './MarketCard';
 export { default as CategoryGraphic } from './CategoryGraphics';
+export { default as MultiLineSparkline } from './MultiLineSparkline';

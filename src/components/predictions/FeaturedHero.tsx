@@ -4,9 +4,12 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { T } from './theme';
 import { categoryConfig } from './PredictionCard';
 import type { PredictionMarket } from './PredictionCard';
-import MiniSparkline from './MiniSparkline';
+import MultiLineSparkline from './MultiLineSparkline';
 import { getCategoryImages } from './categoryImages';
 import { generateMockSparkline, formatVolume } from './utils';
+
+// Distinct colors for multi-outcome chart lines
+const OUTCOME_COLORS = ['#4ADE80', '#60A5FA', '#FBBF24', '#F472B6', '#A78BFA'];
 
 // Extended market fields from unified hooks
 interface ExtendedMarket extends PredictionMarket {
@@ -97,17 +100,30 @@ export default function FeaturedHero({ market: singleMarket, markets: marketsPro
     ? `/predictions/${market.ticker}?source=polymarket`
     : `/predictions/${market.ticker}`;
 
-  const sparklineData = useMemo(() => {
-    return market.priceHistory || generateMockSparkline(market.ticker, market.yesPrice, market.yesPriceChange24h);
-  }, [market.ticker, market.priceHistory, market.yesPrice, market.yesPriceChange24h]);
-
-  const images = getCategoryImages(market.category);
-  const isActive = market.status === 'active';
-
-  // Multi-outcome detection
+  // Multi-outcome detection (must be before chartSeries memo)
   const ext = market as ExtendedMarket;
   const isMulti = ext.marketType === 'multi' && (ext.outcomeCount || 0) > 2;
   const leadingName = ext.subtitle?.replace(/^Leading:\s*/, '').replace(/\s*\(\d+%\)$/, '') || null;
+
+  // Build multi-series sparkline data
+  const chartSeries = useMemo(() => {
+    if (isMulti && ext.topOutcomes && ext.topOutcomes.length > 1) {
+      return ext.topOutcomes.slice(0, 5).map((outcome, i) => ({
+        data: generateMockSparkline(`${market.ticker}-${outcome.name}`, outcome.probability, (market.yesPriceChange24h || 0) * (1 - i * 0.3)),
+        color: OUTCOME_COLORS[i % OUTCOME_COLORS.length],
+        label: outcome.name.length > 10 ? outcome.name.slice(0, 10) + '…' : outcome.name,
+      }));
+    }
+    const yesData = market.priceHistory || generateMockSparkline(market.ticker, market.yesPrice, market.yesPriceChange24h);
+    const noData = yesData.map(v => 1 - v);
+    return [
+      { data: yesData, color: T.green, label: 'Yes' },
+      { data: noData, color: T.red, label: 'No' },
+    ];
+  }, [market.ticker, market.priceHistory, market.yesPrice, market.yesPriceChange24h, isMulti, ext.topOutcomes]);
+
+  const images = getCategoryImages(market.category);
+  const isActive = market.status === 'active';
 
   return (
     <Link href={href} className="block h-full">
@@ -312,74 +328,74 @@ export default function FeaturedHero({ market: singleMarket, markets: marketsPro
             </h2>
           </div>
 
-          {/* Probability + Sparkline */}
+          {/* Probability + Multi-line Chart */}
           {isMulti && leadingName ? (
             <>
-              {/* Multi-outcome: show leading outcome prominently */}
-              <div className="flex items-center justify-center gap-5 md:gap-8 mb-6">
-                <div className="flex flex-col items-center gap-2">
-                  <div className="flex items-baseline gap-3">
-                    <span
-                      className="text-[40px] md:text-[52px] font-extrabold leading-none"
-                      style={{
-                        color: categoryInfo.color,
-                        letterSpacing: '-0.04em',
-                        fontVariantNumeric: 'tabular-nums',
-                        textShadow: `0 0 30px ${categoryInfo.color}40`,
-                      }}
-                    >
-                      {yesPercent}%
-                    </span>
-                  </div>
+              {/* Multi-outcome: leading outcome + multi-line chart */}
+              <div className="flex items-center justify-center gap-6 md:gap-10 mb-4">
+                {/* Left: leading outcome */}
+                <div className="flex flex-col items-center gap-1.5">
                   <span
-                    className="text-[14px] md:text-[16px] font-semibold"
+                    className="text-[40px] md:text-[52px] font-extrabold leading-none"
+                    style={{
+                      color: OUTCOME_COLORS[0],
+                      letterSpacing: '-0.04em',
+                      fontVariantNumeric: 'tabular-nums',
+                      textShadow: `0 0 30px ${OUTCOME_COLORS[0]}40`,
+                    }}
+                  >
+                    {yesPercent}%
+                  </span>
+                  <span
+                    className="text-[13px] md:text-[15px] font-semibold"
                     style={{ color: T.text, textShadow: T.textShadow }}
                   >
                     {leadingName}
                   </span>
-                  <span
-                    className="text-[11px] font-medium"
-                    style={{ color: T.muted }}
-                  >
-                    + {(ext.outcomeCount || 2) - 1} more outcomes
-                  </span>
                 </div>
 
-                {/* Sparkline */}
-                <div className="flex flex-col items-center gap-1 flex-shrink-0">
-                  <div className="opacity-70">
-                    <MiniSparkline
-                      data={sparklineData}
-                      width={120}
-                      height={48}
-                      color={categoryInfo.color}
-                      id={`hero-${market.ticker}`}
-                    />
-                  </div>
-                  <div
-                    className="w-8 h-px"
-                    style={{ background: `linear-gradient(90deg, transparent, ${T.subtle}, transparent)` }}
+                {/* Center: multi-line chart */}
+                <div className="flex-shrink-0">
+                  <MultiLineSparkline
+                    series={chartSeries}
+                    width={200}
+                    height={64}
+                    showGradient
+                    showLabels
                   />
                 </div>
               </div>
 
-              {/* CTA button — single "Explore" for multi-outcome */}
-              <div className="flex items-center justify-center gap-3">
-                <button
-                  className="px-8 py-2.5 rounded-full text-[13px] font-bold"
-                  style={{
-                    backgroundColor: categoryInfo.color,
-                    color: '#000',
-                    boxShadow: `0 0 24px ${categoryInfo.color}30`,
-                  }}
-                  onClick={(e) => { e.preventDefault(); e.stopPropagation(); }}
-                >
-                  Explore Outcomes
-                </button>
-
-                {market.yesPriceChange24h !== 0 && (
+              {/* Outcome legend pills */}
+              <div className="flex items-center justify-center gap-2 flex-wrap mb-2">
+                {ext.topOutcomes?.slice(0, 5).map((outcome, i) => (
                   <span
-                    className="ml-2 text-[11px] font-semibold px-2 py-1 rounded-md"
+                    key={outcome.name}
+                    className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-medium"
+                    style={{
+                      backgroundColor: `${OUTCOME_COLORS[i % OUTCOME_COLORS.length]}12`,
+                      color: OUTCOME_COLORS[i % OUTCOME_COLORS.length],
+                    }}
+                  >
+                    <span
+                      className="w-1.5 h-1.5 rounded-full"
+                      style={{ backgroundColor: OUTCOME_COLORS[i % OUTCOME_COLORS.length] }}
+                    />
+                    {outcome.name.length > 16 ? outcome.name.slice(0, 16) + '…' : outcome.name}
+                    <span style={{ opacity: 0.7 }}>{Math.round(outcome.probability * 100)}%</span>
+                  </span>
+                ))}
+                {(ext.outcomeCount || 0) > 5 && (
+                  <span className="text-[10px] font-medium" style={{ color: T.muted }}>
+                    +{(ext.outcomeCount || 0) - 5} more
+                  </span>
+                )}
+              </div>
+
+              {market.yesPriceChange24h !== 0 && (
+                <div className="flex justify-center">
+                  <span
+                    className="text-[11px] font-semibold px-2.5 py-1 rounded-md"
                     style={{
                       backgroundColor: market.yesPriceChange24h > 0 ? T.greenSoft : T.redSoft,
                       color: market.yesPriceChange24h > 0 ? T.green : T.red,
@@ -387,14 +403,14 @@ export default function FeaturedHero({ market: singleMarket, markets: marketsPro
                   >
                     {market.yesPriceChange24h > 0 ? '+' : ''}{(market.yesPriceChange24h * 100).toFixed(1)}% 24h
                   </span>
-                )}
-              </div>
+                </div>
+              )}
             </>
           ) : (
             <>
-              {/* Binary: YES / sparkline / NO */}
-              <div className="flex items-center justify-center gap-5 md:gap-8 mb-6">
-                <div className="flex items-baseline gap-2">
+              {/* Binary: YES + chart + NO */}
+              <div className="flex items-center justify-center gap-5 md:gap-8 mb-4">
+                <div className="flex flex-col items-center gap-1">
                   <span
                     className="text-[40px] md:text-[52px] font-extrabold leading-none"
                     style={{
@@ -408,29 +424,23 @@ export default function FeaturedHero({ market: singleMarket, markets: marketsPro
                   </span>
                   <span
                     className="text-[11px] font-bold tracking-[0.1em] uppercase"
-                    style={{ color: T.green, opacity: 0.6 }}
+                    style={{ color: T.green, opacity: 0.7 }}
                   >
                     Yes
                   </span>
                 </div>
 
-                <div className="flex flex-col items-center gap-1 flex-shrink-0">
-                  <div className="opacity-70">
-                    <MiniSparkline
-                      data={sparklineData}
-                      width={120}
-                      height={48}
-                      color={market.yesPriceChange24h >= 0 ? T.green : T.red}
-                      id={`hero-${market.ticker}`}
-                    />
-                  </div>
-                  <div
-                    className="w-8 h-px"
-                    style={{ background: `linear-gradient(90deg, transparent, ${T.subtle}, transparent)` }}
+                {/* Dual-line chart: YES (green) + NO (red) */}
+                <div className="flex-shrink-0">
+                  <MultiLineSparkline
+                    series={chartSeries}
+                    width={160}
+                    height={56}
+                    showGradient
                   />
                 </div>
 
-                <div className="flex items-baseline gap-2">
+                <div className="flex flex-col items-center gap-1">
                   <span
                     className="text-[40px] md:text-[52px] font-extrabold leading-none"
                     style={{
@@ -444,41 +454,17 @@ export default function FeaturedHero({ market: singleMarket, markets: marketsPro
                   </span>
                   <span
                     className="text-[11px] font-bold tracking-[0.1em] uppercase"
-                    style={{ color: T.red, opacity: 0.6 }}
+                    style={{ color: T.red, opacity: 0.7 }}
                   >
                     No
                   </span>
                 </div>
               </div>
 
-              {/* CTA buttons */}
-              <div className="flex items-center justify-center gap-3">
-                <button
-                  className="px-6 py-2.5 rounded-full text-[13px] font-bold"
-                  style={{
-                    backgroundColor: T.green,
-                    color: '#000',
-                    boxShadow: `0 0 24px ${T.green}30`,
-                  }}
-                  onClick={(e) => { e.preventDefault(); e.stopPropagation(); }}
-                >
-                  Yes — {yesPercent}¢
-                </button>
-                <button
-                  className="px-6 py-2.5 rounded-full text-[13px] font-bold"
-                  style={{
-                    backgroundColor: T.red,
-                    color: '#fff',
-                    boxShadow: `0 0 24px ${T.red}30`,
-                  }}
-                  onClick={(e) => { e.preventDefault(); e.stopPropagation(); }}
-                >
-                  No — {noPercent}¢
-                </button>
-
-                {market.yesPriceChange24h !== 0 && (
+              {market.yesPriceChange24h !== 0 && (
+                <div className="flex justify-center">
                   <span
-                    className="ml-2 text-[11px] font-semibold px-2 py-1 rounded-md"
+                    className="text-[11px] font-semibold px-2.5 py-1 rounded-md"
                     style={{
                       backgroundColor: market.yesPriceChange24h > 0 ? T.greenSoft : T.redSoft,
                       color: market.yesPriceChange24h > 0 ? T.green : T.red,
@@ -486,8 +472,8 @@ export default function FeaturedHero({ market: singleMarket, markets: marketsPro
                   >
                     {market.yesPriceChange24h > 0 ? '+' : ''}{(market.yesPriceChange24h * 100).toFixed(1)}% 24h
                   </span>
-                )}
-              </div>
+                </div>
+              )}
             </>
           )}
         </div>

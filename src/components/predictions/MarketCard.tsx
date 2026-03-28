@@ -10,9 +10,11 @@ import {
 import { T } from './theme';
 import { categoryConfig } from './PredictionCard';
 import type { PredictionMarket } from './PredictionCard';
-import MiniSparkline from './MiniSparkline';
+import MultiLineSparkline from './MultiLineSparkline';
 import usePolymarketLivePrice from '~/hooks/usePolymarketLivePrice';
 import { generateMockSparkline, formatVolume, formatTimeRemaining } from './utils';
+
+const OUTCOME_COLORS = ['#4ADE80', '#60A5FA', '#FBBF24', '#F472B6', '#A78BFA'];
 
 // Extended market fields that come from unified hook
 interface ExtendedMarket extends PredictionMarket {
@@ -66,9 +68,20 @@ const MarketCard = React.memo(function MarketCard({
   const CategoryIcon = categoryInfo.Icon;
   const catColor = categoryInfo.color;
 
-  const sparklineData = useMemo(() => {
-    return market.priceHistory || generateMockSparkline(market.ticker, market.yesPrice, priceChange);
-  }, [market.ticker, market.priceHistory, market.yesPrice, priceChange]);
+  const chartSeries = useMemo(() => {
+    if (isMulti && ext.topOutcomes && ext.topOutcomes.length > 1) {
+      return ext.topOutcomes.slice(0, 3).map((outcome, i) => ({
+        data: generateMockSparkline(`${market.ticker}-${outcome.name}`, outcome.probability, (priceChange || 0) * (1 - i * 0.3)),
+        color: OUTCOME_COLORS[i % OUTCOME_COLORS.length],
+      }));
+    }
+    const yesData = market.priceHistory || generateMockSparkline(market.ticker, market.yesPrice, priceChange);
+    const noData = yesData.map(v => 1 - v);
+    return [
+      { data: yesData, color: T.green },
+      { data: noData, color: T.red },
+    ];
+  }, [market.ticker, market.priceHistory, market.yesPrice, priceChange, isMulti, ext.topOutcomes]);
 
   return (
     <motion.div
@@ -201,14 +214,13 @@ const MarketCard = React.memo(function MarketCard({
               </h3>
             </div>
 
-            {/* Mini chart */}
-            <div className="mb-3 -mx-1 opacity-50">
-              <MiniSparkline
-                data={sparklineData}
+            {/* Multi-line chart */}
+            <div className="mb-3 -mx-1 opacity-60">
+              <MultiLineSparkline
+                series={chartSeries}
                 width={280}
-                height={32}
-                color={isMulti ? catColor : (isPositive ? T.green : priceChange < 0 ? T.red : T.muted)}
-                id={`card-${market.ticker}`}
+                height={36}
+                showGradient
               />
             </div>
 
