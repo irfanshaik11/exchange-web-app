@@ -23,7 +23,7 @@ interface FeaturedHeroProps {
   rotateInterval?: number;
 }
 
-export default function FeaturedHero({ market: singleMarket, markets: marketsProp, rotateInterval = 6000 }: FeaturedHeroProps) {
+export default function FeaturedHero({ market: singleMarket, markets: marketsProp, rotateInterval = 12000 }: FeaturedHeroProps) {
   // Build the rotation list: pick one top market per unique category
   const rotationMarkets = useMemo(() => {
     const source = marketsProp || (singleMarket ? [singleMarket] : []);
@@ -44,14 +44,39 @@ export default function FeaturedHero({ market: singleMarket, markets: marketsPro
 
   const [activeIndex, setActiveIndex] = useState(0);
   const manualSelectEpoch = useRef(0);
+  const touchStartX = useRef<number | null>(null);
 
-  // Reset timer when user manually clicks a dot
+  // Navigate and reset auto-rotation timer
   const selectIndex = useCallback((i: number) => {
     setActiveIndex(i);
     manualSelectEpoch.current += 1;
   }, []);
 
-  // Auto-rotate — restarts whenever user manually selects a dot
+  const goNext = useCallback(() => {
+    setActiveIndex((prev) => (prev + 1) % rotationMarkets.length);
+    manualSelectEpoch.current += 1;
+  }, [rotationMarkets.length]);
+
+  const goPrev = useCallback(() => {
+    setActiveIndex((prev) => (prev - 1 + rotationMarkets.length) % rotationMarkets.length);
+    manualSelectEpoch.current += 1;
+  }, [rotationMarkets.length]);
+
+  // Touch swipe handlers
+  const onTouchStart = useCallback((e: React.TouchEvent) => {
+    touchStartX.current = e.touches[0].clientX;
+  }, []);
+
+  const onTouchEnd = useCallback((e: React.TouchEvent) => {
+    if (touchStartX.current === null) return;
+    const diff = e.changedTouches[0].clientX - touchStartX.current;
+    touchStartX.current = null;
+    if (Math.abs(diff) < 50) return; // ignore small swipes
+    if (diff < 0) goNext();
+    else goPrev();
+  }, [goNext, goPrev]);
+
+  // Auto-rotate — slower (12s default), restarts on any manual interaction
   useEffect(() => {
     if (rotationMarkets.length <= 1) return;
     const timer = setInterval(() => {
@@ -94,12 +119,47 @@ export default function FeaturedHero({ market: singleMarket, markets: marketsPro
         exit={{ opacity: 0, y: -12 }}
         transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
         className="featured-hero relative overflow-hidden rounded-2xl cursor-pointer group h-full"
+        onTouchStart={onTouchStart}
+        onTouchEnd={onTouchEnd}
         style={{
           background: T.bg,
           border: `1px solid ${categoryInfo.color}20`,
           minHeight: 300,
         }}
       >
+        {/* Navigation arrows — visible on hover */}
+        {rotationMarkets.length > 1 && (
+          <>
+            <button
+              onClick={(e) => { e.preventDefault(); e.stopPropagation(); goPrev(); }}
+              aria-label="Previous market"
+              className="absolute left-3 top-1/2 -translate-y-1/2 z-20 w-8 h-8 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-200"
+              style={{
+                backgroundColor: 'rgba(0,0,0,0.5)',
+                backdropFilter: 'blur(8px)',
+                border: '1px solid rgba(255,255,255,0.1)',
+              }}
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M15 18l-6-6 6-6" />
+              </svg>
+            </button>
+            <button
+              onClick={(e) => { e.preventDefault(); e.stopPropagation(); goNext(); }}
+              aria-label="Next market"
+              className="absolute right-3 top-1/2 -translate-y-1/2 z-20 w-8 h-8 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-200"
+              style={{
+                backgroundColor: 'rgba(0,0,0,0.5)',
+                backdropFilter: 'blur(8px)',
+                border: '1px solid rgba(255,255,255,0.1)',
+              }}
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M9 18l6-6-6-6" />
+              </svg>
+            </button>
+          </>
+        )}
         {/* Animated border shimmer — CSS keyframe driven */}
         <div
           className="absolute inset-0 rounded-2xl pointer-events-none z-20 featured-hero-shimmer"

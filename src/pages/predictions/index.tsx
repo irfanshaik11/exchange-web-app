@@ -423,7 +423,7 @@ export default function PredictionsPage() {
                 </div>
                 {!isLoading && activeMarkets.length > 0 && (
                   <div className="flex-1">
-                    <FeaturedHero markets={activeMarkets} rotateInterval={6000} />
+                    <FeaturedHero markets={activeMarkets} />
                   </div>
                 )}
               </div>
