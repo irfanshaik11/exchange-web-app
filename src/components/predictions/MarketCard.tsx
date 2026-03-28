@@ -116,23 +116,6 @@ const MarketCard = React.memo(function MarketCard({
             e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.06)';
           }}
         >
-          {/* Top accent line — category color gradient */}
-          <div
-            style={{
-              height: 1,
-              background: `linear-gradient(90deg, ${catColor} 0%, transparent 70%)`,
-              opacity: 0.5,
-            }}
-          />
-
-          {/* Diagonal category gradient overlay */}
-          <div
-            className="absolute inset-0 pointer-events-none"
-            style={{
-              background: `linear-gradient(135deg, ${catColor}08 0%, transparent 60%)`,
-              borderRadius: T.cardRadius,
-            }}
-          />
 
           <div className="flex flex-col flex-1 p-4 pt-3.5 relative z-[1]">
             {/* Header: Category icon + label + time + star */}
@@ -188,7 +171,7 @@ const MarketCard = React.memo(function MarketCard({
             <div className="flex items-start gap-2.5 mb-4">
               {market.imageUrl && (
                 <div
-                  className="w-8 h-8 rounded-lg overflow-hidden flex-shrink-0 mt-0.5"
+                  className="w-10 h-10 rounded-lg overflow-hidden flex-shrink-0 mt-0.5"
                   style={{ border: '1px solid rgba(255,255,255,0.08)' }}
                 >
                   <img

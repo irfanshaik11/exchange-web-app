@@ -140,7 +140,6 @@ export default function FeaturedHero({ market: singleMarket, markets: marketsPro
         style={{
           background: T.bg,
           border: `1px solid ${categoryInfo.color}20`,
-          minHeight: 300,
         }}
       >
         {/* Navigation arrows — visible on hover */}
@@ -260,7 +259,7 @@ export default function FeaturedHero({ market: singleMarket, markets: marketsPro
         </div>
 
         {/* Content — fully centered */}
-        <div className="relative z-10 flex flex-col items-center justify-center h-full p-6 md:p-8" style={{ minHeight: 300 }}>
+        <div className="relative z-10 flex flex-col items-center justify-center h-full p-5 md:p-6">
 
           {/* Volume stats — top-right corner */}
           <div className="absolute top-5 right-6 md:top-6 md:right-8 flex items-center gap-3">
@@ -273,7 +272,7 @@ export default function FeaturedHero({ market: singleMarket, markets: marketsPro
           </div>
 
           {/* Category label + LIVE indicator */}
-          <div className="flex items-center gap-2.5 mb-5 mt-2">
+          <div className="flex items-center gap-2.5 mb-3 mt-1">
             {/* Category icon with glow ring */}
             <div
               className="w-8 h-8 rounded-lg flex items-center justify-center relative"
@@ -315,7 +314,7 @@ export default function FeaturedHero({ market: singleMarket, markets: marketsPro
           </div>
 
           {/* Title */}
-          <div className="max-w-2xl text-center mb-5">
+          <div className="max-w-2xl text-center mb-3">
             <h2
               className="text-[22px] md:text-[28px] font-extrabold leading-tight"
               style={{
