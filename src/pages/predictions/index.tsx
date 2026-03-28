@@ -329,19 +329,19 @@ export default function PredictionsPage() {
 
             {/* Restricted regions disclaimer */}
             <div
-              className="flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl mb-4"
+              className="flex items-center justify-center gap-1.5 px-3 py-1 rounded-lg mb-3"
               style={{
-                background: 'linear-gradient(135deg, rgba(248,113,113,0.06) 0%, rgba(248,113,113,0.03) 100%)',
-                border: '1px solid rgba(248,113,113,0.12)',
+                backgroundColor: 'rgba(248,113,113,0.04)',
+                border: '1px solid rgba(248,113,113,0.08)',
               }}
             >
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#F87171" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="flex-shrink-0">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#F87171" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="flex-shrink-0">
                 <path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
                 <line x1="12" y1="9" x2="12" y2="13" />
                 <line x1="12" y1="17" x2="12.01" y2="17" />
               </svg>
-              <span className="text-[13px] font-medium" style={{ color: '#F87171' }}>
-                Prediction market trading unavailable in restricted regions
+              <span className="text-[11px] font-medium" style={{ color: 'rgba(248,113,113,0.7)' }}>
+                Trading unavailable in restricted regions
               </span>
             </div>
 
