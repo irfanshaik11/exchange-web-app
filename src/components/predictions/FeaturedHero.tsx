@@ -160,7 +160,7 @@ export default function FeaturedHero({ market: singleMarket, markets: marketsPro
         onTouchEnd={onTouchEnd}
         style={{
           backgroundColor: 'transparent',
-          height: 400,
+          height: 340,
         }}
       >
         {/* Navigation arrows — visible on hover */}
@@ -228,7 +228,7 @@ export default function FeaturedHero({ market: singleMarket, markets: marketsPro
             alt=""
             className="w-full h-full object-cover"
             style={{
-              filter: 'brightness(0.5) saturate(1)',
+              filter: 'brightness(0.3) saturate(0.9)',
               transform: 'scale(1.15)',
             }}
             loading="eager"
@@ -256,7 +256,7 @@ export default function FeaturedHero({ market: singleMarket, markets: marketsPro
             alt=""
             className="w-full h-full object-cover"
             style={{
-              filter: 'brightness(0.4) saturate(0.9)',
+              filter: 'brightness(0.25) saturate(0.8)',
               transform: 'scale(1.15) scaleX(-1)',
             }}
             loading="eager"
@@ -264,65 +264,57 @@ export default function FeaturedHero({ market: singleMarket, markets: marketsPro
         </div>
 
         {/* Content — fully centered, fills height */}
-        <div className="relative z-10 flex flex-col items-center h-full px-6 pt-6 pb-4 md:px-10 md:pt-8 md:pb-4">
+        <div className="relative z-10 flex flex-col items-center h-full px-6 pt-5 pb-3 md:px-10 md:pt-6 md:pb-3">
 
-          {/* Category label + LIVE indicator */}
-          <div className="flex items-center gap-2.5 mb-2">
-            {/* Category icon with glow ring */}
-            <div
-              className="w-8 h-8 rounded-lg flex items-center justify-center relative"
-              style={{ backgroundColor: `${categoryInfo.color}20` }}
-            >
-              {/* Glow ring */}
+          {/* Top row: category + live + stats — single line */}
+          <div className="flex items-center justify-center gap-3 mb-3 flex-wrap">
+            <div className="flex items-center gap-2">
               <div
-                className="absolute inset-[-3px] rounded-[10px] pointer-events-none"
-                style={{
-                  background: `conic-gradient(from 0deg, ${categoryInfo.color}30, transparent, ${categoryInfo.color}20, transparent, ${categoryInfo.color}30)`,
-                  filter: `blur(3px)`,
-                  opacity: 0.7,
-                }}
-              />
-              <CategoryIcon className="w-4 h-4 relative z-10" style={{ color: categoryInfo.color }} />
+                className="w-6 h-6 rounded-md flex items-center justify-center"
+                style={{ backgroundColor: `${categoryInfo.color}18` }}
+              >
+                <CategoryIcon className="w-3.5 h-3.5" style={{ color: categoryInfo.color }} />
+              </div>
+              <span
+                className="text-[9px] font-bold tracking-[0.14em] uppercase"
+                style={{ color: categoryInfo.color }}
+              >
+                {categoryInfo.label}
+              </span>
             </div>
-            <span
-              className="text-[10px] font-bold tracking-[0.15em] uppercase"
-              style={{ color: categoryInfo.color, textShadow: T.textShadow }}
-            >
-              {categoryInfo.label}
-            </span>
-            {/* LIVE indicator */}
             {isActive && (
-              <span className="flex items-center gap-1.5 text-[9px] font-bold tracking-[0.12em] uppercase" style={{ color: T.green }}>
+              <span className="flex items-center gap-1 text-[9px] font-bold tracking-[0.1em] uppercase" style={{ color: T.green }}>
                 <span
                   className="w-1.5 h-1.5 rounded-full featured-hero-live-dot"
-                  style={{ backgroundColor: T.green, boxShadow: `0 0 6px ${T.green}` }}
+                  style={{ backgroundColor: T.green, boxShadow: `0 0 4px ${T.green}` }}
                 />
                 Live
               </span>
             )}
-            <span
-              className="text-[10px] font-bold tracking-[0.15em] uppercase"
-              style={{ color: T.muted }}
-            >
-              / Featured
+            <div className="w-px h-3" style={{ backgroundColor: 'rgba(255,255,255,0.08)' }} />
+            <span className="text-[10px] font-medium" style={{ color: T.muted }}>
+              {formatVolume(market.totalVolume)} vol
+            </span>
+            <span className="text-[10px] font-medium" style={{ color: T.muted }}>
+              {formatTimeRemaining(market.closesAt).text}
             </span>
           </div>
 
-          {/* Title + image */}
-          <div className="flex items-center justify-center gap-3 max-w-3xl text-center">
+          {/* Title + image — compact */}
+          <div className="flex items-center justify-center gap-2.5 max-w-2xl text-center mb-1">
             {market.imageUrl && (
               <div
-                className="w-14 h-14 rounded-xl overflow-hidden flex-shrink-0"
-                style={{ border: '1px solid rgba(255,255,255,0.08)' }}
+                className="w-10 h-10 rounded-lg overflow-hidden flex-shrink-0"
+                style={{ border: '1px solid rgba(255,255,255,0.06)' }}
               >
                 <img src={market.imageUrl} alt="" className="w-full h-full object-cover" />
               </div>
             )}
             <h2
-              className="text-[26px] md:text-[34px] font-extrabold leading-tight"
+              className="text-[22px] md:text-[28px] font-extrabold leading-tight"
               style={{
                 color: T.text,
-                letterSpacing: '-0.03em',
+                letterSpacing: '-0.02em',
                 textShadow: T.textShadowStrong,
               }}
             >
@@ -333,126 +325,120 @@ export default function FeaturedHero({ market: singleMarket, markets: marketsPro
           {/* Spacer — pushes chart to middle */}
           <div className="flex-1" />
 
-          {/* Probability + Multi-line Chart */}
+          {/* Probability + Chart */}
           {isMulti && leadingName ? (
             <>
-              {/* Multi-outcome: leading outcome + multi-line chart */}
-              <div className="flex items-center justify-center gap-8 md:gap-14 mb-3">
-                {/* Left: leading outcome */}
-                <div className="flex flex-col items-center gap-2">
+              {/* Multi-outcome: leading + chart side by side */}
+              <div className="flex items-center justify-center gap-6 md:gap-10 mb-2">
+                <div className="flex flex-col items-center gap-1">
                   <span
-                    className="text-[52px] md:text-[68px] font-extrabold leading-none"
+                    className="text-[38px] md:text-[48px] font-extrabold leading-none"
                     style={{
                       color: OUTCOME_COLORS[0],
                       letterSpacing: '-0.04em',
                       fontVariantNumeric: 'tabular-nums',
-                      textShadow: `0 0 30px ${OUTCOME_COLORS[0]}40`,
+                      textShadow: `0 0 20px ${OUTCOME_COLORS[0]}30`,
                     }}
                   >
                     {yesPercent}%
                   </span>
                   <span
-                    className="text-[15px] md:text-[18px] font-semibold"
+                    className="text-[13px] font-semibold"
                     style={{ color: T.text, textShadow: T.textShadow }}
                   >
                     {leadingName}
                   </span>
                 </div>
 
-                {/* Center: multi-line chart */}
                 <div className="flex-shrink-0">
                   <MultiLineSparkline
                     series={chartSeries}
-                    width={500}
-                    height={160}
+                    width={380}
+                    height={120}
                     showGradient
-                    showLabels
                   />
                 </div>
               </div>
 
-              {/* Outcome legend pills */}
-              <div className="flex items-center justify-center gap-2.5 flex-wrap mb-2">
+              {/* Outcome legend — compact inline */}
+              <div className="flex items-center justify-center gap-1.5 mt-4 mb-1 max-w-full overflow-hidden">
                 {ext.topOutcomes?.slice(0, 5).map((outcome, i) => (
                   <span
                     key={outcome.name}
-                    className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-medium"
+                    className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium"
                     style={{
-                      backgroundColor: `${OUTCOME_COLORS[i % OUTCOME_COLORS.length]}12`,
+                      backgroundColor: `${OUTCOME_COLORS[i % OUTCOME_COLORS.length]}0a`,
                       color: OUTCOME_COLORS[i % OUTCOME_COLORS.length],
                     }}
                   >
                     <span
-                      className="w-1.5 h-1.5 rounded-full"
+                      className="w-1 h-1 rounded-full"
                       style={{ backgroundColor: OUTCOME_COLORS[i % OUTCOME_COLORS.length] }}
                     />
-                    {outcome.name.length > 16 ? outcome.name.slice(0, 16) + '…' : outcome.name}
-                    <span style={{ opacity: 0.7 }}>{Math.round(outcome.probability * 100)}%</span>
+                    {outcome.name.length > 10 ? outcome.name.slice(0, 10) + '…' : outcome.name}
+                    <span style={{ opacity: 0.6 }}>{Math.round(outcome.probability * 100)}%</span>
                   </span>
                 ))}
                 {(ext.outcomeCount || 0) > 5 && (
-                  <span className="text-[10px] font-medium" style={{ color: T.muted }}>
+                  <span className="text-[9px] font-medium" style={{ color: T.muted }}>
                     +{(ext.outcomeCount || 0) - 5} more
                   </span>
                 )}
               </div>
-
             </>
           ) : (
             <>
               {/* Binary: YES + chart + NO */}
-              <div className="flex items-center justify-center gap-8 md:gap-14 mb-3">
-                <div className="flex flex-col items-center gap-1.5">
+              <div className="flex items-center justify-center gap-6 md:gap-10 mb-2">
+                <div className="flex flex-col items-center gap-0.5">
                   <span
-                    className="text-[52px] md:text-[68px] font-extrabold leading-none"
+                    className="text-[38px] md:text-[48px] font-extrabold leading-none"
                     style={{
                       color: T.green,
                       letterSpacing: '-0.04em',
                       fontVariantNumeric: 'tabular-nums',
-                      textShadow: `0 0 30px ${T.green}40`,
+                      textShadow: `0 0 20px ${T.green}30`,
                     }}
                   >
                     {yesPercent}%
                   </span>
                   <span
-                    className="text-[11px] font-bold tracking-[0.1em] uppercase"
-                    style={{ color: T.green, opacity: 0.7 }}
+                    className="text-[10px] font-bold tracking-[0.1em] uppercase"
+                    style={{ color: T.green, opacity: 0.6 }}
                   >
                     Yes
                   </span>
                 </div>
 
-                {/* Dual-line chart: YES (green) + NO (red) */}
                 <div className="flex-shrink-0">
                   <MultiLineSparkline
                     series={chartSeries}
-                    width={440}
-                    height={150}
+                    width={340}
+                    height={110}
                     showGradient
                   />
                 </div>
 
-                <div className="flex flex-col items-center gap-1.5">
+                <div className="flex flex-col items-center gap-0.5">
                   <span
-                    className="text-[52px] md:text-[68px] font-extrabold leading-none"
+                    className="text-[38px] md:text-[48px] font-extrabold leading-none"
                     style={{
                       color: T.red,
                       letterSpacing: '-0.04em',
                       fontVariantNumeric: 'tabular-nums',
-                      textShadow: `0 0 30px ${T.red}40`,
+                      textShadow: `0 0 20px ${T.red}30`,
                     }}
                   >
                     {noPercent}%
                   </span>
                   <span
-                    className="text-[12px] font-bold tracking-[0.1em] uppercase"
-                    style={{ color: T.red, opacity: 0.7 }}
+                    className="text-[10px] font-bold tracking-[0.1em] uppercase"
+                    style={{ color: T.red, opacity: 0.6 }}
                   >
                     No
                   </span>
                 </div>
               </div>
-
             </>
           )}
 
@@ -460,50 +446,32 @@ export default function FeaturedHero({ market: singleMarket, markets: marketsPro
           <div className="flex-1" />
         </div>
 
-        {/* Bottom stats bar */}
+        {/* Bottom stats — single subtle line */}
         <div
-          className="relative z-10 flex items-center justify-center gap-6 px-6 py-3"
+          className="relative z-10 flex items-center justify-center gap-4 px-6 py-2"
+          style={{ opacity: 0.7 }}
         >
-          <div className="flex items-center gap-1.5">
-            <span className="text-[10px]" style={{ color: T.muted }}>Total Vol</span>
-            <span className="text-[11px] font-semibold" style={{ color: T.textSecondary }}>{formatVolume(market.totalVolume)}</span>
-          </div>
-          <div className="w-px h-3" style={{ backgroundColor: 'rgba(255,255,255,0.06)' }} />
-          <div className="flex items-center gap-1.5">
-            <span className="text-[10px]" style={{ color: T.muted }}>24h Vol</span>
-            <span className="text-[11px] font-semibold" style={{ color: T.textSecondary }}>{formatVolume(market.volume24h)}</span>
-          </div>
-          <div className="w-px h-3" style={{ backgroundColor: 'rgba(255,255,255,0.06)' }} />
-          <div className="flex items-center gap-1.5">
-            <span className="text-[10px]" style={{ color: T.muted }}>Ends</span>
-            <span className="text-[11px] font-semibold" style={{ color: T.textSecondary }}>{formatTimeRemaining(market.closesAt).text}</span>
-          </div>
-          {ext.liquidity ? (
-            <>
-              <div className="w-px h-3" style={{ backgroundColor: 'rgba(255,255,255,0.06)' }} />
-              <div className="flex items-center gap-1.5">
-                <span className="text-[10px]" style={{ color: T.muted }}>Liquidity</span>
-                <span className="text-[11px] font-semibold" style={{ color: T.textSecondary }}>{formatVolume(ext.liquidity)}</span>
-              </div>
-            </>
-          ) : null}
-          {market.traderCount ? (
-            <>
-              <div className="w-px h-3" style={{ backgroundColor: 'rgba(255,255,255,0.06)' }} />
-              <div className="flex items-center gap-1.5">
-                <span className="text-[10px]" style={{ color: T.muted }}>Traders</span>
-                <span className="text-[11px] font-semibold" style={{ color: T.textSecondary }}>{market.traderCount.toLocaleString()}</span>
-              </div>
-            </>
-          ) : null}
+          {[
+            { label: 'Vol', value: formatVolume(market.totalVolume) },
+            { label: '24h', value: formatVolume(market.volume24h) },
+            ...(ext.liquidity ? [{ label: 'Liq', value: formatVolume(ext.liquidity) }] : []),
+            ...(market.traderCount ? [{ label: 'Traders', value: market.traderCount.toLocaleString() }] : []),
+          ].map((stat, i) => (
+            <React.Fragment key={stat.label}>
+              {i > 0 && <span className="text-[8px]" style={{ color: T.subtle }}>·</span>}
+              <span className="text-[10px]" style={{ color: T.muted }}>
+                {stat.label} <span style={{ color: T.textSecondary }} className="font-medium">{stat.value}</span>
+              </span>
+            </React.Fragment>
+          ))}
           {market.yesPriceChange24h !== 0 && (
             <>
-              <div className="w-px h-3" style={{ backgroundColor: 'rgba(255,255,255,0.06)' }} />
+              <span className="text-[8px]" style={{ color: T.subtle }}>·</span>
               <span
-                className="text-[11px] font-semibold"
+                className="text-[10px] font-medium"
                 style={{ color: market.yesPriceChange24h > 0 ? T.green : T.red }}
               >
-                {market.yesPriceChange24h > 0 ? '+' : ''}{(market.yesPriceChange24h * 100).toFixed(1)}% 24h
+                {market.yesPriceChange24h > 0 ? '+' : ''}{(market.yesPriceChange24h * 100).toFixed(1)}%
               </span>
             </>
           )}

@@ -40,7 +40,7 @@ export default function MultiLineSparkline({
     const range = globalMax - globalMin || 1;
 
     const padding = 2;
-    const rightPad = showLabels ? 28 : 2; // extra space for labels
+    const rightPad = showLabels ? 70 : 2; // extra space for labels
     const chartWidth = width - padding - rightPad;
     const chartHeight = height - padding * 2;
 
@@ -68,9 +68,32 @@ export default function MultiLineSparkline({
         color: s.color,
         label: s.label,
         lastValue: s.data[s.data.length - 1],
+        labelY: endPoint.y, // will be adjusted for collisions
       };
     }).filter(Boolean) as NonNullable<typeof paths[number]>[];
   }, [series, width, height, showLabels]);
+
+  // Resolve overlapping labels by pushing them apart
+  const resolvedPaths = useMemo(() => {
+    if (!showLabels || paths.length <= 1) return paths;
+    const MIN_GAP = 12; // minimum px between label centers
+    // Sort by endpoint Y to resolve top-to-bottom
+    const sorted = paths.map((p, i) => ({ ...p, idx: i })).sort((a, b) => a.endPoint.y - b.endPoint.y);
+    // Push labels apart
+    for (let i = 1; i < sorted.length; i++) {
+      const prev = sorted[i - 1];
+      const curr = sorted[i];
+      if (curr.labelY - prev.labelY < MIN_GAP) {
+        curr.labelY = prev.labelY + MIN_GAP;
+      }
+    }
+    // Rebuild in original order
+    const result = [...paths];
+    for (const s of sorted) {
+      result[s.idx] = { ...result[s.idx], labelY: s.labelY };
+    }
+    return result;
+  }, [paths, showLabels]);
 
   if (paths.length === 0) {
     return (
@@ -95,13 +118,13 @@ export default function MultiLineSparkline({
       </defs>
 
       {/* Gradient fill under primary line only */}
-      {showGradient && paths[0] && (
-        <path d={paths[0].gradientD} fill={`url(#ml-grad-${uid})`} />
+      {showGradient && resolvedPaths[0] && (
+        <path d={resolvedPaths[0].gradientD} fill={`url(#ml-grad-${uid})`} />
       )}
 
       {/* Lines — draw secondary lines first (behind), primary last (on top) */}
-      {[...paths].reverse().map((p, i) => {
-        const isPrimary = i === paths.length - 1; // first series = primary = drawn last
+      {[...resolvedPaths].reverse().map((p, i) => {
+        const isPrimary = i === resolvedPaths.length - 1; // first series = primary = drawn last
         return (
           <g key={i}>
             <path
@@ -121,11 +144,11 @@ export default function MultiLineSparkline({
               fill={p.color}
               opacity={isPrimary ? 1 : 0.7}
             />
-            {/* Label at end */}
+            {/* Label at end — Y adjusted to avoid overlaps */}
             {showLabels && p.label && (
               <text
                 x={p.endPoint.x + 5}
-                y={p.endPoint.y + 3}
+                y={p.labelY + 3}
                 fontSize="8"
                 fontWeight="600"
                 fill={p.color}

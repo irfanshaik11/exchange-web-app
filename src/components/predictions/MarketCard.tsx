@@ -213,17 +213,14 @@ const MarketCard = React.memo(function MarketCard({
             {/* Outcome rows */}
             <div className="flex flex-col gap-2 mb-4">
               {isMulti && ext.topOutcomes && ext.topOutcomes.length > 0 ? (
-                <div
-                  className="flex flex-col gap-1.5 overflow-y-auto pr-1"
-                  style={{ maxHeight: '140px' }}
-                >
-                  {ext.topOutcomes.map((outcome, i) => {
+                <div className="flex flex-col gap-1.5">
+                  {ext.topOutcomes.slice(0, 3).map((outcome, i) => {
                     const pct = Math.round(outcome.probability * 100);
                     const isFirst = i === 0;
                     return (
                       <div
                         key={outcome.name}
-                        className="flex items-center justify-between px-3 py-2 rounded-lg"
+                        className="flex items-center justify-between px-3 py-1.5 rounded-lg"
                         style={{
                           backgroundColor: isFirst ? `${catColor}08` : 'rgba(255,255,255,0.02)',
                           border: `1px solid ${isFirst ? `${catColor}18` : 'rgba(255,255,255,0.04)'}`,
@@ -238,14 +235,14 @@ const MarketCard = React.memo(function MarketCard({
                             }}
                           />
                           <span
-                            className="text-[12px] font-medium truncate"
+                            className="text-[11px] font-medium truncate"
                             style={{ color: isFirst ? T.text : T.muted }}
                           >
                             {outcome.name}
                           </span>
                         </div>
                         <span
-                          className="text-[14px] font-bold flex-shrink-0 ml-2"
+                          className="text-[13px] font-bold flex-shrink-0 ml-2"
                           style={{
                             color: isFirst ? T.text : T.muted,
                             fontVariantNumeric: 'tabular-nums',
@@ -256,10 +253,10 @@ const MarketCard = React.memo(function MarketCard({
                       </div>
                     );
                   })}
-                  {(ext.outcomeCount || 0) > 5 && (
-                    <div className="px-3 py-1">
-                      <span className="text-[11px]" style={{ color: T.muted }}>
-                        + {(ext.outcomeCount || 0) - 5} more outcomes
+                  {(ext.outcomeCount || 0) > 3 && (
+                    <div className="px-3 py-0.5">
+                      <span className="text-[10px]" style={{ color: T.muted }}>
+                        + {(ext.outcomeCount || 0) - 3} more
                       </span>
                     </div>
                   )}
