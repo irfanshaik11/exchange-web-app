@@ -289,7 +289,25 @@ export default function PredictionsPage() {
             </div>
           </div>
 
-          {/* Content Area — subtle gradient from category color to black */}
+          {/* Restricted regions — flush banner */}
+          <div
+            className="flex items-center justify-center gap-1.5 py-1"
+            style={{
+              backgroundColor: 'rgba(248,113,113,0.04)',
+              borderBottom: '1px solid rgba(248,113,113,0.08)',
+            }}
+          >
+            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#F87171" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="flex-shrink-0">
+              <path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
+              <line x1="12" y1="9" x2="12" y2="13" />
+              <line x1="12" y1="17" x2="12.01" y2="17" />
+            </svg>
+            <span className="text-[10px] font-medium" style={{ color: 'rgba(248,113,113,0.6)' }}>
+              Trading unavailable in restricted regions
+            </span>
+          </div>
+
+          {/* Content Area */}
           <div className="flex-1 px-6 py-4 relative">
             {/* Page-level gradient tint from featured market category */}
             {!isLoading && activeMarkets.length > 0 && (() => {
@@ -326,24 +344,6 @@ export default function PredictionsPage() {
                 </button>
               </motion.div>
             )}
-
-            {/* Restricted regions disclaimer */}
-            <div
-              className="flex items-center justify-center gap-1.5 px-3 py-1 rounded-lg mb-3"
-              style={{
-                backgroundColor: 'rgba(248,113,113,0.04)',
-                border: '1px solid rgba(248,113,113,0.08)',
-              }}
-            >
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#F87171" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="flex-shrink-0">
-                <path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
-                <line x1="12" y1="9" x2="12" y2="13" />
-                <line x1="12" y1="17" x2="12.01" y2="17" />
-              </svg>
-              <span className="text-[11px] font-medium" style={{ color: 'rgba(248,113,113,0.7)' }}>
-                Trading unavailable in restricted regions
-              </span>
-            </div>
 
             {/* AI Creator — full width, first thing user sees */}
             <div id="ai-predictions-section" className="mb-6">
