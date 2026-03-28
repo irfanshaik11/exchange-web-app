@@ -83,10 +83,10 @@ export default function PredictionsSidebar({
             <button
               key={cat.id}
               onClick={() => onSelectCategory(cat.id)}
-              className="relative flex items-center gap-3 rounded-lg transition-colors duration-150 overflow-hidden"
+              className="relative flex items-center gap-3 rounded-lg transition-all duration-150 overflow-hidden cursor-pointer hover:bg-white/[0.04]"
               style={{
                 padding: '8px 10px',
-                backgroundColor: isActive ? 'rgba(255,255,255,0.04)' : 'transparent',
+                backgroundColor: isActive ? 'rgba(255,255,255,0.06)' : 'transparent',
                 color: isActive ? T.text : T.muted,
               }}
             >
@@ -128,7 +128,7 @@ export default function PredictionsSidebar({
             const el = document.getElementById('ai-predictions-section');
             el?.scrollIntoView({ behavior: 'smooth', block: 'start' });
           }}
-          className="flex items-center gap-3 rounded-lg w-full text-left"
+          className="flex items-center gap-3 rounded-lg w-full text-left cursor-pointer hover:bg-white/[0.04] transition-all duration-150"
           style={{
             padding: '8px 10px',
             color: T.purple,
