@@ -65,6 +65,10 @@ export function mapTradeErrorMessage(error: any): string {
   if (errorCode === 'INVALID_POOL_TYPE')
     return 'No trading route found for this token. Try refreshing.';
 
+  // Geo-blocked (Cloud Armor 403)
+  if (errorCode === 'GEO_BLOCKED' || raw.includes('not available in your region') || raw.includes('geo'))
+    return 'Trading is not available in your region. Use a VPN to place orders.';
+
   // Server error (uncaught backend exception)
   if (raw.includes('internal server error') || raw.includes('status code 500'))
     return 'Trade failed. Please try again.';

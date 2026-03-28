@@ -154,7 +154,7 @@ const config = {
     return [
       {
         source: "/",
-        destination: "/pulse?chain=sol",
+        destination: "/predictions",
         permanent: false,
       },
       {

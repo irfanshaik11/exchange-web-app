@@ -173,6 +173,20 @@ const transformToUnified = (event: PolymarketEvent): ExtendedPredictionMarket[] 
     ? `Leading: ${primaryMarket.groupItemTitle} (${(yesPrice * 100).toFixed(0)}%)`
     : undefined;
 
+  // Build top 5 outcomes for multi-outcome markets (with tokenId for price history)
+  const topOutcomes = isMultiOutcome
+    ? candidateMarkets
+        .map((m) => {
+          const p = safeJsonParse<string[]>(m.outcomePrices, ['0.5', '0.5']).map(Number);
+          const tIds = Array.isArray(m.clobTokenIds)
+            ? m.clobTokenIds
+            : safeJsonParse<string[]>(m.clobTokenIds, []);
+          return { name: m.groupItemTitle || m.question, probability: p[0] || 0, tokenId: tIds[0] };
+        })
+        .sort((a, b) => b.probability - a.probability)
+        .slice(0, 5)
+    : undefined;
+
   return [{
     // Basic PredictionMarket fields
     // Use event.slug for ticker since Polymarket API queries by event slug
@@ -195,6 +209,7 @@ const transformToUnified = (event: PolymarketEvent): ExtendedPredictionMarket[] 
     subtitle: leadingOutcome,
     eventTicker: event.slug,
     outcomeCount: activeMarkets.length || event.markets.length, // Number of active outcomes
+    topOutcomes,
 
     // Timing
     openTime: new Date(event.startDate).getTime() / 1000,

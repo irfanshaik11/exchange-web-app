@@ -171,22 +171,13 @@ export default function MarketFilters({ filters, onFiltersChange }: MarketFilter
       <button
         ref={buttonRef}
         onClick={() => setIsOpen(!isOpen)}
-        className="relative flex items-center gap-1.5 px-2.5 py-2 rounded-md text-sm font-medium transition-colors duration-150 cursor-pointer whitespace-nowrap sm:px-3 sm:py-1"
+        className="relative flex items-center justify-center p-1.5 rounded-lg transition-colors duration-150 cursor-pointer"
         style={{
-          backgroundColor: isOpen || activeFilterCount > 0 ? 'rgba(24, 196, 140, 0.1)' : 'transparent',
-          color: isOpen || activeFilterCount > 0 ? '#18c48c' : '#9ca3af',
+          backgroundColor: isOpen ? 'rgba(255,255,255,0.06)' : 'transparent',
+          color: isOpen ? '#d1d5db' : '#6b7280',
         }}
       >
-        <HiOutlineFilter className="w-3.5 h-3.5" />
-        <span className="hidden sm:inline">Filters</span>
-        {activeFilterCount > 0 && (
-          <span
-            className="flex items-center justify-center min-w-[16px] h-4 px-1 rounded-full text-[10px] font-bold"
-            style={{ backgroundColor: '#18c48c', color: '#0C0C0F' }}
-          >
-            {activeFilterCount}
-          </span>
-        )}
+        <HiOutlineFilter className="w-4 h-4" />
       </button>
 
       {/* Popout */}
