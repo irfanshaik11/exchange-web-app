@@ -128,13 +128,32 @@ export default function PredictionsSidebar({
             const el = document.getElementById('ai-predictions-section');
             el?.scrollIntoView({ behavior: 'smooth', block: 'start' });
           }}
-          className="flex items-center gap-3 rounded-lg w-full text-left cursor-pointer hover:bg-white/[0.04] transition-all duration-150"
+          className="relative flex items-center gap-3 rounded-lg w-full text-left cursor-pointer transition-all duration-200 overflow-hidden group/ai"
           style={{
             padding: '8px 10px',
-            color: T.purple,
+            background: 'linear-gradient(135deg, rgba(139,92,246,0.08) 0%, rgba(59,130,246,0.06) 50%, rgba(16,185,129,0.08) 100%)',
           }}
         >
-          <HiOutlineSparkles className="w-5 h-5 flex-shrink-0" />
+          {/* Shimmer overlay on hover */}
+          <div
+            className="absolute inset-0 opacity-0 group-hover/ai:opacity-100 transition-opacity duration-300"
+            style={{
+              background: 'linear-gradient(135deg, rgba(139,92,246,0.15) 0%, rgba(59,130,246,0.1) 50%, rgba(16,185,129,0.15) 100%)',
+            }}
+          />
+          <span className="w-5 h-5 flex-shrink-0 relative z-[1]">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
+              <defs>
+                <linearGradient id="ai-sidebar-sparkle" x1="3" y1="2" x2="22" y2="21">
+                  <stop stopColor="#8B5CF6" />
+                  <stop offset="0.5" stopColor="#3B82F6" />
+                  <stop offset="1" stopColor="#10B981" />
+                </linearGradient>
+              </defs>
+              <path d="M12 2L13.5 8.5L20 10L13.5 11.5L12 18L10.5 11.5L4 10L10.5 8.5L12 2Z" fill="url(#ai-sidebar-sparkle)" />
+              <path d="M19 15L19.75 17.25L22 18L19.75 18.75L19 21L18.25 18.75L16 18L18.25 17.25L19 15Z" fill="url(#ai-sidebar-sparkle)" opacity="0.7" />
+            </svg>
+          </span>
           <AnimatePresence>
             {isExpanded && (
               <motion.span
@@ -142,7 +161,12 @@ export default function PredictionsSidebar({
                 animate={{ opacity: 1, x: 0 }}
                 exit={{ opacity: 0, x: -4 }}
                 transition={{ duration: 0.15 }}
-                className="text-[12px] font-medium whitespace-nowrap"
+                className="text-[12px] font-bold whitespace-nowrap relative z-[1]"
+                style={{
+                  background: 'linear-gradient(135deg, #8B5CF6, #3B82F6, #10B981)',
+                  WebkitBackgroundClip: 'text',
+                  WebkitTextFillColor: 'transparent',
+                }}
               >
                 AI Predictions
               </motion.span>

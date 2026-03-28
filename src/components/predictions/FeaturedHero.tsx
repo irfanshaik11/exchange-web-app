@@ -6,17 +6,21 @@ import { categoryConfig } from './PredictionCard';
 import type { PredictionMarket } from './PredictionCard';
 import MultiLineSparkline from './MultiLineSparkline';
 import { getCategoryImages } from './categoryImages';
-import { generateMockSparkline, formatVolume } from './utils';
+import { generateMockSparkline, formatVolume, formatTimeRemaining } from './utils';
+import { usePolymarketPriceHistory } from '~/hooks/usePolymarketMarkets';
+import type { UnifiedPredictionMarket } from '~/hooks/useUnifiedPredictionMarkets';
 
 // Distinct colors for multi-outcome chart lines
-const OUTCOME_COLORS = ['#4ADE80', '#60A5FA', '#FBBF24', '#F472B6', '#A78BFA'];
+const OUTCOME_COLORS = ['#4ADE80', '#60A5FA', '#FBBF24', '#F472B6', '#A78BFA', '#FB923C', '#38BDF8', '#E879F9'];
 
 // Extended market fields from unified hooks
 interface ExtendedMarket extends PredictionMarket {
   marketType?: 'binary' | 'multi';
   subtitle?: string;
   outcomeCount?: number;
-  topOutcomes?: { name: string; probability: number }[];
+  topOutcomes?: { name: string; probability: number; tokenId?: string }[];
+  liquidity?: number;
+  openInterest?: number;
 }
 
 interface FeaturedHeroProps {
@@ -26,7 +30,7 @@ interface FeaturedHeroProps {
   rotateInterval?: number;
 }
 
-export default function FeaturedHero({ market: singleMarket, markets: marketsProp, rotateInterval = 12000 }: FeaturedHeroProps) {
+export default function FeaturedHero({ market: singleMarket, markets: marketsProp, rotateInterval = 120000 }: FeaturedHeroProps) {
   // Build the rotation list: pick one top market per unique category
   const rotationMarkets = useMemo(() => {
     const source = marketsProp || (singleMarket ? [singleMarket] : []);
@@ -46,21 +50,25 @@ export default function FeaturedHero({ market: singleMarket, markets: marketsPro
   }, [marketsProp, singleMarket]);
 
   const [activeIndex, setActiveIndex] = useState(0);
+  const [slideDirection, setSlideDirection] = useState<1 | -1>(1); // 1 = right, -1 = left
   const manualSelectEpoch = useRef(0);
   const touchStartX = useRef<number | null>(null);
 
   // Navigate and reset auto-rotation timer
   const selectIndex = useCallback((i: number) => {
+    setSlideDirection(i > activeIndex ? 1 : -1);
     setActiveIndex(i);
     manualSelectEpoch.current += 1;
-  }, []);
+  }, [activeIndex]);
 
   const goNext = useCallback(() => {
+    setSlideDirection(1);
     setActiveIndex((prev) => (prev + 1) % rotationMarkets.length);
     manualSelectEpoch.current += 1;
   }, [rotationMarkets.length]);
 
   const goPrev = useCallback(() => {
+    setSlideDirection(-1);
     setActiveIndex((prev) => (prev - 1 + rotationMarkets.length) % rotationMarkets.length);
     manualSelectEpoch.current += 1;
   }, [rotationMarkets.length]);
@@ -83,6 +91,7 @@ export default function FeaturedHero({ market: singleMarket, markets: marketsPro
   useEffect(() => {
     if (rotationMarkets.length <= 1) return;
     const timer = setInterval(() => {
+      setSlideDirection(1);
       setActiveIndex((prev) => (prev + 1) % rotationMarkets.length);
     }, rotateInterval);
     return () => clearInterval(timer);
@@ -102,44 +111,56 @@ export default function FeaturedHero({ market: singleMarket, markets: marketsPro
 
   // Multi-outcome detection (must be before chartSeries memo)
   const ext = market as ExtendedMarket;
+  const unified = market as UnifiedPredictionMarket;
   const isMulti = ext.marketType === 'multi' && (ext.outcomeCount || 0) > 2;
   const leadingName = ext.subtitle?.replace(/^Leading:\s*/, '').replace(/\s*\(\d+%\)$/, '') || null;
 
-  // Build multi-series sparkline data
+  // Fetch real price history for the active hero market (1 API call)
+  const yesTokenId = unified.polymarketData?.yesTokenId;
+  const { history: realHistory } = usePolymarketPriceHistory(yesTokenId, {
+    interval: '1w',
+    fidelity: 60,
+    enabled: !!yesTokenId,
+  });
+
+  // Build multi-series sparkline data — use real data when available
   const chartSeries = useMemo(() => {
     if (isMulti && ext.topOutcomes && ext.topOutcomes.length > 1) {
       return ext.topOutcomes.slice(0, 5).map((outcome, i) => ({
         data: generateMockSparkline(`${market.ticker}-${outcome.name}`, outcome.probability, (market.yesPriceChange24h || 0) * (1 - i * 0.3)),
         color: OUTCOME_COLORS[i % OUTCOME_COLORS.length],
-        label: outcome.name.length > 10 ? outcome.name.slice(0, 10) + '…' : outcome.name,
+        label: outcome.name.length > 12 ? outcome.name.slice(0, 12) + '…' : outcome.name,
       }));
     }
-    const yesData = market.priceHistory || generateMockSparkline(market.ticker, market.yesPrice, market.yesPriceChange24h);
+    // Binary: use real Polymarket history when available, fall back to mock
+    const yesData = realHistory.length > 2
+      ? realHistory.map(p => p.price)
+      : (market.priceHistory || generateMockSparkline(market.ticker, market.yesPrice, market.yesPriceChange24h));
     const noData = yesData.map(v => 1 - v);
     return [
       { data: yesData, color: T.green, label: 'Yes' },
       { data: noData, color: T.red, label: 'No' },
     ];
-  }, [market.ticker, market.priceHistory, market.yesPrice, market.yesPriceChange24h, isMulti, ext.topOutcomes]);
+  }, [market.ticker, market.priceHistory, market.yesPrice, market.yesPriceChange24h, isMulti, ext.topOutcomes, realHistory]);
 
   const images = getCategoryImages(market.category);
   const isActive = market.status === 'active';
 
   return (
-    <Link href={href} className="block h-full">
-      <AnimatePresence mode="wait">
+    <Link href={href} className="block">
+      <AnimatePresence mode="wait" initial={false}>
       <motion.div
         key={market.ticker}
-        initial={{ opacity: 0, y: 12 }}
-        animate={{ opacity: 1, y: 0 }}
-        exit={{ opacity: 0, y: -12 }}
-        transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
-        className="featured-hero relative overflow-hidden rounded-2xl cursor-pointer group h-full"
+        initial={{ opacity: 0, x: slideDirection * 80 }}
+        animate={{ opacity: 1, x: 0 }}
+        exit={{ opacity: 0, x: slideDirection * -80 }}
+        transition={{ duration: 0.4, ease: [0.25, 0.46, 0.45, 0.94] }}
+        className="featured-hero relative overflow-hidden cursor-pointer group"
         onTouchStart={onTouchStart}
         onTouchEnd={onTouchEnd}
         style={{
-          background: T.bg,
-          border: `1px solid ${categoryInfo.color}20`,
+          backgroundColor: 'transparent',
+          height: 400,
         }}
       >
         {/* Navigation arrows — visible on hover */}
@@ -175,36 +196,31 @@ export default function FeaturedHero({ market: singleMarket, markets: marketsPro
             </button>
           </>
         )}
-        {/* Animated border shimmer — CSS keyframe driven */}
-        <div
-          className="absolute inset-0 rounded-2xl pointer-events-none z-20 featured-hero-shimmer"
-          style={{
-            background: `linear-gradient(90deg, transparent 0%, ${categoryInfo.color}00 30%, ${categoryInfo.color}25 50%, ${categoryInfo.color}00 70%, transparent 100%)`,
-            backgroundSize: '200% 100%',
-            mask: 'linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0)',
-            WebkitMask: 'linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0)',
-            maskComposite: 'xor',
-            WebkitMaskComposite: 'xor',
-            padding: '1px',
-            borderRadius: 'inherit',
-          }}
-        />
 
 
-        {/* Subtle radial glow from bottom center */}
+        {/* Subtle radial glow from center */}
         <div
           className="absolute inset-0 pointer-events-none"
           style={{
-            background: `radial-gradient(ellipse 70% 50% at 50% 110%, ${categoryInfo.color}18 0%, transparent 70%)`,
+            background: `radial-gradient(ellipse 50% 60% at 50% 50%, ${categoryInfo.color}08 0%, transparent 70%)`,
           }}
         />
 
-        {/* Left image — cropped, dramatic */}
+
+        {/* Left image */}
         <div
-          className="absolute left-0 top-0 bottom-0 w-[320px] pointer-events-none select-none hidden md:block"
+          className="absolute left-0 top-0 bottom-0 w-[300px] pointer-events-none select-none hidden md:block"
           style={{
-            maskImage: 'linear-gradient(to right, rgba(0,0,0,0.7) 10%, rgba(0,0,0,0.3) 50%, transparent 85%)',
-            WebkitMaskImage: 'linear-gradient(to right, rgba(0,0,0,0.7) 10%, rgba(0,0,0,0.3) 50%, transparent 85%)',
+            maskImage: `
+              linear-gradient(to right, transparent 0%, black 12%, black 40%, transparent 92%),
+              linear-gradient(to bottom, transparent 0%, black 12%, black 88%, transparent 100%)
+            `,
+            maskComposite: 'intersect',
+            WebkitMaskImage: `
+              linear-gradient(to right, transparent 0%, black 12%, black 40%, transparent 92%),
+              linear-gradient(to bottom, transparent 0%, black 12%, black 88%, transparent 100%)
+            `,
+            WebkitMaskComposite: 'source-in',
           }}
         >
           <img
@@ -212,32 +228,27 @@ export default function FeaturedHero({ market: singleMarket, markets: marketsPro
             alt=""
             className="w-full h-full object-cover"
             style={{
-              filter: 'brightness(0.5) saturate(1.1)',
-              transform: 'scale(1.1)',
+              filter: 'brightness(0.5) saturate(1)',
+              transform: 'scale(1.15)',
             }}
             loading="eager"
           />
-          <div
-            className="absolute inset-0"
-            style={{
-              background: `linear-gradient(135deg, ${categoryInfo.color}15 0%, transparent 60%)`,
-              mixBlendMode: 'overlay',
-            }}
-          />
-          <div
-            className="absolute inset-0"
-            style={{
-              background: `linear-gradient(to top, ${T.bg} 0%, transparent 30%), linear-gradient(to bottom, ${T.bg} 0%, transparent 30%)`,
-            }}
-          />
         </div>
 
-        {/* Right image — NOT mirrored, fade on left edge into center */}
+        {/* Right image */}
         <div
-          className="absolute right-0 top-0 bottom-0 w-[320px] pointer-events-none select-none hidden md:block"
+          className="absolute right-0 top-0 bottom-0 w-[300px] pointer-events-none select-none hidden md:block"
           style={{
-            maskImage: 'linear-gradient(to left, rgba(0,0,0,0.7) 10%, rgba(0,0,0,0.3) 50%, transparent 85%)',
-            WebkitMaskImage: 'linear-gradient(to left, rgba(0,0,0,0.7) 10%, rgba(0,0,0,0.3) 50%, transparent 85%)',
+            maskImage: `
+              linear-gradient(to left, transparent 0%, black 12%, black 40%, transparent 92%),
+              linear-gradient(to bottom, transparent 0%, black 12%, black 88%, transparent 100%)
+            `,
+            maskComposite: 'intersect',
+            WebkitMaskImage: `
+              linear-gradient(to left, transparent 0%, black 12%, black 40%, transparent 92%),
+              linear-gradient(to bottom, transparent 0%, black 12%, black 88%, transparent 100%)
+            `,
+            WebkitMaskComposite: 'source-in',
           }}
         >
           <img
@@ -245,34 +256,18 @@ export default function FeaturedHero({ market: singleMarket, markets: marketsPro
             alt=""
             className="w-full h-full object-cover"
             style={{
-              filter: 'brightness(0.35) saturate(0.8)',
-              transform: 'scale(1.1) scaleX(-1)',
+              filter: 'brightness(0.4) saturate(0.9)',
+              transform: 'scale(1.15) scaleX(-1)',
             }}
             loading="eager"
           />
-          <div
-            className="absolute inset-0"
-            style={{
-              background: `linear-gradient(to top, ${T.bg} 0%, transparent 30%), linear-gradient(to bottom, ${T.bg} 0%, transparent 30%)`,
-            }}
-          />
         </div>
 
-        {/* Content — fully centered */}
-        <div className="relative z-10 flex flex-col items-center justify-center h-full p-5 md:p-6">
-
-          {/* Volume stats — top-right corner */}
-          <div className="absolute top-5 right-6 md:top-6 md:right-8 flex items-center gap-3">
-            <span className="text-[11px] font-medium" style={{ color: T.muted, textShadow: T.textShadow }}>
-              {formatVolume(market.totalVolume)} total vol
-            </span>
-            <span className="text-[11px] font-medium" style={{ color: T.muted, textShadow: T.textShadow }}>
-              {formatVolume(market.volume24h)} 24h
-            </span>
-          </div>
+        {/* Content — fully centered, fills height */}
+        <div className="relative z-10 flex flex-col items-center h-full px-6 pt-6 pb-4 md:px-10 md:pt-8 md:pb-4">
 
           {/* Category label + LIVE indicator */}
-          <div className="flex items-center gap-2.5 mb-3 mt-1">
+          <div className="flex items-center gap-2.5 mb-2">
             {/* Category icon with glow ring */}
             <div
               className="w-8 h-8 rounded-lg flex items-center justify-center relative"
@@ -313,10 +308,18 @@ export default function FeaturedHero({ market: singleMarket, markets: marketsPro
             </span>
           </div>
 
-          {/* Title */}
-          <div className="max-w-2xl text-center mb-3">
+          {/* Title + image */}
+          <div className="flex items-center justify-center gap-3 max-w-3xl text-center">
+            {market.imageUrl && (
+              <div
+                className="w-14 h-14 rounded-xl overflow-hidden flex-shrink-0"
+                style={{ border: '1px solid rgba(255,255,255,0.08)' }}
+              >
+                <img src={market.imageUrl} alt="" className="w-full h-full object-cover" />
+              </div>
+            )}
             <h2
-              className="text-[22px] md:text-[28px] font-extrabold leading-tight"
+              className="text-[26px] md:text-[34px] font-extrabold leading-tight"
               style={{
                 color: T.text,
                 letterSpacing: '-0.03em',
@@ -327,15 +330,18 @@ export default function FeaturedHero({ market: singleMarket, markets: marketsPro
             </h2>
           </div>
 
+          {/* Spacer — pushes chart to middle */}
+          <div className="flex-1" />
+
           {/* Probability + Multi-line Chart */}
           {isMulti && leadingName ? (
             <>
               {/* Multi-outcome: leading outcome + multi-line chart */}
-              <div className="flex items-center justify-center gap-6 md:gap-10 mb-4">
+              <div className="flex items-center justify-center gap-8 md:gap-14 mb-3">
                 {/* Left: leading outcome */}
-                <div className="flex flex-col items-center gap-1.5">
+                <div className="flex flex-col items-center gap-2">
                   <span
-                    className="text-[40px] md:text-[52px] font-extrabold leading-none"
+                    className="text-[52px] md:text-[68px] font-extrabold leading-none"
                     style={{
                       color: OUTCOME_COLORS[0],
                       letterSpacing: '-0.04em',
@@ -346,7 +352,7 @@ export default function FeaturedHero({ market: singleMarket, markets: marketsPro
                     {yesPercent}%
                   </span>
                   <span
-                    className="text-[13px] md:text-[15px] font-semibold"
+                    className="text-[15px] md:text-[18px] font-semibold"
                     style={{ color: T.text, textShadow: T.textShadow }}
                   >
                     {leadingName}
@@ -357,8 +363,8 @@ export default function FeaturedHero({ market: singleMarket, markets: marketsPro
                 <div className="flex-shrink-0">
                   <MultiLineSparkline
                     series={chartSeries}
-                    width={320}
-                    height={100}
+                    width={500}
+                    height={160}
                     showGradient
                     showLabels
                   />
@@ -366,11 +372,11 @@ export default function FeaturedHero({ market: singleMarket, markets: marketsPro
               </div>
 
               {/* Outcome legend pills */}
-              <div className="flex items-center justify-center gap-2 flex-wrap mb-2">
+              <div className="flex items-center justify-center gap-2.5 flex-wrap mb-2">
                 {ext.topOutcomes?.slice(0, 5).map((outcome, i) => (
                   <span
                     key={outcome.name}
-                    className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-medium"
+                    className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-medium"
                     style={{
                       backgroundColor: `${OUTCOME_COLORS[i % OUTCOME_COLORS.length]}12`,
                       color: OUTCOME_COLORS[i % OUTCOME_COLORS.length],
@@ -391,27 +397,14 @@ export default function FeaturedHero({ market: singleMarket, markets: marketsPro
                 )}
               </div>
 
-              {market.yesPriceChange24h !== 0 && (
-                <div className="flex justify-center">
-                  <span
-                    className="text-[11px] font-semibold px-2.5 py-1 rounded-md"
-                    style={{
-                      backgroundColor: market.yesPriceChange24h > 0 ? T.greenSoft : T.redSoft,
-                      color: market.yesPriceChange24h > 0 ? T.green : T.red,
-                    }}
-                  >
-                    {market.yesPriceChange24h > 0 ? '+' : ''}{(market.yesPriceChange24h * 100).toFixed(1)}% 24h
-                  </span>
-                </div>
-              )}
             </>
           ) : (
             <>
               {/* Binary: YES + chart + NO */}
-              <div className="flex items-center justify-center gap-5 md:gap-8 mb-4">
-                <div className="flex flex-col items-center gap-1">
+              <div className="flex items-center justify-center gap-8 md:gap-14 mb-3">
+                <div className="flex flex-col items-center gap-1.5">
                   <span
-                    className="text-[40px] md:text-[52px] font-extrabold leading-none"
+                    className="text-[52px] md:text-[68px] font-extrabold leading-none"
                     style={{
                       color: T.green,
                       letterSpacing: '-0.04em',
@@ -433,15 +426,15 @@ export default function FeaturedHero({ market: singleMarket, markets: marketsPro
                 <div className="flex-shrink-0">
                   <MultiLineSparkline
                     series={chartSeries}
-                    width={280}
-                    height={90}
+                    width={440}
+                    height={150}
                     showGradient
                   />
                 </div>
 
-                <div className="flex flex-col items-center gap-1">
+                <div className="flex flex-col items-center gap-1.5">
                   <span
-                    className="text-[40px] md:text-[52px] font-extrabold leading-none"
+                    className="text-[52px] md:text-[68px] font-extrabold leading-none"
                     style={{
                       color: T.red,
                       letterSpacing: '-0.04em',
@@ -452,7 +445,7 @@ export default function FeaturedHero({ market: singleMarket, markets: marketsPro
                     {noPercent}%
                   </span>
                   <span
-                    className="text-[11px] font-bold tracking-[0.1em] uppercase"
+                    className="text-[12px] font-bold tracking-[0.1em] uppercase"
                     style={{ color: T.red, opacity: 0.7 }}
                   >
                     No
@@ -460,37 +453,68 @@ export default function FeaturedHero({ market: singleMarket, markets: marketsPro
                 </div>
               </div>
 
-              {market.yesPriceChange24h !== 0 && (
-                <div className="flex justify-center">
-                  <span
-                    className="text-[11px] font-semibold px-2.5 py-1 rounded-md"
-                    style={{
-                      backgroundColor: market.yesPriceChange24h > 0 ? T.greenSoft : T.redSoft,
-                      color: market.yesPriceChange24h > 0 ? T.green : T.red,
-                    }}
-                  >
-                    {market.yesPriceChange24h > 0 ? '+' : ''}{(market.yesPriceChange24h * 100).toFixed(1)}% 24h
-                  </span>
-                </div>
-              )}
+            </>
+          )}
+
+          {/* Spacer — pushes stats to bottom */}
+          <div className="flex-1" />
+        </div>
+
+        {/* Bottom stats bar */}
+        <div
+          className="relative z-10 flex items-center justify-center gap-6 px-6 py-3"
+        >
+          <div className="flex items-center gap-1.5">
+            <span className="text-[10px]" style={{ color: T.muted }}>Total Vol</span>
+            <span className="text-[11px] font-semibold" style={{ color: T.textSecondary }}>{formatVolume(market.totalVolume)}</span>
+          </div>
+          <div className="w-px h-3" style={{ backgroundColor: 'rgba(255,255,255,0.06)' }} />
+          <div className="flex items-center gap-1.5">
+            <span className="text-[10px]" style={{ color: T.muted }}>24h Vol</span>
+            <span className="text-[11px] font-semibold" style={{ color: T.textSecondary }}>{formatVolume(market.volume24h)}</span>
+          </div>
+          <div className="w-px h-3" style={{ backgroundColor: 'rgba(255,255,255,0.06)' }} />
+          <div className="flex items-center gap-1.5">
+            <span className="text-[10px]" style={{ color: T.muted }}>Ends</span>
+            <span className="text-[11px] font-semibold" style={{ color: T.textSecondary }}>{formatTimeRemaining(market.closesAt).text}</span>
+          </div>
+          {ext.liquidity ? (
+            <>
+              <div className="w-px h-3" style={{ backgroundColor: 'rgba(255,255,255,0.06)' }} />
+              <div className="flex items-center gap-1.5">
+                <span className="text-[10px]" style={{ color: T.muted }}>Liquidity</span>
+                <span className="text-[11px] font-semibold" style={{ color: T.textSecondary }}>{formatVolume(ext.liquidity)}</span>
+              </div>
+            </>
+          ) : null}
+          {market.traderCount ? (
+            <>
+              <div className="w-px h-3" style={{ backgroundColor: 'rgba(255,255,255,0.06)' }} />
+              <div className="flex items-center gap-1.5">
+                <span className="text-[10px]" style={{ color: T.muted }}>Traders</span>
+                <span className="text-[11px] font-semibold" style={{ color: T.textSecondary }}>{market.traderCount.toLocaleString()}</span>
+              </div>
+            </>
+          ) : null}
+          {market.yesPriceChange24h !== 0 && (
+            <>
+              <div className="w-px h-3" style={{ backgroundColor: 'rgba(255,255,255,0.06)' }} />
+              <span
+                className="text-[11px] font-semibold"
+                style={{ color: market.yesPriceChange24h > 0 ? T.green : T.red }}
+              >
+                {market.yesPriceChange24h > 0 ? '+' : ''}{(market.yesPriceChange24h * 100).toFixed(1)}% 24h
+              </span>
             </>
           )}
         </div>
 
-        {/* Bottom gradient glow line */}
-        <div
-          className="absolute bottom-0 left-0 right-0 h-[2px]"
-          style={{
-            background: `linear-gradient(90deg, transparent 5%, ${categoryInfo.color}60 30%, ${categoryInfo.color}80 50%, ${categoryInfo.color}60 70%, transparent 95%)`,
-            boxShadow: `0 0 12px ${categoryInfo.color}30`,
-          }}
-        />
       </motion.div>
       </AnimatePresence>
 
-      {/* Rotation dots */}
+      {/* Rotation dots — below AnimatePresence so they persist during transitions */}
       {rotationMarkets.length > 1 && (
-        <div className="flex items-center justify-center gap-1.5 mt-3">
+        <div className="flex items-center justify-center gap-1.5 py-3 pl-20">
           {rotationMarkets.map((m, i) => {
             const cat = categoryConfig[m.category] || categoryConfig.other;
             return (
@@ -498,12 +522,12 @@ export default function FeaturedHero({ market: singleMarket, markets: marketsPro
                 key={m.ticker}
                 onClick={(e) => { e.preventDefault(); e.stopPropagation(); selectIndex(i); }}
                 aria-label={`Show ${cat.label} market`}
-                className="transition-all duration-300"
+                className="transition-all duration-300 cursor-pointer"
                 style={{
                   width: i === activeIndex ? 20 : 6,
                   height: 6,
                   borderRadius: 3,
-                  backgroundColor: i === activeIndex ? cat.color : 'rgba(255,255,255,0.15)',
+                  backgroundColor: i === activeIndex ? cat.color : 'rgba(255,255,255,0.25)',
                 }}
               />
             );
@@ -511,15 +535,8 @@ export default function FeaturedHero({ market: singleMarket, markets: marketsPro
         </div>
       )}
 
-      {/* CSS keyframes for shimmer and live dot */}
+      {/* CSS keyframes for live dot */}
       <style jsx>{`
-        .featured-hero-shimmer {
-          animation: hero-shimmer 4s linear infinite;
-        }
-        @keyframes hero-shimmer {
-          0% { background-position: 200% 0; }
-          100% { background-position: -200% 0; }
-        }
         .featured-hero-live-dot {
           animation: live-pulse 2s ease-in-out infinite;
         }

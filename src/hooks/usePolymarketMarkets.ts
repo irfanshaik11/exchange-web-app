@@ -173,12 +173,15 @@ const transformToUnified = (event: PolymarketEvent): ExtendedPredictionMarket[] 
     ? `Leading: ${primaryMarket.groupItemTitle} (${(yesPrice * 100).toFixed(0)}%)`
     : undefined;
 
-  // Build top 5 outcomes for multi-outcome markets
+  // Build top 5 outcomes for multi-outcome markets (with tokenId for price history)
   const topOutcomes = isMultiOutcome
     ? candidateMarkets
         .map((m) => {
           const p = safeJsonParse<string[]>(m.outcomePrices, ['0.5', '0.5']).map(Number);
-          return { name: m.groupItemTitle || m.question, probability: p[0] || 0 };
+          const tIds = Array.isArray(m.clobTokenIds)
+            ? m.clobTokenIds
+            : safeJsonParse<string[]>(m.clobTokenIds, []);
+          return { name: m.groupItemTitle || m.question, probability: p[0] || 0, tokenId: tIds[0] };
         })
         .sort((a, b) => b.probability - a.probability)
         .slice(0, 5)

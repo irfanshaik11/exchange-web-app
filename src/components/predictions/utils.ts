@@ -4,13 +4,16 @@ function seededRandom(seed: string) {
   return () => { h = Math.imul(h ^ (h >>> 15), h | 1); h ^= h + Math.imul(h ^ (h >>> 7), 61 | 1); return ((h ^ (h >>> 14)) >>> 0) / 4294967296; };
 }
 
-export function generateMockSparkline(ticker: string, currentPrice: number, change: number, points = 16): number[] {
+export function generateMockSparkline(ticker: string, currentPrice: number, change: number, points = 28): number[] {
   const rand = seededRandom(ticker);
   const data: number[] = [];
   const startPrice = currentPrice / (1 + change);
+  let momentum = 0;
   for (let i = 0; i < points; i++) {
     const progress = i / (points - 1);
-    const noise = (rand() - 0.5) * 0.02;
+    // Momentum-based noise for more natural walk
+    momentum = momentum * 0.7 + (rand() - 0.5) * 0.06;
+    const noise = momentum;
     const value = startPrice + (currentPrice - startPrice) * progress + noise;
     data.push(Math.max(0, Math.min(1, value)));
   }

@@ -32,7 +32,7 @@ export const PredictionTheme = {
 // Portfolio page theme - matches the darker portfolio styling
 export const PortfolioTheme = {
   // Base colors - darker than prediction theme
-  bg: "#050608",
+  bg: "#020204",
   surface: "#111214",
   surfaceHover: "#1A1B23",
   border: "#2A2B33",
@@ -62,7 +62,7 @@ export const PortfolioTheme = {
 // Every prediction component should import from here instead of defining inline palettes.
 export const T = {
   // Base
-  bg: "#050608",
+  bg: "#020204",
   surface: "rgba(255, 255, 255, 0.025)",
   surfaceHover: "rgba(255, 255, 255, 0.04)",
   border: "rgba(255, 255, 255, 0.04)",

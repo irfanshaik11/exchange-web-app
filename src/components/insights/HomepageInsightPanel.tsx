@@ -96,7 +96,7 @@ export function HomepageInsightPanel({ docked = false }: { docked?: boolean }) {
           {isLoading ? (
             <InsightSkeleton />
           ) : data?.insights ? (
-            <div className="p-3 space-y-3 max-h-[480px] overflow-y-auto scrollbar-hide">
+            <div className="p-3 space-y-3 max-h-[380px] overflow-y-auto scrollbar-hide">
               {/* Market Pulse */}
               <motion.div
                 initial={{ opacity: 0, y: 6 }}

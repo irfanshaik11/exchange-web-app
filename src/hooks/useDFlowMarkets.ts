@@ -80,7 +80,7 @@ export interface ExtendedPredictionMarket extends PredictionMarket {
   noSubTitle?: string;
   eventTicker?: string;
   outcomeCount?: number; // Number of outcomes for multi-outcome markets
-  topOutcomes?: { name: string; probability: number }[]; // Top outcomes for multi-outcome cards
+  topOutcomes?: { name: string; probability: number; tokenId?: string }[]; // Top outcomes for multi-outcome cards
 
   // Timing
   openTime?: number;

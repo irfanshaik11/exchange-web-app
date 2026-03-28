@@ -5,7 +5,6 @@ import {
   HiOutlineSearch,
   HiOutlineRefresh,
   HiOutlineLockClosed,
-  HiOutlineFilter,
 } from 'react-icons/hi';
 import Header from '../../components/Header';
 import Footer from '../../components/Footer';
@@ -53,7 +52,6 @@ export default function PredictionsPage() {
   const [dataSource] = useState<PredictionDataSource>('polymarket');
   const [visibleCardCount, setVisibleCardCount] = useState(24);
   const [showAiPanel, setShowAiPanel] = useState(false);
-  const [showFilters, setShowFilters] = useState(false);
 
   // Fetch markets
   const {
@@ -263,69 +261,40 @@ export default function PredictionsPage() {
               ))}
             </div>
 
-            {/* Right: search */}
-            <div
-              className="flex items-center gap-2 px-3 py-1.5 rounded-full"
-              style={{
-                backgroundColor: 'rgba(255,255,255,0.03)',
-                border: `1px solid ${T.border}`,
-              }}
-            >
-              <HiOutlineSearch className="w-3.5 h-3.5" style={{ color: searchQuery ? T.accent : T.muted }} />
-              <input
-                type="text"
-                placeholder="Search markets..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="bg-transparent text-[12px] outline-none placeholder-neutral-500 w-28 focus:w-44 transition-all duration-200"
-                style={{ color: T.text }}
+            {/* Right: search + filter */}
+            <div className="flex items-center gap-1.5">
+              <div
+                className="flex items-center gap-2 px-3 py-1.5 rounded-full"
+                style={{
+                  backgroundColor: 'rgba(255,255,255,0.03)',
+                  border: `1px solid ${T.border}`,
+                }}
+              >
+                <HiOutlineSearch className="w-3.5 h-3.5" style={{ color: searchQuery ? T.accent : T.muted }} />
+                <input
+                  type="text"
+                  placeholder="Search markets..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="bg-transparent text-[12px] outline-none placeholder-neutral-500 w-28 focus:w-44 transition-all duration-200"
+                  style={{ color: T.text }}
+                />
+                {searchQuery && (
+                  <button
+                    onClick={() => setSearchQuery('')}
+                    className="text-[11px]"
+                    style={{ color: T.muted }}
+                  >
+                    ×
+                  </button>
+                )}
+              </div>
+              <MarketFilters
+                filters={marketFilters}
+                onFiltersChange={setMarketFilters}
               />
-              {searchQuery && (
-                <button
-                  onClick={() => setSearchQuery('')}
-                  className="text-[11px]"
-                  style={{ color: T.muted }}
-                >
-                  ×
-                </button>
-              )}
             </div>
-              {/* Filter button */}
-              <button
-                onClick={() => setShowFilters(!showFilters)}
-                className="p-1.5 rounded-lg"
-                style={{
-                  backgroundColor: showFilters ? 'rgba(255,255,255,0.06)' : 'transparent',
-                  color: T.muted,
-                }}
-              >
-                <HiOutlineFilter className="w-4 h-4" />
-              </button>
           </div>
-
-          {/* Advanced filters dropdown */}
-          <AnimatePresence>
-            {showFilters && (
-              <motion.div
-                initial={{ height: 0, opacity: 0 }}
-                animate={{ height: 'auto', opacity: 1 }}
-                exit={{ height: 0, opacity: 0 }}
-                transition={{ duration: 0.2 }}
-                className="overflow-hidden"
-                style={{
-                  backgroundColor: 'rgba(255,255,255,0.015)',
-                  borderBottom: `1px solid ${T.border}`,
-                }}
-              >
-                <div className="px-6 py-3">
-                  <MarketFilters
-                    filters={marketFilters}
-                    onFiltersChange={setMarketFilters}
-                  />
-                </div>
-              </motion.div>
-            )}
-          </AnimatePresence>
 
           {/* Restricted regions — flush banner */}
           <div
@@ -389,40 +358,18 @@ export default function PredictionsPage() {
             </div>
 
             {/* Featured Hero + AI Insights side by side on xl+ */}
-            <div className="flex gap-4 mb-6 items-stretch">
+            <div className="flex gap-4 mb-6 items-start">
               {/* Featured Hero — takes remaining space */}
-              <div className="flex-1 min-w-0 flex flex-col">
-                <div className="flex items-center gap-2 mb-3">
-                  <span
-                    className="text-[10px] font-bold tracking-[0.14em] uppercase"
-                    style={{ color: T.muted }}
-                  >
-                    Featured Market
-                  </span>
-                  <div className="flex-1 h-px" style={{ background: `linear-gradient(90deg, ${T.border}, transparent)` }} />
-                </div>
+              <div className="flex-1 min-w-0">
                 {!isLoading && activeMarkets.length > 0 && (
-                  <div className="flex-1">
-                    <FeaturedHero markets={activeMarkets} />
-                  </div>
+                  <FeaturedHero markets={activeMarkets} />
                 )}
               </div>
 
-              {/* AI Insights — right column on xl+, height matches hero */}
+              {/* AI Insights — right column on xl+ */}
               <div className="hidden xl:flex xl:flex-col w-[360px] flex-shrink-0">
-                <div className="flex items-center gap-2 mb-3">
-                  <span
-                    className="text-[10px] font-bold tracking-[0.14em] uppercase"
-                    style={{ color: T.muted }}
-                  >
-                    AI Market Pulse
-                  </span>
-                  <div className="flex-1 h-px" style={{ background: `linear-gradient(90deg, ${T.border}, transparent)` }} />
-                </div>
-                <div className="flex-1 overflow-hidden rounded-xl" style={{ border: `1px solid ${T.border}` }}>
-                  <div className="h-full overflow-y-auto scrollbar-hide">
-                    <HomepageInsightPanel docked />
-                  </div>
+                <div className="overflow-hidden rounded-xl" style={{ border: `1px solid ${T.border}` }}>
+                  <HomepageInsightPanel docked />
                 </div>
               </div>
             </div>
@@ -622,7 +569,7 @@ export default function PredictionsPage() {
                   <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
                     <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z" />
                   </svg>
-                  X / Twitter
+                  X
                 </a>
               </div>
             </div>
