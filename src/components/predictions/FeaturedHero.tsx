@@ -358,8 +358,8 @@ export default function FeaturedHero({ market: singleMarket, markets: marketsPro
                 <div className="flex-shrink-0">
                   <MultiLineSparkline
                     series={chartSeries}
-                    width={200}
-                    height={64}
+                    width={320}
+                    height={100}
                     showGradient
                     showLabels
                   />
@@ -434,8 +434,8 @@ export default function FeaturedHero({ market: singleMarket, markets: marketsPro
                 <div className="flex-shrink-0">
                   <MultiLineSparkline
                     series={chartSeries}
-                    width={160}
-                    height={56}
+                    width={280}
+                    height={90}
                     showGradient
                   />
                 </div>
