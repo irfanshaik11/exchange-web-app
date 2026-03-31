@@ -878,7 +878,8 @@ const OutcomesSection: React.FC<{
   event: PolymarketEvent | null;
   isLoading: boolean;
   onSelectOutcome?: (marketId: string, side: 'yes' | 'no') => void;
-}> = React.memo(({ event, isLoading, onSelectOutcome }) => {
+  selectedOutcomeId?: string | null;
+}> = React.memo(({ event, isLoading, onSelectOutcome, selectedOutcomeId }) => {
   const [nameFilter, setNameFilter] = useState('');
   const [chanceSort, setChanceSort] = useState<'asc' | 'desc'>('desc');
   const [volSort, setVolSort] = useState<'asc' | 'desc' | null>(null);
@@ -1060,11 +1061,18 @@ const OutcomesSection: React.FC<{
               const yesPrice = prices[0] || 0.5;
               const noPrice = prices[1] || 0.5;
 
+              const isSelected = selectedOutcomeId === market.id;
               return (
                 <div
                   key={market.id}
-                  className="flex items-center gap-3 p-2.5 rounded-lg border border-[#2A2B33]"
-                  style={{ backgroundColor: '#111214' }}
+                  onClick={() => onSelectOutcome?.(market.id, 'yes')}
+                  className="flex items-center gap-3 p-2.5 rounded-lg border transition-all cursor-pointer"
+                  style={{
+                    backgroundColor: isSelected ? '#151821' : '#111214',
+                    borderColor: isSelected ? '#3A4A6B' : '#2A2B33',
+                  }}
+                  onMouseEnter={(e) => { if (!isSelected) { e.currentTarget.style.backgroundColor = '#141618'; e.currentTarget.style.borderColor = '#353640'; } }}
+                  onMouseLeave={(e) => { if (!isSelected) { e.currentTarget.style.backgroundColor = '#111214'; e.currentTarget.style.borderColor = '#2A2B33'; } }}
                 >
                   {/* Outcome image and name */}
                   <div className="flex-1 flex items-center gap-2 min-w-0">
@@ -1103,14 +1111,14 @@ const OutcomesSection: React.FC<{
                   {/* Buy Yes / Buy No buttons — with decimal precision */}
                   <div className="w-32 flex gap-1.5">
                     <button
-                      onClick={() => onSelectOutcome?.(market.id, 'yes')}
+                      onClick={(e) => { e.stopPropagation(); onSelectOutcome?.(market.id, 'yes'); }}
                       className="flex-1 px-2 py-1.5 rounded-md text-[10px] font-semibold transition-all hover:opacity-90 border border-[#2A2B33]"
                       style={{ backgroundColor: '#111214', color: AX.green }}
                     >
                       {realPrices ? `Yes ${formatCents(yesPrice)}¢` : 'Yes'}
                     </button>
                     <button
-                      onClick={() => onSelectOutcome?.(market.id, 'no')}
+                      onClick={(e) => { e.stopPropagation(); onSelectOutcome?.(market.id, 'no'); }}
                       className="flex-1 px-2 py-1.5 rounded-md text-[10px] font-semibold transition-all hover:opacity-90 border border-[#FF4D7F40]"
                       style={{ backgroundColor: '#111214', color: AX.red }}
                     >
@@ -2709,6 +2717,7 @@ export default function MarketDetailPage() {
                     <OutcomesSection
                       event={polyEvent || null}
                       isLoading={polyLoading}
+                      selectedOutcomeId={selectedOutcomeMarket?.id || null}
                       onSelectOutcome={(marketId, side) => {
                         // Find the market by ID and set it as selected
                         const selectedMkt = polyEvent?.markets?.find(m => m.id === marketId);
@@ -2717,6 +2726,8 @@ export default function MarketDetailPage() {
                           setSelectedSide(side);
                           setTradeMode('buy');
                           setAmount('');
+                          const outcomeName = (selectedMkt as any).groupItemTitle || selectedMkt.question || 'Outcome';
+                          showPolymarketToast(`${outcomeName} selected`, 'success');
                         }
                       }}
                     />
