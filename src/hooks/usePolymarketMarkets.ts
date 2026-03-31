@@ -130,8 +130,16 @@ const transformToUnified = (event: PolymarketEvent): ExtendedPredictionMarket[] 
   const isMultiOutcome = event.markets.length > 1;
 
   // Find the market with highest YES probability to feature on the card
-  // Skip resolved/closed sub-markets — their prices are stale (fallback to 0.5)
-  const activeMarkets = event.markets.filter(m => !m.resolved && !m.closed && m.active !== false);
+  // Skip resolved/closed sub-markets and placeholder outcomes (Team XX, zero volume)
+  const activeMarkets = event.markets.filter(m => {
+    if (m.resolved || m.closed || m.active === false) return false;
+    const label = m.groupItemTitle || m.question || '';
+    if (/^Team [A-Z]+$/i.test(label)) return false;
+    if (/^Person [A-Z]+$/i.test(label)) return false;
+    if (label === 'Other') return false;
+    if (parseFloat(m.volume || '0') === 0) return false;
+    return true;
+  });
   const candidateMarkets = activeMarkets.length > 0 ? activeMarkets : event.markets;
 
   let primaryMarket = candidateMarkets[0];
@@ -174,8 +182,17 @@ const transformToUnified = (event: PolymarketEvent): ExtendedPredictionMarket[] 
     : undefined;
 
   // Build top 5 outcomes for multi-outcome markets (with tokenId for price history)
+  // Filter out placeholder outcomes (Team XX, Person XX, Other, zero volume)
   const topOutcomes = isMultiOutcome
     ? candidateMarkets
+        .filter((m) => {
+          const label = m.groupItemTitle || m.question || '';
+          if (/^Team [A-Z]+$/i.test(label)) return false;
+          if (/^Person [A-Z]+$/i.test(label)) return false;
+          if (label === 'Other') return false;
+          if (parseFloat(m.volume || '0') === 0) return false;
+          return true;
+        })
         .map((m) => {
           const p = safeJsonParse<string[]>(m.outcomePrices, ['0.5', '0.5']).map(Number);
           const tIds = Array.isArray(m.clobTokenIds)
