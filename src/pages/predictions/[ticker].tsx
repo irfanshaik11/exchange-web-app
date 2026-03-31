@@ -2930,7 +2930,7 @@ export default function MarketDetailPage() {
                 <div>
                     {/* Selected Outcome Header */}
                     {selectedOutcomeMarket ? (
-                      <div className="flex items-center gap-2.5 px-4 py-2 mb-1 border-b border-[#2A2B33]">
+                      <div className="flex items-center gap-2.5 px-4 py-[11px] border-b border-[#2A2B33]">
                         {(selectedOutcomeMarket.image || selectedOutcomeMarket.icon) ? (
                           <img
                             src={selectedOutcomeMarket.image || selectedOutcomeMarket.icon}
@@ -2966,7 +2966,7 @@ export default function MarketDetailPage() {
                     )}
 
                     {/* Buy / Sell Toggle + Order Type */}
-                    <div className="px-4 py-2.5 border-b border-[#2A2B33]">
+                    <div className="px-4 py-[18.5px] border-b border-[#2A2B33]">
                       <div className="flex items-center gap-2">
                         {/* Buy/Sell Toggle - matches trenches */}
                         <div className="flex-1 relative h-9 rounded-lg border border-[#2A2B33] bg-[#1E1F26] overflow-hidden">
@@ -3501,7 +3501,7 @@ export default function MarketDetailPage() {
                     </div>
 
                     {/* About Section */}
-                    <div className="border-t border-[#2A2B33] mt-2" style={{ backgroundColor: 'rgba(255,255,255,0.015)' }}>
+                    <div className="border-t border-[#2A2B33]" style={{ backgroundColor: 'rgba(255,255,255,0.015)' }}>
                       <button
                         onClick={() => setShowAbout(!showAbout)}
                         className="w-full flex items-center justify-between px-4 py-3 hover:opacity-80 transition-opacity"
