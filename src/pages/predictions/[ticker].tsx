@@ -2027,7 +2027,7 @@ export default function MarketDetailPage() {
   // Fetch multi-series price history for multi-outcome markets
   const { seriesData: multiSeriesData, isLoading: multiSeriesLoading } = usePolymarketMultiPriceHistory(
     multiOutcomeMarketInfo,
-    { interval: 'max', fidelity: 60, refreshInterval: 60000, enabled: isMultiOutcomeMarket && !!multiOutcomeMarketInfo }
+    { interval: 'all', fidelity: 1440, refreshInterval: 60000, enabled: isMultiOutcomeMarket && !!multiOutcomeMarketInfo }
   );
 
   // Transform multi-series data to ChartSeries format

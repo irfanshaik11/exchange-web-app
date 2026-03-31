@@ -291,10 +291,8 @@ const MultiSeriesLegend: React.FC<{
   return (
     <div className="flex flex-wrap items-center gap-x-4 gap-y-1 px-3 py-2" style={{ borderBottom: `1px solid ${AX.border}` }}>
       {series.map((s, idx) => {
-        // Use hovered value if available, otherwise current price
-        const displayPrice = isHovering && hoveredValues?.has(s.label)
-          ? hoveredValues.get(s.label)!
-          : s.currentPrice;
+        // Always show the latest/current price — don't change on crosshair hover
+        const displayPrice = s.currentPrice;
 
         return (
           <div key={idx} className="flex items-center gap-1.5">
@@ -522,7 +520,10 @@ const TradingViewPredictionChart: React.FC<TradingViewPredictionChartProps> = ({
 
         setTimeout(() => {
           onResolve({
-            name: symbolName,
+            // ticker = internal ID used for all data requests (getBars, subscribeBars)
+            // name = display name shown on chart labels/legend
+            ticker: symbolName,
+            name: displayName,
             description: displayName,
             type: 'prediction',
             session: '24x7',
@@ -548,7 +549,8 @@ const TradingViewPredictionChart: React.FC<TradingViewPredictionChartProps> = ({
         onResult: any,
         onError: any
       ) => {
-        const symbolName = symbolInfo.name;
+        // Use ticker (raw ID) for cache lookup — ticker is the internal identifier set in resolveSymbol
+        const symbolName = symbolInfo.ticker || symbolInfo.name;
         // TradingView sends time range in seconds, convert to ms for comparison
         const fromMs = periodParams.from * 1000;
         const toMs = periodParams.to * 1000;
@@ -556,13 +558,14 @@ const TradingViewPredictionChart: React.FC<TradingViewPredictionChartProps> = ({
         if (isMultiSeries) {
           // Multi-series mode - get data for the specific symbol
           const seriesData = seriesCacheRef.current.get(symbolName);
+          isDev && console.log(`[TV getBars] symbol=${symbolName}, ticker=${symbolInfo.ticker}, name=${symbolInfo.name}, cacheHit=${!!seriesData}, points=${seriesData?.length || 0}, cacheKeys=[${[...seriesCacheRef.current.keys()].join(',')}]`);
 
           if (!seriesData || seriesData.length === 0) {
             onResult([], { noData: true });
             return;
           }
 
-          // Convert to TradingView format and filter by requested time range
+          // Convert to TradingView format
           const allBars = seriesData
             .filter(p => p.time > 0)
             .sort((a, b) => a.time - b.time)
@@ -575,12 +578,17 @@ const TradingViewPredictionChart: React.FC<TradingViewPredictionChartProps> = ({
               volume: 0,
             }));
 
-          // Filter to requested time range
-          const bars = allBars.filter(bar => bar.time >= fromMs && bar.time <= toMs);
+          // On first request, use countBack to return the most recent N bars ending at `to`.
+          // This ensures short timeframes (1d) with sparse data (daily fidelity) still get bars.
+          // On subsequent requests (pagination), filter by time range as usual.
+          let bars: typeof allBars;
+          if (periodParams.firstDataRequest && periodParams.countBack) {
+            const barsBeforeTo = allBars.filter(bar => bar.time <= toMs);
+            bars = barsBeforeTo.slice(-periodParams.countBack);
+          } else {
+            bars = allBars.filter(bar => bar.time >= fromMs && bar.time <= toMs);
+          }
 
-          // Determine if there's no more historical data available
-          // noData should be true if we have no bars OR if the oldest bar in our dataset
-          // is newer than the requested 'from' time (meaning we've reached the beginning)
           const oldestBarTime = allBars.length > 0 ? allBars[0].time : Infinity;
           const noMoreHistoricalData = allBars.length === 0 || oldestBarTime > fromMs;
 
@@ -691,6 +699,8 @@ const TradingViewPredictionChart: React.FC<TradingViewPredictionChartProps> = ({
           'scalesProperties.showPriceScaleCrosshairLabel': true,
           'scalesProperties.showTimeScaleCrosshairLabel': true,
           'scalesProperties.crosshairLabelBgColorDark': '#2A2B33',
+          // Ensure auto-scale considers ALL series (main + overlays), not just main
+          'scalesProperties.scaleSeriesOnly': false,
         },
         // Custom price formatter for percentage
         custom_formatters: {
@@ -718,29 +728,34 @@ const TradingViewPredictionChart: React.FC<TradingViewPredictionChartProps> = ({
           // Watermark API may not be available in all versions
         }
 
-        // For multi-series, add comparison symbols using ref for latest config
+        // For multi-series, add overlay symbols using ref for latest config
+        // IMPORTANT: Use 'Overlay' (not 'Compare') — Overlay plots actual price values on the
+        // same Y-axis, while Compare shows relative % change which is wrong for prediction markets.
         const currentConfig = seriesConfigRef.current.length > 0 ? seriesConfigRef.current : initialSeriesConfig;
         if (isMultiSeries && currentConfig.length > 1) {
           const chart = widget.chart();
 
-          // Add remaining series as comparison
+          // Add remaining series as overlays (absolute price, same axis)
           currentConfig.slice(1).forEach((seriesItem, idx) => {
             try {
               chart.createStudy(
-                'Compare',
-                false,
+                'Overlay',
+                true, // forceOverlay — keep on main pane, not a separate pane
                 false,
                 {
-                  source: 'close',
                   symbol: seriesItem.id,
                 },
                 {
-                  'plot.color': seriesItem.color,
-                  'plot.linewidth': 2,
+                  'style': 2, // Line chart style
+                  'lineStyle.color': seriesItem.color,
+                  'lineStyle.linewidth': 2,
+                },
+                {
+                  priceScale: 'as-series', // Share the main series Y-axis (all outcomes are 0-100%)
                 }
               );
             } catch (e) {
-              console.warn('[TradingViewPredictionChart] Failed to add comparison series:', seriesItem.label, e);
+              console.warn('[TradingViewPredictionChart] Failed to add overlay series:', seriesItem.label, e);
             }
           });
 
@@ -768,20 +783,19 @@ const TradingViewPredictionChart: React.FC<TradingViewPredictionChartProps> = ({
                   values.set(config[0].label, params.price / 100); // Convert from percentage back to 0-1
                 }
 
-                // Study values from the event (Compare studies)
+                // Study values from the event (Overlay studies)
+                // Overlay returns absolute price values (0-100%), not relative % change
                 if (params.studies) {
                   const studyEntries = Object.entries(params.studies);
                   // Map study values back to our series config by index
-                  studyEntries.forEach(([studyId, studyData]: [string, any]) => {
+                  studyEntries.forEach(([studyId, studyData]: [string, any], entryIdx: number) => {
                     if (!studyData || !studyData.plots) return;
                     // Find the matching series config — studies are added in order
                     const plotValues = Object.values(studyData.plots);
                     if (plotValues.length > 0) {
                       const plotValue = plotValues[0] as any;
                       if (plotValue?.value !== undefined) {
-                        // Try to match by study index
-                        const idx = studyEntries.indexOf([studyId, studyData]);
-                        const configIdx = idx + 1; // +1 because main series is index 0
+                        const configIdx = entryIdx + 1; // +1 because main series is index 0
                         if (configIdx < config.length) {
                           values.set(config[configIdx].label, plotValue.value / 100);
                         }
