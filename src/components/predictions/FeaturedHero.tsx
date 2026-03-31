@@ -160,7 +160,7 @@ export default function FeaturedHero({ market: singleMarket, markets: marketsPro
         onTouchEnd={onTouchEnd}
         style={{
           backgroundColor: 'transparent',
-          height: 340,
+          height: 420,
         }}
       >
         {/* Navigation arrows — visible on hover */}
