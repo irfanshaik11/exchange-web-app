@@ -926,7 +926,8 @@ const OutcomesSection: React.FC<{
   event: PolymarketEvent | null;
   isLoading: boolean;
   onSelectOutcome?: (marketId: string, side: 'yes' | 'no') => void;
-}> = React.memo(({ event, isLoading, onSelectOutcome }) => {
+  selectedOutcomeId?: string | null;
+}> = React.memo(({ event, isLoading, onSelectOutcome, selectedOutcomeId }) => {
   const [nameFilter, setNameFilter] = useState('');
   const [chanceSort, setChanceSort] = useState<'asc' | 'desc'>('desc');
   const [volSort, setVolSort] = useState<'asc' | 'desc' | null>(null);
@@ -1111,10 +1112,15 @@ const OutcomesSection: React.FC<{
               const yesPrice = prices[0] || 0.5;
               const noPrice = prices[1] || 0.5;
 
+              const isSelected = selectedOutcomeId === market.id;
               return (
                 <div
                   key={market.id}
-                  className="flex items-center px-3 py-3.5 transition-colors hover:bg-white/[0.02]"
+                  onClick={() => onSelectOutcome?.(market.id, 'yes')}
+                  className="flex items-center px-3 py-3.5 transition-colors hover:bg-white/[0.02] cursor-pointer"
+                  style={{
+                    backgroundColor: isSelected ? '#151821' : 'transparent',
+                  }}
                 >
                   {/* Outcome image and name */}
                   <div className="flex items-center gap-2.5 min-w-0 flex-1">
@@ -1153,14 +1159,14 @@ const OutcomesSection: React.FC<{
                   {/* Yes / No buttons */}
                   <div className="flex gap-2 flex-1 justify-end">
                     <button
-                      onClick={() => onSelectOutcome?.(market.id, 'yes')}
+                      onClick={(e) => { e.stopPropagation(); onSelectOutcome?.(market.id, 'yes'); }}
                       className="w-24 py-2 rounded-lg text-[12px] font-bold transition-all hover:brightness-110 active:scale-[0.97]"
                       style={{ backgroundColor: 'rgba(74,222,128,0.15)', color: AX.green }}
                     >
                       Yes {realPrices ? `${formatCents(yesPrice)}¢` : ''}
                     </button>
                     <button
-                      onClick={() => onSelectOutcome?.(market.id, 'no')}
+                      onClick={(e) => { e.stopPropagation(); onSelectOutcome?.(market.id, 'no'); }}
                       className="w-24 py-2 rounded-lg text-[12px] font-bold transition-all hover:brightness-110 active:scale-[0.97]"
                       style={{ backgroundColor: 'rgba(248,113,113,0.12)', color: AX.red }}
                     >
@@ -2074,7 +2080,7 @@ export default function MarketDetailPage() {
   // Fetch multi-series price history for multi-outcome markets
   const { seriesData: multiSeriesData, isLoading: multiSeriesLoading } = usePolymarketMultiPriceHistory(
     multiOutcomeMarketInfo,
-    { interval: 'max', fidelity: 60, refreshInterval: 60000, enabled: isMultiOutcomeMarket && !!multiOutcomeMarketInfo }
+    { interval: 'all', fidelity: 1440, refreshInterval: 60000, enabled: isMultiOutcomeMarket && !!multiOutcomeMarketInfo }
   );
 
   // Transform multi-series data to ChartSeries format
@@ -2755,6 +2761,7 @@ export default function MarketDetailPage() {
                     <OutcomesSection
                       event={polyEvent || null}
                       isLoading={polyLoading}
+                      selectedOutcomeId={selectedOutcomeMarket?.id || null}
                       onSelectOutcome={(marketId, side) => {
                         // Find the market by ID and set it as selected
                         const selectedMkt = polyEvent?.markets?.find(m => m.id === marketId);
@@ -2763,6 +2770,8 @@ export default function MarketDetailPage() {
                           setSelectedSide(side);
                           setTradeMode('buy');
                           setAmount('');
+                          const outcomeName = (selectedMkt as any).groupItemTitle || selectedMkt.question || 'Outcome';
+                          showPolymarketToast(`${outcomeName} selected`, 'success');
                         }
                       }}
                     />
