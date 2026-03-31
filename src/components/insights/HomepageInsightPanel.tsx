@@ -47,9 +47,9 @@ function timeAgo(dateStr: string): string {
 
 export function HomepageInsightPanel({ docked = false }: { docked?: boolean }) {
   const { data, isLoading, timedOut } = useHomepageInsights();
-  // Desktop starts expanded, mobile starts collapsed (pill only)
+  // Docked mode: always open. Otherwise: desktop expanded, mobile collapsed.
   const [collapsed, setCollapsed] = useState(
-    typeof window !== 'undefined' ? window.innerWidth < 768 : false
+    docked ? false : (typeof window !== 'undefined' ? window.innerWidth < 768 : false)
   );
   const [showPicks, setShowPicks] = useState(true);
   const [showNarratives, setShowNarratives] = useState(true);
@@ -69,22 +69,31 @@ export function HomepageInsightPanel({ docked = false }: { docked?: boolean }) {
       <div className="iridescent-border">
         <div className="iridescent-inner overflow-hidden shadow-2xl">
           {/* Header */}
-          <button
-            onClick={() => setCollapsed(c => !c)}
-            aria-expanded={!collapsed}
-            aria-label="Toggle AI insights"
-            className="w-full flex items-center justify-between px-4 py-3 hover:bg-white/[0.02] transition-colors focus-visible:ring-2 focus-visible:ring-[#4ADE80]/50 focus-visible:outline-none"
-          >
-            <div className="flex items-center gap-2.5">
+          {docked ? (
+            <div className="flex items-center gap-2.5 px-4 py-3">
               <AIIcon size={18} />
               <span className="text-[13px] font-bold tracking-[0.12em] uppercase text-[#4ADE80]">
                 AI Market Pulse
               </span>
             </div>
-            <motion.div animate={{ rotate: collapsed ? 0 : 180 }} transition={{ duration: 0.2 }}>
-              <HiOutlineChevronDown className="w-4 h-4 text-zinc-500" />
-            </motion.div>
-          </button>
+          ) : (
+            <button
+              onClick={() => setCollapsed(c => !c)}
+              aria-expanded={!collapsed}
+              aria-label="Toggle AI insights"
+              className="w-full flex items-center justify-between px-4 py-3 hover:bg-white/[0.02] transition-colors focus-visible:ring-2 focus-visible:ring-[#4ADE80]/50 focus-visible:outline-none"
+            >
+              <div className="flex items-center gap-2.5">
+                <AIIcon size={18} />
+                <span className="text-[13px] font-bold tracking-[0.12em] uppercase text-[#4ADE80]">
+                  AI Market Pulse
+                </span>
+              </div>
+              <motion.div animate={{ rotate: collapsed ? 0 : 180 }} transition={{ duration: 0.2 }}>
+                <HiOutlineChevronDown className="w-4 h-4 text-zinc-500" />
+              </motion.div>
+            </button>
+          )}
 
           {!collapsed && <>
           {/* Glow line */}
@@ -96,7 +105,8 @@ export function HomepageInsightPanel({ docked = false }: { docked?: boolean }) {
           {isLoading ? (
             <InsightSkeleton />
           ) : data?.insights ? (
-            <div className="p-3 space-y-3 max-h-[380px] overflow-y-auto scrollbar-hide">
+            <div className="relative mb-4">
+            <div className="p-3 pb-8 space-y-3 max-h-[400px] overflow-y-auto scrollbar-hide">
               {/* Market Pulse */}
               <motion.div
                 initial={{ opacity: 0, y: 6 }}
@@ -189,6 +199,14 @@ export function HomepageInsightPanel({ docked = false }: { docked?: boolean }) {
               <p className="text-[9px] text-zinc-600 text-center pt-2 pb-1 leading-relaxed">
                 AI-generated insights. Not financial advice.
               </p>
+              {/* Bottom spacer so content doesn't touch border */}
+              <div className="h-4 flex-shrink-0" />
+            </div>
+            {/* Fade overlay at bottom */}
+            <div
+              className="absolute bottom-0 left-0 right-0 h-10 pointer-events-none rounded-b-2xl"
+              style={{ background: 'linear-gradient(to top, rgba(14,16,20,0.95) 0%, rgba(14,16,20,0.6) 40%, transparent 100%)' }}
+            />
             </div>
           ) : timedOut ? (
             <div className="flex flex-col items-center justify-center py-8 px-3 text-center">

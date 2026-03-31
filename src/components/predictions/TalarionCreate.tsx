@@ -566,7 +566,7 @@ export default function TalarionCreate({ onMarketClick, authToken, compact, onEx
         <motion.div
           className="absolute right-5"
           animate={{ rotate: isCollapsed ? 0 : 180 }}
-          transition={{ duration: 0.2 }}
+          transition={{ duration: 0.1 }}
         >
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={T.muted} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <polyline points="6 9 12 15 18 9" />
@@ -581,7 +581,7 @@ export default function TalarionCreate({ onMarketClick, authToken, compact, onEx
         initial={{ height: 0, opacity: 0 }}
         animate={{ height: 'auto', opacity: 1 }}
         exit={{ height: 0, opacity: 0 }}
-        transition={{ duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
+        transition={{ duration: 0.12, ease: 'easeOut' }}
         className="overflow-hidden"
       >
       <div className="px-6 md:px-8 pb-6 md:pb-7 pt-2 flex flex-col relative">

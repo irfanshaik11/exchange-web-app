@@ -368,7 +368,7 @@ export default function PredictionsPage() {
 
               {/* AI Insights — right column on xl+ */}
               <div className="hidden xl:flex xl:flex-col w-[360px] flex-shrink-0">
-                <div className="overflow-hidden rounded-xl" style={{ border: `1px solid ${T.border}` }}>
+                <div className="overflow-hidden rounded-xl">
                   <HomepageInsightPanel docked />
                 </div>
               </div>
