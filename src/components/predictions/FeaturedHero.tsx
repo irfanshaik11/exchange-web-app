@@ -228,7 +228,7 @@ export default function FeaturedHero({ market: singleMarket, markets: marketsPro
             alt=""
             className="w-full h-full object-cover"
             style={{
-              filter: 'brightness(0.3) saturate(0.9)',
+              filter: 'brightness(0.06) saturate(0.4)',
               transform: 'scale(1.15)',
             }}
             loading="eager"
@@ -256,7 +256,7 @@ export default function FeaturedHero({ market: singleMarket, markets: marketsPro
             alt=""
             className="w-full h-full object-cover"
             style={{
-              filter: 'brightness(0.25) saturate(0.8)',
+              filter: 'brightness(0.05) saturate(0.3)',
               transform: 'scale(1.15) scaleX(-1)',
             }}
             loading="eager"

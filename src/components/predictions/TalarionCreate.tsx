@@ -20,6 +20,8 @@ interface TalarionCreateProps {
   compact?: boolean;
   /** Called when compact bar is expanded (user starts typing or clicks) */
   onExpand?: () => void;
+  /** Start with the panel expanded */
+  defaultExpanded?: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -149,12 +151,12 @@ function AICardSkeleton({ index }: { index: number }) {
 // Main component
 // ---------------------------------------------------------------------------
 
-export default function TalarionCreate({ onMarketClick, authToken, compact, onExpand }: TalarionCreateProps) {
+export default function TalarionCreate({ onMarketClick, authToken, compact, onExpand, defaultExpanded }: TalarionCreateProps) {
   // --- State ---
   const router = useRouter();
   const [query, setQuery] = useState('');
   const [settlement, setSettlement] = useState<string>('1m');
-  const [isCollapsed, setIsCollapsed] = useState(true);
+  const [isCollapsed, setIsCollapsed] = useState(!defaultExpanded);
   const inputRef = useRef<HTMLInputElement>(null);
   const resultsRef = useRef<HTMLDivElement>(null);
 
@@ -508,9 +510,9 @@ export default function TalarionCreate({ onMarketClick, authToken, compact, onEx
   }
 
   return (
-    <div className="iridescent-border">
+    <div className="iridescent-border h-full">
     <div
-      className="iridescent-inner w-full rounded-2xl flex flex-col relative overflow-hidden"
+      className="iridescent-inner w-full h-full rounded-2xl flex flex-col relative overflow-hidden"
       style={{
         color: T.text,
       }}
@@ -578,13 +580,13 @@ export default function TalarionCreate({ onMarketClick, authToken, compact, onEx
       <AnimatePresence>
       {!isCollapsed && (
       <motion.div
-        initial={{ height: 0, opacity: 0 }}
-        animate={{ height: 'auto', opacity: 1 }}
-        exit={{ height: 0, opacity: 0 }}
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0 }}
         transition={{ duration: 0.12, ease: 'easeOut' }}
-        className="overflow-hidden"
+        className="overflow-hidden flex-1 flex flex-col"
       >
-      <div className="px-6 md:px-8 pb-6 md:pb-7 pt-2 flex flex-col relative">
+      <div className="px-6 md:px-8 pb-6 md:pb-7 pt-2 flex flex-col justify-center relative flex-1">
 
       {/* Subtle radial glow — top center */}
       <div
@@ -595,7 +597,7 @@ export default function TalarionCreate({ onMarketClick, authToken, compact, onEx
       />
 
       {/* Centered inner column for header + input + suggestions */}
-      <div className="relative w-full max-w-2xl mx-auto flex-1 flex flex-col">
+      <div className="relative w-full max-w-2xl mx-auto flex flex-col">
 
       {/* Header */}
       <div className="mb-4 text-center">

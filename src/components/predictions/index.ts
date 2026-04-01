@@ -34,6 +34,7 @@ export { default as TalarionMarketCard } from './TalarionMarketCard';
 
 // V3 dashboard components
 export { default as PredictionsSidebar } from './PredictionsSidebar';
+export { default as PredictionsTopNav } from './PredictionsTopNav';
 export { default as MarketRow } from './MarketRow';
 export { default as FeaturedHero } from './FeaturedHero';
 export { default as MarketCard } from './MarketCard';

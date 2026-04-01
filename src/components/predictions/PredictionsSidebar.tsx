@@ -15,6 +15,7 @@ import {
   HiOutlineHome,
 } from 'react-icons/hi';
 import { BiFootball, BiBitcoin } from 'react-icons/bi';
+import { RiLayoutTopLine } from 'react-icons/ri';
 import { T } from './theme';
 
 interface SidebarCategory {
@@ -27,8 +28,8 @@ interface SidebarCategory {
 const CATEGORIES: SidebarCategory[] = [
   { id: 'all', label: 'All Markets', icon: HiOutlineHome, color: T.accent },
   { id: 'politics', label: 'Politics', icon: HiOutlineScale, color: '#818CF8' },      // Indigo
-  { id: 'crypto', label: 'Crypto', icon: BiBitcoin, color: '#FBBF24' },               // Amber
   { id: 'sports', label: 'Sports', icon: BiFootball, color: '#4ADE80' },               // Green
+  { id: 'crypto', label: 'Crypto', icon: BiBitcoin, color: '#FBBF24' },               // Amber
   { id: 'finance', label: 'Finance', icon: HiOutlineTrendingUp, color: '#60A5FA' },   // Blue
   { id: 'tech', label: 'AI & Tech', icon: HiOutlineChip, color: '#A78BFA' },          // Purple
   { id: 'entertainment', label: 'Entertainment', icon: HiOutlineFilm, color: '#F472B6' }, // Pink
@@ -40,6 +41,7 @@ const CATEGORIES: SidebarCategory[] = [
 interface PredictionsSidebarProps {
   selectedCategory: string;
   onSelectCategory: (category: string) => void;
+  onToggleLayout?: () => void;
   portfolioBalance?: number;
   portfolioPnL?: number;
   activePositions?: number;
@@ -50,6 +52,7 @@ interface PredictionsSidebarProps {
 export default function PredictionsSidebar({
   selectedCategory,
   onSelectCategory,
+  onToggleLayout,
   portfolioBalance,
   portfolioPnL,
   activePositions = 0,
@@ -173,6 +176,36 @@ export default function PredictionsSidebar({
             )}
           </AnimatePresence>
         </button>
+
+        {/* Layout toggle */}
+        {onToggleLayout && (
+          <>
+            <div className="my-2 mx-2" style={{ borderTop: `1px solid ${T.border}` }} />
+            <button
+              onClick={onToggleLayout}
+              className="relative flex items-center gap-3 rounded-lg transition-all duration-150 overflow-hidden cursor-pointer hover:bg-white/[0.04]"
+              style={{ padding: '8px 10px', color: T.muted }}
+              title="Switch to top navbar layout"
+            >
+              <span className="w-5 h-5 flex-shrink-0 flex items-center justify-center">
+                <RiLayoutTopLine className="w-5 h-5" />
+              </span>
+              <AnimatePresence>
+                {isExpanded && (
+                  <motion.span
+                    initial={{ opacity: 0, x: -4 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    exit={{ opacity: 0, x: -4 }}
+                    transition={{ duration: 0.15 }}
+                    className="text-[12px] font-medium whitespace-nowrap"
+                  >
+                    Top Layout
+                  </motion.span>
+                )}
+              </AnimatePresence>
+            </button>
+          </>
+        )}
       </nav>
 
       {/* Portfolio Widget — commented out, re-enable when portfolio data is wired up
