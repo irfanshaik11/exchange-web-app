@@ -156,7 +156,7 @@ export default function TalarionCreate({ onMarketClick, authToken, compact, onEx
   const router = useRouter();
   const [query, setQuery] = useState('');
   const [settlement, setSettlement] = useState<string>('1m');
-  const [isCollapsed, setIsCollapsed] = useState(!defaultExpanded);
+  const isCollapsed = false;
   const inputRef = useRef<HTMLInputElement>(null);
   const resultsRef = useRef<HTMLDivElement>(null);
 
@@ -213,12 +213,6 @@ export default function TalarionCreate({ onMarketClick, authToken, compact, onEx
     prevCountRef.current = generatedMarkets.length;
   }, [generatedMarkets.length]);
 
-  // Auto-expand when generating or results appear
-  useEffect(() => {
-    if (isGenerating || generatedMarkets.length > 0) {
-      setIsCollapsed(false);
-    }
-  }, [isGenerating, generatedMarkets.length]);
 
   // --- Handlers ---
 
@@ -517,13 +511,23 @@ export default function TalarionCreate({ onMarketClick, authToken, compact, onEx
         color: T.text,
       }}
     >
-      {/* Collapsed bar — click to expand */}
-      <button
-        onClick={() => setIsCollapsed(!isCollapsed)}
-        aria-label="Toggle AI Predictions"
-        className="w-full flex items-center justify-center px-5 py-3.5 hover:bg-white/[0.02] transition-colors relative"
-      >
-        <div className="flex items-center gap-2.5">
+      <div className="overflow-hidden flex-1 flex flex-col">
+      <div className="px-6 md:px-8 pb-6 md:pb-7 pt-4 flex flex-col justify-center relative flex-1">
+
+      {/* Subtle radial glow — top center */}
+      <div
+        className="absolute -top-20 left-1/2 -translate-x-1/2 w-[500px] h-[300px] pointer-events-none"
+        style={{
+          background: 'radial-gradient(ellipse 60% 50%, rgba(139,92,246,0.05) 0%, transparent 60%)',
+        }}
+      />
+
+      {/* Centered inner column for header + input + suggestions */}
+      <div className="relative w-full max-w-2xl mx-auto flex flex-col">
+
+      {/* Header */}
+      <div className="mb-4 text-center">
+        <div className="inline-flex items-center gap-2.5 mb-3">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" className="flex-shrink-0">
             <defs>
               <linearGradient id="ai-talarion-sparkle" x1="3" y1="2" x2="22" y2="21">
@@ -565,42 +569,6 @@ export default function TalarionCreate({ onMarketClick, authToken, compact, onEx
             Predict Anything
           </span>
         </div>
-        <motion.div
-          className="absolute right-5"
-          animate={{ rotate: isCollapsed ? 0 : 180 }}
-          transition={{ duration: 0.1 }}
-        >
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={T.muted} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <polyline points="6 9 12 15 18 9" />
-          </svg>
-        </motion.div>
-      </button>
-
-      {/* Expandable content */}
-      <AnimatePresence>
-      {!isCollapsed && (
-      <motion.div
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        exit={{ opacity: 0 }}
-        transition={{ duration: 0.12, ease: 'easeOut' }}
-        className="overflow-hidden flex-1 flex flex-col"
-      >
-      <div className="px-6 md:px-8 pb-6 md:pb-7 pt-2 flex flex-col justify-center relative flex-1">
-
-      {/* Subtle radial glow — top center */}
-      <div
-        className="absolute -top-20 left-1/2 -translate-x-1/2 w-[500px] h-[300px] pointer-events-none"
-        style={{
-          background: 'radial-gradient(ellipse 60% 50%, rgba(139,92,246,0.05) 0%, transparent 60%)',
-        }}
-      />
-
-      {/* Centered inner column for header + input + suggestions */}
-      <div className="relative w-full max-w-2xl mx-auto flex flex-col">
-
-      {/* Header */}
-      <div className="mb-4 text-center">
         <p
           className="text-[13px] leading-relaxed"
           style={{ color: T.muted }}
@@ -1418,9 +1386,7 @@ export default function TalarionCreate({ onMarketClick, authToken, compact, onEx
       </AnimatePresence>
 
       </div>
-      </motion.div>
-      )}
-      </AnimatePresence>
+      </div>
 
       {/* Placeholder text style for the input */}
       <style jsx>{`
