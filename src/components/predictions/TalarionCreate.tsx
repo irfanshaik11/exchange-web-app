@@ -512,7 +512,7 @@ export default function TalarionCreate({ onMarketClick, authToken, compact, onEx
       }}
     >
       <div className="overflow-hidden flex-1 flex flex-col">
-      <div className="px-6 md:px-8 pb-6 md:pb-7 pt-4 flex flex-col justify-center relative flex-1">
+      <div className="px-6 md:px-8 pb-6 md:pb-7 pt-4 flex flex-col relative flex-1">
 
       {/* Subtle radial glow — top center */}
       <div
@@ -522,11 +522,8 @@ export default function TalarionCreate({ onMarketClick, authToken, compact, onEx
         }}
       />
 
-      {/* Centered inner column for header + input + suggestions */}
-      <div className="relative w-full max-w-2xl mx-auto flex flex-col">
-
-      {/* Header */}
-      <div className="mb-4 text-center">
+      {/* Header — centered in the top half of the card */}
+      <div className="flex-1 flex flex-col items-center justify-end pb-5 text-center">
         <div className="inline-flex items-center gap-2.5 mb-3">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" className="flex-shrink-0">
             <defs>
@@ -550,7 +547,7 @@ export default function TalarionCreate({ onMarketClick, authToken, compact, onEx
             />
           </svg>
           <span
-            className="text-[13px] font-bold tracking-[0.12em] uppercase"
+            className="text-[17px] font-bold tracking-[0.12em] uppercase"
             style={{
               background: 'linear-gradient(135deg, #8B5CF6, #3B82F6, #10B981)',
               WebkitBackgroundClip: 'text',
@@ -576,6 +573,9 @@ export default function TalarionCreate({ onMarketClick, authToken, compact, onEx
           Describe any event. AI turns it into a tradeable market.
         </p>
       </div>
+
+      {/* Input + suggestions — bottom half */}
+      <div className="flex-1 w-full max-w-2xl mx-auto flex flex-col">
 
       {/* Input area */}
       <motion.div
