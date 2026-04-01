@@ -6,10 +6,12 @@ const STORAGE_KEY = 'predictions-nav-layout';
 
 export default function useNavLayout() {
   const [layout, setLayoutState] = useState<NavLayout>('top');
+  const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
     const saved = localStorage.getItem(STORAGE_KEY) as NavLayout | null;
     if (saved === 'top' || saved === 'left') setLayoutState(saved);
+    setMounted(true);
   }, []);
 
   const setLayout = useCallback((l: NavLayout) => {
@@ -18,8 +20,12 @@ export default function useNavLayout() {
   }, []);
 
   const toggle = useCallback(() => {
-    setLayout(layout === 'top' ? 'left' : 'top');
-  }, [layout, setLayout]);
+    setLayoutState(prev => {
+      const next = prev === 'top' ? 'left' : 'top';
+      localStorage.setItem(STORAGE_KEY, next);
+      return next;
+    });
+  }, []);
 
-  return { layout, setLayout, toggle };
+  return { layout, setLayout, toggle, mounted };
 }

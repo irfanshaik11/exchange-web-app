@@ -1,42 +1,9 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import {
-  HiOutlineTrendingUp,
-  HiOutlineScale,
-  HiOutlineBeaker,
-  HiOutlineCloud,
-  HiOutlineFilm,
-  HiOutlineBriefcase,
-  HiOutlineGlobeAlt,
-  HiOutlineChartBar,
-  HiOutlineChip,
-  HiOutlineSparkles,
-  HiOutlineCog,
-  HiOutlineHome,
-} from 'react-icons/hi';
-import { BiFootball, BiBitcoin } from 'react-icons/bi';
+import { HiOutlineChartBar } from 'react-icons/hi';
 import { RiLayoutTopLine } from 'react-icons/ri';
 import { T } from './theme';
-
-interface SidebarCategory {
-  id: string;
-  label: string;
-  icon: React.ComponentType<{ className?: string }>;
-  color: string;
-}
-
-const CATEGORIES: SidebarCategory[] = [
-  { id: 'all', label: 'All Markets', icon: HiOutlineHome, color: T.accent },
-  { id: 'politics', label: 'Politics', icon: HiOutlineScale, color: '#818CF8' },      // Indigo
-  { id: 'sports', label: 'Sports', icon: BiFootball, color: '#4ADE80' },               // Green
-  { id: 'crypto', label: 'Crypto', icon: BiBitcoin, color: '#FBBF24' },               // Amber
-  { id: 'finance', label: 'Finance', icon: HiOutlineTrendingUp, color: '#60A5FA' },   // Blue
-  { id: 'tech', label: 'AI & Tech', icon: HiOutlineChip, color: '#A78BFA' },          // Purple
-  { id: 'entertainment', label: 'Entertainment', icon: HiOutlineFilm, color: '#F472B6' }, // Pink
-  { id: 'science', label: 'Science', icon: HiOutlineBeaker, color: '#FB923C' },       // Orange
-  { id: 'weather', label: 'Weather', icon: HiOutlineCloud, color: '#38BDF8' },        // Sky blue
-  { id: 'geopolitics', label: 'Geopolitics', icon: HiOutlineGlobeAlt, color: '#F97316' }, // Deep orange
-];
+import { CATEGORIES } from './categories';
 
 interface PredictionsSidebarProps {
   selectedCategory: string;
