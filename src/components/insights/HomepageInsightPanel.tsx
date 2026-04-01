@@ -45,7 +45,8 @@ function timeAgo(dateStr: string): string {
   return `${Math.floor(hrs / 24)}d ago`;
 }
 
-export function HomepageInsightPanel({ docked = false, bare = false }: { docked?: boolean; bare?: boolean }) {
+export function HomepageInsightPanel({ docked = false, chromeless = false }: { docked?: boolean; chromeless?: boolean }) {
+  const bare = chromeless;
   const { data, isLoading, timedOut } = useHomepageInsights();
   // Docked mode: always open. Otherwise: desktop expanded, mobile collapsed.
   const [collapsed, setCollapsed] = useState(

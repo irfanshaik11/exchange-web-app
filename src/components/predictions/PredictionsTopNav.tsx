@@ -1,4 +1,4 @@
-import React, { useRef, useState, useEffect } from 'react';
+import { useRef, useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { RiLayoutLeftLine, RiLayoutTopLine } from 'react-icons/ri';
 import { T } from './theme';
@@ -29,12 +29,18 @@ export default function PredictionsTopNav({
       setShowLeftFade(el.scrollLeft > 8);
       setShowRightFade(el.scrollLeft < el.scrollWidth - el.clientWidth - 8);
     };
+    let resizeTimer: ReturnType<typeof setTimeout>;
+    const debouncedCheck = () => {
+      clearTimeout(resizeTimer);
+      resizeTimer = setTimeout(check, 100);
+    };
     check();
     el.addEventListener('scroll', check, { passive: true });
-    window.addEventListener('resize', check);
+    window.addEventListener('resize', debouncedCheck);
     return () => {
+      clearTimeout(resizeTimer);
       el.removeEventListener('scroll', check);
-      window.removeEventListener('resize', check);
+      window.removeEventListener('resize', debouncedCheck);
     };
   }, []);
 
