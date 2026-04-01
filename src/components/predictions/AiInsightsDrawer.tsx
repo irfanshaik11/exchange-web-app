@@ -1,17 +1,19 @@
 import React, { useRef, useState, useEffect } from 'react';
 import { T } from './theme';
-import { HomepageInsightPanel } from '~/components/insights/HomepageInsightPanel';
+import { InsightPanel } from '~/components/insights/InsightPanel';
 
-interface AiPulseDrawerProps {
+interface AiInsightsDrawerProps {
   open: boolean;
   onOpen: () => void;
   onClose: () => void;
+  source: 'polymarket' | 'dflow';
+  marketId: string;
 }
 
 /* ------------------------------------------------------------------ */
 /*  Shared sparkle icon                                                */
 /* ------------------------------------------------------------------ */
-const SparkleIcon = ({ size = 18, gradientId = 'ai-sparkle' }: { size?: number; gradientId?: string }) => (
+const SparkleIcon = ({ size = 18, gradientId = 'ai-sparkle-detail' }: { size?: number; gradientId?: string }) => (
   <svg width={size} height={size} viewBox="0 0 24 24" fill="none">
     <defs>
       <linearGradient id={gradientId} x1="3" y1="2" x2="22" y2="21">
@@ -29,7 +31,7 @@ const SparkleIcon = ({ size = 18, gradientId = 'ai-sparkle' }: { size?: number; 
 /*  Breakpoint hook — true when viewport >= 768px (md)                */
 /* ------------------------------------------------------------------ */
 function useIsDesktop() {
-  const [isDesktop, setIsDesktop] = useState(true); // SSR default: desktop
+  const [isDesktop, setIsDesktop] = useState(true);
   useEffect(() => {
     const mq = window.matchMedia('(min-width: 768px)');
     setIsDesktop(mq.matches);
@@ -41,7 +43,7 @@ function useIsDesktop() {
 }
 
 /* ------------------------------------------------------------------ */
-/*  Drawer header (shared between desktop inline panel & mobile sheet) */
+/*  Drawer header                                                      */
 /* ------------------------------------------------------------------ */
 const DrawerHeader = ({ onClose }: { onClose: () => void }) => (
   <div
@@ -49,9 +51,9 @@ const DrawerHeader = ({ onClose }: { onClose: () => void }) => (
     style={{ borderBottom: '1px solid rgba(74,222,128,0.1)' }}
   >
     <div className="flex items-center gap-2.5">
-      <SparkleIcon size={16} gradientId="ai-home-hdr" />
+      <SparkleIcon size={16} gradientId="ai-detail-hdr" />
       <span className="text-[12px] font-bold tracking-[0.12em] uppercase text-[#4ADE80]">
-        AI Market Pulse
+        AI Insights
       </span>
     </div>
     <button
@@ -69,7 +71,7 @@ const DrawerHeader = ({ onClose }: { onClose: () => void }) => (
 /* ------------------------------------------------------------------ */
 /*  Main component                                                     */
 /* ------------------------------------------------------------------ */
-export default function AiPulseDrawer({ open, onOpen, onClose }: AiPulseDrawerProps) {
+export default function AiInsightsDrawer({ open, onOpen, onClose, source, marketId }: AiInsightsDrawerProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [pillLeft, setPillLeft] = useState<number | null>(null);
   const [pillTop, setPillTop] = useState(140);
@@ -143,19 +145,13 @@ export default function AiPulseDrawer({ open, onOpen, onClose }: AiPulseDrawerPr
               boxShadow: '0 4px 24px rgba(0,0,0,0.4)',
             }}
           >
-            <SparkleIcon size={20} gradientId="ai-fab" />
+            <SparkleIcon size={20} gradientId="ai-detail-fab" />
           </button>
         )}
 
         {/* Bottom sheet overlay */}
         {open && (
-          <div
-            style={{
-              position: 'fixed',
-              inset: 0,
-              zIndex: 100,
-            }}
-          >
+          <div style={{ position: 'fixed', inset: 0, zIndex: 100 }}>
             {/* Backdrop */}
             <div
               onClick={onClose}
@@ -163,7 +159,7 @@ export default function AiPulseDrawer({ open, onOpen, onClose }: AiPulseDrawerPr
                 position: 'absolute',
                 inset: 0,
                 backgroundColor: 'rgba(0,0,0,0.5)',
-                animation: 'aipulse-fade-in 200ms ease-out forwards',
+                animation: 'aiinsights-fade-in 200ms ease-out forwards',
               }}
             />
 
@@ -180,39 +176,31 @@ export default function AiPulseDrawer({ open, onOpen, onClose }: AiPulseDrawerPr
                 display: 'flex',
                 flexDirection: 'column',
                 overflow: 'hidden',
-                animation: 'aipulse-slide-up 350ms cubic-bezier(0.16, 1, 0.3, 1) forwards',
+                animation: 'aiinsights-slide-up 350ms cubic-bezier(0.16, 1, 0.3, 1) forwards',
                 border: '1px solid rgba(74,222,128,0.12)',
                 borderBottom: 'none',
               }}
             >
-              {/* Drag handle (visual affordance) */}
+              {/* Drag handle */}
               <div className="flex justify-center pt-3 pb-1">
-                <div
-                  style={{
-                    width: 36,
-                    height: 4,
-                    borderRadius: 2,
-                    backgroundColor: 'rgba(255,255,255,0.12)',
-                  }}
-                />
+                <div style={{ width: 36, height: 4, borderRadius: 2, backgroundColor: 'rgba(255,255,255,0.12)' }} />
               </div>
 
               <DrawerHeader onClose={onClose} />
 
               <div className="flex-1 overflow-y-auto scrollbar-hide">
-                <HomepageInsightPanel docked chromeless />
+                <InsightPanel source={source} marketId={marketId} docked />
               </div>
             </div>
           </div>
         )}
 
-        {/* Keyframe animations for the bottom sheet */}
         <style jsx global>{`
-          @keyframes aipulse-fade-in {
+          @keyframes aiinsights-fade-in {
             from { opacity: 0; }
             to   { opacity: 1; }
           }
-          @keyframes aipulse-slide-up {
+          @keyframes aiinsights-slide-up {
             from { transform: translateY(100%); }
             to   { transform: translateY(0); }
           }
@@ -247,7 +235,7 @@ export default function AiPulseDrawer({ open, onOpen, onClose }: AiPulseDrawerPr
           }}
         >
           <div className="pill-inner flex flex-col items-center gap-3 px-2 py-4" style={{ minWidth: 38 }}>
-            <SparkleIcon size={18} gradientId="ai-home-tab" />
+            <SparkleIcon size={18} gradientId="ai-detail-tab" />
             <span
               className="text-[9px] font-bold tracking-[0.15em] uppercase"
               style={{
@@ -258,7 +246,7 @@ export default function AiPulseDrawer({ open, onOpen, onClose }: AiPulseDrawerPr
                 WebkitTextFillColor: 'transparent',
               }}
             >
-              AI Pulse
+              AI Insights
             </span>
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" strokeWidth="2" strokeLinecap="round" style={{ opacity: 0.7 }}>
               <path d="M9 18l6-6-6-6" stroke="#4ADE80" />
@@ -266,12 +254,12 @@ export default function AiPulseDrawer({ open, onOpen, onClose }: AiPulseDrawerPr
           </div>
         </button>
       ) : (
-        <div className="w-[360px] flex flex-col">
-          <div className="iridescent-border flex flex-col" style={{ borderRadius: '0 16px 16px 0', borderLeft: 'none' }}>
-            <div className="iridescent-inner flex flex-col overflow-hidden" style={{ borderRadius: '0 14.5px 14.5px 0' }}>
+        <div className="w-[360px] flex flex-col h-full">
+          <div className="iridescent-border flex-1 flex flex-col" style={{ borderRadius: '0 16px 16px 0', borderLeft: 'none' }}>
+            <div className="iridescent-inner flex-1 flex flex-col overflow-hidden" style={{ borderRadius: '0 14.5px 14.5px 0' }}>
               <DrawerHeader onClose={onClose} />
               <div className="flex-1 overflow-y-auto scrollbar-hide">
-                <HomepageInsightPanel docked chromeless />
+                <InsightPanel source={source} marketId={marketId} docked />
               </div>
             </div>
           </div>
