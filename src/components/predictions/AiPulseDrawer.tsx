@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useRef, useState, useEffect } from 'react';
 import { T } from './theme';
 import { HomepageInsightPanel } from '~/components/insights/HomepageInsightPanel';
 
@@ -9,8 +9,48 @@ interface AiPulseDrawerProps {
 }
 
 export default function AiPulseDrawer({ open, onOpen, onClose }: AiPulseDrawerProps) {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [pillLeft, setPillLeft] = useState<number | null>(null);
+  const [pillTop, setPillTop] = useState(140);
+
+  // Dynamic left offset from container position
+  useEffect(() => {
+    if (open) return;
+    const updateLeft = () => {
+      const rect = containerRef.current?.getBoundingClientRect();
+      if (rect) setPillLeft(rect.left + 4);
+    };
+    updateLeft();
+    window.addEventListener('resize', updateLeft);
+    return () => window.removeEventListener('resize', updateLeft);
+  }, [open]);
+
+  // Dynamic top — pill slides up as user scrolls past header
+  useEffect(() => {
+    if (open) return;
+    let raf = 0;
+    const getScrollTop = () =>
+      window.pageYOffset || document.documentElement.scrollTop || document.body.scrollTop || 0;
+    const onScroll = () => {
+      cancelAnimationFrame(raf);
+      raf = requestAnimationFrame(() => {
+        setPillTop(Math.max(16, 140 - getScrollTop()));
+      });
+    };
+    onScroll();
+    // Listen on all possible scroll targets
+    window.addEventListener('scroll', onScroll, { passive: true });
+    document.addEventListener('scroll', onScroll, { passive: true, capture: true });
+    return () => {
+      cancelAnimationFrame(raf);
+      window.removeEventListener('scroll', onScroll);
+      document.removeEventListener('scroll', onScroll, { capture: true } as any);
+    };
+  }, [open]);
+
   return (
     <div
+      ref={containerRef}
       className="hidden xl:flex flex-col flex-shrink-0 items-center relative"
       style={{
         width: open ? 360 : 48,
@@ -21,8 +61,14 @@ export default function AiPulseDrawer({ open, onOpen, onClose }: AiPulseDrawerPr
       {!open ? (
         <button
           onClick={onOpen}
-          className="iridescent-pill absolute top-4 left-1"
-          style={{ cursor: 'pointer', zIndex: 10 }}
+          className="iridescent-pill"
+          style={{
+            position: 'fixed',
+            top: pillTop,
+            left: pillLeft ?? 4,
+            cursor: 'pointer',
+            zIndex: 10,
+          }}
         >
           <div className="pill-inner flex flex-col items-center gap-3 px-2 py-4" style={{ minWidth: 38 }}>
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
