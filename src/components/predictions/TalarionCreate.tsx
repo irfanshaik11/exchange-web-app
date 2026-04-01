@@ -20,8 +20,6 @@ interface TalarionCreateProps {
   compact?: boolean;
   /** Called when compact bar is expanded (user starts typing or clicks) */
   onExpand?: () => void;
-  /** Start with the panel expanded */
-  defaultExpanded?: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -151,12 +149,12 @@ function AICardSkeleton({ index }: { index: number }) {
 // Main component
 // ---------------------------------------------------------------------------
 
-export default function TalarionCreate({ onMarketClick, authToken, compact, onExpand, defaultExpanded }: TalarionCreateProps) {
+export default function TalarionCreate({ onMarketClick, authToken, compact, onExpand }: TalarionCreateProps) {
   // --- State ---
   const router = useRouter();
   const [query, setQuery] = useState('');
   const [settlement, setSettlement] = useState<string>('1m');
-  const isCollapsed = false;
+
   const inputRef = useRef<HTMLInputElement>(null);
   const resultsRef = useRef<HTMLDivElement>(null);
 

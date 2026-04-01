@@ -392,7 +392,7 @@ export default function PredictionsPage() {
 
               {/* Predictions AI — right 50%, stretches to match hero height */}
               <div className="flex-1 min-w-0 flex flex-col" id="ai-predictions-section">
-                <TalarionCreate authToken={user?.bearerToken} defaultExpanded />
+                <TalarionCreate authToken={user?.bearerToken} />
               </div>
             </div>
 
