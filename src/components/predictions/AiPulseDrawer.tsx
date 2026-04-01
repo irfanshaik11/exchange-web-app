@@ -140,7 +140,8 @@ export default function AiPulseDrawer({ open, onOpen, onClose }: AiPulseDrawerPr
               alignItems: 'center',
               justifyContent: 'center',
               cursor: 'pointer',
-              boxShadow: '0 4px 24px rgba(0,0,0,0.4)',
+              backgroundColor: 'rgba(12, 14, 18, 0.95)',
+              boxShadow: '0 4px 24px rgba(0,0,0,0.5)',
             }}
           >
             <SparkleIcon size={20} gradientId="ai-fab" />
@@ -267,10 +268,10 @@ export default function AiPulseDrawer({ open, onOpen, onClose }: AiPulseDrawerPr
         </button>
       ) : (
         <div className="w-[360px] flex flex-col">
-          <div className="iridescent-border flex flex-col" style={{ borderRadius: '0 16px 16px 0', borderLeft: 'none' }}>
-            <div className="iridescent-inner flex flex-col overflow-hidden" style={{ borderRadius: '0 14.5px 14.5px 0' }}>
+          <div className="iridescent-border flex flex-col" style={{ borderRadius: '16px' }}>
+            <div className="iridescent-inner flex flex-col overflow-hidden" style={{ borderRadius: '14.5px' }}>
               <DrawerHeader onClose={onClose} />
-              <div className="flex-1 overflow-y-auto scrollbar-hide">
+              <div className="overflow-y-auto scrollbar-hide">
                 <HomepageInsightPanel docked chromeless />
               </div>
             </div>

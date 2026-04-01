@@ -132,7 +132,7 @@ export default function AiInsightsDrawer({ open, onOpen, onClose, source, market
             className="iridescent-pill"
             style={{
               position: 'fixed',
-              bottom: 24,
+              bottom: 120,
               right: 16,
               zIndex: 50,
               width: 48,
@@ -142,7 +142,8 @@ export default function AiInsightsDrawer({ open, onOpen, onClose, source, market
               alignItems: 'center',
               justifyContent: 'center',
               cursor: 'pointer',
-              boxShadow: '0 4px 24px rgba(0,0,0,0.4)',
+              backgroundColor: 'rgba(12, 14, 18, 0.95)',
+              boxShadow: '0 4px 24px rgba(0,0,0,0.5)',
             }}
           >
             <SparkleIcon size={20} gradientId="ai-detail-fab" />
@@ -189,7 +190,7 @@ export default function AiInsightsDrawer({ open, onOpen, onClose, source, market
               <DrawerHeader onClose={onClose} />
 
               <div className="flex-1 overflow-y-auto scrollbar-hide">
-                <InsightPanel source={source} marketId={marketId} docked />
+                <InsightPanel source={source} marketId={marketId} docked chromeless />
               </div>
             </div>
           </div>
@@ -254,12 +255,12 @@ export default function AiInsightsDrawer({ open, onOpen, onClose, source, market
           </div>
         </button>
       ) : (
-        <div className="w-[360px] flex flex-col h-full">
-          <div className="iridescent-border flex-1 flex flex-col" style={{ borderRadius: '0 16px 16px 0', borderLeft: 'none' }}>
-            <div className="iridescent-inner flex-1 flex flex-col overflow-hidden" style={{ borderRadius: '0 14.5px 14.5px 0' }}>
+        <div className="w-[360px] flex flex-col">
+          <div className="iridescent-border flex flex-col" style={{ borderRadius: '16px' }}>
+            <div className="iridescent-inner flex flex-col overflow-hidden" style={{ borderRadius: '14.5px' }}>
               <DrawerHeader onClose={onClose} />
-              <div className="flex-1 overflow-y-auto scrollbar-hide">
-                <InsightPanel source={source} marketId={marketId} docked />
+              <div className="overflow-y-auto scrollbar-hide">
+                <InsightPanel source={source} marketId={marketId} docked chromeless />
               </div>
             </div>
           </div>
