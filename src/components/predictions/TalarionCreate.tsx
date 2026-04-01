@@ -522,8 +522,8 @@ export default function TalarionCreate({ onMarketClick, authToken, compact, onEx
         }}
       />
 
-      {/* Header — centered in the top half of the card */}
-      <div className="flex-1 flex flex-col items-center justify-end pb-5 text-center">
+      {/* Header — true vertical center via flex-1 + matching bottom weight */}
+      <div className="flex-1 flex flex-col items-center justify-center text-center">
         <div className="inline-flex items-center gap-2.5 mb-3">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" className="flex-shrink-0">
             <defs>
@@ -547,7 +547,7 @@ export default function TalarionCreate({ onMarketClick, authToken, compact, onEx
             />
           </svg>
           <span
-            className="text-[17px] font-bold tracking-[0.12em] uppercase"
+            className="text-[19px] font-bold tracking-[0.14em] uppercase"
             style={{
               background: 'linear-gradient(135deg, #8B5CF6, #3B82F6, #10B981)',
               WebkitBackgroundClip: 'text',
@@ -574,8 +574,8 @@ export default function TalarionCreate({ onMarketClick, authToken, compact, onEx
         </p>
       </div>
 
-      {/* Input + suggestions — bottom half */}
-      <div className="flex-1 w-full max-w-2xl mx-auto flex flex-col">
+      {/* Input + suggestions — pinned to bottom, doesn't compete for centering */}
+      <div className="w-full max-w-2xl mx-auto flex flex-col">
 
       {/* Input area */}
       <motion.div
