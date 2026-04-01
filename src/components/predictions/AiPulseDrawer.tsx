@@ -51,7 +51,7 @@ export default function AiPulseDrawer({ open, onOpen, onClose }: AiPulseDrawerPr
   return (
     <div
       ref={containerRef}
-      className="hidden xl:flex flex-col flex-shrink-0 items-center relative"
+      className="hidden md:flex flex-col flex-shrink-0 items-center relative"
       style={{
         width: open ? 360 : 48,
         transition: 'width 300ms cubic-bezier(0.16, 1, 0.3, 1)',
