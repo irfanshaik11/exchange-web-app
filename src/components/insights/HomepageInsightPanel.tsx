@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { HiOutlineChevronDown } from 'react-icons/hi';
 import { useHomepageInsights } from '~/hooks/useHomepageInsights';
@@ -46,12 +46,15 @@ function timeAgo(dateStr: string): string {
 }
 
 export function HomepageInsightPanel({ docked = false, chromeless = false }: { docked?: boolean; chromeless?: boolean }) {
-  const bare = chromeless;
   const { data, isLoading, timedOut } = useHomepageInsights();
-  // Docked mode: always open. Otherwise: desktop expanded, mobile collapsed.
-  const [collapsed, setCollapsed] = useState(
-    docked ? false : (typeof window !== 'undefined' ? window.innerWidth < 768 : false)
-  );
+  // Docked mode: always open. Otherwise: default expanded, then check mobile on mount.
+  const [collapsed, setCollapsed] = useState(docked ? false : false);
+
+  useEffect(() => {
+    if (!docked && window.innerWidth < 768) {
+      setCollapsed(true);
+    }
+  }, [docked]);
   const [showPicks, setShowPicks] = useState(true);
   const [showNarratives, setShowNarratives] = useState(true);
   const constraintsRef = useRef<HTMLDivElement>(null);
@@ -94,9 +97,9 @@ export function HomepageInsightPanel({ docked = false, chromeless = false }: { d
 
   const expandedPanel = (
     <div>
-      <div className={bare ? '' : 'iridescent-border'}>
-        <div className={bare ? '' : 'iridescent-inner overflow-hidden shadow-2xl'}>
-          {!bare && panelHeader}
+      <div className={chromeless ? '' : 'iridescent-border'}>
+        <div className={chromeless ? '' : 'iridescent-inner overflow-hidden shadow-2xl'}>
+          {!chromeless && panelHeader}
 
           {!collapsed && <>
           {/* Glow line */}
@@ -109,7 +112,7 @@ export function HomepageInsightPanel({ docked = false, chromeless = false }: { d
             <InsightSkeleton />
           ) : data?.insights ? (
             <div className="relative mb-4">
-            <div className={`p-3 pb-8 space-y-3 overflow-y-auto scrollbar-hide ${bare ? '' : 'max-h-[400px]'}`}>
+            <div className={`p-3 pb-8 space-y-3 overflow-y-auto scrollbar-hide ${chromeless ? '' : 'max-h-[400px]'}`}>
               {/* Market Pulse */}
               <motion.div
                 initial={{ opacity: 0, y: 6 }}

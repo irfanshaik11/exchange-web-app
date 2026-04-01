@@ -20,8 +20,6 @@ interface TalarionCreateProps {
   compact?: boolean;
   /** Called when compact bar is expanded (user starts typing or clicks) */
   onExpand?: () => void;
-  /** Start with the panel expanded */
-  defaultExpanded?: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -151,12 +149,12 @@ function AICardSkeleton({ index }: { index: number }) {
 // Main component
 // ---------------------------------------------------------------------------
 
-export default function TalarionCreate({ onMarketClick, authToken, compact, onExpand, defaultExpanded }: TalarionCreateProps) {
+export default function TalarionCreate({ onMarketClick, authToken, compact, onExpand }: TalarionCreateProps) {
   // --- State ---
   const router = useRouter();
   const [query, setQuery] = useState('');
   const [settlement, setSettlement] = useState<string>('1m');
-  const isCollapsed = false;
+
   const inputRef = useRef<HTMLInputElement>(null);
   const resultsRef = useRef<HTMLDivElement>(null);
 
@@ -522,8 +520,8 @@ export default function TalarionCreate({ onMarketClick, authToken, compact, onEx
         }}
       />
 
-      {/* Header — centered in the top half of the card */}
-      <div className="flex-1 flex flex-col items-center justify-end pb-5 text-center">
+      {/* Cohesive centered block: title + description + input + suggestions */}
+      <div className="flex-1 flex flex-col items-center justify-center text-center w-full">
         <div className="inline-flex items-center gap-2.5 mb-3">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" className="flex-shrink-0">
             <defs>
@@ -547,7 +545,7 @@ export default function TalarionCreate({ onMarketClick, authToken, compact, onEx
             />
           </svg>
           <span
-            className="text-[17px] font-bold tracking-[0.12em] uppercase"
+            className="text-[19px] font-bold tracking-[0.14em] uppercase"
             style={{
               background: 'linear-gradient(135deg, #8B5CF6, #3B82F6, #10B981)',
               WebkitBackgroundClip: 'text',
@@ -572,10 +570,7 @@ export default function TalarionCreate({ onMarketClick, authToken, compact, onEx
         >
           Describe any event. AI turns it into a tradeable market.
         </p>
-      </div>
-
-      {/* Input + suggestions — bottom half */}
-      <div className="flex-1 w-full max-w-2xl mx-auto flex flex-col">
+      <div className="w-full max-w-2xl mx-auto flex flex-col mt-5">
 
       {/* Input area */}
       <motion.div
@@ -784,6 +779,7 @@ export default function TalarionCreate({ onMarketClick, authToken, compact, onEx
       </AnimatePresence>
 
       </div>{/* End centered inner column */}
+      </div>{/* End cohesive centered block */}
 
       {/* AI Generated Markets — skeleton placeholders + real cards as they stream in */}
       <AnimatePresence>
