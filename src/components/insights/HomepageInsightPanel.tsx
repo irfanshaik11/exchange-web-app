@@ -48,7 +48,7 @@ function timeAgo(dateStr: string): string {
 export function HomepageInsightPanel({ docked = false, chromeless = false }: { docked?: boolean; chromeless?: boolean }) {
   const { data, isLoading, timedOut } = useHomepageInsights();
   // Docked mode: always open. Otherwise: default expanded, then check mobile on mount.
-  const [collapsed, setCollapsed] = useState(docked ? false : false);
+  const [collapsed, setCollapsed] = useState(false);
 
   useEffect(() => {
     if (!docked && window.innerWidth < 768) {
