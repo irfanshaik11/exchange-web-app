@@ -57,9 +57,7 @@ const MarketRow = React.memo(function MarketRow({
 
   const isActive = market.status === 'active';
   const isPolymarket = market.source === 'polymarket';
-  const href = isPolymarket
-    ? `/predictions/${market.ticker}?source=polymarket`
-    : `/predictions/${market.ticker}`;
+  const href = `/predictions/${market.ticker}`;
 
   const effectiveYesPrice = liveYesPrice ?? market.yesPrice;
   const effectiveNoPrice = liveYesPrice != null ? 1 - liveYesPrice : market.noPrice;

@@ -138,9 +138,7 @@ export default function PredictionCard({
   const isActive = market.status === 'active';
   const isPolymarket = market.source === 'polymarket';
 
-  const href = isPolymarket
-    ? `/predictions/${market.ticker}?source=polymarket`
-    : `/predictions/${market.ticker}`;
+  const href = `/predictions/${market.ticker}`;
 
   // Use live WS price if available, otherwise fall back to REST price
   const effectiveYesPrice = liveYesPrice ?? market.yesPrice;

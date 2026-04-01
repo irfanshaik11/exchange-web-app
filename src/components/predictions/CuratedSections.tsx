@@ -242,9 +242,7 @@ interface CompactMarketCardProps {
 
 function CompactMarketCard({ market, badgeType, isFavorite, onToggleFavorite }: CompactMarketCardProps) {
   const isPolymarket = market.source === 'polymarket';
-  const href = isPolymarket
-    ? `/predictions/${market.ticker}?source=polymarket`
-    : `/predictions/${market.ticker}`;
+  const href = `/predictions/${market.ticker}`;
 
   const yesPercent = Math.round(market.yesPrice * 100);
   const priceChange = market.yesPriceChange24h;

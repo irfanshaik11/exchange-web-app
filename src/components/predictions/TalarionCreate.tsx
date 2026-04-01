@@ -937,7 +937,7 @@ export default function TalarionCreate({ onMarketClick, authToken, compact, onEx
                     onMouseLeave={(e) => {
                       (e.currentTarget as HTMLDivElement).style.borderColor = T.border;
                     }}
-                    onClick={() => router.push(`/predictions/${market.ticker}?source=polymarket`)}
+                    onClick={() => router.push(`/predictions/${market.ticker}`)}
                   >
                     {/* Title */}
                     <h4

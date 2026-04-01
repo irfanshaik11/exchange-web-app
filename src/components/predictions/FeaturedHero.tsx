@@ -105,9 +105,7 @@ export default function FeaturedHero({ market: singleMarket, markets: marketsPro
   const categoryInfo = categoryConfig[market.category] || categoryConfig.other;
   const CategoryIcon = categoryInfo.Icon;
   const isPolymarket = market.source === 'polymarket';
-  const href = isPolymarket
-    ? `/predictions/${market.ticker}?source=polymarket`
-    : `/predictions/${market.ticker}`;
+  const href = `/predictions/${market.ticker}`;
 
   // Multi-outcome detection (must be before chartSeries memo)
   const ext = market as ExtendedMarket;

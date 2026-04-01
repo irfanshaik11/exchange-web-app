@@ -110,7 +110,7 @@ function TokenSelector({
     <div className="relative flex-shrink-0">
       <button
         onClick={() => setOpen(!open)}
-        className="flex items-center gap-1.5 px-2 py-1.5 rounded-md transition-colors hover:bg-white/5"
+        className="flex items-center gap-1.5 px-2 py-1.5 rounded-md cursor-pointer transition-colors hover:bg-white/5"
         style={{ border: '1px solid rgba(255,255,255,0.06)' }}
       >
         <TokenLogo token={token} size={18} />
@@ -150,7 +150,7 @@ function TokenSelector({
               <button
                 key={t.id}
                 onClick={() => { onChange(t.id); setOpen(false); }}
-                className="w-full flex items-center gap-2 px-2.5 py-2 text-left transition-colors hover:bg-white/5"
+                className="w-full flex items-center gap-2 px-2.5 py-2 text-left cursor-pointer transition-colors hover:bg-white/5"
               >
                 <TokenLogo token={t} size={16} />
                 <div>
@@ -277,7 +277,7 @@ export default function PolygonSwapModal({
         {/* Header */}
         <div className="flex items-center justify-between px-4 pt-3 pb-2">
           <h3 className="text-[13px] font-semibold text-white">Swap</h3>
-          <button onClick={onClose} className="p-1 rounded-md hover:bg-white/5">
+          <button onClick={onClose} className="p-1 rounded-md cursor-pointer hover:bg-white/5">
             <HiX className="w-3.5 h-3.5 text-neutral-500" />
           </button>
         </div>
@@ -287,7 +287,7 @@ export default function PolygonSwapModal({
           <div className="rounded-lg p-3" style={{ backgroundColor: 'rgba(255,255,255,0.025)', border: '1px solid rgba(255,255,255,0.05)' }}>
             <div className="flex items-center justify-between mb-1.5">
               <span className="text-[10px] font-medium text-neutral-500 uppercase tracking-wider">From</span>
-              <button onClick={handleMax} className="text-[10px] font-medium hover:text-white" style={{ color: '#A78BFA' }}>
+              <button onClick={handleMax} className="text-[10px] font-medium cursor-pointer hover:text-white" style={{ color: '#A78BFA' }}>
                 {fromToken === 'matic' ? fromBalance.toFixed(4) : `$${fromBalance.toFixed(2)}`}
               </button>
             </div>
@@ -304,7 +304,7 @@ export default function PolygonSwapModal({
               />
               <button
                 onClick={handleMax}
-                className="px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider transition-colors hover:bg-white/10"
+                className="px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider cursor-pointer transition-colors hover:bg-white/10"
                 style={{ color: '#A78BFA', border: '1px solid rgba(167,139,250,0.2)' }}
               >
                 Max
@@ -321,7 +321,7 @@ export default function PolygonSwapModal({
           <div className="flex justify-center -my-0.5 relative z-10">
             <button
               onClick={handleSwapDirection}
-              className="p-1.5 rounded-lg transition-all hover:bg-white/5 active:scale-90"
+              className="p-1.5 rounded-lg cursor-pointer transition-all hover:bg-white/5 active:scale-90"
               style={{ border: '1px solid rgba(255,255,255,0.06)', backgroundColor: '#0c0d12' }}
             >
               <HiOutlineSwitchVertical className="w-3.5 h-3.5" style={{ color: '#A78BFA' }} />
@@ -374,7 +374,7 @@ export default function PolygonSwapModal({
           <button
             onClick={handleSwap}
             disabled={!canSwap}
-            className="w-full py-2.5 rounded-lg text-[13px] font-semibold transition-all active:scale-[0.98]"
+            className="w-full py-2.5 rounded-lg text-[13px] font-semibold cursor-pointer transition-all active:scale-[0.98]"
             style={{
               background: canSwap ? 'linear-gradient(135deg, #8247E5, #A78BFA)' : 'rgba(255,255,255,0.04)',
               color: canSwap ? '#fff' : '#4b5563',

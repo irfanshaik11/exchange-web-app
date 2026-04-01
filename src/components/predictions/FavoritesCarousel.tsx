@@ -157,9 +157,7 @@ interface FavoriteCardProps {
 
 function FavoriteCard({ market, onRemove }: FavoriteCardProps) {
   const isPolymarket = market.source === 'polymarket';
-  const href = isPolymarket
-    ? `/predictions/${market.ticker}?source=polymarket`
-    : `/predictions/${market.ticker}`;
+  const href = `/predictions/${market.ticker}`;
 
   const priceChange = market.yesPriceChange24h;
   const isPositive = priceChange > 0;

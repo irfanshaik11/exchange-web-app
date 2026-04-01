@@ -25,9 +25,7 @@ export default function HeroMarket({ market, liveYesPrice }: HeroMarketProps) {
   const hasLivePrice = liveYesPrice != null;
 
   const isPolymarket = market.source === 'polymarket';
-  const href = isPolymarket
-    ? `/predictions/${market.ticker}?source=polymarket`
-    : `/predictions/${market.ticker}`;
+  const href = `/predictions/${market.ticker}`;
 
   const categoryInfo = categoryConfig[market.category] || categoryConfig.other;
 

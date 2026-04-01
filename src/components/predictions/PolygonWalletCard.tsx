@@ -191,12 +191,11 @@ export default function PolygonWalletCard({
   const truncateAddress = (addr: string) =>
     `${addr.slice(0, 6)}...${addr.slice(-4)}`;
 
-  // Check if user has sufficient balance
-  const hasGasBalance = balance ? balance.matic >= 0.01 : false;
+  // Check if user has sufficient balance (gas is handled by backend — no MATIC check needed)
   const hasTradingBalance = balance ? balance.usdc >= 1 : false;
   const hasPolymarketBalance = balance?.hasPolymarketBalance ?? (balance ? (balance.usdcBridged ?? 0) >= 0.1 : false);
   const hasNativeUsdcToConvert = balance ? (balance.usdcNative ?? 0) >= 0.1 : false;
-  const isReady = hasGasBalance && hasPolymarketBalance;
+  const isReady = hasPolymarketBalance || hasNativeUsdcToConvert;
 
   // If user is not logged in, show login prompt
   if (!user) {
@@ -323,8 +322,8 @@ export default function PolygonWalletCard({
                 )}
               </div>
 
-              {/* Balance display */}
-              <div className="flex items-center gap-3 mt-1">
+              {/* Balance display — dual USDC.e / USDC with info tooltips */}
+              <div className="flex flex-col gap-1 mt-1">
                 {isLoading ? (
                   <div className="flex items-center gap-2">
                     <div className="w-16 h-4 rounded animate-pulse" style={{ backgroundColor: AX.border }} />
@@ -332,15 +331,36 @@ export default function PolygonWalletCard({
                   </div>
                 ) : balance ? (
                   <>
-                    <span className="text-lg font-semibold" style={{ color: AX.text }}>
-                      {balance.usdcFormatted}
-                    </span>
-                    <span className="text-xs px-2 py-0.5 rounded" style={{
-                      backgroundColor: hasGasBalance ? `${AX.green}15` : `${AX.yellow}15`,
-                      color: hasGasBalance ? AX.green : AX.yellow,
-                    }}>
-                      {balance.maticFormatted}
-                    </span>
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-semibold" style={{ color: AX.text }}>
+                        USDC.e
+                      </span>
+                      <span className="text-sm font-semibold" style={{ color: AX.text }}>
+                        ${(balance.usdcBridged ?? 0).toFixed(2)}
+                      </span>
+                      <span
+                        className="w-4 h-4 rounded-full flex items-center justify-center text-[9px] font-bold cursor-help"
+                        style={{ backgroundColor: `${AX.muted}30`, color: AX.muted }}
+                        title="Used for Polymarket trades"
+                      >
+                        i
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-semibold" style={{ color: AX.text }}>
+                        USDC
+                      </span>
+                      <span className="text-sm font-semibold" style={{ color: AX.text }}>
+                        ${(balance.usdcNative ?? 0).toFixed(2)}
+                      </span>
+                      <span
+                        className="w-4 h-4 rounded-full flex items-center justify-center text-[9px] font-bold cursor-help"
+                        style={{ backgroundColor: `${AX.muted}30`, color: AX.muted }}
+                        title="Used for AI Markets (Talarion) trades"
+                      >
+                        i
+                      </span>
+                    </div>
                   </>
                 ) : error ? (
                   <span className="text-sm" style={{ color: AX.red }}>{error}</span>
@@ -421,10 +441,10 @@ export default function PolygonWalletCard({
           </div>
         )}
 
-        {/* Status warnings */}
-        {balance && (!hasPolymarketBalance || !hasGasBalance) && !conversionStatus?.converting && (
+        {/* Status warnings — no MATIC warning (gas is handled by backend) */}
+        {balance && !hasPolymarketBalance && !conversionStatus?.converting && (
           <div className="mt-3 flex flex-wrap gap-2">
-            {!hasPolymarketBalance && hasNativeUsdcToConvert && (
+            {hasNativeUsdcToConvert && (
               <button
                 onClick={handleManualConvert}
                 disabled={conversionStatus?.converting}
@@ -439,7 +459,7 @@ export default function PolygonWalletCard({
                 Convert ${balance.usdcNative?.toFixed(2) || '0'} USDC to USDC.e
               </button>
             )}
-            {!hasPolymarketBalance && !hasNativeUsdcToConvert && (
+            {!hasNativeUsdcToConvert && (
               <div
                 className="flex items-center gap-1.5 text-xs px-2 py-1 rounded-lg"
                 style={{
@@ -449,18 +469,6 @@ export default function PolygonWalletCard({
               >
                 <HiOutlineExclamationCircle className="w-3.5 h-3.5" />
                 Need USDC.e to trade on Polymarket
-              </div>
-            )}
-            {!hasGasBalance && (
-              <div
-                className="flex items-center gap-1.5 text-xs px-2 py-1 rounded-lg"
-                style={{
-                  backgroundColor: `${AX.yellow}15`,
-                  color: AX.yellow,
-                }}
-              >
-                <HiOutlineExclamationCircle className="w-3.5 h-3.5" />
-                Need MATIC for gas
               </div>
             )}
           </div>
@@ -491,8 +499,6 @@ export default function PolygonWalletCard({
                     {balance && (
                       <div className="flex items-center gap-2 text-xs">
                         <span style={{ color: AX.text }}>{balance.usdcFormatted}</span>
-                        <span style={{ color: AX.muted }}>•</span>
-                        <span style={{ color: hasGasBalance ? AX.green : AX.yellow }}>{balance.maticFormatted}</span>
                       </div>
                     )}
                   </div>
@@ -554,7 +560,7 @@ export default function PolygonWalletCard({
                       1
                     </span>
                     <span>
-                      Send <strong style={{ color: AX.text }}>USDC</strong> to your Polygon address above
+                      Send <strong style={{ color: AX.text }}>USDC.e</strong> for Polymarket or <strong style={{ color: AX.text }}>USDC</strong> for AI Markets to your Polygon address above
                     </span>
                   </li>
                   <li className="flex items-start gap-2">
@@ -565,7 +571,7 @@ export default function PolygonWalletCard({
                       2
                     </span>
                     <span>
-                      Add a small amount of <strong style={{ color: AX.text }}>MATIC</strong> for gas (~$0.10 is enough)
+                      Use the <strong style={{ color: AX.text }}>Convert</strong> button to move funds between Polymarket and AI Markets balances
                     </span>
                   </li>
                 </ol>
