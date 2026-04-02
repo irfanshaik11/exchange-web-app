@@ -77,18 +77,15 @@ export default function PredictionsTopNav({
               <button
                 key={cat.id}
                 onClick={() => onSelectCategory(cat.id)}
-                className="relative flex-shrink-0 px-3 py-2.5 text-[13px] font-medium transition-colors duration-150 cursor-pointer whitespace-nowrap"
-                style={{ color: isActive ? T.text : T.muted }}
+                className="relative flex-shrink-0 px-3.5 py-1.5 text-[13px] font-medium cursor-pointer whitespace-nowrap rounded-full"
+                style={{
+                  color: isActive ? T.text : T.muted,
+                  backgroundColor: isActive ? 'rgba(255,255,255,0.08)' : 'transparent',
+                  transition: 'all 150ms ease',
+                  margin: '6px 2px',
+                }}
               >
                 {cat.id === 'all' ? 'All' : cat.label}
-                {isActive && (
-                  <motion.div
-                    layoutId="topnav-active"
-                    className="absolute bottom-0 left-3 right-3 h-[2px] rounded-full"
-                    style={{ backgroundColor: T.accent }}
-                    transition={{ type: 'spring', stiffness: 400, damping: 30 }}
-                  />
-                )}
               </button>
             );
           })}

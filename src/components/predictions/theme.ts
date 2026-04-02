@@ -51,23 +51,23 @@ export const PortfolioTheme = {
 // V2 theme — consolidated, used by all prediction V2 components.
 // Every prediction component should import from here instead of defining inline palettes.
 export const T = {
-  // Base — slightly off-black for depth, never pure #000
-  bg: "#0d0e11",
-  bgCard: "#141519",
-  bgCardHover: "#1a1b22",
-  bgElevated: "#1c1d25",
+  // Base — Polymarket-matched dark palette
+  bg: "#131517",
+  bgCard: "#1c1f24",
+  bgCardHover: "#252930",
+  bgElevated: "#1e2228",
   surface: "rgba(255, 255, 255, 0.03)",
   surfaceHover: "rgba(255, 255, 255, 0.05)",
 
-  // Borders — subtle, use sparingly
-  border: "rgba(255, 255, 255, 0.06)",
-  borderHover: "rgba(255, 255, 255, 0.10)",
-  borderActive: "rgba(255, 255, 255, 0.14)",
+  // Borders — Polymarket uses visible but subtle borders
+  border: "#2a2e35",
+  borderHover: "#3a3e45",
+  borderActive: "#4a4e55",
 
   // Text hierarchy
-  text: "#f0f2f5",
-  textSecondary: "#8b8fa3",
-  muted: "#5c6070",
+  text: "#ffffff",
+  textSecondary: "#858d98",
+  muted: "#5a6270",
   subtle: "#3a3f4a",
 
   // Semantic — trading green/red
@@ -108,8 +108,8 @@ export const T = {
 
   // Effects
   glowIntensity: 0.35,
-  cardShadow: '0 1px 3px rgba(0,0,0,0.4)',
-  cardShadowHover: '0 8px 24px rgba(0,0,0,0.5), 0 2px 8px rgba(0,0,0,0.3)',
+  cardShadow: 'none',
+  cardShadowHover: '0 4px 12px rgba(0,0,0,0.3)',
   textShadow: '0 2px 12px rgba(0,0,0,0.8)',
   textShadowStrong: '0 2px 20px rgba(0,0,0,0.9), 0 0 40px rgba(0,0,0,0.6)',
   shimmerDuration: '3s',
