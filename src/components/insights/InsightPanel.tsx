@@ -9,6 +9,7 @@ interface InsightPanelProps {
   source: string;
   marketId: string;
   docked?: boolean;
+  chromeless?: boolean;
 }
 
 const CATEGORY_LABELS: Record<string, string> = {
@@ -57,7 +58,7 @@ function AIIcon({ size = 16 }: { size?: number }) {
   );
 }
 
-export function InsightPanel({ source, marketId, docked = false }: InsightPanelProps) {
+export function InsightPanel({ source, marketId, docked = false, chromeless = false }: InsightPanelProps) {
   const [collapsed, setCollapsed] = useState(!docked); // docked starts open, floating starts collapsed
   const [opened, setOpened] = useState(!collapsed); // tracks if user has ever opened the panel
   const { data, isLoading, timedOut } = useMarketInsights(source, marketId, opened);
@@ -107,6 +108,12 @@ export function InsightPanel({ source, marketId, docked = false }: InsightPanelP
 
   // ── Docked mode: inline in right column, collapsible ──
   if (docked) {
+    // Chromeless: just the content, no header/wrapper (used inside AiInsightsDrawer)
+    if (chromeless) {
+      return (
+        <div className="p-2.5 space-y-1.5">{insightContent}</div>
+      );
+    }
     return (
       <div role="region" aria-label="AI Insights">
         <button

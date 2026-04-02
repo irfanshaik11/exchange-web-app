@@ -16,6 +16,7 @@ import {
   SkeletonShimmer,
   TalarionCreate,
   PredictionsSidebar,
+  PredictionsTopNav,
   MarketRow,
   FeaturedHero,
   MarketCard,
@@ -31,7 +32,8 @@ import useUnifiedPredictionMarkets from '~/hooks/useUnifiedPredictionMarkets';
 import type { UnifiedPredictionMarket } from '~/hooks/useUnifiedPredictionMarkets';
 import usePredictionFavorites from '~/hooks/usePredictionFavorites';
 import type { PredictionDataSource } from '~/components/predictions/DataSourceSwitcher';
-import { HomepageInsightPanel } from '~/components/insights/HomepageInsightPanel';
+import AiPulseDrawer from '~/components/predictions/AiPulseDrawer';
+import useNavLayout from '~/hooks/useNavLayout';
 
 // Sort tab config
 const SORT_TABS: { id: SortOption; label: string }[] = [
@@ -43,6 +45,7 @@ const SORT_TABS: { id: SortOption; label: string }[] = [
 
 export default function PredictionsPage() {
   const { user, primaryWalletAddresses } = useUser();
+  const { layout, toggle: toggleLayout, mounted: layoutMounted } = useNavLayout();
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [selectedSort, setSelectedSort] = useState<SortOption>('hot');
   const [searchQuery, setSearchQuery] = useState('');
@@ -51,7 +54,7 @@ export default function PredictionsPage() {
   const [showEndedMarkets, setShowEndedMarkets] = useState(false);
   const [dataSource] = useState<PredictionDataSource>('polymarket');
   const [visibleCardCount, setVisibleCardCount] = useState(24);
-  const [showAiPanel, setShowAiPanel] = useState(false);
+  const [aiDrawerOpen, setAiDrawerOpen] = useState(false);
 
   // Fetch markets
   const {
@@ -213,17 +216,43 @@ export default function PredictionsPage() {
           <Header />
         </div>
 
-        {/* Sidebar */}
-        <PredictionsSidebar
-          selectedCategory={selectedCategory}
-          onSelectCategory={setSelectedCategory}
-        />
+        {/* Navigation — sidebar or top bar based on user preference */}
+        {!layoutMounted ? (
+          // Render top nav placeholder during hydration to avoid layout flash
+          <PredictionsTopNav
+            selectedCategory={selectedCategory}
+            onSelectCategory={setSelectedCategory}
+            layout="top"
+            onToggleLayout={toggleLayout}
+          />
+        ) : layout === 'left' ? (
+          <PredictionsSidebar
+            selectedCategory={selectedCategory}
+            onSelectCategory={setSelectedCategory}
+            onToggleLayout={toggleLayout}
+          />
+        ) : (
+          <PredictionsTopNav
+            selectedCategory={selectedCategory}
+            onSelectCategory={setSelectedCategory}
+            layout={layout}
+            onToggleLayout={toggleLayout}
+          />
+        )}
 
-        {/* Main Content — offset by sidebar width */}
+        {/* Main Content — offset by sidebar width when using left layout */}
         <div
-          className="flex-1 flex md:ml-[56px]"
+          className={`flex-1 flex ${layout === 'left' ? 'md:ml-[56px]' : ''}`}
           style={{ paddingTop: 0 }}
         >
+          {/* AI Market Pulse — left drawer (like detail page) */}
+          <AiPulseDrawer
+            open={aiDrawerOpen}
+            onOpen={() => setAiDrawerOpen(true)}
+            onClose={() => setAiDrawerOpen(false)}
+            layoutKey={layout}
+          />
+
           {/* Left: All market content */}
           <div className="flex-1 min-w-0 flex flex-col">
           {/* Combined nav bar: sort tabs left, search right */}
@@ -352,32 +381,21 @@ export default function PredictionsPage() {
               </motion.div>
             )}
 
-            {/* AI Creator — full width, first thing user sees */}
-            <div id="ai-predictions-section" className="mb-6">
-              <TalarionCreate authToken={user?.bearerToken} />
-            </div>
-
-            {/* Featured Hero + AI Insights side by side on xl+ */}
-            <div className="flex gap-4 mb-6 items-start">
-              {/* Featured Hero — takes remaining space */}
-              <div className="flex-1 min-w-0">
+            {/* Hero (left) + Predictions AI (right) — 50/50, hero dictates height */}
+            <div className="flex flex-col lg:flex-row lg:items-stretch gap-4 mb-6">
+              {/* Featured Hero — left 50% */}
+              <div className="flex-1 min-w-0 overflow-hidden rounded-xl">
                 {!isLoading && activeMarkets.length > 0 && (
                   <FeaturedHero markets={activeMarkets} />
                 )}
               </div>
 
-              {/* AI Insights — right column on xl+ */}
-              <div className="hidden xl:flex xl:flex-col w-[360px] flex-shrink-0">
-                <div className="overflow-hidden rounded-xl">
-                  <HomepageInsightPanel docked />
-                </div>
+              {/* Predictions AI — right 50%, stretches to match hero height */}
+              <div className="flex-1 min-w-0 flex flex-col" id="ai-predictions-section">
+                <TalarionCreate authToken={user?.bearerToken} />
               </div>
             </div>
 
-            {/* AI Insights — full width on smaller screens */}
-            <div className="xl:hidden mb-6">
-              <HomepageInsightPanel docked />
-            </div>
 
             {/* Loading State */}
             {isLoading ? (

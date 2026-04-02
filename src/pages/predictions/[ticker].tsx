@@ -32,7 +32,7 @@ import type { ExtendedPredictionMarket } from '~/hooks/useDFlowMarkets';
 import { useUser } from '~/components/UserContext';
 import { useTurnkeySigner } from '~/components/TurnkeySignerContext';
 import PinGate from '~/components/predictions/PinGate';
-import { InsightPanel } from '~/components/insights/InsightPanel';
+import AiInsightsDrawer from '~/components/predictions/AiInsightsDrawer';
 import { showEnhancedToast, updateEnhancedToast } from '~/utils/enhancedToast';
 import { createPolymarketTradeToast, showPolymarketToast } from '~/utils/tradeToast';
 import { SourceBadge, PolygonWalletCard } from '~/components/predictions';
@@ -354,22 +354,70 @@ const PredictionHeader: React.FC<{
 };
 
 // Prediction Tabs Component (similar to TradeTabs)
+const VISIBLE_TABS = ['Outcomes', 'Activity', 'Holders', 'Comments'];
+const MORE_TABS = ['Orders', 'Positions'];
+
 const PredictionTabs: React.FC<{
   tabs: string[];
   selectedTab: string;
   setSelectedTab: (tab: string) => void;
 }> = ({ tabs, selectedTab, setSelectedTab }) => {
+  const [moreOpen, setMoreOpen] = React.useState(false);
+  const moreRef = React.useRef<HTMLDivElement>(null);
+
+  // Close dropdown on outside click
+  React.useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (moreRef.current && !moreRef.current.contains(e.target as Node)) setMoreOpen(false);
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, []);
+
+  const visibleTabs = tabs.filter(t => VISIBLE_TABS.includes(t) || !MORE_TABS.includes(t));
+  const hiddenTabs = tabs.filter(t => MORE_TABS.includes(t));
+  const isHiddenSelected = hiddenTabs.includes(selectedTab);
+
   return (
-    <div className="flex gap-4 pt-2 text-xs items-center">
-      {tabs.map(tab => (
+    <div className="flex gap-3 pt-2 text-xs items-center">
+      {visibleTabs.map(tab => (
         <button
           key={tab}
-          className={`px-3 py-1 font-semibold ${selectedTab === tab ? 'border-b-4 border-[#70E0B0] text-white' : 'text-neutral-400'}`}
+          className={`px-2.5 py-1 font-semibold transition-colors ${selectedTab === tab ? 'border-b-2 border-[#70E0B0] text-white' : 'text-neutral-400 hover:text-neutral-300'}`}
           onClick={() => setSelectedTab(tab)}
         >
           {tab}
         </button>
       ))}
+      {hiddenTabs.length > 0 && (
+        <div className="relative" ref={moreRef}>
+          <button
+            onClick={() => setMoreOpen(o => !o)}
+            className={`px-2.5 py-1 font-semibold transition-colors flex items-center gap-1 ${isHiddenSelected ? 'border-b-2 border-[#70E0B0] text-white' : 'text-neutral-400 hover:text-neutral-300'}`}
+          >
+            {isHiddenSelected ? selectedTab : 'More'}
+            <svg width="8" height="8" viewBox="0 0 8 8" fill="currentColor" className={`transition-transform ${moreOpen ? 'rotate-180' : ''}`}>
+              <path d="M4 6L1 2.5H7L4 6Z" />
+            </svg>
+          </button>
+          {moreOpen && (
+            <div
+              className="absolute top-full left-0 mt-1 z-50 min-w-[100px] rounded-lg shadow-lg py-1"
+              style={{ backgroundColor: AX.surface, border: `1px solid ${AX.border}` }}
+            >
+              {hiddenTabs.map(tab => (
+                <button
+                  key={tab}
+                  className={`w-full text-left px-3 py-1.5 text-xs font-medium transition-colors hover:bg-white/5 ${selectedTab === tab ? 'text-white' : 'text-neutral-400'}`}
+                  onClick={() => { setSelectedTab(tab); setMoreOpen(false); }}
+                >
+                  {tab}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 };
@@ -942,9 +990,15 @@ const OutcomesSection: React.FC<{
   // Separate active, in-review, and resolved markets (memoized with pre-parsed data)
   const { activeMarkets, inReviewMarkets, resolvedMarkets, sortedActiveMarkets, hasActiveFilters } = useMemo(() => {
     const allFiltered = parsedMarkets.filter(market => {
-      if (!nameFilter) return true;
-      const name = (market.groupItemTitle || market.question || '').toLowerCase();
-      return name.includes(nameFilter.toLowerCase());
+      // Filter out placeholder outcomes (Team XX, Person XX, Other, zero volume)
+      const label = (market.groupItemTitle || market.question || '');
+      if (/^Team [A-Z]+$/i.test(label)) return false;
+      if (/^Person [A-Z]+$/i.test(label)) return false;
+      if (label === 'Other') return false;
+      if (parseFloat(market.volume || '0') === 0 && market._prices[0] === 0.5) return false;
+      // Apply user search filter
+      if (nameFilter && !label.toLowerCase().includes(nameFilter.toLowerCase())) return false;
+      return true;
     });
 
     const active = allFiltered.filter(m => !isMarketFullyResolved(m) && !isMarketInReview(m));
@@ -982,14 +1036,14 @@ const OutcomesSection: React.FC<{
   return (
     <div className="h-full flex flex-col">
       {/* Header row with column filters */}
-      <div className="flex-shrink-0 flex items-center gap-3 px-3 py-2 text-[10px] border-b" style={{ borderColor: AX.border, color: AX.muted }}>
+      <div className="flex-shrink-0 flex items-center px-3 py-2.5 text-[10px] font-medium uppercase tracking-wider border-b" style={{ borderColor: AX.border, color: AX.muted }}>
         <div className="flex-1">
           <span className="inline-flex items-center gap-1">
             Outcome
             <SearchFilter value={nameFilter} onChange={setNameFilter} placeholder="Search..." />
           </span>
         </div>
-        <div className="w-14 text-center">
+        <div className="w-20 text-center flex-shrink-0">
           <span className="inline-flex items-center gap-0.5">
             Chance
             <button
@@ -1007,10 +1061,7 @@ const OutcomesSection: React.FC<{
                 <HiOutlineSortDescending className="w-3 h-3" style={{ color: AX.muted }} />
               )}
             </button>
-          </span>
-        </div>
-        <div className="w-14 text-center">
-          <span className="inline-flex items-center gap-0.5">
+            <span className="mx-2 opacity-40">|</span>
             Volume
             <button
               onClick={() => setVolSort(d => d === 'desc' ? 'asc' : d === 'asc' ? null : 'desc')}
@@ -1027,7 +1078,7 @@ const OutcomesSection: React.FC<{
             </button>
           </span>
         </div>
-        <div className="w-32 text-center">Trade</div>
+        <div className="flex-1 text-right pr-2">Trade</div>
       </div>
 
       {/* Results count if filters active */}
@@ -1047,7 +1098,7 @@ const OutcomesSection: React.FC<{
       )}
 
       {/* Scrollable outcome rows */}
-      <div className="flex-1 overflow-y-auto p-3 pb-20 space-y-2">
+      <div className="flex-1 overflow-y-auto px-2 pb-20 divide-y divide-white/[0.06]">
         {sortedActiveMarkets.length === 0 && inReviewMarkets.length === 0 && resolvedMarkets.length === 0 ? (
           <div className="flex items-center justify-center py-8">
             <p className="text-sm" style={{ color: AX.muted }}>No matching outcomes</p>
@@ -1066,63 +1117,60 @@ const OutcomesSection: React.FC<{
                 <div
                   key={market.id}
                   onClick={() => onSelectOutcome?.(market.id, 'yes')}
-                  className="flex items-center gap-3 p-2.5 rounded-lg border transition-all cursor-pointer"
+                  className="flex items-center px-3 py-3.5 transition-colors hover:bg-white/[0.02] cursor-pointer"
                   style={{
-                    backgroundColor: isSelected ? '#151821' : '#111214',
-                    borderColor: isSelected ? '#3A4A6B' : '#2A2B33',
+                    backgroundColor: isSelected ? '#151821' : 'transparent',
                   }}
-                  onMouseEnter={(e) => { if (!isSelected) { e.currentTarget.style.backgroundColor = '#141618'; e.currentTarget.style.borderColor = '#353640'; } }}
-                  onMouseLeave={(e) => { if (!isSelected) { e.currentTarget.style.backgroundColor = '#111214'; e.currentTarget.style.borderColor = '#2A2B33'; } }}
                 >
                   {/* Outcome image and name */}
-                  <div className="flex-1 flex items-center gap-2 min-w-0">
+                  <div className="flex items-center gap-2.5 min-w-0 flex-1">
                     {(market.image || market.icon) ? (
                       <img
                         src={market.image || market.icon}
                         alt={market.groupItemTitle || 'Outcome'}
-                        className="w-9 h-9 rounded-lg object-cover flex-shrink-0"
+                        className="w-10 h-10 rounded-lg object-cover flex-shrink-0"
                         onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
                       />
                     ) : (
                       <div
-                        className="w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0 text-sm font-bold"
+                        className="w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0 text-sm font-bold"
                         style={{ backgroundColor: getAvatarColor(market.groupItemTitle || market.id || 'O'), color: '#fff' }}
                       >
                         {(market.groupItemTitle || market.question || 'O').charAt(0).toUpperCase()}
                       </div>
                     )}
                     <div className="min-w-0">
-                      <div className="font-medium text-xs truncate" style={{ color: AX.text }}>
+                      <div className="font-semibold text-[15px] leading-tight truncate" style={{ color: AX.text }}>
                         {market.groupItemTitle || market.question || 'Outcome'}
                       </div>
-                      <div className="text-[10px]" style={{ color: AX.muted }}>
+                      <div className="text-[11px] mt-0.5" style={{ color: AX.muted }}>
                         {formatVol(market.volume)} Vol.
                       </div>
                     </div>
                   </div>
 
-                  {/* Percentage chance */}
-                  <div className="w-14 text-center">
-                    <span className="text-base font-semibold" style={{ color: AX.text }}>
+                  {/* Percentage chance — centered */}
+                  <div className="w-20 text-center flex-shrink-0">
+                    <span className="text-[22px] font-bold" style={{ color: AX.text, fontVariantNumeric: 'tabular-nums' }}>
                       {realPrices ? formatPercent(yesPrice) : '--'}
                     </span>
                   </div>
 
-                  {/* Buy Yes / Buy No buttons — with decimal precision */}
-                  <div className="w-32 flex gap-1.5">
+                  {/* Yes / No buttons */}
+                  <div className="flex gap-2 flex-1 justify-end">
                     <button
                       onClick={(e) => { e.stopPropagation(); onSelectOutcome?.(market.id, 'yes'); }}
-                      className="flex-1 px-2 py-1.5 rounded-md text-[10px] font-semibold transition-all hover:opacity-90 border border-[#2A2B33]"
-                      style={{ backgroundColor: '#111214', color: AX.green }}
+                      className="w-24 py-2 rounded-lg text-[12px] font-bold transition-all hover:brightness-110 active:scale-[0.97]"
+                      style={{ backgroundColor: 'rgba(74,222,128,0.15)', color: AX.green }}
                     >
-                      {realPrices ? `Yes ${formatCents(yesPrice)}¢` : 'Yes'}
+                      Yes {realPrices ? `${formatCents(yesPrice)}¢` : ''}
                     </button>
                     <button
                       onClick={(e) => { e.stopPropagation(); onSelectOutcome?.(market.id, 'no'); }}
-                      className="flex-1 px-2 py-1.5 rounded-md text-[10px] font-semibold transition-all hover:opacity-90 border border-[#FF4D7F40]"
-                      style={{ backgroundColor: '#111214', color: AX.red }}
+                      className="w-24 py-2 rounded-lg text-[12px] font-bold transition-all hover:brightness-110 active:scale-[0.97]"
+                      style={{ backgroundColor: 'rgba(248,113,113,0.12)', color: AX.red }}
                     >
-                      {realPrices ? `No ${formatCents(noPrice)}¢` : 'No'}
+                      No {realPrices ? `${formatCents(noPrice)}¢` : ''}
                     </button>
                   </div>
                 </div>
@@ -1137,11 +1185,11 @@ const OutcomesSection: React.FC<{
               return (
                 <div
                   key={market.id}
-                  className="flex items-center gap-3 p-2.5 rounded-lg border"
-                  style={{ backgroundColor: '#111214', borderColor: 'rgba(251,191,36,0.2)' }}
+                  className="flex items-center gap-3 px-3 py-3"
+                  style={{ borderColor: 'rgba(251,191,36,0.15)' }}
                 >
                   {/* Outcome image and name */}
-                  <div className="flex-1 flex items-center gap-2 min-w-0">
+                  <div className="flex-1 flex items-center gap-2.5 min-w-0">
                     {(market.image || market.icon) ? (
                       <img
                         src={market.image || market.icon}
@@ -1158,20 +1206,18 @@ const OutcomesSection: React.FC<{
                       </div>
                     )}
                     <div className="min-w-0">
-                      <div className="font-medium text-xs truncate" style={{ color: AX.text }}>
+                      <div className="font-semibold text-[13px] leading-tight truncate" style={{ color: AX.text }}>
                         {market.groupItemTitle || market.question || 'Outcome'}
                       </div>
-                      <div className="flex items-center gap-1.5 mt-0.5">
-                        <div className="text-[10px]" style={{ color: AX.muted }}>
-                          {formatVol(market.volume)} Vol.
-                        </div>
+                      <div className="text-[10px] mt-0.5" style={{ color: AX.muted }}>
+                        {formatVol(market.volume)} Vol.
                       </div>
                     </div>
                   </div>
 
                   {/* Percentage + In Review badge */}
-                  <div className="w-14 text-center">
-                    <span className="text-base font-semibold" style={{ color: AX.text }}>
+                  <div className="w-16 text-center">
+                    <span className="text-[18px] font-bold" style={{ color: AX.text, fontVariantNumeric: 'tabular-nums' }}>
                       {formatPercent(yesPrice)}
                     </span>
                   </div>
@@ -1179,10 +1225,10 @@ const OutcomesSection: React.FC<{
                   {/* In Review label instead of trade buttons */}
                   <div className="w-32 text-center">
                     <span
-                      className="inline-flex items-center gap-1 px-2 py-1 rounded text-[10px] font-semibold"
-                      style={{ backgroundColor: 'rgba(251,191,36,0.15)', color: '#FBBF24' }}
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-bold"
+                      style={{ backgroundColor: 'rgba(251,191,36,0.12)', color: '#FBBF24' }}
                     >
-                      <HiOutlineClock className="w-3 h-3" />
+                      <HiOutlineClock className="w-3.5 h-3.5" />
                       In Review
                     </span>
                   </div>
@@ -1225,11 +1271,10 @@ const OutcomesSection: React.FC<{
                   return (
                     <div
                       key={market.id}
-                      className="flex items-center gap-3 p-2.5 rounded-lg border opacity-60"
-                      style={{ backgroundColor: '#0e1012', borderColor: 'rgba(255,255,255,0.04)' }}
+                      className="flex items-center gap-3 px-3 py-3 opacity-50"
                     >
                       {/* Outcome image and name */}
-                      <div className="flex-1 flex items-center gap-2 min-w-0">
+                      <div className="flex-1 flex items-center gap-2.5 min-w-0">
                         {(market.image || market.icon) ? (
                           <img
                             src={market.image || market.icon}
@@ -1246,19 +1291,19 @@ const OutcomesSection: React.FC<{
                           </div>
                         )}
                         <div className="min-w-0">
-                          <div className="font-medium text-xs truncate" style={{ color: AX.muted }}>
+                          <div className="font-semibold text-[13px] leading-tight truncate" style={{ color: AX.muted }}>
                             {market.groupItemTitle || market.question || 'Outcome'}
                           </div>
-                          <div className="text-[10px]" style={{ color: AX.muted }}>
+                          <div className="text-[10px] mt-0.5" style={{ color: AX.muted }}>
                             {formatVol(market.volume)} Vol.
                           </div>
                         </div>
                       </div>
 
                       {/* Resolution result instead of percentage */}
-                      <div className="w-14 text-center">
+                      <div className="w-16 text-center">
                         <span
-                          className="text-[10px] font-bold px-2 py-1 rounded"
+                          className="text-[11px] font-bold px-2.5 py-1 rounded-md"
                           style={{
                             backgroundColor: yesWon ? 'rgba(74,222,128,0.15)' : 'rgba(248,113,113,0.15)',
                             color: yesWon ? AX.green : AX.red,
@@ -1418,9 +1463,9 @@ export default function MarketDetailPage() {
   const [cancellingOrderId, setCancellingOrderId] = useState<string | null>(null);
 
   // Collapsible sections in trade panel (all open by default)
-  const [showMarketStats, setShowMarketStats] = useState(true);
+  const [showMarketStats, setShowMarketStats] = useState(false);
   const [showAbout, setShowAbout] = useState(true);
-  const [showResolution, setShowResolution] = useState(true);
+  const [showResolution, setShowResolution] = useState(false);
 
   // Ref to track if we've auto-selected best outcome
   const hasAutoSelectedRef = useRef(false);
@@ -2425,105 +2470,20 @@ export default function MarketDetailPage() {
             flex: '1 1 auto',
           }}
         >
-          {/* AI Insights — inline drawer that pushes content */}
-          <div
-            className="hidden xl:flex flex-col flex-shrink-0 items-center relative"
-            style={{
-              width: aiDrawerOpen ? 360 : 48,
-              transition: 'width 300ms cubic-bezier(0.16, 1, 0.3, 1)',
-              overflow: 'hidden',
-            }}
-          >
-            {!aiDrawerOpen ? (
-              /* Collapsed tab — iridescent pill button */
-              <button
-                onClick={() => setAiDrawerOpen(true)}
-                className="iridescent-pill absolute top-4 left-1"
-                style={{ cursor: 'pointer', zIndex: 10 }}
-              >
-                <div
-                  className="pill-inner flex flex-col items-center gap-3 px-2 py-4"
-                  style={{ minWidth: 38 }}
-                >
-                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
-                    <defs>
-                      <linearGradient id="ai-tab-iri" x1="3" y1="2" x2="22" y2="21">
-                        <stop stopColor="#4ADE80" />
-                        <stop offset="0.5" stopColor="#22D3EE" />
-                        <stop offset="1" stopColor="#818CF8" />
-                      </linearGradient>
-                    </defs>
-                    <path d="M12 2L13.5 8.5L20 10L13.5 11.5L12 18L10.5 11.5L4 10L10.5 8.5L12 2Z" fill="url(#ai-tab-iri)" />
-                    <path d="M19 15L19.75 17.25L22 18L19.75 18.75L19 21L18.25 18.75L16 18L18.25 17.25L19 15Z" fill="url(#ai-tab-iri)" opacity="0.7" />
-                  </svg>
-                  <span
-                    className="text-[9px] font-bold tracking-[0.15em] uppercase"
-                    style={{
-                      writingMode: 'vertical-rl',
-                      textOrientation: 'mixed',
-                      background: 'linear-gradient(180deg, #4ADE80, #22D3EE, #818CF8)',
-                      WebkitBackgroundClip: 'text',
-                      WebkitTextFillColor: 'transparent',
-                    }}
-                  >
-                    AI Insights
-                  </span>
-                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" strokeWidth="2" strokeLinecap="round" style={{ opacity: 0.7 }}>
-                    <path d="M9 18l6-6-6-6" stroke="#4ADE80" />
-                  </svg>
-                </div>
-              </button>
-            ) : (
-              /* Expanded: iridescent drawer that pushes chart */
-              <div className="w-[360px] flex flex-col h-full">
-                <div className="iridescent-border flex-1 flex flex-col" style={{ borderRadius: '0 16px 16px 0', borderLeft: 'none' }}>
-                  <div className="iridescent-inner flex-1 flex flex-col overflow-hidden" style={{ borderRadius: '0 14.5px 14.5px 0' }}>
-                    {/* Header */}
-                    <div
-                      className="flex items-center justify-between px-4 py-3 flex-shrink-0"
-                      style={{ borderBottom: '1px solid rgba(74,222,128,0.1)' }}
-                    >
-                      <div className="flex items-center gap-2.5">
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
-                          <defs>
-                            <linearGradient id="ai-drawer-hdr2" x1="3" y1="2" x2="22" y2="21">
-                              <stop stopColor="#4ADE80" />
-                              <stop offset="0.5" stopColor="#22D3EE" />
-                              <stop offset="1" stopColor="#818CF8" />
-                            </linearGradient>
-                          </defs>
-                          <path d="M12 2L13.5 8.5L20 10L13.5 11.5L12 18L10.5 11.5L4 10L10.5 8.5L12 2Z" fill="url(#ai-drawer-hdr2)" />
-                        </svg>
-                        <span className="text-[12px] font-bold tracking-[0.12em] uppercase text-[#4ADE80]">
-                          AI Insights
-                        </span>
-                      </div>
-                      <button
-                        onClick={() => setAiDrawerOpen(false)}
-                        className="p-1.5 rounded-lg"
-                        style={{ color: AX.muted }}
-                      >
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-                          <path d="M15 18l-6-6 6-6" />
-                        </svg>
-                      </button>
-                    </div>
-                    {/* Content */}
-                    <div className="flex-1 overflow-y-auto scrollbar-hide">
-                      <InsightPanel source={isPolymarket ? 'polymarket' : 'dflow'} marketId={tickerString} docked />
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )}
-          </div>
+          {/* AI Insights — responsive drawer */}
+          <AiInsightsDrawer
+            open={aiDrawerOpen}
+            onOpen={() => setAiDrawerOpen(true)}
+            onClose={() => setAiDrawerOpen(false)}
+            source={isPolymarket ? 'polymarket' : 'dflow'}
+            marketId={tickerString}
+          />
 
           {/* LEFT: chart + tabs */}
           <div
             ref={containerRef}
             className="flex-1 min-w-0 max-w-full flex flex-col pb-0"
             style={{
-              borderRight: `1px solid ${AX.border}`,
               minHeight: 0,
             }}
           >
@@ -2675,17 +2635,6 @@ export default function MarketDetailPage() {
               <div className="absolute inset-x-0 top-1/2 -translate-y-1/2 h-px bg-gray-700/20" />
             </div>
 
-            {/* AI Insights — inline on smaller screens where left drawer is hidden */}
-            <div
-              className="xl:hidden"
-              style={{
-                borderBottom: `1px solid ${AX.border}`,
-                borderTop: `1px solid ${AX.border}`,
-                background: 'linear-gradient(180deg, rgba(74,222,128,0.02) 0%, transparent 100%)',
-              }}
-            >
-              <InsightPanel source={isPolymarket ? 'polymarket' : 'dflow'} marketId={tickerString} docked />
-            </div>
 
             {/* BOTTOM pane (tabs + content) */}
             <div className="flex-1 flex flex-col min-h-[400px]">
@@ -2886,14 +2835,14 @@ export default function MarketDetailPage() {
           </div>
 
           {/* RIGHT: Trade Action Panel */}
-          <div className="flex-shrink-0 min-w-[260px] basis-[280px] md:basis-[310px] lg:basis-[330px] hidden lg:flex flex-col text-[12px] leading-tight" style={{ backgroundColor: '#111214' }}>
+          <div className="flex-shrink-0 min-w-[260px] basis-[280px] md:basis-[310px] lg:basis-[340px] hidden lg:flex flex-col text-[12px] leading-tight" style={{ backgroundColor: '#111214', borderLeft: `1px solid ${AX.border}` }}>
             <div className="flex-1 overflow-auto">
               {/* Polymarket Trade Panel */}
               {isPolymarket ? (
                 <div>
                     {/* Selected Outcome Header */}
                     {selectedOutcomeMarket ? (
-                      <div className="flex items-center gap-2.5 px-3 py-2 mb-2 border-b border-[#2A2B33]">
+                      <div className="flex items-center gap-2.5 px-4 py-[11px] border-b border-[#2A2B33]">
                         {(selectedOutcomeMarket.image || selectedOutcomeMarket.icon) ? (
                           <img
                             src={selectedOutcomeMarket.image || selectedOutcomeMarket.icon}
@@ -2929,7 +2878,7 @@ export default function MarketDetailPage() {
                     )}
 
                     {/* Buy / Sell Toggle + Order Type */}
-                    <div className="px-3 py-1.5 border-b border-[#2A2B33]">
+                    <div className="px-4 py-[18.5px] border-b border-[#2A2B33]">
                       <div className="flex items-center gap-2">
                         {/* Buy/Sell Toggle - matches trenches */}
                         <div className="flex-1 relative h-9 rounded-lg border border-[#2A2B33] bg-[#1E1F26] overflow-hidden">
@@ -2960,18 +2909,21 @@ export default function MarketDetailPage() {
                       </div>
                     </div>
 
-                    {/* MARKET / LIMIT tabs - matches trenches */}
-                    <div className="px-3 pt-1 pb-1.5 border-b border-[#2A2B33]">
-                      <div className="flex items-center gap-6">
+                    {/* MARKET / LIMIT pills */}
+                    <div className="px-4 pt-2 pb-1.5">
+                      <div className="flex items-center gap-1.5">
                         {(['market', 'limit'] as const).map((t) => (
                           <button
                             key={t}
                             onClick={() => setOrderType(t)}
-                            className={`pb-1 text-[12px] font-semibold uppercase tracking-wide transition-colors hover:text-[#E6E7EA] ${
-                              orderType === t ? 'text-[#70E0B0] border-b-2 border-[#70E0B0]' : 'text-[#9CA3AF]'
-                            }`}
+                            className="text-[10px] px-2 py-0.5 rounded-full font-semibold uppercase tracking-wide transition-all"
+                            style={{
+                              backgroundColor: orderType === t ? 'rgba(112,224,176,0.15)' : 'transparent',
+                              color: orderType === t ? AX.mint : AX.muted,
+                              border: `1px solid ${orderType === t ? 'rgba(112,224,176,0.3)' : AX.border}`,
+                            }}
                           >
-                            {t === 'market' ? 'MARKET' : 'LIMIT'}
+                            {t === 'market' ? 'Market' : 'Limit'}
                           </button>
                         ))}
                       </div>
@@ -2979,7 +2931,7 @@ export default function MarketDetailPage() {
 
                     {/* Limit Price Input (only shown for limit orders) */}
                     {orderType === 'limit' && (
-                      <div className="px-3 pt-2 mb-2">
+                      <div className="px-4 pt-2 mb-1.5">
                         <div className="flex items-center justify-between mb-2">
                           <span className="text-[10px] font-semibold text-[#9CA3AF] uppercase tracking-wide">Limit Price</span>
                           <span className="text-[10px] text-[#9CA3AF]">
@@ -3031,7 +2983,7 @@ export default function MarketDetailPage() {
                     )}
 
                     {/* Yes/No + Amount + Trade - wrapped with padding */}
-                    <div className="px-3 pt-2">
+                    <div className="px-4 pt-2">
                     {/* Yes / No Buttons */}
                     {(() => {
                       // Parse prices from selected outcome - use SAME formula as OutcomesSection
@@ -3174,8 +3126,8 @@ export default function MarketDetailPage() {
 
                     {/* Quote Display */}
                     {polymarketQuote && parseFloat(amount) > 0 && (
-                      <div className="mb-3 p-2.5 rounded-lg border border-[#2A2B33] bg-[#1A1B1E]">
-                        <div className="space-y-1.5">
+                      <div className="mb-2 p-2 rounded-lg border border-[#2A2B33] bg-[#1A1B1E]">
+                        <div className="space-y-1">
                           {/* Price: Show limit price for limit orders, market price for market orders */}
                           <div className="flex justify-between text-xs">
                             <span style={{ color: AX.muted }}>
@@ -3337,9 +3289,9 @@ export default function MarketDetailPage() {
 
                     {/* Open Orders Section */}
                     {openOrders.length > 0 && (
-                      <div className="border-t border-[#2A2B33] px-3 pt-3">
+                      <div className="border-t border-[#2A2B33] mt-2 px-4 pt-3">
                         <div className="flex items-center justify-between mb-2">
-                          <span className="text-[10px] font-semibold uppercase tracking-wide" style={{ color: AX.muted }}>
+                          <span className="text-[11px] font-semibold uppercase tracking-wide" style={{ color: AX.muted }}>
                             Open Orders ({openOrders.length})
                           </span>
                         </div>
@@ -3398,12 +3350,12 @@ export default function MarketDetailPage() {
                     )}
 
                     {/* Market Stats Section - matches trenches Token Info */}
-                    <div className="border-t border-[#2A2B33]">
+                    <div className="border-t border-[#2A2B33] mt-2" style={{ backgroundColor: 'rgba(255,255,255,0.015)' }}>
                       <button
                         onClick={() => setShowMarketStats(!showMarketStats)}
-                        className="w-full flex items-center justify-between px-3 py-2 hover:opacity-80 transition-opacity"
+                        className="w-full flex items-center justify-between px-4 py-3 hover:opacity-80 transition-opacity"
                       >
-                        <span className="text-[10px] font-semibold uppercase tracking-wide" style={{ color: AX.muted }}>
+                        <span className="text-[11px] font-semibold uppercase tracking-wide" style={{ color: AX.muted }}>
                           Market Stats
                         </span>
                         <svg
@@ -3418,7 +3370,7 @@ export default function MarketDetailPage() {
                         </svg>
                       </button>
                       {showMarketStats && (
-                        <div className="px-3 pb-3 space-y-2">
+                        <div className="px-4 pb-4 space-y-2.5">
                           {/* Volume */}
                           <div className="flex items-center justify-between">
                             <span className="text-[10px] uppercase tracking-wide" style={{ color: AX.muted }}>Volume</span>
@@ -3461,12 +3413,12 @@ export default function MarketDetailPage() {
                     </div>
 
                     {/* About Section */}
-                    <div className="border-t border-[#2A2B33]">
+                    <div className="border-t border-[#2A2B33]" style={{ backgroundColor: 'rgba(255,255,255,0.015)' }}>
                       <button
                         onClick={() => setShowAbout(!showAbout)}
-                        className="w-full flex items-center justify-between px-3 py-2 hover:opacity-80 transition-opacity"
+                        className="w-full flex items-center justify-between px-4 py-3 hover:opacity-80 transition-opacity"
                       >
-                        <span className="text-[10px] font-semibold uppercase tracking-wide" style={{ color: AX.muted }}>
+                        <span className="text-[11px] font-semibold uppercase tracking-wide" style={{ color: AX.muted }}>
                           About
                         </span>
                         <svg
@@ -3481,8 +3433,8 @@ export default function MarketDetailPage() {
                         </svg>
                       </button>
                       {showAbout && (
-                        <div className="px-3 pb-3">
-                          <p className="text-[11px] leading-relaxed" style={{ color: AX.text }}>
+                        <div className="px-4 pb-4">
+                          <p className="text-[13px] leading-relaxed" style={{ color: AX.text, opacity: 0.85 }}>
                             {polyEvent?.description || 'No description available.'}
                           </p>
                         </div>
@@ -3490,12 +3442,12 @@ export default function MarketDetailPage() {
                     </div>
 
                     {/* Resolution Section */}
-                    <div className="border-t border-[#2A2B33]">
+                    <div className="border-t border-[#2A2B33]" style={{ backgroundColor: 'rgba(255,255,255,0.015)' }}>
                       <button
                         onClick={() => setShowResolution(!showResolution)}
-                        className="w-full flex items-center justify-between px-3 py-2 hover:opacity-80 transition-opacity"
+                        className="w-full flex items-center justify-between px-4 py-3 hover:opacity-80 transition-opacity"
                       >
-                        <span className="text-[10px] font-semibold uppercase tracking-wide" style={{ color: AX.muted }}>
+                        <span className="text-[11px] font-semibold uppercase tracking-wide" style={{ color: AX.muted }}>
                           Resolution
                         </span>
                         <svg
@@ -3510,7 +3462,7 @@ export default function MarketDetailPage() {
                         </svg>
                       </button>
                       {showResolution && (
-                        <div className="px-3 pb-3 space-y-2">
+                        <div className="px-4 pb-4 space-y-2.5">
                           {/* Resolver Contract - link to Polygonscan */}
                           {(selectedOutcomeMarket?.resolvedBy || polyEvent?.markets?.[0]?.resolvedBy) && (
                             <div className="flex items-center justify-between">

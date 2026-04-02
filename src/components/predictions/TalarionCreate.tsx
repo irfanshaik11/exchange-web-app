@@ -154,7 +154,7 @@ export default function TalarionCreate({ onMarketClick, authToken, compact, onEx
   const router = useRouter();
   const [query, setQuery] = useState('');
   const [settlement, setSettlement] = useState<string>('1m');
-  const [isCollapsed, setIsCollapsed] = useState(true);
+
   const inputRef = useRef<HTMLInputElement>(null);
   const resultsRef = useRef<HTMLDivElement>(null);
 
@@ -211,12 +211,6 @@ export default function TalarionCreate({ onMarketClick, authToken, compact, onEx
     prevCountRef.current = generatedMarkets.length;
   }, [generatedMarkets.length]);
 
-  // Auto-expand when generating or results appear
-  useEffect(() => {
-    if (isGenerating || generatedMarkets.length > 0) {
-      setIsCollapsed(false);
-    }
-  }, [isGenerating, generatedMarkets.length]);
 
   // --- Handlers ---
 
@@ -508,20 +502,27 @@ export default function TalarionCreate({ onMarketClick, authToken, compact, onEx
   }
 
   return (
-    <div className="iridescent-border">
+    <div className="iridescent-border h-full">
     <div
-      className="iridescent-inner w-full rounded-2xl flex flex-col relative overflow-hidden"
+      className="iridescent-inner w-full h-full rounded-2xl flex flex-col relative overflow-hidden"
       style={{
         color: T.text,
       }}
     >
-      {/* Collapsed bar — click to expand */}
-      <button
-        onClick={() => setIsCollapsed(!isCollapsed)}
-        aria-label="Toggle AI Predictions"
-        className="w-full flex items-center justify-center px-5 py-3.5 hover:bg-white/[0.02] transition-colors relative"
-      >
-        <div className="flex items-center gap-2.5">
+      <div className="overflow-hidden flex-1 flex flex-col">
+      <div className="px-6 md:px-8 pb-6 md:pb-7 pt-4 flex flex-col relative flex-1">
+
+      {/* Subtle radial glow — top center */}
+      <div
+        className="absolute -top-20 left-1/2 -translate-x-1/2 w-[500px] h-[300px] pointer-events-none"
+        style={{
+          background: 'radial-gradient(ellipse 60% 50%, rgba(139,92,246,0.05) 0%, transparent 60%)',
+        }}
+      />
+
+      {/* Cohesive centered block: title + description + input + suggestions */}
+      <div className="flex-1 flex flex-col items-center justify-center text-center w-full">
+        <div className="inline-flex items-center gap-2.5 mb-3">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" className="flex-shrink-0">
             <defs>
               <linearGradient id="ai-talarion-sparkle" x1="3" y1="2" x2="22" y2="21">
@@ -544,7 +545,7 @@ export default function TalarionCreate({ onMarketClick, authToken, compact, onEx
             />
           </svg>
           <span
-            className="text-[13px] font-bold tracking-[0.12em] uppercase"
+            className="text-[19px] font-bold tracking-[0.14em] uppercase"
             style={{
               background: 'linear-gradient(135deg, #8B5CF6, #3B82F6, #10B981)',
               WebkitBackgroundClip: 'text',
@@ -563,49 +564,13 @@ export default function TalarionCreate({ onMarketClick, authToken, compact, onEx
             Predict Anything
           </span>
         </div>
-        <motion.div
-          className="absolute right-5"
-          animate={{ rotate: isCollapsed ? 0 : 180 }}
-          transition={{ duration: 0.1 }}
-        >
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={T.muted} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <polyline points="6 9 12 15 18 9" />
-          </svg>
-        </motion.div>
-      </button>
-
-      {/* Expandable content */}
-      <AnimatePresence>
-      {!isCollapsed && (
-      <motion.div
-        initial={{ height: 0, opacity: 0 }}
-        animate={{ height: 'auto', opacity: 1 }}
-        exit={{ height: 0, opacity: 0 }}
-        transition={{ duration: 0.12, ease: 'easeOut' }}
-        className="overflow-hidden"
-      >
-      <div className="px-6 md:px-8 pb-6 md:pb-7 pt-2 flex flex-col relative">
-
-      {/* Subtle radial glow — top center */}
-      <div
-        className="absolute -top-20 left-1/2 -translate-x-1/2 w-[500px] h-[300px] pointer-events-none"
-        style={{
-          background: 'radial-gradient(ellipse 60% 50%, rgba(139,92,246,0.05) 0%, transparent 60%)',
-        }}
-      />
-
-      {/* Centered inner column for header + input + suggestions */}
-      <div className="relative w-full max-w-2xl mx-auto flex-1 flex flex-col">
-
-      {/* Header */}
-      <div className="mb-4 text-center">
         <p
           className="text-[13px] leading-relaxed"
           style={{ color: T.muted }}
         >
           Describe any event. AI turns it into a tradeable market.
         </p>
-      </div>
+      <div className="w-full max-w-2xl mx-auto flex flex-col mt-5">
 
       {/* Input area */}
       <motion.div
@@ -814,6 +779,7 @@ export default function TalarionCreate({ onMarketClick, authToken, compact, onEx
       </AnimatePresence>
 
       </div>{/* End centered inner column */}
+      </div>{/* End cohesive centered block */}
 
       {/* AI Generated Markets — skeleton placeholders + real cards as they stream in */}
       <AnimatePresence>
@@ -1416,9 +1382,7 @@ export default function TalarionCreate({ onMarketClick, authToken, compact, onEx
       </AnimatePresence>
 
       </div>
-      </motion.div>
-      )}
-      </AnimatePresence>
+      </div>
 
       {/* Placeholder text style for the input */}
       <style jsx>{`

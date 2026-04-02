@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { HiOutlineChevronDown } from 'react-icons/hi';
 import { useHomepageInsights } from '~/hooks/useHomepageInsights';
@@ -45,12 +45,16 @@ function timeAgo(dateStr: string): string {
   return `${Math.floor(hrs / 24)}d ago`;
 }
 
-export function HomepageInsightPanel({ docked = false }: { docked?: boolean }) {
+export function HomepageInsightPanel({ docked = false, chromeless = false }: { docked?: boolean; chromeless?: boolean }) {
   const { data, isLoading, timedOut } = useHomepageInsights();
-  // Docked mode: always open. Otherwise: desktop expanded, mobile collapsed.
-  const [collapsed, setCollapsed] = useState(
-    docked ? false : (typeof window !== 'undefined' ? window.innerWidth < 768 : false)
-  );
+  // Docked mode: always open. Otherwise: default expanded, then check mobile on mount.
+  const [collapsed, setCollapsed] = useState(false);
+
+  useEffect(() => {
+    if (!docked && window.innerWidth < 768) {
+      setCollapsed(true);
+    }
+  }, [docked]);
   const [showPicks, setShowPicks] = useState(true);
   const [showNarratives, setShowNarratives] = useState(true);
   const constraintsRef = useRef<HTMLDivElement>(null);
@@ -64,36 +68,38 @@ export function HomepageInsightPanel({ docked = false }: { docked?: boolean }) {
   const panelRef = useRef<HTMLDivElement>(null);
 
   // ── Shared desktop panel content (used by docked + floating expanded) ──
+
+  const panelHeader = docked ? (
+    <div className="flex items-center gap-2.5 px-4 py-3">
+      <AIIcon size={18} />
+      <span className="text-[13px] font-bold tracking-[0.12em] uppercase text-[#4ADE80]">
+        AI Market Pulse
+      </span>
+    </div>
+  ) : (
+    <button
+      onClick={() => setCollapsed(c => !c)}
+      aria-expanded={!collapsed}
+      aria-label="Toggle AI insights"
+      className="w-full flex items-center justify-between px-4 py-3 hover:bg-white/[0.02] transition-colors focus-visible:ring-2 focus-visible:ring-[#4ADE80]/50 focus-visible:outline-none"
+    >
+      <div className="flex items-center gap-2.5">
+        <AIIcon size={18} />
+        <span className="text-[13px] font-bold tracking-[0.12em] uppercase text-[#4ADE80]">
+          AI Market Pulse
+        </span>
+      </div>
+      <motion.div animate={{ rotate: collapsed ? 0 : 180 }} transition={{ duration: 0.2 }}>
+        <HiOutlineChevronDown className="w-4 h-4 text-zinc-500" />
+      </motion.div>
+    </button>
+  );
+
   const expandedPanel = (
     <div>
-      <div className="iridescent-border">
-        <div className="iridescent-inner overflow-hidden shadow-2xl">
-          {/* Header */}
-          {docked ? (
-            <div className="flex items-center gap-2.5 px-4 py-3">
-              <AIIcon size={18} />
-              <span className="text-[13px] font-bold tracking-[0.12em] uppercase text-[#4ADE80]">
-                AI Market Pulse
-              </span>
-            </div>
-          ) : (
-            <button
-              onClick={() => setCollapsed(c => !c)}
-              aria-expanded={!collapsed}
-              aria-label="Toggle AI insights"
-              className="w-full flex items-center justify-between px-4 py-3 hover:bg-white/[0.02] transition-colors focus-visible:ring-2 focus-visible:ring-[#4ADE80]/50 focus-visible:outline-none"
-            >
-              <div className="flex items-center gap-2.5">
-                <AIIcon size={18} />
-                <span className="text-[13px] font-bold tracking-[0.12em] uppercase text-[#4ADE80]">
-                  AI Market Pulse
-                </span>
-              </div>
-              <motion.div animate={{ rotate: collapsed ? 0 : 180 }} transition={{ duration: 0.2 }}>
-                <HiOutlineChevronDown className="w-4 h-4 text-zinc-500" />
-              </motion.div>
-            </button>
-          )}
+      <div className={chromeless ? '' : 'iridescent-border'}>
+        <div className={chromeless ? '' : 'iridescent-inner overflow-hidden shadow-2xl'}>
+          {!chromeless && panelHeader}
 
           {!collapsed && <>
           {/* Glow line */}
@@ -105,8 +111,8 @@ export function HomepageInsightPanel({ docked = false }: { docked?: boolean }) {
           {isLoading ? (
             <InsightSkeleton />
           ) : data?.insights ? (
-            <div className="relative mb-4">
-            <div className="p-3 pb-8 space-y-3 max-h-[400px] overflow-y-auto scrollbar-hide">
+            <div className={`relative ${chromeless ? '' : 'mb-4'}`}>
+            <div className={`p-3 ${chromeless ? 'pb-3' : 'pb-8'} space-y-3 overflow-y-auto scrollbar-hide ${chromeless ? '' : 'max-h-[400px]'}`}>
               {/* Market Pulse */}
               <motion.div
                 initial={{ opacity: 0, y: 6 }}
@@ -200,13 +206,15 @@ export function HomepageInsightPanel({ docked = false }: { docked?: boolean }) {
                 AI-generated insights. Not financial advice.
               </p>
               {/* Bottom spacer so content doesn't touch border */}
-              <div className="h-4 flex-shrink-0" />
+              {!chromeless && <div className="h-4 flex-shrink-0" />}
             </div>
             {/* Fade overlay at bottom */}
-            <div
-              className="absolute bottom-0 left-0 right-0 h-10 pointer-events-none rounded-b-2xl"
-              style={{ background: 'linear-gradient(to top, rgba(14,16,20,0.95) 0%, rgba(14,16,20,0.6) 40%, transparent 100%)' }}
-            />
+            {!chromeless && (
+              <div
+                className="absolute bottom-0 left-0 right-0 h-10 pointer-events-none rounded-b-2xl"
+                style={{ background: 'linear-gradient(to top, rgba(14,16,20,0.95) 0%, rgba(14,16,20,0.6) 40%, transparent 100%)' }}
+              />
+            )}
             </div>
           ) : timedOut ? (
             <div className="flex flex-col items-center justify-center py-8 px-3 text-center">
