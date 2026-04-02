@@ -152,10 +152,8 @@ export default function AiDrawerBase({
       <>
         {/* FAB — bottom-right, always visible when drawer is closed */}
         {!open && (
-          <button
-            onClick={onOpen}
-            className="iridescent-pill"
-            aria-label={`Open ${title}`}
+          <div
+            className="iridescent-border"
             style={{
               position: 'fixed',
               bottom: fabBottom,
@@ -164,16 +162,27 @@ export default function AiDrawerBase({
               width: 48,
               height: 48,
               borderRadius: '50%',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              cursor: 'pointer',
-              backgroundColor: 'rgba(12, 14, 18, 0.95)',
               boxShadow: '0 4px 24px rgba(0,0,0,0.5)',
             }}
           >
-            <SparkleIcon size={20} gradientId={`${animationPrefix}-fab`} />
-          </button>
+            <button
+              onClick={onOpen}
+              className="iridescent-inner"
+              aria-label={`Open ${title}`}
+              style={{
+                width: '100%',
+                height: '100%',
+                borderRadius: '50%',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                cursor: 'pointer',
+                backgroundColor: T.bg,
+              }}
+            >
+              <SparkleIcon size={20} gradientId={`${animationPrefix}-fab`} />
+            </button>
+          </div>
         )}
 
         {/* Bottom sheet overlay */}
