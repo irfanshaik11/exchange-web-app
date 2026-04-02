@@ -4,7 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { T } from './theme';
 import { categoryConfig } from './PredictionCard';
 import type { PredictionMarket } from './PredictionCard';
-import MultiLineSparkline from './MultiLineSparkline';
+// Chart rendered inline via SVG for full responsive control
 import { generateMockSparkline, formatVolume, formatTimeRemaining } from './utils';
 
 interface ExtendedMarket extends PredictionMarket {
@@ -172,15 +172,68 @@ export default function FeaturedHero({ market: singleMarket, markets: marketsPro
                 padding: '12px 12px 8px',
               }}
             >
-              {/* Chart — full width */}
-              <div style={{ width: '100%', height: 110 }}>
-                <MultiLineSparkline
-                  series={chartSeries}
-                  width={900}
-                  height={110}
-                  showGradient
-                  showLabels
-                />
+              {/* Chart — full width, responsive via viewBox */}
+              <div style={{ width: '100%', height: 120 }}>
+                <div style={{ width: '100%', height: '100%', overflow: 'hidden' }}>
+                  <svg
+                    viewBox="0 0 600 120"
+                    preserveAspectRatio="none"
+                    style={{ width: '100%', height: '100%' }}
+                  >
+                    {/* Render chart lines manually for full control */}
+                    {chartSeries.map((series, si) => {
+                      const pts = series.data;
+                      if (!pts || pts.length < 2) return null;
+                      const minY = 0;
+                      const maxY = 1;
+                      const padTop = 10;
+                      const padBot = 10;
+                      const h = 120 - padTop - padBot;
+                      const w = 600;
+                      const step = w / (pts.length - 1);
+                      const points = pts.map((v, i) => {
+                        const x = i * step;
+                        const y = padTop + h - ((v - minY) / (maxY - minY)) * h;
+                        return `${x},${y}`;
+                      });
+                      const pathD = `M${points.join(' L')}`;
+                      const lastPt = pts[pts.length - 1];
+                      const lastX = (pts.length - 1) * step;
+                      const lastY = padTop + h - ((lastPt - minY) / (maxY - minY)) * h;
+                      return (
+                        <g key={si}>
+                          {/* Gradient fill for first series only */}
+                          {si === 0 && (
+                            <>
+                              <defs>
+                                <linearGradient id="hero-grad" x1="0" y1="0" x2="0" y2="1">
+                                  <stop offset="0%" stopColor={series.color} stopOpacity="0.15" />
+                                  <stop offset="100%" stopColor={series.color} stopOpacity="0" />
+                                </linearGradient>
+                              </defs>
+                              <path
+                                d={`${pathD} L${lastX},${120 - padBot} L0,${120 - padBot} Z`}
+                                fill="url(#hero-grad)"
+                              />
+                            </>
+                          )}
+                          {/* Line */}
+                          <path
+                            d={pathD}
+                            fill="none"
+                            stroke={series.color}
+                            strokeWidth={si === 0 ? 2 : 1.5}
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            opacity={si === 0 ? 0.9 : 0.6}
+                          />
+                          {/* End dot */}
+                          <circle cx={lastX} cy={lastY} r={3} fill={series.color} opacity={0.8} />
+                        </g>
+                      );
+                    })}
+                  </svg>
+                </div>
               </div>
 
               {/* Inline legend — below chart */}

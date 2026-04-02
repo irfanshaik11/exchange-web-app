@@ -55,7 +55,6 @@ export default function PredictionsPage() {
   const [dataSource] = useState<PredictionDataSource>('polymarket');
   const [visibleCardCount, setVisibleCardCount] = useState(24);
   const [aiDrawerOpen, setAiDrawerOpen] = useState(false);
-  const [showCreateModal, setShowCreateModal] = useState(false);
 
   // Fetch markets
   const {
@@ -324,96 +323,29 @@ export default function PredictionsPage() {
             </div>
           </div>
 
-          {/* AI Tools — premium USP section */}
-          <div className="px-6 py-4">
-            <div
-              className="relative overflow-hidden rounded-2xl"
+          {/* AI Tools — inline Predictions AI + AI Insights */}
+          <div className="px-6 py-3 flex items-center gap-3">
+            {/* Predictions AI — actual TalarionCreate inline */}
+            <div className="flex-1" id="ai-predictions-section">
+              <TalarionCreate authToken={user?.bearerToken} compact onExpand={() => {}} />
+            </div>
+
+            {/* AI Insights button */}
+            <button
+              onClick={() => setAiDrawerOpen(!aiDrawerOpen)}
+              className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-[13px] font-semibold flex-shrink-0"
               style={{
-                background: 'linear-gradient(135deg, rgba(59,130,246,0.06) 0%, rgba(139,92,246,0.04) 50%, rgba(59,130,246,0.06) 100%)',
-                border: '1px solid rgba(59,130,246,0.12)',
+                backgroundColor: aiDrawerOpen ? 'rgba(139,92,246,0.12)' : T.bgCard,
+                color: aiDrawerOpen ? '#a78bfa' : T.textSecondary,
+                border: `1px solid ${aiDrawerOpen ? 'rgba(139,92,246,0.25)' : T.border}`,
+                transition: 'all 150ms ease',
               }}
             >
-              {/* Ambient glow */}
-              <div className="absolute pointer-events-none" style={{ top: -40, left: '20%', width: 200, height: 200, borderRadius: '50%', background: 'radial-gradient(circle, rgba(59,130,246,0.08) 0%, transparent 70%)', filter: 'blur(40px)' }} />
-              <div className="absolute pointer-events-none" style={{ bottom: -40, right: '10%', width: 160, height: 160, borderRadius: '50%', background: 'radial-gradient(circle, rgba(139,92,246,0.06) 0%, transparent 70%)', filter: 'blur(30px)' }} />
-
-              <div className="relative flex flex-col sm:flex-row items-stretch gap-3 p-4">
-                {/* Predictions AI — premium input */}
-                <div
-                  className="flex items-center gap-3 flex-1 px-4 py-3 rounded-xl cursor-pointer group"
-                  style={{
-                    backgroundColor: 'rgba(255,255,255,0.03)',
-                    border: '1px solid rgba(255,255,255,0.06)',
-                    transition: 'all 200ms cubic-bezier(0.16,1,0.3,1)',
-                  }}
-                  onClick={() => setShowCreateModal(true)}
-                  onMouseEnter={(e) => {
-                    e.currentTarget.style.borderColor = 'rgba(59,130,246,0.3)';
-                    e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.05)';
-                    e.currentTarget.style.boxShadow = '0 0 20px rgba(59,130,246,0.08)';
-                  }}
-                  onMouseLeave={(e) => {
-                    e.currentTarget.style.borderColor = 'rgba(255,255,255,0.06)';
-                    e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.03)';
-                    e.currentTarget.style.boxShadow = 'none';
-                  }}
-                >
-                  {/* Sparkle icon */}
-                  <div
-                    className="flex-shrink-0 w-8 h-8 rounded-lg flex items-center justify-center"
-                    style={{ background: 'linear-gradient(135deg, rgba(59,130,246,0.15), rgba(139,92,246,0.15))' }}
-                  >
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#60a5fa" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                      <path d="M12 3v1m0 16v1m-8-9H3m18 0h-1m-2.636-6.364l-.707.707M6.343 17.657l-.707.707m12.728 0l-.707-.707M6.343 6.343l-.707-.707" />
-                      <circle cx="12" cy="12" r="4" />
-                    </svg>
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="text-[13px] font-semibold" style={{ color: '#e0e4ea' }}>
-                      Predict Anything
-                    </div>
-                    <div className="text-[12px]" style={{ color: T.muted }}>
-                      Describe an event — AI creates a tradeable market
-                    </div>
-                  </div>
-                  <span
-                    className="flex-shrink-0 text-[10px] font-bold px-2 py-1 rounded-md uppercase"
-                    style={{
-                      background: 'linear-gradient(135deg, rgba(59,130,246,0.2), rgba(139,92,246,0.2))',
-                      color: '#93bbfc',
-                      letterSpacing: '0.06em',
-                    }}
-                  >
-                    AI Powered
-                  </span>
-                </div>
-
-                {/* AI Insights — premium button */}
-                <button
-                  onClick={() => setAiDrawerOpen(!aiDrawerOpen)}
-                  className="flex items-center gap-3 px-4 py-3 rounded-xl flex-shrink-0"
-                  style={{
-                    backgroundColor: aiDrawerOpen ? 'rgba(139,92,246,0.12)' : 'rgba(255,255,255,0.03)',
-                    color: aiDrawerOpen ? '#a78bfa' : T.textSecondary,
-                    border: `1px solid ${aiDrawerOpen ? 'rgba(139,92,246,0.25)' : 'rgba(255,255,255,0.06)'}`,
-                    transition: 'all 200ms cubic-bezier(0.16,1,0.3,1)',
-                  }}
-                >
-                  <div
-                    className="flex-shrink-0 w-8 h-8 rounded-lg flex items-center justify-center"
-                    style={{ background: aiDrawerOpen ? 'rgba(139,92,246,0.15)' : 'rgba(255,255,255,0.04)' }}
-                  >
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
-                      <path d="M12 2L15.09 8.26L22 9.27L17 14.14L18.18 21.02L12 17.77L5.82 21.02L7 14.14L2 9.27L8.91 8.26L12 2Z" />
-                    </svg>
-                  </div>
-                  <div className="text-left">
-                    <div className="text-[13px] font-semibold">AI Insights</div>
-                    <div className="text-[11px]" style={{ color: T.muted }}>Market analysis</div>
-                  </div>
-                </button>
-              </div>
-            </div>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M12 2L15.09 8.26L22 9.27L17 14.14L18.18 21.02L12 17.77L5.82 21.02L7 14.14L2 9.27L8.91 8.26L12 2Z" />
+              </svg>
+              AI Insights
+            </button>
           </div>
 
           {/* Content Area */}
@@ -501,49 +433,7 @@ export default function PredictionsPage() {
               )}
             </AnimatePresence>
 
-            {/* TalarionCreate Modal */}
-            <AnimatePresence>
-              {showCreateModal && (
-                <>
-                  <motion.div
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    exit={{ opacity: 0 }}
-                    className="fixed inset-0 z-[9998]"
-                    style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}
-                    onClick={() => setShowCreateModal(false)}
-                  />
-                  <motion.div
-                    initial={{ opacity: 0, scale: 0.95, y: 20 }}
-                    animate={{ opacity: 1, scale: 1, y: 0 }}
-                    exit={{ opacity: 0, scale: 0.95, y: 20 }}
-                    transition={{ duration: 0.2 }}
-                    className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-[9999] w-[560px] max-w-[90vw] max-h-[80vh] overflow-y-auto rounded-xl"
-                    style={{
-                      backgroundColor: T.bgElevated,
-                      border: `1px solid ${T.border}`,
-                      boxShadow: '0 16px 48px rgba(0,0,0,0.5)',
-                    }}
-                  >
-                    <div className="flex items-center justify-between p-4" style={{ borderBottom: `1px solid ${T.border}` }}>
-                      <span className="text-[14px] font-semibold" style={{ color: T.text }}>Create a Market</span>
-                      <button
-                        onClick={() => setShowCreateModal(false)}
-                        className="p-1 rounded"
-                        style={{ color: T.muted }}
-                      >
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                          <path d="M18 6L6 18M6 6l12 12" />
-                        </svg>
-                      </button>
-                    </div>
-                    <div className="p-4" id="ai-predictions-section">
-                      <TalarionCreate authToken={user?.bearerToken} />
-                    </div>
-                  </motion.div>
-                </>
-              )}
-            </AnimatePresence>
+            {/* TalarionCreate is now inline above — no modal needed */}
 
 
             {/* Loading State */}
