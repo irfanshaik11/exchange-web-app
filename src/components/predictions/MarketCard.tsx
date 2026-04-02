@@ -75,15 +75,17 @@ const MarketCard = React.memo(function MarketCard({
             border: `1px solid ${T.border}`,
             borderRadius: 12,
             opacity: isActive ? 1 : 0.5,
-            transition: `border-color 150ms ease, background-color 150ms ease`,
+            transition: `border-color 150ms ease, background-color 150ms ease, transform 150ms ease`,
           }}
           onMouseEnter={(e) => {
             e.currentTarget.style.borderColor = T.borderHover;
             e.currentTarget.style.backgroundColor = T.bgCardHover;
+            e.currentTarget.style.transform = 'translateY(-2px)';
           }}
           onMouseLeave={(e) => {
             e.currentTarget.style.borderColor = T.border;
             e.currentTarget.style.backgroundColor = T.bgCard;
+            e.currentTarget.style.transform = 'translateY(0)';
           }}
         >
           <div className="flex flex-col flex-1 p-4">

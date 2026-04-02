@@ -73,18 +73,33 @@ export default function PredictionsTopNav({
         >
           {CATEGORIES.map((cat) => {
             const isActive = selectedCategory === cat.id;
+            const CatIcon = cat.icon;
             return (
               <button
                 key={cat.id}
                 onClick={() => onSelectCategory(cat.id)}
-                className="relative flex-shrink-0 px-3.5 py-1.5 text-[13px] font-medium cursor-pointer whitespace-nowrap rounded-full"
+                className="relative flex-shrink-0 flex items-center gap-1.5 px-3.5 py-1.5 text-[13px] font-medium cursor-pointer whitespace-nowrap rounded-full"
                 style={{
-                  color: isActive ? T.text : T.muted,
+                  color: isActive ? T.text : T.textSecondary,
                   backgroundColor: isActive ? 'rgba(255,255,255,0.08)' : 'transparent',
+                  border: isActive ? '1px solid rgba(255,255,255,0.10)' : '1px solid transparent',
                   transition: 'all 150ms ease',
                   margin: '6px 2px',
                 }}
+                onMouseEnter={(e) => {
+                  if (!isActive) {
+                    e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.04)';
+                    e.currentTarget.style.color = T.text;
+                  }
+                }}
+                onMouseLeave={(e) => {
+                  if (!isActive) {
+                    e.currentTarget.style.backgroundColor = 'transparent';
+                    e.currentTarget.style.color = T.textSecondary;
+                  }
+                }}
               >
+                <CatIcon className={`w-3.5 h-3.5 ${isActive ? '' : 'opacity-60'}`} />
                 {cat.id === 'all' ? 'All' : cat.label}
               </button>
             );

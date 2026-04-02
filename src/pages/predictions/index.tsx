@@ -323,7 +323,6 @@ export default function PredictionsPage() {
           {/* Action bar: Predictions AI search + AI Insights */}
           <div
             className="flex items-center gap-3 px-6 py-3"
-            style={{ borderBottom: `1px solid ${T.border}` }}
           >
             {/* Predictions AI — inline search bar */}
             <div
@@ -538,23 +537,23 @@ export default function PredictionsPage() {
               >
                 <div
                   className="w-14 h-14 rounded-xl flex items-center justify-center mb-4"
-                  style={{ backgroundColor: T.greenSoft }}
+                  style={{ backgroundColor: T.bgCard }}
                 >
                   <HiOutlineSearch className="w-6 h-6" style={{ color: T.muted }} />
                 </div>
-                <h3 className="text-base font-semibold mb-1.5" style={{ color: T.text }}>
+                <h3 className="text-[16px] font-semibold mb-1.5" style={{ color: T.text }}>
                   No markets found
                 </h3>
-                <p className="text-[13px] text-center max-w-md mb-4" style={{ color: T.muted }}>
+                <p className="text-[13px] text-center max-w-md mb-4" style={{ color: T.textSecondary }}>
                   {searchQuery
-                    ? `No markets matching "${searchQuery}".`
-                    : "No markets in this category yet."}
+                    ? `No markets matching "${searchQuery}". Try a different search term.`
+                    : "No markets in this category yet. Check back soon or browse Trending markets."}
                 </p>
                 {searchQuery && (
                   <button
                     onClick={() => setSearchQuery('')}
                     className="px-4 py-2 rounded-lg text-[13px] font-medium"
-                    style={{ backgroundColor: T.greenSoft, color: T.accent }}
+                    style={{ backgroundColor: T.accentSoft, color: T.accent }}
                   >
                     Clear search
                   </button>
@@ -593,9 +592,18 @@ export default function PredictionsPage() {
                       disabled={isFetchingMore}
                       className="px-5 py-2 rounded-lg text-[12px] font-medium disabled:opacity-50"
                       style={{
-                        backgroundColor: 'rgba(255,255,255,0.04)',
+                        backgroundColor: T.bgCard,
                         border: `1px solid ${T.border}`,
-                        color: T.textSecondary,
+                        color: T.text,
+                        transition: 'all 150ms ease',
+                      }}
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.borderColor = T.borderHover;
+                        e.currentTarget.style.backgroundColor = T.bgCardHover;
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.borderColor = T.border;
+                        e.currentTarget.style.backgroundColor = T.bgCard;
                       }}
                     >
                       {isFetchingMore ? (
@@ -604,12 +612,12 @@ export default function PredictionsPage() {
                             <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
                             <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
                           </svg>
-                          Loading...
+                          Loading more...
                         </span>
-                      ) : 'Load More Markets'}
+                      ) : 'Show More Markets'}
                     </button>
-                    <span className="text-[11px]" style={{ color: T.muted }}>
-                      Showing {activeMarkets.length.toLocaleString()} of {totalAvailable.toLocaleString()} markets
+                    <span className="text-[12px]" style={{ color: T.muted }}>
+                      Showing {Math.min(visibleCardCount, activeMarkets.length).toLocaleString()} of {totalAvailable.toLocaleString()} markets
                     </span>
                   </div>
                 )}
@@ -680,7 +688,7 @@ export default function PredictionsPage() {
               className="mt-10 py-8 text-center"
               style={{ borderTop: `1px solid ${T.border}` }}
             >
-              <p className="text-[14px] mb-5" style={{ color: T.muted }}>
+              <p className="text-[14px] mb-5" style={{ color: T.textSecondary }}>
                 Don't see what you're looking for? Join our community.
               </p>
               <div className="flex items-center justify-center gap-3">
