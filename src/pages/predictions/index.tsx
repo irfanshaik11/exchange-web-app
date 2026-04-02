@@ -32,7 +32,6 @@ import useUnifiedPredictionMarkets from '~/hooks/useUnifiedPredictionMarkets';
 import type { UnifiedPredictionMarket } from '~/hooks/useUnifiedPredictionMarkets';
 import usePredictionFavorites from '~/hooks/usePredictionFavorites';
 import type { PredictionDataSource } from '~/components/predictions/DataSourceSwitcher';
-import { HomepageInsightPanel } from '~/components/insights/HomepageInsightPanel';
 import AiPulseDrawer from '~/components/predictions/AiPulseDrawer';
 import useNavLayout from '~/hooks/useNavLayout';
 
@@ -396,10 +395,6 @@ export default function PredictionsPage() {
               </div>
             </div>
 
-            {/* AI Market Pulse — full width on smaller screens (where drawer is hidden) */}
-            <div className="xl:hidden mb-6">
-              <HomepageInsightPanel docked />
-            </div>
 
             {/* Loading State */}
             {isLoading ? (
