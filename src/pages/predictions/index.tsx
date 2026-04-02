@@ -383,60 +383,10 @@ export default function PredictionsPage() {
               </motion.div>
             )}
 
-            {/* AI Pulse — right drawer */}
-            <AnimatePresence>
-              {aiDrawerOpen && (
-                <motion.div
-                  initial={{ opacity: 0, x: 20 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  exit={{ opacity: 0, x: 20 }}
-                  transition={{ duration: 0.2 }}
-                  className="fixed right-0 top-0 bottom-0 z-[9999] w-[400px] max-w-[90vw]"
-                  style={{
-                    backgroundColor: T.bgElevated,
-                    borderLeft: `1px solid ${T.border}`,
-                    boxShadow: '-8px 0 24px rgba(0,0,0,0.4)',
-                  }}
-                >
-                  <div className="flex items-center justify-between p-4" style={{ borderBottom: `1px solid ${T.border}` }}>
-                    <div className="flex items-center gap-2">
-                      <svg width="16" height="16" viewBox="0 0 24 24" fill={T.purple}>
-                        <path d="M12 2L15.09 8.26L22 9.27L17 14.14L18.18 21.02L12 17.77L5.82 21.02L7 14.14L2 9.27L8.91 8.26L12 2Z" />
-                      </svg>
-                      <span className="text-[14px] font-semibold" style={{ color: T.text }}>AI Market Pulse</span>
-                    </div>
-                    <button
-                      onClick={() => setAiDrawerOpen(false)}
-                      className="p-1 rounded"
-                      style={{ color: T.muted }}
-                    >
-                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                        <path d="M18 6L6 18M6 6l12 12" />
-                      </svg>
-                    </button>
-                  </div>
-                  <div className="p-4 overflow-y-auto h-full">
-                    <HomepageInsightPanel docked chromeless />
-                  </div>
-                </motion.div>
-              )}
-            </AnimatePresence>
-            {/* Backdrop for AI drawer */}
-            <AnimatePresence>
-              {aiDrawerOpen && (
-                <motion.div
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  exit={{ opacity: 0 }}
-                  className="fixed inset-0 z-[9998]"
-                  style={{ backgroundColor: 'rgba(0,0,0,0.4)' }}
-                  onClick={() => setAiDrawerOpen(false)}
-                />
-              )}
-            </AnimatePresence>
-
-            {/* TalarionCreate is now inline above — no modal needed */}
-
+            {/* Main content area: cards + optional AI sidebar */}
+            <div className={`flex gap-5 ${aiDrawerOpen ? '' : ''}`}>
+            {/* Left: market content */}
+            <div className="flex-1 min-w-0">
 
             {/* Loading State */}
             {isLoading ? (
@@ -618,6 +568,59 @@ export default function PredictionsPage() {
                 )}
               </>
             )}
+
+            </div>
+            {/* Right: AI Insights sidebar (desktop only) */}
+            <AnimatePresence>
+              {aiDrawerOpen && (
+                <motion.div
+                  initial={{ opacity: 0, width: 0 }}
+                  animate={{ opacity: 1, width: 320 }}
+                  exit={{ opacity: 0, width: 0 }}
+                  transition={{ duration: 0.25, ease: [0.16, 1, 0.3, 1] }}
+                  className="hidden lg:block flex-shrink-0 overflow-hidden"
+                >
+                  <div
+                    className="w-[320px] sticky top-16 rounded-xl overflow-y-auto"
+                    style={{
+                      backgroundColor: T.bgCard,
+                      border: `1px solid ${T.border}`,
+                      maxHeight: 'calc(100vh - 80px)',
+                    }}
+                  >
+                    {/* Header */}
+                    <div
+                      className="flex items-center justify-between px-4 py-3 sticky top-0 z-10"
+                      style={{
+                        backgroundColor: T.bgCard,
+                        borderBottom: `1px solid ${T.border}`,
+                      }}
+                    >
+                      <div className="flex items-center gap-2">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="#a78bfa">
+                          <path d="M12 2L15.09 8.26L22 9.27L17 14.14L18.18 21.02L12 17.77L5.82 21.02L7 14.14L2 9.27L8.91 8.26L12 2Z" />
+                        </svg>
+                        <span className="text-[13px] font-semibold" style={{ color: T.text }}>AI Insights</span>
+                      </div>
+                      <button
+                        onClick={() => setAiDrawerOpen(false)}
+                        className="p-1 rounded"
+                        style={{ color: T.muted }}
+                      >
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                          <path d="M18 6L6 18M6 6l12 12" />
+                        </svg>
+                      </button>
+                    </div>
+                    {/* Content */}
+                    <div className="p-3">
+                      <HomepageInsightPanel docked chromeless />
+                    </div>
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+            </div>
 
             {/* Footer CTA */}
             <div
