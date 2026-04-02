@@ -10,6 +10,8 @@ interface AiDrawerBaseProps {
   pillLabel: string;
   fabBottom?: number;
   animationPrefix?: string;
+  /** Pass a value that changes on layout toggle so pill repositions */
+  layoutKey?: string;
   children: ReactNode;
 }
 
@@ -67,6 +69,7 @@ export default function AiDrawerBase({
   pillLabel,
   fabBottom = 24,
   animationPrefix = 'aidrawer',
+  layoutKey,
   children,
 }: AiDrawerBaseProps) {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -77,14 +80,24 @@ export default function AiDrawerBase({
   // ---- Desktop: dynamic left offset from container position ----
   useEffect(() => {
     if (!isDesktop || open) return;
+    const el = containerRef.current;
     const updateLeft = () => {
-      const rect = containerRef.current?.getBoundingClientRect();
+      const rect = el?.getBoundingClientRect();
       if (rect) setPillLeft(rect.left + 4);
     };
     updateLeft();
     window.addEventListener('resize', updateLeft);
-    return () => window.removeEventListener('resize', updateLeft);
-  }, [open, isDesktop]);
+    // Use ResizeObserver to detect layout shifts (e.g. sidebar toggle)
+    let ro: ResizeObserver | undefined;
+    if (el) {
+      ro = new ResizeObserver(updateLeft);
+      ro.observe(el);
+    }
+    return () => {
+      window.removeEventListener('resize', updateLeft);
+      ro?.disconnect();
+    };
+  }, [open, isDesktop, layoutKey]);
 
   // ---- Desktop: pill slides up as user scrolls past header ----
   useEffect(() => {
@@ -265,7 +278,7 @@ export default function AiDrawerBase({
           </div>
         </button>
       ) : (
-        <div className="w-[360px] flex flex-col">
+        <div className="w-[360px] flex flex-col pt-3">
           <div className="iridescent-border flex flex-col" style={{ borderRadius: '16px' }}>
             <div className="iridescent-inner flex flex-col overflow-hidden" style={{ borderRadius: '14.5px' }}>
               <DrawerHeader title={title} onClose={onClose} />

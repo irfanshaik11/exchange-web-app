@@ -6,9 +6,10 @@ interface AiPulseDrawerProps {
   open: boolean;
   onOpen: () => void;
   onClose: () => void;
+  layoutKey?: string;
 }
 
-export default function AiPulseDrawer({ open, onOpen, onClose }: AiPulseDrawerProps) {
+export default function AiPulseDrawer({ open, onOpen, onClose, layoutKey }: AiPulseDrawerProps) {
   return (
     <AiDrawerBase
       open={open}
@@ -18,6 +19,7 @@ export default function AiPulseDrawer({ open, onOpen, onClose }: AiPulseDrawerPr
       pillLabel="AI Pulse"
       fabBottom={24}
       animationPrefix="aipulse"
+      layoutKey={layoutKey}
     >
       <HomepageInsightPanel docked chromeless />
     </AiDrawerBase>

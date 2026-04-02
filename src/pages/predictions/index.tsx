@@ -250,6 +250,7 @@ export default function PredictionsPage() {
             open={aiDrawerOpen}
             onOpen={() => setAiDrawerOpen(true)}
             onClose={() => setAiDrawerOpen(false)}
+            layoutKey={layout}
           />
 
           {/* Left: All market content */}
