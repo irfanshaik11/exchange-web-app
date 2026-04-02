@@ -1,4 +1,4 @@
-import React, { useMemo, useState, useEffect, useCallback } from 'react';
+import React, { useMemo, useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import { motion, AnimatePresence } from 'framer-motion';
 import { T } from './theme';
@@ -42,26 +42,26 @@ export default function FeaturedHero({ market: singleMarket, markets: marketsPro
   const [currentIndex, setCurrentIndex] = useState(0);
   const [isPaused, setIsPaused] = useState(false);
   const [progress, setProgress] = useState(0);
+  const startRef = useRef(Date.now());
 
-  // Auto-rotate
+  // Auto-rotate with ref-based timer (no double-advance bug)
   useEffect(() => {
     if (rotationMarkets.length <= 1 || isPaused) return;
-    const startTime = Date.now();
-    const interval = setInterval(() => {
-      const elapsed = Date.now() - startTime;
-      const p = (elapsed % rotateInterval) / rotateInterval;
-      setProgress(p);
-      if (elapsed % rotateInterval < 50) {
+    startRef.current = Date.now();
+    setProgress(0);
+    const tick = setInterval(() => {
+      const elapsed = Date.now() - startRef.current;
+      const p = elapsed / rotateInterval;
+      if (p >= 1) {
         setCurrentIndex((prev) => (prev + 1) % rotationMarkets.length);
+        startRef.current = Date.now();
+        setProgress(0);
+      } else {
+        setProgress(p);
       }
     }, 50);
-    return () => clearInterval(interval);
-  }, [rotationMarkets.length, rotateInterval, isPaused, currentIndex]);
-
-  // Reset progress on index change
-  useEffect(() => {
-    setProgress(0);
-  }, [currentIndex]);
+    return () => clearInterval(tick);
+  }, [rotationMarkets.length, rotateInterval, isPaused]);
 
   const market = rotationMarkets[currentIndex % rotationMarkets.length];
   if (!market) return null;
@@ -117,7 +117,7 @@ function FeaturedCard({
   }, [isMulti, ext.topOutcomes, yesPercent, noPercent]);
 
   return (
-    <Link href={href} className="block h-full">
+    <Link href={href} className="block h-full" aria-label={market.title}>
       {/* Gradient border wrapper */}
       <div
         className="h-full"
@@ -210,32 +210,30 @@ function FeaturedCard({
                   ))}
                 </div>
 
-                {/* Buy buttons */}
+                {/* Price pills (visual labels, not buttons — card link handles navigation) */}
                 <div className="flex gap-2 mt-3">
-                  <span
+                  <div
                     className="flex-1 text-center py-2 rounded-lg"
                     style={{
                       fontSize: 13,
                       fontWeight: 600,
-                      backgroundColor: 'rgba(34, 197, 94, 0.1)',
+                      backgroundColor: 'rgba(34, 197, 94, 0.08)',
                       color: T.green,
-                      border: '1px solid rgba(34, 197, 94, 0.2)',
                     }}
                   >
-                    Buy Yes {yesPercent}¢
-                  </span>
-                  <span
+                    Yes {yesPercent}¢
+                  </div>
+                  <div
                     className="flex-1 text-center py-2 rounded-lg"
                     style={{
                       fontSize: 13,
                       fontWeight: 600,
-                      backgroundColor: 'rgba(239, 68, 68, 0.1)',
+                      backgroundColor: 'rgba(239, 68, 68, 0.08)',
                       color: T.red,
-                      border: '1px solid rgba(239, 68, 68, 0.2)',
                     }}
                   >
-                    Buy No {noPercent}¢
-                  </span>
+                    No {noPercent}¢
+                  </div>
                 </div>
 
                 {/* Footer stats */}

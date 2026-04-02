@@ -567,7 +567,7 @@ export default function PredictionsPage() {
                   <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
                     {/* Featured Hero — spans 2 columns */}
                     {!searchQuery && selectedCategory === 'all' && (
-                      <div className="col-span-1 sm:col-span-2 overflow-hidden rounded-xl" style={{ border: `1px solid ${T.border}` }}>
+                      <div className="col-span-1 sm:col-span-2">
                         <FeaturedHero markets={activeMarkets} />
                       </div>
                     )}
