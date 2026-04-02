@@ -253,14 +253,14 @@ export default function PredictionsPage() {
             {SORT_TABS.map((tab) => (
               <button
                 key={tab.id}
-                onClick={() => setSelectedSort(tab.id)}
+                onClick={() => { setSelectedSort(tab.id); setAiDrawerOpen(false); }}
                 className="relative flex-shrink-0 px-4 py-3 text-[13px] font-medium"
                 style={{
-                  color: selectedSort === tab.id ? T.text : T.muted,
+                  color: selectedSort === tab.id && !aiDrawerOpen ? T.text : T.muted,
                 }}
               >
                 {tab.label}
-                {selectedSort === tab.id && (
+                {selectedSort === tab.id && !aiDrawerOpen && (
                   <motion.div
                     layoutId="sort-tab-underline"
                     className="absolute bottom-0 left-2 right-2 h-[2px]"
@@ -274,6 +274,43 @@ export default function PredictionsPage() {
                 )}
               </button>
             ))}
+
+            {/* Separator */}
+            <div className="w-px h-5 mx-1 flex-shrink-0" style={{ backgroundColor: T.border }} />
+
+            {/* AI Insights — as a premium tab */}
+            <button
+              onClick={() => setAiDrawerOpen(!aiDrawerOpen)}
+              className="relative flex-shrink-0 flex items-center gap-1.5 px-4 py-3 text-[13px] font-semibold"
+              style={{
+                color: aiDrawerOpen ? '#4ADE80' : T.muted,
+                transition: 'color 150ms ease',
+              }}
+            >
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none">
+                <defs>
+                  <linearGradient id="ai-tab-sparkle" x1="3" y1="2" x2="22" y2="21">
+                    <stop stopColor={aiDrawerOpen ? '#4ADE80' : T.muted} />
+                    <stop offset="0.5" stopColor={aiDrawerOpen ? '#22D3EE' : T.muted} />
+                    <stop offset="1" stopColor={aiDrawerOpen ? '#818CF8' : T.muted} />
+                  </linearGradient>
+                </defs>
+                <path d="M12 2L13.5 8.5L20 10L13.5 11.5L12 18L10.5 11.5L4 10L10.5 8.5L12 2Z" fill="url(#ai-tab-sparkle)" />
+              </svg>
+              AI Insights
+              {aiDrawerOpen && (
+                <motion.div
+                  layoutId="sort-tab-underline"
+                  className="absolute bottom-0 left-2 right-2 h-[2px]"
+                  style={{
+                    background: 'linear-gradient(90deg, #4ADE80, #22D3EE, #818CF8)',
+                    borderRadius: 1,
+                    boxShadow: '0 1px 12px rgba(74, 222, 128, 0.3)',
+                  }}
+                  transition={{ type: 'spring', stiffness: 400, damping: 30 }}
+                />
+              )}
+            </button>
             {!isLoading && (
               <span
                 className="text-[11px] font-medium px-2 py-0.5 rounded-full ml-1 flex-shrink-0"
@@ -321,55 +358,7 @@ export default function PredictionsPage() {
                 onFiltersChange={setMarketFilters}
               />
 
-              {/* AI Insights toggle — in sort bar, icon-only with tooltip */}
-              <button
-                onClick={() => setAiDrawerOpen(!aiDrawerOpen)}
-                className="relative flex items-center justify-center rounded-lg"
-                title="AI Market Insights"
-                style={{
-                  width: 34,
-                  height: 34,
-                  backgroundColor: aiDrawerOpen ? 'rgba(74,222,128,0.10)' : 'transparent',
-                  border: `1px solid ${aiDrawerOpen ? 'rgba(74,222,128,0.25)' : 'transparent'}`,
-                  transition: 'all 200ms cubic-bezier(0.16,1,0.3,1)',
-                }}
-                onMouseEnter={(e) => {
-                  if (!aiDrawerOpen) {
-                    e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.04)';
-                    e.currentTarget.style.borderColor = T.border;
-                  }
-                }}
-                onMouseLeave={(e) => {
-                  if (!aiDrawerOpen) {
-                    e.currentTarget.style.backgroundColor = 'transparent';
-                    e.currentTarget.style.borderColor = 'transparent';
-                  }
-                }}
-              >
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
-                  <defs>
-                    <linearGradient id="ai-sort-sparkle" x1="3" y1="2" x2="22" y2="21">
-                      <stop stopColor={aiDrawerOpen ? '#4ADE80' : T.muted} />
-                      <stop offset="0.5" stopColor={aiDrawerOpen ? '#22D3EE' : T.muted} />
-                      <stop offset="1" stopColor={aiDrawerOpen ? '#818CF8' : T.muted} />
-                    </linearGradient>
-                  </defs>
-                  <path d="M12 2L13.5 8.5L20 10L13.5 11.5L12 18L10.5 11.5L4 10L10.5 8.5L12 2Z" fill="url(#ai-sort-sparkle)" />
-                </svg>
-                {/* Active indicator dot */}
-                {aiDrawerOpen && (
-                  <span
-                    className="absolute -top-0.5 -right-0.5"
-                    style={{
-                      width: 6,
-                      height: 6,
-                      borderRadius: '50%',
-                      background: 'linear-gradient(135deg, #4ADE80, #22D3EE)',
-                      border: '1px solid #131517',
-                    }}
-                  />
-                )}
-              </button>
+              {/* AI Insights toggle is now in the sort tabs row */}
             </div>
           </div>
 
@@ -411,10 +400,50 @@ export default function PredictionsPage() {
               </motion.div>
             )}
 
-            {/* Main content area: cards + optional AI sidebar */}
-            <div className={`flex gap-5 ${aiDrawerOpen ? '' : ''}`}>
-            {/* Left: market content */}
-            <div className="flex-1 min-w-0">
+            {/* Main content area */}
+            <div>
+
+            {/* AI Insights — full-width view when active */}
+            {aiDrawerOpen && (
+              <motion.div
+                initial={{ opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.25, ease: [0.16, 1, 0.3, 1] }}
+                className="mb-6 rounded-2xl overflow-hidden"
+                style={{
+                  background: 'linear-gradient(180deg, rgba(18,20,26,0.98) 0%, rgba(14,16,20,0.96) 80px)',
+                  border: '1px solid rgba(74,222,128,0.10)',
+                  boxShadow: '0 0 40px rgba(74,222,128,0.03)',
+                }}
+              >
+                {/* Premium header */}
+                <div className="relative overflow-hidden">
+                  <div className="absolute inset-0 pointer-events-none" style={{ height: 64, background: 'linear-gradient(180deg, rgba(74,222,128,0.06) 0%, rgba(34,211,238,0.03) 50%, transparent 100%)' }} />
+                  <div className="relative flex items-center gap-2.5 px-6 py-4">
+                    <div
+                      className="w-8 h-8 rounded-lg flex items-center justify-center"
+                      style={{ background: 'linear-gradient(135deg, rgba(74,222,128,0.12), rgba(129,140,248,0.12))', border: '1px solid rgba(74,222,128,0.15)' }}
+                    >
+                      <svg width="15" height="15" viewBox="0 0 24 24" fill="none">
+                        <defs><linearGradient id="ai-view-sparkle" x1="3" y1="2" x2="22" y2="21"><stop stopColor="#4ADE80"/><stop offset="0.5" stopColor="#22D3EE"/><stop offset="1" stopColor="#818CF8"/></linearGradient></defs>
+                        <path d="M12 2L13.5 8.5L20 10L13.5 11.5L12 18L10.5 11.5L4 10L10.5 8.5L12 2Z" fill="url(#ai-view-sparkle)" />
+                      </svg>
+                    </div>
+                    <div>
+                      <span className="text-[15px] font-semibold block" style={{ background: 'linear-gradient(90deg, #4ADE80, #22D3EE)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>
+                        AI Market Intelligence
+                      </span>
+                      <span className="text-[11px]" style={{ color: 'rgba(255,255,255,0.35)' }}>Real-time AI analysis of prediction markets</span>
+                    </div>
+                  </div>
+                  <div style={{ height: 1, background: 'linear-gradient(90deg, transparent, rgba(74,222,128,0.15) 20%, rgba(34,211,238,0.12) 50%, rgba(129,140,248,0.15) 80%, transparent)' }} />
+                </div>
+                {/* Content */}
+                <div className="p-6">
+                  <HomepageInsightPanel docked chromeless />
+                </div>
+              </motion.div>
+            )}
 
             {/* Loading State */}
             {isLoading ? (
@@ -597,96 +626,6 @@ export default function PredictionsPage() {
               </>
             )}
 
-            </div>
-            {/* Right: AI Insights sidebar (desktop only) */}
-            <AnimatePresence>
-              {aiDrawerOpen && (
-                <motion.div
-                  initial={{ opacity: 0, width: 0 }}
-                  animate={{ opacity: 1, width: 320 }}
-                  exit={{ opacity: 0, width: 0 }}
-                  transition={{ duration: 0.25, ease: [0.16, 1, 0.3, 1] }}
-                  className="hidden lg:block flex-shrink-0 overflow-hidden"
-                >
-                  <div
-                    className="w-[320px] sticky top-16 rounded-2xl overflow-hidden"
-                    style={{
-                      background: 'linear-gradient(180deg, rgba(18,20,26,0.98) 0%, rgba(14,16,20,0.96) 60px)',
-                      border: '1px solid rgba(74,222,128,0.10)',
-                      maxHeight: 'calc(100vh - 80px)',
-                      boxShadow: '0 0 30px rgba(74,222,128,0.03)',
-                    }}
-                  >
-                    {/* Premium header with gradient wash */}
-                    <div className="relative overflow-hidden">
-                      {/* Gradient ceiling */}
-                      <div
-                        className="absolute inset-0 pointer-events-none"
-                        style={{
-                          height: 64,
-                          background: 'linear-gradient(180deg, rgba(74,222,128,0.06) 0%, rgba(34,211,238,0.03) 50%, transparent 100%)',
-                        }}
-                      />
-                      <div className="relative flex items-center justify-between px-4 py-3.5">
-                        <div className="flex items-center gap-2.5">
-                          <div
-                            className="w-7 h-7 rounded-lg flex items-center justify-center"
-                            style={{
-                              background: 'linear-gradient(135deg, rgba(74,222,128,0.12), rgba(129,140,248,0.12))',
-                              border: '1px solid rgba(74,222,128,0.15)',
-                            }}
-                          >
-                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
-                              <defs>
-                                <linearGradient id="ai-sidebar-sparkle" x1="3" y1="2" x2="22" y2="21">
-                                  <stop stopColor="#4ADE80" /><stop offset="0.5" stopColor="#22D3EE" /><stop offset="1" stopColor="#818CF8" />
-                                </linearGradient>
-                              </defs>
-                              <path d="M12 2L13.5 8.5L20 10L13.5 11.5L12 18L10.5 11.5L4 10L10.5 8.5L12 2Z" fill="url(#ai-sidebar-sparkle)" />
-                            </svg>
-                          </div>
-                          <div>
-                            <span
-                              className="text-[13px] font-semibold block"
-                              style={{
-                                background: 'linear-gradient(90deg, #4ADE80, #22D3EE)',
-                                WebkitBackgroundClip: 'text',
-                                WebkitTextFillColor: 'transparent',
-                              }}
-                            >
-                              AI Market Pulse
-                            </span>
-                            <span className="text-[10px]" style={{ color: 'rgba(255,255,255,0.35)' }}>Powered by AI</span>
-                          </div>
-                        </div>
-                        <button
-                          onClick={() => setAiDrawerOpen(false)}
-                          className="p-1.5 rounded-lg"
-                          style={{
-                            color: 'rgba(255,255,255,0.4)',
-                            background: 'rgba(255,255,255,0.04)',
-                            border: '1px solid rgba(255,255,255,0.06)',
-                            transition: 'all 150ms ease',
-                          }}
-                          onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.08)'; }}
-                          onMouseLeave={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.04)'; }}
-                        >
-                          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
-                            <path d="M18 6L6 18M6 6l12 12" />
-                          </svg>
-                        </button>
-                      </div>
-                      {/* Gradient separator */}
-                      <div style={{ height: 1, background: 'linear-gradient(90deg, transparent, rgba(74,222,128,0.15) 20%, rgba(34,211,238,0.12) 50%, rgba(129,140,248,0.15) 80%, transparent)' }} />
-                    </div>
-                    {/* Content */}
-                    <div className="p-3 overflow-y-auto" style={{ maxHeight: 'calc(100vh - 150px)' }}>
-                      <HomepageInsightPanel docked chromeless />
-                    </div>
-                  </div>
-                </motion.div>
-              )}
-            </AnimatePresence>
             </div>
 
             {/* Footer CTA */}
