@@ -320,33 +320,49 @@ export default function PredictionsPage() {
             </div>
           </div>
 
-          {/* Action bar: Create + AI Pulse — visible, below sort tabs */}
+          {/* Action bar: Predictions AI search + AI Insights */}
           <div
-            className="flex items-center gap-3 px-6 py-2"
+            className="flex items-center gap-3 px-6 py-3"
             style={{ borderBottom: `1px solid ${T.border}` }}
           >
-            {/* Create Market */}
-            <button
-              onClick={() => setShowCreateModal(true)}
-              className="flex items-center gap-2 px-4 py-2 rounded-lg text-[13px] font-semibold"
+            {/* Predictions AI — inline search bar */}
+            <div
+              className="flex items-center gap-2 flex-1 max-w-xl px-4 py-2.5 rounded-xl cursor-pointer"
               style={{
-                backgroundColor: T.accent,
-                color: '#fff',
+                backgroundColor: 'rgba(255,255,255,0.03)',
+                border: `1px solid ${T.border}`,
                 transition: 'all 150ms ease',
               }}
+              onClick={() => setShowCreateModal(true)}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.borderColor = `${T.accent}40`;
+                e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.05)';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.borderColor = T.border;
+                e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.03)';
+              }}
             >
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={T.accent} strokeWidth="2">
                 <path d="M12 5v14M5 12h14" />
               </svg>
-              Create Market
-            </button>
+              <span className="text-[13px]" style={{ color: T.muted }}>
+                Predict anything — describe an event and AI creates a market...
+              </span>
+              <span
+                className="ml-auto text-[11px] font-medium px-2 py-0.5 rounded"
+                style={{ backgroundColor: `${T.accent}15`, color: T.accent }}
+              >
+                AI
+              </span>
+            </div>
 
-            {/* AI Pulse */}
+            {/* AI Insights */}
             <button
               onClick={() => setAiDrawerOpen(!aiDrawerOpen)}
-              className="flex items-center gap-2 px-4 py-2 rounded-lg text-[13px] font-semibold"
+              className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-[13px] font-semibold flex-shrink-0"
               style={{
-                backgroundColor: aiDrawerOpen ? `${T.purple}25` : 'rgba(255,255,255,0.04)',
+                backgroundColor: aiDrawerOpen ? `${T.purple}20` : 'rgba(255,255,255,0.03)',
                 color: aiDrawerOpen ? T.purple : T.textSecondary,
                 border: `1px solid ${aiDrawerOpen ? `${T.purple}40` : T.border}`,
                 transition: 'all 150ms ease',
@@ -357,11 +373,6 @@ export default function PredictionsPage() {
               </svg>
               AI Insights
             </button>
-
-            {/* Restricted regions notice */}
-            <span className="text-[11px] ml-auto" style={{ color: 'rgba(248,113,113,0.5)' }}>
-              ⚠ Trading unavailable in restricted regions
-            </span>
           </div>
 
           {/* Content Area */}
