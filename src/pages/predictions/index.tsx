@@ -503,13 +503,6 @@ export default function PredictionsPage() {
               </motion.div>
             ) : (
               <>
-                {/* Featured Hero — full width above grid */}
-                {!searchQuery && selectedCategory === 'all' && activeMarkets.length > 0 && (
-                  <div className="mb-5">
-                    <FeaturedHero markets={activeMarkets} />
-                  </div>
-                )}
-
                 {/* Market Grid */}
                 {activeMarkets.length > 0 && (
                   <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
