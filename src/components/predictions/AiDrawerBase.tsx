@@ -10,6 +10,8 @@ interface AiDrawerBaseProps {
   pillLabel: string;
   fabBottom?: number;
   animationPrefix?: string;
+  /** Pass a value that changes on layout toggle so pill repositions */
+  layoutKey?: string;
   children: ReactNode;
 }
 
@@ -67,6 +69,7 @@ export default function AiDrawerBase({
   pillLabel,
   fabBottom = 24,
   animationPrefix = 'aidrawer',
+  layoutKey,
   children,
 }: AiDrawerBaseProps) {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -77,14 +80,24 @@ export default function AiDrawerBase({
   // ---- Desktop: dynamic left offset from container position ----
   useEffect(() => {
     if (!isDesktop || open) return;
+    const el = containerRef.current;
     const updateLeft = () => {
-      const rect = containerRef.current?.getBoundingClientRect();
+      const rect = el?.getBoundingClientRect();
       if (rect) setPillLeft(rect.left + 4);
     };
     updateLeft();
     window.addEventListener('resize', updateLeft);
-    return () => window.removeEventListener('resize', updateLeft);
-  }, [open, isDesktop]);
+    // Use ResizeObserver to detect layout shifts (e.g. sidebar toggle)
+    let ro: ResizeObserver | undefined;
+    if (el) {
+      ro = new ResizeObserver(updateLeft);
+      ro.observe(el);
+    }
+    return () => {
+      window.removeEventListener('resize', updateLeft);
+      ro?.disconnect();
+    };
+  }, [open, isDesktop, layoutKey]);
 
   // ---- Desktop: pill slides up as user scrolls past header ----
   useEffect(() => {
@@ -104,7 +117,7 @@ export default function AiDrawerBase({
     return () => {
       cancelAnimationFrame(raf);
       window.removeEventListener('scroll', onScroll);
-      document.removeEventListener('scroll', onScroll, { capture: true } as any);
+      document.removeEventListener('scroll', onScroll, { capture: true });
     };
   }, [open, isDesktop]);
 
@@ -116,15 +129,17 @@ export default function AiDrawerBase({
     return () => { document.body.style.overflow = prev; };
   }, [open, isDesktop]);
 
-  // ---- Escape key to close mobile sheet ----
+  // ---- Escape key to close drawer (mobile + desktop) ----
+  const onCloseRef = React.useRef(onClose);
+  onCloseRef.current = onClose;
   useEffect(() => {
-    if (isDesktop !== false || !open) return;
+    if (!open) return;
     const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
+      if (e.key === 'Escape') onCloseRef.current();
     };
     document.addEventListener('keydown', onKeyDown);
     return () => document.removeEventListener('keydown', onKeyDown);
-  }, [open, isDesktop, onClose]);
+  }, [open]);
 
   // Don't render until mounted (avoids hydration mismatch)
   if (isDesktop === null) return null;
@@ -137,9 +152,8 @@ export default function AiDrawerBase({
       <>
         {/* FAB — bottom-right, always visible when drawer is closed */}
         {!open && (
-          <button
-            onClick={onOpen}
-            className="iridescent-pill"
+          <div
+            className="iridescent-border"
             style={{
               position: 'fixed',
               bottom: fabBottom,
@@ -148,16 +162,27 @@ export default function AiDrawerBase({
               width: 48,
               height: 48,
               borderRadius: '50%',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              cursor: 'pointer',
-              backgroundColor: 'rgba(12, 14, 18, 0.95)',
               boxShadow: '0 4px 24px rgba(0,0,0,0.5)',
             }}
           >
-            <SparkleIcon size={20} gradientId={`${animationPrefix}-fab`} />
-          </button>
+            <button
+              onClick={onOpen}
+              className="iridescent-inner"
+              aria-label={`Open ${title}`}
+              style={{
+                width: '100%',
+                height: '100%',
+                borderRadius: '50%',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                cursor: 'pointer',
+                backgroundColor: T.bg,
+              }}
+            >
+              <SparkleIcon size={20} gradientId={`${animationPrefix}-fab`} />
+            </button>
+          </div>
         )}
 
         {/* Bottom sheet overlay */}
@@ -265,7 +290,7 @@ export default function AiDrawerBase({
           </div>
         </button>
       ) : (
-        <div className="w-[360px] flex flex-col">
+        <div className="w-[360px] flex flex-col pt-3">
           <div className="iridescent-border flex flex-col" style={{ borderRadius: '16px' }}>
             <div className="iridescent-inner flex flex-col overflow-hidden" style={{ borderRadius: '14.5px' }}>
               <DrawerHeader title={title} onClose={onClose} />

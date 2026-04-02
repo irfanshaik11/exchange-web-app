@@ -111,8 +111,8 @@ export function HomepageInsightPanel({ docked = false, chromeless = false }: { d
           {isLoading ? (
             <InsightSkeleton />
           ) : data?.insights ? (
-            <div className="relative mb-4">
-            <div className={`p-3 pb-8 space-y-3 overflow-y-auto scrollbar-hide ${chromeless ? '' : 'max-h-[400px]'}`}>
+            <div className={`relative ${chromeless ? '' : 'mb-4'}`}>
+            <div className={`p-3 ${chromeless ? 'pb-3' : 'pb-8'} space-y-3 overflow-y-auto scrollbar-hide ${chromeless ? '' : 'max-h-[400px]'}`}>
               {/* Market Pulse */}
               <motion.div
                 initial={{ opacity: 0, y: 6 }}
@@ -206,13 +206,15 @@ export function HomepageInsightPanel({ docked = false, chromeless = false }: { d
                 AI-generated insights. Not financial advice.
               </p>
               {/* Bottom spacer so content doesn't touch border */}
-              <div className="h-4 flex-shrink-0" />
+              {!chromeless && <div className="h-4 flex-shrink-0" />}
             </div>
             {/* Fade overlay at bottom */}
-            <div
-              className="absolute bottom-0 left-0 right-0 h-10 pointer-events-none rounded-b-2xl"
-              style={{ background: 'linear-gradient(to top, rgba(14,16,20,0.95) 0%, rgba(14,16,20,0.6) 40%, transparent 100%)' }}
-            />
+            {!chromeless && (
+              <div
+                className="absolute bottom-0 left-0 right-0 h-10 pointer-events-none rounded-b-2xl"
+                style={{ background: 'linear-gradient(to top, rgba(14,16,20,0.95) 0%, rgba(14,16,20,0.6) 40%, transparent 100%)' }}
+              />
+            )}
             </div>
           ) : timedOut ? (
             <div className="flex flex-col items-center justify-center py-8 px-3 text-center">
