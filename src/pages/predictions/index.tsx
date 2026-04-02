@@ -246,45 +246,45 @@ export default function PredictionsPage() {
           className={`flex-1 flex flex-col ${layout === 'left' ? 'md:ml-[56px]' : ''}`}
           style={{ paddingTop: 0 }}
         >
-          {/* Sort bar: tabs left, search + AI tools right */}
+          {/* Sort bar row 1: tabs + count */}
           <div
-            className="flex items-center justify-between px-6 flex-wrap gap-2"
+            className="flex items-center px-6 overflow-x-auto scrollbar-hide"
             style={{ borderBottom: `1px solid ${T.border}` }}
           >
-            {/* Left: sort tabs + count */}
-            <div className="flex items-center gap-0">
-              {SORT_TABS.map((tab) => (
-                <button
-                  key={tab.id}
-                  onClick={() => setSelectedSort(tab.id)}
-                  className="relative px-4 py-3 text-[13px] font-medium"
-                  style={{
-                    color: selectedSort === tab.id ? T.text : T.muted,
-                  }}
-                >
-                  {tab.label}
-                  {selectedSort === tab.id && (
-                    <motion.div
-                      layoutId="sort-tab-underline"
-                      className="absolute bottom-0 left-2 right-2 h-[2px] rounded-full"
-                      style={{ backgroundColor: T.accent }}
-                      transition={{ type: 'spring', stiffness: 400, damping: 30 }}
-                    />
-                  )}
-                </button>
-              ))}
-              {!isLoading && (
-                <span
-                  className="text-[11px] font-medium px-2 py-0.5 rounded-full ml-1"
-                  style={{ color: T.muted, backgroundColor: 'rgba(255,255,255,0.04)' }}
-                >
-                  {activeMarkets.length.toLocaleString()}
-                </span>
-              )}
-            </div>
+            {SORT_TABS.map((tab) => (
+              <button
+                key={tab.id}
+                onClick={() => setSelectedSort(tab.id)}
+                className="relative flex-shrink-0 px-4 py-3 text-[13px] font-medium"
+                style={{
+                  color: selectedSort === tab.id ? T.text : T.muted,
+                }}
+              >
+                {tab.label}
+                {selectedSort === tab.id && (
+                  <motion.div
+                    layoutId="sort-tab-underline"
+                    className="absolute bottom-0 left-2 right-2 h-[2px] rounded-full"
+                    style={{ backgroundColor: T.accent }}
+                    transition={{ type: 'spring', stiffness: 400, damping: 30 }}
+                  />
+                )}
+              </button>
+            ))}
+            {!isLoading && (
+              <span
+                className="text-[11px] font-medium px-2 py-0.5 rounded-full ml-1 flex-shrink-0"
+                style={{ color: T.muted, backgroundColor: 'rgba(255,255,255,0.04)' }}
+              >
+                {activeMarkets.length.toLocaleString()}
+              </span>
+            )}
 
-            {/* Right: search + create market + AI pulse + filters */}
-            <div className="flex items-center gap-2">
+            {/* Spacer */}
+            <div className="flex-1" />
+
+            {/* Right: search + actions */}
+            <div className="flex items-center gap-2 flex-shrink-0 ml-4">
               {/* Search */}
               <div
                 className="flex items-center gap-2 px-3 py-1.5 rounded-full"
@@ -296,10 +296,10 @@ export default function PredictionsPage() {
                 <HiOutlineSearch className="w-3.5 h-3.5" style={{ color: searchQuery ? T.accent : T.muted }} />
                 <input
                   type="text"
-                  placeholder="Search markets..."
+                  placeholder="Search..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  className="bg-transparent text-[12px] outline-none placeholder-neutral-500 w-28 focus:w-44 transition-all duration-200"
+                  className="bg-transparent text-[12px] outline-none placeholder-neutral-500 w-20 focus:w-36 transition-all duration-200"
                   style={{ color: T.text }}
                 />
                 {searchQuery && (
@@ -313,45 +313,55 @@ export default function PredictionsPage() {
                 )}
               </div>
 
-              {/* Create Market — compact trigger */}
-              <button
-                onClick={() => setShowCreateModal(true)}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[12px] font-medium"
-                style={{
-                  backgroundColor: `${T.accent}15`,
-                  color: T.accent,
-                  border: `1px solid ${T.accent}30`,
-                  transition: 'all 150ms ease',
-                }}
-              >
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                  <path d="M12 5v14M5 12h14" />
-                </svg>
-                Create
-              </button>
-
-              {/* AI Pulse — toolbar button */}
-              <button
-                onClick={() => setAiDrawerOpen(!aiDrawerOpen)}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[12px] font-medium"
-                style={{
-                  backgroundColor: aiDrawerOpen ? `${T.purple}20` : 'rgba(255,255,255,0.03)',
-                  color: aiDrawerOpen ? T.purple : T.muted,
-                  border: `1px solid ${aiDrawerOpen ? `${T.purple}40` : T.border}`,
-                  transition: 'all 150ms ease',
-                }}
-              >
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
-                  <path d="M12 2L15.09 8.26L22 9.27L17 14.14L18.18 21.02L12 17.77L5.82 21.02L7 14.14L2 9.27L8.91 8.26L12 2Z" />
-                </svg>
-                AI Pulse
-              </button>
-
               <MarketFilters
                 filters={marketFilters}
                 onFiltersChange={setMarketFilters}
               />
             </div>
+          </div>
+
+          {/* Action bar: Create + AI Pulse — visible, below sort tabs */}
+          <div
+            className="flex items-center gap-3 px-6 py-2"
+            style={{ borderBottom: `1px solid ${T.border}` }}
+          >
+            {/* Create Market */}
+            <button
+              onClick={() => setShowCreateModal(true)}
+              className="flex items-center gap-2 px-4 py-2 rounded-lg text-[13px] font-semibold"
+              style={{
+                backgroundColor: T.accent,
+                color: '#fff',
+                transition: 'all 150ms ease',
+              }}
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                <path d="M12 5v14M5 12h14" />
+              </svg>
+              Create Market
+            </button>
+
+            {/* AI Pulse */}
+            <button
+              onClick={() => setAiDrawerOpen(!aiDrawerOpen)}
+              className="flex items-center gap-2 px-4 py-2 rounded-lg text-[13px] font-semibold"
+              style={{
+                backgroundColor: aiDrawerOpen ? `${T.purple}25` : 'rgba(255,255,255,0.04)',
+                color: aiDrawerOpen ? T.purple : T.textSecondary,
+                border: `1px solid ${aiDrawerOpen ? `${T.purple}40` : T.border}`,
+                transition: 'all 150ms ease',
+              }}
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M12 2L15.09 8.26L22 9.27L17 14.14L18.18 21.02L12 17.77L5.82 21.02L7 14.14L2 9.27L8.91 8.26L12 2Z" />
+              </svg>
+              AI Insights
+            </button>
+
+            {/* Restricted regions notice */}
+            <span className="text-[11px] ml-auto" style={{ color: 'rgba(248,113,113,0.5)' }}>
+              ⚠ Trading unavailable in restricted regions
+            </span>
           </div>
 
           {/* Content Area */}
