@@ -260,14 +260,22 @@ export default function PredictionsPage() {
             className="flex items-center justify-between px-6"
             style={{ borderBottom: `1px solid ${T.border}` }}
           >
-            {/* Left: title + sort tabs */}
+            {/* Left: title + sort tabs + count */}
             <div className="flex items-center gap-0">
               <span
                 className="text-[13px] font-semibold pr-4 mr-1"
                 style={{ color: T.text, borderRight: `1px solid ${T.border}` }}
               >
-                Prediction Markets
+                Markets
               </span>
+              {!isLoading && (
+                <span
+                  className="text-[11px] font-medium px-2 py-0.5 rounded-full mr-1"
+                  style={{ color: T.muted, backgroundColor: 'rgba(255,255,255,0.04)' }}
+                >
+                  {activeMarkets.length.toLocaleString()}
+                </span>
+              )}
               {SORT_TABS.map((tab) => (
                 <button
                   key={tab.id}
@@ -399,13 +407,30 @@ export default function PredictionsPage() {
 
             {/* Loading State */}
             {isLoading ? (
-              <div className="flex flex-col gap-2">
-                {[...Array(8)].map((_, i) => (
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                {[...Array(12)].map((_, i) => (
                   <div
                     key={i}
-                    className="h-14 rounded-[10px] animate-pulse"
-                    style={{ backgroundColor: 'rgba(255,255,255,0.03)' }}
-                  />
+                    className="rounded-xl animate-pulse flex flex-col p-4 gap-3"
+                    style={{ backgroundColor: T.bgCard, border: `1px solid ${T.border}`, height: 220 }}
+                  >
+                    <div className="flex justify-between">
+                      <div className="h-5 w-16 rounded-full" style={{ backgroundColor: 'rgba(255,255,255,0.04)' }} />
+                      <div className="h-4 w-14 rounded" style={{ backgroundColor: 'rgba(255,255,255,0.03)' }} />
+                    </div>
+                    <div className="h-4 w-full rounded" style={{ backgroundColor: 'rgba(255,255,255,0.04)' }} />
+                    <div className="h-4 w-3/4 rounded" style={{ backgroundColor: 'rgba(255,255,255,0.03)' }} />
+                    <div className="flex-1" />
+                    <div className="flex justify-between items-end">
+                      <div className="h-7 w-16 rounded" style={{ backgroundColor: 'rgba(255,255,255,0.04)' }} />
+                      <div className="h-5 w-16 rounded" style={{ backgroundColor: 'rgba(255,255,255,0.03)' }} />
+                    </div>
+                    <div className="h-px w-full" style={{ backgroundColor: 'rgba(255,255,255,0.04)' }} />
+                    <div className="flex justify-between">
+                      <div className="h-3 w-12 rounded" style={{ backgroundColor: 'rgba(255,255,255,0.03)' }} />
+                      <div className="h-3 w-16 rounded" style={{ backgroundColor: 'rgba(255,255,255,0.03)' }} />
+                    </div>
+                  </div>
                 ))}
               </div>
             ) : mergedFilteredMarkets.length === 0 ? (
@@ -445,10 +470,10 @@ export default function PredictionsPage() {
               </motion.div>
             ) : (
               <>
-                {/* Active Markets — Card Grid (skip first, shown in hero) */}
-                {activeMarkets.length > 1 && (
+                {/* Active Markets — Card Grid */}
+                {activeMarkets.length > 0 && (
                   <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-                    {activeMarkets.slice(1, visibleCardCount + 1).map((market, index) => (
+                    {activeMarkets.slice(0, visibleCardCount).map((market, index) => (
                       <MarketCard
                         key={`${market.source || 'dflow'}-${market.ticker}`}
                         market={market}
