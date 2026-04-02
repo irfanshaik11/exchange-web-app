@@ -117,7 +117,7 @@ export default function AiDrawerBase({
     return () => {
       cancelAnimationFrame(raf);
       window.removeEventListener('scroll', onScroll);
-      document.removeEventListener('scroll', onScroll, { capture: true } as any);
+      document.removeEventListener('scroll', onScroll, { capture: true });
     };
   }, [open, isDesktop]);
 
@@ -129,15 +129,17 @@ export default function AiDrawerBase({
     return () => { document.body.style.overflow = prev; };
   }, [open, isDesktop]);
 
-  // ---- Escape key to close mobile sheet ----
+  // ---- Escape key to close drawer (mobile + desktop) ----
+  const onCloseRef = React.useRef(onClose);
+  onCloseRef.current = onClose;
   useEffect(() => {
-    if (isDesktop !== false || !open) return;
+    if (!open) return;
     const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
+      if (e.key === 'Escape') onCloseRef.current();
     };
     document.addEventListener('keydown', onKeyDown);
     return () => document.removeEventListener('keydown', onKeyDown);
-  }, [open, isDesktop, onClose]);
+  }, [open]);
 
   // Don't render until mounted (avoids hydration mismatch)
   if (isDesktop === null) return null;
@@ -153,6 +155,7 @@ export default function AiDrawerBase({
           <button
             onClick={onOpen}
             className="iridescent-pill"
+            aria-label={`Open ${title}`}
             style={{
               position: 'fixed',
               bottom: fabBottom,
