@@ -320,78 +320,62 @@ export default function PredictionsPage() {
                 filters={marketFilters}
                 onFiltersChange={setMarketFilters}
               />
-            </div>
-          </div>
 
-          {/* AI Tools — Predictions AI (full, with results) + AI Insights */}
-          <div className="px-6 py-3">
-            <div className="flex items-start gap-3">
-              {/* Predictions AI — full TalarionCreate with generation results */}
-              <div className="flex-1 min-w-0" id="ai-predictions-section">
-                <TalarionCreate authToken={user?.bearerToken} />
-              </div>
-
-              {/* AI Insights — premium button */}
+              {/* AI Insights toggle — in sort bar, icon-only with tooltip */}
               <button
                 onClick={() => setAiDrawerOpen(!aiDrawerOpen)}
-                className="relative flex items-center gap-3 px-4 py-3 rounded-xl flex-shrink-0 mt-1 overflow-hidden"
+                className="relative flex items-center justify-center rounded-lg"
+                title="AI Market Insights"
                 style={{
-                  background: aiDrawerOpen
-                    ? 'linear-gradient(135deg, rgba(74,222,128,0.08), rgba(34,211,238,0.06), rgba(129,140,248,0.08))'
-                    : T.bgCard,
-                  border: `1px solid ${aiDrawerOpen ? 'rgba(74,222,128,0.20)' : T.border}`,
+                  width: 34,
+                  height: 34,
+                  backgroundColor: aiDrawerOpen ? 'rgba(74,222,128,0.10)' : 'transparent',
+                  border: `1px solid ${aiDrawerOpen ? 'rgba(74,222,128,0.25)' : 'transparent'}`,
                   transition: 'all 200ms cubic-bezier(0.16,1,0.3,1)',
                 }}
                 onMouseEnter={(e) => {
                   if (!aiDrawerOpen) {
-                    e.currentTarget.style.borderColor = 'rgba(74,222,128,0.15)';
-                    e.currentTarget.style.boxShadow = '0 0 20px rgba(74,222,128,0.06)';
+                    e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.04)';
+                    e.currentTarget.style.borderColor = T.border;
                   }
                 }}
                 onMouseLeave={(e) => {
                   if (!aiDrawerOpen) {
-                    e.currentTarget.style.borderColor = T.border;
-                    e.currentTarget.style.boxShadow = 'none';
+                    e.currentTarget.style.backgroundColor = 'transparent';
+                    e.currentTarget.style.borderColor = 'transparent';
                   }
                 }}
               >
-                {/* Icon in gradient box */}
-                <div
-                  className="flex-shrink-0 w-8 h-8 rounded-lg flex items-center justify-center"
-                  style={{
-                    background: 'linear-gradient(135deg, rgba(74,222,128,0.12), rgba(129,140,248,0.12))',
-                    border: '1px solid rgba(74,222,128,0.15)',
-                  }}
-                >
-                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none">
-                    <defs>
-                      <linearGradient id="ai-btn-grad" x1="3" y1="2" x2="22" y2="21">
-                        <stop stopColor="#4ADE80" />
-                        <stop offset="0.5" stopColor="#22D3EE" />
-                        <stop offset="1" stopColor="#818CF8" />
-                      </linearGradient>
-                    </defs>
-                    <path d="M12 2L13.5 8.5L20 10L13.5 11.5L12 18L10.5 11.5L4 10L10.5 8.5L12 2Z" fill="url(#ai-btn-grad)" />
-                  </svg>
-                </div>
-                <div className="text-left">
-                  <div
-                    className="text-[13px] font-semibold"
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+                  <defs>
+                    <linearGradient id="ai-sort-sparkle" x1="3" y1="2" x2="22" y2="21">
+                      <stop stopColor={aiDrawerOpen ? '#4ADE80' : T.muted} />
+                      <stop offset="0.5" stopColor={aiDrawerOpen ? '#22D3EE' : T.muted} />
+                      <stop offset="1" stopColor={aiDrawerOpen ? '#818CF8' : T.muted} />
+                    </linearGradient>
+                  </defs>
+                  <path d="M12 2L13.5 8.5L20 10L13.5 11.5L12 18L10.5 11.5L4 10L10.5 8.5L12 2Z" fill="url(#ai-sort-sparkle)" />
+                </svg>
+                {/* Active indicator dot */}
+                {aiDrawerOpen && (
+                  <span
+                    className="absolute -top-0.5 -right-0.5"
                     style={{
-                      background: aiDrawerOpen
-                        ? 'linear-gradient(90deg, #4ADE80, #22D3EE)'
-                        : 'none',
-                      WebkitBackgroundClip: aiDrawerOpen ? 'text' : 'unset',
-                      WebkitTextFillColor: aiDrawerOpen ? 'transparent' : T.textSecondary,
-                      color: aiDrawerOpen ? undefined : T.textSecondary,
+                      width: 6,
+                      height: 6,
+                      borderRadius: '50%',
+                      background: 'linear-gradient(135deg, #4ADE80, #22D3EE)',
+                      border: '1px solid #131517',
                     }}
-                  >
-                    AI Insights
-                  </div>
-                  <div className="text-[10px]" style={{ color: T.muted }}>Market pulse</div>
-                </div>
+                  />
+                )}
               </button>
             </div>
+          </div>
+
+          {/* Predictions AI — full width */}
+          <div className="px-6 py-3" id="ai-predictions-section">
+            <TalarionCreate authToken={user?.bearerToken} />
           </div>
 
           {/* Content Area */}
