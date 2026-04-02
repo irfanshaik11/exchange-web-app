@@ -32,7 +32,7 @@ import useUnifiedPredictionMarkets from '~/hooks/useUnifiedPredictionMarkets';
 import type { UnifiedPredictionMarket } from '~/hooks/useUnifiedPredictionMarkets';
 import usePredictionFavorites from '~/hooks/usePredictionFavorites';
 import type { PredictionDataSource } from '~/components/predictions/DataSourceSwitcher';
-import AiPulseDrawer from '~/components/predictions/AiPulseDrawer';
+import { HomepageInsightPanel } from '~/components/insights/HomepageInsightPanel';
 import useNavLayout from '~/hooks/useNavLayout';
 
 // Sort tab config
@@ -55,6 +55,7 @@ export default function PredictionsPage() {
   const [dataSource] = useState<PredictionDataSource>('polymarket');
   const [visibleCardCount, setVisibleCardCount] = useState(24);
   const [aiDrawerOpen, setAiDrawerOpen] = useState(false);
+  const [showCreateModal, setShowCreateModal] = useState(false);
 
   // Fetch markets
   const {
@@ -242,45 +243,21 @@ export default function PredictionsPage() {
 
         {/* Main Content — offset by sidebar width when using left layout */}
         <div
-          className={`flex-1 flex ${layout === 'left' ? 'md:ml-[56px]' : ''}`}
+          className={`flex-1 flex flex-col ${layout === 'left' ? 'md:ml-[56px]' : ''}`}
           style={{ paddingTop: 0 }}
         >
-          {/* AI Market Pulse — left drawer (like detail page) */}
-          <AiPulseDrawer
-            open={aiDrawerOpen}
-            onOpen={() => setAiDrawerOpen(true)}
-            onClose={() => setAiDrawerOpen(false)}
-            layoutKey={layout}
-          />
-
-          {/* Left: All market content */}
-          <div className="flex-1 min-w-0 flex flex-col">
-          {/* Combined nav bar: sort tabs left, search right */}
+          {/* Sort bar: tabs left, search + AI tools right */}
           <div
-            className="flex items-center justify-between px-6"
+            className="flex items-center justify-between px-6 flex-wrap gap-2"
             style={{ borderBottom: `1px solid ${T.border}` }}
           >
-            {/* Left: title + sort tabs + count */}
+            {/* Left: sort tabs + count */}
             <div className="flex items-center gap-0">
-              <span
-                className="text-[13px] font-semibold pr-4 mr-1"
-                style={{ color: T.text, borderRight: `1px solid ${T.border}` }}
-              >
-                Markets
-              </span>
-              {!isLoading && (
-                <span
-                  className="text-[11px] font-medium px-2 py-0.5 rounded-full mr-1"
-                  style={{ color: T.muted, backgroundColor: 'rgba(255,255,255,0.04)' }}
-                >
-                  {activeMarkets.length.toLocaleString()}
-                </span>
-              )}
               {SORT_TABS.map((tab) => (
                 <button
                   key={tab.id}
                   onClick={() => setSelectedSort(tab.id)}
-                  className="relative px-4 py-3 text-[12px] font-medium"
+                  className="relative px-4 py-3 text-[13px] font-medium"
                   style={{
                     color: selectedSort === tab.id ? T.text : T.muted,
                   }}
@@ -296,10 +273,19 @@ export default function PredictionsPage() {
                   )}
                 </button>
               ))}
+              {!isLoading && (
+                <span
+                  className="text-[11px] font-medium px-2 py-0.5 rounded-full ml-1"
+                  style={{ color: T.muted, backgroundColor: 'rgba(255,255,255,0.04)' }}
+                >
+                  {activeMarkets.length.toLocaleString()}
+                </span>
+              )}
             </div>
 
-            {/* Right: search + filter */}
-            <div className="flex items-center gap-1.5">
+            {/* Right: search + create market + AI pulse + filters */}
+            <div className="flex items-center gap-2">
+              {/* Search */}
               <div
                 className="flex items-center gap-2 px-3 py-1.5 rounded-full"
                 style={{
@@ -326,6 +312,41 @@ export default function PredictionsPage() {
                   </button>
                 )}
               </div>
+
+              {/* Create Market — compact trigger */}
+              <button
+                onClick={() => setShowCreateModal(true)}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[12px] font-medium"
+                style={{
+                  backgroundColor: `${T.accent}15`,
+                  color: T.accent,
+                  border: `1px solid ${T.accent}30`,
+                  transition: 'all 150ms ease',
+                }}
+              >
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                  <path d="M12 5v14M5 12h14" />
+                </svg>
+                Create
+              </button>
+
+              {/* AI Pulse — toolbar button */}
+              <button
+                onClick={() => setAiDrawerOpen(!aiDrawerOpen)}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[12px] font-medium"
+                style={{
+                  backgroundColor: aiDrawerOpen ? `${T.purple}20` : 'rgba(255,255,255,0.03)',
+                  color: aiDrawerOpen ? T.purple : T.muted,
+                  border: `1px solid ${aiDrawerOpen ? `${T.purple}40` : T.border}`,
+                  transition: 'all 150ms ease',
+                }}
+              >
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M12 2L15.09 8.26L22 9.27L17 14.14L18.18 21.02L12 17.77L5.82 21.02L7 14.14L2 9.27L8.91 8.26L12 2Z" />
+                </svg>
+                AI Pulse
+              </button>
+
               <MarketFilters
                 filters={marketFilters}
                 onFiltersChange={setMarketFilters}
@@ -333,39 +354,8 @@ export default function PredictionsPage() {
             </div>
           </div>
 
-          {/* Restricted regions — flush banner */}
-          <div
-            className="flex items-center justify-center gap-1.5 py-1"
-            style={{
-              backgroundColor: 'rgba(248,113,113,0.04)',
-              borderBottom: '1px solid rgba(248,113,113,0.08)',
-            }}
-          >
-            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#F87171" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="flex-shrink-0">
-              <path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
-              <line x1="12" y1="9" x2="12" y2="13" />
-              <line x1="12" y1="17" x2="12.01" y2="17" />
-            </svg>
-            <span className="text-[10px] font-medium" style={{ color: 'rgba(248,113,113,0.6)' }}>
-              Trading unavailable in restricted regions
-            </span>
-          </div>
-
           {/* Content Area */}
           <div className="flex-1 px-6 py-4 relative">
-            {/* Page-level gradient tint from featured market category */}
-            {!isLoading && activeMarkets.length > 0 && (() => {
-              const heroCategory = categoryConfig[(activeMarkets[0] as any)?.category] || { color: T.accent };
-              return (
-                <div
-                  className="absolute top-0 left-0 right-0 h-[600px] pointer-events-none z-0"
-                  style={{
-                    background: `linear-gradient(180deg, ${heroCategory.color}06 0%, transparent 100%)`,
-                  }}
-                />
-              );
-            })()}
-
             {/* Error */}
             {error && (
               <motion.div
@@ -389,20 +379,101 @@ export default function PredictionsPage() {
               </motion.div>
             )}
 
-            {/* Hero (left) + Predictions AI (right) — 50/50, hero dictates height */}
-            <div className="flex flex-col lg:flex-row lg:items-stretch gap-4 mb-6">
-              {/* Featured Hero — left 50% */}
-              <div className="flex-1 min-w-0 overflow-hidden rounded-xl">
-                {!isLoading && activeMarkets.length > 0 && (
-                  <FeaturedHero markets={activeMarkets} />
-                )}
-              </div>
+            {/* AI Pulse — right drawer */}
+            <AnimatePresence>
+              {aiDrawerOpen && (
+                <motion.div
+                  initial={{ opacity: 0, x: 20 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  exit={{ opacity: 0, x: 20 }}
+                  transition={{ duration: 0.2 }}
+                  className="fixed right-0 top-0 bottom-0 z-[9999] w-[400px] max-w-[90vw]"
+                  style={{
+                    backgroundColor: T.bgElevated,
+                    borderLeft: `1px solid ${T.border}`,
+                    boxShadow: '-8px 0 24px rgba(0,0,0,0.4)',
+                  }}
+                >
+                  <div className="flex items-center justify-between p-4" style={{ borderBottom: `1px solid ${T.border}` }}>
+                    <div className="flex items-center gap-2">
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill={T.purple}>
+                        <path d="M12 2L15.09 8.26L22 9.27L17 14.14L18.18 21.02L12 17.77L5.82 21.02L7 14.14L2 9.27L8.91 8.26L12 2Z" />
+                      </svg>
+                      <span className="text-[14px] font-semibold" style={{ color: T.text }}>AI Market Pulse</span>
+                    </div>
+                    <button
+                      onClick={() => setAiDrawerOpen(false)}
+                      className="p-1 rounded"
+                      style={{ color: T.muted }}
+                    >
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <path d="M18 6L6 18M6 6l12 12" />
+                      </svg>
+                    </button>
+                  </div>
+                  <div className="p-4 overflow-y-auto h-full">
+                    <HomepageInsightPanel docked chromeless />
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+            {/* Backdrop for AI drawer */}
+            <AnimatePresence>
+              {aiDrawerOpen && (
+                <motion.div
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  className="fixed inset-0 z-[9998]"
+                  style={{ backgroundColor: 'rgba(0,0,0,0.4)' }}
+                  onClick={() => setAiDrawerOpen(false)}
+                />
+              )}
+            </AnimatePresence>
 
-              {/* Predictions AI — right 50%, stretches to match hero height */}
-              <div className="flex-1 min-w-0 flex flex-col" id="ai-predictions-section">
-                <TalarionCreate authToken={user?.bearerToken} />
-              </div>
-            </div>
+            {/* TalarionCreate Modal */}
+            <AnimatePresence>
+              {showCreateModal && (
+                <>
+                  <motion.div
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    exit={{ opacity: 0 }}
+                    className="fixed inset-0 z-[9998]"
+                    style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}
+                    onClick={() => setShowCreateModal(false)}
+                  />
+                  <motion.div
+                    initial={{ opacity: 0, scale: 0.95, y: 20 }}
+                    animate={{ opacity: 1, scale: 1, y: 0 }}
+                    exit={{ opacity: 0, scale: 0.95, y: 20 }}
+                    transition={{ duration: 0.2 }}
+                    className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-[9999] w-[560px] max-w-[90vw] max-h-[80vh] overflow-y-auto rounded-xl"
+                    style={{
+                      backgroundColor: T.bgElevated,
+                      border: `1px solid ${T.border}`,
+                      boxShadow: '0 16px 48px rgba(0,0,0,0.5)',
+                    }}
+                  >
+                    <div className="flex items-center justify-between p-4" style={{ borderBottom: `1px solid ${T.border}` }}>
+                      <span className="text-[14px] font-semibold" style={{ color: T.text }}>Create a Market</span>
+                      <button
+                        onClick={() => setShowCreateModal(false)}
+                        className="p-1 rounded"
+                        style={{ color: T.muted }}
+                      >
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                          <path d="M18 6L6 18M6 6l12 12" />
+                        </svg>
+                      </button>
+                    </div>
+                    <div className="p-4" id="ai-predictions-section">
+                      <TalarionCreate authToken={user?.bearerToken} />
+                    </div>
+                  </motion.div>
+                </>
+              )}
+            </AnimatePresence>
 
 
             {/* Loading State */}
@@ -470,9 +541,15 @@ export default function PredictionsPage() {
               </motion.div>
             ) : (
               <>
-                {/* Active Markets — Card Grid */}
+                {/* Market Grid with Featured Hero as first card */}
                 {activeMarkets.length > 0 && (
                   <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                    {/* Featured Hero — spans 2 columns */}
+                    {!searchQuery && selectedCategory === 'all' && (
+                      <div className="col-span-1 sm:col-span-2 overflow-hidden rounded-xl" style={{ border: `1px solid ${T.border}` }}>
+                        <FeaturedHero markets={activeMarkets} />
+                      </div>
+                    )}
                     {activeMarkets.slice(0, visibleCardCount).map((market, index) => (
                       <MarketCard
                         key={`${market.source || 'dflow'}-${market.ticker}`}
@@ -621,7 +698,6 @@ export default function PredictionsPage() {
           </div>
 
           <Footer />
-          </div>
 
         </div>
       </div>
