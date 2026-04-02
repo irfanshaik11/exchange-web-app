@@ -264,8 +264,12 @@ export default function PredictionsPage() {
                 {selectedSort === tab.id && (
                   <motion.div
                     layoutId="sort-tab-underline"
-                    className="absolute bottom-0 left-2 right-2 h-[2px] rounded-full"
-                    style={{ backgroundColor: T.accent }}
+                    className="absolute bottom-0 left-2 right-2 h-[2px]"
+                    style={{
+                      backgroundColor: T.accent,
+                      borderRadius: 1,
+                      boxShadow: '0 1px 8px rgba(59, 130, 246, 0.3)',
+                    }}
                     transition={{ type: 'spring', stiffness: 400, damping: 30 }}
                   />
                 )}
@@ -328,7 +332,7 @@ export default function PredictionsPage() {
             <div
               className="flex items-center gap-2 flex-1 max-w-xl px-4 py-2.5 rounded-xl cursor-pointer"
               style={{
-                backgroundColor: 'rgba(255,255,255,0.03)',
+                backgroundColor: T.bgCard,
                 border: `1px solid ${T.border}`,
                 transition: 'all 150ms ease',
               }}
@@ -361,7 +365,7 @@ export default function PredictionsPage() {
               onClick={() => setAiDrawerOpen(!aiDrawerOpen)}
               className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-[13px] font-semibold flex-shrink-0"
               style={{
-                backgroundColor: aiDrawerOpen ? `${T.purple}20` : 'rgba(255,255,255,0.03)',
+                backgroundColor: aiDrawerOpen ? `${T.purple}20` : T.bgCard,
                 color: aiDrawerOpen ? T.purple : T.textSecondary,
                 border: `1px solid ${aiDrawerOpen ? `${T.purple}40` : T.border}`,
                 transition: 'all 150ms ease',
@@ -376,6 +380,14 @@ export default function PredictionsPage() {
 
           {/* Content Area */}
           <div className="flex-1 px-6 py-4 relative">
+            {/* Ambient top gradient — barely visible blue wash for depth */}
+            <div
+              className="absolute top-0 left-0 right-0 pointer-events-none z-0"
+              style={{
+                height: '40vh',
+                background: 'radial-gradient(ellipse 80% 50% at 50% 0%, rgba(59, 130, 246, 0.04) 0%, transparent 100%)',
+              }}
+            />
             {/* Error */}
             {error && (
               <motion.div
@@ -498,7 +510,7 @@ export default function PredictionsPage() {
 
             {/* Loading State */}
             {isLoading ? (
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
                 {[...Array(12)].map((_, i) => (
                   <div
                     key={i}
@@ -563,7 +575,7 @@ export default function PredictionsPage() {
               <>
                 {/* Market Grid with Featured Hero as first card */}
                 {activeMarkets.length > 0 && (
-                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
                     {/* Featured Hero — spans 2 columns */}
                     {!searchQuery && selectedCategory === 'all' && (
                       <div className="col-span-1 sm:col-span-2">

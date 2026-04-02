@@ -75,17 +75,20 @@ const MarketCard = React.memo(function MarketCard({
             border: `1px solid ${T.border}`,
             borderRadius: 12,
             opacity: isActive ? 1 : 0.5,
-            transition: `border-color 150ms ease, background-color 150ms ease, transform 150ms ease`,
+            transition: `transform 200ms cubic-bezier(0.33, 1, 0.68, 1), box-shadow 200ms cubic-bezier(0.33, 1, 0.68, 1), border-color 150ms ease-out, background-color 150ms ease-out`,
+            willChange: 'transform',
           }}
           onMouseEnter={(e) => {
             e.currentTarget.style.borderColor = T.borderHover;
             e.currentTarget.style.backgroundColor = T.bgCardHover;
             e.currentTarget.style.transform = 'translateY(-2px)';
+            e.currentTarget.style.boxShadow = '0 4px 12px rgba(0,0,0,0.3), 0 1px 3px rgba(0,0,0,0.2)';
           }}
           onMouseLeave={(e) => {
             e.currentTarget.style.borderColor = T.border;
             e.currentTarget.style.backgroundColor = T.bgCard;
             e.currentTarget.style.transform = 'translateY(0)';
+            e.currentTarget.style.boxShadow = 'none';
           }}
         >
           <div className="flex flex-col flex-1 p-4">
@@ -237,9 +240,22 @@ const MarketCard = React.memo(function MarketCard({
               style={{ borderTop: `1px solid ${T.border}`, fontSize: 12, color: T.muted }}
             >
               <div className="flex items-center gap-3">
-                <span>{formatVolume(market.totalVolume || market.volume24h)} Vol</span>
+                <span style={{ fontVariantNumeric: 'tabular-nums' }}>{formatVolume(market.totalVolume || market.volume24h)} Vol</span>
                 {priceChange !== 0 && (
-                  <span style={{ color: isPositive ? T.green : T.red }}>
+                  <span className="flex items-center gap-1" style={{ color: isPositive ? T.green : T.red, fontVariantNumeric: 'tabular-nums' }}>
+                    {/* Pulsing dot for active movement */}
+                    {Math.abs(priceChange) > 0.02 && (
+                      <span
+                        className="animate-pulse"
+                        style={{
+                          width: 5,
+                          height: 5,
+                          borderRadius: '50%',
+                          backgroundColor: isPositive ? T.green : T.red,
+                          display: 'inline-block',
+                        }}
+                      />
+                    )}
                     {isPositive ? '+' : ''}{(priceChange * 100).toFixed(1)}%
                   </span>
                 )}
