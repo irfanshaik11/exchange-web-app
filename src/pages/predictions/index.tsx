@@ -331,21 +331,65 @@ export default function PredictionsPage() {
                 <TalarionCreate authToken={user?.bearerToken} />
               </div>
 
-              {/* AI Insights button — aligned to top */}
+              {/* AI Insights — premium button */}
               <button
                 onClick={() => setAiDrawerOpen(!aiDrawerOpen)}
-                className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-[13px] font-semibold flex-shrink-0 mt-1"
+                className="relative flex items-center gap-3 px-4 py-3 rounded-xl flex-shrink-0 mt-1 overflow-hidden"
                 style={{
-                  backgroundColor: aiDrawerOpen ? 'rgba(139,92,246,0.12)' : T.bgCard,
-                  color: aiDrawerOpen ? '#a78bfa' : T.textSecondary,
-                  border: `1px solid ${aiDrawerOpen ? 'rgba(139,92,246,0.25)' : T.border}`,
-                  transition: 'all 150ms ease',
+                  background: aiDrawerOpen
+                    ? 'linear-gradient(135deg, rgba(74,222,128,0.08), rgba(34,211,238,0.06), rgba(129,140,248,0.08))'
+                    : T.bgCard,
+                  border: `1px solid ${aiDrawerOpen ? 'rgba(74,222,128,0.20)' : T.border}`,
+                  transition: 'all 200ms cubic-bezier(0.16,1,0.3,1)',
+                }}
+                onMouseEnter={(e) => {
+                  if (!aiDrawerOpen) {
+                    e.currentTarget.style.borderColor = 'rgba(74,222,128,0.15)';
+                    e.currentTarget.style.boxShadow = '0 0 20px rgba(74,222,128,0.06)';
+                  }
+                }}
+                onMouseLeave={(e) => {
+                  if (!aiDrawerOpen) {
+                    e.currentTarget.style.borderColor = T.border;
+                    e.currentTarget.style.boxShadow = 'none';
+                  }
                 }}
               >
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
-                  <path d="M12 2L15.09 8.26L22 9.27L17 14.14L18.18 21.02L12 17.77L5.82 21.02L7 14.14L2 9.27L8.91 8.26L12 2Z" />
-                </svg>
-                AI Insights
+                {/* Icon in gradient box */}
+                <div
+                  className="flex-shrink-0 w-8 h-8 rounded-lg flex items-center justify-center"
+                  style={{
+                    background: 'linear-gradient(135deg, rgba(74,222,128,0.12), rgba(129,140,248,0.12))',
+                    border: '1px solid rgba(74,222,128,0.15)',
+                  }}
+                >
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none">
+                    <defs>
+                      <linearGradient id="ai-btn-grad" x1="3" y1="2" x2="22" y2="21">
+                        <stop stopColor="#4ADE80" />
+                        <stop offset="0.5" stopColor="#22D3EE" />
+                        <stop offset="1" stopColor="#818CF8" />
+                      </linearGradient>
+                    </defs>
+                    <path d="M12 2L13.5 8.5L20 10L13.5 11.5L12 18L10.5 11.5L4 10L10.5 8.5L12 2Z" fill="url(#ai-btn-grad)" />
+                  </svg>
+                </div>
+                <div className="text-left">
+                  <div
+                    className="text-[13px] font-semibold"
+                    style={{
+                      background: aiDrawerOpen
+                        ? 'linear-gradient(90deg, #4ADE80, #22D3EE)'
+                        : 'none',
+                      WebkitBackgroundClip: aiDrawerOpen ? 'text' : 'unset',
+                      WebkitTextFillColor: aiDrawerOpen ? 'transparent' : T.textSecondary,
+                      color: aiDrawerOpen ? undefined : T.textSecondary,
+                    }}
+                  >
+                    AI Insights
+                  </div>
+                  <div className="text-[10px]" style={{ color: T.muted }}>Market pulse</div>
+                </div>
               </button>
             </div>
           </div>
@@ -581,39 +625,78 @@ export default function PredictionsPage() {
                   className="hidden lg:block flex-shrink-0 overflow-hidden"
                 >
                   <div
-                    className="w-[320px] sticky top-16 rounded-xl overflow-y-auto"
+                    className="w-[320px] sticky top-16 rounded-2xl overflow-hidden"
                     style={{
-                      backgroundColor: T.bgCard,
-                      border: `1px solid ${T.border}`,
+                      background: 'linear-gradient(180deg, rgba(18,20,26,0.98) 0%, rgba(14,16,20,0.96) 60px)',
+                      border: '1px solid rgba(74,222,128,0.10)',
                       maxHeight: 'calc(100vh - 80px)',
+                      boxShadow: '0 0 30px rgba(74,222,128,0.03)',
                     }}
                   >
-                    {/* Header */}
-                    <div
-                      className="flex items-center justify-between px-4 py-3 sticky top-0 z-10"
-                      style={{
-                        backgroundColor: T.bgCard,
-                        borderBottom: `1px solid ${T.border}`,
-                      }}
-                    >
-                      <div className="flex items-center gap-2">
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="#a78bfa">
-                          <path d="M12 2L15.09 8.26L22 9.27L17 14.14L18.18 21.02L12 17.77L5.82 21.02L7 14.14L2 9.27L8.91 8.26L12 2Z" />
-                        </svg>
-                        <span className="text-[13px] font-semibold" style={{ color: T.text }}>AI Insights</span>
+                    {/* Premium header with gradient wash */}
+                    <div className="relative overflow-hidden">
+                      {/* Gradient ceiling */}
+                      <div
+                        className="absolute inset-0 pointer-events-none"
+                        style={{
+                          height: 64,
+                          background: 'linear-gradient(180deg, rgba(74,222,128,0.06) 0%, rgba(34,211,238,0.03) 50%, transparent 100%)',
+                        }}
+                      />
+                      <div className="relative flex items-center justify-between px-4 py-3.5">
+                        <div className="flex items-center gap-2.5">
+                          <div
+                            className="w-7 h-7 rounded-lg flex items-center justify-center"
+                            style={{
+                              background: 'linear-gradient(135deg, rgba(74,222,128,0.12), rgba(129,140,248,0.12))',
+                              border: '1px solid rgba(74,222,128,0.15)',
+                            }}
+                          >
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
+                              <defs>
+                                <linearGradient id="ai-sidebar-sparkle" x1="3" y1="2" x2="22" y2="21">
+                                  <stop stopColor="#4ADE80" /><stop offset="0.5" stopColor="#22D3EE" /><stop offset="1" stopColor="#818CF8" />
+                                </linearGradient>
+                              </defs>
+                              <path d="M12 2L13.5 8.5L20 10L13.5 11.5L12 18L10.5 11.5L4 10L10.5 8.5L12 2Z" fill="url(#ai-sidebar-sparkle)" />
+                            </svg>
+                          </div>
+                          <div>
+                            <span
+                              className="text-[13px] font-semibold block"
+                              style={{
+                                background: 'linear-gradient(90deg, #4ADE80, #22D3EE)',
+                                WebkitBackgroundClip: 'text',
+                                WebkitTextFillColor: 'transparent',
+                              }}
+                            >
+                              AI Market Pulse
+                            </span>
+                            <span className="text-[10px]" style={{ color: 'rgba(255,255,255,0.35)' }}>Powered by AI</span>
+                          </div>
+                        </div>
+                        <button
+                          onClick={() => setAiDrawerOpen(false)}
+                          className="p-1.5 rounded-lg"
+                          style={{
+                            color: 'rgba(255,255,255,0.4)',
+                            background: 'rgba(255,255,255,0.04)',
+                            border: '1px solid rgba(255,255,255,0.06)',
+                            transition: 'all 150ms ease',
+                          }}
+                          onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.08)'; }}
+                          onMouseLeave={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.04)'; }}
+                        >
+                          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+                            <path d="M18 6L6 18M6 6l12 12" />
+                          </svg>
+                        </button>
                       </div>
-                      <button
-                        onClick={() => setAiDrawerOpen(false)}
-                        className="p-1 rounded"
-                        style={{ color: T.muted }}
-                      >
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                          <path d="M18 6L6 18M6 6l12 12" />
-                        </svg>
-                      </button>
+                      {/* Gradient separator */}
+                      <div style={{ height: 1, background: 'linear-gradient(90deg, transparent, rgba(74,222,128,0.15) 20%, rgba(34,211,238,0.12) 50%, rgba(129,140,248,0.15) 80%, transparent)' }} />
                     </div>
                     {/* Content */}
-                    <div className="p-3">
+                    <div className="p-3 overflow-y-auto" style={{ maxHeight: 'calc(100vh - 150px)' }}>
                       <HomepageInsightPanel docked chromeless />
                     </div>
                   </div>
