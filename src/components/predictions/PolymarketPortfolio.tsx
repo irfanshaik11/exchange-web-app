@@ -126,9 +126,7 @@ export default function PolymarketPortfolio({
     }
 
     if (marketSlug) {
-      // Add source parameter for Polymarket positions
-      const source = position.source === 'polymarket' ? '?source=polymarket' : '';
-      router.push(`/predictions/${encodeURIComponent(marketSlug)}${source}`);
+      router.push(`/predictions/${encodeURIComponent(marketSlug)}`);
     }
 
     // Also call the optional callback if provided
@@ -507,8 +505,7 @@ export default function PolymarketPortfolio({
                     }
 
                     if (marketSlug) {
-                      const source = trade.source === 'polymarket' ? '?source=polymarket' : '';
-                      router.push(`/predictions/${encodeURIComponent(marketSlug)}${source}`);
+                      router.push(`/predictions/${encodeURIComponent(marketSlug)}`);
                     }
                   }}
                 />

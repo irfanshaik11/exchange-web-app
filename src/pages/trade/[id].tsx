@@ -1,5 +1,5 @@
 import { useRouter } from "next/router";
-import React, { useEffect, useState, useCallback, useRef } from "react";
+import React, { useEffect, useState, useCallback, useRef, useMemo } from "react";
 import { formatMarketCap } from "../../utils/formatPrice";
 import { useWallet } from "../../components/useWallet";
 import { useUser } from "../../components/UserContext";
@@ -415,7 +415,7 @@ export default function TradePage() {
     enabled: !!resolvedTokenMint,
   });
   // Destructure for local use in this component
-  const { holderSummary, topTraders: wsTopTraders, trades: wsHistoricalTrades, tokenInfo: wsTokenInfo, volume: wsVolume } = wsData;
+  const { holderSummary, topTraders: wsTopTraders, trades: wsHistoricalTrades, tokenInfo: wsTokenInfo, volume: wsVolume, similarTokens: wsSimilarTokens } = wsData;
 
   const displayToken = React.useMemo(() => {
     // Start with optimistic data from URL query params (instant display)
@@ -932,45 +932,21 @@ export default function TradePage() {
     });
   }, [idString]);
 
-  // -------- Similar Tokens (right rail) --------
-  const [similarTokens, setSimilarTokens] = useState<SimilarTokenLite[]>([]);
-  const [similarLoading, setSimilarLoading] = useState<boolean>(false);
-  useEffect(() => {
-    let abort = false;
-    async function loadSimilar() {
-      if (!displayToken?.mint) { setSimilarTokens([]); return; }
-      setSimilarLoading(true);
-      try {
-        const res = await fetch(`/api/token-service/similar?mint=${displayToken.mint}&limit=12`);
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const data = await res.json();
-        const mapped: SimilarTokenLite[] = (data?.tokens || []).map((t: any, i: number) => ({
-          id: t.id || t.mint || String(i),
-          name: t.name || t.symbol || "Unknown",
-          symbol: t.symbol,
-          logoUrl: t.image || t.logoUrl,
-          lastTxAt: t.last_tx_unix ?? t.lastTxAt ?? undefined,
-          tokenAgeSec: t.age_sec ?? t.tokenAgeSec ?? undefined,
-          marketCapUsd: t.market_cap_usd ?? t.marketCapUsd ?? undefined,
-          verified: !!t.verified,
-        }));
-        if (!abort) setSimilarTokens(mapped);
-      } catch {
-        if (!abort) setSimilarTokens([]);
-      } finally {
-        if (!abort) setSimilarLoading(false);
-      }
-    }
-    // Defer right-panel fetch until after chart + critical content renders
-    const id = typeof requestIdleCallback !== 'undefined'
-      ? requestIdleCallback(() => { if (!abort) loadSimilar(); })
-      : setTimeout(() => { if (!abort) loadSimilar(); }, 2000);
-    return () => {
-      abort = true;
-      if (typeof cancelIdleCallback !== 'undefined' && typeof id === 'number') cancelIdleCallback(id);
-      else clearTimeout(id as unknown as NodeJS.Timeout);
-    };
-  }, [displayToken?.mint]);
+  // -------- Similar Tokens (right rail, from WS snapshot) --------
+  // FastImage in SimilarTokensPanel handles metadata URI resolution, caching & retries
+  const similarTokens = useMemo<SimilarTokenLite[]>(() => {
+    if (!wsSimilarTokens || wsSimilarTokens.length === 0) return [];
+    const nowSec = Date.now() / 1000;
+    return wsSimilarTokens.map((t, i) => ({
+      id: t.mint_address || String(i),
+      name: t.name || t.symbol || "Unknown",
+      symbol: t.symbol,
+      logoUrl: t.image || t.uri,
+      tokenAgeSec: t.created_at ? Math.max(0, Math.floor(nowSec - t.created_at)) : undefined,
+      marketCapUsd: t.market_cap_usd,
+    }));
+  }, [wsSimilarTokens]);
+  const similarLoading = wsData.loading;
 
   // Right Panel Visibility Toggle
   const [isRightPanelVisible, setIsRightPanelVisible] = useState<boolean>(true);
@@ -1274,25 +1250,25 @@ export default function TradePage() {
                 />
               </div>
 
-              {/* Reused Image Tokens — flush against Token Info */}
+              {/* Similar Tokens — flush against Token Info */}
               <div className="right-rail-panel hug-previous">
-                <ReusedImageTokensPanel
-                  tokens={reusedTokens}
-                  loading={reusedLoading}
-                  maxHeight={360}
-                  className="mx-2"
-                  title="Reused Image Tokens (O)"
-                />
-              </div>
-
-              {/* Similar Tokens — keep a small gap below reused panel */}
-              <div className="right-rail-panel spaced-above">
                 <SimilarTokensPanel
                   tokens={similarTokens}
                   loading={similarLoading}
                   maxHeight={360}
                   title="Similar Tokens"
                   className="mx-2"
+                />
+              </div>
+
+              {/* Reused Image Tokens — below similar tokens */}
+              <div className="right-rail-panel spaced-above">
+                <ReusedImageTokensPanel
+                  tokens={reusedTokens}
+                  loading={reusedLoading}
+                  maxHeight={360}
+                  className="mx-2"
+                  title="Reused Image Tokens (O)"
                 />
               </div>
             </div>

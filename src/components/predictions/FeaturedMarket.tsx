@@ -4,12 +4,8 @@ import Link from 'next/link';
 import { HiOutlineLightningBolt, HiOutlineStar, HiOutlineArrowRight, HiOutlineTrendingUp, HiOutlineClock } from 'react-icons/hi';
 import type { PredictionMarket } from './PredictionCard';
 
-// Helper to build prediction market URL with source param
 const buildPredictionUrl = (market: PredictionMarket): string => {
-  const isPolymarket = market.source === 'polymarket';
-  return isPolymarket
-    ? `/predictions/${market.ticker}?source=polymarket`
-    : `/predictions/${market.ticker}`;
+  return `/predictions/${market.ticker}`;
 };
 
 const AX = {

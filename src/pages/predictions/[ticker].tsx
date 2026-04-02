@@ -1405,11 +1405,9 @@ const TradesTable: React.FC<{ trades: any[]; isLoading: boolean }> = ({ trades, 
 
 export default function MarketDetailPage() {
   const router = useRouter();
-  const { ticker, source } = router.query;
+  const { ticker } = router.query;
   const tickerString = typeof ticker === 'string' ? ticker : '';
-  // TODO: dFlow is disabled for now - only Polymarket is active
-  // const isPolymarket = source === 'polymarket';
-  const isPolymarket = true; // Force Polymarket only
+  const isPolymarket = true; // Polymarket only
 
   // Wait for router to be ready before processing query params
   // This prevents "Market not found" from flashing while Next.js hydrates
@@ -1543,7 +1541,7 @@ export default function MarketDetailPage() {
   );
   const realtimePrices = useDFlowRealtimePrices(!isPolymarket && isRouterReady && tickerString ? tickerString : undefined);
 
-  // Polymarket hooks (only when source=polymarket AND router is ready)
+  // Polymarket hooks (only when Polymarket AND router is ready)
   const { market: polyMarket, event: polyEvent, isLoading: polyLoading, refetch: polyRefetch } = usePolymarketMarket(
     isPolymarket && isRouterReady && tickerString ? tickerString : undefined,
     { enabled: isPolymarket && isRouterReady }

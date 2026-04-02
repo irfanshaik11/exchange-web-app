@@ -2389,34 +2389,42 @@ export default function Header({
                               <div className="text-2xl font-bold text-white">
                                 ${formatCurrency(polygonBalance?.usdc ?? 0)}
                               </div>
-                              <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-neutral-400">
-                                <span className="flex items-center gap-1">
-                                  <span className="h-2 w-2 rounded-full bg-emerald-400"></span>
-                                  $
-                                  {formatBalance(
-                                    polygonBalance?.usdcBridged ?? 0,
-                                    2,
-                                  )}{" "}
-                                  USDC.e
-                                </span>
-                                {(polygonBalance?.usdcNative ?? 0) >= 0.01 && (
-                                  <span className="flex items-center gap-1">
-                                    <span className="h-2 w-2 rounded-full bg-blue-400"></span>
-                                    $
-                                    {formatBalance(
-                                      polygonBalance?.usdcNative ?? 0,
-                                      2,
-                                    )}{" "}
-                                    USDC
-                                  </span>
-                                )}
-                                <span className="flex items-center gap-1">
-                                  <SiPolygon
-                                    className="h-3 w-3"
-                                    style={{ color: "#8247E5" }}
+                              <div className="mt-1.5 flex flex-col gap-1.5 text-xs text-neutral-400">
+                                <span className="flex items-center gap-1.5">
+                                  <img
+                                    src="https://upload.wikimedia.org/wikipedia/commons/c/ca/USD_Coin_logo_%28cropped%29.png"
+                                    alt="USDC.e"
+                                    className="h-4 w-4 rounded-full"
                                   />
-                                  {formatBalance(polygonBalance?.matic ?? 0, 2)}{" "}
-                                  MATIC
+                                  <span className="text-white font-medium">
+                                    ${formatBalance(polygonBalance?.usdcBridged ?? 0, 2)}
+                                  </span>
+                                  <span>USDC.e</span>
+                                  <span
+                                    className="ml-auto cursor-help text-[10px] px-1 py-0.5 rounded"
+                                    style={{ backgroundColor: 'rgba(255,255,255,0.06)' }}
+                                    title="Used for Polymarket trades"
+                                  >
+                                    Polymarket
+                                  </span>
+                                </span>
+                                <span className="flex items-center gap-1.5">
+                                  <img
+                                    src="https://upload.wikimedia.org/wikipedia/commons/c/ca/USD_Coin_logo_%28cropped%29.png"
+                                    alt="USDC"
+                                    className="h-4 w-4 rounded-full"
+                                  />
+                                  <span className="text-white font-medium">
+                                    ${formatBalance(polygonBalance?.usdcNative ?? 0, 2)}
+                                  </span>
+                                  <span>USDC</span>
+                                  <span
+                                    className="ml-auto cursor-help text-[10px] px-1 py-0.5 rounded"
+                                    style={{ backgroundColor: 'rgba(255,255,255,0.06)' }}
+                                    title="Used for AI Markets (Talarion) trades"
+                                  >
+                                    AI Markets
+                                  </span>
                                 </span>
                               </div>
                             </div>
@@ -2471,7 +2479,7 @@ export default function Header({
                               }}
                             >
                               <HiOutlineSwitchVertical className="h-3.5 w-3.5" />
-                              Swap Tokens
+                              Convert USDC.e / USDC
                             </button>
                           </>
                         ) : (

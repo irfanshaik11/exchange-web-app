@@ -264,7 +264,7 @@ const TokenInfoDropdown: React.FC<{ token: any; liveMarketCapUsd?: number | null
   const insiderPercent = parsePercentage(token?.insider_held_percentage ?? token?.insider_holding_percentage);
   const devPercent = parsePercentage(token?.dev_held_percentage ?? token?.dev_holding_percentage);
   const top10Percent = parsePercentage(token?.top10_holding_percentage);
-  const lpBurned = token?.lp_burned ?? false;
+  const lpBurned = token?.lp_burned ?? true;
   
   // Get counts from Codex
   const sniperCount = token?.sniper_count ?? undefined;

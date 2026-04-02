@@ -129,6 +129,17 @@ export interface VolumeTimeframe {
   sell_count: number;
 }
 
+// Similar token from the unified WebSocket snapshot
+export interface SimilarTokenWS {
+  mint_address: string;
+  name: string;
+  symbol: string;
+  image?: string;
+  uri?: string;        // Metadata URI (JSON with image field)
+  market_cap_usd?: number;
+  created_at?: number; // unix seconds
+}
+
 // Volume data from the unified WebSocket snapshot
 export interface SolanaTokenVolume {
   volume_5m: VolumeTimeframe;
@@ -148,6 +159,7 @@ interface WebSocketMessage {
     holder_summary?: HolderSummary | null;
     token?: SolanaTokenInfo | null;
     volume?: SolanaTokenVolume | null;
+    similar_tokens?: SimilarTokenWS[] | null;
   };
   timestamp: string;
 }
@@ -173,6 +185,7 @@ interface UseSolanaTokenWebSocketReturn {
   holderSummary: HolderSummary | null;
   tokenInfo: SolanaTokenInfo | null;
   volume: SolanaTokenVolume | null;
+  similarTokens: SimilarTokenWS[];
   connected: boolean;
   error: string | null;
   loading: boolean;
@@ -306,6 +319,7 @@ export function useSolanaTokenWebSocket(
   const [holderSummary, setHolderSummary] = useState<HolderSummary | null>(null);
   const [tokenInfo, setTokenInfo] = useState<SolanaTokenInfo | null>(null);
   const [volume, setVolume] = useState<SolanaTokenVolume | null>(null);
+  const [similarTokens, setSimilarTokens] = useState<SimilarTokenWS[]>([]);
   const [connected, setConnected] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -479,6 +493,14 @@ export function useSolanaTokenWebSocket(
               setVolume(message.data.volume);
             } else {
               setVolume(null);
+            }
+
+            // Capture similar tokens from snapshot
+            if (message.data.similar_tokens && message.data.similar_tokens.length > 0) {
+              if (isDev) console.log('[useSolanaTokenWebSocket] Received similar tokens:', message.data.similar_tokens.length);
+              setSimilarTokens(message.data.similar_tokens);
+            } else {
+              setSimilarTokens([]);
             }
 
             setLoading(false);
@@ -878,6 +900,7 @@ export function useSolanaTokenWebSocket(
     holderSummary,
     tokenInfo: safeTokenInfo,
     volume,
+    similarTokens,
     connected,
     error,
     loading,

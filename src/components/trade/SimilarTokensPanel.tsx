@@ -1,7 +1,10 @@
 // components/right/SimilarTokensPanel.tsx
 import React from "react";
-import { FaChevronDown, FaChevronRight } from "react-icons/fa";
+import { FaChevronDown, FaChevronRight, FaCopy } from "react-icons/fa";
 import { LuArrowUpDown, LuShieldCheck } from "react-icons/lu";
+import Link from "next/link";
+import toast from "react-hot-toast";
+import FastImage from "../FastImage";
 
 type SimilarToken = {
   id: string;
@@ -88,26 +91,33 @@ const SkeletonRow = ({ i }: { i: number }) => (
 
 const Row: React.FC<{ t: SimilarToken }> = ({ t }) => {
   const ageBadge = formatAgeShort(t.tokenAgeSec);
-  const lastTx = formatSince(t.lastTxAt);
   const mc = formatMoney(t.marketCapUsd);
+  const [copied, setCopied] = React.useState(false);
+
+  const handleCopy = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    navigator.clipboard.writeText(t.id).then(() => {
+      setCopied(true);
+      toast("Contract address copied!", { icon: "📋", duration: 2000 });
+      setTimeout(() => setCopied(false), 1500);
+    });
+  };
 
   return (
-    <div className={`group ${AX.rowHover} transition-colors flex items-center gap-3 py-3 px-3 border-b ${AX.border}`}>
+    <Link href={`/trade/${t.id}`} className={`group ${AX.rowHover} transition-colors flex items-center gap-3 py-3 px-3 border-b ${AX.border} cursor-pointer no-underline`}>
       {/* Avatar */}
-      <div className="relative">
-        {t.logoUrl ? (
-          <img
-            src={t.logoUrl}
-            alt={t.name}
-            className="h-9 w-9 rounded-lg object-cover ring-1 ring-black/30"
-            loading="lazy"
-            referrerPolicy="no-referrer"
-          />
-        ) : (
-          <div className="h-9 w-9 rounded-lg bg-neutral-700 grid place-items-center text-[10px] text-neutral-300">
-            {t.symbol?.slice(0, 3)?.toUpperCase() || "TOK"}
-          </div>
-        )}
+      <div className="relative flex-shrink-0" style={{ borderRadius: 10 }}>
+        <FastImage
+          src={t.logoUrl}
+          alt={t.name}
+          symbol={t.symbol}
+          name={t.name}
+          width={36}
+          height={36}
+          className="rounded-[10px] ring-1 ring-black/30"
+          showBubble={false}
+        />
         {t.verified && (
           <span className="absolute -right-1 -bottom-1 h-4 w-4 rounded-full bg-neutral-900 grid place-items-center ring-1 ring-black/40">
             <LuShieldCheck className="text-emerald-400" size={12} />
@@ -117,19 +127,25 @@ const Row: React.FC<{ t: SimilarToken }> = ({ t }) => {
 
       {/* Main text */}
       <div className="min-w-0 flex-1">
-        <div className="flex items-center gap-2">
-          <div className={`truncate font-medium ${AX.text}`}>{t.name}</div>
-          {t.symbol && <div className={`truncate ${AX.muted} text-[11px]`}>{t.symbol}</div>}
+        <div className="flex items-center gap-1.5">
+          <span className={`font-semibold ${AX.text} text-sm`}>{t.symbol || t.name}</span>
+          <button
+            onClick={handleCopy}
+            className="text-neutral-500 hover:text-neutral-300 cursor-pointer p-0.5"
+            title="Copy contract address"
+          >
+            <FaCopy size={10} className={copied ? "text-[#70E0B0]" : ""} />
+          </button>
         </div>
-        <div className={`text-[11px] ${AX.muted}`}>Last TX: {lastTx}</div>
+        {t.name && <div className={`truncate ${AX.muted} text-[11px]`}>{t.name}</div>}
       </div>
 
       {/* Right column */}
-      <div className="text-right">
+      <div className="text-right flex-shrink-0">
         <div className="text-[11px] text-emerald-400">{ageBadge}</div>
         <div className={`text-sm font-semibold ${AX.mint}`}>{mc}</div>
       </div>
-    </div>
+    </Link>
   );
 };
 
@@ -181,12 +197,21 @@ const SimilarTokensPanel: React.FC<Props> = ({
   loading,
   emptyText = "No similar tokens found.",
   maxHeight = 360,
-  sortKey = "marketCap",
-  sortDir = "desc",
+  sortKey: sortKeyProp = "marketCap",
+  sortDir: sortDirProp = "desc",
   onSortChange,
   defaultCollapsed = false,
   persistKey = "SimilarTokensPanel.collapsed",
 }) => {
+  // Internal sort state — parent can seed via props but toggle works standalone
+  const [sortDir, setSortDir] = React.useState<SortDir>(sortDirProp);
+  const sortKey = sortKeyProp;
+
+  const handleSortToggle = React.useCallback((k: SortKey, d: SortDir) => {
+    setSortDir(d);
+    onSortChange?.(k, d);
+  }, [onSortChange]);
+
   // collapsed state with persistence
   const [collapsed, setCollapsed] = React.useState<boolean>(() => {
     if (typeof window === "undefined") return defaultCollapsed;
@@ -204,13 +229,21 @@ const SimilarTokensPanel: React.FC<Props> = ({
 
   const sorted = React.useMemo(() => {
     const arr = [...(tokens || [])];
-    const dir = sortDir === "desc" ? -1 : 1;
     if (sortKey === "marketCap") {
-      arr.sort((a, b) => ((a.marketCapUsd || 0) < (b.marketCapUsd || 0) ? 1 * dir : -1 * dir));
+      arr.sort((a, b) => {
+        const diff = (b.marketCapUsd || 0) - (a.marketCapUsd || 0);
+        return sortDir === "desc" ? diff : -diff;
+      });
     } else if (sortKey === "lastTx") {
-      arr.sort((a, b) => ((a.lastTxAt || 0) < (b.lastTxAt || 0) ? 1 * dir : -1 * dir));
+      arr.sort((a, b) => {
+        const diff = (b.lastTxAt || 0) - (a.lastTxAt || 0);
+        return sortDir === "desc" ? diff : -diff;
+      });
     } else if (sortKey === "age") {
-      arr.sort((a, b) => ((a.tokenAgeSec || 0) < (b.tokenAgeSec || 0) ? 1 * dir : -1 * dir));
+      arr.sort((a, b) => {
+        const diff = (b.tokenAgeSec || 0) - (a.tokenAgeSec || 0);
+        return sortDir === "desc" ? diff : -diff;
+      });
     }
     return arr;
   }, [tokens, sortKey, sortDir]);
@@ -239,7 +272,7 @@ const SimilarTokensPanel: React.FC<Props> = ({
         onToggleCollapse={() => setCollapsed((c) => !c)}
         sortKey={sortKey}
         sortDir={sortDir}
-        onSortChange={onSortChange}
+        onSortChange={handleSortToggle}
       />
 
       {/* Collapsible content wrapper (animates height) */}

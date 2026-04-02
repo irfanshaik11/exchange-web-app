@@ -651,8 +651,7 @@ export default function UnifiedPortfolio({
     }
 
     if (marketSlug) {
-      const source = position.source === 'polymarket' ? '?source=polymarket' : '';
-      router.push(`/predictions/${encodeURIComponent(marketSlug)}${source}`);
+      router.push(`/predictions/${encodeURIComponent(marketSlug)}`);
     }
   }, [router]);
 
@@ -1169,8 +1168,7 @@ export default function UnifiedPortfolio({
                     }
 
                     if (marketSlug) {
-                      const source = trade.source === 'polymarket' ? '?source=polymarket' : '';
-                      router.push(`/predictions/${encodeURIComponent(marketSlug)}${source}`);
+                      router.push(`/predictions/${encodeURIComponent(marketSlug)}`);
                     }
                   }}
                   theme={C}

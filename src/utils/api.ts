@@ -1152,10 +1152,11 @@ export const polygonSwap = (
   });
 
 /**
- * Withdraw USDC.e from Polygon wallet to an external address
+ * Withdraw USDC.e or native USDC from Polygon wallet to an external address
+ * @param token - 'usdce' (default) or 'usdc' (native)
  */
 export const withdrawPolygonUsdce = (
-  params: { destinationAddress: string; amount: number },
+  params: { destinationAddress: string; amount: number; token?: 'usdce' | 'usdc' },
   authToken: string,
 ) =>
   apiFetch<{
@@ -1194,7 +1195,7 @@ export const withdrawPolygonMatic = (
   });
 
 /**
- * Get USDC.e withdrawal history for the authenticated user
+ * Get Polygon withdrawal history (USDC.e, native USDC, MATIC) for the authenticated user
  */
 export interface PolygonWithdrawalRecord {
   id: number;
@@ -1205,6 +1206,8 @@ export interface PolygonWithdrawalRecord {
   errorMessage?: string;
   createdAt: string;
   completedAt?: string;
+  chain?: string;
+  tokenType?: 'usdce' | 'usdc' | 'matic';
 }
 
 export const getPolygonWithdrawalHistory = (authToken: string) =>
