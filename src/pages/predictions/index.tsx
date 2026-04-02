@@ -324,58 +324,96 @@ export default function PredictionsPage() {
             </div>
           </div>
 
-          {/* Action bar: Predictions AI search + AI Insights */}
-          <div
-            className="flex items-center gap-3 px-6 py-3"
-          >
-            {/* Predictions AI — inline search bar */}
+          {/* AI Tools — premium USP section */}
+          <div className="px-6 py-4">
             <div
-              className="flex items-center gap-2 flex-1 max-w-xl px-4 py-2.5 rounded-xl cursor-pointer"
+              className="relative overflow-hidden rounded-2xl"
               style={{
-                backgroundColor: T.bgCard,
-                border: `1px solid ${T.border}`,
-                transition: 'all 150ms ease',
-              }}
-              onClick={() => setShowCreateModal(true)}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.borderColor = `${T.accent}40`;
-                e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.05)';
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.borderColor = T.border;
-                e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.03)';
+                background: 'linear-gradient(135deg, rgba(59,130,246,0.06) 0%, rgba(139,92,246,0.04) 50%, rgba(59,130,246,0.06) 100%)',
+                border: '1px solid rgba(59,130,246,0.12)',
               }}
             >
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={T.accent} strokeWidth="2">
-                <path d="M12 5v14M5 12h14" />
-              </svg>
-              <span className="text-[13px]" style={{ color: T.muted }}>
-                Predict anything — describe an event and AI creates a market...
-              </span>
-              <span
-                className="ml-auto text-[11px] font-medium px-2 py-0.5 rounded"
-                style={{ backgroundColor: `${T.accent}15`, color: T.accent }}
-              >
-                AI
-              </span>
-            </div>
+              {/* Ambient glow */}
+              <div className="absolute pointer-events-none" style={{ top: -40, left: '20%', width: 200, height: 200, borderRadius: '50%', background: 'radial-gradient(circle, rgba(59,130,246,0.08) 0%, transparent 70%)', filter: 'blur(40px)' }} />
+              <div className="absolute pointer-events-none" style={{ bottom: -40, right: '10%', width: 160, height: 160, borderRadius: '50%', background: 'radial-gradient(circle, rgba(139,92,246,0.06) 0%, transparent 70%)', filter: 'blur(30px)' }} />
 
-            {/* AI Insights */}
-            <button
-              onClick={() => setAiDrawerOpen(!aiDrawerOpen)}
-              className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-[13px] font-semibold flex-shrink-0"
-              style={{
-                backgroundColor: aiDrawerOpen ? `${T.purple}20` : T.bgCard,
-                color: aiDrawerOpen ? T.purple : T.textSecondary,
-                border: `1px solid ${aiDrawerOpen ? `${T.purple}40` : T.border}`,
-                transition: 'all 150ms ease',
-              }}
-            >
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
-                <path d="M12 2L15.09 8.26L22 9.27L17 14.14L18.18 21.02L12 17.77L5.82 21.02L7 14.14L2 9.27L8.91 8.26L12 2Z" />
-              </svg>
-              AI Insights
-            </button>
+              <div className="relative flex flex-col sm:flex-row items-stretch gap-3 p-4">
+                {/* Predictions AI — premium input */}
+                <div
+                  className="flex items-center gap-3 flex-1 px-4 py-3 rounded-xl cursor-pointer group"
+                  style={{
+                    backgroundColor: 'rgba(255,255,255,0.03)',
+                    border: '1px solid rgba(255,255,255,0.06)',
+                    transition: 'all 200ms cubic-bezier(0.16,1,0.3,1)',
+                  }}
+                  onClick={() => setShowCreateModal(true)}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.borderColor = 'rgba(59,130,246,0.3)';
+                    e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.05)';
+                    e.currentTarget.style.boxShadow = '0 0 20px rgba(59,130,246,0.08)';
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.borderColor = 'rgba(255,255,255,0.06)';
+                    e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.03)';
+                    e.currentTarget.style.boxShadow = 'none';
+                  }}
+                >
+                  {/* Sparkle icon */}
+                  <div
+                    className="flex-shrink-0 w-8 h-8 rounded-lg flex items-center justify-center"
+                    style={{ background: 'linear-gradient(135deg, rgba(59,130,246,0.15), rgba(139,92,246,0.15))' }}
+                  >
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#60a5fa" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M12 3v1m0 16v1m-8-9H3m18 0h-1m-2.636-6.364l-.707.707M6.343 17.657l-.707.707m12.728 0l-.707-.707M6.343 6.343l-.707-.707" />
+                      <circle cx="12" cy="12" r="4" />
+                    </svg>
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="text-[13px] font-semibold" style={{ color: '#e0e4ea' }}>
+                      Predict Anything
+                    </div>
+                    <div className="text-[12px]" style={{ color: T.muted }}>
+                      Describe an event — AI creates a tradeable market
+                    </div>
+                  </div>
+                  <span
+                    className="flex-shrink-0 text-[10px] font-bold px-2 py-1 rounded-md uppercase"
+                    style={{
+                      background: 'linear-gradient(135deg, rgba(59,130,246,0.2), rgba(139,92,246,0.2))',
+                      color: '#93bbfc',
+                      letterSpacing: '0.06em',
+                    }}
+                  >
+                    AI Powered
+                  </span>
+                </div>
+
+                {/* AI Insights — premium button */}
+                <button
+                  onClick={() => setAiDrawerOpen(!aiDrawerOpen)}
+                  className="flex items-center gap-3 px-4 py-3 rounded-xl flex-shrink-0"
+                  style={{
+                    backgroundColor: aiDrawerOpen ? 'rgba(139,92,246,0.12)' : 'rgba(255,255,255,0.03)',
+                    color: aiDrawerOpen ? '#a78bfa' : T.textSecondary,
+                    border: `1px solid ${aiDrawerOpen ? 'rgba(139,92,246,0.25)' : 'rgba(255,255,255,0.06)'}`,
+                    transition: 'all 200ms cubic-bezier(0.16,1,0.3,1)',
+                  }}
+                >
+                  <div
+                    className="flex-shrink-0 w-8 h-8 rounded-lg flex items-center justify-center"
+                    style={{ background: aiDrawerOpen ? 'rgba(139,92,246,0.15)' : 'rgba(255,255,255,0.04)' }}
+                  >
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                      <path d="M12 2L15.09 8.26L22 9.27L17 14.14L18.18 21.02L12 17.77L5.82 21.02L7 14.14L2 9.27L8.91 8.26L12 2Z" />
+                    </svg>
+                  </div>
+                  <div className="text-left">
+                    <div className="text-[13px] font-semibold">AI Insights</div>
+                    <div className="text-[11px]" style={{ color: T.muted }}>Market analysis</div>
+                  </div>
+                </button>
+              </div>
+            </div>
           </div>
 
           {/* Content Area */}
@@ -573,15 +611,16 @@ export default function PredictionsPage() {
               </motion.div>
             ) : (
               <>
-                {/* Market Grid with Featured Hero as first card */}
+                {/* Featured Hero — full width above grid */}
+                {!searchQuery && selectedCategory === 'all' && activeMarkets.length > 0 && (
+                  <div className="mb-5">
+                    <FeaturedHero markets={activeMarkets} />
+                  </div>
+                )}
+
+                {/* Market Grid */}
                 {activeMarkets.length > 0 && (
                   <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
-                    {/* Featured Hero — spans 2 columns */}
-                    {!searchQuery && selectedCategory === 'all' && (
-                      <div className="col-span-1 sm:col-span-2">
-                        <FeaturedHero markets={activeMarkets} />
-                      </div>
-                    )}
                     {activeMarkets.slice(0, visibleCardCount).map((market, index) => (
                       <MarketCard
                         key={`${market.source || 'dflow'}-${market.ticker}`}
