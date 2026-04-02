@@ -323,29 +323,31 @@ export default function PredictionsPage() {
             </div>
           </div>
 
-          {/* AI Tools — inline Predictions AI + AI Insights */}
-          <div className="px-6 py-3 flex items-center gap-3">
-            {/* Predictions AI — actual TalarionCreate inline */}
-            <div className="flex-1" id="ai-predictions-section">
-              <TalarionCreate authToken={user?.bearerToken} compact onExpand={() => {}} />
-            </div>
+          {/* AI Tools — Predictions AI (full, with results) + AI Insights */}
+          <div className="px-6 py-3">
+            <div className="flex items-start gap-3">
+              {/* Predictions AI — full TalarionCreate with generation results */}
+              <div className="flex-1 min-w-0" id="ai-predictions-section">
+                <TalarionCreate authToken={user?.bearerToken} />
+              </div>
 
-            {/* AI Insights button */}
-            <button
-              onClick={() => setAiDrawerOpen(!aiDrawerOpen)}
-              className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-[13px] font-semibold flex-shrink-0"
-              style={{
-                backgroundColor: aiDrawerOpen ? 'rgba(139,92,246,0.12)' : T.bgCard,
-                color: aiDrawerOpen ? '#a78bfa' : T.textSecondary,
-                border: `1px solid ${aiDrawerOpen ? 'rgba(139,92,246,0.25)' : T.border}`,
-                transition: 'all 150ms ease',
-              }}
-            >
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
-                <path d="M12 2L15.09 8.26L22 9.27L17 14.14L18.18 21.02L12 17.77L5.82 21.02L7 14.14L2 9.27L8.91 8.26L12 2Z" />
-              </svg>
-              AI Insights
-            </button>
+              {/* AI Insights button — aligned to top */}
+              <button
+                onClick={() => setAiDrawerOpen(!aiDrawerOpen)}
+                className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-[13px] font-semibold flex-shrink-0 mt-1"
+                style={{
+                  backgroundColor: aiDrawerOpen ? 'rgba(139,92,246,0.12)' : T.bgCard,
+                  color: aiDrawerOpen ? '#a78bfa' : T.textSecondary,
+                  border: `1px solid ${aiDrawerOpen ? 'rgba(139,92,246,0.25)' : T.border}`,
+                  transition: 'all 150ms ease',
+                }}
+              >
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M12 2L15.09 8.26L22 9.27L17 14.14L18.18 21.02L12 17.77L5.82 21.02L7 14.14L2 9.27L8.91 8.26L12 2Z" />
+                </svg>
+                AI Insights
+              </button>
+            </div>
           </div>
 
           {/* Content Area */}
