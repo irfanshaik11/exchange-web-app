@@ -70,18 +70,18 @@ export const T = {
   muted: "#7a8090",
   subtle: "#3a3f4a",
 
-  // Semantic — trading green/red
-  green: "#22c55e",
-  greenLight: "#4ade80",
-  greenSoft: "rgba(34, 197, 94, 0.10)",
-  greenBorder: "rgba(34, 197, 94, 0.20)",
-  greenText: "#4ade80",
+  // Semantic — trading teal/rose (premium, not standard green/red)
+  green: "#10b981",
+  greenLight: "#34d399",
+  greenSoft: "rgba(16, 185, 129, 0.10)",
+  greenBorder: "rgba(16, 185, 129, 0.20)",
+  greenText: "#34d399",
 
-  red: "#ef4444",
-  redLight: "#f87171",
-  redSoft: "rgba(239, 68, 68, 0.10)",
-  redBorder: "rgba(239, 68, 68, 0.20)",
-  redText: "#f87171",
+  red: "#f43f5e",
+  redLight: "#fb7185",
+  redSoft: "rgba(244, 63, 94, 0.10)",
+  redBorder: "rgba(244, 63, 94, 0.20)",
+  redText: "#fb7185",
 
   // Other semantic
   yellow: "#FBBF24",

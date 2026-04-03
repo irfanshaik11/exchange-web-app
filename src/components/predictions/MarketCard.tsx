@@ -7,7 +7,7 @@ import type { PredictionMarket } from './PredictionCard';
 import usePolymarketLivePrice from '~/hooks/usePolymarketLivePrice';
 import { generateMockSparkline, formatVolume, formatTimeRemaining } from './utils';
 
-const OUTCOME_COLORS = ['#22c55e', '#3b82f6', '#f59e0b', '#ec4899', '#8b5cf6'];
+const OUTCOME_COLORS = ['#10b981', '#3b82f6', '#f59e0b', '#ec4899', '#8b5cf6'];
 
 interface ExtendedMarket extends PredictionMarket {
   marketType?: 'binary' | 'multi';
@@ -263,8 +263,8 @@ const MarketCard = React.memo(function MarketCard({
                 <div
                   className="flex-1 flex items-center justify-between px-3 py-2 rounded-lg"
                   style={{
-                    backgroundColor: 'rgba(34, 197, 94, 0.08)',
-                    border: '1px solid rgba(34, 197, 94, 0.15)',
+                    backgroundColor: 'rgba(16, 185, 129, 0.08)',
+                    border: '1px solid rgba(16, 185, 129, 0.15)',
                   }}
                 >
                   <span style={{ fontSize: 13, fontWeight: 600, color: T.greenText }}>
@@ -284,8 +284,8 @@ const MarketCard = React.memo(function MarketCard({
                 <div
                   className="flex-1 flex items-center justify-between px-3 py-2 rounded-lg"
                   style={{
-                    backgroundColor: 'rgba(239, 68, 68, 0.08)',
-                    border: '1px solid rgba(239, 68, 68, 0.15)',
+                    backgroundColor: 'rgba(244, 63, 94, 0.08)',
+                    border: '1px solid rgba(244, 63, 94, 0.15)',
                   }}
                 >
                   <span style={{ fontSize: 13, fontWeight: 600, color: T.redText }}>

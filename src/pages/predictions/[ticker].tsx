@@ -74,14 +74,14 @@ const AX = {
   muted: "#7a8090",
   mint: "#3b82f6",
   mintHover: "#2563eb",
-  sell: "#ef4444",
-  // Semantic trading colors
-  green: "#22c55e",
-  greenBg: "rgba(34, 197, 94, 0.10)",
-  greenBorder: "rgba(34, 197, 94, 0.25)",
-  red: "#ef4444",
-  redBg: "rgba(239, 68, 68, 0.10)",
-  redBorder: "rgba(239, 68, 68, 0.25)",
+  sell: "#f43f5e",
+  // Semantic trading colors — premium teal/rose
+  green: "#10b981",
+  greenBg: "rgba(16, 185, 129, 0.10)",
+  greenBorder: "rgba(16, 185, 129, 0.25)",
+  red: "#f43f5e",
+  redBg: "rgba(244, 63, 94, 0.10)",
+  redBorder: "rgba(244, 63, 94, 0.25)",
   yellow: "#FBBF24",
   purple: "#818CF8",
   cyan: "#22D3EE",
@@ -2864,7 +2864,7 @@ export default function MarketDetailPage() {
                           </h3>
                           <button
                             onClick={() => setSelectedOutcomeMarket(null)}
-                            className="text-[10px] text-[#22c55e] hover:underline"
+                            className="text-[10px] text-[#10b981] hover:underline"
                           >
                             Change outcome
                           </button>
@@ -2887,7 +2887,7 @@ export default function MarketDetailPage() {
                             className="absolute top-0 left-0 h-full w-1/2 rounded-md transition-transform duration-200"
                             style={{
                               transform: tradeMode === 'sell' ? 'translateX(100%)' : 'translateX(0%)',
-                              background: tradeMode === 'buy' ? '#22c55e' : '#ef4444',
+                              background: tradeMode === 'buy' ? '#10b981' : '#f43f5e',
                             }}
                           />
                           <div className="relative z-10 grid grid-cols-2 h-full">
@@ -3006,9 +3006,9 @@ export default function MarketDetailPage() {
                             onClick={() => setSelectedSide('yes')}
                             className="h-9 rounded-lg flex items-center justify-center gap-1.5 text-[12px] font-semibold transition-all"
                             style={{
-                              backgroundColor: selectedSide === 'yes' ? '#22c55e' : '#1c1f24',
-                              border: `1px solid ${selectedSide === 'yes' ? '#22c55e' : '#2a2e35'}`,
-                              color: selectedSide === 'yes' ? '#000' : '#22c55e',
+                              backgroundColor: selectedSide === 'yes' ? '#10b981' : '#1c1f24',
+                              border: `1px solid ${selectedSide === 'yes' ? '#10b981' : '#2a2e35'}`,
+                              color: selectedSide === 'yes' ? '#000' : '#10b981',
                             }}
                           >
                             Yes <span className="font-normal">{yesPriceCents.toFixed(0)}¢</span>
@@ -3017,8 +3017,8 @@ export default function MarketDetailPage() {
                             onClick={() => setSelectedSide('no')}
                             className="h-9 rounded-lg flex items-center justify-center gap-1.5 text-[12px] font-semibold transition-all"
                             style={{
-                              backgroundColor: selectedSide === 'no' ? '#ef4444' : '#1c1f24',
-                              border: `1px solid ${selectedSide === 'no' ? '#ef4444' : '#2a2e35'}`,
+                              backgroundColor: selectedSide === 'no' ? '#f43f5e' : '#1c1f24',
+                              border: `1px solid ${selectedSide === 'no' ? '#f43f5e' : '#2a2e35'}`,
                               color: selectedSide === 'no' ? '#000' : '#9CA3AF',
                             }}
                           >
@@ -3094,7 +3094,7 @@ export default function MarketDetailPage() {
                                     }
                                   }}
                                   disabled={!userTokenPosition || userTokenPosition.tokenAmount <= 0}
-                                  className="h-9 text-[12px] font-semibold bg-[#252930] hover:bg-[#1c1f24] text-[#22c55e] disabled:opacity-50"
+                                  className="h-9 text-[12px] font-semibold bg-[#252930] hover:bg-[#1c1f24] text-[#10b981] disabled:opacity-50"
                                 >
                                   Max
                                 </button>
@@ -3254,7 +3254,7 @@ export default function MarketDetailPage() {
                       }
                       className="w-full h-10 rounded-full text-[14px] font-semibold flex items-center justify-center gap-2 transition-all cursor-pointer disabled:cursor-not-allowed disabled:opacity-50"
                       style={{
-                        backgroundColor: tradeMode === 'buy' ? '#22c55e' : '#ef4444',
+                        backgroundColor: tradeMode === 'buy' ? '#10b981' : '#f43f5e',
                         color: '#000',
                       }}
                     >
