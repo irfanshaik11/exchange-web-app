@@ -1405,9 +1405,14 @@ const TradesTable: React.FC<{ trades: any[]; isLoading: boolean }> = ({ trades, 
 
 export default function MarketDetailPage() {
   const router = useRouter();
-  const { ticker } = router.query;
+  const { ticker, outcomeId, side: sideHint, mode } = router.query;
   const tickerString = typeof ticker === 'string' ? ticker : '';
   const isPolymarket = true; // Polymarket only
+
+  // Navigation hints from portfolio (optional query params)
+  const outcomeIdHint = typeof outcomeId === 'string' ? outcomeId : undefined;
+  const sideHintStr = typeof sideHint === 'string' ? sideHint.toLowerCase() as 'yes' | 'no' : undefined;
+  const modeHint = typeof mode === 'string' ? mode.toLowerCase() as 'buy' | 'sell' : undefined;
 
   // Wait for router to be ready before processing query params
   // This prevents "Market not found" from flashing while Next.js hydrates
@@ -1423,6 +1428,25 @@ export default function MarketDetailPage() {
       setSelectedTab(isPolymarket ? "Outcomes" : "Trades");
     }
   }, [isRouterReady, isPolymarket]);
+
+  // Apply mode hint from portfolio navigation (buy/sell)
+  useEffect(() => {
+    if (!isRouterReady || hasAppliedModeHint.current) return;
+    if (modeHint === 'buy' || modeHint === 'sell') {
+      setTradeMode(modeHint);
+      hasAppliedModeHint.current = true;
+    }
+  }, [isRouterReady, modeHint]);
+
+  // Apply side hint from portfolio navigation (yes/no)
+  useEffect(() => {
+    if (!isRouterReady || hasAppliedSideHint.current) return;
+    if (sideHintStr === 'yes' || sideHintStr === 'no') {
+      setSelectedSide(sideHintStr);
+      hasAppliedSideHint.current = true;
+    }
+  }, [isRouterReady, sideHintStr]);
+
   const [amount, setAmount] = useState<string>('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [tradeError, setTradeError] = useState<string | null>(null);
@@ -1469,6 +1493,9 @@ export default function MarketDetailPage() {
 
   // Ref to track if we've auto-selected best outcome
   const hasAutoSelectedRef = useRef(false);
+  // Refs to apply portfolio navigation hints only once
+  const hasAppliedModeHint = useRef(false);
+  const hasAppliedSideHint = useRef(false);
 
   // Accumulate live trade prices from WS for real-time chart updates
   const liveTradePointsRef = useRef<Array<{ time: number; price: number }>>([]);
@@ -1619,13 +1646,25 @@ export default function MarketDetailPage() {
     return !!(isPolymarket && polyEvent?.markets && polyEvent.markets.length > 1);
   }, [isPolymarket, polyEvent]);
 
-  // Auto-select best outcome (highest probability) when polyEvent loads
+  // Auto-select outcome when polyEvent loads — prioritize portfolio hint, fall back to highest probability
   useEffect(() => {
     // Only auto-select once when data first loads
     if (hasAutoSelectedRef.current) return;
     if (!polyEvent?.markets || polyEvent.markets.length === 0) return;
 
-    // Find the market with the highest YES probability
+    // Priority: if navigating from portfolio with a specific outcome, select it
+    if (outcomeIdHint) {
+      const hintedMarket = polyEvent.markets.find(
+        (m: any) => m.conditionId === outcomeIdHint
+      );
+      if (hintedMarket) {
+        setSelectedOutcomeMarket(hintedMarket);
+        hasAutoSelectedRef.current = true;
+        return;
+      }
+    }
+
+    // Fallback: find the market with the highest YES probability
     let bestMarket: PolymarketMarket | null = null;
     let bestPrice = 0;
 
@@ -1661,7 +1700,7 @@ export default function MarketDetailPage() {
       setSelectedOutcomeMarket(bestMarket);
       hasAutoSelectedRef.current = true;
     }
-  }, [polyEvent]);
+  }, [polyEvent, outcomeIdHint]);
 
   // Polymarket Trading: Check geoblock status on mount
   useEffect(() => {

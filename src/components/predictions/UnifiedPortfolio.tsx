@@ -651,7 +651,12 @@ export default function UnifiedPortfolio({
     }
 
     if (marketSlug) {
-      router.push(`/predictions/${encodeURIComponent(marketSlug)}`);
+      const params = new URLSearchParams();
+      if (position.conditionId) params.set('outcomeId', position.conditionId);
+      if (position.side) params.set('side', position.side.toLowerCase());
+      params.set('mode', 'sell');
+      const qs = params.toString();
+      router.push(`/predictions/${encodeURIComponent(marketSlug)}${qs ? `?${qs}` : ''}`);
     }
   }, [router]);
 
