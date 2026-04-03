@@ -137,47 +137,68 @@ const MarketCard = React.memo(function MarketCard({
               </div>
             </div>
 
-            {/* Multi-series sparkline — all outcomes */}
-            <div className="mb-3" style={{ height: 32 }}>
-              <svg viewBox="0 0 280 32" preserveAspectRatio="none" style={{ width: '100%', height: '100%', overflow: 'visible' }}>
-                {chartSeries.map((series, si) => {
-                  const pts = series.data;
-                  if (!pts || pts.length < 2) return null;
-                  const step = 280 / (pts.length - 1);
-                  const pad = 2;
-                  const h = 32 - pad * 2;
-                  const points = pts.map((v, i) => `${i * step},${pad + h - v * h}`);
-                  const pathD = `M${points.join(' L')}`;
-                  return (
-                    <g key={si}>
-                      {/* Gradient fill for primary series only */}
-                      {si === 0 && (
-                        <>
-                          <defs>
-                            <linearGradient id={`card-grad-${market.ticker}`} x1="0" y1="0" x2="0" y2="1">
-                              <stop offset="0%" stopColor={series.color} stopOpacity="0.15" />
-                              <stop offset="100%" stopColor={series.color} stopOpacity="0" />
-                            </linearGradient>
-                          </defs>
+            {/* Multi-series sparkline — all outcomes, auto-scaled Y */}
+            <div className="mb-3" style={{ height: 36 }}>
+              {(() => {
+                // Compute global min/max across ALL series for auto-scaling
+                let globalMin = 1, globalMax = 0;
+                for (const s of chartSeries) {
+                  for (const v of s.data) {
+                    if (v < globalMin) globalMin = v;
+                    if (v > globalMax) globalMax = v;
+                  }
+                }
+                // Add 10% padding so lines don't touch edges
+                const range = globalMax - globalMin || 0.1;
+                const yMin = Math.max(0, globalMin - range * 0.1);
+                const yMax = Math.min(1, globalMax + range * 0.1);
+                const yRange = yMax - yMin || 0.1;
+
+                const W = 280, H = 36, pad = 2;
+
+                return (
+                  <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" style={{ width: '100%', height: '100%', overflow: 'visible' }}>
+                    {chartSeries.map((series, si) => {
+                      const pts = series.data;
+                      if (!pts || pts.length < 2) return null;
+                      const step = W / (pts.length - 1);
+                      const points = pts.map((v, i) => {
+                        const x = i * step;
+                        const y = pad + (H - pad * 2) - ((v - yMin) / yRange) * (H - pad * 2);
+                        return `${x},${y}`;
+                      });
+                      const pathD = `M${points.join(' L')}`;
+                      return (
+                        <g key={si}>
+                          {si === 0 && (
+                            <>
+                              <defs>
+                                <linearGradient id={`card-grad-${market.ticker}`} x1="0" y1="0" x2="0" y2="1">
+                                  <stop offset="0%" stopColor={series.color} stopOpacity="0.20" />
+                                  <stop offset="100%" stopColor={series.color} stopOpacity="0" />
+                                </linearGradient>
+                              </defs>
+                              <path
+                                d={`${pathD} L${W},${H - pad} L0,${H - pad} Z`}
+                                fill={`url(#card-grad-${market.ticker})`}
+                              />
+                            </>
+                          )}
                           <path
-                            d={`${pathD} L280,${32 - pad} L0,${32 - pad} Z`}
-                            fill={`url(#card-grad-${market.ticker})`}
+                            d={pathD}
+                            fill="none"
+                            stroke={series.color}
+                            strokeWidth={series.strokeWidth}
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            opacity={series.opacity}
                           />
-                        </>
-                      )}
-                      <path
-                        d={pathD}
-                        fill="none"
-                        stroke={series.color}
-                        strokeWidth={series.strokeWidth}
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        opacity={series.opacity}
-                      />
-                    </g>
-                  );
-                })}
-              </svg>
+                        </g>
+                      );
+                    })}
+                  </svg>
+                );
+              })()}
             </div>
 
             {/* Spacer */}

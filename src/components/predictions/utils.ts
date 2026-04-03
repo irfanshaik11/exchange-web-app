@@ -11,8 +11,8 @@ export function generateMockSparkline(ticker: string, currentPrice: number, chan
   let price = startPrice;
   let momentum = 0;
 
-  // Volatility scales with price distance from 0.5 (markets near 50% are more volatile)
-  const baseVol = 0.02 + Math.abs(currentPrice - 0.5) * 0.04;
+  // Higher volatility for visible chart movement
+  const baseVol = 0.04 + Math.abs(currentPrice - 0.5) * 0.06;
 
   for (let i = 0; i < points; i++) {
     const progress = i / (points - 1);
