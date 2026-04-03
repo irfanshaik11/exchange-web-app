@@ -278,59 +278,47 @@ export default function PredictionsPage() {
             {/* Separator */}
             <div className="w-px h-5 mx-1 flex-shrink-0" style={{ backgroundColor: T.border }} />
 
-            {/* AI Insights — iridescent animated tab */}
-            <button
-              onClick={() => setAiDrawerOpen(!aiDrawerOpen)}
-              className="relative flex-shrink-0 flex items-center gap-2 px-4 py-1.5 my-1.5 rounded-full text-[13px] font-semibold overflow-hidden"
-              style={{
-                background: 'linear-gradient(135deg, rgba(139,92,246,0.10) 0%, rgba(59,130,246,0.08) 35%, rgba(16,185,129,0.10) 65%, rgba(139,92,246,0.08) 100%)',
-                border: '1px solid rgba(139,92,246,0.22)',
-                color: aiDrawerOpen ? '#a78bfa' : '#93bbfc',
-                transition: 'all 200ms cubic-bezier(0.16,1,0.3,1)',
-                boxShadow: aiDrawerOpen
-                  ? '0 0 20px rgba(139,92,246,0.12), 0 0 6px rgba(74,222,128,0.08)'
-                  : '0 0 12px rgba(139,92,246,0.06)',
-              }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.boxShadow = '0 0 24px rgba(139,92,246,0.16), 0 0 8px rgba(74,222,128,0.10)';
-                e.currentTarget.style.borderColor = 'rgba(139,92,246,0.35)';
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.boxShadow = aiDrawerOpen
-                  ? '0 0 20px rgba(139,92,246,0.12), 0 0 6px rgba(74,222,128,0.08)'
-                  : '0 0 12px rgba(139,92,246,0.06)';
-                e.currentTarget.style.borderColor = 'rgba(139,92,246,0.22)';
-              }}
-            >
-              {/* Iridescent shimmer overlay */}
+            {/* AI Insights — iridescent border tab */}
+            <div className="relative flex-shrink-0 my-1.5 rounded-full" style={{ padding: 1 }}>
+              {/* Iridescent animated border */}
               <div
-                className="absolute inset-0 pointer-events-none"
+                className="absolute inset-0 rounded-full"
                 style={{
-                  background: 'linear-gradient(90deg, transparent 0%, rgba(139,92,246,0.10) 20%, rgba(59,130,246,0.08) 40%, rgba(16,185,129,0.10) 60%, rgba(139,92,246,0.08) 80%, transparent 100%)',
-                  backgroundSize: '200% 100%',
+                  background: 'linear-gradient(270deg, rgba(139,92,246,0.7), rgba(59,130,246,0.6), rgba(16,185,129,0.7), rgba(59,130,246,0.6), rgba(139,92,246,0.7))',
+                  backgroundSize: '400% 100%',
                   animation: 'shimmer-ai 6s ease-in-out infinite',
                 }}
               />
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" className="relative z-[1]">
-                <defs>
-                  <linearGradient id="ai-tab-sparkle" x1="3" y1="2" x2="22" y2="21">
-                    <stop stopColor="#8B5CF6" />
-                    <stop offset="0.5" stopColor="#3B82F6" />
-                    <stop offset="1" stopColor="#10B981" />
-                  </linearGradient>
-                </defs>
-                <path d="M12 2L13.5 8.5L20 10L13.5 11.5L12 18L10.5 11.5L4 10L10.5 8.5L12 2Z" fill="url(#ai-tab-sparkle)" />
-              </svg>
-              <span className="relative z-[1]"
+              <button
+                onClick={() => setAiDrawerOpen(!aiDrawerOpen)}
+                className="relative flex items-center gap-2 px-4 py-1.5 rounded-full text-[13px] font-semibold"
                 style={{
-                  background: 'linear-gradient(90deg, #8B5CF6, #3B82F6, #10B981)',
-                  WebkitBackgroundClip: 'text',
-                  WebkitTextFillColor: 'transparent',
+                  background: aiDrawerOpen ? 'rgba(14,16,20,0.85)' : 'rgba(19,21,23,0.95)',
+                  color: aiDrawerOpen ? '#e0e4ea' : T.textSecondary,
+                  transition: 'all 200ms cubic-bezier(0.16,1,0.3,1)',
                 }}
               >
-                AI Insights
-              </span>
-            </button>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
+                  <defs>
+                    <linearGradient id="ai-tab-sparkle" x1="3" y1="2" x2="22" y2="21">
+                      <stop stopColor="#8B5CF6" />
+                      <stop offset="0.5" stopColor="#3B82F6" />
+                      <stop offset="1" stopColor="#10B981" />
+                    </linearGradient>
+                  </defs>
+                  <path d="M12 2L13.5 8.5L20 10L13.5 11.5L12 18L10.5 11.5L4 10L10.5 8.5L12 2Z" fill="url(#ai-tab-sparkle)" />
+                </svg>
+                <span
+                  style={{
+                    background: 'linear-gradient(90deg, #8B5CF6, #3B82F6, #10B981)',
+                    WebkitBackgroundClip: 'text',
+                    WebkitTextFillColor: 'transparent',
+                  }}
+                >
+                  AI Insights
+                </span>
+              </button>
+            </div>
             {!isLoading && (
               <span
                 className="text-[11px] font-medium px-2 py-0.5 rounded-full ml-1 flex-shrink-0"
