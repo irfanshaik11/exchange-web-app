@@ -74,6 +74,7 @@ const MarketCard = React.memo(function MarketCard({
             backgroundColor: T.bgCard,
             border: `1px solid ${T.border}`,
             borderRadius: 12,
+            cursor: 'pointer',
             opacity: isActive ? 1 : 0.5,
             transition: `transform 200ms cubic-bezier(0.33, 1, 0.68, 1), box-shadow 200ms cubic-bezier(0.33, 1, 0.68, 1), border-color 150ms ease-out, background-color 150ms ease-out`,
             willChange: 'transform',

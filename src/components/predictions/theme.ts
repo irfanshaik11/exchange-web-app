@@ -67,7 +67,7 @@ export const T = {
   // Text hierarchy
   text: "#ffffff",
   textSecondary: "#858d98",
-  muted: "#5a6270",
+  muted: "#7a8090",
   subtle: "#3a3f4a",
 
   // Semantic — trading green/red
