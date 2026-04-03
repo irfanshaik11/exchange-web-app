@@ -278,38 +278,47 @@ export default function PredictionsPage() {
             {/* Separator */}
             <div className="w-px h-5 mx-1 flex-shrink-0" style={{ backgroundColor: T.border }} />
 
-            {/* AI Insights — as a premium tab */}
+            {/* AI Insights — premium tab with gradient pill */}
             <button
               onClick={() => setAiDrawerOpen(!aiDrawerOpen)}
-              className="relative flex-shrink-0 flex items-center gap-1.5 px-4 py-3 text-[13px] font-semibold"
+              className="relative flex-shrink-0 flex items-center gap-2 px-4 py-1.5 my-1.5 rounded-full text-[13px] font-semibold"
               style={{
+                background: aiDrawerOpen
+                  ? 'linear-gradient(135deg, rgba(74,222,128,0.12), rgba(34,211,238,0.08), rgba(129,140,248,0.12))'
+                  : 'transparent',
+                border: aiDrawerOpen
+                  ? '1px solid rgba(74,222,128,0.20)'
+                  : '1px solid transparent',
                 color: aiDrawerOpen ? '#4ADE80' : T.muted,
-                transition: 'color 150ms ease',
+                transition: 'all 200ms cubic-bezier(0.16,1,0.3,1)',
+                boxShadow: aiDrawerOpen ? '0 0 16px rgba(74,222,128,0.08)' : 'none',
+              }}
+              onMouseEnter={(e) => {
+                if (!aiDrawerOpen) {
+                  e.currentTarget.style.color = T.text;
+                  e.currentTarget.style.background = 'rgba(255,255,255,0.04)';
+                  e.currentTarget.style.borderColor = T.border;
+                }
+              }}
+              onMouseLeave={(e) => {
+                if (!aiDrawerOpen) {
+                  e.currentTarget.style.color = T.muted;
+                  e.currentTarget.style.background = 'transparent';
+                  e.currentTarget.style.borderColor = 'transparent';
+                }
               }}
             >
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
                 <defs>
                   <linearGradient id="ai-tab-sparkle" x1="3" y1="2" x2="22" y2="21">
-                    <stop stopColor={aiDrawerOpen ? '#4ADE80' : T.muted} />
-                    <stop offset="0.5" stopColor={aiDrawerOpen ? '#22D3EE' : T.muted} />
-                    <stop offset="1" stopColor={aiDrawerOpen ? '#818CF8' : T.muted} />
+                    <stop stopColor={aiDrawerOpen ? '#4ADE80' : 'currentColor'} />
+                    <stop offset="0.5" stopColor={aiDrawerOpen ? '#22D3EE' : 'currentColor'} />
+                    <stop offset="1" stopColor={aiDrawerOpen ? '#818CF8' : 'currentColor'} />
                   </linearGradient>
                 </defs>
                 <path d="M12 2L13.5 8.5L20 10L13.5 11.5L12 18L10.5 11.5L4 10L10.5 8.5L12 2Z" fill="url(#ai-tab-sparkle)" />
               </svg>
               AI Insights
-              {aiDrawerOpen && (
-                <motion.div
-                  layoutId="sort-tab-underline"
-                  className="absolute bottom-0 left-2 right-2 h-[2px]"
-                  style={{
-                    background: 'linear-gradient(90deg, #4ADE80, #22D3EE, #818CF8)',
-                    borderRadius: 1,
-                    boxShadow: '0 1px 12px rgba(74, 222, 128, 0.3)',
-                  }}
-                  transition={{ type: 'spring', stiffness: 400, damping: 30 }}
-                />
-              )}
             </button>
             {!isLoading && (
               <span
@@ -406,40 +415,62 @@ export default function PredictionsPage() {
             {/* AI Insights — full-width view when active */}
             {aiDrawerOpen && (
               <motion.div
-                initial={{ opacity: 0, y: 8 }}
+                initial={{ opacity: 0, y: 12 }}
                 animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.25, ease: [0.16, 1, 0.3, 1] }}
-                className="mb-6 rounded-2xl overflow-hidden"
+                transition={{ duration: 0.35, ease: [0.16, 1, 0.3, 1] }}
+                className="mb-6 rounded-2xl overflow-hidden relative"
                 style={{
-                  background: 'linear-gradient(180deg, rgba(18,20,26,0.98) 0%, rgba(14,16,20,0.96) 80px)',
-                  border: '1px solid rgba(74,222,128,0.10)',
-                  boxShadow: '0 0 40px rgba(74,222,128,0.03)',
+                  background: 'linear-gradient(180deg, #12151c 0%, #0e1017 100%)',
+                  border: '1px solid rgba(74,222,128,0.12)',
+                  boxShadow: '0 0 60px rgba(74,222,128,0.04), 0 4px 20px rgba(0,0,0,0.3)',
                 }}
               >
+                {/* Ambient glow blobs */}
+                <div className="absolute pointer-events-none" style={{ top: -60, left: '15%', width: 250, height: 250, borderRadius: '50%', background: 'radial-gradient(circle, rgba(74,222,128,0.06) 0%, transparent 70%)', filter: 'blur(50px)' }} />
+                <div className="absolute pointer-events-none" style={{ top: -40, right: '20%', width: 200, height: 200, borderRadius: '50%', background: 'radial-gradient(circle, rgba(34,211,238,0.04) 0%, transparent 70%)', filter: 'blur(40px)' }} />
+                <div className="absolute pointer-events-none" style={{ bottom: -40, right: '10%', width: 180, height: 180, borderRadius: '50%', background: 'radial-gradient(circle, rgba(129,140,248,0.04) 0%, transparent 70%)', filter: 'blur(40px)' }} />
+
                 {/* Premium header */}
                 <div className="relative overflow-hidden">
-                  <div className="absolute inset-0 pointer-events-none" style={{ height: 64, background: 'linear-gradient(180deg, rgba(74,222,128,0.06) 0%, rgba(34,211,238,0.03) 50%, transparent 100%)' }} />
-                  <div className="relative flex items-center gap-2.5 px-6 py-4">
-                    <div
-                      className="w-8 h-8 rounded-lg flex items-center justify-center"
-                      style={{ background: 'linear-gradient(135deg, rgba(74,222,128,0.12), rgba(129,140,248,0.12))', border: '1px solid rgba(74,222,128,0.15)' }}
+                  <div className="absolute inset-0 pointer-events-none" style={{ height: 72, background: 'linear-gradient(180deg, rgba(74,222,128,0.07) 0%, rgba(34,211,238,0.03) 50%, transparent 100%)' }} />
+                  <div className="relative flex items-center justify-between px-6 py-5">
+                    <div className="flex items-center gap-3">
+                      <div
+                        className="w-9 h-9 rounded-xl flex items-center justify-center"
+                        style={{ background: 'linear-gradient(135deg, rgba(74,222,128,0.15), rgba(34,211,238,0.10), rgba(129,140,248,0.15))', border: '1px solid rgba(74,222,128,0.18)' }}
+                      >
+                        <svg width="17" height="17" viewBox="0 0 24 24" fill="none">
+                          <defs><linearGradient id="ai-view-sparkle" x1="3" y1="2" x2="22" y2="21"><stop stopColor="#4ADE80"/><stop offset="0.5" stopColor="#22D3EE"/><stop offset="1" stopColor="#818CF8"/></linearGradient></defs>
+                          <path d="M12 2L13.5 8.5L20 10L13.5 11.5L12 18L10.5 11.5L4 10L10.5 8.5L12 2Z" fill="url(#ai-view-sparkle)" />
+                        </svg>
+                      </div>
+                      <div>
+                        <span className="text-[16px] font-bold block" style={{ background: 'linear-gradient(90deg, #4ADE80, #22D3EE, #818CF8)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>
+                          AI Market Intelligence
+                        </span>
+                        <span className="text-[12px]" style={{ color: 'rgba(255,255,255,0.4)' }}>Real-time analysis powered by AI</span>
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => setAiDrawerOpen(false)}
+                      className="px-3 py-1.5 rounded-lg text-[12px] font-medium"
+                      style={{
+                        color: T.textSecondary,
+                        background: 'rgba(255,255,255,0.04)',
+                        border: `1px solid ${T.border}`,
+                        transition: 'all 150ms ease',
+                      }}
+                      onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.08)'; }}
+                      onMouseLeave={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.04)'; }}
                     >
-                      <svg width="15" height="15" viewBox="0 0 24 24" fill="none">
-                        <defs><linearGradient id="ai-view-sparkle" x1="3" y1="2" x2="22" y2="21"><stop stopColor="#4ADE80"/><stop offset="0.5" stopColor="#22D3EE"/><stop offset="1" stopColor="#818CF8"/></linearGradient></defs>
-                        <path d="M12 2L13.5 8.5L20 10L13.5 11.5L12 18L10.5 11.5L4 10L10.5 8.5L12 2Z" fill="url(#ai-view-sparkle)" />
-                      </svg>
-                    </div>
-                    <div>
-                      <span className="text-[15px] font-semibold block" style={{ background: 'linear-gradient(90deg, #4ADE80, #22D3EE)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>
-                        AI Market Intelligence
-                      </span>
-                      <span className="text-[11px]" style={{ color: 'rgba(255,255,255,0.35)' }}>Real-time AI analysis of prediction markets</span>
-                    </div>
+                      Back to Markets
+                    </button>
                   </div>
-                  <div style={{ height: 1, background: 'linear-gradient(90deg, transparent, rgba(74,222,128,0.15) 20%, rgba(34,211,238,0.12) 50%, rgba(129,140,248,0.15) 80%, transparent)' }} />
+                  <div style={{ height: 1, background: 'linear-gradient(90deg, transparent, rgba(74,222,128,0.18) 15%, rgba(34,211,238,0.14) 50%, rgba(129,140,248,0.18) 85%, transparent)' }} />
                 </div>
+
                 {/* Content */}
-                <div className="p-6">
+                <div className="relative p-6">
                   <HomepageInsightPanel docked chromeless />
                 </div>
               </motion.div>
