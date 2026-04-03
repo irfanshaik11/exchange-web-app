@@ -64,23 +64,24 @@ const PolymarketOrderBook = dynamic(() => import('~/components/predictions/Polym
 const USDC_MINT = 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v';
 
 /* ---------- AXIOM palette (matching token trade page) ---------- */
+/* Palette aligned with homepage redesign (Polymarket-inspired) */
 const AX = {
-  bg: "#111214",
-  surface: "#1E1F26",
-  surface2: "#17191E",
-  border: "#2A2B33",
-  text: "#f0f5f5",
-  muted: "#9CA3AF",
-  mint: "#70E0B0",
-  mintHover: "#58B890",
-  sell: "#FF4D7F",
-  // Prediction-specific colors
-  green: "#4ADE80",
-  greenBg: "rgba(74, 222, 128, 0.15)",
-  greenBorder: "rgba(74, 222, 128, 0.35)",
-  red: "#F87171",
-  redBg: "rgba(248, 113, 113, 0.15)",
-  redBorder: "rgba(248, 113, 113, 0.35)",
+  bg: "#131517",
+  surface: "#1c1f24",
+  surface2: "#181b20",
+  border: "#2a2e35",
+  text: "#ffffff",
+  muted: "#7a8090",
+  mint: "#3b82f6",
+  mintHover: "#2563eb",
+  sell: "#ef4444",
+  // Semantic trading colors
+  green: "#22c55e",
+  greenBg: "rgba(34, 197, 94, 0.10)",
+  greenBorder: "rgba(34, 197, 94, 0.25)",
+  red: "#ef4444",
+  redBg: "rgba(239, 68, 68, 0.10)",
+  redBorder: "rgba(239, 68, 68, 0.25)",
   yellow: "#FBBF24",
   purple: "#818CF8",
   cyan: "#22D3EE",
@@ -383,7 +384,7 @@ const PredictionTabs: React.FC<{
       {visibleTabs.map(tab => (
         <button
           key={tab}
-          className={`px-2.5 py-1 font-semibold transition-colors ${selectedTab === tab ? 'border-b-2 border-[#70E0B0] text-white' : 'text-neutral-400 hover:text-neutral-300'}`}
+          className={`px-2.5 py-1 font-semibold transition-colors ${selectedTab === tab ? 'border-b-2 border-[#3b82f6] text-white' : 'text-neutral-400 hover:text-neutral-300'}`}
           onClick={() => setSelectedTab(tab)}
         >
           {tab}
@@ -393,7 +394,7 @@ const PredictionTabs: React.FC<{
         <div className="relative" ref={moreRef}>
           <button
             onClick={() => setMoreOpen(o => !o)}
-            className={`px-2.5 py-1 font-semibold transition-colors flex items-center gap-1 ${isHiddenSelected ? 'border-b-2 border-[#70E0B0] text-white' : 'text-neutral-400 hover:text-neutral-300'}`}
+            className={`px-2.5 py-1 font-semibold transition-colors flex items-center gap-1 ${isHiddenSelected ? 'border-b-2 border-[#3b82f6] text-white' : 'text-neutral-400 hover:text-neutral-300'}`}
           >
             {isHiddenSelected ? selectedTab : 'More'}
             <svg width="8" height="8" viewBox="0 0 8 8" fill="currentColor" className={`transition-transform ${moreOpen ? 'rotate-180' : ''}`}>
@@ -2456,9 +2457,9 @@ export default function MarketDetailPage() {
       <div
         className="min-h-screen w-full flex flex-col overflow-y-auto"
         style={{
-          backgroundColor: "#111214",
+          backgroundColor: AX.bg,
           color: AX.text,
-          fontFamily: "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", \"Inter\", system-ui, sans-serif",
+          fontFamily: "Inter, -apple-system, BlinkMacSystemFont, 'SF Pro Text', system-ui, sans-serif",
         }}
       >
         <Header search={search} setSearch={setSearch} />
@@ -2509,7 +2510,7 @@ export default function MarketDetailPage() {
               </div>
 
               {/* Separator line */}
-              <div className="px-3 border-b border-[#2A2B33]" style={{ marginTop: '2px' }} />
+              <div className="px-3 border-b border-[#2a2e35]" style={{ marginTop: '2px' }} />
 
               {/* Chart with inline Order Book - flex row layout */}
               <div
@@ -2842,7 +2843,7 @@ export default function MarketDetailPage() {
                 <div>
                     {/* Selected Outcome Header */}
                     {selectedOutcomeMarket ? (
-                      <div className="flex items-center gap-2.5 px-4 py-[11px] border-b border-[#2A2B33]">
+                      <div className="flex items-center gap-2.5 px-4 py-[11px] border-b border-[#2a2e35]">
                         {(selectedOutcomeMarket.image || selectedOutcomeMarket.icon) ? (
                           <img
                             src={selectedOutcomeMarket.image || selectedOutcomeMarket.icon}
@@ -2863,14 +2864,14 @@ export default function MarketDetailPage() {
                           </h3>
                           <button
                             onClick={() => setSelectedOutcomeMarket(null)}
-                            className="text-[10px] text-[#70E0B0] hover:underline"
+                            className="text-[10px] text-[#22c55e] hover:underline"
                           >
                             Change outcome
                           </button>
                         </div>
                       </div>
                     ) : (
-                      <div className="text-center py-2.5 mb-2 mx-3 rounded-lg bg-[#1A1B1E] border border-[#2A2B33]">
+                      <div className="text-center py-2.5 mb-2 mx-3 rounded-lg bg-[#1A1B1E] border border-[#2a2e35]">
                         <p className="text-[11px] text-[#9CA3AF]">
                           Select an outcome from the Outcomes tab
                         </p>
@@ -2878,15 +2879,15 @@ export default function MarketDetailPage() {
                     )}
 
                     {/* Buy / Sell Toggle + Order Type */}
-                    <div className="px-4 py-[18.5px] border-b border-[#2A2B33]">
+                    <div className="px-4 py-[18.5px] border-b border-[#2a2e35]">
                       <div className="flex items-center gap-2">
                         {/* Buy/Sell Toggle - matches trenches */}
-                        <div className="flex-1 relative h-9 rounded-lg border border-[#2A2B33] bg-[#1E1F26] overflow-hidden">
+                        <div className="flex-1 relative h-9 rounded-lg border border-[#2a2e35] bg-[#1c1f24] overflow-hidden">
                           <div
                             className="absolute top-0 left-0 h-full w-1/2 rounded-md transition-transform duration-200"
                             style={{
                               transform: tradeMode === 'sell' ? 'translateX(100%)' : 'translateX(0%)',
-                              background: tradeMode === 'buy' ? '#70E0B0' : '#FF4D7F',
+                              background: tradeMode === 'buy' ? '#22c55e' : '#ef4444',
                             }}
                           />
                           <div className="relative z-10 grid grid-cols-2 h-full">
@@ -2938,7 +2939,7 @@ export default function MarketDetailPage() {
                             {tradeMode === 'buy' ? 'Max price to pay' : 'Min price to receive'}
                           </span>
                         </div>
-                        <div className="flex items-center justify-between rounded-lg px-2 border border-[#2A2B33] bg-[#25282B]">
+                        <div className="flex items-center justify-between rounded-lg px-2 border border-[#2a2e35] bg-[#252930]">
                           <button
                             onClick={() => setLimitPriceCents(prev => Math.max(1, prev - 1))}
                             className="w-10 h-10 flex items-center justify-center text-xl font-bold rounded-md transition-colors hover:bg-white/10"
@@ -2964,7 +2965,7 @@ export default function MarketDetailPage() {
                             <button
                               key={delta}
                               onClick={() => setLimitPriceCents(prev => Math.max(1, Math.min(99, prev - delta)))}
-                              className="px-2 py-1 rounded text-[11px] font-medium transition-colors border border-[#2A2B33] bg-[#25282B] text-[#9CA3AF] hover:bg-[#1E1F26]"
+                              className="px-2 py-1 rounded text-[11px] font-medium transition-colors border border-[#2a2e35] bg-[#252930] text-[#9CA3AF] hover:bg-[#1c1f24]"
                             >
                               −{delta}¢
                             </button>
@@ -2973,7 +2974,7 @@ export default function MarketDetailPage() {
                             <button
                               key={delta}
                               onClick={() => setLimitPriceCents(prev => Math.max(1, Math.min(99, prev + delta)))}
-                              className="px-2 py-1 rounded text-[11px] font-medium transition-colors border border-[#2A2B33] bg-[#25282B] text-[#9CA3AF] hover:bg-[#1E1F26]"
+                              className="px-2 py-1 rounded text-[11px] font-medium transition-colors border border-[#2a2e35] bg-[#252930] text-[#9CA3AF] hover:bg-[#1c1f24]"
                             >
                               +{delta}¢
                             </button>
@@ -3005,9 +3006,9 @@ export default function MarketDetailPage() {
                             onClick={() => setSelectedSide('yes')}
                             className="h-9 rounded-lg flex items-center justify-center gap-1.5 text-[12px] font-semibold transition-all"
                             style={{
-                              backgroundColor: selectedSide === 'yes' ? '#70E0B0' : '#1E1F26',
-                              border: `1px solid ${selectedSide === 'yes' ? '#70E0B0' : '#2A2B33'}`,
-                              color: selectedSide === 'yes' ? '#000' : '#70E0B0',
+                              backgroundColor: selectedSide === 'yes' ? '#22c55e' : '#1c1f24',
+                              border: `1px solid ${selectedSide === 'yes' ? '#22c55e' : '#2a2e35'}`,
+                              color: selectedSide === 'yes' ? '#000' : '#22c55e',
                             }}
                           >
                             Yes <span className="font-normal">{yesPriceCents.toFixed(0)}¢</span>
@@ -3016,8 +3017,8 @@ export default function MarketDetailPage() {
                             onClick={() => setSelectedSide('no')}
                             className="h-9 rounded-lg flex items-center justify-center gap-1.5 text-[12px] font-semibold transition-all"
                             style={{
-                              backgroundColor: selectedSide === 'no' ? '#FF4D7F' : '#1E1F26',
-                              border: `1px solid ${selectedSide === 'no' ? '#FF4D7F' : '#2A2B33'}`,
+                              backgroundColor: selectedSide === 'no' ? '#ef4444' : '#1c1f24',
+                              border: `1px solid ${selectedSide === 'no' ? '#ef4444' : '#2a2e35'}`,
                               color: selectedSide === 'no' ? '#000' : '#9CA3AF',
                             }}
                           >
@@ -3029,7 +3030,7 @@ export default function MarketDetailPage() {
 
                     {/* Amount Input - matches trenches */}
                     <div className="mb-3">
-                      <div className="rounded-lg border border-[#2A2B33] bg-[#25282B]">
+                      <div className="rounded-lg border border-[#2a2e35] bg-[#252930]">
                         <div className="flex items-center justify-between gap-3 px-3 py-1.5">
                           <div className="flex items-center gap-1">
                             <span className="text-[10px] font-semibold text-[#9CA3AF] uppercase tracking-wide">Amount</span>
@@ -3055,14 +3056,14 @@ export default function MarketDetailPage() {
                                   <button
                                     key={qa}
                                     onClick={() => setAmount(prev => String((parseFloat(prev) || 0) + qa))}
-                                    className="h-9 border-r border-[#000] last:border-r-0 text-[12px] font-semibold tabular-nums bg-[#25282B] hover:bg-[#1E1F26] text-[#E6E7EA]"
+                                    className="h-9 border-r border-[#000] last:border-r-0 text-[12px] font-semibold tabular-nums bg-[#252930] hover:bg-[#1c1f24] text-[#E6E7EA]"
                                   >
                                     ${qa}
                                   </button>
                                 ))}
                                 <button
                                   onClick={() => polygonBalance && setAmount(Math.floor(polygonBalance.usdc).toString())}
-                                  className="h-9 text-[12px] font-semibold bg-[#25282B] hover:bg-[#1E1F26] text-[#E6E7EA]"
+                                  className="h-9 text-[12px] font-semibold bg-[#252930] hover:bg-[#1c1f24] text-[#E6E7EA]"
                                 >
                                   Max
                                 </button>
@@ -3078,7 +3079,7 @@ export default function MarketDetailPage() {
                                       key={pct}
                                       onClick={() => { setAmount(tokenValue.toFixed(2)); setIsSellMax(pct === 100); }}
                                       disabled={!userTokenPosition || userTokenPosition.tokenAmount <= 0}
-                                      className="h-9 border-r border-[#000] last:border-r-0 text-[12px] font-semibold tabular-nums bg-[#25282B] hover:bg-[#1E1F26] text-[#E6E7EA] disabled:opacity-50"
+                                      className="h-9 border-r border-[#000] last:border-r-0 text-[12px] font-semibold tabular-nums bg-[#252930] hover:bg-[#1c1f24] text-[#E6E7EA] disabled:opacity-50"
                                     >
                                       {pct}%
                                     </button>
@@ -3093,7 +3094,7 @@ export default function MarketDetailPage() {
                                     }
                                   }}
                                   disabled={!userTokenPosition || userTokenPosition.tokenAmount <= 0}
-                                  className="h-9 text-[12px] font-semibold bg-[#25282B] hover:bg-[#1E1F26] text-[#70E0B0] disabled:opacity-50"
+                                  className="h-9 text-[12px] font-semibold bg-[#252930] hover:bg-[#1c1f24] text-[#22c55e] disabled:opacity-50"
                                 >
                                   Max
                                 </button>
@@ -3106,7 +3107,7 @@ export default function MarketDetailPage() {
 
                     {/* Position Info for SELL mode */}
                     {tradeMode === 'sell' && (
-                      <div className="mb-3 p-2 rounded-lg border border-[#2A2B33] bg-[#1A1B1E]">
+                      <div className="mb-3 p-2 rounded-lg border border-[#2a2e35] bg-[#1A1B1E]">
                         {userTokenPosition && userTokenPosition.tokenAmount > 0 ? (
                           <div className="flex justify-between items-center text-xs">
                             <span style={{ color: AX.muted }}>Your {selectedSide.toUpperCase()} tokens:</span>
@@ -3126,7 +3127,7 @@ export default function MarketDetailPage() {
 
                     {/* Quote Display */}
                     {polymarketQuote && parseFloat(amount) > 0 && (
-                      <div className="mb-2 p-2 rounded-lg border border-[#2A2B33] bg-[#1A1B1E]">
+                      <div className="mb-2 p-2 rounded-lg border border-[#2a2e35] bg-[#1A1B1E]">
                         <div className="space-y-1">
                           {/* Price: Show limit price for limit orders, market price for market orders */}
                           <div className="flex justify-between text-xs">
@@ -3203,7 +3204,7 @@ export default function MarketDetailPage() {
 
                     {/* Polygon Balance Display */}
                     {user?.bearerToken && (
-                      <div className="mb-3 p-2.5 rounded-lg border border-[#2A2B33] bg-[#1A1B1E]">
+                      <div className="mb-3 p-2.5 rounded-lg border border-[#2a2e35] bg-[#1A1B1E]">
                         <div className="flex items-center justify-between">
                           <div className="flex items-center gap-2">
                             <span className="text-xs" style={{ color: AX.muted }}>Polygon Wallet</span>
@@ -3253,7 +3254,7 @@ export default function MarketDetailPage() {
                       }
                       className="w-full h-10 rounded-full text-[14px] font-semibold flex items-center justify-center gap-2 transition-all cursor-pointer disabled:cursor-not-allowed disabled:opacity-50"
                       style={{
-                        backgroundColor: tradeMode === 'buy' ? '#70E0B0' : '#FF4D7F',
+                        backgroundColor: tradeMode === 'buy' ? '#22c55e' : '#ef4444',
                         color: '#000',
                       }}
                     >
@@ -3289,7 +3290,7 @@ export default function MarketDetailPage() {
 
                     {/* Open Orders Section */}
                     {openOrders.length > 0 && (
-                      <div className="border-t border-[#2A2B33] mt-2 px-4 pt-3">
+                      <div className="border-t border-[#2a2e35] mt-2 px-4 pt-3">
                         <div className="flex items-center justify-between mb-2">
                           <span className="text-[11px] font-semibold uppercase tracking-wide" style={{ color: AX.muted }}>
                             Open Orders ({openOrders.length})
@@ -3350,7 +3351,7 @@ export default function MarketDetailPage() {
                     )}
 
                     {/* Market Stats Section - matches trenches Token Info */}
-                    <div className="border-t border-[#2A2B33] mt-2" style={{ backgroundColor: 'rgba(255,255,255,0.015)' }}>
+                    <div className="border-t border-[#2a2e35] mt-2" style={{ backgroundColor: 'rgba(255,255,255,0.015)' }}>
                       <button
                         onClick={() => setShowMarketStats(!showMarketStats)}
                         className="w-full flex items-center justify-between px-4 py-3 hover:opacity-80 transition-opacity"
@@ -3413,7 +3414,7 @@ export default function MarketDetailPage() {
                     </div>
 
                     {/* About Section */}
-                    <div className="border-t border-[#2A2B33]" style={{ backgroundColor: 'rgba(255,255,255,0.015)' }}>
+                    <div className="border-t border-[#2a2e35]" style={{ backgroundColor: 'rgba(255,255,255,0.015)' }}>
                       <button
                         onClick={() => setShowAbout(!showAbout)}
                         className="w-full flex items-center justify-between px-4 py-3 hover:opacity-80 transition-opacity"
@@ -3442,7 +3443,7 @@ export default function MarketDetailPage() {
                     </div>
 
                     {/* Resolution Section */}
-                    <div className="border-t border-[#2A2B33]" style={{ backgroundColor: 'rgba(255,255,255,0.015)' }}>
+                    <div className="border-t border-[#2a2e35]" style={{ backgroundColor: 'rgba(255,255,255,0.015)' }}>
                       <button
                         onClick={() => setShowResolution(!showResolution)}
                         className="w-full flex items-center justify-between px-4 py-3 hover:opacity-80 transition-opacity"
