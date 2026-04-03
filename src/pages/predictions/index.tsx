@@ -278,7 +278,7 @@ export default function PredictionsPage() {
             {/* Separator */}
             <div className="w-px h-5 mx-1 flex-shrink-0" style={{ backgroundColor: T.border }} />
 
-            {/* AI Insights — iridescent border tab */}
+            {/* AI Insights — iridescent border, plain text (gradient text only when active) */}
             <div className="relative flex-shrink-0 my-1.5 rounded-full" style={{ padding: 1 }}>
               {/* Iridescent animated border */}
               <div
@@ -293,30 +293,40 @@ export default function PredictionsPage() {
                 onClick={() => setAiDrawerOpen(!aiDrawerOpen)}
                 className="relative flex items-center gap-2 px-4 py-1.5 rounded-full text-[13px] font-semibold"
                 style={{
-                  background: aiDrawerOpen ? 'rgba(14,16,20,0.85)' : 'rgba(19,21,23,0.95)',
+                  background: aiDrawerOpen ? 'rgba(14,16,20,0.75)' : 'rgba(19,21,23,0.95)',
                   color: aiDrawerOpen ? '#e0e4ea' : T.textSecondary,
                   transition: 'all 200ms cubic-bezier(0.16,1,0.3,1)',
                 }}
               >
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
-                  <defs>
-                    <linearGradient id="ai-tab-sparkle" x1="3" y1="2" x2="22" y2="21">
-                      <stop stopColor="#8B5CF6" />
-                      <stop offset="0.5" stopColor="#3B82F6" />
-                      <stop offset="1" stopColor="#10B981" />
-                    </linearGradient>
-                  </defs>
-                  <path d="M12 2L13.5 8.5L20 10L13.5 11.5L12 18L10.5 11.5L4 10L10.5 8.5L12 2Z" fill="url(#ai-tab-sparkle)" />
+                  {aiDrawerOpen ? (
+                    <>
+                      <defs>
+                        <linearGradient id="ai-tab-sparkle-active" x1="3" y1="2" x2="22" y2="21">
+                          <stop stopColor="#8B5CF6" />
+                          <stop offset="0.5" stopColor="#3B82F6" />
+                          <stop offset="1" stopColor="#10B981" />
+                        </linearGradient>
+                      </defs>
+                      <path d="M12 2L13.5 8.5L20 10L13.5 11.5L12 18L10.5 11.5L4 10L10.5 8.5L12 2Z" fill="url(#ai-tab-sparkle-active)" />
+                    </>
+                  ) : (
+                    <path d="M12 2L13.5 8.5L20 10L13.5 11.5L12 18L10.5 11.5L4 10L10.5 8.5L12 2Z" fill="currentColor" />
+                  )}
                 </svg>
-                <span
-                  style={{
-                    background: 'linear-gradient(90deg, #8B5CF6, #3B82F6, #10B981)',
-                    WebkitBackgroundClip: 'text',
-                    WebkitTextFillColor: 'transparent',
-                  }}
-                >
-                  AI Insights
-                </span>
+                {aiDrawerOpen ? (
+                  <span
+                    style={{
+                      background: 'linear-gradient(90deg, #8B5CF6, #3B82F6, #10B981)',
+                      WebkitBackgroundClip: 'text',
+                      WebkitTextFillColor: 'transparent',
+                    }}
+                  >
+                    AI Insights
+                  </span>
+                ) : (
+                  <span>AI Insights</span>
+                )}
               </button>
             </div>
             {!isLoading && (
