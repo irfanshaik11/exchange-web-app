@@ -275,7 +275,31 @@ export default function PredictionsPage() {
               </button>
             ))}
 
-            {/* AI Insights button removed from sort bar — now a collapsible strip above grid */}
+            {/* Separator */}
+            <div className="w-px h-5 mx-1 flex-shrink-0" style={{ backgroundColor: T.border }} />
+
+            {/* AI Insights — iridescent border pill */}
+            <div className="relative flex-shrink-0 my-1.5 rounded-full" style={{ padding: 1 }}>
+              <div className="absolute inset-0 rounded-full" style={{ background: 'linear-gradient(270deg, rgba(139,92,246,0.7), rgba(59,130,246,0.6), rgba(16,185,129,0.7), rgba(59,130,246,0.6), rgba(139,92,246,0.7))', backgroundSize: '400% 100%', animation: 'shimmer-ai 6s ease-in-out infinite' }} />
+              <button
+                onClick={() => setAiDrawerOpen(!aiDrawerOpen)}
+                className="relative flex items-center gap-2 px-4 py-1.5 rounded-full text-[13px] font-semibold"
+                style={{ background: aiDrawerOpen ? 'rgba(14,16,20,0.75)' : 'rgba(19,21,23,0.95)', color: aiDrawerOpen ? '#e0e4ea' : T.textSecondary, transition: 'all 200ms ease' }}
+              >
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
+                  {aiDrawerOpen ? (
+                    <><defs><linearGradient id="ai-tab-sparkle-a" x1="3" y1="2" x2="22" y2="21"><stop stopColor="#8B5CF6"/><stop offset="0.5" stopColor="#3B82F6"/><stop offset="1" stopColor="#10B981"/></linearGradient></defs><path d="M12 2L13.5 8.5L20 10L13.5 11.5L12 18L10.5 11.5L4 10L10.5 8.5L12 2Z" fill="url(#ai-tab-sparkle-a)"/></>
+                  ) : (
+                    <path d="M12 2L13.5 8.5L20 10L13.5 11.5L12 18L10.5 11.5L4 10L10.5 8.5L12 2Z" fill="currentColor"/>
+                  )}
+                </svg>
+                {aiDrawerOpen ? (
+                  <span style={{ background: 'linear-gradient(90deg, #8B5CF6, #3B82F6, #10B981)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>AI Insights</span>
+                ) : (
+                  <span>AI Insights</span>
+                )}
+              </button>
+            </div>
             {!isLoading && (
               <span
                 className="text-[11px] font-medium px-2 py-0.5 rounded-full ml-1 flex-shrink-0"
@@ -368,63 +392,29 @@ export default function PredictionsPage() {
             {/* Main content area */}
             <div>
 
-            {/* AI Insights — collapsible strip above grid */}
-            <div
-              className="mb-4 rounded-xl overflow-hidden"
-              style={{
-                border: `1px solid ${aiDrawerOpen ? 'rgba(139,92,246,0.15)' : T.border}`,
-                transition: 'border-color 200ms ease',
-              }}
-            >
-              {/* Summary bar — always visible */}
-              <button
-                onClick={() => setAiDrawerOpen(!aiDrawerOpen)}
-                className="w-full flex items-center gap-3 px-4 py-2.5 cursor-pointer"
-                style={{
-                  backgroundColor: aiDrawerOpen ? 'rgba(14,16,20,0.9)' : T.bgCard,
-                  transition: 'background-color 200ms ease',
-                }}
+            {/* AI Insights — full-width view when tab is active */}
+            {aiDrawerOpen && (
+              <motion.div
+                initial={{ opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.25, ease: [0.16, 1, 0.3, 1] }}
+                className="mb-5 rounded-xl overflow-hidden"
+                style={{ backgroundColor: T.bgCard, border: `1px solid ${T.border}` }}
               >
-                {/* Iridescent sparkle icon */}
-                <div className="relative flex-shrink-0" style={{ padding: 1, borderRadius: 8 }}>
-                  <div className="absolute inset-0 rounded-lg" style={{ background: 'linear-gradient(135deg, rgba(139,92,246,0.5), rgba(59,130,246,0.4), rgba(16,185,129,0.5))', backgroundSize: '400% 100%', animation: 'shimmer-ai 6s ease-in-out infinite' }} />
-                  <div className="relative w-6 h-6 rounded-lg flex items-center justify-center" style={{ backgroundColor: T.bgCard }}>
-                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none">
-                      <defs><linearGradient id="ai-strip-sparkle" x1="3" y1="2" x2="22" y2="21"><stop stopColor="#8B5CF6"/><stop offset="0.5" stopColor="#3B82F6"/><stop offset="1" stopColor="#10B981"/></linearGradient></defs>
-                      <path d="M12 2L13.5 8.5L20 10L13.5 11.5L12 18L10.5 11.5L4 10L10.5 8.5L12 2Z" fill="url(#ai-strip-sparkle)" />
-                    </svg>
+                <div className="flex items-center justify-between px-5 py-3" style={{ borderBottom: `1px solid ${T.border}` }}>
+                  <div className="flex items-center gap-2">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><defs><linearGradient id="ai-v-sparkle" x1="3" y1="2" x2="22" y2="21"><stop stopColor="#8B5CF6"/><stop offset="0.5" stopColor="#3B82F6"/><stop offset="1" stopColor="#10B981"/></linearGradient></defs><path d="M12 2L13.5 8.5L20 10L13.5 11.5L12 18L10.5 11.5L4 10L10.5 8.5L12 2Z" fill="url(#ai-v-sparkle)"/></svg>
+                    <span className="text-[14px] font-semibold" style={{ color: T.text }}>AI Market Pulse</span>
                   </div>
+                  <button onClick={() => setAiDrawerOpen(false)} className="text-[12px] font-medium px-3 py-1 rounded-lg" style={{ color: T.textSecondary, background: 'rgba(255,255,255,0.04)', border: `1px solid ${T.border}` }}>
+                    Back to Markets
+                  </button>
                 </div>
-                <span className="text-[13px] font-semibold" style={{ color: T.text }}>AI Market Pulse</span>
-                <span className="text-[12px]" style={{ color: T.muted }}>Real-time AI analysis</span>
-                <svg
-                  width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"
-                  className="ml-auto flex-shrink-0"
-                  style={{ color: T.muted, transform: aiDrawerOpen ? 'rotate(180deg)' : 'rotate(0)', transition: 'transform 200ms ease' }}
-                >
-                  <path d="M6 9l6 6 6-6" />
-                </svg>
-              </button>
-
-              {/* Expanded content */}
-              <AnimatePresence>
-                {aiDrawerOpen && (
-                  <motion.div
-                    initial={{ height: 0, opacity: 0 }}
-                    animate={{ height: 'auto', opacity: 1 }}
-                    exit={{ height: 0, opacity: 0 }}
-                    transition={{ duration: 0.25, ease: [0.16, 1, 0.3, 1] }}
-                    className="overflow-hidden"
-                  >
-                    <div style={{ borderTop: `1px solid ${T.border}` }}>
-                      <div className="p-4">
-                        <HomepageInsightPanel docked chromeless />
-                      </div>
-                    </div>
-                  </motion.div>
-                )}
-              </AnimatePresence>
-            </div>
+                <div className="p-5">
+                  <HomepageInsightPanel docked chromeless />
+                </div>
+              </motion.div>
+            )}
 
             {/* Loading State */}
             {isLoading ? (
