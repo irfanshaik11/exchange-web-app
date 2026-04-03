@@ -540,6 +540,18 @@ export default function PredictionsPage() {
               </motion.div>
             ) : (
               <>
+                {/* Section header */}
+                {activeMarkets.length > 0 && (
+                  <div className="flex items-center justify-between mb-4">
+                    <h2 style={{ fontSize: 16, fontWeight: 600, color: T.text }}>
+                      {selectedSort === 'hot' ? 'Trending' : selectedSort === 'new' ? 'Newest' : selectedSort === 'ending' ? 'Ending Soon' : 'Top Volume'} Markets
+                    </h2>
+                    <span style={{ fontSize: 13, color: T.muted, fontVariantNumeric: 'tabular-nums' }}>
+                      {activeMarkets.length.toLocaleString()} markets
+                    </span>
+                  </div>
+                )}
+
                 {/* Market Grid */}
                 {activeMarkets.length > 0 && (
                   <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
@@ -660,11 +672,17 @@ export default function PredictionsPage() {
 
             {/* Footer CTA */}
             <div
-              className="mt-10 py-8 text-center"
-              style={{ borderTop: `1px solid ${T.border}` }}
+              className="mt-12 py-10 text-center rounded-2xl"
+              style={{
+                background: 'linear-gradient(180deg, rgba(255,255,255,0.02) 0%, transparent 100%)',
+                borderTop: `1px solid ${T.border}`,
+              }}
             >
-              <p className="text-[14px] mb-5" style={{ color: T.textSecondary }}>
-                Don't see what you're looking for? Join our community.
+              <h3 style={{ fontSize: 18, fontWeight: 600, color: T.text, marginBottom: 8 }}>
+                Join the Community
+              </h3>
+              <p className="text-[14px] mb-6" style={{ color: T.textSecondary }}>
+                Get market insights, discuss predictions, and stay ahead.
               </p>
               <div className="flex items-center justify-center gap-3">
                 <a

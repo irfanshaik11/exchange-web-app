@@ -73,11 +73,11 @@ const MarketCard = React.memo(function MarketCard({
   return (
     <motion.div
       ref={observeRef}
-      initial={index < 16 ? { opacity: 0, y: 6 } : false}
+      initial={index < 20 ? { opacity: 0, y: 12 } : false}
       animate={{ opacity: 1, y: 0 }}
       transition={{
-        duration: 0.25,
-        delay: index < 16 ? Math.min(index * 0.03, 0.35) : 0,
+        duration: 0.35,
+        delay: index < 20 ? Math.min(index * 0.04, 0.6) : 0,
         ease: [0.16, 1, 0.3, 1],
       }}
     >
@@ -104,6 +104,14 @@ const MarketCard = React.memo(function MarketCard({
             e.currentTarget.style.backgroundColor = T.bgCard;
             e.currentTarget.style.transform = 'translateY(0)';
             e.currentTarget.style.boxShadow = 'none';
+          }}
+          onMouseDown={(e) => {
+            e.currentTarget.style.transform = 'translateY(0) scale(0.98)';
+            e.currentTarget.style.transition = 'transform 80ms ease';
+          }}
+          onMouseUp={(e) => {
+            e.currentTarget.style.transform = 'translateY(-2px) scale(1)';
+            e.currentTarget.style.transition = 'transform 200ms cubic-bezier(0.33, 1, 0.68, 1), box-shadow 200ms cubic-bezier(0.33, 1, 0.68, 1), border-color 150ms ease-out, background-color 150ms ease-out';
           }}
         >
           <div className="flex flex-col flex-1 p-4">
