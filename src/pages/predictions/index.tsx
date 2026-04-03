@@ -275,60 +275,7 @@ export default function PredictionsPage() {
               </button>
             ))}
 
-            {/* Separator */}
-            <div className="w-px h-5 mx-1 flex-shrink-0" style={{ backgroundColor: T.border }} />
-
-            {/* AI Insights — iridescent border, plain text (gradient text only when active) */}
-            <div className="relative flex-shrink-0 my-1.5 rounded-full" style={{ padding: 1 }}>
-              {/* Iridescent animated border */}
-              <div
-                className="absolute inset-0 rounded-full"
-                style={{
-                  background: 'linear-gradient(270deg, rgba(139,92,246,0.7), rgba(59,130,246,0.6), rgba(16,185,129,0.7), rgba(59,130,246,0.6), rgba(139,92,246,0.7))',
-                  backgroundSize: '400% 100%',
-                  animation: 'shimmer-ai 6s ease-in-out infinite',
-                }}
-              />
-              <button
-                onClick={() => setAiDrawerOpen(!aiDrawerOpen)}
-                className="relative flex items-center gap-2 px-4 py-1.5 rounded-full text-[13px] font-semibold"
-                style={{
-                  background: aiDrawerOpen ? 'rgba(14,16,20,0.75)' : 'rgba(19,21,23,0.95)',
-                  color: aiDrawerOpen ? '#e0e4ea' : T.textSecondary,
-                  transition: 'all 200ms cubic-bezier(0.16,1,0.3,1)',
-                }}
-              >
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
-                  {aiDrawerOpen ? (
-                    <>
-                      <defs>
-                        <linearGradient id="ai-tab-sparkle-active" x1="3" y1="2" x2="22" y2="21">
-                          <stop stopColor="#8B5CF6" />
-                          <stop offset="0.5" stopColor="#3B82F6" />
-                          <stop offset="1" stopColor="#10B981" />
-                        </linearGradient>
-                      </defs>
-                      <path d="M12 2L13.5 8.5L20 10L13.5 11.5L12 18L10.5 11.5L4 10L10.5 8.5L12 2Z" fill="url(#ai-tab-sparkle-active)" />
-                    </>
-                  ) : (
-                    <path d="M12 2L13.5 8.5L20 10L13.5 11.5L12 18L10.5 11.5L4 10L10.5 8.5L12 2Z" fill="currentColor" />
-                  )}
-                </svg>
-                {aiDrawerOpen ? (
-                  <span
-                    style={{
-                      background: 'linear-gradient(90deg, #8B5CF6, #3B82F6, #10B981)',
-                      WebkitBackgroundClip: 'text',
-                      WebkitTextFillColor: 'transparent',
-                    }}
-                  >
-                    AI Insights
-                  </span>
-                ) : (
-                  <span>AI Insights</span>
-                )}
-              </button>
-            </div>
+            {/* AI Insights button removed from sort bar — now a collapsible strip above grid */}
             {!isLoading && (
               <span
                 className="text-[11px] font-medium px-2 py-0.5 rounded-full ml-1 flex-shrink-0"
@@ -421,69 +368,63 @@ export default function PredictionsPage() {
             {/* Main content area */}
             <div>
 
-            {/* AI Insights — full-width view when active */}
-            {aiDrawerOpen && (
-              <motion.div
-                initial={{ opacity: 0, y: 12 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.35, ease: [0.16, 1, 0.3, 1] }}
-                className="mb-6 rounded-2xl overflow-hidden relative"
+            {/* AI Insights — collapsible strip above grid */}
+            <div
+              className="mb-4 rounded-xl overflow-hidden"
+              style={{
+                border: `1px solid ${aiDrawerOpen ? 'rgba(139,92,246,0.15)' : T.border}`,
+                transition: 'border-color 200ms ease',
+              }}
+            >
+              {/* Summary bar — always visible */}
+              <button
+                onClick={() => setAiDrawerOpen(!aiDrawerOpen)}
+                className="w-full flex items-center gap-3 px-4 py-2.5 cursor-pointer"
                 style={{
-                  background: 'linear-gradient(180deg, #12151c 0%, #0e1017 100%)',
-                  border: '1px solid rgba(74,222,128,0.12)',
-                  boxShadow: '0 0 60px rgba(74,222,128,0.04), 0 4px 20px rgba(0,0,0,0.3)',
+                  backgroundColor: aiDrawerOpen ? 'rgba(14,16,20,0.9)' : T.bgCard,
+                  transition: 'background-color 200ms ease',
                 }}
               >
-                {/* Ambient glow blobs */}
-                <div className="absolute pointer-events-none" style={{ top: -60, left: '15%', width: 250, height: 250, borderRadius: '50%', background: 'radial-gradient(circle, rgba(74,222,128,0.06) 0%, transparent 70%)', filter: 'blur(50px)' }} />
-                <div className="absolute pointer-events-none" style={{ top: -40, right: '20%', width: 200, height: 200, borderRadius: '50%', background: 'radial-gradient(circle, rgba(34,211,238,0.04) 0%, transparent 70%)', filter: 'blur(40px)' }} />
-                <div className="absolute pointer-events-none" style={{ bottom: -40, right: '10%', width: 180, height: 180, borderRadius: '50%', background: 'radial-gradient(circle, rgba(129,140,248,0.04) 0%, transparent 70%)', filter: 'blur(40px)' }} />
+                {/* Iridescent sparkle icon */}
+                <div className="relative flex-shrink-0" style={{ padding: 1, borderRadius: 8 }}>
+                  <div className="absolute inset-0 rounded-lg" style={{ background: 'linear-gradient(135deg, rgba(139,92,246,0.5), rgba(59,130,246,0.4), rgba(16,185,129,0.5))', backgroundSize: '400% 100%', animation: 'shimmer-ai 6s ease-in-out infinite' }} />
+                  <div className="relative w-6 h-6 rounded-lg flex items-center justify-center" style={{ backgroundColor: T.bgCard }}>
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none">
+                      <defs><linearGradient id="ai-strip-sparkle" x1="3" y1="2" x2="22" y2="21"><stop stopColor="#8B5CF6"/><stop offset="0.5" stopColor="#3B82F6"/><stop offset="1" stopColor="#10B981"/></linearGradient></defs>
+                      <path d="M12 2L13.5 8.5L20 10L13.5 11.5L12 18L10.5 11.5L4 10L10.5 8.5L12 2Z" fill="url(#ai-strip-sparkle)" />
+                    </svg>
+                  </div>
+                </div>
+                <span className="text-[13px] font-semibold" style={{ color: T.text }}>AI Market Pulse</span>
+                <span className="text-[12px]" style={{ color: T.muted }}>Real-time AI analysis</span>
+                <svg
+                  width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"
+                  className="ml-auto flex-shrink-0"
+                  style={{ color: T.muted, transform: aiDrawerOpen ? 'rotate(180deg)' : 'rotate(0)', transition: 'transform 200ms ease' }}
+                >
+                  <path d="M6 9l6 6 6-6" />
+                </svg>
+              </button>
 
-                {/* Premium header */}
-                <div className="relative overflow-hidden">
-                  <div className="absolute inset-0 pointer-events-none" style={{ height: 72, background: 'linear-gradient(180deg, rgba(74,222,128,0.07) 0%, rgba(34,211,238,0.03) 50%, transparent 100%)' }} />
-                  <div className="relative flex items-center justify-between px-6 py-5">
-                    <div className="flex items-center gap-3">
-                      <div
-                        className="w-9 h-9 rounded-xl flex items-center justify-center"
-                        style={{ background: 'linear-gradient(135deg, rgba(74,222,128,0.15), rgba(34,211,238,0.10), rgba(129,140,248,0.15))', border: '1px solid rgba(74,222,128,0.18)' }}
-                      >
-                        <svg width="17" height="17" viewBox="0 0 24 24" fill="none">
-                          <defs><linearGradient id="ai-view-sparkle" x1="3" y1="2" x2="22" y2="21"><stop stopColor="#4ADE80"/><stop offset="0.5" stopColor="#22D3EE"/><stop offset="1" stopColor="#818CF8"/></linearGradient></defs>
-                          <path d="M12 2L13.5 8.5L20 10L13.5 11.5L12 18L10.5 11.5L4 10L10.5 8.5L12 2Z" fill="url(#ai-view-sparkle)" />
-                        </svg>
-                      </div>
-                      <div>
-                        <span className="text-[16px] font-bold block" style={{ background: 'linear-gradient(90deg, #4ADE80, #22D3EE, #818CF8)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>
-                          AI Market Intelligence
-                        </span>
-                        <span className="text-[12px]" style={{ color: 'rgba(255,255,255,0.4)' }}>Real-time analysis powered by AI</span>
+              {/* Expanded content */}
+              <AnimatePresence>
+                {aiDrawerOpen && (
+                  <motion.div
+                    initial={{ height: 0, opacity: 0 }}
+                    animate={{ height: 'auto', opacity: 1 }}
+                    exit={{ height: 0, opacity: 0 }}
+                    transition={{ duration: 0.25, ease: [0.16, 1, 0.3, 1] }}
+                    className="overflow-hidden"
+                  >
+                    <div style={{ borderTop: `1px solid ${T.border}` }}>
+                      <div className="p-4">
+                        <HomepageInsightPanel docked chromeless />
                       </div>
                     </div>
-                    <button
-                      onClick={() => setAiDrawerOpen(false)}
-                      className="px-3 py-1.5 rounded-lg text-[12px] font-medium"
-                      style={{
-                        color: T.textSecondary,
-                        background: 'rgba(255,255,255,0.04)',
-                        border: `1px solid ${T.border}`,
-                        transition: 'all 150ms ease',
-                      }}
-                      onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.08)'; }}
-                      onMouseLeave={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.04)'; }}
-                    >
-                      Back to Markets
-                    </button>
-                  </div>
-                  <div style={{ height: 1, background: 'linear-gradient(90deg, transparent, rgba(74,222,128,0.18) 15%, rgba(34,211,238,0.14) 50%, rgba(129,140,248,0.18) 85%, transparent)' }} />
-                </div>
-
-                {/* Content */}
-                <div className="relative p-6">
-                  <HomepageInsightPanel docked chromeless />
-                </div>
-              </motion.div>
-            )}
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </div>
 
             {/* Loading State */}
             {isLoading ? (
