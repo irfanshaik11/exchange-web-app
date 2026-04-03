@@ -1,10 +1,11 @@
-import React, { useRef } from 'react';
+import React, { useRef, useMemo } from 'react';
 import Link from 'next/link';
 import { motion } from 'framer-motion';
 import { T } from './theme';
 import { categoryConfig } from './PredictionCard';
 import type { PredictionMarket } from './PredictionCard';
 import usePolymarketLivePrice from '~/hooks/usePolymarketLivePrice';
+import { usePolymarketPriceHistory } from '~/hooks/usePolymarketMarkets';
 import { formatVolume, formatTimeRemaining } from './utils';
 
 const OUTCOME_COLORS = ['#22c55e', '#3b82f6', '#f59e0b', '#ec4899', '#8b5cf6'];
@@ -51,8 +52,24 @@ const MarketCard = React.memo(function MarketCard({
   const timeInfo = formatTimeRemaining(market.closesAt);
   const categoryInfo = categoryConfig[market.category] || categoryConfig.other;
 
-  // Only show sparkline if real price history is available (no fake data)
-  const hasRealData = market.priceHistory && market.priceHistory.length > 2;
+  // Fetch REAL price history from the same API the detail page uses
+  const { history: priceHistoryRaw } = usePolymarketPriceHistory(
+    tokenId,
+    { interval: '1w', fidelity: 60, refreshInterval: 0, enabled: !!tokenId }
+  );
+
+  // Extract price values for sparkline
+  const sparkData = useMemo(() => {
+    if (priceHistoryRaw && priceHistoryRaw.length > 2) {
+      return priceHistoryRaw.map((p: any) => typeof p === 'number' ? p : p.p ?? p.price ?? 0);
+    }
+    if (market.priceHistory && market.priceHistory.length > 2) {
+      return market.priceHistory;
+    }
+    return null;
+  }, [priceHistoryRaw, market.priceHistory]);
+
+  const hasRealData = sparkData !== null && sparkData.length > 2;
 
   return (
     <motion.div
@@ -124,7 +141,7 @@ const MarketCard = React.memo(function MarketCard({
             {hasRealData && (
               <div className="mb-3" style={{ height: 32 }}>
                 {(() => {
-                  const pts = market.priceHistory!;
+                  const pts = sparkData!;
                   let min = 1, max = 0;
                   for (const v of pts) { if (v < min) min = v; if (v > max) max = v; }
                   const range = max - min || 0.1;
