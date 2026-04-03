@@ -1,12 +1,11 @@
-import React, { useRef, useMemo } from 'react';
+import React, { useRef } from 'react';
 import Link from 'next/link';
 import { motion } from 'framer-motion';
 import { T } from './theme';
 import { categoryConfig } from './PredictionCard';
 import type { PredictionMarket } from './PredictionCard';
-// Multi-series chart rendered inline via SVG
 import usePolymarketLivePrice from '~/hooks/usePolymarketLivePrice';
-import { generateMockSparkline, formatVolume, formatTimeRemaining } from './utils';
+import { formatVolume, formatTimeRemaining } from './utils';
 
 const OUTCOME_COLORS = ['#22c55e', '#3b82f6', '#f59e0b', '#ec4899', '#8b5cf6'];
 
@@ -52,24 +51,8 @@ const MarketCard = React.memo(function MarketCard({
   const timeInfo = formatTimeRemaining(market.closesAt);
   const categoryInfo = categoryConfig[market.category] || categoryConfig.other;
 
-  // Build multi-series sparkline data — one line per outcome
-  const chartSeries = useMemo(() => {
-    if (isMulti && ext.topOutcomes && ext.topOutcomes.length > 1) {
-      return ext.topOutcomes.slice(0, 4).map((outcome, i) => ({
-        data: generateMockSparkline(`${market.ticker}-${outcome.name}`, outcome.probability, (priceChange || 0) * (1 - i * 0.25)),
-        color: OUTCOME_COLORS[i % OUTCOME_COLORS.length],
-        strokeWidth: i === 0 ? 1.8 : 1.2,
-        opacity: i === 0 ? 0.9 : 0.5,
-      }));
-    }
-    // Binary: Yes + No
-    const yesData = market.priceHistory || generateMockSparkline(market.ticker, market.yesPrice, priceChange);
-    const noData = yesData.map(v => 1 - v);
-    return [
-      { data: yesData, color: T.green, strokeWidth: 1.8, opacity: 0.9 },
-      { data: noData, color: T.red, strokeWidth: 1.2, opacity: 0.4 },
-    ];
-  }, [market.ticker, market.priceHistory, market.yesPrice, priceChange, isMulti, ext.topOutcomes]);
+  // Only show sparkline if real price history is available (no fake data)
+  const hasRealData = market.priceHistory && market.priceHistory.length > 2;
 
   return (
     <motion.div
@@ -137,69 +120,37 @@ const MarketCard = React.memo(function MarketCard({
               </div>
             </div>
 
-            {/* Multi-series sparkline — all outcomes, auto-scaled Y */}
-            <div className="mb-3" style={{ height: 36 }}>
-              {(() => {
-                // Compute global min/max across ALL series for auto-scaling
-                let globalMin = 1, globalMax = 0;
-                for (const s of chartSeries) {
-                  for (const v of s.data) {
-                    if (v < globalMin) globalMin = v;
-                    if (v > globalMax) globalMax = v;
-                  }
-                }
-                // Add 10% padding so lines don't touch edges
-                const range = globalMax - globalMin || 0.1;
-                const yMin = Math.max(0, globalMin - range * 0.1);
-                const yMax = Math.min(1, globalMax + range * 0.1);
-                const yRange = yMax - yMin || 0.1;
-
-                const W = 280, H = 36, pad = 2;
-
-                return (
-                  <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" style={{ width: '100%', height: '100%', overflow: 'visible' }}>
-                    {chartSeries.map((series, si) => {
-                      const pts = series.data;
-                      if (!pts || pts.length < 2) return null;
-                      const step = W / (pts.length - 1);
-                      const points = pts.map((v, i) => {
-                        const x = i * step;
-                        const y = pad + (H - pad * 2) - ((v - yMin) / yRange) * (H - pad * 2);
-                        return `${x},${y}`;
-                      });
-                      const pathD = `M${points.join(' L')}`;
-                      return (
-                        <g key={si}>
-                          {si === 0 && (
-                            <>
-                              <defs>
-                                <linearGradient id={`card-grad-${market.ticker}`} x1="0" y1="0" x2="0" y2="1">
-                                  <stop offset="0%" stopColor={series.color} stopOpacity="0.20" />
-                                  <stop offset="100%" stopColor={series.color} stopOpacity="0" />
-                                </linearGradient>
-                              </defs>
-                              <path
-                                d={`${pathD} L${W},${H - pad} L0,${H - pad} Z`}
-                                fill={`url(#card-grad-${market.ticker})`}
-                              />
-                            </>
-                          )}
-                          <path
-                            d={pathD}
-                            fill="none"
-                            stroke={series.color}
-                            strokeWidth={series.strokeWidth}
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            opacity={series.opacity}
-                          />
-                        </g>
-                      );
-                    })}
-                  </svg>
-                );
-              })()}
-            </div>
+            {/* Sparkline — only if real price history exists */}
+            {hasRealData && (
+              <div className="mb-3" style={{ height: 32 }}>
+                {(() => {
+                  const pts = market.priceHistory!;
+                  let min = 1, max = 0;
+                  for (const v of pts) { if (v < min) min = v; if (v > max) max = v; }
+                  const range = max - min || 0.1;
+                  const yMin = Math.max(0, min - range * 0.1);
+                  const yMax = Math.min(1, max + range * 0.1);
+                  const yRange = yMax - yMin || 0.1;
+                  const W = 280, H = 32, pad = 2;
+                  const step = W / (pts.length - 1);
+                  const points = pts.map((v, i) => `${i * step},${pad + (H - pad * 2) - ((v - yMin) / yRange) * (H - pad * 2)}`);
+                  const pathD = `M${points.join(' L')}`;
+                  const color = isPositive ? T.green : priceChange < 0 ? T.red : T.textSecondary;
+                  return (
+                    <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" style={{ width: '100%', height: '100%' }}>
+                      <defs>
+                        <linearGradient id={`card-grad-${market.ticker}`} x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="0%" stopColor={color} stopOpacity="0.15" />
+                          <stop offset="100%" stopColor={color} stopOpacity="0" />
+                        </linearGradient>
+                      </defs>
+                      <path d={`${pathD} L${W},${H - pad} L0,${H - pad} Z`} fill={`url(#card-grad-${market.ticker})`} />
+                      <path d={pathD} fill="none" stroke={color} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" opacity="0.8" />
+                    </svg>
+                  );
+                })()}
+              </div>
+            )}
 
             {/* Spacer */}
             <div className="flex-1" />
