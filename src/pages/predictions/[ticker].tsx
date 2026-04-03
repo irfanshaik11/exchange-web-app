@@ -2488,29 +2488,46 @@ export default function MarketDetailPage() {
               minHeight: 0,
             }}
           >
-            {/* TOP pane - Chart */}
+            {/* Market Header — compact */}
+            <div className="px-4 flex-shrink-0">
+              <PredictionHeader
+                market={market}
+                yesPrice={currentYesPrice}
+                noPrice={currentNoPrice}
+                source={isPolymarket ? 'polymarket' : 'dflow'}
+                isMultiOutcome={isMultiOutcomeMarket}
+                endDate={polyEvent?.endDate || selectedOutcomeMarket?.endDate}
+              />
+            </div>
+
+            {/* Price Banner */}
+            <div
+              className="flex items-center gap-6 px-4 py-2.5"
+              style={{ borderBottom: `1px solid ${AX.border}` }}
+            >
+              <div className="flex items-baseline gap-2">
+                <span style={{ fontSize: 26, fontWeight: 700, color: '#34d399', fontVariantNumeric: 'tabular-nums', letterSpacing: '-0.02em' }}>
+                  Yes {Math.round(currentYesPrice * 100)}¢
+                </span>
+                {market.yesPriceChange24h !== 0 && (
+                  <span style={{ fontSize: 13, fontWeight: 600, color: market.yesPriceChange24h > 0 ? '#34d399' : '#fb7185' }}>
+                    {market.yesPriceChange24h > 0 ? '▲' : '▼'} {Math.abs(market.yesPriceChange24h * 100).toFixed(1)}¢
+                  </span>
+                )}
+              </div>
+              <div className="flex items-baseline gap-2">
+                <span style={{ fontSize: 26, fontWeight: 700, color: '#fb7185', fontVariantNumeric: 'tabular-nums', letterSpacing: '-0.02em' }}>
+                  No {Math.round(currentNoPrice * 100)}¢
+                </span>
+              </div>
+              <span className="ml-auto text-[12px]" style={{ color: AX.muted }}>24h</span>
+            </div>
+
+            {/* Chart — fixed 420px, no resize */}
             <div
               className="flex-shrink-0 flex flex-col"
-              style={{
-                height: topPanePx,
-                minHeight: `${MIN_CHART_HEIGHT}px`,
-                transition: isResizing ? 'none' : 'height 0.2s ease-out',
-                willChange: isResizing ? 'height' : 'auto',
-              }}
+              style={{ height: 420 }}
             >
-              <div className="px-3 flex-shrink-0">
-                <PredictionHeader
-                  market={market}
-                  yesPrice={currentYesPrice}
-                  noPrice={currentNoPrice}
-                  source={isPolymarket ? 'polymarket' : 'dflow'}
-                  isMultiOutcome={isMultiOutcomeMarket}
-                  endDate={polyEvent?.endDate || selectedOutcomeMarket?.endDate}
-                />
-              </div>
-
-              {/* Separator line */}
-              <div className="px-3 border-b border-[#2a2e35]" style={{ marginTop: '2px' }} />
 
               {/* Chart with inline Order Book - flex row layout */}
               <div
@@ -2836,7 +2853,7 @@ export default function MarketDetailPage() {
           </div>
 
           {/* RIGHT: Trade Action Panel */}
-          <div className="flex-shrink-0 min-w-[260px] basis-[280px] md:basis-[310px] lg:basis-[340px] hidden lg:flex flex-col text-[12px] leading-tight" style={{ backgroundColor: '#111214', borderLeft: `1px solid ${AX.border}` }}>
+          <div className="flex-shrink-0 min-w-[260px] basis-[280px] md:basis-[310px] lg:basis-[360px] hidden lg:flex flex-col text-[12px] leading-tight" style={{ backgroundColor: AX.surface2, borderLeft: `1px solid ${AX.border}` }}>
             <div className="flex-1 overflow-auto">
               {/* Polymarket Trade Panel */}
               {isPolymarket ? (
@@ -3829,6 +3846,39 @@ export default function MarketDetailPage() {
                 )}
               </button>
             </div>
+
+            {/* AI Insights — collapsed accordion below trading panel */}
+            <div style={{ borderTop: `1px solid ${AX.border}` }}>
+              <button
+                onClick={() => setAiDrawerOpen(!aiDrawerOpen)}
+                className="w-full flex items-center gap-2 px-4 py-3 cursor-pointer"
+                style={{ backgroundColor: 'transparent', transition: 'background 150ms ease' }}
+                onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.02)'; }}
+                onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = 'transparent'; }}
+              >
+                <div className="relative flex-shrink-0" style={{ padding: 1, borderRadius: 6 }}>
+                  <div className="absolute inset-0 rounded-md" style={{ background: 'linear-gradient(135deg, rgba(139,92,246,0.5), rgba(59,130,246,0.4), rgba(16,185,129,0.5))', backgroundSize: '400% 100%', animation: 'shimmer-ai 6s ease-in-out infinite' }} />
+                  <div className="relative w-5 h-5 rounded-md flex items-center justify-center" style={{ backgroundColor: AX.surface2 }}>
+                    <svg width="10" height="10" viewBox="0 0 24 24" fill="none"><defs><linearGradient id="ai-detail-sparkle" x1="3" y1="2" x2="22" y2="21"><stop stopColor="#8B5CF6"/><stop offset="0.5" stopColor="#3B82F6"/><stop offset="1" stopColor="#10B981"/></linearGradient></defs><path d="M12 2L13.5 8.5L20 10L13.5 11.5L12 18L10.5 11.5L4 10L10.5 8.5L12 2Z" fill="url(#ai-detail-sparkle)"/></svg>
+                  </div>
+                </div>
+                <span className="text-[11px] font-semibold" style={{ color: AX.text }}>AI Analysis</span>
+                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" className="ml-auto" style={{ color: AX.muted, transform: aiDrawerOpen ? 'rotate(180deg)' : 'rotate(0)', transition: 'transform 200ms ease' }}>
+                  <path d="M6 9l6 6 6-6"/>
+                </svg>
+              </button>
+              {aiDrawerOpen && (
+                <div className="px-3 pb-3">
+                  <AiInsightsDrawer
+                    open={true}
+                    onOpen={() => {}}
+                    onClose={() => setAiDrawerOpen(false)}
+                    source={isPolymarket ? 'polymarket' : 'dflow'}
+                    marketId={tickerString}
+                  />
+                </div>
+              )}
+            </div>
           </div>
         </div>
       )}
@@ -3869,6 +3919,7 @@ export default function MarketDetailPage() {
         .mobile-trade-modal-closing { animation: slideDown 0.3s ease-in; }
         @keyframes slideUp { from { transform: translateY(100%); } to { transform: translateY(0); } }
         @keyframes slideDown { from { transform: translateY(0); } to { transform: translateY(100%); } }
+        @keyframes shimmer-ai { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
       `}</style>
     </PinGate>
   );
