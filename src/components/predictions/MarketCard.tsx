@@ -4,7 +4,7 @@ import { motion } from 'framer-motion';
 import { T } from './theme';
 import { categoryConfig } from './PredictionCard';
 import type { PredictionMarket } from './PredictionCard';
-import MiniSparkline from './MiniSparkline';
+// Multi-series chart rendered inline via SVG
 import usePolymarketLivePrice from '~/hooks/usePolymarketLivePrice';
 import { generateMockSparkline, formatVolume, formatTimeRemaining } from './utils';
 
@@ -52,9 +52,24 @@ const MarketCard = React.memo(function MarketCard({
   const timeInfo = formatTimeRemaining(market.closesAt);
   const categoryInfo = categoryConfig[market.category] || categoryConfig.other;
 
-  const sparkData = useMemo(() => {
-    return market.priceHistory || generateMockSparkline(market.ticker, market.yesPrice, priceChange);
-  }, [market.ticker, market.priceHistory, market.yesPrice, priceChange]);
+  // Build multi-series sparkline data — one line per outcome
+  const chartSeries = useMemo(() => {
+    if (isMulti && ext.topOutcomes && ext.topOutcomes.length > 1) {
+      return ext.topOutcomes.slice(0, 4).map((outcome, i) => ({
+        data: generateMockSparkline(`${market.ticker}-${outcome.name}`, outcome.probability, (priceChange || 0) * (1 - i * 0.25)),
+        color: OUTCOME_COLORS[i % OUTCOME_COLORS.length],
+        strokeWidth: i === 0 ? 1.8 : 1.2,
+        opacity: i === 0 ? 0.9 : 0.5,
+      }));
+    }
+    // Binary: Yes + No
+    const yesData = market.priceHistory || generateMockSparkline(market.ticker, market.yesPrice, priceChange);
+    const noData = yesData.map(v => 1 - v);
+    return [
+      { data: yesData, color: T.green, strokeWidth: 1.8, opacity: 0.9 },
+      { data: noData, color: T.red, strokeWidth: 1.2, opacity: 0.4 },
+    ];
+  }, [market.ticker, market.priceHistory, market.yesPrice, priceChange, isMulti, ext.topOutcomes]);
 
   return (
     <motion.div
@@ -122,15 +137,47 @@ const MarketCard = React.memo(function MarketCard({
               </div>
             </div>
 
-            {/* Sparkline — subtle, shows market activity */}
-            <div className="mb-3" style={{ height: 28, opacity: 0.6 }}>
-              <MiniSparkline
-                data={sparkData}
-                width={280}
-                height={28}
-                color={isPositive ? T.green : priceChange < 0 ? T.red : T.textSecondary}
-                showGradient
-              />
+            {/* Multi-series sparkline — all outcomes */}
+            <div className="mb-3" style={{ height: 32 }}>
+              <svg viewBox="0 0 280 32" preserveAspectRatio="none" style={{ width: '100%', height: '100%', overflow: 'visible' }}>
+                {chartSeries.map((series, si) => {
+                  const pts = series.data;
+                  if (!pts || pts.length < 2) return null;
+                  const step = 280 / (pts.length - 1);
+                  const pad = 2;
+                  const h = 32 - pad * 2;
+                  const points = pts.map((v, i) => `${i * step},${pad + h - v * h}`);
+                  const pathD = `M${points.join(' L')}`;
+                  return (
+                    <g key={si}>
+                      {/* Gradient fill for primary series only */}
+                      {si === 0 && (
+                        <>
+                          <defs>
+                            <linearGradient id={`card-grad-${market.ticker}`} x1="0" y1="0" x2="0" y2="1">
+                              <stop offset="0%" stopColor={series.color} stopOpacity="0.15" />
+                              <stop offset="100%" stopColor={series.color} stopOpacity="0" />
+                            </linearGradient>
+                          </defs>
+                          <path
+                            d={`${pathD} L280,${32 - pad} L0,${32 - pad} Z`}
+                            fill={`url(#card-grad-${market.ticker})`}
+                          />
+                        </>
+                      )}
+                      <path
+                        d={pathD}
+                        fill="none"
+                        stroke={series.color}
+                        strokeWidth={series.strokeWidth}
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        opacity={series.opacity}
+                      />
+                    </g>
+                  );
+                })}
+              </svg>
             </div>
 
             {/* Spacer */}
