@@ -184,13 +184,14 @@ const transformToUnified = (event: PolymarketEvent): ExtendedPredictionMarket[] 
   // Build top 5 outcomes for multi-outcome markets (with tokenId for price history)
   // Filter out placeholder outcomes (Team XX, Person XX, Other, zero volume)
   const topOutcomes = isMultiOutcome
-    ? candidateMarkets
+    ? (activeMarkets.length > 0 ? candidateMarkets : event.markets)
         .filter((m) => {
           const label = m.groupItemTitle || m.question || '';
           if (/^Team [A-Z]+$/i.test(label)) return false;
           if (/^Person [A-Z]+$/i.test(label)) return false;
           if (label === 'Other') return false;
-          if (parseFloat(m.volume || '0') === 0) return false;
+          // Don't filter by volume for resolved markets — they should still show outcomes
+          if (!m.resolved && parseFloat(m.volume || '0') === 0) return false;
           return true;
         })
         .map((m) => {
@@ -198,7 +199,8 @@ const transformToUnified = (event: PolymarketEvent): ExtendedPredictionMarket[] 
           const tIds = Array.isArray(m.clobTokenIds)
             ? m.clobTokenIds
             : safeJsonParse<string[]>(m.clobTokenIds, []);
-          return { name: m.groupItemTitle || m.question, probability: p[0] || 0, tokenId: tIds[0] };
+          const yesP = p[0] ?? 0.5;
+          return { name: m.groupItemTitle || m.question, probability: yesP, tokenId: tIds[0] };
         })
         .sort((a, b) => b.probability - a.probability)
         .slice(0, 5)

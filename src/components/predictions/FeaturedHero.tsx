@@ -63,7 +63,7 @@ export default function FeaturedHero({ market: singleMarket, markets: marketsPro
   if (!market) return null;
 
   const ext = market as ExtendedMarket;
-  const isMulti = ext.marketType === 'multi' && (ext.outcomeCount || 0) > 2;
+  const isMulti = ext.marketType === 'multi' && (ext.outcomeCount || 0) > 1;
   const yesPercent = Math.round(market.yesPrice * 100);
   const noPercent = Math.round(market.noPrice * 100);
   const priceChange = market.yesPriceChange24h;

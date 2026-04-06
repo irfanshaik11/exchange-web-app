@@ -37,7 +37,7 @@ const MarketCard = React.memo(function MarketCard({
   const liveYesPrice = livePriceEntry?.price;
 
   const ext = market as ExtendedMarket;
-  const isMulti = ext.marketType === 'multi' && (ext.outcomeCount || 0) > 2;
+  const isMulti = ext.marketType === 'multi' && (ext.outcomeCount || 0) > 1;
   const isActive = market.status === 'active';
   const href = `/predictions/${market.ticker}`;
 
