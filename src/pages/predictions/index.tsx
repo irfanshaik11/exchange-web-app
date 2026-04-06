@@ -279,14 +279,14 @@ export default function PredictionsPage() {
             <div className="w-px h-5 mx-1 flex-shrink-0" style={{ backgroundColor: T.border }} />
 
             {/* AI Insights — iridescent border pill */}
-            <div className="relative flex-shrink-0 my-1.5 rounded-full" style={{ padding: 1 }}>
+            <div className="relative flex-shrink-0 my-1.5 ml-2 rounded-full" style={{ padding: 1 }}>
               <div className="absolute inset-0 rounded-full" style={{ background: 'linear-gradient(270deg, rgba(139,92,246,0.7), rgba(59,130,246,0.6), rgba(16,185,129,0.7), rgba(59,130,246,0.6), rgba(139,92,246,0.7))', backgroundSize: '400% 100%', animation: 'shimmer-ai 6s ease-in-out infinite' }} />
               <button
                 onClick={() => setAiDrawerOpen(!aiDrawerOpen)}
-                className="relative flex items-center gap-2 px-4 py-1.5 rounded-full text-[13px] font-semibold"
+                className="relative flex items-center justify-center gap-1.5 px-5 py-1.5 rounded-full text-[13px] font-semibold"
                 style={{ background: aiDrawerOpen ? 'rgba(14,16,20,0.75)' : 'rgba(19,21,23,0.95)', color: aiDrawerOpen ? '#e0e4ea' : T.textSecondary, transition: 'all 200ms ease' }}
               >
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" className="flex-shrink-0">
                   {aiDrawerOpen ? (
                     <><defs><linearGradient id="ai-tab-sparkle-a" x1="3" y1="2" x2="22" y2="21"><stop stopColor="#8B5CF6"/><stop offset="0.5" stopColor="#3B82F6"/><stop offset="1" stopColor="#10B981"/></linearGradient></defs><path d="M12 2L13.5 8.5L20 10L13.5 11.5L12 18L10.5 11.5L4 10L10.5 8.5L12 2Z" fill="url(#ai-tab-sparkle-a)"/></>
                   ) : (
