@@ -21,20 +21,19 @@ import {
 import { BiWallet, BiCopy } from 'react-icons/bi';
 import Header from '../../components/Header';
 import Footer from '../../components/Footer';
-import { useDFlowMarket, useDFlowTrades, useDFlowOrderBook, useDFlowPriceHistory, useDFlowRealtimePrices, formatVolume, formatOpenInterest, getDFlowQuote, getDFlowSwap } from '~/hooks/useDFlowMarkets';
+import { useDFlowMarket, useDFlowTrades, useDFlowOrderBook, useDFlowPriceHistory, useDFlowRealtimePrices, getDFlowQuote, getDFlowSwap } from '~/hooks/useDFlowMarkets';
 import { usePolymarketMarket, usePolymarketPriceHistory, usePolymarketMultiPriceHistory, usePolymarketComments, usePolymarketHolders, usePolymarketActivity, formatPolymarketVolume } from '~/hooks/usePolymarketMarkets';
 import usePolymarketOrderBookWS from '~/hooks/usePolymarketOrderBook';
 import type { ChartSeries } from '~/components/predictions/PolymarketChart';
 import type { ChartSeriesData } from '~/components/predictions/TradingViewPredictionChart';
 import type { PolymarketComment, PolymarketHolder, PolymarketActivity, PolymarketEvent, PolymarketMarket } from '~/hooks/usePolymarketMarkets';
-import type { ExtendedPredictionMarket } from '~/hooks/useDFlowMarkets';
 import { useUser } from '~/components/UserContext';
 import { useTurnkeySigner } from '~/components/TurnkeySignerContext';
 import PinGate from '~/components/predictions/PinGate';
 import { InsightPanel } from '~/components/insights/InsightPanel';
 import { showEnhancedToast, updateEnhancedToast } from '~/utils/enhancedToast';
 import { createPolymarketTradeToast, showPolymarketToast } from '~/utils/tradeToast';
-import { SourceBadge, PolygonWalletCard } from '~/components/predictions';
+import { PolygonWalletCard } from '~/components/predictions';
 import {
   getPolymarketQuote,
   getPolymarketBalance,
