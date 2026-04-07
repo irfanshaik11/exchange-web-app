@@ -2540,7 +2540,20 @@ export default function MarketDetailPage() {
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2">
                   <h1 className="text-[16px] font-bold truncate" style={{ color: AX.text }}>{market.title}</h1>
+                  <button
+                    onClick={() => copyToClipboard(tickerString)}
+                    className="flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-mono flex-shrink-0 hover:opacity-70 transition-opacity"
+                    style={{ backgroundColor: AX.surface, color: AX.muted, border: `1px solid ${AX.border}` }}
+                  >
+                    {tickerString}
+                    <BiCopy className="w-3 h-3" />
+                  </button>
                   <span className="text-[10px] px-2 py-0.5 rounded font-medium flex-shrink-0" style={{ backgroundColor: AX.surface, color: AX.cyan, border: `1px solid ${AX.cyan}30` }}>POLYMARKET</span>
+                  {isResolved && (
+                    <span className="text-[10px] px-2 py-0.5 rounded font-bold uppercase tracking-wider flex-shrink-0" style={{ backgroundColor: market.result === 'yes' ? AX.greenBg : AX.redBg, color: market.result === 'yes' ? AX.green : AX.red }}>
+                      Resolved {market.result?.toUpperCase()}
+                    </span>
+                  )}
                 </div>
                 <div className="flex items-center gap-2 mt-0.5">
                   {(polyEvent?.endDate || selectedOutcomeMarket?.endDate) && (
