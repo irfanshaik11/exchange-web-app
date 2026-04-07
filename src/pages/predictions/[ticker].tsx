@@ -4,7 +4,6 @@ import { useRouter } from 'next/router';
 import Link from 'next/link';
 import dynamic from 'next/dynamic';
 import {
-  HiOutlineArrowLeft,
   HiOutlineClock,
   HiOutlineRefresh,
   HiOutlineExternalLink,
@@ -22,20 +21,19 @@ import {
 import { BiWallet, BiCopy } from 'react-icons/bi';
 import Header from '../../components/Header';
 import Footer from '../../components/Footer';
-import { useDFlowMarket, useDFlowTrades, useDFlowOrderBook, useDFlowPriceHistory, useDFlowRealtimePrices, formatVolume, formatOpenInterest, getDFlowQuote, getDFlowSwap } from '~/hooks/useDFlowMarkets';
+import { useDFlowMarket, useDFlowTrades, useDFlowOrderBook, useDFlowPriceHistory, useDFlowRealtimePrices, getDFlowQuote, getDFlowSwap } from '~/hooks/useDFlowMarkets';
 import { usePolymarketMarket, usePolymarketPriceHistory, usePolymarketMultiPriceHistory, usePolymarketComments, usePolymarketHolders, usePolymarketActivity, formatPolymarketVolume } from '~/hooks/usePolymarketMarkets';
 import usePolymarketOrderBookWS from '~/hooks/usePolymarketOrderBook';
 import type { ChartSeries } from '~/components/predictions/PolymarketChart';
 import type { ChartSeriesData } from '~/components/predictions/TradingViewPredictionChart';
 import type { PolymarketComment, PolymarketHolder, PolymarketActivity, PolymarketEvent, PolymarketMarket } from '~/hooks/usePolymarketMarkets';
-import type { ExtendedPredictionMarket } from '~/hooks/useDFlowMarkets';
 import { useUser } from '~/components/UserContext';
 import { useTurnkeySigner } from '~/components/TurnkeySignerContext';
 import PinGate from '~/components/predictions/PinGate';
-import AiInsightsDrawer from '~/components/predictions/AiInsightsDrawer';
+import { InsightPanel } from '~/components/insights/InsightPanel';
 import { showEnhancedToast, updateEnhancedToast } from '~/utils/enhancedToast';
 import { createPolymarketTradeToast, showPolymarketToast } from '~/utils/tradeToast';
-import { SourceBadge, PolygonWalletCard } from '~/components/predictions';
+import { PolygonWalletCard } from '~/components/predictions';
 import {
   getPolymarketQuote,
   getPolymarketBalance,
@@ -64,23 +62,24 @@ const PolymarketOrderBook = dynamic(() => import('~/components/predictions/Polym
 const USDC_MINT = 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v';
 
 /* ---------- AXIOM palette (matching token trade page) ---------- */
+/* Palette aligned with homepage redesign (Polymarket-inspired) */
 const AX = {
-  bg: "#111214",
-  surface: "#1E1F26",
-  surface2: "#17191E",
-  border: "#2A2B33",
-  text: "#f0f5f5",
-  muted: "#9CA3AF",
-  mint: "#70E0B0",
-  mintHover: "#58B890",
-  sell: "#FF4D7F",
-  // Prediction-specific colors
-  green: "#4ADE80",
-  greenBg: "rgba(74, 222, 128, 0.15)",
-  greenBorder: "rgba(74, 222, 128, 0.35)",
-  red: "#F87171",
-  redBg: "rgba(248, 113, 113, 0.15)",
-  redBorder: "rgba(248, 113, 113, 0.35)",
+  bg: "#131517",
+  surface: "#1c1f24",
+  surface2: "#181b20",
+  border: "#2a2e35",
+  text: "#ffffff",
+  muted: "#7a8090",
+  mint: "#3b82f6",
+  mintHover: "#2563eb",
+  sell: "#EF4444",
+  // Semantic trading colors — teal/red
+  green: "#10b981",
+  greenBg: "rgba(16, 185, 129, 0.10)",
+  greenBorder: "rgba(16, 185, 129, 0.25)",
+  red: "#EF4444",
+  redBg: "rgba(239, 68, 68, 0.10)",
+  redBorder: "rgba(239, 68, 68, 0.25)",
   yellow: "#FBBF24",
   purple: "#818CF8",
   cyan: "#22D3EE",
@@ -244,183 +243,8 @@ const formatUSDC = (amount: number): string => {
   return `${amount.toFixed(2)} USDC`;
 };
 
-// Market Image with fallback
-const MarketImage: React.FC<{ src?: string; alt: string; size?: 'sm' | 'md' | 'lg' }> = ({ src, alt, size = 'md' }) => {
-  const [hasError, setHasError] = useState(false);
-  const sizeClasses = { sm: 'w-8 h-8', md: 'w-10 h-10', lg: 'w-14 h-14' };
 
-  if (!src || hasError) {
-    return (
-      <div className={`${sizeClasses[size]} rounded-lg flex items-center justify-center`} style={{ backgroundColor: AX.surface }}>
-        <span className="text-sm font-bold" style={{ color: AX.mint }}>{alt.charAt(0)}</span>
-      </div>
-    );
-  }
 
-  return (
-    <img
-      src={src}
-      alt={alt}
-      className={`${sizeClasses[size]} rounded-lg object-cover`}
-      onError={() => setHasError(true)}
-    />
-  );
-};
-
-// Prediction Header Component (similar to TradeHeader)
-const PredictionHeader: React.FC<{
-  market: ExtendedPredictionMarket;
-  yesPrice: number;
-  noPrice: number;
-  source?: 'dflow' | 'polymarket';
-  isMultiOutcome?: boolean;
-  endDate?: string;
-}> = ({ market, yesPrice, noPrice, source, isMultiOutcome, endDate }) => {
-  const isActive = market.status === 'active';
-  const isResolved = market.status === 'resolved';
-
-  // Format closing date as "Jan 20, 2025"
-  const formattedEndDate = endDate
-    ? new Date(endDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
-    : null;
-
-  return (
-    <div className="flex items-center justify-between py-2">
-      {/* Left side - Market info */}
-      <div className="flex items-center gap-3">
-        <Link href="/predictions" className="flex items-center gap-1.5 text-sm hover:opacity-70" style={{ color: AX.muted }}>
-          <HiOutlineArrowLeft className="w-4 h-4" />
-        </Link>
-
-        <MarketImage src={market.imageUrl} alt={market.title} size="md" />
-
-        <div className="flex flex-col">
-          <div className="flex items-center gap-2">
-            <span className="font-semibold text-sm" style={{ color: AX.text }}>{market.title}</span>
-            <button
-              onClick={() => {
-                copyToClipboard(market.ticker);
-                showEnhancedToast('success', 'Copied!', { description: market.ticker, duration: 2000 });
-              }}
-              className="flex items-center gap-1 text-xs font-mono px-1.5 py-0.5 rounded hover:opacity-70 transition-opacity cursor-pointer"
-              style={{ backgroundColor: AX.surface, color: AX.muted }}
-              title="Click to copy"
-            >
-              {market.ticker}
-              <BiCopy className="w-3 h-3" />
-            </button>
-            {/* Source badge */}
-            {source && (
-              <span
-                className="text-[9px] px-1.5 py-0.5 rounded font-medium uppercase tracking-wider"
-                style={{
-                  backgroundColor: source === 'polymarket' ? `${AX.purple}20` : `${AX.green}20`,
-                  color: source === 'polymarket' ? AX.purple : AX.green,
-                  border: `1px solid ${source === 'polymarket' ? AX.purple : AX.green}40`,
-                }}
-              >
-                {source === 'polymarket' ? 'Polymarket' : 'dFlow'}
-              </span>
-            )}
-          </div>
-          <div className="flex items-center gap-2 text-xs" style={{ color: AX.muted }}>
-            {isResolved ? (
-              <span style={{ color: market.result === 'yes' ? AX.green : AX.red }}>
-                Resolved {market.result?.toUpperCase()}
-              </span>
-            ) : formattedEndDate ? (
-              <span className="flex items-center gap-1">
-                <HiOutlineClock className="w-3.5 h-3.5" />
-                Closes {formattedEndDate}
-              </span>
-            ) : (
-              <span className="flex items-center gap-1">
-                <HiOutlineClock className="w-3.5 h-3.5" />
-                {formatTimeRemaining(market.closesAt)}
-              </span>
-            )}
-            {market.subtitle && (
-              <>
-                <span>•</span>
-                <span className="truncate max-w-[200px]">{market.subtitle}</span>
-              </>
-            )}
-          </div>
-        </div>
-      </div>
-
-    </div>
-  );
-};
-
-// Prediction Tabs Component (similar to TradeTabs)
-const VISIBLE_TABS = ['Outcomes', 'Activity', 'Holders', 'Comments'];
-const MORE_TABS = ['Orders', 'Positions'];
-
-const PredictionTabs: React.FC<{
-  tabs: string[];
-  selectedTab: string;
-  setSelectedTab: (tab: string) => void;
-}> = ({ tabs, selectedTab, setSelectedTab }) => {
-  const [moreOpen, setMoreOpen] = React.useState(false);
-  const moreRef = React.useRef<HTMLDivElement>(null);
-
-  // Close dropdown on outside click
-  React.useEffect(() => {
-    const handler = (e: MouseEvent) => {
-      if (moreRef.current && !moreRef.current.contains(e.target as Node)) setMoreOpen(false);
-    };
-    document.addEventListener('mousedown', handler);
-    return () => document.removeEventListener('mousedown', handler);
-  }, []);
-
-  const visibleTabs = tabs.filter(t => VISIBLE_TABS.includes(t) || !MORE_TABS.includes(t));
-  const hiddenTabs = tabs.filter(t => MORE_TABS.includes(t));
-  const isHiddenSelected = hiddenTabs.includes(selectedTab);
-
-  return (
-    <div className="flex gap-3 pt-2 text-xs items-center">
-      {visibleTabs.map(tab => (
-        <button
-          key={tab}
-          className={`px-2.5 py-1 font-semibold transition-colors ${selectedTab === tab ? 'border-b-2 border-[#70E0B0] text-white' : 'text-neutral-400 hover:text-neutral-300'}`}
-          onClick={() => setSelectedTab(tab)}
-        >
-          {tab}
-        </button>
-      ))}
-      {hiddenTabs.length > 0 && (
-        <div className="relative" ref={moreRef}>
-          <button
-            onClick={() => setMoreOpen(o => !o)}
-            className={`px-2.5 py-1 font-semibold transition-colors flex items-center gap-1 ${isHiddenSelected ? 'border-b-2 border-[#70E0B0] text-white' : 'text-neutral-400 hover:text-neutral-300'}`}
-          >
-            {isHiddenSelected ? selectedTab : 'More'}
-            <svg width="8" height="8" viewBox="0 0 8 8" fill="currentColor" className={`transition-transform ${moreOpen ? 'rotate-180' : ''}`}>
-              <path d="M4 6L1 2.5H7L4 6Z" />
-            </svg>
-          </button>
-          {moreOpen && (
-            <div
-              className="absolute top-full left-0 mt-1 z-50 min-w-[100px] rounded-lg shadow-lg py-1"
-              style={{ backgroundColor: AX.surface, border: `1px solid ${AX.border}` }}
-            >
-              {hiddenTabs.map(tab => (
-                <button
-                  key={tab}
-                  className={`w-full text-left px-3 py-1.5 text-xs font-medium transition-colors hover:bg-white/5 ${selectedTab === tab ? 'text-white' : 'text-neutral-400'}`}
-                  onClick={() => { setSelectedTab(tab); setMoreOpen(false); }}
-                >
-                  {tab}
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
-      )}
-    </div>
-  );
-};
 
 // Comments Component for Polymarket - with inline filters
 const CommentsSection: React.FC<{ comments: PolymarketComment[]; isLoading: boolean; eventSlug?: string }> = React.memo(({ comments, isLoading, eventSlug }) => {
@@ -1157,18 +981,18 @@ const OutcomesSection: React.FC<{
                   </div>
 
                   {/* Yes / No buttons */}
-                  <div className="flex gap-2 flex-1 justify-end">
+                  <div className="flex gap-2.5 flex-1 justify-end">
                     <button
                       onClick={(e) => { e.stopPropagation(); onSelectOutcome?.(market.id, 'yes'); }}
-                      className="w-24 py-2 rounded-lg text-[12px] font-bold transition-all hover:brightness-110 active:scale-[0.97]"
-                      style={{ backgroundColor: 'rgba(74,222,128,0.15)', color: AX.green }}
+                      className="w-32 py-2.5 rounded-lg text-[13px] font-bold transition-all hover:brightness-110 active:scale-[0.97]"
+                      style={{ backgroundColor: AX.greenBg, color: AX.green, border: `1px solid ${AX.greenBorder}` }}
                     >
                       Yes {realPrices ? `${formatCents(yesPrice)}¢` : ''}
                     </button>
                     <button
                       onClick={(e) => { e.stopPropagation(); onSelectOutcome?.(market.id, 'no'); }}
-                      className="w-24 py-2 rounded-lg text-[12px] font-bold transition-all hover:brightness-110 active:scale-[0.97]"
-                      style={{ backgroundColor: 'rgba(248,113,113,0.12)', color: AX.red }}
+                      className="w-32 py-2.5 rounded-lg text-[13px] font-bold transition-all hover:brightness-110 active:scale-[0.97]"
+                      style={{ backgroundColor: AX.redBg, color: AX.red, border: `1px solid ${AX.redBorder}` }}
                     >
                       No {realPrices ? `${formatCents(noPrice)}¢` : ''}
                     </button>
@@ -1465,7 +1289,6 @@ export default function MarketDetailPage() {
   const [geoblockStatus, setGeoblockStatus] = useState<PolymarketGeoblock | null>(null);
   const [isExecutingTrade, setIsExecutingTrade] = useState(false);
   const [showWalletModal, setShowWalletModal] = useState(false);
-  const [aiDrawerOpen, setAiDrawerOpen] = useState(false);
 
   // User's position for current token (for SELL orders)
   const [userTokenPosition, setUserTokenPosition] = useState<{
@@ -1503,49 +1326,6 @@ export default function MarketDetailPage() {
 
   // Resizable chart state (matching token trade page)
   const containerRef = useRef<HTMLDivElement | null>(null);
-  const MIN_CHART_HEIGHT = 400;
-  const DEFAULT_CHART_HEIGHT_RATIO = 0.65; // 65% of viewport for taller chart + order book
-  const SSR_DEFAULT_CHART_HEIGHT = 500;
-
-  const getResponsiveLimits = useCallback(() => {
-    if (typeof window === "undefined") return { min: MIN_CHART_HEIGHT, max: 600 };
-    const vh = window.innerHeight;
-    const MIN_TOP = Math.max(MIN_CHART_HEIGHT, vh * 0.25);
-    const MIN_BOTTOM = 180;
-    const MAX_TOP = Math.min(vh * 0.7, vh - MIN_BOTTOM);
-    return { min: MIN_TOP, max: MAX_TOP };
-  }, []);
-
-  const clampTop = useCallback((desired: number) => {
-    const limits = getResponsiveLimits();
-    const enforcedMin = Math.max(MIN_CHART_HEIGHT, limits.min);
-    const vh = typeof window !== "undefined" ? window.innerHeight : 600;
-    const maxTop = Math.min(vh - 180, limits.max);
-    return Math.max(enforcedMin, Math.min(desired, maxTop));
-  }, [getResponsiveLimits]);
-
-  const [topPanePx, setTopPanePx] = useState<number>(() => {
-    if (typeof window === "undefined") return Math.max(MIN_CHART_HEIGHT, SSR_DEFAULT_CHART_HEIGHT);
-    const limits = getResponsiveLimits();
-    const proposed = Math.max(limits.min, Math.min(window.innerHeight * DEFAULT_CHART_HEIGHT_RATIO, limits.max));
-    const saved = Number(localStorage.getItem("predictionSplitTopPx"));
-    if (Number.isFinite(saved) && saved > 0 && saved >= limits.min && saved <= limits.max) {
-      return Math.max(saved, proposed);
-    }
-    return proposed;
-  });
-
-  const [isResizing, setIsResizing] = useState(false);
-  const topPanePxRef = useRef(topPanePx);
-
-  useEffect(() => {
-    topPanePxRef.current = topPanePx;
-  }, [topPanePx]);
-
-  useEffect(() => {
-    localStorage.setItem("predictionSplitTopPx", String(topPanePx));
-  }, [topPanePx]);
-
   // Data hooks
   const { user, solBalance, usdcBalance, refreshBalance, primaryWalletAddresses } = useUser();
   const turnkeySigner = useTurnkeySigner();
@@ -2454,6 +2234,24 @@ export default function MarketDetailPage() {
     }, 300);
   }, []);
 
+  // Parse prices from selected outcome for the trade panel
+  // (must be before early returns to maintain consistent hook count)
+  const tradePanelPrices = useMemo(() => {
+    let yp = currentYesPrice;
+    let np = currentNoPrice;
+    if (selectedOutcomeMarket?.outcomePrices) {
+      try {
+        const prices = JSON.parse(selectedOutcomeMarket.outcomePrices).map(Number);
+        yp = prices[0] || 0.5;
+        np = prices[1] || 0.5;
+      } catch {}
+    }
+    return {
+      yesCents: Math.round(yp * 100 * 10) / 10,
+      noCents: Math.round(np * 100 * 10) / 10,
+    };
+  }, [currentYesPrice, currentNoPrice, selectedOutcomeMarket]);
+
   // Show loading state while router is initializing or data is being fetched
   if (!isRouterReady || isLoading) {
     return (
@@ -2488,82 +2286,101 @@ export default function MarketDetailPage() {
   const isResolved = market.status === 'resolved';
   const pageTitle = `${market.title} | Predictions`;
 
+  /* ─────────────────────────────────────────────────────────────────────
+     COCKPIT LAYOUT — redesigned per expert trader requirements
+     Left 60-65%: header, price banner, chart, tabs (scrollable)
+     Right 35-40%: sticky trading panel that NEVER leaves screen
+     ───────────────────────────────────────────────────────────────────── */
+
   return (
     <PinGate>
       <Head><title>{pageTitle}</title></Head>
 
       <div
-        className="min-h-screen w-full flex flex-col overflow-y-auto"
+        className="min-h-screen w-full flex flex-col"
         style={{
-          backgroundColor: "#111214",
+          backgroundColor: AX.bg,
           color: AX.text,
-          fontFamily: "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", \"Inter\", system-ui, sans-serif",
+          fontFamily: "Inter, -apple-system, BlinkMacSystemFont, 'SF Pro Text', system-ui, sans-serif",
         }}
       >
         <Header search={search} setSearch={setSearch} />
 
-        <div
-          className="flex flex-1 w-full max-w-full min-h-0"
-          style={{
-            minHeight: 'calc(100vh - 60px)',
-            flex: '1 1 auto',
-          }}
-        >
-          {/* AI Insights — responsive drawer */}
-          <AiInsightsDrawer
-            open={aiDrawerOpen}
-            onOpen={() => setAiDrawerOpen(true)}
-            onClose={() => setAiDrawerOpen(false)}
-            source={isPolymarket ? 'polymarket' : 'dflow'}
-            marketId={tickerString}
-          />
+        {/* ══════════════ MAIN COCKPIT ══════════════ */}
+        <div className="flex flex-1 w-full relative">
 
-          {/* LEFT: chart + tabs */}
-          <div
-            ref={containerRef}
-            className="flex-1 min-w-0 max-w-full flex flex-col pb-0"
-            style={{
-              minHeight: 0,
-            }}
-          >
-            {/* TOP pane - Chart */}
-            <div
-              className="flex-shrink-0 flex flex-col"
-              style={{
-                height: topPanePx,
-                minHeight: `${MIN_CHART_HEIGHT}px`,
-                transition: isResizing ? 'none' : 'height 0.2s ease-out',
-                willChange: isResizing ? 'height' : 'auto',
-              }}
-            >
-              <div className="px-3 flex-shrink-0">
-                <PredictionHeader
-                  market={market}
-                  yesPrice={currentYesPrice}
-                  noPrice={currentNoPrice}
-                  source={isPolymarket ? 'polymarket' : 'dflow'}
-                  isMultiOutcome={isMultiOutcomeMarket}
-                  endDate={polyEvent?.endDate || selectedOutcomeMarket?.endDate}
-                />
+          {/* ══════════ LEFT PANEL (~65%) ══════════ */}
+          <div ref={containerRef} className="flex-1 min-w-0 flex flex-col">
+
+            {/* ── Header Row — 80px to align with right panel ── */}
+            <div className="flex items-center gap-3 px-4 flex-shrink-0" style={{ height: 80, borderBottom: `1px solid ${AX.border}` }}>
+              <button onClick={() => router.push('/predictions')} className="p-1.5 rounded-lg hover:opacity-70 transition-opacity flex-shrink-0" style={{ color: AX.muted }}>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
+              </button>
+              {(polyEvent?.image || market.imageUrl || (market as any).image) && (
+                <img src={polyEvent?.image || market.imageUrl || (market as any).image} alt="" className="w-14 h-14 rounded-xl object-cover flex-shrink-0" style={{ border: `1px solid ${AX.border}` }} />
+              )}
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2">
+                  <h1 className="text-[16px] font-bold truncate" style={{ color: AX.text }}>{market.title}</h1>
+                  <button
+                    onClick={() => copyToClipboard(tickerString)}
+                    className="flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-mono flex-shrink-0 hover:opacity-70 transition-opacity"
+                    style={{ backgroundColor: AX.surface, color: AX.muted, border: `1px solid ${AX.border}` }}
+                  >
+                    {tickerString}
+                    <BiCopy className="w-3 h-3" />
+                  </button>
+                  <span className="text-[10px] px-2 py-0.5 rounded font-medium flex-shrink-0" style={{ backgroundColor: AX.surface, color: AX.cyan, border: `1px solid ${AX.cyan}30` }}>POLYMARKET</span>
+                  {isResolved && (
+                    <span className="text-[10px] px-2 py-0.5 rounded font-bold uppercase tracking-wider flex-shrink-0" style={{ backgroundColor: market.result === 'yes' ? AX.greenBg : AX.redBg, color: market.result === 'yes' ? AX.green : AX.red }}>
+                      Resolved {market.result?.toUpperCase()}
+                    </span>
+                  )}
+                </div>
+                <div className="flex items-center gap-2 mt-0.5">
+                  {(polyEvent?.endDate || selectedOutcomeMarket?.endDate) && (
+                    <span className="text-[11px] flex items-center gap-1" style={{ color: AX.muted }}>
+                      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
+                      Closes {new Date(polyEvent?.endDate || selectedOutcomeMarket?.endDate || '').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                    </span>
+                  )}
+                  {multiOutcomeMarketInfo && multiOutcomeMarketInfo.length > 0 && (
+                    <span className="text-[11px]" style={{ color: AX.muted }}>
+                      · Leading: {multiOutcomeMarketInfo[0].label} ({(multiOutcomeMarketInfo[0].currentPrice * 100).toFixed(0)}%)
+                    </span>
+                  )}
+                </div>
               </div>
 
-              {/* Separator line */}
-              <div className="px-3 border-b border-[#2A2B33]" style={{ marginTop: '2px' }} />
+              {/* Key stats */}
+              <div className="flex items-center gap-3 flex-shrink-0">
+                <div className="text-right">
+                  <div className="text-[9px] uppercase tracking-wider font-medium" style={{ color: AX.muted }}>Vol</div>
+                  <div className="text-[11px] font-semibold" style={{ color: AX.text, fontVariantNumeric: 'tabular-nums' }}>
+                    {formatPolymarketVolume(parseFloat(polyEvent?.volume || selectedOutcomeMarket?.volume || '0'))}
+                  </div>
+                </div>
+                <div className="text-right">
+                  <div className="text-[9px] uppercase tracking-wider font-medium" style={{ color: AX.muted }}>Liq</div>
+                  <div className="text-[11px] font-semibold" style={{ color: AX.text, fontVariantNumeric: 'tabular-nums' }}>
+                    {formatPolymarketVolume(parseFloat(polyEvent?.liquidity || selectedOutcomeMarket?.liquidity || '0'))}
+                  </div>
+                </div>
+              </div>
+            </div>
 
-              {/* Chart with inline Order Book - flex row layout */}
-              <div
-                className="flex-1 min-h-[200px] flex w-full overflow-hidden"
-                style={{ height: '100%', width: '100%', minHeight: 0, minWidth: 0 }}
-              >
-                {/* Chart area - takes remaining space, full height */}
-                <div className="flex-1 relative min-w-0 h-full" style={{ minHeight: 0 }}>
-                {/* Show loading while fetching price history (from either dFlow or Polymarket) */}
+            {/* ── Chart area (fixed height) ── */}
+            <div className="flex-shrink-0 flex" style={{ height: 407 }}>
+              <div className="flex-1 relative min-w-0 h-full" style={{ minHeight: 0 }}>
                 {chartHistoryLoading ? (
                   <div key="chart-loading" className="flex items-center justify-center h-full" style={{ backgroundColor: AX.bg }}>
-                    <HiOutlineRefresh className="w-5 h-5 animate-spin" style={{ color: AX.muted }} />
+                    <div className="flex flex-col items-center gap-3">
+                      <div className="w-full max-w-[300px] h-32 rounded-xl animate-pulse" style={{ backgroundColor: AX.surface }} />
+                      <HiOutlineRefresh className="w-5 h-5 animate-spin" style={{ color: AX.muted }} />
+                    </div>
                   </div>
                 ) : isPolymarket && isMultiOutcomeMarket ? (
-                  /* Use TradingView advanced chart for multi-outcome Polymarket markets */
                   <TradingViewPredictionChart
                     key={`tv-multi-${tickerString}`}
                     ticker={tickerString}
@@ -2578,7 +2395,6 @@ export default function MarketDetailPage() {
                     resolvedResult={market.result as 'yes' | 'no' | null}
                   />
                 ) : isPolymarket ? (
-                  /* Use TradingView chart for single-outcome Polymarket markets (line chart) */
                   <TradingViewPredictionChart
                     key={`tv-poly-${tickerString}`}
                     ticker={tickerString}
@@ -2587,13 +2403,12 @@ export default function MarketDetailPage() {
                     noPrice={currentNoPrice}
                     height="100%"
                     priceHistory={chartPriceHistory}
-                    showOrderBook={false} /* Use separate PolymarketOrderBook instead */
-                    useLineChart={true} /* Line chart like multi-outcome markets */
+                    showOrderBook={false}
+                    useLineChart={true}
                     isResolved={isResolved}
                     resolvedResult={market.result as 'yes' | 'no' | null}
                   />
                 ) : (
-                  /* Use TradingView chart for dFlow markets */
                   <TradingViewPredictionChart
                     key={`tv-dflow-${tickerString}`}
                     ticker={tickerString}
@@ -2607,1264 +2422,733 @@ export default function MarketDetailPage() {
                     resolvedResult={market.result as 'yes' | 'no' | null}
                   />
                 )}
-
-                </div>
-
-                {/* Polymarket Real-time Order Book - inline flex item on the right */}
-                {/* Hide order book for resolved/closed markets - Polymarket deactivates CLOB when market closes */}
-                {isPolymarket && polyTokenIds.yes && !isResolved && !(selectedOutcomeMarket as any)?.closed && (
-                  <PolymarketOrderBook
-                    yesTokenId={polyTokenIds.yes}
-                    noTokenId={polyTokenIds.no}
-                    marketTitle={market.title}
-                    defaultOpen={true}
-                    isMultiOutcome={isMultiOutcomeMarket}
-                  />
-                )}
               </div>
-            </div>
 
-            {/* Resizer */}
-            <div
-              role="separator"
-              aria-orientation="horizontal"
-              aria-label="Resize chart and content panels"
-              tabIndex={0}
-              onPointerDown={(e) => {
-                if (e.pointerType === 'mouse' && e.button !== 0) return;
-                e.preventDefault();
-                e.stopPropagation();
-                const startY = e.clientY;
-                const startTop = topPanePxRef.current;
-                (e.target as Element).setPointerCapture(e.pointerId);
-                setIsResizing(true);
-                document.body.style.cursor = "row-resize";
-                document.body.style.userSelect = "none";
-
-                const onMove = (ev: PointerEvent) => {
-                  ev.preventDefault();
-                  const delta = ev.clientY - startY;
-                  const newHeight = clampTop(startTop + delta);
-                  setTopPanePx(newHeight);
-                  topPanePxRef.current = newHeight;
-                };
-
-                const onUp = () => {
-                  (e.target as Element).releasePointerCapture(e.pointerId);
-                  setIsResizing(false);
-                  document.body.style.cursor = "";
-                  document.body.style.userSelect = "";
-                  (e.target as Element).removeEventListener("pointermove", onMove);
-                  (e.target as Element).removeEventListener("pointerup", onUp);
-                  (e.target as Element).removeEventListener("pointercancel", onUp);
-                };
-
-                (e.target as Element).addEventListener("pointermove", onMove, { passive: false });
-                (e.target as Element).addEventListener("pointerup", onUp, { passive: false });
-                (e.target as Element).addEventListener("pointercancel", onUp, { passive: false });
-              }}
-              className="relative h-1.5 cursor-row-resize select-none touch-none flex-shrink-0 flex items-center justify-center hover:bg-gray-800/20 transition-colors"
-              style={{ touchAction: "none", zIndex: 10, pointerEvents: "auto" }}
-            >
-              <div className="flex items-center gap-0.5">
-                <div className="w-0.5 h-0.5 rounded-full bg-gray-500" />
-                <div className="w-0.5 h-0.5 rounded-full bg-gray-500" />
-                <div className="w-0.5 h-0.5 rounded-full bg-gray-500" />
-              </div>
-              <div className="absolute inset-x-0 top-1/2 -translate-y-1/2 h-px bg-gray-700/20" />
-            </div>
-
-
-            {/* BOTTOM pane (tabs + content) */}
-            <div className="flex-1 flex flex-col min-h-[400px]">
-              <div className="flex-shrink-0 px-3">
-                <PredictionTabs
-                  tabs={isPolymarket ? POLYMARKET_TABS : DFLOW_TABS}
-                  selectedTab={selectedTab}
-                  setSelectedTab={setSelectedTab}
+              {/* Order Book (inline right) */}
+              {isPolymarket && polyTokenIds.yes && !isResolved && !(selectedOutcomeMarket as any)?.closed && (
+                <PolymarketOrderBook
+                  yesTokenId={polyTokenIds.yes}
+                  noTokenId={polyTokenIds.no}
+                  marketTitle={market.title}
+                  defaultOpen={true}
+                  isMultiOutcome={isMultiOutcomeMarket}
                 />
-              </div>
-              <div className="flex-1 min-h-[300px] overflow-auto pb-20">
-                {/* dFlow: Trades tab */}
-                {selectedTab === "Trades" && (
-                  <div className="flex flex-col h-full">
-                    <TradesTable trades={trades || []} isLoading={tradesLoading} />
-                  </div>
-                )}
-                {/* Polymarket: Activity tab */}
-                {selectedTab === "Activity" && (
-                  <div className="flex flex-col h-full">
-                    <ActivitySection activities={activities || []} isLoading={activityLoading} />
-                  </div>
-                )}
-                {/* Polymarket: Outcomes tab (for multi-outcome markets) */}
-                {selectedTab === "Outcomes" && (
-                  <div className="flex flex-col h-full">
-                    <OutcomesSection
-                      event={polyEvent || null}
-                      isLoading={polyLoading}
-                      selectedOutcomeId={selectedOutcomeMarket?.id || null}
-                      onSelectOutcome={(marketId, side) => {
-                        // Find the market by ID and set it as selected
-                        const selectedMkt = polyEvent?.markets?.find(m => m.id === marketId);
-                        if (selectedMkt) {
-                          setSelectedOutcomeMarket(selectedMkt);
-                          setSelectedSide(side);
-                          setTradeMode('buy');
-                          setAmount('');
-                          const outcomeName = (selectedMkt as any).groupItemTitle || selectedMkt.question || 'Outcome';
-                          showPolymarketToast(`${outcomeName} selected`, 'success');
-                        }
-                      }}
-                    />
-                  </div>
-                )}
-                {/* Polymarket: Comments tab */}
-                {selectedTab === "Comments" && (
-                  <div className="flex flex-col h-full">
-                    <CommentsSection comments={comments || []} isLoading={commentsLoading} eventSlug={tickerString} />
-                  </div>
-                )}
-                {/* Polymarket: Holders tab */}
-                {selectedTab === "Holders" && (
-                  <div className="flex flex-col h-full">
-                    <HoldersSection holders={holders || []} isLoading={holdersLoading} />
-                  </div>
-                )}
-                {/* Orders tab - Active limit orders */}
-                {selectedTab === "Orders" && (
-                <div className="flex flex-col h-full">
-                  {!user?.bearerToken ? (
-                    <div className="flex flex-col items-center justify-center h-full py-12">
-                      <div className="w-12 h-12 rounded-xl mb-3 flex items-center justify-center" style={{ backgroundColor: AX.surface2 }}>
-                        <HiOutlineClipboardList className="w-6 h-6" style={{ color: AX.muted }} />
-                      </div>
-                      <p className="text-sm" style={{ color: AX.muted }}>Log in to view your orders</p>
-                    </div>
-                  ) : openOrders.length === 0 ? (
-                    <div className="flex flex-col items-center justify-center h-full py-12">
-                      <div className="w-12 h-12 rounded-xl mb-3 flex items-center justify-center" style={{ backgroundColor: AX.surface2 }}>
-                        <HiOutlineClipboardList className="w-6 h-6" style={{ color: AX.muted }} />
-                      </div>
-                      <p className="text-sm font-medium mb-1" style={{ color: AX.text }}>No Open Orders</p>
-                      <p className="text-xs" style={{ color: AX.muted }}>Your limit orders will appear here</p>
-                    </div>
-                  ) : (
-                    <div className="p-3 space-y-2 overflow-auto">
-                      <div className="flex items-center justify-between mb-3">
-                        <span className="text-xs font-semibold" style={{ color: AX.text }}>
-                          {openOrders.length} Open Order{openOrders.length !== 1 ? 's' : ''}
-                        </span>
-                      </div>
-                      {openOrders.map((order) => {
-                        const isBuy = order.side === 'BUY';
-                        const price = parseFloat(order.price || '0');
-                        const size = parseFloat(order.original_size || order.size || '0');
-                        const filled = parseFloat(order.size_matched || '0');
-                        const remaining = size - filled;
-                        const filledPercent = size > 0 ? (filled / size) * 100 : 0;
+              )}
+            </div>
 
-                        return (
-                          <div
-                            key={order.id}
-                            className="p-3 rounded-lg"
-                            style={{ backgroundColor: AX.surface, border: `1px solid ${AX.border}` }}
-                          >
-                            <div className="flex items-start justify-between mb-2">
-                              <div className="flex items-center gap-2">
-                                <span
-                                  className="text-[10px] font-bold px-2 py-1 rounded"
-                                  style={{
-                                    backgroundColor: isBuy ? AX.greenBg : AX.redBg,
-                                    color: isBuy ? AX.green : AX.red,
-                                  }}
-                                >
-                                  {isBuy ? 'BUY' : 'SELL'}
-                                </span>
-                                <span className="text-xs" style={{ color: AX.muted }}>
-                                  Limit Order
-                                </span>
-                              </div>
-                              <button
-                                onClick={() => handleCancelOrder(order.id)}
-                                disabled={cancellingOrderId === order.id}
-                                className="px-3 py-1.5 rounded-lg text-xs font-medium transition-all hover:opacity-80 disabled:opacity-50"
-                                style={{
-                                  backgroundColor: AX.redBg,
-                                  color: AX.red,
-                                  border: `1px solid ${AX.red}30`,
-                                }}
-                              >
-                                {cancellingOrderId === order.id ? (
-                                  <HiOutlineRefresh className="w-3 h-3 animate-spin" />
-                                ) : (
-                                  'Cancel'
-                                )}
-                              </button>
-                            </div>
-
-                            <div className="space-y-1.5">
-                              <div className="flex items-center justify-between">
-                                <span className="text-xs" style={{ color: AX.muted }}>Price</span>
-                                <span className="text-sm font-semibold" style={{ color: AX.text }}>
-                                  {(price * 100).toFixed(0)}¢
-                                </span>
-                              </div>
-                              <div className="flex items-center justify-between">
-                                <span className="text-xs" style={{ color: AX.muted }}>Size</span>
-                                <span className="text-sm font-medium" style={{ color: AX.text }}>
-                                  {size.toFixed(2)} shares
-                                </span>
-                              </div>
-                              {filled > 0 && (
-                                <>
-                                  <div className="flex items-center justify-between">
-                                    <span className="text-xs" style={{ color: AX.muted }}>Filled</span>
-                                    <span className="text-sm font-medium" style={{ color: AX.green }}>
-                                      {filled.toFixed(2)} ({filledPercent.toFixed(0)}%)
-                                    </span>
-                                  </div>
-                                  <div className="flex items-center justify-between">
-                                    <span className="text-xs" style={{ color: AX.muted }}>Remaining</span>
-                                    <span className="text-sm font-medium" style={{ color: AX.text }}>
-                                      {remaining.toFixed(2)} shares
-                                    </span>
-                                  </div>
-                                  {/* Progress bar */}
-                                  <div className="h-1.5 rounded-full overflow-hidden mt-1" style={{ backgroundColor: AX.border }}>
-                                    <div
-                                      className="h-full rounded-full transition-all"
-                                      style={{ width: `${filledPercent}%`, backgroundColor: AX.green }}
-                                    />
-                                  </div>
-                                </>
-                              )}
-                              <div className="flex items-center justify-between pt-1">
-                                <span className="text-xs" style={{ color: AX.muted }}>Total Value</span>
-                                <span className="text-sm font-semibold" style={{ color: AX.text }}>
-                                  ${(remaining * price).toFixed(2)}
-                                </span>
-                              </div>
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  )}
-                </div>
-                )}
-                {/* Both: Positions tab */}
-                {selectedTab === "Positions" && (
-                <div className="flex flex-col h-full">
-                  <React.Suspense fallback={<div className="flex items-center justify-center h-full"><HiOutlineRefresh className="w-5 h-5 animate-spin" style={{ color: AX.muted }} /></div>}>
-                    {user?.bearerToken ? (
-                      <UnifiedPortfolio
-                        authToken={user.bearerToken}
-                        walletAddress={primaryWalletAddresses?.ethereum}
-                        variant="predictions"
-                      />
-                    ) : (
-                      <PredictionPositions userPublicKey={user?.publicKey} showEmptyState={true} />
+            {/* ── Tabs + Content ── */}
+            <div className="flex flex-col" style={{ borderTop: `1px solid ${AX.border}` }}>
+              {/* Tab bar */}
+              <div className="flex items-center gap-0 px-3 sticky top-0 z-10" style={{ borderBottom: `1px solid ${AX.border}`, backgroundColor: AX.bg }}>
+                {[...(isPolymarket ? POLYMARKET_TABS : DFLOW_TABS), 'AI Insights'].map((tab) => (
+                  <button
+                    key={tab}
+                    onClick={() => setSelectedTab(tab)}
+                    className="px-3 py-2.5 text-[13px] font-medium transition-colors relative"
+                    style={{ color: selectedTab === tab ? AX.text : AX.muted }}
+                  >
+                    {tab === 'AI Insights' ? (
+                      <span
+                        className="flex items-center gap-1.5 px-2 py-0.5 rounded-full"
+                        style={{
+                          background: selectedTab === 'AI Insights'
+                            ? 'linear-gradient(135deg, rgba(139,92,246,0.15), rgba(59,130,246,0.12), rgba(16,185,129,0.15))'
+                            : 'transparent',
+                          border: selectedTab === 'AI Insights'
+                            ? '1px solid rgba(139,92,246,0.3)'
+                            : '1px solid transparent',
+                        }}
+                      >
+                        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" style={{ animation: 'sparkle-pulse 2s ease-in-out infinite' }}>
+                          <defs>
+                            <linearGradient id="ai-tab-sparkle" x1="3" y1="2" x2="22" y2="21">
+                              <stop stopColor="#8B5CF6"/><stop offset="0.33" stopColor="#6366F1"/><stop offset="0.66" stopColor="#3B82F6"/><stop offset="1" stopColor="#10B981"/>
+                            </linearGradient>
+                          </defs>
+                          <path d="M12 2L13.5 8.5L20 10L13.5 11.5L12 18L10.5 11.5L4 10L10.5 8.5L12 2Z" fill="url(#ai-tab-sparkle)"/>
+                        </svg>
+                        <span style={{
+                          background: 'linear-gradient(90deg, #8B5CF6, #6366F1, #3B82F6, #10B981)',
+                          WebkitBackgroundClip: 'text',
+                          WebkitTextFillColor: 'transparent',
+                          fontWeight: 600,
+                        }}>AI Insights</span>
+                      </span>
+                    ) : tab}
+                    {selectedTab === tab && (
+                      <div className="absolute bottom-0 left-1 right-1 h-[2px] rounded-full" style={{ backgroundColor: AX.cyan }} />
                     )}
-                  </React.Suspense>
+                  </button>
+                ))}
+              </div>
+
+              {/* Tab content — CSS hidden to preserve state */}
+              <div className="min-h-[300px]">
+                <div className={selectedTab === "Trades" ? '' : 'hidden'}>
+                  <TradesTable trades={trades || []} isLoading={tradesLoading} />
                 </div>
+                <div className={selectedTab === "Activity" ? '' : 'hidden'}>
+                  <ActivitySection activities={activities || []} isLoading={activityLoading} />
+                </div>
+                <div className={selectedTab === "Outcomes" ? '' : 'hidden'}>
+                  <OutcomesSection
+                    event={polyEvent || null}
+                    isLoading={polyLoading}
+                    selectedOutcomeId={selectedOutcomeMarket?.id || null}
+                    onSelectOutcome={(marketId, side) => {
+                      const selectedMkt = polyEvent?.markets?.find(m => m.id === marketId);
+                      if (selectedMkt) {
+                        setSelectedOutcomeMarket(selectedMkt);
+                        setSelectedSide(side);
+                        setTradeMode('buy');
+                        setAmount('');
+                        const outcomeName = (selectedMkt as any).groupItemTitle || selectedMkt.question || 'Outcome';
+                        showPolymarketToast(`${outcomeName} selected`, 'success');
+                      }
+                    }}
+                  />
+                </div>
+                <div className={selectedTab === "Comments" ? '' : 'hidden'}>
+                  <CommentsSection comments={comments || []} isLoading={commentsLoading} eventSlug={tickerString} />
+                </div>
+                <div className={selectedTab === "Holders" ? '' : 'hidden'}>
+                  <HoldersSection holders={holders || []} isLoading={holdersLoading} />
+                </div>
+                <div className={selectedTab === "Orders" ? '' : 'hidden'}>
+                  <div className="flex flex-col h-full">
+                    {!user?.bearerToken ? (
+                      <div className="flex flex-col items-center justify-center h-full py-8">
+                        <div className="w-10 h-10 rounded-xl mb-2 flex items-center justify-center" style={{ backgroundColor: AX.surface2 }}>
+                          <HiOutlineClipboardList className="w-5 h-5" style={{ color: AX.muted }} />
+                        </div>
+                        <p className="text-xs" style={{ color: AX.muted }}>Log in to view your orders</p>
+                      </div>
+                    ) : openOrders.length === 0 ? (
+                      <div className="flex flex-col items-center justify-center h-full py-8">
+                        <div className="w-10 h-10 rounded-xl mb-2 flex items-center justify-center" style={{ backgroundColor: AX.surface2 }}>
+                          <HiOutlineClipboardList className="w-5 h-5" style={{ color: AX.muted }} />
+                        </div>
+                        <p className="text-xs font-medium mb-0.5" style={{ color: AX.text }}>No Open Orders</p>
+                        <p className="text-[10px]" style={{ color: AX.muted }}>Your limit orders will appear here</p>
+                      </div>
+                    ) : (
+                      <div className="p-3 space-y-2 overflow-auto">
+                        <div className="flex items-center justify-between mb-2">
+                          <span className="text-xs font-semibold" style={{ color: AX.text }}>
+                            {openOrders.length} Open Order{openOrders.length !== 1 ? 's' : ''}
+                          </span>
+                        </div>
+                        {openOrders.map((order) => {
+                          const isBuy = order.side === 'BUY';
+                          const price = parseFloat(order.price || '0');
+                          const size = parseFloat(order.original_size || order.size || '0');
+                          const filled = parseFloat(order.size_matched || '0');
+                          const remaining = size - filled;
+                          const filledPercent = size > 0 ? (filled / size) * 100 : 0;
+                          return (
+                            <div key={order.id} className="p-3 rounded-xl" style={{ backgroundColor: AX.surface, border: `1px solid ${AX.border}` }}>
+                              <div className="flex items-start justify-between mb-2">
+                                <div className="flex items-center gap-2">
+                                  <span className="text-[10px] font-bold px-2 py-1 rounded" style={{ backgroundColor: isBuy ? AX.greenBg : AX.redBg, color: isBuy ? AX.green : AX.red }}>{isBuy ? 'BUY' : 'SELL'}</span>
+                                  <span className="text-xs" style={{ color: AX.muted }}>Limit Order</span>
+                                </div>
+                                <button onClick={() => handleCancelOrder(order.id)} disabled={cancellingOrderId === order.id} className="px-3 py-1.5 rounded-lg text-xs font-medium transition-all hover:opacity-80 disabled:opacity-50" style={{ backgroundColor: AX.redBg, color: AX.red, border: `1px solid ${AX.red}30` }}>
+                                  {cancellingOrderId === order.id ? <HiOutlineRefresh className="w-3 h-3 animate-spin" /> : 'Cancel'}
+                                </button>
+                              </div>
+                              <div className="space-y-1.5">
+                                <div className="flex items-center justify-between"><span className="text-xs" style={{ color: AX.muted }}>Price</span><span className="text-sm font-semibold" style={{ color: AX.text }}>{(price * 100).toFixed(0)}¢</span></div>
+                                <div className="flex items-center justify-between"><span className="text-xs" style={{ color: AX.muted }}>Size</span><span className="text-sm font-medium" style={{ color: AX.text }}>{size.toFixed(2)} shares</span></div>
+                                {filled > 0 && (<>
+                                  <div className="flex items-center justify-between"><span className="text-xs" style={{ color: AX.muted }}>Filled</span><span className="text-sm font-medium" style={{ color: AX.green }}>{filled.toFixed(2)} ({filledPercent.toFixed(0)}%)</span></div>
+                                  <div className="h-1.5 rounded-full overflow-hidden mt-1" style={{ backgroundColor: AX.border }}><div className="h-full rounded-full transition-all" style={{ width: `${filledPercent}%`, backgroundColor: AX.green }} /></div>
+                                </>)}
+                                <div className="flex items-center justify-between pt-1"><span className="text-xs" style={{ color: AX.muted }}>Total Value</span><span className="text-sm font-semibold" style={{ color: AX.text }}>${(remaining * price).toFixed(2)}</span></div>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                </div>
+                <div className={selectedTab === "Positions" ? '' : 'hidden'}>
+                  <div className="flex flex-col h-full">
+                    <React.Suspense fallback={<div className="flex items-center justify-center h-full"><HiOutlineRefresh className="w-5 h-5 animate-spin" style={{ color: AX.muted }} /></div>}>
+                      {user?.bearerToken ? (
+                        <UnifiedPortfolio authToken={user.bearerToken} walletAddress={primaryWalletAddresses?.ethereum} variant="predictions" />
+                      ) : (
+                        <PredictionPositions userPublicKey={user?.publicKey} showEmptyState={true} />
+                      )}
+                    </React.Suspense>
+                  </div>
+                </div>
+                {selectedTab === "AI Insights" && (
+                  <div className="p-4 w-full">
+                    {/* Iridescent glow container */}
+                    <div className="relative rounded-xl overflow-hidden">
+                      {/* Animated iridescent border */}
+                      <div className="absolute inset-0 rounded-xl" style={{
+                        background: 'linear-gradient(135deg, #8B5CF6, #6366F1, #3B82F6, #06B6D4, #10B981, #8B5CF6)',
+                        backgroundSize: '300% 300%',
+                        animation: 'iridescent-flow 6s ease-in-out infinite',
+                        padding: 1,
+                      }} />
+                      {/* Inner content with dark bg */}
+                      <div className="relative m-[1px] rounded-xl" style={{ backgroundColor: AX.surface2 }}>
+                        {/* Subtle aurora glow at top */}
+                        <div className="absolute top-0 left-0 right-0 h-24 rounded-t-xl pointer-events-none" style={{
+                          background: 'linear-gradient(180deg, rgba(139,92,246,0.08) 0%, rgba(59,130,246,0.04) 40%, transparent 100%)',
+                        }} />
+                        <div className="relative">
+                          <InsightPanel source={isPolymarket ? 'polymarket' : 'dflow'} marketId={tickerString} docked chromeless />
+                        </div>
+                      </div>
+                    </div>
+                  </div>
                 )}
               </div>
             </div>
-          </div>
 
-          {/* RIGHT: Trade Action Panel */}
-          <div className="flex-shrink-0 min-w-[260px] basis-[280px] md:basis-[310px] lg:basis-[340px] hidden lg:flex flex-col text-[12px] leading-tight" style={{ backgroundColor: '#111214', borderLeft: `1px solid ${AX.border}` }}>
-            <div className="flex-1 overflow-auto">
+          </div>{/* end LEFT PANEL */}
+
+          {/* ══════════ RIGHT PANEL — STICKY TRADING ══════════ */}
+          <div
+            className="flex-shrink-0 hidden lg:flex flex-col text-[12px] leading-tight sticky top-[0px] self-start"
+            style={{
+              width: 360,
+              maxWidth: '35%',
+              maxHeight: '100vh',
+              backgroundColor: AX.surface2,
+              borderLeft: `1px solid ${AX.border}`,
+            }}
+          >
+            <div className="flex-1 overflow-y-auto pb-4">
               {/* Polymarket Trade Panel */}
               {isPolymarket ? (
                 <div>
-                    {/* Selected Outcome Header */}
-                    {selectedOutcomeMarket ? (
-                      <div className="flex items-center gap-2.5 px-4 py-[11px] border-b border-[#2A2B33]">
-                        {(selectedOutcomeMarket.image || selectedOutcomeMarket.icon) ? (
-                          <img
-                            src={selectedOutcomeMarket.image || selectedOutcomeMarket.icon}
-                            alt=""
-                            className="w-9 h-9 rounded-lg object-cover"
-                          />
-                        ) : (
-                          <div
-                            className="w-9 h-9 rounded-lg flex items-center justify-center text-sm font-bold"
-                            style={{ backgroundColor: getAvatarColor(selectedOutcomeMarket.groupItemTitle || 'O'), color: '#fff' }}
-                          >
-                            {(selectedOutcomeMarket.groupItemTitle || 'O').charAt(0).toUpperCase()}
-                          </div>
-                        )}
-                        <div className="flex-1 min-w-0">
-                          <h3 className="font-semibold text-[13px] truncate text-[#E6E7EA]">
-                            {selectedOutcomeMarket.groupItemTitle || selectedOutcomeMarket.question || 'Selected Outcome'}
-                          </h3>
-                          <button
-                            onClick={() => setSelectedOutcomeMarket(null)}
-                            className="text-[10px] text-[#70E0B0] hover:underline"
-                          >
-                            Change outcome
-                          </button>
+                  {/* Selected Outcome Header — height matches left panel header */}
+                  {selectedOutcomeMarket ? (
+                    <div
+                      className="flex items-center gap-3 px-4"
+                      style={{
+                        height: 80,
+                        borderBottom: `1px solid ${AX.border}`,
+                        background: 'linear-gradient(180deg, rgba(28, 31, 36, 0.6) 0%, transparent 100%)',
+                      }}
+                    >
+                      {(selectedOutcomeMarket.image || selectedOutcomeMarket.icon) ? (
+                        <img src={selectedOutcomeMarket.image || selectedOutcomeMarket.icon} alt="" className="w-12 h-12 rounded-xl object-cover" />
+                      ) : (
+                        <div className="w-12 h-12 rounded-xl flex items-center justify-center text-sm font-bold" style={{ backgroundColor: getAvatarColor(selectedOutcomeMarket.groupItemTitle || 'O'), color: '#fff' }}>
+                          {(selectedOutcomeMarket.groupItemTitle || 'O').charAt(0).toUpperCase()}
                         </div>
-                      </div>
-                    ) : (
-                      <div className="text-center py-2.5 mb-2 mx-3 rounded-lg bg-[#1A1B1E] border border-[#2A2B33]">
-                        <p className="text-[11px] text-[#9CA3AF]">
-                          Select an outcome from the Outcomes tab
-                        </p>
-                      </div>
-                    )}
-
-                    {/* Buy / Sell Toggle + Order Type */}
-                    <div className="px-4 py-[18.5px] border-b border-[#2A2B33]">
-                      <div className="flex items-center gap-2">
-                        {/* Buy/Sell Toggle - matches trenches */}
-                        <div className="flex-1 relative h-9 rounded-lg border border-[#2A2B33] bg-[#1E1F26] overflow-hidden">
-                          <div
-                            className="absolute top-0 left-0 h-full w-1/2 rounded-md transition-transform duration-200"
-                            style={{
-                              transform: tradeMode === 'sell' ? 'translateX(100%)' : 'translateX(0%)',
-                              background: tradeMode === 'buy' ? '#70E0B0' : '#FF4D7F',
-                            }}
-                          />
-                          <div className="relative z-10 grid grid-cols-2 h-full">
-                            <button
-                              onClick={() => setTradeMode('buy')}
-                              className="flex items-center justify-center h-full text-[13px] font-semibold cursor-pointer select-none"
-                              style={{ color: tradeMode === 'buy' ? '#000' : '#C7CBD1' }}
-                            >
-                              Buy
-                            </button>
-                            <button
-                              onClick={() => setTradeMode('sell')}
-                              className="flex items-center justify-center h-full text-[13px] font-semibold cursor-pointer select-none"
-                              style={{ color: tradeMode === 'sell' ? '#000' : '#C7CBD1' }}
-                            >
-                              Sell
-                            </button>
-                          </div>
-                        </div>
+                      )}
+                      <div className="flex-1 min-w-0">
+                        <h3 className="font-semibold text-[14px] truncate" style={{ color: AX.text }}>
+                          {selectedOutcomeMarket.groupItemTitle || selectedOutcomeMarket.question || 'Selected Outcome'}
+                        </h3>
+                        <button onClick={() => setSelectedOutcomeMarket(null)} className="text-[11px] hover:underline transition-colors" style={{ color: AX.green }}>
+                          Change outcome
+                        </button>
                       </div>
                     </div>
+                  ) : (
+                    <div className="text-center py-4 mx-4 mt-3 rounded-xl" style={{ backgroundColor: AX.bg, border: `1px solid ${AX.border}` }}>
+                      <p className="text-[12px]" style={{ color: AX.muted }}>Select an outcome from the Outcomes tab</p>
+                    </div>
+                  )}
 
-                    {/* MARKET / LIMIT pills */}
-                    <div className="px-4 pt-2 pb-1.5">
-                      <div className="flex items-center gap-1.5">
-                        {(['market', 'limit'] as const).map((t) => (
-                          <button
-                            key={t}
-                            onClick={() => setOrderType(t)}
-                            className="text-[10px] px-2 py-0.5 rounded-full font-semibold uppercase tracking-wide transition-all"
-                            style={{
-                              backgroundColor: orderType === t ? 'rgba(112,224,176,0.15)' : 'transparent',
-                              color: orderType === t ? AX.mint : AX.muted,
-                              border: `1px solid ${orderType === t ? 'rgba(112,224,176,0.3)' : AX.border}`,
-                            }}
-                          >
-                            {t === 'market' ? 'Market' : 'Limit'}
-                          </button>
+                  {/* Buy/Sell + Market/Limit — merged section, no internal border */}
+                  <div className="px-4 pt-3" style={{ paddingBottom: 15 }}>
+                    <div className="grid grid-cols-2 gap-2.5 mb-3">
+                      <button
+                        onClick={() => setTradeMode('buy')}
+                        className="py-2.5 rounded-lg flex items-center justify-center text-[13px] font-bold cursor-pointer select-none transition-all hover:brightness-110 active:scale-[0.97]"
+                        style={{
+                          backgroundColor: tradeMode === 'buy' ? AX.green : AX.greenBg,
+                          border: `1px solid ${tradeMode === 'buy' ? AX.green : AX.greenBorder}`,
+                          color: tradeMode === 'buy' ? '#000' : AX.green,
+                        }}
+                      >Buy</button>
+                      <button
+                        onClick={() => setTradeMode('sell')}
+                        className="py-2.5 rounded-lg flex items-center justify-center text-[13px] font-bold cursor-pointer select-none transition-all hover:brightness-110 active:scale-[0.97]"
+                        style={{
+                          backgroundColor: tradeMode === 'sell' ? AX.red : AX.redBg,
+                          border: `1px solid ${tradeMode === 'sell' ? AX.red : AX.redBorder}`,
+                          color: tradeMode === 'sell' ? '#000' : AX.red,
+                        }}
+                      >Sell</button>
+                    </div>
+
+                    {/* Market / Limit pills */}
+                    <div className="flex items-center gap-2">
+                      {(['market', 'limit'] as const).map((t) => (
+                        <button
+                          key={t}
+                          onClick={() => setOrderType(t)}
+                          className="text-[11px] px-3 py-1 rounded-full font-semibold transition-all"
+                          style={{
+                            backgroundColor: orderType === t ? `${AX.mint}18` : 'transparent',
+                            color: orderType === t ? AX.mint : AX.muted,
+                            border: `1px solid ${orderType === t ? `${AX.mint}35` : AX.border}`,
+                          }}
+                        >
+                          {t === 'market' ? 'Market' : 'Limit'}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Limit Price Input */}
+                  {orderType === 'limit' && (
+                    <div className="px-4 pt-1 mb-2">
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="text-[10px] font-semibold uppercase tracking-wide" style={{ color: AX.muted }}>Limit Price</span>
+                        <span className="text-[10px]" style={{ color: AX.muted }}>{tradeMode === 'buy' ? 'Max price to pay' : 'Min price to receive'}</span>
+                      </div>
+                      <div className="flex items-center justify-between rounded-xl px-2" style={{ backgroundColor: AX.bg, border: `1px solid ${AX.border}` }}>
+                        <button onClick={() => setLimitPriceCents(prev => Math.max(1, prev - 1))} className="w-10 h-10 flex items-center justify-center text-xl font-bold rounded-lg transition-colors hover:bg-white/10" style={{ color: AX.muted }}>-</button>
+                        <div className="flex-1 text-center">
+                          <span className="text-2xl font-bold" style={{ color: AX.text, fontVariantNumeric: 'tabular-nums' }}>{limitPriceCents}¢</span>
+                        </div>
+                        <button onClick={() => setLimitPriceCents(prev => Math.min(99, prev + 1))} className="w-10 h-10 flex items-center justify-center text-xl font-bold rounded-lg transition-colors hover:bg-white/10" style={{ color: AX.muted }}>+</button>
+                      </div>
+                      <div className="flex justify-center gap-2 mt-2">
+                        {[1, 5, 10].map(delta => (
+                          <button key={`minus-${delta}`} onClick={() => setLimitPriceCents(prev => Math.max(1, Math.min(99, prev - delta)))} className="px-2 py-1 rounded-lg text-[11px] font-medium transition-colors" style={{ backgroundColor: AX.bg, color: AX.muted, border: `1px solid ${AX.border}` }}>-{delta}¢</button>
+                        ))}
+                        {[1, 5, 10].map(delta => (
+                          <button key={`plus-${delta}`} onClick={() => setLimitPriceCents(prev => Math.max(1, Math.min(99, prev + delta)))} className="px-2 py-1 rounded-lg text-[11px] font-medium transition-colors" style={{ backgroundColor: AX.bg, color: AX.muted, border: `1px solid ${AX.border}` }}>+{delta}¢</button>
                         ))}
                       </div>
                     </div>
+                  )}
 
-                    {/* Limit Price Input (only shown for limit orders) */}
-                    {orderType === 'limit' && (
-                      <div className="px-4 pt-2 mb-1.5">
-                        <div className="flex items-center justify-between mb-2">
-                          <span className="text-[10px] font-semibold text-[#9CA3AF] uppercase tracking-wide">Limit Price</span>
-                          <span className="text-[10px] text-[#9CA3AF]">
-                            {tradeMode === 'buy' ? 'Max price to pay' : 'Min price to receive'}
-                          </span>
-                        </div>
-                        <div className="flex items-center justify-between rounded-lg px-2 border border-[#2A2B33] bg-[#25282B]">
-                          <button
-                            onClick={() => setLimitPriceCents(prev => Math.max(1, prev - 1))}
-                            className="w-10 h-10 flex items-center justify-center text-xl font-bold rounded-md transition-colors hover:bg-white/10"
-                            style={{ color: AX.muted }}
-                          >
-                            −
-                          </button>
-                          <div className="flex-1 text-center">
-                            <span className="text-2xl font-bold" style={{ color: AX.text }}>
-                              {limitPriceCents}¢
-                            </span>
-                          </div>
-                          <button
-                            onClick={() => setLimitPriceCents(prev => Math.min(99, prev + 1))}
-                            className="w-10 h-10 flex items-center justify-center text-xl font-bold rounded-md transition-colors hover:bg-white/10"
-                            style={{ color: AX.muted }}
-                          >
-                            +
-                          </button>
-                        </div>
-                        <div className="flex justify-center gap-2 mt-2">
-                          {[1, 5, 10].map(delta => (
-                            <button
-                              key={delta}
-                              onClick={() => setLimitPriceCents(prev => Math.max(1, Math.min(99, prev - delta)))}
-                              className="px-2 py-1 rounded text-[11px] font-medium transition-colors border border-[#2A2B33] bg-[#25282B] text-[#9CA3AF] hover:bg-[#1E1F26]"
-                            >
-                              −{delta}¢
-                            </button>
-                          ))}
-                          {[1, 5, 10].map(delta => (
-                            <button
-                              key={delta}
-                              onClick={() => setLimitPriceCents(prev => Math.max(1, Math.min(99, prev + delta)))}
-                              className="px-2 py-1 rounded text-[11px] font-medium transition-colors border border-[#2A2B33] bg-[#25282B] text-[#9CA3AF] hover:bg-[#1E1F26]"
-                            >
-                              +{delta}¢
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-                    )}
+                  {/* Yes/No Buttons + Amount + Execute */}
+                  <div className="px-4 pt-3" style={{ borderTop: `1px solid ${AX.border}` }}>
+                    {/* Yes / No toggle buttons — matches outcomes table style */}
+                    <div className="grid grid-cols-2 gap-2.5 mb-3">
+                      <button
+                        onClick={() => setSelectedSide('yes')}
+                        className="py-2.5 rounded-lg flex items-center justify-center gap-1.5 text-[13px] font-bold transition-all hover:brightness-110 active:scale-[0.97]"
+                        style={{
+                          backgroundColor: selectedSide === 'yes' ? AX.green : AX.greenBg,
+                          border: `1px solid ${selectedSide === 'yes' ? AX.green : AX.greenBorder}`,
+                          color: selectedSide === 'yes' ? '#000' : AX.green,
+                        }}
+                      >
+                        Yes {tradePanelPrices.yesCents.toFixed(0)}¢
+                      </button>
+                      <button
+                        onClick={() => setSelectedSide('no')}
+                        className="py-2.5 rounded-lg flex items-center justify-center gap-1.5 text-[13px] font-bold transition-all hover:brightness-110 active:scale-[0.97]"
+                        style={{
+                          backgroundColor: selectedSide === 'no' ? AX.red : AX.redBg,
+                          border: `1px solid ${selectedSide === 'no' ? AX.red : AX.redBorder}`,
+                          color: selectedSide === 'no' ? '#000' : AX.red,
+                        }}
+                      >
+                        No {tradePanelPrices.noCents.toFixed(0)}¢
+                      </button>
+                    </div>
 
-                    {/* Yes/No + Amount + Trade - wrapped with padding */}
-                    <div className="px-4 pt-2">
-                    {/* Yes / No Buttons */}
-                    {(() => {
-                      // Parse prices from selected outcome - use SAME formula as OutcomesSection
-                      let yesPrice = currentYesPrice;
-                      let noPrice = currentNoPrice;
-                      if (selectedOutcomeMarket?.outcomePrices) {
-                        try {
-                          const prices = JSON.parse(selectedOutcomeMarket.outcomePrices).map(Number);
-                          yesPrice = prices[0] || 0.5;
-                          noPrice = prices[1] || 0.5;
-                        } catch {}
-                      }
-                      // Same calculation as OutcomesSection: Math.round(price * 100 * 10) / 10, then .toFixed(0)
-                      const yesPriceCents = Math.round(yesPrice * 100 * 10) / 10;
-                      const noPriceCents = Math.round(noPrice * 100 * 10) / 10;
-                      return (
-                        <div className="grid grid-cols-2 gap-2 mb-3">
-                          <button
-                            onClick={() => setSelectedSide('yes')}
-                            className="h-9 rounded-lg flex items-center justify-center gap-1.5 text-[12px] font-semibold transition-all"
-                            style={{
-                              backgroundColor: selectedSide === 'yes' ? '#70E0B0' : '#1E1F26',
-                              border: `1px solid ${selectedSide === 'yes' ? '#70E0B0' : '#2A2B33'}`,
-                              color: selectedSide === 'yes' ? '#000' : '#70E0B0',
-                            }}
-                          >
-                            Yes <span className="font-normal">{yesPriceCents.toFixed(0)}¢</span>
-                          </button>
-                          <button
-                            onClick={() => setSelectedSide('no')}
-                            className="h-9 rounded-lg flex items-center justify-center gap-1.5 text-[12px] font-semibold transition-all"
-                            style={{
-                              backgroundColor: selectedSide === 'no' ? '#FF4D7F' : '#1E1F26',
-                              border: `1px solid ${selectedSide === 'no' ? '#FF4D7F' : '#2A2B33'}`,
-                              color: selectedSide === 'no' ? '#000' : '#9CA3AF',
-                            }}
-                          >
-                            No <span className="font-normal">{noPriceCents.toFixed(0)}¢</span>
-                          </button>
-                        </div>
-                      );
-                    })()}
-
-                    {/* Amount Input - matches trenches */}
+                    {/* Amount Input */}
                     <div className="mb-3">
-                      <div className="rounded-lg border border-[#2A2B33] bg-[#25282B]">
-                        <div className="flex items-center justify-between gap-3 px-3 py-1.5">
-                          <div className="flex items-center gap-1">
-                            <span className="text-[10px] font-semibold text-[#9CA3AF] uppercase tracking-wide">Amount</span>
+                      <div className="rounded-xl overflow-hidden" style={{ border: `1px solid ${AX.border}`, backgroundColor: AX.bg }}>
+                        <div className="flex items-center justify-between gap-3 px-3 py-2">
+                          <div className="flex items-center gap-1.5">
+                            <span className="text-[10px] font-semibold uppercase tracking-wide" style={{ color: AX.muted }}>Amount</span>
                             <input
                               type="text"
                               inputMode="decimal"
                               value={amount}
                               onChange={(e) => { setAmount(e.target.value); setIsSellMax(false); }}
                               placeholder="0.00"
-                              className="h-8 w-20 bg-transparent border-none text-left pl-2 text-[12px] font-normal text-[#E6E7EA] tabular-nums placeholder:text-[#9CA3AF] focus:outline-none"
-                              style={{ fontFamily: 'ui-monospace, SFMono-Regular, "SF Mono", Consolas, "Liberation Mono", Menlo, monospace' }}
+                              className="h-8 w-24 bg-transparent border-none text-left pl-2 text-[13px] font-medium tabular-nums placeholder:text-[#555] focus:outline-none"
+                              style={{ color: AX.text, fontFamily: 'ui-monospace, SFMono-Regular, "SF Mono", Consolas, monospace' }}
                             />
                           </div>
-                          <span className="text-[14px] font-semibold text-[#E6E7EA]">$</span>
+                          <span className="text-[15px] font-bold" style={{ color: AX.text }}>$</span>
                         </div>
-
-                        {/* Preset buttons grid - matches trenches */}
-                        <div className="border-t border-[#000] rounded-b-lg overflow-hidden">
-                          <div className="grid grid-cols-5">
-                            {tradeMode === 'buy' ? (
-                              <>
-                                {[1, 5, 20, 100].map((qa) => (
-                                  <button
-                                    key={qa}
-                                    onClick={() => setAmount(prev => String((parseFloat(prev) || 0) + qa))}
-                                    className="h-9 border-r border-[#000] last:border-r-0 text-[12px] font-semibold tabular-nums bg-[#25282B] hover:bg-[#1E1F26] text-[#E6E7EA]"
-                                  >
-                                    ${qa}
+                        {/* Preset buttons */}
+                        <div className="grid" style={{ gridTemplateColumns: 'repeat(5, 1fr)', borderTop: `1px solid ${AX.border}` }}>
+                          {tradeMode === 'buy' ? (
+                            <>
+                              {[5, 25, 100, 500].map((qa) => (
+                                <button
+                                  key={qa}
+                                  onClick={() => setAmount(prev => String((parseFloat(prev) || 0) + qa))}
+                                  className="h-9 text-[12px] font-semibold tabular-nums transition-colors hover:bg-white/[0.04]"
+                                  style={{ color: AX.text, borderRight: `1px solid ${AX.border}` }}
+                                >
+                                  ${qa}
+                                </button>
+                              ))}
+                              <button
+                                onClick={() => polygonBalance && setAmount(Math.floor(polygonBalance.usdc).toString())}
+                                className="h-9 text-[12px] font-bold transition-colors hover:bg-white/[0.04]"
+                                style={{ color: AX.green }}
+                              >
+                                Max
+                              </button>
+                            </>
+                          ) : (
+                            <>
+                              {[25, 50, 75, 100].map((pct) => {
+                                const tokenValue = userTokenPosition ? userTokenPosition.tokenAmount * (selectedSide === 'yes' ? currentYesPrice : currentNoPrice) * (pct / 100) : 0;
+                                return (
+                                  <button key={pct} onClick={() => { setAmount(tokenValue.toFixed(2)); setIsSellMax(pct === 100); }} disabled={!userTokenPosition || userTokenPosition.tokenAmount <= 0} className="h-9 text-[12px] font-semibold tabular-nums transition-colors hover:bg-white/[0.04] disabled:opacity-40" style={{ color: AX.text, borderRight: `1px solid ${AX.border}` }}>
+                                    {pct}%
                                   </button>
-                                ))}
-                                <button
-                                  onClick={() => polygonBalance && setAmount(Math.floor(polygonBalance.usdc).toString())}
-                                  className="h-9 text-[12px] font-semibold bg-[#25282B] hover:bg-[#1E1F26] text-[#E6E7EA]"
-                                >
-                                  Max
-                                </button>
-                              </>
-                            ) : (
-                              <>
-                                {[25, 50, 75, 100].map((pct) => {
-                                  const tokenValue = userTokenPosition
-                                    ? userTokenPosition.tokenAmount * (selectedSide === 'yes' ? currentYesPrice : currentNoPrice) * (pct / 100)
-                                    : 0;
-                                  return (
-                                    <button
-                                      key={pct}
-                                      onClick={() => { setAmount(tokenValue.toFixed(2)); setIsSellMax(pct === 100); }}
-                                      disabled={!userTokenPosition || userTokenPosition.tokenAmount <= 0}
-                                      className="h-9 border-r border-[#000] last:border-r-0 text-[12px] font-semibold tabular-nums bg-[#25282B] hover:bg-[#1E1F26] text-[#E6E7EA] disabled:opacity-50"
-                                    >
-                                      {pct}%
-                                    </button>
-                                  );
-                                })}
-                                <button
-                                  onClick={() => {
-                                    if (userTokenPosition && userTokenPosition.tokenAmount > 0) {
-                                      const maxValue = userTokenPosition.tokenAmount * (selectedSide === 'yes' ? currentYesPrice : currentNoPrice);
-                                      setAmount(maxValue.toFixed(2));
-                                      setIsSellMax(true);
-                                    }
-                                  }}
-                                  disabled={!userTokenPosition || userTokenPosition.tokenAmount <= 0}
-                                  className="h-9 text-[12px] font-semibold bg-[#25282B] hover:bg-[#1E1F26] text-[#70E0B0] disabled:opacity-50"
-                                >
-                                  Max
-                                </button>
-                              </>
-                            )}
-                          </div>
+                                );
+                              })}
+                              <button
+                                onClick={() => { if (userTokenPosition && userTokenPosition.tokenAmount > 0) { const maxValue = userTokenPosition.tokenAmount * (selectedSide === 'yes' ? currentYesPrice : currentNoPrice); setAmount(maxValue.toFixed(2)); setIsSellMax(true); } }}
+                                disabled={!userTokenPosition || userTokenPosition.tokenAmount <= 0}
+                                className="h-9 text-[12px] font-bold transition-colors hover:bg-white/[0.04] disabled:opacity-40"
+                                style={{ color: AX.green }}
+                              >
+                                Max
+                              </button>
+                            </>
+                          )}
                         </div>
                       </div>
                     </div>
 
                     {/* Position Info for SELL mode */}
                     {tradeMode === 'sell' && (
-                      <div className="mb-3 p-2 rounded-lg border border-[#2A2B33] bg-[#1A1B1E]">
+                      <div className="mb-3 p-2.5 rounded-xl" style={{ backgroundColor: AX.bg, border: `1px solid ${AX.border}` }}>
                         {userTokenPosition && userTokenPosition.tokenAmount > 0 ? (
                           <div className="flex justify-between items-center text-xs">
                             <span style={{ color: AX.muted }}>Your {selectedSide.toUpperCase()} tokens:</span>
-                            <span style={{ color: AX.text, fontWeight: 600 }}>
+                            <span style={{ color: AX.text, fontWeight: 600, fontVariantNumeric: 'tabular-nums' }}>
                               {userTokenPosition.tokenAmount.toFixed(2)} (~${(userTokenPosition.tokenAmount * (selectedSide === 'yes' ? currentYesPrice : currentNoPrice)).toFixed(2)})
                             </span>
                           </div>
                         ) : (
-                          <div className="text-xs text-center" style={{ color: AX.muted }}>
-                            You don't own any {selectedSide.toUpperCase()} tokens
-                          </div>
+                          <div className="text-xs text-center" style={{ color: AX.muted }}>No {selectedSide.toUpperCase()} tokens held</div>
                         )}
                       </div>
                     )}
 
-                    {/* Quick Amount Buttons now integrated into Amount container above */}
-
                     {/* Quote Display */}
                     {polymarketQuote && parseFloat(amount) > 0 && (
-                      <div className="mb-2 p-2 rounded-lg border border-[#2A2B33] bg-[#1A1B1E]">
-                        <div className="space-y-1">
-                          {/* Price: Show limit price for limit orders, market price for market orders */}
+                      <div className="mb-3 p-3 rounded-xl" style={{ backgroundColor: AX.bg, border: `1px solid ${AX.border}` }}>
+                        <div className="space-y-1.5">
                           <div className="flex justify-between text-xs">
-                            <span style={{ color: AX.muted }}>
-                              {orderType === 'limit' ? 'Limit Price' : 'Price'}
-                            </span>
-                            <span style={{ color: orderType === 'limit' ? AX.purple : AX.text }}>
+                            <span style={{ color: AX.muted }}>{orderType === 'limit' ? 'Limit Price' : 'Price'}</span>
+                            <span style={{ color: orderType === 'limit' ? AX.purple : AX.text, fontVariantNumeric: 'tabular-nums' }}>
                               {orderType === 'limit' ? `${limitPriceCents}¢` : `${(polymarketQuote.price * 100).toFixed(1)}¢`}
                             </span>
                           </div>
                           <div className="flex justify-between text-xs">
-                            <span style={{ color: AX.muted }}>Platform Fee ({polymarketQuote.platformFeeBps / 100}%)</span>
-                            <span style={{ color: AX.muted }}>-${polymarketQuote.platformFee.toFixed(2)}</span>
+                            <span style={{ color: AX.muted }}>Fee ({polymarketQuote.platformFeeBps / 100}%)</span>
+                            <span style={{ color: AX.muted, fontVariantNumeric: 'tabular-nums' }}>-${polymarketQuote.platformFee.toFixed(2)}</span>
                           </div>
                           <div className="flex justify-between text-xs">
                             <span style={{ color: AX.muted }}>Net Amount</span>
-                            <span style={{ color: AX.text }}>${polymarketQuote.netAmount.toFixed(2)}</span>
+                            <span style={{ color: AX.text, fontVariantNumeric: 'tabular-nums' }}>${polymarketQuote.netAmount.toFixed(2)}</span>
                           </div>
-                          {polymarketQuote.expectedTokens && (
-                            <>
-                              <div className="border-t my-1.5" style={{ borderColor: AX.border }} />
-                              {/* For limit orders, recalculate estimated shares based on limit price */}
-                              {(() => {
-                                const displayPrice = orderType === 'limit' ? limitPriceCents / 100 : polymarketQuote.price;
-                                const estShares = orderType === 'limit'
-                                  ? polymarketQuote.netAmount / displayPrice
-                                  : polymarketQuote.expectedTokens;
-                                const potentialPayout = estShares; // Each share pays $1 if winning
-                                const potentialProfit = potentialPayout - polymarketQuote.netAmount - polymarketQuote.platformFee;
-                                const profitPercent = (potentialProfit / parseFloat(amount)) * 100;
-
-                                return (
-                                  <>
-                                    <div className="flex justify-between text-xs">
-                                      <span style={{ color: AX.muted }}>Est. Shares</span>
-                                      <span style={{ color: AX.text }}>{estShares.toFixed(2)}</span>
-                                    </div>
-                                    <div className="flex justify-between text-xs">
-                                      <span style={{ color: AX.muted }}>Potential Payout</span>
-                                      <span style={{ color: AX.green }}>${potentialPayout.toFixed(2)}</span>
-                                    </div>
-                                    <div className="flex justify-between text-xs">
-                                      <span style={{ color: AX.muted }}>Potential Profit</span>
-                                      <span style={{ color: AX.green }}>
-                                        +${potentialProfit.toFixed(2)} ({profitPercent.toFixed(1)}%)
-                                      </span>
-                                    </div>
-                                  </>
-                                );
-                              })()}
-                            </>
-                          )}
+                          {polymarketQuote.expectedTokens && (() => {
+                            const displayPrice = orderType === 'limit' ? limitPriceCents / 100 : polymarketQuote.price;
+                            const estShares = orderType === 'limit' ? polymarketQuote.netAmount / displayPrice : polymarketQuote.expectedTokens;
+                            const potentialPayout = estShares;
+                            const potentialProfit = potentialPayout - polymarketQuote.netAmount - polymarketQuote.platformFee;
+                            const profitPercent = (potentialProfit / parseFloat(amount)) * 100;
+                            return (<>
+                              <div className="border-t my-2" style={{ borderColor: AX.border }} />
+                              <div className="flex justify-between text-xs"><span style={{ color: AX.muted }}>Est. Shares</span><span style={{ color: AX.text, fontVariantNumeric: 'tabular-nums' }}>{estShares.toFixed(2)}</span></div>
+                              <div className="flex justify-between text-xs"><span style={{ color: AX.muted }}>Potential Payout</span><span style={{ color: AX.green, fontVariantNumeric: 'tabular-nums' }}>${potentialPayout.toFixed(2)}</span></div>
+                              <div className="flex justify-between text-xs font-semibold"><span style={{ color: AX.muted }}>Potential Profit</span><span style={{ color: AX.green, fontVariantNumeric: 'tabular-nums' }}>+${potentialProfit.toFixed(2)} ({profitPercent.toFixed(1)}%)</span></div>
+                            </>);
+                          })()}
                         </div>
                       </div>
                     )}
 
                     {/* Loading Quote */}
                     {isLoadingQuote && parseFloat(amount) > 0 && (
-                      <div className="mb-3 p-3 rounded-lg flex items-center justify-center" style={{ backgroundColor: AX.bg }}>
+                      <div className="mb-3 p-3 rounded-xl flex items-center justify-center gap-2" style={{ backgroundColor: AX.bg }}>
                         <div className="animate-spin w-4 h-4 border-2 border-t-transparent rounded-full" style={{ borderColor: AX.muted }} />
-                        <span className="ml-2 text-xs" style={{ color: AX.muted }}>Fetching quote...</span>
+                        <span className="text-xs" style={{ color: AX.muted }}>Fetching quote...</span>
                       </div>
                     )}
 
                     {/* Geoblock Warning */}
                     {geoblockStatus?.blocked && (
-                      <div className="mb-3 p-2 rounded-lg flex items-center gap-2" style={{ backgroundColor: AX.redBg, border: `1px solid ${AX.redBorder}` }}>
+                      <div className="mb-3 p-2.5 rounded-xl flex items-center gap-2" style={{ backgroundColor: AX.redBg, border: `1px solid ${AX.redBorder}` }}>
                         <HiOutlineExclamation className="w-4 h-4" style={{ color: AX.red }} />
-                        <span className="text-xs" style={{ color: AX.red }}>
-                          Trading unavailable in {geoblockStatus.country}
-                        </span>
+                        <span className="text-xs" style={{ color: AX.red }}>Trading unavailable in {geoblockStatus.country}</span>
                       </div>
                     )}
 
-                    {/* Polygon Balance Display */}
+                    {/* Polygon Balance */}
                     {user?.bearerToken && (
-                      <div className="mb-3 p-2.5 rounded-lg border border-[#2A2B33] bg-[#1A1B1E]">
+                      <div className="mb-3 p-2.5 rounded-xl" style={{ backgroundColor: AX.bg, border: `1px solid ${AX.border}` }}>
                         <div className="flex items-center justify-between">
                           <div className="flex items-center gap-2">
-                            <span className="text-xs" style={{ color: AX.muted }}>Polygon Wallet</span>
+                            <BiWallet className="w-3.5 h-3.5" style={{ color: AX.muted }} />
+                            <span className="text-xs" style={{ color: AX.muted }}>Balance</span>
                             {polygonBalance && !polygonBalance.hasTradingBalance && (
-                              <span className="text-[10px] px-1.5 py-0.5 rounded" style={{ backgroundColor: `${AX.yellow}20`, color: AX.yellow }}>
-                                Low
-                              </span>
+                              <span className="text-[9px] px-1.5 py-0.5 rounded-md" style={{ backgroundColor: `${AX.yellow}20`, color: AX.yellow }}>Low</span>
                             )}
                           </div>
                           <div className="flex items-center gap-2">
                             {polygonBalance ? (
-                              <span className="text-xs font-medium" style={{ color: polygonBalance.hasTradingBalance ? AX.text : AX.red }}>
-                                {polygonBalance.usdcFormatted}
-                              </span>
+                              <span className="text-xs font-semibold" style={{ color: polygonBalance.hasTradingBalance ? AX.text : AX.red, fontVariantNumeric: 'tabular-nums' }}>{polygonBalance.usdcFormatted}</span>
                             ) : (
                               <span className="text-xs" style={{ color: AX.muted }}>--</span>
                             )}
-                            <button
-                              onClick={() => setShowWalletModal(true)}
-                              className="text-[10px] px-2 py-1 rounded hover:opacity-80 transition-opacity"
-                              style={{ backgroundColor: `${AX.green}15`, color: AX.green }}
-                            >
+                            <button onClick={() => setShowWalletModal(true)} className="text-[10px] px-2.5 py-1 rounded-lg hover:opacity-80 transition-opacity font-medium" style={{ backgroundColor: `${AX.green}15`, color: AX.green }}>
                               {polygonBalance?.hasTradingBalance ? 'Details' : 'Fund'}
                             </button>
                           </div>
                         </div>
                         {polygonBalance && !polygonBalance.hasGasBalance && (
                           <div className="mt-2 text-[10px] flex items-center gap-1" style={{ color: AX.yellow }}>
-                            <HiOutlineExclamation className="w-3 h-3" />
-                            Need MATIC for gas fees
+                            <HiOutlineExclamation className="w-3 h-3" />Need MATIC for gas fees
                           </div>
                         )}
                       </div>
                     )}
 
-                    {/* Trade Button - matches trenches */}
+                    {/* Trade Button */}
                     <button
                       onClick={handlePolymarketTrade}
-                      disabled={
-                        !selectedOutcomeMarket ||
-                        !amount ||
-                        parseFloat(amount) <= 0 ||
-                        isExecutingTrade ||
-                        isLoadingQuote ||
-                        geoblockStatus?.blocked ||
-                        !user?.bearerToken
-                      }
-                      className="w-full h-10 rounded-full text-[14px] font-semibold flex items-center justify-center gap-2 transition-all cursor-pointer disabled:cursor-not-allowed disabled:opacity-50"
+                      disabled={!selectedOutcomeMarket || !amount || parseFloat(amount) <= 0 || isExecutingTrade || isLoadingQuote || geoblockStatus?.blocked || !user?.bearerToken}
+                      className="w-full h-12 rounded-xl text-[15px] font-bold flex items-center justify-center gap-2 transition-all active:scale-[0.97] cursor-pointer disabled:cursor-not-allowed disabled:opacity-50"
                       style={{
-                        backgroundColor: tradeMode === 'buy' ? '#70E0B0' : '#FF4D7F',
+                        backgroundColor: tradeMode === 'buy' ? AX.green : AX.red,
                         color: '#000',
+                        boxShadow: `0 4px 12px ${tradeMode === 'buy' ? 'rgba(16,185,129,0.25)' : 'rgba(244,63,94,0.25)'}`,
                       }}
                     >
                       {isExecutingTrade ? (
-                        <>
-                          <div className="animate-spin w-4 h-4 border-2 border-t-transparent rounded-full" style={{ borderColor: 'currentColor' }} />
-                          Processing...
-                        </>
+                        <><div className="animate-spin w-4 h-4 border-2 border-t-transparent rounded-full" style={{ borderColor: 'currentColor' }} />Processing...</>
                       ) : !user?.bearerToken ? (
                         'Log in to Trade'
                       ) : geoblockStatus?.blocked ? (
                         'Trading Unavailable'
                       ) : (
-                        <>
-                          {tradeMode === 'buy' ? 'Buy' : 'Sell'} {selectedSide.toUpperCase()}
-                          {polymarketQuote?.expectedTokens && ` (${polymarketQuote.expectedTokens.toFixed(1)} shares)`}
-                        </>
+                        <>{tradeMode === 'buy' ? 'Buy' : 'Sell'} {selectedSide.toUpperCase()}{polymarketQuote?.expectedTokens && ` (${polymarketQuote.expectedTokens.toFixed(1)} shares)`}</>
                       )}
                     </button>
+                  </div>
 
-                    </div>{/* close px-3 pt-2 wrapper */}
+                  {/* Help Text */}
+                  <p className="text-[10px] mt-1.5 text-center px-3 pb-0.5" style={{ color: AX.muted }}>
+                    {!user?.bearerToken ? 'Log in to trade on Polymarket' : !polygonBalance?.hasTradingBalance ? 'Fund your Polygon wallet with USDC to trade' : 'Trades execute on Polygon via Polymarket CLOB'}
+                  </p>
 
-                    {/* Help Text */}
-                    <p className="text-[10px] mt-3 text-center px-3" style={{ color: AX.muted }}>
-                      {!user?.bearerToken ? (
-                        'Log in to trade on Polymarket'
-                      ) : !polygonBalance?.hasTradingBalance ? (
-                        'Fund your Polygon wallet with USDC to trade'
-                      ) : (
-                        'Trades execute on Polygon via Polymarket CLOB'
-                      )}
-                    </p>
-
-                    {/* Open Orders Section */}
-                    {openOrders.length > 0 && (
-                      <div className="border-t border-[#2A2B33] mt-2 px-4 pt-3">
-                        <div className="flex items-center justify-between mb-2">
-                          <span className="text-[11px] font-semibold uppercase tracking-wide" style={{ color: AX.muted }}>
-                            Open Orders ({openOrders.length})
-                          </span>
-                        </div>
-                        <div className="space-y-2">
-                          {openOrders.map((order) => {
-                            const isBuy = order.side === 'BUY';
-                            const price = parseFloat(order.price || '0');
-                            const size = parseFloat(order.original_size || order.size || '0');
-                            const filled = parseFloat(order.size_matched || '0');
-                            const remaining = size - filled;
-
-                            return (
-                              <div
-                                key={order.id}
-                                className="p-2 rounded-lg flex items-center justify-between"
-                                style={{ backgroundColor: AX.bg, border: `1px solid ${AX.border}` }}
-                              >
-                                <div className="flex-1">
-                                  <div className="flex items-center gap-2">
-                                    <span
-                                      className="text-[10px] font-bold px-1.5 py-0.5 rounded"
-                                      style={{
-                                        backgroundColor: isBuy ? AX.greenBg : AX.redBg,
-                                        color: isBuy ? AX.green : AX.red,
-                                      }}
-                                    >
-                                      {isBuy ? 'BUY' : 'SELL'}
-                                    </span>
-                                    <span className="text-xs font-medium" style={{ color: AX.text }}>
-                                      {remaining.toFixed(2)} @ {(price * 100).toFixed(0)}¢
-                                    </span>
-                                  </div>
-                                  {filled > 0 && (
-                                    <span className="text-[10px]" style={{ color: AX.muted }}>
-                                      {filled.toFixed(2)} filled
-                                    </span>
-                                  )}
-                                </div>
-                                <button
-                                  onClick={() => handleCancelOrder(order.id)}
-                                  disabled={cancellingOrderId === order.id}
-                                  className="px-2 py-1 rounded text-[10px] font-medium transition-colors hover:opacity-80 disabled:opacity-50"
-                                  style={{
-                                    backgroundColor: AX.redBg,
-                                    color: AX.red,
-                                    border: `1px solid ${AX.red}40`,
-                                  }}
-                                >
-                                  {cancellingOrderId === order.id ? '...' : 'Cancel'}
-                                </button>
-                              </div>
-                            );
-                          })}
-                        </div>
+                  {/* Open Orders */}
+                  {openOrders.length > 0 && (
+                    <div className="px-4 pt-3" style={{ borderTop: `1px solid ${AX.border}` }}>
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="text-[11px] font-semibold uppercase tracking-wide" style={{ color: AX.muted }}>Open Orders ({openOrders.length})</span>
                       </div>
-                    )}
-
-                    {/* Market Stats Section - matches trenches Token Info */}
-                    <div className="border-t border-[#2A2B33] mt-2" style={{ backgroundColor: 'rgba(255,255,255,0.015)' }}>
-                      <button
-                        onClick={() => setShowMarketStats(!showMarketStats)}
-                        className="w-full flex items-center justify-between px-4 py-3 hover:opacity-80 transition-opacity"
-                      >
-                        <span className="text-[11px] font-semibold uppercase tracking-wide" style={{ color: AX.muted }}>
-                          Market Stats
-                        </span>
-                        <svg
-                          width="12"
-                          height="12"
-                          viewBox="0 0 12 12"
-                          fill="none"
-                          className={`transition-transform ${showMarketStats ? 'rotate-180' : ''}`}
-                          style={{ color: AX.muted }}
-                        >
-                          <path d="M6 9L1 4L11 4L6 9Z" fill="currentColor" />
-                        </svg>
-                      </button>
-                      {showMarketStats && (
-                        <div className="px-4 pb-4 space-y-2.5">
-                          {/* Volume */}
-                          <div className="flex items-center justify-between">
-                            <span className="text-[10px] uppercase tracking-wide" style={{ color: AX.muted }}>Volume</span>
-                            <span className="text-[11px] font-semibold" style={{ color: AX.text }}>
-                              {formatPolymarketVolume(parseFloat(polyEvent?.volume || selectedOutcomeMarket?.volume || '0'))}
-                            </span>
-                          </div>
-                          {/* Liquidity */}
-                          <div className="flex items-center justify-between">
-                            <span className="text-[10px] uppercase tracking-wide" style={{ color: AX.muted }}>Liquidity</span>
-                            <span className="text-[11px] font-semibold" style={{ color: AX.text }}>
-                              {formatPolymarketVolume(parseFloat(polyEvent?.liquidity || selectedOutcomeMarket?.liquidity || '0'))}
-                            </span>
-                          </div>
-                          {/* End Date */}
-                          {(polyEvent?.endDate || selectedOutcomeMarket?.endDate) && (
-                            <div className="flex items-center justify-between">
-                              <span className="text-[10px] uppercase tracking-wide" style={{ color: AX.muted }}>End Date</span>
-                              <span className="text-[11px] font-semibold" style={{ color: AX.text }}>
-                                {new Date(polyEvent?.endDate || selectedOutcomeMarket?.endDate || '').toLocaleDateString('en-US', {
-                                  year: 'numeric',
-                                  month: 'short',
-                                  day: 'numeric',
-                                })}
-                              </span>
-                            </div>
-                          )}
-                          {/* Status */}
-                          <div className="flex items-center justify-between">
-                            <span className="text-[10px] uppercase tracking-wide" style={{ color: AX.muted }}>Status</span>
-                            <span
-                              className="text-[11px] font-semibold"
-                              style={{ color: (polyEvent?.active ?? selectedOutcomeMarket?.active) ? AX.green : AX.red }}
-                            >
-                              {(polyEvent?.active ?? selectedOutcomeMarket?.active) ? 'Active' : 'Closed'}
-                            </span>
-                          </div>
-                        </div>
-                      )}
-                    </div>
-
-                    {/* About Section */}
-                    <div className="border-t border-[#2A2B33]" style={{ backgroundColor: 'rgba(255,255,255,0.015)' }}>
-                      <button
-                        onClick={() => setShowAbout(!showAbout)}
-                        className="w-full flex items-center justify-between px-4 py-3 hover:opacity-80 transition-opacity"
-                      >
-                        <span className="text-[11px] font-semibold uppercase tracking-wide" style={{ color: AX.muted }}>
-                          About
-                        </span>
-                        <svg
-                          width="12"
-                          height="12"
-                          viewBox="0 0 12 12"
-                          fill="none"
-                          className={`transition-transform ${showAbout ? 'rotate-180' : ''}`}
-                          style={{ color: AX.muted }}
-                        >
-                          <path d="M6 9L1 4L11 4L6 9Z" fill="currentColor" />
-                        </svg>
-                      </button>
-                      {showAbout && (
-                        <div className="px-4 pb-4">
-                          <p className="text-[13px] leading-relaxed" style={{ color: AX.text, opacity: 0.85 }}>
-                            {polyEvent?.description || 'No description available.'}
-                          </p>
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Resolution Section */}
-                    <div className="border-t border-[#2A2B33]" style={{ backgroundColor: 'rgba(255,255,255,0.015)' }}>
-                      <button
-                        onClick={() => setShowResolution(!showResolution)}
-                        className="w-full flex items-center justify-between px-4 py-3 hover:opacity-80 transition-opacity"
-                      >
-                        <span className="text-[11px] font-semibold uppercase tracking-wide" style={{ color: AX.muted }}>
-                          Resolution
-                        </span>
-                        <svg
-                          width="12"
-                          height="12"
-                          viewBox="0 0 12 12"
-                          fill="none"
-                          className={`transition-transform ${showResolution ? 'rotate-180' : ''}`}
-                          style={{ color: AX.muted }}
-                        >
-                          <path d="M6 9L1 4L11 4L6 9Z" fill="currentColor" />
-                        </svg>
-                      </button>
-                      {showResolution && (
-                        <div className="px-4 pb-4 space-y-2.5">
-                          {/* Resolver Contract - link to Polygonscan */}
-                          {(selectedOutcomeMarket?.resolvedBy || polyEvent?.markets?.[0]?.resolvedBy) && (
-                            <div className="flex items-center justify-between">
-                              <span className="text-[10px] uppercase tracking-wide" style={{ color: AX.muted }}>Resolver</span>
-                              <a
-                                href={`https://polygonscan.com/address/${selectedOutcomeMarket?.resolvedBy || polyEvent?.markets?.[0]?.resolvedBy}`}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="flex items-center gap-1.5 text-[11px] font-mono hover:opacity-70"
-                                style={{ color: AX.purple }}
-                              >
-                                {(selectedOutcomeMarket?.resolvedBy || polyEvent?.markets?.[0]?.resolvedBy || '').slice(0, 6)}...{(selectedOutcomeMarket?.resolvedBy || polyEvent?.markets?.[0]?.resolvedBy || '').slice(-4)}
-                                <img
-                                  src="https://polygonscan.com/assets/poly/images/svg/logos/chain-dim.svg?v=26.1.4.2"
-                                  alt="Polygonscan"
-                                  className="w-3 h-3"
-                                />
-                              </a>
-                            </div>
-                          )}
-                          {/* Condition ID */}
-                          {(selectedOutcomeMarket?.conditionId || polyEvent?.markets?.[0]?.conditionId) && (
-                            <div className="flex items-center justify-between">
-                              <span className="text-[10px] uppercase tracking-wide" style={{ color: AX.muted }}>Condition</span>
-                              <button
-                                onClick={() => copyToClipboard(selectedOutcomeMarket?.conditionId || polyEvent?.markets?.[0]?.conditionId || '')}
-                                className="flex items-center gap-1 text-[11px] font-mono hover:opacity-70"
-                                style={{ color: AX.cyan }}
-                              >
-                                {(selectedOutcomeMarket?.conditionId || polyEvent?.markets?.[0]?.conditionId || '').slice(0, 6)}...{(selectedOutcomeMarket?.conditionId || polyEvent?.markets?.[0]?.conditionId || '').slice(-4)}
-                                <BiCopy className="w-3 h-3" />
+                      <div className="space-y-2 pb-3">
+                        {openOrders.map((order) => {
+                          const isBuy = order.side === 'BUY';
+                          const price = parseFloat(order.price || '0');
+                          const size = parseFloat(order.original_size || order.size || '0');
+                          const filled = parseFloat(order.size_matched || '0');
+                          const remaining = size - filled;
+                          return (
+                            <div key={order.id} className="p-2.5 rounded-xl flex items-center justify-between" style={{ backgroundColor: AX.bg, border: `1px solid ${AX.border}` }}>
+                              <div className="flex-1">
+                                <div className="flex items-center gap-2">
+                                  <span className="text-[10px] font-bold px-1.5 py-0.5 rounded" style={{ backgroundColor: isBuy ? AX.greenBg : AX.redBg, color: isBuy ? AX.green : AX.red }}>{isBuy ? 'BUY' : 'SELL'}</span>
+                                  <span className="text-xs font-medium" style={{ color: AX.text, fontVariantNumeric: 'tabular-nums' }}>{remaining.toFixed(2)} @ {(price * 100).toFixed(0)}¢</span>
+                                </div>
+                                {filled > 0 && <span className="text-[10px]" style={{ color: AX.muted }}>{filled.toFixed(2)} filled</span>}
+                              </div>
+                              <button onClick={() => handleCancelOrder(order.id)} disabled={cancellingOrderId === order.id} className="px-2.5 py-1 rounded-lg text-[10px] font-medium transition-colors hover:opacity-80 disabled:opacity-50" style={{ backgroundColor: AX.redBg, color: AX.red, border: `1px solid ${AX.red}40` }}>
+                                {cancellingOrderId === order.id ? '...' : 'Cancel'}
                               </button>
                             </div>
-                          )}
-                          {/* UMA Oracle info */}
-                          <div className="pt-2 mt-1" style={{ borderTop: `1px solid ${AX.border}` }}>
-                            <p className="text-[10px]" style={{ color: AX.muted }}>
-                              Resolved via UMA Optimistic Oracle on Polygon
-                            </p>
-                          </div>
-                          {/* Link to full rules on Polymarket */}
-                          <a
-                            href={`https://polymarket.com/event/${tickerString}`}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="inline-flex items-center gap-1 text-[10px] hover:underline"
-                            style={{ color: AX.mint }}
-                          >
-                            View full rules on Polymarket
-                            <HiOutlineExternalLink className="w-3 h-3" />
-                          </a>
-                        </div>
-                      )}
+                          );
+                        })}
+                      </div>
                     </div>
+                  )}
+
+                  {/* Market Stats (collapsed) */}
+                  <div style={{ borderTop: `1px solid ${AX.border}` }}>
+                    <button onClick={() => setShowMarketStats(!showMarketStats)} className="w-full flex items-center justify-between px-4 py-1.5 hover:bg-white/[0.02] transition-colors">
+                      <span className="text-[11px] font-semibold uppercase tracking-wide" style={{ color: AX.muted }}>Market Stats</span>
+                      <svg width="12" height="12" viewBox="0 0 12 12" fill="none" className={`transition-transform duration-200 ${showMarketStats ? 'rotate-180' : ''}`} style={{ color: AX.muted }}><path d="M6 9L1 4L11 4L6 9Z" fill="currentColor" /></svg>
+                    </button>
+                    {showMarketStats && (
+                      <div className="px-4 pb-4 space-y-2.5">
+                        <div className="flex items-center justify-between"><span className="text-[10px] uppercase tracking-wide" style={{ color: AX.muted }}>Volume</span><span className="text-[11px] font-semibold" style={{ color: AX.text, fontVariantNumeric: 'tabular-nums' }}>{formatPolymarketVolume(parseFloat(polyEvent?.volume || selectedOutcomeMarket?.volume || '0'))}</span></div>
+                        <div className="flex items-center justify-between"><span className="text-[10px] uppercase tracking-wide" style={{ color: AX.muted }}>Liquidity</span><span className="text-[11px] font-semibold" style={{ color: AX.text, fontVariantNumeric: 'tabular-nums' }}>{formatPolymarketVolume(parseFloat(polyEvent?.liquidity || selectedOutcomeMarket?.liquidity || '0'))}</span></div>
+                        {(polyEvent?.endDate || selectedOutcomeMarket?.endDate) && (
+                          <div className="flex items-center justify-between"><span className="text-[10px] uppercase tracking-wide" style={{ color: AX.muted }}>End Date</span><span className="text-[11px] font-semibold" style={{ color: AX.text }}>{new Date(polyEvent?.endDate || selectedOutcomeMarket?.endDate || '').toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })}</span></div>
+                        )}
+                        <div className="flex items-center justify-between"><span className="text-[10px] uppercase tracking-wide" style={{ color: AX.muted }}>Status</span><span className="text-[11px] font-semibold" style={{ color: (polyEvent?.active ?? selectedOutcomeMarket?.active) ? AX.green : AX.red }}>{(polyEvent?.active ?? selectedOutcomeMarket?.active) ? 'Active' : 'Closed'}</span></div>
+                      </div>
+                    )}
                   </div>
-                ) : (
-                  <>
-                {/* Wallet & Balances */}
-                {user ? (
-                  <div className="rounded-lg mb-4 overflow-hidden" style={{ backgroundColor: AX.bg, border: `1px solid ${AX.border}` }}>
-                    <div className="flex items-center justify-between p-3 border-b" style={{ borderColor: AX.border }}>
-                      <div className="flex items-center gap-2">
-                        <BiWallet className="w-4 h-4" style={{ color: AX.mint }} />
-                        <span className="text-xs font-mono" style={{ color: AX.muted }}>
-                          {user.publicKey.slice(0, 4)}...{user.publicKey.slice(-4)}
-                        </span>
+
+                  {/* About This Market */}
+                  <div style={{ borderTop: `1px solid ${AX.border}` }}>
+                    <button onClick={() => setShowAbout(!showAbout)} className="w-full flex items-center justify-between px-4 py-1.5 hover:bg-white/[0.02] transition-colors">
+                      <span className="text-[11px] font-semibold uppercase tracking-wide" style={{ color: AX.muted }}>About</span>
+                      <svg width="12" height="12" viewBox="0 0 12 12" fill="none" className={`transition-transform duration-200 ${showAbout ? 'rotate-180' : ''}`} style={{ color: AX.muted }}><path d="M6 9L1 4L11 4L6 9Z" fill="currentColor" /></svg>
+                    </button>
+                    {showAbout && (
+                      <div className="px-4 pb-4">
+                        <p className="text-[13px] leading-relaxed" style={{ color: AX.text, opacity: 0.85 }}>
+                          {polyEvent?.description || 'No description available.'}
+                        </p>
                       </div>
-                      <button
-                        onClick={() => copyToClipboard(user.publicKey)}
-                        className="text-xs hover:opacity-70 flex items-center gap-1"
-                        style={{ color: AX.mint }}
-                      >
-                        <BiCopy className="w-3 h-3" />
-                      </button>
-                    </div>
-                    <div className="flex items-center justify-between p-3">
-                      <div className="flex items-center gap-3">
-                        <span className="text-xs" style={{ color: solBalance < 0.01 ? AX.yellow : AX.muted }}>
-                          {solBalance.toFixed(4)} SOL
-                        </span>
-                        <span style={{ color: AX.border }}>•</span>
-                        <span className="text-xs font-medium" style={{ color: usdcBalance > 0 ? AX.text : AX.muted }}>
-                          {(usdcBalance || 0).toFixed(2)} USDC
-                        </span>
-                      </div>
-                    </div>
-                    {(solBalance < 0.01 || usdcBalance < 1) && (
-                      <div className="px-3 pb-3">
-                        {solBalance < 0.01 && (
-                          <div className="flex items-center gap-2 text-xs p-2 rounded" style={{ backgroundColor: `${AX.yellow}15`, color: AX.yellow }}>
-                            <HiOutlineExclamation className="w-3.5 h-3.5 flex-shrink-0" />
-                            <span>Low SOL for tx fees</span>
+                    )}
+                  </div>
+
+                  {/* Resolution Criteria */}
+                  <div style={{ borderTop: `1px solid ${AX.border}` }}>
+                    <button onClick={() => setShowResolution(!showResolution)} className="w-full flex items-center justify-between px-4 py-1.5 hover:bg-white/[0.02] transition-colors">
+                      <span className="text-[11px] font-semibold uppercase tracking-wide" style={{ color: AX.muted }}>Resolution</span>
+                      <svg width="12" height="12" viewBox="0 0 12 12" fill="none" className={`transition-transform duration-200 ${showResolution ? 'rotate-180' : ''}`} style={{ color: AX.muted }}><path d="M6 9L1 4L11 4L6 9Z" fill="currentColor" /></svg>
+                    </button>
+                    {showResolution && (
+                      <div className="px-4 pb-4 space-y-2.5">
+                        {(selectedOutcomeMarket?.resolvedBy || polyEvent?.markets?.[0]?.resolvedBy) && (
+                          <div className="flex items-center justify-between">
+                            <span className="text-[10px] uppercase tracking-wide" style={{ color: AX.muted }}>Resolver</span>
+                            <a href={`https://polygonscan.com/address/${selectedOutcomeMarket?.resolvedBy || polyEvent?.markets?.[0]?.resolvedBy}`} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1.5 text-[10px] font-mono hover:opacity-70" style={{ color: AX.purple }}>
+                              {(selectedOutcomeMarket?.resolvedBy || polyEvent?.markets?.[0]?.resolvedBy || '').slice(0, 6)}...{(selectedOutcomeMarket?.resolvedBy || polyEvent?.markets?.[0]?.resolvedBy || '').slice(-4)}
+                              <img src="https://polygonscan.com/assets/poly/images/svg/logos/chain-dim.svg?v=26.1.4.2" alt="Polygonscan" className="w-3 h-3" />
+                            </a>
                           </div>
                         )}
+                        {(selectedOutcomeMarket?.conditionId || polyEvent?.markets?.[0]?.conditionId) && (
+                          <div className="flex items-center justify-between">
+                            <span className="text-[10px] uppercase tracking-wide" style={{ color: AX.muted }}>Condition</span>
+                            <button onClick={() => copyToClipboard(selectedOutcomeMarket?.conditionId || polyEvent?.markets?.[0]?.conditionId || '')} className="flex items-center gap-1 text-[10px] font-mono hover:opacity-70" style={{ color: AX.cyan }}>
+                              {(selectedOutcomeMarket?.conditionId || polyEvent?.markets?.[0]?.conditionId || '').slice(0, 6)}...{(selectedOutcomeMarket?.conditionId || polyEvent?.markets?.[0]?.conditionId || '').slice(-4)}
+                              <BiCopy className="w-3 h-3" />
+                            </button>
+                          </div>
+                        )}
+                        <div className="pt-2 mt-1" style={{ borderTop: `1px solid ${AX.border}` }}>
+                          <p className="text-[10px]" style={{ color: AX.muted }}>Resolved via UMA Optimistic Oracle on Polygon</p>
+                        </div>
+                        <a href={`https://polymarket.com/event/${tickerString}`} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-[10px] hover:underline" style={{ color: AX.mint }}>
+                          View full rules on Polymarket
+                          <HiOutlineExternalLink className="w-3 h-3" />
+                        </a>
                       </div>
                     )}
                   </div>
-                ) : (
-                  <div className="rounded-lg p-4 mb-4 text-center" style={{ backgroundColor: AX.bg, border: `1px solid ${AX.border}` }}>
-                    <BiWallet className="w-6 h-6 mx-auto mb-2" style={{ color: AX.muted }} />
-                    <p className="text-sm mb-1" style={{ color: AX.text }}>Connect Wallet</p>
-                    <p className="text-xs" style={{ color: AX.muted }}>SOL (fees) + USDC (trade)</p>
-                  </div>
-                )}
-
-                {/* Side Selection */}
-                <div className="grid grid-cols-2 gap-2 mb-4">
-                  <button
-                    onClick={() => setSelectedSide('yes')}
-                    className="py-3 rounded-lg flex items-center justify-center gap-2 transition-all"
-                    style={{
-                      backgroundColor: selectedSide === 'yes' ? AX.greenBg : AX.bg,
-                      border: `2px solid ${selectedSide === 'yes' ? AX.green : AX.border}`,
-                    }}
-                  >
-                    <HiOutlineCheckCircle className="w-5 h-5" style={{ color: AX.green }} />
-                    <span className="font-bold" style={{ color: AX.green }}>YES</span>
-                    <span className="text-sm" style={{ color: AX.green }}>{Math.round(currentYesPrice * 100)}¢</span>
-                  </button>
-                  <button
-                    onClick={() => setSelectedSide('no')}
-                    className="py-3 rounded-lg flex items-center justify-center gap-2 transition-all"
-                    style={{
-                      backgroundColor: selectedSide === 'no' ? AX.redBg : AX.bg,
-                      border: `2px solid ${selectedSide === 'no' ? AX.red : AX.border}`,
-                    }}
-                  >
-                    <HiOutlineXCircle className="w-5 h-5" style={{ color: AX.red }} />
-                    <span className="font-bold" style={{ color: AX.red }}>NO</span>
-                    <span className="text-sm" style={{ color: AX.red }}>{Math.round(currentNoPrice * 100)}¢</span>
-                  </button>
                 </div>
-
-                {/* Amount Input */}
-                <div className="mb-4">
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="text-xs" style={{ color: AX.muted }}>Amount (USDC)</span>
-                    {user && usdcBalance > 0 && (
-                      <button
-                        onClick={() => setAmount(Math.floor(usdcBalance).toString())}
-                        className="text-xs hover:opacity-70"
-                        style={{ color: AX.mint }}
-                      >
-                        Max
-                      </button>
-                    )}
-                  </div>
-                  <div className="relative">
-                    <span className="absolute left-3 top-1/2 -translate-y-1/2" style={{ color: AX.muted }}>$</span>
-                    <input
-                      type="number"
-                      value={amount}
-                      onChange={(e) => { setAmount(e.target.value); setTradeError(null); }}
-                      placeholder="0"
-                      className="w-full pl-7 pr-3 py-3 rounded-lg text-lg font-semibold outline-none"
-                      style={{ backgroundColor: AX.bg, border: `1px solid ${AX.border}`, color: AX.text }}
-                    />
-                  </div>
-                </div>
-
-                {/* Quick amounts */}
-                <div className="grid grid-cols-4 gap-2 mb-4">
-                  {[10, 25, 50, 100].map((qa) => (
-                    <button
-                      key={qa}
-                      onClick={() => { setAmount(qa.toString()); setTradeError(null); }}
-                      className="py-2 rounded-lg text-sm transition-colors"
-                      style={{
-                        backgroundColor: amount === qa.toString() ? AX.mint : AX.bg,
-                        color: amount === qa.toString() ? '#000' : AX.muted,
-                        border: `1px solid ${amount === qa.toString() ? AX.mint : AX.border}`,
-                      }}
-                    >
-                      ${qa}
-                    </button>
-                  ))}
-                </div>
-
-                {/* Payout Preview */}
-                {amountNumber > 0 && (
-                  <div className="p-3 rounded-lg mb-4 space-y-2" style={{ backgroundColor: AX.bg }}>
-                    <div className="flex justify-between text-sm">
-                      <span style={{ color: AX.muted }}>You pay</span>
-                      <span style={{ color: AX.text }}>{formatUSDC(amountNumber)}</span>
+              ) : (
+                /* dFlow trade panel (unchanged logic, refined visuals) */
+                <div className="p-4">
+                  {user ? (
+                    <div className="rounded-xl mb-4 overflow-hidden" style={{ backgroundColor: AX.bg, border: `1px solid ${AX.border}` }}>
+                      <div className="flex items-center justify-between p-3 border-b" style={{ borderColor: AX.border }}>
+                        <div className="flex items-center gap-2">
+                          <BiWallet className="w-4 h-4" style={{ color: AX.mint }} />
+                          <span className="text-xs font-mono" style={{ color: AX.muted }}>{user.publicKey.slice(0, 4)}...{user.publicKey.slice(-4)}</span>
+                        </div>
+                        <button onClick={() => copyToClipboard(user.publicKey)} className="text-xs hover:opacity-70 flex items-center gap-1" style={{ color: AX.mint }}><BiCopy className="w-3 h-3" /></button>
+                      </div>
+                      <div className="flex items-center justify-between p-3">
+                        <div className="flex items-center gap-3">
+                          <span className="text-xs" style={{ color: solBalance < 0.01 ? AX.yellow : AX.muted }}>{solBalance.toFixed(4)} SOL</span>
+                          <span style={{ color: AX.border }}>|</span>
+                          <span className="text-xs font-medium" style={{ color: usdcBalance > 0 ? AX.text : AX.muted }}>{(usdcBalance || 0).toFixed(2)} USDC</span>
+                        </div>
+                      </div>
+                      {solBalance < 0.01 && (
+                        <div className="px-3 pb-3"><div className="flex items-center gap-2 text-xs p-2 rounded-lg" style={{ backgroundColor: `${AX.yellow}15`, color: AX.yellow }}><HiOutlineExclamation className="w-3.5 h-3.5 flex-shrink-0" /><span>Low SOL for tx fees</span></div></div>
+                      )}
                     </div>
-                    <div className="flex justify-between text-sm">
-                      <span style={{ color: AX.muted }}>Payout if wins</span>
-                      <span style={{ color: AX.mint }}>{formatUSDC(potentialPayout)}</span>
-                    </div>
-                  </div>
-                )}
-
-                {/* Error */}
-                {tradeError && (
-                  <div className="flex items-center gap-2 p-2 rounded-lg mb-4" style={{ backgroundColor: AX.redBg }}>
-                    <HiOutlineExclamation className="w-4 h-4" style={{ color: AX.red }} />
-                    <span className="text-xs" style={{ color: AX.red }}>{tradeError}</span>
-                  </div>
-                )}
-
-                {/* Submit Button */}
-                <button
-                  onClick={handleSubmit}
-                  disabled={!isActive || amountNumber <= 0 || isSubmitting}
-                  className="w-full py-3 rounded-lg font-semibold flex items-center justify-center gap-2 transition-all"
-                  style={{
-                    backgroundColor: !isActive ? AX.bg : amountNumber > 0 ? AX.mint : AX.bg,
-                    color: !isActive ? AX.muted : amountNumber > 0 ? '#000' : AX.muted,
-                    border: `1px solid ${!isActive ? AX.border : amountNumber > 0 ? AX.mint : AX.border}`,
-                    cursor: isActive && amountNumber > 0 && !isSubmitting ? 'pointer' : 'not-allowed',
-                    opacity: isSubmitting ? 0.6 : 1,
-                  }}
-                >
-                  {isSubmitting ? (
-                    <HiOutlineRefresh className="w-5 h-5 animate-spin" />
-                  ) : !isActive ? (
-                    'Market Closed'
-                  ) : !user ? (
-                    <>
-                      <BiWallet className="w-5 h-5" />
-                      Login to Trade
-                    </>
                   ) : (
-                    <>
-                      <HiOutlineLightningBolt className="w-5 h-5" />
-                      Buy {selectedSide.toUpperCase()}
-                    </>
+                    <div className="rounded-xl p-4 mb-4 text-center" style={{ backgroundColor: AX.bg, border: `1px solid ${AX.border}` }}>
+                      <BiWallet className="w-6 h-6 mx-auto mb-2" style={{ color: AX.muted }} />
+                      <p className="text-sm mb-1" style={{ color: AX.text }}>Connect Wallet</p>
+                      <p className="text-xs" style={{ color: AX.muted }}>SOL (fees) + USDC (trade)</p>
+                    </div>
                   )}
-                </button>
-                  </>
-                )}
-
+                  <div className="grid grid-cols-2 gap-2.5 mb-4">
+                    <button onClick={() => setSelectedSide('yes')} className="py-2.5 rounded-lg flex items-center justify-center gap-1.5 text-[13px] font-bold transition-all hover:brightness-110 active:scale-[0.97]" style={{ backgroundColor: selectedSide === 'yes' ? AX.green : AX.greenBg, border: `1px solid ${selectedSide === 'yes' ? AX.green : AX.greenBorder}`, color: selectedSide === 'yes' ? '#000' : AX.green }}>
+                      Yes {Math.round(currentYesPrice * 100)}¢
+                    </button>
+                    <button onClick={() => setSelectedSide('no')} className="py-2.5 rounded-lg flex items-center justify-center gap-1.5 text-[13px] font-bold transition-all hover:brightness-110 active:scale-[0.97]" style={{ backgroundColor: selectedSide === 'no' ? AX.red : AX.redBg, border: `1px solid ${selectedSide === 'no' ? AX.red : AX.redBorder}`, color: selectedSide === 'no' ? '#000' : AX.red }}>
+                      No {Math.round(currentNoPrice * 100)}¢
+                    </button>
+                  </div>
+                  <div className="mb-4">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-xs" style={{ color: AX.muted }}>Amount (USDC)</span>
+                      {user && usdcBalance > 0 && (<button onClick={() => setAmount(Math.floor(usdcBalance).toString())} className="text-xs hover:opacity-70" style={{ color: AX.mint }}>Max</button>)}
+                    </div>
+                    <div className="relative">
+                      <span className="absolute left-3 top-1/2 -translate-y-1/2" style={{ color: AX.muted }}>$</span>
+                      <input type="number" value={amount} onChange={(e) => { setAmount(e.target.value); setTradeError(null); }} placeholder="0" className="w-full pl-7 pr-3 py-3 rounded-xl text-lg font-semibold outline-none" style={{ backgroundColor: AX.bg, border: `1px solid ${AX.border}`, color: AX.text }} />
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-4 gap-2 mb-4">
+                    {[10, 25, 50, 100].map((qa) => (<button key={qa} onClick={() => { setAmount(qa.toString()); setTradeError(null); }} className="py-2 rounded-xl text-sm transition-colors" style={{ backgroundColor: amount === qa.toString() ? AX.mint : AX.bg, color: amount === qa.toString() ? '#000' : AX.muted, border: `1px solid ${amount === qa.toString() ? AX.mint : AX.border}` }}>${qa}</button>))}
+                  </div>
+                  {amountNumber > 0 && (
+                    <div className="p-3 rounded-xl mb-4 space-y-2" style={{ backgroundColor: AX.bg }}>
+                      <div className="flex justify-between text-sm"><span style={{ color: AX.muted }}>You pay</span><span style={{ color: AX.text }}>{formatUSDC(amountNumber)}</span></div>
+                      <div className="flex justify-between text-sm"><span style={{ color: AX.muted }}>Payout if wins</span><span style={{ color: AX.mint }}>{formatUSDC(potentialPayout)}</span></div>
+                    </div>
+                  )}
+                  {tradeError && (<div className="flex items-center gap-2 p-2 rounded-xl mb-4" style={{ backgroundColor: AX.redBg }}><HiOutlineExclamation className="w-4 h-4" style={{ color: AX.red }} /><span className="text-xs" style={{ color: AX.red }}>{tradeError}</span></div>)}
+                  <button onClick={handleSubmit} disabled={!isActive || amountNumber <= 0 || isSubmitting} className="w-full py-3 rounded-xl font-semibold flex items-center justify-center gap-2 transition-all active:scale-[0.97]" style={{ backgroundColor: !isActive ? AX.bg : amountNumber > 0 ? AX.mint : AX.bg, color: !isActive ? AX.muted : amountNumber > 0 ? '#000' : AX.muted, border: `1px solid ${!isActive ? AX.border : amountNumber > 0 ? AX.mint : AX.border}`, cursor: isActive && amountNumber > 0 && !isSubmitting ? 'pointer' : 'not-allowed', opacity: isSubmitting ? 0.6 : 1 }}>
+                    {isSubmitting ? (<HiOutlineRefresh className="w-5 h-5 animate-spin" />) : !isActive ? ('Market Closed') : !user ? (<><BiWallet className="w-5 h-5" />Login to Trade</>) : (<><HiOutlineLightningBolt className="w-5 h-5" />Buy {selectedSide.toUpperCase()}</>)}
+                  </button>
+                </div>
+              )}
             </div>
-          </div>
+          </div>{/* end RIGHT PANEL */}
 
-          {/* Trade button for mobile */}
+          {/* Mobile trade FAB */}
           <div className="fixed bottom-0 left-0 w-full p-4 z-50 lg:hidden mb-10">
-            <button
-              className="w-full py-3 rounded-lg font-semibold"
-              style={{ backgroundColor: AX.mint, color: '#000' }}
-              onClick={() => setShowMobileTradeModal(true)}
-            >
-              Trade
-            </button>
+            <button className="w-full py-3.5 rounded-xl font-bold text-[15px] shadow-lg" style={{ backgroundColor: AX.green, color: '#000', boxShadow: '0 -4px 24px rgba(16,185,129,0.2)' }} onClick={() => setShowMobileTradeModal(true)}>Trade</button>
           </div>
-        </div>
+        </div>{/* end MAIN COCKPIT */}
       </div>
 
       {/* Mobile Trade Modal */}
       {showMobileTradeModal && (
         <div className="fixed inset-0 z-[100] lg:hidden">
-          <div
-            className={`absolute inset-0 bg-black/70 transition-opacity duration-300 ${isClosingModal ? "opacity-0" : "opacity-100"}`}
-            onClick={closeModal}
-          />
-          <div
-            className={`absolute bottom-0 left-0 right-0 rounded-t-xl shadow-2xl max-h-[85vh] flex flex-col ${isClosingModal ? "mobile-trade-modal-closing" : "mobile-trade-modal"}`}
-            style={{ backgroundColor: AX.bg }}
-          >
-            <div className="flex justify-center pt-3 pb-2 cursor-grab">
-              <div className="w-12 h-1 rounded-full" style={{ backgroundColor: AX.border }} />
-            </div>
+          <div className={`absolute inset-0 bg-black/70 transition-opacity duration-300 ${isClosingModal ? "opacity-0" : "opacity-100"}`} onClick={closeModal} />
+          <div className={`absolute bottom-0 left-0 right-0 rounded-t-2xl shadow-2xl max-h-[85vh] flex flex-col ${isClosingModal ? "mobile-trade-modal-closing" : "mobile-trade-modal"}`} style={{ backgroundColor: AX.surface2 }}>
+            <div className="flex justify-center pt-3 pb-2 cursor-grab"><div className="w-12 h-1 rounded-full" style={{ backgroundColor: AX.border }} /></div>
             <div className="flex justify-end pr-4 pb-2">
-              <button
-                onClick={closeModal}
-                className="w-8 h-8 rounded-full flex items-center justify-center transition-colors"
-                style={{ backgroundColor: AX.surface, color: AX.muted }}
-              >
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <line x1="18" y1="6" x2="6" y2="18" />
-                  <line x1="6" y1="6" x2="18" y2="18" />
-                </svg>
+              <button onClick={closeModal} className="w-8 h-8 rounded-full flex items-center justify-center transition-colors" style={{ backgroundColor: AX.bg, color: AX.muted }}>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
               </button>
             </div>
             <div className="flex-1 overflow-y-auto p-4">
-              {/* Mobile trade form - similar to desktop */}
-              <div className="grid grid-cols-2 gap-2 mb-4">
-                <button
-                  onClick={() => setSelectedSide('yes')}
-                  className="py-3 rounded-lg flex items-center justify-center gap-2"
-                  style={{
-                    backgroundColor: selectedSide === 'yes' ? AX.greenBg : AX.surface,
-                    border: `2px solid ${selectedSide === 'yes' ? AX.green : AX.border}`,
-                  }}
-                >
-                  <HiOutlineCheckCircle className="w-5 h-5" style={{ color: AX.green }} />
-                  <span className="font-bold" style={{ color: AX.green }}>YES {Math.round(currentYesPrice * 100)}¢</span>
+              <div className="grid grid-cols-2 gap-2.5 mb-4">
+                <button onClick={() => setSelectedSide('yes')} className="py-2.5 rounded-lg flex items-center justify-center gap-1.5 text-[13px] font-bold transition-all hover:brightness-110 active:scale-[0.97]" style={{ backgroundColor: selectedSide === 'yes' ? AX.green : AX.greenBg, border: `1px solid ${selectedSide === 'yes' ? AX.green : AX.greenBorder}`, color: selectedSide === 'yes' ? '#000' : AX.green }}>
+                  Yes {Math.round(currentYesPrice * 100)}¢
                 </button>
-                <button
-                  onClick={() => setSelectedSide('no')}
-                  className="py-3 rounded-lg flex items-center justify-center gap-2"
-                  style={{
-                    backgroundColor: selectedSide === 'no' ? AX.redBg : AX.surface,
-                    border: `2px solid ${selectedSide === 'no' ? AX.red : AX.border}`,
-                  }}
-                >
-                  <HiOutlineXCircle className="w-5 h-5" style={{ color: AX.red }} />
-                  <span className="font-bold" style={{ color: AX.red }}>NO {Math.round(currentNoPrice * 100)}¢</span>
+                <button onClick={() => setSelectedSide('no')} className="py-2.5 rounded-lg flex items-center justify-center gap-1.5 text-[13px] font-bold transition-all hover:brightness-110 active:scale-[0.97]" style={{ backgroundColor: selectedSide === 'no' ? AX.red : AX.redBg, border: `1px solid ${selectedSide === 'no' ? AX.red : AX.redBorder}`, color: selectedSide === 'no' ? '#000' : AX.red }}>
+                  No {Math.round(currentNoPrice * 100)}¢
                 </button>
               </div>
-
               <div className="relative mb-4">
                 <span className="absolute left-3 top-1/2 -translate-y-1/2" style={{ color: AX.muted }}>$</span>
-                <input
-                  type="number"
-                  value={amount}
-                  onChange={(e) => { setAmount(e.target.value); setTradeError(null); }}
-                  placeholder="0"
-                  className="w-full pl-7 pr-3 py-3 rounded-lg text-lg font-semibold outline-none"
-                  style={{ backgroundColor: AX.surface, border: `1px solid ${AX.border}`, color: AX.text }}
-                />
+                <input type="number" value={amount} onChange={(e) => { setAmount(e.target.value); setTradeError(null); }} placeholder="0" className="w-full pl-7 pr-3 py-3 rounded-xl text-lg font-semibold outline-none" style={{ backgroundColor: AX.bg, border: `1px solid ${AX.border}`, color: AX.text }} />
               </div>
-
               <div className="grid grid-cols-4 gap-2 mb-4">
-                {[10, 25, 50, 100].map((qa) => (
-                  <button
-                    key={qa}
-                    onClick={() => setAmount(qa.toString())}
-                    className="py-2 rounded-lg text-sm"
-                    style={{
-                      backgroundColor: amount === qa.toString() ? AX.mint : AX.surface,
-                      color: amount === qa.toString() ? '#000' : AX.muted,
-                    }}
-                  >
-                    ${qa}
-                  </button>
-                ))}
+                {[10, 25, 50, 100].map((qa) => (<button key={qa} onClick={() => setAmount(qa.toString())} className="py-2 rounded-xl text-sm" style={{ backgroundColor: amount === qa.toString() ? AX.mint : AX.bg, color: amount === qa.toString() ? '#000' : AX.muted }}>${qa}</button>))}
               </div>
-
-              {amountNumber > 0 && (
-                <div className="p-3 rounded-lg mb-4 space-y-2" style={{ backgroundColor: AX.surface }}>
-                  <div className="flex justify-between text-sm">
-                    <span style={{ color: AX.muted }}>Payout if wins</span>
-                    <span style={{ color: AX.mint }}>{formatUSDC(potentialPayout)}</span>
-                  </div>
-                </div>
-              )}
-
-              {tradeError && (
-                <div className="flex items-center gap-2 p-2 rounded-lg mb-4" style={{ backgroundColor: AX.redBg }}>
-                  <HiOutlineExclamation className="w-4 h-4" style={{ color: AX.red }} />
-                  <span className="text-xs" style={{ color: AX.red }}>{tradeError}</span>
-                </div>
-              )}
-
-              <button
-                onClick={handleSubmit}
-                disabled={!isActive || amountNumber <= 0 || isSubmitting}
-                className="w-full py-3 rounded-lg font-semibold flex items-center justify-center gap-2"
-                style={{
-                  backgroundColor: isActive && amountNumber > 0 ? AX.mint : AX.surface,
-                  color: isActive && amountNumber > 0 ? '#000' : AX.muted,
-                  opacity: isSubmitting ? 0.6 : 1,
-                }}
-              >
-                {isSubmitting ? (
-                  <HiOutlineRefresh className="w-5 h-5 animate-spin" />
-                ) : (
-                  <>
-                    <HiOutlineLightningBolt className="w-5 h-5" />
-                    Buy {selectedSide.toUpperCase()}
-                  </>
-                )}
+              {amountNumber > 0 && (<div className="p-3 rounded-xl mb-4 space-y-2" style={{ backgroundColor: AX.bg }}><div className="flex justify-between text-sm"><span style={{ color: AX.muted }}>Payout if wins</span><span style={{ color: AX.mint }}>{formatUSDC(potentialPayout)}</span></div></div>)}
+              {tradeError && (<div className="flex items-center gap-2 p-2 rounded-xl mb-4" style={{ backgroundColor: AX.redBg }}><HiOutlineExclamation className="w-4 h-4" style={{ color: AX.red }} /><span className="text-xs" style={{ color: AX.red }}>{tradeError}</span></div>)}
+              <button onClick={handleSubmit} disabled={!isActive || amountNumber <= 0 || isSubmitting} className="w-full py-3 rounded-xl font-semibold flex items-center justify-center gap-2" style={{ backgroundColor: isActive && amountNumber > 0 ? AX.mint : AX.bg, color: isActive && amountNumber > 0 ? '#000' : AX.muted, opacity: isSubmitting ? 0.6 : 1 }}>
+                {isSubmitting ? (<HiOutlineRefresh className="w-5 h-5 animate-spin" />) : (<><HiOutlineLightningBolt className="w-5 h-5" />Buy {selectedSide.toUpperCase()}</>)}
               </button>
             </div>
           </div>
@@ -3875,29 +3159,12 @@ export default function MarketDetailPage() {
 
       {/* Polygon Wallet Modal */}
       {showWalletModal && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center p-4"
-          style={{ backgroundColor: 'rgba(0, 0, 0, 0.8)' }}
-          onClick={() => setShowWalletModal(false)}
-        >
-          <div
-            className="relative w-full max-w-md"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <button
-              onClick={() => setShowWalletModal(false)}
-              className="absolute -top-2 -right-2 z-10 w-8 h-8 rounded-full flex items-center justify-center transition-colors hover:opacity-80"
-              style={{ backgroundColor: AX.surface, border: `1px solid ${AX.border}`, color: AX.muted }}
-            >
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ backgroundColor: 'rgba(0, 0, 0, 0.8)' }} onClick={() => setShowWalletModal(false)}>
+          <div className="relative w-full max-w-md" onClick={(e) => e.stopPropagation()}>
+            <button onClick={() => setShowWalletModal(false)} className="absolute -top-2 -right-2 z-10 w-8 h-8 rounded-full flex items-center justify-center transition-colors hover:opacity-80" style={{ backgroundColor: AX.surface, border: `1px solid ${AX.border}`, color: AX.muted }}>
               <HiOutlineX className="w-4 h-4" />
             </button>
-            <PolygonWalletCard
-              variant="expanded"
-              initialBalance={polygonBalance}
-              onBalanceChange={(balance) => {
-                if (balance) setPolygonBalance(balance);
-              }}
-            />
+            <PolygonWalletCard variant="expanded" initialBalance={polygonBalance} onBalanceChange={(balance) => { if (balance) setPolygonBalance(balance); }} />
           </div>
         </div>
       )}
@@ -3907,6 +3174,9 @@ export default function MarketDetailPage() {
         .mobile-trade-modal-closing { animation: slideDown 0.3s ease-in; }
         @keyframes slideUp { from { transform: translateY(100%); } to { transform: translateY(0); } }
         @keyframes slideDown { from { transform: translateY(0); } to { transform: translateY(100%); } }
+        @keyframes shimmer-ai { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
+        @keyframes iridescent-flow { 0% { background-position: 0% 50%; } 50% { background-position: 100% 50%; } 100% { background-position: 0% 50%; } }
+        @keyframes sparkle-pulse { 0%, 100% { opacity: 1; transform: scale(1); } 50% { opacity: 0.7; transform: scale(1.15) rotate(15deg); } }
       `}</style>
     </PinGate>
   );
