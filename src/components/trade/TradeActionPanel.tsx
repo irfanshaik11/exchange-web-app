@@ -21,7 +21,7 @@ import { executeSolanaMultiBuy, formatSolanaTxSummary, buildSolanaWalletAllocati
 import { validateSolanaBuy, validateSolanaSell, showTradeValidationError } from "~/utils/preTradeValidation";
 import { checkAtaExists, getCachedAtaExists, prefetchAtaCheck } from "~/utils/ataCheck";
 import { useTxHashCallback } from "~/contexts/SolanaPositionWebSocketContext";
-import type { SolanaTokenVolume } from "~/hooks/useSolanaTokenWebSocket";
+import type { SolanaTokenVolume, FirstBuyer, FirstBuyersSummary } from "~/hooks/useSolanaTokenWebSocket";
 import { extractTokenImage, getResolvedTokenImage, resolveTokenImage } from "~/utils/images";
 import { SiSolana } from "react-icons/si";
 
@@ -248,7 +248,7 @@ const AddressDisplay: React.FC<{
 };
 
 // Token Info Dropdown Component
-const TokenInfoDropdown: React.FC<{ token: any; liveMarketCapUsd?: number | null }> = ({ token, liveMarketCapUsd }) => {
+const TokenInfoDropdown: React.FC<{ token: any; liveMarketCapUsd?: number | null; firstBuyers?: FirstBuyer[]; firstBuyersSummary?: FirstBuyersSummary | null }> = ({ token, liveMarketCapUsd, firstBuyers, firstBuyersSummary }) => {
   const [isOpen, setIsOpen] = useState(true);
 
   // Get token metrics (using Codex fields if available, fallback to token-analytics)
@@ -307,14 +307,14 @@ const TokenInfoDropdown: React.FC<{ token: any; liveMarketCapUsd?: number | null
       {isOpen && (
         <div className="px-3 pb-3 space-y-2" style={{ backgroundColor: AX.bg }}>
           {/* Tax Percentage - Large Display */}
-          <div className="rounded-md p-2.5 border" style={{ backgroundColor: 'rgba(30, 31, 38, 0.3)', borderColor: AX.border }}>
+          {/* <div className="rounded-md p-2.5 border" style={{ backgroundColor: 'rgba(30, 31, 38, 0.3)', borderColor: AX.border }}>
             <div className="text-center">
               <div className="text-[12px] font-bold mb-0.5" style={{ color: AX.muted }}>
                 {token?.tax_percentage ? `${token.tax_percentage}%` : '0%'}
               </div>
               <div className="text-[10px] uppercase tracking-wide" style={{ color: AX.muted }}>Tax %</div>
             </div>
-          </div>
+          </div> */}
 
           {/* Separator Line */}
           <div className="h-px" style={{ backgroundColor: AX.border }}></div>
@@ -448,22 +448,126 @@ const TokenInfoDropdown: React.FC<{ token: any; liveMarketCapUsd?: number | null
               </div>
             </div>
 
-            {/* Sniper Holdings */}
-            <div className="rounded-md p-2 border h-[68px]" style={{ backgroundColor: 'rgba(30, 31, 38, 0.3)', borderColor: AX.border }}>
-              <div className="flex flex-col items-center justify-center gap-1 h-full">
-                <div className="flex items-center gap-1.5">
-                  <FaCrosshairs size={16} style={{ color: AX.aiGreen }} />
-                  <div className="text-[12px] font-bold" style={{ color: AX.aiGreen }}>
-                    {sniperPercent > 0 ? `${sniperPercent.toFixed(1)}%` : '0%'}
+            {/* Sniper Holdings - with first buyers hover popout */}
+            <div className="relative group/snipers h-[68px]">
+              <div className="rounded-md p-2 border cursor-pointer hover:border-[#3A3B43] transition-colors h-full" style={{ backgroundColor: 'rgba(30, 31, 38, 0.3)', borderColor: AX.border }}>
+                <div className="flex flex-col items-center justify-center gap-1 h-full">
+                  <div className="flex items-center gap-1.5">
+                    <FaCrosshairs size={16} style={{ color: AX.aiGreen }} />
+                    <div className="text-[12px] font-bold" style={{ color: AX.aiGreen }}>
+                      {sniperPercent > 0 ? `${sniperPercent.toFixed(1)}%` : '0%'}
+                    </div>
+                  </div>
+                  <div className="text-[10px] uppercase tracking-wide text-center leading-tight" style={{ color: AX.muted }}>
+                    Snipers H.
+                    {sniperCount !== undefined && (
+                      <div className="text-[9px] mt-0.5" style={{ color: AX.muted }}>({sniperCount})</div>
+                    )}
                   </div>
                 </div>
-                <div className="text-[10px] uppercase tracking-wide text-center leading-tight" style={{ color: AX.muted }}>
-                  Snipers H.
-                  {sniperCount !== undefined && (
-                    <div className="text-[9px] mt-0.5" style={{ color: AX.muted }}>({sniperCount})</div>
-                  )}
-                </div>
               </div>
+              {/* First Buyers Popout */}
+              {firstBuyersSummary && firstBuyers && firstBuyers.length > 0 && (
+                <div className="absolute right-0 top-full mt-1 z-50 opacity-0 invisible group-hover/snipers:opacity-100 group-hover/snipers:visible transition-all duration-200 pointer-events-none group-hover/snipers:pointer-events-auto">
+                  <div className="rounded-lg border shadow-xl min-w-[260px] max-w-[300px]" style={{ backgroundColor: AX.surface, borderColor: AX.border }}>
+                    {/* Header */}
+                    <div className="px-3 py-2 border-b" style={{ borderColor: AX.border }}>
+                      <div className="text-[11px] font-semibold" style={{ color: AX.text }}>
+                        {token?.symbol || token?.name || 'Token'} First {firstBuyersSummary.total} buyers
+                      </div>
+                    </div>
+                    {/* Dots grid */}
+                    <div className="px-3 pt-2 pb-1">
+                      <div className="flex flex-wrap gap-[3px]">
+                        {firstBuyers.map((buyer, i) => {
+                          const dotColor =
+                            buyer.status === 'hold' ? '#14b080' :
+                            buyer.status === 'buy_more' ? '#3b82f6' :
+                            '#f25561';
+                          const isSellAll = buyer.status === 'sell_all';
+                          return (
+                            <div
+                              key={buyer.wallet || i}
+                              className="relative"
+                              style={{ width: 14, height: 14 }}
+                              title={`${buyer.wallet.slice(0, 4)}...${buyer.wallet.slice(-4)} · ${buyer.status.replace('_', ' ')}${buyer.is_sniper ? ' · sniper' : ''}`}
+                            >
+                              <div
+                                style={{
+                                  width: 12,
+                                  height: 12,
+                                  borderRadius: '50%',
+                                  backgroundColor: isSellAll ? 'transparent' : dotColor,
+                                  border: isSellAll ? `1.5px solid ${dotColor}` : 'none',
+                                }}
+                              />
+                              {buyer.is_sniper && (
+                                <FaCrosshairs
+                                  size={7}
+                                  style={{
+                                    position: 'absolute',
+                                    top: -1,
+                                    right: -2,
+                                    color: '#fff',
+                                    filter: 'drop-shadow(0 0 1px rgba(0,0,0,0.8))',
+                                  }}
+                                />
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                    {/* Legend */}
+                    <div className="px-3 py-1.5 grid grid-cols-2 gap-x-4 gap-y-0.5">
+                      <div className="flex items-center gap-1.5">
+                        <div style={{ width: 7, height: 7, borderRadius: '50%', backgroundColor: '#14b080' }} />
+                        <span className="text-[10px]" style={{ color: AX.muted }}>Hold: {firstBuyersSummary.hold}</span>
+                      </div>
+                      <div className="flex items-center gap-1.5">
+                        <div style={{ width: 7, height: 7, borderRadius: '50%', backgroundColor: '#3b82f6' }} />
+                        <span className="text-[10px]" style={{ color: AX.muted }}>Buy More: {firstBuyersSummary.buy_more}</span>
+                      </div>
+                      <div className="flex items-center gap-1.5">
+                        <div style={{ width: 7, height: 7, borderRadius: '50%', backgroundColor: '#f25561' }} />
+                        <span className="text-[10px]" style={{ color: AX.muted }}>Sell Partial: {firstBuyersSummary.sell_partial}</span>
+                      </div>
+                      <div className="flex items-center gap-1.5">
+                        <div style={{ width: 7, height: 7, borderRadius: '50%', border: '1.5px solid #f25561', backgroundColor: 'transparent' }} />
+                        <span className="text-[10px]" style={{ color: AX.muted }}>Sell All: {firstBuyersSummary.sell_all}</span>
+                      </div>
+                    </div>
+                    {/* Stats */}
+                    <div className="px-3 py-2 border-t space-y-1" style={{ borderColor: AX.border }}>
+                      <div className="flex items-center justify-between">
+                        <span className="text-[10px]" style={{ color: AX.muted }}>Snipers Hold</span>
+                        <span className="text-[10px] font-semibold" style={{ color: AX.text }}>
+                          {firstBuyersSummary.snipers_hold_pct != null ? `${firstBuyersSummary.snipers_hold_pct.toFixed(2)}%` : '0%'}
+                        </span>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <span className="text-[10px]" style={{ color: AX.muted }}>Current Total Holdings</span>
+                        <span className="text-[10px] font-semibold" style={{ color: AX.text }}>
+                          {firstBuyersSummary.current_holdings_pct != null ? `${firstBuyersSummary.current_holdings_pct.toFixed(2)}%` : '0%'}
+                        </span>
+                      </div>
+                      {firstBuyersSummary.top10_holders_pct != null && (
+                        <div className="flex items-center justify-between">
+                          <span className="text-[10px]" style={{ color: AX.muted }}>Top 10 holders</span>
+                          <span className="text-[10px] font-semibold" style={{ color: AX.text }}>
+                            {firstBuyersSummary.top10_holders_pct.toFixed(2)}%
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                    {/* Interstate branding */}
+                    <div className="flex items-center justify-center gap-1.5 px-3 py-2 border-t" style={{ borderColor: AX.border }}>
+                      <img src="/interstate/logo.png" alt="Interstate" className="h-3.5 w-3.5 object-contain" />
+                      <span className="text-[10px] font-semibold !font-orbitron" style={{ color: AX.muted }}>interstate</span>
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
 
@@ -921,6 +1025,8 @@ interface TradeActionPanelProps {
   liveLiquidityUsd?: number | null; // Real-time liquidity from WebSocket (same source as header)
   livePriceUsd?: number | null; // Real-time USD price from chart OHLC data
   circulatingSupply?: number; // Circulating supply from /v1/supply endpoint
+  firstBuyers?: FirstBuyer[];
+  firstBuyersSummary?: FirstBuyersSummary | null;
 }
 
 const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
@@ -934,6 +1040,8 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
   liveLiquidityUsd,
   livePriceUsd,
   circulatingSupply,
+  firstBuyers,
+  firstBuyersSummary,
 }) => {
   // Live SOL price from Pyth Network (same source as footer)
   const { solPrice: liveSolPrice } = useSolPrice();
@@ -3884,7 +3992,7 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
       </div>
 
       {/* ===== Token Info ===== */}
-      <TokenInfoDropdown token={token} liveMarketCapUsd={liveMarketCapUsd} />
+      <TokenInfoDropdown token={token} liveMarketCapUsd={liveMarketCapUsd} firstBuyers={firstBuyers} firstBuyersSummary={firstBuyersSummary} />
 
       {/* ===== Pool Info Section ===== */}
       <PoolInfoSection token={token} liveMarketCapUsd={liveMarketCapUsd} liveLiquidityUsd={liveLiquidityUsd} />

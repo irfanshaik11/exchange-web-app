@@ -415,7 +415,7 @@ export default function TradePage() {
     enabled: !!resolvedTokenMint,
   });
   // Destructure for local use in this component
-  const { holderSummary, topTraders: wsTopTraders, trades: wsHistoricalTrades, tokenInfo: wsTokenInfo, volume: wsVolume, similarTokens: wsSimilarTokens } = wsData;
+  const { holderSummary, topTraders: wsTopTraders, trades: wsHistoricalTrades, tokenInfo: wsTokenInfo, volume: wsVolume, similarTokens: wsSimilarTokens, firstBuyers: wsFirstBuyers, firstBuyersSummary: wsFirstBuyersSummary } = wsData;
 
   const displayToken = React.useMemo(() => {
     // Start with optimistic data from URL query params (instant display)
@@ -1247,6 +1247,8 @@ export default function TradePage() {
                   liveLiquidityUsd={wsTokenInfo?.liquidity_usd}
                   livePriceUsd={validChartMetrics.lastPriceUsd}
                   circulatingSupply={circulatingSupply}
+                  firstBuyers={wsFirstBuyers}
+                  firstBuyersSummary={wsFirstBuyersSummary}
                 />
               </div>
 
@@ -1317,6 +1319,8 @@ export default function TradePage() {
                 liveLiquidityUsd={wsTokenInfo?.liquidity_usd}
                 livePriceUsd={validChartMetrics.lastPriceUsd}
                 circulatingSupply={circulatingSupply}
+                firstBuyers={wsFirstBuyers}
+                firstBuyersSummary={wsFirstBuyersSummary}
               />
             </div>
           </div>
