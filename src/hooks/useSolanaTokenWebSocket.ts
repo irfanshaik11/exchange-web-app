@@ -96,6 +96,28 @@ export interface SolanaDevToken {
   created_at: string;
 }
 
+// First buyer from the unified WebSocket snapshot
+export interface FirstBuyer {
+  wallet: string;
+  status: 'hold' | 'buy_more' | 'sell_partial' | 'sell_all';
+  is_sniper: boolean;
+  buy_count?: number;
+  sell_count?: number;
+  remaining_pct?: number;
+}
+
+// First buyers summary from the unified WebSocket snapshot
+export interface FirstBuyersSummary {
+  hold: number;
+  buy_more: number;
+  sell_partial: number;
+  sell_all: number;
+  total: number;
+  snipers_hold_pct: number;
+  current_holdings_pct: number;
+  top10_holders_pct?: number;
+}
+
 // Token info from the unified WebSocket snapshot
 export interface SolanaTokenInfo {
   mint: string;
@@ -160,6 +182,8 @@ interface WebSocketMessage {
     token?: SolanaTokenInfo | null;
     volume?: SolanaTokenVolume | null;
     similar_tokens?: SimilarTokenWS[] | null;
+    first_buyers?: FirstBuyer[] | null;
+    first_buyers_summary?: FirstBuyersSummary | null;
   };
   timestamp: string;
 }
@@ -183,6 +207,8 @@ interface UseSolanaTokenWebSocketReturn {
   topTraders: SolanaTopTrader[];
   devTokens: SolanaDevToken[];
   holderSummary: HolderSummary | null;
+  firstBuyers: FirstBuyer[];
+  firstBuyersSummary: FirstBuyersSummary | null;
   tokenInfo: SolanaTokenInfo | null;
   volume: SolanaTokenVolume | null;
   similarTokens: SimilarTokenWS[];
@@ -317,6 +343,8 @@ export function useSolanaTokenWebSocket(
   const [topTraders, setTopTraders] = useState<SolanaTopTrader[]>([]);
   const [devTokens, setDevTokens] = useState<SolanaDevToken[]>([]);
   const [holderSummary, setHolderSummary] = useState<HolderSummary | null>(null);
+  const [firstBuyers, setFirstBuyers] = useState<FirstBuyer[]>([]);
+  const [firstBuyersSummary, setFirstBuyersSummary] = useState<FirstBuyersSummary | null>(null);
   const [tokenInfo, setTokenInfo] = useState<SolanaTokenInfo | null>(null);
   const [volume, setVolume] = useState<SolanaTokenVolume | null>(null);
   const [similarTokens, setSimilarTokens] = useState<SimilarTokenWS[]>([]);
@@ -447,6 +475,22 @@ export function useSolanaTokenWebSocket(
               setHolderSummary(normalized);
             } else {
               setHolderSummary(null);
+            }
+
+            // Capture first_buyers from snapshot
+            if (message.data.first_buyers && message.data.first_buyers.length > 0) {
+              if (isDev) console.log('[useSolanaTokenWebSocket] Received first_buyers:', message.data.first_buyers.length);
+              setFirstBuyers(message.data.first_buyers);
+            } else {
+              setFirstBuyers([]);
+            }
+
+            // Capture first_buyers_summary from snapshot
+            if (message.data.first_buyers_summary) {
+              if (isDev) console.log('[useSolanaTokenWebSocket] Received first_buyers_summary:', message.data.first_buyers_summary);
+              setFirstBuyersSummary(message.data.first_buyers_summary);
+            } else {
+              setFirstBuyersSummary(null);
             }
 
             // Capture token info from snapshot (price, mcap, liquidity, uri)
@@ -898,6 +942,8 @@ export function useSolanaTokenWebSocket(
     topTraders,
     devTokens,
     holderSummary,
+    firstBuyers,
+    firstBuyersSummary,
     tokenInfo: safeTokenInfo,
     volume,
     similarTokens,
