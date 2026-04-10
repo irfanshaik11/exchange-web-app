@@ -594,3 +594,42 @@ export async function getReferralTree(
 ): Promise<{ directReferrals: any[]; tierCounts: number[]; totalCount: number }> {
   return fetchWithAuth('/api/referrals/tree', bearerToken);
 }
+
+// ============================================================
+// SOCIAL QUESTS (Snag-powered)
+// ============================================================
+
+export interface SocialStatus {
+  configured: boolean;
+  connections: {
+    twitter: boolean;
+    telegram: boolean;
+    twitterUser?: string;
+    telegramUsername?: string;
+  };
+  ruleCompletion: Record<string, boolean>;
+}
+
+export async function getSocialStatus(bearerToken: string): Promise<SocialStatus> {
+  return fetchWithAuth<SocialStatus>('/api/arena/social/status', bearerToken);
+}
+
+export async function connectSocial(
+  bearerToken: string,
+  platform: 'twitter' | 'telegram'
+): Promise<{ connected: boolean; oauthUrl?: string; platform: string }> {
+  return fetchWithAuth(`/api/arena/social/connect/${platform}`, bearerToken, {
+    method: 'POST',
+  });
+}
+
+export async function verifySocialQuest(
+  bearerToken: string,
+  questId: string
+): Promise<{ verified: boolean; quest?: Quest; message?: string }> {
+  return fetchWithAuth('/api/arena/social/verify', bearerToken, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ questId }),
+  });
+}

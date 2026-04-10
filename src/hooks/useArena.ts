@@ -29,6 +29,9 @@ import {
   getRewardHistory,
   getReferralQuests,
   getReferralTree,
+  getSocialStatus,
+  connectSocial,
+  verifySocialQuest,
   type ArenaStats,
   type QuestsResponse,
   type CashbackSummary,
@@ -42,6 +45,7 @@ import {
   type HonorsInfo,
   type ReferralReward,
   type ReferralQuest,
+  type SocialStatus,
 } from '~/utils/arenaApi';
 
 // ============================================================
@@ -468,4 +472,62 @@ export function useLeaderboardPageData(
       top3.refetch();
     },
   };
+}
+
+// ============================================================
+// SOCIAL QUEST HOOKS (Snag-powered)
+// ============================================================
+
+export function useSocialStatus() {
+  const { user } = useUser();
+
+  return useQuery({
+    queryKey: ['arena', 'social-status', user?.id],
+    queryFn: () => getSocialStatus(user!.bearerToken),
+    enabled: !!user?.bearerToken,
+    staleTime: 30 * 1000,
+    refetchOnMount: true,
+    refetchOnWindowFocus: true,
+  });
+}
+
+export function useConnectSocial() {
+  const { user } = useUser();
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (platform: 'twitter' | 'telegram') =>
+      connectSocial(user!.bearerToken, platform),
+    onSuccess: (data) => {
+      if (data.connected) {
+        queryClient.invalidateQueries({ queryKey: ['arena', 'social-status'] });
+        queryClient.invalidateQueries({ queryKey: ['arena', 'quests'] });
+        toast.success(`${data.platform === 'twitter' ? 'X' : 'Telegram'} account connected!`);
+      }
+      // If oauthUrl is returned, the component handles the redirect
+    },
+    onError: (error: Error) => {
+      toast.error(error.message || 'Failed to connect account');
+    },
+  });
+}
+
+export function useVerifySocialQuest() {
+  const { user } = useUser();
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (questId: string) =>
+      verifySocialQuest(user!.bearerToken, questId),
+    onSuccess: (data) => {
+      if (data.verified) {
+        queryClient.invalidateQueries({ queryKey: ['arena', 'quests'] });
+        queryClient.invalidateQueries({ queryKey: ['arena', 'social-status'] });
+        toast.success(data.message || 'Task verified! Claim your gold.');
+      }
+    },
+    onError: (error: Error) => {
+      toast.error(error.message || 'Verification failed — did you complete the task?');
+    },
+  });
 }

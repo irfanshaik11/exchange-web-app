@@ -17,6 +17,7 @@ import Footer from '~/components/Footer';
 import { DockedPanelMarginWrapper } from '~/contexts/DockedPanelContext';
 import { useUser } from '~/components/UserContext';
 import { useArenaStats, useQuests, useCashbackSummary, useClaimCashback } from '~/hooks/useArena';
+import SocialQuestsSection from '~/components/arena/quests/SocialQuestsSection';
 import { claimAllQuests } from '~/utils/arenaApi';
 import { useQueryClient } from '@tanstack/react-query';
 import { toast } from 'react-hot-toast';
@@ -695,6 +696,7 @@ export default function ArenaPage() {
   // Use real API data only — no mocks so empty state messages show when quests haven't been earned yet
   const dailyQuests = (questsData as any)?.grouped?.daily || [];
   const seasonalQuests = (questsData as any)?.grouped?.seasonal || [];
+  const socialQuests = (questsData as any)?.grouped?.special || [];
 
   // Calculate pending gold from completed but unclaimed quests
   const allQuests = (questsData as any)?.quests || [];
@@ -1012,6 +1014,14 @@ export default function ArenaPage() {
 
                 {/* Right: Quests */}
                 <div className="flex-1 p-6">
+                  {/* Social Quests — Standalone card above trade quests */}
+                  {socialQuests.length > 0 && (
+                    <SocialQuestsSection
+                      quests={socialQuests}
+                      goldMultiplier={displayMultiplier}
+                    />
+                  )}
+
                   {/* Daily Quests */}
                   <div className="mb-6">
                     <div className="flex items-center justify-between mb-4">
