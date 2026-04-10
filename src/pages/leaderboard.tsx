@@ -186,15 +186,15 @@ export default function LeaderboardPage() {
 
   const faqs = [
     { q: 'How Does The Leaderboard Work?', a: 'The leaderboard ranks users by Credits earned (Credits Leaderboard) or quests completed (Quest Leaderboard). Rankings reset daily at midnight UTC for daily boards and on the 1st of each month for monthly boards.' },
-    { q: 'Want to keep it stealth?', a: 'Enable anonymous mode in your Outpost settings to hide your username on the leaderboard. Your stats will still count, but others will see ******* instead of your name.' },
-    { q: 'How Are Credits Calculated?', a: 'Credits are earned through trading activity, quest completion, trading streaks, and rank-up bonuses. Your Credits multiplier increases with your Outpost rank.' },
+    { q: 'Want to keep it stealth?', a: 'Enable anonymous mode in your Airdrop Genesis settings to hide your username on the leaderboard. Your stats will still count, but others will see ******* instead of your name.' },
+    { q: 'How Are Credits Calculated?', a: 'Credits are earned through trading activity, quest completion, trading streaks, and rank-up bonuses. Your Credits multiplier increases with your Airdrop Genesis rank.' },
   ];
 
   return (
     <>
       <Head>
-        <title>Leaderboard | Interstate Outpost</title>
-        <meta name="description" content="Compete for Credits prizes on the Interstate Outpost leaderboard." />
+        <title>Leaderboard | Interstate Airdrop Genesis</title>
+        <meta name="description" content="Compete for Credits prizes on the Interstate Airdrop Genesis leaderboard." />
       </Head>
 
       <div className="min-h-screen bg-black">
@@ -493,7 +493,7 @@ export default function LeaderboardPage() {
                     <tr className="border-b border-neutral-800">
                       <th className="text-left py-3 px-4 text-neutral-500 text-sm font-medium">Place</th>
                       <th className="text-left py-3 px-4 text-neutral-500 text-sm font-medium">User</th>
-                      <th className="text-left py-3 px-4 text-neutral-500 text-sm font-medium">Outpost Rank</th>
+                      <th className="text-left py-3 px-4 text-neutral-500 text-sm font-medium">Airdrop Genesis Rank</th>
                       {type === 'gold' ? (
                         <>
                           <th className="text-left py-3 px-4 text-neutral-500 text-sm font-medium">SOL Earned</th>
@@ -652,7 +652,7 @@ export default function LeaderboardPage() {
               <div className="mb-4">
                 <h2 className="text-white font-bold text-lg">FAQs</h2>
                 <p className="text-neutral-500 text-sm">
-                  More Questions? <a href="#" className="text-white underline hover:no-underline">Chat with Support</a> or <a href="/outpost" className="text-white underline hover:no-underline">View Outpost Intro</a>
+                  More Questions? <a href="#" className="text-white underline hover:no-underline">Chat with Support</a> or <a href="/airdrop-genesis" className="text-white underline hover:no-underline">View Airdrop Genesis Intro</a>
                 </p>
               </div>
 

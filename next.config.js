@@ -159,7 +159,12 @@ const config = {
       },
       {
         source: "/arena",
-        destination: "/outpost",
+        destination: "/airdrop-genesis",
+        permanent: true,
+      },
+      {
+        source: "/outpost",
+        destination: "/airdrop-genesis",
         permanent: true,
       },
     ];
