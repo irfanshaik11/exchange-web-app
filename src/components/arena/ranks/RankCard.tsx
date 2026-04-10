@@ -125,7 +125,7 @@ export default function RankCard({
               <GiCrown className="w-8 h-8 text-yellow-400" />
             </div>
             <p className={`${colors.text} font-bold mt-2`}>Maximum Rank Achieved!</p>
-            <p className="text-neutral-400 text-sm">You've reached the pinnacle of the Outpost</p>
+            <p className="text-neutral-400 text-sm">You've reached the pinnacle of Airdrop Genesis</p>
           </div>
         )}
       </div>

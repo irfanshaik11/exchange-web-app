@@ -316,7 +316,7 @@ export default function ReferralsPage() {
   if (!user) {
     return (
       <>
-        <Head><title>Referrals | Interstate Outpost</title></Head>
+        <Head><title>Referrals | Interstate Airdrop Genesis</title></Head>
         <div className="min-h-screen bg-black">
           <Header />
           {/* Outer padding wrapper - uniform padding on all sides */}
@@ -347,7 +347,7 @@ export default function ReferralsPage() {
   return (
     <>
       <Head>
-        <title>Referrals | Interstate Outpost</title>
+        <title>Referrals | Interstate Airdrop Genesis</title>
         <meta name="description" content="Build your trading network and earn SOL from 5 layers of referrals." />
       </Head>
 
@@ -1362,7 +1362,7 @@ export default function ReferralsPage() {
               <div className="mb-4">
                 <h2 className="text-white font-bold text-lg">Referral FAQs</h2>
                 <p className="text-neutral-500 text-sm">
-                  More Questions? <a href="#" className="text-white underline hover:no-underline">Chat with Support</a> or <a href="/outpost" className="text-white underline hover:no-underline">View Outpost Intro</a>
+                  More Questions? <a href="#" className="text-white underline hover:no-underline">Chat with Support</a> or <a href="/airdrop-genesis" className="text-white underline hover:no-underline">View Airdrop Genesis Intro</a>
                 </p>
               </div>
 

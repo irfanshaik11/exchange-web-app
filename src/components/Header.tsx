@@ -143,7 +143,7 @@ const navLinks = [
   { name: "Trenches", href: "/pulse" },
   { name: "Trending", href: "/discover" },
   { name: "Predictions", href: "/predictions" },
-  { name: "Rewards", href: "/outpost" },
+  { name: "Airdrop", href: "/airdrop-genesis" },
   { name: "Portfolio", href: "/portfolio" },
   // { name: "Trackers", href: "/trackers" },
   // { name: "Perpetuals", href: "/perpetuals" },
@@ -1888,8 +1888,8 @@ export default function Header({
                     router.pathname === link.href ||
                     (link.name === "Trenches" &&
                       router.pathname.startsWith("/trade/")) ||
-                    (link.name === "Rewards" &&
-                      (router.pathname === "/outpost" ||
+                    (link.name === "Airdrop" &&
+                      (router.pathname === "/airdrop-genesis" ||
                         router.pathname === "/referrals"));
                   return (
                     <Link
@@ -3214,8 +3214,8 @@ export default function Header({
                   router.pathname === link.href ||
                   (link.name === "Trenches" &&
                     router.pathname.startsWith("/trade/")) ||
-                  (link.name === "Rewards" &&
-                    (router.pathname === "/outpost" ||
+                  (link.name === "Airdrop" &&
+                    (router.pathname === "/airdrop-genesis" ||
                       router.pathname === "/referrals"));
                 return (
                   <Link
