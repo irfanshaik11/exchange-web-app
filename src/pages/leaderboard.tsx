@@ -132,8 +132,12 @@ export default function LeaderboardPage() {
   const totalEntries = leaderboard.data?.total || 0;
   const totalPages = Math.ceil(totalEntries / pageSize);
 
+  // Display label — "Credits" matches the terminology used everywhere
+  // else in the Airdrop Genesis umbrella (even though the backend API
+  // path is /api/leaderboard/points and the storage column is goldEarned,
+  // the user-facing word across the product is Credits).
   const categoryLabel = {
-    points: "Points",
+    points: "Credits",
     pnl: "Realized PnL",
     volume: "Volume",
   }[type];
@@ -254,7 +258,7 @@ export default function LeaderboardPage() {
                     <div className="inline-flex items-center rounded-full bg-[#1a1b1f] p-1">
                       {(
                         [
-                          { key: "points", label: "Points" },
+                          { key: "points", label: "Credits" },
                           { key: "pnl", label: "Realized PnL" },
                           { key: "volume", label: "Volume" },
                         ] as const
