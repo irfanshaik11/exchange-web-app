@@ -154,11 +154,13 @@ export default function LeaderboardPage() {
   }, [period]);
 
   const top3Data: LeaderboardEntry[] = top3.data ?? [];
-  const leaderboardEntries: LeaderboardEntry[] = leaderboard.data?.entries ?? [];
+  const leaderboardEntries: LeaderboardEntry[] =
+    leaderboard.data?.entries ?? [];
   const totalEntries = leaderboard.data?.total ?? 0;
   const totalPages = Math.ceil(totalEntries / pageSize);
 
-  const isInitialLoading = leaderboard.isLoading && leaderboardEntries.length === 0;
+  const isInitialLoading =
+    leaderboard.isLoading && leaderboardEntries.length === 0;
   const isLeaderboardError = leaderboard.isError;
   const isTop3Loading = top3.isLoading && top3Data.length === 0;
 
@@ -391,7 +393,11 @@ export default function LeaderboardPage() {
                       const initial = (displayName[0] || "?").toUpperCase();
                       const value = getEntryValue(entry);
                       const rankLabel =
-                        podiumRank === 1 ? "1st" : podiumRank === 2 ? "2nd" : "3rd";
+                        podiumRank === 1
+                          ? "1st"
+                          : podiumRank === 2
+                            ? "2nd"
+                            : "3rd";
                       const rankAccent =
                         podiumRank === 1
                           ? "text-amber-400 bg-amber-500/10 border-amber-500/30"
