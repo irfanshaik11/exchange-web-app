@@ -16,12 +16,30 @@ import { DockedPanelMarginWrapper } from "~/contexts/DockedPanelContext";
 import { useUser } from "~/components/UserContext";
 import { useLeaderboardPageData } from "~/hooks/useArena";
 import ArenaPageToggle from "~/components/ArenaPageToggle";
+import type { LeaderboardEntry } from "~/utils/arenaApi";
 
 import { GiTrophy } from "react-icons/gi";
-import { FiSearch, FiChevronLeft, FiChevronRight } from "react-icons/fi";
+import {
+  FiSearch,
+  FiChevronLeft,
+  FiChevronRight,
+  FiAlertCircle,
+} from "react-icons/fi";
 
 type LeaderboardType = "points" | "pnl" | "volume";
 type LeaderboardPeriod = "DAILY" | "MONTHLY" | "LIFETIME";
+
+// A small hook for debouncing a value by N milliseconds. Used to throttle
+// the search-as-you-type input so every keystroke doesn't fire a fresh
+// backend request and spawn a new React Query cache entry.
+function useDebouncedValue<T>(value: T, delayMs: number): T {
+  const [debounced, setDebounced] = useState(value);
+  useEffect(() => {
+    const t = setTimeout(() => setDebounced(value), delayMs);
+    return () => clearTimeout(t);
+  }, [value, delayMs]);
+  return debounced;
+}
 
 // Shared space background — matches airdrop-genesis.tsx + referrals.tsx
 const SpaceBackgroundContained = () => (
@@ -102,15 +120,23 @@ export default function LeaderboardPage() {
   const [type, setType] = useState<LeaderboardType>("points");
   const [period, setPeriod] = useState<LeaderboardPeriod>("DAILY");
   const [page, setPage] = useState(1);
-  const [search, setSearch] = useState("");
+  // Uncontrolled input text — debounced below before flowing into the query
+  // so every keystroke doesn't fire a fresh backend request.
+  const [searchInput, setSearchInput] = useState("");
+  const debouncedSearch = useDebouncedValue(searchInput, 300);
   const pageSize = 50;
 
   useEffect(() => setMounted(true), []);
 
+  // Reset to the first page whenever the debounced search term changes.
+  useEffect(() => {
+    setPage(1);
+  }, [debouncedSearch]);
+
   const { leaderboard, position, top3 } = useLeaderboardPageData(type, period, {
     limit: pageSize,
     offset: (page - 1) * pageSize,
-    search: search || undefined,
+    search: debouncedSearch || undefined,
   });
 
   const nextResetTime = useMemo(() => {
@@ -127,10 +153,14 @@ export default function LeaderboardPage() {
       : new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1));
   }, [period]);
 
-  const top3Data = (top3.data || []) as any[];
-  const leaderboardEntries = (leaderboard.data?.entries || []) as any[];
-  const totalEntries = leaderboard.data?.total || 0;
+  const top3Data: LeaderboardEntry[] = top3.data ?? [];
+  const leaderboardEntries: LeaderboardEntry[] = leaderboard.data?.entries ?? [];
+  const totalEntries = leaderboard.data?.total ?? 0;
   const totalPages = Math.ceil(totalEntries / pageSize);
+
+  const isInitialLoading = leaderboard.isLoading && leaderboardEntries.length === 0;
+  const isLeaderboardError = leaderboard.isError;
+  const isTop3Loading = top3.isLoading && top3Data.length === 0;
 
   // Display label — "Credits" matches the terminology used everywhere
   // else in the Airdrop Genesis umbrella (even though the backend API
@@ -142,7 +172,7 @@ export default function LeaderboardPage() {
     volume: "Volume",
   }[type];
 
-  const getEntryValue = (entry: any): number => {
+  const getEntryValue = (entry: LeaderboardEntry | undefined): number => {
     if (!entry) return 0;
     if (type === "points") return Number(entry.points ?? entry.goldEarned ?? 0);
     if (type === "pnl") return Number(entry.pnl ?? 0);
@@ -321,7 +351,25 @@ export default function LeaderboardPage() {
                 </div>
 
                 {/* Top 3 Podium — three equal cards matching airdrop-genesis surface style */}
-                {top3Data.length >= 3 && (
+                {isTop3Loading ? (
+                  <div className="mb-6 grid grid-cols-1 gap-4 md:grid-cols-3">
+                    {[0, 1, 2].map((i) => (
+                      <div
+                        key={`podium-skeleton-${i}`}
+                        className="flex items-center gap-4 rounded-xl border border-white/[0.08] bg-white/[0.04] px-5 py-4 backdrop-blur-sm"
+                      >
+                        <div className="h-12 w-12 flex-shrink-0 animate-pulse rounded-full bg-white/[0.08]" />
+                        <div className="flex-1 space-y-2">
+                          <div className="h-3 w-12 animate-pulse rounded bg-white/[0.08]" />
+                          <div className="h-4 w-28 animate-pulse rounded bg-white/[0.08]" />
+                          <div className="h-3 w-20 animate-pulse rounded bg-white/[0.08]" />
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : null}
+
+                {!isTop3Loading && top3Data.length >= 3 && (
                   <div
                     className={`mb-6 grid grid-cols-1 gap-4 transition-all delay-200 duration-700 md:grid-cols-3 ${
                       mounted
@@ -332,19 +380,22 @@ export default function LeaderboardPage() {
                     {[0, 1, 2].map((podiumIdx) => {
                       const entry = top3Data[podiumIdx];
                       if (!entry) return null;
-                      const position = podiumIdx + 1;
-                      const isFirst = position === 1;
+                      // Renamed from `position` to avoid shadowing the outer
+                      // `position` from useLeaderboardPageData which is read
+                      // in the Your Position bar below.
+                      const podiumRank = podiumIdx + 1;
+                      const isFirst = podiumRank === 1;
                       const displayName = entry.isAnonymous
                         ? "•••••••"
                         : entry.userName || "---";
                       const initial = (displayName[0] || "?").toUpperCase();
                       const value = getEntryValue(entry);
                       const rankLabel =
-                        position === 1 ? "1st" : position === 2 ? "2nd" : "3rd";
+                        podiumRank === 1 ? "1st" : podiumRank === 2 ? "2nd" : "3rd";
                       const rankAccent =
-                        position === 1
+                        podiumRank === 1
                           ? "text-amber-400 bg-amber-500/10 border-amber-500/30"
-                          : position === 2
+                          : podiumRank === 2
                             ? "text-neutral-300 bg-white/[0.04] border-white/[0.12]"
                             : "text-amber-700 bg-amber-900/15 border-amber-800/30";
 
@@ -442,11 +493,9 @@ export default function LeaderboardPage() {
                       <input
                         type="text"
                         placeholder="Search trader…"
-                        value={search}
-                        onChange={(e) => {
-                          setSearch(e.target.value);
-                          setPage(1);
-                        }}
+                        value={searchInput}
+                        onChange={(e) => setSearchInput(e.target.value)}
+                        aria-label="Search traders by name"
                         className="w-full rounded-full border border-white/[0.08] bg-white/[0.04] py-2 pr-4 pl-9 text-[12px] text-white placeholder-neutral-500 focus:border-white/[0.2] focus:outline-none"
                       />
                     </div>
@@ -461,8 +510,42 @@ export default function LeaderboardPage() {
 
                   {/* Rows */}
                   <div>
-                    {leaderboardEntries.length > 0 ? (
-                      leaderboardEntries.map((entry: any, idx: number) => {
+                    {isLeaderboardError ? (
+                      // Error state — surfaces the query failure with a retry
+                      // affordance rather than a silent empty list.
+                      <div className="px-5 py-12 text-center">
+                        <FiAlertCircle className="mx-auto mb-3 h-6 w-6 text-rose-400" />
+                        <p className="text-sm text-white">
+                          Couldn&apos;t load the leaderboard.
+                        </p>
+                        <p className="mt-1 text-[12px] text-neutral-500">
+                          {(leaderboard.error as Error | null)?.message ??
+                            "Please try again."}
+                        </p>
+                        <button
+                          onClick={() => leaderboard.refetch()}
+                          className="mt-4 rounded-full border border-white/[0.12] bg-white/[0.06] px-4 py-1.5 text-[12px] font-medium text-white hover:bg-white/[0.1]"
+                        >
+                          Retry
+                        </button>
+                      </div>
+                    ) : isInitialLoading ? (
+                      // Skeleton rows while the first request is in flight.
+                      Array.from({ length: 8 }).map((_, idx) => (
+                        <div
+                          key={`skeleton-${idx}`}
+                          className="grid grid-cols-[48px_1fr_auto] items-center gap-4 border-b border-white/[0.04] px-5 py-3"
+                        >
+                          <div className="h-3 w-6 animate-pulse rounded bg-white/[0.06]" />
+                          <div className="flex items-center gap-3">
+                            <div className="h-8 w-8 animate-pulse rounded-full bg-white/[0.06]" />
+                            <div className="h-3 w-32 animate-pulse rounded bg-white/[0.06]" />
+                          </div>
+                          <div className="ml-auto h-3 w-16 animate-pulse rounded bg-white/[0.06]" />
+                        </div>
+                      ))
+                    ) : leaderboardEntries.length > 0 ? (
+                      leaderboardEntries.map((entry, idx) => {
                         const pos = (page - 1) * pageSize + idx + 1;
                         const displayName = entry.isAnonymous
                           ? "•••••••"
@@ -495,7 +578,8 @@ export default function LeaderboardPage() {
                                 {initial}
                               </div>
                               <span className="truncate text-[13px] font-medium text-white">
-                                @{displayName}
+                                {entry.isAnonymous ? "" : "@"}
+                                {displayName}
                               </span>
                             </div>
 
@@ -511,7 +595,9 @@ export default function LeaderboardPage() {
                       })
                     ) : (
                       <div className="px-5 py-12 text-center text-sm text-neutral-500">
-                        No traders found.
+                        {debouncedSearch
+                          ? `No traders match "${debouncedSearch}".`
+                          : "No traders found."}
                       </div>
                     )}
                   </div>

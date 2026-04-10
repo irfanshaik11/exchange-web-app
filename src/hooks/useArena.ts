@@ -4,7 +4,12 @@
  * Custom hooks for interacting with the Arena gamification system.
  */
 
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import {
+  useQuery,
+  useMutation,
+  useQueryClient,
+  keepPreviousData,
+} from "@tanstack/react-query";
 import { useCallback } from "react";
 import { toast } from "react-hot-toast";
 import { useUser } from "~/components/UserContext";
@@ -214,9 +219,17 @@ export function useSetAnonymousMode() {
 // LEADERBOARD HOOKS
 // ============================================================
 
+// Consistent casing across every leaderboard hook: lowercase category
+// (matches the URL path segment convention) and uppercase period (matches
+// the UI state type used on the leaderboard page). This removes the
+// asymmetric `.toUpperCase()` / `.toLowerCase()` casts that previously lived
+// inside useLeaderboardPageData.
+export type LeaderboardCategory = "points" | "pnl" | "volume";
+export type LeaderboardPeriod = "DAILY" | "MONTHLY" | "LIFETIME";
+
 export function useLeaderboard(
-  type: "points" | "pnl" | "volume",
-  period: "DAILY" | "MONTHLY" | "LIFETIME",
+  type: LeaderboardCategory,
+  period: LeaderboardPeriod,
   options: { limit?: number; offset?: number; search?: string } = {},
 ) {
   return useQuery({
@@ -224,12 +237,16 @@ export function useLeaderboard(
     queryFn: () => getLeaderboard(type, period, options),
     staleTime: 30 * 1000,
     refetchInterval: 60 * 1000,
+    // Keep the previous page visible while the next one is in flight so
+    // tab switches / pagination / debounced search don't flash an empty
+    // state between requests.
+    placeholderData: keepPreviousData,
   });
 }
 
 export function useUserLeaderboardPosition(
-  type: "POINTS" | "PNL" | "VOLUME",
-  period: "DAILY" | "MONTHLY" | "LIFETIME",
+  type: LeaderboardCategory,
+  period: LeaderboardPeriod,
 ) {
   const { user } = useUser();
 
@@ -239,6 +256,7 @@ export function useUserLeaderboardPosition(
     enabled: !!user?.bearerToken,
     staleTime: 30 * 1000,
     refetchInterval: 60 * 1000,
+    placeholderData: keepPreviousData,
   });
 }
 
@@ -254,15 +272,13 @@ export function useAllUserPositions() {
   });
 }
 
-export function useTop3(
-  type: "points" | "pnl" | "volume",
-  period: "daily" | "monthly" | "lifetime",
-) {
+export function useTop3(type: LeaderboardCategory, period: LeaderboardPeriod) {
   return useQuery({
     queryKey: ["leaderboard", "top3", type, period],
     queryFn: () => getTop3(type, period),
     staleTime: 30 * 1000,
     refetchInterval: 60 * 1000,
+    placeholderData: keepPreviousData,
   });
 }
 
@@ -460,19 +476,13 @@ export function useReferralsPageData() {
  * Combined hook for the Leaderboard page
  */
 export function useLeaderboardPageData(
-  type: "points" | "pnl" | "volume",
-  period: "DAILY" | "MONTHLY" | "LIFETIME",
+  type: LeaderboardCategory,
+  period: LeaderboardPeriod,
   options: { limit?: number; offset?: number; search?: string } = {},
 ) {
   const leaderboard = useLeaderboard(type, period, options);
-  const position = useUserLeaderboardPosition(
-    type.toUpperCase() as "POINTS" | "PNL" | "VOLUME",
-    period,
-  );
-  const top3 = useTop3(
-    type,
-    period.toLowerCase() as "daily" | "monthly" | "lifetime",
-  );
+  const position = useUserLeaderboardPosition(type, period);
+  const top3 = useTop3(type, period);
 
   return {
     leaderboard,

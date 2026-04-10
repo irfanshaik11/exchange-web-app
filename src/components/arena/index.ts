@@ -21,7 +21,6 @@ export { default as QuestCard, QuestRow } from './quests/QuestCard';
 export { default as QuestList, DailyQuestsSection, SeasonalQuestsSection, ReferralQuestsSection } from './quests/QuestList';
 
 // Leaderboard Components
-export { default as LeaderboardTable } from './leaderboard/LeaderboardTable';
 export { default as LeaderboardPodium, CompactPodium } from './leaderboard/LeaderboardPodium';
 export { default as UserPositionBar, CompactUserPosition } from './leaderboard/UserPositionBar';
 

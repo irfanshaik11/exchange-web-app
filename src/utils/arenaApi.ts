@@ -311,9 +311,7 @@ export async function getCashbackSummary(
   return fetchWithAuth<CashbackSummary>("/api/arena/cashback", bearerToken);
 }
 
-export async function claimCashback(
-  bearerToken: string,
-): Promise<{
+export async function claimCashback(bearerToken: string): Promise<{
   success: boolean;
   amountClaimed: number;
   txSignature?: string;
@@ -395,9 +393,11 @@ export async function getLeaderboard(
 
 export async function getUserPosition(
   bearerToken: string,
-  type: "POINTS" | "PNL" | "VOLUME",
+  type: "points" | "pnl" | "volume",
   period: "DAILY" | "MONTHLY" | "LIFETIME",
 ): Promise<UserPosition> {
+  // Backend parses category case-insensitively — lowercase keeps the API
+  // layer consistent with getLeaderboard / getTop3 URL conventions.
   const params = new URLSearchParams({ category: type, period });
   return fetchWithAuth<UserPosition>(
     `/api/leaderboard/position?${params.toString()}`,
@@ -423,10 +423,12 @@ export async function getAllUserPositions(bearerToken: string): Promise<{
 
 export async function getTop3(
   type: "points" | "pnl" | "volume",
-  period: "daily" | "monthly" | "lifetime",
+  period: "DAILY" | "MONTHLY" | "LIFETIME",
 ): Promise<LeaderboardEntry[]> {
+  // URL path segment is conventionally lowercase; backend parses
+  // case-insensitively but we normalize here at the client boundary.
   const response = await fetch(
-    `${getBaseUrl()}/api/leaderboard/top3/${type}/${period}`,
+    `${getBaseUrl()}/api/leaderboard/top3/${type}/${period.toLowerCase()}`,
   );
   const data = await response.json();
   return data.data.podium;
@@ -625,9 +627,7 @@ export interface ReferralQuest {
   isComplete: boolean;
 }
 
-export async function getReferralQuests(
-  bearerToken: string,
-): Promise<{
+export async function getReferralQuests(bearerToken: string): Promise<{
   quests: ReferralQuest[];
   currentHonorsLevel: number;
   currentHonorsName: string;
@@ -639,9 +639,7 @@ export async function getReferralQuests(
 /**
  * Get referral tree structure for visualization
  */
-export async function getReferralTree(
-  bearerToken: string,
-): Promise<{
+export async function getReferralTree(bearerToken: string): Promise<{
   directReferrals: any[];
   tierCounts: number[];
   totalCount: number;
