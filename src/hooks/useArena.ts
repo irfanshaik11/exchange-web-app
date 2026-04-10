@@ -4,10 +4,10 @@
  * Custom hooks for interacting with the Arena gamification system.
  */
 
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { useCallback } from 'react';
-import { toast } from 'react-hot-toast';
-import { useUser } from '~/components/UserContext';
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useCallback } from "react";
+import { toast } from "react-hot-toast";
+import { useUser } from "~/components/UserContext";
 import {
   getArenaStats,
   getQuests,
@@ -42,7 +42,7 @@ import {
   type HonorsInfo,
   type ReferralReward,
   type ReferralQuest,
-} from '~/utils/arenaApi';
+} from "~/utils/arenaApi";
 
 // ============================================================
 // ARENA STATS HOOK
@@ -52,7 +52,7 @@ export function useArenaStats() {
   const { user } = useUser();
 
   return useQuery({
-    queryKey: ['arena', 'stats', user?.id],
+    queryKey: ["arena", "stats", user?.id],
     queryFn: () => getArenaStats(user!.bearerToken),
     enabled: !!user?.bearerToken,
     staleTime: 30 * 1000,
@@ -66,11 +66,13 @@ export function useArenaStats() {
 // QUESTS HOOKS
 // ============================================================
 
-export function useQuests(type?: 'DAILY' | 'SEASONAL' | 'REFERRAL' | 'SPECIAL') {
+export function useQuests(
+  type?: "DAILY" | "SEASONAL" | "REFERRAL" | "SPECIAL",
+) {
   const { user } = useUser();
 
   return useQuery({
-    queryKey: ['arena', 'quests', user?.id, type],
+    queryKey: ["arena", "quests", user?.id, type],
     queryFn: () => getQuests(user!.bearerToken, type),
     enabled: !!user?.bearerToken,
     staleTime: 30 * 1000,
@@ -88,10 +90,10 @@ export function useClaimQuest() {
     mutationFn: (questId: number) => claimQuest(user!.bearerToken, questId),
     onSuccess: (data) => {
       // Invalidate related queries
-      queryClient.invalidateQueries({ queryKey: ['arena', 'stats'] });
-      queryClient.invalidateQueries({ queryKey: ['arena', 'quests'] });
-      queryClient.invalidateQueries({ queryKey: ['arena', 'cashback'] });
-      queryClient.invalidateQueries({ queryKey: ['arena', 'gold-history'] });
+      queryClient.invalidateQueries({ queryKey: ["arena", "stats"] });
+      queryClient.invalidateQueries({ queryKey: ["arena", "quests"] });
+      queryClient.invalidateQueries({ queryKey: ["arena", "cashback"] });
+      queryClient.invalidateQueries({ queryKey: ["arena", "gold-history"] });
 
       // Show success toast
       if (data.goldAwarded) {
@@ -106,7 +108,7 @@ export function useClaimQuest() {
       }
     },
     onError: (error: Error) => {
-      toast.error(error.message || 'Failed to claim quest');
+      toast.error(error.message || "Failed to claim quest");
     },
   });
 }
@@ -119,7 +121,7 @@ export function useCashbackSummary() {
   const { user } = useUser();
 
   return useQuery({
-    queryKey: ['arena', 'cashback', user?.id],
+    queryKey: ["arena", "cashback", user?.id],
     queryFn: () => getCashbackSummary(user!.bearerToken),
     enabled: !!user?.bearerToken,
     staleTime: 30 * 1000,
@@ -136,17 +138,17 @@ export function useClaimCashback() {
   return useMutation({
     mutationFn: () => claimCashback(user!.bearerToken),
     onSuccess: (data) => {
-      queryClient.invalidateQueries({ queryKey: ['arena', 'stats'] });
-      queryClient.invalidateQueries({ queryKey: ['arena', 'cashback'] });
+      queryClient.invalidateQueries({ queryKey: ["arena", "stats"] });
+      queryClient.invalidateQueries({ queryKey: ["arena", "cashback"] });
       if (data.success && data.amountClaimed > 0) {
         toast.success(
-          `💰 Claimed ${data.amountClaimed.toFixed(6)} SOL!${data.txSignature ? ' Check Solscan for details.' : ''}`,
-          { duration: 6000 }
+          `💰 Claimed ${data.amountClaimed.toFixed(6)} SOL!${data.txSignature ? " Check Solscan for details." : ""}`,
+          { duration: 6000 },
         );
       }
     },
     onError: (error: Error) => {
-      toast.error(error.message || 'Failed to claim cashback');
+      toast.error(error.message || "Failed to claim cashback");
     },
   });
 }
@@ -155,11 +157,13 @@ export function useClaimCashback() {
 // GOLD HISTORY HOOK
 // ============================================================
 
-export function useGoldHistory(options: { limit?: number; offset?: number; type?: string } = {}) {
+export function useGoldHistory(
+  options: { limit?: number; offset?: number; type?: string } = {},
+) {
   const { user } = useUser();
 
   return useQuery({
-    queryKey: ['arena', 'gold-history', user?.id, options],
+    queryKey: ["arena", "gold-history", user?.id, options],
     queryFn: () => getGoldHistory(user!.bearerToken, options),
     enabled: !!user?.bearerToken,
     staleTime: 30 * 1000,
@@ -175,7 +179,7 @@ export function useGoldHistory(options: { limit?: number; offset?: number; type?
 
 export function useRankDefinitions() {
   return useQuery({
-    queryKey: ['arena', 'ranks'],
+    queryKey: ["arena", "ranks"],
     queryFn: getRankDefinitions,
     staleTime: 5 * 60 * 1000, // 5 minutes (these rarely change)
   });
@@ -190,17 +194,18 @@ export function useSetAnonymousMode() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: (isAnonymous: boolean) => setAnonymousMode(user!.bearerToken, isAnonymous),
+    mutationFn: (isAnonymous: boolean) =>
+      setAnonymousMode(user!.bearerToken, isAnonymous),
     onSuccess: (data) => {
-      queryClient.invalidateQueries({ queryKey: ['arena', 'stats'] });
+      queryClient.invalidateQueries({ queryKey: ["arena", "stats"] });
       toast.success(
         data.isAnonymous
-          ? '🔒 You are now anonymous on the leaderboard'
-          : '👁️ Your username is now visible on the leaderboard'
+          ? "🔒 You are now anonymous on the leaderboard"
+          : "👁️ Your username is now visible on the leaderboard",
       );
     },
     onError: (error: Error) => {
-      toast.error(error.message || 'Failed to update anonymity setting');
+      toast.error(error.message || "Failed to update anonymity setting");
     },
   });
 }
@@ -210,12 +215,12 @@ export function useSetAnonymousMode() {
 // ============================================================
 
 export function useLeaderboard(
-  type: 'points' | 'pnl' | 'volume',
-  period: 'DAILY' | 'MONTHLY' | 'LIFETIME',
-  options: { limit?: number; offset?: number; search?: string } = {}
+  type: "points" | "pnl" | "volume",
+  period: "DAILY" | "MONTHLY" | "LIFETIME",
+  options: { limit?: number; offset?: number; search?: string } = {},
 ) {
   return useQuery({
-    queryKey: ['leaderboard', type, period, options],
+    queryKey: ["leaderboard", type, period, options],
     queryFn: () => getLeaderboard(type, period, options),
     staleTime: 30 * 1000,
     refetchInterval: 60 * 1000,
@@ -223,13 +228,13 @@ export function useLeaderboard(
 }
 
 export function useUserLeaderboardPosition(
-  type: 'POINTS' | 'PNL' | 'VOLUME',
-  period: 'DAILY' | 'MONTHLY' | 'LIFETIME'
+  type: "POINTS" | "PNL" | "VOLUME",
+  period: "DAILY" | "MONTHLY" | "LIFETIME",
 ) {
   const { user } = useUser();
 
   return useQuery({
-    queryKey: ['leaderboard', 'position', user?.id, type, period],
+    queryKey: ["leaderboard", "position", user?.id, type, period],
     queryFn: () => getUserPosition(user!.bearerToken, type, period),
     enabled: !!user?.bearerToken,
     staleTime: 30 * 1000,
@@ -241,7 +246,7 @@ export function useAllUserPositions() {
   const { user } = useUser();
 
   return useQuery({
-    queryKey: ['leaderboard', 'all-positions', user?.id],
+    queryKey: ["leaderboard", "all-positions", user?.id],
     queryFn: () => getAllUserPositions(user!.bearerToken),
     enabled: !!user?.bearerToken,
     staleTime: 30 * 1000,
@@ -249,9 +254,12 @@ export function useAllUserPositions() {
   });
 }
 
-export function useTop3(type: 'points' | 'pnl' | 'volume', period: 'daily' | 'monthly' | 'lifetime') {
+export function useTop3(
+  type: "points" | "pnl" | "volume",
+  period: "daily" | "monthly" | "lifetime",
+) {
   return useQuery({
-    queryKey: ['leaderboard', 'top3', type, period],
+    queryKey: ["leaderboard", "top3", type, period],
     queryFn: () => getTop3(type, period),
     staleTime: 30 * 1000,
     refetchInterval: 60 * 1000,
@@ -266,7 +274,7 @@ export function useReferralStats() {
   const { user } = useUser();
 
   return useQuery({
-    queryKey: ['referrals', 'stats', user?.id],
+    queryKey: ["referrals", "stats", user?.id],
     queryFn: () => getReferralStats(user!.bearerToken),
     enabled: !!user?.bearerToken,
     staleTime: 30 * 1000,
@@ -276,11 +284,13 @@ export function useReferralStats() {
   });
 }
 
-export function useDirectReferrals(options: { limit?: number; offset?: number; search?: string } = {}) {
+export function useDirectReferrals(
+  options: { limit?: number; offset?: number; search?: string } = {},
+) {
   const { user } = useUser();
 
   return useQuery({
-    queryKey: ['referrals', 'direct', user?.id, options],
+    queryKey: ["referrals", "direct", user?.id, options],
     queryFn: () => getDirectReferrals(user!.bearerToken, options),
     enabled: !!user?.bearerToken,
     staleTime: 30 * 1000,
@@ -290,11 +300,13 @@ export function useDirectReferrals(options: { limit?: number; offset?: number; s
   });
 }
 
-export function useAllReferrals(options: { limit?: number; offset?: number; search?: string } = {}) {
+export function useAllReferrals(
+  options: { limit?: number; offset?: number; search?: string } = {},
+) {
   const { user } = useUser();
 
   return useQuery({
-    queryKey: ['referrals', 'all', user?.id, options],
+    queryKey: ["referrals", "all", user?.id, options],
     queryFn: () => getAllReferrals(user!.bearerToken, options),
     enabled: !!user?.bearerToken,
     staleTime: 10 * 1000,
@@ -311,19 +323,19 @@ export function useClaimReferralRewards() {
   return useMutation({
     mutationFn: () => claimReferralRewards(user!.bearerToken),
     onSuccess: (data) => {
-      queryClient.invalidateQueries({ queryKey: ['arena', 'stats'] });
-      queryClient.invalidateQueries({ queryKey: ['referrals'] });
+      queryClient.invalidateQueries({ queryKey: ["arena", "stats"] });
+      queryClient.invalidateQueries({ queryKey: ["referrals"] });
       if (data.success && data.amountClaimed > 0) {
         // Show success toast - the txSignature is returned for Solscan link
         // The referrals page component will handle showing the link
         toast.success(
-          `✅ Claimed ${data.amountClaimed.toFixed(4)} SOL!${data.txSignature ? ' Check Solscan for details.' : ''}`,
-          { duration: 6000 }
+          `✅ Claimed ${data.amountClaimed.toFixed(4)} SOL!${data.txSignature ? " Check Solscan for details." : ""}`,
+          { duration: 6000 },
         );
       }
     },
     onError: (error: Error) => {
-      toast.error(error.message || 'Failed to claim referral rewards');
+      toast.error(error.message || "Failed to claim referral rewards");
     },
   });
 }
@@ -332,7 +344,7 @@ export function useHonorsInfo() {
   const { user } = useUser();
 
   return useQuery({
-    queryKey: ['referrals', 'honors', user?.id],
+    queryKey: ["referrals", "honors", user?.id],
     queryFn: () => getHonorsInfo(user!.bearerToken),
     enabled: !!user?.bearerToken,
     staleTime: 10 * 1000,
@@ -342,11 +354,13 @@ export function useHonorsInfo() {
   });
 }
 
-export function useRewardHistory(options: { limit?: number; offset?: number } = {}) {
+export function useRewardHistory(
+  options: { limit?: number; offset?: number } = {},
+) {
   const { user } = useUser();
 
   return useQuery({
-    queryKey: ['referrals', 'rewards', user?.id, options],
+    queryKey: ["referrals", "rewards", user?.id, options],
     queryFn: () => getRewardHistory(user!.bearerToken, options),
     enabled: !!user?.bearerToken,
     staleTime: 30 * 1000,
@@ -360,7 +374,7 @@ export function useReferralQuests() {
   const { user } = useUser();
 
   return useQuery({
-    queryKey: ['referrals', 'quests', user?.id],
+    queryKey: ["referrals", "quests", user?.id],
     queryFn: () => getReferralQuests(user!.bearerToken),
     enabled: !!user?.bearerToken,
     staleTime: 30 * 1000,
@@ -374,7 +388,7 @@ export function useReferralTree() {
   const { user } = useUser();
 
   return useQuery({
-    queryKey: ['referrals', 'tree', user?.id],
+    queryKey: ["referrals", "tree", user?.id],
     queryFn: () => getReferralTree(user!.bearerToken),
     enabled: !!user?.bearerToken,
     staleTime: 60 * 1000,
@@ -403,8 +417,13 @@ export function useArenaPageData() {
     quests,
     cashback,
     ranks,
-    isLoading: stats.isLoading || quests.isLoading || cashback.isLoading || ranks.isLoading,
-    isError: stats.isError || quests.isError || cashback.isError || ranks.isError,
+    isLoading:
+      stats.isLoading ||
+      quests.isLoading ||
+      cashback.isLoading ||
+      ranks.isLoading,
+    isError:
+      stats.isError || quests.isError || cashback.isError || ranks.isError,
     error: stats.error || quests.error || cashback.error || ranks.error,
     refetch: () => {
       stats.refetch();
@@ -420,7 +439,7 @@ export function useArenaPageData() {
 export function useReferralsPageData() {
   const stats = useReferralStats();
   const honors = useHonorsInfo();
-  const quests = useQuests('REFERRAL');
+  const quests = useQuests("REFERRAL");
 
   return {
     stats,
@@ -441,18 +460,18 @@ export function useReferralsPageData() {
  * Combined hook for the Leaderboard page
  */
 export function useLeaderboardPageData(
-  type: 'points' | 'pnl' | 'volume',
-  period: 'DAILY' | 'MONTHLY' | 'LIFETIME',
-  options: { limit?: number; offset?: number; search?: string } = {}
+  type: "points" | "pnl" | "volume",
+  period: "DAILY" | "MONTHLY" | "LIFETIME",
+  options: { limit?: number; offset?: number; search?: string } = {},
 ) {
   const leaderboard = useLeaderboard(type, period, options);
   const position = useUserLeaderboardPosition(
-    type.toUpperCase() as 'POINTS' | 'PNL' | 'VOLUME',
-    period
+    type.toUpperCase() as "POINTS" | "PNL" | "VOLUME",
+    period,
   );
   const top3 = useTop3(
     type,
-    period.toLowerCase() as 'daily' | 'monthly' | 'lifetime'
+    period.toLowerCase() as "daily" | "monthly" | "lifetime",
   );
 
   return {

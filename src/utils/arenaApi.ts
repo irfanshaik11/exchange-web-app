@@ -4,13 +4,18 @@
  * Functions for interacting with the Arena gamification system API.
  */
 
-import { env } from '../env';
+import { env } from "../env";
 
 // ============================================================
 // TYPES
 // ============================================================
 
-export type RankName = 'DEGEN' | 'WARRIOR' | 'GLADIATOR' | 'COMMANDER' | 'TITAN';
+export type RankName =
+  | "DEGEN"
+  | "WARRIOR"
+  | "GLADIATOR"
+  | "COMMANDER"
+  | "TITAN";
 
 export interface ArenaStats {
   userId: number;
@@ -45,7 +50,7 @@ export interface ArenaStats {
 export interface Quest {
   id: number;
   questId: string;
-  type: 'DAILY' | 'SEASONAL' | 'REFERRAL' | 'SPECIAL';
+  type: "DAILY" | "SEASONAL" | "REFERRAL" | "SPECIAL";
   title: string;
   description: string;
   goldReward: number;
@@ -111,7 +116,7 @@ export interface LeaderboardEntry {
   rank: RankName;
   rankLevel: number;
   rankDisplay: string;
-  entityType?: 'USER' | 'BOT';
+  entityType?: "USER" | "BOT";
   goldEarned?: number;
   questsCompleted?: number;
   points?: number;
@@ -121,8 +126,8 @@ export interface LeaderboardEntry {
 }
 
 export interface LeaderboardResponse {
-  type: 'POINTS' | 'PNL' | 'VOLUME';
-  period: 'DAILY' | 'MONTHLY' | 'LIFETIME';
+  type: "POINTS" | "PNL" | "VOLUME";
+  period: "DAILY" | "MONTHLY" | "LIFETIME";
   entries: LeaderboardEntry[];
   total: number;
   limit: number;
@@ -179,9 +184,9 @@ export interface ReferralStats {
 
   // Fee discount based on Honors level
   feeDiscount?: {
-    baseFeePercent: number;      // 1%
+    baseFeePercent: number; // 1%
     effectiveFeePercent: number; // e.g., 0.7% for Honors IV
-    discountPercent: number;     // e.g., 30% discount
+    discountPercent: number; // e.g., 30% discount
   };
 }
 
@@ -204,18 +209,18 @@ export interface DirectReferral {
  * Get the backend base URL, upgrading to HTTPS if needed
  */
 function getBaseUrl(): string {
-  const envUrl = env.NEXT_PUBLIC_BACKEND_URL || '';
+  const envUrl = env.NEXT_PUBLIC_BACKEND_URL || "";
   const stripTrailingSlash = (url: string) =>
-    url.endsWith('/') ? url.slice(0, -1) : url;
+    url.endsWith("/") ? url.slice(0, -1) : url;
 
-  if (typeof window === 'undefined') {
+  if (typeof window === "undefined") {
     return stripTrailingSlash(envUrl);
   }
 
   try {
     const url = new URL(envUrl || window.location.origin);
-    if (window.location.protocol === 'https:' && url.protocol === 'http:') {
-      url.protocol = 'https:';
+    if (window.location.protocol === "https:" && url.protocol === "http:") {
+      url.protocol = "https:";
     }
     return stripTrailingSlash(url.toString());
   } catch {
@@ -226,20 +231,24 @@ function getBaseUrl(): string {
 async function fetchWithAuth<T>(
   endpoint: string,
   bearerToken: string,
-  options: RequestInit = {}
+  options: RequestInit = {},
 ): Promise<T> {
   const response = await fetch(`${getBaseUrl()}${endpoint}`, {
     ...options,
     headers: {
-      'Content-Type': 'application/json',
+      "Content-Type": "application/json",
       Authorization: `Bearer ${bearerToken}`,
       ...options.headers,
     },
   });
 
   if (!response.ok) {
-    const error = await response.json().catch(() => ({ error: 'Request failed' }));
-    throw new Error(error.error || `Request failed with status ${response.status}`);
+    const error = await response
+      .json()
+      .catch(() => ({ error: "Request failed" }));
+    throw new Error(
+      error.error || `Request failed with status ${response.status}`,
+    );
   }
 
   const data = await response.json();
@@ -251,30 +260,34 @@ async function fetchWithAuth<T>(
 // ============================================================
 
 export async function getArenaStats(bearerToken: string): Promise<ArenaStats> {
-  return fetchWithAuth<ArenaStats>('/api/arena/stats', bearerToken);
+  return fetchWithAuth<ArenaStats>("/api/arena/stats", bearerToken);
 }
 
 // ============================================================
 // QUESTS
 // ============================================================
 
-export async function getQuests(bearerToken: string, type?: string): Promise<QuestsResponse> {
-  const queryParams = type ? `?type=${type}` : '';
-  return fetchWithAuth<QuestsResponse>(`/api/arena/quests${queryParams}`, bearerToken);
+export async function getQuests(
+  bearerToken: string,
+  type?: string,
+): Promise<QuestsResponse> {
+  const queryParams = type ? `?type=${type}` : "";
+  return fetchWithAuth<QuestsResponse>(
+    `/api/arena/quests${queryParams}`,
+    bearerToken,
+  );
 }
 
 export async function claimQuest(
   bearerToken: string,
-  questId: number
+  questId: number,
 ): Promise<{ goldAwarded: number; honorsUpgrade?: string }> {
   return fetchWithAuth(`/api/arena/quests/${questId}/claim`, bearerToken, {
-    method: 'POST',
+    method: "POST",
   });
 }
 
-export async function claimAllQuests(
-  bearerToken: string
-): Promise<{
+export async function claimAllQuests(bearerToken: string): Promise<{
   success: boolean;
   totalGoldAwarded: number;
   claimedCount: number;
@@ -283,8 +296,8 @@ export async function claimAllQuests(
   newLevel?: number;
   message: string;
 }> {
-  return fetchWithAuth('/api/arena/quests/claim-all', bearerToken, {
-    method: 'POST',
+  return fetchWithAuth("/api/arena/quests/claim-all", bearerToken, {
+    method: "POST",
   });
 }
 
@@ -292,15 +305,22 @@ export async function claimAllQuests(
 // CASHBACK
 // ============================================================
 
-export async function getCashbackSummary(bearerToken: string): Promise<CashbackSummary> {
-  return fetchWithAuth<CashbackSummary>('/api/arena/cashback', bearerToken);
+export async function getCashbackSummary(
+  bearerToken: string,
+): Promise<CashbackSummary> {
+  return fetchWithAuth<CashbackSummary>("/api/arena/cashback", bearerToken);
 }
 
 export async function claimCashback(
-  bearerToken: string
-): Promise<{ success: boolean; amountClaimed: number; txSignature?: string; message: string }> {
-  return fetchWithAuth('/api/arena/cashback/claim', bearerToken, {
-    method: 'POST',
+  bearerToken: string,
+): Promise<{
+  success: boolean;
+  amountClaimed: number;
+  txSignature?: string;
+  message: string;
+}> {
+  return fetchWithAuth("/api/arena/cashback/claim", bearerToken, {
+    method: "POST",
   });
 }
 
@@ -310,14 +330,14 @@ export async function claimCashback(
 
 export async function getGoldHistory(
   bearerToken: string,
-  options: { limit?: number; offset?: number; type?: string } = {}
+  options: { limit?: number; offset?: number; type?: string } = {},
 ): Promise<{ transactions: GoldTransaction[]; total: number }> {
   const params = new URLSearchParams();
-  if (options.limit) params.set('limit', options.limit.toString());
-  if (options.offset) params.set('offset', options.offset.toString());
-  if (options.type) params.set('type', options.type);
+  if (options.limit) params.set("limit", options.limit.toString());
+  if (options.offset) params.set("offset", options.offset.toString());
+  if (options.type) params.set("type", options.type);
 
-  const queryString = params.toString() ? `?${params.toString()}` : '';
+  const queryString = params.toString() ? `?${params.toString()}` : "";
   return fetchWithAuth(`/api/arena/gold-history${queryString}`, bearerToken);
 }
 
@@ -344,10 +364,10 @@ export async function getRankDefinitions(): Promise<{
 
 export async function setAnonymousMode(
   bearerToken: string,
-  isAnonymous: boolean
+  isAnonymous: boolean,
 ): Promise<{ isAnonymous: boolean }> {
-  return fetchWithAuth('/api/arena/settings/anonymous', bearerToken, {
-    method: 'POST',
+  return fetchWithAuth("/api/arena/settings/anonymous", bearerToken, {
+    method: "POST",
     body: JSON.stringify({ isAnonymous }),
   });
 }
@@ -357,55 +377,75 @@ export async function setAnonymousMode(
 // ============================================================
 
 export async function getLeaderboard(
-  type: 'points' | 'pnl' | 'volume',
-  period: 'DAILY' | 'MONTHLY' | 'LIFETIME',
-  options: { limit?: number; offset?: number; search?: string } = {}
+  type: "points" | "pnl" | "volume",
+  period: "DAILY" | "MONTHLY" | "LIFETIME",
+  options: { limit?: number; offset?: number; search?: string } = {},
 ): Promise<LeaderboardResponse> {
   const params = new URLSearchParams({ period });
-  if (options.limit) params.set('limit', options.limit.toString());
-  if (options.offset) params.set('offset', options.offset.toString());
-  if (options.search) params.set('search', options.search);
+  if (options.limit) params.set("limit", options.limit.toString());
+  if (options.offset) params.set("offset", options.offset.toString());
+  if (options.search) params.set("search", options.search);
 
-  const response = await fetch(`${getBaseUrl()}/api/leaderboard/${type}?${params.toString()}`);
+  const response = await fetch(
+    `${getBaseUrl()}/api/leaderboard/${type}?${params.toString()}`,
+  );
   const data = await response.json();
   return data.data;
 }
 
 export async function getUserPosition(
   bearerToken: string,
-  type: 'POINTS' | 'PNL' | 'VOLUME',
-  period: 'DAILY' | 'MONTHLY' | 'LIFETIME'
+  type: "POINTS" | "PNL" | "VOLUME",
+  period: "DAILY" | "MONTHLY" | "LIFETIME",
 ): Promise<UserPosition> {
   const params = new URLSearchParams({ category: type, period });
-  return fetchWithAuth<UserPosition>(`/api/leaderboard/position?${params.toString()}`, bearerToken);
+  return fetchWithAuth<UserPosition>(
+    `/api/leaderboard/position?${params.toString()}`,
+    bearerToken,
+  );
 }
 
-export async function getAllUserPositions(
-  bearerToken: string
-): Promise<{
-  points: { daily: UserPosition; monthly: UserPosition; lifetime: UserPosition };
+export async function getAllUserPositions(bearerToken: string): Promise<{
+  points: {
+    daily: UserPosition;
+    monthly: UserPosition;
+    lifetime: UserPosition;
+  };
   pnl: { daily: UserPosition; monthly: UserPosition; lifetime: UserPosition };
-  volume: { daily: UserPosition; monthly: UserPosition; lifetime: UserPosition };
+  volume: {
+    daily: UserPosition;
+    monthly: UserPosition;
+    lifetime: UserPosition;
+  };
 }> {
-  return fetchWithAuth('/api/leaderboard/my-positions', bearerToken);
+  return fetchWithAuth("/api/leaderboard/my-positions", bearerToken);
 }
 
 export async function getTop3(
-  type: 'points' | 'pnl' | 'volume',
-  period: 'daily' | 'monthly' | 'lifetime'
+  type: "points" | "pnl" | "volume",
+  period: "daily" | "monthly" | "lifetime",
 ): Promise<LeaderboardEntry[]> {
-  const response = await fetch(`${getBaseUrl()}/api/leaderboard/top3/${type}/${period}`);
+  const response = await fetch(
+    `${getBaseUrl()}/api/leaderboard/top3/${type}/${period}`,
+  );
   const data = await response.json();
   return data.data.podium;
 }
 
 export async function getLeaderboardCountdown(
-  period: 'DAILY' | 'MONTHLY'
+  period: "DAILY" | "MONTHLY",
 ): Promise<{
-  countdown: { hours: number; minutes: number; seconds: number; totalSeconds: number };
+  countdown: {
+    hours: number;
+    minutes: number;
+    seconds: number;
+    totalSeconds: number;
+  };
   formatted: string;
 }> {
-  const response = await fetch(`${getBaseUrl()}/api/leaderboard/countdown?period=${period}`);
+  const response = await fetch(
+    `${getBaseUrl()}/api/leaderboard/countdown?period=${period}`,
+  );
   const data = await response.json();
   return data.data;
 }
@@ -421,8 +461,10 @@ export async function getLeaderboardCountdown(
  * - Pending and claimed SOL rewards
  * - Honors level and progression
  */
-export async function getReferralStats(bearerToken: string): Promise<ReferralStats> {
-  return fetchWithAuth<ReferralStats>('/api/referrals/stats', bearerToken);
+export async function getReferralStats(
+  bearerToken: string,
+): Promise<ReferralStats> {
+  return fetchWithAuth<ReferralStats>("/api/referrals/stats", bearerToken);
 }
 
 /**
@@ -430,14 +472,14 @@ export async function getReferralStats(bearerToken: string): Promise<ReferralSta
  */
 export async function getDirectReferrals(
   bearerToken: string,
-  options: { limit?: number; offset?: number; search?: string } = {}
+  options: { limit?: number; offset?: number; search?: string } = {},
 ): Promise<{ referrals: DirectReferral[]; total: number; hasMore: boolean }> {
   const params = new URLSearchParams();
-  if (options.limit) params.set('limit', options.limit.toString());
-  if (options.offset) params.set('offset', options.offset.toString());
-  if (options.search) params.set('search', options.search);
+  if (options.limit) params.set("limit", options.limit.toString());
+  if (options.offset) params.set("offset", options.offset.toString());
+  if (options.search) params.set("search", options.search);
 
-  const queryString = params.toString() ? `?${params.toString()}` : '';
+  const queryString = params.toString() ? `?${params.toString()}` : "";
   return fetchWithAuth(`/api/referrals/direct${queryString}`, bearerToken);
 }
 
@@ -459,14 +501,14 @@ export interface AllReferral {
  */
 export async function getAllReferrals(
   bearerToken: string,
-  options: { limit?: number; offset?: number; search?: string } = {}
+  options: { limit?: number; offset?: number; search?: string } = {},
 ): Promise<{ referrals: AllReferral[]; total: number; hasMore: boolean }> {
   const params = new URLSearchParams();
-  if (options.limit) params.set('limit', options.limit.toString());
-  if (options.offset) params.set('offset', options.offset.toString());
-  if (options.search) params.set('search', options.search);
+  if (options.limit) params.set("limit", options.limit.toString());
+  if (options.offset) params.set("offset", options.offset.toString());
+  if (options.search) params.set("search", options.search);
 
-  const queryString = params.toString() ? `?${params.toString()}` : '';
+  const queryString = params.toString() ? `?${params.toString()}` : "";
   return fetchWithAuth(`/api/referrals/all${queryString}`, bearerToken);
 }
 
@@ -474,17 +516,15 @@ export async function getAllReferrals(
  * Claim pending SOL rewards from referrals
  * Returns transaction signature on success for Solscan link
  */
-export async function claimReferralRewards(
-  bearerToken: string
-): Promise<{
+export async function claimReferralRewards(bearerToken: string): Promise<{
   success: boolean;
   amountClaimed: number;
   message: string;
   txSignature?: string;
   cooldownRemaining?: number; // Seconds until next claim allowed
 }> {
-  return fetchWithAuth('/api/referrals/claim', bearerToken, {
-    method: 'POST',
+  return fetchWithAuth("/api/referrals/claim", bearerToken, {
+    method: "POST",
   });
 }
 
@@ -493,10 +533,10 @@ export async function claimReferralRewards(
  */
 export async function applyReferralCode(
   bearerToken: string,
-  code: string
+  code: string,
 ): Promise<{ success: boolean; message?: string }> {
-  return fetchWithAuth('/api/referrals/apply', bearerToken, {
-    method: 'POST',
+  return fetchWithAuth("/api/referrals/apply", bearerToken, {
+    method: "POST",
     body: JSON.stringify({ code }),
   });
 }
@@ -537,7 +577,7 @@ export interface HonorsInfo {
 }
 
 export async function getHonorsInfo(bearerToken: string): Promise<HonorsInfo> {
-  return fetchWithAuth<HonorsInfo>('/api/referrals/honors', bearerToken);
+  return fetchWithAuth<HonorsInfo>("/api/referrals/honors", bearerToken);
 }
 
 /**
@@ -557,13 +597,13 @@ export interface ReferralReward {
 
 export async function getRewardHistory(
   bearerToken: string,
-  options: { limit?: number; offset?: number } = {}
+  options: { limit?: number; offset?: number } = {},
 ): Promise<{ rewards: ReferralReward[]; total: number; hasMore: boolean }> {
   const params = new URLSearchParams();
-  if (options.limit) params.set('limit', options.limit.toString());
-  if (options.offset) params.set('offset', options.offset.toString());
+  if (options.limit) params.set("limit", options.limit.toString());
+  if (options.offset) params.set("offset", options.offset.toString());
 
-  const queryString = params.toString() ? `?${params.toString()}` : '';
+  const queryString = params.toString() ? `?${params.toString()}` : "";
   return fetchWithAuth(`/api/referrals/rewards${queryString}`, bearerToken);
 }
 
@@ -572,7 +612,7 @@ export async function getRewardHistory(
  */
 export interface ReferralQuest {
   id: string;
-  type: 'RANK_UP' | 'INFO';
+  type: "RANK_UP" | "INFO";
   title: string;
   description: string;
   progress: number;
@@ -586,16 +626,25 @@ export interface ReferralQuest {
 }
 
 export async function getReferralQuests(
-  bearerToken: string
-): Promise<{ quests: ReferralQuest[]; currentHonorsLevel: number; currentHonorsName: string; totalRevShare: number }> {
-  return fetchWithAuth('/api/referrals/quests', bearerToken);
+  bearerToken: string,
+): Promise<{
+  quests: ReferralQuest[];
+  currentHonorsLevel: number;
+  currentHonorsName: string;
+  totalRevShare: number;
+}> {
+  return fetchWithAuth("/api/referrals/quests", bearerToken);
 }
 
 /**
  * Get referral tree structure for visualization
  */
 export async function getReferralTree(
-  bearerToken: string
-): Promise<{ directReferrals: any[]; tierCounts: number[]; totalCount: number }> {
-  return fetchWithAuth('/api/referrals/tree', bearerToken);
+  bearerToken: string,
+): Promise<{
+  directReferrals: any[];
+  tierCounts: number[];
+  totalCount: number;
+}> {
+  return fetchWithAuth("/api/referrals/tree", bearerToken);
 }

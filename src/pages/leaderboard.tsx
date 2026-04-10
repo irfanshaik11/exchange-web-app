@@ -8,41 +8,41 @@
  * Lifetime), top-3 podium, your position, and the full standings list.
  */
 
-import React, { useState, useMemo, useEffect } from 'react';
-import Head from 'next/head';
-import Header from '~/components/Header';
-import Footer from '~/components/Footer';
-import { DockedPanelMarginWrapper } from '~/contexts/DockedPanelContext';
-import { useUser } from '~/components/UserContext';
-import { useLeaderboardPageData } from '~/hooks/useArena';
-import ArenaPageToggle from '~/components/ArenaPageToggle';
+import React, { useState, useMemo, useEffect } from "react";
+import Head from "next/head";
+import Header from "~/components/Header";
+import Footer from "~/components/Footer";
+import { DockedPanelMarginWrapper } from "~/contexts/DockedPanelContext";
+import { useUser } from "~/components/UserContext";
+import { useLeaderboardPageData } from "~/hooks/useArena";
+import ArenaPageToggle from "~/components/ArenaPageToggle";
 
-import { GiTrophy } from 'react-icons/gi';
-import { FiSearch, FiChevronLeft, FiChevronRight } from 'react-icons/fi';
+import { GiTrophy } from "react-icons/gi";
+import { FiSearch, FiChevronLeft, FiChevronRight } from "react-icons/fi";
 
-type LeaderboardType = 'points' | 'pnl' | 'volume';
-type LeaderboardPeriod = 'DAILY' | 'MONTHLY' | 'LIFETIME';
+type LeaderboardType = "points" | "pnl" | "volume";
+type LeaderboardPeriod = "DAILY" | "MONTHLY" | "LIFETIME";
 
 // Shared space background — matches airdrop-genesis.tsx + referrals.tsx
 const SpaceBackgroundContained = () => (
-  <div className="absolute inset-0 overflow-hidden pointer-events-none rounded-2xl">
+  <div className="pointer-events-none absolute inset-0 overflow-hidden rounded-2xl">
     <div
       className="absolute inset-x-0 top-0 h-[80vh] bg-cover bg-top bg-no-repeat"
-      style={{ backgroundImage: 'url(/ranks/Background.png)' }}
+      style={{ backgroundImage: "url(/ranks/Background.png)" }}
     />
     <div className="absolute inset-0 bg-black/30" />
     <div
       className="absolute inset-0"
       style={{
         background:
-          'linear-gradient(to bottom, transparent 0%, transparent 20%, rgba(0,0,0,0.1) 30%, rgba(0,0,0,0.3) 45%, rgba(0,0,0,0.6) 60%, rgba(0,0,0,0.85) 75%, black 90%)',
+          "linear-gradient(to bottom, transparent 0%, transparent 20%, rgba(0,0,0,0.1) 30%, rgba(0,0,0,0.3) 45%, rgba(0,0,0,0.6) 60%, rgba(0,0,0,0.85) 75%, black 90%)",
       }}
     />
     <div
       className="absolute inset-x-0 top-1/4 bottom-0"
       style={{
         background:
-          'linear-gradient(to bottom, transparent 0%, rgba(0,0,0,0.2) 25%, rgba(0,0,0,0.5) 50%, rgba(0,0,0,0.8) 75%, black 100%)',
+          "linear-gradient(to bottom, transparent 0%, rgba(0,0,0,0.2) 25%, rgba(0,0,0,0.5) 50%, rgba(0,0,0,0.8) 75%, black 100%)",
       }}
     />
     <div className="absolute inset-0 bg-gradient-to-r from-black/20 via-transparent to-black/20" />
@@ -67,14 +67,20 @@ const CountdownInline = ({ targetTime }: { targetTime: Date }) => {
   }, [targetTime]);
   return (
     <span>
-      {String(t.h).padStart(2, '0')}:{String(t.m).padStart(2, '0')}:
-      {String(t.s).padStart(2, '0')}
+      {String(t.h).padStart(2, "0")}:{String(t.m).padStart(2, "0")}:
+      {String(t.s).padStart(2, "0")}
     </span>
   );
 };
 
 // FAQ accordion
-const FAQItem = ({ question, answer }: { question: string; answer: string }) => {
+const FAQItem = ({
+  question,
+  answer,
+}: {
+  question: string;
+  answer: string;
+}) => {
   const [open, setOpen] = useState(false);
   return (
     <div className="border-b border-white/[0.08]">
@@ -83,7 +89,7 @@ const FAQItem = ({ question, answer }: { question: string; answer: string }) => 
         className="flex w-full items-center justify-between py-4 text-left"
       >
         <span className="text-sm font-medium text-white">{question}</span>
-        <span className="text-xl text-neutral-500">{open ? '−' : '+'}</span>
+        <span className="text-xl text-neutral-500">{open ? "−" : "+"}</span>
       </button>
       {open && <div className="pb-4 text-sm text-neutral-400">{answer}</div>}
     </div>
@@ -93,10 +99,10 @@ const FAQItem = ({ question, answer }: { question: string; answer: string }) => 
 export default function LeaderboardPage() {
   const { user } = useUser();
   const [mounted, setMounted] = useState(false);
-  const [type, setType] = useState<LeaderboardType>('points');
-  const [period, setPeriod] = useState<LeaderboardPeriod>('DAILY');
+  const [type, setType] = useState<LeaderboardType>("points");
+  const [period, setPeriod] = useState<LeaderboardPeriod>("DAILY");
   const [page, setPage] = useState(1);
-  const [search, setSearch] = useState('');
+  const [search, setSearch] = useState("");
   const pageSize = 50;
 
   useEffect(() => setMounted(true), []);
@@ -108,10 +114,16 @@ export default function LeaderboardPage() {
   });
 
   const nextResetTime = useMemo(() => {
-    if (period === 'LIFETIME') return null;
+    if (period === "LIFETIME") return null;
     const now = new Date();
-    return period === 'DAILY'
-      ? new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 1))
+    return period === "DAILY"
+      ? new Date(
+          Date.UTC(
+            now.getUTCFullYear(),
+            now.getUTCMonth(),
+            now.getUTCDate() + 1,
+          ),
+        )
       : new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1));
   }, [period]);
 
@@ -121,54 +133,55 @@ export default function LeaderboardPage() {
   const totalPages = Math.ceil(totalEntries / pageSize);
 
   const categoryLabel = {
-    points: 'Points',
-    pnl: 'Realized PnL',
-    volume: 'Volume',
+    points: "Points",
+    pnl: "Realized PnL",
+    volume: "Volume",
   }[type];
 
   const getEntryValue = (entry: any): number => {
     if (!entry) return 0;
-    if (type === 'points') return Number(entry.points ?? entry.goldEarned ?? 0);
-    if (type === 'pnl') return Number(entry.pnl ?? 0);
+    if (type === "points") return Number(entry.points ?? entry.goldEarned ?? 0);
+    if (type === "pnl") return Number(entry.pnl ?? 0);
     return Number(entry.volume ?? 0);
   };
 
   const formatValue = (value: number): string => {
-    if (type === 'points') return value.toLocaleString();
-    if (type === 'pnl') {
-      const formatted = value.toLocaleString('en-US', {
-        style: 'currency',
-        currency: 'USD',
+    if (type === "points") return value.toLocaleString();
+    if (type === "pnl") {
+      const formatted = value.toLocaleString("en-US", {
+        style: "currency",
+        currency: "USD",
         maximumFractionDigits: 0,
       });
       return value >= 0 ? `+${formatted}` : formatted;
     }
-    return value.toLocaleString('en-US', {
-      style: 'currency',
-      currency: 'USD',
+    return value.toLocaleString("en-US", {
+      style: "currency",
+      currency: "USD",
       maximumFractionDigits: 0,
     });
   };
 
   const getValueColor = (value: number): string => {
-    if (type !== 'pnl') return 'text-white';
-    return value >= 0 ? 'text-emerald-400' : 'text-rose-400';
+    if (type !== "pnl") return "text-white";
+    return value >= 0 ? "text-emerald-400" : "text-rose-400";
   };
 
   // Deterministic avatar tint from name (purely decorative)
   const avatarGradient = (name: string): string => {
     const palette = [
-      'from-amber-500/25 to-amber-700/10 text-amber-200',
-      'from-emerald-500/25 to-emerald-700/10 text-emerald-200',
-      'from-sky-500/25 to-sky-700/10 text-sky-200',
-      'from-violet-500/25 to-violet-700/10 text-violet-200',
-      'from-rose-500/25 to-rose-700/10 text-rose-200',
-      'from-cyan-500/25 to-cyan-700/10 text-cyan-200',
-      'from-fuchsia-500/25 to-fuchsia-700/10 text-fuchsia-200',
-      'from-lime-500/25 to-lime-700/10 text-lime-200',
+      "from-amber-500/25 to-amber-700/10 text-amber-200",
+      "from-emerald-500/25 to-emerald-700/10 text-emerald-200",
+      "from-sky-500/25 to-sky-700/10 text-sky-200",
+      "from-violet-500/25 to-violet-700/10 text-violet-200",
+      "from-rose-500/25 to-rose-700/10 text-rose-200",
+      "from-cyan-500/25 to-cyan-700/10 text-cyan-200",
+      "from-fuchsia-500/25 to-fuchsia-700/10 text-fuchsia-200",
+      "from-lime-500/25 to-lime-700/10 text-lime-200",
     ];
     let h = 0;
-    for (let i = 0; i < name.length; i++) h = (h * 31 + name.charCodeAt(i)) >>> 0;
+    for (let i = 0; i < name.length; i++)
+      h = (h * 31 + name.charCodeAt(i)) >>> 0;
     return palette[h % palette.length];
   };
 
@@ -188,48 +201,52 @@ export default function LeaderboardPage() {
         <DockedPanelMarginWrapper>
           <div className="p-1 sm:p-1.5">
             {/* Rounded container with shared space background */}
-            <div className="relative rounded-2xl overflow-hidden min-h-[calc(100vh-80px)] border border-white/[0.06]">
+            <div className="relative min-h-[calc(100vh-80px)] overflow-hidden rounded-2xl border border-white/[0.06]">
               <SpaceBackgroundContained />
 
-              <main className="relative z-10 mx-auto max-w-6xl px-4 sm:px-6 pt-8 pb-24">
+              <main className="relative z-10 mx-auto max-w-6xl px-4 pt-8 pb-24 sm:px-6">
                 {/* Top-level tab: Airdrop Genesis / Referrals / Leaderboard */}
                 <ArenaPageToggle activePage="leaderboard" />
 
                 {/* Epic title block — mirrors airdrop-genesis + referrals */}
                 <div
-                  className={`text-center mb-10 transition-all duration-700 ${
-                    mounted ? 'opacity-100 translate-y-0' : 'opacity-0 -translate-y-4'
+                  className={`mb-10 text-center transition-all duration-700 ${
+                    mounted
+                      ? "translate-y-0 opacity-100"
+                      : "-translate-y-4 opacity-0"
                   }`}
                 >
-                  <div className="flex items-center justify-center gap-4 mb-4">
+                  <div className="mb-4 flex items-center justify-center gap-4">
                     <div className="h-px w-16 bg-gradient-to-r from-transparent via-amber-500/50 to-amber-500/20" />
-                    <GiTrophy className="w-6 h-6 text-amber-500/70" />
+                    <GiTrophy className="h-6 w-6 text-amber-500/70" />
                     <div className="h-px w-16 bg-gradient-to-l from-transparent via-amber-500/50 to-amber-500/20" />
                   </div>
 
-                  <h1 className="text-5xl md:text-6xl font-black tracking-tight text-white text-center">
+                  <h1 className="text-center text-5xl font-black tracking-tight text-white md:text-6xl">
                     LEADERBOARD
                   </h1>
 
-                  <div className="flex items-center justify-center gap-3 mt-4">
-                    <p className="text-neutral-200 text-sm tracking-[0.3em] uppercase font-semibold">
+                  <div className="mt-4 flex items-center justify-center gap-3">
+                    <p className="text-sm font-semibold tracking-[0.3em] text-neutral-200 uppercase">
                       Trade • Compete • Conquer
                     </p>
                   </div>
 
-                  <div className="flex items-center justify-center gap-2 mt-4">
-                    <div className="w-2 h-2 rounded-full bg-amber-500/30" />
+                  <div className="mt-4 flex items-center justify-center gap-2">
+                    <div className="h-2 w-2 rounded-full bg-amber-500/30" />
                     <div className="h-px w-24 bg-gradient-to-r from-amber-500/30 via-amber-500/10 to-transparent" />
-                    <div className="w-1.5 h-1.5 rounded-full bg-amber-500/20" />
+                    <div className="h-1.5 w-1.5 rounded-full bg-amber-500/20" />
                     <div className="h-px w-24 bg-gradient-to-l from-amber-500/30 via-amber-500/10 to-transparent" />
-                    <div className="w-2 h-2 rounded-full bg-amber-500/30" />
+                    <div className="h-2 w-2 rounded-full bg-amber-500/30" />
                   </div>
                 </div>
 
                 {/* Category + period toolbar */}
                 <div
-                  className={`mb-8 flex flex-col gap-4 transition-all duration-700 delay-100 ${
-                    mounted ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'
+                  className={`mb-8 flex flex-col gap-4 transition-all delay-100 duration-700 ${
+                    mounted
+                      ? "translate-y-0 opacity-100"
+                      : "translate-y-4 opacity-0"
                   }`}
                 >
                   {/* Category pills */}
@@ -237,9 +254,9 @@ export default function LeaderboardPage() {
                     <div className="inline-flex items-center rounded-full bg-[#1a1b1f] p-1">
                       {(
                         [
-                          { key: 'points', label: 'Points' },
-                          { key: 'pnl', label: 'Realized PnL' },
-                          { key: 'volume', label: 'Volume' },
+                          { key: "points", label: "Points" },
+                          { key: "pnl", label: "Realized PnL" },
+                          { key: "volume", label: "Volume" },
                         ] as const
                       ).map(({ key, label }) => {
                         const active = type === key;
@@ -250,10 +267,10 @@ export default function LeaderboardPage() {
                               setType(key);
                               setPage(1);
                             }}
-                            className={`px-4 py-2 rounded-full text-sm transition-all ${
+                            className={`rounded-full px-4 py-2 text-sm transition-all ${
                               active
-                                ? 'bg-gradient-to-r from-amber-500 to-yellow-500 text-black font-semibold'
-                                : 'text-gray-400 hover:text-white'
+                                ? "bg-gradient-to-r from-amber-500 to-yellow-500 font-semibold text-black"
+                                : "text-gray-400 hover:text-white"
                             }`}
                           >
                             {label}
@@ -264,9 +281,9 @@ export default function LeaderboardPage() {
                   </div>
 
                   {/* Period + countdown */}
-                  <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
-                    <div className="inline-flex items-center gap-1 rounded-full bg-white/[0.04] border border-white/[0.08] p-1">
-                      {(['DAILY', 'MONTHLY', 'LIFETIME'] as const).map((p) => {
+                  <div className="flex flex-col items-center justify-center gap-4 sm:flex-row">
+                    <div className="inline-flex items-center gap-1 rounded-full border border-white/[0.08] bg-white/[0.04] p-1">
+                      {(["DAILY", "MONTHLY", "LIFETIME"] as const).map((p) => {
                         const active = period === p;
                         return (
                           <button
@@ -275,8 +292,10 @@ export default function LeaderboardPage() {
                               setPeriod(p);
                               setPage(1);
                             }}
-                            className={`px-4 py-1.5 rounded-full text-xs font-medium tracking-wider uppercase transition-colors ${
-                              active ? 'bg-white/[0.1] text-white' : 'text-neutral-500 hover:text-white'
+                            className={`rounded-full px-4 py-1.5 text-xs font-medium tracking-wider uppercase transition-colors ${
+                              active
+                                ? "bg-white/[0.1] text-white"
+                                : "text-neutral-500 hover:text-white"
                             }`}
                           >
                             {p.charAt(0) + p.slice(1).toLowerCase()}
@@ -286,7 +305,9 @@ export default function LeaderboardPage() {
                     </div>
                     {nextResetTime && (
                       <div className="flex items-center gap-2 text-[11px] text-neutral-400">
-                        <span className="tracking-wider uppercase">Resets in</span>
+                        <span className="tracking-wider uppercase">
+                          Resets in
+                        </span>
                         <span className="font-mono text-white tabular-nums">
                           <CountdownInline targetTime={nextResetTime} />
                         </span>
@@ -298,8 +319,10 @@ export default function LeaderboardPage() {
                 {/* Top 3 Podium — three equal cards matching airdrop-genesis surface style */}
                 {top3Data.length >= 3 && (
                   <div
-                    className={`grid grid-cols-1 md:grid-cols-3 gap-4 mb-6 transition-all duration-700 delay-200 ${
-                      mounted ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'
+                    className={`mb-6 grid grid-cols-1 gap-4 transition-all delay-200 duration-700 md:grid-cols-3 ${
+                      mounted
+                        ? "translate-y-0 opacity-100"
+                        : "translate-y-4 opacity-0"
                     }`}
                   >
                     {[0, 1, 2].map((podiumIdx) => {
@@ -308,31 +331,31 @@ export default function LeaderboardPage() {
                       const position = podiumIdx + 1;
                       const isFirst = position === 1;
                       const displayName = entry.isAnonymous
-                        ? '•••••••'
-                        : entry.userName || '---';
-                      const initial = (displayName[0] || '?').toUpperCase();
+                        ? "•••••••"
+                        : entry.userName || "---";
+                      const initial = (displayName[0] || "?").toUpperCase();
                       const value = getEntryValue(entry);
                       const rankLabel =
-                        position === 1 ? '1st' : position === 2 ? '2nd' : '3rd';
+                        position === 1 ? "1st" : position === 2 ? "2nd" : "3rd";
                       const rankAccent =
                         position === 1
-                          ? 'text-amber-400 bg-amber-500/10 border-amber-500/30'
+                          ? "text-amber-400 bg-amber-500/10 border-amber-500/30"
                           : position === 2
-                          ? 'text-neutral-300 bg-white/[0.04] border-white/[0.12]'
-                          : 'text-amber-700 bg-amber-900/15 border-amber-800/30';
+                            ? "text-neutral-300 bg-white/[0.04] border-white/[0.12]"
+                            : "text-amber-700 bg-amber-900/15 border-amber-800/30";
 
                       return (
                         <div
                           key={entry.userId ?? podiumIdx}
-                          className={`flex items-center gap-4 px-5 py-4 rounded-xl backdrop-blur-sm border ${
+                          className={`flex items-center gap-4 rounded-xl border px-5 py-4 backdrop-blur-sm ${
                             isFirst
-                              ? 'bg-gradient-to-br from-amber-500/[0.08] via-white/[0.04] to-transparent border-amber-500/30'
-                              : 'bg-white/[0.06] border-white/[0.08]'
+                              ? "border-amber-500/30 bg-gradient-to-br from-amber-500/[0.08] via-white/[0.04] to-transparent"
+                              : "border-white/[0.08] bg-white/[0.06]"
                           }`}
                         >
                           <div
                             className={`flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-full border border-white/10 bg-gradient-to-br text-base font-bold ${avatarGradient(
-                              displayName
+                              displayName,
                             )}`}
                           >
                             {initial}
@@ -346,7 +369,7 @@ export default function LeaderboardPage() {
                                 {rankLabel}
                               </span>
                               {isFirst && (
-                                <GiTrophy className="w-3.5 h-3.5 text-amber-400" />
+                                <GiTrophy className="h-3.5 w-3.5 text-amber-400" />
                               )}
                             </div>
                             <div className="truncate text-sm font-semibold text-white">
@@ -366,27 +389,29 @@ export default function LeaderboardPage() {
 
                 {/* Your Position */}
                 {user && (
-                  <div className="mb-6 flex items-center justify-between px-5 py-4 bg-white/[0.06] backdrop-blur-sm border border-white/[0.08] rounded-xl">
+                  <div className="mb-6 flex items-center justify-between rounded-xl border border-white/[0.08] bg-white/[0.06] px-5 py-4 backdrop-blur-sm">
                     <div className="flex items-center gap-4">
-                      <div className="flex h-9 w-9 items-center justify-center rounded-full bg-amber-500/15 border border-amber-500/30 text-amber-400 font-semibold text-xs tabular-nums">
-                        {position.data?.position ? `#${position.data.position}` : '—'}
+                      <div className="flex h-9 w-9 items-center justify-center rounded-full border border-amber-500/30 bg-amber-500/15 text-xs font-semibold text-amber-400 tabular-nums">
+                        {position.data?.position
+                          ? `#${position.data.position}`
+                          : "—"}
                       </div>
                       <div>
-                        <div className="text-[10px] font-semibold tracking-wider uppercase text-neutral-500">
+                        <div className="text-[10px] font-semibold tracking-wider text-neutral-500 uppercase">
                           Your Position
                         </div>
                         <div className="text-sm font-semibold text-white">
-                          @{user.name || 'You'}
+                          @{user.name || "You"}
                         </div>
                       </div>
                     </div>
                     <div className="text-right">
-                      <div className="text-[10px] font-semibold tracking-wider uppercase text-neutral-500">
+                      <div className="text-[10px] font-semibold tracking-wider text-neutral-500 uppercase">
                         {categoryLabel}
                       </div>
                       <div
                         className={`font-mono text-base font-semibold tabular-nums ${getValueColor(
-                          position.data?.value ?? 0
+                          position.data?.value ?? 0,
                         )}`}
                       >
                         {formatValue(position.data?.value ?? 0)}
@@ -396,13 +421,16 @@ export default function LeaderboardPage() {
                 )}
 
                 {/* Full Standings */}
-                <div className="mb-6 rounded-xl border border-white/[0.08] bg-white/[0.04] backdrop-blur-sm overflow-hidden">
+                <div className="mb-6 overflow-hidden rounded-xl border border-white/[0.08] bg-white/[0.04] backdrop-blur-sm">
                   {/* Toolbar */}
-                  <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 px-5 py-4 border-b border-white/[0.08]">
+                  <div className="flex flex-col gap-3 border-b border-white/[0.08] px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
                     <div>
-                      <h2 className="text-base font-bold text-white">Full Standings</h2>
+                      <h2 className="text-base font-bold text-white">
+                        Full Standings
+                      </h2>
                       <p className="text-[11px] text-neutral-500">
-                        {totalEntries.toLocaleString()} traders · updates every 5 min
+                        {totalEntries.toLocaleString()} traders · updates every
+                        5 min
                       </p>
                     </div>
                     <div className="relative w-full sm:w-64">
@@ -415,13 +443,13 @@ export default function LeaderboardPage() {
                           setSearch(e.target.value);
                           setPage(1);
                         }}
-                        className="w-full rounded-full border border-white/[0.08] bg-white/[0.04] py-2 pl-9 pr-4 text-[12px] text-white placeholder-neutral-500 focus:border-white/[0.2] focus:outline-none"
+                        className="w-full rounded-full border border-white/[0.08] bg-white/[0.04] py-2 pr-4 pl-9 text-[12px] text-white placeholder-neutral-500 focus:border-white/[0.2] focus:outline-none"
                       />
                     </div>
                   </div>
 
                   {/* Column headers */}
-                  <div className="grid grid-cols-[48px_1fr_auto] items-center gap-4 px-5 py-2.5 border-b border-white/[0.06] text-[10px] font-semibold tracking-wider uppercase text-neutral-500">
+                  <div className="grid grid-cols-[48px_1fr_auto] items-center gap-4 border-b border-white/[0.06] px-5 py-2.5 text-[10px] font-semibold tracking-wider text-neutral-500 uppercase">
                     <div>Rank</div>
                     <div>Trader</div>
                     <div className="text-right">{categoryLabel}</div>
@@ -433,29 +461,31 @@ export default function LeaderboardPage() {
                       leaderboardEntries.map((entry: any, idx: number) => {
                         const pos = (page - 1) * pageSize + idx + 1;
                         const displayName = entry.isAnonymous
-                          ? '•••••••'
-                          : entry.userName || '---';
-                        const initial = (displayName[0] || '?').toUpperCase();
+                          ? "•••••••"
+                          : entry.userName || "---";
+                        const initial = (displayName[0] || "?").toUpperCase();
                         const value = getEntryValue(entry);
                         const isPodium = pos <= 3;
 
                         return (
                           <div
                             key={entry.userId || idx}
-                            className="grid grid-cols-[48px_1fr_auto] items-center gap-4 px-5 py-3 border-b border-white/[0.04] transition-colors hover:bg-white/[0.03]"
+                            className="grid grid-cols-[48px_1fr_auto] items-center gap-4 border-b border-white/[0.04] px-5 py-3 transition-colors hover:bg-white/[0.03]"
                           >
                             <div
                               className={`font-mono text-[13px] tabular-nums ${
-                                isPodium ? 'text-amber-400 font-semibold' : 'text-neutral-500'
+                                isPodium
+                                  ? "font-semibold text-amber-400"
+                                  : "text-neutral-500"
                               }`}
                             >
                               #{pos}
                             </div>
 
-                            <div className="flex items-center gap-3 min-w-0">
+                            <div className="flex min-w-0 items-center gap-3">
                               <div
                                 className={`flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full border border-white/10 bg-gradient-to-br text-[11px] font-bold ${avatarGradient(
-                                  displayName
+                                  displayName,
                                 )}`}
                               >
                                 {initial}
@@ -467,7 +497,7 @@ export default function LeaderboardPage() {
 
                             <div
                               className={`text-right font-mono text-[13px] font-semibold tabular-nums ${getValueColor(
-                                value
+                                value,
                               )}`}
                             >
                               {formatValue(value)}
@@ -484,13 +514,13 @@ export default function LeaderboardPage() {
 
                   {/* Pagination */}
                   {totalPages > 1 && (
-                    <div className="flex items-center justify-between px-5 py-3 border-t border-white/[0.08] text-[11px]">
+                    <div className="flex items-center justify-between border-t border-white/[0.08] px-5 py-3 text-[11px]">
                       <div className="text-neutral-500">
-                        Page{' '}
+                        Page{" "}
                         <span className="font-mono font-semibold text-white tabular-nums">
                           {page}
-                        </span>{' '}
-                        of{' '}
+                        </span>{" "}
+                        of{" "}
                         <span className="font-mono text-neutral-400 tabular-nums">
                           {totalPages}
                         </span>
@@ -505,7 +535,9 @@ export default function LeaderboardPage() {
                           Prev
                         </button>
                         <button
-                          onClick={() => setPage(Math.min(totalPages, page + 1))}
+                          onClick={() =>
+                            setPage(Math.min(totalPages, page + 1))
+                          }
                           disabled={page === totalPages}
                           className="flex items-center gap-1 rounded-full border border-white/[0.08] bg-white/[0.04] px-3 py-1.5 text-white hover:bg-white/[0.08] disabled:cursor-not-allowed disabled:opacity-30"
                         >
@@ -522,12 +554,18 @@ export default function LeaderboardPage() {
                   <div className="mb-3">
                     <h2 className="text-sm font-bold text-white">FAQs</h2>
                     <p className="text-[11px] text-neutral-500">
-                      More Questions?{' '}
-                      <a href="#" className="underline text-neutral-300 hover:text-white">
+                      More Questions?{" "}
+                      <a
+                        href="#"
+                        className="text-neutral-300 underline hover:text-white"
+                      >
                         Chat with Support
-                      </a>{' '}
-                      or{' '}
-                      <a href="/airdrop-genesis" className="underline text-neutral-300 hover:text-white">
+                      </a>{" "}
+                      or{" "}
+                      <a
+                        href="/airdrop-genesis"
+                        className="text-neutral-300 underline hover:text-white"
+                      >
                         View Airdrop Genesis
                       </a>
                     </p>
