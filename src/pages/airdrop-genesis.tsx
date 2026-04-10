@@ -743,8 +743,8 @@ export default function ArenaPage() {
   return (
     <>
       <Head>
-        <title>Outpost | Interstate</title>
-        <meta name="description" content="Level up your trading with Interstate Outpost - earn Credits, climb ranks, and compete for rewards." />
+        <title>Airdrop Genesis | Interstate</title>
+        <meta name="description" content="Level up your trading with Interstate Airdrop Genesis - earn Credits, climb ranks, and compete for rewards." />
       </Head>
 
       <div className="min-h-screen bg-black">
@@ -775,7 +775,7 @@ export default function ArenaPage() {
 
               {/* Main title */}
               <h1 className="text-5xl md:text-6xl font-black tracking-tight text-white text-center">
-                OUTPOST
+                AIRDROP GENESIS
               </h1>
 
               {/* Subtitle */}
@@ -1412,11 +1412,11 @@ export default function ArenaPage() {
             <div className={`mb-10 transition-all duration-700 delay-700 ${mounted ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'}`}>
               <h2 className="text-white font-bold text-lg mb-2 tracking-wide">FAQs</h2>
               <p className="text-neutral-500 text-sm mb-4">
-                More Questions? <span className="text-neutral-300 hover:text-white underline cursor-pointer transition-colors">Chat with Support</span> or <span className="text-neutral-300 hover:text-white underline cursor-pointer transition-colors">View Outpost Intro</span>
+                More Questions? <span className="text-neutral-300 hover:text-white underline cursor-pointer transition-colors">Chat with Support</span> or <span className="text-neutral-300 hover:text-white underline cursor-pointer transition-colors">View Airdrop Genesis Intro</span>
               </p>
               <Card className="overflow-hidden">
                 <div className="px-5">
-                  <FAQItem question="How does the Outpost work?" answer="The Outpost is our gamified rewards system. Trade to earn Credits, climb ranks, and unlock better rewards like higher cashback percentages and Credits multipliers." />
+                  <FAQItem question="How does Airdrop Genesis work?" answer="Airdrop Genesis is our gamified rewards system. Trade to earn Credits, climb ranks, and unlock better rewards like higher cashback percentages and Credits multipliers." />
                   <FAQItem question="How can I earn Credits?" answer="You earn Credits by trading, completing quests, maintaining trading streaks, and ranking up. All Credits earned is multiplied by your current rank's Credits Boost." />
                   <FAQItem question="Do I have to claim my Credits?" answer="Credits from trading is automatically added to your balance. Quest rewards need to be manually claimed by clicking the Claim button." />
                   <FAQItem question="What can I do with my Credits?" answer="Credits determines your position on the leaderboard. Top performers earn additional prizes. Future features will include more ways to use your Credits." />

@@ -10,7 +10,7 @@ import { IoClose } from "react-icons/io5";
 
 // Menu items configuration
 const arenaMenuItems = [
-  { name: "Outpost", href: "/outpost", icon: "trophy", disabled: false },
+  { name: "Airdrop Genesis", href: "/airdrop-genesis", icon: "trophy", disabled: false },
   { name: "Referrals", href: "/referrals", icon: "users", disabled: false },
   { name: "Leaderboard", href: "/leaderboard", icon: "chart", disabled: true },
   { name: "Jackpot", href: "/jackpot", icon: "grid", disabled: true },
@@ -54,14 +54,14 @@ export default function MorphingArenaNav() {
   const currentArenaPage = arenaMenuItems.find(
     (item) =>
       router.pathname === item.href ||
-      (item.href === "/outpost" &&
-        router.pathname.startsWith("/outpost") &&
-        !arenaMenuItems.some((i) => i.href !== "/outpost" && router.pathname === i.href))
+      (item.href === "/airdrop-genesis" &&
+        router.pathname.startsWith("/airdrop-genesis") &&
+        !arenaMenuItems.some((i) => i.href !== "/airdrop-genesis" && router.pathname === i.href))
   ) || arenaMenuItems[0];
 
   const isOnArenaPage = arenaMenuItems.some(
     (item) => router.pathname === item.href ||
-    (item.href === "/outpost" && router.pathname.startsWith("/outpost"))
+    (item.href === "/airdrop-genesis" && router.pathname.startsWith("/airdrop-genesis"))
   );
 
   // Click outside detection
@@ -139,7 +139,7 @@ export default function MorphingArenaNav() {
                 letterSpacing: "0.01em",
               }}
             >
-              {isOnArenaPage ? currentArenaPage?.name?.toUpperCase() : "OUTPOST"}
+              {isOnArenaPage ? currentArenaPage?.name?.toUpperCase() : "AIRDROP GENESIS"}
             </span>
           </motion.button>
         ) : (
@@ -155,7 +155,7 @@ export default function MorphingArenaNav() {
             {arenaMenuItems.map((item, index) => {
               const isActive =
                 router.pathname === item.href ||
-                (item.href === "/outpost" && router.pathname.startsWith("/outpost"));
+                (item.href === "/airdrop-genesis" && router.pathname.startsWith("/airdrop-genesis"));
               const isDisabled = item.disabled;
 
               if (isDisabled) {
