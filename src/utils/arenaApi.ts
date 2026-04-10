@@ -111,13 +111,17 @@ export interface LeaderboardEntry {
   rank: RankName;
   rankLevel: number;
   rankDisplay: string;
+  entityType?: 'USER' | 'BOT';
   goldEarned?: number;
   questsCompleted?: number;
+  points?: number;
+  pnl?: number;
+  volume?: number;
   prize: number;
 }
 
 export interface LeaderboardResponse {
-  type: 'GOLD' | 'QUEST';
+  type: 'POINTS' | 'PNL' | 'VOLUME';
   period: 'DAILY' | 'MONTHLY' | 'LIFETIME';
   entries: LeaderboardEntry[];
   total: number;
@@ -353,7 +357,7 @@ export async function setAnonymousMode(
 // ============================================================
 
 export async function getLeaderboard(
-  type: 'gold' | 'quests',
+  type: 'points' | 'pnl' | 'volume',
   period: 'DAILY' | 'MONTHLY' | 'LIFETIME',
   options: { limit?: number; offset?: number; search?: string } = {}
 ): Promise<LeaderboardResponse> {
@@ -369,24 +373,25 @@ export async function getLeaderboard(
 
 export async function getUserPosition(
   bearerToken: string,
-  type: 'GOLD' | 'QUEST',
+  type: 'POINTS' | 'PNL' | 'VOLUME',
   period: 'DAILY' | 'MONTHLY' | 'LIFETIME'
 ): Promise<UserPosition> {
-  const params = new URLSearchParams({ type, period });
+  const params = new URLSearchParams({ category: type, period });
   return fetchWithAuth<UserPosition>(`/api/leaderboard/position?${params.toString()}`, bearerToken);
 }
 
 export async function getAllUserPositions(
   bearerToken: string
 ): Promise<{
-  gold: { daily: UserPosition; monthly: UserPosition; lifetime: UserPosition };
-  quest: { daily: UserPosition; monthly: UserPosition; lifetime: UserPosition };
+  points: { daily: UserPosition; monthly: UserPosition; lifetime: UserPosition };
+  pnl: { daily: UserPosition; monthly: UserPosition; lifetime: UserPosition };
+  volume: { daily: UserPosition; monthly: UserPosition; lifetime: UserPosition };
 }> {
   return fetchWithAuth('/api/leaderboard/my-positions', bearerToken);
 }
 
 export async function getTop3(
-  type: 'gold' | 'quest',
+  type: 'points' | 'pnl' | 'volume',
   period: 'daily' | 'monthly' | 'lifetime'
 ): Promise<LeaderboardEntry[]> {
   const response = await fetch(`${getBaseUrl()}/api/leaderboard/top3/${type}/${period}`);

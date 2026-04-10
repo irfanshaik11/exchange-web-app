@@ -210,7 +210,7 @@ export function useSetAnonymousMode() {
 // ============================================================
 
 export function useLeaderboard(
-  type: 'gold' | 'quests',
+  type: 'points' | 'pnl' | 'volume',
   period: 'DAILY' | 'MONTHLY' | 'LIFETIME',
   options: { limit?: number; offset?: number; search?: string } = {}
 ) {
@@ -223,7 +223,7 @@ export function useLeaderboard(
 }
 
 export function useUserLeaderboardPosition(
-  type: 'GOLD' | 'QUEST',
+  type: 'POINTS' | 'PNL' | 'VOLUME',
   period: 'DAILY' | 'MONTHLY' | 'LIFETIME'
 ) {
   const { user } = useUser();
@@ -249,7 +249,7 @@ export function useAllUserPositions() {
   });
 }
 
-export function useTop3(type: 'gold' | 'quest', period: 'daily' | 'monthly' | 'lifetime') {
+export function useTop3(type: 'points' | 'pnl' | 'volume', period: 'daily' | 'monthly' | 'lifetime') {
   return useQuery({
     queryKey: ['leaderboard', 'top3', type, period],
     queryFn: () => getTop3(type, period),
@@ -441,17 +441,17 @@ export function useReferralsPageData() {
  * Combined hook for the Leaderboard page
  */
 export function useLeaderboardPageData(
-  type: 'gold' | 'quests',
+  type: 'points' | 'pnl' | 'volume',
   period: 'DAILY' | 'MONTHLY' | 'LIFETIME',
   options: { limit?: number; offset?: number; search?: string } = {}
 ) {
   const leaderboard = useLeaderboard(type, period, options);
   const position = useUserLeaderboardPosition(
-    type.toUpperCase() as 'GOLD' | 'QUEST',
+    type.toUpperCase() as 'POINTS' | 'PNL' | 'VOLUME',
     period
   );
   const top3 = useTop3(
-    type === 'quests' ? 'quest' : 'gold',
+    type,
     period.toLowerCase() as 'daily' | 'monthly' | 'lifetime'
   );
 
