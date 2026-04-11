@@ -5,7 +5,8 @@
  * the circle indicator. Header shows total earnable credits.
  */
 
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useRouter } from 'next/router';
 import { FiCheck, FiExternalLink, FiLoader, FiInfo } from 'react-icons/fi';
 import InterstateTooltip from '~/components/InterstateTooltip';
 import type { Quest } from '~/utils/arenaApi';
@@ -40,7 +41,7 @@ const TGLogo = () => (
 const SOCIAL_QUEST_CONFIGS = [
   { questId: 'SOCIAL_CONNECT_X', platform: 'twitter' as const, icon: <XLogo />, actionLabel: 'Connect', actionUrl: undefined, tooltip: 'Link your X (Twitter) account to Interstate to unlock social quests and earn credits.' },
   { questId: 'SOCIAL_FOLLOW_X', platform: 'twitter' as const, icon: <XLogo />, actionLabel: 'Follow', actionUrl: 'https://x.com/interstatefdn', tooltip: 'Follow @interstatefdn on X to stay updated and earn credits. Click Follow, then come back and verify.' },
-  { questId: 'SOCIAL_ENGAGE_POST', platform: 'twitter' as const, icon: <XLogo />, actionLabel: 'Like / RT', actionUrl: 'https://x.com/interstatefdn', tooltip: 'Like or repost any Interstate post on X. Visit our profile, engage with a post, then verify here.' },
+  { questId: 'SOCIAL_ENGAGE_POST', platform: 'twitter' as const, icon: <XLogo />, actionLabel: 'Engage', actionUrl: 'https://x.com/interstatefdn/status/2041067022562324801', tooltip: 'Like, comment, AND repost the Interstate post on X. You must do all three to complete this quest.' },
   { questId: 'SOCIAL_JOIN_TG', platform: 'telegram' as const, icon: <TGLogo />, actionLabel: 'Join', actionUrl: 'https://t.me/+DDXGrsJoe3szYTAx', tooltip: 'Join the Interstate Telegram community to connect with other traders and earn credits.' },
 ];
 
@@ -63,8 +64,10 @@ export default function SocialQuestsSection({
   const verifySocialQuest = useVerifySocialQuest();
   const claimQuest = useClaimQuest();
 
+  const router = useRouter();
   const [actionTaken, setActionTaken] = useState<Record<string, boolean>>({});
   const [verifyingQuest, setVerifyingQuest] = useState<string | null>(null);
+  const autoVerifyDone = useRef(false);
 
   const questMap = useMemo(() => {
     const map: Record<string, Quest> = {};
@@ -93,7 +96,8 @@ export default function SocialQuestsSection({
   const handleConnect = useCallback(async (platform: 'twitter' | 'telegram') => {
     const result = await connectSocial.mutateAsync(platform);
     if (result.oauthUrl) {
-      window.open(result.oauthUrl, '_blank', 'noopener,noreferrer');
+      // Redirect same tab — callback will return here with ?social_connected=twitter
+      window.location.href = result.oauthUrl;
     }
   }, [connectSocial]);
 
@@ -110,6 +114,26 @@ export default function SocialQuestsSection({
   const handleClaim = useCallback((questDbId: number) => {
     claimQuest.mutate(questDbId);
   }, [claimQuest]);
+
+  // Auto-verify Connect X/TG quest after OAuth redirect (URL has ?social_connected=twitter)
+  useEffect(() => {
+    if (!router.isReady || autoVerifyDone.current) return;
+    const platform = router.query.social_connected as string;
+    if (!platform) return;
+
+    autoVerifyDone.current = true;
+
+    // Clean up URL
+    const { social_connected, social_error, ...rest } = router.query;
+    router.replace({ pathname: router.pathname, query: rest }, undefined, { shallow: true });
+
+    // Auto-verify the Connect quest
+    if (platform === 'twitter') {
+      handleVerify('SOCIAL_CONNECT_X');
+    } else if (platform === 'telegram') {
+      handleVerify('SOCIAL_JOIN_TG');
+    }
+  }, [router.isReady, router.query, handleVerify]);
 
   if (allClaimed) {
     return (
@@ -165,6 +189,10 @@ export default function SocialQuestsSection({
         } else if (cfg.questId === 'SOCIAL_CONNECT_X' && !isComplete) {
           btnLabel = 'Connect';
           btnAction = () => handleConnect('twitter');
+        } else if (cfg.questId === 'SOCIAL_JOIN_TG' && !isComplete && !hasActed) {
+          // TG needs Snag OAuth first to link their Telegram account, then they join the group
+          btnLabel = <>{cfg.actionLabel} <FiExternalLink className="w-3 h-3" /></>;
+          btnAction = () => handleConnect('telegram');
         } else if (!isComplete && hasActed) {
           btnLabel = 'Verify';
           btnAction = () => handleVerify(cfg.questId);
