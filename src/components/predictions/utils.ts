@@ -7,16 +7,31 @@ function seededRandom(seed: string) {
 export function generateMockSparkline(ticker: string, currentPrice: number, change: number, points = 28): number[] {
   const rand = seededRandom(ticker);
   const data: number[] = [];
-  const startPrice = currentPrice / (1 + change);
+  const startPrice = Math.max(0.02, Math.min(0.98, currentPrice / (1 + (change || 0.01))));
+  let price = startPrice;
   let momentum = 0;
+
+  // Higher volatility for visible chart movement
+  const baseVol = 0.04 + Math.abs(currentPrice - 0.5) * 0.06;
+
   for (let i = 0; i < points; i++) {
     const progress = i / (points - 1);
-    // Momentum-based noise for more natural walk
-    momentum = momentum * 0.7 + (rand() - 0.5) * 0.06;
-    const noise = momentum;
-    const value = startPrice + (currentPrice - startPrice) * progress + noise;
-    data.push(Math.max(0, Math.min(1, value)));
+    // Mean-revert toward the target (currentPrice) with random walk
+    const target = startPrice + (currentPrice - startPrice) * progress;
+    const meanRevert = (target - price) * 0.15;
+    // Random shock — bigger than before for realistic movement
+    const shock = (rand() - 0.5) * baseVol;
+    // Momentum carries forward (trending behavior)
+    momentum = momentum * 0.6 + shock + meanRevert;
+    // Occasional larger moves (news events)
+    if (rand() < 0.08) momentum += (rand() - 0.5) * baseVol * 3;
+
+    price += momentum;
+    price = Math.max(0.01, Math.min(0.99, price));
+    data.push(price);
   }
+  // Ensure last point matches current price
+  data[data.length - 1] = currentPrice;
   return data;
 }
 
