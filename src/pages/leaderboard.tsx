@@ -407,7 +407,9 @@ export default function LeaderboardPage() {
 
                       return (
                         <div
-                          key={entry.userId ?? podiumIdx}
+                          // Key MUST namespace by entityType because a bot
+                          // and a real user can share the same numeric id.
+                          key={`${entry.entityType}-${entry.userId}`}
                           className={`flex items-center gap-4 rounded-xl border px-5 py-4 backdrop-blur-sm ${
                             isFirst
                               ? "border-amber-500/30 bg-gradient-to-br from-amber-500/[0.08] via-white/[0.04] to-transparent"
@@ -448,38 +450,89 @@ export default function LeaderboardPage() {
                   </div>
                 )}
 
-                {/* Your Position */}
-                {user && (
-                  <div className="mb-6 flex items-center justify-between rounded-xl border border-white/[0.08] bg-white/[0.06] px-5 py-4 backdrop-blur-sm">
-                    <div className="flex items-center gap-4">
-                      <div className="flex h-9 w-9 items-center justify-center rounded-full border border-amber-500/30 bg-amber-500/15 text-xs font-semibold text-amber-400 tabular-nums">
-                        {position.data?.position
-                          ? `#${position.data.position}`
-                          : "—"}
+                {/* Your Position — tri-state:
+                    • loading  → skeleton pulse
+                    • ranked   → #rank + name + value
+                    • unranked → "Unranked" label + category-specific hint */}
+                {user && (() => {
+                  const isPositionLoading = position.isLoading && !position.data;
+                  const hasRank = !!position.data?.position;
+
+                  // Copy mirrors the Airdrop Genesis voice
+                  // ("Start trading to unlock…") used on airdrop-genesis.tsx.
+                  const unrankedHint = {
+                    points: "Start trading to earn your first Credits",
+                    pnl: "Close a position to appear on the PnL board",
+                    volume: "Start trading to appear on the Volume board",
+                  }[type];
+
+                  return (
+                    <div className="mb-6 flex items-center justify-between rounded-xl border border-white/[0.08] bg-white/[0.06] px-5 py-4 backdrop-blur-sm">
+                      <div className="flex min-w-0 items-center gap-4">
+                        {/* Rank badge — amber filled when ranked, neutral
+                            outline when unranked, shimmer when loading. */}
+                        {isPositionLoading ? (
+                          <div className="h-9 w-9 animate-pulse rounded-full border border-white/[0.08] bg-white/[0.04]" />
+                        ) : hasRank ? (
+                          <div className="flex h-9 w-9 items-center justify-center rounded-full border border-amber-500/30 bg-amber-500/15 text-xs font-semibold text-amber-400 tabular-nums">
+                            #{position.data!.position}
+                          </div>
+                        ) : (
+                          <div className="flex h-9 w-9 items-center justify-center rounded-full border border-white/[0.12] bg-white/[0.04] text-[13px] font-semibold text-neutral-500">
+                            —
+                          </div>
+                        )}
+
+                        <div className="min-w-0">
+                          <div className="text-[10px] font-semibold tracking-wider text-neutral-500 uppercase">
+                            {isPositionLoading
+                              ? "Your Position"
+                              : hasRank
+                                ? "Your Position"
+                                : "Unranked"}
+                          </div>
+                          {isPositionLoading ? (
+                            <div className="mt-1 h-4 w-28 animate-pulse rounded bg-white/[0.06]" />
+                          ) : hasRank ? (
+                            <div className="text-sm font-semibold text-white">
+                              @{user.name || "You"}
+                            </div>
+                          ) : (
+                            <>
+                              <div className="text-sm font-semibold text-white">
+                                @{user.name || "You"}
+                              </div>
+                              <div className="mt-0.5 truncate text-[11px] text-neutral-400">
+                                {unrankedHint}
+                              </div>
+                            </>
+                          )}
+                        </div>
                       </div>
-                      <div>
+
+                      <div className="text-right">
                         <div className="text-[10px] font-semibold tracking-wider text-neutral-500 uppercase">
-                          Your Position
+                          {categoryLabel}
                         </div>
-                        <div className="text-sm font-semibold text-white">
-                          @{user.name || "You"}
-                        </div>
+                        {isPositionLoading ? (
+                          <div className="ml-auto mt-1 h-5 w-20 animate-pulse rounded bg-white/[0.06]" />
+                        ) : hasRank ? (
+                          <div
+                            className={`font-mono text-base font-semibold tabular-nums ${getValueColor(
+                              position.data!.value ?? 0,
+                            )}`}
+                          >
+                            {formatValue(position.data!.value ?? 0)}
+                          </div>
+                        ) : (
+                          <div className="font-mono text-base font-semibold tabular-nums text-neutral-500">
+                            —
+                          </div>
+                        )}
                       </div>
                     </div>
-                    <div className="text-right">
-                      <div className="text-[10px] font-semibold tracking-wider text-neutral-500 uppercase">
-                        {categoryLabel}
-                      </div>
-                      <div
-                        className={`font-mono text-base font-semibold tabular-nums ${getValueColor(
-                          position.data?.value ?? 0,
-                        )}`}
-                      >
-                        {formatValue(position.data?.value ?? 0)}
-                      </div>
-                    </div>
-                  </div>
-                )}
+                  );
+                })()}
 
                 {/* Full Standings */}
                 <div className="mb-6 overflow-hidden rounded-xl border border-white/[0.08] bg-white/[0.04] backdrop-blur-sm">
@@ -562,7 +615,10 @@ export default function LeaderboardPage() {
 
                         return (
                           <div
-                            key={entry.userId || idx}
+                            // Namespace by entityType so a bot and a real
+                            // user that share the same numeric id don't
+                            // collide in the React reconciler.
+                            key={`${entry.entityType}-${entry.userId}`}
                             className="grid grid-cols-[48px_1fr_auto] items-center gap-4 border-b border-white/[0.04] px-5 py-3 transition-colors hover:bg-white/[0.03]"
                           >
                             <div

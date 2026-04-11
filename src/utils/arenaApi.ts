@@ -116,7 +116,10 @@ export interface LeaderboardEntry {
   rank: RankName;
   rankLevel: number;
   rankDisplay: string;
-  entityType?: "USER" | "BOT";
+  // Always present on responses from the reshaped controller — used as
+  // part of the React list key to disambiguate a BOT and a real USER
+  // that happen to share the same numeric id.
+  entityType: "USER" | "BOT";
   goldEarned?: number;
   questsCompleted?: number;
   points?: number;
