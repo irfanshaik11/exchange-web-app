@@ -32,7 +32,7 @@ import useUnifiedPredictionMarkets from '~/hooks/useUnifiedPredictionMarkets';
 import type { UnifiedPredictionMarket } from '~/hooks/useUnifiedPredictionMarkets';
 import usePredictionFavorites from '~/hooks/usePredictionFavorites';
 import type { PredictionDataSource } from '~/components/predictions/DataSourceSwitcher';
-import AiPulseDrawer from '~/components/predictions/AiPulseDrawer';
+import { HomepageInsightPanel } from '~/components/insights/HomepageInsightPanel';
 import useNavLayout from '~/hooks/useNavLayout';
 
 // Sort tab config
@@ -242,56 +242,81 @@ export default function PredictionsPage() {
 
         {/* Main Content — offset by sidebar width when using left layout */}
         <div
-          className={`flex-1 flex ${layout === 'left' ? 'md:ml-[56px]' : ''}`}
+          className={`flex-1 flex flex-col ${layout === 'left' ? 'md:ml-[56px]' : ''}`}
           style={{ paddingTop: 0 }}
         >
-          {/* AI Market Pulse — left drawer (like detail page) */}
-          <AiPulseDrawer
-            open={aiDrawerOpen}
-            onOpen={() => setAiDrawerOpen(true)}
-            onClose={() => setAiDrawerOpen(false)}
-            layoutKey={layout}
-          />
-
-          {/* Left: All market content */}
-          <div className="flex-1 min-w-0 flex flex-col">
-          {/* Combined nav bar: sort tabs left, search right */}
+          {/* Sort bar row 1: tabs + count */}
           <div
-            className="flex items-center justify-between px-6"
+            className="flex items-center px-6 overflow-x-auto scrollbar-hide"
             style={{ borderBottom: `1px solid ${T.border}` }}
           >
-            {/* Left: title + sort tabs */}
-            <div className="flex items-center gap-0">
-              <span
-                className="text-[13px] font-semibold pr-4 mr-1"
-                style={{ color: T.text, borderRight: `1px solid ${T.border}` }}
+            {SORT_TABS.map((tab) => (
+              <button
+                key={tab.id}
+                onClick={() => { setSelectedSort(tab.id); setAiDrawerOpen(false); }}
+                className="relative flex-shrink-0 px-4 py-3 text-[13px] font-medium"
+                style={{
+                  color: selectedSort === tab.id && !aiDrawerOpen ? T.text : T.muted,
+                }}
               >
-                Prediction Markets
-              </span>
-              {SORT_TABS.map((tab) => (
-                <button
-                  key={tab.id}
-                  onClick={() => setSelectedSort(tab.id)}
-                  className="relative px-4 py-3 text-[12px] font-medium"
-                  style={{
-                    color: selectedSort === tab.id ? T.text : T.muted,
-                  }}
-                >
-                  {tab.label}
-                  {selectedSort === tab.id && (
-                    <motion.div
-                      layoutId="sort-tab-underline"
-                      className="absolute bottom-0 left-2 right-2 h-[2px] rounded-full"
-                      style={{ backgroundColor: T.accent }}
-                      transition={{ type: 'spring', stiffness: 400, damping: 30 }}
-                    />
-                  )}
-                </button>
-              ))}
-            </div>
+                {tab.label}
+                {selectedSort === tab.id && !aiDrawerOpen && (
+                  <motion.div
+                    layoutId="sort-tab-underline"
+                    className="absolute bottom-0 left-2 right-2 h-[2px]"
+                    style={{
+                      backgroundColor: T.accent,
+                      borderRadius: 1,
+                      boxShadow: '0 1px 8px rgba(59, 130, 246, 0.3)',
+                    }}
+                    transition={{ type: 'spring', stiffness: 400, damping: 30 }}
+                  />
+                )}
+              </button>
+            ))}
 
-            {/* Right: search + filter */}
-            <div className="flex items-center gap-1.5">
+            {/* Separator */}
+            <div className="w-px h-5 mx-1 flex-shrink-0" style={{ backgroundColor: T.border }} />
+
+            {/* AI Insights — iridescent border pill */}
+            <div className="relative flex-shrink-0 my-1.5 ml-2 rounded-full" style={{ padding: 1.5 }}>
+              <div className="absolute inset-0 rounded-full" style={{ background: aiDrawerOpen ? 'linear-gradient(270deg, #8B5CF6, #6366F1, #3B82F6, #10B981, #3B82F6, #8B5CF6)' : 'linear-gradient(270deg, rgba(139,92,246,0.5), rgba(59,130,246,0.4), rgba(16,185,129,0.5), rgba(59,130,246,0.4), rgba(139,92,246,0.5))', backgroundSize: '300% 100%', animation: 'shimmer-ai 4s ease-in-out infinite' }} />
+              <button
+                onClick={() => setAiDrawerOpen(!aiDrawerOpen)}
+                className="relative flex items-center justify-center gap-2 px-4 py-1.5 rounded-full text-[13px] font-semibold"
+                style={{ background: aiDrawerOpen ? 'rgba(10,10,14,0.85)' : 'rgba(16,17,20,0.92)', transition: 'all 200ms ease' }}
+              >
+                <svg width="15" height="15" viewBox="0 0 16 16" fill="none" className="flex-shrink-0">
+                  <defs>
+                    <linearGradient id="ai-home-sparkle" x1="1" y1="1" x2="15" y2="15">
+                      <stop stopColor="#8B5CF6"/><stop offset="0.5" stopColor="#3B82F6"/><stop offset="1" stopColor="#10B981"/>
+                    </linearGradient>
+                  </defs>
+                  <path d="M8 0.5L9.2 5.8L14 7L9.2 8.2L8 13.5L6.8 8.2L2 7L6.8 5.8L8 0.5Z" fill={aiDrawerOpen ? 'url(#ai-home-sparkle)' : 'rgba(160,170,190,0.6)'}/>
+                  <path d="M13 1L13.5 3L15.5 3.5L13.5 4L13 6L12.5 4L10.5 3.5L12.5 3L13 1Z" fill={aiDrawerOpen ? 'url(#ai-home-sparkle)' : 'rgba(160,170,190,0.4)'} opacity="0.7"/>
+                </svg>
+                {aiDrawerOpen ? (
+                  <span style={{ background: 'linear-gradient(90deg, #8B5CF6, #6366F1, #3B82F6, #10B981)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>AI Insights</span>
+                ) : (
+                  <span style={{ color: 'rgba(160,170,190,0.8)' }}>AI Insights</span>
+                )}
+              </button>
+            </div>
+            {!isLoading && (
+              <span
+                className="text-[11px] font-medium px-2 py-0.5 rounded-full ml-1 flex-shrink-0"
+                style={{ color: T.muted, backgroundColor: 'rgba(255,255,255,0.04)' }}
+              >
+                {activeMarkets.length.toLocaleString()}
+              </span>
+            )}
+
+            {/* Spacer */}
+            <div className="flex-1" />
+
+            {/* Right: search + actions */}
+            <div className="flex items-center gap-2 flex-shrink-0 ml-4">
+              {/* Search */}
               <div
                 className="flex items-center gap-2 px-3 py-1.5 rounded-full"
                 style={{
@@ -302,10 +327,10 @@ export default function PredictionsPage() {
                 <HiOutlineSearch className="w-3.5 h-3.5" style={{ color: searchQuery ? T.accent : T.muted }} />
                 <input
                   type="text"
-                  placeholder="Search markets..."
+                  placeholder="Search..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  className="bg-transparent text-[12px] outline-none placeholder-neutral-500 w-28 focus:w-44 transition-all duration-200"
+                  className="bg-transparent text-[12px] outline-none placeholder-neutral-500 w-20 focus:w-36 transition-all duration-200"
                   style={{ color: T.text }}
                 />
                 {searchQuery && (
@@ -318,46 +343,31 @@ export default function PredictionsPage() {
                   </button>
                 )}
               </div>
+
               <MarketFilters
                 filters={marketFilters}
                 onFiltersChange={setMarketFilters}
               />
+
+              {/* AI Insights toggle is now in the sort tabs row */}
             </div>
           </div>
 
-          {/* Restricted regions — flush banner */}
-          <div
-            className="flex items-center justify-center gap-1.5 py-1"
-            style={{
-              backgroundColor: 'rgba(248,113,113,0.04)',
-              borderBottom: '1px solid rgba(248,113,113,0.08)',
-            }}
-          >
-            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#F87171" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="flex-shrink-0">
-              <path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
-              <line x1="12" y1="9" x2="12" y2="13" />
-              <line x1="12" y1="17" x2="12.01" y2="17" />
-            </svg>
-            <span className="text-[10px] font-medium" style={{ color: 'rgba(248,113,113,0.6)' }}>
-              Trading unavailable in restricted regions
-            </span>
+          {/* Predictions AI — full width */}
+          <div className="px-6 py-3" id="ai-predictions-section">
+            <TalarionCreate authToken={user?.bearerToken} />
           </div>
 
           {/* Content Area */}
           <div className="flex-1 px-6 py-4 relative">
-            {/* Page-level gradient tint from featured market category */}
-            {!isLoading && activeMarkets.length > 0 && (() => {
-              const heroCategory = categoryConfig[(activeMarkets[0] as any)?.category] || { color: T.accent };
-              return (
-                <div
-                  className="absolute top-0 left-0 right-0 h-[600px] pointer-events-none z-0"
-                  style={{
-                    background: `linear-gradient(180deg, ${heroCategory.color}06 0%, transparent 100%)`,
-                  }}
-                />
-              );
-            })()}
-
+            {/* Ambient top gradient — barely visible blue wash for depth */}
+            <div
+              className="absolute top-0 left-0 right-0 pointer-events-none z-0"
+              style={{
+                height: '40vh',
+                background: 'radial-gradient(ellipse 80% 50% at 50% 0%, rgba(59, 130, 246, 0.04) 0%, transparent 100%)',
+              }}
+            />
             {/* Error */}
             {error && (
               <motion.div
@@ -381,31 +391,59 @@ export default function PredictionsPage() {
               </motion.div>
             )}
 
-            {/* Hero (left) + Predictions AI (right) — 50/50, hero dictates height */}
-            <div className="flex flex-col lg:flex-row lg:items-stretch gap-4 mb-6">
-              {/* Featured Hero — left 50% */}
-              <div className="flex-1 min-w-0 overflow-hidden rounded-xl">
-                {!isLoading && activeMarkets.length > 0 && (
-                  <FeaturedHero markets={activeMarkets} />
-                )}
-              </div>
+            {/* Main content area */}
+            <div>
 
-              {/* Predictions AI — right 50%, stretches to match hero height */}
-              <div className="flex-1 min-w-0 flex flex-col" id="ai-predictions-section">
-                <TalarionCreate authToken={user?.bearerToken} />
-              </div>
-            </div>
-
+            {/* AI Insights — full-width view when tab is active */}
+            {aiDrawerOpen && (
+              <motion.div
+                initial={{ opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.25, ease: [0.16, 1, 0.3, 1] }}
+                className="mb-5 rounded-xl overflow-hidden"
+                style={{ backgroundColor: T.bgCard, border: `1px solid ${T.border}` }}
+              >
+                <div className="flex items-center justify-between px-5 py-3" style={{ borderBottom: `1px solid ${T.border}` }}>
+                  <div className="flex items-center gap-2">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><defs><linearGradient id="ai-v-sparkle" x1="3" y1="2" x2="22" y2="21"><stop stopColor="#8B5CF6"/><stop offset="0.5" stopColor="#3B82F6"/><stop offset="1" stopColor="#10B981"/></linearGradient></defs><path d="M12 2L13.5 8.5L20 10L13.5 11.5L12 18L10.5 11.5L4 10L10.5 8.5L12 2Z" fill="url(#ai-v-sparkle)"/></svg>
+                    <span className="text-[14px] font-semibold" style={{ color: T.text }}>AI Market Pulse</span>
+                  </div>
+                  <button onClick={() => setAiDrawerOpen(false)} className="text-[12px] font-medium px-3 py-1 rounded-lg" style={{ color: T.textSecondary, background: 'rgba(255,255,255,0.04)', border: `1px solid ${T.border}` }}>
+                    Back to Markets
+                  </button>
+                </div>
+                <div className="p-5">
+                  <HomepageInsightPanel docked chromeless />
+                </div>
+              </motion.div>
+            )}
 
             {/* Loading State */}
             {isLoading ? (
-              <div className="flex flex-col gap-2">
-                {[...Array(8)].map((_, i) => (
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
+                {[...Array(12)].map((_, i) => (
                   <div
                     key={i}
-                    className="h-14 rounded-[10px] animate-pulse"
-                    style={{ backgroundColor: 'rgba(255,255,255,0.03)' }}
-                  />
+                    className="rounded-xl animate-pulse flex flex-col p-4 gap-3"
+                    style={{ backgroundColor: T.bgCard, border: `1px solid ${T.border}`, height: 220 }}
+                  >
+                    <div className="flex justify-between">
+                      <div className="h-5 w-16 rounded-full" style={{ backgroundColor: 'rgba(255,255,255,0.04)' }} />
+                      <div className="h-4 w-14 rounded" style={{ backgroundColor: 'rgba(255,255,255,0.03)' }} />
+                    </div>
+                    <div className="h-4 w-full rounded" style={{ backgroundColor: 'rgba(255,255,255,0.04)' }} />
+                    <div className="h-4 w-3/4 rounded" style={{ backgroundColor: 'rgba(255,255,255,0.03)' }} />
+                    <div className="flex-1" />
+                    <div className="flex justify-between items-end">
+                      <div className="h-7 w-16 rounded" style={{ backgroundColor: 'rgba(255,255,255,0.04)' }} />
+                      <div className="h-5 w-16 rounded" style={{ backgroundColor: 'rgba(255,255,255,0.03)' }} />
+                    </div>
+                    <div className="h-px w-full" style={{ backgroundColor: 'rgba(255,255,255,0.04)' }} />
+                    <div className="flex justify-between">
+                      <div className="h-3 w-12 rounded" style={{ backgroundColor: 'rgba(255,255,255,0.03)' }} />
+                      <div className="h-3 w-16 rounded" style={{ backgroundColor: 'rgba(255,255,255,0.03)' }} />
+                    </div>
+                  </div>
                 ))}
               </div>
             ) : mergedFilteredMarkets.length === 0 ? (
@@ -421,23 +459,23 @@ export default function PredictionsPage() {
               >
                 <div
                   className="w-14 h-14 rounded-xl flex items-center justify-center mb-4"
-                  style={{ backgroundColor: T.greenSoft }}
+                  style={{ backgroundColor: T.bgCard }}
                 >
                   <HiOutlineSearch className="w-6 h-6" style={{ color: T.muted }} />
                 </div>
-                <h3 className="text-base font-semibold mb-1.5" style={{ color: T.text }}>
+                <h3 className="text-[16px] font-semibold mb-1.5" style={{ color: T.text }}>
                   No markets found
                 </h3>
-                <p className="text-[13px] text-center max-w-md mb-4" style={{ color: T.muted }}>
+                <p className="text-[13px] text-center max-w-md mb-4" style={{ color: T.textSecondary }}>
                   {searchQuery
-                    ? `No markets matching "${searchQuery}".`
-                    : "No markets in this category yet."}
+                    ? `No markets matching "${searchQuery}". Try a different search term.`
+                    : "No markets in this category yet. Check back soon or browse Trending markets."}
                 </p>
                 {searchQuery && (
                   <button
                     onClick={() => setSearchQuery('')}
                     className="px-4 py-2 rounded-lg text-[13px] font-medium"
-                    style={{ backgroundColor: T.greenSoft, color: T.accent }}
+                    style={{ backgroundColor: T.accentSoft, color: T.accent }}
                   >
                     Clear search
                   </button>
@@ -445,10 +483,22 @@ export default function PredictionsPage() {
               </motion.div>
             ) : (
               <>
-                {/* Active Markets — Card Grid (skip first, shown in hero) */}
-                {activeMarkets.length > 1 && (
-                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-                    {activeMarkets.slice(1, visibleCardCount + 1).map((market, index) => (
+                {/* Section header */}
+                {activeMarkets.length > 0 && (
+                  <div className="flex items-center justify-between mb-4">
+                    <h2 style={{ fontSize: 16, fontWeight: 600, color: T.text }}>
+                      {selectedSort === 'hot' ? 'Trending' : selectedSort === 'new' ? 'Newest' : selectedSort === 'ending' ? 'Ending Soon' : 'Top Volume'} Markets
+                    </h2>
+                    <span style={{ fontSize: 13, color: T.muted, fontVariantNumeric: 'tabular-nums' }}>
+                      {activeMarkets.length.toLocaleString()} markets
+                    </span>
+                  </div>
+                )}
+
+                {/* Market Grid */}
+                {activeMarkets.length > 0 && (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
+                    {activeMarkets.slice(0, visibleCardCount).map((market, index) => (
                       <MarketCard
                         key={`${market.source || 'dflow'}-${market.ticker}`}
                         market={market}
@@ -470,9 +520,18 @@ export default function PredictionsPage() {
                       disabled={isFetchingMore}
                       className="px-5 py-2 rounded-lg text-[12px] font-medium disabled:opacity-50"
                       style={{
-                        backgroundColor: 'rgba(255,255,255,0.04)',
+                        backgroundColor: T.bgCard,
                         border: `1px solid ${T.border}`,
-                        color: T.textSecondary,
+                        color: T.text,
+                        transition: 'all 150ms ease',
+                      }}
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.borderColor = T.borderHover;
+                        e.currentTarget.style.backgroundColor = T.bgCardHover;
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.borderColor = T.border;
+                        e.currentTarget.style.backgroundColor = T.bgCard;
                       }}
                     >
                       {isFetchingMore ? (
@@ -481,12 +540,12 @@ export default function PredictionsPage() {
                             <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
                             <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
                           </svg>
-                          Loading...
+                          Loading more...
                         </span>
-                      ) : 'Load More Markets'}
+                      ) : 'Show More Markets'}
                     </button>
-                    <span className="text-[11px]" style={{ color: T.muted }}>
-                      Showing {activeMarkets.length.toLocaleString()} of {totalAvailable.toLocaleString()} markets
+                    <span className="text-[12px]" style={{ color: T.muted }}>
+                      Showing {Math.min(visibleCardCount, activeMarkets.length).toLocaleString()} of {totalAvailable.toLocaleString()} markets
                     </span>
                   </div>
                 )}
@@ -552,13 +611,21 @@ export default function PredictionsPage() {
               </>
             )}
 
+            </div>
+
             {/* Footer CTA */}
             <div
-              className="mt-10 py-8 text-center"
-              style={{ borderTop: `1px solid ${T.border}` }}
+              className="mt-12 py-10 text-center rounded-2xl"
+              style={{
+                background: 'linear-gradient(180deg, rgba(255,255,255,0.02) 0%, transparent 100%)',
+                borderTop: `1px solid ${T.border}`,
+              }}
             >
-              <p className="text-[14px] mb-5" style={{ color: T.muted }}>
-                Don't see what you're looking for? Join our community.
+              <h3 style={{ fontSize: 18, fontWeight: 600, color: T.text, marginBottom: 8 }}>
+                Join the Community
+              </h3>
+              <p className="text-[14px] mb-6" style={{ color: T.textSecondary }}>
+                Get market insights, discuss predictions, and stay ahead.
               </p>
               <div className="flex items-center justify-center gap-3">
                 <a
@@ -596,7 +663,6 @@ export default function PredictionsPage() {
           </div>
 
           <Footer />
-          </div>
 
         </div>
       </div>
@@ -614,6 +680,13 @@ export default function PredictionsPage() {
           -webkit-line-clamp: 2;
           -webkit-box-orient: vertical;
           overflow: hidden;
+        }
+        @keyframes shimmer-ai {
+          0% { background-position: 200% 0; }
+          100% { background-position: -200% 0; }
+        }
+        @media (prefers-reduced-motion: reduce) {
+          .shimmer-ai-anim { animation: none !important; }
         }
       `}</style>
     </PinGate>

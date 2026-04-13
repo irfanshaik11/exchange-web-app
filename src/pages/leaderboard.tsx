@@ -1,688 +1,750 @@
 /**
  * Leaderboard Page
  *
- * Premium Trojan Arena style interface with podium, rankings table,
- * jackpot banner, and competitive features.
+ * Third tab of the Airdrop Genesis umbrella (alongside Airdrop Genesis
+ * and Referrals). Wraps the same space-themed rounded container as the
+ * other two pages, and drops in the leaderboard content: category tabs
+ * (Points / Realized PnL / Volume), period toggle (Daily / Monthly /
+ * Lifetime), top-3 podium, your position, and the full standings list.
  */
 
-import React, { useState, useMemo, useEffect } from 'react';
-import Head from 'next/head';
-import Header from '~/components/Header';
-import Footer from '~/components/Footer';
-import { DockedPanelMarginWrapper } from '~/contexts/DockedPanelContext';
-import { useUser } from '~/components/UserContext';
-import { useLeaderboardPageData, useArenaStats } from '~/hooks/useArena';
+import React, { useState, useMemo, useEffect } from "react";
+import Head from "next/head";
+import Header from "~/components/Header";
+import Footer from "~/components/Footer";
+import { DockedPanelMarginWrapper } from "~/contexts/DockedPanelContext";
+import { useUser } from "~/components/UserContext";
+import { useLeaderboardPageData } from "~/hooks/useArena";
+import ArenaPageToggle from "~/components/ArenaPageToggle";
+import type { LeaderboardEntry } from "~/utils/arenaApi";
 
-// React Icons
-import { GiCoins, GiSpartanHelmet, GiTrophy } from 'react-icons/gi';
-import { FiSearch, FiChevronLeft, FiChevronRight } from 'react-icons/fi';
-import { IoRocketSharp } from 'react-icons/io5';
+import { GiTrophy } from "react-icons/gi";
+import {
+  FiSearch,
+  FiChevronLeft,
+  FiChevronRight,
+  FiAlertCircle,
+} from "react-icons/fi";
 
-type LeaderboardType = 'gold' | 'quests';
-type LeaderboardPeriod = 'DAILY' | 'MONTHLY' | 'LIFETIME';
+type LeaderboardType = "points" | "pnl" | "volume";
+type LeaderboardPeriod = "DAILY" | "MONTHLY" | "LIFETIME";
 
-// Space background - contained within rounded container (matching Arena)
+// A small hook for debouncing a value by N milliseconds. Used to throttle
+// the search-as-you-type input so every keystroke doesn't fire a fresh
+// backend request and spawn a new React Query cache entry.
+function useDebouncedValue<T>(value: T, delayMs: number): T {
+  const [debounced, setDebounced] = useState(value);
+  useEffect(() => {
+    const t = setTimeout(() => setDebounced(value), delayMs);
+    return () => clearTimeout(t);
+  }, [value, delayMs]);
+  return debounced;
+}
+
+// Shared space background — matches airdrop-genesis.tsx + referrals.tsx
 const SpaceBackgroundContained = () => (
-  <div className="absolute inset-0 overflow-hidden pointer-events-none rounded-2xl">
-    {/* Main background image */}
+  <div className="pointer-events-none absolute inset-0 overflow-hidden rounded-2xl">
     <div
       className="absolute inset-x-0 top-0 h-[80vh] bg-cover bg-top bg-no-repeat"
-      style={{ backgroundImage: 'url(/ranks/Background.png)' }}
+      style={{ backgroundImage: "url(/ranks/Background.png)" }}
     />
-    {/* Subtle dark overlay */}
     <div className="absolute inset-0 bg-black/30" />
-    {/* Multi-layer gradual fade for smooth transition */}
     <div
       className="absolute inset-0"
       style={{
-        background: 'linear-gradient(to bottom, transparent 0%, transparent 20%, rgba(0,0,0,0.1) 30%, rgba(0,0,0,0.3) 45%, rgba(0,0,0,0.6) 60%, rgba(0,0,0,0.85) 75%, black 90%)'
+        background:
+          "linear-gradient(to bottom, transparent 0%, transparent 20%, rgba(0,0,0,0.1) 30%, rgba(0,0,0,0.3) 45%, rgba(0,0,0,0.6) 60%, rgba(0,0,0,0.85) 75%, black 90%)",
       }}
     />
-    {/* Extra smooth fade layer */}
     <div
       className="absolute inset-x-0 top-1/4 bottom-0"
       style={{
-        background: 'linear-gradient(to bottom, transparent 0%, rgba(0,0,0,0.2) 25%, rgba(0,0,0,0.5) 50%, rgba(0,0,0,0.8) 75%, black 100%)'
+        background:
+          "linear-gradient(to bottom, transparent 0%, rgba(0,0,0,0.2) 25%, rgba(0,0,0,0.5) 50%, rgba(0,0,0,0.8) 75%, black 100%)",
       }}
     />
-    {/* Side vignette */}
     <div className="absolute inset-0 bg-gradient-to-r from-black/20 via-transparent to-black/20" />
   </div>
 );
 
-// Card component
-const Card = ({ children, className = '' }: { children: React.ReactNode; className?: string }) => (
-  <div className={`bg-[#0a0a0a]/95 backdrop-blur-sm border border-neutral-800/50 rounded-xl ${className}`}>
-    {children}
-  </div>
-);
-
-// Credits coin using PNG image
-const CreditsCoin = ({ className = '' }: { className?: string }) => (
-  <img src="/ranks/Coin.png" alt="Credits" className={`${className} object-contain`} />
-);
-
-// Solana logo
-const SolanaLogo = ({ className = '' }: { className?: string }) => (
-  <img src="https://solana.com/src/img/branding/solanaLogoMark.svg" alt="SOL" className={`${className} object-contain`} />
-);
-
-// Helper to get rank image path
-const getRankImage = (rank: string, level: number = 1): string => {
-  const rankLower = rank.toLowerCase();
-  const clampedLevel = Math.max(1, Math.min(4, level || 1));
-  return `/ranks/${rankLower}-${clampedLevel}.png`;
-};
-
-// Rank badge component with hexagonal frame
-const RankBadge = ({ rank, size = 'md', variant = 'default' }: { rank: string; size?: 'sm' | 'md' | 'lg'; variant?: 'gold' | 'silver' | 'bronze' | 'default' }) => {
-  const sizes = { sm: 'w-8 h-8', md: 'w-12 h-12', lg: 'w-20 h-20' };
-  const iconSizes = { sm: 'w-4 h-4', md: 'w-6 h-6', lg: 'w-10 h-10' };
-
-  const colors = {
-    gold: { bg: 'bg-gradient-to-br from-amber-400 to-amber-600', border: 'border-amber-300', icon: 'text-amber-900' },
-    silver: { bg: 'bg-gradient-to-br from-slate-300 to-slate-500', border: 'border-slate-200', icon: 'text-slate-700' },
-    bronze: { bg: 'bg-gradient-to-br from-amber-600 to-amber-800', border: 'border-amber-500', icon: 'text-amber-200' },
-    default: { bg: 'bg-neutral-800', border: 'border-neutral-600', icon: 'text-neutral-400' },
-  };
-
-  const c = colors[variant];
-
+// Inline countdown — compact HH:MM:SS for the toolbar
+const CountdownInline = ({ targetTime }: { targetTime: Date }) => {
+  const [t, setT] = useState({ h: 0, m: 0, s: 0 });
+  useEffect(() => {
+    const tick = () => {
+      const diff = Math.max(0, targetTime.getTime() - Date.now());
+      setT({
+        h: Math.floor(diff / 3_600_000),
+        m: Math.floor((diff % 3_600_000) / 60_000),
+        s: Math.floor((diff % 60_000) / 1000),
+      });
+    };
+    tick();
+    const id = setInterval(tick, 1000);
+    return () => clearInterval(id);
+  }, [targetTime]);
   return (
-    <div className={`relative ${sizes[size]} flex items-center justify-center`}>
-      <div className={`absolute inset-0 ${c.bg} ${c.border} border-2 rounded-lg rotate-45`} />
-      <GiSpartanHelmet className={`${iconSizes[size]} ${c.icon} relative z-10`} />
-    </div>
+    <span>
+      {String(t.h).padStart(2, "0")}:{String(t.m).padStart(2, "0")}:
+      {String(t.s).padStart(2, "0")}
+    </span>
   );
 };
 
-// Get rank color based on rank name
-const getRankColor = (rank: string) => {
-  if (rank?.toLowerCase().includes('titan')) return 'text-amber-400';
-  if (rank?.toLowerCase().includes('commander')) return 'text-orange-400';
-  if (rank?.toLowerCase().includes('gladiator')) return 'text-emerald-400';
-  if (rank?.toLowerCase().includes('warrior')) return 'text-cyan-400';
-  return 'text-neutral-400';
-};
-
-// Countdown timer component
-const CountdownTimer = ({ targetTime }: { targetTime: Date }) => {
-  const [timeLeft, setTimeLeft] = useState({ hours: 0, minutes: 0, seconds: 0 });
-
-  useEffect(() => {
-    const calculate = () => {
-      const now = new Date().getTime();
-      const target = targetTime.getTime();
-      const diff = Math.max(0, target - now);
-
-      setTimeLeft({
-        hours: Math.floor(diff / (1000 * 60 * 60)),
-        minutes: Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60)),
-        seconds: Math.floor((diff % (1000 * 60)) / 1000),
-      });
-    };
-
-    calculate();
-    const interval = setInterval(calculate, 1000);
-    return () => clearInterval(interval);
-  }, [targetTime]);
-
+// FAQ accordion
+const FAQItem = ({
+  question,
+  answer,
+}: {
+  question: string;
+  answer: string;
+}) => {
+  const [open, setOpen] = useState(false);
   return (
-    <div className="flex items-center gap-2 text-white">
-      <span className="font-bold text-lg">{String(timeLeft.hours).padStart(2, '0')}</span>
-      <span className="text-neutral-500 text-sm">Hours</span>
-      <span className="font-bold text-lg">{String(timeLeft.minutes).padStart(2, '0')}</span>
-      <span className="text-neutral-500 text-sm">Minutes</span>
-      <span className="font-bold text-lg">{String(timeLeft.seconds).padStart(2, '0')}</span>
-      <span className="text-neutral-500 text-sm">Seconds</span>
+    <div className="border-b border-white/[0.08]">
+      <button
+        onClick={() => setOpen((o) => !o)}
+        className="flex w-full items-center justify-between py-4 text-left"
+      >
+        <span className="text-sm font-medium text-white">{question}</span>
+        <span className="text-xl text-neutral-500">{open ? "−" : "+"}</span>
+      </button>
+      {open && <div className="pb-4 text-sm text-neutral-400">{answer}</div>}
     </div>
   );
 };
 
 export default function LeaderboardPage() {
   const { user } = useUser();
-  const [type, setType] = useState<LeaderboardType>('gold');
-  const [period, setPeriod] = useState<LeaderboardPeriod>('DAILY');
+  const [mounted, setMounted] = useState(false);
+  const [type, setType] = useState<LeaderboardType>("points");
+  const [period, setPeriod] = useState<LeaderboardPeriod>("DAILY");
   const [page, setPage] = useState(1);
-  const [search, setSearch] = useState('');
-  const [expandedFaq, setExpandedFaq] = useState<number | null>(null);
+  // Uncontrolled input text — debounced below before flowing into the query
+  // so every keystroke doesn't fire a fresh backend request.
+  const [searchInput, setSearchInput] = useState("");
+  const debouncedSearch = useDebouncedValue(searchInput, 300);
   const pageSize = 50;
+
+  useEffect(() => setMounted(true), []);
+
+  // Reset to the first page whenever the debounced search term changes.
+  useEffect(() => {
+    setPage(1);
+  }, [debouncedSearch]);
 
   const { leaderboard, position, top3 } = useLeaderboardPageData(type, period, {
     limit: pageSize,
     offset: (page - 1) * pageSize,
-    search: search || undefined,
+    search: debouncedSearch || undefined,
   });
-  const { data: arenaStats } = useArenaStats();
 
   const nextResetTime = useMemo(() => {
-    if (period === 'LIFETIME') return null;
+    if (period === "LIFETIME") return null;
     const now = new Date();
-    return period === 'DAILY'
-      ? new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 1))
+    return period === "DAILY"
+      ? new Date(
+          Date.UTC(
+            now.getUTCFullYear(),
+            now.getUTCMonth(),
+            now.getUTCDate() + 1,
+          ),
+        )
       : new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1));
   }, [period]);
 
-  // Mock top 3 data for display
-  const top3Data = top3.data || [];
-  const leaderboardEntries = leaderboard.data?.entries || [];
-  const totalEntries = leaderboard.data?.total || 0;
+  const top3Data: LeaderboardEntry[] = top3.data ?? [];
+  const leaderboardEntries: LeaderboardEntry[] =
+    leaderboard.data?.entries ?? [];
+  const totalEntries = leaderboard.data?.total ?? 0;
   const totalPages = Math.ceil(totalEntries / pageSize);
 
-  // Prize amounts
-  const getPrize = (pos: number) => {
-    if (period === 'LIFETIME') return 0;
-    const prizes = period === 'DAILY'
-      ? { 1: 1000, 2: 900, 3: 800, 4: 700, 5: 700, 6: 700, 7: 700, 8: 700, 9: 700, 10: 700 }
-      : { 1: 10000, 2: 8000, 3: 6000, 4: 4000, 5: 4000, 6: 4000, 7: 4000, 8: 4000, 9: 4000, 10: 4000 };
-    if (pos <= 10) return prizes[pos as keyof typeof prizes] || 700;
-    if (pos <= 50) return period === 'DAILY' ? 500 : 2500;
-    if (pos <= 100) return period === 'DAILY' ? 350 : 1500;
-    if (pos <= 500) return period === 'DAILY' ? 200 : 800;
-    if (pos <= 1000) return period === 'DAILY' ? 100 : 500;
-    if (pos <= 2500) return period === 'DAILY' ? 50 : 300;
-    return 0;
+  const isInitialLoading =
+    leaderboard.isLoading && leaderboardEntries.length === 0;
+  const isLeaderboardError = leaderboard.isError;
+  const isTop3Loading = top3.isLoading && top3Data.length === 0;
+
+  // Display label — "Credits" matches the terminology used everywhere
+  // else in the Airdrop Genesis umbrella (even though the backend API
+  // path is /api/leaderboard/points and the storage column is goldEarned,
+  // the user-facing word across the product is Credits).
+  const categoryLabel = {
+    points: "Credits",
+    pnl: "Realized PnL",
+    volume: "Volume",
+  }[type];
+
+  const getEntryValue = (entry: LeaderboardEntry | undefined): number => {
+    if (!entry) return 0;
+    if (type === "points") return Number(entry.points ?? entry.goldEarned ?? 0);
+    if (type === "pnl") return Number(entry.pnl ?? 0);
+    return Number(entry.volume ?? 0);
   };
 
-  const faqs = [
-    { q: 'How Does The Leaderboard Work?', a: 'The leaderboard ranks users by Credits earned (Credits Leaderboard) or quests completed (Quest Leaderboard). Rankings reset daily at midnight UTC for daily boards and on the 1st of each month for monthly boards.' },
-    { q: 'Want to keep it stealth?', a: 'Enable anonymous mode in your Airdrop Genesis settings to hide your username on the leaderboard. Your stats will still count, but others will see ******* instead of your name.' },
-    { q: 'How Are Credits Calculated?', a: 'Credits are earned through trading activity, quest completion, trading streaks, and rank-up bonuses. Your Credits multiplier increases with your Airdrop Genesis rank.' },
-  ];
+  const formatValue = (value: number): string => {
+    if (type === "points") return value.toLocaleString();
+    if (type === "pnl") {
+      const formatted = value.toLocaleString("en-US", {
+        style: "currency",
+        currency: "USD",
+        maximumFractionDigits: 0,
+      });
+      return value >= 0 ? `+${formatted}` : formatted;
+    }
+    return value.toLocaleString("en-US", {
+      style: "currency",
+      currency: "USD",
+      maximumFractionDigits: 0,
+    });
+  };
+
+  const getValueColor = (value: number): string => {
+    if (type !== "pnl") return "text-white";
+    return value >= 0 ? "text-emerald-400" : "text-rose-400";
+  };
+
+  // Deterministic avatar tint from name (purely decorative)
+  const avatarGradient = (name: string): string => {
+    const palette = [
+      "from-amber-500/25 to-amber-700/10 text-amber-200",
+      "from-emerald-500/25 to-emerald-700/10 text-emerald-200",
+      "from-sky-500/25 to-sky-700/10 text-sky-200",
+      "from-violet-500/25 to-violet-700/10 text-violet-200",
+      "from-rose-500/25 to-rose-700/10 text-rose-200",
+      "from-cyan-500/25 to-cyan-700/10 text-cyan-200",
+      "from-fuchsia-500/25 to-fuchsia-700/10 text-fuchsia-200",
+      "from-lime-500/25 to-lime-700/10 text-lime-200",
+    ];
+    let h = 0;
+    for (let i = 0; i < name.length; i++)
+      h = (h * 31 + name.charCodeAt(i)) >>> 0;
+    return palette[h % palette.length];
+  };
 
   return (
     <>
       <Head>
         <title>Leaderboard | Interstate Airdrop Genesis</title>
-        <meta name="description" content="Compete for Credits prizes on the Interstate Airdrop Genesis leaderboard." />
+        <meta
+          name="description"
+          content="Interstate's traders, ranked by Points, Realized PnL, and Volume."
+        />
       </Head>
 
       <div className="min-h-screen bg-black">
-        {/* Header stays outside the rounded container */}
         <Header />
 
-        {/* Outer padding wrapper - collapses when a popup is docked */}
         <DockedPanelMarginWrapper>
-        <div className="p-1 sm:p-1.5">
-          {/* Rounded container with background */}
-          <div className="relative rounded-2xl overflow-hidden min-h-[calc(100vh-80px)] border border-white/[0.06]">
-            {/* Background inside the rounded container */}
-            <SpaceBackgroundContained />
+          <div className="p-1 sm:p-1.5">
+            {/* Rounded container with shared space background */}
+            <div className="relative min-h-[calc(100vh-80px)] overflow-hidden rounded-2xl border border-white/[0.06]">
+              <SpaceBackgroundContained />
 
-            {/* Content */}
-            <main className="relative z-10 mx-auto max-w-6xl px-4 sm:px-6 pt-8 pb-24">
-              {/* Page Title */}
-              <h1 className="text-5xl md:text-6xl font-black tracking-tight text-white text-center mb-8">
-                LEADERBOARD
-              </h1>
+              <main className="relative z-10 mx-auto max-w-6xl px-4 pt-8 pb-24 sm:px-6">
+                {/* Top-level tab: Airdrop Genesis / Referrals / Leaderboard */}
+                <ArenaPageToggle activePage="leaderboard" />
 
-            {/* Header Tabs - Three sections: Credits Toggle | Period Selector | Quest Toggle */}
-            <div className="flex items-center justify-center mb-6">
-              <div className="inline-flex items-center bg-neutral-900/80 backdrop-blur-sm rounded-full border border-neutral-700/50 p-1 gap-1">
-                {/* Credits Leaderboard Toggle */}
-                <button
-                  onClick={() => setType('gold')}
-                  className={`flex items-center gap-2 px-4 py-2 rounded-full transition-all ${
-                    type === 'gold'
-                      ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30'
-                      : 'text-neutral-400 hover:text-neutral-300'
+                {/* Epic title block — mirrors airdrop-genesis + referrals */}
+                <div
+                  className={`mb-10 text-center transition-all duration-700 ${
+                    mounted
+                      ? "translate-y-0 opacity-100"
+                      : "-translate-y-4 opacity-0"
                   }`}
                 >
-                  <CreditsCoin className="w-5 h-5" />
-                  <span className="font-bold">Credits Leaderboard</span>
-                </button>
+                  <div className="mb-4 flex items-center justify-center gap-4">
+                    <div className="h-px w-16 bg-gradient-to-r from-transparent via-amber-500/50 to-amber-500/20" />
+                    <GiTrophy className="h-6 w-6 text-amber-500/70" />
+                    <div className="h-px w-16 bg-gradient-to-l from-transparent via-amber-500/50 to-amber-500/20" />
+                  </div>
 
-                {/* Period Tabs - Always in center */}
-                <div className="flex items-center gap-1 px-3 border-l border-r border-neutral-700/50">
-                  {(['DAILY', 'MONTHLY', 'LIFETIME'] as const).map((p) => (
-                    <button
-                      key={p}
-                      onClick={() => { setPeriod(p); setPage(1); }}
-                      className={`px-3 py-1.5 text-sm font-medium transition-colors rounded ${
-                        period === p ? 'text-white' : 'text-neutral-500 hover:text-neutral-300'
-                      }`}
-                    >
-                      {p.charAt(0) + p.slice(1).toLowerCase()}
-                    </button>
-                  ))}
+                  <h1 className="text-center text-5xl font-black tracking-tight text-white md:text-6xl">
+                    LEADERBOARD
+                  </h1>
+
+                  <div className="mt-4 flex items-center justify-center gap-3">
+                    <p className="text-sm font-semibold tracking-[0.3em] text-neutral-200 uppercase">
+                      Trade • Compete • Conquer
+                    </p>
+                  </div>
+
+                  <div className="mt-4 flex items-center justify-center gap-2">
+                    <div className="h-2 w-2 rounded-full bg-amber-500/30" />
+                    <div className="h-px w-24 bg-gradient-to-r from-amber-500/30 via-amber-500/10 to-transparent" />
+                    <div className="h-1.5 w-1.5 rounded-full bg-amber-500/20" />
+                    <div className="h-px w-24 bg-gradient-to-l from-amber-500/30 via-amber-500/10 to-transparent" />
+                    <div className="h-2 w-2 rounded-full bg-amber-500/30" />
+                  </div>
                 </div>
 
-                {/* Quest Leaderboard Toggle */}
-                <button
-                  onClick={() => setType('quests')}
-                  className={`flex items-center gap-2 px-4 py-2 rounded-full transition-all ${
-                    type === 'quests'
-                      ? 'bg-orange-500/20 text-orange-400 border border-orange-500/30'
-                      : 'text-neutral-400 hover:text-neutral-300'
+                {/* Category + period toolbar */}
+                <div
+                  className={`mb-8 flex flex-col gap-4 transition-all delay-100 duration-700 ${
+                    mounted
+                      ? "translate-y-0 opacity-100"
+                      : "translate-y-4 opacity-0"
                   }`}
                 >
-                  <IoRocketSharp className="w-5 h-5" />
-                  <span className="font-bold">Quest Leaderboard</span>
-                </button>
-              </div>
-            </div>
-
-            {/* Top 3 Podium */}
-            {top3Data.length >= 3 && (
-              <div className="flex items-end justify-center gap-8 mb-8">
-                {/* #2 - Silver (left) */}
-                <div className="text-center">
-                  <RankBadge rank="silver" size="lg" variant="silver" />
-                  <p className="text-white font-bold mt-3">@{top3Data[1]?.userName || '---'}</p>
-                  <p className={`text-sm ${getRankColor(top3Data[1]?.rank)}`}>
-                    <GiTrophy className="inline w-4 h-4 mr-1" />
-                    {top3Data[1]?.rank || 'Degen'} {top3Data[1]?.rankLevel || 'I'}
-                  </p>
-                  <div className="mt-3 px-4 py-2 bg-neutral-800/80 rounded-lg border border-neutral-700">
-                    <div className="flex items-center justify-between gap-4">
-                      <div className="flex items-center gap-1">
-                        {type === 'gold' ? (
-                          <CreditsCoin className="w-4 h-4" />
-                        ) : (
-                          <IoRocketSharp className="w-4 h-4 text-orange-400" />
-                        )}
-                        <span className={type === 'gold' ? 'text-amber-400 font-bold' : 'text-orange-400 font-bold'}>
-                          {type === 'gold'
-                            ? (top3Data[1]?.goldEarned || 0).toLocaleString()
-                            : top3Data[1]?.questsCompleted || 0}
-                        </span>
-                      </div>
-                      <span className="text-neutral-400">+{getPrize(2)}</span>
-                      <CreditsCoin className="w-4 h-4" />
-                    </div>
-                  </div>
-                </div>
-
-                {/* #1 - Gold (center, elevated) */}
-                <div className="text-center -mt-8">
-                  <RankBadge rank="gold" size="lg" variant="gold" />
-                  <p className="text-white font-bold mt-3">@{top3Data[0]?.userName || '---'}</p>
-                  <p className={`text-sm ${getRankColor(top3Data[0]?.rank)}`}>
-                    <GiTrophy className="inline w-4 h-4 mr-1" />
-                    {top3Data[0]?.rank || 'Degen'} {top3Data[0]?.rankLevel || 'I'}
-                  </p>
-                  <div className="mt-3 px-4 py-2 bg-amber-500/20 rounded-lg border border-amber-500/40">
-                    <div className="flex items-center justify-between gap-4">
-                      <div className="flex items-center gap-1">
-                        {type === 'gold' ? (
-                          <CreditsCoin className="w-4 h-4" />
-                        ) : (
-                          <IoRocketSharp className="w-4 h-4 text-orange-400" />
-                        )}
-                        <span className={type === 'gold' ? 'text-amber-400 font-bold' : 'text-orange-400 font-bold'}>
-                          {type === 'gold'
-                            ? (top3Data[0]?.goldEarned || 0).toLocaleString()
-                            : top3Data[0]?.questsCompleted || 0}
-                        </span>
-                      </div>
-                      <span className="text-amber-300">+{getPrize(1).toLocaleString()}</span>
-                      <CreditsCoin className="w-4 h-4" />
-                    </div>
-                  </div>
-                </div>
-
-                {/* #3 - Bronze (right) */}
-                <div className="text-center">
-                  <RankBadge rank="bronze" size="lg" variant="bronze" />
-                  <p className="text-white font-bold mt-3">@{top3Data[2]?.userName || '---'}</p>
-                  <p className={`text-sm ${getRankColor(top3Data[2]?.rank)}`}>
-                    <GiTrophy className="inline w-4 h-4 mr-1" />
-                    {top3Data[2]?.rank || 'Degen'} {top3Data[2]?.rankLevel || 'I'}
-                  </p>
-                  <div className="mt-3 px-4 py-2 bg-amber-700/20 rounded-lg border border-amber-600/40">
-                    <div className="flex items-center justify-between gap-4">
-                      <div className="flex items-center gap-1">
-                        {type === 'gold' ? (
-                          <CreditsCoin className="w-4 h-4" />
-                        ) : (
-                          <IoRocketSharp className="w-4 h-4 text-orange-400" />
-                        )}
-                        <span className={type === 'gold' ? 'text-amber-400 font-bold' : 'text-orange-400 font-bold'}>
-                          {type === 'gold'
-                            ? (top3Data[2]?.goldEarned || 0).toLocaleString()
-                            : top3Data[2]?.questsCompleted || 0}
-                        </span>
-                      </div>
-                      <span className="text-amber-500">+{getPrize(3)}</span>
-                      <CreditsCoin className="w-4 h-4" />
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* Countdown Timer */}
-            {nextResetTime && (
-              <div className="text-center mb-6">
-                <p className="text-neutral-400 text-sm uppercase tracking-wider font-bold mb-2">
-                  {period} Leaderboard Resets In
-                </p>
-                <CountdownTimer targetTime={nextResetTime} />
-              </div>
-            )}
-
-            {/* Your Position Bar - Matte opaque style */}
-            {user && (
-              <div className="mb-6 px-5 py-4 bg-white/[0.06] backdrop-blur-sm border border-white/[0.08] rounded-xl">
-                <div className="flex items-center justify-between">
-                  {/* Left: Position & Username */}
-                  <div className="flex items-center gap-6">
-                    <span className="text-neutral-400 font-medium text-sm">
-                      {position.data?.position ? `#${position.data.position}` : 'Not Placed'}
-                    </span>
-                    <span className="text-white font-bold text-sm">You <span className="text-neutral-300">({user.name})</span></span>
-                  </div>
-
-                  {/* Right: Stats */}
-                  <div className="flex items-center gap-8">
-                    {/* Rank Badge */}
-                    <div className="flex items-center gap-2">
-                      <img
-                        src={getRankImage((arenaStats as any)?.rank || 'degen', (arenaStats as any)?.rankLevel || 1)}
-                        alt="Rank"
-                        className="w-6 h-6 object-contain"
-                      />
-                      <span className="text-neutral-300 text-sm">{(arenaStats as any)?.rank || 'Degen'} {['', 'I', 'II', 'III', 'IV'][(arenaStats as any)?.rankLevel || 1]}</span>
-                    </div>
-
-                    {/* SOL */}
-                    <div className="flex items-center gap-1.5">
-                      <SolanaLogo className="w-4 h-4" />
-                      <span className="text-white text-sm font-medium">0 SOL</span>
-                    </div>
-
-                    {/* Credits earned */}
-                    <div className="flex items-center gap-1.5">
-                      <CreditsCoin className="w-5 h-5" />
-                      <span className="text-white text-sm font-medium">
-                        {type === 'gold' ? (position.data?.value?.toLocaleString() || '0') : '0'}
-                      </span>
-                    </div>
-
-                    {/* Prize */}
-                    <div className="flex items-center gap-1.5">
-                      <CreditsCoin className="w-5 h-5" />
-                      <span className="text-amber-400 text-sm font-medium">+{position.data?.prize || 350}</span>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* Jackpot Banner - Dark style with gold accent */}
-            <div
-              className="relative mb-6 rounded-xl overflow-hidden"
-              style={{
-                background: 'linear-gradient(90deg, #1a1508 0%, #0d0d0a 30%, #0f0e0a 70%, #1a1508 100%)',
-                border: '1px solid rgba(139, 115, 85, 0.3)'
-              }}
-            >
-              {/* Gold accent on left edge */}
-              <div
-                className="absolute left-0 top-0 bottom-0 w-1"
-                style={{ background: 'linear-gradient(180deg, #D4AF37 0%, #B8860B 50%, #8B6914 100%)' }}
-              />
-
-              {/* Subtle coin imagery on right */}
-              <div
-                className="absolute right-0 top-0 bottom-0 w-1/3 opacity-30"
-                style={{
-                  backgroundImage: 'url(/future.png)',
-                  backgroundSize: 'cover',
-                  backgroundPosition: 'center right',
-                  maskImage: 'linear-gradient(to right, transparent, black)',
-                  WebkitMaskImage: 'linear-gradient(to right, transparent, black)'
-                }}
-              />
-
-              <div className="relative flex items-center justify-between px-6 py-5">
-                <div>
-                  <h3
-                    className="font-black text-xl tracking-wide"
-                    style={{
-                      background: 'linear-gradient(90deg, #FFD700 0%, #FFC107 50%, #FFB300 100%)',
-                      WebkitBackgroundClip: 'text',
-                      WebkitTextFillColor: 'transparent',
-                      backgroundClip: 'text',
-                    }}
-                  >
-                    $2,574.56 DAILY JACKPOT NOW LIVE
-                  </h3>
-                  <p className="text-neutral-400 text-sm mt-0.5">Turn Your Credits Into Huge Solana Rewards!</p>
-                </div>
-                <button
-                  className="px-6 py-2.5 text-sm font-semibold rounded-lg transition-all duration-200 cursor-pointer hover:brightness-110"
-                  style={{
-                    background: 'rgba(20, 18, 12, 0.9)',
-                    border: '1px solid rgba(212, 175, 55, 0.5)',
-                    color: '#D4AF37'
-                  }}
-                >
-                  Enter The Jackpot
-                </button>
-              </div>
-            </div>
-
-            {/* Rankings Table */}
-            <Card className="p-6 mb-6">
-              <div className="flex items-center justify-between mb-4">
-                <h3 className={type === 'gold' ? 'text-amber-400 font-bold' : 'text-white font-bold'}>
-                  {type === 'gold' ? 'Credits Ranks' : 'Quest Ranks'}
-                </h3>
-                <div className="flex items-center gap-3">
-                  <button className="px-4 py-2 bg-neutral-800 hover:bg-neutral-700 text-white text-sm font-medium rounded-lg transition-colors border border-neutral-700">
-                    Show Your Position
-                  </button>
-                  <div className="relative">
-                    <FiSearch className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-neutral-500" />
-                    <input
-                      type="text"
-                      placeholder="Search User"
-                      value={search}
-                      onChange={(e) => { setSearch(e.target.value); setPage(1); }}
-                      className="pl-10 pr-4 py-2 bg-neutral-800 border border-neutral-700 rounded-lg text-white text-sm placeholder-neutral-500 focus:outline-none focus:border-neutral-600"
-                    />
-                  </div>
-                </div>
-              </div>
-
-              {/* Table */}
-              <div className="overflow-x-auto">
-                <table className="w-full">
-                  <thead>
-                    <tr className="border-b border-neutral-800">
-                      <th className="text-left py-3 px-4 text-neutral-500 text-sm font-medium">Place</th>
-                      <th className="text-left py-3 px-4 text-neutral-500 text-sm font-medium">User</th>
-                      <th className="text-left py-3 px-4 text-neutral-500 text-sm font-medium">Airdrop Genesis Rank</th>
-                      {type === 'gold' ? (
-                        <>
-                          <th className="text-left py-3 px-4 text-neutral-500 text-sm font-medium">SOL Earned</th>
-                          <th className="text-left py-3 px-4 text-neutral-500 text-sm font-medium">Credits Claimed</th>
-                        </>
-                      ) : (
-                        <th className="text-left py-3 px-4 text-neutral-500 text-sm font-medium">Quests Completed</th>
-                      )}
-                      <th className="text-left py-3 px-4 text-neutral-500 text-sm font-medium">Prizes</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {leaderboardEntries.length > 0 ? (
-                      leaderboardEntries.map((entry: any, idx: number) => {
-                        const pos = (page - 1) * pageSize + idx + 1;
+                  {/* Category pills */}
+                  <div className="flex items-center justify-center">
+                    <div className="inline-flex items-center rounded-full bg-[#1a1b1f] p-1">
+                      {(
+                        [
+                          { key: "points", label: "Credits" },
+                          { key: "pnl", label: "Realized PnL" },
+                          { key: "volume", label: "Volume" },
+                        ] as const
+                      ).map(({ key, label }) => {
+                        const active = type === key;
                         return (
-                          <tr key={entry.userId || idx} className="border-b border-neutral-800/50 hover:bg-neutral-800/30">
-                            <td className="py-3 px-4 text-neutral-500">#{pos}</td>
-                            <td className="py-3 px-4 text-white font-medium">
-                              @{entry.isAnonymous ? '*******' : entry.userName}
-                            </td>
-                            <td className="py-3 px-4">
-                              <div className="flex items-center gap-2">
-                                <RankBadge rank={entry.rank} size="sm" />
-                                <span className={getRankColor(entry.rank)}>
-                                  {entry.rank} {entry.rankLevel}
-                                </span>
+                          <button
+                            key={key}
+                            onClick={() => {
+                              setType(key);
+                              setPage(1);
+                            }}
+                            className={`rounded-full px-4 py-2 text-sm transition-all ${
+                              active
+                                ? "bg-gradient-to-r from-amber-500 to-yellow-500 font-semibold text-black"
+                                : "text-gray-400 hover:text-white"
+                            }`}
+                          >
+                            {label}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {/* Period + countdown */}
+                  <div className="flex flex-col items-center justify-center gap-4 sm:flex-row">
+                    <div className="inline-flex items-center gap-1 rounded-full border border-white/[0.08] bg-white/[0.04] p-1">
+                      {(["DAILY", "MONTHLY", "LIFETIME"] as const).map((p) => {
+                        const active = period === p;
+                        return (
+                          <button
+                            key={p}
+                            onClick={() => {
+                              setPeriod(p);
+                              setPage(1);
+                            }}
+                            className={`rounded-full px-4 py-1.5 text-xs font-medium tracking-wider uppercase transition-colors ${
+                              active
+                                ? "bg-white/[0.1] text-white"
+                                : "text-neutral-500 hover:text-white"
+                            }`}
+                          >
+                            {p.charAt(0) + p.slice(1).toLowerCase()}
+                          </button>
+                        );
+                      })}
+                    </div>
+                    {nextResetTime && (
+                      <div className="flex items-center gap-2 text-[11px] text-neutral-400">
+                        <span className="tracking-wider uppercase">
+                          Resets in
+                        </span>
+                        <span className="font-mono text-white tabular-nums">
+                          <CountdownInline targetTime={nextResetTime} />
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Top 3 Podium — three equal cards matching airdrop-genesis surface style */}
+                {isTop3Loading ? (
+                  <div className="mb-6 grid grid-cols-1 gap-4 md:grid-cols-3">
+                    {[0, 1, 2].map((i) => (
+                      <div
+                        key={`podium-skeleton-${i}`}
+                        className="flex items-center gap-4 rounded-xl border border-white/[0.08] bg-white/[0.04] px-5 py-4 backdrop-blur-sm"
+                      >
+                        <div className="h-12 w-12 flex-shrink-0 animate-pulse rounded-full bg-white/[0.08]" />
+                        <div className="flex-1 space-y-2">
+                          <div className="h-3 w-12 animate-pulse rounded bg-white/[0.08]" />
+                          <div className="h-4 w-28 animate-pulse rounded bg-white/[0.08]" />
+                          <div className="h-3 w-20 animate-pulse rounded bg-white/[0.08]" />
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : null}
+
+                {!isTop3Loading && top3Data.length >= 3 && (
+                  <div
+                    className={`mb-6 grid grid-cols-1 gap-4 transition-all delay-200 duration-700 md:grid-cols-3 ${
+                      mounted
+                        ? "translate-y-0 opacity-100"
+                        : "translate-y-4 opacity-0"
+                    }`}
+                  >
+                    {[0, 1, 2].map((podiumIdx) => {
+                      const entry = top3Data[podiumIdx];
+                      if (!entry) return null;
+                      // Renamed from `position` to avoid shadowing the outer
+                      // `position` from useLeaderboardPageData which is read
+                      // in the Your Position bar below.
+                      const podiumRank = podiumIdx + 1;
+                      const isFirst = podiumRank === 1;
+                      const displayName = entry.isAnonymous
+                        ? "•••••••"
+                        : entry.userName || "---";
+                      const initial = (displayName[0] || "?").toUpperCase();
+                      const value = getEntryValue(entry);
+                      const rankLabel =
+                        podiumRank === 1
+                          ? "1st"
+                          : podiumRank === 2
+                            ? "2nd"
+                            : "3rd";
+                      const rankAccent =
+                        podiumRank === 1
+                          ? "text-amber-400 bg-amber-500/10 border-amber-500/30"
+                          : podiumRank === 2
+                            ? "text-neutral-300 bg-white/[0.04] border-white/[0.12]"
+                            : "text-amber-700 bg-amber-900/15 border-amber-800/30";
+
+                      return (
+                        <div
+                          // Key MUST namespace by entityType because a bot
+                          // and a real user can share the same numeric id.
+                          key={`${entry.entityType}-${entry.userId}`}
+                          className={`flex items-center gap-4 rounded-xl border px-5 py-4 backdrop-blur-sm ${
+                            isFirst
+                              ? "border-amber-500/30 bg-gradient-to-br from-amber-500/[0.08] via-white/[0.04] to-transparent"
+                              : "border-white/[0.08] bg-white/[0.06]"
+                          }`}
+                        >
+                          <div
+                            className={`flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-full border border-white/10 bg-gradient-to-br text-base font-bold ${avatarGradient(
+                              displayName,
+                            )}`}
+                          >
+                            {initial}
+                          </div>
+
+                          <div className="min-w-0 flex-1">
+                            <div className="mb-1 flex items-center gap-2">
+                              <span
+                                className={`rounded-full border px-2 py-0.5 text-[9px] font-semibold tracking-wider uppercase ${rankAccent}`}
+                              >
+                                {rankLabel}
+                              </span>
+                              {isFirst && (
+                                <GiTrophy className="h-3.5 w-3.5 text-amber-400" />
+                              )}
+                            </div>
+                            <div className="truncate text-sm font-semibold text-white">
+                              @{displayName}
+                            </div>
+                            <div
+                              className={`font-mono text-[13px] tabular-nums ${getValueColor(value)}`}
+                            >
+                              {formatValue(value)}
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+
+                {/* Your Position — tri-state:
+                    • loading  → skeleton pulse
+                    • ranked   → #rank + name + value
+                    • unranked → "Unranked" label + category-specific hint */}
+                {user && (() => {
+                  const isPositionLoading = position.isLoading && !position.data;
+                  const hasRank = !!position.data?.position;
+
+                  // Copy mirrors the Airdrop Genesis voice
+                  // ("Start trading to unlock…") used on airdrop-genesis.tsx.
+                  const unrankedHint = {
+                    points: "Start trading to earn your first Credits",
+                    pnl: "Close a position to appear on the PnL board",
+                    volume: "Start trading to appear on the Volume board",
+                  }[type];
+
+                  return (
+                    <div className="mb-6 flex items-center justify-between rounded-xl border border-white/[0.08] bg-white/[0.06] px-5 py-4 backdrop-blur-sm">
+                      <div className="flex min-w-0 items-center gap-4">
+                        {/* Rank badge — amber filled when ranked, neutral
+                            outline when unranked, shimmer when loading. */}
+                        {isPositionLoading ? (
+                          <div className="h-9 w-9 animate-pulse rounded-full border border-white/[0.08] bg-white/[0.04]" />
+                        ) : hasRank ? (
+                          <div className="flex h-9 w-9 items-center justify-center rounded-full border border-amber-500/30 bg-amber-500/15 text-xs font-semibold text-amber-400 tabular-nums">
+                            #{position.data!.position}
+                          </div>
+                        ) : (
+                          <div className="flex h-9 w-9 items-center justify-center rounded-full border border-white/[0.12] bg-white/[0.04] text-[13px] font-semibold text-neutral-500">
+                            —
+                          </div>
+                        )}
+
+                        <div className="min-w-0">
+                          <div className="text-[10px] font-semibold tracking-wider text-neutral-500 uppercase">
+                            {isPositionLoading
+                              ? "Your Position"
+                              : hasRank
+                                ? "Your Position"
+                                : "Unranked"}
+                          </div>
+                          {isPositionLoading ? (
+                            <div className="mt-1 h-4 w-28 animate-pulse rounded bg-white/[0.06]" />
+                          ) : hasRank ? (
+                            <div className="text-sm font-semibold text-white">
+                              @{user.name || "You"}
+                            </div>
+                          ) : (
+                            <>
+                              <div className="text-sm font-semibold text-white">
+                                @{user.name || "You"}
                               </div>
-                            </td>
-                            {type === 'gold' ? (
-                              <>
-                                <td className="py-3 px-4">
-                                  <div className="flex items-center gap-1">
-                                    <span className="text-purple-400">≡</span>
-                                    <span className="text-white">{(entry.solEarned || 0).toFixed(4)} SOL</span>
-                                  </div>
-                                </td>
-                                <td className="py-3 px-4">
-                                  <div className="flex items-center gap-1">
-                                    <CreditsCoin className="w-4 h-4" />
-                                    <span className="text-amber-400 font-bold">
-                                      {entry.goldEarned >= 1000
-                                        ? `${(entry.goldEarned / 1000).toFixed(1)}K`
-                                        : entry.goldEarned?.toLocaleString() || '0'}
-                                    </span>
-                                  </div>
-                                </td>
-                              </>
-                            ) : (
-                              <td className="py-3 px-4">
-                                <div className="flex items-center gap-1">
-                                  <IoRocketSharp className="w-4 h-4 text-orange-400" />
-                                  <span className="text-orange-400 font-bold">
-                                    {entry.questsCompleted || 0}
-                                  </span>
-                                </div>
-                              </td>
-                            )}
-                            <td className="py-3 px-4">
-                              <div className="flex items-center gap-1">
-                                <CreditsCoin className="w-4 h-4" />
-                                <span className="text-amber-400 font-bold">+{getPrize(pos).toLocaleString()}</span>
+                              <div className="mt-0.5 truncate text-[11px] text-neutral-400">
+                                {unrankedHint}
                               </div>
-                            </td>
-                          </tr>
+                            </>
+                          )}
+                        </div>
+                      </div>
+
+                      <div className="text-right">
+                        <div className="text-[10px] font-semibold tracking-wider text-neutral-500 uppercase">
+                          {categoryLabel}
+                        </div>
+                        {isPositionLoading ? (
+                          <div className="ml-auto mt-1 h-5 w-20 animate-pulse rounded bg-white/[0.06]" />
+                        ) : hasRank ? (
+                          <div
+                            className={`font-mono text-base font-semibold tabular-nums ${getValueColor(
+                              position.data!.value ?? 0,
+                            )}`}
+                          >
+                            {formatValue(position.data!.value ?? 0)}
+                          </div>
+                        ) : (
+                          <div className="font-mono text-base font-semibold tabular-nums text-neutral-500">
+                            —
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })()}
+
+                {/* Full Standings */}
+                <div className="mb-6 overflow-hidden rounded-xl border border-white/[0.08] bg-white/[0.04] backdrop-blur-sm">
+                  {/* Toolbar */}
+                  <div className="flex flex-col gap-3 border-b border-white/[0.08] px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
+                    <div>
+                      <h2 className="text-base font-bold text-white">
+                        Full Standings
+                      </h2>
+                      <p className="text-[11px] text-neutral-500">
+                        {totalEntries.toLocaleString()} traders · updates every
+                        5 min
+                      </p>
+                    </div>
+                    <div className="relative w-full sm:w-64">
+                      <FiSearch className="absolute top-1/2 left-3 h-3.5 w-3.5 -translate-y-1/2 text-neutral-500" />
+                      <input
+                        type="text"
+                        placeholder="Search trader…"
+                        value={searchInput}
+                        onChange={(e) => setSearchInput(e.target.value)}
+                        aria-label="Search traders by name"
+                        className="w-full rounded-full border border-white/[0.08] bg-white/[0.04] py-2 pr-4 pl-9 text-[12px] text-white placeholder-neutral-500 focus:border-white/[0.2] focus:outline-none"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Column headers */}
+                  <div className="grid grid-cols-[48px_1fr_auto] items-center gap-4 border-b border-white/[0.06] px-5 py-2.5 text-[10px] font-semibold tracking-wider text-neutral-500 uppercase">
+                    <div>Rank</div>
+                    <div>Trader</div>
+                    <div className="text-right">{categoryLabel}</div>
+                  </div>
+
+                  {/* Rows */}
+                  <div>
+                    {isLeaderboardError ? (
+                      // Error state — surfaces the query failure with a retry
+                      // affordance rather than a silent empty list.
+                      <div className="px-5 py-12 text-center">
+                        <FiAlertCircle className="mx-auto mb-3 h-6 w-6 text-rose-400" />
+                        <p className="text-sm text-white">
+                          Couldn&apos;t load the leaderboard.
+                        </p>
+                        <p className="mt-1 text-[12px] text-neutral-500">
+                          {(leaderboard.error as Error | null)?.message ??
+                            "Please try again."}
+                        </p>
+                        <button
+                          onClick={() => leaderboard.refetch()}
+                          className="mt-4 rounded-full border border-white/[0.12] bg-white/[0.06] px-4 py-1.5 text-[12px] font-medium text-white hover:bg-white/[0.1]"
+                        >
+                          Retry
+                        </button>
+                      </div>
+                    ) : isInitialLoading ? (
+                      // Skeleton rows while the first request is in flight.
+                      Array.from({ length: 8 }).map((_, idx) => (
+                        <div
+                          key={`skeleton-${idx}`}
+                          className="grid grid-cols-[48px_1fr_auto] items-center gap-4 border-b border-white/[0.04] px-5 py-3"
+                        >
+                          <div className="h-3 w-6 animate-pulse rounded bg-white/[0.06]" />
+                          <div className="flex items-center gap-3">
+                            <div className="h-8 w-8 animate-pulse rounded-full bg-white/[0.06]" />
+                            <div className="h-3 w-32 animate-pulse rounded bg-white/[0.06]" />
+                          </div>
+                          <div className="ml-auto h-3 w-16 animate-pulse rounded bg-white/[0.06]" />
+                        </div>
+                      ))
+                    ) : leaderboardEntries.length > 0 ? (
+                      leaderboardEntries.map((entry, idx) => {
+                        const pos = (page - 1) * pageSize + idx + 1;
+                        const displayName = entry.isAnonymous
+                          ? "•••••••"
+                          : entry.userName || "---";
+                        const initial = (displayName[0] || "?").toUpperCase();
+                        const value = getEntryValue(entry);
+                        const isPodium = pos <= 3;
+
+                        return (
+                          <div
+                            // Namespace by entityType so a bot and a real
+                            // user that share the same numeric id don't
+                            // collide in the React reconciler.
+                            key={`${entry.entityType}-${entry.userId}`}
+                            className="grid grid-cols-[48px_1fr_auto] items-center gap-4 border-b border-white/[0.04] px-5 py-3 transition-colors hover:bg-white/[0.03]"
+                          >
+                            <div
+                              className={`font-mono text-[13px] tabular-nums ${
+                                isPodium
+                                  ? "font-semibold text-amber-400"
+                                  : "text-neutral-500"
+                              }`}
+                            >
+                              #{pos}
+                            </div>
+
+                            <div className="flex min-w-0 items-center gap-3">
+                              <div
+                                className={`flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full border border-white/10 bg-gradient-to-br text-[11px] font-bold ${avatarGradient(
+                                  displayName,
+                                )}`}
+                              >
+                                {initial}
+                              </div>
+                              <span className="truncate text-[13px] font-medium text-white">
+                                {entry.isAnonymous ? "" : "@"}
+                                {displayName}
+                              </span>
+                            </div>
+
+                            <div
+                              className={`text-right font-mono text-[13px] font-semibold tabular-nums ${getValueColor(
+                                value,
+                              )}`}
+                            >
+                              {formatValue(value)}
+                            </div>
+                          </div>
                         );
                       })
                     ) : (
-                      <tr>
-                        <td colSpan={type === 'gold' ? 6 : 5} className="py-8 text-center text-neutral-500">
-                          No results found
-                        </td>
-                      </tr>
-                    )}
-                  </tbody>
-                </table>
-              </div>
-
-              {/* Pagination */}
-              {totalPages > 1 && (
-                <div className="flex items-center justify-center gap-2 mt-6">
-                  <button
-                    onClick={() => setPage(1)}
-                    disabled={page === 1}
-                    className="px-3 py-2 text-neutral-500 hover:text-white disabled:opacity-30"
-                  >
-                    «
-                  </button>
-                  <button
-                    onClick={() => setPage(Math.max(1, page - 1))}
-                    disabled={page === 1}
-                    className="px-3 py-2 text-neutral-500 hover:text-white disabled:opacity-30"
-                  >
-                    <FiChevronLeft />
-                  </button>
-
-                  {/* Page numbers */}
-                  {Array.from({ length: Math.min(6, totalPages) }, (_, i) => {
-                    let pageNum;
-                    if (totalPages <= 6) {
-                      pageNum = i + 1;
-                    } else if (page <= 3) {
-                      pageNum = i + 1;
-                    } else if (page >= totalPages - 2) {
-                      pageNum = totalPages - 5 + i;
-                    } else {
-                      pageNum = page - 2 + i;
-                    }
-                    return (
-                      <button
-                        key={pageNum}
-                        onClick={() => setPage(pageNum)}
-                        className={`w-8 h-8 rounded ${
-                          page === pageNum
-                            ? 'bg-neutral-700 text-white'
-                            : 'text-neutral-500 hover:text-white'
-                        }`}
-                      >
-                        {pageNum}
-                      </button>
-                    );
-                  })}
-
-                  {totalPages > 6 && <span className="text-neutral-500">...</span>}
-                  {totalPages > 6 && (
-                    <button
-                      onClick={() => setPage(totalPages)}
-                      className={`w-8 h-8 rounded ${
-                        page === totalPages ? 'bg-neutral-700 text-white' : 'text-neutral-500 hover:text-white'
-                      }`}
-                    >
-                      {totalPages}
-                    </button>
-                  )}
-
-                  <button
-                    onClick={() => setPage(Math.min(totalPages, page + 1))}
-                    disabled={page === totalPages}
-                    className="px-3 py-2 text-neutral-500 hover:text-white disabled:opacity-30"
-                  >
-                    <FiChevronRight />
-                  </button>
-                  <button
-                    onClick={() => setPage(totalPages)}
-                    disabled={page === totalPages}
-                    className="px-3 py-2 text-neutral-500 hover:text-white disabled:opacity-30"
-                  >
-                    »
-                  </button>
-                </div>
-              )}
-            </Card>
-
-            {/* FAQs */}
-            <div className="mb-6">
-              <div className="mb-4">
-                <h2 className="text-white font-bold text-lg">FAQs</h2>
-                <p className="text-neutral-500 text-sm">
-                  More Questions? <a href="#" className="text-white underline hover:no-underline">Chat with Support</a> or <a href="/airdrop-genesis" className="text-white underline hover:no-underline">View Airdrop Genesis Intro</a>
-                </p>
-              </div>
-
-              <div className="space-y-2">
-                {faqs.map((faq, idx) => (
-                  <div key={idx} className="border-b border-neutral-800">
-                    <button
-                      onClick={() => setExpandedFaq(expandedFaq === idx ? null : idx)}
-                      className="w-full flex items-center justify-between py-4 text-left"
-                    >
-                      <span className="text-white font-medium">{faq.q}</span>
-                      <span className="text-neutral-500 text-xl">{expandedFaq === idx ? '−' : '+'}</span>
-                    </button>
-                    {expandedFaq === idx && (
-                      <div className="pb-4 text-neutral-400 text-sm">
-                        {faq.a}
+                      <div className="px-5 py-12 text-center text-sm text-neutral-500">
+                        {debouncedSearch
+                          ? `No traders match "${debouncedSearch}".`
+                          : "No traders found."}
                       </div>
                     )}
                   </div>
-                ))}
+
+                  {/* Pagination */}
+                  {totalPages > 1 && (
+                    <div className="flex items-center justify-between border-t border-white/[0.08] px-5 py-3 text-[11px]">
+                      <div className="text-neutral-500">
+                        Page{" "}
+                        <span className="font-mono font-semibold text-white tabular-nums">
+                          {page}
+                        </span>{" "}
+                        of{" "}
+                        <span className="font-mono text-neutral-400 tabular-nums">
+                          {totalPages}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={() => setPage(Math.max(1, page - 1))}
+                          disabled={page === 1}
+                          className="flex items-center gap-1 rounded-full border border-white/[0.08] bg-white/[0.04] px-3 py-1.5 text-white hover:bg-white/[0.08] disabled:cursor-not-allowed disabled:opacity-30"
+                        >
+                          <FiChevronLeft className="h-3 w-3" />
+                          Prev
+                        </button>
+                        <button
+                          onClick={() =>
+                            setPage(Math.min(totalPages, page + 1))
+                          }
+                          disabled={page === totalPages}
+                          className="flex items-center gap-1 rounded-full border border-white/[0.08] bg-white/[0.04] px-3 py-1.5 text-white hover:bg-white/[0.08] disabled:cursor-not-allowed disabled:opacity-30"
+                        >
+                          Next
+                          <FiChevronRight className="h-3 w-3" />
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* FAQs */}
+                <div className="mt-16 mb-6">
+                  <div className="mb-3">
+                    <h2 className="text-sm font-bold text-white">FAQs</h2>
+                    <p className="text-[11px] text-neutral-500">
+                      More Questions?{" "}
+                      <a
+                        href="#"
+                        className="text-neutral-300 underline hover:text-white"
+                      >
+                        Chat with Support
+                      </a>{" "}
+                      or{" "}
+                      <a
+                        href="/airdrop-genesis"
+                        className="text-neutral-300 underline hover:text-white"
+                      >
+                        View Airdrop Genesis
+                      </a>
+                    </p>
+                  </div>
+
+                  <div>
+                    <FAQItem
+                      question="How does the leaderboard work?"
+                      answer="The leaderboard ranks traders by three metrics: Points (earned through trading and quests), Realized PnL (profit or loss from closed positions), and Volume (total USD traded). Rankings reset daily at 00:00 UTC for the Daily board and on the 1st of each month for the Monthly board. Lifetime totals never reset."
+                    />
+                    <FAQItem
+                      question="Can I hide my username?"
+                      answer="Yes. Enable anonymous mode in your Airdrop Genesis settings and your username will display as ••••••• on the leaderboard while your stats still count."
+                    />
+                    <FAQItem
+                      question="How often does it update?"
+                      answer="The leaderboard rebuilds every five minutes. Your latest trades will appear within a few minutes of being recorded."
+                    />
+                  </div>
+                </div>
+              </main>
+
+              <div className="relative z-10">
+                <Footer />
               </div>
             </div>
-            </main>
-
-            {/* Footer inside the rounded container */}
-            <div className="relative z-10">
-              <Footer />
-            </div>
           </div>
-        </div>
         </DockedPanelMarginWrapper>
       </div>
     </>
