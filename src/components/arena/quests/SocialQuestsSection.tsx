@@ -7,7 +7,7 @@
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/router';
-import { FiCheck, FiExternalLink, FiLoader, FiInfo } from 'react-icons/fi';
+import { FiCheck, FiExternalLink, FiLoader, FiInfo, FiChevronDown, FiChevronRight } from 'react-icons/fi';
 import InterstateTooltip from '~/components/InterstateTooltip';
 import type { Quest } from '~/utils/arenaApi';
 import {
@@ -67,6 +67,7 @@ export default function SocialQuestsSection({
   const router = useRouter();
   const [actionTaken, setActionTaken] = useState<Record<string, boolean>>({});
   const [verifyingQuest, setVerifyingQuest] = useState<string | null>(null);
+  const [collapsed, setCollapsed] = useState(true);
   const autoVerifyDone = useRef(false);
 
   const questMap = useMemo(() => {
@@ -93,6 +94,13 @@ export default function SocialQuestsSection({
     return SOCIAL_QUEST_CONFIGS.every(cfg => questMap[cfg.questId]?.isClaimed);
   }, [questMap]);
 
+  const claimedCredits = useMemo(() => {
+    return SOCIAL_QUEST_CONFIGS.reduce((sum, cfg) => {
+      const q = questMap[cfg.questId];
+      return sum + (q && q.isClaimed ? q.goldReward : 0);
+    }, 0);
+  }, [questMap]);
+
   const handleConnect = useCallback(async (platform: 'twitter' | 'telegram') => {
     const result = await connectSocial.mutateAsync(platform);
     if (result.oauthUrl) {
@@ -110,6 +118,27 @@ export default function SocialQuestsSection({
     setVerifyingQuest(questId);
     try { await verifySocialQuest.mutateAsync(questId); } finally { setVerifyingQuest(null); }
   }, [verifySocialQuest]);
+
+  /**
+   * TG Join requires TWO prerequisites: (1) user joined the group, (2) TG linked to Snag.
+   * This handler checks if TG is already connected — if not, starts OAuth (auto-verify on return).
+   * If already connected, verifies the join rule directly.
+   */
+  const handleTelegramVerify = useCallback(async () => {
+    setVerifyingQuest('SOCIAL_JOIN_TG');
+    try {
+      const result = await connectSocial.mutateAsync('telegram');
+      if (result.oauthUrl) {
+        // TG not linked to Snag yet — OAuth first, auto-verify fires on redirect back
+        window.location.href = result.oauthUrl;
+        return;
+      }
+      // TG already connected — verify group membership directly
+      await verifySocialQuest.mutateAsync('SOCIAL_JOIN_TG');
+    } finally {
+      setVerifyingQuest(null);
+    }
+  }, [connectSocial, verifySocialQuest]);
 
   const handleClaim = useCallback((questDbId: number) => {
     claimQuest.mutate(questDbId);
@@ -135,33 +164,45 @@ export default function SocialQuestsSection({
     }
   }, [router.isReady, router.query, handleVerify]);
 
-  if (allClaimed) {
-    return (
-      <div className={`mb-6 ${className}`}>
-        <div className="flex items-center gap-2 mb-4">
-          <FiCheck className="w-4 h-4 text-emerald-500" />
-          <h3 className="text-white font-bold">Social Quests</h3>
-          <span className="text-xs text-emerald-400">Complete</span>
-        </div>
-      </div>
-    );
-  }
-
   return (
     <div className={`mb-6 ${className}`}>
-      {/* Header with total earnable credits */}
-      <div className="flex items-center justify-between mb-4">
-        <div className="flex items-center gap-2">
-          <h3 className="text-white font-bold">Social Quests</h3>
-          <span className="text-xs text-neutral-500">·</span>
-          <div className="flex items-center gap-1">
-            <CreditsCoin className="w-3.5 h-3.5" />
-            <span className="text-xs text-neutral-400">{remainingCredits.toLocaleString()} credits available</span>
+      {allClaimed ? (
+        /* Completed header — collapsible to show finished quests */
+        <button
+          type="button"
+          onClick={() => setCollapsed(prev => !prev)}
+          className="flex items-center justify-between w-full mb-4 group cursor-pointer"
+        >
+          <div className="flex items-center gap-2">
+            <FiCheck className="w-4 h-4 text-emerald-500" />
+            <h3 className="text-white font-bold">Social Quests</h3>
+            <span className="text-xs text-emerald-400">Complete</span>
+            <span className="text-xs text-neutral-500">·</span>
+            <div className="flex items-center gap-1">
+              <CreditsCoin className="w-3.5 h-3.5" />
+              <span className="text-xs text-neutral-400">{claimedCredits.toLocaleString()} claimed</span>
+            </div>
+          </div>
+          {collapsed
+            ? <FiChevronRight className="w-4 h-4 text-neutral-500 group-hover:text-neutral-300 transition-colors" />
+            : <FiChevronDown className="w-4 h-4 text-neutral-500 group-hover:text-neutral-300 transition-colors" />
+          }
+        </button>
+      ) : (
+        /* In-progress header */
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-2">
+            <h3 className="text-white font-bold">Social Quests</h3>
+            <span className="text-xs text-neutral-500">·</span>
+            <div className="flex items-center gap-1">
+              <CreditsCoin className="w-3.5 h-3.5" />
+              <span className="text-xs text-neutral-400">{remainingCredits.toLocaleString()} credits available</span>
+            </div>
           </div>
         </div>
-      </div>
+      )}
 
-      {SOCIAL_QUEST_CONFIGS.map((cfg) => {
+      {(allClaimed && collapsed) ? null : SOCIAL_QUEST_CONFIGS.map((cfg) => {
         const quest = questMap[cfg.questId];
         if (!quest) return null;
 
@@ -190,9 +231,13 @@ export default function SocialQuestsSection({
           btnLabel = 'Connect';
           btnAction = () => handleConnect('twitter');
         } else if (cfg.questId === 'SOCIAL_JOIN_TG' && !isComplete && !hasActed) {
-          // TG needs Snag OAuth first to link their Telegram account, then they join the group
+          // Step 1: Open the TG group invite link so the user actually joins
           btnLabel = <>{cfg.actionLabel} <FiExternalLink className="w-3 h-3" /></>;
-          btnAction = () => handleConnect('telegram');
+          btnAction = () => handleAction(cfg.questId, cfg.actionUrl);
+        } else if (cfg.questId === 'SOCIAL_JOIN_TG' && !isComplete && hasActed) {
+          // Step 2: Connect TG to Snag (if needed) + verify group membership
+          btnLabel = 'Verify';
+          btnAction = () => handleTelegramVerify();
         } else if (!isComplete && hasActed) {
           btnLabel = 'Verify';
           btnAction = () => handleVerify(cfg.questId);
@@ -269,3 +314,4 @@ export default function SocialQuestsSection({
     </div>
   );
 }
+
