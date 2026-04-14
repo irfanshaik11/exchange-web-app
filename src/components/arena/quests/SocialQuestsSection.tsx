@@ -8,6 +8,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/router';
 import { FiCheck, FiExternalLink, FiLoader, FiInfo, FiChevronDown, FiChevronRight } from 'react-icons/fi';
+import { toast } from 'react-hot-toast';
 import InterstateTooltip from '~/components/InterstateTooltip';
 import type { Quest } from '~/utils/arenaApi';
 import {
@@ -144,19 +145,36 @@ export default function SocialQuestsSection({
     claimQuest.mutate(questDbId);
   }, [claimQuest]);
 
-  // Auto-verify Connect X/TG quest after OAuth redirect (URL has ?social_connected=twitter)
+  // Handle OAuth redirect return — either success (auto-verify) or error (toast)
   useEffect(() => {
     if (!router.isReady || autoVerifyDone.current) return;
-    const platform = router.query.social_connected as string;
-    if (!platform) return;
+    const platform = router.query.social_connected as string | undefined;
+    const errorCode = router.query.social_error as string | undefined;
+    const errorPlatform = router.query.platform as string | undefined;
+
+    if (!platform && !errorCode) return;
 
     autoVerifyDone.current = true;
 
     // Clean up URL
-    const { social_connected, social_error, ...rest } = router.query;
+    const { social_connected, social_error, platform: _p, ...rest } = router.query;
     router.replace({ pathname: router.pathname, query: rest }, undefined, { shallow: true });
 
-    // Auto-verify the Connect quest
+    // Error path — show a toast explaining why the connection failed
+    if (errorCode) {
+      if (errorCode === 'account_already_linked') {
+        const platformLabel = errorPlatform === 'twitter' ? 'X (Twitter)' : 'Telegram';
+        toast.error(
+          `This ${platformLabel} account is already linked to another Interstate user. Please use a different account.`,
+          { duration: 6000 }
+        );
+      } else {
+        toast.error(`Social connection failed: ${errorCode.replace(/_/g, ' ')}`);
+      }
+      return;
+    }
+
+    // Success path — auto-verify the quest
     if (platform === 'twitter') {
       handleVerify('SOCIAL_CONNECT_X');
     } else if (platform === 'telegram') {
