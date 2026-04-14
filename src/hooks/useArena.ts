@@ -556,7 +556,20 @@ export function useVerifySocialQuest() {
       }
     },
     onError: (error: Error) => {
-      toast.error(error.message || 'Verification failed — did you complete the task?');
+      const msg = (error.message || '').toLowerCase();
+      if (msg.includes('twitter not connected') || msg.includes('x not connected')) {
+        toast.error(
+          'This X account may already be linked to another Interstate user. Please use a different account.',
+          { duration: 6000 }
+        );
+      } else if (msg.includes('telegram not connected')) {
+        toast.error(
+          'This Telegram account may already be linked to another Interstate user. Please use a different account.',
+          { duration: 6000 }
+        );
+      } else {
+        toast.error(error.message || 'Verification failed — did you complete the task?');
+      }
     },
   });
 }
