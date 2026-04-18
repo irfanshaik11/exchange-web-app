@@ -21,6 +21,8 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 // React Icons
 import { GiMedal, GiTrophy, GiCrown, GiCoins } from 'react-icons/gi';
 import ArenaPageToggle from '~/components/ArenaPageToggle';
+import RecruiterMilestoneStrip from '~/components/arena/referrals/RecruiterMilestoneStrip';
+import PassthroughCounter from '~/components/arena/referrals/PassthroughCounter';
 import { FiUsers, FiCopy, FiCheck, FiEdit2, FiLock, FiSearch, FiChevronDown, FiChevronLeft, FiChevronRight, FiInfo } from 'react-icons/fi';
 import { HiSparkles } from 'react-icons/hi';
 import { IoRocketSharp } from 'react-icons/io5';
@@ -367,6 +369,25 @@ export default function ReferralsPage() {
             <main className="relative z-10 mx-auto max-w-6xl px-4 sm:px-6 pt-8 pb-24">
               {/* Arena/Referrals Toggle */}
               <ArenaPageToggle activePage="referrals" />
+
+              {/* v2.0: Referral passthrough counter — REDUNDANT with the existing
+                  SOL Rewards Breakdown card which already answers "what did my
+                  referrals pay me?". Passthrough still writes credits server-side
+                  via awardReferralPassthrough(); users see them in the header chip
+                  total + /arena/gold-history, just without a dedicated card here.
+              <div className="mb-4">
+                <PassthroughCounter />
+              </div>
+              */}
+
+              {/* v2.0: Recruiter milestone ladder — REDUNDANT with Honors card,
+                  which already shows the "active traders recruited" count.
+                  Milestones still auto-claim server-side; users see credits land
+                  in their balance without this dedicated UI surface.
+              <div className="mb-4">
+                <RecruiterMilestoneStrip />
+              </div>
+              */}
 
               {/* Epic Title Section */}
               <div className={`text-center mb-12 transition-all duration-700 ${mounted ? 'opacity-100 translate-y-0' : 'opacity-0 -translate-y-4'}`}>

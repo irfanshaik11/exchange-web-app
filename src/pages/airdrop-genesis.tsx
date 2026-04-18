@@ -18,6 +18,10 @@ import { DockedPanelMarginWrapper } from '~/contexts/DockedPanelContext';
 import { useUser } from '~/components/UserContext';
 import { useArenaStats, useQuests, useCashbackSummary, useClaimCashback } from '~/hooks/useArena';
 import SocialQuestsSection from '~/components/arena/quests/SocialQuestsSection';
+import KeyTweetsSection from '~/components/arena/quests/KeyTweetsSection';
+import SeasonRoadmap from '~/components/arena/season/SeasonRoadmap';
+import SeasonCountdownBanner from '~/components/arena/season/SeasonCountdownBanner';
+import ArenaInfoTooltip from '~/components/arena/common/ArenaInfoTooltip';
 import { claimAllQuests } from '~/utils/arenaApi';
 import { useQueryClient } from '@tanstack/react-query';
 import { toast } from 'react-hot-toast';
@@ -765,7 +769,7 @@ export default function ArenaPage() {
             <ArenaPageToggle activePage="arena" />
 
             {/* Epic Title Section */}
-            <div className={`text-center mb-12 transition-all duration-700 ${mounted ? 'opacity-100 translate-y-0' : 'opacity-0 -translate-y-4'}`}>
+            <div className={`text-center mb-8 transition-all duration-700 ${mounted ? 'opacity-100 translate-y-0' : 'opacity-0 -translate-y-4'}`}>
               {/* Decorative top element */}
               <div className="flex items-center justify-center gap-4 mb-4">
                 <div className="h-px w-16 bg-gradient-to-r from-transparent via-yellow-500/50 to-yellow-500/20" />
@@ -773,10 +777,13 @@ export default function ArenaPage() {
                 <div className="h-px w-16 bg-gradient-to-l from-transparent via-yellow-500/50 to-yellow-500/20" />
               </div>
 
-              {/* Main title */}
-              <h1 className="text-5xl md:text-6xl font-black tracking-tight text-white text-center">
-                AIRDROP GENESIS
-              </h1>
+              {/* Main title with info tooltip */}
+              <div className="flex items-center justify-center gap-3">
+                <h1 className="text-5xl md:text-6xl font-black tracking-tight text-white text-center">
+                  AIRDROP GENESIS
+                </h1>
+                <ArenaInfoTooltip />
+              </div>
 
               {/* Subtitle */}
               <div className="flex items-center justify-center gap-3 mt-4">
@@ -794,6 +801,12 @@ export default function ArenaPage() {
                 <div className="w-2 h-2 rounded-full bg-yellow-500/30" />
               </div>
             </div>
+
+            {/* v2.0: Rollover countdown banner — only renders in last 14 days */}
+            <SeasonCountdownBanner />
+
+            {/* v2.0: Season roadmap — primary way users learn there are 4 seasons */}
+            <SeasonRoadmap />
 
             {/* User Stats Bar - Clean matte design */}
             <div className={`flex flex-col sm:flex-row items-stretch gap-3 mb-6 transition-all duration-700 delay-100 ${mounted ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'}`}>
@@ -1021,6 +1034,11 @@ export default function ArenaPage() {
                       goldMultiplier={displayMultiplier}
                     />
                   )}
+
+                  {/* v2.0: Admin-curated Key Tweets (repeatable credits) */}
+                  <div className="mt-4">
+                    <KeyTweetsSection />
+                  </div>
 
                   {/* Daily Quests */}
                   <div className="mb-6">

@@ -688,3 +688,130 @@ export async function verifySocialQuest(
     body: JSON.stringify({ questId }),
   });
 }
+
+// ============================================================
+// v2.0 — SEASONS, KEY TWEETS, RECRUITER, CREDITS SUMMARY
+// All credit amounts reuse `goldEarned`-style fields at the wire level
+// (backend keeps "gold" column names). UI renders them as "Credits".
+// ============================================================
+
+export interface Season {
+  id: number;
+  code: 'preseason' | 's1' | 's2' | 's3';
+  name: string;
+  startsAt: string;
+  endsAt: string;
+  isActive: boolean;
+}
+
+export interface SeasonStatsEntry extends Season {
+  userCreditsEarned: number;
+  userReferralCreditsEarned: number;
+  userRank: RankName;
+  userRankLevel: number;
+  userTradesCount: number;
+  userVolumeUsd: number;
+  isFrozen: boolean;
+}
+
+export interface SeasonStatsResponse {
+  seasons: SeasonStatsEntry[];
+  activeSeasonId: number | null;
+}
+
+export interface CreditsSummary {
+  seasonCredits: number;
+  lifetimeCredits: number;
+  rank: RankName;
+  rankLevel: number;
+  rankDisplay: string;
+  activeSeason: {
+    id: number;
+    code: string;
+    name: string;
+    startsAt: string;
+    endsAt: string;
+  } | null;
+  progressToNextRank: number;
+  nextRankThreshold: number | null;
+  creditsMultiplier: number;
+}
+
+export interface KeyTweet {
+  id: number;
+  tweetId: string;
+  tweetUrl: string;
+  creditsPerClaim: number;
+  claimed: boolean;
+  activatedAt: string;
+}
+
+export interface RecruiterTier {
+  tier: number;
+  activeTradersRequired: number;
+  baseCredits: number;
+  title: string;
+  claimed: boolean;
+  claimedAt: string | null;
+}
+
+export interface RecruiterProgress {
+  activeTraderCount: number;
+  tiers: RecruiterTier[];
+}
+
+export interface SeasonLeaderboardEntry {
+  position: number;
+  userId: number;
+  username: string | null;
+  walletSnippet: string | null;
+  creditsEarned: number;
+  rank: RankName;
+  rankLevel: number;
+  volumeUsd: number;
+}
+
+export interface SeasonLeaderboardResponse {
+  seasonId: number | null;
+  entries: SeasonLeaderboardEntry[];
+}
+
+export async function getSeasons(bearerToken: string): Promise<{ seasons: Season[]; activeSeasonId: number | null }> {
+  return fetchWithAuth('/api/arena/seasons', bearerToken);
+}
+
+export async function getSeasonStats(bearerToken: string): Promise<SeasonStatsResponse> {
+  return fetchWithAuth('/api/arena/season-stats', bearerToken);
+}
+
+export async function getCreditsSummary(bearerToken: string): Promise<CreditsSummary> {
+  return fetchWithAuth('/api/arena/credits-summary', bearerToken);
+}
+
+export async function getKeyTweets(bearerToken: string): Promise<{ tweets: KeyTweet[] }> {
+  return fetchWithAuth('/api/arena/key-tweets', bearerToken);
+}
+
+export async function claimKeyTweet(
+  bearerToken: string,
+  keyTweetId: number,
+): Promise<{ success: boolean; creditsAwarded?: number; error?: string }> {
+  return fetchWithAuth(`/api/arena/key-tweets/${keyTweetId}/claim`, bearerToken, {
+    method: 'POST',
+  });
+}
+
+export async function getRecruiterProgress(bearerToken: string): Promise<RecruiterProgress> {
+  return fetchWithAuth('/api/arena/recruiter-progress', bearerToken);
+}
+
+export async function getSeasonLeaderboard(
+  bearerToken: string,
+  opts: { seasonId?: number; limit?: number } = {},
+): Promise<SeasonLeaderboardResponse> {
+  const params = new URLSearchParams();
+  if (opts.seasonId) params.set('seasonId', String(opts.seasonId));
+  if (opts.limit) params.set('limit', String(opts.limit));
+  const qs = params.toString();
+  return fetchWithAuth(`/api/arena/leaderboard/season${qs ? `?${qs}` : ''}`, bearerToken);
+}

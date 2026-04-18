@@ -37,6 +37,14 @@ import {
   getSocialStatus,
   connectSocial,
   verifySocialQuest,
+  // v2.0
+  getSeasons,
+  getSeasonStats,
+  getCreditsSummary,
+  getKeyTweets,
+  claimKeyTweet,
+  getRecruiterProgress,
+  getSeasonLeaderboard,
   type ArenaStats,
   type QuestsResponse,
   type CashbackSummary,
@@ -51,6 +59,12 @@ import {
   type ReferralReward,
   type ReferralQuest,
   type SocialStatus,
+  type Season,
+  type SeasonStatsResponse,
+  type CreditsSummary,
+  type KeyTweet,
+  type RecruiterProgress,
+  type SeasonLeaderboardResponse,
 } from '~/utils/arenaApi';
 
 // ============================================================
@@ -571,5 +585,101 @@ export function useVerifySocialQuest() {
         toast.error(error.message || 'Verification failed — did you complete the task?');
       }
     },
+  });
+}
+
+// ============================================================
+// v2.0 — SEASONS / CREDITS SUMMARY / KEY TWEETS / RECRUITER
+// ============================================================
+
+/**
+ * Always-on credits summary for the header chip.
+ * Polls every 30s; refreshes on quest-claim via queryClient.invalidateQueries.
+ */
+export function useCreditsSummary() {
+  const { user } = useUser();
+  return useQuery<CreditsSummary>({
+    queryKey: ['arena', 'credits-summary', user?.id],
+    queryFn: () => getCreditsSummary(user!.bearerToken),
+    enabled: !!user?.bearerToken,
+    refetchInterval: 30_000,
+    staleTime: 10_000,
+  });
+}
+
+/** All seasons + which is active. Cached for 5 minutes (dates don't change). */
+export function useSeasons() {
+  const { user } = useUser();
+  return useQuery<{ seasons: Season[]; activeSeasonId: number | null }>({
+    queryKey: ['arena', 'seasons'],
+    queryFn: () => getSeasons(user!.bearerToken),
+    enabled: !!user?.bearerToken,
+    staleTime: 5 * 60_000,
+  });
+}
+
+/** User's per-season stats (drives the Preseason | S1 | S2 | S3 selector). */
+export function useSeasonStats() {
+  const { user } = useUser();
+  return useQuery<SeasonStatsResponse>({
+    queryKey: ['arena', 'season-stats', user?.id],
+    queryFn: () => getSeasonStats(user!.bearerToken),
+    enabled: !!user?.bearerToken,
+    staleTime: 60_000,
+  });
+}
+
+/** Active curated tweets for current season + this user's claim status. */
+export function useKeyTweets() {
+  const { user } = useUser();
+  return useQuery<{ tweets: KeyTweet[] }>({
+    queryKey: ['arena', 'key-tweets', user?.id],
+    queryFn: () => getKeyTweets(user!.bearerToken),
+    enabled: !!user?.bearerToken,
+    staleTime: 60_000,
+  });
+}
+
+/** Claim a key tweet — invalidates credits-summary + key-tweets on success. */
+export function useClaimKeyTweet() {
+  const qc = useQueryClient();
+  const { user } = useUser();
+  return useMutation<{ success: boolean; creditsAwarded?: number; error?: string }, Error, number>({
+    mutationFn: (keyTweetId: number) => claimKeyTweet(user!.bearerToken, keyTweetId),
+    onSuccess: (res) => {
+      if (res?.success && res.creditsAwarded) {
+        toast.success(`+${res.creditsAwarded.toLocaleString()} Credits claimed!`);
+        qc.invalidateQueries({ queryKey: ['arena', 'key-tweets'] });
+        qc.invalidateQueries({ queryKey: ['arena', 'credits-summary'] });
+        qc.invalidateQueries({ queryKey: ['arena', 'stats'] });
+      } else if (res?.error) {
+        toast.error(res.error);
+      }
+    },
+    onError: (err: any) => {
+      toast.error(err?.message || 'Claim failed');
+    },
+  });
+}
+
+/** Recruiter milestone progress for the referrals page. */
+export function useRecruiterProgress() {
+  const { user } = useUser();
+  return useQuery<RecruiterProgress>({
+    queryKey: ['arena', 'recruiter-progress', user?.id],
+    queryFn: () => getRecruiterProgress(user!.bearerToken),
+    enabled: !!user?.bearerToken,
+    staleTime: 60_000,
+  });
+}
+
+/** Season-scoped leaderboard (top 100 of active season by default). */
+export function useSeasonLeaderboard(opts: { seasonId?: number; limit?: number } = {}) {
+  const { user } = useUser();
+  return useQuery<SeasonLeaderboardResponse>({
+    queryKey: ['arena', 'leaderboard', 'season', opts.seasonId ?? 'active', opts.limit ?? 100],
+    queryFn: () => getSeasonLeaderboard(user!.bearerToken, opts),
+    enabled: !!user?.bearerToken,
+    staleTime: 30_000,
   });
 }
