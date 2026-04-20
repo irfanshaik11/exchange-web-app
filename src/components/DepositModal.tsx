@@ -1,6 +1,12 @@
 "use client";
 
-import React, { useEffect, useMemo, useState, useRef, useCallback } from "react";
+import React, {
+  useEffect,
+  useMemo,
+  useState,
+  useRef,
+  useCallback,
+} from "react";
 import {
   FaCopy,
   FaTimes,
@@ -779,31 +785,31 @@ const DepositModal: React.FC<DepositModalProps> = ({
                   )}
                 </div>
 
-                    {/* Info Box */}
-                    <div className="flex gap-3 rounded-3xl border border-[#3b82f6] bg-[rgba(59,130,246,0.1)] p-4">
-                      <div className="mt-0.5 flex-shrink-0">
-                        <svg
-                          width="20"
-                          height="20"
-                          viewBox="0 0 24 24"
-                          fill="currentColor"
-                          className="text-[#3b82f6]"
-                        >
-                          <circle cx="12" cy="12" r="10" fill="currentColor" />
-                          <path
-                            d="M12 8v4m0 4h.01"
-                            stroke="#1a1b20"
-                            strokeWidth="2"
-                            strokeLinecap="round"
-                          />
-                        </svg>
-                      </div>
-                      <div className="text-sm leading-relaxed text-[#60a5fa]">
-                        <span className="font-semibold">Note: </span>
-                        Swap between cryptocurrencies using Onramper. The output
-                        will be delivered directly to your wallet.
-                      </div>
-                    </div>
+                {/* Info Box */}
+                <div className="flex gap-3 rounded-3xl border border-[#3b82f6] bg-[rgba(59,130,246,0.1)] p-4">
+                  <div className="mt-0.5 flex-shrink-0">
+                    <svg
+                      width="20"
+                      height="20"
+                      viewBox="0 0 24 24"
+                      fill="currentColor"
+                      className="text-[#3b82f6]"
+                    >
+                      <circle cx="12" cy="12" r="10" fill="currentColor" />
+                      <path
+                        d="M12 8v4m0 4h.01"
+                        stroke="#1a1b20"
+                        strokeWidth="2"
+                        strokeLinecap="round"
+                      />
+                    </svg>
+                  </div>
+                  <div className="text-sm leading-relaxed text-[#60a5fa]">
+                    <span className="font-semibold">Note: </span>
+                    Swap between cryptocurrencies using Onramper. The output
+                    will be delivered directly to your wallet.
+                  </div>
+                </div>
 
                 {/* Powered by Onramper */}
                 <div className="flex items-center justify-center gap-2 text-xs text-neutral-500">
