@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useState, useRef, useCallback } from "react";
+import React, { useEffect, useMemo, useState, useRef, useCallback } from "react";
 import {
   FaCopy,
   FaTimes,
@@ -224,6 +224,13 @@ const DepositModal: React.FC<DepositModalProps> = ({
         primaryWalletAddresses.solana ||
         user?.publicKey ||
         "";
+
+  // Memoize so parent re-renders (tab switches, balance polls, copy state, etc.)
+  // don't produce a new URL string and remount the iframe mid-KYC.
+  const onramperUrl = useMemo(
+    () => buildOnramperUrl(depositAddress),
+    [depositAddress],
+  );
 
   useEffect(() => {
     if (!open) return;
@@ -616,7 +623,6 @@ const DepositModal: React.FC<DepositModalProps> = ({
       return;
     }
 
-    const onramperUrl = buildOnramperUrl(depositAddress);
     if (!onramperUrl) {
       toast.error("Onramper is not configured. Please contact support.", {
         duration: 2000,
@@ -751,30 +757,27 @@ const DepositModal: React.FC<DepositModalProps> = ({
           {/* Content */}
           <div className="flex-1 overflow-y-auto px-6 pb-6">
             {/* Convert Tab */}
-            {activeTab === "convert" &&
-              (() => {
-                const onramperIframeUrl = buildOnramperUrl(depositAddress);
-                return (
-                  <div className="space-y-4">
-                    {/* Onramper Swap Widget */}
-                    <div className="overflow-hidden rounded-3xl border border-[#2A2B33]">
-                      {onramperIframeUrl ? (
-                        <iframe
-                          src={onramperIframeUrl}
-                          title="Onramper Swap"
-                          className="h-[600px] w-full border-none bg-[#0a0b0f]"
-                          allow="payment"
-                        />
-                      ) : (
-                        <div className="flex h-[600px] w-full items-center justify-center bg-[#0a0b0f] px-6 text-center text-sm text-neutral-400">
-                          {primaryWalletLoading
-                            ? "Loading wallet data…"
-                            : !depositAddress
-                              ? `Add a primary ${tokenSymbol} wallet before swapping.`
-                              : "Onramper is not configured. Please contact support."}
-                        </div>
-                      )}
+            {activeTab === "convert" && (
+              <div className="space-y-4">
+                {/* Onramper Swap Widget */}
+                <div className="overflow-hidden rounded-3xl border border-[#2A2B33]">
+                  {onramperUrl ? (
+                    <iframe
+                      src={onramperUrl}
+                      title="Onramper Swap"
+                      className="h-[600px] w-full border-none bg-[#0a0b0f]"
+                      allow="payment"
+                    />
+                  ) : (
+                    <div className="flex h-[600px] w-full items-center justify-center bg-[#0a0b0f] px-6 text-center text-sm text-neutral-400">
+                      {primaryWalletLoading
+                        ? "Loading wallet data…"
+                        : !depositAddress
+                          ? `Add a primary ${tokenSymbol} wallet before swapping.`
+                          : "Onramper is not configured. Please contact support."}
                     </div>
+                  )}
+                </div>
 
                     {/* Info Box */}
                     <div className="flex gap-3 rounded-3xl border border-[#3b82f6] bg-[rgba(59,130,246,0.1)] p-4">
@@ -802,20 +805,19 @@ const DepositModal: React.FC<DepositModalProps> = ({
                       </div>
                     </div>
 
-                    {/* Powered by Onramper */}
-                    <div className="flex items-center justify-center gap-2 text-xs text-neutral-500">
-                      <span className="flex items-center gap-1.5">
-                        Powered by
-                        <img
-                          src="/onramper.svg"
-                          alt="Onramper"
-                          className="h-2.5 opacity-60"
-                        />
-                      </span>
-                    </div>
-                  </div>
-                );
-              })()}
+                {/* Powered by Onramper */}
+                <div className="flex items-center justify-center gap-2 text-xs text-neutral-500">
+                  <span className="flex items-center gap-1.5">
+                    Powered by
+                    <img
+                      src="/onramper.svg"
+                      alt="Onramper"
+                      className="h-2.5 opacity-60"
+                    />
+                  </span>
+                </div>
+              </div>
+            )}
 
             {/* Deposit Tab */}
             {activeTab === "deposit" && (
