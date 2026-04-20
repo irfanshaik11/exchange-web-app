@@ -15,8 +15,9 @@ Successfully replaced MoonPay with Onramper as the fiat onramp provider.
 
 #### Added:
 - Onramper integration using widget URL approach
-- `ONRAMPER_API_KEY` constant: `pk_prod_01KB0GV0SYGKAC64C5QRJPD5DZ`
+- API key loaded from `NEXT_PUBLIC_ONRAMPER_API_KEY` env var (publishable `pk_` key — safe to ship to client but must be configured per environment)
 - `showOnramper()` function that opens Onramper widget in popup window
+- `buildOnramperUrl(walletAddress)` helper that constructs the widget URL with the user's primary wallet as the destination
 
 #### Updated UI:
 - Changed badge color from purple (`#7D00FF`) to green (`#18c48c`)
@@ -32,21 +33,13 @@ Successfully replaced MoonPay with Onramper as the fiat onramp provider.
 
 ## Onramper Widget Configuration
 
-The integration uses Onramper's widget URL with the following parameters:
+The integration uses Onramper's widget URL. The key and destination wallet are dynamic; theme params are static. See `buildOnramperUrl(walletAddress)` in `src/components/DepositModal.tsx` for the single source of truth. Pseudocode:
 
 ```javascript
-const onramperUrl = new URL('https://widget.onramper.com');
-onramperUrl.searchParams.set('apiKey', ONRAMPER_API_KEY);
-onramperUrl.searchParams.set('wallets', `SOL:${depositAddress}`);
-onramperUrl.searchParams.set('defaultCrypto', 'SOL');
-onramperUrl.searchParams.set('defaultAmount', '100');
-onramperUrl.searchParams.set('themeName', 'dark');
-onramperUrl.searchParams.set('containerColor', '1a1b20');
-onramperUrl.searchParams.set('primaryColor', '18c48c');
-onramperUrl.searchParams.set('secondaryColor', '2A2D35');
-onramperUrl.searchParams.set('cardColor', '0a0b0f');
-onramperUrl.searchParams.set('primaryTextColor', 'ffffff');
-onramperUrl.searchParams.set('secondaryTextColor', 'E6E7EA');
+const onramperUrl = new URL('https://buy.onramper.com/');
+onramperUrl.searchParams.set('apiKey', process.env.NEXT_PUBLIC_ONRAMPER_API_KEY);
+onramperUrl.searchParams.set('wallets', `sol:${primaryWalletAddress}`);
+// ...theme params (defaultCrypto, defaultAmount, themeName, colors)
 ```
 
 ## Widget Display Method
@@ -74,7 +67,7 @@ The widget opens in a centered popup window with dimensions:
 
 ## API Key
 
-Production API Key: `pk_prod_01KB0GV0SYGKAC64C5QRJPD5DZ`
+The Onramper publishable API key is configured per environment via the `NEXT_PUBLIC_ONRAMPER_API_KEY` env var. Do **not** commit real keys into source — rotate through the Onramper dashboard and update the per-environment env files.
 
 ## Support
 
