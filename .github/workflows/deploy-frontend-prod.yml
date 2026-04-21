@@ -2,7 +2,7 @@ name: Deploy to Multi-Region MIGs
 
 on:
   push:
-    branches: [ prod ]
+    branches: [ disable ]
 
 permissions:
   contents: read
