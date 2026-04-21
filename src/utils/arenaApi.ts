@@ -62,6 +62,7 @@ export interface Quest {
   isClaimed: boolean;
   completedAt: string | null;
   claimedAt: string | null;
+  marketType?: "SPOT" | "POLY";
 }
 
 export interface QuestsResponse {
