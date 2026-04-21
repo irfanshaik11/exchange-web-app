@@ -29,6 +29,7 @@ import {
 } from "~/utils/api";
 import QRCode from "react-qr-code";
 import { useUser } from "./UserContext";
+import { useCreditsSummary } from "~/hooks/useArena";
 import { useSolPrice } from "./SolPriceContext";
 import { useWatchlist } from "./WatchlistContext";
 import { useQuickBuy } from "./QuickBuyContext";
@@ -386,6 +387,10 @@ export default function Header({
     selectedWalletIds,
     logout,
   } = useUser();
+
+  // v2.0: Arena credits summary for inline display in the balance pill.
+  // Falls back silently if backend endpoint is unavailable.
+  const { data: creditsSummary } = useCreditsSummary();
 
   // Get referral stats for Honors badge display
   // Cache honorsLevel in localStorage to prevent badge flicker on page load
@@ -2304,15 +2309,50 @@ export default function Header({
                   }}
                   title="Click to view account & wallet"
                 >
+                  {/* v2.0: Show Arena rank badge (driven by lifetime credits),
+                      not the Referrals Honors badge. Two separate axes —
+                      the header belongs to the Arena. */}
                   <div
                     className="hidden h-6 w-6 bg-contain bg-center bg-no-repeat select-none sm:flex"
                     style={{
-                      backgroundImage: `url(/ranks/degen-${Math.max(1, Math.min(4, honorsLevel))}.png)`,
+                      backgroundImage: creditsSummary
+                        ? `url(/ranks/${creditsSummary.rank.toLowerCase()}-${Math.max(1, Math.min(4, creditsSummary.rankLevel))}.png)`
+                        : `url(/ranks/degen-1.png)`,
                     }}
                     role="img"
-                    aria-label={`Honors ${honorsLevel}`}
+                    aria-label={creditsSummary ? creditsSummary.rankDisplay : 'Degen I'}
                   />
                   <div className="flex items-center gap-1.5 text-left">
+                    {/* v2.0: Arena credits inline — renders only once data is loaded.
+                        Coin.png sits right next to the number as the credits-unit glyph. */}
+                    {creditsSummary && (
+                      <>
+                        <div
+                          className="flex items-center gap-1"
+                          title={`${creditsSummary.rankDisplay} · ${creditsSummary.lifetimeCredits.toLocaleString()} lifetime credits`}
+                        >
+                          <span className="text-xs font-semibold text-yellow-300 tabular-nums sm:text-sm">
+                            {(() => {
+                              // Always floor — never overstate balance.
+                              // <1k: raw.  1k–99.99k: one decimal (13.6k).
+                              // 100k–999k: integer k (125k).  >=1M: two decimals M (1.53M).
+                              const n = creditsSummary.seasonCredits;
+                              if (n < 1000) return n.toLocaleString();
+                              if (n < 100_000) return `${Math.floor(n / 100) / 10}k`;
+                              if (n < 1_000_000) return `${Math.floor(n / 1000)}k`;
+                              return `${Math.floor(n / 10_000) / 100}M`;
+                            })()}
+                          </span>
+                          <div
+                            className="h-4 w-4 flex-shrink-0 bg-contain bg-center bg-no-repeat select-none"
+                            style={{ backgroundImage: "url(/ranks/Coin.png)" }}
+                            role="img"
+                            aria-label="Credits"
+                          />
+                        </div>
+                        <span className="h-3 w-px bg-[#20232b]" />
+                      </>
+                    )}
                     <div className="flex items-center gap-1 text-xs font-medium text-white sm:text-sm">
                       {isPredictionsPage ? (
                         <>
