@@ -49,10 +49,15 @@ export default function QuestCard({
       {/* Header */}
       <div className="flex items-start justify-between mb-3">
         <div className="flex-1">
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
             <h4 className={`font-semibold ${quest.isClaimed ? 'text-neutral-500' : 'text-white'}`}>
               {quest.title}
             </h4>
+            {quest.marketType === 'POLY' && (
+              <span className="px-1.5 py-0.5 bg-blue-500/10 text-blue-400 text-[10px] font-medium tracking-wide rounded border border-blue-500/20 uppercase">
+                Polymarket
+              </span>
+            )}
             {quest.isClaimed && (
               <span className="flex items-center gap-1 text-emerald-500 text-sm">
                 <FiCheck className="w-4 h-4" />
@@ -159,6 +164,11 @@ export function QuestRow({
           <span className={`truncate ${quest.isClaimed ? 'text-neutral-500' : 'text-white'}`}>
             {quest.title}
           </span>
+          {quest.marketType === 'POLY' && (
+            <span className="shrink-0 px-1.5 py-0.5 bg-blue-500/10 text-blue-400 text-[9px] font-medium tracking-wide rounded border border-blue-500/20 uppercase">
+              Poly
+            </span>
+          )}
         </div>
         {!quest.isClaimed && (
           <div className="flex items-center gap-2 mt-1 ml-6">
