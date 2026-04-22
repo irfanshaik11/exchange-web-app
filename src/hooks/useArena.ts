@@ -65,7 +65,7 @@ import {
   type KeyTweet,
   type RecruiterProgress,
   type SeasonLeaderboardResponse,
-} from '~/utils/arenaApi';
+} from "~/utils/arenaApi";
 
 // ============================================================
 // ARENA STATS HOOK
@@ -243,7 +243,18 @@ export function useSetAnonymousMode() {
 // asymmetric `.toUpperCase()` / `.toLowerCase()` casts that previously lived
 // inside useLeaderboardPageData.
 export type LeaderboardCategory = "points" | "pnl" | "volume";
-export type LeaderboardPeriod = "DAILY" | "MONTHLY" | "LIFETIME";
+// Legacy periods (DAILY/MONTHLY/LIFETIME) still serve traffic during the
+// seasons-migration bake period, but the UI now only exposes the 4 season
+// keys. They'll be dropped once the backend cleanup PR lands (~14 days
+// post-cutover — tracking narrative-prod/exchange-backend#256).
+export type LeaderboardPeriod =
+  | "DAILY"
+  | "MONTHLY"
+  | "LIFETIME"
+  | "PRESEASON"
+  | "SEASON1"
+  | "SEASON2"
+  | "SEASON3";
 
 export function useLeaderboard(
   type: LeaderboardCategory,
@@ -525,7 +536,7 @@ export function useSocialStatus() {
   const { user } = useUser();
 
   return useQuery({
-    queryKey: ['arena', 'social-status', user?.id],
+    queryKey: ["arena", "social-status", user?.id],
     queryFn: () => getSocialStatus(user!.bearerToken),
     enabled: !!user?.bearerToken,
     staleTime: 30 * 1000,
@@ -539,18 +550,20 @@ export function useConnectSocial() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: (platform: 'twitter' | 'telegram') =>
+    mutationFn: (platform: "twitter" | "telegram") =>
       connectSocial(user!.bearerToken, platform),
     onSuccess: (data) => {
       if (data.connected) {
-        queryClient.invalidateQueries({ queryKey: ['arena', 'social-status'] });
-        queryClient.invalidateQueries({ queryKey: ['arena', 'quests'] });
-        toast.success(`${data.platform === 'twitter' ? 'X' : 'Telegram'} account connected!`);
+        queryClient.invalidateQueries({ queryKey: ["arena", "social-status"] });
+        queryClient.invalidateQueries({ queryKey: ["arena", "quests"] });
+        toast.success(
+          `${data.platform === "twitter" ? "X" : "Telegram"} account connected!`,
+        );
       }
       // If oauthUrl is returned, the component handles the redirect
     },
     onError: (error: Error) => {
-      toast.error(error.message || 'Failed to connect account');
+      toast.error(error.message || "Failed to connect account");
     },
   });
 }
@@ -564,25 +577,30 @@ export function useVerifySocialQuest() {
       verifySocialQuest(user!.bearerToken, questId),
     onSuccess: (data) => {
       if (data.verified) {
-        queryClient.invalidateQueries({ queryKey: ['arena', 'quests'] });
-        queryClient.invalidateQueries({ queryKey: ['arena', 'social-status'] });
-        toast.success(data.message || 'Task verified! Claim your gold.');
+        queryClient.invalidateQueries({ queryKey: ["arena", "quests"] });
+        queryClient.invalidateQueries({ queryKey: ["arena", "social-status"] });
+        toast.success(data.message || "Task verified! Claim your gold.");
       }
     },
     onError: (error: Error) => {
-      const msg = (error.message || '').toLowerCase();
-      if (msg.includes('twitter not connected') || msg.includes('x not connected')) {
+      const msg = (error.message || "").toLowerCase();
+      if (
+        msg.includes("twitter not connected") ||
+        msg.includes("x not connected")
+      ) {
         toast.error(
-          'This X account may already be linked to another Interstate user. Please use a different account.',
-          { duration: 6000 }
+          "This X account may already be linked to another Interstate user. Please use a different account.",
+          { duration: 6000 },
         );
-      } else if (msg.includes('telegram not connected')) {
+      } else if (msg.includes("telegram not connected")) {
         toast.error(
-          'This Telegram account may already be linked to another Interstate user. Please use a different account.',
-          { duration: 6000 }
+          "This Telegram account may already be linked to another Interstate user. Please use a different account.",
+          { duration: 6000 },
         );
       } else {
-        toast.error(error.message || 'Verification failed — did you complete the task?');
+        toast.error(
+          error.message || "Verification failed — did you complete the task?",
+        );
       }
     },
   });
@@ -599,7 +617,7 @@ export function useVerifySocialQuest() {
 export function useCreditsSummary() {
   const { user } = useUser();
   return useQuery<CreditsSummary>({
-    queryKey: ['arena', 'credits-summary', user?.id],
+    queryKey: ["arena", "credits-summary", user?.id],
     queryFn: () => getCreditsSummary(user!.bearerToken),
     enabled: !!user?.bearerToken,
     refetchInterval: 30_000,
@@ -611,7 +629,7 @@ export function useCreditsSummary() {
 export function useSeasons() {
   const { user } = useUser();
   return useQuery<{ seasons: Season[]; activeSeasonId: number | null }>({
-    queryKey: ['arena', 'seasons'],
+    queryKey: ["arena", "seasons"],
     queryFn: () => getSeasons(user!.bearerToken),
     enabled: !!user?.bearerToken,
     staleTime: 5 * 60_000,
@@ -622,7 +640,7 @@ export function useSeasons() {
 export function useSeasonStats() {
   const { user } = useUser();
   return useQuery<SeasonStatsResponse>({
-    queryKey: ['arena', 'season-stats', user?.id],
+    queryKey: ["arena", "season-stats", user?.id],
     queryFn: () => getSeasonStats(user!.bearerToken),
     enabled: !!user?.bearerToken,
     staleTime: 60_000,
@@ -633,7 +651,7 @@ export function useSeasonStats() {
 export function useKeyTweets() {
   const { user } = useUser();
   return useQuery<{ tweets: KeyTweet[] }>({
-    queryKey: ['arena', 'key-tweets', user?.id],
+    queryKey: ["arena", "key-tweets", user?.id],
     queryFn: () => getKeyTweets(user!.bearerToken),
     enabled: !!user?.bearerToken,
     staleTime: 60_000,
@@ -644,20 +662,27 @@ export function useKeyTweets() {
 export function useClaimKeyTweet() {
   const qc = useQueryClient();
   const { user } = useUser();
-  return useMutation<{ success: boolean; creditsAwarded?: number; error?: string }, Error, number>({
-    mutationFn: (keyTweetId: number) => claimKeyTweet(user!.bearerToken, keyTweetId),
+  return useMutation<
+    { success: boolean; creditsAwarded?: number; error?: string },
+    Error,
+    number
+  >({
+    mutationFn: (keyTweetId: number) =>
+      claimKeyTweet(user!.bearerToken, keyTweetId),
     onSuccess: (res) => {
       if (res?.success && res.creditsAwarded) {
-        toast.success(`+${res.creditsAwarded.toLocaleString()} Credits claimed!`);
-        qc.invalidateQueries({ queryKey: ['arena', 'key-tweets'] });
-        qc.invalidateQueries({ queryKey: ['arena', 'credits-summary'] });
-        qc.invalidateQueries({ queryKey: ['arena', 'stats'] });
+        toast.success(
+          `+${res.creditsAwarded.toLocaleString()} Credits claimed!`,
+        );
+        qc.invalidateQueries({ queryKey: ["arena", "key-tweets"] });
+        qc.invalidateQueries({ queryKey: ["arena", "credits-summary"] });
+        qc.invalidateQueries({ queryKey: ["arena", "stats"] });
       } else if (res?.error) {
         toast.error(res.error);
       }
     },
     onError: (err: any) => {
-      toast.error(err?.message || 'Claim failed');
+      toast.error(err?.message || "Claim failed");
     },
   });
 }
@@ -666,7 +691,7 @@ export function useClaimKeyTweet() {
 export function useRecruiterProgress() {
   const { user } = useUser();
   return useQuery<RecruiterProgress>({
-    queryKey: ['arena', 'recruiter-progress', user?.id],
+    queryKey: ["arena", "recruiter-progress", user?.id],
     queryFn: () => getRecruiterProgress(user!.bearerToken),
     enabled: !!user?.bearerToken,
     staleTime: 60_000,
@@ -674,10 +699,18 @@ export function useRecruiterProgress() {
 }
 
 /** Season-scoped leaderboard (top 100 of active season by default). */
-export function useSeasonLeaderboard(opts: { seasonId?: number; limit?: number } = {}) {
+export function useSeasonLeaderboard(
+  opts: { seasonId?: number; limit?: number } = {},
+) {
   const { user } = useUser();
   return useQuery<SeasonLeaderboardResponse>({
-    queryKey: ['arena', 'leaderboard', 'season', opts.seasonId ?? 'active', opts.limit ?? 100],
+    queryKey: [
+      "arena",
+      "leaderboard",
+      "season",
+      opts.seasonId ?? "active",
+      opts.limit ?? 100,
+    ],
     queryFn: () => getSeasonLeaderboard(user!.bearerToken, opts),
     enabled: !!user?.bearerToken,
     staleTime: 30_000,
