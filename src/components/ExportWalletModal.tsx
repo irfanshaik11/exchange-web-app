@@ -83,7 +83,10 @@ export default function ExportWalletModal({
   const { authState, clientState, session: turnkeySession, exportWallet, wallets = [] } = turnkey || {};
   const sessionFromContext = turnkeySession || turnkey?.session;
 
-  const { logout, user, walletList, refreshWalletList } = useUser();
+  // [gmail-export-cleanup 2026-04-21] Added walletListLoading so handleExport can
+  // treat "still loading" as distinct from "empty" and avoid prematurely showing
+  // an error / routing to the (now-collapsed) Google SDK path during the race.
+  const { logout, user, walletList, walletListLoading, refreshWalletList } = useUser();
 
   const [selectedWalletId, setSelectedWalletId] = useState<string | null>(null);
   const [status, setStatus] = useState<ExportStatus>("idle");
@@ -228,28 +231,35 @@ export default function ExportWalletModal({
     // wallet list has the correct walletId and address.
     if (Array.isArray(walletList) && walletList.length) return walletList;
 
+    // [gmail-export-cleanup 2026-04-21] Removed: SDK-wallet fallback for non-wallet-auth
+    // (Gmail) users. Gmail now has a backend-rooted sub-org just like EVM, so the
+    // authoritative wallet list is always the backend one. Falling back to the Turnkey
+    // SDK session's wallets (which live in the FE-OAuth sub-org the backend can't act on)
+    // produced the "Wallet not found" failure mode observed during the post-signup race.
+    // Legacy FE-rooted-sub-org users were already unable to use the app and are out of scope.
+    //
     // Fallback to SDK wallets only if backend list is empty
-    if (!isWalletAuth) {
-      let sourceList: any[] = [];
-      try {
-        const cached =
-          typeof window !== "undefined" ? (window as any).__turnkeyCachedWallets : null;
-        if (Array.isArray(cached) && cached.length) {
-          sourceList = cached;
-        }
-      } catch {
-        // Ignore caching errors
-      }
-
-      if (!sourceList.length && Array.isArray(wallets) && wallets.length) {
-        sourceList = wallets;
-      }
-      if (!sourceList.length) {
-        sourceList = Array.isArray(fetchedWallets) ? fetchedWallets : [];
-      }
-
-      return sourceList;
-    }
+    // if (!isWalletAuth) {
+    //   let sourceList: any[] = [];
+    //   try {
+    //     const cached =
+    //       typeof window !== "undefined" ? (window as any).__turnkeyCachedWallets : null;
+    //     if (Array.isArray(cached) && cached.length) {
+    //       sourceList = cached;
+    //     }
+    //   } catch {
+    //     // Ignore caching errors
+    //   }
+    //
+    //   if (!sourceList.length && Array.isArray(wallets) && wallets.length) {
+    //     sourceList = wallets;
+    //   }
+    //   if (!sourceList.length) {
+    //     sourceList = Array.isArray(fetchedWallets) ? fetchedWallets : [];
+    //   }
+    //
+    //   return sourceList;
+    // }
 
     return Array.isArray(fetchedWallets) ? fetchedWallets : [];
   }, [isWalletAuth, walletList, wallets, fetchedWallets]);
@@ -448,12 +458,21 @@ export default function ExportWalletModal({
     // This ensures Google OAuth users export from the backend-created sub-org
     // (which the backend has delegated API access to), not the FE-created sub-org.
     const hasBackendWallets = Array.isArray(walletList) && walletList.length > 0;
-    const isGooglePath =
-      !hasBackendWallets &&
-      !isWalletAuth &&
-      isGoogleAuthenticated &&
-      typeof exportWallet === "function" &&
-      !!sessionFromContext?.organizationId;
+    // [gmail-export-cleanup 2026-04-21] Collapsed to false — Gmail users now export via the
+    // backend path just like EVM. Backend creates a BE-rooted sub-org for every Gmail signup
+    // (isWalletAuthFlow=true branch in user.controller.ts:4490+), so client-side Turnkey SDK
+    // export is no longer needed. Legacy users with FE-rooted sub-orgs were already broken
+    // on every code path and are explicitly out of scope.
+    //
+    // Original logic kept below for quick revert. After ~2 weeks of prod stability,
+    // a follow-up PR can grep for [gmail-export-cleanup 2026-04-21] and delete.
+    const isGooglePath = false;
+    // const isGooglePath =
+    //   !hasBackendWallets &&
+    //   !isWalletAuth &&
+    //   isGoogleAuthenticated &&
+    //   typeof exportWallet === "function" &&
+    //   !!sessionFromContext?.organizationId;
 
     if (timeoutRef.current) {
       clearTimeout(timeoutRef.current);
@@ -490,6 +509,18 @@ export default function ExportWalletModal({
       undefined;
 
     if (!walletIdToUse) {
+      // [gmail-export-cleanup 2026-04-21] Treat "still loading" as distinct from "empty":
+      // if the backend wallet list is in flight (common race right after first signup),
+      // tell the user to wait a moment and kick off another refresh, rather than showing
+      // "please refresh the page" which is disruptive. If genuinely empty after the fetch
+      // completes, the original error messages still fire on the next click.
+      if (walletListLoading) {
+        setError("Loading your wallets — please try again in a moment.");
+        setStatus("error");
+        refreshWalletList?.(true);
+        return;
+      }
+
       if (isGooglePath) {
         setError("No Turnkey wallet found. Please sign in again to refresh your wallet list.");
         setShowLoginModal(true);
