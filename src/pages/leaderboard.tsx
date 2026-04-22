@@ -28,6 +28,7 @@ import {
   isSeasonLocked,
   type SeasonKey,
 } from "~/utils/seasons";
+import posthog from "posthog-js";
 
 type LeaderboardType = "points" | "pnl" | "volume";
 // Leaderboard period is now always a season. Legacy DAILY/MONTHLY/LIFETIME
@@ -335,7 +336,7 @@ export default function LeaderboardPage() {
                         return (
                           <button
                             key={season.key}
-                            onClick={() => !locked && setPeriod(season.key)}
+                            onClick={() => { if (!locked) { setPeriod(season.key); posthog.capture("leaderboard_category_changed", { season: season.key }); } }}
                             disabled={locked}
                             aria-label={ariaLabel}
                             title={
