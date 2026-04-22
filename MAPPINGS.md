@@ -3,7 +3,6 @@
 This document provides a comprehensive reference for all field mappings between the backend WebSocket data and the frontend PulseToken interface.
 
 ---
-
 ## Table of Contents:
 
 1. [Overview](#overview)
